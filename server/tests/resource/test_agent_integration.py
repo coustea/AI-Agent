@@ -254,12 +254,13 @@ def test_ppt_agent_execute_success():
 
         with patch("app.resource.agents.ppt.MaterialAgent") as MockM, \
              patch("app.resource.agents.ppt.OutlineAgent") as MockO, \
-             patch("app.resource.agents.ppt.write_slides_concurrently", new_callable=AsyncMock) as mock_write, \
+             patch("app.resource.agents.ppt.SlideAgent") as MockS, \
              patch("app.resource.agents.ppt.PayloadBuilder") as MockB:
 
             MockM.return_value.run = AsyncMock(return_value=digest)
             MockO.return_value.run = AsyncMock(return_value=outline)
-            mock_write.return_value = drafts
+            drafts_map = {d.slide_id: d for d in drafts}
+            MockS.return_value.run = AsyncMock(side_effect=lambda contract, digest, outline: drafts_map[contract.slide_id])
             MockB.return_value.build.return_value = PptPayload(
                 template_id="theme-logic-blue", topic="Python 基础",
                 author="AI", date="2026-06-15",
@@ -335,12 +336,13 @@ def test_ppt_agent_page_count_mismatch():
 
         with patch("app.resource.agents.ppt.MaterialAgent") as MockM, \
              patch("app.resource.agents.ppt.OutlineAgent") as MockO, \
-             patch("app.resource.agents.ppt.write_slides_concurrently", new_callable=AsyncMock) as mock_write, \
+             patch("app.resource.agents.ppt.SlideAgent") as MockS, \
              patch("app.resource.agents.ppt.PayloadBuilder") as MockB:
 
             MockM.return_value.run = AsyncMock(return_value=digest)
             MockO.return_value.run = AsyncMock(return_value=outline)
-            mock_write.return_value = drafts
+            drafts_map = {d.slide_id: d for d in drafts}
+            MockS.return_value.run = AsyncMock(side_effect=lambda contract, digest, outline: drafts_map[contract.slide_id])
             MockB.return_value.build.return_value = PptPayload(
                 template_id="theme-logic-blue", topic="Python 基础",
                 author="AI", date="2026-06-15",

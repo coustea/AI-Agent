@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Literal
+import operator
+from typing import Any, Annotated, Literal, Union, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
@@ -255,22 +258,6 @@ class SceneWriterAgent:
         return await llm.ainvoke_json(SceneDraft, message)
 
 
-async def write_scenes_concurrently(
-    writer: SceneWriterAgent,
-    outline: VideoOutline,
-    digest: VideoMaterialDigest,
-    constraints: VideoConstraints,
-    *,
-    concurrency: int = 4,
-) -> list[SceneDraft]:
-    semaphore = asyncio.Semaphore(concurrency)
-
-    async def run_one(contract: SceneContract) -> SceneDraft:
-        async with semaphore:
-            return await writer.run(contract, digest, constraints)
-
-    drafts = await asyncio.gather(*(run_one(scene) for scene in outline.scenes))
-    return sorted(drafts, key=lambda item: item.index)
 
 
 class VideoPayloadBuilder:
@@ -333,6 +320,36 @@ class VideoPayloadBuilder:
         )
 
 
+class VideoSceneWriteState(TypedDict):
+    contract: SceneContract
+    digest: VideoMaterialDigest
+    constraints: VideoConstraints
+
+
+def _add_scene_drafts(left: list[SceneDraft] | None, right: list[SceneDraft] | None) -> list[SceneDraft]:
+    if left is None:
+        left = []
+    if right is None:
+        right = []
+    return left + right
+
+
+class VideoGraphState(TypedDict, total=False):
+    # Inputs
+    input_data: ResourceInput
+    config: dict[str, Any]
+    constraints: VideoConstraints
+
+    # Intermediate artifacts
+    digest: VideoMaterialDigest
+    outline: VideoOutline
+    drafts: Annotated[list[SceneDraft], _add_scene_drafts]
+
+    # Final outputs
+    payload: VideoPayload
+    error: str
+
+
 @register_agent
 class VideoAgent(BaseResourceAgent):
     """Video 生成 Agent。输出结构化预览 JSON，不渲染二进制视频。"""
@@ -340,34 +357,152 @@ class VideoAgent(BaseResourceAgent):
     agent_id = "video"
     agent_name = "讲解视频"
 
+    def __init__(self, emitter=None):
+        super().__init__(emitter=emitter)
+        self._scene_semaphore = asyncio.Semaphore(4)
+
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         config = input_data.agent_config or {}
-        constraints = VideoConstraints.model_validate(config)
         title_prefix = input_data.learning_need[:32]
+        result = await self._run_pipeline(
+            input_data=input_data,
+            config=config,
+            title_prefix=title_prefix,
+        )
+        if result.success:
+            coverage = outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs)
+            result.metadata["teaching_plan_outline_ids"] = coverage["teaching_plan_outline_ids"]
+            result.metadata["covered_source_outline_ids"] = coverage["covered_source_outline_ids"]
+            result.metadata["missing_source_outline_ids"] = coverage["missing_source_outline_ids"]
+        await self.emit_finish(result)
+        return result
 
-        try:
-            await self.emit_start("正在提取视频素材", progress=20)
-            digest = await VideoMaterialAgent().run(input_data, config)
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        """路径节点场景：从 NodeInput 构建素材并执行嵌套子图。"""
+        from app.resource.schemas import DownstreamContext, DownstreamMaterial, ReusableAssets
 
-            await self.emit_start("正在规划视频结构", progress=35)
-            outline = await VideoOutlineAgent().run(digest, constraints)
-            if len(outline.scenes) != constraints.scene_count:
-                raise ValueError(f"视频场景数与预期不符：期望 {constraints.scene_count}，实际 {len(outline.scenes)}")
-
-            await self.emit_start("正在并行生成视频分镜", progress=55)
-            drafts = await write_scenes_concurrently(
-                SceneWriterAgent(),
-                outline,
-                digest,
-                constraints,
-                concurrency=4,
+        content_materials = []
+        if input_data.tutorial_markdown:
+            content_materials.append(
+                DownstreamMaterial(
+                    outline_id="node-outline-1",
+                    type="explanation",
+                    summary=input_data.tutorial_markdown[:450] + "...",
+                    key_points=input_data.knowledge_points[:8] if input_data.knowledge_points else [],
+                )
             )
 
-            await self.emit_start("正在构建视频预览载荷", progress=85)
-            payload = VideoPayloadBuilder().build(outline, drafts, constraints, digest)
+        mock_handoffs = {
+            "content": DownstreamContext(
+                source_agent="content",
+                title=input_data.node_title,
+                one_sentence_summary=input_data.tutorial_summary or f"关于 {input_data.node_title} 的学习教程",
+                materials=content_materials,
+                reusable_assets=ReusableAssets(
+                    examples=[f"学习侧重点：{focus}" for focus in input_data.generation_focus] if input_data.generation_focus else [],
+                    visual_ideas=input_data.knowledge_points or [],
+                ),
+            )
+        }
+
+        resource_input = ResourceInput(
+            learning_need=input_data.node_title,
+            learning_scenario="path_learning",
+            profile=input_data.profile or {},
+            agent_name="video",
+            agent_config=input_data.agent_config or {},
+            upstream_handoffs=mock_handoffs,
+        )
+
+        result = await self._run_pipeline(
+            input_data=resource_input,
+            config=resource_input.agent_config,
+            title_prefix=input_data.node_title,
+        )
+        result.metadata["path_id"] = input_data.path_id
+        result.metadata["node_id"] = input_data.node_id
+        await self.emit_finish(result)
+        return result
+
+    def _build_graph(self) -> Any:
+        workflow = StateGraph(VideoGraphState)
+
+        workflow.add_node("extract_material", self._material_node)
+        workflow.add_node("plan_outline", self._outline_node)
+        workflow.add_node("write_scene", self._write_scene_node)
+        workflow.add_node("build_payload", self._payload_node)
+
+        workflow.add_edge(START, "extract_material")
+        workflow.add_edge("extract_material", "plan_outline")
+        workflow.add_conditional_edges("plan_outline", self._route_scenes, ["write_scene"])
+        workflow.add_edge("write_scene", "build_payload")
+        workflow.add_edge("build_payload", END)
+
+        return workflow.compile()
+
+    async def _material_node(self, state: VideoGraphState) -> dict[str, Any]:
+        await self.emit_start("正在提取视频素材", progress=20)
+        digest = await VideoMaterialAgent().run(state["input_data"], state["config"])
+        return {"digest": digest}
+
+    async def _outline_node(self, state: VideoGraphState) -> dict[str, Any]:
+        await self.emit_start("正在规划视频结构", progress=35)
+        outline = await VideoOutlineAgent().run(state["digest"], state["constraints"])
+        if len(outline.scenes) != state["constraints"].scene_count:
+            raise ValueError(
+                f"视频场景数与预期不符：期望 {state['constraints'].scene_count}，实际 {len(outline.scenes)}"
+            )
+        return {"outline": outline}
+
+    def _route_scenes(self, state: VideoGraphState) -> list[Send]:
+        outline: VideoOutline = state["outline"]
+        digest: VideoMaterialDigest = state["digest"]
+        constraints: VideoConstraints = state["constraints"]
+        return [
+            Send("write_scene", {
+                "contract": scene,
+                "digest": digest,
+                "constraints": constraints,
+            })
+            for scene in outline.scenes
+        ]
+
+    async def _write_scene_node(self, state: VideoSceneWriteState) -> dict[str, Any]:
+        async with self._scene_semaphore:
+            writer = SceneWriterAgent()
+            draft = await writer.run(state["contract"], state["digest"], state["constraints"])
+            return {"drafts": [draft]}
+
+    async def _payload_node(self, state: VideoGraphState) -> dict[str, Any]:
+        await self.emit_start("正在构建视频预览载荷", progress=85)
+        payload = VideoPayloadBuilder().build(
+            state["outline"], state["drafts"], state["constraints"], state["digest"]
+        )
+        return {"payload": payload}
+
+    async def _run_pipeline(
+        self,
+        *,
+        input_data: ResourceInput,
+        config: dict,
+        title_prefix: str,
+    ) -> AgentResult:
+        constraints = VideoConstraints.model_validate(config)
+        try:
+            graph = self._build_graph()
+            initial_state = VideoGraphState(
+                input_data=input_data,
+                config=config,
+                constraints=constraints,
+                drafts=[],
+            )
+            final_state = await graph.ainvoke(initial_state)
+            payload = final_state.get("payload")
+            if not payload:
+                raise ValueError("Video generation graph failed to build final payload")
         except Exception as exc:
             logger.error("VideoAgent 生成异常: %s", exc, exc_info=True)
-            result = AgentResult(
+            return AgentResult(
                 success=False,
                 error=str(exc),
                 title=f"{title_prefix} - 视频",
@@ -380,13 +515,10 @@ class VideoAgent(BaseResourceAgent):
                     "internal_pipeline": "material/outline/scenes/payload",
                 },
             )
-            await self.emit_finish(result)
-            return result
 
         content = payload.model_dump_json(indent=2)
         source_handoff_agent_ids = sorted(input_data.upstream_handoffs.keys()) if input_data.upstream_handoffs else sorted({agent for scene in payload.scenes for agent in scene.source_agents})
-        coverage = outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs)
-        result = AgentResult(
+        return AgentResult(
             success=True,
             content=content,
             file_type="json",
@@ -406,26 +538,7 @@ class VideoAgent(BaseResourceAgent):
                 "aspect_ratio": payload.aspect_ratio,
                 "style": payload.style,
                 "source_handoff_agent_ids": source_handoff_agent_ids,
-                "teaching_plan_outline_ids": coverage["teaching_plan_outline_ids"],
-                "covered_source_outline_ids": coverage["covered_source_outline_ids"],
-                "missing_source_outline_ids": coverage["missing_source_outline_ids"],
                 "internal_pipeline": "material/outline/scenes/payload",
-            },
-        )
-        await self.emit_finish(result)
-        return result
-
-    async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        return AgentResult(
-            success=False,
-            error="VideoAgent 暂未接入 path 节点资源生成",
-            title=f"{input_data.node_title} - 视频",
-            metadata={
-                "engine": "video_json",
-                "agent_id": "video",
-                "schema_version": "video/v1",
-                "delivery_mode": "preview",
-                "reserved_for_path": True,
             },
         )
 

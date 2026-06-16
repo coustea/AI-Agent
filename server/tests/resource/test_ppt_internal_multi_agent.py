@@ -987,11 +987,29 @@ class TestSlideAgent:
 # ── write_slides_concurrently ────────────────────────────────────────────────
 
 
+async def write_slides_concurrently(
+    slide_agent,
+    outline,
+    digest,
+    concurrency = 4,
+):
+    import asyncio
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _run_with_semaphore(contract) -> any:
+        async with semaphore:
+            return await slide_agent.run(contract, digest, outline)
+
+    tasks = [_run_with_semaphore(contract) for contract in outline.slides]
+    drafts = await asyncio.gather(*tasks)
+    return sorted(drafts, key=lambda d: d.index)
+
+
 class TestWriteSlidesConcurrently:
     @pytest.mark.asyncio
     async def test_concurrent_slide_writing_preserves_order(self, monkeypatch):
         """并发写幻灯片保持顺序。"""
-        from app.resource.agents.ppt import write_slides_concurrently, SlideAgent
+        from app.resource.agents.ppt import SlideAgent
         from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,

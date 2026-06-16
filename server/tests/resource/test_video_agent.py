@@ -199,3 +199,96 @@ def test_video_payload_contract_uses_backend_video_v1_fields():
     assert "visual_prompt" in first_scene
     assert "visual_data" not in first_scene
     assert "imageUrl" not in first_scene
+
+
+@pytest.mark.asyncio
+async def test_video_agent_generate_node_path_learning(monkeypatch):
+    from app.resource.agents.video import (
+        SceneDraft,
+        SceneWriterAgent,
+        VideoAgent,
+        VideoMaterialAgent,
+        VideoMaterialDigest,
+        VideoOutline,
+        VideoOutlineAgent,
+        SceneContract,
+    )
+    from app.resource.schemas import NodeInput
+
+    async def fake_material_run(self, input_data, config):
+        assert input_data.learning_scenario == "path_learning"
+        assert "content" in input_data.upstream_handoffs
+        return VideoMaterialDigest(
+            topic="TCP 三次握手",
+            audience="自学学习者",
+            learning_goal="掌握 TCP 握手",
+            core_concepts=["SYN", "ACK"],
+            facts=["三次握手同步序号"],
+            examples=["历史 SYN 报文"],
+            process_steps=["SYN", "SYN+ACK", "ACK"],
+            misconceptions=[],
+            practice_prompts=[],
+            visual_opportunities=[],
+            source_map={"facts": ["content"]},
+        )
+
+    async def fake_outline_run(self, digest, constraints):
+        return VideoOutline(
+            title="TCP 三次握手讲解",
+            topic=digest.topic,
+            duration_seconds=constraints.duration_seconds,
+            style=constraints.style,
+            aspect_ratio=constraints.aspect_ratio,
+            narrative="大纲",
+            scenes=[
+                SceneContract(scene_id="scene-1", index=1, role="hook", title="问题", duration_seconds=60, learning_objective="引入问题", visual_type="card", content_hint="为什么不是两次", required_sources=["content"]),
+                SceneContract(scene_id="scene-2", index=2, role="concept", title="流程", duration_seconds=60, learning_objective="解释流程", visual_type="diagram", content_hint="三次报文", required_sources=["content"]),
+                SceneContract(scene_id="scene-3", index=3, role="recap", title="总结", duration_seconds=60, learning_objective="总结", visual_type="card", content_hint="回顾", required_sources=["content"]),
+            ],
+        )
+
+    async def fake_scene_run(self, contract, digest, constraints):
+        return SceneDraft(
+            scene_id=contract.scene_id,
+            index=contract.index,
+            title=contract.title,
+            narration=f"{contract.title} 旁白",
+            captions=[contract.title],
+            on_screen_text=[contract.learning_objective],
+            visual_prompt=contract.content_hint,
+            visual_type=contract.visual_type,
+            interaction_prompt="",
+            source_agents=contract.required_sources,
+        )
+
+    monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
+    monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)
+    monkeypatch.setattr(SceneWriterAgent, "run", fake_scene_run)
+
+    node_input = NodeInput(
+        path_id=101,
+        node_id=202,
+        node_key="tcp-handshake",
+        path_title="网络协议",
+        path_goal="掌握握手",
+        stage_id="stage-1",
+        node_title="TCP 三次握手",
+        difficulty="intermediate",
+        mastery_target="理解三次报文交换",
+        knowledge_points=["SYN", "ACK"],
+        weak_knowledge_points=["第三次确认"],
+        generation_focus=["时序描述"],
+        tutorial_title="三次握手教程",
+        tutorial_summary="教程摘要",
+        tutorial_markdown="# 教程正文\n握手原理。",
+        agent_config={"scene_count": 3},
+    )
+
+    agent = VideoAgent()
+    result = await agent.generate_node(node_input)
+
+    assert result.success is True
+    assert result.file_type == "json"
+    assert result.metadata["agent_id"] == "video"
+    assert result.metadata["path_id"] == 101
+    assert result.metadata["node_id"] == 202

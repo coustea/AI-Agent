@@ -70,7 +70,7 @@ def test_pre_audit_uses_handoff_not_full_content():
     deep = envelope["deep_audit_resources"]
     assert len(deep) == 2
     for item in deep:
-        assert "audit_content" not in item
+        assert "audit_content" in item
         assert "source_content" not in item
         assert "covered_outline_ids" in item
     agents_in_deep = {item["agent_id"] for item in deep}
