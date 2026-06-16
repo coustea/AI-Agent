@@ -178,6 +178,7 @@
                   msg.id === streamingMsgId ? streamDisplayText : msg.content,
                   msg.id === streamingMsgId ? isAIThinking : false,
                   msg.searchStage,
+                  msg.contextCompressionStage,
                   msg.teachingDiagramGenerating,
                   msg.teachingDiagram,
                   msg.attachments
@@ -218,6 +219,18 @@
                         :is-streaming="isStreamingMessage(msg)"
                     />
                   </template>
+                </div>
+
+                <div v-if="msg.contextCompressionStage" :class="['context-compression-card', { 'is-done': msg.contextCompressionStage === 'compression_done' }]">
+                  <div class="compression-orbit" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <div class="compression-copy">
+                    <strong>{{ getCompressionTitle(msg) }}</strong>
+                    <span>{{ msg.contextCompressionMessage || '正在整理较早的对话上下文...' }}</span>
+                  </div>
                 </div>
 
                 <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
@@ -479,6 +492,7 @@ import {
   type PendingFile,
   type Attachment,
   type ChatMsg,
+  type ContextCompressionStage,
   normalizeTeachingDiagram,
   getDocumentType,
   getDocumentIconColor,
@@ -701,6 +715,52 @@ let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
 
+const COMPRESSION_STAGES = new Set<ContextCompressionStage>([
+  'compression_checking',
+  'compression_running',
+  'compression_done',
+])
+
+const compressionClearTimers = new Map<ChatMsg['id'], ReturnType<typeof window.setTimeout>>()
+
+const getCompressionTitle = (msg: ChatMsg) => {
+  return msg.contextCompressionStage === 'compression_done' ? '上下文整理完成' : '上下文整理中'
+}
+
+const clearCompressionStatus = (aiMsg?: ChatMsg) => {
+  if (!aiMsg) return
+  const timer = compressionClearTimers.get(aiMsg.id)
+  if (timer != null) {
+    window.clearTimeout(timer)
+    compressionClearTimers.delete(aiMsg.id)
+  }
+  aiMsg.contextCompressionStage = undefined
+  aiMsg.contextCompressionMessage = undefined
+}
+
+const scheduleCompressionClear = (aiMsg: ChatMsg) => {
+  const existing = compressionClearTimers.get(aiMsg.id)
+  if (existing != null) {
+    window.clearTimeout(existing)
+  }
+  const timer = window.setTimeout(() => {
+    aiMsg.contextCompressionStage = undefined
+    aiMsg.contextCompressionMessage = undefined
+    compressionClearTimers.delete(aiMsg.id)
+  }, 1000)
+  compressionClearTimers.set(aiMsg.id, timer)
+}
+
+const applyCompressionStatus = (aiMsg: ChatMsg, payload: { stage?: string; message?: string }) => {
+  if (!payload.stage || !COMPRESSION_STAGES.has(payload.stage as ContextCompressionStage)) return false
+  aiMsg.contextCompressionStage = payload.stage as ContextCompressionStage
+  aiMsg.contextCompressionMessage = payload.message || '正在整理上下文...'
+  if (aiMsg.contextCompressionStage === 'compression_done') {
+    scheduleCompressionClear(aiMsg)
+  }
+  return true
+}
+
 const clearAvatarThinkingTimeout = () => {
   if (avatarThinkingTimeout) {
     clearTimeout(avatarThinkingTimeout)
@@ -767,7 +827,7 @@ const startAvatarThinkingTimeout = () => {
 }
 
 let scrollPending = false
-let streamFlushHandle: ReturnType<typeof setTimeout> | null = null
+let streamFlushHandle: ReturnType<typeof window.setTimeout> | null = null
 const streamDisplayText = ref('')
 const pendingRenderQueue: string[] = []
 let pendingRenderQueueStart = 0
@@ -1438,6 +1498,7 @@ const switchSession = async (sessionId: string) => {
       onDone: () => {
         isStreamDone = true
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        clearCompressionStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
         }
@@ -1453,6 +1514,7 @@ const switchSession = async (sessionId: string) => {
         stopStreamFlushLoop()
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        clearCompressionStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
           if (!aiMsg.content) {
@@ -1469,6 +1531,14 @@ const switchSession = async (sessionId: string) => {
           const payload = evt.data as { stage?: string; message?: string }
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
+
+          if (applyCompressionStatus(aiMsg, payload)) {
+            aiMsg.searchStage = undefined
+            aiMsg.searchMessage = undefined
+            scrollToBottom()
+            return
+          }
+
           if ([
             'preparing_context', 'classify', 'search_node', 'spark_summary',
             'direct_answer', 'attachment_answer', 'reading_profile',
@@ -1508,6 +1578,7 @@ const switchSession = async (sessionId: string) => {
           const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           if (!aiMsg) return
+          clearCompressionStatus(aiMsg)
           aiMsg.searchStage = undefined
           aiMsg.searchMessage = undefined
           aiMsg.teachingDiagramGenerating = false
@@ -1830,6 +1901,7 @@ const handleSend = async () => {
           isStreamDone = true
           const finishedSessionId = currentSessionId.value
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          clearCompressionStatus(aiMsg)
           if (aiMsg) {
             aiMsg.teachingDiagramGenerating = false
           }
@@ -1847,6 +1919,7 @@ const handleSend = async () => {
           stopStreamFlushLoop()
           commitStreamTextToMessage(aiMsgId)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
+          clearCompressionStatus(aiMsg)
           if (aiMsg) {
             aiMsg.teachingDiagramGenerating = false
             if (!aiMsg.content) {
@@ -1863,6 +1936,13 @@ const handleSend = async () => {
             const payload = evt.data as { stage?: string; message?: string }
             const aiMsg = messages.value.find(m => m.id === aiMsgId)
             if (!aiMsg) return
+
+            if (applyCompressionStatus(aiMsg, payload)) {
+              aiMsg.searchStage = undefined
+              aiMsg.searchMessage = undefined
+              scrollToBottom()
+              return
+            }
 
             if ([
               'preparing_context',
@@ -1912,6 +1992,7 @@ const handleSend = async () => {
             const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
             const aiMsg = messages.value.find(m => m.id === aiMsgId)
             if (!aiMsg) return
+            clearCompressionStatus(aiMsg)
             aiMsg.searchStage = undefined
             aiMsg.searchMessage = undefined
             aiMsg.teachingDiagramGenerating = false
@@ -2021,6 +2102,8 @@ onBeforeUnmount(() => {
     if (f.localUrl) URL.revokeObjectURL(f.localUrl)
   })
   if (dimTimer) clearTimeout(dimTimer)
+  compressionClearTimers.forEach(timer => window.clearTimeout(timer))
+  compressionClearTimers.clear()
   document.removeEventListener('mousedown', handleGlobalClick)
   document.removeEventListener('touchstart', handleGlobalClick)
 })
@@ -2053,6 +2136,81 @@ onBeforeUnmount(() => {
 .search-status-text {
   animation: pulse-text 1.5s infinite ease-in-out;
 }
+
+.context-compression-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: min(520px, 100%);
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.context-compression-card.is-done {
+  border-color: rgba(22, 163, 74, 0.45);
+}
+
+.compression-orbit {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+
+.compression-orbit span {
+  position: absolute;
+  inset: 6px;
+  border: 2px solid transparent;
+  border-top-color: #0891b2;
+  border-radius: 50%;
+  animation: compression-spin 1s linear infinite;
+}
+
+.compression-orbit span:nth-child(2) {
+  inset: 3px;
+  border-top-color: #16a34a;
+  animation-duration: 1.4s;
+  animation-direction: reverse;
+}
+
+.compression-orbit span:nth-child(3) {
+  inset: 9px;
+  border-top-color: #64748b;
+  animation-duration: 0.8s;
+}
+
+.compression-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compression-copy strong {
+  font-size: 0.88rem;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.compression-copy span {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+@keyframes compression-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tutor-dashboard {
   display: flex;
   flex-direction: column;

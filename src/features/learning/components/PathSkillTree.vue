@@ -126,7 +126,7 @@ const handleNodeClick = (node: LearningPathNode) => {
 }
 
 .stage-badge {
-  background: var(--gradient-path);
+  background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 800;
@@ -134,7 +134,7 @@ const handleNodeClick = (node: LearningPathNode) => {
   border-radius: var(--radius-sm);
   text-transform: uppercase;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.18);
 }
 
 .stage-info h4 {
@@ -223,15 +223,15 @@ const handleNodeClick = (node: LearningPathNode) => {
 
 /* Active styles */
 .node-card:not(.locked):not(.completed):not(.completed_with_gaps) .status-icon {
-  border-color: var(--cat-path);
-  color: var(--cat-path);
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 .pulse-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--cat-path);
+  background: #2563eb;
 }
 
 .active-pulse .pulse-dot {
@@ -241,15 +241,15 @@ const handleNodeClick = (node: LearningPathNode) => {
 @keyframes pulse-animation {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.7);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(217, 119, 6, 0);
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
   }
 }
 
@@ -290,7 +290,7 @@ const handleNodeClick = (node: LearningPathNode) => {
 
 .node-card.in_progress .step-num,
 .node-card.available .step-num {
-  color: var(--cat-path);
+  color: #2563eb;
 }
 
 .duration-badge {
@@ -311,8 +311,8 @@ const handleNodeClick = (node: LearningPathNode) => {
   border: 1px solid transparent;
 }
 .difficulty-badge.beginner { background: rgba(16, 185, 129, 0.1); color: #059669; border-color: rgba(16, 185, 129, 0.2); }
-.difficulty-badge.intermediate { background: rgba(245, 158, 11, 0.1); color: #d97706; border-color: rgba(245, 158, 11, 0.2); }
-.difficulty-badge.advanced { background: rgba(239, 68, 68, 0.1); color: #dc2626; border-color: rgba(239, 68, 68, 0.2); }
+.difficulty-badge.intermediate { background: rgba(37, 99, 235, 0.1); color: #2563eb; border-color: rgba(37, 99, 235, 0.2); }
+.difficulty-badge.advanced { background: rgba(124, 58, 237, 0.1); color: #7c3aed; border-color: rgba(124, 58, 237, 0.2); }
 
 .node-title {
   margin: 0;
@@ -323,7 +323,7 @@ const handleNodeClick = (node: LearningPathNode) => {
 }
 
 .node-card:not(.locked):hover .node-title {
-  color: var(--color-primary);
+  color: #2563eb;
 }
 
 .node-desc {
@@ -341,7 +341,7 @@ const handleNodeClick = (node: LearningPathNode) => {
   margin-top: 8px;
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--cat-path);
+  color: #2563eb;
   opacity: 0.8;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }

@@ -14,6 +14,8 @@ export interface Attachment {
   name: string
 }
 
+export type ContextCompressionStage = 'compression_checking' | 'compression_running' | 'compression_done'
+
 export interface ChatMsg {
   id: number
   role: 'user' | 'ai'
@@ -24,6 +26,8 @@ export interface ChatMsg {
   teachingDiagramGenerating?: boolean
   searchStage?: string
   searchMessage?: string
+  contextCompressionStage?: ContextCompressionStage
+  contextCompressionMessage?: string
 }
 
 export const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {

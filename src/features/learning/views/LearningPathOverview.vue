@@ -1,23 +1,37 @@
 <template>
   <main class="path-dashboard">
-    <BaseCard v-if="loading" class="state-card">正在加载学习路径...</BaseCard>
-    <BaseCard v-else-if="!path" class="state-card">
+    <div class="bg-decor" v-if="isGenerating">
+      <div class="data-stream"></div>
+      <div class="grid-layer"></div>
+    </div>
+
+    <BaseCard v-if="loading" class="state-card">正在拉取云端数据...</BaseCard>
+
+    <BaseCard v-else-if="!path && !isGenerating" class="state-card">
       <p>还没有可用的学习路径。</p>
       <BaseButton variant="primary" @click="router.push('/path-planner')">去创建</BaseButton>
     </BaseCard>
 
     <div v-else-if="isGenerating" class="generating-screen">
-        <div class="generating-content">
-        <div class="cube-loader">
-          <div class="cube cube1"></div>
-          <div class="cube cube2"></div>
-          <div class="cube cube4"></div>
-          <div class="cube cube3"></div>
+      <div class="generating-content">
+        <div class="loader-section">
+          <div class="cube-loader">
+            <div class="cube cube1"></div>
+            <div class="cube cube2"></div>
+            <div class="cube cube4"></div>
+            <div class="cube cube3"></div>
+          </div>
+          <h2>正在生成学习路径</h2>
+          <p class="generating-subtitle">AI 规划引擎正在为您拆解知识拓扑，预计需要 10-15 秒</p>
         </div>
-        <h2>正在生成学习路径</h2>
-        <p class="generating-subtitle">系统会先整理阶段与节点，完成后你就可以按节点开始学习。</p>
-        <div class="message-log">
-          <transition-group name="list">
+
+        <div class="console-box">
+          <div class="corner-tl"></div><div class="corner-tr"></div>
+          <div class="corner-bl"></div><div class="corner-br"></div>
+
+          <div class="scanning-line"></div>
+
+          <transition-group name="list" tag="div" class="message-log">
             <div v-for="(msg, i) in generatingMessages" :key="i" class="log-msg">
               <span class="dot"></span> {{ msg }}
             </div>
@@ -27,8 +41,7 @@
     </div>
 
     <div v-else class="dashboard-grid">
-      
-      <!-- Top Row: Overview Stats -->
+
       <header class="dashboard-header">
         <div class="header-main-info">
           <div class="title-area">
@@ -42,7 +55,7 @@
             <BaseButton variant="primary" @click="router.push('/path-planner')">重新规划</BaseButton>
           </div>
         </div>
-        
+
         <div class="stats-row">
           <div class="stat-box">
             <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> 总进度</label>
@@ -72,12 +85,9 @@
         </div>
       </header>
 
-      <!-- Evaluation Banner (if any) -->
       <EvaluationBanner :evaluation="evaluation" class="dashboard-banner" />
 
-      <!-- Main Body: High density panels -->
       <div class="dashboard-body">
-        <!-- Skill Tree / Graph (full width) -->
         <section class="dashboard-graph">
           <div class="graph-card">
             <div class="card-header">
@@ -91,24 +101,19 @@
                 <span class="legend-item"><i class="dot slate"></i> 未解锁</span>
               </div>
             </div>
-            
+
             <div class="tree-wrapper">
-              <PathSkillTree 
-                :stages="path.stages" 
-                :nodes="path.nodes" 
-                @node-click="handleNodeClick" 
+              <PathSkillTree
+                :stages="path.stages"
+                :nodes="path.nodes"
+                @node-click="handleNodeClick"
               />
             </div>
           </div>
         </section>
-
       </div>
 
-      <!-- Drawer for node details -->
-      <NodeDetailDrawer 
-        v-model="drawerVisible" 
-        :node="selectedNode" 
-      />
+      <NodeDetailDrawer v-model="drawerVisible" :node="selectedNode" />
 
     </div>
   </main>
@@ -125,7 +130,7 @@ import PathSkillTree from '@/features/learning/components/PathSkillTree.vue'
 import EvaluationBanner from '@/features/learning/components/EvaluationBanner.vue'
 import NodeDetailDrawer from '@/features/learning/components/NodeDetailDrawer.vue'
 
-import { getCurrentLearningPath, getLearningPathById, getLearningEvaluation } from '@/features/learning/api/path'
+import { createLearningPath, getCurrentLearningPath, getLearningPathById, getLearningEvaluation } from '@/features/learning/api/path'
 import type { LearningPathOverview, PathLearningEvaluationResponse, LearningPathNode } from '@/features/learning/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 
@@ -155,7 +160,7 @@ const handlePathEvent = (e: MessageEvent) => {
     const data = JSON.parse(e.data)
     if (data.message && !generatingMessages.value.includes(data.message)) {
       generatingMessages.value.push(data.message)
-      if (generatingMessages.value.length > 4) {
+      if (generatingMessages.value.length > 5) { // 稍微增加保留条数，让列表显得更丰满
         generatingMessages.value.shift()
       }
     }
@@ -171,14 +176,11 @@ const handlePathEvent = (e: MessageEvent) => {
 const startSSE = (pathId: number) => {
   const token = localStorage.getItem('token') || ''
   eventSource = new EventSource(`/api/v1/ai/path-plan/${pathId}/events?token=${encodeURIComponent(token)}`)
-  
+
   eventSource.onmessage = handlePathEvent
   eventSource.addEventListener('path.step', handlePathEvent)
   eventSource.addEventListener('path.done', handlePathEvent)
 }
-
-onDeactivated(() => {
-})
 
 onActivated(() => {
   if (isGenerating.value && path.value) {
@@ -196,11 +198,40 @@ onBeforeUnmount(() => {
   }
 })
 
-
 const loadPath = async () => {
+  const rawId = String(route.params.id || '')
+
+  // 核心优化：接管从 Entry 过来的新建路径请求，直接进入动画并后台发请求
+  if (rawId === 'new') {
+    isGenerating.value = true
+    loading.value = false
+    path.value = null
+    const newGoal = route.query.goal as string
+
+    if (!newGoal) {
+      router.replace('/path-planner')
+      return
+    }
+
+    if (generatingMessages.value.length === 0) {
+      generatingMessages.value = ['正在启动规划引擎并对接 AI 模型...']
+    }
+
+    try {
+      const res = await createLearningPath({ goal: newGoal, topic: newGoal })
+      const newPath = res.data.data
+
+      // 生成成功后，用真实的 id 替换当前 url (这会触发 watch 重新加载数据)
+      router.replace(`/path-planner/overview/${newPath.id}`)
+    } catch (error) {
+      ElMessage.error(getErrorMessage(error, '路线推演失败'))
+      router.replace('/path-planner')
+    }
+    return
+  }
+
   loading.value = true
   try {
-    const rawId = String(route.params.id || '')
     const paramId = Number(rawId || 0)
     const shouldLoadSpecificPath = Boolean(rawId && rawId !== 'latest' && Number.isFinite(paramId) && paramId > 0)
 
@@ -226,7 +257,9 @@ const loadPath = async () => {
 
     if (path.value.status === 'generating') {
       isGenerating.value = true
-      generatingMessages.value = ['已创建路径记录，正在拆解阶段与节点']
+      if (generatingMessages.value.length === 0) {
+        generatingMessages.value = ['已定位到专属路径，正在继续生成节点细节...']
+      }
       startSSE(currentPathId)
     } else {
       isGenerating.value = false
@@ -258,13 +291,19 @@ const handleNodeClick = (node: LearningPathNode) => {
 
 watch(
   () => route.params.id,
-  () => {
+  (newId, oldId) => {
     if (eventSource) {
       eventSource.close()
       eventSource = null
     }
-    generatingMessages.value = []
-    isGenerating.value = false
+
+    if (oldId === 'new' && newId && newId !== 'new') {
+      isGenerating.value = true
+    } else {
+      generatingMessages.value = []
+      isGenerating.value = false
+    }
+
     loadPath()
   }
 )
@@ -274,14 +313,14 @@ onMounted(loadPath)
 
 <style scoped>
 .path-dashboard {
-  /* --- Deep Page Colorization (Amber Theme) --- */
-  --color-primary: var(--cat-path);
-  --color-primary-hover: #D97706; /* Amber 600 */
-  --color-primary-soft: var(--cat-path-soft);
-  --color-primary-border: #FCD34D; /* Amber 300 */
-  --color-primary-text: #B45309; /* Amber 700 */
-  --gradient-primary: var(--gradient-path);
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-soft: #e0e7ff;
+  --color-primary-border: #a5b4fc;
+  --color-primary-text: #3730a3;
+  --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%);
 
+  position: relative;
   min-height: calc(100vh - 64px);
   padding: 24px;
   background: var(--color-bg);
@@ -289,84 +328,160 @@ onMounted(loadPath)
   flex-direction: column;
 }
 
+/* --- 背景装饰：解决页面空旷 --- */
+.bg-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.grid-layer {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(79, 70, 229, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 70, 229, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.data-stream {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.05) 0%, transparent 70%);
+}
+
+/* --- 生成态布局 --- */
 .generating-screen {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  min-height: 60vh;
+  z-index: 1;
+  min-height: 65vh;
 }
 
 .generating-content {
+  width: 100%;
+  max-width: 500px;
   text-align: center;
-  max-width: 400px;
+}
+
+.loader-section {
+  margin-bottom: 40px;
 }
 
 .generating-content h2 {
-  font-size: 1.5rem;
-  margin: 24px 0 8px;
-  background: var(--gradient-path);
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin: 24px 0 12px;
+  background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .generating-subtitle {
   color: var(--color-text-muted);
-  margin-bottom: 32px;
+  font-size: 0.95rem;
+}
+
+/* --- 控制台方框优化：玻璃拟态、居中置顶 --- */
+.console-box {
+  position: relative;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(79, 70, 229, 0.15);
+  border-radius: 16px;
+  padding: 30px 20px;
+  min-height: 220px; /* 增加高度，避免空旷 */
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
 }
 
 .message-log {
-  text-align: left;
-  background: var(--color-bg);
-  padding: 16px 24px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
-  height: 160px;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  align-items: center;      /* 确保文本框内部居中 */
+  justify-content: flex-start; /* 从顶部开始向下排列 */
+  gap: 12px;
+  width: 100%;
 }
 
 .log-msg {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: var(--color-text);
   font-size: 0.9rem;
-  margin: 4px 0;
-  opacity: 0.8;
+  font-family: var(--font-mono, monospace);
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.04);
+  width: fit-content; /* 宽度适应文字，结合外层居中达到好看的效果 */
 }
 
 .log-msg:last-child {
-  opacity: 1;
-  color: var(--cat-path);
+  color: var(--color-primary);
   font-weight: 600;
+  background: rgba(79, 70, 229, 0.1);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.05);
 }
 
 .log-msg .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary);
 }
 
-.list-enter-active,
-.list-leave-active {
-  transition: all 0.3s ease;
+/* --- 装饰性细节 --- */
+.scanning-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  animation: scan-move 2.5s linear infinite;
+  opacity: 0.5;
+  z-index: 10;
+}
+
+@keyframes scan-move {
+  0% { top: 0%; opacity: 0; }
+  20% { opacity: 0.5; }
+  80% { opacity: 0.5; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* 方框四角装饰 */
+.corner-tl, .corner-tr, .corner-bl, .corner-br {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-primary);
+  opacity: 0.3;
+}
+.corner-tl { top: 12px; left: 12px; border-right: 0; border-bottom: 0; }
+.corner-tr { top: 12px; right: 12px; border-left: 0; border-bottom: 0; }
+.corner-bl { bottom: 12px; left: 12px; border-right: 0; border-top: 0; }
+.corner-br { bottom: 12px; right: 12px; border-left: 0; border-top: 0; }
+
+/* 列表进入动画 */
+.list-enter-active, .list-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .list-enter-from {
   opacity: 0;
-  transform: translateX(-20px);
+  transform: translateY(-15px);
 }
 .list-leave-to {
   opacity: 0;
-  transform: translateY(-20px);
+  transform: scale(0.95);
 }
 
+/* Loader Animation */
 .cube-loader {
   width: 60px;
   height: 60px;
@@ -386,7 +501,7 @@ onMounted(loadPath)
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
-  background-color: var(--cat-path);
+  background-color: var(--color-primary);
   animation: cube-loader 2.76s infinite linear both;
   transform-origin: 100% 100%;
 }
@@ -402,6 +517,7 @@ onMounted(loadPath)
   90%, 100% { transform: perspective(140px) rotateY(180deg); opacity: 0; }
 }
 
+/* Dashboard Grid Styles */
 .dashboard-grid {
   display: flex;
   flex-direction: column;
@@ -410,9 +526,10 @@ onMounted(loadPath)
   margin: 0 auto;
   width: 100%;
   flex: 1;
+  position: relative;
+  z-index: 2;
 }
 
-/* Header */
 .dashboard-header {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -433,7 +550,7 @@ onMounted(loadPath)
   display: block;
   font-size: 0.8rem;
   font-weight: 800;
-  color: var(--cat-path);
+  color: var(--color-primary);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin-bottom: 8px;
@@ -490,7 +607,7 @@ onMounted(loadPath)
 }
 
 .text-primary {
-  color: var(--cat-path) !important;
+  color: var(--color-primary) !important;
 }
 
 .progress-box {
@@ -512,7 +629,7 @@ onMounted(loadPath)
 .progress-track i {
   display: block;
   height: 100%;
-  background: var(--gradient-path);
+  background: var(--gradient-primary);
   border-radius: 999px;
   transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -539,7 +656,6 @@ onMounted(loadPath)
   margin: 0;
 }
 
-/* Dashboard Body */
 .dashboard-body {
   display: flex;
   flex-direction: column;
@@ -620,7 +736,6 @@ onMounted(loadPath)
   text-align: center;
 }
 
-/* Responsive */
 @media (max-width: 1200px) {
   .graph-card {
     min-height: 500px;
