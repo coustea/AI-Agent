@@ -1,8 +1,8 @@
 <template>
   <div class="wrong-book-tab">
     <div class="header-section">
-      <h2>Wrong Questions Book</h2>
-      <p class="subtitle">Review and drill your mistakes to solidify your understanding.</p>
+      <h2>错题本</h2>
+      <p class="subtitle">重练错题、巩固薄弱点，提升掌握程度。</p>
     </div>
 
     <div class="main-grid">
@@ -10,15 +10,15 @@
       <div class="drill-column">
         <div class="panel">
           <div class="panel-header">
-            <h3>Quick Drill</h3>
-            <button class="btn-text" @click="$emit('pick-drill')" title="Next Question">
+            <h3>快速再练</h3>
+            <button class="btn-text" @click="$emit('pick-drill')" title="换一题">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             </button>
           </div>
 
           <div v-if="drillQuestion" class="drill-content">
             <div class="tags">
-              <span class="tag danger">Mistake Retry</span>
+              <span class="tag danger">错题重练</span>
               <span class="tag outline">{{ drillQuestion.subject }}</span>
             </div>
             
@@ -59,26 +59,26 @@
               :disabled="!hasDrillAnswer || drillReviewing"
               @click="$emit('submit-drill')"
             >
-              {{ drillReviewing ? 'Reviewing...' : 'Submit Drill' }}
+              {{ drillReviewing ? '评阅中...' : '提交答案' }}
             </button>
             <button
               v-else
               class="btn-secondary full-width"
               @click="$emit('pick-drill')"
             >
-              Next Question
+              再练一题
             </button>
 
             <!-- Drill Result -->
             <div v-if="drillSubmitted" :class="['result-panel', drillCorrect ? 'success' : 'danger']">
-              <strong>{{ drillCorrect ? 'Mastered!' : 'Needs more work' }}</strong>
-              <div class="ref-ans">Reference: {{ formatAnswer(drillQuestion.answer) }}</div>
+              <strong>{{ drillCorrect ? '已掌握！' : '还需练习' }}</strong>
+              <div class="ref-ans">参考答案：{{ formatAnswer(drillQuestion.answer) }}</div>
               <p v-if="drillReview?.feedback" class="feedback-text">{{ drillReview.feedback }}</p>
               <div class="analysis-text" v-html="renderInline(drillQuestion.analysis)"></div>
             </div>
           </div>
           <div v-else class="empty-state small">
-            No wrong questions to drill. Good job!
+            暂无错题可练，继续保持！
           </div>
         </div>
       </div>
@@ -88,33 +88,33 @@
         <div class="filter-bar">
           <div class="search-input-wrapper">
             <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input 
-              v-model="filters.query" 
-              type="text" 
-              placeholder="Search in wrong book..." 
+            <input
+              v-model="filters.query"
+              type="text"
+              placeholder="搜索错题..."
               class="search-input"
               @keyup.enter="$emit('search-wrong')"
             />
           </div>
           <select v-model="filters.subject" class="filter-select" @change="$emit('search-wrong')">
-            <option value="">All Subjects</option>
+            <option value="">全部学科</option>
             <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
           </select>
           <select v-model="filters.type" class="filter-select" @change="$emit('search-wrong')">
-            <option value="">All Types</option>
+            <option value="">全部题型</option>
             <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
           </select>
         </div>
 
         <div v-if="loading" class="loading-state">
-          Loading wrong questions...
+          加载错题中...
         </div>
 
         <div v-else class="wrong-list">
           <article v-for="question in questions" :key="question.id" class="question-card">
             <div class="card-header">
               <div class="tags">
-                <span class="tag danger-outline">Mistakes: {{ question.wrong_count || 1 }}</span>
+                <span class="tag danger-outline">错 {{ question.wrong_count || 1 }} 次</span>
                 <span class="tag outline">{{ question.subject }}</span>
                 <span class="tag type">{{ question.type }}</span>
               </div>
@@ -149,46 +149,46 @@
               :disabled="submitted[question.id]"
               class="text-area-input"
               rows="3"
-              placeholder="Try answering again..."
+              placeholder="请重新作答..."
             ></textarea>
 
             <div class="card-footer">
               <div v-if="submitted[question.id]" :class="['result-badge', correct[question.id] ? 'success' : 'danger']">
-                {{ correct[question.id] ? 'Mastered!' : 'Still needs work' }}
+                {{ correct[question.id] ? '已掌握！' : '仍需练习' }}
               </div>
               <div v-else class="empty-badge"></div>
 
               <div class="action-buttons">
                 <button class="btn-text" @click="$emit('toggle-wrong-analysis', question.id)">
-                  {{ openedAnalysis.has(question.id) ? 'Hide Analysis' : 'Show Analysis' }}
+                  {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
                 </button>
-                <button class="btn-text text-danger" @click="$emit('remove-wrong', question)">Remove</button>
-                <button class="btn-text text-success" @click="$emit('archive-wrong', question)">Archive</button>
+                <button class="btn-text text-danger" @click="$emit('remove-wrong', question)">移出</button>
+                <button class="btn-text text-success" @click="$emit('archive-wrong', question)">归档</button>
                 <button
                   class="btn-primary"
                   :disabled="submitted[question.id] || !hasAnswer(question)"
                   @click="$emit('submit-wrong', question)"
                 >
-                  {{ reviewing[question.id] ? 'Reviewing...' : 'Submit' }}
+                  {{ reviewing[question.id] ? '评阅中...' : '提交' }}
                 </button>
               </div>
             </div>
 
             <div v-if="openedAnalysis.has(question.id)" class="analysis-panel">
-              <strong>Reference: {{ formatAnswer(question.answer) }}</strong>
-              <div class="analysis-text" v-html="renderInline(question.analysis || 'No analysis available.')"></div>
+              <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
+              <div class="analysis-text" v-html="renderInline(question.analysis || '暂无解析。')"></div>
             </div>
           </article>
 
           <div v-if="questions.length === 0" class="empty-state">
-            No wrong questions found.
+            暂无错题。
           </div>
         </div>
 
         <div v-if="total > 0 && !loading" class="pagination">
-          <button class="page-btn" :disabled="page === 1" @click="$emit('page-change', page - 1)">Previous</button>
-          <span class="page-info">Page {{ page }} of {{ Math.ceil(total / pageSize) }}</span>
-          <button class="page-btn" :disabled="page >= Math.ceil(total / pageSize)" @click="$emit('page-change', page + 1)">Next</button>
+          <button class="page-btn" :disabled="page === 1" @click="$emit('page-change', page - 1)">上一页</button>
+          <span class="page-info">第 {{ page }} 页 / 共 {{ Math.ceil(total / pageSize) }} 页</span>
+          <button class="page-btn" :disabled="page >= Math.ceil(total / pageSize)" @click="$emit('page-change', page + 1)">下一页</button>
         </div>
       </div>
     </div>
