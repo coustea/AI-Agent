@@ -46,6 +46,8 @@ dependencies = [
     "openpyxl>=3.1.5",
     "requests>=2.33.1",
     "langchain-tavily>=0.2.18",
+    "edge-tts>=6.1.12",
+    "mutagen>=1.47.0",
 ]
 
 [dependency-groups]
