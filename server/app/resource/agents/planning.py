@@ -1,8 +1,6 @@
-"""规划智能体 — 分析学习需求，生成教学蓝图和各 Agent 个性化指令。
+"""规划智能体 — 分析学习需求，生成总体教学大纲（TeachingPlan）。
 
-PlanningAgent 是多智能体模式的入口，它的输出（ExecutionPlan）包含：
-  - blueprint: 教学蓝图（全局教学策略）
-  - agent_instructions: 每个子 Agent 的个性化执行指令
+PlanningAgent 是多智能体模式的入口，它的唯一输出是 TeachingPlan，定义了全局教学方向与大纲。
 """
 
 from __future__ import annotations
@@ -11,13 +9,13 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, ExecutionPlan, NodeInput, ResourceInput
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput, TeachingPlan
 from app.resource.utils import format_learner_profile_for_prompt
 
 
 @register_agent
 class PlanningAgent(BaseResourceAgent):
-    """分析学习需求，生成教学蓝图和各 Agent 个性化指令。"""
+    """分析学习需求，生成全局教学大纲（TeachingPlan）。"""
 
     agent_id = "planning"
     agent_name = "规划"
@@ -27,39 +25,37 @@ class PlanningAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        """多智能体场景：分析学习需求，生成教学蓝图和执行计划。"""
+        """多智能体场景：分析学习需求，生成总体教学方向、概要和大纲。"""
         await self.emit_start("正在分析学习需求并构建执行计划", progress=10)
 
         prompt = prompts.get("resource").get("planning")
         input_text = self._build_planning_input(input_data)
 
-        await self.emit_start("正在调用大模型生成教学蓝图与各智能体指令", progress=25)
+        await self.emit_start("正在调用大模型生成教学方向与大纲", progress=25)
 
         plan = await self.llm.ainvoke_json(
-            ExecutionPlan,
+            TeachingPlan,
             f"{prompt}\n\n{input_text}",
             temperature=INFERENCE_TEMPERATURE,
         )
 
-        await self.emit_start("蓝图已生成，正在提取各智能体个性化指令", progress=85)
+        await self.emit_start("教学方向与大纲已生成", progress=85)
 
         result = AgentResult(
             success=True,
             content=plan.model_dump_json(indent=2),
             file_type="json",
-            title="教学蓝图与执行计划",
-            summary="PlanningAgent 生成了教学蓝图和各 Agent 个性化指令",
+            title="教学方向与大纲",
+            summary="PlanningAgent 生成了总体教学方向、概要和大纲",
+            metrics={"outline_count": len(plan.outline)},
             metadata={
                 "agent_id": "planning",
-                "blueprint": plan.blueprint.model_dump(mode="json"),
-                "instructions": {
-                    inst.agent_id: inst.model_dump(mode="json")
-                    for inst in plan.agent_instructions
-                },
+                "teaching_plan": plan.model_dump(mode="json"),
             },
         )
         await self.emit_finish(result)
         return result
+
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         """路径节点场景不支持 PlanningAgent。"""

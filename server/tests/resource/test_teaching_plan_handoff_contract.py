@@ -121,3 +121,45 @@ def test_agent_result_uses_metrics_and_downstream_context():
     assert dumped["metrics"]["char_count"] == 5
     assert dumped["downstream_context"]["source_agent"] == "content"
     assert "summary_data" not in dumped
+
+
+import json
+
+import pytest
+
+from app.resource.agents.planning import PlanningAgent
+from app.resource.schemas import ResourceInput, TeachingPlan
+
+
+@pytest.mark.asyncio
+async def test_planning_agent_returns_teaching_plan_without_agent_instructions(monkeypatch):
+    class FakeLlm:
+        async def ainvoke_json(self, model, message, **kwargs):
+            assert model is TeachingPlan
+            assert "为每个启用的资源 Agent" not in message
+            return TeachingPlan(
+                topic="TCP 三次握手",
+                learning_goal="理解三次握手",
+                summary="围绕目的、流程 and 误区组织学习。",
+                outline=[],
+            )
+
+    agent = PlanningAgent()
+    agent.llm = FakeLlm()
+
+    result = await agent.generate_resource(
+        ResourceInput(
+            resource_id=1,
+            learning_need="学习 TCP 三次握手",
+            agent_config={"enabled_agents": ["content", "mindmap", "ppt", "video"]},
+        )
+    )
+
+    payload = json.loads(result.content)
+
+    assert result.success is True
+    assert result.downstream_context is None
+    assert result.metadata["agent_id"] == "planning"
+    assert result.metadata["teaching_plan"]["topic"] == "TCP 三次握手"
+    assert "agent_instructions" not in payload
+
