@@ -199,36 +199,60 @@ class ResourceGenerationRequest(BaseModel):
 # 教学蓝图 & 执行计划模型（Planning Agent 输出）
 # ======================================================================
 
-class LearningBlueprint(BaseModel):
-    """Planning Agent 生成的内部教学蓝图，供多个资源 Agent 共享。
+class TeachingOutlineItem(BaseModel):
+    """PlanningAgent 生成的全局教学大纲项，不绑定具体 agent。"""
 
-    不作为 GeneratedResourceItem 保存，不返回给前端，不写入 Neo4j。
-    """
-    topic: str = Field(description="学习主题")
-    learner_goal: str = Field(default="", description="本轮学习目标")
-    prerequisite_concepts: list[str] = Field(default_factory=list, description="前置概念")
-    core_concepts: list[str] = Field(default_factory=list, description="核心概念")
-    difficult_points: list[str] = Field(default_factory=list, description="难点与易错点")
-    concept_relations: list[str] = Field(default_factory=list, description="概念间关系")
-    example_scenarios: list[str] = Field(default_factory=list, description="推荐案例或场景")
-    practice_targets: list[str] = Field(default_factory=list, description="练习目标")
-    resource_guidance: dict[str, str] = Field(default_factory=dict, description="各类资源的生成侧重点")
+    id: str = Field(pattern=r"^o[0-9]+$", description="稳定大纲 ID，如 o1、o2")
+    title: str
+    goal: str = ""
+    key_points: list[str] = Field(default_factory=list)
+    common_misconceptions: list[str] = Field(default_factory=list)
+    suggested_examples: list[str] = Field(default_factory=list)
+    suggested_visuals: list[str] = Field(default_factory=list)
+    must_not_miss: bool = True
 
 
-class AgentInstruction(BaseModel):
-    """Planning Agent 为单个下游 Agent 生成的个性化指令。"""
-    agent_id: str
-    focus: str = Field(default="", description="该 Agent 应重点关注的方面")
-    difficulty: str = Field(default="intermediate", description="建议难度")
-    personalization_notes: str = Field(default="", description="个性化建议")
-    constraints: list[str] = Field(default_factory=list, description="特殊约束")
+class TeachingPlan(BaseModel):
+    """PlanningAgent 的唯一输出：总体方向、概要、大纲和边界。"""
+
+    topic: str
+    learning_goal: str = ""
+    audience: str = ""
+    difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
+    teaching_strategy: str = ""
+    summary: str = ""
+    outline: list[TeachingOutlineItem] = Field(default_factory=list)
+    boundaries: list[str] = Field(default_factory=list)
 
 
-class ExecutionPlan(BaseModel):
-    """Planning Agent 的完整输出。"""
-    blueprint: LearningBlueprint
-    agent_instructions: list[AgentInstruction] = Field(default_factory=list)
-    personalization_summary: str = Field(default="", description="个性化分析总结")
+class ReusableAssets(BaseModel):
+    examples: list[str] = Field(default_factory=list)
+    misconceptions: list[str] = Field(default_factory=list)
+    visual_ideas: list[str] = Field(default_factory=list)
+    practice_refs: list[str] = Field(default_factory=list)
+    code_refs: list[str] = Field(default_factory=list)
+
+
+class DownstreamMaterial(BaseModel):
+    outline_id: str = ""
+    type: Literal["explanation", "structure", "practice", "code", "reading", "example", "visual"] = "explanation"
+    summary: str = Field(default="", max_length=500)
+    key_points: list[str] = Field(default_factory=list, max_length=8)
+    evidence_excerpt: str = Field(default="", max_length=180)
+    priority: int = Field(default=3, ge=1, le=5)
+
+
+class DownstreamContext(BaseModel):
+    """基础 agent 给 PPT/Video/Review 的短交接摘要。"""
+
+    schema_version: Literal["resource_handoff/v1"] = "resource_handoff/v1"
+    source_agent: str
+    title: str = ""
+    one_sentence_summary: str = Field(default="", max_length=180)
+    covered_outline_ids: list[str] = Field(default_factory=list)
+    materials: list[DownstreamMaterial] = Field(default_factory=list, max_length=8)
+    reusable_assets: ReusableAssets = Field(default_factory=ReusableAssets)
+    cautions: list[str] = Field(default_factory=list, max_length=6)
 
 
 # ======================================================================
@@ -243,7 +267,8 @@ class AgentResult(BaseModel):
     file_type: str = "markdown"
     title: str = ""
     summary: str = ""
-    summary_data: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    downstream_context: DownstreamContext | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str = ""
 
@@ -256,10 +281,9 @@ class ResourceInput(BaseModel):
     learning_scenario: LearningScenario = "self_study"
     agent_name: str = ""
     agent_config: dict[str, Any] = Field(default_factory=dict)
-    blueprint: LearningBlueprint | None = None
-    instruction: AgentInstruction | None = None
+    teaching_plan: TeachingPlan | None = None
     profile: dict[str, Any] = Field(default_factory=dict)
-    previous_results: dict[str, AgentResult] = Field(default_factory=dict)
+    upstream_handoffs: dict[str, DownstreamContext] = Field(default_factory=dict)
 
 
 class NodeInput(BaseModel):
@@ -294,7 +318,8 @@ class GeneratedResourceItem(BaseModel):
     format: str
     content: Any
     summary: str = ""
-    summary_data: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    downstream_context: DownstreamContext | None = None
     execution_report: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     status: str = "completed"
@@ -359,9 +384,11 @@ __all__ = [
     "ResourceGenerationRequest",
     "SingleResourceRequest",
     # Learning blueprint & planning
-    "LearningBlueprint",
-    "AgentInstruction",
-    "ExecutionPlan",
+    "TeachingOutlineItem",
+    "TeachingPlan",
+    "ReusableAssets",
+    "DownstreamMaterial",
+    "DownstreamContext",
     # Runtime input/output
     "AgentResult",
     "ResourceInput",
