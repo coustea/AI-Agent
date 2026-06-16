@@ -1904,6 +1904,7 @@ const handleSend = async () => {
 
           if (evt.event === 'done') {
             const payload = evt.data as {
+              full_response?: string
               teaching_diagram?: TeachingDiagram | null
               resources?: { teaching_diagram?: TeachingDiagram | null }
               knowledge_sources?: KnowledgeSource[]
@@ -1914,6 +1915,9 @@ const handleSend = async () => {
             aiMsg.searchStage = undefined
             aiMsg.searchMessage = undefined
             aiMsg.teachingDiagramGenerating = false
+            if (!aiMsg.content && !streamDisplayText.value && payload?.full_response) {
+              aiMsg.content = payload.full_response
+            }
             if (!diagram) return
             aiMsg.teachingDiagram = diagram
             scrollToBottom()

@@ -1,8 +1,8 @@
 <template>
   <div class="search-tab">
     <div class="header-section">
-      <h2>Question Bank</h2>
-      <p class="subtitle">Search and explore the complete repository of questions.</p>
+      <h2>全部题目</h2>
+      <p class="subtitle">搜索并浏览完整题库，支持筛选和在线作答。</p>
     </div>
 
     <!-- Filters -->
@@ -12,21 +12,21 @@
         <input 
           v-model="filters.query" 
           type="text" 
-          placeholder="Search questions..." 
+          placeholder="搜索题目..." 
           class="search-input"
           @keyup.enter="handleSearch"
         />
       </div>
       <select v-model="filters.subject" class="filter-select" @change="handleSearch">
-        <option value="">All Subjects</option>
+        <option value="">全部学科</option>
         <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
       </select>
       <select v-model="filters.difficulty" class="filter-select" @change="handleSearch">
-        <option value="">All Difficulties</option>
+        <option value="">全部难度</option>
         <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
       </select>
       <select v-model="filters.type" class="filter-select" @change="handleSearch">
-        <option value="">All Types</option>
+        <option value="">全部题型</option>
         <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
       </select>
     </div>
@@ -34,7 +34,7 @@
     <!-- Loading State -->
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <span>Loading questions...</span>
+      <span>加载题目中...</span>
     </div>
 
     <!-- Question List -->
@@ -43,7 +43,7 @@
         <div class="card-header">
           <div class="tags">
             <span class="tag">{{ question.subject }}</span>
-            <span :class="['tag outline', difficultyClass(question.difficulty)]">{{ question.difficulty || 'Unrated' }}</span>
+            <span :class="['tag outline', difficultyClass(question.difficulty)]">{{ question.difficulty || '未评级' }}</span>
             <span class="tag type">{{ question.type }}</span>
           </div>
           <span class="question-id">#{{ question.id.split('-')[0] }}</span>
@@ -78,7 +78,7 @@
           :disabled="submitted[question.id]"
           class="text-area-input"
           rows="3"
-          placeholder="Enter your answer... AI will review it."
+          placeholder="请输入你的答案...AI 将自动评阅。"
         ></textarea>
 
         <!-- Actions & Result -->
@@ -86,8 +86,8 @@
           <div v-if="submitted[question.id]" :class="['result-badge', correct[question.id] ? 'success' : 'danger']">
             <svg v-if="correct[question.id]" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-            {{ correct[question.id] ? 'Correct' : 'Incorrect (Added to Wrong Book)' }}
-            <span v-if="review[question.id]?.score" class="score-text">({{ review[question.id].score }} pts)</span>
+            {{ correct[question.id] ? '正确' : '错误（已加入错题本）' }}
+            <span v-if="review[question.id]?.score" class="score-text">({{ review[question.id].score }} 分)</span>
           </div>
           <div v-else class="empty-badge"></div>
 
@@ -96,14 +96,14 @@
               class="btn-text" 
               @click="$emit('toggle-analysis', question.id)"
             >
-              {{ openedAnalysis.has(question.id) ? 'Hide Analysis' : 'Show Analysis' }}
+              {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
             </button>
             <button
               class="btn-primary"
               :disabled="submitted[question.id] || !hasAnswer(question)"
               @click="submitAnswer(question)"
             >
-              {{ reviewing[question.id] ? 'Reviewing...' : 'Submit' }}
+              {{ reviewing[question.id] ? '评阅中...' : '提交' }}
             </button>
           </div>
         </div>
@@ -111,10 +111,10 @@
         <!-- Analysis Panel -->
         <div v-if="openedAnalysis.has(question.id)" class="analysis-panel">
           <div class="analysis-header">
-            <strong>Reference: {{ formatAnswer(question.answer) }}</strong>
+            <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
             <span v-if="review[question.id]?.feedback" class="feedback-text">{{ review[question.id].feedback }}</span>
           </div>
-          <div class="analysis-content" v-html="renderInline(question.analysis || 'No analysis available.')"></div>
+          <div class="analysis-content" v-html="renderInline(question.analysis || '暂无解析。')"></div>
           <div v-if="question.knowledge_points?.length" class="knowledge-tags">
             <span v-for="point in question.knowledge_points" :key="point" class="tag small">{{ point }}</span>
           </div>
@@ -122,7 +122,7 @@
       </article>
 
       <div v-if="questions.length === 0" class="empty-state">
-        No questions match your criteria.
+        没有找到符合条件的题目。
       </div>
     </div>
 
@@ -133,15 +133,15 @@
         :disabled="currentPage === 1"
         @click="changePage(currentPage - 1)"
       >
-        Previous
+        上一页
       </button>
-      <span class="page-info">Page {{ currentPage }} of {{ Math.ceil(total / pageSize) }}</span>
-      <button 
-        class="page-btn" 
+      <span class="page-info">第 {{ currentPage }} 页 / 共 {{ Math.ceil(total / pageSize) }} 页</span>
+      <button
+        class="page-btn"
         :disabled="currentPage >= Math.ceil(total / pageSize)"
         @click="changePage(currentPage + 1)"
       >
-        Next
+        下一页
       </button>
     </div>
   </div>

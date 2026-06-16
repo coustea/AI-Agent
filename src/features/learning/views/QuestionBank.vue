@@ -7,13 +7,13 @@
         <div class="nav-container">
           <div class="brand">
             <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-            <h2>Practice Center</h2>
+            <h2>刷题中心</h2>
           </div>
           <nav class="nav-links">
-            <button :class="['nav-item', { active: activeModule === 'practice' }]" @click="switchModule('practice')">Dashboard</button>
-            <button :class="['nav-item', { active: activeModule === 'search' }]" @click="switchModule('search')">Question Bank</button>
-            <button :class="['nav-item', { active: activeModule === 'paper' }]" @click="switchModule('paper')">Mock Exams</button>
-            <button :class="['nav-item', { active: activeModule === 'wrong' }]" @click="switchModule('wrong')">Wrong Book</button>
+            <button :class="['nav-item', { active: activeModule === 'practice' }]" @click="switchModule('practice')">智能练习</button>
+            <button :class="['nav-item', { active: activeModule === 'search' }]" @click="switchModule('search')">全部题目</button>
+            <button :class="['nav-item', { active: activeModule === 'paper' }]" @click="switchModule('paper')">模拟组卷</button>
+            <button :class="['nav-item', { active: activeModule === 'wrong' }]" @click="switchModule('wrong')">错题本</button>
           </nav>
         </div>
       </header>
@@ -118,7 +118,7 @@
         <div class="exam-topbar-left">
           <button class="btn-text" @click="quitExam">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            Exit Exam
+            退出考试
           </button>
           <h1 class="exam-title">{{ examTitle }}</h1>
         </div>
@@ -127,8 +127,8 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span>{{ formattedExamTime }}</span>
           </div>
-          <button v-if="!examSubmitted" class="btn-primary" @click="submitExam">Submit Exam</button>
-          <button v-else class="btn-secondary" @click="backWorkspace">Back to Dashboard</button>
+          <button v-if="!examSubmitted" class="btn-primary" @click="submitExam">交卷</button>
+          <button v-else class="btn-secondary" @click="backWorkspace">返回首页</button>
         </div>
       </header>
 
@@ -136,13 +136,13 @@
         <div class="exam-content">
           <article v-if="currentExamQuestion" class="exam-question">
             <div class="question-header">
-              <span class="q-number">Question {{ currentExamIndex + 1 }} of {{ examPaper.length }}</span>
+              <span class="q-number">第 {{ currentExamIndex + 1 }} 题 / 共 {{ examPaper.length }} 题</span>
               <div class="tags">
                 <span class="tag outline">{{ currentExamQuestion.subject }}</span>
                 <span class="tag type">{{ currentExamQuestion.type }}</span>
               </div>
               <div v-if="examSubmitted" :class="['result-badge', isExamCorrect(currentExamQuestion) ? 'success' : 'danger']">
-                {{ isExamCorrect(currentExamQuestion) ? 'Correct' : 'Incorrect' }}
+                {{ isExamCorrect(currentExamQuestion) ? '正确' : '错误' }}
               </div>
             </div>
 
@@ -174,32 +174,32 @@
               class="text-area-input"
               rows="6"
               :disabled="examSubmitted"
-              placeholder="Enter your answer here..."
+              placeholder="请输入你的答案..."
             ></textarea>
 
             <div v-if="examSubmitted" :class="['analysis-panel', isExamCorrect(currentExamQuestion) ? 'success' : 'danger']">
-              <strong>Reference: {{ formatAnswer(currentExamQuestion.answer) }}</strong>
-              <div class="analysis-text" v-html="renderInline(currentExamQuestion.analysis || 'No analysis available.')"></div>
+              <strong>参考答案：{{ formatAnswer(currentExamQuestion.answer) }}</strong>
+              <div class="analysis-text" v-html="renderInline(currentExamQuestion.analysis || '暂无解析。')"></div>
             </div>
 
             <div class="nav-controls">
-              <button class="btn-secondary" :disabled="currentExamIndex === 0" @click="currentExamIndex -= 1">Previous</button>
-              <button class="btn-primary" :disabled="currentExamIndex >= examPaper.length - 1" @click="currentExamIndex += 1">Next</button>
+              <button class="btn-secondary" :disabled="currentExamIndex === 0" @click="currentExamIndex -= 1">上一题</button>
+              <button class="btn-primary" :disabled="currentExamIndex >= examPaper.length - 1" @click="currentExamIndex += 1">下一题</button>
             </div>
           </article>
         </div>
 
         <aside class="exam-sidebar">
           <div class="panel">
-            <h3>{{ examSubmitted ? 'Exam Report' : 'Answer Sheet' }}</h3>
+            <h3>{{ examSubmitted ? '考试报告' : '答题卡' }}</h3>
 
             <div v-if="examSubmitted" class="score-display">
               <div class="score-value">{{ examScore }}%</div>
-              <div class="score-label">Final Score</div>
+              <div class="score-label">最终得分</div>
             </div>
             <div v-else class="progress-display">
               <div class="progress-value">{{ examAnsweredCount }} / {{ examPaper.length }}</div>
-              <div class="progress-label">Answered</div>
+              <div class="progress-label">已作答</div>
             </div>
 
             <div class="grid-sheet">
@@ -221,8 +221,8 @@
               </button>
             </div>
 
-            <button v-if="!examSubmitted" class="btn-primary full-width" style="margin-top: 24px;" @click="submitExam">Submit Exam</button>
-            <button v-else class="btn-secondary full-width" style="margin-top: 24px;" @click="backWorkspace">Complete Review</button>
+            <button v-if="!examSubmitted" class="btn-primary full-width" style="margin-top: 24px;" @click="submitExam">交卷</button>
+            <button v-else class="btn-secondary full-width" style="margin-top: 24px;" @click="backWorkspace">完成查看</button>
           </div>
         </aside>
       </main>
@@ -342,18 +342,18 @@ const stats = reactive({ totalAttempted: 0, totalCorrect: 0 })
 
 // Paper State
 const paperForm = reactive({
-  title: 'Mock Exam',
+  title: '模拟试卷',
   subject: '',
   difficulty: '混合',
   duration: 45,
 })
 
 const paperTypeCounts = reactive([
-  { type: '选择题', label: 'Single Choice', count: 5 },
-  { type: '多选题', label: 'Multiple Choice', count: 2 },
-  { type: '判断题', label: 'True/False', count: 3 },
-  { type: '填空题', label: 'Fill Blanks', count: 2 },
-  { type: '简答题', label: 'Short Answer', count: 1 },
+  { type: '选择题', label: '单选题', count: 5 },
+  { type: '多选题', label: '多选题', count: 2 },
+  { type: '判断题', label: '判断题', count: 3 },
+  { type: '填空题', label: '填空题', count: 2 },
+  { type: '简答题', label: '简答题', count: 1 },
 ])
 const paperPreview = shallowRef<Question[]>([])
 const paperLoading = ref(false)
@@ -431,7 +431,7 @@ async function loadPracticePool() {
     const result = await fetchQuizBankQuestions({
       subjects: learnerCourses.value.length ? learnerCourses.value : undefined,
       page: 1,
-      page_size: 160,
+      page_size: 100,
     })
     practicePool.value = result.items || []
     totalQuestions.value = result.total || totalQuestions.value
@@ -461,7 +461,7 @@ async function loadQuestionBank() {
     difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
     types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
   } catch {
-    ElMessage.error('Failed to load question bank')
+    ElMessage.error('加载题库失败')
   } finally {
     bankLoading.value = false
   }
@@ -491,7 +491,7 @@ async function loadWrongBook() {
     wrongQuestions.value = (result.items || []).map(normalizeWrongQuestion)
     wrongTotal.value = result.total || 0
   } catch {
-    ElMessage.error('Failed to load wrong book')
+    ElMessage.error('加载错题本失败')
   } finally {
     wrongLoading.value = false
   }
@@ -530,14 +530,14 @@ function pickDailyQuestion() {
 }
 
 function startSingleDailyQuestion() {
-  if (!dailyQuestion.value) return ElMessage.warning('No questions available')
-  startExam([dailyQuestion.value], 'Daily Challenge')
+  if (!dailyQuestion.value) return ElMessage.warning('暂无题目')
+  startExam([dailyQuestion.value], '每日一题')
 }
 
 async function startRecommendedPractice() {
   const subject = wrongQuestions.value[0]?.subject || practiceForm.subject || learnerCourses.value[0] || ''
   await startPracticeByCondition({
-    title: subject ? `${subject} · Recommended Practice` : 'Recommended Practice',
+    title: subject ? `${subject} · 推荐练习` : '推荐练习',
     subject,
     count: recommendedCount.value,
   })
@@ -553,7 +553,7 @@ function startSpecialPracticeProxy(formObj: any) {
 
 async function startSpecialPractice() {
   await startPracticeByCondition({
-    title: practiceForm.subject ? `${practiceForm.subject} · Custom Practice` : 'Custom Practice',
+    title: practiceForm.subject ? `${practiceForm.subject} · 自定义练习` : '自定义练习',
     subject: practiceForm.subject,
     difficulty: practiceForm.difficulty,
     type: practiceForm.type,
@@ -570,14 +570,14 @@ async function startPracticeByCondition(config: { title: string; subject?: strin
       type: config.type || undefined,
       subjects: !config.subject && learnerCourses.value.length ? learnerCourses.value : undefined,
       page: 1,
-      page_size: 300,
+      page_size: 100,
     })
     const pool = result.items || []
     const selected = shuffle(pool).slice(0, config.count)
-    if (!selected.length) return ElMessage.warning('No questions match the criteria')
+    if (!selected.length) return ElMessage.warning('没有符合条件的题目')
     startExam(selected, config.title)
   } catch {
-    ElMessage.error('Failed to generate practice')
+    ElMessage.error('生成练习失败')
   } finally {
     practiceLoading.value = false
   }
@@ -663,7 +663,7 @@ function toggleWrongAnalysis(id: string) {
 
 // Mock Exam Builder
 function resetPaperForm() {
-  paperForm.title = 'Mock Exam'
+  paperForm.title = '模拟试卷'
   paperForm.subject = subjects.value[0] || ''
   paperForm.difficulty = '混合'
   paperForm.duration = 45
@@ -677,14 +677,14 @@ function resetPaperForm() {
 
 async function generatePaperPreview() {
   const targetCount = paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
-  if (targetCount <= 0) return ElMessage.warning('Select at least 1 question')
+  if (targetCount <= 0) return ElMessage.warning('请至少选择 1 道题目')
   paperLoading.value = true
   try {
     const result = await fetchQuizBankQuestions({
       subject: paperForm.subject || undefined,
       difficulty: paperForm.difficulty === '混合' ? undefined : paperForm.difficulty,
       page: 1,
-      page_size: 400,
+      page_size: 100,
     })
     const pool = result.items || []
     const selected: Question[] = []
@@ -693,10 +693,10 @@ async function generatePaperPreview() {
       selected.push(...shuffle(sameType).slice(0, config.count))
     })
     paperPreview.value = selected
-    if (!selected.length) ElMessage.warning('No questions available')
-    else ElMessage.success(`Generated ${selected.length} questions`)
+    if (!selected.length) ElMessage.warning('暂无题目')
+    else ElMessage.success(`已生成 ${selected.length} 道题目`)
   } catch {
-    ElMessage.error('Generation failed')
+    ElMessage.error('生成失败')
   } finally {
     paperLoading.value = false
   }
@@ -735,7 +735,7 @@ function stopExamTimer() {
 }
 
 function quitExam() {
-  ElMessageBox.confirm('Progress will be lost.', 'Quit Exam', { type: 'warning' })
+  ElMessageBox.confirm('当前进度将丢失，确定退出吗？', '退出考试', { type: 'warning' })
     .then(() => backWorkspace()).catch(() => undefined)
 }
 
@@ -744,7 +744,7 @@ async function submitExam() {
   const unAnswered = examPaper.value.length - examAnsweredCount.value
   if (unAnswered > 0) {
     try {
-      await ElMessageBox.confirm(`You have ${unAnswered} unanswered questions. Submit anyway?`, 'Confirm Submit', { type: 'warning' })
+      await ElMessageBox.confirm(`还有 ${unAnswered} 道题目未作答，确定交卷吗？`, '确认交卷', { type: 'warning' })
     } catch {
       return
     }
