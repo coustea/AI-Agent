@@ -176,8 +176,8 @@ class MaterialBundle(BaseModel):
     learning_need: str
     learning_scenario: str = ""
     profile: dict[str, Any] = Field(default_factory=dict)
-    blueprint: dict[str, Any] | None = None
-    instruction: dict[str, Any] | None = None
+    teaching_plan: dict[str, Any] | None = None
+    upstream_handoffs: dict[str, Any] = Field(default_factory=dict)
     artifacts: dict[ResourceAgentId, MaterialArtifact] = Field(default_factory=dict)
     source_type: Literal["resource", "node"] = "resource"
     node_context: NodeMaterialContext | None = None
@@ -505,16 +505,49 @@ def _extract_artifacts(results: dict[str, AgentResult]) -> dict[ResourceAgentId,
     return artifacts
 
 
+def _extract_artifacts_from_handoffs(handoffs: dict[str, Any]) -> dict[ResourceAgentId, MaterialArtifact]:
+    """从 DownstreamContext 字典提取 MaterialArtifact。"""
+    from app.resource.schemas import DownstreamContext
+
+    artifacts: dict[ResourceAgentId, MaterialArtifact] = {}
+    for agent_id in _SOURCE_LIMITS:
+        handoff = handoffs.get(agent_id)
+        if handoff is None:
+            continue
+        if isinstance(handoff, DownstreamContext):
+            artifacts[agent_id] = MaterialArtifact(
+                agent_id=agent_id,
+                title=handoff.title or "",
+                summary=handoff.one_sentence_summary or "",
+                content=json.dumps(handoff.model_dump(mode="json"), ensure_ascii=False),
+                metadata={"source": "handoff"},
+                success=True,
+            )
+        elif isinstance(handoff, dict):
+            artifacts[agent_id] = MaterialArtifact(
+                agent_id=agent_id,
+                title=handoff.get("title", ""),
+                summary=handoff.get("one_sentence_summary", ""),
+                content=json.dumps(handoff, ensure_ascii=False),
+                metadata={"source": "handoff"},
+                success=True,
+            )
+    return artifacts
+
+
 def build_resource_material(input_data: ResourceInput) -> MaterialBundle:
     """从 ResourceInput 构建 MaterialBundle（多智能体场景）。"""
-    artifacts = _extract_artifacts(input_data.previous_results)
+    artifacts = _extract_artifacts_from_handoffs(input_data.upstream_handoffs)
 
     return MaterialBundle(
         learning_need=input_data.learning_need,
         learning_scenario=input_data.learning_scenario,
         profile=input_data.profile,
-        blueprint=input_data.blueprint.model_dump(mode="json") if input_data.blueprint else None,
-        instruction=input_data.instruction.model_dump(mode="json") if input_data.instruction else None,
+        teaching_plan=input_data.teaching_plan.model_dump(mode="json") if input_data.teaching_plan else None,
+        upstream_handoffs={
+            agent_id: handoff.model_dump(mode="json")
+            for agent_id, handoff in input_data.upstream_handoffs.items()
+        },
         artifacts=artifacts,
         source_type="resource",
         node_context=None,
@@ -541,8 +574,8 @@ def build_node_material(input_data: NodeInput) -> MaterialBundle:
         learning_need=input_data.node_title,
         learning_scenario="path_learning",
         profile=input_data.profile,
-        blueprint=None,
-        instruction=None,
+        teaching_plan=None,
+        upstream_handoffs={},
         artifacts={},
         source_type="node",
         node_context=node_context,
@@ -985,7 +1018,7 @@ class PptAgent(BaseResourceAgent):
                 error=error,
                 title=f"{title_prefix} - PPT",
                 summary=error,
-                summary_data={"page_count": actual_count, "expected_page_count": page_count},
+                metrics={"page_count": actual_count, "expected_page_count": page_count},
                 metadata={
                     "engine": "ppt_json",
                     "agent_id": "ppt",
@@ -1000,13 +1033,14 @@ class PptAgent(BaseResourceAgent):
             )
 
         content = payload.model_dump_json(indent=2)
+        source_handoff_agent_ids = sorted(bundle.upstream_handoffs.keys()) if bundle.upstream_handoffs else []
         return AgentResult(
             success=True,
             content=content,
             file_type="json",
             title=f"{title_prefix} - PPT",
             summary=f"生成 {actual_count} 页在线预览 PPT",
-            summary_data={"page_count": actual_count},
+            metrics={"page_count": actual_count},
             metadata={
                 "engine": "ppt_json",
                 "agent_id": "ppt",
@@ -1015,6 +1049,7 @@ class PptAgent(BaseResourceAgent):
                 "template_id": payload.template_id,
                 "page_count": actual_count,
                 "difficulty": difficulty,
+                "source_handoff_agent_ids": source_handoff_agent_ids,
                 "internal_pipeline": "material/outline/slides/payload",
             },
         )

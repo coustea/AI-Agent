@@ -522,7 +522,7 @@ function getShortCardTitle(card: ResourceCard) {
 }
 
 function getMainTopic(card: ResourceCard) {
-  const summaryData = isPlainObject(card.summary_data) ? card.summary_data : {}
+  const summaryData = isPlainObject(card.metrics) ? card.metrics : {}
   const raw = summaryData.topic || card.metadata?.topic || card.title
   return typeof raw === 'string' ? raw.trim() : ''
 }
@@ -554,9 +554,9 @@ function getCardVisualLabel(type: string) {
 }
 
 function getResourceCardTags(card: ResourceCard) {
-  const summaryData = isPlainObject(card.summary_data) ? card.summary_data : {}
-  const language = String(summaryData.language || card.metadata?.programming_language || 'Python')
-  const count = summaryData.question_count || summaryData.node_count || summaryData.page_count || ''
+  const metrics = isPlainObject(card.metrics) ? card.metrics : {}
+  const language = String(metrics.language || card.metadata?.programming_language || 'Python')
+  const count = metrics.question_count || metrics.node_count || metrics.page_count || ''
   const preset: Record<string, string[]> = {
     content: ['概念', '原理', '易错点'],
     mindmap: ['结构图', '概念关系', count ? `${count} 节点` : '重点脉络'],
@@ -704,12 +704,12 @@ function getCoverSvg(type: string): string {
 }
 
 function getResourceHighlights(card: ResourceCard) {
-  const summaryData = isPlainObject(card.summary_data) ? card.summary_data : {}
+  const metrics = isPlainObject(card.metrics) ? card.metrics : {}
   const candidates = [
-    summaryData.question_count ? `${summaryData.question_count} 题` : '',
-    summaryData.node_count ? `${summaryData.node_count} 节点` : '',
-    summaryData.page_count ? `${summaryData.page_count} 页` : '',
-    summaryData.language ? String(summaryData.language) : '',
+    metrics.question_count ? `${metrics.question_count} 题` : '',
+    metrics.node_count ? `${metrics.node_count} 节点` : '',
+    metrics.page_count ? `${metrics.page_count} 页` : '',
+    metrics.language ? String(metrics.language) : '',
     card.metadata?.programming_language ? String(card.metadata.programming_language) : '',
   ]
   return candidates.filter(Boolean)

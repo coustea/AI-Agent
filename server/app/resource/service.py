@@ -40,15 +40,14 @@ from app.resource.review import (
 from app.resource.agents.ppt import MaterialBundle, build_resource_material
 from app.resource.schemas import (
     AgentResult,
-    AgentInstruction,
     AgentSelection,
-    ExecutionPlan,
+    DownstreamContext,
     GeneratedResourceItem,
-    LearningBlueprint,
     ResourceBundle,
     ResourceGenerationRequest,
     ResourceInput,
     ReviewResult,
+    TeachingPlan,
 )
 from app.infra.logging import get_module_logger
 
@@ -67,15 +66,17 @@ def _select_worker_agents(enabled_agents: list[str], registry: dict[str, Any]) -
     ]
 
 
+BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
+
+
 def _build_agent_resource_input(
     *,
     request: ResourceGenerationRequest,
     resource_id: int,
     agent_id: str,
-    blueprint: LearningBlueprint | None,
-    instruction_map: dict[str, AgentInstruction],
+    teaching_plan: TeachingPlan | None,
     profile: dict[str, Any],
-    previous_results: dict[str, AgentResult],
+    upstream_handoffs: dict[str, DownstreamContext],
     agent_config_extra: dict[str, Any] | None,
 ) -> ResourceInput:
     agent_config = request.agent_configs.get(agent_id, {})
@@ -87,11 +88,21 @@ def _build_agent_resource_input(
         learning_scenario=request.learning_scenario,
         agent_name=agent_id,
         agent_config=agent_config,
-        blueprint=blueprint,
-        instruction=instruction_map.get(agent_id),
+        teaching_plan=teaching_plan,
         profile=profile,
-        previous_results=previous_results,
+        upstream_handoffs=upstream_handoffs,
     )
+
+
+def _collect_successful_handoffs(results: dict[str, AgentResult]) -> dict[str, DownstreamContext]:
+    handoffs: dict[str, DownstreamContext] = {}
+    for agent_id, result in results.items():
+        if agent_id not in BASE_RESOURCE_AGENT_IDS:
+            continue
+        if not result.success or result.downstream_context is None:
+            continue
+        handoffs[agent_id] = result.downstream_context
+    return handoffs
 
 
 class ResourceService:
@@ -121,7 +132,6 @@ class ResourceService:
         resource = GeneratedResource(
             user_id=user_id,
             learning_need=request.learning_need,
-            personalization={},
             selected_agents=request.enabled_agent_ids(),
             agent_configs=request.agent_configs.model_dump(mode="json"),
             source=source,
@@ -224,6 +234,8 @@ class ResourceService:
             content_json=content_json,
             content_text=content_text,
             metadata_json=result.metadata,
+            metrics=result.metrics,
+            downstream_context=result.downstream_context.model_dump(mode="json") if result.downstream_context else None,
             status="finished",
             updated_at=datetime.now(timezone.utc),
         )
@@ -293,7 +305,7 @@ class ResourceService:
         request: ResourceGenerationRequest,
         results: dict[str, AgentResult],
         review_result: ReviewResult,
-        plan: ExecutionPlan,
+        teaching_plan: TeachingPlan,
     ) -> None:
         """保存审阅元数据和终态；Agent 结果已在完成节点逐条入库。"""
         saved_items = await self.list_resource_items(user_id, resource_id)
@@ -315,16 +327,14 @@ class ResourceService:
             if resource is None or resource.user_id != user_id:
                 raise ValueError("资源不存在或无权限")
 
-            personalization = dict(resource.personalization or {})
-            personalization.update({
-                "review_result": review_result.model_dump(mode="json"),
-                "execution_plan": plan.model_dump(mode="json"),
-                "failed_agents": failed_agents,
+            resource.teaching_plan = teaching_plan.model_dump(mode="json")
+            resource.review_result = review_result.model_dump(mode="json")
+            resource.failed_agents = failed_agents
+            resource.workflow_metadata = {
                 "selected_agents": request.enabled_agent_ids(),
-            })
+            }
             resource.status = status
             resource.updated_at = datetime.now(timezone.utc)
-            resource.personalization = personalization
             await self._commit(resource)
 
     async def get_resource_bundle(
@@ -340,17 +350,18 @@ class ResourceService:
             return None
 
         db_items = await self.list_resource_items(user_id, resource_id)
-        workflow_data = resource.personalization if isinstance(resource.personalization, dict) else {}
-        review_data = workflow_data.get("review_result")
 
-        review_result = ReviewResult.model_validate(review_data) if isinstance(review_data, dict) else None
+        review_result = (
+            ReviewResult.model_validate(resource.review_result)
+            if isinstance(resource.review_result, dict)
+            else None
+        )
 
         metadata = {
             "source": "database",
-            "failed_agents": workflow_data.get("failed_agents") or [],
+            "failed_agents": resource.failed_agents or [],
+            "teaching_plan": resource.teaching_plan or {},
         }
-        if isinstance(workflow_data.get("execution_plan"), dict):
-            metadata["execution_plan"] = workflow_data["execution_plan"]
 
         return ResourceBundle(
             id=str(resource.id),
@@ -551,26 +562,21 @@ async def run_multi_agent_generation(
                 emitter=emitter,
                 agent_id="planning",
                 phase="planning_blueprint",
-                message="正在规划生成蓝图",
+                message="正在规划教学方向与大纲",
                 progress=5,
             ) as planning_tracker:
                 planning_result = await AGENT_REGISTRY["planning"](emitter).generate_resource(planning_input)
                 await planning_tracker.finish(
-                    "教学蓝图与执行计划已生成" if planning_result.success else (planning_result.error or "规划失败"),
+                    "教学方向与大纲已生成" if planning_result.success else (planning_result.error or "规划失败"),
                     success=planning_result.success,
                     metrics={"enabled_agents": len(enabled_agents)},
                 )
 
-            blueprint = None
-            instruction_map: dict[str, AgentInstruction] = {}
+            teaching_plan = None
             if planning_result.success and planning_result.metadata:
-                blueprint_data = planning_result.metadata.get("blueprint")
-                if blueprint_data:
-                    blueprint = LearningBlueprint.model_validate(blueprint_data)
-                instructions_data = planning_result.metadata.get("instructions", {})
-                for aid, inst_data in instructions_data.items():
-                    if isinstance(inst_data, dict):
-                        instruction_map[aid] = AgentInstruction.model_validate(inst_data)
+                plan_data = planning_result.metadata.get("teaching_plan")
+                if isinstance(plan_data, dict):
+                    teaching_plan = TeachingPlan.model_validate(plan_data)
 
             planning_elapsed = time.perf_counter() - start_time
             if planning_result.success:
@@ -585,6 +591,13 @@ async def run_multi_agent_generation(
                 success = False
                 return
 
+            if teaching_plan is None:
+                logger.error("Planning 未返回 teaching_plan，终止生成: resource_id=%s run_id=%s", resource_id, run_id)
+                await emitter.emit_done(success=False, message="规划阶段未返回教学计划")
+                done_emitted = True
+                success = False
+                return
+
             # ==========================================
             # 阶段 2: 基础资源并行生成阶段 (Parallel Worker Agents)
             # ==========================================
@@ -593,18 +606,18 @@ async def run_multi_agent_generation(
 
             worker_agents = _select_worker_agents(enabled_agents, AGENT_REGISTRY)
 
-            async def run_one(agent_id: str, agent_config_extra: dict[str, Any] | None = None) -> None:
+            async def run_one(agent_id: str, agent_config_extra: dict[str, Any] | None = None, upstream_handoffs_override: dict[str, DownstreamContext] | None = None) -> None:
                 """独立运行单个 Worker Agent 的协程函数"""
                 agent_start = time.perf_counter()
                 try:
+                    handoffs = upstream_handoffs_override if upstream_handoffs_override is not None else {}
                     resource_input = _build_agent_resource_input(
                         request=request,
                         resource_id=resource_id,
                         agent_id=agent_id,
-                        blueprint=blueprint,
-                        instruction_map=instruction_map,
+                        teaching_plan=teaching_plan,
                         profile=profile,
-                        previous_results=dict(results),
+                        upstream_handoffs=handoffs,
                         agent_config_extra=agent_config_extra,
                     )
                     logger.info(
@@ -629,16 +642,16 @@ async def run_multi_agent_generation(
                         await tracker.finish(
                             result.summary if result.success else (result.error or f"{agent_id} 生成失败"),
                             success=result.success,
-                            metrics=result.summary_data,
+                            metrics=result.metrics,
                         )
                     results[agent_id] = result
 
                     agent_elapsed = time.perf_counter() - agent_start
                     if result.success:
                         logger.info(
-                            "Agent[%s] 完成: %.2fs summary=%s metadata=%s",
+                            "Agent[%s] 完成: %.2fs summary=%s metrics=%s",
                             agent_id, agent_elapsed, result.summary,
-                            result.summary_data or {},
+                            result.metrics or {},
                         )
                     else:
                         logger.warning(
@@ -656,7 +669,7 @@ async def run_multi_agent_generation(
                             agent_id,
                             message=f"{agent_id} 资源已保存，可在产物坞预览",
                             artifact_id=str(resource_item.id),
-                            metrics=result.summary_data,
+                            metrics=result.metrics,
                         )
                 except Exception as exc:
                     agent_elapsed = time.perf_counter() - agent_start
@@ -720,7 +733,7 @@ async def run_multi_agent_generation(
                 request=request,
                 results=review_results,
                 profile=profile,
-                blueprint=blueprint,
+                teaching_plan=teaching_plan,
             )
             source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
 
@@ -822,22 +835,22 @@ async def run_multi_agent_generation(
                     phase="ppt_generating",
                 )
 
-                # PPT 使用 resource material builder 构建素材
+                # PPT 使用 upstream handoffs 构建素材
+                base_handoffs = _collect_successful_handoffs(base_results)
                 material_bundle = build_resource_material(ResourceInput(
                     resource_id=resource_id,
                     learning_need=request.learning_need,
                     learning_scenario=request.learning_scenario,
                     agent_name=PPT_AGENT_ID,
                     agent_config=request.agent_configs.get(PPT_AGENT_ID, {}),
-                    blueprint=blueprint,
-                    instruction=instruction_map.get(PPT_AGENT_ID),
+                    teaching_plan=teaching_plan,
                     profile=profile,
-                    previous_results=base_results,
+                    upstream_handoffs=base_handoffs,
                 ))
                 await run_one(PPT_AGENT_ID, {
                     "material_bundle": material_bundle.model_dump(mode="json"),
-                    "previous_result_agent_ids": list(base_results.keys()),
-                })
+                    "upstream_handoff_agent_ids": list(base_handoffs.keys()),
+                }, upstream_handoffs_override=base_handoffs)
 
                 # PPT 审核（非阻塞，记录问题但不拦截）
                 await emitter.emit_agent("ppt_review", status="running", message="PPT 内容审核中", progress=90)
@@ -857,7 +870,7 @@ async def run_multi_agent_generation(
                     request=request,
                     results=ppt_review_results,
                     profile=profile,
-                    blueprint=blueprint,
+                    teaching_plan=teaching_plan,
                 )
                 if ppt_missing_resources:
                     ppt_review_result = failed_review_result(
@@ -943,7 +956,7 @@ async def run_multi_agent_generation(
                     phase="video_generating",
                 )
 
-                await run_one(VIDEO_AGENT_ID)
+                await run_one(VIDEO_AGENT_ID, upstream_handoffs_override=_collect_successful_handoffs(base_results))
 
                 await emitter.emit_agent("video_review", status="running", message="讲解视频内容审核中", progress=90)
                 video_result = results.get(VIDEO_AGENT_ID)
@@ -962,7 +975,7 @@ async def run_multi_agent_generation(
                     request=request,
                     results=video_review_results,
                     profile=profile,
-                    blueprint=blueprint,
+                    teaching_plan=teaching_plan,
                 )
                 if video_missing_resources:
                     video_review_result = failed_review_result(
@@ -1097,13 +1110,7 @@ async def run_multi_agent_generation(
                     request=request,
                     results=results,
                     review_result=review_result,
-                    plan=ExecutionPlan(
-                        blueprint=blueprint or LearningBlueprint(topic=request.learning_need),
-                        agent_instructions=list(instruction_map.values()),
-                    ) if blueprint else ExecutionPlan(
-                        blueprint=LearningBlueprint(topic=request.learning_need),
-                        agent_instructions=[],
-                    ),
+                    teaching_plan=teaching_plan,
                 )
 
                 saved_items = await usecases.list_resource_items(user_id, resource_id)

@@ -172,18 +172,21 @@ def _result_excerpt(result: AgentResult, limit: int = 4000) -> dict[str, Any]:
     }
 
 
+VIDEO_SOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
+
+
 def _input_context(input_data: ResourceInput, config: dict[str, Any]) -> dict[str, Any]:
+    handoffs = {
+        agent_id: handoff.model_dump(mode="json")
+        for agent_id, handoff in input_data.upstream_handoffs.items()
+        if agent_id in VIDEO_SOURCE_AGENT_IDS
+    }
     return {
         "learning_need": input_data.learning_need,
         "learning_scenario": input_data.learning_scenario,
         "profile": input_data.profile,
-        "blueprint": input_data.blueprint.model_dump(mode="json") if input_data.blueprint else {},
-        "instruction": input_data.instruction.model_dump(mode="json") if input_data.instruction else {},
-        "previous_results": {
-            agent_id: _result_excerpt(result)
-            for agent_id, result in input_data.previous_results.items()
-            if result.success
-        },
+        "teaching_plan": input_data.teaching_plan.model_dump(mode="json") if input_data.teaching_plan else {},
+        "upstream_handoffs": handoffs,
         "config": config,
     }
 
@@ -191,8 +194,8 @@ def _input_context(input_data: ResourceInput, config: dict[str, Any]) -> dict[st
 class VideoMaterialAgent:
     async def run(self, input_data: ResourceInput, config: dict[str, Any]) -> VideoMaterialDigest:
         context = _input_context(input_data, config)
-        fallback_topic = input_data.blueprint.topic if input_data.blueprint else input_data.learning_need
-        if not context["previous_results"]:
+        fallback_topic = input_data.teaching_plan.topic if input_data.teaching_plan else input_data.learning_need
+        if not context["upstream_handoffs"]:
             return VideoMaterialDigest(
                 topic=fallback_topic,
                 audience="自学学习者",
@@ -380,13 +383,14 @@ class VideoAgent(BaseResourceAgent):
             return result
 
         content = payload.model_dump_json(indent=2)
+        source_handoff_agent_ids = sorted(input_data.upstream_handoffs.keys()) if input_data.upstream_handoffs else sorted({agent for scene in payload.scenes for agent in scene.source_agents})
         result = AgentResult(
             success=True,
             content=content,
             file_type="json",
             title=f"{title_prefix} - 视频",
             summary=f"生成 {len(payload.scenes)} 段结构化讲解视频脚本",
-            summary_data={
+            metrics={
                 "scene_count": len(payload.scenes),
                 "duration_seconds": payload.duration_seconds,
             },
@@ -399,6 +403,10 @@ class VideoAgent(BaseResourceAgent):
                 "scene_count": len(payload.scenes),
                 "aspect_ratio": payload.aspect_ratio,
                 "style": payload.style,
+                "source_handoff_agent_ids": source_handoff_agent_ids,
+                "teaching_plan_outline_ids": [
+                    item.id for item in input_data.teaching_plan.outline
+                ] if input_data.teaching_plan else [],
                 "internal_pipeline": "material/outline/scenes/payload",
             },
         )
@@ -433,14 +441,17 @@ class VideoAgent(BaseResourceAgent):
                 error="tutor_context 缺少 learning_need/question/topic",
                 metadata={"agent_id": "video", "reserved_for_tutor": True},
             )
-        previous_results = tutor_context.get("previous_results")
-        if not isinstance(previous_results, dict):
-            previous_results = {}
-        normalized_results = {
-            agent_id: result if isinstance(result, AgentResult) else AgentResult.model_validate(result)
-            for agent_id, result in previous_results.items()
-            if isinstance(result, (dict, AgentResult))
-        }
+        from app.resource.schemas import DownstreamContext
+        raw_handoffs = tutor_context.get("upstream_handoffs") or tutor_context.get("previous_results") or {}
+        normalized_handoffs: dict[str, DownstreamContext] = {}
+        for agent_id, value in raw_handoffs.items():
+            if isinstance(value, DownstreamContext):
+                normalized_handoffs[agent_id] = value
+            elif isinstance(value, dict):
+                try:
+                    normalized_handoffs[agent_id] = DownstreamContext.model_validate(value)
+                except Exception:
+                    pass
         return await self.generate_resource(
             ResourceInput(
                 learning_need=learning_need,
@@ -448,6 +459,6 @@ class VideoAgent(BaseResourceAgent):
                 agent_name="video",
                 agent_config=tutor_context.get("agent_config") if isinstance(tutor_context.get("agent_config"), dict) else {},
                 profile=tutor_context.get("profile") if isinstance(tutor_context.get("profile"), dict) else {},
-                previous_results=normalized_results,
+                upstream_handoffs=normalized_handoffs,
             )
         )

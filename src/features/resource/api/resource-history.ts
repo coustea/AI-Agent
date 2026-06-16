@@ -22,7 +22,8 @@ export interface ResourceItemDetail {
   format: string
   content: Record<string, unknown> | string | null
   summary: string
-  summary_data: Record<string, unknown>
+  metrics: Record<string, unknown>
+  downstream_context?: Record<string, unknown> | null
   metadata: Record<string, unknown>
   status: string
   error_message: string | null

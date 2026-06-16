@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.resource.schemas import AgentResult, ResourceGenerationRequest, ReviewResult
+from app.resource.schemas import AgentResult, ResourceGenerationRequest, ReviewResult, TeachingPlan
 
 SOURCE_AUDIT_AGENT_IDS = ("content", "reading")
 COMPLETENESS_ONLY_AGENT_IDS = ("quiz", "mindmap", "code")
@@ -60,7 +60,7 @@ def build_pre_audit_envelope(
     request: ResourceGenerationRequest,
     results: dict[str, AgentResult],
     profile: dict[str, Any],
-    blueprint: Any | None,
+    teaching_plan: TeachingPlan | None,
 ) -> tuple[dict[str, Any], list[str]]:
     selected_agents = request.enabled_agent_ids()
     checked_agents = [
@@ -99,7 +99,12 @@ def build_pre_audit_envelope(
             "learning_need": request.learning_need,
             "learning_scenario": request.learning_scenario,
             "profile_summary": profile_summary(profile),
-            "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+            "teaching_plan": teaching_plan.model_dump(mode="json") if teaching_plan else {},
+        },
+        "upstream_handoffs": {
+            agent_id: result.downstream_context.model_dump(mode="json")
+            for agent_id, result in results.items()
+            if result.success and result.downstream_context is not None
         },
         "deep_audit_resources": deep_audit_resources,
         "completeness_only": completeness_only,
@@ -111,7 +116,7 @@ def build_ppt_audit_envelope(
     request: ResourceGenerationRequest,
     results: dict[str, AgentResult],
     profile: dict[str, Any],
-    blueprint: Any | None,
+    teaching_plan: TeachingPlan | None,
 ) -> tuple[dict[str, Any], list[str]]:
     selected_agents = request.enabled_agent_ids()
     missing_resources: list[str] = []
@@ -144,7 +149,12 @@ def build_ppt_audit_envelope(
             "learning_need": request.learning_need,
             "learning_scenario": request.learning_scenario,
             "profile_summary": profile_summary(profile),
-            "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+            "teaching_plan": teaching_plan.model_dump(mode="json") if teaching_plan else {},
+        },
+        "upstream_handoffs": {
+            agent_id: result.downstream_context.model_dump(mode="json")
+            for agent_id, result in results.items()
+            if result.success and result.downstream_context is not None
         },
         "approved_sources": approved_sources,
         "ppt_resource": ppt_resource,
@@ -156,7 +166,7 @@ def build_video_audit_envelope(
     request: ResourceGenerationRequest,
     results: dict[str, AgentResult],
     profile: dict[str, Any],
-    blueprint: Any | None,
+    teaching_plan: TeachingPlan | None,
 ) -> tuple[dict[str, Any], list[str]]:
     selected_agents = request.enabled_agent_ids()
     missing_resources: list[str] = []
@@ -189,7 +199,12 @@ def build_video_audit_envelope(
             "learning_need": request.learning_need,
             "learning_scenario": request.learning_scenario,
             "profile_summary": profile_summary(profile),
-            "blueprint": blueprint.model_dump(mode="json") if blueprint else {},
+            "teaching_plan": teaching_plan.model_dump(mode="json") if teaching_plan else {},
+        },
+        "upstream_handoffs": {
+            agent_id: result.downstream_context.model_dump(mode="json")
+            for agent_id, result in results.items()
+            if result.success and result.downstream_context is not None
         },
         "approved_sources": approved_sources,
         "video_resource": video_resource,

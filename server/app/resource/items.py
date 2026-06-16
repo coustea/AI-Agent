@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from app.infra.models import GeneratedResourceItem as GeneratedResourceItemModel
-from app.resource.schemas import AgentResult, GeneratedResourceItem
+from app.resource.schemas import AgentResult, DownstreamContext, GeneratedResourceItem
 
 
 def content_envelope(result: AgentResult) -> tuple[dict[str, Any] | None, str | None]:
@@ -21,7 +21,6 @@ def content_envelope(result: AgentResult) -> tuple[dict[str, Any] | None, str | 
     envelope = {
         "title": result.title,
         "summary": result.summary,
-        "summary_data": result.summary_data,
         "metadata": result.metadata,
         "format": result.file_type,
         "content": content,
@@ -69,7 +68,12 @@ def db_item_to_resource_item(item: GeneratedResourceItemModel) -> GeneratedResou
         format=envelope.get("format") or item.content_format,
         content=content,
         summary=envelope.get("summary") or item.summary or "",
-        summary_data=envelope.get("summary_data") or {},
+        metrics=item.metrics or {},
+        downstream_context=(
+            DownstreamContext.model_validate(item.downstream_context)
+            if isinstance(item.downstream_context, dict)
+            else None
+        ),
         execution_report=item.execution_report,
         metadata=envelope.get("metadata") or item.metadata_json or {},
         status=item.status,
@@ -91,6 +95,11 @@ def db_item_to_agent_result(item: GeneratedResourceItemModel) -> AgentResult:
         file_type=envelope.get("format") or item.content_format,
         title=envelope.get("title") or item.title or "",
         summary=envelope.get("summary") or item.summary or "",
-        summary_data=envelope.get("summary_data") or {},
+        metrics=item.metrics or {},
+        downstream_context=(
+            DownstreamContext.model_validate(item.downstream_context)
+            if isinstance(item.downstream_context, dict)
+            else None
+        ),
         metadata=envelope.get("metadata") or item.metadata_json or {},
     )

@@ -248,7 +248,7 @@ const getAgentTypeName = (type: string) => {
 
 const hasPreviewContent = (item: ResourceItemDetail) => {
   if (item.content != null && String(item.content).trim()) return true
-  if (item.summary_data && Object.keys(item.summary_data).length) return true
+  if (item.metrics && Object.keys(item.metrics).length) return true
   if (item.metadata && Object.keys(item.metadata).length) return true
   return false
 }
@@ -283,8 +283,8 @@ const exportToLocal = async (item: ResourceItemDetail) => {
         // 如果解析失败，则按正常的 markdown/普通文本处理
       }
     }
-  } else if (item.summary_data && Object.keys(item.summary_data).length > 0) {
-    contentStr = JSON.stringify(item.summary_data, null, 2)
+  } else if (item.metrics && Object.keys(item.metrics).length > 0) {
+    contentStr = JSON.stringify(item.metrics, null, 2)
     ext = '.json'
     mimeType = 'application/json'
   } else if (item.metadata && Object.keys(item.metadata).length > 0) {

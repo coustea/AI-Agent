@@ -11,7 +11,7 @@ from app.resource.service import (
     _build_agent_resource_input,
     _select_worker_agents,
 )
-from app.resource.schemas import AgentResult, LearningBlueprint, ResourceGenerationRequest
+from app.resource.schemas import AgentResult, DownstreamContext, ResourceGenerationRequest, TeachingPlan
 
 
 def test_video_is_aggregation_agent_not_base_worker():
@@ -21,7 +21,7 @@ def test_video_is_aggregation_agent_not_base_worker():
     assert _select_worker_agents(["content", "video", "ppt", "reading"], registry) == ["content", "reading"]
 
 
-def test_agent_resource_input_receives_previous_results():
+def test_agent_resource_input_receives_upstream_handoffs():
     request = ResourceGenerationRequest.model_validate(
         {
             "learning_need": "生成 TCP 讲解视频",
@@ -31,28 +31,24 @@ def test_agent_resource_input_receives_previous_results():
             ],
         }
     )
-    previous_results = {
-        "content": AgentResult(
-            success=True,
-            content="# TCP",
-            title="课程内容",
-            metadata={"agent_id": "content"},
-        )
-    }
+    handoff = DownstreamContext(
+        source_agent="content",
+        title="课程内容",
+        one_sentence_summary="TCP 三次握手讲解",
+    )
 
     input_data = _build_agent_resource_input(
         request=request,
         resource_id=1,
         agent_id="video",
-        blueprint=LearningBlueprint(topic="TCP"),
-        instruction_map={},
+        teaching_plan=TeachingPlan(topic="TCP"),
         profile={"level": "beginner"},
-        previous_results=previous_results,
+        upstream_handoffs={"content": handoff},
         agent_config_extra=None,
     )
 
     assert input_data.agent_name == "video"
-    assert input_data.previous_results["content"].content == "# TCP"
+    assert input_data.upstream_handoffs["content"].source_agent == "content"
 
 
 def test_review_agent_extracts_video_resource_audit_content():

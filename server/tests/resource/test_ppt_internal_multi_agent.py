@@ -12,13 +12,13 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app.resource.agents.ppt_manifest import (
+from app.resource.agents.ppt import (
     PPT_TEMPLATE_MANIFEST,
-    get_block_required_fields,
-    get_layout_slots,
-    validate_contract_against_manifest,
+    _get_block_required_fields as get_block_required_fields,
+    _get_layout_slots as get_layout_slots,
+    _validate_contract_against_manifest as validate_contract_against_manifest,
 )
-from app.resource.agents.ppt_models import (
+from app.resource.agents.ppt import (
     BlockContract,
     DeckConstraints,
     DeckOutline,
@@ -310,14 +310,14 @@ class TestMaterialBundle:
         assert artifact.content == ""
         assert artifact.success is True
 
-    def test_bundle_with_profile_and_blueprint(self):
+    def test_bundle_with_profile_and_teaching_plan(self):
         bundle = MaterialBundle(
             learning_need="Python",
             profile={"level": "beginner"},
-            blueprint={"sections": ["basics", "control flow"]},
+            teaching_plan={"topic": "Python", "outline": [{"id": "o1", "title": "basics"}]},
         )
         assert bundle.profile["level"] == "beginner"
-        assert bundle.blueprint["sections"][0] == "basics"
+        assert bundle.teaching_plan["topic"] == "Python"
 
 
 # ── SlideDraft ──────────────────────────────────────────────────────────────
@@ -599,8 +599,8 @@ class TestMaterialAgent:
     @pytest.mark.asyncio
     async def test_material_agent_requests_material_digest(self, monkeypatch):
         """MaterialAgent 调用 LLM 并请求 MaterialDigest schema。"""
-        from app.resource.agents.ppt_internal import MaterialAgent
-        from app.resource.agents.ppt_models import MaterialBundle, MaterialDigest
+        from app.resource.agents.ppt import MaterialAgent
+        from app.resource.agents.ppt import MaterialBundle, MaterialDigest
 
         captured_schema = None
         captured_fn_name = None
@@ -619,7 +619,7 @@ class TestMaterialAgent:
                     misconceptions=["两次握手就够了"],
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         bundle = MaterialBundle(learning_need="学习 TCP")
@@ -638,8 +638,8 @@ class TestOutlineAgent:
     @pytest.mark.asyncio
     async def test_outline_agent_requests_deck_outline(self, monkeypatch):
         """OutlineAgent 调用 LLM 并请求 DeckOutline schema，返回含 SlideContract。"""
-        from app.resource.agents.ppt_internal import OutlineAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import OutlineAgent
+        from app.resource.agents.ppt import (
             MaterialDigest, DeckConstraints, DeckOutline, SlideContract,
             BlockContract, ThemeType, LayoutType,
         )
@@ -694,7 +694,7 @@ class TestOutlineAgent:
                     ],
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         digest = MaterialDigest(topic="TCP", audience="学生", learning_goal="理解握手")
@@ -712,8 +712,8 @@ class TestOutlineAgent:
     @pytest.mark.asyncio
     async def test_outline_agent_rejects_wrong_page_count(self, monkeypatch):
         """OutlineAgent must reject outlines that do not match DeckConstraints.page_count."""
-        from app.resource.agents.ppt_internal import OutlineAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import OutlineAgent
+        from app.resource.agents.ppt import (
             MaterialDigest, DeckConstraints, DeckOutline, SlideContract, BlockContract,
         )
 
@@ -747,7 +747,7 @@ class TestOutlineAgent:
                     ],
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         digest = MaterialDigest(topic="TCP", audience="学生", learning_goal="理解握手")
@@ -764,8 +764,8 @@ class TestSlideAgent:
     @pytest.mark.asyncio
     async def test_slide_agent_requests_slide_draft(self, monkeypatch):
         """SlideAgent 调用 LLM 并请求 SlideDraft schema。"""
-        from app.resource.agents.ppt_internal import SlideAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import SlideAgent
+        from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,
         )
@@ -789,7 +789,7 @@ class TestSlideAgent:
                     speaker_notes="这是封面页",
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         contract = SlideContract(
@@ -820,8 +820,8 @@ class TestSlideAgent:
     @pytest.mark.asyncio
     async def test_slide_agent_rejects_missing_blocks(self, monkeypatch):
         """SlideDraft 缺少合约中声明的 block_id 时应失败。"""
-        from app.resource.agents.ppt_internal import SlideAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import SlideAgent
+        from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,
         )
@@ -837,7 +837,7 @@ class TestSlideAgent:
                     speaker_notes="备注",
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         contract = SlideContract(
@@ -864,8 +864,8 @@ class TestSlideAgent:
     @pytest.mark.asyncio
     async def test_slide_agent_rejects_extra_blocks(self, monkeypatch):
         """SlideDraft 包含合约中未声明的 block_id 时应失败。"""
-        from app.resource.agents.ppt_internal import SlideAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import SlideAgent
+        from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,
         )
@@ -881,7 +881,7 @@ class TestSlideAgent:
                     speaker_notes="备注",
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         contract = SlideContract(
@@ -906,8 +906,8 @@ class TestSlideAgent:
     @pytest.mark.asyncio
     async def test_slide_agent_rejects_missing_required_block_field(self, monkeypatch):
         """SlideDraft data must include every required field from BlockContract.required_fields."""
-        from app.resource.agents.ppt_internal import SlideAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import SlideAgent
+        from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,
         )
@@ -922,7 +922,7 @@ class TestSlideAgent:
                     speaker_notes="讲解代码",
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         contract = SlideContract(
@@ -946,8 +946,8 @@ class TestSlideAgent:
     @pytest.mark.asyncio
     async def test_slide_agent_rejects_empty_required_block_field(self, monkeypatch):
         """Required string fields must not be blank."""
-        from app.resource.agents.ppt_internal import SlideAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import SlideAgent
+        from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,
         )
@@ -962,7 +962,7 @@ class TestSlideAgent:
                     speaker_notes="讲解正文",
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         contract = SlideContract(
@@ -991,8 +991,8 @@ class TestWriteSlidesConcurrently:
     @pytest.mark.asyncio
     async def test_concurrent_slide_writing_preserves_order(self, monkeypatch):
         """并发写幻灯片保持顺序。"""
-        from app.resource.agents.ppt_internal import write_slides_concurrently, SlideAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import write_slides_concurrently, SlideAgent
+        from app.resource.agents.ppt import (
             SlideDraft, SlideContract, BlockContract, RenderedBlock,
             DeckOutline, MaterialDigest,
         )
@@ -1028,7 +1028,7 @@ class TestWriteSlidesConcurrently:
                     speaker_notes="备注",
                 )
 
-        from app.resource.agents import ppt_internal as mod
+        from app.resource.agents import ppt as mod
         monkeypatch.setattr(mod, "get_llm", lambda: FakeLlm())
 
         contracts = [
@@ -1080,7 +1080,7 @@ class TestWriteSlidesConcurrently:
 class TestPayloadBuilder:
     def _make_outline_and_drafts(self):
         """Helper to create a minimal DeckOutline + matching SlideDrafts for 3 slides."""
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import (
             DeckOutline, SlideContract, BlockContract,
             SlideDraft, RenderedBlock,
         )
@@ -1154,7 +1154,7 @@ class TestPayloadBuilder:
 
     def test_build_cover_slide(self):
         """PayloadBuilder 正确构建封面页。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
+        from app.resource.agents.ppt import PayloadBuilder
         outline, drafts = self._make_outline_and_drafts()
         builder = PayloadBuilder()
         payload = builder.build(outline, drafts)
@@ -1169,7 +1169,7 @@ class TestPayloadBuilder:
 
     def test_build_agenda_slide(self):
         """PayloadBuilder 正确构建目录页。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
+        from app.resource.agents.ppt import PayloadBuilder
         outline, drafts = self._make_outline_and_drafts()
         builder = PayloadBuilder()
         payload = builder.build(outline, drafts)
@@ -1180,7 +1180,7 @@ class TestPayloadBuilder:
 
     def test_build_split_screen_concept(self):
         """PayloadBuilder 正确构建 SplitScreen 概念页。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
+        from app.resource.agents.ppt import PayloadBuilder
         outline, drafts = self._make_outline_and_drafts()
         builder = PayloadBuilder()
         payload = builder.build(outline, drafts)
@@ -1193,7 +1193,7 @@ class TestPayloadBuilder:
 
     def test_build_full_payload(self):
         """PayloadBuilder 生成完整的 PptPayload。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
+        from app.resource.agents.ppt import PayloadBuilder
         outline, drafts = self._make_outline_and_drafts()
         builder = PayloadBuilder()
         payload = builder.build(outline, drafts)
@@ -1204,8 +1204,8 @@ class TestPayloadBuilder:
 
     def test_build_fails_on_missing_draft(self):
         """缺少 draft 时 PayloadBuilder 失败。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import PayloadBuilder
+        from app.resource.agents.ppt import (
             DeckOutline, SlideContract, BlockContract,
         )
         outline = DeckOutline(
@@ -1229,7 +1229,7 @@ class TestPayloadBuilder:
 
     def test_speaker_notes_in_metadata(self):
         """speaker_notes 存入 slide metadata。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
+        from app.resource.agents.ppt import PayloadBuilder
         outline, drafts = self._make_outline_and_drafts()
         builder = PayloadBuilder()
         payload = builder.build(outline, drafts)
@@ -1239,8 +1239,8 @@ class TestPayloadBuilder:
 
     def test_builder_rejects_missing_required_text_instead_of_empty_output(self):
         """PayloadBuilder must not silently create an empty Text block."""
-        from app.resource.agents.ppt_builder import PayloadBuilder
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import PayloadBuilder
+        from app.resource.agents.ppt import (
             DeckOutline, SlideContract, BlockContract,
             SlideDraft, RenderedBlock,
         )
@@ -1286,8 +1286,8 @@ class TestPayloadBuilder:
 
     def test_code_demo_block(self):
         """Code block 正确转换。"""
-        from app.resource.agents.ppt_builder import PayloadBuilder
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import PayloadBuilder
+        from app.resource.agents.ppt import (
             DeckOutline, SlideContract, BlockContract,
             SlideDraft, RenderedBlock,
         )

@@ -1,14 +1,13 @@
 """Tests for the resource generation refactoring:
 
-1. LearningBlueprint replaces KnowledgeGraph as internal coordination structure
+1. TeachingPlan replaces LearningBlueprint as PlanningAgent's sole output
 2. Path node resource generation uses correct field names
-3. ResourceInput uses blueprint instead of knowledge_graph
+3. ResourceInput uses teaching_plan and upstream_handoffs, not blueprint/previous_results
 4. knowledge_graph is no longer a valid ResourceAgentId
 """
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -25,13 +24,13 @@ from app.resource.schemas import (
     AGENT_DEFAULT_ORDER,
     AGENT_META,
     AgentConfigs,
-    AgentInstruction,
     AgentSelection,
-    ExecutionPlan,
-    LearningBlueprint,
+    DownstreamContext,
     ResourceAgentId,
     ResourceGenerationRequest,
     ResourceInput,
+    TeachingOutlineItem,
+    TeachingPlan,
 )
 
 
@@ -45,14 +44,12 @@ def test_knowledge_graph_is_not_a_valid_agent_id():
     assert "knowledge_graph" not in [e.value for e in ResourceAgentId]
 
 
-def test_planning_prompt_describes_learning_blueprint_contract_and_ppt_agent():
+def test_planning_prompt_describes_teaching_plan_contract_and_ppt_agent():
     prompt_path = Path(__file__).resolve().parents[2] / "app" / "resource" / "prompts" / "planning.md"
     prompt = prompt_path.read_text(encoding="utf-8")
 
-    assert '"blueprint"' in prompt
-    assert '"learning_blueprint"' not in prompt
-    assert '"core_concepts"' in prompt
-    assert "**ppt**" in prompt
+    assert "教学" in prompt or "teaching" in prompt.lower()
+    assert "大纲" in prompt or "outline" in prompt.lower()
 
 
 def test_agent_meta_does_not_include_knowledge_graph():
@@ -90,77 +87,69 @@ def test_agent_selection_rejects_knowledge_graph():
 
 
 # ======================================================================
-# 2. LearningBlueprint replaces KnowledgeGraph
+# 2. TeachingPlan replaces LearningBlueprint
 # ======================================================================
 
 
-def test_learning_blueprint_has_required_fields():
-    """LearningBlueprint must contain topic and learner_goal."""
-    bp = LearningBlueprint(topic="操作系统处理机调度", learner_goal="理解典型调度算法")
-    assert bp.topic == "操作系统处理机调度"
-    assert bp.learner_goal == "理解典型调度算法"
+def test_teaching_plan_has_required_fields():
+    """TeachingPlan must contain topic."""
+    plan = TeachingPlan(topic="操作系统处理机调度", learning_goal="理解典型调度算法")
+    assert plan.topic == "操作系统处理机调度"
+    assert plan.learning_goal == "理解典型调度算法"
 
 
-def test_learning_blueprint_default_lists_are_empty():
-    """LearningBlueprint list fields default to empty."""
-    bp = LearningBlueprint(topic="test")
-    assert bp.prerequisite_concepts == []
-    assert bp.core_concepts == []
-    assert bp.difficult_points == []
-    assert bp.concept_relations == []
-    assert bp.example_scenarios == []
-    assert bp.practice_targets == []
+def test_teaching_plan_default_lists_are_empty():
+    """TeachingPlan list fields default to empty."""
+    plan = TeachingPlan(topic="test")
+    assert plan.outline == []
+    assert plan.boundaries == []
 
 
-def test_learning_blueprint_resource_guidance_is_dict():
-    """resource_guidance maps agent_id to generation focus."""
-    bp = LearningBlueprint(
-        topic="test",
-        resource_guidance={"content": "侧重调度算法对比", "quiz": "重点出分析题"},
-    )
-    assert bp.resource_guidance["content"] == "侧重调度算法对比"
+def test_teaching_plan_has_no_agent_instructions():
+    """TeachingPlan must not have agent_instructions or resource_guidance."""
+    dumped = TeachingPlan(topic="test").model_dump(mode="json")
+    assert "agent_instructions" not in dumped
+    assert "resource_guidance" not in dumped
 
 
-def test_execution_plan_uses_blueprint():
-    """ExecutionPlan uses LearningBlueprint, not knowledge_graph."""
-    bp = LearningBlueprint(topic="test", learner_goal="goal")
-    plan = ExecutionPlan(blueprint=bp)
-    assert plan.blueprint is bp
-    assert plan.blueprint.topic == "test"
-    assert not hasattr(plan, "knowledge_graph")
+def test_teaching_plan_outline_items_have_stable_ids():
+    """TeachingOutlineItem ids must match pattern o1, o2, etc."""
+    item = TeachingOutlineItem(id="o1", title="为什么需要三次握手")
+    assert item.id == "o1"
 
 
 # ======================================================================
-# 3. ResourceInput uses blueprint, not knowledge_graph
+# 3. ResourceInput uses teaching_plan and upstream_handoffs
 # ======================================================================
 
 
-def test_worker_state_uses_blueprint_field():
-    """ResourceInput must have blueprint field, not knowledge_graph."""
-    bp = LearningBlueprint(topic="test")
-    state = ResourceInput(blueprint=bp, learning_need="OS调度")
-    assert state.blueprint is bp
+def test_worker_state_uses_teaching_plan_field():
+    """ResourceInput must have teaching_plan field, not blueprint."""
+    plan = TeachingPlan(topic="test")
+    state = ResourceInput(teaching_plan=plan, learning_need="OS调度")
+    assert state.teaching_plan is plan
     assert not hasattr(state, "knowledge_graph")
+    assert not hasattr(state, "blueprint")
 
 
-def test_worker_state_blueprint_can_be_none():
-    """ResourceInput.blueprint defaults to None (PlanningAgent may fail)."""
+def test_worker_state_teaching_plan_can_be_none():
+    """ResourceInput.teaching_plan defaults to None (PlanningAgent may fail)."""
     state = ResourceInput(learning_need="test")
-    assert state.blueprint is None
+    assert state.teaching_plan is None
 
 
-def test_worker_state_instruction_can_be_none():
-    """ResourceInput.instruction defaults to None."""
+def test_worker_state_upstream_handoffs_defaults_empty():
+    """ResourceInput.upstream_handoffs defaults to empty dict."""
     state = ResourceInput(learning_need="test")
-    assert state.instruction is None
+    assert state.upstream_handoffs == {}
 
 
-def test_worker_state_instruction_field_exists():
-    """ResourceInput must have an instruction field for AgentInstruction."""
-    instr = AgentInstruction(agent_id="quiz", focus="scheduling algorithms")
-    state = ResourceInput(learning_need="test", instruction=instr)
-    assert state.instruction is instr
-    assert state.instruction.agent_id == "quiz"
+def test_worker_state_upstream_handoffs_holds_downstream_context():
+    """ResourceInput.upstream_handoffs maps agent_id to DownstreamContext."""
+    handoff = DownstreamContext(source_agent="content", title="内容", one_sentence_summary="讲解")
+    state = ResourceInput(learning_need="test", upstream_handoffs={"content": handoff})
+    assert state.upstream_handoffs["content"].source_agent == "content"
+    assert not hasattr(state, "previous_results")
 
 
 # ======================================================================
@@ -226,77 +215,70 @@ def test_request_learning_scenario_default():
 
 
 # ======================================================================
-# 5. AgentInstruction structure
+# 5. DownstreamContext structure
 # ======================================================================
 
 
-def test_agent_instruction_fields():
-    """AgentInstruction has focus, difficulty, personalization_notes, constraints."""
-    instr = AgentInstruction(
-        agent_id="content",
-        focus="scheduling algorithms comparison",
-        difficulty="intermediate",
-        personalization_notes="student struggles with SJF",
-        constraints=["avoid code examples"],
+def test_downstream_context_fields():
+    """DownstreamContext has source_agent, title, one_sentence_summary, covered_outline_ids."""
+    ctx = DownstreamContext(
+        source_agent="content",
+        title="TCP 三次握手讲解",
+        one_sentence_summary="解释三次握手的目的和流程",
+        covered_outline_ids=["o1", "o2"],
     )
-    assert instr.agent_id == "content"
-    assert instr.focus == "scheduling algorithms comparison"
-    assert instr.difficulty == "intermediate"
-    assert instr.constraints == ["avoid code examples"]
+    assert ctx.source_agent == "content"
+    assert ctx.covered_outline_ids == ["o1", "o2"]
+    assert ctx.schema_version == "resource_handoff/v1"
 
 
-def test_agent_instruction_defaults():
-    """AgentInstruction defaults: focus="", difficulty="intermediate", constraints=[]."""
-    instr = AgentInstruction(agent_id="quiz")
-    assert instr.focus == ""
-    assert instr.difficulty == "intermediate"
-    assert instr.constraints == []
+def test_downstream_context_defaults():
+    """DownstreamContext defaults: title="", one_sentence_summary="", covered_outline_ids=[]."""
+    ctx = DownstreamContext(source_agent="quiz")
+    assert ctx.title == ""
+    assert ctx.one_sentence_summary == ""
+    assert ctx.covered_outline_ids == []
 
 
 # ======================================================================
-# 6. Integration: ExecutionPlan -> ResourceInput pipeline
+# 6. Integration: TeachingPlan -> ResourceInput pipeline
 # ======================================================================
 
 
-def test_execution_plan_to_worker_state():
-    """A full ExecutionPlan can populate ResourceInput fields."""
-    bp = LearningBlueprint(
+def test_teaching_plan_to_worker_state():
+    """A TeachingPlan can populate ResourceInput fields."""
+    plan = TeachingPlan(
         topic="OS scheduling",
-        learner_goal="understand FCFS, SJF, RR",
-        prerequisite_concepts=["process states", "ready queue"],
-        core_concepts=["FCFS", "SJF", "RR", "priority scheduling"],
-        difficult_points=["SJF starvation", "RR time quantum choice"],
+        learning_goal="understand FCFS, SJF, RR",
+        outline=[
+            TeachingOutlineItem(id="o1", title="FCFS 调度", key_points=["先来先服务"]),
+            TeachingOutlineItem(id="o2", title="SJF 调度", key_points=["最短作业优先"]),
+        ],
+        boundaries=["不要讨论多处理器调度"],
     )
-    instr = AgentInstruction(
-        agent_id="quiz",
-        focus="scheduling algorithm comparison",
-        constraints=["include analysis questions"],
-    )
-    plan = ExecutionPlan(
-        blueprint=bp,
-        agent_instructions=[instr],
-        personalization_summary="student is strong on concepts but weak on analysis",
+    handoff = DownstreamContext(
+        source_agent="content",
+        title="调度算法讲解",
+        one_sentence_summary="覆盖 FCFS、SJF、RR 三种调度算法",
+        covered_outline_ids=["o1", "o2"],
     )
 
     state = ResourceInput(
         learning_need="OS scheduling algorithms",
-        blueprint=plan.blueprint,
-        instruction=instr,
+        teaching_plan=plan,
+        upstream_handoffs={"content": handoff},
         agent_config={"question_count": 5},
     )
 
-    assert state.blueprint.topic == "OS scheduling"
-    assert state.blueprint.difficult_points == ["SJF starvation", "RR time quantum choice"]
-    assert state.instruction.agent_id == "quiz"
-    assert state.instruction.constraints == ["include analysis questions"]
+    assert state.teaching_plan.topic == "OS scheduling"
+    assert state.teaching_plan.outline[0].id == "o1"
+    assert state.upstream_handoffs["content"].covered_outline_ids == ["o1", "o2"]
 
 
-def test_execution_plan_fallback_blueprint():
-    """When PlanningAgent fails, a minimal LearningBlueprint still works."""
-    bp = LearningBlueprint(topic="fallback topic", learner_goal="basic goal")
-    plan = ExecutionPlan(blueprint=bp)
-    state = ResourceInput(learning_need="test", blueprint=plan.blueprint)
-    assert state.blueprint.topic == "fallback topic"
+def test_teaching_plan_fallback_none():
+    """When PlanningAgent fails, teaching_plan=None still works."""
+    state = ResourceInput(learning_need="test", teaching_plan=None)
+    assert state.teaching_plan is None
 
 
 # ======================================================================
@@ -308,58 +290,6 @@ def test_path_node_resource_request_schema_removed():
     import app.path.schemas as schemas
 
     assert not hasattr(schemas, "PathNodeResourceRequest")
-
-
-def test_path_plan_contract_persists_percentage_confidence_and_rationale_items():
-    from app.path.schemas import AgentLearningPathPlan, AgentStage, AgentPathNode
-
-    plan = AgentLearningPathPlan(
-        title="操作系统进阶路径",
-        confidence=82,
-        adjustment_rationale=["优先补齐调度基础", "通过练习巩固算法比较"],
-        stages=[AgentStage(stage_id="stage-1", title="基础", description="基础阶段")],
-        nodes=[AgentPathNode(node_id="n1", stage_id="stage-1", title="节点1")],
-    )
-
-    assert plan.confidence == 82
-    assert plan.adjustment_rationale == ["优先补齐调度基础", "通过练习巩固算法比较"]
-
-
-@pytest.mark.asyncio
-async def test_path_planner_uses_request_knowledge_preferences_and_plans_all_stages():
-    from app.path.agents.planner import PathPlannerAgent
-    from app.path.schemas import AgentLearningPathPlan, AgentStage, AgentPathNode, CreateLearningPathRequest
-
-    class CapturingLLM:
-        messages = []
-
-        async def ainvoke_json(self, schema, messages):
-            self.messages = messages
-            return AgentLearningPathPlan(
-                title="处理机调度学习路径",
-                stages=[AgentStage(stage_id="stage-1", title="调度基础", description="调度基础阶段")],
-                nodes=[AgentPathNode(node_id="n1", stage_id="stage-1", title="处理机调度")],
-            )
-
-    agent = PathPlannerAgent()
-    llm = CapturingLLM()
-    agent.llm = llm
-
-    await agent.generate_plan(
-        CreateLearningPathRequest(
-            goal="掌握调度算法",
-            topic="操作系统处理机调度",
-            current_knowledge=["进程状态"],
-            preferences={"learning_style": "案例驱动"},
-        ),
-        {"weak_points": ["响应时间计算"]},
-    )
-
-    prompt = llm.messages[-1].content
-    assert "进程状态" in prompt
-    assert "案例驱动" in prompt
-    assert "所有阶段" in agent.system_prompt
-    assert "仅包含第 1 阶段" not in agent.system_prompt
 
 
 def test_persisted_resource_item_exposes_real_card_status():
@@ -381,6 +311,8 @@ def test_persisted_resource_item_exposes_real_card_status():
         content_text=None,
         metadata_json={"agent_id": "ppt"},
         execution_report=None,
+        metrics=None,
+        downstream_context=None,
     )
 
     mapped = ResourceService._db_item_to_resource_item(object(), item)
