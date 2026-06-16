@@ -517,10 +517,10 @@ async def run_multi_agent_generation(
 
     [ 阶段 1 ] : PlanningAgent (规划智能体) — 串行，必须先完成
                  ↓
-                 生成蓝图 (Blueprint) 和 指令分发表 (Instructions)
+                 生成全局 TeachingPlan（教学方向、概要、大纲和边界）
                  ↓
     [ 阶段 2 ] : 并行调度所有启用的 Worker Agents (如 Content, Quiz, Code, Mindmap 等)
-                 (各个 Worker 拿着专属的 Instruction 并行干活)
+                 (各个 Worker 基于 TeachingPlan 生成资源和 DownstreamContext)
                  ↓
     [ 阶段 3 ] : 前置审核、PPT、Video 聚合生成并行执行
                  - 前置审核与 PPT、Video 生成并行启动
@@ -561,7 +561,7 @@ async def run_multi_agent_generation(
             async with AgentRunTracker(
                 emitter=emitter,
                 agent_id="planning",
-                phase="planning_blueprint",
+                phase="planning",
                 message="正在规划教学方向与大纲",
                 progress=5,
             ) as planning_tracker:

@@ -444,7 +444,7 @@ class VideoAgent(BaseResourceAgent):
                 metadata={"agent_id": "video", "reserved_for_tutor": True},
             )
         from app.resource.schemas import DownstreamContext
-        raw_handoffs = tutor_context.get("upstream_handoffs") or tutor_context.get("previous_results") or {}
+        raw_handoffs = tutor_context.get("upstream_handoffs") or {}
         normalized_handoffs: dict[str, DownstreamContext] = {}
         for agent_id, value in raw_handoffs.items():
             if isinstance(value, DownstreamContext):
