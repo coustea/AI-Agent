@@ -6,7 +6,7 @@ app:
 
 # 数据库配置
 database:
-  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 10
   max_overflow: 20
@@ -31,6 +31,8 @@ models:
   # 推理参数
   temperature: 0.3
   max_tokens: 4096
+  # 结构化输出策略：auto / json_first / tool_first
+  structured_output_strategy: "auto"
   # 网络与重试参数
   timeout: 300          # 单次请求超时（秒）
   max_retries: 2        # 失败重试次数

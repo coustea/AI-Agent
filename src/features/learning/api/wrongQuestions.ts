@@ -37,13 +37,6 @@ export async function fetchWrongQuestions(params?: {
   return response.data as WrongQuestionListResponse
 }
 
-export async function addWrongQuestion(data: {
-  question_id: string
-  user_answer?: string
-}): Promise<{ id: number; action: string }> {
-  const response = await http.post('/ai/wrong-questions', data)
-  return response.data.data
-}
 
 export async function removeWrongQuestion(wrongId: number): Promise<void> {
   await http.delete(`/ai/wrong-questions/${wrongId}`)

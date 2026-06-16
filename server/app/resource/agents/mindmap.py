@@ -6,8 +6,9 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_node_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -23,68 +24,69 @@ class MindmapAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """核心生成逻辑：拼接导图配置 → LLM 生成 → 解析分支和薄弱点。"""
-        config = state.agent_config
-        # 拼接思维导图配置（类型、深度、高亮模式）
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        result = await self._generate_mindmap(
+            input_text="\n\n".join(build_resource_context(input_data)),
+            title_prefix=input_data.learning_need[:32],
+            config=input_data.agent_config,
+        )
+        await self.emit_finish(result)
+        return result
+
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        result = await self._generate_mindmap(
+            input_text="\n\n".join(build_node_context(input_data)),
+            title_prefix=input_data.node_title,
+            config=input_data.agent_config,
+        )
+        result.metadata["path_id"] = input_data.path_id
+        result.metadata["node_id"] = input_data.node_id
+        await self.emit_finish(result)
+        return result
+
+    async def _generate_mindmap(
+        self,
+        *,
+        input_text: str,
+        title_prefix: str,
+        config: dict,
+    ) -> AgentResult:
         if config:
             cfg = ["## 思维导图配置"]
             cfg.append(f"- 导图类型: {config.get('map_type', 'knowledge_tree')}")
             cfg.append(f"- 最大深度: {config.get('max_depth', 4)}")
             cfg.append("- 用粗体高亮标注薄弱知识点" if config.get("highlight_weak", True) else "- 不高亮薄弱知识点")
             input_text += f"\n\n{chr(10).join(cfg)}"
-        # 明确要求使用标准 Markdown 格式，禁止 Mermaid 语法
         input_text += (
             "\n\n请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题和列表文本。"
         )
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在构建知识导图提示词",
-                progress=25,
-            )
-
-        logger.info("Agent[mindmap] 步骤: 调用 LLM 生成知识导图, input_len=%d", len(input_text))
+        await self.emit_start("正在构建知识导图提示词", progress=25)
         prompt = prompts.get("resource").get("mindmap")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
-
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="导图已生成，正在解析分支结构",
-                progress=85,
-            )
-
         content = response.content if hasattr(response, "content") else str(response)
-        # 清理 LLM 输出中多余的 fence 标记
         content = _clean_markdown(content)
 
-        # 解析导图分支和薄弱知识点
         branches: list[str] = []
         weak_points: list[str] = []
         for line in content.splitlines():
             stripped = line.strip()
-            # 二级标题作为分支节点
             if stripped.startswith("## "):
                 branches.append(stripped.lstrip("#").strip())
-            # 列表项中包含易错/薄弱标记的作为薄弱点
             elif stripped.startswith("- "):
                 item = stripped[2:].strip()
                 if any(token in item for token in ("易错", "误区", "难点", "薄弱")):
                     weak_points.append(item)
 
-        logger.info("Agent[mindmap] 步骤: 导图解析完成, output_len=%d branches=%d weak=%d", len(content), len(branches), len(weak_points))
-
-        return WorkerResult(
+        return AgentResult(
             success=True,
             content=content,
             file_type="markdown",
-            title=f"{state.learning_need[:32]} - 思维导图",
+            title=f"{title_prefix} - 思维导图",
             summary="生成 Markmap 思维导图 Markdown",
             summary_data={
-                "central_topic": state.learning_need[:50],
+                "central_topic": title_prefix[:50],
                 "branches": list(dict.fromkeys(branches))[:8],
                 "weak_points": list(dict.fromkeys(weak_points))[:8],
             },

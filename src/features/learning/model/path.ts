@@ -1,3 +1,5 @@
+export type PathResourceType = 'content' | 'mindmap' | 'code' | 'reading' | 'quiz' | 'ppt'
+
 export interface LearningPathStage {
   stage_id: string
   title: string
@@ -74,12 +76,16 @@ export interface LearningPathTutorial {
 
 export interface LearningPathResource {
   id: number
-  resource_type: 'mindmap' | 'code' | 'ppt' | string
+  resource_type: PathResourceType | string
   version_no: number
   title: string
   content_format: string
   content_text: string | null
   content_json: Record<string, unknown> | null
+  summary: string | null
+  status: string
+  error_message: string | null
+  input_data: Record<string, unknown> | null
   metadata: Record<string, unknown>
   created_at: string
 }
@@ -151,7 +157,7 @@ export interface CreateLearningPathResponse {
 }
 
 export interface AuxiliaryResourceRequest {
-  resource_type: 'mindmap' | 'code' | 'ppt'
+  resource_type: PathResourceType
 }
 
 interface LearningSignalSnapshot {
@@ -176,12 +182,16 @@ export interface PathLearningEvaluationResponse {
 
 export interface PathResourceDetail {
   id: number
-  resource_type: string
+  resource_type: PathResourceType | string
   version_no: number
   title: string
   content_format: string
   content_text: string | null
   content_json: Record<string, unknown> | null
+  summary: string | null
+  status: string
+  error_message: string | null
+  input_data: Record<string, unknown> | null
   metadata: Record<string, unknown>
   created_at: string
 }

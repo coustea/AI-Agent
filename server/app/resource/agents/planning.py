@@ -11,7 +11,7 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
-from app.resource.schemas import ExecutionPlan, WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, ExecutionPlan, NodeInput, ResourceInput
 from app.resource.utils import format_learner_profile_for_prompt
 
 
@@ -26,48 +26,24 @@ class PlanningAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def run(self, state: WorkerState) -> WorkerResult:
-        """PlanningAgent 自行构建输入，不走通用 build_worker_base_context。"""
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在分析学习需求并构建执行计划",
-                progress=10,
-            )
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """多智能体场景：分析学习需求，生成教学蓝图和执行计划。"""
+        await self.emit_start("正在分析学习需求并构建执行计划", progress=10)
 
         prompt = prompts.get("resource").get("planning")
-        # 自定义构建规划输入（包含学习需求、画像、场景、资源类型列表）
-        input_text = self._build_planning_input(state)
+        input_text = self._build_planning_input(input_data)
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在调用大模型生成教学蓝图与各智能体指令",
-                progress=25,
-            )
+        await self.emit_start("正在调用大模型生成教学蓝图与各智能体指令", progress=25)
 
-        # LLM 结构化输出 → ExecutionPlan（含 blueprint + agent_instructions）
         plan = await self.llm.ainvoke_json(
             ExecutionPlan,
             f"{prompt}\n\n{input_text}",
             temperature=INFERENCE_TEMPERATURE,
         )
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="蓝图已生成，正在提取各智能体个性化指令",
-                progress=85,
-            )
+        await self.emit_start("蓝图已生成，正在提取各智能体个性化指令", progress=85)
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="finished",
-                message="教学蓝图与执行计划已生成",
-                progress=100,
-            )
-
-        return WorkerResult(
+        result = AgentResult(
             success=True,
             content=plan.model_dump_json(indent=2),
             file_type="json",
@@ -82,19 +58,29 @@ class PlanningAgent(BaseResourceAgent):
                 },
             },
         )
+        await self.emit_finish(result)
+        return result
 
-    def _build_planning_input(self, state: WorkerState) -> str:
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        """路径节点场景不支持 PlanningAgent。"""
+        return AgentResult(
+            success=False,
+            error="planning agent 不用于路径节点资源生成",
+            title="",
+            summary="not supported",
+            metadata={"agent_id": "planning"},
+        )
+
+    def _build_planning_input(self, input_data: ResourceInput) -> str:
         """构建规划阶段的 LLM 输入文本。"""
         parts = [
-            f"## 学习需求\n{state.learning_need}",
-            f"## 学习场景\n{getattr(state, 'learning_scenario', 'self_study')}",
+            f"## 学习需求\n{input_data.learning_need}",
+            f"## 学习场景\n{input_data.learning_scenario}",
         ]
-        # 添加学习者画像
-        profile_text = format_learner_profile_for_prompt(state.profile)
+        profile_text = format_learner_profile_for_prompt(input_data.profile)
         if profile_text:
             parts.append(f"## 学习者画像\n{profile_text}")
-        # 添加需要生成的资源类型列表
-        agents = list(state.agent_config.get("enabled_agents", [])) if state.agent_config else []
+        agents = list(input_data.agent_config.get("enabled_agents", [])) if input_data.agent_config else []
         if agents:
             parts.append(f"## 需要生成的资源类型\n{', '.join(agents)}")
         return "\n\n".join(parts)

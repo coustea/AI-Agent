@@ -209,13 +209,13 @@ class PathPlannerAgent:
         tool_calls = list(getattr(response, "tool_calls", []) or [])[: self.max_search_tool_calls]
         if not tool_calls:
             direct = _message_content(response)
-            if _is_usable(direct):
+            if is_usable_search_result(direct):
                 return f"\n\n联网检索参考:\n{direct[:6000]}"
             return ""
 
         tools_by_name = {tool.name: tool for tool in self.search_tools}
         results = await _run_tool_calls(tool_calls, tools_by_name)
-        usable = [r for r in results if _is_usable(r)]
+        usable = [r for r in results if is_usable_search_result(r)]
         if not usable:
             return ""
 
@@ -292,7 +292,7 @@ def _build_search_messages(
     ]
 
 
-def _is_usable(result: object) -> bool:
+def is_usable_search_result(result: object) -> bool:
     """判断搜索结果是否可用（非空且不含失败标记词）。"""
     text = str(result or "").strip()
     if not text:
@@ -334,9 +334,7 @@ async def _run_tool_calls(tool_calls: list[Any], tools_by_name: dict[str, Any]) 
     return list(await asyncio.gather(*[_run_one(tc) for tc in tool_calls]))
 
 
-def is_usable_search_result(result: object) -> bool:
-    """Public alias kept for test backward compatibility."""
-    return _is_usable(result)
+
 
 
 def repair_generated_plan_from_macro_stages(

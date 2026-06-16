@@ -25,10 +25,8 @@ from app.resource.api import router as resource_router
 # WebSocket 路由
 from app.ws_routes import router as websocket_router
 
-# 测验路由
+# 测验与错题本路由
 from app.quiz.api import router as quiz_router
-# 错题本路由
-from app.quiz.wrong_api import router as wrong_router
 
 
 def install_routes(app: FastAPI) -> None:
@@ -54,9 +52,7 @@ def install_routes(app: FastAPI) -> None:
     app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
     # 数字人模块：/api/v1/ai/avatar/*
     app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
-    # 测验模块：/api/v1/ai/quiz/*
+    # 测验与错题本模块：/api/v1/ai/quiz-bank/*, /api/v1/ai/wrong-questions/*
     app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
-    # 错题本模块：/api/v1/ai/wrong/*
-    app.include_router(wrong_router, prefix="/api/v1/ai", tags=["wrong-questions"])
     # WebSocket 模块：/ws/*
     app.include_router(websocket_router)

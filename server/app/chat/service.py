@@ -515,7 +515,7 @@ class LocalFileStore:
     def _safe_filename(self, filename: str) -> str:
         """清洗文件名：移除危险字符，限制长度。
 
-        移除 \ / * ? : " < > | 等文件系统特殊字符，
+        移除 \\ / * ? : " < > | 等文件系统特殊字符，
         文件名超过 100 字符时截断（保留扩展名），防止路径过长。
         """
         safe = re.sub(r'[\\/*?:"<>|]', "", filename).strip()

@@ -2,31 +2,21 @@
   <div class="question-bank-layout">
     <!-- Workspace Layout -->
     <div v-if="viewMode === 'workspace'" class="workspace-layout">
-      <!-- Sidebar Navigation -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-          <h2>Practice Center</h2>
+      <!-- Top Navigation -->
+      <header class="top-nav">
+        <div class="nav-container">
+          <div class="brand">
+            <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            <h2>Practice Center</h2>
+          </div>
+          <nav class="nav-links">
+            <button :class="['nav-item', { active: activeModule === 'practice' }]" @click="switchModule('practice')">Dashboard</button>
+            <button :class="['nav-item', { active: activeModule === 'search' }]" @click="switchModule('search')">Question Bank</button>
+            <button :class="['nav-item', { active: activeModule === 'paper' }]" @click="switchModule('paper')">Mock Exams</button>
+            <button :class="['nav-item', { active: activeModule === 'wrong' }]" @click="switchModule('wrong')">Wrong Book</button>
+          </nav>
         </div>
-        <nav class="sidebar-nav">
-          <button :class="['nav-item', { active: activeModule === 'practice' }]" @click="switchModule('practice')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            Dashboard
-          </button>
-          <button :class="['nav-item', { active: activeModule === 'search' }]" @click="switchModule('search')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            Question Bank
-          </button>
-          <button :class="['nav-item', { active: activeModule === 'paper' }]" @click="switchModule('paper')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            Mock Exams
-          </button>
-          <button :class="['nav-item', { active: activeModule === 'wrong' }]" @click="switchModule('wrong')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.5 9.5-9.1 9.1a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8l9.1-9.1a2 2 0 0 1 2.8 0l5.7 5.7a2 2 0 0 1 0 2.8Z"/><path d="M5.5 15.5 12 22"/></svg>
-            Wrong Book
-          </button>
-        </nav>
-      </aside>
+      </header>
 
       <!-- Main Content -->
       <main class="main-content">
@@ -244,9 +234,8 @@
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
-import { fetchQuizBankQuestions, fetchQuizReview, type QuizReviewResult } from '@/features/learning/api/quizBank'
+import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, type QuizReviewResult } from '@/features/learning/api/quizBank'
 import {
-  addWrongQuestion,
   archiveWrongQuestion,
   fetchRandomWrongQuestion,
   fetchWrongQuestions,
@@ -762,15 +751,56 @@ async function submitExam() {
   }
   stopExamTimer()
   let correctCount = 0
-  const wrongTasks: Promise<void>[] = []
+  
+  const batchResults: any[] = []
+  
+  // Grade objective locally and prepare batch
   examPaper.value.forEach((q) => {
-    if (evaluateAnswer(q, examAnswers.value[q.id])) correctCount += 1
-    else wrongTasks.push(saveWrongQuestion(q, examAnswers.value[q.id]))
+    if (isObjectiveQuestion(q)) {
+      const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
+      if (isCorrect) correctCount += 1
+      batchResults.push({
+        question_id: q.id,
+        user_answer: formatUserAnswer(examAnswers.value[q.id]),
+        is_correct: isCorrect,
+        subject: q.subject,
+        question_type: q.type,
+        content: q.content,
+        options: q.options || {},
+        answer: q.answer,
+        analysis: q.analysis,
+      })
+    }
   })
+  
+  // Grade subjective concurrently via AI review and add to batch
+  const subjectiveTasks = examPaper.value.filter(q => !isObjectiveQuestion(q)).map(async (q) => {
+    const { correct } = await gradeQuestion(q, examAnswers.value[q.id])
+    if (correct) correctCount += 1
+    // Optional: save review to some state to show to user
+    batchResults.push({
+        question_id: q.id,
+        user_answer: formatUserAnswer(examAnswers.value[q.id]),
+        is_correct: correct,
+        subject: q.subject,
+        question_type: q.type,
+        content: q.content,
+        options: q.options || {},
+        answer: q.answer,
+        analysis: q.analysis,
+    })
+  })
+  
+  await Promise.all(subjectiveTasks)
+
+  // Submit all objective results to save wrongs
+  if (batchResults.length > 0) {
+    await submitObjectiveResults({ results: batchResults })
+  }
+
   examCorrectCount.value = correctCount
   examSubmitted.value = true
   saveAttempt(examPaper.value.length, correctCount)
-  await Promise.allSettled(wrongTasks)
 }
 
 function backWorkspace() {
@@ -792,7 +822,7 @@ function isExamCorrect(q: Question) {
 
 // Helpers
 async function gradeQuestion(question: Question, answer: AnswerValue) {
-  if (isOptionQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
+  if (isObjectiveQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
   try {
     const review = await fetchQuizReview({
       question_id: question.id,
@@ -811,7 +841,19 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
 
 async function saveWrongQuestion(question: Question, answer: AnswerValue) {
   try {
-    await addWrongQuestion({ question_id: question.id, user_answer: formatUserAnswer(answer) })
+    await submitObjectiveResults({
+      results: [{
+        question_id: question.id,
+        user_answer: formatUserAnswer(answer),
+        is_correct: false,
+        subject: question.subject,
+        question_type: question.type,
+        content: question.content,
+        options: question.options || {},
+        answer: question.answer,
+        analysis: question.analysis,
+      }]
+    })
     wrongTotal.value += 1
   } catch { /* ignore duplicates */ }
 }
@@ -838,9 +880,14 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
   const stdText = String(question.answer || '').trim().toLowerCase()
   if (!userText) return false
   if (!stdText) return userText.length > 4
+  
+  if (question.type === '填空题') {
+    return userText === stdText
+  }
   return userText.includes(stdText) || stdText.includes(userText)
 }
 
+function isObjectiveQuestion(q: Question) { return ['选择题', '单选题', '多选题', '判断题', '填空题'].includes(q.type) }
 function isOptionQuestion(q: Question) { return ['选择题', '单选题', '多选题', '判断题'].includes(q.type) }
 function getOptions(q: Question) { return q.type === '判断题' ? { A: '正确', B: '错误' } : (q.options || {}) }
 function isSelected(ans: AnswerValue, key: string) {
@@ -907,91 +954,104 @@ function renderInline(text: string) {
 </script>
 
 <style scoped>
-/* Base Professional SaaS Minimalist Styles */
+/* Minimalist Professional Flat Design Tokens */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 .question-bank-layout {
   min-height: calc(100vh - 60px);
-  background: #F9FAFB;
-  color: #111827;
+  background: #FFFFFF;
+  color: #171717;
   font-family: 'Inter', -apple-system, sans-serif;
   box-sizing: border-box;
 }
 
-/* Sidebar Layout */
+/* Top Navigation */
 .workspace-layout {
   display: flex;
+  flex-direction: column;
   min-height: calc(100vh - 60px);
 }
 
-.sidebar {
-  width: 260px;
-  background: #FFFFFF;
-  border-right: 1px solid #E5E7EB;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+.top-nav {
+  background: #171717;
+  color: #FFFFFF;
+  border-bottom: 2px solid #D4AF37;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
-.sidebar-header {
-  padding: 24px;
+.nav-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+  height: 64px;
+}
+
+.brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid #F3F4F6;
 }
 
-.sidebar-header h2 {
-  font-size: 18px;
+.brand h2 {
+  font-size: 16px;
   font-weight: 600;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .logo-icon {
-  color: #111827;
+  color: #D4AF37;
 }
 
-.sidebar-nav {
-  padding: 16px;
+.nav-links {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 16px;
 }
 
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 16px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: #4B5563;
+  color: #A3A3A3;
   font-size: 14px;
   font-weight: 500;
+  padding: 8px 16px;
   cursor: pointer;
-  text-align: left;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  position: relative;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .nav-item:hover {
-  background: #F3F4F6;
-  color: #111827;
+  color: #FFFFFF;
 }
 
 .nav-item.active {
-  background: #111827;
-  color: #FFFFFF;
+  color: #D4AF37;
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #D4AF37;
 }
 
 .main-content {
   flex: 1;
-  padding: 32px 40px;
-  max-width: 1200px;
+  padding: 40px;
+  max-width: 1000px;
   margin: 0 auto;
-  overflow-y: auto;
+  width: 100%;
 }
 
 /* Fullscreen Exam Workspace */
@@ -1006,20 +1066,24 @@ function renderInline(text: string) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
-  border-bottom: 1px solid #E5E7EB;
+  padding: 16px 40px;
+  background: #171717;
+  color: #FFFFFF;
+  border-bottom: 2px solid #D4AF37;
 }
 
 .exam-topbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 24px;
 }
 
 .exam-title {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .exam-actions {
@@ -1033,29 +1097,31 @@ function renderInline(text: string) {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: #F3F4F6;
-  border-radius: 6px;
+  background: #262626;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 14px;
+  color: #FFFFFF;
+  border: 1px solid #404040;
 }
 
 .exam-main {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 340px;
   flex: 1;
-}
-
-.exam-content {
-  padding: 40px;
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
   width: 100%;
 }
 
+.exam-content {
+  padding: 48px 40px;
+}
+
 .exam-sidebar {
   border-left: 1px solid #E5E7EB;
-  background: #F9FAFB;
-  padding: 24px;
+  background: #FAFAFA;
+  padding: 32px;
 }
 
 .question-header {
@@ -1066,8 +1132,9 @@ function renderInline(text: string) {
 }
 
 .q-number {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
+  color: #171717;
 }
 
 .tags {
@@ -1076,93 +1143,97 @@ function renderInline(text: string) {
 }
 
 .tag {
-  background: #F3F4F6;
-  color: #374151;
-  padding: 4px 10px;
-  border-radius: 99px;
+  background: #FFFFFF;
+  color: #404040;
+  padding: 4px 8px;
+  border-radius: 4px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
+  border: 1px solid #D4D4D4;
 }
 
-.tag.outline { background: transparent; border: 1px solid #E5E7EB; }
-.tag.type { background: #FEF3C7; color: #92400E; }
+.tag.type { background: #171717; color: #FFFFFF; border: none; }
 
 .question-text {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.6;
-  margin-bottom: 32px;
+  margin-bottom: 40px;
+  color: #171717;
 }
 
 .options-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .option-btn {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  padding: 16px;
+  padding: 16px 20px;
   background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
+  border: 2px solid #E5E7EB;
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
   transition: all 0.15s ease;
 }
 
-.option-btn:hover:not(:disabled) { border-color: #9CA3AF; }
-.option-btn.selected { border-color: #111827; background: #F3F4F6; }
-.option-btn.correct { border-color: #10B981; background: #ECFDF5; }
-.option-btn.wrong { border-color: #EF4444; background: #FEF2F2; }
+.option-btn:hover:not(:disabled) { border-color: #171717; }
+.option-btn.selected { border-color: #171717; background: #171717; color: #FFFFFF; }
+.option-btn.correct { border-color: #059669; background: #059669; color: #FFFFFF; }
+.option-btn.wrong { border-color: #DC2626; background: #DC2626; color: #FFFFFF; }
 
-.opt-key { font-weight: 600; min-width: 24px; }
-.opt-text { font-size: 15px; line-height: 1.5; }
+.opt-key { font-weight: 700; min-width: 24px; font-size: 16px; }
+.opt-text { font-size: 16px; line-height: 1.5; }
 
 .text-area-input {
   width: 100%;
   padding: 16px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  font-size: 15px;
+  border: 2px solid #E5E7EB;
+  border-radius: 0;
+  font-size: 16px;
   font-family: inherit;
   resize: vertical;
   outline: none;
+  background: #FFFFFF;
+  transition: border-color 0.15s;
 }
-.text-area-input:focus { border-color: #111827; }
+.text-area-input:focus { border-color: #171717; }
 
 .nav-controls {
   display: flex;
   justify-content: space-between;
   margin-top: 48px;
-  padding-top: 24px;
+  padding-top: 32px;
   border-top: 1px solid #E5E7EB;
 }
 
-.panel h3 { font-size: 16px; margin: 0 0 24px 0; }
+.panel h3 { font-size: 14px; margin: 0 0 24px 0; text-transform: uppercase; letter-spacing: 0.05em; color: #404040; }
 
 .score-display, .progress-display {
   text-align: center;
-  padding: 24px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  margin-bottom: 24px;
+  padding: 32px 24px;
+  background: #171717;
+  color: #FFFFFF;
+  border-radius: 0;
+  margin-bottom: 32px;
 }
 
 .score-value, .progress-value {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 700;
-  color: #111827;
   margin-bottom: 8px;
+  color: #D4AF37;
 }
 
 .score-label, .progress-label {
   font-size: 12px;
-  color: #6B7280;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.1em;
+  color: #A3A3A3;
 }
 
 .grid-sheet {
@@ -1174,38 +1245,41 @@ function renderInline(text: string) {
 .sheet-btn {
   aspect-ratio: 1;
   background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  font-size: 13px;
+  border: 2px solid #E5E7EB;
+  border-radius: 0;
+  font-size: 14px;
   font-weight: 600;
-  color: #4B5563;
+  color: #404040;
   cursor: pointer;
+  transition: all 0.15s;
 }
 
-.sheet-btn.answered { background: #111827; color: white; border-color: #111827; }
-.sheet-btn.active { border: 2px solid #111827; }
-.sheet-btn.correct { background: #10B981; color: white; border-color: #10B981; }
-.sheet-btn.wrong { background: #EF4444; color: white; border-color: #EF4444; }
+.sheet-btn:hover { border-color: #171717; }
+.sheet-btn.answered { background: #171717; color: #FFFFFF; border-color: #171717; }
+.sheet-btn.active { border-color: #D4AF37; color: #D4AF37; }
+.sheet-btn.correct { background: #059669; color: #FFFFFF; border-color: #059669; }
+.sheet-btn.wrong { background: #DC2626; color: #FFFFFF; border-color: #DC2626; }
 
 /* Global Buttons */
-.btn-primary { background: #111827; color: #FFFFFF; border: none; padding: 8px 24px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: 0.15s; }
-.btn-primary:hover:not(:disabled) { background: #374151; }
+.btn-primary { background: #171717; color: #FFFFFF; border: 2px solid #171717; padding: 12px 24px; border-radius: 0; font-weight: 600; cursor: pointer; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
+.btn-primary:hover:not(:disabled) { background: #D4AF37; border-color: #D4AF37; color: #171717; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-secondary { background: #FFFFFF; color: #111827; border: 1px solid #D1D5DB; padding: 8px 24px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: 0.15s; }
-.btn-secondary:hover:not(:disabled) { background: #F9FAFB; border-color: #9CA3AF; }
+.btn-secondary { background: #FFFFFF; color: #171717; border: 2px solid #171717; padding: 12px 24px; border-radius: 0; font-weight: 600; cursor: pointer; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
+.btn-secondary:hover:not(:disabled) { background: #171717; color: #FFFFFF; }
 .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-text { background: none; border: none; color: #6B7280; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;}
-.btn-text:hover { color: #111827; }
+.btn-text { background: none; border: none; color: #A3A3A3; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
+.btn-text:hover { color: #FFFFFF; }
 
 .full-width { width: 100%; }
 
-.result-badge { padding: 4px 12px; border-radius: 99px; font-size: 13px; font-weight: 500; }
-.result-badge.success { background: #ECFDF5; color: #059669; }
-.result-badge.danger { background: #FEF2F2; color: #DC2626; }
+.result-badge { padding: 6px 12px; border-radius: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; border: 2px solid transparent; }
+.result-badge.success { background: #ECFDF5; color: #059669; border-color: #059669; }
+.result-badge.danger { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
 
-.analysis-panel { margin-top: 24px; padding: 16px; border-radius: 8px; font-size: 14px; }
-.analysis-panel.success { background: #ECFDF5; border-left: 3px solid #10B981; }
-.analysis-panel.danger { background: #FEF2F2; border-left: 3px solid #EF4444; }
+.analysis-panel { margin-top: 32px; padding: 24px; border-radius: 0; font-size: 15px; }
+.analysis-panel.success { background: #F8FAFC; border-left: 4px solid #10B981; }
+.analysis-panel.danger { background: #FAFAFA; border-left: 4px solid #EF4444; }
+.analysis-text { margin-top: 12px; color: #404040; line-height: 1.6; }
 </style>

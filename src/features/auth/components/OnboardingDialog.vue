@@ -208,15 +208,6 @@ const PRESET_PROGRAMMING_LANGUAGES = ['Python', 'Java', 'C++', 'JavaScript', 'Go
 
 const currentTimeLabel = computed(() => formatTime())
 
-const isComplete = computed(() => {
-  return currentStep.value > 7 || Boolean(
-    form.school &&
-    form.major &&
-    form.grade &&
-    form.daily_study_time &&
-    form.global_learning_goal,
-  )
-})
 
 const canSend = computed(() => {
   return userInput.value.trim().length > 0 && !isAssistantStreaming.value && !submitting.value
@@ -333,7 +324,7 @@ const splitToTypewriterChunks = (text: string) => {
   let buffer = ''
 
   for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]
+    const char = text[index]!
     const isAscii = /[A-Za-z0-9_+#./-]/.test(char)
 
     if (isAscii) {
@@ -391,9 +382,10 @@ const streamAssistantMessage = async (content: string) => {
     const msgIndex = messages.value.findIndex(item => item.id === messageId)
     if (msgIndex === -1) return
 
+    const msg = messages.value[msgIndex]!
     messages.value[msgIndex] = {
-      ...messages.value[msgIndex],
-      content: messages.value[msgIndex].content + chunk,
+      ...msg,
+      content: msg.content + chunk,
     }
 
     await scrollToBottom()
@@ -402,8 +394,9 @@ const streamAssistantMessage = async (content: string) => {
 
   const msgIndex = messages.value.findIndex(item => item.id === messageId)
   if (msgIndex !== -1) {
+    const msg = messages.value[msgIndex]!
     messages.value[msgIndex] = {
-      ...messages.value[msgIndex],
+      ...msg,
       streaming: false,
     }
   }
@@ -632,7 +625,7 @@ const submitForm = async () => {
       courses: form.courses as any,
     })
 
-    await updateMe({ is_first_login: false }).catch(() => {})
+    await updateMe({ is_first_login: true }).catch(() => {})
 
     ElMessage.success('学习画像构建成功')
     visible.value = false
@@ -648,12 +641,8 @@ const submitForm = async () => {
   }
 }
 
-const handleNeverShow = async () => {
-  try {
-    await updateMe({ is_first_login: false })
-  } catch (error) {
-    console.error('Failed to update first login state', error)
-  }
+const handleNeverShow = () => {
+  // 跳过不更新 is_first_login，下次登录仍会弹出引导
   visible.value = false
   emit('success')
   if (route.query.onboarding) {

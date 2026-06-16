@@ -13,6 +13,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.exc import ProgrammingError
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -36,9 +38,6 @@ from app.profile.types import (
     ProfileScoreOutput,
     make_default_profile_json,
     make_default_score_json,
-    PROFILE_MESSAGE_THRESHOLD,
-    PROFILE_TOKEN_THRESHOLD,
-    PROFILE_UPDATE_COOLDOWN_MINUTES,
 )
 from app.infra.prompts import prompts
 
@@ -172,27 +171,76 @@ class ProfileService:
                 )
             ).first()
 
-    async def get_or_create_global_profile(self, *, user_id: int) -> GlobalProfile:
-        """获取或创建用户的全局画像。"""
+    async def get_or_create_global_profile(
+        self,
+        *,
+        user_id: int,
+        db: AsyncSession | None = None,
+    ) -> GlobalProfile:
+        """获取或创建用户的全局画像。
+
+        使用 INSERT ... ON CONFLICT DO NOTHING 保证并发安全，
+        不会因并发请求产生 UniqueViolationError。
+
+        Args:
+            user_id: 用户 ID。
+            db: 可选的已有数据库会话。传入时复用该会话（避免 session.merge 开销），
+                不传时自动创建短生命周期会话。
+        """
+        if db is not None:
+            return await self._get_or_create_global_profile_inner(db, user_id)
+
         async with session_scope() as db:
-            stmt = select(GlobalProfile).where(
-                GlobalProfile.user_id == user_id,
-                GlobalProfile.module == self.module,
-            )
-            profile = (await db.exec(stmt)).first()
-            if not profile:
-                profile = GlobalProfile(
-                    user_id=user_id,
-                    module=self.module,
-                    profile_json=make_default_profile_json(),
-                    profile_score_json=make_default_score_json(),
+            return await self._get_or_create_global_profile_inner(db, user_id)
+
+    async def _get_or_create_global_profile_inner(
+        self,
+        db: AsyncSession,
+        user_id: int,
+    ) -> GlobalProfile:
+        """get_or_create 的内部实现，在给定会话中执行。"""
+        # 原子 upsert：INSERT ... ON CONFLICT DO NOTHING
+        now = datetime.now(timezone.utc)
+        stmt = pg_insert(GlobalProfile).values(
+            user_id=user_id,
+            module=self.module,
+            profile_json=make_default_profile_json(),
+            profile_score_json=make_default_score_json(),
+            created_at=now,
+            updated_at=now,
+        ).on_conflict_do_nothing(
+            constraint="uq_global_profile_user_module",
+        )
+        await db.exec(stmt)  # type: ignore[arg-type]
+        await db.flush()
+
+        # 无论刚插入还是已存在，都 SELECT 返回
+        profile = (
+            await db.exec(
+                select(GlobalProfile).where(
+                    GlobalProfile.user_id == user_id,
+                    GlobalProfile.module == self.module,
                 )
-                db.add(profile)
-                await db.flush()
-                logger.info("[ProfileService] 创建新全局画像: user_id=%s module=%s", user_id, self.module)
-            else:
-                logger.info("[ProfileService] 获取全局画像: user_id=%s module=%s", user_id, self.module)
-            return profile
+            )
+        ).first()
+
+        # on_conflict_do_nothing 后 profile 理论上一定存在
+        if profile is None:
+            # 极端防御：flush 后仍然查不到，再次尝试创建（不应发生）
+            logger.warning(
+                "[ProfileService] upsert 后未查到画像，降级创建: user_id=%s module=%s",
+                user_id, self.module,
+            )
+            profile = GlobalProfile(
+                user_id=user_id,
+                module=self.module,
+                profile_json=make_default_profile_json(),
+                profile_score_json=make_default_score_json(),
+            )
+            db.add(profile)
+            await db.flush()
+
+        return profile
 
     async def get_course_profiles(self, *, user_id: int) -> list[CourseProfile]:
         """获取用户的所有课程子画像。"""
@@ -261,8 +309,7 @@ class ProfileService:
                 school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
                 base_info["school_level"] = school.level if school and school.level else None
 
-            profile = await self.get_or_create_global_profile(user_id=user_id)
-            profile = await db.merge(profile)
+            profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
 
             profile_json = profile.profile_json or make_default_profile_json()
             profile_json["base_info"] = base_info
@@ -311,8 +358,7 @@ class ProfileService:
                 logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
                             user_id, dims_summary)
 
-                profile = await self.get_or_create_global_profile(user_id=user_id)
-                profile = await db.merge(profile)
+                profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
 
                 profile_json = profile.profile_json or make_default_profile_json()
                 profile_json["base_info"] = base_info
@@ -334,8 +380,7 @@ class ProfileService:
         """从会话中推理更新全局稳定画像特征。"""
         logger.info("[ProfileService] 全局画像更新开始: user_id=%s session_id=%s", user_id, session_id)
         async with session_scope() as db:
-            global_profile = await self.get_or_create_global_profile(user_id=user_id)
-            global_profile = await db.merge(global_profile)
+            global_profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
             profile_json = global_profile.profile_json or {}
 
             recent_dialogue = ""
@@ -401,8 +446,7 @@ class ProfileService:
         logger.info("[ProfileService] 课程画像更新开始: user_id=%s session_id=%s course_name=%s active_topic=%s",
                      user_id, session_id, course_name, active_topic)
         async with session_scope() as db:
-            global_profile = await self.get_or_create_global_profile(user_id=user_id)
-            global_profile = await db.merge(global_profile)
+            global_profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
             global_profile_id = global_profile.id
 
             course_profiles = await self.get_course_profiles(user_id=user_id)
@@ -502,8 +546,7 @@ class ProfileService:
         """重新计算并刷新用户的全局打分。打分输入 = 全局画像 JSON + 课程画像 Markdown 拼接。"""
         logger.info("[ProfileService] 全局评分刷新开始: user_id=%s", user_id)
         async with session_scope() as db:
-            global_profile = await self.get_or_create_global_profile(user_id=user_id)
-            global_profile = await db.merge(global_profile)
+            global_profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
 
             course_profiles = await self.get_course_profiles(user_id=user_id)
             course_markdown_list = []

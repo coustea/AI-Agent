@@ -415,7 +415,7 @@ CREATE TABLE IF NOT EXISTS global_profiles (
     profile_score_json      JSONB,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
-    UNIQUE (user_id, module)
+    CONSTRAINT uq_global_profile_user_module UNIQUE (user_id, module)
 );
 
 CREATE INDEX IF NOT EXISTS ix_global_profiles_user_id ON global_profiles (user_id);
@@ -796,6 +796,10 @@ CREATE TABLE IF NOT EXISTS path_node_resources (
     content_text   TEXT,
     content_json   JSONB,
     metadata_json  JSONB,
+    summary        TEXT,
+    status         VARCHAR(32)     NOT NULL DEFAULT 'completed',
+    error_message  TEXT,
+    input_json     JSONB,
     created_at     TIMESTAMPTZ     DEFAULT NOW(),
     updated_at     TIMESTAMPTZ     DEFAULT NOW()
 );
@@ -809,6 +813,8 @@ CREATE INDEX IF NOT EXISTS ix_path_node_resources_node_type
     ON path_node_resources (node_id, resource_type);
 CREATE INDEX IF NOT EXISTS ix_path_node_resources_content_json
     ON path_node_resources USING GIN (content_json);
+CREATE INDEX IF NOT EXISTS ix_path_node_resources_input_json
+    ON path_node_resources USING GIN (input_json);
 
 -- ============================================================
 -- 19. wrong_questions

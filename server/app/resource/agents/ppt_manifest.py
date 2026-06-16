@@ -53,9 +53,9 @@ PPT_TEMPLATE_MANIFEST = {
         "Callout": ["text", "tone"],
         "Code": ["language", "code"],
         "BigNumber": ["value", "label"],
-        "Formula": ["latex", "description"],
+        "Formula": ["latex"],
         "Timeline": ["items"],
-        "Terminal": ["commands"],
+        "Terminal": ["command", "output"],
     },
 }
 

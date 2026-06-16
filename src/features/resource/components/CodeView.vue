@@ -33,23 +33,23 @@
           <div v-if="hasComplexity" class="extra-item complexity-info">
             <div class="extra-label"><el-icon><Timer /></el-icon> 复杂度分析</div>
             <div class="extra-content">
-              <span v-if="parsedData.complexity.time">时间: <code>{{ parsedData.complexity.time }}</code></span>
-              <span v-if="parsedData.complexity.space" class="ml-4">空间: <code>{{ parsedData.complexity.space }}</code></span>
+              <span v-if="parsedData?.complexity?.time">时间: <code>{{ parsedData!.complexity!.time }}</code></span>
+              <span v-if="parsedData?.complexity?.space" class="ml-4">空间: <code>{{ parsedData!.complexity!.space }}</code></span>
             </div>
           </div>
 
-          <div v-if="parsedData.debug_tips?.length" class="extra-item tips-info">
+          <div v-if="parsedData?.debug_tips?.length" class="extra-item tips-info">
             <div class="extra-label"><el-icon><Warning /></el-icon> 调试建议</div>
             <ul class="tips-list">
-              <li v-for="(tip, idx) in parsedData.debug_tips" :key="idx">{{ tip }}</li>
+              <li v-for="(tip, idx) in parsedData!.debug_tips" :key="idx">{{ tip }}</li>
             </ul>
           </div>
         </div>
 
-        <div v-if="parsedData.exercises?.length" class="extra-item exercises-info">
+        <div v-if="parsedData?.exercises?.length" class="extra-item exercises-info">
           <div class="extra-label"><el-icon><EditPen /></el-icon> 练习序列</div>
           <div class="exercises-container">
-            <div v-for="(ex, idx) in parsedData.exercises" :key="idx" class="exercise-item">
+            <div v-for="(ex, idx) in parsedData!.exercises" :key="idx" class="exercise-item">
               <span class="ex-num">{{ (Number(idx) + 1).toString().padStart(2, '0') }}</span>
               <span class="ex-text">{{ typeof ex === 'string' ? ex : ex.question || ex.title }}</span>
             </div>
@@ -127,8 +127,8 @@ function unwrapFencedCode(text: string, fallbackLanguage = 'text'): FenceResult 
   const match = trimmed.match(/^```([\w#+.-]*)\s*\n([\s\S]*?)\n```$/)
   if (!match) return { code: text, language: normalizeLanguage(fallbackLanguage) }
   return {
-    language: normalizeLanguage(match[1], fallbackLanguage),
-    code: match[2].trimEnd(),
+    language: normalizeLanguage(match[1]!, fallbackLanguage),
+    code: match[2]!.trimEnd(),
   }
 }
 
@@ -283,7 +283,7 @@ const performHighlight = async () => {
     // 如果已经被包裹（例如纯代码模式或已处理过的Markdown），只需更新语言标签
     if (pre.parentElement?.classList.contains('code-block-wrapper')) {
       const langLabel = pre.parentElement.querySelector('.lang-label')
-      if (langLabel) langLabel.innerText = langText
+      if (langLabel) (langLabel as HTMLElement).innerText = langText
       return
     }
 

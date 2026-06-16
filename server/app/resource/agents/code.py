@@ -6,8 +6,9 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_node_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -23,14 +24,40 @@ class CodeAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """核心生成逻辑：提取代码配置 → 调用 LLM → 返回 Markdown 代码块。"""
-        config = state.agent_config
-        # 从配置中提取编程语言、案例类型、难度等参数
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        result = await self._generate_code(
+            input_text="\n\n".join(build_resource_context(input_data)),
+            title_prefix=input_data.learning_need[:32],
+            config=input_data.agent_config,
+        )
+        await self.emit_finish(result)
+        return result
+
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        config = {
+            "difficulty": input_data.difficulty or "beginner",
+            **input_data.agent_config,
+        }
+        result = await self._generate_code(
+            input_text="\n\n".join(build_node_context(input_data)),
+            title_prefix=input_data.node_title,
+            config=config,
+        )
+        result.metadata["path_id"] = input_data.path_id
+        result.metadata["node_id"] = input_data.node_id
+        await self.emit_finish(result)
+        return result
+
+    async def _generate_code(
+        self,
+        *,
+        input_text: str,
+        title_prefix: str,
+        config: dict,
+    ) -> AgentResult:
         language = config.get("programming_language") or config.get("language") or "python"
         case_type = config.get("case_type") or "basic_demo"
         difficulty = config.get("difficulty") or config.get("complexity") or "beginner"
-        # 将代码配置拼接到 prompt 中
         if config:
             cfg = ["## 代码配置"]
             cfg.append(f"- programming_language: {language}")
@@ -40,32 +67,16 @@ class CodeAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成教学代码示例，包含代码注释和说明，输出为 Markdown 格式（代码块内为代码）。"
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在构建代码示例提示词",
-                progress=25,
-            )
-
-        logger.info("Agent[code] 步骤: 调用 LLM 生成代码示例, language=%s case_type=%s difficulty=%s", language, case_type, difficulty)
+        await self.emit_start("正在构建代码示例提示词", progress=25)
         prompt = prompts.get("resource").get("code")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
-
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="代码已生成，正在提取元信息",
-                progress=85,
-            )
-
         content = response.content if hasattr(response, "content") else str(response)
-        logger.info("Agent[code] 步骤: 代码提取完成, output_len=%d", len(content))
 
-        return WorkerResult(
+        return AgentResult(
             success=True,
             content=content,
             file_type="markdown",
-            title=f"{state.learning_need[:32]} - 代码示例",
+            title=f"{title_prefix} - 代码示例",
             summary="生成教学代码示例",
             summary_data={"language": language, "case_type": case_type, "difficulty": difficulty},
             metadata={"agent_id": "code", "language": language, "case_type": case_type, "difficulty": difficulty},

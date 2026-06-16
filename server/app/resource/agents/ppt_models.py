@@ -6,6 +6,7 @@
   - 内部流水线模型 (MaterialArtifact, MaterialBundle, MaterialDigest,
     DeckConstraints, BlockContract, SlideContract, DeckOutline,
     RenderedBlock, SlideDraft)
+  - 路径节点素材上下文 (NodeMaterialContext)
 """
 
 from __future__ import annotations
@@ -140,6 +141,21 @@ class MaterialArtifact(BaseModel):
     success: bool = True
 
 
+class NodeMaterialContext(BaseModel):
+    """路径节点素材上下文 — 供 PPT 内部流水线调整大纲策略。"""
+    path_title: str = ""
+    path_goal: str = ""
+    node_title: str = ""
+    node_key: str = ""
+    difficulty: str | None = None
+    knowledge_points: list[str] = Field(default_factory=list)
+    weak_knowledge_points: list[str] = Field(default_factory=list)
+    generation_focus: list[str] = Field(default_factory=list)
+    tutorial_title: str = ""
+    tutorial_summary: str | None = None
+    tutorial_markdown: str = ""
+
+
 class MaterialBundle(BaseModel):
     learning_need: str
     learning_scenario: str = ""
@@ -147,6 +163,8 @@ class MaterialBundle(BaseModel):
     blueprint: dict[str, Any] | None = None
     instruction: dict[str, Any] | None = None
     artifacts: dict[ResourceAgentId, MaterialArtifact] = Field(default_factory=dict)
+    source_type: Literal["resource", "node"] = "resource"
+    node_context: NodeMaterialContext | None = None
 
 
 class MaterialDigest(BaseModel):

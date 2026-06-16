@@ -210,6 +210,26 @@ def _validate_draft_against_contract(draft: SlideDraft, contract: SlideContract)
                 raise ValueError(
                     f"Block {block.block_id} has empty required field '{field_name}'"
                 )
+        if block.type == "Timeline":
+            items = block.data.get("items", [])
+            if not isinstance(items, list) or len(items) == 0:
+                raise ValueError(
+                    f"Block {block.block_id} Timeline.items must be a non-empty list"
+                )
+            for i, item in enumerate(items):
+                if not isinstance(item, dict):
+                    raise ValueError(
+                        f"Block {block.block_id} Timeline.items[{i}] must be an object"
+                    )
+                if not item.get("title"):
+                    raise ValueError(
+                        f"Block {block.block_id} Timeline.items[{i}] missing 'title'"
+                    )
+        if block.type == "Terminal":
+            if not block.data.get("output"):
+                raise ValueError(
+                    f"Block {block.block_id} Terminal must have non-empty 'output'"
+                )
 
 
 async def write_slides_concurrently(

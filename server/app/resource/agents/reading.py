@@ -10,8 +10,9 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_node_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import WorkerResult, WorkerState
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -63,14 +64,40 @@ class ReadingAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
-    async def _execute(self, input_text: str, state: WorkerState) -> WorkerResult:
-        """核心生成逻辑：提取阅读配置 → LLM 结构化输出 → 解析资源统计。"""
-        config = state.agent_config
-        # 提取阅读配置参数
+    async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        parts = build_resource_context(input_data)
+        input_text = "\n\n".join(parts)
+        result = await self._generate_reading(
+            input_text=input_text,
+            title_prefix=input_data.learning_need[:32],
+            config=input_data.agent_config,
+        )
+        await self.emit_finish(result)
+        return result
+
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        parts = build_node_context(input_data)
+        input_text = "\n\n".join(parts)
+        result = await self._generate_reading(
+            input_text=input_text,
+            title_prefix=input_data.node_title,
+            config=input_data.agent_config,
+        )
+        result.metadata["path_id"] = input_data.path_id
+        result.metadata["node_id"] = input_data.node_id
+        await self.emit_finish(result)
+        return result
+
+    async def _generate_reading(
+        self,
+        *,
+        input_text: str,
+        title_prefix: str,
+        config: dict,
+    ) -> AgentResult:
         reading_depth = config.get("reading_depth") or config.get("reading_type") or "course_extended"
         max_items = config.get("max_items") or 5
         language_preference = config.get("language_preference") or "chinese"
-        # 拼接阅读配置到 prompt
         if config:
             cfg = ["## 阅读配置"]
             cfg.append(f"- reading_depth: {reading_depth}")
@@ -79,16 +106,10 @@ class ReadingAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成拓展阅读材料，只输出 JSON 对象。"
 
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="正在构建拓展阅读提示词",
-                progress=25,
-            )
+        await self.emit_start("正在构建拓展阅读提示词", progress=25)
 
         prompt = prompts.get("resource").get("reading")
         logger.info("Agent[reading] 步骤: 调用 LLM 生成拓展阅读, depth=%s max_items=%s", reading_depth, max_items)
-        # LLM 结构化输出 → ReadingPayload（含 resources、learning_path）
         result = await self.llm.ainvoke_json(
             ReadingPayload,
             f"{prompt}\n\n{input_text}",
@@ -96,13 +117,6 @@ class ReadingAgent(BaseResourceAgent):
             function_name="generate_reading_resources",
             function_description="生成拓展阅读推荐资源",
         )
-
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id, status="running",
-                message="阅读列表已生成，正在解析资源结构",
-                progress=85,
-            )
 
         reading_data = result.model_dump(mode="json")
         content = json.dumps(reading_data, ensure_ascii=False, indent=2)
@@ -112,11 +126,11 @@ class ReadingAgent(BaseResourceAgent):
             len(reading_data.get("learning_path", [])),
         )
 
-        return WorkerResult(
+        return AgentResult(
             success=True,
             content=content,
             file_type="json",
-            title=reading_data.get("title") or f"{state.learning_need[:32]} - 拓展阅读",
+            title=reading_data.get("title") or f"{title_prefix} - 拓展阅读",
             summary=reading_data.get("summary") or "生成拓展阅读材料",
             summary_data={
                 "resource_count": len(reading_data.get("resources", [])),
