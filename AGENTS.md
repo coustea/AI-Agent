@@ -1,39 +1,92 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-`src/` contains the Vue 3 + TypeScript frontend. Major feature areas are grouped by domain, for example `src/chat/`, `src/resource/`, `src/path/`, `src/profile/`, and `src/evaluation/`. Shared app wiring lives in `src/main.ts`, `src/router/`, `src/components/`, and `src/utils/`.
+## Project Structure
 
-`server/` contains the FastAPI backend. Runtime code is under `server/app/`, organized by capability (`auth`, `chat`, `resource`, `path`, `evaluation`, `avatar`, `memory`, `infra`). Static files live in `public/`; generated frontend output goes to `dist/`; design and implementation notes live in `docs/` and `server/docs/`.
+Vue 3 + TypeScript frontend (`src/`) + FastAPI + SQLModel backend (`server/`). Two distinct business domains reuse agent infrastructure but must stay separate:
+- **Standalone resource generation** (`resource` domain)
+- **Learning-path planning** (`path` domain)
 
-## Build, Test, and Development Commands
-Frontend:
-- `npm run dev` starts the Vite dev server.
-- `npm run build` runs `vue-tsc` and produces a production build in `dist/`.
-- `npm run preview` serves the built frontend locally.
+Do not merge their records, detail pages, or persistence models.
 
-Backend:
-- `cd server && uv sync` installs Python dependencies from `pyproject.toml` and `uv.lock`.
-- `cd server && uv run fastapi dev app/main.py` starts the API with reload.
-- `cd server && uv run pytest` runs backend tests.
+### Frontend (`src/`)
+- `src/app/` — router, layouts, guards, providers
+- `src/features/` — domain features: `auth`, `chat`, `dashboard`, `learning`, `profile`, `resource`
+- `src/shared/` — API clients (`src/shared/api/`), auth helpers, UI components, types
 
-## Coding Style & Naming Conventions
-Follow the existing style in each area instead of introducing a new formatter.
+### Backend (`server/app/`)
+Each domain follows `api.py` → `service.py` → schemas pattern:
+- `auth` — registration, login, JWT, user info
+- `chat` — streaming tutor, uploads, history, diagram generation
+- `resource` — multi-agent resource generation
+- `path` — learning-path planning, node workspace, evaluation
+- `profile` — learner profile inference and storage
+- `evaluation`, `dashboard`, `quiz`, `avatar`, `infra`, `ws_routes`
 
-- Frontend uses TypeScript, Vue SFCs, 2-space indentation, and no semicolons.
-- Vue components use `PascalCase.vue`; composables use `useXxx.ts`; API/helper modules use lowercase names such as `auth.ts` or `resource-history.ts`.
-- Backend Python uses 4-space indentation, type hints, snake_case module names, and short docstrings where helpful.
+Startup wiring: `app_factory.py` → `lifecycle.py` → `routes.py`
 
-No ESLint, Prettier, or Ruff config is currently committed, so validate frontend changes with `npm run build` and backend changes with `uv run pytest`.
+## Commands
 
-## Testing Guidelines
-Backend testing is configured with `pytest` and `pytest-asyncio`. Add new tests under `server/tests/`, mirroring `server/app/` paths when possible, and name files `test_*.py`. Prioritize service, API, and regression coverage for changed modules.
+### Frontend (from repo root)
+```bash
+npm run build    # vue-tsc + vite build — use this as the automated check (no ESLint/Prettier)
+npm run dev      # Vite dev server
+```
 
-Frontend automated tests are not yet configured; for UI changes, include manual verification steps in the PR.
+### Backend (from `server/`)
+```bash
+uv sync                                          # install Python deps
+uv run fastapi dev app/main.py --port 9999       # dev server with reload
+uv run pytest                                    # run all tests
+uv run pytest tests/chat/test_history.py -q      # run single test file
+uv run pytest -x                                 # stop on first failure
+```
 
-## Commit & Pull Request Guidelines
-Recent history favors short conventional prefixes such as `feat:`, `refactor:`, and `fix:`; concise Chinese or English summaries are both already used. Prefer the format `<type>: <summary>` and keep commits focused.
+## Port Configuration
 
-PRs should describe scope, affected modules, config or schema changes, and verification performed. Include screenshots or short recordings for frontend changes, and link the related issue or design note when available.
+Backend runs on port **9999** (set in `server/config.yaml`). The Vite proxy in `vite.config.ts` must match:
+- `/api` → `http://127.0.0.1:9999`
+- `/ws` → `ws://127.0.0.1:9999`
 
-## Security & Configuration Tips
-Do not commit secrets. Keep runtime configuration in backend config files or environment variables, and review changes to `server/config.yaml`, database setup, and external model credentials carefully before merging.
+If these get out of sync, API calls from the frontend will 500.
+
+## Coding Style
+
+- Frontend: TypeScript, Vue SFCs, 2-space indent, no semicolons. Components `PascalCase.vue`, composables `useXxx.ts`.
+- Backend: 4-space indent, type hints, snake_case modules.
+- Vue files must use `<script setup lang="ts">` and `<style scoped>`. See `docs/vue-code-style.md`.
+
+No linter configs are committed. Validate with `npm run build` (frontend) and `uv run pytest` (backend).
+
+## Testing
+
+Backend: `pytest` + `pytest-asyncio`. Tests in `server/tests/` mirror `server/app/` paths. Name files `test_*.py`.
+
+Known pre-existing test failures (do not waste time debugging):
+- `tests/chat/test_agent_single_module_refactor.py` — stale assertion on `_decide` function
+- `tests/chat/test_onboarding_api.py` — missing `background_tasks` arg in direct asyncio.run call
+- `tests/chat/test_reasoning_agent.py` — `FakeLlm` missing `astream` attribute
+
+Frontend has no automated tests.
+
+## Architecture Notes
+
+### API Routes (`server/app/routes.py`)
+Actual mounted prefixes:
+- `/api/v1/users` — auth/user endpoints
+- `/api/v1/ai/*` — chat, resources, path-plan, dashboard, evaluation, quiz, avatar, wrong-questions
+
+### Auth
+JWT-based with `ActiveToken` whitelist table. `get_current_user` and `get_current_user_flexible` in `app/auth/security.py` inject the request-scoped `AsyncSession` directly — do **not** use a separate `session_scope()` in auth dependencies, or the returned `User` becomes detached and triggers greenlet errors.
+
+### Database
+PostgreSQL via `asyncpg`. Schema lives in `server/init_schema.sql`; SQLModel definitions in `server/app/infra/models.py`. Keep them in sync — startup does not reconcile schema drift.
+
+Two session patterns:
+- `get_session()` — FastAPI DI, `expire_on_commit=False`, no auto-commit
+- `session_scope()` — explicit context manager, auto-commit, for background tasks outside DI
+
+### Configuration
+All runtime config in `server/config.yaml`, loaded by `server/app/config.py`. Not `.env`. Key families: `app`, `database`, `jwt`, `models`, `spark`, `avatar`, `search`, `paths`, `knowledge`, `memory`, `chat`.
+
+### Commit Convention
+Short conventional prefixes: `feat:`, `fix:`, `refactor:`. Chinese or English summaries both used. Keep commits focused.

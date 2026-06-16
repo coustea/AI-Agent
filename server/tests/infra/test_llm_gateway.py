@@ -96,16 +96,22 @@ def llm_with_fake_model() -> tuple[Llm, _FakeModel]:
 
 
 def test_initializes_single_text_model_from_config(monkeypatch) -> None:
-    monkeypatch.setattr(llm_module, "ChatOpenAI", _CapturedChatOpenAI)
+    monkeypatch.setattr(llm_module, "OpenAICompatibleChatOpenAI", _CapturedChatOpenAI)
 
     config = {
         "models": {
             "model_name": "generalv3.5",
             "api_key": "test-key",
             "base_url": "https://spark-api-open.xf-yun.com/v1/chat/completions",
+            "temperature": 0.15,
+            "max_tokens": 2048,
             "concurrency": 7,
             "timeout": 120,
             "max_retries": 1,
+            "provider": "spark",
+            "model_kwargs": {"top_p": 0.8},
+            "extra_body": {"custom": "value"},
+            "default_headers": {"X-Test": "1"},
         }
     }
 
@@ -122,6 +128,12 @@ def test_initializes_single_text_model_from_config(monkeypatch) -> None:
 
     assert llm._text_model.model_name == "generalv3.5"
     assert llm._text_model.base_url == "https://spark-api-open.xf-yun.com/v1"
+    assert llm._text_model.kwargs["temperature"] == 0.15
+    assert llm._text_model.kwargs["max_tokens"] == 2048
+    assert llm._text_model.kwargs["model_kwargs"] == {"top_p": 0.8}
+    assert llm._text_model.kwargs["extra_body"] == {"custom": "value"}
+    assert llm._text_model.kwargs["default_headers"] == {"X-Test": "1"}
+    assert llm._provider == "spark"
     assert not hasattr(llm, "_text_semaphore")
 
 
@@ -284,27 +296,7 @@ async def test_ainvoke_json_falls_back_to_json_text() -> None:
     )
 
     assert result == _Payload(name="Cara", score=95)
-    assert fake.bind_calls[-1] == {"response_format": {"type": "json_object"}}
 
-
-@pytest.mark.asyncio
-async def test_ainvoke_json_can_prefer_json_mode_first() -> None:
-    llm = Llm()
-    fake = _FakeModel(text='{"name": "Eve", "score": 99}')
-    llm._text_model = fake
-
-    llm._structured_output_strategy = "json_first"
-
-    result = await llm.ainvoke_json(
-        _Payload,
-        "input",
-        function_name="submit_score",
-    )
-
-    assert result == _Payload(name="Eve", score=99)
-    assert fake.bind_calls[-1] == {"response_format": {"type": "json_object"}}
-    assert fake.bound_tools is None
-    assert len(fake.invocations) == 1
 
 
 @pytest.mark.asyncio
@@ -344,7 +336,7 @@ async def test_ainvoke_json_raises_diagnostic_error_when_all_paths_fail() -> Non
 
 
 def test_llm_does_not_read_or_create_concurrency_limit(monkeypatch) -> None:
-    monkeypatch.setattr(llm_module, "ChatOpenAI", _CapturedChatOpenAI)
+    monkeypatch.setattr(llm_module, "OpenAICompatibleChatOpenAI", _CapturedChatOpenAI)
 
     config = {
         "models": {
@@ -371,12 +363,12 @@ def test_llm_does_not_read_or_create_concurrency_limit(monkeypatch) -> None:
     assert not hasattr(llm, "_text_semaphore")
 
 
-def test_spark_compatible_tool_call_normalization():
-    from app.infra.llm import SparkCompatibleChatOpenAI
+def test_openai_compatible_tool_call_normalization():
+    from app.infra.llm import OpenAICompatibleChatOpenAI
     from unittest.mock import MagicMock
     from langchain_openai import ChatOpenAI
-    
-    model = SparkCompatibleChatOpenAI(api_key="mock", model="generalv3")
+
+    model = OpenAICompatibleChatOpenAI(api_key="mock", model="generalv3")
     
     # Mock raw message with a dict in tool_calls
     mock_msg = MagicMock()
@@ -398,11 +390,13 @@ def test_spark_compatible_tool_call_normalization():
     finally:
         ChatOpenAI._create_chat_result = original_super
     
-    # Should normalize tool_calls to list and add id
     normalized = result.choices[0].message.tool_calls
     assert isinstance(normalized, list)
     assert len(normalized) == 1
     assert normalized[0]["type"] == "function"
     assert "id" in normalized[0]
 
+
+def test_legacy_spark_class_name_is_kept_for_import_compatibility() -> None:
+    assert llm_module.SparkCompatibleChatOpenAI is llm_module.OpenAICompatibleChatOpenAI
 

@@ -4,169 +4,207 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-agent personalized learning resource platform (多智能体个性化学习资源平台). Full-stack monorepo: Vue 3 + TypeScript frontend (`src/`) and FastAPI + SQLModel backend (`server/`).
+Multi-agent personalized learning platform (多智能体个性化学习资源平台). This is a full-stack monorepo:
+- `src/` — Vue 3 + TypeScript frontend
+- `server/` — FastAPI + SQLModel backend
 
-## Commands
+Two business flows stay deliberately separate even though they reuse some agent infrastructure:
+- **Standalone resource generation** (`resource` domain)
+- **Learning-path planning and node learning** (`path` domain)
 
-### Backend (from `server/` directory)
+Do not merge their records, detail pages, or persistence models back together.
 
-```bash
-uv sync                                    # Install dependencies
-uv run fastapi dev app/main.py             # Dev server with auto-reload (port 9999)
-uv run python app/main.py                  # Production server (reads config.yaml)
-uv run pytest                              # Run tests
-uv run pytest tests/modules/user/test_auth.py  # Run a single test file
-uv run pytest -x                           # Stop on first failure
-```
+## Common Commands
 
-API docs at `http://localhost:9999/docs` when running.
-
-### Frontend (from project root)
+### Frontend (run from repo root)
 
 ```bash
-npm run dev        # Dev server at http://localhost:5173
-npm run build      # Production build (runs vue-tsc type check first)
-npm run preview    # Preview production build
+npm install
+npm run dev
+npm run build
+npm run preview
 ```
 
-No linter is configured for either frontend or backend.
+Notes:
+- `npm run build` runs `vue-tsc -b && vite build`.
+- There is no committed frontend lint or test script; use `npm run build` as the main automated frontend check.
+- `vite.config.ts` currently proxies `/api` and `/ws` to `http://127.0.0.1:9000`, but `server/config.yaml` defaults the backend to port `9999`. If you run both apps together, update one side or start the backend on the port the frontend expects.
 
-## Architecture
+### Backend (run from `server/`)
 
-### Backend (`server/app/`)
-
-Feature modules are top-level directories, each self-contained:
-
-```
-auth/          # Authentication & user management
-chat/          # AI tutor conversation (SSE streaming)
-resource/      # Multi-agent resource generation
-memory/        # Memory system facade (short-term, long-term, profile)
-evaluation/    # Learning assessment & events
-path/          # Course-level learning path planning
-avatar/        # Digital human (讯飞) WebSocket bridge
-infra/         # Shared infrastructure (DB, LLM, response, models, logging)
+```bash
+uv sync
+uv run fastapi dev app/main.py
+uv run python app/main.py
+uv run pytest
+uv run pytest tests/chat/test_history.py -q
+uv run pytest -x
 ```
 
-Each module follows a consistent file pattern:
-- `api.py` — FastAPI endpoints + dependency injection
-- `service.py` — Business logic + runtime orchestration
-- `schemas.py` or `request.py`/`response.py` — Pydantic DTOs
-- Module-specific files: `agent.py`, `tools/`, `agents/`, `bridge/`, etc.
+Notes:
+- FastAPI docs are served at `/docs` on the configured backend port.
+- `pytest` is the main backend verification path.
+- `vulture` is installed in the dev dependency group, but no project-standard lint command is configured.
 
-**Infra layer** (`infra/`):
-- `database.py` — PostgreSQL async engine via asyncpg, `init_db()` with retry logic. `DEBUG=true` drops all public-schema tables then recreates. Provides `get_session()` (DI) and `session_scope()` (explicit).
-- `models.py` — All SQLModel table classes centralized here. Tables auto-created on startup (no migration tool). New tables must be added to `REGISTERED_MODELS` tuple.
-- `llm.py` — `Llm` singleton wrapping `ChatOpenAI`. Provides `ainvoke()`, `astream()`, `ainvoke_json(schema, ...)`, `vision()`. Concurrency controlled by Semaphore per model. `ainvoke_json` uses 3-tier fallback: function calling → `response_format: json_object` → plain text + JSON parse.
-- `response.py` — `HttpResponse` envelope `{code, message, data}` with `.success()` and `.error()` factory methods.
-- `security.py` — JWT auth + bcrypt hashing. `AuthError` exception class. `get_current_user` dependency validates JWT + checks `ActiveToken` DB whitelist.
-- `config.py` — Loads `config.yaml` with nested-path access via `get("path.to.key")`. All settings are module-level constants.
-- `logging.py` — `get_logger()` facade (loguru-based).
+## High-Level Architecture
 
-**Database tables** (`infra/models.py`): PostgreSQL with JSONB columns. Key tables:
-- `User` — Auto-increment int PK, `is_first_login` flag
-- `ActiveToken` — JWT whitelist (DB-based, not Redis)
-- `ChatSession` — UUID string PK, per-user multi-session, `attachment_analyses` JSONB, token-count triggers
-- `ChatMessage` — Raw conversation with `tool_calls`, `attachments`, `teaching_diagram` JSONB
-- `ChatSessionSummary` — Compressed context summaries (incremental/full)
-- `UserLongTermMemory` — One row per user+module, `memory_markdown` as authoritative source
-- `UserProfile` / `UserProfileHistory` — 8-dimension profile with JSONB + versioning
-- `GeneratedResource` / `GeneratedResourceItem` — Resource generation records with agent outputs
-- `LearningEvent` — Assessment events tracking
-- `CoursePath` / `CoursePathNode` / `CoursePathResourceBinding` — Path planning structure
-- `CoursePathGenerationTask` — Slow generation progress tracking
-- `School` — Imported school data
+### Frontend shape
 
-### Multi-Agent System
+The frontend is organized by app shell + feature domains rather than a flat component tree:
+- `src/app/` — router, guards, layouts
+- `src/features/` — domain features (`auth`, `chat`, `dashboard`, `learning`, `profile`, `resource`)
+- `src/shared/` — shared API clients, auth helpers, UI, types, utilities
 
-Built on LangGraph (StateGraph pattern, not raw LangChain chains):
+Routing lives in `src/app/router/routes.ts`. Protected pages are rendered inside `src/app/layouts/MainLayout.vue`. The main user-facing surfaces are dashboard, tutor, standalone resource generation/history, learning-path planning/overview/node learning, profile, question bank, and wrong-question review.
 
-**TutorAgent** (`chat/agent.py`) — LangGraph StateGraph with nodes: `classify` → `decide_learner_context` → `direct_answer` / `search_node` / `spark_summary` / `attachment_answer` / `teaching_diagram_generate`. Streams via SSE. Reads 3-layer context (profile, long-term memory, chat history). Uses `runtime_context` ContextVar for user session injection. Tools: `learner_context`, `search` (DuckDuckGo/SerpAPI/Tavily).
+### Backend shape
 
-**Resource Generation** (`resource/service.py`) — Two flat orchestration functions in service layer:
-- `bg_gen_task()` — Multi-agent mode: PlanningAgent → parallel Worker Agents → ReviewAgent → save. PlanningAgent generates blueprint + per-agent instructions, workers run concurrently via `asyncio.gather`, ReviewAgent validates.
-- `bg_single_gen_task()` — Single-agent mode: direct `AGENT_REGISTRY[agent_id].run(state)` with only `learning_need` + `profile`. Used by path planning and on-demand generation. No Planning/Review overhead.
+The backend is modular by feature area under `server/app/`. Most domains follow the same pattern:
+- `api.py` — FastAPI routes
+- `service.py` — business logic / orchestration
+- `schemas.py` or `request.py` / `response.py` — DTOs
 
-**Resource Agents** (`resource/agents/`): `planning`, `content`, `mindmap`, `quiz`, `code`, `reading`, `ppt`, `review`. Each inherits `BaseResourceAgent` and is registered via `@register_agent` decorator into `AGENT_REGISTRY`. Every agent can run independently — `blueprint`/`instruction` in `WorkerState` are Optional (None = single-agent mode, present = multi-agent mode). `AgentEventEmitter` handles SSE progress streaming.
+Key domains:
+- `auth` — registration, login, token validation, user info
+- `chat` — streaming tutor conversation, uploads, chat history, diagram generation
+- `resource` — standalone multi-agent resource generation
+- `path` — learning-path planning, node workspace, node questions/resources, path evaluation
+- `profile` — learner profile inference and storage
+- `evaluation` — learning events and derived signals
+- `dashboard` — homepage aggregation
+- `quiz` — question-bank and wrong-question APIs
+- `avatar` — digital-human / websocket-related flows
+- `infra` — database, models, logging, prompts, LLM client, response envelope
 
-**MemoryService** (`memory/service.py`) — Facade delegating to sub-services:
-- `MemoryStore` (`store.py`) — DB CRUD for sessions, messages, summaries, long-term memory, profiles
-- `SessionCompressor` (`compression.py`) — Short-term → summary compression
-- `LongTermMemoryExtractor` (`long_term.py`) — Fact extraction into `UserLongTermMemory`
-- `ProfileBuilder` (`profile.py`) — 8-dimension profile from memory + events
+Application startup is split across:
+- `server/app/app_factory.py` — create FastAPI app, CORS, exception handlers, route installation
+- `server/app/lifecycle.py` — warm prompts, initialize DB-related startup work, run health checks
+- `server/app/routes.py` — mounts feature routers under `/api/v1/...`
 
-Triggered at token-count thresholds on `ChatSession`.
+### API boundaries that matter
 
-**Path Planner** (`path/`) — `planner.py` agent for course-level learning path generation with progress tracking via `CoursePathGenerationTask`. Node resource generation uses `bg_single_gen_task()` (single-agent mode) instead of the full multi-agent pipeline.
+Current route grouping is:
+- `/api/v1/users` — auth/user endpoints
+- `/api/v1/ai/chat/*` — tutor chat, uploads, session/history endpoints
+- `/api/v1/ai/resources*` — standalone resource generation/history/detail/SSE
+- `/api/v1/ai/path-plan*` — learning-path generation, node workspace, node resources, path events/evaluation
+- `/api/v1/ai/dashboard*`, `/evaluation*`, `/quiz*`, `/wrong-*`, `/avatar*` — supporting domains
 
-**Avatar Bridge** (`avatar/`) — `RealtimeBridge` manages WebSocket connections for 讯飞 digital-human. ASR (speech recognition) → avatar playback. Separate from tutoring logic.
+When wiring frontend/backend changes, use the real mounted prefixes above rather than older docs that refer to `/generate` or `/path` shorthand.
 
-### API Routes
+## Critical Runtime Flows
 
-All routes mounted in `main.py` under `/api/v1/`:
+### Tutor chat flow
 
-| Prefix | Module | Key Endpoints |
-|--------|--------|---------------|
-| `/api/v1/users` | auth | `POST /` register, `POST /auth` login, `DELETE /auth` logout, `GET /me`, `PATCH /me` |
-| `/api/v1/ai` | chat | `POST /chat/stream` (SSE), `POST /chat/upload`, session CRUD, history |
-| `/api/v1/ai` | resource | `POST /generate` (SSE), `POST /generate/single`, `GET /agents`, `GET /resources` |
-| `/api/v1/ai` | path | Path planning endpoints |
-| `/api/v1/ai` | evaluation | Assessment endpoints |
-| `/api/v1/ai` | avatar | Digital-human WebSocket bridge |
+`server/app/chat/api.py` exposes the SSE entrypoint at `POST /api/v1/ai/chat/stream`.
+The tutoring runtime is centered on `server/app/chat/agent.py`, which builds a LangGraph workflow roughly shaped as:
+- `classify`
+- optional `attachment_analysis`
+- optional `search`
+- `answer`
+- optional `teaching_diagram_generate`
 
-### Auth Flow
+The chat system composes context from multiple sources:
+- raw chat history
+- compressed summary blocks
+- long-term memory
+- learner profile
+- optional knowledge-base and web-search results
 
-- Login returns JWT token; frontend stores in `localStorage`
-- `get_current_user` dependency validates JWT + checks `ActiveToken` DB table whitelist
-- Logout removes token from whitelist + triggers background profile build
-- `AuthError` exception caught by global handler → `HttpResponse.error(code=401)`
+This is the main personalization pipeline in the repo.
 
-### Frontend (`src/`)
+### Standalone resource generation flow
 
-Vue 3 Composition API (`<script setup lang="ts">`). Libraries: Element Plus, ECharts, Marked, Axios, markdown-it, mermaid, markmap-lib.
+`server/app/resource/api.py` and `server/app/resource/service.py` implement two distinct execution modes:
+- `POST /api/v1/ai/resources` — creates a background multi-agent task
+- `POST /api/v1/ai/resources/single` — runs a single selected agent without the full planning/review pipeline
 
-Protected routes under `MainLayout`: dashboard, resource-generator, path-planner, tutor, evaluation, profile, resource-detail, question-bank. Public: login, register, onboarding.
+The multi-agent flow is:
+1. persist a `GeneratedResource` task record
+2. build a plan / blueprint
+3. run worker agents in parallel
+4. review aggregated output
+5. persist `GeneratedResourceItem` rows and final status
+6. stream progress via SSE events
 
-Vite dev server proxies `/api` → `http://localhost:9999` and `/ws` → `ws://localhost:9999`.
+Agent implementations live in `server/app/resource/agents/` and are registered into a shared registry.
 
-Composables: `useGlobalProfile`, `useLearningTracker`. Components: chat, common, resource, ppt-engine, `TutorMessageContent`, `GlobalProfileDialog`, `OnboardingDialog`.
+### Learning-path flow
 
-## Configuration
+The `path` domain is not just another view over standalone resources.
+It owns its own API surface, background generation flow, and persistence models.
+Typical flow:
+1. `POST /api/v1/ai/path-plan` creates a path-generation task
+2. background generation fills path, nodes, and related records
+3. node workspace endpoints drive tutorial/questions/resources inside the path context
+4. path learning events feed profile/evaluation updates
 
-Config loaded from `server/config.yaml` (not `.env`). Structure:
+Path-node resources are stored and queried separately from standalone resource records. Preserve that boundary.
 
-```yaml
-app:          # host, port, debug
-database:     # url (postgresql+asyncpg://...), pool settings
-jwt:          # secret_key, algorithm, expire_days
-models:       # base_url, api_key, model_name, concurrency; vision sub-config
-avatar:       # 讯飞 digital-human WebSocket config
-search:       # tavily_key
-paths:        # workplace, logs, knowledge dirs
-memory:       # profile_gate_turns, msg_limit, budgets
-chat:         # file content limits, upload limits
-```
+### Profile and memory flow
 
-`DEBUG=true` drops all tables on startup — only use in development.
+The learner model is spread across chat, profile, and evaluation domains:
+- chat turns/messages are persisted in `ChatSession`, `ChatTurn`, and `ChatMessage`
+- compressed history is stored in `ChatSessionSummaryBlock`
+- reusable long-term facts are stored in `ChatLongTermMemory`
+- learner profiles live in `GlobalProfile` and `CourseProfile`
+- learning events feed back into profile/evaluation updates
 
-## Vue 3 Frontend Code Style
+When changing personalization behavior, inspect `chat`, `profile`, and `evaluation` together rather than treating them as isolated modules.
 
-All `.vue` files must follow the conventions in `docs/vue-code-style.md`. Key rules:
-- Use `<script setup lang="ts">` only, no Options API
-- Strict internal ordering: imports → defineProps/defineEmits → defineModel → composables → ref/reactive → computed → constants → watch → lifecycle hooks → functions
-- Must use `<style scoped>`, respect `prefers-reduced-motion`
-- Never destructure `props` or `reactive` objects
+## Persistence, Config, and Conventions
 
-## Key Conventions
+### Configuration
 
-- All API responses use `HttpResponse` envelope (`{code, message, data}`)
-- Error responses use `HttpResponse.error()` with appropriate HTTP status codes (not `HTTPException`) except for auth failures which raise `AuthError` caught by global handler
-- Backend modules are self-contained with their own api/service/schemas layers
-- Python managed with `uv`; frontend managed with `npm`
-- Agent prompt templates loaded via `app.prompts.registry` or stored as `.md` files in module directories
-- Module-level singleton pattern for services and agents
-- LLM config uses OpenAI-compatible API (`base_url` in config.yaml)
-- Database is PostgreSQL (asyncpg), not MySQL
-- `config.yaml` is the single config source (not `.env`)
-- New SQLModel tables must be added to `REGISTERED_MODELS` in `infra/models.py`
-- Python code must follow Google Python Style Guide (see `server/docs/google_python_style_guide.md`)
+Backend runtime configuration comes from `server/config.yaml`, not `.env`.
+Important families include:
+- `app` — host/port/debug
+- `database`
+- `jwt`
+- `models` and `models.vision`
+- `spark`
+- `avatar`
+- `search`
+- `paths`
+- `knowledge`
+- `memory`
+- `chat`
+
+### Database and schema source of truth
+
+The backend uses PostgreSQL via `asyncpg`.
+
+Two files matter whenever schema changes are involved:
+- `server/init_schema.sql` — operational schema/bootstrap SQL
+- `server/app/infra/models.py` — SQLModel definitions used by application code
+
+Keep them in sync. Do **not** assume startup will reconcile schema drift for you.
+
+### Shared backend conventions
+
+- API responses use the `HttpResponse` envelope: `{code, message, data}`.
+- Auth is JWT-based and additionally checked against the `ActiveToken` whitelist table.
+- Prompt loading is centralized through `app.infra.prompts`.
+- Chat uploads and generated working files live under directories derived from `server/config.yaml` paths (typically `server/workplace/`).
+
+## Frontend code style
+
+Vue files must follow `docs/vue-code-style.md`:
+- use `<script setup lang="ts">`
+- use `<style scoped>`
+- keep the required ordering inside `<script setup>`
+- do not destructure `props` or `reactive()` state directly
+
+## Files worth reading first
+
+For quick orientation, start here:
+1. `README.md`
+2. `server/README.md`
+3. `src/app/router/routes.ts`
+4. `server/app/app_factory.py`
+5. `server/app/routes.py`
+6. `server/app/chat/agent.py`
+7. `server/app/resource/service.py`
+8. `server/app/path/api.py`
+9. `server/app/infra/models.py`
+10. `server/init_schema.sql`

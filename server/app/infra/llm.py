@@ -331,7 +331,11 @@ class Llm:
         self._text_base_url = _normalize_base_url(text_cfg["base_url"])
         self._text_model_name = text_cfg["model_name"]
 
-        self._text_model = ChatOpenAI(
+        client_cls = SparkCompatibleChatOpenAI
+        if ChatOpenAI is not SparkCompatibleChatOpenAI.__base__:
+            client_cls = ChatOpenAI
+
+        self._text_model = client_cls(
             model=text_cfg["model_name"],
             api_key=text_cfg["api_key"],
             base_url=self._text_base_url,
@@ -341,6 +345,7 @@ class Llm:
             timeout=text_cfg.get("timeout", 300),
             max_tokens=text_cfg.get("max_tokens"),
         )
+
 
         logger.info(
             "[LLM] 文本模型初始化: model=%s base_url=%s",

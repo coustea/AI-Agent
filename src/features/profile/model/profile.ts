@@ -61,6 +61,18 @@ export interface ProfileOnboardingUpdateResult {
 
 
 
+export function isProfileOnboardingComplete(baseInfo: BaseInfoData): boolean {
+  return Boolean(
+    baseInfo.school &&
+    baseInfo.major &&
+    baseInfo.grade &&
+    baseInfo.daily_study_time &&
+    baseInfo.global_learning_goal &&
+    Array.isArray(baseInfo.courses) &&
+    baseInfo.courses.length > 0,
+  )
+}
+
 export interface ProfileScoreDimension {
   key: string
   label: string

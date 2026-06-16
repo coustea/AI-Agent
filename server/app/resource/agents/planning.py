@@ -26,7 +26,7 @@ class PlanningAgent(BaseResourceAgent):
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         """多智能体场景：分析学习需求，生成总体教学方向、概要和大纲。"""
-        await self.emit_start("正在分析学习需求并构建执行计划", progress=10)
+        await self.emit_start("正在分析学习需求并构建教学方向与大纲", progress=10)
 
         prompt = prompts.get("resource").get("planning")
         input_text = self._build_planning_input(input_data)
