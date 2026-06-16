@@ -1,6 +1,6 @@
 // src/types/resource.ts — 资源生成相关类型定义
 
-export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt'
+export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 type ResourceStreamEventName = 'agent' | 'done'
@@ -80,6 +80,13 @@ export interface ResourceGenerationRequest {
     ppt: {
       page_count: number
       difficulty: 'beginner' | 'intermediate' | 'advanced'
+    }
+    video: {
+      duration_seconds: number
+      scene_count: number
+      style: 'explainer' | 'lecture' | 'screencast' | 'case_walkthrough'
+      voice: 'teacher' | 'coach' | 'concise'
+      aspect_ratio: '16:9' | '9:16' | '1:1'
     }
   }
 }

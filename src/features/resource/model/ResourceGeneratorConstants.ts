@@ -9,11 +9,13 @@ import {
 // ===================== Agent 元数据 =====================
 
 export const PPT_AGENT_ID = 'ppt'
+export const VIDEO_AGENT_ID = 'video'
 export const PRE_REVIEW_AGENT_ID = 'pre_review'
 export const PPT_REVIEW_AGENT_ID = 'ppt_review'
+export const VIDEO_REVIEW_AGENT_ID = 'video_review'
 export const COORDINATOR_AGENT_ID = 'coordinator'
 export const BUNDLE_AGENT_ID = 'bundle'
-export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, 'review', BUNDLE_AGENT_ID]
+export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, VIDEO_REVIEW_AGENT_ID, 'review', BUNDLE_AGENT_ID]
 export const MIN_AGENTS = 3
 
 export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
@@ -25,8 +27,10 @@ export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   code: { label: '实战演练助手', icon: '💻' },
   reading: { label: '拓展阅读助手', icon: '📚' },
   ppt: { label: '演示文稿助手', icon: '📊' },
+  video: { label: '讲解视频助手', icon: '🎬' },
   pre_review: { label: '前置安全审核', icon: '🛡️' },
   ppt_review: { label: 'PPT 安全审核', icon: '🔍' },
+  video_review: { label: '视频安全审核', icon: '🔍' },
   review: { label: '质量把关助手', icon: '🔍' },
   bundle: { label: '资源打包助手', icon: '📦' },
 }
@@ -41,6 +45,7 @@ export const agentMetaList = [
   { id: 'quiz', name: '自测题生成助手', icon: Edit, colorClass: 'text-emerald' },
   { id: 'reading', name: '拓展阅读助手', icon: Collection, colorClass: 'text-indigo' },
   { id: 'ppt', name: '演示文稿助手', icon: DataBoard, colorClass: 'text-pink' },
+  { id: 'video', name: '讲解视频助手', icon: DataBoard, colorClass: 'text-orange' },
 ]
 
 export const getAgentMeta = (id: string) =>
@@ -57,13 +62,14 @@ export type AnyAgentConfigs = {
   code: { programming_language: string; case_type: string; difficulty: string }
   reading: { reading_depth: string; max_items: number; language_preference: string }
   ppt: { page_count: number; difficulty: string; output_format: string }
+  video: { duration_seconds: number; scene_count: number; style: string; voice: string; aspect_ratio: string }
 }
 
 export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
-  exam_prep: { content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' }, quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true }, mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'algorithm_template', difficulty: 'intermediate' }, reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' }, ppt: { page_count: 8, difficulty: 'advanced', output_format: 'preview' } },
-  daily_review: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' }, ppt: { page_count: 5, difficulty: 'intermediate', output_format: 'preview' } },
-  project_practice: { content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'intermediate' }, reading: { reading_depth: 'engineering', max_items: 5, language_preference: 'chinese' }, ppt: { page_count: 10, difficulty: 'intermediate', output_format: 'preview' } },
-  self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' }, ppt: { page_count: 6, difficulty: 'beginner', output_format: 'preview' } },
+  exam_prep: { content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' }, quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 70, exam_style: '考研', include_analysis: true }, mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'algorithm_template', difficulty: 'intermediate' }, reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' }, ppt: { page_count: 8, difficulty: 'advanced', output_format: 'preview' }, video: { duration_seconds: 180, scene_count: 6, style: 'lecture', voice: 'teacher', aspect_ratio: '16:9' } },
+  daily_review: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: true, include_prerequisites: false }, code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' }, ppt: { page_count: 5, difficulty: 'intermediate', output_format: 'preview' }, video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' } },
+  project_practice: { content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 30, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'intermediate' }, reading: { reading_depth: 'engineering', max_items: 5, language_preference: 'chinese' }, ppt: { page_count: 10, difficulty: 'intermediate', output_format: 'preview' }, video: { duration_seconds: 240, scene_count: 8, style: 'screencast', voice: 'coach', aspect_ratio: '16:9' } },
+  self_study: { content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' }, quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 40, exam_style: 'school', include_analysis: true }, mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, expand_weak_points: false, include_prerequisites: true }, code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' }, reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' }, ppt: { page_count: 6, difficulty: 'beginner', output_format: 'preview' }, video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' } },
 }
 
 export const scenarioOptions: Array<{ icon: string; name: string; value: LearningScenario }> = [
@@ -93,6 +99,7 @@ export const getResourceTypeLabel = (type: string) => {
     quiz: '自测题',
     reading: '拓展阅读',
     ppt: '演示文稿',
+    video: '讲解视频',
     reviewer: '质量审查',
   }
   return labelMap[type] || getAgentMeta(type).name || type
@@ -106,6 +113,7 @@ export const getResourceUsageHint = (type: string) => {
     quiz: '完成自测题，检查掌握情况并定位仍然薄弱的知识点。',
     reading: '用于课后拓展和深入理解，适合完成基础资源后阅读。',
     ppt: '精美的自动生成幻灯片，可用于直接演示或快速概览。',
+    video: '结构化讲解视频脚本，包含分镜旁白和视觉提示。',
   }
   return hintMap[type] || '建议结合本次学习目标使用该资源。'
 }
@@ -118,6 +126,7 @@ export const getDefaultResourceFormat = (type: string) => {
     quiz: 'Quiz JSON',
     reading: 'Reading List',
     ppt: 'PPT JSON',
+    video: 'Video JSON',
   }
   return formatMap[type] || 'Resource'
 }
@@ -130,6 +139,7 @@ export const getEstimatedTime = (type: string) => {
     quiz: '10-20 分钟',
     reading: '20-30 分钟',
     ppt: '5-10 分钟',
+    video: '3-5 分钟',
   }
   return timeMap[type] || '待评估'
 }
@@ -154,6 +164,7 @@ export const getResourceToneClass = (type: string) => {
     quiz: 'tone-emerald',
     reading: 'tone-indigo',
     ppt: 'tone-pink',
+    video: 'tone-orange',
   }
   return toneMap[type] || 'tone-blue'
 }
@@ -166,6 +177,7 @@ export const getAgentOutputFormat = (agentId: string) => {
     quiz: 'Quiz 题库',
     reading: 'Reading List',
     ppt: 'PPT 页面',
+    video: '视频脚本',
   }
   return formatMap[agentId] || '学习资源'
 }
