@@ -431,7 +431,7 @@ async function loadPracticePool() {
     const result = await fetchQuizBankQuestions({
       subjects: learnerCourses.value.length ? learnerCourses.value : undefined,
       page: 1,
-      page_size: 160,
+      page_size: 100,
     })
     practicePool.value = result.items || []
     totalQuestions.value = result.total || totalQuestions.value
@@ -570,7 +570,7 @@ async function startPracticeByCondition(config: { title: string; subject?: strin
       type: config.type || undefined,
       subjects: !config.subject && learnerCourses.value.length ? learnerCourses.value : undefined,
       page: 1,
-      page_size: 300,
+      page_size: 100,
     })
     const pool = result.items || []
     const selected = shuffle(pool).slice(0, config.count)
@@ -684,7 +684,7 @@ async function generatePaperPreview() {
       subject: paperForm.subject || undefined,
       difficulty: paperForm.difficulty === '混合' ? undefined : paperForm.difficulty,
       page: 1,
-      page_size: 400,
+      page_size: 100,
     })
     const pool = result.items || []
     const selected: Question[] = []
