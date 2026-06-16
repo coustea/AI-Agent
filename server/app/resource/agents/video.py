@@ -280,7 +280,8 @@ class VideoPayloadBuilder:
         cursor_ms = 0
         for contract in outline.scenes:
             draft = draft_by_id[contract.scene_id]
-            duration_ms = contract.duration_seconds * 1000
+            # Use generated duration_ms or fallback to contract planned duration
+            duration_ms = getattr(draft, "duration_ms", 0) or (contract.duration_seconds * 1000)
             scenes.append(
                 VideoScene(
                     scene_id=contract.scene_id,
@@ -296,31 +297,45 @@ class VideoPayloadBuilder:
                     visual_prompt=draft.visual_prompt,
                     interaction_prompt=draft.interaction_prompt,
                     visual=draft.visual or {},
-                    source_agents=draft.source_agents or contract.required_sources,
                     audio_src=draft.audio_src,
+                    source_agents=draft.source_agents or contract.required_sources,
                 )
             )
             cursor_ms += duration_ms
 
-        assets = [
-            VideoAsset(
-                asset_id=f"asset-{scene.index}",
-                type="diagram_prompt" if scene.visual_type in {"diagram", "timeline", "comparison"} else "image_prompt",
-                description=scene.visual_prompt,
-                source_scene_id=scene.scene_id,
-            )
-            for scene in scenes
-        ]
+        # Adjust total duration and last scene padding to satisfy model validators
+        total_ms = cursor_ms
+        duration_seconds = (total_ms + 999) // 1000
+        target_total_ms = duration_seconds * 1000
+        diff_ms = target_total_ms - total_ms
+        
+        if scenes and diff_ms > 0:
+            scenes[-1].duration_ms += diff_ms
+            
+        # Re-align contiguous start times
+        expected_start = 0
+        for scene in scenes:
+            scene.start_ms = expected_start
+            expected_start += scene.duration_ms
+
         source_agent_ids = sorted({agent for scene in scenes for agent in scene.source_agents})
         return VideoPayload(
             title=outline.title,
             topic=outline.topic or digest.topic,
-            duration_seconds=constraints.duration_seconds,
+            duration_seconds=duration_seconds,
             aspect_ratio=constraints.aspect_ratio,
             style=constraints.style,
             voice=constraints.voice,
             scenes=scenes,
-            assets=assets,
+            assets=[
+                VideoAsset(
+                    asset_id=f"asset-{scene.index}",
+                    type="diagram_prompt" if scene.visual_type in {"diagram", "timeline", "comparison"} else "image_prompt",
+                    description=scene.visual_prompt,
+                    source_scene_id=scene.scene_id,
+                )
+                for scene in scenes
+            ],
             metadata={
                 "source_agent_ids": source_agent_ids,
                 "internal_pipeline": "material/outline/scenes/payload",
@@ -333,6 +348,7 @@ class VideoSceneWriteState(TypedDict):
     contract: SceneContract
     digest: VideoMaterialDigest
     constraints: VideoConstraints
+    resource_id: int | None
 
 
 def _add_scene_drafts(left: list[SceneDraft] | None, right: list[SceneDraft] | None) -> list[SceneDraft]:
@@ -469,11 +485,13 @@ class VideoAgent(BaseResourceAgent):
         outline: VideoOutline = state["outline"]
         digest: VideoMaterialDigest = state["digest"]
         constraints: VideoConstraints = state["constraints"]
+        resource_id = state["input_data"].resource_id if "input_data" in state and hasattr(state["input_data"], "resource_id") else None
         return [
             Send("write_scene", {
                 "contract": scene,
                 "digest": digest,
                 "constraints": constraints,
+                "resource_id": resource_id,
             })
             for scene in outline.scenes
         ]
@@ -482,6 +500,27 @@ class VideoAgent(BaseResourceAgent):
         async with self._scene_semaphore:
             writer = SceneWriterAgent()
             draft = await writer.run(state["contract"], state["digest"], state["constraints"])
+            
+            # Synthesize TTS
+            from app.resource.infra.tts import TtsService
+            from app.config import WORKPLACE_DIR
+            
+            res_id = state.get("resource_id")
+            prefix = f"res_{res_id}" if res_id else f"digest_{abs(hash(state['digest'].topic)) % 10000}"
+            filename = f"{prefix}_scene_{draft.scene_id}.mp3"
+            file_path = WORKPLACE_DIR / "video_audio" / filename
+            
+            try:
+                duration_s = await TtsService.synthesize(draft.narration, file_path)
+                # Add 500ms safety buffer, but keep a minimum of 4 seconds
+                draft.duration_ms = max(int(duration_s * 1000) + 500, 4000)
+                draft.audio_src = f"/api/v1/ai/video/audio/{filename}"
+            except Exception as e:
+                logger.error("TTS synthesis failed for scene %s: %s", draft.scene_id, e)
+                # Fallback to contract planned duration
+                draft.duration_ms = state["contract"].duration_seconds * 1000
+                draft.audio_src = None
+                
             return {"drafts": [draft]}
 
     async def _payload_node(self, state: VideoGraphState) -> dict[str, Any]:

@@ -10,7 +10,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app.resource.schemas import AgentResult, ResourceInput
+from app.resource.schemas import AgentResult, DownstreamContext, ResourceInput
 
 
 def _valid_payload_dict():
@@ -153,6 +153,12 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
             source_agents=contract.required_sources,
         )
 
+    # Mock TtsService.synthesize to return 20.0 seconds duration without network calls
+    from app.resource.infra.tts import TtsService
+    async def fake_tts_synthesize(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
+        return 20.0
+    monkeypatch.setattr(TtsService, "synthesize", fake_tts_synthesize)
+
     monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
     monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)
     monkeypatch.setattr(SceneWriterAgent, "run", fake_scene_run)
@@ -166,14 +172,12 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
             learning_need="把 TCP 三次握手生成讲解视频",
             agent_name="video",
             agent_config={"duration_seconds": 180, "scene_count": 3},
-            previous_results={
-                "content": AgentResult(
-                    success=True,
-                    content="# TCP 三次握手\n三次握手同步双方初始序号。",
-                    file_type="markdown",
+            upstream_handoffs={
+                "content": DownstreamContext(
+                    source_agent="content",
                     title="课程内容",
-                    summary="TCP 内容",
-                    metadata={"agent_id": "content"},
+                    one_sentence_summary="TCP 三次握手同步双方初始序号。",
+                    covered_outline_ids=[],
                 )
             },
         )
@@ -184,7 +188,7 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
     assert result.metadata["agent_id"] == "video"
     assert result.metadata["schema_version"] == "video/v1"
     parsed = json.loads(result.content)
-    assert parsed["duration_seconds"] == 180
+    assert parsed["duration_seconds"] == 62
     assert len(parsed["scenes"]) == 3
 
 
@@ -260,6 +264,12 @@ async def test_video_agent_generate_node_path_learning(monkeypatch):
             interaction_prompt="",
             source_agents=contract.required_sources,
         )
+
+    # Mock TtsService.synthesize to return 20.0 seconds duration without network calls
+    from app.resource.infra.tts import TtsService
+    async def fake_tts_synthesize(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
+        return 20.0
+    monkeypatch.setattr(TtsService, "synthesize", fake_tts_synthesize)
 
     monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
     monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)
