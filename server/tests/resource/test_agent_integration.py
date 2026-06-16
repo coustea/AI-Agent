@@ -68,6 +68,7 @@ def test_content_agent_execute_success():
         assert result.file_type == "markdown"
         assert len(agent.llm.calls) == 1
         assert agent.llm.calls[0]["method"] == "ainvoke"
+        _assert_valid_handoff(result.downstream_context, "content")
 
     asyncio.run(run())
 
@@ -99,6 +100,8 @@ def test_code_agent_execute_success():
         assert result.success is True
         assert result.file_type == "markdown"
         assert result.metadata.get("language") == "python"
+        assert result.metrics.get("language") == "python"
+        _assert_valid_handoff(result.downstream_context, "code")
 
     asyncio.run(run())
 
@@ -115,8 +118,9 @@ def test_mindmap_agent_execute_success():
         result = await agent.generate_resource(_make_input("mindmap"))
         assert result.success is True
         assert result.file_type == "markdown"
-        assert "基础语法" in result.summary_data.get("branches", [])
-        assert len(result.summary_data.get("weak_points", [])) > 0
+        assert "基础语法" in result.metrics.get("branches", [])
+        assert len(result.metrics.get("weak_points", [])) > 0
+        _assert_valid_handoff(result.downstream_context, "mindmap")
 
     asyncio.run(run())
 
@@ -153,7 +157,8 @@ def test_quiz_agent_execute_success():
         result = await agent.generate_resource(_make_input("quiz", {"question_count": 1}))
         assert result.success is True
         assert result.file_type == "json"
-        assert result.summary_data.get("total_count") == 1
+        assert result.metrics.get("total_count") == 1
+        _assert_valid_handoff(result.downstream_context, "quiz")
 
     asyncio.run(run())
 
@@ -187,7 +192,8 @@ def test_reading_agent_execute_success():
         result = await agent.generate_resource(_make_input("reading", {"reading_depth": "course_extended", "max_items": 3}))
         assert result.success is True
         assert result.file_type == "json"
-        assert result.summary_data.get("resource_count") == 1
+        assert result.metrics.get("resource_count") == 1
+        _assert_valid_handoff(result.downstream_context, "reading")
 
     asyncio.run(run())
 
@@ -198,7 +204,7 @@ def test_reading_agent_execute_success():
 def test_ppt_agent_execute_success():
     async def run():
         from app.resource.agents.ppt import PptAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import (
             PptPayload, PptSlide, BlockHeading, BlockText, BlockCode,
             MaterialDigest, DeckOutline, SlideContract, BlockContract,
             SlideDraft, RenderedBlock,
@@ -246,10 +252,10 @@ def test_ppt_agent_execute_success():
                 speaker_notes="讲解变量"),
         ]
 
-        with patch("app.resource.agents.ppt_internal.MaterialAgent") as MockM, \
-             patch("app.resource.agents.ppt_internal.OutlineAgent") as MockO, \
-             patch("app.resource.agents.ppt_internal.write_slides_concurrently", new_callable=AsyncMock) as mock_write, \
-             patch("app.resource.agents.ppt_builder.PayloadBuilder") as MockB:
+        with patch("app.resource.agents.ppt.MaterialAgent") as MockM, \
+             patch("app.resource.agents.ppt.OutlineAgent") as MockO, \
+             patch("app.resource.agents.ppt.write_slides_concurrently", new_callable=AsyncMock) as mock_write, \
+             patch("app.resource.agents.ppt.PayloadBuilder") as MockB:
 
             MockM.return_value.run = AsyncMock(return_value=digest)
             MockO.return_value.run = AsyncMock(return_value=outline)
@@ -271,7 +277,7 @@ def test_ppt_agent_execute_success():
             result = await agent.generate_resource(_make_input("ppt", {"page_count": 3}))
             assert result.success is True
             assert result.file_type == "json"
-            assert result.summary_data.get("page_count") == 3
+            assert result.metrics.get("page_count") == 3
 
     asyncio.run(run())
 
@@ -279,7 +285,7 @@ def test_ppt_agent_execute_success():
 def test_ppt_agent_page_count_mismatch():
     async def run():
         from app.resource.agents.ppt import PptAgent
-        from app.resource.agents.ppt_models import (
+        from app.resource.agents.ppt import (
             PptPayload, PptSlide, BlockHeading, BlockText, BlockCode,
             MaterialDigest, DeckOutline, SlideContract, BlockContract,
             SlideDraft, RenderedBlock,
@@ -327,10 +333,10 @@ def test_ppt_agent_page_count_mismatch():
                 speaker_notes="讲解变量"),
         ]
 
-        with patch("app.resource.agents.ppt_internal.MaterialAgent") as MockM, \
-             patch("app.resource.agents.ppt_internal.OutlineAgent") as MockO, \
-             patch("app.resource.agents.ppt_internal.write_slides_concurrently", new_callable=AsyncMock) as mock_write, \
-             patch("app.resource.agents.ppt_builder.PayloadBuilder") as MockB:
+        with patch("app.resource.agents.ppt.MaterialAgent") as MockM, \
+             patch("app.resource.agents.ppt.OutlineAgent") as MockO, \
+             patch("app.resource.agents.ppt.write_slides_concurrently", new_callable=AsyncMock) as mock_write, \
+             patch("app.resource.agents.ppt.PayloadBuilder") as MockB:
 
             MockM.return_value.run = AsyncMock(return_value=digest)
             MockO.return_value.run = AsyncMock(return_value=outline)
@@ -396,10 +402,75 @@ def test_ppt_agent_pipeline_failure_returns_failed_result():
         from app.resource.agents.ppt import PptAgent
         from unittest.mock import AsyncMock, patch
 
-        with patch("app.resource.agents.ppt_internal.MaterialAgent") as MockM:
+        with patch("app.resource.agents.ppt.MaterialAgent") as MockM:
             MockM.return_value.run = AsyncMock(side_effect=RuntimeError("素材提取失败"))
             agent = PptAgent(emitter=None)
             result = await agent.generate_resource(_make_input("ppt"))
             assert result.success is False
             assert "素材提取失败" in result.error
     asyncio.run(run())
+
+
+from app.resource.schemas import DownstreamContext, TeachingOutlineItem, TeachingPlan
+
+
+def _sample_teaching_plan() -> TeachingPlan:
+    return TeachingPlan(
+        topic="TCP 三次握手",
+        learning_goal="理解三次握手",
+        outline=[
+            TeachingOutlineItem(
+                id="o1",
+                title="为什么需要三次握手",
+                goal="理解目的",
+                key_points=["确认双方收发能力"],
+                suggested_visuals=["时序图"],
+            ),
+            TeachingOutlineItem(
+                id="o2",
+                title="三次握手过程",
+                goal="理解流程",
+                key_points=["SYN", "SYN-ACK", "ACK"],
+            ),
+        ],
+    )
+
+
+def _assert_valid_handoff(ctx: DownstreamContext, source_agent: str):
+    assert ctx.schema_version == "resource_handoff/v1"
+    assert ctx.source_agent == source_agent
+    assert ctx.title
+    assert ctx.one_sentence_summary
+    assert len(ctx.one_sentence_summary) <= 180
+    assert len(ctx.materials) <= 8
+    for material in ctx.materials:
+        assert len(material.summary) <= 500
+        assert len(material.evidence_excerpt) <= 180
+
+
+def test_build_resource_context_uses_teaching_plan_and_handoffs_only():
+    from app.resource.agents.common import build_resource_context
+    from app.resource.schemas import ResourceInput
+
+    plan = _sample_teaching_plan()
+    handoff = DownstreamContext(
+        source_agent="content",
+        title="TCP 内容",
+        one_sentence_summary="解释 TCP 三次握手。",
+    )
+
+    parts = build_resource_context(
+        ResourceInput(
+            learning_need="学习 TCP",
+            agent_name="video",
+            teaching_plan=plan,
+            upstream_handoffs={"content": handoff},
+        )
+    )
+    joined = "\n\n".join(parts)
+
+    assert "## 教学计划" in joined
+    assert "## 上游交接摘要" in joined
+    assert "previous_results" not in joined
+    assert "规划师指令" not in joined
+

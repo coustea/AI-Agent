@@ -10,7 +10,7 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_node_context, build_resource_context
+from app.resource.agents.common import build_node_context, build_resource_context, build_basic_handoff
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -67,11 +67,23 @@ class ReadingAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
+        config = {
+            **input_data.agent_config,
+            "_teaching_plan": input_data.teaching_plan,
+        }
         result = await self._generate_reading(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
-            config=input_data.agent_config,
+            config=config,
         )
+        handoff = build_basic_handoff(
+            source_agent="reading",
+            title=result.title,
+            summary=result.summary,
+            teaching_plan=input_data.teaching_plan,
+            material_type="reading",
+        )
+        result.downstream_context = handoff
         await self.emit_finish(result)
         return result
 
@@ -132,7 +144,7 @@ class ReadingAgent(BaseResourceAgent):
             file_type="json",
             title=reading_data.get("title") or f"{title_prefix} - 拓展阅读",
             summary=reading_data.get("summary") or "生成拓展阅读材料",
-            summary_data={
+            metrics={
                 "resource_count": len(reading_data.get("resources", [])),
                 "reading_depth": reading_depth,
                 "language_preference": language_preference,

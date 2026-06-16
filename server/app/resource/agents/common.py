@@ -23,27 +23,80 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
     if profile_text:
         parts.append(f"## 学习者画像摘要\n{profile_text}")
 
-    if input_data.blueprint:
-        parts.append(f"## 教学蓝图\n{input_data.blueprint.model_dump_json(indent=2)}")
+    if input_data.teaching_plan:
+        parts.append(f"## 教学计划\n{input_data.teaching_plan.model_dump_json(indent=2)}")
 
-    if input_data.instruction:
-        lines = [f"## 规划师指令\n- 重点: {input_data.instruction.focus}"]
-        if input_data.instruction.difficulty:
-            lines.append(f"- 难度: {input_data.instruction.difficulty}")
-        if input_data.instruction.personalization_notes:
-            lines.append(f"- 个性化建议: {input_data.instruction.personalization_notes}")
-        for constraint in input_data.instruction.constraints:
-            lines.append(f"- 约束: {constraint}")
-        parts.append("\n".join(lines))
-
-    if input_data.previous_results:
-        lines = ["## 已生成资源摘要"]
-        for agent_id, result in input_data.previous_results.items():
-            if result.success:
-                lines.append(f"- {agent_id}: {result.title or result.summary or '已生成'}")
-        parts.append("\n".join(lines))
+    if input_data.upstream_handoffs:
+        handoffs = {
+            agent_id: handoff.model_dump(mode="json")
+            for agent_id, handoff in input_data.upstream_handoffs.items()
+        }
+        parts.append("## 上游交接摘要\n" + json.dumps(handoffs, ensure_ascii=False, indent=2))
 
     return parts
+
+
+from app.resource.schemas import DownstreamContext, DownstreamMaterial, ReusableAssets, TeachingPlan
+
+
+def outline_ids_from_plan(plan: TeachingPlan | None) -> list[str]:
+    if not plan:
+        return []
+    return [item.id for item in plan.outline]
+
+
+def first_outline_id(plan: TeachingPlan | None) -> str:
+    ids = outline_ids_from_plan(plan)
+    return ids[0] if ids else ""
+
+
+def clip_text(value: str, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+def build_basic_handoff(
+    *,
+    source_agent: str,
+    title: str,
+    summary: str,
+    teaching_plan: TeachingPlan | None,
+    material_type: str,
+    key_points: list[str] | None = None,
+    evidence: str = "",
+    examples: list[str] | None = None,
+    visual_ideas: list[str] | None = None,
+    practice_refs: list[str] | None = None,
+    code_refs: list[str] | None = None,
+    cautions: list[str] | None = None,
+) -> DownstreamContext:
+    outline_ids = outline_ids_from_plan(teaching_plan)
+    material_outline_id = first_outline_id(teaching_plan)
+    material = DownstreamMaterial(
+        outline_id=material_outline_id,
+        type=material_type,
+        summary=clip_text(summary, 500),
+        key_points=(key_points or [])[:8],
+        evidence_excerpt=clip_text(evidence, 180),
+        priority=1,
+    )
+    return DownstreamContext(
+        source_agent=source_agent,
+        title=clip_text(title, 120),
+        one_sentence_summary=clip_text(summary, 180),
+        covered_outline_ids=outline_ids,
+        materials=[material] if material.summary else [],
+        reusable_assets=ReusableAssets(
+            examples=(examples or [])[:6],
+            visual_ideas=(visual_ideas or [])[:6],
+            practice_refs=(practice_refs or [])[:6],
+            code_refs=(code_refs or [])[:6],
+        ),
+        cautions=(cautions or [])[:6],
+    )
+
 
 
 def build_node_context(input_data: NodeInput) -> list[str]:

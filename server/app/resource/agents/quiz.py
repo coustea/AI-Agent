@@ -10,7 +10,7 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_node_context, build_resource_context
+from app.resource.agents.common import build_node_context, build_resource_context, build_basic_handoff
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -56,11 +56,29 @@ class QuizAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
+        config = {
+            **input_data.agent_config,
+            "_teaching_plan": input_data.teaching_plan,
+        }
         result = await self._generate_quiz(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
-            config=input_data.agent_config,
+            config=config,
         )
+        try:
+            quiz_data = json.loads(result.content)
+            q_ids = [str(q.get("id")) for q in quiz_data.get("questions", [])]
+        except Exception:
+            q_ids = []
+        handoff = build_basic_handoff(
+            source_agent="quiz",
+            title=result.title,
+            summary=result.summary,
+            teaching_plan=input_data.teaching_plan,
+            material_type="practice",
+            practice_refs=q_ids,
+        )
+        result.downstream_context = handoff
         await self.emit_finish(result)
         return result
 
@@ -122,7 +140,7 @@ class QuizAgent(BaseResourceAgent):
             file_type="json",
             title=f"{title_prefix} - 习题集",
             summary=f"生成 {len(questions)} 道习题",
-            summary_data={
+            metrics={
                 "total_count": len(questions),
                 "difficulty_distribution": difficulty_dist,
             },

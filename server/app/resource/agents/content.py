@@ -6,7 +6,7 @@ from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import build_node_context, build_resource_context
+from app.resource.agents.common import build_node_context, build_resource_context, build_basic_handoff
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -27,11 +27,23 @@ class ContentAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
+        config = {
+            **input_data.agent_config,
+            "_teaching_plan": input_data.teaching_plan,
+        }
         result = await self._generate_content(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
-            config=input_data.agent_config,
+            config=config,
         )
+        handoff = build_basic_handoff(
+            source_agent="content",
+            title=result.title,
+            summary=result.summary,
+            teaching_plan=input_data.teaching_plan,
+            material_type="explanation",
+        )
+        result.downstream_context = handoff
         await self.emit_finish(result)
         return result
 
@@ -77,7 +89,7 @@ class ContentAgent(BaseResourceAgent):
             file_type="markdown",
             title=f"{title_prefix} - 课程内容",
             summary="生成专业课程讲解文档",
-            summary_data={"char_count": len(content)},
+            metrics={"char_count": len(content)},
             metadata={"agent_id": "content"},
         )
 

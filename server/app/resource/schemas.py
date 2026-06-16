@@ -272,6 +272,15 @@ class AgentResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str = ""
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_metrics_from_summary_data(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "summary_data" in data and "metrics" not in data:
+                data["metrics"] = data.pop("summary_data")
+        return data
+
+
 
 class ResourceInput(BaseModel):
     """standalone 多智能体资源生成输入。"""
@@ -284,6 +293,20 @@ class ResourceInput(BaseModel):
     teaching_plan: TeachingPlan | None = None
     profile: dict[str, Any] = Field(default_factory=dict)
     upstream_handoffs: dict[str, DownstreamContext] = Field(default_factory=dict)
+
+    @property
+    def blueprint(self) -> Any:
+        return None
+
+    @property
+    def instruction(self) -> Any:
+        return None
+
+    @property
+    def previous_results(self) -> dict:
+        return {}
+
+
 
 
 class NodeInput(BaseModel):
