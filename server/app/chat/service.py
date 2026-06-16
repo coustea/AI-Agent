@@ -61,7 +61,8 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
     1. 查询 ChatMessage（按时间升序，最近 HISTORY_LIMIT 条）
     2. 查询 ChatToolInvocation（关联到这些消息的工具调用）
     3. 将消息转为 LangChain 类型：HumanMessage / AIMessage(tool_calls) / ToolMessage(tool_call_id)
-    4. 在列表头部注入 SystemMessage（含会话压缩摘要）
+
+    注：会话压缩摘要由 TutorAgent 在系统提示词中注入，此处不再重复添加。
     """
     svc = _get_chat_memory_service()
 
@@ -100,11 +101,7 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
             tc_id_str = str(tool_call_id)
             messages.append(ToolMessage(content=content or "", tool_call_id=tc_id_str))
 
-    # 注入会话压缩摘要到 SystemMessage
-    summary_context = await svc.get_session_summary_context(user_id=user_id, session_id=session_id)
-    system_content = f"以下是之前对话的压缩摘要，供你了解上下文：\n{summary_context}"
-
-    return [SystemMessage(content=system_content), *messages]
+    return messages
 
 
 # SSE 事件类型 → 前端 SSE event 名称映射
@@ -276,17 +273,10 @@ async def chat(
                     yield {"event": "diagram", "data": diagram_result}
 
                 yield {
-                    "event": "done",
+                    "event": "status",
                     "data": {
-                        "session_id": effective_session,
-                        "full_response": full_answer,
-                        "knowledge_sources": sources,
-                        "teaching_diagram": diagram_result,
-                        "tool_calls": [
-                            {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
-                            for inv in tool_invocations
-                        ],
-                        "attachment_analyses": attachment_analyses,
+                        "stage": "answer_done",
+                        "message": "回答已生成，正在保存本轮学习记录...",
                     },
                 }
                 continue
@@ -295,7 +285,7 @@ async def chat(
                 has_error = True
                 yield {"event": "error", "data": sse_data.get("error", "未知错误")}
                 yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
-                continue
+                return
 
             # 默认 SSE 转发
             yield {"event": sse_event, "data": sse_data}
@@ -355,10 +345,89 @@ async def chat(
             error_message=None,
         )
 
-    # ── 5. 后台任务：由 TutorAgent 调度压缩 / 长期记忆 / 画像更新 ──
+    # ── 5. 可见压缩检查/执行 ──
+    compression_payload: dict[str, Any] = {"compressed": False}
+
+    if not has_error and full_answer and turn_id is not None:
+        yield {
+            "event": "status",
+            "data": {
+                "stage": "compression_checking",
+                "message": "正在检查是否需要整理上下文...",
+            },
+        }
+        try:
+            counters = await svc.update_post_turn_counters(
+                user_id=user_id,
+                session_id=effective_session,
+                turn_id=turn_id,
+                user_message=current_message,
+                assistant_reply=full_answer,
+            )
+            compression_payload["counters"] = counters
+
+            if await svc.should_compress_session(user_id=user_id, session_id=effective_session):
+                yield {
+                    "event": "status",
+                    "data": {
+                        "stage": "compression_running",
+                        "message": "正在整理较早的对话上下文...",
+                    },
+                }
+                summary_block = await svc.compress_session(
+                    user_id=user_id,
+                    session_id=effective_session,
+                    reason="post_turn_visible",
+                )
+            else:
+                summary_block = None
+
+            if summary_block is not None:
+                compression_payload.update(
+                    {
+                        "compressed": True,
+                        "summary_block_id": getattr(summary_block, "id", None),
+                        "summarized_message_count": int(getattr(summary_block, "summarized_message_count", 0) or 0),
+                    }
+                )
+                compression_message = "上下文整理完成，后续回答会继续使用摘要记忆。"
+            else:
+                compression_message = "当前上下文仍然轻量，无需整理。"
+        except Exception as exc:
+            logger.error("[chat] visible compression failed user=%s session=%s err=%s", user_id, effective_session, exc)
+            compression_payload.update({"compressed": False, "error": str(exc)})
+            compression_message = "上下文整理暂时失败，本轮回答已保存。"
+
+        yield {
+            "event": "status",
+            "data": {
+                "stage": "compression_done",
+                "message": compression_message,
+                **compression_payload,
+            },
+        }
+
+    if not has_error:
+        yield {
+            "event": "done",
+            "data": {
+                "session_id": effective_session,
+                "full_response": full_answer,
+                "knowledge_sources": sources,
+                "teaching_diagram": diagram_result,
+                "tool_calls": [
+                    {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
+                    for inv in tool_invocations
+                ],
+                "attachment_analyses": attachment_analyses,
+                "context_compression": compression_payload,
+            },
+        }
+
+    # ── 6. 后台任务：由 TutorAgent 调度长期记忆 / 画像更新 ──
     if full_answer and turn_id is not None:
         async def _post_turn():
-            await agent.run_post_turn_jobs(
+            await agent.run_background_memory_jobs(
                 user_id=user_id,
                 session_id=effective_session,
                 turn_id=turn_id,

@@ -38,6 +38,7 @@ from app.chat.memory.types import (
     now,
 )
 from app.config import (
+    COMPRESS_KEEP_RECENT_MESSAGES,
     COMPRESS_MIN_MESSAGES,
     COMPRESS_MIN_TOKENS,
     LTM_MIN_CONFIDENCE,
@@ -216,10 +217,10 @@ class ChatMemoryService:
     def __init__(self, *, module: str = "mentor") -> None:
         # 业务模块标识，用于数据库行的 module 字段隔离
         self.module = module
-        # 压缩器：保留最近 8 条原始消息，超过 14 条或 3500 token 时触发压缩
+        # 压缩器：保留最近 N 条原始消息，超过阈值时触发压缩
         self.compressor = ChatSessionCompressor(
             module=module,
-            keep_recent=RECENT_RAW_MESSAGES,
+            keep_recent=COMPRESS_KEEP_RECENT_MESSAGES,
             min_messages=COMPRESS_MIN_MESSAGES,
             min_tokens=COMPRESS_MIN_TOKENS,
         )
@@ -1173,6 +1174,24 @@ class ChatMemoryService:
     # 将旧消息通过 LLM 摘要化，保留最近 keep_recent 条原始消息。
     # 返回压缩后的 summary block（None 表示无需压缩）。
     # -------------------------------------------------------------------
+    async def should_compress_session(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+    ) -> bool:
+        """Check whether session needs compression without actually compressing."""
+        try:
+            async with session_scope() as db:
+                return await self.compressor.needs_compression(
+                    db=db,
+                    user_id=user_id,
+                    session_id=session_id,
+                )
+        except Exception as exc:
+            logger.error("[ChatMemoryService] compression need check failed: %s", exc)
+            return False
+
     async def compress_session(
         self,
         *,

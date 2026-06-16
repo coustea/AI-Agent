@@ -89,6 +89,10 @@ class ChatSessionCompressor:
             reason=reason,
         )
 
+    async def needs_compression(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
+        """Return whether the current session satisfies compression thresholds."""
+        return await self._should_compress(db=db, user_id=user_id, session_id=session_id)
+
     async def _should_compress(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
         """判断是否需要压缩 — 满足任一条件即触发。
 
@@ -208,9 +212,13 @@ class ChatSessionCompressor:
         db.add(summary_block)
         await db.flush()
 
-        # 物理删除已被摘要覆盖的旧消息 — 只删除 ID < first_kept 的消息
-        first_kept = dialogue[-self.keep_recent].id if self.keep_recent > 0 else None
-        if first_kept:
+        # 物理删除已被摘要覆盖的旧消息
+        if self.keep_recent > 0:
+            first_kept = dialogue[-self.keep_recent].id
+        else:
+            stale_ids = [msg.id for msg in target if msg.id is not None]
+
+        if self.keep_recent > 0 and first_kept:
             stale_messages = list(
                 (
                     await db.exec(
@@ -223,8 +231,24 @@ class ChatSessionCompressor:
                     )
                 ).all()
             )
-            for msg in stale_messages:
-                await db.delete(msg)
+        elif self.keep_recent == 0:
+            stale_messages = list(
+                (
+                    await db.exec(
+                        select(ChatMessage).where(
+                            ChatMessage.user_id == user_id,
+                            ChatMessage.session_id == session_id,
+                            ChatMessage.module == self.module,
+                            ChatMessage.id.in_(stale_ids),
+                        )
+                    )
+                ).all()
+            )
+        else:
+            stale_messages = []
+
+        for msg in stale_messages:
+            await db.delete(msg)
 
         # 重置 token 计数器 — 压缩后重新开始累积
         chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()

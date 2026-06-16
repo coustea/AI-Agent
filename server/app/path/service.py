@@ -45,7 +45,7 @@ from app.path.schemas import (
     PathQuizSubmitResponse,
 )
 from app.path.validation import normalize_path_plan, validate_path_plan
-from app.resource.agents import AGENT_REGISTRY
+from app.resource.service import generate_path_node_resource
 from app.resource.schemas import NodeInput
 
 logger = get_logger(__name__)
@@ -322,8 +322,7 @@ class PathService:
             agent_config={},
         )
 
-        agent = AGENT_REGISTRY[payload.resource_type]()
-        result = await agent.generate_node(node_input)
+        result = await generate_path_node_resource(payload.resource_type, node_input)
 
         if not result.success:
             # Save failed record with error details
