@@ -7,7 +7,7 @@ import BlockFormula from './BlockFormula.vue'
 import BlockTimeline from './BlockTimeline.vue'
 import BlockTerminal from './BlockTerminal.vue'
 
-export const BlockRegistry: Record<string, any> = {
+const BlockRegistry: Record<string, any> = {
   Heading: BlockHeading,
   Text: BlockText,
   Callout: BlockCallout,

@@ -907,7 +907,7 @@ const submitForm = async () => {
       courses: form.courses as any,
     })
 
-    await updateMe({ is_first_login: false }).catch(() => {})
+    await updateMe({ is_first_login: true }).catch(() => {})
 
     ElMessage.success('学习画像构建成功')
     visible.value = false
@@ -925,7 +925,7 @@ const submitForm = async () => {
 
 const handleNeverShow = async () => {
   try {
-    await updateMe({ is_first_login: false })
+    await updateMe({ is_first_login: true })
   } catch (error) {
     console.error('Failed to update first login state', error)
   }

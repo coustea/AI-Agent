@@ -3,7 +3,7 @@ import LayoutSplitScreen from './LayoutSplitScreen.vue'
 import LayoutBentoGrid from './LayoutBentoGrid.vue'
 import LayoutLayerStack from './LayoutLayerStack.vue'
 
-export const LayoutRegistry: Record<string, any> = {
+const LayoutRegistry: Record<string, any> = {
   FocusTitle: LayoutFocusTitle,
   SplitScreen: LayoutSplitScreen,
   BentoGrid: LayoutBentoGrid,

@@ -9,10 +9,10 @@ import {
 // ===================== Agent 元数据 =====================
 
 export const PPT_AGENT_ID = 'ppt'
-export const VIDEO_AGENT_ID = 'video'
+const VIDEO_AGENT_ID = 'video'
 export const PRE_REVIEW_AGENT_ID = 'pre_review'
 export const PPT_REVIEW_AGENT_ID = 'ppt_review'
-export const VIDEO_REVIEW_AGENT_ID = 'video_review'
+const VIDEO_REVIEW_AGENT_ID = 'video_review'
 export const COORDINATOR_AGENT_ID = 'coordinator'
 export const BUNDLE_AGENT_ID = 'bundle'
 export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, VIDEO_REVIEW_AGENT_ID, 'review', BUNDLE_AGENT_ID]
