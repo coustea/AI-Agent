@@ -499,23 +499,41 @@ def retrieve_dense_knowledge(
                 k=max(top_k or KB_TOP_K, KB_TOP_K),
                 filter=None,
             )
-            merged_rows: dict[tuple[str, str], tuple[Any, float]] = {}
+            merged_rows: dict[tuple[str, str], tuple[Any, float, dict[str, Any]]] = {}
             for doc, score in rows:
-                key = _metadata_key(dict(doc.metadata or {}))
-                merged_rows[key] = (doc, score)
+                metadata = dict(doc.metadata or {})
+                metadata.setdefault("matched_by", "vector_filter")
+                key = _metadata_key(metadata)
+                merged_rows[key] = (doc, score, metadata)
             for doc, score in fallback_rows:
                 metadata = dict(doc.metadata or {})
                 if not _matches_source_filter(metadata, source_filter):
                     continue
+                metadata["matched_by"] = "metadata_fallback"
                 key = _metadata_key(metadata)
                 if key not in merged_rows:
-                    merged_rows[key] = (doc, score)
+                    merged_rows[key] = (doc, score, metadata)
             rows = sorted(merged_rows.values(), key=lambda item: float(item[1]))[: (top_k or KB_TOP_K)]
     except Exception:
         logger.exception("[knowledge] dense query failed")
         return []
 
-    return _normalize_ranked_rows(rows, retrieval_mode="dense")
+    # Build result preserving matched_by from stored metadata
+    items: list[dict[str, Any]] = []
+    for idx, item in enumerate(rows, 1):
+        doc = item[0]
+        score = item[1]
+        stored_metadata = item[2] if len(item) > 2 else dict(doc.metadata or {})
+        items.append(
+            {
+                "rank": idx,
+                "distance": float(score),
+                "metadata": stored_metadata,
+                "text": str(doc.page_content or "").strip(),
+                "retrieval_mode": "dense",
+            }
+        )
+    return items
 
 
 def retrieve_sparse_knowledge(

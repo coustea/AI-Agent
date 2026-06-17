@@ -482,3 +482,60 @@ def test_matches_source_filter_rejects_ambiguous_non_matching_book() -> None:
         {"source": "Redis设计与实现.md"},
         ("《Java从入门到精通》",),
     )
+
+
+def test_retrieve_dense_knowledge_rejects_non_matching_fallback_candidates(monkeypatch) -> None:
+    from app.chat.tools import knowledge
+
+    class FakeDoc:
+        def __init__(self, text: str, metadata: dict) -> None:
+            self.page_content = text
+            self.metadata = metadata
+
+    class FakeVectorStore:
+        def similarity_search_by_vector_with_relevance_scores(self, embedding, **kwargs):
+            if kwargs.get("filter") is not None:
+                return []
+            return [
+                (FakeDoc("java-hit", {"file_name": "Java从入门到精通-第06章.md", "chunk_index": 1}), 0.2),
+                (FakeDoc("redis-hit", {"source": "Redis设计与实现.md", "chunk_index": 2}), 0.1),
+            ]
+
+    monkeypatch.setattr(knowledge, "_get_vectorstore", lambda: FakeVectorStore())
+    monkeypatch.setattr(knowledge, "_get_cached_embedding", lambda _query: (0.1, 0.2, 0.3))
+
+    rows = knowledge.retrieve_dense_knowledge(
+        "Java 集合",
+        top_k=3,
+        source_filter=("《Java从入门到精通》",),
+    )
+
+    assert [row["text"] for row in rows] == ["java-hit"]
+
+
+def test_retrieve_dense_knowledge_marks_metadata_fallback_candidates(monkeypatch) -> None:
+    from app.chat.tools import knowledge
+
+    class FakeDoc:
+        def __init__(self, text: str, metadata: dict) -> None:
+            self.page_content = text
+            self.metadata = metadata
+
+    class FakeVectorStore:
+        def similarity_search_by_vector_with_relevance_scores(self, embedding, **kwargs):
+            if kwargs.get("filter") is not None:
+                return []
+            return [
+                (FakeDoc("java-hit", {"file_name": "Java从入门到精通-第06章.md", "chunk_index": 1}), 0.2),
+            ]
+
+    monkeypatch.setattr(knowledge, "_get_vectorstore", lambda: FakeVectorStore())
+    monkeypatch.setattr(knowledge, "_get_cached_embedding", lambda _query: (0.1, 0.2, 0.3))
+
+    rows = knowledge.retrieve_dense_knowledge(
+        "Java 集合",
+        top_k=3,
+        source_filter=("《Java从入门到精通》",),
+    )
+
+    assert rows[0]["metadata"]["matched_by"] == "metadata_fallback"
