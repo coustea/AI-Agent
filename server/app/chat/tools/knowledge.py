@@ -310,7 +310,7 @@ def _get_sparse_corpus() -> list[dict[str, Any]]:
             {
                 "metadata": meta,
                 "text": text,
-                "search_text": f"{text}\n{meta.get('source', '')}\n{meta.get('file_name', '')}\n{meta.get('h1', '')}\n{meta.get('h2', '')}".lower(),
+                "search_text": build_sparse_search_text(text, meta),
             }
         )
     return corpus
@@ -319,13 +319,10 @@ def _get_sparse_corpus() -> list[dict[str, Any]]:
 def build_bm25_index(corpus: list[dict[str, Any]]) -> BM25Index:
     """从语料构建 BM25 索引。
 
-    每篇文档的分词文本 = 正文 + 来源 + 文件名，确保来源信息也能被 BM25 匹配到。
+    每篇文档的分词文本使用预计算的 search_text，确保来源信息也能被 BM25 匹配到。
     """
     tokenized_documents = [
-        _tokenize_for_bm25(
-            # 拼接正文、来源、文件名作为分词输入
-            f"{row.get('text', '')}\n{(row.get('metadata') or {}).get('source', '')}\n{(row.get('metadata') or {}).get('file_name', '')}"
-        )
+        _tokenize_for_bm25(row.get("search_text", ""))
         for row in corpus
     ]
     return BM25Index(corpus, tokenized_documents)
