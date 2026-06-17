@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, TYPE_CHECKING
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
     from app.infra.models import PathNode, PathNodeTutorial, PathNodeQuestion, PathNodeResource

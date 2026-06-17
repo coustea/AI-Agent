@@ -1,6 +1,6 @@
-"""Resource domain schemas — re-exported from submodules for backward compatibility.
+"""资源域 Schema — 从子模块重新导出，保持向后兼容。
 
-All external imports via ``from app.resource.schemas import X`` continue to work.
+所有外部导入 ``from app.resource.schemas import X`` 继续可用。
 """
 
 # ── Meta ──────────────────────────────────────────────────────────────────

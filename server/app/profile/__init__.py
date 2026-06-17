@@ -1,4 +1,4 @@
-"""Shared learner profile package."""
+"""共享学习者画像模块。"""
 
 from app.profile.request import OnboardingUpdate, GlobalTutoringProfileUpdate, CourseTutoringProfileUpdate
 from app.profile.response import (

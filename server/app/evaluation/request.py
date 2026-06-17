@@ -1,4 +1,4 @@
-"""Evaluation request schemas."""
+"""评估请求模式定义。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+"""学习事件类型枚举。"""
 LearningEventType = Literal[
     "resource_viewed",
     "resource_completed",
@@ -17,7 +18,7 @@ LearningEventType = Literal[
 
 
 class LearningEventCreate(BaseModel):
-    """Learning event creation request."""
+    """学习事件创建请求。"""
 
     event_type: LearningEventType
     session_id: str | None = None

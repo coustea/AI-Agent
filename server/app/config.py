@@ -219,6 +219,9 @@ KB_QUERY_EMBEDDING_CACHE_SIZE: int = get("chat.query_embedding_cache_size", 500)
 # 稀疏检索加载的文档上限
 KB_SPARSE_CORPUS_LIMIT: int = get("chat.sparse_corpus_limit", 12000)
 
+# ============ 安全过滤配置 ============
+SAFETY_SENSITIVE_TERMS: tuple[str, ...] = tuple(get("safety.sensitive_terms", ["色情", "赌博", "毒品", "暴力"]))
+
 # ============ 评估配置 ============
 # 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃
 STREAK_MIN_SECONDS: int = get("evaluation.streak_min_seconds", 300)

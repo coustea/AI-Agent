@@ -1,3 +1,5 @@
+"""题库查询与 AI 答案审查服务。"""
+
 from __future__ import annotations
 
 import re
@@ -104,6 +106,7 @@ class QuizBankService:
         return normalized.strip()
 
     def _normalize_options(self, options: dict | None) -> dict[str, str] | None:
+        """规范化题目选项中的 LaTeX 公式文本。"""
         if not isinstance(options, dict):
             return None
 
@@ -184,11 +187,13 @@ class QuizBankService:
         )
 
     async def _list_distinct_values(self, session: AsyncSession, column) -> list[str]:
+        """查询指定列的所有去重非空值。"""
         stmt = select(distinct(column)).where(column.is_not(None)).order_by(column.asc())
         result = await session.exec(stmt)
         return [str(value).strip() for value in result.all() if str(value).strip()]
 
     def _to_read(self, item: QuizQuestion) -> QuizQuestionRead:
+        """将 ORM 对象转换为 API 响应 DTO，同时规范化 LaTeX 公式。"""
         return QuizQuestionRead(
             id=item.question_id,
             subject=item.subject,
@@ -222,6 +227,7 @@ class QuizReviewService:
         self._prompt_template: str | None = None
 
     def _load_prompt(self) -> str:
+        """加载审查 prompt 模板，文件不存在时使用内置降级模板。"""
         if self._prompt_template is None:
             try:
                 self._prompt_template = self._PROMPT_PATH.read_text(encoding="utf-8")
@@ -231,6 +237,7 @@ class QuizReviewService:
         return self._prompt_template
 
     def _fallback_prompt(self) -> str:
+        """返回内置降级审查 prompt 模板。"""
         return """# 任务
 评判用户答案质量。
 
@@ -250,6 +257,7 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         user_answer: str,
         knowledge_points: list[str],
     ) -> list:
+        """将审查参数填充到 prompt 模板中，构建 LLM 消息列表。"""
         prompt = self._load_prompt()
         filled = prompt.replace("{{question_type}}", question_type).replace(
             "{{question_content}}", question_content

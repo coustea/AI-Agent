@@ -1,10 +1,10 @@
-"""Video resource agent.
+"""视频智能体 — 结构化讲解视频脚本生成（JSON 输出，不渲染二进制视频）。
 
-Single-file implementation by design:
-  1. VideoMaterialAgent extracts material from upstream resources.
-  2. VideoOutlineAgent plans scene contracts.
-  3. SceneWriterAgent writes scenes concurrently.
-  4. VideoPayloadBuilder constructs validated preview JSON.
+内部多智能体流水线：
+  1. VideoMaterialAgent  — 从上游资源提取视频素材
+  2. VideoOutlineAgent   — 规划场景合约
+  3. SceneWriterAgent    — 并发写场景（含 TTS 合成）
+  4. VideoPayloadBuilder — 确定性构建预览 JSON 载荷
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ VisualType = Literal["card", "diagram", "code", "timeline", "comparison", "quiz"
 
 
 class VideoConstraints(BaseModel):
+    """视频约束参数 — 时长、场景数、风格、配音等。"""
     duration_seconds: int = Field(default=180, ge=60, le=600)
     scene_count: int = Field(default=6, ge=3, le=12)
     style: VideoStyle = "explainer"
@@ -43,6 +44,7 @@ class VideoConstraints(BaseModel):
 
 
 class VideoMaterialDigest(BaseModel):
+    """视频素材摘要 — 从上游资源提取的主题、概念、事实、示例等。"""
     topic: str
     audience: str = ""
     learning_goal: str = ""
@@ -57,6 +59,7 @@ class VideoMaterialDigest(BaseModel):
 
 
 class SceneContract(BaseModel):
+    """场景合约 — 每个视频场景的结构化定义（角色、时长、学习目标等）。"""
     scene_id: str
     index: int = Field(ge=1)
     role: SceneRole
@@ -69,6 +72,7 @@ class SceneContract(BaseModel):
 
 
 class VideoOutline(BaseModel):
+    """视频大纲 — 包含所有场景合约，校验场景连续性和时长一致性。"""
     title: str
     topic: str
     duration_seconds: int = Field(ge=60)
@@ -210,6 +214,7 @@ def _input_context(input_data: ResourceInput, config: dict[str, Any]) -> dict[st
 
 
 class VideoMaterialAgent:
+    """视频素材提取 Agent — 从上游 handoff 中提取 PPT 可用的教学素材。"""
     async def run(self, input_data: ResourceInput, config: dict[str, Any]) -> VideoMaterialDigest:
         context = _input_context(input_data, config)
         fallback_topic = input_data.learning_need
@@ -239,6 +244,7 @@ def _duration_plan(total: int, count: int) -> list[int]:
 
 
 class VideoOutlineAgent:
+    """视频大纲规划 Agent — 生成场景合约列表。"""
     async def run(self, digest: VideoMaterialDigest, constraints: VideoConstraints) -> VideoOutline:
         if not digest.core_concepts and not digest.facts:
             durations = _duration_plan(constraints.duration_seconds, constraints.scene_count)
@@ -258,6 +264,7 @@ class VideoOutlineAgent:
 
 
 class SceneWriterAgent:
+    """场景写作 Agent — 根据合约和素材生成单个场景的内容。"""
     async def run(self, contract: SceneContract, digest: VideoMaterialDigest, constraints: VideoConstraints) -> SceneDraft:
         prompt = prompts.get("resource").get("video_scene")
         payload = {
@@ -275,6 +282,13 @@ class SceneWriterAgent:
 
 
 class VideoPayloadBuilder:
+    """视频载荷构建器 — 确定性地将 outline + drafts 转换为 VideoPayload。
+
+    处理：
+    - 场景时长对齐和连续性校验
+    - 资产（asset）自动生成
+    - 总时长补差（确保 scene durations 之和等于 duration_seconds）
+    """
     def build(
         self,
         outline: VideoOutline,

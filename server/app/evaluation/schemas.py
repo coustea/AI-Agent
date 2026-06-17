@@ -1,4 +1,4 @@
-"""Evaluation schemas — re-exported from request.py and response.py for backward compatibility."""
+"""评估模式定义 — 从 request.py 和 response.py 重新导出以保持向后兼容。"""
 
 from app.evaluation.request import LearningEventCreate, LearningEventType, LearningSessionCreate
 from app.evaluation.response import (

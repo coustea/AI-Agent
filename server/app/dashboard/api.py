@@ -1,4 +1,4 @@
-"""Dashboard HTTP routes — split into focused sub-endpoints."""
+"""仪表盘 HTTP 路由 — 按功能拆分为独立子端点。"""
 
 from __future__ import annotations
 
@@ -35,10 +35,11 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 def _text(value: Any, fallback: str = "") -> str:
+    """安全提取文本值，空值时返回默认值。"""
     if value is None:
         return fallback
     if isinstance(value, str):
@@ -47,6 +48,7 @@ def _text(value: Any, fallback: str = "") -> str:
 
 
 def _course_context_name(course: dict[str, Any] | None, fallback: str = "") -> str:
+    """从课程上下文字典中提取课程名称。"""
     if not isinstance(course, dict):
         return fallback
     context = course.get("course_context") or {}
@@ -57,10 +59,12 @@ def _course_context_name(course: dict[str, Any] | None, fallback: str = "") -> s
 
 
 def _score_json(profile_json_or_score: dict[str, Any]) -> dict[str, Any]:
+    """将评分数据转换为字典格式，非字典类型返回空字典。"""
     return profile_json_or_score if isinstance(profile_json_or_score, dict) else {}
 
 
 def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list[str]:
+    """获取低分维度列表（得分低于60分）。"""
     scores = _score_json(score_json).get("dimension_scores") or {}
     items: list[tuple[str, float]] = []
     for key, value in scores.items():
@@ -71,12 +75,14 @@ def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list
 
 
 def _score_evidence(score_json: dict[str, Any], key: str, *, limit: int = 3) -> list[str]:
+    """获取指定维度的评分证据列表。"""
     evidence = _score_json(score_json).get("dimension_evidence") or {}
     values = evidence.get(key) or []
     return [str(item) for item in values[:limit] if str(item).strip()]
 
 
 def _status_label(value: str) -> str:
+    """将状态值转换为中文标签。"""
     return {
         "pending": "等待中",
         "generating": "生成中",
@@ -98,18 +104,21 @@ def _status_label(value: str) -> str:
 
 
 def _event_topic(event: LearningEvent | None) -> str:
+    """从学习事件中提取主题。"""
     if not event:
         return ""
     return _text(event.topic) or _text(event.course)
 
 
 def _resource_title(resource: GeneratedResource | None) -> str:
+    """获取资源标题。"""
     if not resource:
         return ""
     return _text(resource.learning_need, "最近生成的资源")
 
 
 def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
+    """获取当前学习路径节点（优先可用状态，其次已完成有缺陷状态）。"""
     for status in ("available", "completed_with_gaps"):
         for node in path_nodes:
             if node.status == status:
@@ -118,10 +127,11 @@ def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
 
 
 # ---------------------------------------------------------------------------
-# Shared lightweight queries
+# 共享轻量级查询
 # ---------------------------------------------------------------------------
 
 async def _get_active_path(session: AsyncSession, user_id: int) -> LearningPath | None:
+    """获取用户当前活跃的学习路径。"""
     return (await session.exec(
         select(LearningPath)
         .where(LearningPath.user_id == user_id, LearningPath.status == "active")
@@ -131,6 +141,7 @@ async def _get_active_path(session: AsyncSession, user_id: int) -> LearningPath 
 
 
 async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> list[PathNode]:
+    """获取学习路径的所有节点（按优先级排序）。"""
     return list((await session.exec(
         select(PathNode)
         .where(PathNode.user_id == user_id, PathNode.path_id == path_id)
@@ -140,6 +151,7 @@ async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> 
 
 
 async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 50) -> list[LearningEvent]:
+    """获取用户最近的学习事件列表。"""
     return list((await session.exec(
         select(LearningEvent)
         .where(LearningEvent.user_id == user_id)
@@ -149,11 +161,13 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
 
 
 async def _get_profile_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
+    """获取用户画像数据。"""
     profile = await get_profile_service().get_or_create_global_profile(user_id=user_id, db=session)
     return profile.profile_json or {}
 
 
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
+    """获取用户评分数据。"""
     profile = await get_profile_service().get_or_create_global_profile(user_id=user_id, db=session)
     return profile.profile_score_json or {}
 
@@ -161,6 +175,7 @@ async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[s
 def _weak_topics_from_events(
     events: list[LearningEvent],
 ) -> list[str]:
+    """从学习事件中提取薄弱知识点。"""
     counter: Counter[str] = Counter()
     for event in events:
         topic = _event_topic(event)
@@ -175,7 +190,7 @@ def _weak_topics_from_events(
 
 
 # ---------------------------------------------------------------------------
-# 1. GET /dashboard/recommendation
+# 1. 获取推荐内容
 # ---------------------------------------------------------------------------
 
 @router.get("/recommendation")
@@ -183,6 +198,7 @@ async def get_recommendation(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取首页推荐内容 — 根据用户状态返回个性化学习建议。"""
     profile_json = await _get_profile_json(session, current_user.id)
     base_info = profile_json.get("base_info") or {}
     goal = _text(base_info.get("global_learning_goal"))
@@ -292,7 +308,7 @@ async def get_recommendation(
 
 
 # ---------------------------------------------------------------------------
-# 2. GET /dashboard/profile-radar
+# 2. 获取用户画像雷达图
 # ---------------------------------------------------------------------------
 
 @router.get("/profile-radar")
@@ -300,6 +316,7 @@ async def get_profile_radar(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取用户画像雷达图数据 — 各维度得分和证据。"""
     profile = await get_profile_service().get_or_create_global_profile(user_id=current_user.id, db=session)
     score_json = profile.profile_score_json or {}
 
@@ -342,7 +359,7 @@ async def get_profile_radar(
 
 
 # ---------------------------------------------------------------------------
-# 3. GET /dashboard/continue-learning
+# 3. 获取继续学习数据
 # ---------------------------------------------------------------------------
 
 @router.get("/continue-learning")
@@ -350,6 +367,7 @@ async def get_continue_learning(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取继续学习数据 — 当前路径和节点进度。"""
     active_path = await _get_active_path(session, current_user.id)
     if not active_path:
         return HttpResponse.success(data={"active_path": None, "nodes": []})
@@ -400,7 +418,7 @@ async def get_continue_learning(
 
 
 # ---------------------------------------------------------------------------
-# 4. GET /dashboard/quick-actions
+# 4. 获取快捷操作
 # ---------------------------------------------------------------------------
 
 @router.get("/quick-actions")
@@ -408,6 +426,7 @@ async def get_quick_actions(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取快捷操作和今日建议。"""
     profile_json = await _get_profile_json(session, current_user.id)
     recent_events = await _get_recent_events(session, current_user.id, limit=30)
 
@@ -477,7 +496,7 @@ async def get_quick_actions(
         for item in sorted(action_defs, key=lambda value: value["score"], reverse=True)
     ]
 
-    # Today suggestions
+    # 今日建议
     path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
     suggestions: list[dict[str, str]] = []
     tones = ["blue", "amber", "green", "indigo"]
@@ -538,7 +557,7 @@ async def get_quick_actions(
 
 
 # ---------------------------------------------------------------------------
-# 5. GET /dashboard/recent-resources
+# 5. 获取最近资源
 # ---------------------------------------------------------------------------
 
 @router.get("/recent-resources")
@@ -546,6 +565,7 @@ async def get_recent_resources(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取最近生成的学习资源列表。"""
     recent_resources = list((await session.exec(
         select(GeneratedResource)
         .where(
@@ -574,10 +594,11 @@ async def get_recent_resources(
 
 
 # ---------------------------------------------------------------------------
-# 6. GET /dashboard/daily-challenge
+# 6. 获取每日挑战
 # ---------------------------------------------------------------------------
 
 _DIFFICULTY_MINUTES = {"简单": 5, "中等": 12, "困难": 20, "easy": 5, "medium": 12, "hard": 20}
+"""题目难度对应的预估时间（分钟）。"""
 
 
 @router.get("/daily-challenge")
@@ -585,6 +606,7 @@ async def get_daily_challenge(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取每日挑战题目 — 根据薄弱知识点推荐。"""
     profile_json = await _get_profile_json(session, current_user.id)
     score_json = await _get_profile_score_json(session, current_user.id)
     weak_topics = _score_evidence(score_json, "weak_knowledge_points")
@@ -624,7 +646,7 @@ async def get_daily_challenge(
 
 
 # ---------------------------------------------------------------------------
-# 7. GET /dashboard/study-stats
+# 7. 获取学习统计
 # ---------------------------------------------------------------------------
 
 @router.get("/study-stats")
@@ -632,6 +654,7 @@ async def get_study_stats(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取学习统计 — 本周天数、总时长、待完成节点等。"""
     now = datetime.now(timezone.utc)
     week_start = now - timedelta(days=now.weekday())
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)

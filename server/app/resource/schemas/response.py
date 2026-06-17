@@ -1,4 +1,4 @@
-"""Response and resource-item models served to the frontend."""
+"""响应模型 — 供前端使用的资源项和资源包 DTO。"""
 
 from __future__ import annotations
 

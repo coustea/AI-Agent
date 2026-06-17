@@ -1,4 +1,12 @@
-"""Background orchestration entrypoint for standalone resource generation."""
+"""后台编排入口 — 独立资源生成的 LangGraph 全局编排。
+
+负责：
+1. 创建 run_id 和事件发射器
+2. 更新资源状态为 generating
+3. 构建并执行 LangGraph 全局编排图
+4. 处理成功/失败结果，发送完成事件
+5. 释放写锁
+"""
 
 from __future__ import annotations
 

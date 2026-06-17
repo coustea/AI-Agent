@@ -1,4 +1,4 @@
-"""LangGraph workflow internals for the resource domain."""
+"""资源域 LangGraph 工作流 — 全局编排图和状态定义。"""
 
 from app.resource.workflow.graph import build_parent_graph, export_mermaid_topology
 

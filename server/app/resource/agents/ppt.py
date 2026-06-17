@@ -609,7 +609,7 @@ def build_node_material(input_data: NodeInput) -> MaterialBundle:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class MaterialAgent:
-    """素材提取 — 从 MaterialBundle 提取 PPT 可用的教学素材。"""
+    """素材提取 Agent — 从 MaterialBundle 提取 PPT 可用的教学素材。"""
 
     async def run(self, bundle: MaterialBundle) -> MaterialDigest:
         """从资源系统结果提取 PPT 素材摘要。"""
@@ -639,7 +639,7 @@ class MaterialAgent:
 
 
 class OutlineAgent:
-    """大纲规划 — 生成 PPT 页面结构及每页的前端模板合约。"""
+    """大纲规划 Agent — 生成 PPT 页面结构及每页的前端模板合约。"""
 
     async def run(
         self,
@@ -688,7 +688,7 @@ class OutlineAgent:
 
 
 class SlideAgent:
-    """单页生成 — 根据一份 SlideContract 生成一页 PPT 内容。"""
+    """单页生成 Agent — 根据一份 SlideContract 生成一页 PPT 内容。"""
 
     async def run(
         self,
@@ -741,7 +741,7 @@ class SlideAgent:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class PayloadBuilder:
-    """确定性构建器：DeckOutline + list[SlideDraft] → PptPayload。"""
+    """确定性构建器 — 将 DeckOutline + list[SlideDraft] 转换为 PptPayload。"""
 
     def build(self, outline: DeckOutline, drafts: list[SlideDraft]) -> PptPayload:
         """构建最终 PptPayload，校验 draft 与 contract 严格匹配。"""

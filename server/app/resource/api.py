@@ -101,7 +101,7 @@ async def create_single_resource_task(
     )
     resource_id = result["resource_id"]
 
-    # Single agent mode: run via multi-agent pipeline with only one agent selected
+    # 单智能体模式：通过多智能体流水线执行，只启用一个 agent
     background_tasks.add_task(
         run_multi_agent_generation,
         user_id=current_user.id,
@@ -263,11 +263,11 @@ async def get_resource(
 
 @router.get("/video/audio/{filename:path}")
 async def get_video_audio(filename: str):
-    """Serve generated video audio files."""
+    """提供生成的视频音频文件。"""
     from app.config import WORKPLACE_DIR
     from fastapi.responses import FileResponse
 
-    # Simple directory traversal checks
+    # 简单的目录遍历安全检查
     if ".." in filename or "/" in filename or "\\" in filename:
         return HttpResponse.error(code=400, message="Illegal filename")
 
@@ -280,14 +280,13 @@ async def get_video_audio(filename: str):
 
 @router.post("/video/render")
 async def render_video(request: dict[str, Any]):
-    """Trigger GPU-accelerated video rendering from a VideoPayload JSON.
+    """从 VideoPayload JSON 触发 GPU 加速视频渲染。
 
-    Accepts a VideoPayload JSON, writes it to a temp file, invokes the
-    Remotion render script, and returns the rendered MP4.
+    接受 VideoPayload JSON，写入临时文件，调用 Remotion 渲染脚本，返回 MP4。
 
-    Request body:
-        payload: The VideoPayload JSON object
-        gl: Optional GPU backend - "angle" (default), "swiftshader", "egl"
+    请求体：
+        payload: VideoPayload JSON 对象
+        gl: 可选 GPU 后端 — "angle"（默认）, "swiftshader", "egl"
     """
     import json
     import uuid
@@ -317,10 +316,10 @@ async def render_video(request: dict[str, Any]):
     plan_path = work_dir / "plan.json"
     output_path = work_dir / "output.mp4"
 
-    # Write the payload JSON
+    # 写入 payload JSON 文件
     plan_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # Build and run the render command
+    # 构建并执行渲染命令
     render_script = video_render_dir / "scripts" / "render.ts"
     cmd = (
         f"cd {video_render_dir} && "

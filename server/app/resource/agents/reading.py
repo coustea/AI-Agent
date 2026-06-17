@@ -123,6 +123,7 @@ class ReadingAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
+        """内部方法 — 调用 LLM 生成拓展阅读推荐。"""
         reading_depth = config.get("reading_depth") or config.get("reading_type") or "course_extended"
         max_items = config.get("max_items") or 5
         language_preference = config.get("language_preference") or "chinese"

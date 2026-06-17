@@ -1,4 +1,12 @@
-"""Teaching blueprint and planning models — PlanningAgent output."""
+"""教学蓝图与规划模型 — PlanningAgent 的输出结构。
+
+核心模型：
+- TeachingPlan          — 教学策略 + 大纲 + Agent 指派
+- TeachingOutlineItem   — 单个大纲项（标题、目标、知识点等）
+- AgentAssignment       — 为每个 Worker Agent 生成的精确指派合约
+- DownstreamContext     — 基础 agent 给聚合 agent 的交接摘要
+- ReusableAssets        — 可复用素材（示例、视觉想法、代码引用等）
+"""
 
 from __future__ import annotations
 

@@ -1,2 +1,2 @@
-"""Dashboard API module."""
+"""仪表盘 API 模块。"""
 

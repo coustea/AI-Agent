@@ -1,6 +1,5 @@
 """
-Avatar module for virtual human integration.
-Provides speech recognition (ASR) and avatar control capabilities.
+虚拟人集成模块 — 提供语音识别（ASR）和数字人控制能力。
 """
 
 __version__ = "1.0.0"

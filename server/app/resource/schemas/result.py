@@ -1,4 +1,9 @@
-"""Runtime input/output models for agent execution."""
+"""Agent 运行时输入/输出模型。
+
+- AgentResult     — 统一的 Agent 输出结果（成功/失败、内容、元数据）
+- ResourceInput   — standalone 多智能体资源生成输入
+- NodeInput       — 路径规划节点资源生成输入
+"""
 
 from __future__ import annotations
 

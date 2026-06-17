@@ -1,4 +1,7 @@
-"""Auth service — 用户账号存储 + 认证用例。"""
+"""认证业务服务层。
+
+负责用户账号的持久化存储（CRUD）以及认证相关用例的编排，
+包括注册、登录、登出、用户信息更新等操作。"""
 
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ logger = get_logger(__name__)
 
 
 def _read_user(user: User) -> UserRead:
+    """将 User ORM 对象转换为 UserRead 响应模型。"""
     return UserRead.model_validate(user)
 
 
@@ -60,6 +64,7 @@ class UserAccountStore:
         return {"token": token, "user": user_read}
 
     async def update(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
+        """更新用户信息，仅更新提交的非空字段。"""
         user = await session.get(User, user_id)
         if not user:
             return None
@@ -81,19 +86,23 @@ class AuthUseCases:
         self.account_store = account_store
 
     async def register(self, session: AsyncSession, data: UserRegister) -> dict[str, UserRead] | None:
+        """注册新用户。"""
         return await self.account_store.register(session, data)
 
     async def login(self, session: AsyncSession, data: UserLogin) -> dict[str, str | UserRead] | None:
+        """用户登录，验证凭据并签发 Token。"""
         return await self.account_store.authenticate(session, data.username, data.password)
 
     async def update_me(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
+        """更新当前用户信息。"""
         return await self.account_store.update(session, user_id, data)
 
     async def logout(self, session: AsyncSession, token: str) -> None:
+        """用户登出，撤销 Token。"""
         await revoke_token(token, session)
 
     async def upsert_profile_on_logout(self, user_id: int) -> None:
-        """Profile V2 has no logout-triggered compatibility update."""
+        """登出时更新用户画像（V2 版本暂无需要同步的兼容性数据）。"""
         return None
 
 

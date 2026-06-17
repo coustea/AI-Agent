@@ -1,4 +1,4 @@
-"""Persistence helpers for the resource domain."""
+"""资源域持久化层 — Repository 模式 + ORM 映射。"""
 
 from app.resource.persistence.mappers import (
     content_envelope,

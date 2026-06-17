@@ -58,7 +58,7 @@ class PlanningAgent(BaseResourceAgent):
 
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        """路径节点场景不支持 PlanningAgent。"""
+        """路径节点场景不支持 PlanningAgent — 规划 agent 仅用于多智能体入口。"""
         return AgentResult(
             success=False,
             error="planning agent 不用于路径节点资源生成",

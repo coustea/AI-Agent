@@ -76,6 +76,7 @@ class ContentAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
+        """内部方法 — 调用 LLM 生成课程内容 Markdown。"""
         if config:
             cfg = ["## 内容配置"]
             cfg.append(f"- 结构: {config.get('structure', 'progressive')}")
@@ -104,6 +105,6 @@ class ContentAgent(BaseResourceAgent):
 
 
 def _clean_markdown_fences(content: str) -> str:
-    """移除 LLM 输出中的 markdown fence 包裹标记。"""
+    """移除 LLM 输出中的 markdown fence 包裹标记（```markdown 等）。"""
     lines = content.split("\n")
     return "\n".join(line for line in lines if line.strip() not in ("```", "```markdown", "```text"))

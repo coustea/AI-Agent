@@ -111,13 +111,14 @@ def build_agent_assignment_context(plan: TeachingPlan, agent_id: str) -> list[st
 
 
 def outline_ids_from_plan(plan: TeachingPlan | None) -> list[str]:
+    """获取教学计划中所有大纲项的 ID 列表。"""
     if not plan:
         return []
     return [item.id for item in plan.outline]
 
 
 def assigned_outline_ids(plan: TeachingPlan | None, agent_id: str) -> list[str]:
-    """Return outline IDs assigned to a specific agent, or all IDs as fallback."""
+    """获取指定 Agent 被指派的大纲 ID 列表，不存在时回退到全量。"""
     if not plan:
         return []
     for a in plan.agent_assignments:
@@ -127,11 +128,13 @@ def assigned_outline_ids(plan: TeachingPlan | None, agent_id: str) -> list[str]:
 
 
 def first_outline_id(plan: TeachingPlan | None) -> str:
+    """获取第一个大纲项的 ID。"""
     ids = outline_ids_from_plan(plan)
     return ids[0] if ids else ""
 
 
 def _valid_outline_ids(plan: TeachingPlan | None, outline_ids: list[str] | None) -> list[str]:
+    """过滤出教学计划中有效的大纲 ID（去重、保序）。"""
     allowed = set(outline_ids_from_plan(plan))
     if not allowed:
         return []
@@ -143,6 +146,7 @@ def _valid_outline_ids(plan: TeachingPlan | None, outline_ids: list[str] | None)
 
 
 def select_outline_ids_by_keywords(plan: TeachingPlan | None, keywords: list[str]) -> list[str]:
+    """根据关键词匹配大纲项，返回匹配的 ID 列表。"""
     if not plan:
         return []
     normalized = [item.strip().lower() for item in keywords if item.strip()]
@@ -166,6 +170,7 @@ def outline_coverage_summary(
     plan: TeachingPlan | None,
     handoffs: dict[str, DownstreamContext],
 ) -> dict[str, list[str]]:
+    """汇总大纲覆盖情况 — 哪些被覆盖、哪些缺失。"""
     plan_ids = outline_ids_from_plan(plan)
     allowed = set(plan_ids)
     covered: list[str] = []
@@ -181,6 +186,7 @@ def outline_coverage_summary(
 
 
 def clip_text(value: str, limit: int) -> str:
+    """截断文本到指定字符数，超出部分用省略号替代。"""
     text = " ".join(str(value or "").split())
     if len(text) <= limit:
         return text
@@ -188,6 +194,7 @@ def clip_text(value: str, limit: int) -> str:
 
 
 def first_content_excerpt(content: str, limit: int = 180) -> str:
+    """提取内容的第一个非标题/非空行作为摘要。"""
     for line in str(content or "").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#") or stripped == "---" or stripped == "***":
@@ -211,6 +218,7 @@ def build_basic_handoff(
     practice_refs: list[str] | None = None,
     code_refs: list[str] | None = None,
 ) -> DownstreamContext:
+    """构建基础的 DownstreamContext 交接摘要。"""
     filtered_covered_ids = _valid_outline_ids(
         teaching_plan,
         covered_outline_ids or ([first_outline_id(teaching_plan)] if first_outline_id(teaching_plan) else []),

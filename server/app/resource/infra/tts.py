@@ -1,3 +1,10 @@
+"""TTS 语音合成服务 — 基于 edge-tts 的文本转语音。
+
+支持：
+- 基础合成：文本 → MP3，返回时长
+- 带字幕合成：文本 → MP3 + 逐词时间戳，用于视频字幕
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,6 +16,7 @@ logger = get_logger(__name__)
 
 
 class CaptionWord:
+    """逐词字幕 — 包含文本和起止时间戳（毫秒）。"""
     __slots__ = ("text", "start_ms", "end_ms")
 
     def __init__(self, text: str, start_ms: int, end_ms: int):
@@ -21,6 +29,7 @@ class CaptionWord:
 
 
 class TtsResult:
+    """TTS 合成结果 — 包含音频时长和逐词字幕列表。"""
     __slots__ = ("duration", "captions")
 
     def __init__(self, duration: float, captions: list[CaptionWord]):
@@ -32,7 +41,7 @@ class TtsResult:
 
 
 def _parse_vtt_captions(vtt_text: str) -> list[CaptionWord]:
-    """Parse WebVTT subtitle output from edge-tts into CaptionWord list."""
+    """解析 edge-tts 输出的 WebVTT 字幕为 CaptionWord 列表。"""
     captions: list[CaptionWord] = []
     lines = vtt_text.strip().splitlines()
     i = 0
@@ -59,7 +68,7 @@ def _parse_vtt_captions(vtt_text: str) -> list[CaptionWord]:
 
 
 def _parse_timestamp(ts: str) -> int | None:
-    """Parse HH:MM:SS.mmm or MM:SS.mmm timestamp to milliseconds."""
+    """将 HH:MM:SS.mmm 或 MM:SS.mmm 时间戳解析为毫秒。"""
     try:
         ts = ts.strip()
         parts = ts.split(":")
@@ -75,13 +84,15 @@ def _parse_timestamp(ts: str) -> int | None:
 
 
 class TtsService:
+    """TTS 语音合成服务 — 封装 edge-tts 调用。"""
+
     @staticmethod
     async def synthesize(
         text: str,
         file_path: Path,
         voice: str = "zh-CN-XiaoxiaoNeural",
     ) -> float:
-        """Synthesize text to MP3 and return its duration in seconds."""
+        """基础合成：文本 → MP3，返回音频时长（秒）。"""
         if not text or not text.strip():
             logger.warning("Empty text passed to TtsService. Skip synthesis.")
             return 0.0
@@ -107,9 +118,9 @@ class TtsService:
         file_path: Path,
         voice: str = "zh-CN-XiaoxiaoNeural",
     ) -> TtsResult:
-        """Synthesize text to MP3 with word-level caption timestamps.
+        """带字幕合成：文本 → MP3 + 逐词时间戳。
 
-        Returns a TtsResult containing both duration and caption timing data.
+        通过 edge-tts 的 WordBoundary 事件获取每个词的起止时间。
         """
         if not text or not text.strip():
             logger.warning("Empty text passed to TtsService. Skip synthesis.")

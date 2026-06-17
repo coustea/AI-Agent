@@ -116,6 +116,7 @@ class QuizAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
+        """内部方法 — 调用 LLM 生成结构化习题集。"""
         if config:
             cfg = ["## 习题配置"]
             cfg.append(f"- 题目数量: {config.get('question_count', 5)}")

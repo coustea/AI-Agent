@@ -14,16 +14,19 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, NamedTuple
+from typing import Any, AsyncIterator
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.chat.agent import TutorAgent
 from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
+from app.chat.safety import ContentSafetyFilter, SafetyResult, safety_filter
 from app.chat.schemas import (
     TutorAgentInput,
     UploadResponse,
 )
+from app.chat.storage.file_store import LocalFileStore
+from app.chat.storage.message_item import ChatMessageItem
 from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, IMAGE_EXTENSIONS, CHAT_HISTORY_LIMIT
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage
@@ -32,8 +35,207 @@ logger = get_logger(__name__)
 
 
 # -----------------------------------------------------------------------
-# 核心函数：build_messages / chat
+# 核心函数：build_messages / chat helpers / chat
 # -----------------------------------------------------------------------
+
+
+async def _create_turn(
+    uc: ChatUseCases,
+    *,
+    user_id: int,
+    session_id: str,
+    user_input: str,
+    attachments: list[str],
+    enable_web_search: bool,
+    need_teaching_diagram: bool,
+) -> tuple[int, int, int | None, str]:
+    """Create turn, persist user message, and generate title if first message.
+
+    Returns (turn_id, turn_index, user_message_id, user_content).
+    """
+    svc = uc._memory_service
+    current_message = (user_input or "").strip()
+    merged_attachments = list(dict.fromkeys(attachments or []))
+
+    user_content = current_message
+    if merged_attachments:
+        image_urls, file_urls = [], []
+        for url in merged_attachments:
+            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
+            if ext in IMAGE_EXTENSIONS:
+                image_urls.append(url)
+            else:
+                file_urls.append(url)
+        if image_urls:
+            user_content += f" [Attached Images: {', '.join(image_urls)}]"
+        if file_urls:
+            user_content += f" [Attached Files: {', '.join(file_urls)}]"
+
+    turn_row = await svc.create_turn(
+        user_id=user_id, session_id=session_id,
+        route="default", execution_mode="default",
+        has_attachments=bool(merged_attachments),
+        used_web_search=enable_web_search,
+        used_teaching_diagram=need_teaching_diagram,
+        status="running",
+    )
+    turn_id = turn_row.id
+    turn_index = int(getattr(turn_row, "turn_index", 0) or 0)
+
+    await svc.append_turn_event(
+        user_id=user_id, session_id=session_id, turn_id=turn_id,
+        event_type="turn.started", payload={"status": "running"},
+    )
+
+    user_attachment_records = [
+        {"url": url, "type": "image" if url.rsplit(".", 1)[-1].lower().split("?")[0] in IMAGE_EXTENSIONS else "document", "name": url.split("/")[-1]}
+        for url in merged_attachments
+    ] if merged_attachments else None
+
+    user_message = await uc.save_message(
+        user_id=user_id, session_id=session_id,
+        role="user", content=user_content,
+        attachments=user_attachment_records,
+        turn_id=turn_id, message_kind="user_input",
+    )
+    user_message_id = getattr(user_message, "id", None)
+
+    await svc.append_turn_event(
+        user_id=user_id, session_id=session_id, turn_id=turn_id,
+        event_type="user.message", payload={"content": user_content},
+    )
+
+    if await uc.count_messages(user_id, session_id) <= 1:
+        uc._spawn_background(
+            svc.generate_session_title(user_id=user_id, session_id=session_id, first_message=current_message),
+            label="generate_title",
+        )
+
+    return turn_id, turn_index, user_message_id, user_content
+
+
+async def _persist_assistant_reply(
+    uc: ChatUseCases,
+    *,
+    user_id: int,
+    session_id: str,
+    turn_id: int,
+    full_answer: str,
+    sources: list[dict[str, Any]],
+    diagram_result: dict[str, Any] | None,
+    attachment_analyses: list[dict[str, Any]],
+    enable_web_search: bool,
+    need_teaching_diagram: bool,
+) -> None:
+    """Safety-filter, save assistant message, finalize turn transcript and status."""
+    svc = uc._memory_service
+
+    if full_answer:
+        safety_result = await safety_filter.check(full_answer)
+        if safety_result.has_violation:
+            full_answer = safety_result.sanitized_text
+
+    if full_answer:
+        await uc.save_message(
+            user_id=user_id, session_id=session_id,
+            role="assistant", content=full_answer,
+            knowledge_sources=sources if sources else None,
+            teaching_diagram=diagram_result,
+            attachment_analyses=attachment_analyses if attachment_analyses else None,
+            turn_id=turn_id, message_kind="assistant_answer",
+        )
+
+    await svc.append_turn_event(
+        user_id=user_id, session_id=session_id, turn_id=turn_id,
+        event_type="answer.completed", payload={"answer": full_answer},
+    )
+    await svc.finalize_turn_transcript(
+        user_id=user_id, session_id=session_id, turn_id=turn_id,
+        status="completed", final_answer=full_answer,
+    )
+    await svc.update_turn(
+        user_id=user_id, session_id=session_id, turn_id=turn_id,
+        status="completed", route="answer", execution_mode="answer",
+        used_web_search=enable_web_search, used_teaching_diagram=need_teaching_diagram,
+        error_message=None,
+    )
+
+
+async def _run_compression_check(
+    svc: Any,
+    *,
+    user_id: int,
+    session_id: str,
+    turn_id: int,
+    user_message: str,
+    assistant_reply: str,
+) -> AsyncIterator[dict[str, Any]]:
+    """Check context compression, yield SSE status events, and send final compression_payload via send().
+
+    Usage: ``async for event in _run_compression_check(...): yield event``
+    After iteration, access ``compression_payload`` attribute on the generator.
+    """
+    compression_payload: dict[str, Any] = {"compressed": False}
+
+    yield {
+        "event": "status",
+        "data": {
+            "stage": "compression_checking",
+            "message": "正在检查是否需要整理上下文...",
+        },
+    }
+    try:
+        counters = await svc.update_post_turn_counters(
+            user_id=user_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            user_message=user_message,
+            assistant_reply=assistant_reply,
+        )
+        compression_payload["counters"] = counters
+
+        if await svc.should_compress_session(user_id=user_id, session_id=session_id):
+            yield {
+                "event": "status",
+                "data": {
+                    "stage": "compression_running",
+                    "message": "正在整理较早的对话上下文...",
+                },
+            }
+            summary_block = await svc.compress_session(
+                user_id=user_id,
+                session_id=session_id,
+                reason="post_turn_visible",
+            )
+        else:
+            summary_block = None
+
+        if summary_block is not None:
+            compression_payload.update(
+                {
+                    "compressed": True,
+                    "summary_block_id": getattr(summary_block, "id", None),
+                    "summarized_message_count": int(getattr(summary_block, "summarized_message_count", 0) or 0),
+                }
+            )
+            compression_message = "上下文整理完成，后续回答会继续使用摘要记忆。"
+        else:
+            compression_message = "当前上下文仍然轻量，无需整理。"
+    except Exception as exc:
+        logger.error("[chat] visible compression failed user=%s session=%s err=%s", user_id, session_id, exc)
+        compression_payload.update({"compressed": False, "error": str(exc)})
+        compression_message = "上下文整理暂时失败，本轮回答已保存。"
+
+    yield {
+        "event": "status",
+        "data": {
+            "stage": "compression_done",
+            "message": compression_message,
+            **compression_payload,
+        },
+    }
+
+    _run_compression_check.compression_payload = compression_payload
 
 
 def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
@@ -129,16 +331,6 @@ async def chat(
     enable_web_search: bool = False,
     need_teaching_diagram: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
-    """总编排函数：创建 turn → 构建上下文 → 调用 TutorAgent → 转发 SSE → 持久化。
-
-    流程：
-    1. 创建 turn 记录 + 持久化用户消息
-    2. 构建历史消息（build_messages）
-    3. 加载会话摘要
-    4. 调用 TutorAgent.chat()，将内部事件转换为 SSE
-    5. 持久化助手回复、工具调用、turn 终态
-    6. 后台交给 TutorAgent 调度记忆管线和画像更新
-    """
     uc = get_chat_usecases()
     effective_session = session_id or uc.default_session_id(user_id)
     merged_attachments = list(dict.fromkeys(attachments or []))
@@ -162,66 +354,19 @@ async def chat(
         },
     }
 
-    # ── 1. 创建 turn 记录 + 持久化用户消息 ──
-    svc = uc._memory_service
-    turn_id: int | None = None
-
-    user_content = current_message
-    if merged_attachments:
-        image_urls, file_urls = [], []
-        for url in merged_attachments:
-            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-            if ext in IMAGE_EXTENSIONS:
-                image_urls.append(url)
-            else:
-                file_urls.append(url)
-        if image_urls:
-            user_content += f" [Attached Images: {', '.join(image_urls)}]"
-        if file_urls:
-            user_content += f" [Attached Files: {', '.join(file_urls)}]"
-
-    turn_row = await svc.create_turn(
-        user_id=user_id, session_id=effective_session,
-        route="default", execution_mode="default",
-        has_attachments=bool(merged_attachments),
-        used_web_search=enable_web_search,
-        used_teaching_diagram=need_teaching_diagram,
-        status="running",
+    # ── 1. 创建 turn + 持久化用户消息 ──
+    turn_id, turn_index, user_message_id, user_content = await _create_turn(
+        uc,
+        user_id=user_id,
+        session_id=effective_session,
+        user_input=user_input,
+        attachments=merged_attachments,
+        enable_web_search=enable_web_search,
+        need_teaching_diagram=need_teaching_diagram,
     )
-    turn_id = turn_row.id
-    turn_index = int(getattr(turn_row, "turn_index", 0) or 0)
-
-    await svc.append_turn_event(
-        user_id=user_id, session_id=effective_session, turn_id=turn_id,
-        event_type="turn.started", payload={"status": "running"},
-    )
-
-    user_attachment_records = [
-        {"url": url, "type": "image" if url.rsplit(".", 1)[-1].lower().split("?")[0] in IMAGE_EXTENSIONS else "document", "name": url.split("/")[-1]}
-        for url in merged_attachments
-    ] if merged_attachments else None
-
-    user_message = await uc.save_message(
-        user_id=user_id, session_id=effective_session,
-        role="user", content=user_content,
-        attachments=user_attachment_records,
-        turn_id=turn_id, message_kind="user_input",
-    )
-    user_message_id = getattr(user_message, "id", None)
-
-    await svc.append_turn_event(
-        user_id=user_id, session_id=effective_session, turn_id=turn_id,
-        event_type="user.message", payload={"content": user_content},
-    )
-
-    # 首条消息时自动生成会话标题
-    if await uc.count_messages(user_id, effective_session) <= 1:
-        uc._spawn_background(
-            svc.generate_session_title(user_id=user_id, session_id=effective_session, first_message=current_message),
-            label="generate_title",
-        )
 
     # ── 2. 构建上下文 ──
+    svc = uc._memory_service
     history_messages = await build_messages(user_id, effective_session)
     session_summary = await svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
 
@@ -252,12 +397,10 @@ async def chat(
             sse_event = _SSE_EVENT_MAP.get(event.type, "status")
             sse_data = event.payload
 
-            # 特殊处理：token 事件只发文本，不包 payload
             if event.type == "answer_token":
                 yield {"event": "token", "data": sse_data.get("token", "")}
                 continue
 
-            # 收集结果
             if event.type == "final":
                 full_answer = sse_data.get("final_answer", "")
                 diagram_result = sse_data.get("diagram_result")
@@ -265,7 +408,6 @@ async def chat(
                 sources = sse_data.get("sources", [])
                 attachment_analyses = sse_data.get("attachment_analyses", [])
 
-                # 发送 diagram 事件
                 if diagram_result is not None:
                     yield {"event": "diagram", "data": diagram_result}
 
@@ -284,7 +426,6 @@ async def chat(
                 yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
                 return
 
-            # 默认 SSE 转发
             yield {"event": sse_event, "data": sse_data}
 
     except Exception as exc:
@@ -305,104 +446,36 @@ async def chat(
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
 
-    # ── 4. 持久化助手回复和工具调用 ──
-    if turn_id is not None:
-        yield {"event": "status", "data": {"stage": "persisting_turn", "message": "正在保存本轮学习记录..."}}
-
-        # 安全过滤
-        if full_answer:
-            safety_result = await safety_filter.check(full_answer)
-            if safety_result.has_violation:
-                full_answer = safety_result.sanitized_text
-                yield {"event": "status", "data": {"stage": "safety_filter", "message": "内容触发安全策略，已进行部分过滤"}}
-
-        # 保存最终助手回复
-        if full_answer:
-            await uc.save_message(
-                user_id=user_id, session_id=effective_session,
-                role="assistant", content=full_answer,
-                knowledge_sources=sources if sources else None,
-                teaching_diagram=diagram_result,
-                attachment_analyses=attachment_analyses if attachment_analyses else None,
-                turn_id=turn_id, message_kind="assistant_answer",
-            )
-
-        await svc.append_turn_event(
-            user_id=user_id, session_id=effective_session, turn_id=turn_id,
-            event_type="answer.completed", payload={"answer": full_answer},
-        )
-        await svc.finalize_turn_transcript(
-            user_id=user_id, session_id=effective_session, turn_id=turn_id,
-            status="completed", final_answer=full_answer,
-        )
-        await svc.update_turn(
-            user_id=user_id, session_id=effective_session, turn_id=turn_id,
-            status="completed", route="answer", execution_mode="answer",
-            used_web_search=enable_web_search, used_teaching_diagram=need_teaching_diagram,
-            error_message=None,
-        )
-
-    # ── 5. 可见压缩检查/执行 ──
+    # ── 4. 持久化助手回复 ──
     compression_payload: dict[str, Any] = {"compressed": False}
 
+    if turn_id is not None:
+        yield {"event": "status", "data": {"stage": "persisting_turn", "message": "正在保存本轮学习记录..."}}
+        await _persist_assistant_reply(
+            uc,
+            user_id=user_id,
+            session_id=effective_session,
+            turn_id=turn_id,
+            full_answer=full_answer,
+            sources=sources,
+            diagram_result=diagram_result,
+            attachment_analyses=attachment_analyses,
+            enable_web_search=enable_web_search,
+            need_teaching_diagram=need_teaching_diagram,
+        )
+
+    # ── 5. 可见压缩检查 ──
     if not has_error and full_answer and turn_id is not None:
-        yield {
-            "event": "status",
-            "data": {
-                "stage": "compression_checking",
-                "message": "正在检查是否需要整理上下文...",
-            },
-        }
-        try:
-            counters = await svc.update_post_turn_counters(
-                user_id=user_id,
-                session_id=effective_session,
-                turn_id=turn_id,
-                user_message=current_message,
-                assistant_reply=full_answer,
-            )
-            compression_payload["counters"] = counters
-
-            if await svc.should_compress_session(user_id=user_id, session_id=effective_session):
-                yield {
-                    "event": "status",
-                    "data": {
-                        "stage": "compression_running",
-                        "message": "正在整理较早的对话上下文...",
-                    },
-                }
-                summary_block = await svc.compress_session(
-                    user_id=user_id,
-                    session_id=effective_session,
-                    reason="post_turn_visible",
-                )
-            else:
-                summary_block = None
-
-            if summary_block is not None:
-                compression_payload.update(
-                    {
-                        "compressed": True,
-                        "summary_block_id": getattr(summary_block, "id", None),
-                        "summarized_message_count": int(getattr(summary_block, "summarized_message_count", 0) or 0),
-                    }
-                )
-                compression_message = "上下文整理完成，后续回答会继续使用摘要记忆。"
-            else:
-                compression_message = "当前上下文仍然轻量，无需整理。"
-        except Exception as exc:
-            logger.error("[chat] visible compression failed user=%s session=%s err=%s", user_id, effective_session, exc)
-            compression_payload.update({"compressed": False, "error": str(exc)})
-            compression_message = "上下文整理暂时失败，本轮回答已保存。"
-
-        yield {
-            "event": "status",
-            "data": {
-                "stage": "compression_done",
-                "message": compression_message,
-                **compression_payload,
-            },
-        }
+        async for sse_event in _run_compression_check(
+            svc,
+            user_id=user_id,
+            session_id=effective_session,
+            turn_id=turn_id,
+            user_message=current_message,
+            assistant_reply=full_answer,
+        ):
+            yield sse_event
+        compression_payload = getattr(_run_compression_check, "compression_payload", {"compressed": False})
 
     if not has_error:
         yield {
@@ -421,7 +494,7 @@ async def chat(
             },
         }
 
-    # ── 6. 后台任务：由 TutorAgent 调度长期记忆 / 画像更新 ──
+    # ── 6. 后台任务 ──
     if full_answer and turn_id is not None:
         async def _post_turn():
             await agent.run_background_memory_jobs(
@@ -436,304 +509,7 @@ async def chat(
         uc._spawn_background(_post_turn(), label="post_turn")
 
 
-# -----------------------------------------------------------------------
-# 内容安全过滤（原 utils/safety.py 内联）
-# -----------------------------------------------------------------------
 
-class SafetyResult(NamedTuple):
-    """安全检查结果：是否触发违规 + 脱敏后的文本。"""
-    has_violation: bool
-    sanitized_text: str
-
-class ContentSafetyFilter:
-    """基于正则的敏感词过滤器。
-
-    工作原理：
-    1. 预编译正则匹配所有敏感词（色情/赌博/毒品/暴力）
-    2. check() 方法对文本执行全文扫描，命中则替换为 ***
-    3. stream_guard_chars 用于流式场景：需要缓存最后 N 个字符，
-       防止敏感词被流式切分导致漏检（例如 "色"+"情" 分两次推送）
-
-    注意：这是一个轻量级防护，复杂的语义级安全判断应由上游 LLM 完成。
-    """
-
-    def __init__(self):
-        # 敏感词列表 — 可扩展
-        self.sensitive_terms = ("色情", "赌博", "毒品", "暴力")
-        # 预编译正则：将所有敏感词用 | 连接，一次扫描全部命中
-        self.sensitive_patterns = [
-            re.compile("|".join(re.escape(term) for term in self.sensitive_terms), re.IGNORECASE)
-        ]
-        # 流式缓冲的守卫字符数：最长敏感词长度 - 1，确保流式切分不会漏检
-        self.stream_guard_chars = max(1, max(len(term) for term in self.sensitive_terms) - 1)
-
-    async def check(self, text: str) -> SafetyResult:
-        """对文本执行敏感词检查并脱敏。
-
-        返回 SafetyResult：has_violation 表示是否触发，sanitized_text 是脱敏后文本。
-        空文本直接返回无违规，避免无谓的正则扫描。
-        """
-        if not text:
-            return SafetyResult(has_violation=False, sanitized_text=text)
-        sanitized = text
-        has_violation = False
-        for pattern in self.sensitive_patterns:
-            if pattern.search(sanitized):
-                has_violation = True
-                # 将所有匹配的敏感词替换为 ***
-                sanitized = pattern.sub("***", sanitized)
-        return SafetyResult(has_violation=has_violation, sanitized_text=sanitized)
-
-# 全局单例过滤器，所有 ChatUseCases 实例共享同一份正则编译结果
-safety_filter = ContentSafetyFilter()
-
-
-# -----------------------------------------------------------------------
-# 本地文件存储（原 utils/storage.py 内联）
-# -----------------------------------------------------------------------
-
-class LocalFileStore:
-    """用户上传文件的本地存储。
-
-    目录结构: {CHAT_DIR}/{user_id}/{session_id}/{filename}
-    每个用户每个会话独立一个文件夹，避免文件名冲突。
-    支持的文件类型分为图片（≤5MB）和文档（≤10MB）两类。
-    """
-
-    def __init__(self) -> None:
-        self.upload_dir = CHAT_DIR  # 上传文件根目录，来自 config.yaml
-        # 允许的图片扩展名（小写，带点号）
-        self.allowed_image_ext = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        # 允许的文档扩展名
-        self.allowed_doc_ext = {".pdf", ".docx", ".txt", ".md", ".log", ".xlsx", ".xls", ".csv", ".tsv"}
-        # 图片大小上限 5MB
-        self.max_image_size = 5 * 1024 * 1024
-        # 文档大小上限 10MB
-        self.max_doc_size = 10 * 1024 * 1024
-
-    def list_files(self, *, user_id: int, session_id: str) -> list[Path]:
-        """列出指定会话目录下的所有上传文件。"""
-        # 路径: {CHAT_DIR}/{user_id}/{session_id}/
-        session_dir = self.upload_dir / str(user_id) / session_id
-        if not session_dir.exists():
-            return []
-        # 只返回文件，忽略子目录
-        return [path for path in session_dir.iterdir() if path.is_file()]
-
-    async def save_upload(
-        self,
-        *,
-        filename: str,
-        content: bytes,
-        user_id: int,
-        session_id: str,
-    ) -> dict:
-        """保存用户上传的文件到磁盘。
-
-        流程：
-        1. 根据扩展名判断文件类型（图片/文档）和大小上限
-        2. 校验文件大小，超限抛出 ValueError
-        3. 创建会话目录（不存在则递归创建）
-        4. 对文件名做安全清洗，防止路径穿越
-        5. 写入磁盘并返回 UploadResponse 元数据
-        """
-        suffix = Path(filename).suffix.lower()
-        # 根据扩展名确定文件类型和大小上限
-        if suffix in self.allowed_image_ext:
-            file_type = "image"
-            max_size = self.max_image_size
-        elif suffix in self.allowed_doc_ext:
-            file_type = "document"
-            max_size = self.max_doc_size
-        else:
-            raise ValueError(f"不支持的文件类型: {suffix}")
-
-        # 文件大小校验
-        if len(content) > max_size:
-            raise ValueError(f"文件大小超过限制（{max_size // (1024 * 1024)}MB）")
-
-        # 创建用户-会话目录: {CHAT_DIR}/{user_id}/{session_id}/
-        session_dir = self.upload_dir / str(user_id) / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-
-        # 文件名安全清洗：去除非法字符，过长则截断
-        safe_name = self._safe_filename(filename)
-        if not safe_name:
-            # 文件名清洗后为空，用时间戳兜底
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_name = f"{timestamp}{suffix}"
-
-        # 写入磁盘
-        file_path = session_dir / safe_name
-        file_path.write_bytes(content)
-
-        # 返回文件元数据，供前端和附件分析器使用
-        return UploadResponse(
-            url=f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/{safe_name}",
-            file_type=file_type,
-            original_name=filename,
-            size_bytes=len(content),
-            storage_key=f"{user_id}/{session_id}/{safe_name}",
-            mime_type=_guess_mime_type(suffix),
-            extension=suffix,
-        ).model_dump()
-
-    def _safe_filename(self, filename: str) -> str:
-        """清洗文件名：移除危险字符，限制长度。
-
-        移除 \\ / * ? : " < > | 等文件系统特殊字符，
-        文件名超过 100 字符时截断（保留扩展名），防止路径过长。
-        """
-        safe = re.sub(r'[\\/*?:"<>|]', "", filename).strip()
-        if len(safe) > 100:
-            name, ext = Path(safe).stem, Path(safe).suffix
-            safe = f"{name[:100 - len(ext)]}{ext}"
-        return safe
-
-    def resolve_user_file(
-        self,
-        *,
-        current_user_id: int,
-        owner_id: int,
-        session_id: str,
-        filename: str,
-    ) -> Path:
-        """安全地解析用户文件路径，防止路径穿越攻击。
-
-        多层防护：
-        1. 权限校验：只能访问自己的文件
-        2. 禁止 .. 目录遍历
-        3. 只允许特定子目录（diagrams）
-        4. 解析后检查路径是否仍在 session_dir 内
-        """
-        if owner_id != current_user_id:
-            raise PermissionError("无权访问该文件")
-
-        filename_path = Path(filename)
-        # 禁止 .. 目录遍历
-        if ".." in filename_path.parts:
-            raise ValueError("非法文件名")
-
-        # 子目录白名单检查：只允许 diagrams 子目录
-        if filename_path.parent != Path("."):
-            parent_name = filename_path.parent.name
-            if parent_name not in {"diagrams"}:
-                raise ValueError("非法子目录")
-            if filename_path.name != filename_path.parts[-1]:
-                raise ValueError("非法文件名")
-            else:
-                # 文件名必须与原始输入完全一致
-                if filename_path.name != filename:
-                    raise ValueError("非法文件名")
-
-        # 解析真实路径，确保没有逃逸出 session_dir
-        session_dir = (self.upload_dir / str(owner_id) / session_id).resolve()
-        file_path = (session_dir / filename).resolve()
-        if not str(file_path).startswith(str(session_dir)):
-            raise ValueError("非法文件路径")
-        if not file_path.exists() or not file_path.is_file():
-            raise FileNotFoundError("文件不存在")
-        return file_path
-
-
-def _guess_mime_type(suffix: str) -> str:
-    """根据文件扩展名推断 MIME 类型，未知类型返回 octet-stream。"""
-    mapping = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-        ".pdf": "application/pdf",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".txt": "text/plain",
-        ".md": "text/markdown",
-        ".log": "text/plain",
-        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".xls": "application/vnd.ms-excel",
-        ".csv": "text/csv",
-        ".tsv": "text/tab-separated-values",
-    }
-    return mapping.get(suffix, "application/octet-stream")
-
-
-
-class ChatMessageItem:
-    """对话消息数据模型，用于历史记录查询和前端渲染。
-
-    字段说明：
-    - id: 消息数据库主键
-    - role: user / assistant / tool
-    - content: 消息正文
-    - attachments: 附件列表（图片/文件）
-    - tool_calls: 工具调用记录（搜索、图解等）
-    - tool_call_id: 关联的工具调用 ID（tool 角色消息使用）
-    - knowledge_sources: 知识来源（搜索结果引用）
-    - attachment_analyses: 附件分析结果（图片描述/文档摘要）
-    - teaching_diagram: 教学图解数据
-    - turn_id: 所属 turn 的 ID
-    - message_kind: 消息分类（user_input / assistant_answer / tool_result 等）
-    - created_at: 创建时间
-    """
-
-    def __init__(
-        self,
-        *,
-        id: int,
-        role: str,
-        content: str,
-        attachments: list[dict[str, Any]] | None = None,
-        tool_calls: list[dict[str, Any]] | None = None,
-        tool_call_id: str | None = None,
-        knowledge_sources: list[dict[str, Any]] | None = None,
-        attachment_analyses: list[dict[str, Any]] | None = None,
-        teaching_diagram: dict[str, Any] | None = None,
-        turn_id: int | None = None,
-        message_kind: str | None = None,
-        created_at: Any = None,
-    ) -> Any:
-        self.id = id
-        self.role = role
-        self.content = content
-        self.attachments = attachments
-        self.tool_calls = tool_calls
-        self.tool_call_id = tool_call_id
-        self.knowledge_sources = knowledge_sources
-        self.attachment_analyses = attachment_analyses
-        self.teaching_diagram = teaching_diagram
-        self.turn_id = turn_id
-        self.message_kind = message_kind
-        self.created_at = created_at
-
-    def model_dump(self) -> dict[str, Any]:
-        """序列化为字典，用于 JSON API 响应。
-
-        只包含有值的字段，避免返回大量 null。
-        附件会递归调用自身的 model_dump()。
-        """
-        data: dict[str, Any] = {
-            "id": self.id,
-            "role": self.role,
-            "content": self.content,
-            "created_at": self.created_at,
-        }
-        if self.attachments:
-            data["attachments"] = self.attachments
-        if self.tool_calls:
-            data["tool_calls"] = self.tool_calls
-        if self.tool_call_id:
-            data["tool_call_id"] = self.tool_call_id
-        if self.knowledge_sources:
-            data["knowledge_sources"] = self.knowledge_sources
-        if self.attachment_analyses:
-            data["attachment_analyses"] = self.attachment_analyses
-        if self.teaching_diagram:
-            data["teaching_diagram"] = self.teaching_diagram
-        if self.turn_id is not None:
-            data["turn_id"] = self.turn_id
-        if self.message_kind:
-            data["message_kind"] = self.message_kind
-        return data
 
 
 class ChatUseCases:

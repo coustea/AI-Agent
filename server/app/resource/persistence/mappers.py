@@ -1,4 +1,4 @@
-"""Mapping helpers between persistence models and resource domain schemas."""
+"""持久化模型与资源域 Schema 之间的映射辅助。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,12 @@ from app.resource.schemas import AgentResult, DownstreamContext, GeneratedResour
 
 
 def content_envelope(result: AgentResult) -> tuple[dict[str, Any] | None, str | None]:
-    """Split AgentResult content into JSON and plain-text storage fields."""
+    """将 AgentResult 内容拆分为 JSON 和纯文本存储字段。
+
+    返回 (content_json, content_text) 元组：
+    - markdown/text/code 类型 → content_json=None, content_text=原文
+    - json 类型 → content_json=结构化数据, content_text=None
+    """
     fmt = result.file_type.lower()
     content = result.content
     envelope = {
@@ -53,7 +58,7 @@ def content_envelope(result: AgentResult) -> tuple[dict[str, Any] | None, str | 
 
 
 def db_item_to_resource_item(item: GeneratedResourceItemModel) -> GeneratedResourceItem:
-    """Convert a DB row to the frontend-facing resource item DTO."""
+    """将数据库行转换为前端资源项 DTO。"""
     envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
     content = envelope.get("content") if item.content_json is not None else item.content_text
     return GeneratedResourceItem(
@@ -79,7 +84,7 @@ def db_item_to_resource_item(item: GeneratedResourceItemModel) -> GeneratedResou
 
 
 def db_item_to_agent_result(item: GeneratedResourceItemModel) -> AgentResult:
-    """Convert a DB row to AgentResult for downstream review/workflow use."""
+    """将数据库行转换为 AgentResult，供下游审核/工作流使用。"""
     envelope = dict(item.content_json) if isinstance(item.content_json, dict) else {}
     content = envelope.get("content") if item.content_json is not None else item.content_text
     if not isinstance(content, str):

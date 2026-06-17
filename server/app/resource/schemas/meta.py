@@ -1,4 +1,9 @@
-"""Agent metadata constants and default configuration."""
+"""Agent 元数据常量和默认配置。
+
+AGENT_META          — 每个 agent 的名称、图标、描述
+AGENT_DEFAULT_ORDER — agent 默认排序
+AGENT_DEFAULT_ENABLED — 默认启用的 agent 列表
+"""
 
 from __future__ import annotations
 

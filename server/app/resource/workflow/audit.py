@@ -1,4 +1,4 @@
-"""Agent ID constants for the resource LangGraph workflow."""
+"""资源 LangGraph 工作流中的 Agent ID 常量。"""
 
 from __future__ import annotations
 

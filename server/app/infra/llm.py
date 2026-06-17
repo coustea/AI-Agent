@@ -1,4 +1,13 @@
-"""OpenAI-compatible LLM gateway."""
+"""OpenAI 兼容的 LLM 网关模块。
+
+提供统一的异步 LLM 调用接口，支持：
+- 普通文本生成（ainvoke / astream）
+- 工具调用（ainvoke_tools）
+- 结构化 JSON 输出（ainvoke_json），带 json_mode 重试 + prompt 回退
+- 视觉模型调用（vision）
+
+内部使用 langchain_openai.ChatOpenAI 作为底层实现。
+"""
 
 from __future__ import annotations
 
@@ -21,6 +30,7 @@ logger = get_logger(__name__)
 
 
 class ChatModelConfig(BaseModel):
+    """LLM 模型配置项。"""
     base_url: str
     api_key: str
     model_name: str
@@ -34,7 +44,7 @@ class ChatModelConfig(BaseModel):
 
 
 class ChatModel(ChatOpenAI):
-    """ChatOpenAI with defensive tool_calls normalization."""
+    """带有防御性 tool_calls 规范化的 ChatOpenAI 子类。"""
 
     def _create_chat_result(self, response: Any, generation_info: Any | None = None) -> Any:
         try:
@@ -56,6 +66,7 @@ class ChatModel(ChatOpenAI):
 
 
 def _fix_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
+    """修复单个 tool_call 的格式：补充缺失 id，序列化 arguments。"""
     if not tc.get("id"):
         tc = {**tc, "id": f"call_{uuid.uuid4().hex[:12]}"}
     fn = tc.get("function")
@@ -66,6 +77,7 @@ def _fix_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_base_url(base_url: str) -> str:
+    """规范化 base_url：去除尾部斜杠和 /chat/completions 后缀。"""
     url = (base_url or "").strip().rstrip("/")
     if url.endswith("/chat/completions"):
         url = url[: -len("/chat/completions")]
@@ -73,6 +85,7 @@ def _normalize_base_url(base_url: str) -> str:
 
 
 def _load_config(path: str) -> ChatModelConfig | None:
+    """从配置文件加载模型配置，返回 ChatModelConfig 或 None。"""
     raw = get(path, {}) or {}
     if not isinstance(raw, dict) or not raw.get("model_name"):
         return None
@@ -94,6 +107,7 @@ def _load_config(path: str) -> ChatModelConfig | None:
 
 
 def _create_model(cfg: ChatModelConfig, *, streaming: bool = False) -> ChatModel:
+    """根据配置创建 ChatModel 实例。"""
     kw: dict[str, Any] = {
         "model": cfg.model_name,
         "api_key": cfg.api_key,
@@ -114,6 +128,7 @@ def _create_model(cfg: ChatModelConfig, *, streaming: bool = False) -> ChatModel
 
 
 def _bind(model: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+    """为模型绑定运行时参数（temperature / max_tokens）。"""
     kw: dict[str, Any] = {}
     if temperature is not None:
         kw["temperature"] = temperature
@@ -123,6 +138,7 @@ def _bind(model: Any, *, temperature: float | None = None, max_tokens: int | Non
 
 
 def _parse_json(text: str, schema: type[BaseModel]) -> BaseModel:
+    """从 LLM 输出文本中解析 JSON 并校验为指定 schema。"""
     raw = parse_first_json_object(text)
     data = _lift_nested_config(raw, schema)
     try:
@@ -132,7 +148,7 @@ def _parse_json(text: str, schema: type[BaseModel]) -> BaseModel:
 
 
 def _find_matching_json(text: str, schema: type[BaseModel]) -> BaseModel:
-    """Scan all JSON objects in text, return the one matching schema's required fields."""
+    """扫描文本中所有 JSON 对象，返回匹配 schema 必填字段的那个。"""
     required = _required_fields(schema)
     candidates = _extract_json_objects(text)
     if required:
@@ -151,7 +167,7 @@ def _find_matching_json(text: str, schema: type[BaseModel]) -> BaseModel:
 
 
 def _lenient_validate(data: dict[str, Any], schema: type[BaseModel]) -> BaseModel:
-    """Validate with lenient mode: strict on root scalars, coerce nested objects."""
+    """宽松模式校验：根级标量严格校验，嵌套对象强制转换。"""
     try:
         return schema.model_validate(data, strict=False)
     except Exception:
@@ -159,6 +175,7 @@ def _lenient_validate(data: dict[str, Any], schema: type[BaseModel]) -> BaseMode
 
 
 def _required_fields(schema: type[BaseModel]) -> set[str]:
+    """获取 schema 的必填字段集合。"""
     try:
         return set(schema.model_json_schema().get("required", []) or [])
     except Exception:
@@ -166,6 +183,7 @@ def _required_fields(schema: type[BaseModel]) -> set[str]:
 
 
 def _extract_json_objects(text: str) -> list[dict[str, Any]]:
+    """从文本中提取所有不重复的 JSON 对象。"""
     decoder = json.JSONDecoder()
     content = strip_markdown_code_fences(text or "").strip()
     seen: set[str] = set()
@@ -186,6 +204,7 @@ def _extract_json_objects(text: str) -> list[dict[str, Any]]:
 
 
 def _lift_nested_config(data: dict[str, Any], schema: type[BaseModel]) -> dict[str, Any]:
+    """将嵌套的 config 字段提升到顶层（适配 LLM 输出格式）。"""
     config = data.get("config")
     if not isinstance(config, dict):
         return data
@@ -202,7 +221,7 @@ def _lift_nested_config(data: dict[str, Any], schema: type[BaseModel]) -> dict[s
 
 
 def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
-    """Build a concise schema description for prompt with enum values and nested field hints."""
+    """构建用于 prompt 的精简 schema 描述，包含枚举值和嵌套字段提示。"""
     full_schema = schema.model_json_schema()
     defs = full_schema.get("$defs", {})
     required = set(full_schema.get("required") or [])
@@ -220,7 +239,7 @@ def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
 
 
 def _describe_property(prop: dict[str, Any], defs: dict[str, Any], depth: int = 0) -> str:
-    """Describe a JSON schema property in human-readable form."""
+    """以人类可读形式描述 JSON schema 属性。"""
     if depth > 2:
         return "..."
     if "enum" in prop:
@@ -261,6 +280,7 @@ def _describe_property(prop: dict[str, Any], defs: dict[str, Any], depth: int = 
 
 
 def _inject_json_instruction(input_data: Any, schema: type[BaseModel]) -> list[BaseMessage]:
+    """向消息列表注入 JSON 输出格式指令，确保 LLM 返回符合 schema 的 JSON。"""
     if isinstance(input_data, str):
         msgs: list[BaseMessage] = [HumanMessage(content=input_data)]
     elif isinstance(input_data, BaseMessage):
@@ -290,10 +310,13 @@ def _inject_json_instruction(input_data: Any, schema: type[BaseModel]) -> list[B
 
 
 class Llm:
-    """Unified async LLM gateway.
+    """统一异步 LLM 网关。
 
-    Structured output: json_mode (retry once) → prompt fallback.
+    结构化输出策略：json_mode（重试一次）→ prompt 回退。
     """
+
+    def __init__(self) -> None:
+        """初始化 LLM 网关，加载文本模型和视觉模型配置。"""
 
     def __init__(self) -> None:
         self.text_config = _load_config("models")

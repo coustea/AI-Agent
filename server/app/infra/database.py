@@ -1,4 +1,4 @@
-"""Database engine, session factory, and startup initialization.
+"""数据库引擎、会话工厂与启动初始化。
 
 职责：
   - 校验数据库配置完整性
@@ -40,6 +40,7 @@ logger = get_logger(__name__)
 
 @dataclass
 class ServiceStatus:
+    """单个服务的健康状态。"""
     name: str
     ok: bool = False
     latency_ms: int = 0
@@ -48,6 +49,7 @@ class ServiceStatus:
 
 @dataclass
 class HealthReport:
+    """健康检测报告，包含所有服务状态。"""
     services: list[ServiceStatus] = field(default_factory=list)
 
     @property
@@ -71,6 +73,7 @@ def _validate_database_settings() -> None:
 
 _validate_database_settings()
 
+# 创建全局异步数据库引擎（连接池）
 engine = create_async_engine(
     DB_URL,
     echo=DB_ECHO,

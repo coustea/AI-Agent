@@ -1,4 +1,4 @@
-"""Learning evaluation service."""
+"""学习评估服务。"""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")  # 前端时区：上海（UTC+8）
 
 @dataclass(frozen=True)
 class MemoryUpdateSignal:
-    """Legacy signal type — kept for type-checking compatibility only."""
+    """记忆更新信号类型（遗留类型，仅用于类型检查兼容）。"""
     content: str
     signal_type: str
     dimension: str
@@ -41,17 +41,17 @@ class MemoryUpdateSignal:
 
 
 def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
-    """Legacy helper — no longer produces actionable signals."""
+    """从学习事件派生记忆信号（遗留方法，不再产生有效信号）。"""
     return []
 
 
 def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> dict[str, Any] | None:
-    """Legacy helper — always returns None (no profile update)."""
+    """构建画像更新负载（遗留方法，始终返回 None）。"""
     return None
 
 
 async def bg_apply_profile_update_from_learning_event(user_id: int, event_payload: dict[str, Any]) -> None:
-    """Profile V2 does not update from generic learning events in this refactor."""
+    """后台任务：从学习事件更新用户画像（当前重构版本不执行更新）。"""
     logger.debug(
         "[Evaluation] skip profile update for learning event: user_id=%s event_type=%s",
         user_id,
@@ -195,6 +195,7 @@ class EvaluationService:
         user_id: int,
         limit: int = 100,
     ) -> EvaluationSummaryResponse:
+        """获取评估摘要 — 从最近学习事件构建。"""
         stmt = (
             select(LearningEvent)
             .where(LearningEvent.user_id == user_id)
@@ -208,6 +209,7 @@ class EvaluationService:
         return build_summary_from_events(events, active_minutes=active_minutes)
 
     async def _get_active_minutes(self, session: AsyncSession, *, user_id: int) -> int:
+        """获取用户总活跃分钟数。"""
         stmt = select(LearningSession).where(LearningSession.user_id == user_id)
         result = await session.exec(stmt)
         total_seconds = sum(s.duration_seconds or 0 for s in result.all())
@@ -288,6 +290,7 @@ class EvaluationService:
 
 
 def _parse_iso_datetime(value: str) -> datetime:
+    """解析 ISO8601 格式日期时间字符串。"""
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
@@ -295,6 +298,7 @@ def _parse_iso_datetime(value: str) -> datetime:
 
 
 def _to_item(event: LearningEvent) -> LearningEventItem:
+    """将 LearningEvent 模型转换为响应项。"""
     return LearningEventItem(
         id=event.id or 0,
         event_type=event.event_type,
@@ -312,16 +316,19 @@ def _to_item(event: LearningEvent) -> LearningEventItem:
 
 
 def _to_local(value: datetime) -> datetime:
+    """将 UTC 时间转换为上海时区。"""
     if value.tzinfo is None or value.utcoffset() is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(SHANGHAI_TZ)
 
 
 def _local_day_start(day: date) -> datetime:
+    """获取指定日期的上海时区零点（转换为 UTC）。"""
     return datetime.combine(day, time.min, tzinfo=SHANGHAI_TZ).astimezone(UTC)
 
 
 def _get_time_boundaries(now_local: datetime) -> dict[str, datetime]:
+    """计算今日/本周/本月的起止时间（上海时区和 UTC）。"""
     today_start_local = datetime.combine(now_local.date(), time.min, tzinfo=SHANGHAI_TZ)
     week_start_date = now_local.date() - timedelta(days=now_local.weekday())
     week_start_local = datetime.combine(week_start_date, time.min, tzinfo=SHANGHAI_TZ)
@@ -338,6 +345,7 @@ def _get_time_boundaries(now_local: datetime) -> dict[str, datetime]:
 
 
 def _build_daily_breakdown(end_date: date, days: int, daily_map: dict[date, int]) -> list[DailyTimeEntry]:
+    """构建每日学习时长分布列表。"""
     start_date = end_date - timedelta(days=days - 1)
     return [
         DailyTimeEntry(date=(start_date + timedelta(days=offset)).isoformat(), seconds=daily_map.get(start_date + timedelta(days=offset), 0))
@@ -346,6 +354,7 @@ def _build_daily_breakdown(end_date: date, days: int, daily_map: dict[date, int]
 
 
 def _build_hourly_distribution(hourly_map: dict[int, int]) -> list[HourlyDistributionEntry]:
+    """构建24小时学习时长分布列表。"""
     return [HourlyDistributionEntry(hour=hour, seconds=hourly_map.get(hour, 0)) for hour in range(24)]
 
 

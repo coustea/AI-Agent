@@ -1,4 +1,11 @@
-"""Request models and agent configuration schemas."""
+"""请求模型与 Agent 配置 Schema。
+
+包含：
+- ResourceGenerationRequest — 多智能体资源生成请求
+- SingleResourceRequest     — 单智能体资源生成请求
+- AgentConfigs              — 各 agent 的配置集合
+- 各 agent 配置类（ContentConfig / MindmapConfig / QuizConfig 等）
+"""
 
 from __future__ import annotations
 

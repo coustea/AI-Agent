@@ -1,2 +1,2 @@
-"""Learning evaluation module."""
+"""学习评估模块。"""
 

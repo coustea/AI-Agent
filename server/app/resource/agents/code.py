@@ -83,6 +83,7 @@ class CodeAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
+        """内部方法 — 调用 LLM 生成教学代码示例。"""
         language = config.get("programming_language") or config.get("language") or "python"
         case_type = config.get("case_type") or "basic_demo"
         difficulty = config.get("difficulty") or config.get("complexity") or "beginner"

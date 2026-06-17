@@ -1,4 +1,4 @@
-"""Evaluation response schemas."""
+"""评估响应模式定义。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class LearningEventItem(BaseModel):
-    """Learning event item for response."""
+    """学习事件响应项。"""
 
     id: int
     event_type: str
@@ -25,7 +25,7 @@ class LearningEventItem(BaseModel):
 
 
 class EvaluationMetric(BaseModel):
-    """Evaluation metric item."""
+    """评估指标项。"""
 
     label: str
     value: str
@@ -33,7 +33,7 @@ class EvaluationMetric(BaseModel):
 
 
 class EvaluationSummaryResponse(BaseModel):
-    """Evaluation summary response."""
+    """评估摘要响应。"""
 
     event_count: int
     average_score: float | None = None
@@ -48,14 +48,14 @@ class EvaluationSummaryResponse(BaseModel):
 
 
 class DailyTimeEntry(BaseModel):
-    """Daily learning time entry."""
+    """每日学习时长记录。"""
 
     date: str
     seconds: int = Field(default=0, ge=0)
 
 
 class HourlyDistributionEntry(BaseModel):
-    """Hourly learning time distribution entry."""
+    """每小时学习时长分布。"""
 
     hour: int = Field(ge=0, le=23)
     seconds: int = Field(default=0, ge=0)
@@ -63,6 +63,7 @@ class HourlyDistributionEntry(BaseModel):
 
 class LearningTimeStatsResponse(BaseModel):
     """学习时长统计响应 — 从 LearningSession 表聚合。"""
+
 
     today_seconds: int = Field(default=0, ge=0)
     week_seconds: int = Field(default=0, ge=0)

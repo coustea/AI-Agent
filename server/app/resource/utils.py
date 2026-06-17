@@ -1,4 +1,4 @@
-"""Resource module utilities."""
+"""资源模块工具函数。"""
 
 import json
 from typing import Any

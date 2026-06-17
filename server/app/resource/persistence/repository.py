@@ -1,4 +1,4 @@
-"""Database-facing repository for the resource domain."""
+"""资源域数据库仓库 — 持久化和写协调。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,10 @@ from app.resource.schemas import AgentResult, ResourceGenerationRequest, Teachin
 
 
 class ResourceRepository:
-    """Owns resource persistence and write coordination."""
+    """资源仓库 — 管理资源持久化和写锁协调。
+
+    写锁机制：防止并发更新同一资源，每个 resource_id 独立的 asyncio.Lock。
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -45,6 +48,7 @@ class ResourceRepository:
         request: ResourceGenerationRequest,
         source: str,
     ) -> dict[str, Any]:
+        """创建资源生成任务，返回 resource_id 和状态。"""
         resource = GeneratedResource(
             user_id=user_id,
             learning_need=request.learning_need,
@@ -154,6 +158,14 @@ class ResourceRepository:
         teaching_plan: TeachingPlan,
         coverage_report: dict[str, list[str]] | None = None,
     ) -> None:
+        """保存资源生成最终结果 — 更新资源状态、教学计划和失败 agent 列表。
+
+        状态逻辑：
+        - 有成功 + 有失败 → partial_completed
+        - 全部失败 → failed
+        - 全部成功 → completed
+        - 有大纲覆盖缺口 → 额外标记 _coverage_gap
+        """
         saved_items = await self.list_resource_items(user_id, resource_id)
         failed_agents = [agent_id for agent_id, result in results.items() if not result.success]
         successful = len(saved_items)

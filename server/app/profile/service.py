@@ -1,4 +1,4 @@
-"""Shared learner profile service."""
+"""共享学习者画像服务 — 全局画像 CRUD、课程画像管理、LLM 推理与评分。"""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ REQUIRED_COURSE_MARKDOWN_SECTIONS = (
 
 
 def validate_course_markdown(markdown_text: str, course_name: str) -> str:
-    """Validate and normalize LLM-generated course profile Markdown."""
+    """校验并规范化 LLM 生成的课程画像 Markdown 文本。"""
     text = (markdown_text or "").strip()
     if not text:
         raise ValueError("课程画像 Markdown 为空")
@@ -597,6 +597,7 @@ class ProfileService:
         max_messages: int = 20,
         after_message_id: int = 0,
     ) -> tuple[str, int]:
+        """构建最近对话文本，用于画像推理上下文注入。"""
         stmt = (
             select(ChatMessage)
             .where(
@@ -623,6 +624,7 @@ class ProfileService:
         return "\n".join(lines), latest_message_id
 
     async def _get_long_term_memory_text(self, *, user_id: int) -> str:
+        """获取用户的长期记忆 Markdown 文本。"""
         async with session_scope() as db:
             ltm = (
                 await db.exec(
@@ -641,6 +643,7 @@ _profile_service_cache: dict[str, ProfileService] = {}
 
 
 def get_profile_service(*, module: str = "mentor") -> ProfileService:
+    """获取指定模块的画像服务单例（带缓存）。"""
     if module not in _profile_service_cache:
         _profile_service_cache[module] = ProfileService(module=module)
     return _profile_service_cache[module]

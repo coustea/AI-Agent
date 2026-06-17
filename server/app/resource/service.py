@@ -1,7 +1,13 @@
-"""Public service seam for the resource domain — CRUD use cases only.
+"""资源域公共服务 — CRUD 用例，供 API 和兄弟模块调用。
 
-Orchestration entrypoint: app.resource.orchestrator
-Path-domain helpers:     app.resource.path_helpers
+编排入口：app.resource.orchestrator
+路径辅助：app.resource.path_helpers
+
+职责：
+- 创建资源生成任务
+- 查询生成状态（合并内存快照与 DB 持久化数据）
+- 计算总体进度
+- 保存/查询/列举资源项
 """
 
 from __future__ import annotations
@@ -30,7 +36,7 @@ logger = get_module_logger("resource", sub="service")
 
 
 class ResourceService:
-    """Public resource-domain use cases exposed to API and sibling domains."""
+    """资源域公共用例，供 API 层和路径模块调用。"""
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -191,6 +197,10 @@ class ResourceService:
         agent_snapshots: dict[str, Any],
         db_items: list[Any],
     ) -> dict[str, Any]:
+        """将 DB 已持久化的资源项合并到内存快照中。
+
+        解决 SSE 连接晚于事件时前端看不到已完成 agent 的问题。
+        """
         merged = {
             agent_id: dict(snapshot)
             for agent_id, snapshot in agent_snapshots.items()
@@ -216,6 +226,15 @@ class ResourceService:
         selected_agents: list[str],
         agent_snapshots: dict[str, Any],
     ) -> int:
+        """计算资源生成的总体进度百分比（0-100）。
+
+        权重分配：
+        - planning（规划）: 15%
+        - worker agents（基础资源并行生成）: 50%
+        - bundle（资源包组装）: 10%
+        - ppt（可选）: 15%
+        - video（可选）: 15%
+        """
         if status in {"completed", "partial_completed"}:
             return 100
         if status == "pending" and not agent_snapshots:

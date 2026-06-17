@@ -71,6 +71,7 @@ class MindmapAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
+        """内部方法 — 调用 LLM 生成 Markmap 思维导图 Markdown。"""
         if config:
             cfg = ["## 思维导图配置"]
             cfg.append(f"- 导图类型: {config.get('map_type', 'knowledge_tree')}")

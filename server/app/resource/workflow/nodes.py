@@ -1,4 +1,9 @@
-"""LangGraph nodes and helpers for the resource workflow."""
+"""LangGraph 工作流节点函数和辅助工具。
+
+节点拓扑：
+  START → planning → worker_node(×N, Send并行) → merge_workers
+    → [ppt_node, video_node] (并行) → merge_aggregation → save_node
+"""
 
 from __future__ import annotations
 
@@ -32,6 +37,7 @@ BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
 
 
 def select_worker_agents(enabled_agents: list[str], registry: dict[str, Any]) -> list[str]:
+    """筛选基础 worker agent（排除 planning、review 和聚合 agent）。"""
     return [
         agent_id
         for agent_id in enabled_agents
@@ -51,6 +57,7 @@ def build_agent_resource_input(
     upstream_handoffs: dict[str, DownstreamContext],
     agent_config_extra: dict[str, Any] | None,
 ):
+    """为指定 agent 构建 ResourceInput 输入。"""
     agent_config = request.agent_configs.get(agent_id, {})
     if agent_config_extra:
         agent_config = {**agent_config, **agent_config_extra}
@@ -68,6 +75,11 @@ def build_agent_resource_input(
 
 
 def require_downstream_context_for_base_result(agent_id: str, result: AgentResult) -> AgentResult:
+    """确保基础 agent 成功时一定有 downstream_context。
+
+    如果基础 agent 成功但未输出 downstream_context，自动合成一个最小版本，
+    避免下游聚合 agent 拿不到交接信息。
+    """
     if agent_id not in BASE_RESOURCE_AGENT_IDS:
         return result
     if not result.success or result.downstream_context is not None:
@@ -86,6 +98,7 @@ def collect_successful_handoffs(
     results: dict[str, AgentResult],
     teaching_plan: TeachingPlan | None = None,
 ) -> dict[str, DownstreamContext]:
+    """收集所有基础 agent 的成功交接上下文，供聚合 agent 使用。"""
     handoffs: dict[str, DownstreamContext] = {}
     for agent_id, result in results.items():
         if agent_id not in BASE_RESOURCE_AGENT_IDS:
@@ -110,6 +123,7 @@ async def persist_result_and_emit_artifact(
     emitter,
     depends_on_agents: list[str] | None = None,
 ) -> None:
+    """将 Agent 结果持久化到数据库，并发送产物就绪事件。"""
     async with session_scope() as session:
         repository = ResourceRepository(session)
         resource_item = await repository.save_agent_result(
@@ -131,6 +145,7 @@ async def persist_result_and_emit_artifact(
 
 
 async def planning_node(state: ParentState) -> dict[str, Any]:
+    """规划节点 — 调用 PlanningAgent 生成教学方向与大纲（TeachingPlan）。"""
     planning_input = ResourceInput(
         resource_id=state["resource_id"],
         learning_need=state["request"].learning_need,
@@ -175,6 +190,7 @@ def base_worker_ids(state: ParentState) -> list[str]:
 
 
 def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
+    """路由：有 worker agent → Send 并行分发，否则直接合并。"""
     worker_ids = base_worker_ids(state)
     if not worker_ids:
         return ["merge_workers"]
@@ -194,6 +210,7 @@ def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
 
 
 async def worker_node(state: WorkerInputState) -> dict[str, Any]:
+    """Worker 节点 — 执行单个基础 agent 的资源生成并持久化结果。"""
     agent_id = state["agent_id"]
     resource_input = build_agent_resource_input(
         request=state["request"],
@@ -263,6 +280,7 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
 
 
 async def merge_workers_node(state: ParentState) -> dict[str, Any]:
+    """合并 Worker 结果 — 汇总成功/失败计数，检查大纲覆盖情况。"""
     results = state.get("results") or {}
     success_count = sum(1 for r in results.values() if r.success)
     fail_count = sum(1 for r in results.values() if not r.success)
@@ -310,6 +328,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
 
 
 def _compute_coverage_report(state: ParentState) -> CoverageReport:
+    """计算大纲覆盖报告 — 哪些大纲项被覆盖，哪些核心项缺失。"""
     plan = state.get("teaching_plan")
     results = state.get("results") or {}
     if not plan or not plan.outline:
@@ -437,6 +456,7 @@ async def _run_aggregation_agent(
 
 
 async def ppt_node(state: ParentState) -> dict[str, Any]:
+    """PPT 聚合节点 — 从上游交接构建素材，运行 PptAgent 内部流水线。"""
     from app.resource.agents.ppt import build_resource_material
 
     def ppt_extra_input(base_input: ResourceInput) -> dict[str, Any] | None:
@@ -452,6 +472,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
 
 
 async def video_node(state: ParentState) -> dict[str, Any]:
+    """Video 聚合节点 — 运行 VideoAgent 内部流水线生成视频脚本。"""
     return await _run_aggregation_agent(
         state,
         agent_id=VIDEO_AGENT_ID,
@@ -463,7 +484,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
 
 
 async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
-    """Barrier 节点：等待所有聚合 Agent 完成后再进入 save。"""
+    """聚合 Barrier 节点 — 等待所有聚合 Agent（PPT/Video）完成后再保存。"""
     results = state.get("results") or {}
     agg_results = {aid: r for aid, r in results.items() if aid in AGGREGATION_AGENT_IDS}
     success_count = sum(1 for r in agg_results.values() if r.success)
@@ -482,6 +503,7 @@ async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
 
 
 async def save_node(state: ParentState) -> dict[str, Any]:
+    """保存节点 — 组装资源包，将最终结果持久化到数据库。"""
     await state["emitter"].emit_agent(
         BUNDLE_AGENT_ID,
         status="running",
