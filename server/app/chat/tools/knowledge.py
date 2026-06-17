@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import math
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -54,6 +55,73 @@ _QUERY_REWRITE_RULES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"逻辑回归"), ("逻辑回归", "机器学习", "分类", "logistic regression")),
     (re.compile(r"指针"), ("指针", "C语言", "变量", "地址")),
 )
+
+_JAVA_QUERY_RE = re.compile(r"\bjava\b|jvm|jdk|jre|spring|mybatis|jdbc|servlet", re.IGNORECASE)
+_JAVA_SOURCE_FILTER: tuple[str, ...] = ("Java从入门到精通",)
+
+_NOISE_TERMS: tuple[str, ...] = ("z-library.sk", "1lib.sk", "z-lib.sk")
+
+
+@dataclass(frozen=True)
+class QueryRouteResult:
+    query: str
+    source_filter: tuple[str, ...] | None = None
+
+
+def route_query_sources(query: str, course_name: str | None = None) -> QueryRouteResult:
+    normalized_query = (query or "").strip()
+    normalized_course_name = (course_name or "").strip()
+    routing_text = " ".join(part for part in (normalized_course_name, normalized_query) if part)
+    source_filter = ("Java从入门到精通",) if _JAVA_QUERY_RE.search(routing_text) else None
+    return QueryRouteResult(query=normalized_query, source_filter=source_filter)
+
+
+def _normalize_source_text(value: Any) -> str:
+    text = str(value or "").strip().casefold()
+    if not text:
+        return ""
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def _normalize_book_title(source: str) -> str:
+    title = source
+    for term in _NOISE_TERMS:
+        title = title.replace(term, "")
+    title = re.sub(r"\(\s*,?\s*\)", "", title)
+    title = re.sub(r"\s{2,}", " ", title)
+    return title.strip(" ()")
+
+
+def build_sparse_search_text(text: str, metadata: dict[str, Any]) -> str:
+    title = _normalize_book_title(str(metadata.get("source") or metadata.get("file_name") or ""))
+    heading = str(metadata.get("heading_path") or metadata.get("h1") or metadata.get("h2") or "").strip()
+    return "\n".join(part for part in (str(text or "").strip(), heading, title) if part).lower()
+
+
+def _matches_source_filter(metadata: dict[str, Any], source_filter: tuple[str, ...] | None) -> bool:
+    if not source_filter:
+        return True
+
+    candidates = [
+        _normalize_source_text(metadata.get("source")),
+        _normalize_source_text(metadata.get("file_name")),
+        _normalize_source_text(metadata.get("book_title")),
+    ]
+    candidates = [candidate for candidate in candidates if candidate]
+    if not candidates:
+        return False
+
+    normalized_filters = []
+    for item in source_filter:
+        normalized = _normalize_source_text(item)
+        if normalized:
+            normalized_filters.append(normalized)
+
+    for candidate in candidates:
+        for expected in normalized_filters:
+            if candidate == expected or expected in candidate or candidate in expected:
+                return True
+    return False
 
 
 class BM25Index:
@@ -320,7 +388,13 @@ def _normalize_ranked_rows(
     return items
 
 
-def rank_with_bm25(query: str, index: BM25Index, *, top_k: int | None = None) -> list[dict[str, Any]]:
+def rank_with_bm25(
+    query: str,
+    index: BM25Index,
+    *,
+    top_k: int | None = None,
+    source_filter: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     """使用 BM25 算法对语料进行稀疏检索排名。
 
     BM25 公式：score = IDF * (TF * (k1 + 1)) / (TF + k1 * (1 - b + b * dl/avgdl))
@@ -335,6 +409,9 @@ def rank_with_bm25(query: str, index: BM25Index, *, top_k: int | None = None) ->
     b = 0.75  # 文档长度归一化参数：0 表示不归一化，1 表示完全归一化
     scored_rows: list[tuple[float, dict[str, Any]]] = []
     for row, term_freqs, doc_length in zip(index.documents, index.doc_term_freqs, index.doc_lengths, strict=False):
+        metadata = dict(row.get("metadata") or {})
+        if not _matches_source_filter(metadata, source_filter):
+            continue
         score = 0.0
         for term in query_terms:
             tf = term_freqs.get(term, 0)
@@ -366,7 +443,12 @@ def rank_with_bm25(query: str, index: BM25Index, *, top_k: int | None = None) ->
     return items
 
 
-def retrieve_dense_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str, Any]]:
+def retrieve_dense_knowledge(
+    query: str,
+    *,
+    top_k: int | None = None,
+    source_filter: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     """Dense 路径检索：使用向量相似度搜索本地知识库。
 
     流程：query → rewrite → embed → 相似度搜索 → 排名结果
@@ -388,7 +470,26 @@ def retrieve_dense_knowledge(query: str, *, top_k: int | None = None) -> list[di
         rows = vectorstore.similarity_search_by_vector_with_relevance_scores(
             list(cached_embedding),
             k=max(top_k or KB_TOP_K, KB_TOP_K),
+            filter={"source": {"$in": list(source_filter)}} if source_filter else None,
         )
+        if source_filter:
+            fallback_rows = vectorstore.similarity_search_by_vector_with_relevance_scores(
+                list(cached_embedding),
+                k=max(top_k or KB_TOP_K, KB_TOP_K),
+                filter=None,
+            )
+            merged_rows: dict[tuple[str, str], tuple[Any, float]] = {}
+            for doc, score in rows:
+                key = _metadata_key(dict(doc.metadata or {}))
+                merged_rows[key] = (doc, score)
+            for doc, score in fallback_rows:
+                metadata = dict(doc.metadata or {})
+                if not _matches_source_filter(metadata, source_filter):
+                    continue
+                key = _metadata_key(metadata)
+                if key not in merged_rows:
+                    merged_rows[key] = (doc, score)
+            rows = sorted(merged_rows.values(), key=lambda item: float(item[1]))[: (top_k or KB_TOP_K)]
     except Exception:
         logger.exception("[knowledge] dense query failed")
         return []
@@ -396,7 +497,12 @@ def retrieve_dense_knowledge(query: str, *, top_k: int | None = None) -> list[di
     return _normalize_ranked_rows(rows, retrieval_mode="dense")
 
 
-def retrieve_sparse_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str, Any]]:
+def retrieve_sparse_knowledge(
+    query: str,
+    *,
+    top_k: int | None = None,
+    source_filter: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     """Sparse 路径检索：使用内存 BM25 索引进行关键词匹配。
 
     BM25 对精确关键词匹配效果好，适合查询中包含专有名词的场景。
@@ -404,7 +510,12 @@ def retrieve_sparse_knowledge(query: str, *, top_k: int | None = None) -> list[d
     normalized_query = (query or "").strip()
     if not normalized_query:
         return []
-    return rank_with_bm25(normalized_query, _get_bm25_index(), top_k=max(top_k or KB_TOP_K, KB_TOP_K))
+    return rank_with_bm25(
+        normalized_query,
+        _get_bm25_index(),
+        top_k=max(top_k or KB_TOP_K, KB_TOP_K),
+        source_filter=source_filter,
+    )
 
 
 def merge_ranked_results(
@@ -472,7 +583,12 @@ def merge_ranked_results(
     return result
 
 
-def retrieve_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str, Any]]:
+def retrieve_knowledge(
+    query: str,
+    *,
+    course_name: str | None = None,
+    top_k: int | None = None,
+) -> list[dict[str, Any]]:
     """混合检索入口：同时执行 dense 和 sparse 两路检索，合并排名。
 
     每路检索取 2*top_k 个候选，合并后取最终 top_k，确保有足够的去重余量。
@@ -481,20 +597,35 @@ def retrieve_knowledge(query: str, *, top_k: int | None = None) -> list[dict[str
     if not normalized_query:
         return []
 
+    route = route_query_sources(normalized_query, course_name=course_name)
+
     # 两路检索各取 2 倍候选量，为合并去重留出余量
-    dense_rows = retrieve_dense_knowledge(normalized_query, top_k=max((top_k or KB_TOP_K) * 2, KB_TOP_K))
-    sparse_rows = retrieve_sparse_knowledge(normalized_query, top_k=max((top_k or KB_TOP_K) * 2, KB_TOP_K))
+    dense_rows = retrieve_dense_knowledge(
+        route.query,
+        top_k=max((top_k or KB_TOP_K) * 2, KB_TOP_K),
+        source_filter=route.source_filter,
+    )
+    sparse_rows = retrieve_sparse_knowledge(
+        route.query,
+        top_k=max((top_k or KB_TOP_K) * 2, KB_TOP_K),
+        source_filter=route.source_filter,
+    )
     if not dense_rows and not sparse_rows:
         return []
     return merge_ranked_results(
-        normalized_query,
+        route.query,
         dense_rows=dense_rows,
         sparse_rows=sparse_rows,
         top_k=top_k or KB_TOP_K,
     )
 
 
-def format_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[str, list[dict[str, Any]]]:
+def format_knowledge_context(
+    query: str,
+    *,
+    course_name: str | None = None,
+    top_k: int | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """将检索结果格式化为可读的上下文文本，供 LLM 消费。
 
     返回格式：
@@ -503,7 +634,7 @@ def format_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[s
 
     同时返回原始结果列表，供调用方进一步处理。
     """
-    rows = retrieve_knowledge(query, top_k=top_k)
+    rows = retrieve_knowledge(query, course_name=course_name, top_k=top_k)
     if not rows:
         return "", []
 
@@ -530,35 +661,44 @@ def format_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[s
     return "\n\n".join(parts), rows
 
 
-async def aformat_knowledge_context(query: str, *, top_k: int | None = None) -> tuple[str, list[dict[str, Any]]]:
+async def aformat_knowledge_context(
+    query: str,
+    *,
+    course_name: str | None = None,
+    top_k: int | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """异步包装器：将同步的 format_knowledge_context 放到线程池执行。
 
     检索操作（向量搜索、BM25 排序）涉及 CPU 密集计算，
     放到线程池避免阻塞 asyncio 事件循环。
     """
-    return await asyncio.to_thread(format_knowledge_context, query, top_k=top_k)
+    return await asyncio.to_thread(format_knowledge_context, query, course_name=course_name, top_k=top_k)
 
 
-@tool("search_knowledge_base")
-async def search_knowledge_base(query: str) -> str:
-    """LangChain tool 入口：搜索本地课程知识库。
-
-    适用于查询学术概念、定义、理论等教材内容。
-    内部执行混合检索（dense + sparse），返回格式化的上下文片段。
-    """
-    context, rows = await aformat_knowledge_context(query)
-    if not rows:
-        return "本地知识库没有检索到相关内容，或知识库尚未正确加载。"
-    return context
-
-
-# 知识库搜索工具的输入参数模型（用于 LLM tool call 参数校验）
 class SearchKnowledgeBaseArgs(BaseModel):
     query: str = Field(description="Search query for local course knowledge.")
     course_name: str | None = Field(default=None, description="Course name used as a retrieval hint.")
     top_k: int = Field(default=4, ge=1, le=8, description="Maximum number of snippets to return.")
 
 
+@tool("search_knowledge_base", args_schema=SearchKnowledgeBaseArgs)
+async def search_knowledge_base(
+    query: str,
+    course_name: str | None = None,
+    top_k: int = 4,
+) -> str:
+    """LangChain tool 入口：搜索本地课程知识库。
+
+    适用于查询学术概念、定义、理论等教材内容。
+    内部执行混合检索（dense + sparse），返回格式化的上下文片段。
+    """
+    context, rows = await aformat_knowledge_context(query, course_name=course_name, top_k=top_k)
+    if not rows:
+        return "本地知识库没有检索到相关内容，或知识库尚未正确加载。"
+    return context
+
+
+# 知识库搜索工具的输入参数模型（用于 LLM tool call 参数校验）
 def _compact(text: str, *, limit: int = 3500) -> str:
     """截断过长文本，防止撑爆 LLM 上下文窗口。
 
@@ -582,9 +722,12 @@ def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
         top_k: int = 4,
     ) -> str:
         # 将课程名拼接到查询前，帮助检索模型聚焦到特定课程内容
-        search_query = f"{course_name} {query}".strip() if course_name else query
         try:
-            context, _rows = await aformat_knowledge_context(search_query, top_k=top_k)
+            context, _rows = await aformat_knowledge_context(
+                query,
+                course_name=course_name,
+                top_k=top_k,
+            )
         except Exception as exc:
             logger.warning("[search_knowledge_base] failed: %s", exc)
             return "本地知识库暂时不可用。"
