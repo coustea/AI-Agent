@@ -151,6 +151,24 @@ async def stream_resource_events(
         return HttpResponse.error(code=401, message="认证失败")
 
     async def event_stream():
+        # 先回填当前已有的快照状态，避免 SSE 连接晚于事件导致前端空白
+        from app.resource.events import AgentEvent
+        snapshot = resource_event_bus.get_latest_snapshot(resource_id)
+        for agent_id, agent_snapshot in snapshot.get("agent_snapshots", {}).items():
+            snapshot_event = AgentEvent(
+                event_type="agent.snapshot",
+                agent_id=agent_id,
+                **{k: v for k, v in agent_snapshot.items() if k in AgentEvent.model_fields},
+            )
+            yield f"event: {snapshot_event.event_type}\ndata: {snapshot_event.model_dump_json()}\n\n"
+        if snapshot.get("current_message") and not snapshot.get("agent_snapshots"):
+            snapshot_event = AgentEvent(
+                event_type="agent",
+                message=snapshot["current_message"],
+            )
+            yield f"event: agent\ndata: {snapshot_event.model_dump_json()}\n\n"
+
+        # 然后订阅实时事件
         queue = resource_event_bus.subscribe(resource_id)
         try:
             while True:

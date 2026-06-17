@@ -1,4 +1,10 @@
-"""Compiled LangGraph for standalone resource generation."""
+"""Compiled LangGraph for standalone resource generation.
+
+拓扑：
+  START → planning → worker_node(×N, Send并行) → merge_workers
+    → [ppt_node, video_node] (并行) → merge_aggregation → save_node
+    → save_node (无聚合Agent时直接保存)
+"""
 
 from __future__ import annotations
 
@@ -8,11 +14,11 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from app.resource.workflow.nodes import (
+    merge_aggregation_node,
     merge_workers_node,
     planning_node,
     ppt_node,
-    pre_audit_node,
-    route_aggregation_after_audit,
+    route_after_merge,
     route_workers_or_merge,
     save_node,
     video_node,
@@ -28,9 +34,9 @@ def build_parent_graph() -> Any:
     workflow.add_node("planning", planning_node)
     workflow.add_node("worker_node", worker_node)
     workflow.add_node("merge_workers", merge_workers_node)
-    workflow.add_node("pre_audit_node", pre_audit_node)
     workflow.add_node("ppt_node", ppt_node)
     workflow.add_node("video_node", video_node)
+    workflow.add_node("merge_aggregation", merge_aggregation_node)
     workflow.add_node("save_node", save_node)
 
     workflow.add_edge(START, "planning")
@@ -40,14 +46,14 @@ def build_parent_graph() -> Any:
         ["worker_node", "merge_workers"],
     )
     workflow.add_edge("worker_node", "merge_workers")
-    workflow.add_edge("merge_workers", "pre_audit_node")
     workflow.add_conditional_edges(
-        "pre_audit_node",
-        route_aggregation_after_audit,
+        "merge_workers",
+        route_after_merge,
         ["ppt_node", "video_node", "save_node"],
     )
-    workflow.add_edge("ppt_node", "save_node")
-    workflow.add_edge("video_node", "save_node")
+    workflow.add_edge("ppt_node", "merge_aggregation")
+    workflow.add_edge("video_node", "merge_aggregation")
+    workflow.add_edge("merge_aggregation", "save_node")
     workflow.add_edge("save_node", END)
 
     return workflow.compile()

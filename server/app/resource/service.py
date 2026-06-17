@@ -22,16 +22,8 @@ from app.resource.schemas import (
     GeneratedResourceItem,
     ResourceBundle,
     ResourceGenerationRequest,
-    ReviewResult,
 )
-from app.resource.workflow.audit import (
-    BUNDLE_AGENT_ID,
-    PPT_AGENT_ID,
-    PPT_REVIEW_AGENT_ID,
-    PRE_REVIEW_AGENT_ID,
-    VIDEO_AGENT_ID,
-    VIDEO_REVIEW_AGENT_ID,
-)
+from app.resource.workflow.audit import BUNDLE_AGENT_ID, PPT_AGENT_ID, VIDEO_AGENT_ID
 from app.resource.workflow.nodes import AGGREGATION_AGENT_IDS
 
 logger = get_module_logger("resource", sub="service")
@@ -120,21 +112,6 @@ class ResourceService:
             depends_on_agents=depends_on_agents,
         )
 
-    async def results_for_review(
-        self,
-        user_id: int,
-        resource_id: int,
-        failures: dict[str, AgentResult],
-    ) -> dict[str, AgentResult]:
-        from app.resource.persistence import db_item_to_agent_result
-
-        db_items = await self.repository.list_resource_items(user_id, resource_id)
-        persisted = {
-            item.agent_type: db_item_to_agent_result(item)
-            for item in db_items
-        }
-        return {**persisted, **failures}
-
     async def save_generation_results(
         self,
         *,
@@ -142,7 +119,6 @@ class ResourceService:
         resource_id: int,
         request: ResourceGenerationRequest,
         results: dict[str, AgentResult],
-        review_result: ReviewResult,
         teaching_plan,
     ) -> None:
         await self.repository.save_generation_results(
@@ -150,7 +126,6 @@ class ResourceService:
             resource_id=resource_id,
             request=request,
             results=results,
-            review_result=review_result,
             teaching_plan=teaching_plan,
         )
 
@@ -166,11 +141,6 @@ class ResourceService:
             return None
 
         db_items = await self.repository.list_resource_items(user_id, resource_id)
-        review_result = (
-            ReviewResult.model_validate(resource.review_result)
-            if isinstance(resource.review_result, dict)
-            else None
-        )
         metadata = {
             "source": "database",
             "failed_agents": resource.failed_agents or [],
@@ -183,7 +153,6 @@ class ResourceService:
             learning_need=resource.learning_need or "",
             selected_agents=resource.selected_agents or [],
             resources=[db_item_to_resource_item(item) for item in db_items],
-            review_result=review_result,
             status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",
             updated_at=resource.updated_at.isoformat() if resource.updated_at else "",

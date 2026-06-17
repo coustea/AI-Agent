@@ -48,7 +48,6 @@ async def run_multi_agent_generation(
             run_id=run_id,
             emitter=emitter,
             results={},
-            review_results=[],
         )
         final_state = await graph.ainvoke(initial_state)
         success = bool(final_state.get("success", False))

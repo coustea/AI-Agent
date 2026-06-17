@@ -9,7 +9,6 @@ from langgraph.types import Send
 
 from app.infra.database import session_scope
 from app.resource.agents import AGENT_REGISTRY
-from app.resource.agents.ppt import build_resource_material
 from app.resource.events import AgentRunTracker
 from app.resource.persistence import ResourceRepository, db_item_to_agent_result
 from app.resource.schemas import (
@@ -22,17 +21,9 @@ from app.resource.workflow.audit import (
     BUNDLE_AGENT_ID,
     COORDINATOR_AGENT_ID,
     PPT_AGENT_ID,
-    PPT_REVIEW_AGENT_ID,
-    PRE_REVIEW_AGENT_ID,
     VIDEO_AGENT_ID,
-    VIDEO_REVIEW_AGENT_ID,
-    build_ppt_audit_envelope,
-    build_pre_audit_envelope,
-    build_video_audit_envelope,
-    failed_review_result,
-    review_result_from_agent,
 )
-from app.resource.workflow.state import ParentState, WorkerInputState, merge_review_results
+from app.resource.workflow.state import ParentState, WorkerInputState
 
 logger = logging.getLogger(__name__)
 
@@ -110,19 +101,6 @@ def collect_successful_handoffs(
     return handoffs
 
 
-async def load_results_for_review(
-    *,
-    user_id: int,
-    resource_id: int,
-    failures: dict[str, AgentResult],
-) -> dict[str, AgentResult]:
-    async with session_scope() as session:
-        repository = ResourceRepository(session)
-        db_items = await repository.list_resource_items(user_id, resource_id)
-    persisted = {item.agent_type: db_item_to_agent_result(item) for item in db_items}
-    return {**persisted, **failures}
-
-
 async def persist_result_and_emit_artifact(
     *,
     user_id: int,
@@ -146,6 +124,9 @@ async def persist_result_and_emit_artifact(
         artifact_id=str(resource_item.id),
         metrics=result.metrics,
     )
+
+
+# ── Planning node ──────────────────────────────────────────────────────
 
 
 async def planning_node(state: ParentState) -> dict[str, Any]:
@@ -177,9 +158,14 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
             teaching_plan = TeachingPlan.model_validate(plan_data)
 
     if not planning_result.success or teaching_plan is None:
-        raise ValueError(planning_result.error or "规划阶段未返回教学计划")
+        error_msg = planning_result.error or "规划阶段未返回教学计划"
+        logger.error("规划阶段失败: resource_id=%s, error=%s", state["resource_id"], error_msg)
+        raise ValueError(error_msg)
 
     return {"teaching_plan": teaching_plan}
+
+
+# ── Worker nodes ───────────────────────────────────────────────────────
 
 
 def base_worker_ids(state: ParentState) -> list[str]:
@@ -264,18 +250,15 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
             )
         except Exception as exc:
             logger.error("worker_node %s 入库异常: %s", agent_id, exc, exc_info=True)
-            result = AgentResult(
-                success=False,
-                error=f"入库失败: {exc}",
-                title=result.title,
-                summary=result.summary,
-                content=result.content,
-                file_type=result.file_type,
-                metadata=result.metadata,
-            )
+            # 保留原始成功的 result，仅在 metadata 中标记入库失败
+            updated_metadata = {**result.metadata, "persist_error": str(exc)}
+            result = result.model_copy(update={"metadata": updated_metadata})
 
     result = require_downstream_context_for_base_result(agent_id, result)
     return {"results": {agent_id: result}}
+
+
+# ── Merge workers node ─────────────────────────────────────────────────
 
 
 async def merge_workers_node(state: ParentState) -> dict[str, Any]:
@@ -298,7 +281,14 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     return {}
 
 
-def route_aggregation_after_audit(state: ParentState) -> list[str]:
+# ── Routing after merge ────────────────────────────────────────────────
+
+
+def route_after_merge(state: ParentState) -> list[str]:
+    """路由到聚合 Agent（PPT/Video）或直接保存。
+
+    PPT 和 Video 被选中时并行执行，通过 merge_aggregation barrier 同步后再进 save_node。
+    """
     enabled = state["request"].enabled_agent_ids()
     destinations: list[str] = []
     if PPT_AGENT_ID in enabled:
@@ -308,116 +298,128 @@ def route_aggregation_after_audit(state: ParentState) -> list[str]:
     return destinations or ["save_node"]
 
 
-async def pre_audit_node(state: ParentState) -> dict[str, Any]:
-    failed_results = {aid: r for aid, r in state["results"].items() if not r.success}
-    review_results = await load_results_for_review(
-        user_id=state["user_id"],
-        resource_id=state["resource_id"],
-        failures=failed_results,
+# ── Aggregation nodes (PPT, Video) ─────────────────────────────────────
+
+
+async def _run_aggregation_agent(
+    state: ParentState,
+    *,
+    agent_id: str,
+    running_message: str,
+    extra_input_builder: Any | None = None,
+) -> dict[str, Any]:
+    """运行聚合 Agent（PPT/Video），不含审核。"""
+    emitter = state["emitter"]
+    await emitter.emit_agent(
+        agent_id,
+        status="running",
+        message=running_message,
+        progress=80,
+        phase=f"{agent_id}_generating",
     )
 
-    pre_audit_envelope, missing_resources = build_pre_audit_envelope(
-        request=state["request"],
-        results=review_results,
-        profile=state["profile"],
-        teaching_plan=state["teaching_plan"],
-    )
-    source_audit_required = bool(pre_audit_envelope["deep_audit_resources"])
+    base_handoffs = collect_successful_handoffs(state["results"], teaching_plan=state.get("teaching_plan"))
 
-    pre_review_result = None
-    if missing_resources:
-        pre_review_result = failed_review_result(
-            status="needs_revision",
-            message=f"资源生成不完整: {', '.join(missing_resources)}",
-            revision_targets=missing_resources,
-            review_mode="pre_audit",
-        )
-        await state["emitter"].emit_agent(
-            PRE_REVIEW_AGENT_ID,
-            status="finished",
-            message=f"审核发现资源不完整: {', '.join(missing_resources)}（已放行，请留意提示）",
-            progress=80,
-            metrics={"review_warning": True, "missing_resources": missing_resources},
-        )
-    elif source_audit_required and "review" in AGENT_REGISTRY:
-        review_input = ResourceInput(
+    agent_config_extra: dict[str, Any] = {"upstream_handoff_agent_ids": list(base_handoffs.keys())}
+    if extra_input_builder:
+        extra = extra_input_builder(ResourceInput(
             resource_id=state["resource_id"],
             learning_need=state["request"].learning_need,
             learning_scenario=state["request"].learning_scenario,
+            agent_name=agent_id,
+            agent_config=state["request"].agent_configs.get(agent_id, {}),
+            teaching_plan=state["teaching_plan"],
             profile=state["profile"],
-            agent_config={
-                "review_envelope": pre_audit_envelope,
-                "progress_agent_id": PRE_REVIEW_AGENT_ID,
-            },
-        )
-        async with AgentRunTracker(
-            emitter=state["emitter"],
-            agent_id=PRE_REVIEW_AGENT_ID,
-            phase="reviewing_sources",
-            message="正在审核基础资源事实性与安全性",
-            progress=72,
-        ) as pre_review_tracker:
-            pre_review_agent_result = await AGENT_REGISTRY["review"](state["emitter"]).generate_resource(review_input)
-            await pre_review_tracker.finish(
-                "前置审核完成",
-                success=pre_review_agent_result.success,
-                metrics={"review_status": pre_review_agent_result.metadata.get("review_status")},
-            )
-        pre_review_result = review_result_from_agent(pre_review_agent_result)
-        if not pre_review_result.passed:
-            await state["emitter"].emit_agent(
-                PRE_REVIEW_AGENT_ID,
-                status="finished",
-                message=f"审核发现问题: {len(pre_review_result.issues)} 项（已放行，请留意提示）",
-                progress=80,
-                metrics={"review_warning": True, "issue_count": len(pre_review_result.issues)},
-            )
-    else:
-        await state["emitter"].emit_agent(
-            PRE_REVIEW_AGENT_ID,
-            status="skipped",
-            message="无需深度审核，跳过前置审核",
-            progress=80,
-        )
-        from app.resource.schemas import ReviewResult
-        pre_review_result = ReviewResult(passed=True, overall_score=100)
+            upstream_handoffs=base_handoffs,
+        ))
+        if extra:
+            agent_config_extra.update(extra)
 
-    return {"review_results": [pre_review_result] if pre_review_result else []}
+    agent_input = build_agent_resource_input(
+        request=state["request"],
+        resource_id=state["resource_id"],
+        agent_id=agent_id,
+        teaching_plan=state["teaching_plan"],
+        profile=state["profile"],
+        upstream_handoffs=base_handoffs,
+        agent_config_extra=agent_config_extra,
+    )
+
+    agent = AGENT_REGISTRY[agent_id](emitter)
+    async with AgentRunTracker(
+        emitter=emitter,
+        agent_id=agent_id,
+        phase="llm_generating",
+        message=f"{agent_id} 模型生成中",
+        progress=80,
+    ) as tracker:
+        result = await agent.generate_resource(agent_input)
+        await tracker.finish(
+            result.summary if result.success else (result.error or f"{agent_id} 生成失败"),
+            success=result.success,
+            metrics=result.metrics,
+        )
+
+    if result.success and result.content:
+        try:
+            await persist_result_and_emit_artifact(
+                user_id=state["user_id"],
+                resource_id=state["resource_id"],
+                result=result,
+                emitter=emitter,
+                depends_on_agents=list(base_handoffs.keys()),
+            )
+        except Exception as exc:
+            logger.error("聚合 Agent %s 入库异常: %s", agent_id, exc, exc_info=True)
+            updated_metadata = {**result.metadata, "persist_error": str(exc)}
+            result = result.model_copy(update={"metadata": updated_metadata})
+
+    return {"results": {agent_id: result}}
 
 
 async def ppt_node(state: ParentState) -> dict[str, Any]:
-    from app.resource.workflow.aggregation import run_aggregation_node
+    from app.resource.agents.ppt import build_resource_material
 
     def ppt_extra_input(base_input: ResourceInput) -> dict[str, Any] | None:
         material_bundle = build_resource_material(base_input)
         return {"material_bundle": material_bundle.model_dump(mode="json")}
 
-    return await run_aggregation_node(
+    return await _run_aggregation_agent(
         state,
         agent_id=PPT_AGENT_ID,
-        review_agent_id=PPT_REVIEW_AGENT_ID,
         running_message="正在生成 PPT",
-        generating_message="PPT 模型生成中",
-        review_running_message="PPT 内容审核中",
-        review_skipped_message="PPT 未成功生成，跳过 PPT 审核",
-        build_audit_envelope=build_ppt_audit_envelope,
         extra_input_builder=ppt_extra_input,
     )
 
 
 async def video_node(state: ParentState) -> dict[str, Any]:
-    from app.resource.workflow.aggregation import run_aggregation_node
-
-    return await run_aggregation_node(
+    return await _run_aggregation_agent(
         state,
         agent_id=VIDEO_AGENT_ID,
-        review_agent_id=VIDEO_REVIEW_AGENT_ID,
         running_message="正在生成讲解视频配置与分镜",
-        generating_message="视频模型生成中",
-        review_running_message="讲解视频内容审核中",
-        review_skipped_message="讲解视频未成功生成，跳过审核",
-        build_audit_envelope=build_video_audit_envelope,
     )
+
+
+# ── Merge aggregation barrier ──────────────────────────────────────────
+
+
+async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
+    """Barrier 节点：等待所有聚合 Agent 完成后再进入 save。"""
+    results = state.get("results") or {}
+    agg_results = {aid: r for aid, r in results.items() if aid in AGGREGATION_AGENT_IDS}
+    success_count = sum(1 for r in agg_results.values() if r.success)
+    fail_count = sum(1 for r in agg_results.values() if not r.success)
+    await state["emitter"].emit_agent(
+        BUNDLE_AGENT_ID,
+        status="running",
+        message=f"聚合资源生成完成：成功 {success_count} 个，失败 {fail_count} 个",
+        progress=95,
+        phase="aggregation_done",
+    )
+    return {}
+
+
+# ── Save node ──────────────────────────────────────────────────────────
 
 
 async def save_node(state: ParentState) -> dict[str, Any]:
@@ -429,8 +431,6 @@ async def save_node(state: ParentState) -> dict[str, Any]:
         phase="bundling",
     )
 
-    review_result = merge_review_results(state.get("review_results") or [])
-
     try:
         async with session_scope() as session:
             repository = ResourceRepository(session)
@@ -439,7 +439,6 @@ async def save_node(state: ParentState) -> dict[str, Any]:
                 resource_id=state["resource_id"],
                 request=state["request"],
                 results=state["results"],
-                review_result=review_result,
                 teaching_plan=state["teaching_plan"],
             )
             saved_items = await repository.list_resource_items(state["user_id"], state["resource_id"])

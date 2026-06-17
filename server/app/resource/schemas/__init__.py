@@ -41,7 +41,6 @@ from app.resource.schemas.result import (
     AgentResult,
     NodeInput,
     ResourceInput,
-    ReviewResult,
 )
 
 # ── Response ──────────────────────────────────────────────────────────────
@@ -70,7 +69,6 @@ __all__ = [
     "ResourceInput",
     "NodeInput",
     "GeneratedResourceItem",
-    "ReviewResult",
     "ResourceBundle",
     # Response models
 ]

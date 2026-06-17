@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import GeneratedResource, GeneratedResourceItem as GeneratedResourceItemModel
 from app.resource.persistence.mappers import content_envelope
-from app.resource.schemas import AgentResult, ResourceGenerationRequest, TeachingPlan, ReviewResult
+from app.resource.schemas import AgentResult, ResourceGenerationRequest, TeachingPlan
 
 
 class ResourceRepository:
@@ -152,16 +152,10 @@ class ResourceRepository:
         resource_id: int,
         request: ResourceGenerationRequest,
         results: dict[str, AgentResult],
-        review_result: ReviewResult,
         teaching_plan: TeachingPlan,
     ) -> None:
         saved_items = await self.list_resource_items(user_id, resource_id)
         failed_agents = [agent_id for agent_id, result in results.items() if not result.success]
-        for agent_id in review_result.failed_agents:
-            if agent_id and agent_id not in failed_agents:
-                failed_agents.append(agent_id)
-        if not review_result.passed and "review" not in failed_agents:
-            failed_agents.append("review")
         successful = len(saved_items)
         if failed_agents and successful:
             status = "partial_completed"
@@ -174,7 +168,6 @@ class ResourceRepository:
             if resource is None or resource.user_id != user_id:
                 raise ValueError("资源不存在或无权限")
             resource.teaching_plan = teaching_plan.model_dump(mode="json")
-            resource.review_result = review_result.model_dump(mode="json")
             resource.failed_agents = failed_agents
             resource.workflow_metadata = {
                 "selected_agents": request.enabled_agent_ids(),

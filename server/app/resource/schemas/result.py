@@ -62,14 +62,3 @@ class NodeInput(BaseModel):
     profile: dict[str, Any] = Field(default_factory=dict)
     existing_resources: dict[str, AgentResult] = Field(default_factory=dict)
     agent_config: dict[str, Any] = Field(default_factory=dict)
-
-
-class ReviewResult(BaseModel):
-    """Review Agent 的审查结果。"""
-    passed: bool = True
-    overall_score: int = Field(default=100, ge=0, le=100)
-    consistency_score: int = Field(default=100, ge=0, le=100, description="知识一致性评分")
-    personalization_score: int = Field(default=100, ge=0, le=100, description="个性化匹配度评分")
-    issues: list[str] = Field(default_factory=list)
-    suggestions: list[str] = Field(default_factory=list)
-    failed_agents: list[str] = Field(default_factory=list)
