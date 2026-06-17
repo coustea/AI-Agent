@@ -92,6 +92,32 @@ def _normalize_book_title(source: str) -> str:
     return title.strip(" ()")
 
 
+def _normalize_source_identity_text(value: Any) -> str:
+    """Normalize source identity text for canonical comparison.
+
+    Applies book title normalization (strips noise terms) then converts
+    to casefolded alphanumeric-only form for fuzzy identity matching.
+    """
+    text = _normalize_book_title(str(value or ""))
+    text = text.casefold().strip()
+    if not text:
+        return ""
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def extract_canonical_source_identity(metadata: dict[str, Any]) -> str:
+    """Extract a canonical source identity from metadata.
+
+    Tries metadata keys in priority order: book_title, source, file_name.
+    Returns casefolded alphanumeric-only string for fuzzy matching.
+    """
+    for key in ("book_title", "source", "file_name"):
+        normalized = _normalize_source_identity_text(metadata.get(key))
+        if normalized:
+            return normalized
+    return ""
+
+
 def build_sparse_search_text(text: str, metadata: dict[str, Any]) -> str:
     title = _normalize_book_title(str(metadata.get("source") or metadata.get("file_name") or ""))
     heading = str(metadata.get("heading_path") or metadata.get("h1") or metadata.get("h2") or "").strip()

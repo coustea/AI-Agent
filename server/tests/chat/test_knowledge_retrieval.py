@@ -419,3 +419,48 @@ def test_compute_source_metrics_counts_top1_accuracy_and_pollution() -> None:
 
     assert metrics["top1_source_accuracy"] == 1.0
     assert metrics["cross_book_pollution_rate"] == 0.5
+
+
+def test_extract_canonical_source_identity_prefers_book_title_then_source_then_file_name() -> None:
+    from app.chat.tools.knowledge import extract_canonical_source_identity
+
+    assert (
+        extract_canonical_source_identity(
+            {
+                "book_title": "《Java从入门到精通》",
+                "source": "ignored-source.md",
+                "file_name": "ignored-file.md",
+            }
+        )
+        == "java从入门到精通"
+    )
+    assert (
+        extract_canonical_source_identity(
+            {
+                "source": "Java从入门到精通（第2版）.final.md",
+                "file_name": "ignored-file.md",
+            }
+        )
+        == "java从入门到精通第2版finalmd"
+    )
+    assert (
+        extract_canonical_source_identity(
+            {
+                "file_name": "Java从入门到精通-第06章.md",
+            }
+        )
+        == "java从入门到精通第06章md"
+    )
+
+
+def test_extract_canonical_source_identity_strips_known_noise() -> None:
+    from app.chat.tools.knowledge import extract_canonical_source_identity
+
+    assert (
+        extract_canonical_source_identity(
+            {
+                "source": "Java从入门到精通（第2版） (z-library.sk, 1lib.sk, z-lib.sk).final.md",
+            }
+        )
+        == "java从入门到精通第2版finalmd"
+    )
