@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_logger
 from app.infra.models import QuizQuestion
+from app.config import QUIZ_IMPORT_BATCH_SIZE
 
 logger = get_logger(__name__)
 
@@ -21,9 +22,6 @@ logger = get_logger(__name__)
 QUIZ_DIR = Path(__file__).parent.parent.parent / "quiz" / "final"
 # 408 题库子目录名
 QUIZ_BANK_SUBDIR = "408题库"
-
-# 批量写入的批次大小
-BATCH_SIZE = 200
 
 
 async def _load_quiz_files() -> list[tuple[dict, str]]:
@@ -121,7 +119,7 @@ async def import_quiz_bank(session: AsyncSession) -> int:
         batch.append(model)
 
         # 达到批次大小时提交一次
-        if len(batch) >= BATCH_SIZE:
+        if len(batch) >= QUIZ_IMPORT_BATCH_SIZE:
             session.add_all(batch)
             await session.commit()
             imported += len(batch)

@@ -41,10 +41,9 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 from app.profile.service import get_profile_service
+from app.config import IMAGE_EXTENSIONS
 
 logger = get_logger(__name__)
-
-IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 
 def _current_date_text() -> str:

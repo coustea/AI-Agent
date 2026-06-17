@@ -24,7 +24,7 @@ from app.chat.schemas import (
     TutorAgentInput,
     UploadResponse,
 )
-from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST
+from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, IMAGE_EXTENSIONS, CHAT_HISTORY_LIMIT
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage
 
@@ -34,9 +34,6 @@ logger = get_logger(__name__)
 # -----------------------------------------------------------------------
 # 核心函数：build_messages / chat
 # -----------------------------------------------------------------------
-
-IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
-HISTORY_LIMIT = 20
 
 
 def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
@@ -67,7 +64,7 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
     svc = _get_chat_memory_service()
 
     # 查询历史消息
-    raw_messages = await svc.list_messages(user_id=user_id, session_id=session_id, limit=HISTORY_LIMIT)
+    raw_messages = await svc.list_messages(user_id=user_id, session_id=session_id, limit=CHAT_HISTORY_LIMIT)
 
     # 查询工具调用记录，按 tool_call_id 建索引
     tool_invocations = await svc.list_tool_invocations(user_id=user_id, session_id=session_id, limit=50)

@@ -22,11 +22,11 @@ from app.evaluation.response import (
 )
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, LearningSession
+from app.config import STREAK_MIN_SECONDS
 
 logger = get_logger(__name__)
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")  # 前端时区：上海（UTC+8）
-STREAK_MIN_SECONDS = 300  # 连续学习天数判定阈值：每天至少 5 分钟
 
 
 @dataclass(frozen=True)

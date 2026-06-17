@@ -11,7 +11,7 @@ import json
 import websockets
 
 from app.avatar.services import xfyun_auth
-from app.config import ASR_API_KEY, ASR_API_SECRET, ASR_APP_ID, AVATAR_IAT_URL
+from app.config import ASR_API_KEY, ASR_API_SECRET, ASR_APP_ID, AVATAR_IAT_URL, ASR_VAD_EOS
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +49,7 @@ class IatClient:
                         "language": "zh_cn",
                         "domain": "iat",
                         "accent": "mandarin",
-                        "vad_eos": 1000,  # VAD 结束静默时长（毫秒）
+                        "vad_eos": ASR_VAD_EOS,  # VAD 结束静默时长（毫秒）
                         "ptt": 1,         # 开启标点符号
                         "pd": "0",        # 说话人分离模式
                         "nunum": 0,       # 数字转写为阿拉伯数字

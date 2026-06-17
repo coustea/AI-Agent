@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from app.resource.schemas import AgentResult, ResourceGenerationRequest, ReviewResult, TeachingPlan
+from app.config import REVIEW_CONTENT_LIMIT
 
 SOURCE_AUDIT_AGENT_IDS = ("content", "reading")
 COMPLETENESS_ONLY_AGENT_IDS = ("quiz", "mindmap", "code")
@@ -16,7 +17,6 @@ PPT_REVIEW_AGENT_ID = "ppt_review"
 VIDEO_AGENT_ID = "video"
 VIDEO_REVIEW_AGENT_ID = "video_review"
 BUNDLE_AGENT_ID = "bundle"
-REVIEW_CONTENT_LIMIT = 12_000
 
 
 def has_generated_content(result: AgentResult | None) -> bool:

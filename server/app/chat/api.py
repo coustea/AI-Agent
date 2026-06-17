@@ -553,7 +553,7 @@ async def update_profile_onboarding(
         await db.exec(
             update(User)
             .where(User.id == user_id)
-            .values(is_first_login=False)
+            .values(is_first_login=True)
         )
         await db.commit()
         logger.info("[ChatAPI] onboarding complete: user_id=%s", user_id)

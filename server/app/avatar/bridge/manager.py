@@ -20,6 +20,7 @@ from fastapi import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from app.infra.logging import get_logger
+from app.config import ASR_VAD_EOS
 
 logger = get_logger(__name__)
 
@@ -44,7 +45,7 @@ class RealtimeBridge:
         self._asr_loop_task = None
 
         # VAD 自适应参数
-        self._vad_eos = 1000            # VAD 结束静默时长（毫秒）
+        self._vad_eos = ASR_VAD_EOS     # VAD 结束静默时长（毫秒）
         self._consecutive_empty = 0     # 连续空识别轮次计数
         self._empty_rate = 0.0          # 空识别率（用于自适应调整 VAD）
         self._round_metrics: list[dict] = []  # 每轮 ASR 的指标记录

@@ -34,6 +34,8 @@ from app.config import (
     KB_ENABLED,
     KB_OLLAMA_BASE_URL,
     KB_TOP_K,
+    KB_QUERY_EMBEDDING_CACHE_SIZE,
+    KB_SPARSE_CORPUS_LIMIT,
 )
 from app.infra.logging import get_logger
 
@@ -41,10 +43,6 @@ logger = get_logger(__name__)
 
 # Cache for query embeddings to avoid repeated model calls.
 # Key: normalized query string, Value: embedding vector.
-# query embedding 缓存大小，避免重复调用 Ollama 模型
-_QUERY_EMBEDDING_CACHE_SIZE = 500
-# 稀疏检索加载的文档上限，防止内存溢出
-_SPARSE_CORPUS_LIMIT = 12000
 # 中文分词正则：匹配连续 2 个及以上的中文字符
 _CHINESE_TERM_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
 # 英文/数字分词正则：匹配连续 2 个及以上的字母、数字、+、#、.、-
@@ -226,7 +224,7 @@ def _get_sparse_corpus() -> list[dict[str, Any]]:
         if collection is None:
             return []
         # 限制加载数量，防止超大知识库撑爆内存
-        raw = collection.get(include=["documents", "metadatas"], limit=_SPARSE_CORPUS_LIMIT)
+        raw = collection.get(include=["documents", "metadatas"], limit=KB_SPARSE_CORPUS_LIMIT)
     except Exception:
         logger.exception("[knowledge] failed to load sparse corpus")
         return []
@@ -270,7 +268,7 @@ def _get_bm25_index() -> BM25Index:
     return build_bm25_index(_get_sparse_corpus())
 
 
-@lru_cache(maxsize=_QUERY_EMBEDDING_CACHE_SIZE)
+@lru_cache(maxsize=KB_QUERY_EMBEDDING_CACHE_SIZE)
 def _get_cached_embedding(query: str) -> tuple[float, ...] | None:
     """获取查询的向量表示（带 LRU 缓存）。
 

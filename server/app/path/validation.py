@@ -6,12 +6,11 @@ import re
 
 from app.infra.logging import get_logger
 from app.path.schemas import ALLOWED_RESOURCE_TYPES, AgentLearningPathPlan, AgentPathNode
+from app.config import PATH_MIN_ESTIMATED_MINUTES, PATH_MAX_ESTIMATED_MINUTES
 
 logger = get_logger(__name__)
 
 VALID_DIFFICULTIES: tuple[str, ...] = ("beginner", "intermediate", "advanced")
-MIN_ESTIMATED_MINUTES = 10
-MAX_ESTIMATED_MINUTES = 180
 
 
 class PathPlanValidationError(ValueError):
@@ -193,10 +192,10 @@ def validate_path_plan(plan: AgentLearningPathPlan) -> None:
         if node.stage_id not in stage_ids:
             raise PathPlanValidationError(f"节点 {node.node_id} 引用了不存在的阶段: {node.stage_id}")
         if node.estimated_minutes is not None and (
-            node.estimated_minutes < MIN_ESTIMATED_MINUTES or node.estimated_minutes > MAX_ESTIMATED_MINUTES
+            node.estimated_minutes < PATH_MIN_ESTIMATED_MINUTES or node.estimated_minutes > PATH_MAX_ESTIMATED_MINUTES
         ):
             raise PathPlanValidationError(
-                f"节点 {node.node_id} 的 estimated_minutes 必须在 {MIN_ESTIMATED_MINUTES}-{MAX_ESTIMATED_MINUTES} 之间"
+                f"节点 {node.node_id} 的 estimated_minutes 必须在 {PATH_MIN_ESTIMATED_MINUTES}-{PATH_MAX_ESTIMATED_MINUTES} 之间"
             )
         if node.difficulty and node.difficulty not in VALID_DIFFICULTIES:
             raise PathPlanValidationError(

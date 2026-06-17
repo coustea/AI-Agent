@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import operator
 from typing import Any, Annotated, Literal, Union, TypedDict
 
 from pydantic import BaseModel, Field, model_validator

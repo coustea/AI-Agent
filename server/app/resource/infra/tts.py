@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import edge_tts
 from mutagen.mp3 import MP3

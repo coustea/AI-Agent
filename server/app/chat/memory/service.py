@@ -45,7 +45,6 @@ from app.config import (
     LTM_MIN_MESSAGES,
     LTM_MIN_TOKENS,
     LTM_COOLDOWN_MINUTES,
-    RECENT_RAW_MESSAGES,
     SUMMARY_CONTEXT_BLOCKS,
 )
 from app.infra.database import session_scope

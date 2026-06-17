@@ -47,13 +47,12 @@ from app.path.schemas import (
 from app.path.validation import normalize_path_plan, validate_path_plan
 from app.resource.path_helpers import generate_path_node_resource
 from app.resource.schemas import NodeInput
+from app.config import PATH_PASS_SCORE, PATH_QUIZ_SIZE
 
 logger = get_logger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-PASS_SCORE = 3
-QUIZ_SIZE = 5
 AUX_RESOURCE_TYPES = {"content", "mindmap", "code", "reading", "quiz", "ppt"}
 ACTIVE_NODE_STATUSES = {"available", "in_progress", "remediation", "reinforced"}
 STARTED_NODE_STATUSES = {"in_progress", "remediation", "reinforced"}
@@ -393,10 +392,10 @@ class PathService:
 
         round_no = await self._get_latest_round(node.id) + 1
         generated = await self._generate_question_payload(path=path, node=node, tutorial=tutorial, round_no=round_no)
-        if len(generated) != QUIZ_SIZE:
+        if len(generated) != PATH_QUIZ_SIZE:
             raise ValueError("当前节点还没有生成完整的五道题，请稍后重试")
         questions: list[PathNodeQuestion] = []
-        for index, item in enumerate(generated[:QUIZ_SIZE], start=1):
+        for index, item in enumerate(generated[:PATH_QUIZ_SIZE], start=1):
             question = PathNodeQuestion(
                 path_id=path.id,
                 node_id=node.id,
@@ -434,7 +433,7 @@ class PathService:
         path = await self._must_get_path(user_id, node.path_id)
         round_no = await self._get_latest_round(node.id)
         questions = await self._get_round_questions(node.id, round_no)
-        if len(questions) != QUIZ_SIZE:
+        if len(questions) != PATH_QUIZ_SIZE:
             raise ValueError("当前节点还没有完整的五道题")
 
         answer_map = {item.question_id: item.response for item in payload.answers}
@@ -455,7 +454,7 @@ class PathService:
                         weak_points.append(point)
         node.attempt_count += 1
         outcome = "passed"
-        passed = score >= PASS_SCORE
+        passed = score >= PATH_PASS_SCORE
         next_node_id: int | None = None
 
         if passed:
@@ -775,7 +774,7 @@ class PathService:
             node_id=node.node_id,
             course=path.title,
             topic=node.title,
-            score=float(score / QUIZ_SIZE * 100),
+            score=float(score / PATH_QUIZ_SIZE * 100),
             feedback=None,
             metadata={"weak_knowledge_points": weak_points, "outcome": outcome},
         )
