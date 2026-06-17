@@ -45,7 +45,7 @@ from app.path.schemas import (
     PathQuizSubmitResponse,
 )
 from app.path.validation import normalize_path_plan, validate_path_plan
-from app.resource.service import generate_path_node_resource
+from app.resource.path_helpers import generate_path_node_resource
 from app.resource.schemas import NodeInput
 
 logger = get_logger(__name__)

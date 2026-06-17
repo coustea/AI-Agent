@@ -27,10 +27,8 @@ from app.infra.models import User
 from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 from app.resource.events import resource_event_bus
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
-from app.resource.service import (
-    ResourceService,
-    run_multi_agent_generation,
-)
+from app.resource.service import ResourceService
+from app.resource.orchestrator import run_multi_agent_generation
 from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
 

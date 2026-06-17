@@ -386,279 +386,38 @@ async def pre_audit_node(state: ParentState) -> dict[str, Any]:
 
 
 async def ppt_node(state: ParentState) -> dict[str, Any]:
-    await state["emitter"].emit_agent(
-        PPT_AGENT_ID,
-        status="running",
-        message="正在生成 PPT",
-        progress=80,
-        phase="ppt_generating",
-    )
+    from app.resource.workflow.aggregation import run_aggregation_node
 
-    base_handoffs = collect_successful_handoffs(state["results"], teaching_plan=state.get("teaching_plan"))
-    material_bundle = build_resource_material(ResourceInput(
-        resource_id=state["resource_id"],
-        learning_need=state["request"].learning_need,
-        learning_scenario=state["request"].learning_scenario,
-        agent_name=PPT_AGENT_ID,
-        agent_config=state["request"].agent_configs.get(PPT_AGENT_ID, {}),
-        teaching_plan=state["teaching_plan"],
-        profile=state["profile"],
-        upstream_handoffs=base_handoffs,
-    ))
+    def ppt_extra_input(base_input: ResourceInput) -> dict[str, Any] | None:
+        material_bundle = build_resource_material(base_input)
+        return {"material_bundle": material_bundle.model_dump(mode="json")}
 
-    ppt_input = build_agent_resource_input(
-        request=state["request"],
-        resource_id=state["resource_id"],
+    return await run_aggregation_node(
+        state,
         agent_id=PPT_AGENT_ID,
-        teaching_plan=state["teaching_plan"],
-        profile=state["profile"],
-        upstream_handoffs=base_handoffs,
-        agent_config_extra={
-            "material_bundle": material_bundle.model_dump(mode="json"),
-            "upstream_handoff_agent_ids": list(base_handoffs.keys()),
-        },
+        review_agent_id=PPT_REVIEW_AGENT_ID,
+        running_message="正在生成 PPT",
+        generating_message="PPT 模型生成中",
+        review_running_message="PPT 内容审核中",
+        review_skipped_message="PPT 未成功生成，跳过 PPT 审核",
+        build_audit_envelope=build_ppt_audit_envelope,
+        extra_input_builder=ppt_extra_input,
     )
-
-    ppt_agent = AGENT_REGISTRY[PPT_AGENT_ID](state["emitter"])
-    async with AgentRunTracker(
-        emitter=state["emitter"],
-        agent_id=PPT_AGENT_ID,
-        phase="llm_generating",
-        message="PPT 模型生成中",
-        progress=80,
-    ) as tracker:
-        ppt_result = await ppt_agent.generate_resource(ppt_input)
-        await tracker.finish(
-            ppt_result.summary if ppt_result.success else (ppt_result.error or "PPT 生成失败"),
-            success=ppt_result.success,
-            metrics=ppt_result.metrics,
-        )
-
-    if ppt_result.success and ppt_result.content:
-        await persist_result_and_emit_artifact(
-            user_id=state["user_id"],
-            resource_id=state["resource_id"],
-            result=ppt_result,
-            emitter=state["emitter"],
-            depends_on_agents=list(base_handoffs.keys()),
-        )
-
-    await state["emitter"].emit_agent(PPT_REVIEW_AGENT_ID, status="running", message="PPT 内容审核中", progress=90)
-    ppt_review_result = None
-    if not ppt_result or not ppt_result.success:
-        await state["emitter"].emit_agent(
-            PPT_REVIEW_AGENT_ID,
-            status="skipped",
-            message="PPT 未成功生成，跳过 PPT 审核",
-            progress=95,
-        )
-    else:
-        ppt_failed_results = {aid: r for aid, r in {**state["results"], "ppt": ppt_result}.items() if not r.success}
-        ppt_review_results = await load_results_for_review(
-            user_id=state["user_id"],
-            resource_id=state["resource_id"],
-            failures=ppt_failed_results,
-        )
-        ppt_audit_envelope, ppt_missing_resources = build_ppt_audit_envelope(
-            request=state["request"],
-            results=ppt_review_results,
-            profile=state["profile"],
-            teaching_plan=state["teaching_plan"],
-        )
-        if ppt_missing_resources:
-            ppt_review_result = failed_review_result(
-                status="needs_revision",
-                message=f"PPT 审核发现缺失: {', '.join(ppt_missing_resources)}",
-                revision_targets=ppt_missing_resources,
-                review_mode="ppt_audit",
-            )
-            await state["emitter"].emit_agent(
-                PPT_REVIEW_AGENT_ID,
-                status="finished",
-                message=f"PPT 审核发现问题: {', '.join(ppt_missing_resources)}（已放行，请留意提示）",
-                progress=95,
-                metrics={"review_warning": True, "missing_resources": ppt_missing_resources},
-            )
-        elif "review" in AGENT_REGISTRY:
-            ppt_review_input = ResourceInput(
-                resource_id=state["resource_id"],
-                learning_need=state["request"].learning_need,
-                learning_scenario=state["request"].learning_scenario,
-                profile=state["profile"],
-                agent_config={
-                    "review_envelope": ppt_audit_envelope,
-                    "progress_agent_id": PPT_REVIEW_AGENT_ID,
-                },
-            )
-            async with AgentRunTracker(
-                emitter=state["emitter"],
-                agent_id=PPT_REVIEW_AGENT_ID,
-                phase="reviewing_ppt",
-                message="正在审核 PPT 内容安全与事实一致性",
-                progress=92,
-            ) as ppt_review_tracker:
-                ppt_review_agent_result = await AGENT_REGISTRY["review"](state["emitter"]).generate_resource(ppt_review_input)
-                await ppt_review_tracker.finish(
-                    "PPT 审核完成",
-                    success=ppt_review_agent_result.success,
-                    metrics={"review_status": ppt_review_agent_result.metadata.get("review_status")},
-                )
-            ppt_review_result = review_result_from_agent(ppt_review_agent_result)
-            if not ppt_review_result.passed:
-                await state["emitter"].emit_agent(
-                    PPT_REVIEW_AGENT_ID,
-                    status="finished",
-                    message=f"PPT 审核发现问题: {len(ppt_review_result.issues)} 项（已放行，请留意提示）",
-                    progress=95,
-                    metrics={"review_warning": True, "issue_count": len(ppt_review_result.issues)},
-                )
-        else:
-            ppt_review_result = failed_review_result(
-                status="blocked",
-                message="审核智能体不可用，无法完成 PPT 安全审核",
-                revision_targets=["review"],
-                review_mode="ppt_audit",
-            )
-            await state["emitter"].emit_agent(
-                PPT_REVIEW_AGENT_ID,
-                status="finished",
-                message="审核智能体不可用，PPT 安全审核已跳过",
-                progress=95,
-                metrics={"review_warning": True, "reason": "agent_unavailable"},
-            )
-
-    return {"results": {"ppt": ppt_result}, "review_results": [ppt_review_result] if ppt_review_result else []}
 
 
 async def video_node(state: ParentState) -> dict[str, Any]:
-    await state["emitter"].emit_agent(
-        VIDEO_AGENT_ID,
-        status="running",
-        message="正在生成讲解视频配置与分镜",
-        progress=80,
-        phase="video_generating",
-    )
+    from app.resource.workflow.aggregation import run_aggregation_node
 
-    base_handoffs = collect_successful_handoffs(state["results"], teaching_plan=state.get("teaching_plan"))
-    video_input = build_agent_resource_input(
-        request=state["request"],
-        resource_id=state["resource_id"],
+    return await run_aggregation_node(
+        state,
         agent_id=VIDEO_AGENT_ID,
-        teaching_plan=state["teaching_plan"],
-        profile=state["profile"],
-        upstream_handoffs=base_handoffs,
-        agent_config_extra=None,
+        review_agent_id=VIDEO_REVIEW_AGENT_ID,
+        running_message="正在生成讲解视频配置与分镜",
+        generating_message="视频模型生成中",
+        review_running_message="讲解视频内容审核中",
+        review_skipped_message="讲解视频未成功生成，跳过审核",
+        build_audit_envelope=build_video_audit_envelope,
     )
-
-    video_agent = AGENT_REGISTRY[VIDEO_AGENT_ID](state["emitter"])
-    async with AgentRunTracker(
-        emitter=state["emitter"],
-        agent_id=VIDEO_AGENT_ID,
-        phase="llm_generating",
-        message="视频模型生成中",
-        progress=80,
-    ) as tracker:
-        video_result = await video_agent.generate_resource(video_input)
-        await tracker.finish(
-            video_result.summary if video_result.success else (video_result.error or "视频生成失败"),
-            success=video_result.success,
-            metrics=video_result.metrics,
-        )
-
-    if video_result.success and video_result.content:
-        await persist_result_and_emit_artifact(
-            user_id=state["user_id"],
-            resource_id=state["resource_id"],
-            result=video_result,
-            emitter=state["emitter"],
-            depends_on_agents=list(base_handoffs.keys()),
-        )
-
-    await state["emitter"].emit_agent(VIDEO_REVIEW_AGENT_ID, status="running", message="讲解视频内容审核中", progress=90)
-    video_review_result = None
-    if not video_result or not video_result.success:
-        await state["emitter"].emit_agent(
-            VIDEO_REVIEW_AGENT_ID,
-            status="skipped",
-            message="讲解视频未成功生成，跳过审核",
-            progress=95,
-        )
-    else:
-        video_failed_results = {aid: r for aid, r in {**state["results"], "video": video_result}.items() if not r.success}
-        video_review_results = await load_results_for_review(
-            user_id=state["user_id"],
-            resource_id=state["resource_id"],
-            failures=video_failed_results,
-        )
-        video_audit_envelope, video_missing_resources = build_video_audit_envelope(
-            request=state["request"],
-            results=video_review_results,
-            profile=state["profile"],
-            teaching_plan=state["teaching_plan"],
-        )
-        if video_missing_resources:
-            video_review_result = failed_review_result(
-                status="needs_revision",
-                message=f"视频审核发现缺失: {', '.join(video_missing_resources)}",
-                revision_targets=video_missing_resources,
-                review_mode="video_audit",
-            )
-            await state["emitter"].emit_agent(
-                VIDEO_REVIEW_AGENT_ID,
-                status="finished",
-                message=f"视频审核发现问题: {', '.join(video_missing_resources)}（已放行，请留意提示）",
-                progress=95,
-                metrics={"review_warning": True, "missing_resources": video_missing_resources},
-            )
-        elif "review" in AGENT_REGISTRY:
-            video_review_input = ResourceInput(
-                resource_id=state["resource_id"],
-                learning_need=state["request"].learning_need,
-                learning_scenario=state["request"].learning_scenario,
-                profile=state["profile"],
-                agent_config={
-                    "review_envelope": video_audit_envelope,
-                    "progress_agent_id": VIDEO_REVIEW_AGENT_ID,
-                },
-            )
-            async with AgentRunTracker(
-                emitter=state["emitter"],
-                agent_id=VIDEO_REVIEW_AGENT_ID,
-                phase="reviewing_video",
-                message="正在审核讲解视频内容安全与事实一致性",
-                progress=92,
-            ) as video_review_tracker:
-                video_review_agent_result = await AGENT_REGISTRY["review"](state["emitter"]).generate_resource(video_review_input)
-                await video_review_tracker.finish(
-                    "讲解视频审核完成",
-                    success=video_review_agent_result.success,
-                    metrics={"review_status": video_review_agent_result.metadata.get("review_status")},
-                )
-            video_review_result = review_result_from_agent(video_review_agent_result)
-            if not video_review_result.passed:
-                await state["emitter"].emit_agent(
-                    VIDEO_REVIEW_AGENT_ID,
-                    status="finished",
-                    message=f"视频审核发现问题: {len(video_review_result.issues)} 项（已放行，请留意提示）",
-                    progress=95,
-                    metrics={"review_warning": True, "issue_count": len(video_review_result.issues)},
-                )
-        else:
-            video_review_result = failed_review_result(
-                status="blocked",
-                message="审核智能体不可用，无法完成视频安全审核",
-                revision_targets=["review"],
-                review_mode="video_audit",
-            )
-            await state["emitter"].emit_agent(
-                VIDEO_REVIEW_AGENT_ID,
-                status="finished",
-                message="审核智能体不可用，视频安全审核已跳过",
-                progress=95,
-                metrics={"review_warning": True, "reason": "agent_unavailable"},
-            )
-
-    return {"results": {"video": video_result}, "review_results": [video_review_result] if video_review_result else []}
 
 
 async def save_node(state: ParentState) -> dict[str, Any]:

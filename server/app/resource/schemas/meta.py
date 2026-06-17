@@ -1,0 +1,16 @@
+"""Agent metadata constants and default configuration."""
+
+from __future__ import annotations
+
+AGENT_META: dict[str, dict[str, str]] = {
+    "content": {"name": "课程内容", "icon": "Document", "description": "专业课程讲解文档"},
+    "mindmap": {"name": "思维导图", "icon": "Mindmap", "description": "知识结构思维导图"},
+    "quiz": {"name": "练习题", "icon": "Quiz", "description": "练习习题"},
+    "code": {"name": "代码示例", "icon": "Code", "description": "代码实操案例"},
+    "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
+    "ppt": {"name": "PPT文稿", "icon": "DataBoard", "description": "PPT文稿生成"},
+    "video": {"name": "讲解视频", "icon": "Video", "description": "结构化讲解视频脚本与分镜"},
+}
+
+AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "video"]
+AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "ppt"]

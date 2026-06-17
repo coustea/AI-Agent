@@ -1,32 +1,29 @@
-"""Public service seam for the resource domain."""
+"""Public service seam for the resource domain — CRUD use cases only.
+
+Orchestration entrypoint: app.resource.orchestrator
+Path-domain helpers:     app.resource.path_helpers
+"""
 
 from __future__ import annotations
 
-import time
 from typing import Any
-from uuid import uuid4
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
-from app.resource.agents import AGENT_REGISTRY
 from app.resource.constants import STANDALONE_RESOURCE_SOURCES
-from app.resource.events import AgentEventEmitter, resource_event_bus
+from app.resource.events import resource_event_bus
 from app.resource.persistence import (
     ResourceRepository,
-    db_item_to_agent_result,
     db_item_to_resource_item,
 )
 from app.resource.schemas import (
     AgentResult,
     GeneratedResourceItem,
-    NodeInput,
     ResourceBundle,
     ResourceGenerationRequest,
     ReviewResult,
 )
-from app.resource.workflow import build_parent_graph
 from app.resource.workflow.audit import (
     BUNDLE_AGENT_ID,
     PPT_AGENT_ID,
@@ -35,14 +32,9 @@ from app.resource.workflow.audit import (
     VIDEO_AGENT_ID,
     VIDEO_REVIEW_AGENT_ID,
 )
-from app.resource.workflow.nodes import (
-    AGGREGATION_AGENT_IDS,
-    build_agent_resource_input,
-    select_worker_agents,
-)
-from app.resource.workflow.state import ParentState
+from app.resource.workflow.nodes import AGGREGATION_AGENT_IDS
 
-logger = get_module_logger("resource", sub="workflow")
+logger = get_module_logger("resource", sub="service")
 
 
 class ResourceService:
@@ -134,6 +126,8 @@ class ResourceService:
         resource_id: int,
         failures: dict[str, AgentResult],
     ) -> dict[str, AgentResult]:
+        from app.resource.persistence import db_item_to_agent_result
+
         db_items = await self.repository.list_resource_items(user_id, resource_id)
         persisted = {
             item.agent_type: db_item_to_agent_result(item)
@@ -296,97 +290,6 @@ class ResourceService:
         return max(0, min(100, round(sum(weight * progress for weight, progress in stages) / weight_total)))
 
 
-async def generate_path_node_resource(
-    agent_id: str,
-    node_input: NodeInput,
-) -> AgentResult:
-    supported_agent_ids = {"content", "mindmap", "code", "reading", "quiz", "ppt", "video"}
-    if agent_id not in supported_agent_ids:
-        raise ValueError(f"Unsupported agent_id for path node: {agent_id}")
-    if agent_id not in AGENT_REGISTRY:
-        raise ValueError(f"Agent '{agent_id}' not found in AGENT_REGISTRY")
-
-    agent = AGENT_REGISTRY[agent_id]()
-    result = await agent.generate_node(node_input)
-    if not result.success:
-        logger.warning(
-            "path_node_resource agent %s failed: %s",
-            agent_id,
-            result.error or "unknown error",
-        )
-    return result
-
-
-async def run_multi_agent_generation(
-    user_id: int,
-    request: ResourceGenerationRequest,
-    profile: dict[str, Any],
-    resource_id: int,
-) -> None:
-    run_id = f"resource-{resource_id}-{uuid4().hex[:8]}"
-    emitter = AgentEventEmitter(resource_id=resource_id, run_id=run_id)
-    start_time = time.perf_counter()
-    success = False
-
-    try:
-        logger.info(
-            "启动 LangGraph 全局编排图资源生成: run_id=%s user_id=%s, resource_id=%s, agents=%s",
-            run_id, user_id, resource_id, request.enabled_agent_ids(),
-        )
-
-        async with session_scope() as session:
-            usecases = ResourceService(session)
-            await usecases.update_resource_status(resource_id, "generating")
-
-        graph = build_parent_graph()
-        initial_state = ParentState(
-            user_id=user_id,
-            resource_id=resource_id,
-            request=request,
-            profile=profile,
-            run_id=run_id,
-            emitter=emitter,
-            results={},
-            review_results=[],
-        )
-        final_state = await graph.ainvoke(initial_state)
-        success = bool(final_state.get("success", False))
-
-        if not success:
-            logger.warning("LangGraph 未产生成功终态: resource_id=%s", resource_id)
-            async with session_scope() as session:
-                usecases = ResourceService(session)
-                resource = await usecases.get_resource(user_id, resource_id)
-                if resource is not None and resource.status == "generating":
-                    await usecases.update_resource_status(resource_id, "failed")
-
-        await emitter.emit_done(
-            success=success,
-            message="资源生成完成" if success else "资源生成失败",
-        )
-        total_elapsed = time.perf_counter() - start_time
-        logger.info("资源生成结束: resource_id=%s, success=%s, 耗时=%.2fs", resource_id, success, total_elapsed)
-    except Exception as exc:
-        total_elapsed = time.perf_counter() - start_time
-        logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
-        async with session_scope() as session:
-            usecases = ResourceService(session)
-            await usecases.update_resource_status(resource_id, "failed")
-        await emitter.emit_done(success=False, message=f"资源生成失败: {exc}")
-    finally:
-        ResourceService.release_write_lock(resource_id)
-
-
 __all__ = [
-    "AGGREGATION_AGENT_IDS",
-    "STANDALONE_RESOURCE_SOURCES",
     "ResourceService",
-    "build_agent_resource_input",
-    "generate_path_node_resource",
-    "run_multi_agent_generation",
-    "select_worker_agents",
 ]
-
-# Internal helper aliases still used by resource-domain tests.
-_build_agent_resource_input = build_agent_resource_input
-_select_worker_agents = select_worker_agents

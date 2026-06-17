@@ -114,18 +114,22 @@ def build_pre_audit_envelope(
     }, missing_resources
 
 
-def build_ppt_audit_envelope(
+def build_aggregation_audit_envelope(
     *,
+    target_agent_id: str,
+    audit_mode: str,
+    resource_key: str,
     request: ResourceGenerationRequest,
     results: dict[str, AgentResult],
     profile: dict[str, Any],
     teaching_plan: TeachingPlan | None,
 ) -> tuple[dict[str, Any], list[str]]:
+    """Parameterized audit envelope for aggregation agents (PPT, Video)."""
     selected_agents = request.enabled_agent_ids()
     missing_resources: list[str] = []
-    ppt_result = results.get(PPT_AGENT_ID)
-    if PPT_AGENT_ID in selected_agents and not has_generated_content(ppt_result):
-        missing_resources.append(PPT_AGENT_ID)
+    target_result = results.get(target_agent_id)
+    if target_agent_id in selected_agents and not has_generated_content(target_result):
+        missing_resources.append(target_agent_id)
     approved_sources = [
         {
             "agent_id": agent_id,
@@ -139,18 +143,18 @@ def build_ppt_audit_envelope(
         for agent_id in selected_agents
         if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
     ]
-    ppt_resource = (
+    target_resource = (
         {
-            "agent_id": PPT_AGENT_ID,
-            "title": ppt_result.title,
-            "summary": ppt_result.summary,
-            "audit_content": bounded_content(ppt_result.content),
+            "agent_id": target_agent_id,
+            "title": target_result.title,
+            "summary": target_result.summary,
+            "audit_content": bounded_content(target_result.content),
         }
-        if has_generated_content(ppt_result)
+        if has_generated_content(target_result)
         else None
     )
     return {
-        "mode": "ppt_audit",
+        "mode": audit_mode,
         "request_context": {
             "learning_need": request.learning_need,
             "learning_scenario": request.learning_scenario,
@@ -163,8 +167,26 @@ def build_ppt_audit_envelope(
             if result.success and result.downstream_context is not None
         },
         "approved_sources": approved_sources,
-        "ppt_resource": ppt_resource,
+        resource_key: target_resource,
     }, missing_resources
+
+
+def build_ppt_audit_envelope(
+    *,
+    request: ResourceGenerationRequest,
+    results: dict[str, AgentResult],
+    profile: dict[str, Any],
+    teaching_plan: TeachingPlan | None,
+) -> tuple[dict[str, Any], list[str]]:
+    return build_aggregation_audit_envelope(
+        target_agent_id=PPT_AGENT_ID,
+        audit_mode="ppt_audit",
+        resource_key="ppt_resource",
+        request=request,
+        results=results,
+        profile=profile,
+        teaching_plan=teaching_plan,
+    )
 
 
 def build_video_audit_envelope(
@@ -174,50 +196,15 @@ def build_video_audit_envelope(
     profile: dict[str, Any],
     teaching_plan: TeachingPlan | None,
 ) -> tuple[dict[str, Any], list[str]]:
-    selected_agents = request.enabled_agent_ids()
-    missing_resources: list[str] = []
-    video_result = results.get(VIDEO_AGENT_ID)
-    if VIDEO_AGENT_ID in selected_agents and not has_generated_content(video_result):
-        missing_resources.append(VIDEO_AGENT_ID)
-    approved_sources = [
-        {
-            "agent_id": agent_id,
-            "title": results[agent_id].downstream_context.title
-            if results[agent_id].downstream_context else results[agent_id].title,
-            "summary": results[agent_id].downstream_context.one_sentence_summary
-            if results[agent_id].downstream_context else results[agent_id].summary,
-            "covered_outline_ids": results[agent_id].downstream_context.covered_outline_ids
-            if results[agent_id].downstream_context else [],
-        }
-        for agent_id in selected_agents
-        if agent_id in SOURCE_AUDIT_AGENT_IDS and has_generated_content(results.get(agent_id))
-    ]
-    video_resource = (
-        {
-            "agent_id": VIDEO_AGENT_ID,
-            "title": video_result.title,
-            "summary": video_result.summary,
-            "audit_content": bounded_content(video_result.content),
-        }
-        if has_generated_content(video_result)
-        else None
+    return build_aggregation_audit_envelope(
+        target_agent_id=VIDEO_AGENT_ID,
+        audit_mode="video_audit",
+        resource_key="video_resource",
+        request=request,
+        results=results,
+        profile=profile,
+        teaching_plan=teaching_plan,
     )
-    return {
-        "mode": "video_audit",
-        "request_context": {
-            "learning_need": request.learning_need,
-            "learning_scenario": request.learning_scenario,
-            "profile_summary": profile_summary(profile),
-            "teaching_plan": teaching_plan.model_dump(mode="json") if teaching_plan else {},
-        },
-        "upstream_handoffs": {
-            agent_id: result.downstream_context.model_dump(mode="json")
-            for agent_id, result in results.items()
-            if result.success and result.downstream_context is not None
-        },
-        "approved_sources": approved_sources,
-        "video_resource": video_resource,
-    }, missing_resources
 
 
 def failed_review_result(
