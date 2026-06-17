@@ -208,3 +208,39 @@ LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 30)
 INFERENCE_TEMPERATURE = get("models.temperature", 0.3)
 # 视觉模型温度参数（通常需要更高的创造性）
 VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
+
+# ============ Chat 扩展配置 ============
+# 支持的图片扩展名集合
+IMAGE_EXTENSIONS: set[str] = set(get("chat.image_extensions", ["png", "jpg", "jpeg", "gif", "webp"]))
+# 构建对话上下文时拉取的历史消息条数
+CHAT_HISTORY_LIMIT: int = get("chat.history_limit", 20)
+# 查询 embedding 缓存大小
+KB_QUERY_EMBEDDING_CACHE_SIZE: int = get("chat.query_embedding_cache_size", 500)
+# 稀疏检索加载的文档上限
+KB_SPARSE_CORPUS_LIMIT: int = get("chat.sparse_corpus_limit", 12000)
+
+# ============ 评估配置 ============
+# 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃
+STREAK_MIN_SECONDS: int = get("evaluation.streak_min_seconds", 300)
+
+# ============ 路径规划配置 ============
+# 节点估计时长下限（分钟）
+PATH_MIN_ESTIMATED_MINUTES: int = get("paths_config.min_estimated_minutes", 10)
+# 节点估计时长上限（分钟）
+PATH_MAX_ESTIMATED_MINUTES: int = get("paths_config.max_estimated_minutes", 180)
+# 路径节点测验题目数量
+PATH_QUIZ_SIZE: int = get("paths_config.quiz_size", 5)
+# 通过测验的最低分数
+PATH_PASS_SCORE: int = get("paths_config.pass_score", 3)
+
+# ============ 资源生成配置 ============
+# 审核时单个资源内容截断上限（字符数）
+REVIEW_CONTENT_LIMIT: int = get("resource.review_content_limit", 12000)
+
+# ============ 题库导入配置 ============
+# 批量写入的批次大小
+QUIZ_IMPORT_BATCH_SIZE: int = get("quiz.import_batch_size", 200)
+
+# ============ ASR 配置 ============
+# VAD 结束静默时长（毫秒）
+ASR_VAD_EOS: int = get("asr.vad_eos", 1000)

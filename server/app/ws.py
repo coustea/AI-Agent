@@ -1,7 +1,6 @@
-"""WebSocket 路由模块（旧版本）。
+"""WebSocket 路由模块。
 
 提供数字人语音对话的 WebSocket 端点。
-注意：此文件为旧版本，新路由已迁移至 ws_routes.py。
 """
 
 from __future__ import annotations
@@ -11,11 +10,13 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.auth.security import AuthError, _resolve_current_user_from_token
 from app.avatar.bridge.manager import avatar_bridge_manager
+from app.infra.database import session_scope
 
 # 创建路由实例
 router = APIRouter()
 
 
+# WebSocket 端点：数字人语音对话
 @router.websocket("/ws/avatar")
 async def avatar_websocket(websocket: WebSocket) -> None:
     """数字人语音对话 WebSocket 端点。
@@ -27,16 +28,17 @@ async def avatar_websocket(websocket: WebSocket) -> None:
     4. 创建或复用数字人桥接实例，处理双向语音流
     5. 连接断开时清理资源
     """
-    # 从 query 参数提取 JWT Token
+    # 从 query 参数提取 JWT Token（WebSocket 不支持自定义 header）
     token = websocket.query_params.get("token", "").strip()
     if not token:
-        # 缺少 Token，以 1008（Policy Violation）关闭连接
+        # 1008 = Policy Violation
         await websocket.close(code=1008, reason="missing token")
         return
 
     try:
-        # 验证 Token 并解析用户信息
-        user = await _resolve_current_user_from_token(token)
+        # 验证 Token 并解析用户信息（WebSocket 无法使用 DI，需要手动创建 session）
+        async with session_scope() as session:
+            user = await _resolve_current_user_from_token(token, session)
     except AuthError:
         # Token 无效或已过期
         await websocket.close(code=1008, reason="invalid token")

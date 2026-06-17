@@ -23,7 +23,7 @@ from app.path.api import router as path_router
 # 学习资源路由
 from app.resource.api import router as resource_router
 # WebSocket 路由
-from app.ws_routes import router as websocket_router
+from app.ws import router as websocket_router
 
 # 测验与错题本路由
 from app.quiz.api import router as quiz_router
