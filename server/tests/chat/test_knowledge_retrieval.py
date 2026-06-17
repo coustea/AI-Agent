@@ -379,3 +379,24 @@ def test_get_sparse_corpus_uses_cleaned_search_text(monkeypatch) -> None:
 
     assert corpus
     assert "z-library.sk" not in corpus[0]["search_text"]
+
+
+def test_merge_ranked_results_uses_rrf_ordering() -> None:
+    from app.chat.tools.knowledge import merge_ranked_results
+
+    dense_rows = [
+        {"rank": 1, "distance": 0.2, "metadata": {"source": "java.md", "chunk_index": 1}, "text": "dense-a", "retrieval_mode": "dense"},
+        {"rank": 2, "distance": 0.3, "metadata": {"source": "db.md", "chunk_index": 2}, "text": "dense-b", "retrieval_mode": "dense"},
+    ]
+    sparse_rows = [
+        {"rank": 1, "distance": -4.0, "metadata": {"source": "db.md", "chunk_index": 2}, "text": "sparse-b", "retrieval_mode": "sparse"},
+        {"rank": 2, "distance": -3.0, "metadata": {"source": "java.md", "chunk_index": 1}, "text": "sparse-a", "retrieval_mode": "dense"},
+    ]
+
+    merged = merge_ranked_results("query", dense_rows=dense_rows, sparse_rows=sparse_rows, top_k=2)
+
+    # RRF scoring:
+    # java.md: 1/(60+1) + 1/(60+2) = 0.0164 + 0.0159 = 0.0323
+    # db.md: 1/(60+2) + 1/(60+1) = 0.0159 + 0.0164 = 0.0323
+    # Both have same score, so order should preserve dense rank order (java.md first)
+    assert [item["metadata"]["source"] for item in merged] == ["java.md", "db.md"]

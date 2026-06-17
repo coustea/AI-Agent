@@ -515,6 +515,15 @@ def retrieve_sparse_knowledge(
     )
 
 
+def _rrf_score(rank: int, constant: int = 60) -> float:
+    """计算 Reciprocal Rank Fusion 分数。
+
+    RRF 分数 = 1 / (constant + rank)
+    constant 默认为 60，与业界常见设置一致。
+    """
+    return 1.0 / (constant + rank)
+
+
 def merge_ranked_results(
     query: str,
     *,
@@ -522,56 +531,39 @@ def merge_ranked_results(
     sparse_rows: list[dict[str, Any]],
     top_k: int | None = None,
 ) -> list[dict[str, Any]]:
-    """合并 dense 和 sparse 两路检索结果，按综合分数重新排名。
+    """合并 dense 和 sparse 两路检索结果，使用 Reciprocal Rank Fusion (RRF) 算法。
 
-    合并策略：
-    1. 按 (来源, chunk_index) 去重
-    2. dense 分数 = 100 - rank*3 + 词汇命中数*5
-    3. sparse 分数 = 200 - rank*4 + 词汇命中数*8（sparse 权重更高）
-    4. 同一文档取两路中的最高分
+    RRF 是一种简单有效的融合策略：
+    - 对每个列表中的每个结果，计算 RRF 分数 = 1/(60 + rank)
+    - 同一文档在多个列表中出现时，分数相加
+    - 按合并分数降序排列，相同分数时按原始 rank 排序
+
+    该方法不需要调参，对排序融合有良好效果。
     """
-    # 提取查询的分词结果（含扩展词），用于计算词汇命中数
-    query_terms = [term.lower() for term in _extract_query_terms(rewrite_query(query))]
-    # 以 (来源文件, chunk索引) 作为去重键
     merged_scores: dict[tuple[str, str], dict[str, Any]] = {}
 
-    # 处理 dense（向量）检索结果
-    for idx, item in enumerate(dense_rows, 1):
-        metadata = dict(item.get("metadata") or {})
-        key = _metadata_key(metadata)
-        # 计算查询词在文档中的命中数，命中越多相关性越高
-        lexical_hits = sum(1 for term in query_terms if term and term in str(item.get("text") or "").lower())
-        # dense 分数公式：基础分 100，按 rank 递减，词汇命中加分
-        merged_scores[key] = {
-            "item": {
-                **item,
-                "metadata": metadata,
-                "rank": idx,
-            },
-            "score": 100 - idx * 3 + lexical_hits * 5,
-        }
+    # 处理 dense 和 sparse 两路结果
+    for rows in (dense_rows, sparse_rows):
+        for item in rows:
+            metadata = dict(item.get("metadata") or {})
+            key = _metadata_key(metadata)
+            score = _rrf_score(int(item.get("rank") or 0))
+            existing = merged_scores.get(key)
+            if existing is None:
+                # 首次出现，直接插入
+                merged_scores[key] = {"item": {**item, "metadata": metadata}, "score": score}
+            else:
+                # 已存在，累加分数
+                existing["score"] += score
+                # 如果当前结果的 rank 更优，则更新 item
+                if item.get("rank", 9999) < existing["item"].get("rank", 9999):
+                    existing["item"] = {**item, "metadata": metadata}
 
-    # 处理 sparse（BM25）检索结果
-    for idx, item in enumerate(sparse_rows, 1):
-        metadata = dict(item.get("metadata") or {})
-        key = _metadata_key(metadata)
-        lexical_hits = sum(1 for term in query_terms if term and term in str(item.get("text") or "").lower())
-        # sparse 分数基数更高（200），rank 递减更快，词汇命中权重更大
-        candidate_score = 200 - idx * 4 + lexical_hits * 8
-        existing = merged_scores.get(key)
-        # 如果同一文档已在 dense 中出现，取两路中的最高分
-        if existing is None or candidate_score > existing["score"]:
-            merged_scores[key] = {
-                "item": {
-                    **item,
-                    "metadata": metadata,
-                    "rank": idx,
-                },
-                "score": candidate_score,
-            }
-
-    # 按综合分数降序排列，截取 top_k 结果
-    ordered = sorted(merged_scores.values(), key=lambda item: item["score"], reverse=True)
+    # 按分数降序排列，相同分数时按 rank 升序排列（保序）
+    ordered = sorted(
+        merged_scores.values(),
+        key=lambda x: (-x["score"], x["item"].get("rank", 9999)),
+    )
     result: list[dict[str, Any]] = []
     for idx, candidate in enumerate(ordered[: (top_k or KB_TOP_K)], 1):
         item = dict(candidate["item"])
