@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { clearCurrentUser } from '@/features/auth/model/currentUser'
 import { clearAuthToken, emitAuthExpired, getAuthToken } from '@/shared/auth/token'
 
 /** 后端统一响应信封 */
@@ -72,6 +73,7 @@ http.interceptors.response.use(
     // 登录/注册接口的 401/400 不跳转，只由页面 catch 处理
     const isAuthRequest = url.includes('/users/auth') || url === '/users'
     if (status === 401 && !isAuthRequest) {
+      clearCurrentUser()
       clearAuthToken()
       // 不再硬跳转，由 useAuthPolling 轮询或 router.beforeEach 统一处理
       // 派发自定义事件通知 token 失效

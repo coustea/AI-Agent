@@ -379,8 +379,6 @@ const todayWeekday = computed(() => new Intl.DateTimeFormat('zh-CN', {
 
 // removed activeDashboardTab
 
-const modelProvider = computed(() => 'DeepSeek')
-
 const profilePath = computed(() => profileRadarData.value?.radar?.path || '/profile')
 
 const radarSource = computed<any>(() => {
@@ -739,7 +737,7 @@ watch(
 
 .status-pill {
   min-height: 28px;
-  padding: 0 var(--space-2\.5);
+  padding: 0 var(--space-2_5);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.72);
@@ -809,7 +807,7 @@ watch(
 }
 
 .overview-copy h1 {
-  margin: var(--space-3) 0 var(--space-2\.5);
+  margin: var(--space-3) 0 var(--space-2_5);
   color: var(--color-text-strong);
   font-size: clamp(var(--text-2xl), 3vw, var(--text-3xl));
   line-height: 1.15;
@@ -876,7 +874,7 @@ watch(
 }
 
 .task-info h2 {
-  margin: var(--space-1\.5) 0 var(--space-2);
+  margin: var(--space-1_5) 0 var(--space-2);
   color: var(--color-text-strong);
   font-size: var(--text-xl);
   line-height: 1.3;
@@ -909,7 +907,7 @@ watch(
 .overview-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2\.5);
+  gap: var(--space-2_5);
   margin-top: var(--space-5);
 }
 
@@ -929,7 +927,7 @@ watch(
   color: var(--color-primary);
   font-size: var(--text-lg);
   font-weight: var(--weight-bold);
-  margin-bottom: var(--space-0\.5);
+  margin-bottom: var(--space-0_5);
 }
 
 .overview-stat span {
@@ -974,7 +972,7 @@ watch(
 
 .card-head h2,
 .challenge-top h2 {
-  margin: var(--space-1\.5) 0 0;
+  margin: var(--space-1_5) 0 0;
   color: var(--color-text-strong);
   font-size: var(--text-lg);
   line-height: 1.3;
@@ -983,7 +981,7 @@ watch(
 .text-link {
   border: none;
   background: transparent;
-  padding: var(--space-1) var(--space-0\.5);
+  padding: var(--space-1) var(--space-0_5);
   color: var(--color-primary);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
@@ -1063,7 +1061,7 @@ watch(
 
 .study-table-head,
 .resource-table-head {
-  padding: 0 var(--space-3) var(--space-2\.5);
+  padding: 0 var(--space-3) var(--space-2_5);
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
@@ -1308,7 +1306,7 @@ watch(
 }
 
 .state-copy h1 {
-  margin: 0 0 var(--space-2\.5) 0;
+  margin: 0 0 var(--space-2_5) 0;
   color: var(--color-text-strong);
   font-size: var(--text-2xl);
   line-height: 1.25;
@@ -1368,7 +1366,7 @@ watch(
   .study-row,
   .resource-row {
     grid-template-columns: 1fr;
-    gap: var(--space-2\.5);
+    gap: var(--space-2_5);
     align-items: flex-start;
     border: 1px solid var(--color-border-light);
   }

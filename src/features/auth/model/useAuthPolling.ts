@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAuthStatus } from '@/features/auth/api/auth'
+import { clearCurrentUser } from '@/features/auth/model/currentUser'
 import { AUTH_EXPIRED_EVENT, clearAuthToken } from '@/shared/auth/token'
 
 export function useAuthPolling(intervalMs: number = 60000) {
@@ -12,6 +13,7 @@ export function useAuthPolling(intervalMs: number = 60000) {
   const redirectToLogin = () => {
     if (redirected) return
     redirected = true
+    clearCurrentUser()
     clearAuthToken()
     router.push('/login')
   }

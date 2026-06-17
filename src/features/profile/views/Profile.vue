@@ -43,8 +43,8 @@
               <div class="info-content-box">
                 <span class="info-label">学校</span>
                 <div class="info-value school-info-strong">
-                  <span v-if="studentProfile.school_level" class="school-level-badge">{{ studentProfile.school_level }}</span>
                   <span class="school-name-text" :title="studentProfile.school || undefined">{{ studentProfile.school || '未填写' }}</span>
+                  <span v-if="studentProfile.school_level" class="school-level-badge">{{ studentProfile.school_level }}</span>
                 </div>
               </div>
             </div>
@@ -66,7 +66,36 @@
               <div class="info-icon-box"><el-icon><Cpu /></el-icon></div>
               <div class="info-content-box">
                 <span class="info-label">编程语言</span>
-                <span class="info-value">{{ studentProfile.preferred_language || '未填写' }}</span>
+                <div class="info-value">
+                  <div v-if="preferredLanguages.length > 0" class="course-display-wrapper user-card-course-wrapper">
+                    <strong class="course-single-title user-card-course-title" :title="preferredLanguages[0]">{{ preferredLanguages[0] }}</strong>
+                    <el-popover
+                        v-if="preferredLanguages.length > 1"
+                        placement="top"
+                        :width="220"
+                        trigger="hover"
+                        popper-class="course-popover"
+                    >
+                      <template #reference>
+                        <el-button link type="primary" class="view-all-courses-btn user-card-view-btn">
+                          共 {{ preferredLanguages.length }} 项
+                        </el-button>
+                      </template>
+                      <div class="all-courses-popover-content">
+                        <div class="popover-title">
+                          <el-icon><Cpu /></el-icon> 已填写的全部编程语言
+                        </div>
+                        <div class="popover-course-list">
+                          <div v-for="(language, idx) in preferredLanguages" :key="language" class="popover-course-item">
+                            <span class="course-number">{{ idx + 1 }}.</span>
+                            <span class="course-name">{{ language }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </el-popover>
+                  </div>
+                  <span v-else>未填写</span>
+                </div>
               </div>
             </div>
             <div class="info-mini-card">
@@ -85,7 +114,7 @@
                     >
                       <template #reference>
                         <el-button link type="primary" class="view-all-courses-btn user-card-view-btn">
-                          (共{{ studentProfile.courses.length }}门)
+                          共 {{ studentProfile.courses.length }} 门
                         </el-button>
                       </template>
                       <div class="all-courses-popover-content">
@@ -105,7 +134,7 @@
                 </div>
               </div>
             </div>
-            <div class="info-mini-card span-2">
+            <div class="info-mini-card">
               <div class="info-icon-box"><el-icon><Aim /></el-icon></div>
               <div class="info-content-box">
                 <span class="info-label">学习目标</span>
@@ -118,53 +147,45 @@
         <div class="combined-profile-wrapper">
           <div class="bento-card combined-profile-card">
             <div class="card-header-flex main-card-header">
-              <h4 class="card-title">
-                <el-icon><User /></el-icon> 学习画像
-              </h4>
-
-              <div class="custom-tab-switcher">
-                <button
-                    class="switcher-btn active"
-                >
-                  能力维度
-                </button>
+              <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
+              <div class="custom-pill-group">
+                <button type="button" :class="['pill-btn', { active: historyFilter === 'all' }]" @click="historyFilter = 'all'">全部</button>
+                <button type="button" :class="['pill-btn', { active: historyFilter === 'completed' }]" @click="historyFilter = 'completed'">已完成</button>
               </div>
             </div>
 
             <div class="profile-tabs-content">
-              <div v-show="profileTab === 'dimensions'" class="tab-pane-content">
-                <div class="dimensions-layout">
-                  <div class="dimensions-list">
-                    <div
-                        v-for="dim in dimensionsData"
-                        :key="dim.key"
-                        class="dimension-item"
-                        :class="{ 'is-active': activeDimensionKey === dim.key }"
-                        @click="activeDimensionKey = activeDimensionKey === dim.key ? null : dim.key"
-                    >
-                      <div class="dim-main-row">
-                        <span class="dim-icon"><el-icon><component :is="getDimIcon(dim.key)" /></el-icon></span>
-                        <span class="dim-name">{{ dim.name }}</span>
-                        <span class="dim-score">{{ dim.score }}分</span>
-                        <span class="dim-trend stable">
-                          <el-icon><Right /></el-icon>
+              <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 4px;" v-loading="resourceHistoryLoading">
+                <div v-if="filteredTableData.length === 0" class="empty-history">
+                  <el-empty description="暂无历史生成记录" :image-size="60" />
+                </div>
+                <div v-else class="history-list-flow">
+                  <div
+                      v-for="item in filteredTableData"
+                      :key="item.id"
+                      class="history-row-card"
+                      :class="getStatusClass(item.rawStatus)"
+                      @click="viewResourceDetail(item)"
+                  >
+                    <div class="status-bar"></div>
+                    <div class="item-icon-wrapper">
+                      <el-icon><component :is="getHistoryIcon(item.rawStatus)" /></el-icon>
+                    </div>
+
+                    <div class="item-main-info">
+                      <span class="item-title" :title="item.title">{{ item.title }}</span>
+                      <div class="item-sub-meta">
+                        <span class="item-time"><el-icon><Clock /></el-icon>{{ item.time }}</span>
+                        <span class="status-badge-pill" :class="item.rawStatus">
+                          <span class="badge-dot"></span>
+                          {{ item.status }}
                         </span>
                       </div>
-                      <div class="dim-progress-track">
-                        <div class="dim-progress-bar" :style="{ width: dim.score + '%' }" :class="dim.key"></div>
-                      </div>
-                      <div class="dim-summary-short" v-if="activeDimensionKey !== dim.key">
-                        {{ dim.summary || '暂无描述' }}
-                      </div>
-                      <div class="dim-summary-expanded" v-else>
-                        <p class="dim-desc-p">{{ dim.summary || '暂无详细描述' }}</p>
-                        <div class="dim-evidence-box" v-if="dim.evidence && dim.evidence.length > 0">
-                          <span class="evidence-lbl">分析依据：</span>
-                          <div class="evidence-list-items">
-                            <span v-for="(ev, idx) in dim.evidence" :key="idx" class="evidence-item-tag">{{ ev }}</span>
-                          </div>
-                        </div>
-                      </div>
+                    </div>
+
+                    <div class="item-action-btn">
+                      <span>查看</span>
+                      <el-icon class="action-arrow"><ArrowRight /></el-icon>
                     </div>
                   </div>
                 </div>
@@ -173,52 +194,69 @@
           </div>
         </div>
       </div>
-      <div class="bento-card bento-span-3 history-card">
-        <div class="card-header-flex">
-          <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
-
-          <div class="custom-pill-group">
-            <button type="button" :class="['pill-btn', { active: historyFilter === '全部' }]" @click="historyFilter = '全部'">全部</button>
-            <button type="button" :class="['pill-btn', { active: historyFilter === '已完成' }]" @click="historyFilter = '已完成'">已完成</button>
+      <div class="bento-card bento-span-3 profile-notes-card">
+        <div class="card-header-flex profile-notes-header">
+          <div class="profile-notes-title-block">
+            <h4 class="card-title"><el-icon><DocumentCopy /></el-icon> 我的笔记</h4>
+            <p class="profile-notes-subtitle">同步展示全局笔记草稿和最近保存内容</p>
+          </div>
+          <div class="profile-notes-summary">
+            <span class="notes-card-count">{{ profileSavedNotes.length }} 条已保存</span>
+            <span v-if="profileDraft" class="notes-draft-pill">草稿未保存</span>
           </div>
         </div>
+        <div class="profile-notes-body">
+          <div v-if="profileDraft || profileSavedNotes.length > 0" class="profile-notes-stack">
+            <article v-if="profileDraft" class="profile-note-item draft-note-item" @click="openNotePreview({ id: 'draft', content: profileDraft, savedAt: '' }, true)">
+              <div class="note-item-head">
+                <span class="note-state-badge">未保存草稿</span>
+                <span class="note-time-text">关闭弹窗后仍会保留</span>
+              </div>
+              <p class="note-item-title">{{ getNoteSummary(profileDraft) }}</p>
+            </article>
 
-        <div style="flex: 1; height: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 4px;" v-loading="resourceHistoryLoading">
-          <div v-if="filteredTableData.length === 0" class="empty-history">
-            <el-empty description="暂无历史生成记录" :image-size="60" />
-          </div>
-          <div v-else class="history-list-flow">
-            <div
-                v-for="item in filteredTableData"
-                :key="item.id"
-                class="history-row-card"
-                :class="getStatusClass(item.rawStatus)"
-                @click="viewResourceDetail(item)"
+            <article
+              v-for="note in profileSavedNotes"
+              :key="note.id"
+              class="profile-note-item"
+              @click="openNotePreview(note)"
             >
-              <div class="status-bar"></div>
-              <div class="item-icon-wrapper">
-                <el-icon><component :is="getHistoryIcon(item.rawStatus)" /></el-icon>
+              <div class="note-item-head">
+                <span class="note-state-badge subtle">已保存</span>
+                <span class="note-time-text">{{ formatNoteTime(note.savedAt) }}</span>
               </div>
+              <p class="note-item-title">{{ getNoteSummary(note.content) }}</p>
+            </article>
+          </div>
 
-              <div class="item-main-info">
-                <span class="item-title" :title="item.title">{{ item.title }}</span>
-                <div class="item-sub-meta">
-                  <span class="item-time"><el-icon><Clock /></el-icon>{{ item.time }}</span>
-                  <span class="status-badge-pill" :class="item.rawStatus">
-                    <span class="badge-dot"></span>
-                    {{ item.status }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="item-action-btn">
-                <span>查看</span>
-                <el-icon class="action-arrow"><ArrowRight /></el-icon>
-              </div>
+          <div v-else class="profile-notes-empty">
+            <div class="profile-notes-empty-inner">
+              <span>还没有笔记</span>
+              <p>点击右下角全局笔记按钮后记录的内容，会在这里同步展示。</p>
             </div>
           </div>
         </div>
       </div>
+
+      <el-dialog
+        v-model="notePreviewVisible"
+        width="min(760px, 92vw)"
+        class="note-preview-dialog"
+        destroy-on-close
+      >
+        <template #header>
+          <div class="note-preview-header">
+            <div>
+              <h3>{{ notePreviewDraft ? '未保存草稿' : '笔记详情' }}</h3>
+              <p>{{ notePreviewDraft ? '关闭全局笔记前会继续保留' : (notePreviewSavedAt ? formatNoteTime(notePreviewSavedAt) : '刚刚记录') }}</p>
+            </div>
+          </div>
+        </template>
+
+        <div class="note-preview-body">
+          <p class="note-preview-content">{{ notePreviewContent }}</p>
+        </div>
+      </el-dialog>
 
       <div class="bento-card bento-span-2 performance-card">
         <div class="card-header-flex">
@@ -255,7 +293,7 @@
           <div class="perf-box">
             <div class="perf-icon bg-purple-light"><el-icon class="text-purple"><ChatDotRound /></el-icon></div>
             <div class="perf-data">
-              <span class="label">AI互动次数</span>
+              <span class="label">AI 互动次数</span>
               <span class="value">{{ dynamicStats.interactions }} <small>次</small></span>
             </div>
           </div>
@@ -368,7 +406,7 @@
                     filterable
                     allow-create
                     default-first-option
-                    placeholder="输入课程名后【按回车】即可添加"
+                    placeholder="输入课程名后，按回车即可添加"
                     class="w-full"
                 >
                   <template #tag>
@@ -383,7 +421,7 @@
                       >
                         <template #reference>
                           <el-button link type="primary" class="view-all-courses-btn" @click.stop>
-                            (共{{ profileForm.courses.length }}门)
+                            共 {{ profileForm.courses.length }} 门
                           </el-button>
                         </template>
                         <div class="all-courses-popover-content">
@@ -414,7 +452,7 @@
 
             <el-form-item prop="global_learning_goal">
               <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
-              <el-select v-model="profileForm.global_learning_goal" filterable allow-create default-first-option clearable placeholder="请选择目标，列表没有可直接输入后【按回车】">
+              <el-select v-model="profileForm.global_learning_goal" filterable allow-create default-first-option clearable placeholder="请选择学习目标，没有合适选项可直接输入">
                 <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
               </el-select>
             </el-form-item>
@@ -430,7 +468,7 @@
 
             <div class="profile-form-grid">
               <el-form-item prop="school">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 院校</span></template>
+                <template #label><span class="custom-label"><span class="req-star">*</span> 学校</span></template>
                 <el-autocomplete
                     v-model="profileForm.school"
                     :fetch-suggestions="querySearchSchool"
@@ -475,12 +513,12 @@
         <div class="dialog-custom-footer">
           <div class="footer-hint">
             <el-icon><InfoFilled /></el-icon>
-            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得精准推荐</span>
+            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得更精准推荐</span>
           </div>
           <div class="footer-actions">
             <template v-if="currentEditorStep === 1">
               <el-button class="step-btn" @click="nextEditorStep(profileFormRef)">
-                下一步 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+                下一步<el-icon class="el-icon--right"><ArrowRight /></el-icon>
               </el-button>
             </template>
             <template v-else-if="currentEditorStep === 2">
@@ -499,7 +537,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
@@ -509,14 +547,29 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
-  InfoFilled, Timer, Checked, VideoPlay, Search, Check, ArrowRight, ArrowLeft, ArrowDown,
-  Reading, UserFilled, Clock, Cpu, DocumentCopy, Aim,
-  Right, User, ChatDotRound
+  Aim,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ChatDotRound,
+  Check,
+  Checked,
+  CircleCheckFilled,
+  Clock,
+  Cpu,
+  DocumentCopy,
+  Edit,
+  InfoFilled,
+  Reading,
+  Search,
+  Timer,
+  UserFilled,
+  VideoPlay,
 } from '@element-plus/icons-vue'
-import { getMe, uploadAvatar } from '@/features/auth/api/auth'
+import { uploadAvatar } from '@/features/auth/api/auth'
+import { ensureCurrentUser, setCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import {
   getProfileOnboarding, updateProfileOnboarding,
-  getProfileScore, getProfile
 } from '@/features/profile/api/profile'
 import { getGeneratedResources } from '@/features/resource/api/resource-history'
 import type { GeneratedResourceItem } from '@/features/resource/api/resource-history'
@@ -524,45 +577,50 @@ import { getLearningTimeStats } from '@/features/learning/api/evaluation'
 import type { LearningTimeStats } from '@/features/learning/api/evaluation'
 import { searchSchools } from '@/features/resource/api/school'
 import type { SchoolItem } from '@/features/resource/api/school'
-import type { ProfileOnboardingUpdate, ProfileScoreData, StudentProfileData } from '@/features/profile/api/profile'
+import type { ProfileOnboardingUpdate, StudentProfileData } from '@/features/profile/api/profile'
+import { useGlobalNotesSnapshot } from '@/shared/model/globalNotes'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
 const router = useRouter()
 const route = useRoute()
+const { currentUser, userName } = useCurrentUser()
+const notesSnapshot = useGlobalNotesSnapshot(computed(() => currentUser.value?.id))
 
 const timeRange = ref('7')
-const historyFilter = ref('全部')
-const userName = ref('学习者')
-const userEmail = ref<string | null>('user@example.com')
+const historyFilter = ref<'all' | 'completed'>('all')
+const userEmail = ref<string | null>(null)
 const userAvatar = ref<string | null>(null)
 const avatarUploading = ref(false)
 const profileEditorVisible = ref(false)
 const currentEditorStep = ref(1)
 const profileSubmitting = ref(false)
 const profileFormRef = ref<FormInstance>()
-const profileSchoolOptions = ref<SchoolItem[]>([])
 const learningStats = ref<LearningTimeStats | null>(null)
 const selectedTrendCourse = ref<string>('')
 const resourceHistoryLoading = ref(false)
 const courseDropdownOpen = ref(false)
+const notePreviewVisible = ref(false)
+const notePreviewContent = ref('')
+const notePreviewSavedAt = ref('')
+const notePreviewDraft = ref(false)
 
 const studentProfile = ref<StudentProfileData & { learning_duration_total?: number }>({
-  school: '测试大学',
+  school: null,
   school_level: null,
-  grade: '大三',
-  major: '人工智能',
-  courses: ['深度学习', '计算机视觉', 'Python高级编程'],
-  learning_goal: '大厂求职面试',
+  grade: null,
+  major: null,
+  courses: [],
+  learning_goal: null,
   preferred_language: null,
   learning_duration_total: 0
 })
 
-const profileScoreData = ref<ProfileScoreData | null>(null)
-const profileData = ref<any>(null)
-
-const profileTab = ref('dimensions')
-const activeDimensionKey = ref<string | null>(null)
+const profileMeta = reactive({
+  dailyStudyTime: '',
+  globalLearningGoal: '',
+  programmingLanguages: [] as string[],
+})
 
 interface ProfileFormData {
   grade: string
@@ -593,14 +651,14 @@ const PRESET_MAJORS = [
 const PRESET_COURSES = [
   '数据结构', '算法分析', '操作系统', '计算机网络', '数据库系统',
   '计算机组成原理', '编译原理', '离散数学', '线性代数', '概率统计',
-  '软件工程', 'Web开发', '机器学习', '深度学习', '计算机视觉', 'NLP',
+  '软件工程', 'Web 开发', '机器学习', '深度学习', '计算机视觉', 'NLP',
   '分布式系统', '云计算', '嵌入式开发', '移动端开发'
 ]
 const PRESET_GOALS = [
-  '期末考试冲刺', '完成课设项目', '大厂求职面试', '考研初试复习', '考研复试准备',
-  '系统学习进阶', '零基础快速入门', '竞赛夺奖(ACM/蓝桥)', '个人兴趣拓展', '行业证书考取'
+  '期末考试冲刺', '完成课程设计项目', '大厂求职面试', '考研初试复习', '考研复试准备',
+  '系统学习进阶', '零基础快速入门', '竞赛获奖', '个人兴趣拓展', '行业证书考取'
 ]
-const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
+const PRESET_DAILY_STUDY_TIME = ['30min 以下', '30-60min', '1-2h', '2-3h', '3h 以上']
 const PRESET_GRADES = [
   '大一', '大二', '大三', '大四',
   '研一', '研二', '研三',
@@ -613,92 +671,40 @@ const PRESET_LANGUAGES = [
 ]
 
 const profileRules = {
-  school: [{ required: true, message: '请选择或填写院校', trigger: 'change' }],
+  school: [{ required: true, message: '请选择或填写学校', trigger: 'change' }],
   grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
   major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
   courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
-  global_learning_goal: [{ required: true, message: '请选择或输入当前学习目标', trigger: 'change' }],
+  global_learning_goal: [{ required: true, message: '请选择或填写当前学习目标', trigger: 'change' }],
 }
 
 const profileHeadline = computed(() => {
   const parts = [studentProfile.value.major, studentProfile.value.school]
-      .filter((item): item is string => Boolean(item))
+    .filter((item): item is string => Boolean(item))
   return parts.length ? parts.join(' · ') : '学习资料待完善'
 })
 
-const getDimIcon = (key: string): string => {
-  const map: Record<string, string> = {
-    major_background: 'Reading',
-    student_stage: 'Aim',
-    course_context: 'Clock',
-    knowledge_level: 'Timer',
-    learning_goal_type: 'Aim',
-    weak_knowledge_points: 'Warning',
-    cognitive_style: 'Cpu',
-    resource_preference_weight: 'Notebook',
-    learning_pace: 'DataLine',
-    practice_profile: 'DataLine',
+const preferredLanguages = computed(() => {
+  if (profileMeta.programmingLanguages.length > 0) {
+    return profileMeta.programmingLanguages.filter(Boolean)
   }
-  return map[key] || 'DataLine'
-}
+  return (studentProfile.value.preferred_language || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+})
 
 const selectCourse = (c: string) => {
   selectedTrendCourse.value = c
   courseDropdownOpen.value = false
 }
 
-const dimensionsData = computed(() => {
-  const dimensionNames: Record<string, string> = {
-    major_background: '专业背景',
-    student_stage: '学习阶段',
-    course_context: '课程上下文',
-    knowledge_level: '知识基础',
-    learning_goal_type: '学习目标',
-    weak_knowledge_points: '薄弱知识点',
-    cognitive_style: '认知风格',
-    resource_preference_weight: '资源偏好',
-    learning_pace: '学习节奏',
-    practice_profile: '实践能力',
-  }
-
-  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-
-  const dimJson = profileData.value?.profile_json?.dimensions || {} as Record<string, any>
-
-  return Object.entries(dimensionNames).map(([key, name]) => {
-    const rawScore = scores[key] !== undefined && scores[key] !== null ? scores[key] : 0
-
-    const trend: 'up' | 'down' | 'stable' = 'stable'
-
-    const dimInfo = dimJson[key] || {} as Record<string, any>
-
-    return {
-      key,
-      name,
-      score: rawScore,
-      trend,
-      summary: dimInfo.value || '',
-      evidence: dimInfo.evidence || [],
-    }
-  })
-})
-
 const dynamicStats = computed(() => {
-  const scores = profileScoreData.value?.metrics?.dimension_scores || {}
-  const scoreVals = Object.values(scores).filter((v): v is number => typeof v === 'number')
-  const avgScore = scoreVals.length > 0
-      ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
-      : 0
-  const completedResourcesCount = resourceHistory.value.filter(r => r.status === 'completed').length
   const totalCourses = studentProfile.value.courses?.length || 0
-  const activeDays = learningStats.value?.daily_breakdown?.filter((item) => item.seconds > 0).length || 0
 
   return {
-    compositeScore: avgScore,
     generatedResources: resourceHistory.value.length,
     completedCourses: totalCourses,
-    completedTasks: completedResourcesCount,
-    activeDays,
     interactions: 0
   }
 })
@@ -761,11 +767,14 @@ const tableData = computed(() => {
 })
 
 const filteredTableData = computed(() => {
-  if (historyFilter.value === '已完成') {
+  if (historyFilter.value === 'completed') {
     return tableData.value.filter(item => item.rawStatus === 'completed')
   }
   return tableData.value
 })
+
+const profileDraft = computed(() => notesSnapshot.draft.value.trim())
+const profileSavedNotes = computed(() => notesSnapshot.savedNotes.value)
 
 watch(() => studentProfile.value.courses, (newCourses) => {
   if (newCourses && newCourses.length > 0) {
@@ -787,6 +796,7 @@ watch(timeRange, () => {
 
 watch(() => route.path, (newPath) => {
   if (newPath === '/profile') {
+    notesSnapshot.sync()
     Promise.all([
       loadProfileInfo(),
       loadResourceHistory(),
@@ -796,12 +806,17 @@ watch(() => route.path, (newPath) => {
 })
 
 onMounted(async () => {
+  notesSnapshot.sync()
   await Promise.all([
     loadProfileInfo(),
     loadResourceHistory(),
     loadLearningStats()
   ]).catch(console.error)
   openProfileEditorFromRoute()
+})
+
+onBeforeUnmount(() => {
+  notesSnapshot.dispose()
 })
 
 const translateStatus = (status: string) => {
@@ -850,20 +865,22 @@ const formatDurationUnit = (seconds?: number | null) => {
 
 const querySearchMajor = (queryString: string, cb: any) => {
   const results = queryString
-      ? PRESET_MAJORS.filter(m => m.toLowerCase().includes(queryString.toLowerCase()))
-      : PRESET_MAJORS
+    ? PRESET_MAJORS.filter(m => m.toLowerCase().includes(queryString.toLowerCase()))
+    : PRESET_MAJORS
   cb(results.map(m => ({ value: m })))
 }
 
-const querySearchSchool = async (queryString: string, cb: any) => {
+const querySearchSchool = async (
+  queryString: string,
+  cb: (results: Array<{ value: string; level?: string | null }>) => void
+) => {
   if (!queryString) {
     cb([])
     return
   }
   try {
     const res = await searchSchools(queryString, 20)
-    profileSchoolOptions.value = res.data.data
-    const options = res.data.data.map((school: any) => ({
+    const options = (res.data.data || []).map((school: SchoolItem) => ({
       value: school.name,
       level: school.level
     }))
@@ -877,39 +894,42 @@ const fillProfileForm = (payload: StudentProfileData) => {
   profileForm.grade = payload.grade || ''
   profileForm.major = payload.major || ''
   profileForm.courses = Array.isArray(payload.courses) ? [...payload.courses] : []
-  profileForm.global_learning_goal = payload.learning_goal || ''
+  profileForm.global_learning_goal = profileMeta.globalLearningGoal || payload.learning_goal || ''
   profileForm.school = payload.school || ''
-  profileForm.programming_languages = payload.preferred_language ? payload.preferred_language.split(',').map(s => s.trim()).filter(Boolean) : []
+  profileForm.daily_study_time = profileMeta.dailyStudyTime
+  profileForm.programming_languages = profileMeta.programmingLanguages.length > 0
+    ? [...profileMeta.programmingLanguages]
+    : (payload.preferred_language ? payload.preferred_language.split(',').map(s => s.trim()).filter(Boolean) : [])
 }
 
 const loadProfileInfo = async () => {
   try {
-    const [userRes, onboardingRes, scoreRes, profileRes] = await Promise.allSettled([
-      getMe(),
+    const [userRes, onboardingRes] = await Promise.allSettled([
+      ensureCurrentUser(true),
       getProfileOnboarding(),
-      getProfileScore(),
-      getProfile(),
     ])
 
-    if (userRes.status === 'fulfilled') {
-      userName.value = userRes.value.data.data.username
-      userAvatar.value = userRes.value.data.data.avatar
-      userEmail.value = userRes.value.data.data.email
+    if (userRes.status === 'fulfilled' && userRes.value) {
+      setCurrentUser(userRes.value)
+      userAvatar.value = userRes.value.avatar
+      userEmail.value = userRes.value.email
+    } else if (currentUser.value) {
+      userAvatar.value = currentUser.value.avatar
+      userEmail.value = currentUser.value.email
     }
 
     if (onboardingRes.status === 'fulfilled') {
-      studentProfile.value = onboardingRes.value.data?.data?.student_profile ?? studentProfile.value
-    }
-
-    if (scoreRes.status === 'fulfilled') {
-      profileScoreData.value = scoreRes.value.data.data
-    }
-
-    if (profileRes.status === 'fulfilled') {
-      profileData.value = profileRes.value.data.data
+      const onboardingData = onboardingRes.value.data?.data
+      const baseInfo = onboardingData?.base_info
+      studentProfile.value = onboardingData?.student_profile ?? studentProfile.value
+      profileMeta.dailyStudyTime = baseInfo?.daily_study_time || ''
+      profileMeta.globalLearningGoal = baseInfo?.global_learning_goal || onboardingData?.student_profile?.learning_goal || ''
+      profileMeta.programmingLanguages = Array.isArray(baseInfo?.programming_languages)
+        ? [...baseInfo.programming_languages]
+        : []
     }
   } catch (e) {
-    console.warn('加载数据失败：', e)
+    console.warn('加载个人中心数据失败', e)
   } finally {
     fillProfileForm(studentProfile.value)
   }
@@ -922,7 +942,7 @@ const loadLearningStats = async () => {
     learningStats.value = res.data.data
     studentProfile.value.learning_duration_total = res.data.data.total_seconds
   } catch (e) {
-    console.warn('后端学习时长统计加载失败', e)
+    console.warn('加载学习时长统计失败', e)
     learningStats.value = null
     studentProfile.value.learning_duration_total = 0
   }
@@ -934,16 +954,17 @@ const loadResourceHistory = async () => {
     const res = await getGeneratedResources(1, 20)
     resourceHistory.value = res.data.data?.items || []
   } catch (e) {
-    console.warn('后端资源历史加载失败：', e)
+    console.warn('加载资源生成历史失败', e)
     resourceHistory.value = []
   } finally {
     resourceHistoryLoading.value = false
   }
 }
+
 const beforeAvatarUpload = (file: File) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
   if (!allowedTypes.includes(file.type)) {
-    ElMessage.error('仅支持 jpg, png, gif, webp 格式的图片')
+    ElMessage.error('仅支持 jpg、png、gif、webp 格式图片')
     return false
   }
   const maxSize = 2 * 1024 * 1024
@@ -959,6 +980,12 @@ const handleAvatarUpload = async (options: { file: File }) => {
   try {
     const res = await uploadAvatar(options.file)
     userAvatar.value = res.data.data.avatar
+    if (currentUser.value) {
+      setCurrentUser({
+        ...currentUser.value,
+        avatar: res.data.data.avatar
+      })
+    }
     ElMessage.success('头像上传成功')
   } catch (e) {
     console.error('Failed to upload avatar', e)
@@ -980,15 +1007,14 @@ const openProfileEditorFromRoute = () => {
   }
 }
 
-const nextEditorStep = (formEl: FormInstance | undefined) => {
+const nextEditorStep = async (formEl: FormInstance | undefined) => {
   if (!formEl) return
-  formEl.validateField(['major', 'courses', 'global_learning_goal'], (valid) => {
-    if (valid) {
-      currentEditorStep.value = 2
-    } else {
-      ElMessage.warning('请先完善当前页面的必填项')
-    }
-  })
+  try {
+    await formEl.validateField(['major', 'courses', 'global_learning_goal'])
+    currentEditorStep.value = 2
+  } catch {
+    ElMessage.warning('请先完善当前页面的必填项')
+  }
 }
 
 const submitProfile = async (formEl: FormInstance | undefined) => {
@@ -1016,8 +1042,11 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
       learning_goal: payload.global_learning_goal,
       preferred_language: payload.programming_languages.join(', '),
     }
+    profileMeta.dailyStudyTime = payload.daily_study_time
+    profileMeta.globalLearningGoal = payload.global_learning_goal
+    profileMeta.programmingLanguages = [...payload.programming_languages]
     profileEditorVisible.value = false
-    ElMessage.success('学习画像资料已更新')
+    ElMessage.success('学习资料已更新')
     await loadProfileInfo()
   } catch (e: any) {
     console.error('Failed to update profile onboarding', e)
@@ -1040,6 +1069,28 @@ const getHistoryIcon = (status: string) => {
 const getStatusClass = (status: string) => {
   return `status-${status}`
 }
+
+const formatNoteTime = (savedAt: string) => {
+  const date = new Date(savedAt)
+  if (Number.isNaN(date.getTime())) return '刚刚保存'
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+const getNoteSummary = (content: string) => {
+  const normalized = content.replace(/\s+/g, ' ').trim()
+  return normalized || '绌虹櫧绗旇'
+}
+
+const openNotePreview = (note: { content: string; savedAt?: string }, isDraft = false) => {
+  notePreviewContent.value = note.content
+  notePreviewSavedAt.value = note.savedAt || ''
+  notePreviewDraft.value = isDraft
+  notePreviewVisible.value = true
+}
 </script>
 
 <style scoped>
@@ -1051,22 +1102,27 @@ const getStatusClass = (status: string) => {
 }
 .bento-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-6); }
 .bento-card { background: var(--color-surface); border-radius: 8px; padding: var(--space-6); border: 1px solid var(--color-border); display: flex; flex-direction: column; }
-.history-card, .performance-card { height: 260px; }
+.profile-notes-card {
+  height: 224px;
+}
+.performance-card {
+  height: 224px;
+}
 .bento-span-2 { grid-column: span 2; }
 .bento-span-3 { grid-column: span 3; }
 .bento-span-4 { grid-column: span 4; }
 .bento-span-5 { grid-column: span 5; }
 
-/* ======== 【核心样式修改区】顶部包裹层布局 ======== */
+/* ======== 銆愭牳蹇冩牱寮忎慨鏀瑰尯銆戦《閮ㄥ寘瑁瑰眰甯冨眬 ======== */
 .top-row-wrapper {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: var(--space-6);
-  align-items: flex-start;
+  align-items: stretch;
   width: 100%;
 }
 
 .user-card {
-  flex: 2;
   min-width: 0;
   position: relative;
   background: linear-gradient(135deg, var(--color-surface) 0%, rgba(79, 70, 229, 0.02) 100%);
@@ -1080,10 +1136,9 @@ const getStatusClass = (status: string) => {
 }
 
 .combined-profile-wrapper {
-  flex: 3;
   min-width: 0;
-  align-self: stretch;
   position: relative;
+  height: 100%;
 }
 
 .combined-profile-card {
@@ -1107,9 +1162,170 @@ const getStatusClass = (status: string) => {
   margin-top: var(--space-4);
 }
 
-/* 响应式调整（小屏幕下恢复上下堆叠） */
+.profile-notes-header {
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.profile-notes-title-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-notes-subtitle {
+  display: none;
+}
+
+.profile-notes-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notes-draft-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-primary);
+  font-size: 0.72rem;
+  font-weight: var(--weight-semibold);
+}
+
+.profile-notes-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.96));
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.profile-notes-stack {
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.profile-note-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.96));
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+.profile-note-item:hover {
+  border-color: var(--color-primary-border);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+
+.draft-note-item {
+  border-color: var(--color-primary-border);
+  background: linear-gradient(180deg, rgba(238, 242, 255, 0.9), rgba(248, 250, 252, 0.96));
+}
+
+.note-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.note-state-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.72rem;
+  font-weight: var(--weight-bold);
+}
+
+.note-state-badge.subtle {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.note-time-text,
+.notes-card-count {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.note-item-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-notes-empty {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-notes-empty-inner {
+  width: 100%;
+  min-height: 100%;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.03) 0%, rgba(79, 70, 229, 0.08) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.profile-notes-empty-inner span {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.profile-notes-empty-inner p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* 鍝嶅簲寮忚皟鏁达紙灏忓睆骞曚笅鎭㈠涓婁笅鍫嗗彔锛?*/
 @media (max-width: 1200px) {
   .top-row-wrapper {
+    display: flex;
     flex-direction: column;
     align-items: stretch;
   }
@@ -1133,10 +1349,46 @@ const getStatusClass = (status: string) => {
 @media (max-width: 768px) {
   .bento-container { grid-template-columns: 1fr; }
   .bento-span-2, .bento-span-3, .bento-span-4, .bento-span-5 { grid-column: span 1; }
-  .history-card, .performance-card { height: auto; min-height: 260px; }
+  .profile-notes-card { height: 360px; }
+  .performance-card { height: auto; min-height: 260px; }
   .combined-profile-wrapper {
     height: 450px;
   }
+  .profile-notes-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .profile-notes-summary {
+    align-items: flex-start;
+  }
+}
+
+.note-preview-header h3 {
+  margin: 0;
+  color: var(--color-text-strong);
+  font-size: 1.05rem;
+}
+
+.note-preview-header p {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.note-preview-body {
+  max-height: min(62vh, 520px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.note-preview-content {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.92rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .user-divider {
@@ -1165,9 +1417,6 @@ const getStatusClass = (status: string) => {
 .info-mini-card:hover {
   border-color: var(--color-primary-border);
   background: var(--color-primary-soft);
-}
-.info-mini-card.span-2 {
-  grid-column: span 2;
 }
 .info-icon-box {
   width: 32px;
@@ -1198,24 +1447,24 @@ const getStatusClass = (status: string) => {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--color-text-strong);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   width: 100%;
   text-align: left;
+  min-width: 0;
 }
-.info-value .school-info-strong {
+.school-info-strong {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
   min-width: 0;
   width: 100%;
 }
-.info-value .school-name-text {
+.school-name-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .user-card .user-card-course-wrapper {
@@ -1226,6 +1475,7 @@ const getStatusClass = (status: string) => {
   width: 100%;
   margin-left: 0 !important;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .user-card .user-card-course-title {
@@ -1259,9 +1509,9 @@ const getStatusClass = (status: string) => {
   width: 100%;
 }
 
-/* ================= 【自定义 UI 组件区】 ================= */
+/* ================= 銆愯嚜瀹氫箟 UI 缁勪欢鍖恒€?================= */
 
-/* 1. 自定义胶囊：编辑资料按钮 */
+/* 1. 鑷畾涔夎兌鍥婏細缂栬緫璧勬枡鎸夐挳 */
 .custom-edit-btn {
   position: absolute; right: 0; top: 0;
   display: inline-flex; align-items: center; gap: 4px;
@@ -1275,7 +1525,7 @@ const getStatusClass = (status: string) => {
   box-shadow: 0 4px 8px rgba(15, 23, 42, 0.06); transform: translateY(-1px);
 }
 
-/* 2. 自定义丝滑分段控制器 (近期任务 / 资源历史) */
+/* 2. 鑷畾涔変笣婊戝垎娈垫帶鍒跺櫒 (杩戞湡浠诲姟 / 璧勬簮鍘嗗彶) */
 .custom-pill-group {
   display: inline-flex;
   background: var(--color-surface-hover, var(--color-surface-hover));
@@ -1313,7 +1563,7 @@ const getStatusClass = (status: string) => {
   font-weight: 700;
 }
 
-/* 3. 自定义原生风格下拉菜单 (课程切换) */
+/* 3. 鑷畾涔夊師鐢熼鏍间笅鎷夎彍鍗?(璇剧▼鍒囨崲) */
 .custom-dropdown {
   position: relative; display: inline-flex; align-items: center;
   background: var(--color-surface); border: 1px solid var(--color-border);
@@ -1380,8 +1630,8 @@ const getStatusClass = (status: string) => {
 .trend-chart-container { height: 220px; width: 100%; flex: 1; }
 
 /* Performance */
-.perf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); flex: 1; align-content: stretch; }
-.perf-box { display: flex; align-items: center; gap: 15px; background: var(--color-bg); padding: var(--space-4); border-radius: var(--radius-xl); }
+.perf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; flex: 1; align-content: stretch; }
+.perf-box { display: flex; align-items: center; gap: 12px; background: var(--color-bg); padding: 12px 14px; border-radius: var(--radius-xl); }
 .perf-icon { width: 44px; height: 44px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
 .bg-blue-light { background: var(--color-info-soft); }
 .bg-indigo-light { background: var(--color-primary-soft); }
@@ -1423,7 +1673,7 @@ const getStatusClass = (status: string) => {
 .task-title-cell { font-weight: var(--weight-semibold); color: var(--color-text-strong); }
 .custom-tag { border-radius: var(--radius-sm); }
 
-/* 滚动条优化 */
+/* 婊氬姩鏉′紭鍖?*/
 .history-card :deep(.el-scrollbar__bar.is-vertical) { width: 6px !important; }
 .history-card :deep(.el-scrollbar__thumb) { background-color: var(--color-border-hover) !important; border-radius: 4px; }
 .history-card :deep(.el-scrollbar__thumb:hover) { background-color: var(--color-text-faint) !important; }
@@ -1566,7 +1816,7 @@ const getStatusClass = (status: string) => {
 
 .mt-3 { margin-top: var(--space-3); }
 
-/* 让 ECharts 画布填满外部容器 */
+/* 璁?ECharts 鐢诲竷濉弧澶栭儴瀹瑰櫒 */
 .chart {
   width: 100%;
   height: 100%;
@@ -1586,8 +1836,8 @@ const getStatusClass = (status: string) => {
   align-items: center;
 }
 
-/* ======== 右上角独立胶囊按钮组 ======== */
-/* 容器：彻底去除背景框和统一边框，使用 gap 拉开间距 */
+/* ======== 鍙充笂瑙掔嫭绔嬭兌鍥婃寜閽粍 ======== */
+/* 瀹瑰櫒锛氬交搴曞幓闄よ儗鏅鍜岀粺涓€杈规锛屼娇鐢?gap 鎷夊紑闂磋窛 */
 .custom-tab-switcher {
   display: flex;
   gap: 12px;
@@ -1597,7 +1847,7 @@ const getStatusClass = (status: string) => {
   padding: 0 !important;
 }
 
-/* 独立按钮：单独赋予形状、边框和阴影 */
+/* 鐙珛鎸夐挳锛氬崟鐙祴浜堝舰鐘躲€佽竟妗嗗拰闃村奖 */
 .switcher-btn {
   background: var(--color-surface);
   border: 1px solid var(--color-border, var(--color-border));
@@ -1627,7 +1877,7 @@ const getStatusClass = (status: string) => {
 }
 /* ================================================= */
 
-/* 滚动条样式美化 */
+/* 婊氬姩鏉℃牱寮忕編鍖?*/
 .profile-tabs-content::-webkit-scrollbar {
   width: 6px;
 }
@@ -1926,12 +2176,16 @@ const getStatusClass = (status: string) => {
   font-weight: 600;
 }
 .school-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.7rem;
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  padding: 1px 4px;
-  border-radius: 4px;
-  margin-left: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  margin-left: 0;
+  line-height: 1.2;
 }
 
 @media (max-width: 720px) {
@@ -1943,14 +2197,14 @@ const getStatusClass = (status: string) => {
 </style>
 
 <style>
-/* 修复你的全局弹窗样式覆盖引发背景透明的问题 */
+/* 淇浣犵殑鍏ㄥ眬寮圭獥鏍峰紡瑕嗙洊寮曞彂鑳屾櫙閫忔槑鐨勯棶棰?*/
 .course-popover {
   padding: 12px !important;
   border-radius: 8px !important;
-  box-shadow: var(--shadow-lg), 0 4px 20px rgba(0,0,0,0.1) !important; /* 增加阴影，增强层级感 */
+  box-shadow: var(--shadow-lg), 0 4px 20px rgba(0,0,0,0.1) !important; /* 澧炲姞闃村奖锛屽寮哄眰绾ф劅 */
   border: 1px solid var(--color-border) !important;
-  background: var(--color-surface, var(--color-surface)) !important; /* 强制白色背景，防止内容穿透重叠 */
-  z-index: 9999 !important; /* 提升层级 */
+  background: var(--color-surface, var(--color-surface)) !important; /* 寮哄埗鐧借壊鑳屾櫙锛岄槻姝㈠唴瀹圭┛閫忛噸鍙?*/
+  z-index: 9999 !important; /* 鎻愬崌灞傜骇 */
 }
 .all-courses-popover-content .popover-title {
   font-size: 0.85rem;
@@ -1993,7 +2247,7 @@ const getStatusClass = (status: string) => {
 }
 
 /* ============================================================
-   资源生成历史 ——— 无界行卡片流样式
+   璧勬簮鐢熸垚鍘嗗彶 鈥斺€斺€?鏃犵晫琛屽崱鐗囨祦鏍峰紡
    ============================================================ */
 .history-list-flow {
   display: flex;
@@ -2022,7 +2276,7 @@ const getStatusClass = (status: string) => {
   box-shadow: 0 6px 16px rgba(79, 70, 229, 0.06);
 }
 
-/* 左侧状态指示彩色条 */
+/* 宸︿晶鐘舵€佹寚绀哄僵鑹叉潯 */
 .history-row-card .status-bar {
   position: absolute;
   left: 0;
@@ -2050,7 +2304,7 @@ const getStatusClass = (status: string) => {
   background: var(--color-danger);
 }
 
-/* 图标包裹器 */
+/* 鍥炬爣鍖呰９鍣?*/
 .item-icon-wrapper {
   width: 34px;
   height: 34px;
@@ -2085,7 +2339,7 @@ const getStatusClass = (status: string) => {
   color: var(--color-danger);
 }
 
-/* 主体信息区 */
+/* 涓讳綋淇℃伅鍖?*/
 .item-main-info {
   flex: 1;
   min-width: 0;
@@ -2117,7 +2371,7 @@ const getStatusClass = (status: string) => {
   gap: var(--space-1);
 }
 
-/* 状态药丸胶囊 */
+/* 鐘舵€佽嵂涓歌兌鍥?*/
 .status-badge-pill {
   display: inline-flex;
   align-items: center;
@@ -2151,7 +2405,7 @@ const getStatusClass = (status: string) => {
   background: currentColor;
 }
 
-/* 生成中呼吸灯动画 */
+/* 鐢熸垚涓懠鍚哥伅鍔ㄧ敾 */
 .status-badge-pill.pending .badge-dot,
 .status-badge-pill.processing .badge-dot {
   animation: badge-pulse 1.6s infinite alternate;
@@ -2162,7 +2416,7 @@ const getStatusClass = (status: string) => {
   100% { transform: scale(1.3); opacity: 1; }
 }
 
-/* 右侧动作查看按钮 */
+/* 鍙充晶鍔ㄤ綔鏌ョ湅鎸夐挳 */
 .item-action-btn {
   display: flex;
   align-items: center;
