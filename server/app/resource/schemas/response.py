@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from app.resource.schemas.plan import DownstreamContext
 from app.resource.schemas.request import ResourceAgentId
-from app.resource.schemas.result import AgentResult, ReviewResult
+from app.resource.schemas.result import AgentResult
 
 
 class GeneratedResourceItem(BaseModel):
@@ -40,7 +40,6 @@ class ResourceBundle(BaseModel):
     learning_need: str
     selected_agents: list[str] = Field(default_factory=list)
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    review_result: ReviewResult | None = None
     status: str = "completed"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

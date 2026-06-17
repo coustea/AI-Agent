@@ -11,7 +11,6 @@ from app.resource.agents.code import CodeAgent
 from app.resource.agents.reading import ReadingAgent
 from app.resource.agents.ppt import PptAgent
 from app.resource.agents.video import VideoAgent
-from app.resource.agents.review import ReviewAgent
 
 __all__ = [
     "AGENT_REGISTRY",
@@ -25,5 +24,4 @@ __all__ = [
     "ReadingAgent",
     "PptAgent",
     "VideoAgent",
-    "ReviewAgent",
 ]

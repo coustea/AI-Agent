@@ -35,21 +35,6 @@ export interface LearningSessionCreate {
   metadata?: Record<string, unknown>
 }
 
-export interface LearningEventItem {
-  id: number
-  event_type: string
-  resource_id: number | null
-  resource_item_id: number | null
-  path_id: number | null
-  path_node_id: number | null
-  node_id: string | null
-  course: string | null
-  topic: string | null
-  score: number | null
-  feedback: string | null
-  created_at: string
-}
-
 export interface DailyTimeEntry {
   date: string
   seconds: number

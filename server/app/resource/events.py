@@ -102,7 +102,7 @@ class ResourceEventBus:
                 logger.warning("EventBus queue full for resource_id=%s, dropping event", resource_id)
         if event.event_type == "done":
             loop = asyncio.get_event_loop()
-            loop.call_later(300, self._cleanup_snapshot, resource_id)
+            loop.call_later(1800, self._cleanup_snapshot, resource_id)
 
     def _cleanup_snapshot(self, resource_id: int) -> None:
         self._latest_snapshots.pop(resource_id, None)
