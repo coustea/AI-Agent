@@ -14,8 +14,7 @@ from app.resource.agents.common import (
     build_basic_handoff,
     build_node_context,
     build_resource_context,
-    first_content_excerpt,
-    outline_ids_from_plan,
+    assigned_outline_ids,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -91,17 +90,13 @@ class ReadingAgent(BaseResourceAgent):
             ]
         except Exception:
             resource_titles = []
-        outline_ids = outline_ids_from_plan(input_data.teaching_plan)
+        outline_ids = assigned_outline_ids(input_data.teaching_plan, "reading")
         handoff = build_basic_handoff(
             source_agent="reading",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
-            material_type="reading",
             covered_outline_ids=outline_ids,
-            material_outline_id=outline_ids[0] if outline_ids else "",
-            key_points=resource_titles[:8],
-            evidence=first_content_excerpt(result.content),
             examples=resource_titles[:6],
         )
         result.downstream_context = handoff

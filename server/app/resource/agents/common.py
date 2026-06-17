@@ -10,12 +10,23 @@
 import json
 import re
 
-from app.resource.schemas import NodeInput, ResourceInput
+from app.resource.schemas import (
+    AgentAssignment,
+    DownstreamContext,
+    NodeInput,
+    ReusableAssets,
+    ResourceInput,
+    TeachingPlan,
+)
 from app.resource.utils import format_learner_profile_for_prompt
 
 
 def build_resource_context(input_data: ResourceInput) -> list[str]:
-    """构建 standalone 多智能体资源生成上下文。"""
+    """构建 standalone 多智能体资源生成上下文。
+
+    当 TeachingPlan 包含 agent_assignments 时，使用切片注入（仅注入该 Agent
+    被指派的大纲项和聚焦指令）；否则回退到全量注入。
+    """
     parts = [f"## 学习需求\n{input_data.learning_need}"]
     parts.append(f"## 学习场景\n{input_data.learning_scenario}")
 
@@ -24,7 +35,16 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
         parts.append(f"## 学习者画像摘要\n{profile_text}")
 
     if input_data.teaching_plan:
-        parts.append(f"## 教学计划\n{input_data.teaching_plan.model_dump_json(indent=2)}")
+        agent_id = input_data.agent_config.get("agent_id", "") if input_data.agent_config else ""
+        assignments = input_data.teaching_plan.agent_assignments
+
+        if assignments and agent_id:
+            assignment_context = build_agent_assignment_context(
+                input_data.teaching_plan, agent_id
+            )
+            parts.extend(assignment_context)
+        else:
+            parts.append(f"## 教学计划\n{input_data.teaching_plan.model_dump_json(indent=2)}")
 
     if input_data.upstream_handoffs:
         handoffs = {
@@ -36,13 +56,74 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
     return parts
 
 
-from app.resource.schemas import DownstreamContext, DownstreamMaterial, ReusableAssets, TeachingPlan
+def build_agent_assignment_context(plan: TeachingPlan, agent_id: str) -> list[str]:
+    """为指定 Agent 构建 assignment 切片上下文。
+
+    注入：
+    - 该 Agent 的 AgentAssignment（聚焦指令、风格约束、边界提醒、强调知识点、重叠回避）
+    - 仅该 Agent 被指派的大纲项（而非全量 outline）
+    """
+    assignment: AgentAssignment | None = None
+    for a in plan.agent_assignments:
+        if a.agent_id == agent_id:
+            assignment = a
+            break
+
+    if assignment is None:
+        return [f"## 教学计划\n{plan.model_dump_json(indent=2)}"]
+
+    parts: list[str] = []
+
+    parts.append(f"## Agent 指派（{agent_id}）")
+    if assignment.focus_instruction:
+        parts.append(f"**聚焦指令**：{assignment.focus_instruction}")
+    if assignment.style_constraint:
+        parts.append(f"**风格约束**：{assignment.style_constraint}")
+    if assignment.boundary_notes:
+        parts.append("**边界提醒**：")
+        for note in assignment.boundary_notes:
+            parts.append(f"  - {note}")
+    if assignment.key_points_emphasis:
+        parts.append("**重点强调**：")
+        for kp in assignment.key_points_emphasis:
+            parts.append(f"  - {kp}")
+    if assignment.avoid_overlap_with:
+        parts.append(f"**避免与以下 Agent 内容重叠**：{', '.join(assignment.avoid_overlap_with)}")
+
+    assigned_ids = set(assignment.assigned_outline_ids)
+    sliced_outline = [item for item in plan.outline if item.id in assigned_ids]
+    if sliced_outline:
+        outline_lines = ["## 你负责的大纲项\n"]
+        for item in sliced_outline:
+            outline_lines.append(f"### {item.id}: {item.title}")
+            outline_lines.append(f"目标：{item.goal}")
+            if item.key_points:
+                outline_lines.append("关键知识点：" + "、".join(item.key_points))
+            if item.must_not_miss:
+                outline_lines.append("⚠️ 核心大纲（必须覆盖）")
+            outline_lines.append("")
+        parts.append("\n".join(outline_lines))
+
+    if plan.teaching_strategy:
+        parts.append(f"## 全局教学策略\n{plan.teaching_strategy}")
+
+    return parts
 
 
 def outline_ids_from_plan(plan: TeachingPlan | None) -> list[str]:
     if not plan:
         return []
     return [item.id for item in plan.outline]
+
+
+def assigned_outline_ids(plan: TeachingPlan | None, agent_id: str) -> list[str]:
+    """Return outline IDs assigned to a specific agent, or all IDs as fallback."""
+    if not plan:
+        return []
+    for a in plan.agent_assignments:
+        if a.agent_id == agent_id:
+            return [oid for oid in a.assigned_outline_ids if oid in {item.id for item in plan.outline}]
+    return outline_ids_from_plan(plan)
 
 
 def first_outline_id(plan: TeachingPlan | None) -> str:
@@ -124,48 +205,27 @@ def build_basic_handoff(
     title: str,
     summary: str,
     teaching_plan: TeachingPlan | None,
-    material_type: str,
     covered_outline_ids: list[str] | None = None,
-    material_outline_id: str | None = None,
-    key_points: list[str] | None = None,
-    evidence: str = "",
     examples: list[str] | None = None,
     visual_ideas: list[str] | None = None,
     practice_refs: list[str] | None = None,
     code_refs: list[str] | None = None,
-    cautions: list[str] | None = None,
 ) -> DownstreamContext:
     filtered_covered_ids = _valid_outline_ids(
         teaching_plan,
         covered_outline_ids or ([first_outline_id(teaching_plan)] if first_outline_id(teaching_plan) else []),
-    )
-    valid_material_ids = _valid_outline_ids(teaching_plan, [material_outline_id or ""])
-    resolved_material_outline_id = (
-        valid_material_ids[0]
-        if valid_material_ids
-        else (filtered_covered_ids[0] if filtered_covered_ids else "")
-    )
-    material = DownstreamMaterial(
-        outline_id=resolved_material_outline_id,
-        type=material_type,
-        summary=clip_text(summary, 500),
-        key_points=(key_points or [])[:8],
-        evidence_excerpt=clip_text(evidence, 180),
-        priority=1,
     )
     return DownstreamContext(
         source_agent=source_agent,
         title=clip_text(title, 120),
         one_sentence_summary=clip_text(summary, 180),
         covered_outline_ids=filtered_covered_ids,
-        materials=[material] if material.summary else [],
         reusable_assets=ReusableAssets(
             examples=(examples or [])[:6],
             visual_ideas=(visual_ideas or [])[:6],
             practice_refs=(practice_refs or [])[:6],
             code_refs=(code_refs or [])[:6],
         ),
-        cautions=(cautions or [])[:6],
     )
 
 

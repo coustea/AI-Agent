@@ -23,7 +23,7 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import outline_coverage_summary
+from app.resource.agents.common import assigned_outline_ids, outline_coverage_summary
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 logger = get_logger(__name__)
@@ -184,6 +184,7 @@ class MaterialBundle(BaseModel):
     artifacts: dict[ResourceAgentId, MaterialArtifact] = Field(default_factory=dict)
     source_type: Literal["resource", "node"] = "resource"
     node_context: NodeMaterialContext | None = None
+    assignment_instruction: str = ""
 
 
 class MaterialDigest(BaseModel):
@@ -542,6 +543,23 @@ def build_resource_material(input_data: ResourceInput) -> MaterialBundle:
     """从 ResourceInput 构建 MaterialBundle（多智能体场景）。"""
     artifacts = _extract_artifacts_from_handoffs(input_data.upstream_handoffs)
 
+    # Build assignment instruction for PPT aggregation agent
+    assignment_instruction = ""
+    if input_data.teaching_plan and input_data.teaching_plan.agent_assignments:
+        for a in input_data.teaching_plan.agent_assignments:
+            if a.agent_id == "ppt":
+                parts: list[str] = []
+                if a.focus_instruction:
+                    parts.append(f"聚焦指令：{a.focus_instruction}")
+                if a.style_constraint:
+                    parts.append(f"风格约束：{a.style_constraint}")
+                if a.boundary_notes:
+                    parts.append("边界提醒：" + "；".join(a.boundary_notes))
+                if a.key_points_emphasis:
+                    parts.append("重点强调：" + "；".join(a.key_points_emphasis))
+                assignment_instruction = "\n".join(parts)
+                break
+
     return MaterialBundle(
         learning_need=input_data.learning_need,
         learning_scenario=input_data.learning_scenario,
@@ -554,6 +572,7 @@ def build_resource_material(input_data: ResourceInput) -> MaterialBundle:
         artifacts=artifacts,
         source_type="resource",
         node_context=None,
+        assignment_instruction=assignment_instruction,
     )
 
 

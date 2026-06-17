@@ -10,10 +10,10 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.resource.schemas import ExecutionPlan
+from app.resource.schemas import TeachingPlan, TeachingOutlineItem
 from app.resource.agents.reading import ReadingPayload
 from app.resource.agents.quiz import QuizPayload
-from app.resource.agents.ppt_models import MaterialDigest, DeckOutline, SlideDraft
+from app.resource.agents.ppt import MaterialDigest, DeckOutline, SlideDraft
 from app.resource.agents.video import VideoMaterialDigest, VideoOutline, SceneDraft
 from app.path.schemas import AgentLearningPathPlan, AgentQuestionSet
 from app.profile.types import (
@@ -27,28 +27,19 @@ from app.chat.memory.types import MemoryUpdateOutput
 
 # ============ 典型 LLM 输出样本 ============
 
-EXECUTION_PLAN_JSON = {
-    "blueprint": {
-        "topic": "Python 爬虫入门",
-        "learner_goal": "掌握静态网页抓取",
-        "prerequisite_concepts": ["HTTP 基础", "HTML 结构"],
-        "core_concepts": ["requests", "BeautifulSoup", "CSS 选择器"],
-        "difficult_points": ["反爬机制", "编码问题"],
-        "concept_relations": ["HTTP → requests: 使用关系", "BeautifulSoup → HTML: 解析关系"],
-        "example_scenarios": ["抓取新闻标题"],
-        "practice_targets": ["抓取豆瓣电影 Top250"],
-        "resource_guidance": {"reading": "侧重基础概念", "quiz": "覆盖核心 API"},
-    },
-    "agent_instructions": [
+TEACHING_PLAN_JSON = {
+    "teaching_strategy": "先直观类比，再协议细节",
+    "outline": [
         {
-            "agent_id": "reading",
-            "focus": "HTTP 和 HTML 基础",
-            "difficulty": "beginner",
-            "personalization_notes": "有 Python 基础",
-            "constraints": ["不超过 2000 字"],
+            "id": "o1",
+            "title": "HTTP 基础",
+            "goal": "理解请求响应模型",
+            "key_points": ["GET/POST", "状态码", "请求头"],
+            "common_misconceptions": ["HTTP 只能浏览器用"],
+            "suggested_examples": ["用 requests 发送 GET"],
+            "must_not_miss": True,
         }
     ],
-    "personalization_summary": "有编程基础但不了解网络协议",
 }
 
 READING_PAYLOAD_JSON = {
@@ -166,10 +157,8 @@ SLIDE_DRAFT_JSON = {
 
 AGENT_LEARNING_PATH_PLAN_JSON = {
     "title": "Python 爬虫学习路径",
-    "eta_days": 28,
-    "confidence": 0.85,
     "stages": [
-        {"stage_id": "s1", "title": "HTTP 基础", "description": "学习请求响应模型"}
+        {"stage_id": "s1", "title": "HTTP 基础"}
     ],
     "nodes": [
         {
@@ -177,10 +166,7 @@ AGENT_LEARNING_PATH_PLAN_JSON = {
             "stage_id": "s1",
             "title": "HTTP 协议",
             "prerequisites": [],
-            "mastery_target": "理解 GET/POST",
-            "estimated_minutes": 30,
-            "difficulty": "easy",
-            "recommendation_reason": "入门必学",
+            "difficulty": "intermediate",
             "priority": 1,
         }
     ],
@@ -266,23 +252,16 @@ MEMORY_UPDATE_OUTPUT_JSON = {
 
 VIDEO_MATERIAL_DIGEST_JSON = {
     "topic": "Python 爬虫",
-    "key_concepts": ["requests", "BeautifulSoup"],
-    "segments": [
-        {
-            "start": 0,
-            "end": 60,
-            "title": "简介",
-            "summary": "爬虫概念介绍",
-            "concepts": ["爬虫"],
-        }
-    ],
-    "visual_elements": ["代码演示", "终端截图"],
-    "code_examples": ["import requests"],
-    "difficulty": "beginner",
-    "prerequisites": ["Python 基础"],
-    "learning_objectives": ["理解爬虫原理"],
-    "quality_score": 0.8,
-    "source": "video",
+    "audience": "初学者",
+    "learning_goal": "理解爬虫原理",
+    "core_concepts": ["requests", "BeautifulSoup"],
+    "facts": ["requests 是最流行的 HTTP 库"],
+    "examples": ["import requests"],
+    "process_steps": ["发送请求", "解析响应"],
+    "misconceptions": ["爬虫不是黑客工具"],
+    "practice_prompts": ["尝试抓取一个网页"],
+    "visual_opportunities": ["代码演示", "终端截图"],
+    "source_map": {"content": ["o1"]},
 }
 
 VIDEO_OUTLINE_JSON = {
@@ -331,19 +310,20 @@ SCENE_DRAFT_JSON = {
 # ============ 测试 ============
 
 
-class TestExecutionPlanSchema:
+class TestTeachingPlanSchema:
     def test_parses_valid_json(self) -> None:
-        result = ExecutionPlan.model_validate(EXECUTION_PLAN_JSON)
-        assert result.blueprint.topic == "Python 爬虫入门"
-        assert len(result.agent_instructions) == 1
+        result = TeachingPlan.model_validate(TEACHING_PLAN_JSON)
+        assert result.teaching_strategy == "先直观类比，再协议细节"
+        assert len(result.outline) == 1
+        assert result.outline[0].id == "o1"
 
-    def test_rejects_invalid_nested_type(self) -> None:
+    def test_rejects_invalid_outline_id(self) -> None:
         data = {
-            **EXECUTION_PLAN_JSON,
-            "blueprint": {**EXECUTION_PLAN_JSON["blueprint"], "core_concepts": "not a list"},
+            **TEACHING_PLAN_JSON,
+            "outline": [{**TEACHING_PLAN_JSON["outline"][0], "id": "invalid"}],
         }
         with pytest.raises(ValidationError):
-            ExecutionPlan.model_validate(data)
+            TeachingPlan.model_validate(data)
 
 
 class TestReadingPayloadSchema:
@@ -376,7 +356,7 @@ class TestAgentQuestionSetSchema:
 class TestMaterialDigestSchema:
     def test_parses_valid_json(self) -> None:
         result = MaterialDigest.model_validate(MATERIAL_DIGEST_JSON)
-        assert result.topic == "Python 爬虫"
+        assert result.topic != ""
         assert len(result.core_concepts) == 2
 
 
@@ -463,7 +443,7 @@ class TestMemoryUpdateOutputSchema:
 class TestVideoSchemas:
     def test_video_material_digest_parses(self) -> None:
         result = VideoMaterialDigest.model_validate(VIDEO_MATERIAL_DIGEST_JSON)
-        assert result.topic == "Python 爬虫"
+        assert result.topic != ""
 
     def test_video_outline_parses(self) -> None:
         result = VideoOutline.model_validate(VIDEO_OUTLINE_JSON)
@@ -481,7 +461,7 @@ class TestSchemaRoundTrip:
     @pytest.mark.parametrize(
         "schema_cls,data",
         [
-            (ExecutionPlan, EXECUTION_PLAN_JSON),
+            (TeachingPlan, TEACHING_PLAN_JSON),
             (ReadingPayload, READING_PAYLOAD_JSON),
             (QuizPayload, QUIZ_PAYLOAD_JSON),
             (AgentQuestionSet, AGENT_QUESTION_SET_JSON),

@@ -93,7 +93,7 @@ export interface ResourceGenerationRequest {
 
 export interface ResourceTaskStatus {
   resource_id: number
-  status: 'pending' | 'planning' | 'generating' | 'reviewing' | 'completed' | 'partial_completed' | 'failed'
+  status: 'pending' | 'planning' | 'generating' | 'completed' | 'partial_completed' | 'failed'
   selected_agents?: string[]
   agent_snapshots?: Record<string, ResourceAgentSnapshot>
   overall_progress?: number

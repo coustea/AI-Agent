@@ -156,7 +156,7 @@ export const KnowledgeCheckScene: React.FC<KnowledgeCheckSceneProps> = ({
         </div>
       </div>
 
-      <SubtitleBar narration={scene.narration} durationSeconds={scene.duration_seconds} />
+      <SubtitleBar narration={scene.narration} durationSeconds={scene.duration_seconds} captionWords={scene.caption_words} />
     </AbsoluteFill>
   );
 };

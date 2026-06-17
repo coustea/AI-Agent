@@ -19,6 +19,12 @@ def merge_results_dict(left: dict[str, AgentResult] | None, right: dict[str, Age
     return {**left, **right}
 
 
+class CoverageReport(TypedDict, total=False):
+    covered_outline_ids: list[str]
+    missing_outline_ids: list[str]
+    critical_missing_ids: list[str]
+
+
 class ParentState(TypedDict, total=False):
     user_id: int
     resource_id: int
@@ -29,6 +35,7 @@ class ParentState(TypedDict, total=False):
     teaching_plan: TeachingPlan
     results: Annotated[dict[str, AgentResult], merge_results_dict]
     success: bool
+    coverage_report: CoverageReport
 
 
 class WorkerInputState(TypedDict):

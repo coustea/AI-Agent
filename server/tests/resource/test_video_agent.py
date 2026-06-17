@@ -153,11 +153,11 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
             source_agents=contract.required_sources,
         )
 
-    # Mock TtsService.synthesize to return 20.0 seconds duration without network calls
-    from app.resource.infra.tts import TtsService
-    async def fake_tts_synthesize(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
-        return 20.0
-    monkeypatch.setattr(TtsService, "synthesize", fake_tts_synthesize)
+    # Mock TtsService.synthesize_with_captions to return 20.0s duration without network calls
+    from app.resource.infra.tts import TtsService, TtsResult
+    async def fake_tts_synthesize_with_captions(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
+        return TtsResult(duration=20.0, captions=[])
+    monkeypatch.setattr(TtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
 
     monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
     monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)
@@ -188,7 +188,7 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
     assert result.metadata["agent_id"] == "video"
     assert result.metadata["schema_version"] == "video/v1"
     parsed = json.loads(result.content)
-    assert parsed["duration_seconds"] == 62
+    assert parsed["duration_seconds"] == 62  # 3 scenes × 20.5s each (20s TTS + 500ms buffer)
     assert len(parsed["scenes"]) == 3
 
 
@@ -265,11 +265,11 @@ async def test_video_agent_generate_node_path_learning(monkeypatch):
             source_agents=contract.required_sources,
         )
 
-    # Mock TtsService.synthesize to return 20.0 seconds duration without network calls
-    from app.resource.infra.tts import TtsService
-    async def fake_tts_synthesize(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
-        return 20.0
-    monkeypatch.setattr(TtsService, "synthesize", fake_tts_synthesize)
+    # Mock TtsService.synthesize_with_captions to return 20.0s duration without network calls
+    from app.resource.infra.tts import TtsService, TtsResult
+    async def fake_tts_synthesize_with_captions(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
+        return TtsResult(duration=20.0, captions=[])
+    monkeypatch.setattr(TtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
 
     monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
     monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)

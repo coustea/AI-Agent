@@ -266,15 +266,103 @@ async def get_video_audio(filename: str):
     """Serve generated video audio files."""
     from app.config import WORKPLACE_DIR
     from fastapi.responses import FileResponse
-    
+
     # Simple directory traversal checks
     if ".." in filename or "/" in filename or "\\" in filename:
         return HttpResponse.error(code=400, message="Illegal filename")
-        
+
     file_path = WORKPLACE_DIR / "video_audio" / filename
     if not file_path.exists():
         return HttpResponse.error(code=404, message="Audio file not found")
-        
+
     return FileResponse(path=str(file_path), media_type="audio/mpeg")
+
+
+@router.post("/video/render")
+async def render_video(request: dict[str, Any]):
+    """Trigger GPU-accelerated video rendering from a VideoPayload JSON.
+
+    Accepts a VideoPayload JSON, writes it to a temp file, invokes the
+    Remotion render script, and returns the rendered MP4.
+
+    Request body:
+        payload: The VideoPayload JSON object
+        gl: Optional GPU backend - "angle" (default), "swiftshader", "egl"
+    """
+    import json
+    import uuid
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    from app.config import WORKPLACE_DIR
+    from app.infra.logging import get_logger
+
+    logger = get_logger(__name__)
+
+    payload = request.get("payload")
+    if not payload or not isinstance(payload, dict):
+        return HttpResponse.error(code=400, message="Missing 'payload' in request body")
+
+    gl = request.get("gl", "angle")
+    job_id = str(uuid.uuid4())[:8]
+
+    # Paths
+    video_render_dir = Path(__file__).resolve().parent.parent.parent.parent / "video-render"
+    if not (video_render_dir / "package.json").exists():
+        return HttpResponse.error(code=500, message="video-render project not found")
+
+    work_dir = WORKPLACE_DIR / "video_render_jobs" / job_id
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    plan_path = work_dir / "plan.json"
+    output_path = work_dir / "output.mp4"
+
+    # Write the payload JSON
+    plan_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Build and run the render command
+    render_script = video_render_dir / "scripts" / "render.ts"
+    cmd = (
+        f"cd {video_render_dir} && "
+        f"npx tsx {render_script} "
+        f"--input {plan_path} "
+        f"--output {output_path} "
+        f"--gl {gl} "
+        f"--concurrency 4"
+    )
+
+    logger.info("Starting video render job %s with gl=%s", job_id, gl)
+
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)  # 10min max
+
+        if proc.returncode != 0:
+            err_msg = stderr.decode("utf-8", errors="replace")[-500:]
+            logger.error("Render job %s failed: %s", job_id, err_msg)
+            return HttpResponse.error(code=500, message=f"Render failed: {err_msg}")
+
+        if not output_path.exists():
+            return HttpResponse.error(code=500, message="Render output file not found")
+
+        file_size_mb = output_path.stat().st_size / 1024 / 1024
+        logger.info("Render job %s complete: %.1f MB", job_id, file_size_mb)
+
+        return FileResponse(
+            path=str(output_path),
+            media_type="video/mp4",
+            filename=f"{payload.get('title', 'video')}_{job_id}.mp4",
+        )
+
+    except asyncio.TimeoutError:
+        logger.error("Render job %s timed out", job_id)
+        return HttpResponse.error(code=504, message="Render timed out (10min limit)")
+    except Exception as e:
+        logger.error("Render job %s error: %s", job_id, e)
+        return HttpResponse.error(code=500, message=f"Render error: {e}")
 
 

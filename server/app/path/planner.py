@@ -7,9 +7,8 @@ research 节点：按需调用搜索工具，收集外部参考资料
 strategist 节点：LLM 结合画像、搜索结果生成路径骨架（阶段 + 节点）
 
 重要约束：
-  1. 规划阶段只生成路径结构，不生成教程、题目、PPT、代码、思维导图等资源。
-  2. 节点资源策略 resource_policy 可以由 LLM 省略，后续由 normalize_path_plan 确定性补全。
-  3. 当 LLM 结构化输出失败时，使用确定性兜底路径，避免前端直接进入 failed 状态。
+  1. 规划阶段只生成路径结构（stages + nodes），不生成教程、题目、PPT、代码、思维导图等资源。
+  2. 当 LLM 结构化输出失败时，使用确定性兜底路径，避免前端直接进入 failed 状态。
 """
 
 from __future__ import annotations
@@ -350,33 +349,23 @@ def repair_generated_plan_from_macro_stages(
       2. stages 为空但 nodes 有值 → 从 nodes 的 stage_id 推导 stages
       3. nodes 为空但 stages 有值 → 为每个 stage 生成默认节点
     """
-    # 场景1: stages 为空时从 macro_stages 补充
     if not plan.stages and macro_stages:
         plan.stages = list(macro_stages)
 
-    # 场景2: 从 nodes 的 stage_id 值推导 stages（去重保序）
     if not plan.stages and plan.nodes:
         seen: set[str] = set()
         derived: list[AgentStage] = []
         for node in plan.nodes:
             if node.stage_id not in seen:
                 seen.add(node.stage_id)
-                derived.append(
-                    AgentStage(
-                        stage_id=node.stage_id,
-                        title=node.title,
-                        description=f"{node.title}阶段",
-                    )
-                )
+                derived.append(AgentStage(stage_id=node.stage_id, title=node.title))
         plan.stages = derived
 
-    # 场景3: nodes 为空时为每个 stage 生成一个默认节点
     if not plan.nodes and plan.stages:
         previous_node_id = ""
         nodes: list[AgentPathNode] = []
         for index, stage in enumerate(plan.stages, 1):
             node_id = f"{stage.stage_id}-core"
-            # 难度递进：第一阶段 beginner，最后阶段 advanced，其余 intermediate
             difficulty = "beginner" if index == 1 else "intermediate"
             if index == len(plan.stages) and len(plan.stages) >= 3:
                 difficulty = "advanced"
@@ -385,13 +374,7 @@ def repair_generated_plan_from_macro_stages(
                 stage_id=stage.stage_id,
                 title=stage.title,
                 prerequisites=[previous_node_id] if previous_node_id else [],
-                mastery_target=stage.description or f"完成{stage.title}阶段学习",
-                estimated_minutes=45,
                 difficulty=difficulty,
-                recommendation_reason=(
-                    f"围绕「{request.goal}」的阶段目标生成，"
-                    "用于保证路径规划结果可直接开始学习"
-                ),
                 priority=index * 10,
             )
             nodes.append(node)
@@ -402,108 +385,50 @@ def repair_generated_plan_from_macro_stages(
 
 
 def build_fallback_path_plan(request: CreateLearningPathRequest) -> AgentLearningPathPlan:
-    """LLM 结构化输出失败时的确定性兜底路径。
-
-    兜底路径只保证“可用、可展示、可进入深入学习”，不替代 LLM 的个性化规划。
-    后续 service.complete_path_generation 会继续执行 normalize_path_plan 和 validate_path_plan。
-    """
+    """LLM 结构化输出失败时的确定性兜底路径。"""
     topic = (request.topic or request.goal or "课程学习").strip()
     goal = (request.goal or topic).strip()
 
     stages = [
-        AgentStage(
-            stage_id="stage-1",
-            title="基础认知与前置补齐",
-            description=f"建立对{topic}的整体认识，补齐学习{topic}所需的基础概念。",
-        ),
-        AgentStage(
-            stage_id="stage-2",
-            title="核心机制与高频考点",
-            description=f"围绕{topic}的核心机制、关键概念和常见考点进行系统学习。",
-        ),
-        AgentStage(
-            stage_id="stage-3",
-            title="综合应用与复习巩固",
-            description=f"通过练习、案例和总结完成{topic}的应用巩固。",
-        ),
+        AgentStage(stage_id="stage-1", title="基础认知与前置补齐"),
+        AgentStage(stage_id="stage-2", title="核心机制与高频考点"),
+        AgentStage(stage_id="stage-3", title="综合应用与复习巩固"),
     ]
 
     nodes = [
         AgentPathNode(
-            node_id="node-1",
-            stage_id="stage-1",
+            node_id="node-1", stage_id="stage-1",
             title=f"{topic}学习地图与核心术语",
-            prerequisites=[],
-            mastery_target=f"理解{topic}的知识范围、核心术语和推荐学习顺序。",
-            estimated_minutes=35,
-            difficulty="beginner",
-            recommendation_reason="先建立整体框架，降低后续学习的认知负担。",
-            priority=1,
+            prerequisites=[], difficulty="beginner", priority=1,
         ),
         AgentPathNode(
-            node_id="node-2",
-            stage_id="stage-1",
+            node_id="node-2", stage_id="stage-1",
             title="前置基础补齐",
-            prerequisites=["node-1"],
-            mastery_target=f"补齐理解{topic}所需的基础背景和必要前置知识。",
-            estimated_minutes=35,
-            difficulty="beginner",
-            recommendation_reason="避免直接进入核心内容时出现基础断层。",
-            priority=2,
+            prerequisites=["node-1"], difficulty="beginner", priority=2,
         ),
         AgentPathNode(
-            node_id="node-3",
-            stage_id="stage-2",
+            node_id="node-3", stage_id="stage-2",
             title="核心概念与结构关系",
-            prerequisites=["node-2"],
-            mastery_target=f"掌握{topic}中最基础、最常用的核心概念及其关系。",
-            estimated_minutes=40,
-            difficulty="intermediate",
-            recommendation_reason="从概念关系入手，有利于后续理解流程、算法或机制。",
-            priority=3,
+            prerequisites=["node-2"], difficulty="intermediate", priority=3,
         ),
         AgentPathNode(
-            node_id="node-4",
-            stage_id="stage-2",
+            node_id="node-4", stage_id="stage-2",
             title="关键流程与典型机制",
-            prerequisites=["node-3"],
-            mastery_target=f"理解{topic}中的关键流程、典型机制和常见处理方法。",
-            estimated_minutes=45,
-            difficulty="intermediate",
-            recommendation_reason="把抽象知识转化为可推演、可验证的学习任务。",
-            priority=4,
+            prerequisites=["node-3"], difficulty="intermediate", priority=4,
         ),
         AgentPathNode(
-            node_id="node-5",
-            stage_id="stage-2",
+            node_id="node-5", stage_id="stage-2",
             title="易错点与薄弱点专项巩固",
-            prerequisites=["node-4"],
-            mastery_target=f"识别{topic}学习中的常见误区，并完成针对性纠错。",
-            estimated_minutes=35,
-            difficulty="intermediate",
-            recommendation_reason="提高测验正确率，减少重复性错误。",
-            priority=5,
+            prerequisites=["node-4"], difficulty="intermediate", priority=5,
         ),
         AgentPathNode(
-            node_id="node-6",
-            stage_id="stage-3",
+            node_id="node-6", stage_id="stage-3",
             title="综合练习与知识总结",
-            prerequisites=["node-5"],
-            mastery_target=f"整合多个知识点，围绕“{goal}”完成综合复习与应用。",
-            estimated_minutes=45,
-            difficulty="advanced",
-            recommendation_reason="完成从理解到应用的收束，适合作为最终复习节点。",
-            priority=6,
+            prerequisites=["node-5"], difficulty="advanced", priority=6,
         ),
     ]
 
-    return AgentLearningPathPlan(
-        title=f"{topic}个性化学习路径",
-        eta_days=7,
-        confidence=45,
-        stages=stages,
-        nodes=nodes,
-    )
+    return AgentLearningPathPlan(title=f"{topic}个性化学习路径", stages=stages, nodes=nodes)
 
 
 async def emit_progress(

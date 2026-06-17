@@ -6,7 +6,10 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@remotion/bundler": "^4.0.478",
+    "@remotion/captions": "^4.0.478",
     "@remotion/cli": "4.0.478",
+    "@remotion/renderer": "^4.0.478",
     "@remotion/tailwind-v4": "4.0.478",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -27,7 +30,10 @@
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
-    "generate-tts": "node scripts/generate-tts.js"
+    "generate-tts": "node scripts/generate-tts.js",
+    "render": "npx tsx scripts/render.ts",
+    "render:gpu": "npx tsx scripts/render.ts --gl angle",
+    "render:cpu": "npx tsx scripts/render.ts --gl swiftshader"
   },
   "sideEffects": [
     "*.css"

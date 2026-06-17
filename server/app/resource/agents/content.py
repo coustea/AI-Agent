@@ -10,8 +10,7 @@ from app.resource.agents.common import (
     build_basic_handoff,
     build_node_context,
     build_resource_context,
-    first_content_excerpt,
-    outline_ids_from_plan,
+    assigned_outline_ids,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -42,18 +41,14 @@ class ContentAgent(BaseResourceAgent):
             title_prefix=input_data.learning_need[:32],
             config=config,
         )
-        outline_ids = outline_ids_from_plan(input_data.teaching_plan)
+        outline_ids = assigned_outline_ids(input_data.teaching_plan, "content")
         first_outline = input_data.teaching_plan.outline[0] if input_data.teaching_plan and input_data.teaching_plan.outline else None
         handoff = build_basic_handoff(
             source_agent="content",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
-            material_type="explanation",
             covered_outline_ids=outline_ids,
-            material_outline_id=outline_ids[0] if outline_ids else "",
-            key_points=first_outline.key_points if first_outline else [],
-            evidence=first_content_excerpt(result.content),
             examples=first_outline.suggested_examples if first_outline else [],
             visual_ideas=first_outline.suggested_visuals if first_outline else [],
         )

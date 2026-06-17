@@ -9,13 +9,12 @@
           <button class="text-link" @click="router.push(`/path-planner/overview/${workspace.path.id}`)">返回路径总览</button>
           <span class="page-kicker">节点学习</span>
           <h1>{{ workspace.node.title }}</h1>
-          <p>{{ workspace.node.mastery_target || workspace.node.recommendation_reason || '围绕当前节点完成学习、测验和巩固。' }}</p>
+          <p>围绕当前节点完成学习、测验和巩固。</p>
         </div>
 
         <div class="node-summary">
           <span>状态：{{ statusText(workspace.node.status) }}</span>
           <span>尝试次数：{{ workspace.node.attempt_count }}</span>
-          <span v-if="workspace.node.estimated_minutes">建议 {{ workspace.node.estimated_minutes }} 分钟</span>
         </div>
       </header>
 
@@ -59,7 +58,6 @@
                 @click="createResource(action.type)"
               >
                 <span>{{ action.label }}</span>
-                <small>{{ action.required ? '推荐' : '可选' }}</small>
               </button>
             </div>
             <div class="saved-resource-list" v-if="workspace.resources.length">
@@ -163,28 +161,20 @@ const quizResult = ref<PathQuizSubmitResponse | null>(null)
 const answers = ref<Record<number, string>>({})
 const hasStartedTracking = ref(false)
 
-const supportedPathResourceTypes: PathResourceType[] = ['content', 'mindmap', 'code', 'reading', 'quiz', 'ppt']
+const DIFFICULTY_RESOURCE_MAP: Record<string, PathResourceType[]> = {
+  beginner: ['mindmap', 'code', 'ppt'],
+  intermediate: ['mindmap', 'code', 'ppt', 'reading'],
+  advanced: ['code', 'mindmap', 'ppt', 'reading'],
+}
+const DEFAULT_RESOURCE_ORDER: PathResourceType[] = ['mindmap', 'code', 'ppt', 'reading']
 
 const resourceActions = computed(() => {
-  const policy = workspace.value?.node?.resource_policy
-  const fallback: PathResourceType[] = ['mindmap', 'code', 'ppt']
-  const orderedTypes = policy
-    ? [...policy.required_resource_types, ...policy.optional_resource_types]
-    : fallback
-  const seen = new Set<string>()
-
-  return (orderedTypes.length ? orderedTypes : fallback)
-    .filter((type): type is PathResourceType => supportedPathResourceTypes.includes(type as PathResourceType))
-    .filter((type) => {
-      if (seen.has(type)) return false
-      seen.add(type)
-      return true
-    })
-    .map((type) => ({
-      type,
-      label: resourceTypeLabel(type),
-      required: Boolean(policy?.required_resource_types?.includes(type)),
-    }))
+  const difficulty = workspace.value?.node?.difficulty || 'intermediate'
+  const orderedTypes: PathResourceType[] = DIFFICULTY_RESOURCE_MAP[difficulty] ?? DEFAULT_RESOURCE_ORDER
+  return orderedTypes.map((type) => ({
+    type,
+    label: resourceTypeLabel(type),
+  }))
 })
 
 const resourceTypeLabel = (rt: string) => {

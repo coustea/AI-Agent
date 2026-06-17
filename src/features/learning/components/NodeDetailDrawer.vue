@@ -13,15 +13,11 @@
       </div>
 
       <div class="detail-section">
-        <label>目标与原因</label>
-        <p>{{ node.mastery_target || node.recommendation_reason || '进入节点后生成教程并开始学习。' }}</p>
+        <label>学习目标</label>
+        <p>进入节点后生成教程并开始学习。</p>
       </div>
 
       <div class="detail-grid">
-        <div class="grid-item">
-          <label>预计耗时</label>
-          <strong>{{ node.estimated_minutes ? `${node.estimated_minutes} 分钟` : '未知' }}</strong>
-        </div>
         <div class="grid-item">
           <label>难度等级</label>
           <strong>{{ node.difficulty || '常规' }}</strong>

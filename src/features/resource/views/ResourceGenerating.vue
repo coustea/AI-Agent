@@ -296,10 +296,6 @@
               </div>
             </div>
 
-            <div class="focus-review-warning" v-if="selectedDagNode.reviewWarning">
-              <el-alert type="warning" :closable="false" show-icon title="审核提示" :description="selectedDagNode.currentMessage" />
-            </div>
-
             <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
               <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
             </div>
@@ -374,8 +370,6 @@ import type { ResourceAgentId } from '@/features/resource/model/resource'
 import {
   COORDINATOR_AGENT_ID,
   PPT_AGENT_ID,
-  PRE_REVIEW_AGENT_ID,
-  PPT_REVIEW_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
@@ -612,9 +606,9 @@ watch(
 )
 
 const trailingStageNodes = computed(() => {
-  const nodes = [getStageNode(PRE_REVIEW_AGENT_ID)]
+  const nodes: DagNodeState[] = []
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
-    nodes.push(getStageNode(PPT_AGENT_ID), getStageNode(PPT_REVIEW_AGENT_ID))
+    nodes.push(getStageNode(PPT_AGENT_ID))
   }
   nodes.push(getStageNode(BUNDLE_AGENT_ID))
   return nodes
@@ -729,11 +723,8 @@ function getLogPhaseLabel(phase?: string) {
     planning_blueprint: '规划',
     llm_generating: '生成',
     validating: '校验',
-    reviewing_sources: '审核',
-    reviewing_ppt: '审核',
     ppt_generating: 'PPT',
     ppt_waiting_sources: '等待',
-    pre_review_waiting_sources: '等待',
     artifact_saved: '保存',
     bundling: '打包',
     finished: '完成',
@@ -788,10 +779,7 @@ function getNodePhaseLabel(node: DagNodeState) {
     planning_blueprint: '规划蓝图',
     llm_generating: '模型调用',
     validating: '解析校验',
-    reviewing_sources: '前置审核',
-    reviewing_ppt: 'PPT 审核',
     ppt_waiting_sources: '等待事实来源',
-    pre_review_waiting_sources: '等待基础资源',
     artifact_saved: '产物保存',
     bundling: '资源组装',
     finished: '完成',
@@ -807,10 +795,8 @@ function getNodePhaseLabel(node: DagNodeState) {
 function getNodeDisplayMessage(node: DagNodeState) {
   if (node.status === 'failed') return node.currentMessage || '执行失败，请检查该智能体输出'
   if (node.currentMessage) return node.currentMessage
-  if (node.id === PPT_AGENT_ID) return '等待前置审核通过后生成演示文稿'
-  if (node.id === PRE_REVIEW_AGENT_ID) return '等待基础资源完成后进行事实性与安全审核'
-  if (node.id === PPT_REVIEW_AGENT_ID) return '等待 PPT 生成后进行专项审核'
-  if (node.id === BUNDLE_AGENT_ID) return '等待资源和审核结果完成后组装资源包'
+  if (node.id === PPT_AGENT_ID) return '等待基础资源完成后生成演示文稿'
+  if (node.id === BUNDLE_AGENT_ID) return '等待资源完成后组装资源包'
   return getNodeFallbackMessage(node)
 }
 
@@ -2093,10 +2079,6 @@ function getPlanStepIcon(agentId: string) {
   color: #475569;
   font-size: 0.78rem;
   line-height: 1.45;
-}
-
-.focus-review-warning {
-  margin-top: 8px;
 }
 
 .focus-metric-chips {

@@ -23,7 +23,7 @@ from app.resource.workflow.audit import (
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
 )
-from app.resource.workflow.state import ParentState, WorkerInputState
+from app.resource.workflow.state import ParentState, WorkerInputState, CoverageReport
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ def build_agent_resource_input(
     agent_config = request.agent_configs.get(agent_id, {})
     if agent_config_extra:
         agent_config = {**agent_config, **agent_config_extra}
+    agent_config["agent_id"] = agent_id
     return ResourceInput(
         resource_id=resource_id,
         learning_need=request.learning_need,
@@ -278,7 +279,65 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         message=message,
         progress=70,
     )
-    return {}
+
+    coverage_report = _compute_coverage_report(state)
+    if coverage_report.get("critical_missing_ids"):
+        critical_titles = []
+        plan = state.get("teaching_plan")
+        if plan:
+            for item in plan.outline:
+                if item.id in coverage_report["critical_missing_ids"]:
+                    critical_titles.append(item.title)
+        await state["emitter"].emit_agent(
+            COORDINATOR_AGENT_ID,
+            status="running",
+            message=f"大纲覆盖警告：核心大纲项未覆盖 — {', '.join(critical_titles)}",
+            progress=70,
+            phase="coverage_gap_warning",
+        )
+    elif coverage_report.get("missing_outline_ids"):
+        missing_ids = coverage_report["missing_outline_ids"]
+        if plan := state.get("teaching_plan"):
+            missing_titles = [item.title for item in plan.outline if item.id in missing_ids]
+            await state["emitter"].emit_agent(
+                COORDINATOR_AGENT_ID,
+                status="running",
+                message=f"非核心大纲项未覆盖：{', '.join(missing_titles)}",
+                progress=70,
+            )
+
+    return {"coverage_report": coverage_report}
+
+
+def _compute_coverage_report(state: ParentState) -> CoverageReport:
+    plan = state.get("teaching_plan")
+    results = state.get("results") or {}
+    if not plan or not plan.outline:
+        return CoverageReport(
+            covered_outline_ids=[],
+            missing_outline_ids=[],
+            critical_missing_ids=[],
+        )
+
+    all_outline_ids = {item.id for item in plan.outline}
+    must_not_miss_ids = {item.id for item in plan.outline if item.must_not_miss}
+
+    covered: set[str] = set()
+    for agent_id, result in results.items():
+        if not result.success or result.downstream_context is None:
+            continue
+        for oid in result.downstream_context.covered_outline_ids:
+            if oid in all_outline_ids:
+                covered.add(oid)
+
+    missing = sorted(all_outline_ids - covered)
+    critical_missing = sorted(must_not_miss_ids - covered)
+
+    return CoverageReport(
+        covered_outline_ids=sorted(covered),
+        missing_outline_ids=missing,
+        critical_missing_ids=critical_missing,
+    )
 
 
 # ── Routing after merge ────────────────────────────────────────────────
@@ -440,6 +499,7 @@ async def save_node(state: ParentState) -> dict[str, Any]:
                 request=state["request"],
                 results=state["results"],
                 teaching_plan=state["teaching_plan"],
+                coverage_report=state.get("coverage_report"),
             )
             saved_items = await repository.list_resource_items(state["user_id"], state["resource_id"])
             resource = await repository.get_resource(state["user_id"], state["resource_id"])

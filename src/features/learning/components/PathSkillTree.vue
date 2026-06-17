@@ -6,7 +6,6 @@
         <div class="stage-badge">阶段 {{ stageIdx + 1 }}</div>
         <div class="stage-info">
           <h4>{{ stage.title }}</h4>
-          <p>{{ stage.description }}</p>
         </div>
       </div>
 
@@ -36,16 +35,10 @@
           <div class="node-content">
             <div class="node-meta">
               <span class="step-num">STEP {{ node.priority }}</span>
-              <span v-if="node.estimated_minutes" class="duration-badge">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="duration-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                {{ node.estimated_minutes }} min
-              </span>
               <span v-if="node.difficulty" class="difficulty-badge" :class="node.difficulty">{{ node.difficulty }}</span>
             </div>
-            
+
             <h5 class="node-title">{{ node.title }}</h5>
-            <p v-if="node.mastery_target" class="node-desc">{{ node.mastery_target }}</p>
-            <p v-else-if="node.recommendation_reason" class="node-desc">{{ node.recommendation_reason }}</p>
             
             <!-- Active CTA button -->
             <div v-if="isActive(node.status)" class="node-cta">

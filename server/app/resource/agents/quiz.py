@@ -14,8 +14,7 @@ from app.resource.agents.common import (
     build_basic_handoff,
     build_node_context,
     build_resource_context,
-    first_content_excerpt,
-    outline_ids_from_plan,
+    assigned_outline_ids,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -84,17 +83,13 @@ class QuizAgent(BaseResourceAgent):
         except Exception:
             q_ids = []
             knowledge_points = []
-        outline_ids = outline_ids_from_plan(input_data.teaching_plan)
+        outline_ids = assigned_outline_ids(input_data.teaching_plan, "quiz")
         handoff = build_basic_handoff(
             source_agent="quiz",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
-            material_type="practice",
             covered_outline_ids=outline_ids,
-            material_outline_id=outline_ids[0] if outline_ids else "",
-            key_points=knowledge_points[:8],
-            evidence=first_content_excerpt(result.content),
             practice_refs=q_ids,
         )
         result.downstream_context = handoff
