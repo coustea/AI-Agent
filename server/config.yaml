@@ -132,6 +132,14 @@ chat:
   # 稀疏检索加载的文档上限
   sparse_corpus_limit: 12000
 
+# 内容安全过滤配置
+safety:
+  sensitive_terms:
+    - 色情
+    - 赌博
+    - 毒品
+    - 暴力
+
 # 评估配置
 evaluation:
   # 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃
