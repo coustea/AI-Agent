@@ -1,13 +1,14 @@
 <template>
   <div class="practice-tab">
-    <header class="dashboard-header">
-      <div class="header-content">
-        <h1>智能练习</h1>
-        <p class="subtitle">专注你的每日目标、推荐任务和综合复习。</p>
+    <header class="module-header">
+      <div class="header-copy">
+        <span class="section-label">Practice</span>
+        <h2>智能练习</h2>
+        <p class="subtitle">把综合练习能力集中在一个页面里，按推荐、错题、组卷和自定义四种方式组织训练。</p>
       </div>
       <div class="metrics-grid">
         <div class="metric-card">
-          <span class="metric-label">已做题数</span>
+          <span class="metric-label">已练题数</span>
           <strong class="metric-value">{{ stats.totalAttempted }}</strong>
         </div>
         <div class="metric-card">
@@ -22,17 +23,19 @@
     </header>
 
     <div class="main-grid">
-      <!-- Left Column: Tasks -->
-      <div class="tasks-column">
-        <h2 class="section-title">今日任务</h2>
+      <section class="tasks-column">
+        <div class="section-title-row">
+          <span class="section-label">Today</span>
+          <h3>今日任务</h3>
+        </div>
 
-        <div class="task-card primary-task">
+        <div class="section-card emphasized">
           <div class="task-info">
-            <h3>推荐练习</h3>
-            <p>根据你的当前课程和薄弱点，为你精选了 {{ recommendedCount }} 道题目。</p>
+            <h4>推荐练习</h4>
+            <p>根据你当前课程和错题情况，优先安排更适合今天完成的训练任务。</p>
             <div class="tags">
               <span class="tag">{{ recommendedSubject }}</span>
-              <span class="tag">{{ recommendedCount }} 道</span>
+              <span class="tag">{{ recommendedCount }} 题</span>
             </div>
           </div>
           <button class="btn-primary" :disabled="practiceLoading" @click="$emit('start-recommended')">
@@ -40,91 +43,77 @@
           </button>
         </div>
 
-        <div class="task-card danger-task">
+        <div class="section-card warning-card">
           <div class="task-info">
-            <h3>错题复习</h3>
-            <p>你有 {{ wrongTotal }} 道题目需要重点复习，优先攻克它们可以快速提升正确率。</p>
+            <h4>错题复习</h4>
+            <p>你目前有 {{ wrongTotal }} 道题需要重点回看，优先巩固薄弱点会更快提升整体正确率。</p>
           </div>
-          <button class="btn-danger" @click="$emit('switch-tab', 'wrong')">
-            立即复习
-          </button>
+          <button class="btn-ghost danger" @click="$emit('switch-tab', 'wrong')">立即复习</button>
         </div>
 
-        <div class="task-card">
+        <div class="section-card">
           <div class="task-info">
-            <h3>模拟组卷</h3>
-            <p>准备好测试了吗？根据学科、难度和题型配置一份专属试卷。</p>
+            <h4>模拟组卷</h4>
+            <p>按学科、难度和题型组合试卷，用更接近真实考试的节奏检验当前掌握情况。</p>
           </div>
-          <button class="btn-secondary" @click="$emit('switch-tab', 'paper')">
-            开始组卷
-          </button>
+          <button class="btn-secondary" @click="$emit('switch-tab', 'paper')">开始组卷</button>
         </div>
-      </div>
+      </section>
 
-      <!-- Right Column: Custom Practice & Daily Pick -->
-      <div class="sidebar-column">
-        <!-- Daily Pick -->
-        <div class="panel">
-          <div class="panel-header">
-            <h3>每日一题</h3>
-            <button class="btn-icon" @click="$emit('refresh-daily')" title="换一题">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            </button>
-          </div>
-          <div v-if="dailyQuestion" class="daily-question">
-            <div class="tags small-tags">
-              <span class="tag outline">{{ dailyQuestion.subject }}</span>
-              <span class="tag outline">{{ dailyQuestion.type }}</span>
+      <aside class="sidebar-column">
+        <div class="section-card custom-card">
+          <div class="panel-head stacked">
+            <div>
+              <span class="section-label">Custom</span>
+              <h4>自定义练习</h4>
             </div>
-            <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
-            <button class="btn-primary full-width" @click="$emit('start-daily')">开始答题</button>
+            <p>按你的节奏设定学科、难度、题型和题量，生成一组更贴近当前目标的训练。</p>
           </div>
-          <div v-else class="empty-state">
-            暂无每日一题。
-          </div>
-        </div>
 
-        <!-- Custom Practice Form -->
-        <div class="panel">
-          <h3>自定义练习</h3>
-          <form @submit.prevent="handleCustomStart" class="custom-form">
+          <form class="custom-form" @submit.prevent="handleCustomStart">
             <div class="form-group">
               <label>学科</label>
-              <select v-model="form.subject" class="select-input">
+              <select v-model="form.subject" class="field">
                 <option value="">全部学科</option>
                 <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
-            <div class="form-group">
-              <label>难度</label>
-              <select v-model="form.difficulty" class="select-input">
-                <option value="">不限难度</option>
-                <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
-              </select>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>难度</label>
+                <select v-model="form.difficulty" class="field">
+                  <option value="">不限难度</option>
+                  <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>题型</label>
+                <select v-model="form.type" class="field">
+                  <option value="">全部题型</option>
+                  <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
+                </select>
+              </div>
             </div>
-            <div class="form-group">
-              <label>题型</label>
-              <select v-model="form.type" class="select-input">
-                <option value="">全部题型</option>
-                <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
-              </select>
-            </div>
+
             <div class="form-group">
               <label>题数</label>
-              <input type="number" v-model="form.count" min="1" max="30" class="text-input" />
+              <input v-model="form.count" type="number" min="1" max="30" class="field" />
             </div>
+
             <button type="submit" class="btn-primary full-width" :disabled="practiceLoading">
               {{ practiceLoading ? '加载中...' : '生成练习' }}
             </button>
           </form>
         </div>
-      </div>
+      </aside>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed } from 'vue'
+import { computed, reactive } from 'vue'
 
 const props = defineProps<{
   stats: { totalAttempted: number; totalCorrect: number }
@@ -132,7 +121,6 @@ const props = defineProps<{
   recommendedSubject: string
   recommendedCount: number
   practiceLoading: boolean
-  dailyQuestion: any | null
   subjects: string[]
   difficulties: string[]
   types: string[]
@@ -141,16 +129,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'switch-tab', tab: string): void
   (e: 'start-recommended'): void
-  (e: 'start-daily'): void
-  (e: 'start-custom', config: any): void
-  (e: 'refresh-daily'): void
+  (e: 'start-custom', config: { subject: string; difficulty: string; type: string; count: number }): void
 }>()
 
 const form = reactive({
   subject: '',
   difficulty: '',
   type: '',
-  count: 10
+  count: 10,
 })
 
 const accuracyText = computed(() => {
@@ -161,326 +147,310 @@ const accuracyText = computed(() => {
 function handleCustomStart() {
   emit('start-custom', { ...form })
 }
-
-function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-}
 </script>
 
 <style scoped>
 .practice-tab {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
 }
 
-.dashboard-header {
+.module-header,
+.section-card {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.module-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: flex-end;
-  border-bottom: 1px solid #E5E7EB;
-  padding-bottom: 24px;
+  gap: 20px;
+  padding: 22px 24px;
 }
 
-.header-content h1 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 8px 0;
+.header-copy h2,
+.section-title-row h3,
+.task-info h4,
+.panel-head h4 {
+  margin: 6px 0 0;
+  color: #0f172a;
 }
 
-.subtitle {
-  color: #6B7280;
-  margin: 0;
-  font-size: 14px;
+.header-copy h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.section-label {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.subtitle,
+.panel-head p,
+.task-info p {
+  margin: 8px 0 0;
+  color: #64748b;
+  line-height: 1.65;
 }
 
 .metrics-grid {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(132px, 1fr));
+  gap: 12px;
 }
 
 .metric-card {
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  padding: 16px 24px;
-  display: flex;
-  flex-direction: column;
-  min-width: 120px;
-}
-
-.metric-card.warning {
-  background: #FEF2F2;
-  border-color: #FCA5A5;
-}
-
-.metric-card.warning .metric-value {
-  color: #DC2626;
+  padding: 16px 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: #f8fafc;
 }
 
 .metric-label {
+  display: block;
+  color: #64748b;
   font-size: 12px;
-  color: #6B7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 500;
-  margin-bottom: 4px;
+  font-weight: 700;
 }
 
 .metric-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #111827;
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.metric-card.warning .metric-value {
+  color: #dc2626;
 }
 
 .main-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 32px;
+  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.95fr);
+  gap: 20px;
 }
 
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #111827;
-}
-
-.tasks-column {
+.tasks-column,
+.sidebar-column {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
-.task-card {
+.sidebar-column {
+  align-self: start;
+}
+
+.section-title-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  transition: border-color 0.15s ease;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.task-card:hover {
-  border-color: #D1D5DB;
+.section-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px;
 }
 
-.primary-task {
-  border: 1px solid #111827;
-  background: #F9FAFB;
+.section-card.emphasized {
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  border-color: rgba(99, 102, 241, 0.22);
 }
 
-.danger-task {
-  border: 1px solid #FECACA;
+.section-card.warning-card {
+  border-color: rgba(248, 113, 113, 0.24);
+  background: rgba(255, 255, 255, 0.96);
 }
 
-.task-info h3 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
+.task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.task-info p {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  color: #4B5563;
-  line-height: 1.5;
+.task-info h4,
+.panel-head h4 {
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .tags {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tag {
-  background: #E5E7EB;
-  color: #374151;
-  padding: 4px 10px;
-  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
 }
 
-.tag.outline {
-  background: transparent;
-  border: 1px solid #D1D5DB;
-}
-
-.sidebar-column {
+.panel-head {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.panel {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.panel-header {
-  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  gap: 16px;
 }
 
-.panel h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.btn-icon {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #6B7280;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.btn-icon:hover {
-  background: #F3F4F6;
-  color: #111827;
-}
-
-.daily-question {
-  display: flex;
+.panel-head.stacked {
   flex-direction: column;
-  gap: 12px;
 }
 
-.question-content {
+.btn-primary,
+.btn-secondary,
+.btn-ghost,
+.field {
+  min-height: 44px;
+  border-radius: 14px;
   font-size: 14px;
-  color: #374151;
-  line-height: 1.6;
-  max-height: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
+  font-family: inherit;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-ghost {
+  min-width: 132px;
+  padding: 0 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+.btn-primary {
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.btn-secondary {
+  border: 1px solid rgba(165, 180, 252, 0.4);
+  background: rgba(255, 255, 255, 0.9);
+  color: #3730a3;
+}
+
+.btn-secondary:hover:not(:disabled),
+.btn-ghost:hover:not(:disabled) {
+  background: #fff;
+}
+
+.btn-ghost {
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  background: rgba(254, 242, 242, 0.8);
+  color: #dc2626;
+}
+
+.btn-ghost.danger:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.92);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-ghost:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.custom-card .btn-primary {
+  width: 100%;
 }
 
 .custom-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-top: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .form-group label {
+  color: #475569;
   font-size: 13px;
-  font-weight: 500;
-  color: #374151;
+  font-weight: 700;
 }
 
-.select-input, .text-input {
+.field {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #111827;
-  background: #FFFFFF;
+  padding: 0 14px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #0f172a;
   outline: none;
-  font-family: inherit;
-  transition: border-color 0.15s ease;
   box-sizing: border-box;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.select-input:focus, .text-input:focus {
-  border-color: #111827;
-}
-
-/* Buttons */
-.btn-primary {
-  background: #111827;
-  color: #FFFFFF;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #374151;
-}
-
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #FFFFFF;
-  color: #111827;
-  border: 1px solid #D1D5DB;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-secondary:hover {
-  background: #F9FAFB;
-  border-color: #9CA3AF;
-}
-
-.btn-danger {
-  background: #FEF2F2;
-  color: #DC2626;
-  border: 1px solid #FECACA;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-danger:hover {
-  background: #FEE2E2;
+.field:focus {
+  border-color: rgba(79, 70, 229, 0.42);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
 }
 
 .full-width {
   width: 100%;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 32px 0;
-  color: #6B7280;
-  font-size: 14px;
+@media (max-width: 960px) {
+  .module-header,
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-header {
+    flex-direction: column;
+  }
+
+  .metrics-grid {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-card,
+  .module-header {
+    padding: 18px;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    width: 100%;
+  }
 }
 </style>

@@ -1,27 +1,32 @@
 <template>
   <div class="exam-tab">
-    <div class="header-section">
-      <h2>模拟组卷</h2>
-      <p class="subtitle">配置参数，生成专属模拟试卷。</p>
-    </div>
+    <header class="module-header">
+      <div>
+        <span class="section-label">Builder</span>
+        <h2>模拟组卷</h2>
+        <p class="subtitle">配置参数并预览试卷，再进入完整考试模式。</p>
+      </div>
+    </header>
 
     <div class="builder-grid">
-      <!-- Left: Form -->
-      <div class="config-panel">
+      <section class="config-panel">
         <div class="panel-header">
-          <h3>试卷配置</h3>
-          <button class="btn-text" @click="$emit('reset-form')">重置</button>
+          <div>
+            <span class="section-label">Config</span>
+            <h3>试卷配置</h3>
+          </div>
+          <button class="btn-link" @click="$emit('reset-form')">重置</button>
         </div>
 
         <form class="config-form" @submit.prevent>
           <div class="form-row">
             <div class="form-group">
               <label>试卷标题</label>
-              <input type="text" v-model="form.title" class="text-input" placeholder="如：数据结构期末模拟" />
+              <input v-model="form.title" type="text" class="field" placeholder="例如：数据结构期末模拟" />
             </div>
             <div class="form-group">
               <label>学科</label>
-              <select v-model="form.subject" class="select-input">
+              <select v-model="form.subject" class="field">
                 <option value="">全部学科</option>
                 <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
               </select>
@@ -31,50 +36,43 @@
           <div class="form-row">
             <div class="form-group">
               <label>难度</label>
-              <select v-model="form.difficulty" class="select-input">
+              <select v-model="form.difficulty" class="field">
                 <option value="混合">混合（随机）</option>
                 <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
             <div class="form-group">
               <label>时长（分钟）</label>
-              <input type="number" v-model="form.duration" min="5" max="180" class="text-input" />
+              <input v-model="form.duration" type="number" min="5" max="180" class="field" />
             </div>
           </div>
 
           <div class="type-counts">
-            <label class="section-label">题型分布</label>
+            <span class="section-label">Question Mix</span>
+            <h4>题型分布</h4>
             <div class="count-grid">
               <div v-for="item in typeCounts" :key="item.type" class="count-box">
                 <span class="type-label">{{ item.label }}</span>
-                <input type="number" v-model="item.count" min="0" max="30" class="count-input" />
+                <input v-model="item.count" type="number" min="0" max="30" class="count-input" />
               </div>
             </div>
           </div>
 
           <div class="form-actions">
-            <button
-              class="btn-secondary"
-              :disabled="loading"
-              @click="$emit('generate-preview')"
-            >
+            <button class="btn-secondary" :disabled="loading" @click="$emit('generate-preview')">
               {{ loading ? '生成中...' : '生成预览' }}
             </button>
-            <button
-              class="btn-primary"
-              :disabled="preview.length === 0"
-              @click="$emit('start-exam')"
-            >
-              开始考试
-            </button>
+            <button class="btn-primary" :disabled="preview.length === 0" @click="$emit('start-exam')">开始考试</button>
           </div>
         </form>
-      </div>
+      </section>
 
-      <!-- Right: Preview -->
-      <div class="preview-panel">
+      <section class="preview-panel">
         <div class="panel-header">
-          <h3>试卷预览</h3>
+          <div>
+            <span class="section-label">Preview</span>
+            <h3>试卷预览</h3>
+          </div>
           <span v-if="preview.length > 0" class="badge">{{ preview.length }} 题</span>
         </div>
 
@@ -94,10 +92,8 @@
           </div>
         </div>
 
-        <div v-else class="empty-preview">
-          配置试卷参数后，点击「生成预览」查看题目。
-        </div>
-      </div>
+        <div v-else class="empty-preview">配置试卷参数后，点击“生成预览”查看题目。</div>
+      </section>
     </div>
   </div>
 </template>
@@ -112,7 +108,7 @@ const props = defineProps<{
   difficulties: string[]
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'reset-form'): void
   (e: 'generate-preview'): void
   (e: 'start-exam'): void
@@ -143,212 +139,225 @@ function renderInline(text: string) {
 .exam-tab {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
-.header-section h2 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 4px 0;
+.module-header,
+.config-panel,
+.preview-panel,
+.empty-preview {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.module-header {
+  padding: 22px 24px;
+}
+
+.section-label {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.module-header h2,
+.panel-header h3,
+.type-counts h4 {
+  margin: 6px 0 0;
+  color: #0f172a;
+}
+
+.module-header h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
 }
 
 .subtitle {
-  color: #6B7280;
-  font-size: 14px;
-  margin: 0;
+  margin: 8px 0 0;
+  color: #64748b;
+  line-height: 1.65;
 }
 
 .builder-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 24px;
-}
-
-.config-panel, .preview-panel {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px;
 }
 
 .panel-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid #E5E7EB;
+  gap: 16px;
+  padding: 22px 24px 0;
 }
 
-.panel-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.btn-text {
-  background: none;
+.btn-link {
   border: none;
-  color: #6B7280;
-  font-size: 13px;
+  background: transparent;
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.btn-text:hover {
-  color: #111827;
+.btn-link:hover {
+  color: #4338ca;
 }
 
 .badge {
-  background: #F3F4F6;
-  color: #374151;
-  padding: 4px 10px;
-  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .config-form {
-  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
+  padding: 20px 24px 24px;
 }
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.form-group label {
+.form-group label,
+.type-label {
+  color: #475569;
   font-size: 13px;
-  font-weight: 500;
-  color: #374151;
+  font-weight: 700;
 }
 
-.select-input, .text-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
+.field,
+.count-input,
+.btn-primary,
+.btn-secondary {
+  min-height: 44px;
+  border-radius: 14px;
   font-size: 14px;
-  background: #FFFFFF;
+  font-family: inherit;
+}
+
+.field,
+.count-input {
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #0f172a;
   outline: none;
-  transition: border-color 0.15s ease;
   box-sizing: border-box;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.select-input:focus, .text-input:focus {
-  border-color: #111827;
+.field:focus,
+.count-input:focus {
+  border-color: rgba(79, 70, 229, 0.42);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
 }
 
-.section-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 12px;
-  display: block;
+.type-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .count-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
 .count-box {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  padding: 8px 12px;
-  border-radius: 6px;
-}
-
-.type-label {
-  font-size: 13px;
-  color: #4B5563;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.92);
 }
 
 .count-input {
-  width: 48px;
-  padding: 4px;
-  border: 1px solid #D1D5DB;
-  border-radius: 4px;
+  width: 64px;
+  padding: 0 8px;
   text-align: center;
-  font-size: 13px;
-  outline: none;
-}
-
-.count-input:focus {
-  border-color: #111827;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 8px;
 }
 
+.btn-primary,
 .btn-secondary {
-  background: #FFFFFF;
-  color: #111827;
-  border: 1px solid #D1D5DB;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 0 18px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #F9FAFB;
-  border-color: #9CA3AF;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .btn-primary {
-  background: #111827;
-  color: #FFFFFF;
-  border: none;
-  padding: 8px 24px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease;
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #374151;
+  background: #4338ca;
+  border-color: #4338ca;
 }
 
-.btn-primary:disabled, .btn-secondary:disabled {
-  opacity: 0.5;
+.btn-secondary {
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #334155;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.52;
   cursor: not-allowed;
 }
 
 .preview-list {
-  padding: 0;
-  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  max-height: 680px;
   overflow-y: auto;
+  padding: 8px 24px 24px;
 }
 
 .preview-item {
   display: flex;
   gap: 16px;
-  padding: 16px 24px;
-  border-bottom: 1px solid #F3F4F6;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
 }
 
 .preview-item:last-child {
@@ -356,53 +365,99 @@ function renderInline(text: string) {
 }
 
 .item-number {
-  width: 24px;
-  height: 24px;
-  background: #F3F4F6;
-  color: #4B5563;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  display: flex;
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 800;
   flex-shrink: 0;
 }
 
 .item-content {
-  flex: 1;
+  min-width: 0;
 }
 
 .item-meta {
-  font-size: 12px;
-  color: #6B7280;
-  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .meta-dot {
   margin: 0 6px;
 }
 
-.text-success { color: #059669; }
-.text-warning { color: #D97706; }
-.text-danger { color: #DC2626; }
-.text-neutral { color: #6B7280; }
-
 .item-text {
-  font-size: 14px;
-  color: #111827;
-  line-height: 1.5;
+  margin-top: 8px;
+  color: #0f172a;
+  line-height: 1.65;
   display: -webkit-box;
+  overflow: hidden;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow: hidden;
+}
+
+.text-success {
+  color: #059669;
+}
+
+.text-warning {
+  color: #d97706;
+}
+
+.text-danger {
+  color: #dc2626;
+}
+
+.text-neutral {
+  color: #64748b;
 }
 
 .empty-preview {
-  padding: 48px 24px;
+  margin: 0 24px 24px;
+  padding: 40px 24px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px dashed rgba(203, 213, 225, 0.96);
+  color: #64748b;
   text-align: center;
-  color: #6B7280;
-  font-size: 14px;
-  line-height: 1.6;
+}
+
+@media (max-width: 960px) {
+  .builder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .module-header,
+  .panel-header,
+  .config-form,
+  .preview-list {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .form-row,
+  .count-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+  }
+
+  .empty-preview {
+    margin: 0 18px 18px;
+  }
 }
 </style>

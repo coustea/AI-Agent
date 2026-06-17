@@ -1,44 +1,46 @@
 <template>
   <div class="search-tab">
-    <div class="header-section">
-      <h2>全部题目</h2>
-      <p class="subtitle">搜索并浏览完整题库，支持筛选和在线作答。</p>
-    </div>
-
-    <!-- Filters -->
-    <div class="filter-bar">
-      <div class="search-input-wrapper">
-        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input 
-          v-model="filters.query" 
-          type="text" 
-          placeholder="搜索题目..." 
-          class="search-input"
-          @keyup.enter="handleSearch"
-        />
+    <header class="module-header">
+      <div>
+        <span class="section-label">Question Bank</span>
+        <h2>全部题目</h2>
+        <p class="subtitle">按学科、难度和题型检索题库，并直接在线作答。</p>
       </div>
-      <select v-model="filters.subject" class="filter-select" @change="handleSearch">
-        <option value="">全部学科</option>
-        <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
-      </select>
-      <select v-model="filters.difficulty" class="filter-select" @change="handleSearch">
-        <option value="">全部难度</option>
-        <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
-      </select>
-      <select v-model="filters.type" class="filter-select" @change="handleSearch">
-        <option value="">全部题型</option>
-        <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
-      </select>
-    </div>
+    </header>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="loading-state">
+    <section class="filter-card">
+      <div class="filter-bar">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input
+            v-model="filters.query"
+            type="text"
+            placeholder="搜索题目..."
+            class="search-input"
+            @keyup.enter="handleSearch"
+          />
+        </div>
+        <select v-model="filters.subject" class="filter-select" @change="handleSearch">
+          <option value="">全部学科</option>
+          <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
+        </select>
+        <select v-model="filters.difficulty" class="filter-select" @change="handleSearch">
+          <option value="">全部难度</option>
+          <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
+        </select>
+        <select v-model="filters.type" class="filter-select" @change="handleSearch">
+          <option value="">全部题型</option>
+          <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
+        </select>
+      </div>
+    </section>
+
+    <div v-if="loading" class="loading-card">
       <div class="spinner"></div>
       <span>加载题目中...</span>
     </div>
 
-    <!-- Question List -->
-    <div v-else class="question-list">
+    <section v-else class="question-list">
       <article v-for="question in questions" :key="question.id" class="question-card">
         <div class="card-header">
           <div class="tags">
@@ -51,19 +53,18 @@
 
         <div class="question-content" v-html="renderInline(question.content)"></div>
 
-        <!-- Options / Input Area -->
         <div v-if="isOptionQuestion(question)" class="options-grid">
           <button
             v-for="(text, key) in getOptions(question)"
             :key="key"
             type="button"
             :class="[
-              'option-btn', 
-              { 
-                'selected': isSelected(question, String(key)),
-                'correct': submitted[question.id] && isCorrectOption(question, String(key)),
-                'wrong': submitted[question.id] && isSelected(question, String(key)) && !isCorrectOption(question, String(key))
-              }
+              'option-btn',
+              {
+                selected: isSelected(question, String(key)),
+                correct: submitted[question.id] && isCorrectOption(question, String(key)),
+                wrong: submitted[question.id] && isSelected(question, String(key)) && !isCorrectOption(question, String(key)),
+              },
             ]"
             :disabled="submitted[question.id]"
             @click="selectOption(question, String(key))"
@@ -78,10 +79,9 @@
           :disabled="submitted[question.id]"
           class="text-area-input"
           rows="3"
-          placeholder="请输入你的答案...AI 将自动评阅。"
+          placeholder="请输入你的答案，系统会自动评阅。"
         ></textarea>
 
-        <!-- Actions & Result -->
         <div class="card-footer">
           <div v-if="submitted[question.id]" :class="['result-badge', correct[question.id] ? 'success' : 'danger']">
             <svg v-if="correct[question.id]" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -89,13 +89,10 @@
             {{ correct[question.id] ? '正确' : '错误（已加入错题本）' }}
             <span v-if="review[question.id]?.score" class="score-text">({{ review[question.id].score }} 分)</span>
           </div>
-          <div v-else class="empty-badge"></div>
+          <div v-else class="result-placeholder"></div>
 
           <div class="action-buttons">
-            <button 
-              class="btn-text" 
-              @click="$emit('toggle-analysis', question.id)"
-            >
+            <button class="btn-link" @click="$emit('toggle-analysis', question.id)">
               {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
             </button>
             <button
@@ -108,7 +105,6 @@
           </div>
         </div>
 
-        <!-- Analysis Panel -->
         <div v-if="openedAnalysis.has(question.id)" class="analysis-panel">
           <div class="analysis-header">
             <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
@@ -121,28 +117,13 @@
         </div>
       </article>
 
-      <div v-if="questions.length === 0" class="empty-state">
-        没有找到符合条件的题目。
-      </div>
-    </div>
+      <div v-if="questions.length === 0" class="empty-state">没有找到符合条件的题目。</div>
+    </section>
 
-    <!-- Pagination -->
-    <div v-if="total > 0 && !loading" class="pagination">
-      <button 
-        class="page-btn" 
-        :disabled="currentPage === 1"
-        @click="changePage(currentPage - 1)"
-      >
-        上一页
-      </button>
+    <div v-if="total > 0 && !loading" class="pagination-card">
+      <button class="page-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">上一页</button>
       <span class="page-info">第 {{ currentPage }} 页 / 共 {{ Math.ceil(total / pageSize) }} 页</span>
-      <button
-        class="page-btn"
-        :disabled="currentPage >= Math.ceil(total / pageSize)"
-        @click="changePage(currentPage + 1)"
-      >
-        下一页
-      </button>
+      <button class="page-btn" :disabled="currentPage >= Math.ceil(total / pageSize)" @click="changePage(currentPage + 1)">下一页</button>
     </div>
   </div>
 </template>
@@ -158,7 +139,6 @@ const props = defineProps<{
   subjects: string[]
   difficulties: string[]
   types: string[]
-  
   answers: Record<string, any>
   submitted: Record<string, boolean>
   correct: Record<string, boolean>
@@ -191,7 +171,6 @@ function submitAnswer(question: any) {
   emit('submit', question)
 }
 
-// Helpers
 function isOptionQuestion(question: any) {
   return ['选择题', '单选题', '多选题', '判断题'].includes(question.type)
 }
@@ -212,10 +191,10 @@ function isCorrectOption(question: any, key: string) {
   let ansText = String(question.answer || '').trim()
   if (question.type === '判断题') {
     const upper = ansText.toUpperCase()
-    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some(i => upper.includes(i))) ansText = 'A'
-    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some(i => upper.includes(i))) ansText = 'B'
+    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some((item) => upper.includes(item))) ansText = 'A'
+    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some((item) => upper.includes(item))) ansText = 'B'
   }
-  const correctKeys = ansText.split(/[、,，;；\s]+/).map(i => i.trim().toUpperCase()).filter(Boolean)
+  const correctKeys = ansText.split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
   return correctKeys.includes(key)
 }
 
@@ -254,84 +233,122 @@ function renderInline(text: string) {
 .search-tab {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
-.header-section h2 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 4px 0;
+.module-header,
+.filter-card,
+.question-card,
+.pagination-card,
+.loading-card,
+.empty-state {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.module-header,
+.filter-card,
+.pagination-card,
+.loading-card,
+.empty-state {
+  padding: 22px 24px;
+}
+
+.section-label {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.module-header h2 {
+  margin: 6px 0 0;
+  color: #0f172a;
+  font-size: 1.35rem;
+  font-weight: 700;
 }
 
 .subtitle {
-  color: #6B7280;
-  font-size: 14px;
-  margin: 0;
+  margin: 8px 0 0;
+  color: #64748b;
+  line-height: 1.65;
 }
 
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  background: #FFFFFF;
-  padding: 16px;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
 }
 
 .search-input-wrapper {
   position: relative;
-  flex: 1;
+  flex: 1 1 320px;
 }
 
 .search-icon {
   position: absolute;
-  left: 12px;
   top: 50%;
+  left: 14px;
   transform: translateY(-50%);
-  color: #9CA3AF;
+  color: #94a3b8;
+}
+
+.search-input,
+.filter-select,
+.page-btn,
+.btn-primary {
+  min-height: 42px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+
+.search-input,
+.filter-select {
+  width: 100%;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #0f172a;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .search-input {
-  width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.15s ease;
-  box-sizing: border-box;
-}
-
-.search-input:focus {
-  border-color: #111827;
+  padding: 0 14px 0 42px;
 }
 
 .filter-select {
-  padding: 8px 32px 8px 12px;
-  border: 1px solid #D1D5DB;
-  border-radius: 6px;
-  font-size: 14px;
-  background: #FFFFFF;
-  outline: none;
-  min-width: 140px;
+  flex: 0 0 148px;
+  padding: 0 14px;
 }
 
-.loading-state {
+.search-input:focus,
+.filter-select:focus,
+.text-area-input:focus {
+  border-color: rgba(79, 70, 229, 0.42);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+}
+
+.loading-card,
+.empty-state {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 64px 0;
-  color: #6B7280;
-  gap: 16px;
+  flex-direction: column;
+  gap: 14px;
+  color: #64748b;
+  text-align: center;
 }
 
 .spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid #E5E7EB;
-  border-top-color: #111827;
+  border: 2px solid rgba(203, 213, 225, 0.96);
+  border-top-color: #4f46e5;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -347,286 +364,305 @@ function renderInline(text: string) {
 }
 
 .question-card {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
   padding: 24px;
 }
 
-.card-header {
+.card-header,
+.card-footer {
   display: flex;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.card-header {
   align-items: center;
   margin-bottom: 16px;
 }
 
-.tags {
-  display: flex;
-  gap: 8px;
-}
-
-.tag {
-  background: #F3F4F6;
-  color: #374151;
-  padding: 4px 10px;
-  border-radius: 99px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.tag.outline {
-  background: transparent;
-  border: 1px solid #E5E7EB;
-}
-
-.tag.type {
-  background: #FEF3C7;
-  color: #92400E;
-}
-
-.success-text { color: #059669; border-color: #A7F3D0 !important; }
-.warning-text { color: #D97706; border-color: #FDE68A !important; }
-.danger-text { color: #DC2626; border-color: #FECACA !important; }
-
-.question-id {
-  font-family: monospace;
-  color: #9CA3AF;
-  font-size: 13px;
-}
-
-.question-content {
-  font-size: 15px;
-  color: #111827;
-  line-height: 1.6;
-  margin-bottom: 24px;
-}
-
-.options-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.option-btn {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s ease;
-}
-
-.option-btn:hover:not(:disabled) {
-  border-color: #9CA3AF;
-  background: #F9FAFB;
-}
-
-.option-btn.selected {
-  border-color: #111827;
-  background: #F3F4F6;
-}
-
-.option-btn.correct {
-  border-color: #10B981;
-  background: #ECFDF5;
-}
-
-.option-btn.wrong {
-  border-color: #EF4444;
-  background: #FEF2F2;
-}
-
-.option-btn:disabled {
-  cursor: default;
-}
-
-.opt-key {
-  font-weight: 600;
-  color: #111827;
-  min-width: 20px;
-}
-
-.opt-text {
-  color: #374151;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.text-area-input {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  resize: vertical;
-  margin-bottom: 24px;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.text-area-input:focus {
-  border-color: #111827;
-}
-
-.text-area-input:disabled {
-  background: #F9FAFB;
-  cursor: not-allowed;
-}
-
 .card-footer {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #E5E7EB;
+  margin-top: 8px;
   padding-top: 16px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.result-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 6px 12px;
-  border-radius: 99px;
-}
-
-.result-badge.success {
-  background: #ECFDF5;
-  color: #059669;
-}
-
-.result-badge.danger {
-  background: #FEF2F2;
-  color: #DC2626;
-}
-
-.score-text {
-  font-weight: 600;
-}
-
+.tags,
+.knowledge-tags,
 .action-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.btn-text {
-  background: none;
-  border: none;
-  color: #6B7280;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-text:hover {
-  color: #111827;
-}
-
-.btn-primary {
-  background: #111827;
-  color: #FFFFFF;
-  border: none;
-  padding: 8px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #374151;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.analysis-panel {
-  margin-top: 16px;
-  padding: 16px;
-  background: #F9FAFB;
-  border-radius: 8px;
-  border-left: 3px solid #111827;
-}
-
-.analysis-header {
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.feedback-text {
-  color: #059669;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.analysis-content {
-  font-size: 14px;
-  color: #4B5563;
-  line-height: 1.6;
-}
-
-.knowledge-tags {
-  margin-top: 12px;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.tag.small {
-  font-size: 11px;
-  padding: 2px 8px;
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.pagination {
+.tag.outline {
+  background: #fff;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  color: #475569;
+}
+
+.tag.type {
+  border: 1px solid rgba(99, 102, 241, 0.16);
+}
+
+.tag.small {
+  min-height: 24px;
+  padding: 0 10px;
+}
+
+.success-text {
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.2) !important;
+}
+
+.warning-text {
+  color: #d97706;
+  border-color: rgba(245, 158, 11, 0.24) !important;
+}
+
+.danger-text {
+  color: #dc2626;
+  border-color: rgba(248, 113, 113, 0.24) !important;
+}
+
+.neutral-text {
+  color: #64748b;
+}
+
+.question-id {
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.question-content {
+  margin-bottom: 20px;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.options-grid {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: #fff;
+  text-align: left;
+  color: #0f172a;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.option-btn:hover:not(:disabled) {
+  border-color: rgba(99, 102, 241, 0.32);
+  background: rgba(248, 250, 252, 0.95);
+}
+
+.option-btn.selected {
+  border-color: rgba(79, 70, 229, 0.36);
+  background: rgba(238, 242, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.08);
+}
+
+.option-btn.correct {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(236, 253, 245, 0.92);
+}
+
+.option-btn.wrong {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(254, 242, 242, 0.94);
+}
+
+.opt-key {
+  min-width: 20px;
+  color: #4338ca;
+  font-weight: 800;
+}
+
+.opt-text {
+  color: #334155;
+  line-height: 1.6;
+}
+
+.text-area-input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 18px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  color: #0f172a;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.result-badge {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.result-badge.success {
+  background: rgba(236, 253, 245, 0.92);
+  color: #059669;
+}
+
+.result-badge.danger {
+  background: rgba(254, 242, 242, 0.94);
+  color: #dc2626;
+}
+
+.score-text {
+  font-weight: 700;
+}
+
+.result-placeholder {
+  min-height: 32px;
+}
+
+.btn-link {
+  border: none;
+  background: transparent;
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-link:hover {
+  color: #4338ca;
+}
+
+.btn-primary {
+  padding: 0 18px;
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.btn-primary:disabled,
+.page-btn:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.analysis-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.analysis-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.feedback-text {
+  color: #059669;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.analysis-content {
+  color: #475569;
+  line-height: 1.7;
+}
+
+.pagination-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 16px;
-  padding: 16px 0;
 }
 
 .page-btn {
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 14px;
+  padding: 0 14px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #334155;
   cursor: pointer;
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #F9FAFB;
-}
-
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  background: #f8fafc;
 }
 
 .page-info {
+  color: #475569;
   font-size: 14px;
-  color: #4B5563;
+  font-weight: 600;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 64px 0;
-  color: #6B7280;
-  font-size: 14px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
+@media (max-width: 720px) {
+  .module-header,
+  .filter-card,
+  .question-card,
+  .pagination-card,
+  .loading-card,
+  .empty-state {
+    padding: 18px;
+  }
+
+  .filter-select {
+    flex: 1 1 calc(50% - 12px);
+  }
+
+  .card-footer,
+  .analysis-header,
+  .pagination-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-buttons {
+    width: 100%;
+  }
+
+  .btn-primary,
+  .page-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

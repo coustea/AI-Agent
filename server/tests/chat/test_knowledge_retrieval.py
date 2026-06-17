@@ -539,3 +539,31 @@ def test_retrieve_dense_knowledge_marks_metadata_fallback_candidates(monkeypatch
     )
 
     assert rows[0]["metadata"]["matched_by"] == "metadata_fallback"
+
+
+def test_rank_with_bm25_uses_canonical_source_identity_for_filtering() -> None:
+    from app.chat.tools import knowledge
+
+    corpus = [
+        {
+            "text": "Java 集合 List 接口",
+            "metadata": {"book_title": "《Java从入门到精通》", "chunk_index": 1},
+            "search_text": "java 集合 list 接口 java从入门到精通",
+        },
+        {
+            "text": "Redis ziplist",
+            "metadata": {"source": "Redis设计与实现.md", "chunk_index": 2},
+            "search_text": "redis ziplist redis设计与实现",
+        },
+    ]
+
+    index = knowledge.build_bm25_index(corpus)
+    rows = knowledge.rank_with_bm25(
+        "Java 集合",
+        index,
+        top_k=5,
+        source_filter=("Java从入门到精通-第06章.md",),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["metadata"]["book_title"] == "《Java从入门到精通》"
