@@ -162,7 +162,7 @@
         <div class="chat-interaction-area">
           <div class="chat-viewport" ref="chatScroll">
             <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
-              <h2>你好，学习者！</h2>
+              <h2>你好，{{ userName }}！</h2>
             </div>
 
             <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
@@ -465,6 +465,7 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getErrorMessage } from '@/shared/api/http'
+import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 
@@ -485,7 +486,6 @@ import type {
   KnowledgeSource,
   TeachingDiagram,
 } from '@/features/chat/model/chat'
-import { getMe } from '@/features/auth/api/auth'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
 import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
@@ -505,6 +505,7 @@ defineOptions({ name: 'Tutor' })
 
 const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
+const { userName } = useCurrentUser()
 
 // 状态
 const chatMode = ref('standard')
@@ -690,7 +691,6 @@ const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
 const digitalHumanSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
-const currentUserId = ref<string | number | null>(null)
 const searchPopoverVisible = ref(false)
 const searchKeyword = ref('')
 
@@ -1360,16 +1360,6 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
   const target = e.target as HTMLElement
   if (showFabMenu.value && !target.closest('.fab-container')) {
     showFabMenu.value = false
-  }
-}
-
-const fetchCurrentUser = async () => {
-  if (currentUserId.value) return
-  try {
-    const res = await getMe()
-    currentUserId.value = res.data.data?.id ?? null
-  } catch {
-    currentUserId.value = null
   }
 }
 
@@ -2047,7 +2037,7 @@ onMounted(async () => {
   document.addEventListener('mousedown', handleGlobalClick)
   document.addEventListener('touchstart', handleGlobalClick, { passive: true })
 
-  await fetchCurrentUser()
+  await ensureCurrentUser()
   await loadSessions()
 
   // If we still have a currentSessionId (from before navigating away),

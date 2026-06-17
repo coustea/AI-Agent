@@ -45,7 +45,7 @@
               <el-icon><UserFilled /></el-icon>
             </div>
             <div class="user-info">
-              <span class="user-name">学习者</span>
+              <span class="user-name">{{ userName }}</span>
             </div>
             <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
           </div>
@@ -80,6 +80,7 @@
         v-model="onboardingDialogVisible"
     />
     <GlobalProfileDialog />
+    <GlobalNoteFab v-if="currentUser" />
   </div>
 </template>
 
@@ -93,13 +94,16 @@ import {
 } from '@element-plus/icons-vue'
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
+import { clearCurrentUser, ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import GlobalProfileDialog from '@/features/profile/components/GlobalProfileDialog.vue'
 import { isGlobalProfileVisible } from '@/features/profile/model/useGlobalProfile'
 import { useAuthPolling } from '@/features/auth/model/useAuthPolling'
 import { clearAuthToken } from '@/shared/auth/token'
+import GlobalNoteFab from '@/shared/ui/GlobalNoteFab.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { currentUser, userName } = useCurrentUser()
 const onboardingDialogVisible = ref(false)
 const pendingPath = ref<string | null>(null)
 
@@ -152,6 +156,7 @@ onMounted(() => {
   updateTime()
   timer = window.setInterval(updateTime, 1000)
   loadOnboardingStatus()
+  ensureCurrentUser().catch(() => null)
 })
 
 onUnmounted(() => {
@@ -165,6 +170,7 @@ const handleCommand = async (command: string) => {
     } catch {
       // ignore
     }
+    clearCurrentUser()
     clearAuthToken()
     router.push('/login')
   } else if (command === 'profile' || command === 'history' || command === 'favorites' || command === 'settings') {
@@ -332,7 +338,7 @@ const handleCommand = async (command: string) => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2\.5) var(--space-4);
+  padding: var(--space-2_5) var(--space-4);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   cursor: pointer;

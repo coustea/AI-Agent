@@ -125,6 +125,7 @@ import { useRouter } from 'vue-router'
 import { User, Lock, ArrowRight, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { login } from '@/features/auth/api/auth'
+import { setCurrentUser } from '@/features/auth/model/currentUser'
 import { getErrorMessage } from '@/shared/api/http'
 import { setAuthToken } from '@/shared/auth/token'
 
@@ -158,6 +159,7 @@ const handleLogin = async (formEl: any) => {
         const { data } = res.data
         if (data.token) {
           setAuthToken(data.token)
+          setCurrentUser(data.user ?? null)
           ElMessage.success({ message: '登录成功！', duration: 2000, offset: 20 })
           if (!data.user?.is_first_login) {
             router.push('/dashboard?onboarding=true')
