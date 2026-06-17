@@ -1,17 +1,22 @@
 <template>
   <div class="wrong-book-tab">
-    <div class="header-section">
-      <h2>错题本</h2>
-      <p class="subtitle">重练错题、巩固薄弱点，提升掌握程度。</p>
-    </div>
+    <header class="module-header">
+      <div>
+        <span class="section-label">Wrong Book</span>
+        <h2>错题本</h2>
+        <p class="subtitle">集中复习错题、查看解析，并持续巩固薄弱点。</p>
+      </div>
+    </header>
 
     <div class="main-grid">
-      <!-- Left: Quick Drill -->
-      <div class="drill-column">
-        <div class="panel">
-          <div class="panel-header">
-            <h3>快速再练</h3>
-            <button class="btn-text" @click="$emit('pick-drill')" title="换一题">
+      <section class="drill-column">
+        <div class="section-card">
+          <div class="panel-head">
+            <div>
+              <span class="section-label">Quick Drill</span>
+              <h3>快速再练</h3>
+            </div>
+            <button class="btn-icon" @click="$emit('pick-drill')" title="换一题">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             </button>
           </div>
@@ -20,8 +25,9 @@
             <div class="tags">
               <span class="tag danger">错题重练</span>
               <span class="tag outline">{{ drillQuestion.subject }}</span>
+              <span class="tag outline">{{ drillQuestion.type }}</span>
             </div>
-            
+
             <div class="question-stem" v-html="renderInline(drillQuestion.content)"></div>
 
             <div v-if="isOptionQuestion(drillQuestion)" class="options-list">
@@ -30,12 +36,12 @@
                 :key="key"
                 type="button"
                 :class="[
-                  'option-btn', 
-                  { 
-                    'selected': isDrillSelected(String(key)),
-                    'correct': drillSubmitted && isCorrectOption(drillQuestion, String(key)),
-                    'wrong': drillSubmitted && isDrillSelected(String(key)) && !isCorrectOption(drillQuestion, String(key))
-                  }
+                  'option-btn',
+                  {
+                    selected: isDrillSelected(String(key)),
+                    correct: drillSubmitted && isCorrectOption(drillQuestion, String(key)),
+                    wrong: drillSubmitted && isDrillSelected(String(key)) && !isCorrectOption(drillQuestion, String(key)),
+                  },
                 ]"
                 :disabled="drillSubmitted"
                 @click="$emit('select-drill-option', String(key))"
@@ -47,10 +53,11 @@
             <textarea
               v-else
               :value="drillAnswer"
-              @input="$emit('update:drillAnswer', ($event.target as HTMLTextAreaElement).value)"
-              :disabled="drillSubmitted"
               class="text-area-input"
-              rows="3"
+              rows="4"
+              placeholder="请重新作答..."
+              :disabled="drillSubmitted"
+              @input="$emit('update:drillAnswer', ($event.target as HTMLTextAreaElement).value)"
             ></textarea>
 
             <button
@@ -69,52 +76,49 @@
               再练一题
             </button>
 
-            <!-- Drill Result -->
             <div v-if="drillSubmitted" :class="['result-panel', drillCorrect ? 'success' : 'danger']">
-              <strong>{{ drillCorrect ? '已掌握！' : '还需练习' }}</strong>
+              <strong>{{ drillCorrect ? '已掌握' : '还需练习' }}</strong>
               <div class="ref-ans">参考答案：{{ formatAnswer(drillQuestion.answer) }}</div>
               <p v-if="drillReview?.feedback" class="feedback-text">{{ drillReview.feedback }}</p>
-              <div class="analysis-text" v-html="renderInline(drillQuestion.analysis)"></div>
+              <div class="analysis-text" v-html="renderInline(drillQuestion.analysis || '暂无解析。')"></div>
             </div>
           </div>
-          <div v-else class="empty-state small">
-            暂无错题可练，继续保持！
+
+          <div v-else class="empty-state">暂无可再练的错题。</div>
+        </div>
+      </section>
+
+      <section class="list-column">
+        <div class="filter-card">
+          <div class="filter-bar">
+            <div class="search-input-wrapper">
+              <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input
+                v-model="filters.query"
+                type="text"
+                placeholder="搜索错题..."
+                class="search-input"
+                @keyup.enter="$emit('search-wrong')"
+              />
+            </div>
+            <select v-model="filters.subject" class="filter-select" @change="$emit('search-wrong')">
+              <option value="">全部学科</option>
+              <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
+            </select>
+            <select v-model="filters.type" class="filter-select" @change="$emit('search-wrong')">
+              <option value="">全部题型</option>
+              <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
+            </select>
           </div>
         </div>
-      </div>
 
-      <!-- Right: List & Filters -->
-      <div class="list-column">
-        <div class="filter-bar">
-          <div class="search-input-wrapper">
-            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input
-              v-model="filters.query"
-              type="text"
-              placeholder="搜索错题..."
-              class="search-input"
-              @keyup.enter="$emit('search-wrong')"
-            />
-          </div>
-          <select v-model="filters.subject" class="filter-select" @change="$emit('search-wrong')">
-            <option value="">全部学科</option>
-            <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
-          </select>
-          <select v-model="filters.type" class="filter-select" @change="$emit('search-wrong')">
-            <option value="">全部题型</option>
-            <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
-          </select>
-        </div>
-
-        <div v-if="loading" class="loading-state">
-          加载错题中...
-        </div>
+        <div v-if="loading" class="loading-card">加载错题中...</div>
 
         <div v-else class="wrong-list">
           <article v-for="question in questions" :key="question.id" class="question-card">
             <div class="card-header">
               <div class="tags">
-                <span class="tag danger-outline">错 {{ question.wrong_count || 1 }} 次</span>
+                <span class="tag danger">错 {{ question.wrong_count || 1 }} 次</span>
                 <span class="tag outline">{{ question.subject }}</span>
                 <span class="tag type">{{ question.type }}</span>
               </div>
@@ -129,12 +133,12 @@
                 :key="key"
                 type="button"
                 :class="[
-                  'option-btn', 
-                  { 
-                    'selected': isSelected(question, String(key)),
-                    'correct': submitted[question.id] && isCorrectOption(question, String(key)),
-                    'wrong': submitted[question.id] && isSelected(question, String(key)) && !isCorrectOption(question, String(key))
-                  }
+                  'option-btn',
+                  {
+                    selected: isSelected(question, String(key)),
+                    correct: submitted[question.id] && isCorrectOption(question, String(key)),
+                    wrong: submitted[question.id] && isSelected(question, String(key)) && !isCorrectOption(question, String(key)),
+                  },
                 ]"
                 :disabled="submitted[question.id]"
                 @click="$emit('select-wrong-option', question, String(key))"
@@ -146,24 +150,24 @@
             <textarea
               v-else
               v-model="answers[question.id]"
-              :disabled="submitted[question.id]"
               class="text-area-input"
               rows="3"
               placeholder="请重新作答..."
+              :disabled="submitted[question.id]"
             ></textarea>
 
             <div class="card-footer">
               <div v-if="submitted[question.id]" :class="['result-badge', correct[question.id] ? 'success' : 'danger']">
-                {{ correct[question.id] ? '已掌握！' : '仍需练习' }}
+                {{ correct[question.id] ? '已掌握' : '仍需练习' }}
               </div>
-              <div v-else class="empty-badge"></div>
+              <div v-else class="result-placeholder"></div>
 
               <div class="action-buttons">
-                <button class="btn-text" @click="$emit('toggle-wrong-analysis', question.id)">
+                <button class="btn-link" @click="$emit('toggle-wrong-analysis', question.id)">
                   {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
                 </button>
-                <button class="btn-text text-danger" @click="$emit('remove-wrong', question)">移出</button>
-                <button class="btn-text text-success" @click="$emit('archive-wrong', question)">归档</button>
+                <button class="btn-link danger-link" @click="$emit('remove-wrong', question)">移出</button>
+                <button class="btn-link success-link" @click="$emit('archive-wrong', question)">归档</button>
                 <button
                   class="btn-primary"
                   :disabled="submitted[question.id] || !hasAnswer(question)"
@@ -180,22 +184,22 @@
             </div>
           </article>
 
-          <div v-if="questions.length === 0" class="empty-state">
-            暂无错题。
-          </div>
+          <div v-if="questions.length === 0" class="empty-state">暂无错题。</div>
         </div>
 
-        <div v-if="total > 0 && !loading" class="pagination">
+        <div v-if="total > 0 && !loading" class="pagination-card">
           <button class="page-btn" :disabled="page === 1" @click="$emit('page-change', page - 1)">上一页</button>
           <span class="page-info">第 {{ page }} 页 / 共 {{ Math.ceil(total / pageSize) }} 页</span>
           <button class="page-btn" :disabled="page >= Math.ceil(total / pageSize)" @click="$emit('page-change', page + 1)">下一页</button>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 const props = defineProps<{
   questions: any[]
   total: number
@@ -205,14 +209,12 @@ const props = defineProps<{
   filters: { query: string; subject: string; type: string }
   subjects: string[]
   types: string[]
-  
   answers: Record<string, any>
   submitted: Record<string, boolean>
   correct: Record<string, boolean>
   reviewing: Record<string, boolean>
   review: Record<string, any>
   openedAnalysis: Set<string>
-
   drillQuestion: any | null
   drillAnswer: any
   drillSubmitted: boolean
@@ -234,8 +236,6 @@ defineEmits<{
   (e: 'archive-wrong', question: any): void
   (e: 'remove-wrong', question: any): void
 }>()
-
-import { computed } from 'vue'
 
 const hasDrillAnswer = computed(() => {
   const ans = props.drillAnswer
@@ -270,10 +270,10 @@ function isCorrectOption(question: any, key: string) {
   let ansText = String(question.answer || '').trim()
   if (question.type === '判断题') {
     const upper = ansText.toUpperCase()
-    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some(i => upper.includes(i))) ansText = 'A'
-    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some(i => upper.includes(i))) ansText = 'B'
+    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some((item) => upper.includes(item))) ansText = 'A'
+    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some((item) => upper.includes(item))) ansText = 'B'
   }
-  const correctKeys = ansText.split(/[、,，;；\s]+/).map(i => i.trim().toUpperCase()).filter(Boolean)
+  const correctKeys = ansText.split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
   return correctKeys.includes(key)
 }
 
@@ -305,216 +305,460 @@ function renderInline(text: string) {
 .wrong-book-tab {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
-.header-section h2 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 4px 0;
+.module-header,
+.section-card,
+.filter-card,
+.question-card,
+.pagination-card,
+.loading-card,
+.empty-state {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.module-header,
+.filter-card,
+.pagination-card,
+.loading-card,
+.empty-state,
+.section-card,
+.question-card {
+  padding: 22px 24px;
+}
+
+.section-label {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.module-header h2,
+.panel-head h3 {
+  margin: 6px 0 0;
+  color: #0f172a;
+}
+
+.module-header h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
 }
 
 .subtitle {
-  color: #6B7280;
-  font-size: 14px;
-  margin: 0;
+  margin: 8px 0 0;
+  color: #64748b;
+  line-height: 1.65;
 }
 
 .main-grid {
   display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 24px;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.45fr);
+  gap: 20px;
 }
 
-.panel {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  padding: 20px;
+.list-column,
+.wrong-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.panel-header {
+.panel-head,
+.card-header,
+.card-footer,
+.pagination-card {
   display: flex;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-head,
+.card-header,
+.card-footer {
   align-items: center;
-  margin-bottom: 16px;
 }
 
-.panel-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.tags {
+.tags,
+.action-buttons {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .tag {
-  background: #F3F4F6;
-  color: #374151;
-  padding: 4px 10px;
-  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
 }
 
-.tag.danger { background: #FEF2F2; color: #DC2626; }
-.tag.danger-outline { border: 1px solid #FECACA; color: #DC2626; background: transparent; }
-.tag.outline { background: transparent; border: 1px solid #E5E7EB; }
-.tag.type { background: #FEF3C7; color: #92400E; }
+.tag.danger {
+  background: rgba(254, 242, 242, 0.94);
+  color: #dc2626;
+}
 
-.question-stem {
-  font-size: 15px;
-  color: #111827;
-  line-height: 1.6;
-  margin-bottom: 20px;
+.tag.outline {
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #475569;
+}
+
+.tag.type {
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
+}
+
+.drill-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.question-stem,
+.question-content,
+.analysis-text {
+  color: #334155;
+  line-height: 1.7;
 }
 
 .options-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
 }
 
 .option-btn {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 10px 14px;
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
-  cursor: pointer;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: #fff;
+  color: #0f172a;
   text-align: left;
-  transition: all 0.15s ease;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
-.option-btn:hover:not(:disabled) { border-color: #9CA3AF; background: #F9FAFB; }
-.option-btn.selected { border-color: #111827; background: #F3F4F6; }
-.option-btn.correct { border-color: #10B981; background: #ECFDF5; }
-.option-btn.wrong { border-color: #EF4444; background: #FEF2F2; }
+.option-btn:hover:not(:disabled) {
+  border-color: rgba(99, 102, 241, 0.32);
+  background: rgba(248, 250, 252, 0.95);
+}
 
-.opt-key { font-weight: 600; color: #111827; min-width: 20px; }
-.opt-text { color: #374151; font-size: 14px; line-height: 1.5; }
+.option-btn.selected {
+  border-color: rgba(79, 70, 229, 0.36);
+  background: rgba(238, 242, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.08);
+}
 
-.text-area-input {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #D1D5DB;
-  border-radius: 8px;
+.option-btn.correct {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(236, 253, 245, 0.92);
+}
+
+.option-btn.wrong {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(254, 242, 242, 0.94);
+}
+
+.opt-key {
+  min-width: 20px;
+  color: #4338ca;
+  font-weight: 800;
+}
+
+.opt-text {
+  line-height: 1.6;
+}
+
+.text-area-input,
+.search-input,
+.filter-select,
+.btn-primary,
+.btn-secondary,
+.page-btn {
+  min-height: 42px;
+  border-radius: 14px;
   font-size: 14px;
   font-family: inherit;
-  resize: vertical;
-  margin-bottom: 16px;
+}
+
+.text-area-input,
+.search-input,
+.filter-select {
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #0f172a;
   outline: none;
   box-sizing: border-box;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.text-area-input:focus { border-color: #111827; }
+.text-area-input {
+  min-height: 120px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  resize: vertical;
+}
 
-.btn-primary { background: #111827; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: 0.15s; }
-.btn-primary:hover:not(:disabled) { background: #374151; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.text-area-input:focus,
+.search-input:focus,
+.filter-select:focus {
+  border-color: rgba(79, 70, 229, 0.42);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+}
 
-.btn-secondary { background: #FFFFFF; color: #111827; border: 1px solid #D1D5DB; padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: 0.15s; }
-.btn-secondary:hover { background: #F9FAFB; }
+.btn-primary,
+.btn-secondary,
+.page-btn {
+  padding: 0 18px;
+  font-weight: 700;
+}
 
-.btn-text { background: none; border: none; color: #6B7280; font-size: 13px; font-weight: 500; cursor: pointer; }
-.btn-text:hover { color: #111827; }
-.text-danger:hover { color: #DC2626; }
-.text-success:hover { color: #059669; }
+.btn-primary {
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+  cursor: pointer;
+}
 
-.full-width { width: 100%; }
+.btn-primary:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.btn-secondary {
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.btn-secondary:hover:not(:disabled),
+.page-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.page-btn:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 14px;
+  background: #fff;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-icon:hover {
+  color: #4338ca;
+  background: rgba(238, 242, 255, 0.88);
+}
+
+.full-width {
+  width: 100%;
+}
 
 .result-panel {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid transparent;
 }
-.result-panel.success { background: #ECFDF5; border-left: 3px solid #10B981; }
-.result-panel.danger { background: #FEF2F2; border-left: 3px solid #EF4444; }
 
-.ref-ans { margin-top: 8px; font-weight: 500; }
-.feedback-text { color: #059669; margin-top: 8px; }
-.analysis-text { margin-top: 8px; color: #4B5563; line-height: 1.5; }
+.result-panel.success {
+  background: rgba(236, 253, 245, 0.75);
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.result-panel.danger {
+  background: rgba(254, 242, 242, 0.85);
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.ref-ans,
+.feedback-text {
+  margin-top: 8px;
+}
+
+.feedback-text {
+  color: #059669;
+}
 
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1 1 280px;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  color: #94a3b8;
+}
+
+.search-input {
+  padding-left: 38px;
+}
+
+.filter-select {
+  flex: 0 0 148px;
+}
+
+.question-id {
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.card-header {
   margin-bottom: 16px;
 }
 
-.search-input-wrapper { position: relative; flex: 1; }
-.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9CA3AF; }
-.search-input { width: 100%; padding: 6px 12px 6px 32px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; outline: none; box-sizing: border-box;}
-.filter-select { padding: 6px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; outline: none; }
-
-.wrong-list { display: flex; flex-direction: column; gap: 16px; }
-
-.question-card {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  padding: 20px;
+.question-content {
+  margin-bottom: 20px;
 }
-
-.card-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
-.question-id { font-family: monospace; color: #9CA3AF; font-size: 12px; }
 
 .card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid #E5E7EB;
+  margin-top: 8px;
   padding-top: 16px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.result-badge { padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; }
-.result-badge.success { background: #ECFDF5; color: #059669; }
-.result-badge.danger { background: #FEF2F2; color: #DC2626; }
-
-.action-buttons { display: flex; gap: 12px; }
-
-.analysis-panel {
-  margin-top: 16px;
-  padding: 12px 16px;
-  background: #F9FAFB;
-  border-radius: 8px;
-  border-left: 3px solid #111827;
-  font-size: 13px;
-}
-
-.loading-state, .empty-state {
-  text-align: center;
-  padding: 48px 0;
-  color: #6B7280;
-  font-size: 14px;
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
+.result-badge {
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 0;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.page-btn {
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
+.result-badge.success {
+  background: rgba(236, 253, 245, 0.92);
+  color: #059669;
+}
+
+.result-badge.danger {
+  background: rgba(254, 242, 242, 0.94);
+  color: #dc2626;
+}
+
+.result-placeholder {
+  min-height: 32px;
+}
+
+.btn-link {
+  border: none;
+  background: transparent;
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.page-btn:hover:not(:disabled) { background: #F9FAFB; }
-.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-link:hover {
+  color: #4338ca;
+}
+
+.danger-link:hover {
+  color: #dc2626;
+}
+
+.success-link:hover {
+  color: #059669;
+}
+
+.analysis-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.loading-card,
+.empty-state {
+  color: #64748b;
+  text-align: center;
+}
+
+.pagination-card {
+  align-items: center;
+  justify-content: center;
+}
+
+.page-info {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 980px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .module-header,
+  .section-card,
+  .filter-card,
+  .question-card,
+  .pagination-card,
+  .loading-card,
+  .empty-state {
+    padding: 18px;
+  }
+
+  .filter-select {
+    flex: 1 1 calc(50% - 12px);
+  }
+
+  .card-footer,
+  .pagination-card,
+  .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-buttons {
+    width: 100%;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .page-btn {
+    width: 100%;
+  }
+}
 </style>

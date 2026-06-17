@@ -309,7 +309,6 @@ const PRESET_GOALS = ['期末复习', '考研学习', '进阶学习', '补基础
 const PRESET_GRADES = ['大一', '大二', '大三', '大四', '研一', '研二', '研三']
 const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
 const PRESET_PROGRAMMING_LANGUAGES = ['Python', 'Java', 'C++', 'JavaScript', 'Go', 'Rust']
-
 const ONBOARDING_STEPS: StepMeta[] = [
   {
     key: 1,
@@ -630,7 +629,6 @@ const streamAssistantMessage = async (content: string) => {
     if (runId !== streamRunId) return
     const msgIndex = messages.value.findIndex(item => item.id === messageId)
     if (msgIndex === -1) return
-
     messages.value[msgIndex] = {
       ...messages.value[msgIndex],
       content: messages.value[msgIndex].content + chunk,

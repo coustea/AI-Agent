@@ -1,124 +1,149 @@
-<template>
+﻿<template>
   <div class="question-bank-layout">
-    <!-- Workspace Layout -->
-    <div v-if="viewMode === 'workspace'" class="workspace-layout">
-      <!-- Top Navigation -->
-      <header class="top-nav">
-        <div class="nav-container">
-          <div class="brand">
-            <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-            <h2>刷题中心</h2>
-          </div>
-          <nav class="nav-links">
-            <button :class="['nav-item', { active: activeModule === 'practice' }]" @click="switchModule('practice')">智能练习</button>
-            <button :class="['nav-item', { active: activeModule === 'search' }]" @click="switchModule('search')">全部题目</button>
-            <button :class="['nav-item', { active: activeModule === 'paper' }]" @click="switchModule('paper')">模拟组卷</button>
-            <button :class="['nav-item', { active: activeModule === 'wrong' }]" @click="switchModule('wrong')">错题本</button>
-          </nav>
+    <div v-if="viewMode === 'workspace'" class="question-bank-workspace">
+      <section class="question-bank-hero">
+        <div class="hero-copy">
+          <span class="hero-kicker">Question Bank Workspace</span>
+          <h1>刷题中心</h1>
+          <p>在统一的学习工作台中完成练习、检索、组卷和错题巩固。</p>
         </div>
-      </header>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <span>已练题数</span>
+            <strong>{{ stats.totalAttempted }}</strong>
+          </div>
+          <div class="hero-stat">
+            <span>正确率</span>
+            <strong>{{ practiceAccuracy }}</strong>
+          </div>
+          <div class="hero-stat warning">
+            <span>待复习</span>
+            <strong>{{ wrongTotal }}</strong>
+          </div>
+        </div>
+      </section>
 
-      <!-- Main Content -->
-      <main class="main-content">
-        <PracticeTab
-          v-if="activeModule === 'practice'"
-          :stats="stats"
-          :wrongTotal="wrongTotal"
-          :recommendedSubject="recommendedSubject"
-          :recommendedCount="recommendedCount"
-          :practiceLoading="practiceLoading"
-          :dailyQuestion="dailyQuestion"
-          :subjects="subjects"
-          :difficulties="difficulties"
-          :types="types"
-          @switch-tab="switchModule"
-          @start-recommended="startRecommendedPractice"
-          @start-daily="startSingleDailyQuestion"
-          @start-custom="startSpecialPracticeProxy"
-          @refresh-daily="pickDailyQuestion"
-        />
+      <section class="workspace-tabs" role="tablist" aria-label="棰樺簱妯″潡">
+        <button :class="['workspace-tab', { active: activeModule === 'daily' }]" @click="switchModule('daily')">每日练习</button>
+        <button :class="['workspace-tab', { active: activeModule === 'practice' }]" @click="switchModule('practice')">智能练习</button>
+        <button :class="['workspace-tab', { active: activeModule === 'search' }]" @click="switchModule('search')">全部题目</button>
+        <button :class="['workspace-tab', { active: activeModule === 'paper' }]" @click="switchModule('paper')">模拟组卷</button>
+        <button :class="['workspace-tab', { active: activeModule === 'wrong' }]" @click="switchModule('wrong')">错题本</button>
+      </section>
 
-        <SearchTab
-          v-else-if="activeModule === 'search'"
-          :questions="questions"
-          :total="totalQuestions"
-          :loading="bankLoading"
-          :currentPage="bankPage"
-          :pageSize="bankPageSize"
-          :filters="bankFilters"
-          :subjects="subjects"
-          :difficulties="difficulties"
-          :types="types"
-          :answers="bankAnswers"
-          :submitted="bankSubmitted"
-          :correct="bankCorrect"
-          :reviewing="bankReviewing"
-          :review="bankReview"
-          :openedAnalysis="openedAnalysis"
-          @search="searchBank"
-          @page-change="handleBankPageChange"
-          @select-option="selectBankOption"
-          @submit="submitBankAnswer"
-          @toggle-analysis="toggleBankAnalysis"
-        />
+      <section class="workspace-panel-shell">
+        <div class="workspace-panel-header">
+          <div>
+            <span class="workspace-panel-label">Current Module</span>
+            <h2>{{ moduleTitles[activeModule] }}</h2>
+          </div>
+          <p>{{ moduleDescriptions[activeModule] }}</p>
+        </div>
 
-        <ExamTab
-          v-else-if="activeModule === 'paper'"
-          :form="paperForm"
-          :typeCounts="paperTypeCounts"
-          :preview="paperPreview"
-          :loading="paperLoading"
-          :subjects="subjects"
-          :difficulties="difficulties"
-          @reset-form="resetPaperForm"
-          @generate-preview="generatePaperPreview"
-          @start-exam="startPreviewExam"
-        />
+        <main class="workspace-panel-content">
+          <DailyPracticeTab
+            v-if="activeModule === 'daily'"
+            :dailyQuestion="dailyQuestion"
+            @start-daily="startSingleDailyQuestion"
+            @refresh-daily="pickDailyQuestion"
+          />
 
-        <WrongBookTab
-          v-else-if="activeModule === 'wrong'"
-          :questions="filteredWrongQuestions"
-          :total="wrongTotal"
-          :loading="wrongLoading"
-          :page="wrongPage"
-          :pageSize="wrongPageSize"
-          :filters="wrongFilters"
-          :subjects="subjects"
-          :types="types"
-          :answers="wrongAnswers"
-          :submitted="wrongSubmitted"
-          :correct="wrongCorrect"
-          :reviewing="wrongReviewing"
-          :review="wrongReview"
-          :openedAnalysis="openedWrongAnalysis"
-          :drillQuestion="wrongDrillQuestion"
-          :drillAnswer="wrongDrillAnswer"
-          :drillSubmitted="wrongDrillSubmitted"
-          :drillCorrect="wrongDrillCorrect"
-          :drillReviewing="wrongDrillReviewing"
-          :drillReview="wrongDrillReview"
-          @search-wrong="searchWrong"
-          @page-change="handleWrongPageChange"
-          @pick-drill="pickWrongQuestion"
-          @select-drill-option="selectWrongDrillOption"
-          @update:drillAnswer="wrongDrillAnswer = $event"
-          @submit-drill="submitWrongDrill"
-          @select-wrong-option="selectWrongOption"
-          @submit-wrong="submitWrongAnswer"
-          @toggle-wrong-analysis="toggleWrongAnalysis"
-          @archive-wrong="archiveWrong"
-          @remove-wrong="removeWrong"
-        />
-      </main>
+          <PracticeTab
+            v-else-if="activeModule === 'practice'"
+            :stats="stats"
+            :wrongTotal="wrongTotal"
+            :recommendedSubject="recommendedSubject"
+            :recommendedCount="recommendedCount"
+            :practiceLoading="practiceLoading"
+            :subjects="subjects"
+            :difficulties="difficulties"
+            :types="types"
+            @switch-tab="switchModule"
+            @start-recommended="startRecommendedPractice"
+            @start-custom="startSpecialPracticeProxy"
+          />
+
+          <SearchTab
+            v-else-if="activeModule === 'search'"
+            :questions="questions"
+            :total="totalQuestions"
+            :loading="bankLoading"
+            :currentPage="bankPage"
+            :pageSize="bankPageSize"
+            :filters="bankFilters"
+            :subjects="subjects"
+            :difficulties="difficulties"
+            :types="types"
+            :answers="bankAnswers"
+            :submitted="bankSubmitted"
+            :correct="bankCorrect"
+            :reviewing="bankReviewing"
+            :review="bankReview"
+            :openedAnalysis="openedAnalysis"
+            @search="searchBank"
+            @page-change="handleBankPageChange"
+            @select-option="selectBankOption"
+            @submit="submitBankAnswer"
+            @toggle-analysis="toggleBankAnalysis"
+          />
+
+          <ExamTab
+            v-else-if="activeModule === 'paper'"
+            :form="paperForm"
+            :typeCounts="paperTypeCounts"
+            :preview="paperPreview"
+            :loading="paperLoading"
+            :subjects="subjects"
+            :difficulties="difficulties"
+            @reset-form="resetPaperForm"
+            @generate-preview="generatePaperPreview"
+            @start-exam="startPreviewExam"
+          />
+
+          <WrongBookTab
+            v-else-if="activeModule === 'wrong'"
+            :questions="filteredWrongQuestions"
+            :total="wrongTotal"
+            :loading="wrongLoading"
+            :page="wrongPage"
+            :pageSize="wrongPageSize"
+            :filters="wrongFilters"
+            :subjects="subjects"
+            :types="types"
+            :answers="wrongAnswers"
+            :submitted="wrongSubmitted"
+            :correct="wrongCorrect"
+            :reviewing="wrongReviewing"
+            :review="wrongReview"
+            :openedAnalysis="openedWrongAnalysis"
+            :drillQuestion="wrongDrillQuestion"
+            :drillAnswer="wrongDrillAnswer"
+            :drillSubmitted="wrongDrillSubmitted"
+            :drillCorrect="wrongDrillCorrect"
+            :drillReviewing="wrongDrillReviewing"
+            :drillReview="wrongDrillReview"
+            @search-wrong="searchWrong"
+            @page-change="handleWrongPageChange"
+            @pick-drill="pickWrongQuestion"
+            @select-drill-option="selectWrongDrillOption"
+            @update:drillAnswer="wrongDrillAnswer = $event"
+            @submit-drill="submitWrongDrill"
+            @select-wrong-option="selectWrongOption"
+            @submit-wrong="submitWrongAnswer"
+            @toggle-wrong-analysis="toggleWrongAnalysis"
+            @archive-wrong="archiveWrong"
+            @remove-wrong="removeWrong"
+          />
+        </main>
+      </section>
     </div>
 
-    <!-- Fullscreen Exam View -->
     <div v-else class="exam-workspace">
       <header class="exam-topbar">
         <div class="exam-topbar-left">
           <button class="btn-text" @click="quitExam">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            退出考试
+            閫€鍑鸿€冭瘯
           </button>
           <h1 class="exam-title">{{ examTitle }}</h1>
         </div>
@@ -127,8 +152,8 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span>{{ formattedExamTime }}</span>
           </div>
-          <button v-if="!examSubmitted" class="btn-primary" @click="submitExam">交卷</button>
-          <button v-else class="btn-secondary" @click="backWorkspace">返回首页</button>
+          <button v-if="!examSubmitted" class="btn-primary" @click="submitExam">浜ゅ嵎</button>
+          <button v-else class="btn-secondary" @click="backWorkspace">杩斿洖棣栭〉</button>
         </div>
       </header>
 
@@ -156,10 +181,10 @@
                 :class="[
                   'option-btn',
                   {
-                    'selected': isSelected(examAnswers[currentExamQuestion.id], key),
-                    'correct': examSubmitted && isCorrectOption(currentExamQuestion, key),
-                    'wrong': examSubmitted && isSelected(examAnswers[currentExamQuestion.id], key) && !isCorrectOption(currentExamQuestion, key)
-                  }
+                    selected: isSelected(examAnswers[currentExamQuestion.id], key),
+                    correct: examSubmitted && isCorrectOption(currentExamQuestion, key),
+                    wrong: examSubmitted && isSelected(examAnswers[currentExamQuestion.id], key) && !isCorrectOption(currentExamQuestion, key),
+                  },
                 ]"
                 :disabled="examSubmitted"
                 @click="selectExamOption(currentExamQuestion, key)"
@@ -209,11 +234,11 @@
                 :class="[
                   'sheet-btn',
                   {
-                    'active': currentExamIndex === index,
-                    'answered': !examSubmitted && hasAnswerData(examAnswers[question.id]),
-                    'correct': examSubmitted && isExamCorrect(question),
-                    'wrong': examSubmitted && !isExamCorrect(question)
-                  }
+                    active: currentExamIndex === index,
+                    answered: !examSubmitted && hasAnswerData(examAnswers[question.id]),
+                    correct: examSubmitted && isExamCorrect(question),
+                    wrong: examSubmitted && !isExamCorrect(question),
+                  },
                 ]"
                 @click="currentExamIndex = index"
               >
@@ -221,8 +246,8 @@
               </button>
             </div>
 
-            <button v-if="!examSubmitted" class="btn-primary full-width" style="margin-top: 24px;" @click="submitExam">交卷</button>
-            <button v-else class="btn-secondary full-width" style="margin-top: 24px;" @click="backWorkspace">完成查看</button>
+            <button v-if="!examSubmitted" class="btn-primary full-width sidebar-submit" @click="submitExam">浜ゅ嵎</button>
+            <button v-else class="btn-secondary full-width sidebar-submit" @click="backWorkspace">瀹屾垚鏌ョ湅</button>
           </div>
         </aside>
       </main>
@@ -242,14 +267,14 @@ import {
   removeWrongQuestion,
 } from '@/features/learning/api/wrongQuestions'
 
-// Subcomponents
+import DailyPracticeTab from '@/features/learning/components/question-bank/DailyPracticeTab.vue'
 import PracticeTab from '@/features/learning/components/question-bank/PracticeTab.vue'
 import SearchTab from '@/features/learning/components/question-bank/SearchTab.vue'
 import ExamTab from '@/features/learning/components/question-bank/ExamTab.vue'
 import WrongBookTab from '@/features/learning/components/question-bank/WrongBookTab.vue'
 
 type ViewMode = 'workspace' | 'exam'
-type ModuleKey = 'practice' | 'search' | 'paper' | 'wrong'
+type ModuleKey = 'daily' | 'practice' | 'search' | 'paper' | 'wrong'
 type AnswerValue = string | string[] | undefined
 
 interface Question {
@@ -284,9 +309,8 @@ interface WrongQuestionDTO {
   is_archived?: boolean
 }
 
-// Global State
 const viewMode = ref<ViewMode>('workspace')
-const activeModule = ref<ModuleKey>('practice')
+const activeModule = ref<ModuleKey>('daily')
 
 const subjects = ref<string[]>([])
 const difficulties = ref<string[]>([])
@@ -294,12 +318,10 @@ const types = ref<string[]>([])
 const learnerCourses = ref<string[]>([])
 const practicePool = shallowRef<Question[]>([])
 
-// Practice State
 const practiceLoading = ref(false)
 const practiceForm = reactive({ subject: '', difficulty: '', type: '', count: 10 })
 const dailyQuestion = ref<Question | null>(null)
 
-// Bank State
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
 const bankLoading = ref(false)
@@ -307,7 +329,6 @@ const bankPage = ref(1)
 const bankPageSize = ref(8)
 const bankFilters = reactive({ query: '', subject: '', difficulty: '', type: '' })
 
-// Wrong State
 const wrongQuestions = shallowRef<Question[]>([])
 const wrongTotal = ref(0)
 const wrongLoading = ref(false)
@@ -315,7 +336,6 @@ const wrongPage = ref(1)
 const wrongPageSize = ref(8)
 const wrongFilters = reactive({ query: '', subject: '', type: '' })
 
-// Interaction States
 const bankAnswers = ref<Record<string, AnswerValue>>({})
 const bankSubmitted = ref<Record<string, boolean>>({})
 const bankCorrect = ref<Record<string, boolean>>({})
@@ -330,7 +350,6 @@ const wrongReviewing = ref<Record<string, boolean>>({})
 const wrongReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedWrongAnalysis = ref<Set<string>>(new Set())
 
-// Drill State
 const wrongDrillQuestion = ref<Question | null>(null)
 const wrongDrillAnswer = ref<AnswerValue>('')
 const wrongDrillSubmitted = ref(false)
@@ -340,7 +359,6 @@ const wrongDrillReview = ref<QuizReviewResult | null>(null)
 
 const stats = reactive({ totalAttempted: 0, totalCorrect: 0 })
 
-// Paper State
 const paperForm = reactive({
   title: '模拟试卷',
   subject: '',
@@ -357,7 +375,6 @@ const paperTypeCounts = reactive([
 const paperPreview = shallowRef<Question[]>([])
 const paperLoading = ref(false)
 
-// Active Exam State
 const examTitle = ref('')
 const examPaper = shallowRef<Question[]>([])
 const examAnswers = ref<Record<string, AnswerValue>>({})
@@ -367,7 +384,6 @@ const examTime = ref(0)
 const examCorrectCount = ref(0)
 let examTimer: number | null = null
 
-// Computed
 const recommendedSubject = computed(() => wrongQuestions.value[0]?.subject || learnerCourses.value[0] || subjects.value[0] || 'General')
 const recommendedCount = computed(() => {
   const available = practicePool.value.length || questions.value.length
@@ -392,8 +408,25 @@ const examScore = computed(() => {
   if (!examPaper.value.length) return 0
   return Math.round((examCorrectCount.value / examPaper.value.length) * 100)
 })
+const practiceAccuracy = computed(() => {
+  if (!stats.totalAttempted) return '0%'
+  return `${Math.round((stats.totalCorrect / stats.totalAttempted) * 100)}%`
+})
+const moduleTitles: Record<ModuleKey, string> = {
+  daily: '每日练习',
+  practice: '智能练习',
+  search: '全部题目',
+  paper: '模拟组卷',
+  wrong: '错题本',
+}
+const moduleDescriptions: Record<ModuleKey, string> = {
+  daily: '先完成今天这一题，再进入更完整的练习节奏。',
+  practice: '按推荐练习、错题复习、模拟组卷和自定义练习组织你的训练。',
+  search: '按学科、难度和题型检索题库并直接作答。',
+  paper: '配置你的模拟试卷，并在预览后进入考试模式。',
+  wrong: '集中复习错题、管理薄弱点并进行再练。',
+}
 
-// Lifecycle
 onMounted(() => {
   readLocalStats()
   void bootstrap()
@@ -414,7 +447,6 @@ async function bootstrap() {
   pickDailyQuestion()
 }
 
-// Navigation & Actions
 function switchModule(key: string) {
   activeModule.value = key as ModuleKey
   if (key === 'wrong') {
@@ -460,7 +492,7 @@ async function loadQuestionBank() {
     difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
     types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
   } catch {
-    ElMessage.error('加载题库失败')
+    ElMessage.error('鍔犺浇棰樺簱澶辫触')
   } finally {
     bankLoading.value = false
   }
@@ -524,93 +556,71 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
 }
 
 function pickDailyQuestion() {
-  const pool = practicePool.value.length ? practicePool.value : questions.value
-  dailyQuestion.value = pool.length ? (shuffle(pool)[0] as Question) : null
+  const source = practicePool.value.length ? practicePool.value : questions.value
+  if (!source.length) {
+    dailyQuestion.value = null
+    return
+  }
+  dailyQuestion.value = source[Math.floor(Math.random() * source.length)] || null
+}
+
+async function pickWrongQuestion() {
+  try {
+    const result = await fetchRandomWrongQuestion()
+    wrongDrillQuestion.value = result ? normalizeWrongQuestion(result) : null
+  } catch {
+    wrongDrillQuestion.value = wrongQuestions.value[0] || null
+  }
+  wrongDrillAnswer.value = ''
+  wrongDrillSubmitted.value = false
+  wrongDrillCorrect.value = false
+  wrongDrillReviewing.value = false
+  wrongDrillReview.value = null
+}
+
+function startRecommendedPractice() {
+  const pool = practicePool.value.filter((item) => !recommendedSubject.value || item.subject === recommendedSubject.value)
+  const selected = shuffle(pool.length ? pool : practicePool.value).slice(0, recommendedCount.value)
+  if (!selected.length) {
+    ElMessage.warning('暂无题目')
+    return
+  }
+  startExam(selected, '推荐练习')
 }
 
 function startSingleDailyQuestion() {
-  if (!dailyQuestion.value) return ElMessage.warning('暂无题目')
+  if (!dailyQuestion.value) {
+    ElMessage.warning('暂无每日一题')
+    return
+  }
   startExam([dailyQuestion.value], '每日一题')
 }
 
-async function startRecommendedPractice() {
-  const subject = wrongQuestions.value[0]?.subject || practiceForm.subject || learnerCourses.value[0] || ''
-  await startPracticeByCondition({
-    title: subject ? `${subject} · 推荐练习` : '推荐练习',
-    subject,
-    count: recommendedCount.value,
-  })
+function startSpecialPracticeProxy(config: typeof practiceForm) {
+  void startCustomPractice(config)
 }
 
-function startSpecialPracticeProxy(formObj: any) {
-  practiceForm.subject = formObj.subject
-  practiceForm.difficulty = formObj.difficulty
-  practiceForm.type = formObj.type
-  practiceForm.count = formObj.count
-  void startSpecialPractice()
-}
-
-async function startSpecialPractice() {
-  await startPracticeByCondition({
-    title: practiceForm.subject ? `${practiceForm.subject} · 自定义练习` : '自定义练习',
-    subject: practiceForm.subject,
-    difficulty: practiceForm.difficulty,
-    type: practiceForm.type,
-    count: practiceForm.count,
-  })
-}
-
-async function startPracticeByCondition(config: { title: string; subject?: string; difficulty?: string; type?: string; count: number }) {
+async function startCustomPractice(config: typeof practiceForm) {
   practiceLoading.value = true
   try {
     const result = await fetchQuizBankQuestions({
       subject: config.subject || undefined,
       difficulty: config.difficulty || undefined,
       type: config.type || undefined,
-      subjects: !config.subject && learnerCourses.value.length ? learnerCourses.value : undefined,
       page: 1,
-      page_size: 100,
+      page_size: Math.min(30, Math.max(1, Number(config.count || 10))),
     })
-    const pool = result.items || []
-    const selected = shuffle(pool).slice(0, config.count)
-    if (!selected.length) return ElMessage.warning('没有符合条件的题目')
-    startExam(selected, config.title)
+    const selected = result.items || []
+    if (!selected.length) {
+      ElMessage.warning('没有符合条件的题目')
+      return
+    }
+    startExam(selected, '自定义练习')
   } catch {
-    ElMessage.error('生成练习失败')
+    ElMessage.error('鐢熸垚缁冧範澶辫触')
   } finally {
     practiceLoading.value = false
   }
-}
-
-// Review/Answering Logic (Bank + Wrong)
-async function pickWrongQuestion() {
-  wrongDrillAnswer.value = ''
-  wrongDrillSubmitted.value = false
-  wrongDrillCorrect.value = false
-  wrongDrillReviewing.value = false
-  wrongDrillReview.value = null
-  try {
-    const item = await fetchRandomWrongQuestion()
-    wrongDrillQuestion.value = item ? normalizeWrongQuestion(item) : null
-  } catch {
-    wrongDrillQuestion.value = null
-  }
-}
-
-function selectWrongDrillOption(key: string) {
-  if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
-  wrongDrillAnswer.value = updateOptionAnswer(wrongDrillQuestion.value, wrongDrillAnswer.value, key)
-}
-
-async function submitWrongDrill() {
-  if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
-  wrongDrillReviewing.value = true
-  const result = await gradeQuestion(wrongDrillQuestion.value, wrongDrillAnswer.value)
-  wrongDrillSubmitted.value = true
-  wrongDrillCorrect.value = result.correct
-  wrongDrillReview.value = result.review
-  saveAttempt(1, result.correct ? 1 : 0)
-  wrongDrillReviewing.value = false
 }
 
 function selectBankOption(question: Question, key: string) {
@@ -648,6 +658,22 @@ async function submitWrongAnswer(question: Question) {
   wrongReviewing.value[question.id] = false
 }
 
+async function submitWrongDrill() {
+  if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
+  wrongDrillReviewing.value = true
+  const result = await gradeQuestion(wrongDrillQuestion.value, wrongDrillAnswer.value)
+  wrongDrillSubmitted.value = true
+  wrongDrillCorrect.value = result.correct
+  wrongDrillReview.value = result.review
+  saveAttempt(1, result.correct ? 1 : 0)
+  wrongDrillReviewing.value = false
+}
+
+function selectWrongDrillOption(key: string) {
+  if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
+  wrongDrillAnswer.value = updateOptionAnswer(wrongDrillQuestion.value, wrongDrillAnswer.value, key)
+}
+
 function toggleBankAnalysis(id: string) {
   const next = new Set(openedAnalysis.value)
   next.has(id) ? next.delete(id) : next.add(id)
@@ -660,17 +686,15 @@ function toggleWrongAnalysis(id: string) {
   openedWrongAnalysis.value = next
 }
 
-// Mock Exam Builder
 function resetPaperForm() {
-  paperForm.title = '模拟试卷'
+  paperForm.title = '妯℃嫙璇曞嵎'
   paperForm.subject = subjects.value[0] || ''
   paperForm.difficulty = '混合'
   paperForm.duration = 45
   if (paperTypeCounts[0]) paperTypeCounts[0].count = 5
-  if (paperTypeCounts[1]) paperTypeCounts[1].count = 2
-  if (paperTypeCounts[2]) paperTypeCounts[2].count = 3
-  if (paperTypeCounts[3]) paperTypeCounts[3].count = 2
-  if (paperTypeCounts[4]) paperTypeCounts[4].count = 1
+  if (paperTypeCounts[1]) paperTypeCounts[1].count = 3
+  if (paperTypeCounts[2]) paperTypeCounts[2].count = 2
+  if (paperTypeCounts[3]) paperTypeCounts[3].count = 1
   paperPreview.value = []
 }
 
@@ -710,7 +734,7 @@ function startExam(paper: Question[], title: string) {
   examTitle.value = title
   examPaper.value = paper
   examAnswers.value = {}
-  paper.forEach((q) => (examAnswers.value[q.id] = q.type === '多选题' ? [] : ''))
+    paper.forEach((q) => (examAnswers.value[q.id] = q.type === '多选题' ? [] : ''))
   examSubmitted.value = false
   examCorrectCount.value = 0
   currentExamIndex.value = 0
@@ -735,7 +759,8 @@ function stopExamTimer() {
 
 function quitExam() {
   ElMessageBox.confirm('当前进度将丢失，确定退出吗？', '退出考试', { type: 'warning' })
-    .then(() => backWorkspace()).catch(() => undefined)
+    .then(() => backWorkspace())
+    .catch(() => undefined)
 }
 
 async function submitExam() {
@@ -743,17 +768,16 @@ async function submitExam() {
   const unAnswered = examPaper.value.length - examAnsweredCount.value
   if (unAnswered > 0) {
     try {
-      await ElMessageBox.confirm(`还有 ${unAnswered} 道题目未作答，确定交卷吗？`, '确认交卷', { type: 'warning' })
+      await ElMessageBox.confirm(`还有 ${unAnswered} 道题未作答，确定交卷吗？`, '确认交卷', { type: 'warning' })
     } catch {
       return
     }
   }
   stopExamTimer()
   let correctCount = 0
-  
-  const batchResults: any[] = []
-  
-  // Grade objective locally and prepare batch
+
+  const batchResults: Array<Record<string, unknown>> = []
+
   examPaper.value.forEach((q) => {
     if (isObjectiveQuestion(q)) {
       const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
@@ -771,13 +795,13 @@ async function submitExam() {
       })
     }
   })
-  
-  // Grade subjective concurrently via AI review and add to batch
-  const subjectiveTasks = examPaper.value.filter(q => !isObjectiveQuestion(q)).map(async (q) => {
-    const { correct } = await gradeQuestion(q, examAnswers.value[q.id])
-    if (correct) correctCount += 1
-    // Optional: save review to some state to show to user
-    batchResults.push({
+
+  const subjectiveTasks = examPaper.value
+    .filter((q) => !isObjectiveQuestion(q))
+    .map(async (q) => {
+      const { correct } = await gradeQuestion(q, examAnswers.value[q.id])
+      if (correct) correctCount += 1
+      batchResults.push({
         question_id: q.id,
         user_answer: formatUserAnswer(examAnswers.value[q.id]),
         is_correct: correct,
@@ -787,14 +811,13 @@ async function submitExam() {
         options: q.options || {},
         answer: q.answer,
         analysis: q.analysis,
+      })
     })
-  })
-  
+
   await Promise.all(subjectiveTasks)
 
-  // Submit all objective results to save wrongs
   if (batchResults.length > 0) {
-    await submitObjectiveResults({ results: batchResults })
+    await submitObjectiveResults({ results: batchResults as any[] })
   }
 
   examCorrectCount.value = correctCount
@@ -805,7 +828,7 @@ async function submitExam() {
 function backWorkspace() {
   stopExamTimer()
   viewMode.value = 'workspace'
-  activeModule.value = 'practice'
+  activeModule.value = 'daily'
   void loadQuestionBank()
   void loadWrongBook()
 }
@@ -819,7 +842,6 @@ function isExamCorrect(q: Question) {
   return evaluateAnswer(q, examAnswers.value[q.id])
 }
 
-// Helpers
 async function gradeQuestion(question: Question, answer: AnswerValue) {
   if (isObjectiveQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
   try {
@@ -851,10 +873,12 @@ async function saveWrongQuestion(question: Question, answer: AnswerValue) {
         options: question.options || {},
         answer: question.answer,
         analysis: question.analysis,
-      }]
+      }],
     })
     wrongTotal.value += 1
-  } catch { /* ignore duplicates */ }
+  } catch {
+    // ignore duplicates
+  }
 }
 
 async function archiveWrong(q: Question) {
@@ -879,7 +903,7 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
   const stdText = String(question.answer || '').trim().toLowerCase()
   if (!userText) return false
   if (!stdText) return userText.length > 4
-  
+
   if (question.type === '填空题') {
     return userText === stdText
   }
@@ -896,21 +920,21 @@ function isSelected(ans: AnswerValue, key: string) {
 function updateOptionAnswer(q: Question, ans: AnswerValue, key: string) {
   if (q.type !== '多选题') return key
   const selected = normalizeAnswer(ans)
-  return selected.includes(key) ? selected.filter(k => k !== key) : [...selected, key]
+  return selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]
 }
 function correctKeys(q: Question) {
   let ansText = String(q.answer || '').trim()
   if (q.type === '判断题') {
     const upper = ansText.toUpperCase()
-    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some(i => upper.includes(i))) ansText = 'A'
-    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some(i => upper.includes(i))) ansText = 'B'
+    if (upper === 'A' || ['TRUE', 'T', '正确'].some((item) => upper.includes(item))) ansText = 'A'
+    else if (upper === 'B' || ['FALSE', 'F', '错误'].some((item) => upper.includes(item))) ansText = 'B'
   }
-  return ansText.split(/[、,，;；\s]+/).map(i => i.trim().toUpperCase()).filter(Boolean)
+  return ansText.split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
 }
 function isCorrectOption(q: Question, key: string) { return correctKeys(q).includes(key) }
 function normalizeAnswer(ans: AnswerValue): string[] {
-  if (Array.isArray(ans)) return ans.map(i => String(i).trim().toUpperCase()).filter(Boolean)
-  return String(ans || '').split(/[、,，;；\s]+/).map(i => i.trim().toUpperCase()).filter(Boolean)
+  if (Array.isArray(ans)) return ans.map((item) => String(item).trim().toUpperCase()).filter(Boolean)
+  return String(ans || '').split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
 }
 function hasAnswerData(ans: AnswerValue) { return normalizeAnswer(ans).length > 0 }
 function formatAnswer(ans: string) { return String(ans || '').replace(/,/g, '、') }
@@ -948,337 +972,630 @@ function formatDuration(sec: number) {
 }
 function renderInline(text: string) {
   if (!text) return ''
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>')
 }
 </script>
 
 <style scoped>
-/* Minimalist Professional Flat Design Tokens */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 .question-bank-layout {
-  min-height: calc(100vh - 60px);
-  background: #FFFFFF;
-  color: #171717;
-  font-family: 'Inter', -apple-system, sans-serif;
+  min-height: calc(100vh - var(--navbar-height, 64px));
+  padding: 24px;
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text, #0f172a);
+  font-family: 'Inter', 'Segoe UI', sans-serif;
   box-sizing: border-box;
 }
 
-/* Top Navigation */
-.workspace-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 60px);
-}
-
-.top-nav {
-  background: #171717;
-  color: #FFFFFF;
-  border-bottom: 2px solid #D4AF37;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-.nav-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 40px;
-  height: 64px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.brand h2 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.logo-icon {
-  color: #D4AF37;
-}
-
-.nav-links {
-  display: flex;
-  gap: 16px;
-}
-
-.nav-item {
-  background: transparent;
-  border: none;
-  color: #A3A3A3;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.nav-item:hover {
-  color: #FFFFFF;
-}
-
-.nav-item.active {
-  color: #D4AF37;
-}
-
-.nav-item.active::after {
-  content: '';
-  position: absolute;
-  bottom: -22px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #D4AF37;
-}
-
-.main-content {
-  flex: 1;
-  padding: 40px;
-  max-width: 1000px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-/* Fullscreen Exam Workspace */
+.question-bank-workspace,
 .exam-workspace {
-  background: #FFFFFF;
-  min-height: calc(100vh - 60px);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.question-bank-workspace {
   display: flex;
   flex-direction: column;
+  gap: 20px;
+}
+
+.question-bank-hero,
+.workspace-panel-shell,
+.exam-question,
+.exam-sidebar .panel {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.question-bank-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px;
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 680px;
+}
+
+.hero-kicker,
+.workspace-panel-label {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-copy h1,
+.workspace-panel-header h2,
+.exam-title {
+  margin: 0;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.hero-copy h1 {
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.hero-copy p,
+.workspace-panel-header p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.65;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  gap: 12px;
+  min-width: min(100%, 460px);
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.hero-stat span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.hero-stat strong {
+  color: #0f172a;
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.hero-stat.warning strong {
+  color: #dc2626;
+}
+
+.workspace-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  width: fit-content;
+}
+
+.workspace-tab {
+  min-height: 42px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.workspace-tab:hover {
+  background: rgba(238, 242, 255, 0.9);
+  color: #4338ca;
+}
+
+.workspace-tab.active {
+  background: #4f46e5;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.24);
+}
+
+.workspace-panel-shell {
+  padding: 24px;
+}
+
+.workspace-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.workspace-panel-header h2 {
+  margin-top: 6px;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.workspace-panel-content {
+  min-width: 0;
+}
+
+.exam-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .exam-topbar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 40px;
-  background: #171717;
-  color: #FFFFFF;
-  border-bottom: 2px solid #D4AF37;
+  gap: 20px;
+  padding: 20px 24px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
-.exam-topbar-left {
+.exam-topbar-left,
+.exam-actions,
+.timer-badge,
+.tags,
+.question-header {
   display: flex;
   align-items: center;
-  gap: 24px;
 }
 
-.exam-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.exam-actions {
-  display: flex;
-  align-items: center;
+.exam-topbar-left,
+.exam-actions,
+.question-header {
   gap: 16px;
 }
 
+.exam-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
 .timer-badge {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background: #262626;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 14px;
-  color: #FFFFFF;
-  border: 1px solid #404040;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(79, 70, 229, 0.18);
 }
 
 .exam-main {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  flex: 1;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
 }
 
 .exam-content {
-  padding: 48px 40px;
+  min-width: 0;
 }
 
-.exam-sidebar {
-  border-left: 1px solid #E5E7EB;
-  background: #FAFAFA;
-  padding: 32px;
+.exam-question {
+  padding: 28px;
+}
+
+.exam-sidebar .panel {
+  padding: 24px;
 }
 
 .question-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 24px;
 }
 
 .q-number {
-  font-size: 24px;
-  font-weight: 700;
-  color: #171717;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .tags {
-  display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tag {
-  background: #FFFFFF;
-  color: #404040;
-  padding: 4px 8px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  background: #fff;
+  color: #475569;
   font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  border: 1px solid #D4D4D4;
+  font-weight: 700;
 }
 
-.tag.type { background: #171717; color: #FFFFFF; border: none; }
+.tag.type {
+  border-color: rgba(99, 102, 241, 0.18);
+  background: rgba(238, 242, 255, 0.9);
+  color: #4338ca;
+}
 
 .question-text {
-  font-size: 18px;
-  line-height: 1.6;
-  margin-bottom: 40px;
-  color: #171717;
+  margin-bottom: 28px;
+  color: #0f172a;
+  font-size: 1.05rem;
+  line-height: 1.8;
 }
 
 .options-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .option-btn {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  padding: 16px 20px;
-  background: #FFFFFF;
-  border: 2px solid #E5E7EB;
-  border-radius: 0;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: #fff;
+  color: #0f172a;
   cursor: pointer;
   text-align: left;
-  transition: all 0.15s ease;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
-.option-btn:hover:not(:disabled) { border-color: #171717; }
-.option-btn.selected { border-color: #171717; background: #171717; color: #FFFFFF; }
-.option-btn.correct { border-color: #059669; background: #059669; color: #FFFFFF; }
-.option-btn.wrong { border-color: #DC2626; background: #DC2626; color: #FFFFFF; }
+.option-btn:hover:not(:disabled) {
+  border-color: rgba(99, 102, 241, 0.32);
+  background: rgba(248, 250, 252, 0.95);
+}
 
-.opt-key { font-weight: 700; min-width: 24px; font-size: 16px; }
-.opt-text { font-size: 16px; line-height: 1.5; }
+.option-btn.selected {
+  border-color: rgba(79, 70, 229, 0.36);
+  background: rgba(238, 242, 255, 0.95);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.08);
+}
+
+.option-btn.correct {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(236, 253, 245, 0.92);
+}
+
+.option-btn.wrong {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(254, 242, 242, 0.94);
+}
+
+.opt-key {
+  min-width: 24px;
+  color: #4338ca;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.opt-text {
+  font-size: 15px;
+  line-height: 1.6;
+}
 
 .text-area-input {
   width: 100%;
-  padding: 16px;
-  border: 2px solid #E5E7EB;
-  border-radius: 0;
-  font-size: 16px;
+  min-height: 144px;
+  padding: 16px 18px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 18px;
+  background: #fff;
   font-family: inherit;
+  font-size: 15px;
+  color: #0f172a;
   resize: vertical;
   outline: none;
-  background: #FFFFFF;
-  transition: border-color 0.15s;
+  box-sizing: border-box;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
-.text-area-input:focus { border-color: #171717; }
+
+.text-area-input:focus {
+  border-color: rgba(79, 70, 229, 0.45);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+}
 
 .nav-controls {
   display: flex;
   justify-content: space-between;
-  margin-top: 48px;
-  padding-top: 32px;
-  border-top: 1px solid #E5E7EB;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.panel h3 { font-size: 14px; margin: 0 0 24px 0; text-transform: uppercase; letter-spacing: 0.05em; color: #404040; }
-
-.score-display, .progress-display {
-  text-align: center;
-  padding: 32px 24px;
-  background: #171717;
-  color: #FFFFFF;
-  border-radius: 0;
-  margin-bottom: 32px;
-}
-
-.score-value, .progress-value {
-  font-size: 40px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: #D4AF37;
-}
-
-.score-label, .progress-label {
-  font-size: 12px;
+.panel h3 {
+  margin: 0 0 18px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #A3A3A3;
+}
+
+.score-display,
+.progress-display {
+  margin-bottom: 24px;
+  padding: 24px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #eef2ff 0%, #ffffff 100%);
+  border: 1px solid rgba(165, 180, 252, 0.28);
+  text-align: center;
+}
+
+.score-value,
+.progress-value {
+  margin-bottom: 8px;
+  color: #4338ca;
+  font-size: 2.25rem;
+  font-weight: 800;
+}
+
+.score-label,
+.progress-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .grid-sheet {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .sheet-btn {
   aspect-ratio: 1;
-  background: #FFFFFF;
-  border: 2px solid #E5E7EB;
-  border-radius: 0;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 14px;
+  background: #fff;
+  color: #475569;
   font-size: 14px;
-  font-weight: 600;
-  color: #404040;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
 
-.sheet-btn:hover { border-color: #171717; }
-.sheet-btn.answered { background: #171717; color: #FFFFFF; border-color: #171717; }
-.sheet-btn.active { border-color: #D4AF37; color: #D4AF37; }
-.sheet-btn.correct { background: #059669; color: #FFFFFF; border-color: #059669; }
-.sheet-btn.wrong { background: #DC2626; color: #FFFFFF; border-color: #DC2626; }
+.sheet-btn:hover {
+  border-color: rgba(79, 70, 229, 0.28);
+}
 
-/* Global Buttons */
-.btn-primary { background: #171717; color: #FFFFFF; border: 2px solid #171717; padding: 12px 24px; border-radius: 0; font-weight: 600; cursor: pointer; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
-.btn-primary:hover:not(:disabled) { background: #D4AF37; border-color: #D4AF37; color: #171717; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.sheet-btn.answered {
+  border-color: rgba(79, 70, 229, 0.2);
+  background: rgba(238, 242, 255, 0.88);
+  color: #4338ca;
+}
 
-.btn-secondary { background: #FFFFFF; color: #171717; border: 2px solid #171717; padding: 12px 24px; border-radius: 0; font-weight: 600; cursor: pointer; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
-.btn-secondary:hover:not(:disabled) { background: #171717; color: #FFFFFF; }
-.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.sheet-btn.active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
 
-.btn-text { background: none; border: none; color: #A3A3A3; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; }
-.btn-text:hover { color: #FFFFFF; }
+.sheet-btn.correct {
+  background: rgba(16, 185, 129, 0.92);
+  border-color: rgba(16, 185, 129, 0.92);
+  color: #fff;
+}
 
-.full-width { width: 100%; }
+.sheet-btn.wrong {
+  background: rgba(239, 68, 68, 0.92);
+  border-color: rgba(239, 68, 68, 0.92);
+  color: #fff;
+}
 
-.result-badge { padding: 6px 12px; border-radius: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; border: 2px solid transparent; }
-.result-badge.success { background: #ECFDF5; color: #059669; border-color: #059669; }
-.result-badge.danger { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
+.btn-primary,
+.btn-secondary {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
 
-.analysis-panel { margin-top: 32px; padding: 24px; border-radius: 0; font-size: 15px; }
-.analysis-panel.success { background: #F8FAFC; border-left: 4px solid #10B981; }
-.analysis-panel.danger { background: #FAFAFA; border-left: 4px solid #EF4444; }
-.analysis-text { margin-top: 12px; color: #404040; line-height: 1.6; }
+.btn-primary {
+  border: 1px solid #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.btn-secondary {
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #334155;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.92);
+}
+
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-text:hover {
+  color: #4338ca;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.sidebar-submit {
+  margin-top: 24px;
+}
+
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.result-badge.success {
+  background: rgba(236, 253, 245, 0.92);
+  color: #059669;
+}
+
+.result-badge.danger {
+  background: rgba(254, 242, 242, 0.94);
+  color: #dc2626;
+}
+
+.analysis-panel {
+  margin-top: 24px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: #f8fafc;
+  font-size: 15px;
+}
+
+.analysis-panel.success {
+  border-color: rgba(16, 185, 129, 0.16);
+}
+
+.analysis-panel.danger {
+  border-color: rgba(239, 68, 68, 0.16);
+}
+
+.analysis-text {
+  margin-top: 10px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+@media (max-width: 1100px) {
+  .exam-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .question-bank-layout {
+    padding: 16px;
+  }
+
+  .question-bank-hero,
+  .workspace-panel-header,
+  .exam-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero-stats {
+    grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .question-bank-layout {
+    padding: 12px;
+  }
+
+  .question-bank-hero,
+  .workspace-panel-shell,
+  .exam-question,
+  .exam-sidebar .panel {
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .workspace-tabs {
+    width: 100%;
+    border-radius: 24px;
+  }
+
+  .workspace-tab {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .nav-controls,
+  .exam-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+}
 </style>
+
