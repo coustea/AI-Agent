@@ -40,7 +40,7 @@
       </div>
     </div>
 
-    <div v-else class="dashboard-grid">
+    <div v-else-if="path" class="dashboard-grid">
 
       <header class="dashboard-header">
         <div class="header-main-info">
@@ -60,10 +60,6 @@
           <div class="stat-box">
             <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> 总进度</label>
             <strong class="text-primary">{{ path.overall_progress }}%</strong>
-          </div>
-          <div class="stat-box">
-            <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 预计耗时</label>
-            <strong>{{ path.eta_days }} 天</strong>
           </div>
           <div class="stat-box">
             <label><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg> 学习阶段</label>
@@ -120,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onActivated, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 

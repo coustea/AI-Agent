@@ -1,92 +1,83 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure
+Vue 3 + TypeScript frontend (`src/`) + FastAPI + SQLModel backend (`server/`).
 
-Vue 3 + TypeScript frontend (`src/`) + FastAPI + SQLModel backend (`server/`). Two distinct business domains reuse agent infrastructure but must stay separate:
-- **Standalone resource generation** (`resource` domain)
-- **Learning-path planning** (`path` domain)
-
-Do not merge their records, detail pages, or persistence models.
-
-### Frontend (`src/`)
-- `src/app/` — router, layouts, guards, providers
-- `src/features/` — domain features: `auth`, `chat`, `dashboard`, `learning`, `profile`, `resource`
-- `src/shared/` — API clients (`src/shared/api/`), auth helpers, UI components, types
-
-### Backend (`server/app/`)
-Each domain follows `api.py` → `service.py` → schemas pattern:
-- `auth` — registration, login, JWT, user info
-- `chat` — streaming tutor, uploads, history, diagram generation
-- `resource` — multi-agent resource generation
-- `path` — learning-path planning, node workspace, evaluation
-- `profile` — learner profile inference and storage
-- `evaluation`, `dashboard`, `quiz`, `avatar`, `infra`, `ws_routes`
-
-Startup wiring: `app_factory.py` → `lifecycle.py` → `routes.py`
+**Critical constraint**: `resource` (standalone resource generation) and `path` (learning-path planning) share agent infrastructure but **do not** merge their records, detail pages, or persistence models.
 
 ## Commands
 
-### Frontend (from repo root)
+### Frontend (repo root)
 ```bash
-npm run build    # vue-tsc + vite build — use this as the automated check (no ESLint/Prettier)
-npm run dev      # Vite dev server
+npm run build    # vue-tsc + vite build — the only frontend check (no linter)
+npm run dev      # Vite dev server on :5173
 ```
 
-### Backend (from `server/`)
+### Backend (`server/`)
 ```bash
-uv sync                                          # install Python deps
-uv run fastapi dev app/main.py --port 9999       # dev server with reload
-uv run pytest                                    # run all tests
-uv run pytest tests/chat/test_history.py -q      # run single test file
-uv run pytest -x                                 # stop on first failure
+uv sync                                  # install Python deps (requires Python >=3.13)
+uv run fastapi dev app/main.py --port 9999
+uv run pytest                            # all tests
+uv run pytest -x                         # stop on first failure
+uv run pytest tests/chat/ -q             # single module
 ```
 
-## Port Configuration
+## Ports & Proxy
 
-Backend runs on port **9999** (set in `server/config.yaml`). The Vite proxy in `vite.config.ts` must match:
-- `/api` → `http://127.0.0.1:9999`
-- `/ws` → `ws://127.0.0.1:9999`
+| Service | Port |
+|---------|------|
+| Vite dev server | 5173 |
+| FastAPI backend | 9999 |
 
-If these get out of sync, API calls from the frontend will 500.
-
-## Coding Style
-
-- Frontend: TypeScript, Vue SFCs, 2-space indent, no semicolons. Components `PascalCase.vue`, composables `useXxx.ts`.
-- Backend: 4-space indent, type hints, snake_case modules.
-- Vue files must use `<script setup lang="ts">` and `<style scoped>`. See `docs/vue-code-style.md`.
-
-No linter configs are committed. Validate with `npm run build` (frontend) and `uv run pytest` (backend).
+`vite.config.ts` proxies `/api` → `http://127.0.0.1:9999` and `/ws` → `ws://127.0.0.1:9999`. Configurable via `VITE_API_PROXY_TARGET`. Proxy mismatch → 500s.
 
 ## Testing
 
-Backend: `pytest` + `pytest-asyncio`. Tests in `server/tests/` mirror `server/app/` paths. Name files `test_*.py`.
+Backend: `pytest` + `pytest-asyncio`. Tests in `server/tests/` mirror `server/app/`. `conftest.py` adds `server/` to `sys.path`.
 
-Known pre-existing test failures (do not waste time debugging):
-- `tests/chat/test_agent_single_module_refactor.py` — stale assertion on `_decide` function
-- `tests/chat/test_onboarding_api.py` — missing `background_tasks` arg in direct asyncio.run call
-- `tests/chat/test_reasoning_agent.py` — `FakeLlm` missing `astream` attribute
+Pre-existing failures (do not debug):
+- `tests/chat/test_agent_single_module_refactor.py`
+- `tests/chat/test_onboarding_api.py`
+- `tests/chat/test_reasoning_agent.py`
 
-Frontend has no automated tests.
+Frontend has no tests.
 
-## Architecture Notes
+## Coding Style
 
-### API Routes (`server/app/routes.py`)
-Actual mounted prefixes:
-- `/api/v1/users` — auth/user endpoints
-- `/api/v1/ai/*` — chat, resources, path-plan, dashboard, evaluation, quiz, avatar, wrong-questions
+- Frontend: TypeScript, Vue SFCs `<script setup lang="ts">` + `<style scoped>`, 2-space indent, no semicolons. Components `PascalCase.vue`, composables `useXxx.ts`.
+- Backend: 4-space indent, type hints, snake_case modules.
+- No linter config is committed — validate with `npm run build` / `uv run pytest`.
+
+## Architecture
+
+### Startup & Routing
+`server/app/main.py` (create_app → lifespan → install_routes). No `app_factory.py` or `lifecycle.py`.
+
+API prefixes (from `server/app/routes.py`):
+- `/api/v1/users` — auth
+- `/api/v1/ai/*` — chat, resource, path, dashboard, evaluation, quiz/quiz-bank/wrong-questions, avatar
+- `/ws/avatar` — WebSocket (from `ws.py`)
+
+All responses use `HttpResponse` envelope: `{code, message, data}` (see `app/infra/response.py`).
 
 ### Auth
-JWT-based with `ActiveToken` whitelist table. `get_current_user` and `get_current_user_flexible` in `app/auth/security.py` inject the request-scoped `AsyncSession` directly — do **not** use a separate `session_scope()` in auth dependencies, or the returned `User` becomes detached and triggers greenlet errors.
+JWT + `ActiveToken` whitelist. `get_current_user` / `get_current_user_flexible` in `app/auth/security.py` inject the request-scoped `AsyncSession` directly — **never** use `session_scope()` inside auth deps (causes detached-User greenlet errors).
 
 ### Database
-PostgreSQL via `asyncpg`. Schema lives in `server/init_schema.sql`; SQLModel definitions in `server/app/infra/models.py`. Keep them in sync — startup does not reconcile schema drift.
+PostgreSQL via `asyncpg`. Dual source of truth:
+- `server/init_schema.sql` — bootstrap SQL
+- `server/app/infra/models.py` — SQLModel definitions
 
-Two session patterns:
+Startup does **not** reconcile drift. New tables must be added to `REGISTERED_MODELS` tuple at the bottom of `models.py`.
+
+Session patterns:
 - `get_session()` — FastAPI DI, `expire_on_commit=False`, no auto-commit
-- `session_scope()` — explicit context manager, auto-commit, for background tasks outside DI
+- `session_scope()` — context manager, auto-commit, for background tasks
 
 ### Configuration
-All runtime config in `server/config.yaml`, loaded by `server/app/config.py`. Not `.env`. Key families: `app`, `database`, `jwt`, `models`, `spark`, `avatar`, `search`, `paths`, `knowledge`, `memory`, `chat`.
+`server/config.yaml` only (no `.env`). Loaded by `app/config.py`. Key groups: `app`, `database`, `jwt`, `models`, `spark`, `avatar`, `search`, `paths`, `knowledge`, `memory`, `chat`.
 
-### Commit Convention
-Short conventional prefixes: `feat:`, `fix:`, `refactor:`. Chinese or English summaries both used. Keep commits focused.
+### Backend module pattern
+Each domain under `server/app/` follows `api.py` → `service.py` → schemas. The `infra/` module holds shared infrastructure: `database.py`, `models.py`, `llm.py`, `response.py`, `prompts/`, `logging.py`, `context.py`.
+
+## Commit Convention
+Short conventional prefixes: `feat:`, `fix:`, `refactor:`. Chinese or English summaries. Keep commits focused.

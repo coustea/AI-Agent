@@ -238,21 +238,14 @@ class ResourceService:
         ]
         if worker_agents:
             stages.append((
-                45,
+                50,
                 round(sum(progress_for(agent_id) for agent_id in worker_agents) / len(worker_agents)),
             ))
-        stages.append((10, progress_for(PRE_REVIEW_AGENT_ID)))
         stages.append((10, progress_for(BUNDLE_AGENT_ID)))
         if PPT_AGENT_ID in selected_agents:
-            stages.extend([
-                (15, progress_for(PPT_AGENT_ID)),
-                (5, progress_for(PPT_REVIEW_AGENT_ID)),
-            ])
+            stages.append((15, progress_for(PPT_AGENT_ID)))
         if VIDEO_AGENT_ID in selected_agents:
-            stages.extend([
-                (15, progress_for(VIDEO_AGENT_ID)),
-                (5, progress_for(VIDEO_REVIEW_AGENT_ID)),
-            ])
+            stages.append((15, progress_for(VIDEO_AGENT_ID)))
         weight_total = sum(weight for weight, _ in stages)
         if weight_total <= 0:
             return 0

@@ -586,7 +586,6 @@ class GeneratedResourceItem(SQLModel, table=True):
     # 展示与契约信息
     title: str | None = Field(default=None, max_length=200)
     summary: str | None = Field(default=None, sa_column=Column(Text))
-    output_contract: str | None = Field(default=None, max_length=80)
     generated_by: str | None = Field(default=None, max_length=50, index=True)
 
     # 内容主体（根据 content_format 选择存储位置）
@@ -744,8 +743,6 @@ class LearningPath(SQLModel, table=True):
 
     overall_progress: int = Field(default=0, ge=0, le=100)
     current_node_key: str | None = Field(default=None, max_length=80, index=True)
-    eta_days: int = Field(default=14, ge=1)
-    confidence: int = Field(default=60, ge=0, le=100)
     status: str = Field(default="active", max_length=30, index=True)
 
     stages_json: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
@@ -784,11 +781,7 @@ class PathNode(SQLModel, table=True):
     current_tutorial_id: int | None = Field(default=None, index=True)
 
     prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    resource_policy: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    mastery_target: str | None = Field(default=None, sa_column=Column(Text))
-    estimated_minutes: int | None = Field(default=None)
     difficulty: str | None = Field(default=None, max_length=30)
-    recommendation_reason: str | None = Field(default=None, sa_column=Column(Text))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

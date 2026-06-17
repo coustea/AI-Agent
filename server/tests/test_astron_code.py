@@ -235,7 +235,6 @@ async def test_astron_code_coordinator_planning(chat_model):
         pytest.fail(f"Coordinator planning failed: {e}")
 
     assert plan is not None
-    assert plan.topic != ""
     assert len(plan.outline) > 0
     assert "code" in agent_ids
     assert "quiz" in agent_ids

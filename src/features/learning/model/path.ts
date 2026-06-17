@@ -3,17 +3,6 @@ export type PathResourceType = 'content' | 'mindmap' | 'code' | 'reading' | 'qui
 export interface LearningPathStage {
   stage_id: string
   title: string
-  description: string
-}
-
-export interface NodeResourcePolicy {
-  primary_resource_type: string
-  required_resource_types: string[]
-  optional_resource_types: string[]
-  assessment_type: string
-  generation_focus: string[]
-  personalization_reason: string
-  expected_resource_count: number
 }
 
 export interface LearningPathNode {
@@ -24,13 +13,8 @@ export interface LearningPathNode {
   status: 'locked' | 'available' | 'completed' | 'completed_with_gaps' | string
   priority: number
   attempt_count: number
-  mastery_target: string | null
-  estimated_minutes: number | null
   difficulty: string | null
-  recommendation_reason: string | null
   prerequisites: string[]
-  resource_policy: NodeResourcePolicy | null
-  current_tutorial_id: number | null
 }
 
 export interface LearningPathOverview {
@@ -40,8 +24,6 @@ export interface LearningPathOverview {
   goal: string
   topic: string | null
   overall_progress: number
-  eta_days: number
-  confidence: number
   status: string
   current_node_key: string | null
   stages: LearningPathStage[]
@@ -57,7 +39,6 @@ export interface LearningPathHistoryItem {
   topic: string | null
   overall_progress: number
   status: string
-  current_node_key: string | null
   updated_at: string
 }
 

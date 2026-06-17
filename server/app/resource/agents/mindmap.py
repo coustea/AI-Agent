@@ -10,8 +10,7 @@ from app.resource.agents.common import (
     build_basic_handoff,
     build_node_context,
     build_resource_context,
-    first_content_excerpt,
-    outline_ids_from_plan,
+    assigned_outline_ids,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -41,17 +40,13 @@ class MindmapAgent(BaseResourceAgent):
             config=config,
         )
         branches = result.metrics.get("branches", [])
-        outline_ids = outline_ids_from_plan(input_data.teaching_plan)
+        outline_ids = assigned_outline_ids(input_data.teaching_plan, "mindmap")
         handoff = build_basic_handoff(
             source_agent="mindmap",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
-            material_type="structure",
             covered_outline_ids=outline_ids,
-            material_outline_id=outline_ids[0] if outline_ids else "",
-            key_points=branches[:8],
-            evidence=first_content_excerpt(result.content),
             visual_ideas=branches,
         )
         result.downstream_context = handoff

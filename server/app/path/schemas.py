@@ -55,16 +55,6 @@ ALLOWED_RESOURCE_TYPES: tuple[str, ...] = (
 # ======================================================================
 
 
-class NodeResourcePolicy(BaseModel):
-    """资源推送策略 — 只描述进入深入学习后建议生成哪些资源，不在规划阶段直接生成资源。"""
-
-    primary_resource_type: str = Field(description="进入深入学习后优先推荐生成的资源类型，如 'content'")
-    required_resource_types: list[str] = Field(description="进入深入学习后建议优先提供的资源类型列表")
-    optional_resource_types: list[str] = Field(default_factory=list, description="用户需要时再生成的可选增强资源类型列表")
-    assessment_type: str = Field(default="quiz", description="掌握度评估方式: 'quiz', 'code', 'none'")
-    generation_focus: list[str] = Field(default_factory=list, description="后续资源生成时使用的内容重点提示")
-    personalization_reason: str = Field(description="为什么此推荐策略适合该学习者")
-    expected_resource_count: int = Field(default=2, ge=1, le=6, description="进入深入学习后预计可生成的资源数量")
 
 
 class LearningSignalSnapshot(BaseModel):
@@ -182,13 +172,8 @@ class LearningPathNodeDTO(BaseModel):
     status: str
     priority: int
     attempt_count: int
-    mastery_target: str | None = None
-    estimated_minutes: int | None = None
     difficulty: str | None = None
-    recommendation_reason: str | None = None
     prerequisites: list[str] = Field(default_factory=list)
-    resource_policy: NodeResourcePolicy | None = None
-    current_tutorial_id: int | None = None
 
     @classmethod
     def from_model(cls, node: PathNode) -> LearningPathNodeDTO:
@@ -200,13 +185,8 @@ class LearningPathNodeDTO(BaseModel):
             status=node.status,
             priority=node.priority,
             attempt_count=node.attempt_count,
-            mastery_target=node.mastery_target,
-            estimated_minutes=node.estimated_minutes,
             difficulty=node.difficulty,
-            recommendation_reason=node.recommendation_reason,
             prerequisites=list(node.prerequisites or []),
-            resource_policy=dict(node.resource_policy) if node.resource_policy else None,
-            current_tutorial_id=node.current_tutorial_id,
         )
 
 
@@ -217,8 +197,6 @@ class LearningPathOverviewResponse(BaseModel):
     goal: str
     topic: str | None = None
     overall_progress: int
-    eta_days: int
-    confidence: int
     status: str
     current_node_key: str | None = None
     stages: list[dict[str, Any]] = Field(default_factory=list)
@@ -234,7 +212,6 @@ class LearningPathHistoryItem(BaseModel):
     topic: str | None = None
     overall_progress: int
     status: str
-    current_node_key: str | None = None
     updated_at: str
 
 
@@ -301,37 +278,23 @@ class AgentPathNode(BaseModel):
     stage_id: str = Field(description="阶段标识")
     title: str = Field(description="节点标题")
     prerequisites: list[str] = Field(default_factory=list, description="前置节点 ID")
-    mastery_target: str = Field(default="", description="掌握目标")
-    estimated_minutes: int = Field(default=30, description="预估学习时间(分钟)")
     difficulty: str = Field(default="intermediate", description="难度等级")
-    recommendation_reason: str = Field(default="", description="推荐理由")
     priority: int = Field(default=0, description="优先级")
-    resource_policy: NodeResourcePolicy | None = Field(default=None, description="资源推送策略")
 
 
 class AgentStage(BaseModel):
     """规划 Agent 输出的阶段。"""
-    
+
     stage_id: str = Field(description="阶段标识，如'stage-1'")
     title: str = Field(description="阶段标题")
-    description: str = Field(description="阶段描述")
 
 
 class AgentLearningPathPlan(BaseModel):
     """规划 Agent 的结构化输出。"""
 
     title: str = Field(description="路径标题")
-    eta_days: int = Field(default=14, description="预估学习天数")
-    confidence: int = Field(default=60, ge=0, le=100, description="规划置信度百分比")
     stages: list[AgentStage] = Field(min_length=1, description="宏观阶段骨架列表，至少1个阶段")
     nodes: list[AgentPathNode] = Field(min_length=1, description="所有阶段的具体学习节点列表，至少1个节点")
-
-    @field_validator("confidence", mode="before")
-    @classmethod
-    def normalize_confidence(cls, value: Any) -> Any:
-        if isinstance(value, float) and 0 <= value <= 1:
-            return round(value * 100)
-        return value
 
 
 class PathLearningEvaluationResponse(BaseModel):
@@ -355,10 +318,10 @@ __all__ = [
     "AgentLearningPathPlan",
     "AgentQuestionItem",
     "AgentQuestionSet",
-    # Resource policy
-    "NodeResourcePolicy",
-    "LearningSignalSnapshot",
+    # Resource types
     "ALLOWED_RESOURCE_TYPES",
+    # Signal
+    "LearningSignalSnapshot",
     # Response
     "LearningPathQuestionDTO",
     "LearningPathResourceDTO",

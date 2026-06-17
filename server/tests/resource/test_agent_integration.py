@@ -369,7 +369,7 @@ def test_ppt_agent_page_count_mismatch():
 
 
 def test_all_agents_registered():
-    expected = {"content", "mindmap", "code", "quiz", "reading", "ppt", "video", "planning", "review"}
+    expected = {"content", "mindmap", "code", "quiz", "reading", "ppt", "video", "planning"}
     actual = set(AGENT_REGISTRY.keys())
     assert expected == actual, f"缺少: {expected - actual}, 多余: {actual - expected}"
 
@@ -439,15 +439,10 @@ def _sample_teaching_plan() -> TeachingPlan:
 
 
 def _assert_valid_handoff(ctx: DownstreamContext, source_agent: str):
-    assert ctx.schema_version == "resource_handoff/v1"
     assert ctx.source_agent == source_agent
     assert ctx.title
     assert ctx.one_sentence_summary
     assert len(ctx.one_sentence_summary) <= 180
-    assert len(ctx.materials) <= 8
-    for material in ctx.materials:
-        assert len(material.summary) <= 500
-        assert len(material.evidence_excerpt) <= 180
 
 
 def test_build_resource_context_uses_teaching_plan_and_handoffs_only():

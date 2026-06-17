@@ -29,7 +29,7 @@ VideoStyle = Literal["explainer", "lecture", "screencast", "case_walkthrough"]
 VideoVoice = Literal["teacher", "coach", "concise"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
 SceneRole = Literal["hook", "concept", "example", "process", "misconception", "practice", "recap"]
-VisualType = Literal["card", "diagram", "code", "screencast", "timeline", "comparison", "quiz"]
+VisualType = Literal["card", "diagram", "code", "timeline", "comparison", "quiz", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture"]
 
 
 class VideoConstraints(BaseModel):
@@ -94,6 +94,12 @@ class VideoOutline(BaseModel):
         return self
 
 
+class CaptionWord(BaseModel):
+    text: str
+    start_ms: int
+    end_ms: int
+
+
 class SceneDraft(BaseModel):
     scene_id: str
     index: int = Field(ge=1)
@@ -108,6 +114,7 @@ class SceneDraft(BaseModel):
     source_agents: list[str] = Field(default_factory=list)
     audio_src: str | None = None
     duration_ms: int = 0
+    caption_words: list[CaptionWord] = Field(default_factory=list)
 
 
 
@@ -134,6 +141,7 @@ class VideoScene(BaseModel):
     visual: dict[str, Any] = Field(default_factory=dict)
     source_agents: list[str] = Field(default_factory=list)
     audio_src: str | None = None
+    caption_words: list[CaptionWord] = Field(default_factory=list)
 
 
 
@@ -204,7 +212,7 @@ def _input_context(input_data: ResourceInput, config: dict[str, Any]) -> dict[st
 class VideoMaterialAgent:
     async def run(self, input_data: ResourceInput, config: dict[str, Any]) -> VideoMaterialDigest:
         context = _input_context(input_data, config)
-        fallback_topic = input_data.teaching_plan.topic if input_data.teaching_plan else input_data.learning_need
+        fallback_topic = input_data.learning_need
         if not context["upstream_handoffs"]:
             return VideoMaterialDigest(
                 topic=fallback_topic,
@@ -298,6 +306,7 @@ class VideoPayloadBuilder:
                     visual=draft.visual or {},
                     audio_src=draft.audio_src,
                     source_agents=draft.source_agents or contract.required_sources,
+                    caption_words=draft.caption_words,
                 )
             )
             cursor_ms += duration_ms
@@ -329,7 +338,7 @@ class VideoPayloadBuilder:
             assets=[
                 VideoAsset(
                     asset_id=f"asset-{scene.index}",
-                    type="diagram_prompt" if scene.visual_type in {"diagram", "timeline", "comparison"} else "image_prompt",
+                    type="diagram_prompt" if scene.visual_type in {"diagram", "timeline", "comparison", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture"} else "image_prompt",
                     description=scene.visual_prompt,
                     source_scene_id=scene.scene_id,
                 )
@@ -403,25 +412,13 @@ class VideoAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         """路径节点场景：从 NodeInput 构建素材并执行嵌套子图。"""
-        from app.resource.schemas import DownstreamContext, DownstreamMaterial, ReusableAssets
-
-        content_materials = []
-        if input_data.tutorial_markdown:
-            content_materials.append(
-                DownstreamMaterial(
-                    outline_id="node-outline-1",
-                    type="explanation",
-                    summary=input_data.tutorial_markdown[:450] + "...",
-                    key_points=input_data.knowledge_points[:8] if input_data.knowledge_points else [],
-                )
-            )
+        from app.resource.schemas import DownstreamContext, ReusableAssets
 
         mock_handoffs = {
             "content": DownstreamContext(
                 source_agent="content",
                 title=input_data.node_title,
                 one_sentence_summary=input_data.tutorial_summary or f"关于 {input_data.node_title} 的学习教程",
-                materials=content_materials,
                 reusable_assets=ReusableAssets(
                     examples=[f"学习侧重点：{focus}" for focus in input_data.generation_focus] if input_data.generation_focus else [],
                     visual_ideas=input_data.knowledge_points or [],
@@ -499,27 +496,28 @@ class VideoAgent(BaseResourceAgent):
         async with self._scene_semaphore:
             writer = SceneWriterAgent()
             draft = await writer.run(state["contract"], state["digest"], state["constraints"])
-            
-            # Synthesize TTS
+
+            # Synthesize TTS with word-level captions
             from app.resource.infra.tts import TtsService
             from app.config import WORKPLACE_DIR
-            
+
             res_id = state.get("resource_id")
             prefix = f"res_{res_id}" if res_id else f"digest_{abs(hash(state['digest'].topic)) % 10000}"
             filename = f"{prefix}_scene_{draft.scene_id}.mp3"
             file_path = WORKPLACE_DIR / "video_audio" / filename
-            
+
             try:
-                duration_s = await TtsService.synthesize(draft.narration, file_path)
+                tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
                 # Add 500ms safety buffer, but keep a minimum of 4 seconds
-                draft.duration_ms = max(int(duration_s * 1000) + 500, 4000)
+                draft.duration_ms = max(int(tts_result.duration * 1000) + 500, 4000)
                 draft.audio_src = f"/api/v1/ai/video/audio/{filename}"
+                draft.caption_words = tts_result.captions
             except Exception as e:
                 logger.error("TTS synthesis failed for scene %s: %s", draft.scene_id, e)
                 # Fallback to contract planned duration
                 draft.duration_ms = state["contract"].duration_seconds * 1000
                 draft.audio_src = None
-                
+
             return {"drafts": [draft]}
 
     async def _payload_node(self, state: VideoGraphState) -> dict[str, Any]:

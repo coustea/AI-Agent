@@ -102,7 +102,6 @@ class ResourceRepository:
             metadata_json=result.metadata,
             metrics=result.metrics,
             downstream_context=result.downstream_context.model_dump(mode="json") if result.downstream_context else None,
-            output_contract=result.downstream_context.schema_version if result.downstream_context else None,
             depends_on_agents=depends_on_agents or None,
             status="finished",
             updated_at=datetime.now(timezone.utc),
@@ -153,25 +152,35 @@ class ResourceRepository:
         request: ResourceGenerationRequest,
         results: dict[str, AgentResult],
         teaching_plan: TeachingPlan,
+        coverage_report: dict[str, list[str]] | None = None,
     ) -> None:
         saved_items = await self.list_resource_items(user_id, resource_id)
         failed_agents = [agent_id for agent_id, result in results.items() if not result.success]
         successful = len(saved_items)
+
+        critical_missing = (coverage_report or {}).get("critical_missing_ids", [])
+        if critical_missing:
+            failed_agents.append("_coverage_gap")
+
         if failed_agents and successful:
             status = "partial_completed"
         elif failed_agents:
             status = "failed"
         else:
             status = "completed"
+
         async with self._get_write_lock(resource_id):
             resource = await self.session.get(GeneratedResource, resource_id)
             if resource is None or resource.user_id != user_id:
                 raise ValueError("资源不存在或无权限")
             resource.teaching_plan = teaching_plan.model_dump(mode="json")
             resource.failed_agents = failed_agents
-            resource.workflow_metadata = {
+            workflow_metadata: dict[str, Any] = {
                 "selected_agents": request.enabled_agent_ids(),
             }
+            if coverage_report:
+                workflow_metadata["coverage"] = coverage_report
+            resource.workflow_metadata = workflow_metadata
             resource.status = status
             resource.updated_at = datetime.now(timezone.utc)
             await self.commit_refresh(resource)

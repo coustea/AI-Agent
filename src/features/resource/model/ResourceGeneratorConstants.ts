@@ -2,20 +2,16 @@
 
 import type { LearningScenario } from '@/features/resource/model/resource'
 import {
-  Cpu, CircleCheckFilled, Position,
+  Cpu, Position,
   Document, Share, Edit, Collection, DataBoard,
 } from '@element-plus/icons-vue'
 
 // ===================== Agent 元数据 =====================
 
 export const PPT_AGENT_ID = 'ppt'
-const VIDEO_AGENT_ID = 'video'
-export const PRE_REVIEW_AGENT_ID = 'pre_review'
-export const PPT_REVIEW_AGENT_ID = 'ppt_review'
-const VIDEO_REVIEW_AGENT_ID = 'video_review'
 export const COORDINATOR_AGENT_ID = 'coordinator'
 export const BUNDLE_AGENT_ID = 'bundle'
-export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, PRE_REVIEW_AGENT_ID, PPT_REVIEW_AGENT_ID, VIDEO_REVIEW_AGENT_ID, 'review', BUNDLE_AGENT_ID]
+export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, BUNDLE_AGENT_ID]
 export const MIN_AGENTS = 3
 
 export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
@@ -28,16 +24,11 @@ export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   reading: { label: '拓展阅读助手', icon: '📚' },
   ppt: { label: '演示文稿助手', icon: '📊' },
   video: { label: '讲解视频助手', icon: '🎬' },
-  pre_review: { label: '前置安全审核', icon: '🛡️' },
-  ppt_review: { label: 'PPT 安全审核', icon: '🔍' },
-  video_review: { label: '视频安全审核', icon: '🔍' },
-  review: { label: '质量把关助手', icon: '🔍' },
   bundle: { label: '资源打包助手', icon: '📦' },
 }
 
 export const agentMetaList = [
   { id: 'master', name: '规划中枢', icon: Cpu, colorClass: 'text-blue' },
-  { id: 'reviewer', name: '质量把关助手', icon: CircleCheckFilled, colorClass: 'text-emerald' },
   { id: 'assembler', name: '资源打包助手', icon: Position, colorClass: 'text-indigo' },
   { id: 'content', name: '讲义生成助手', icon: Document, colorClass: 'text-blue' },
   { id: 'mindmap', name: '导图绘制助手', icon: Share, colorClass: 'text-purple' },
@@ -100,7 +91,6 @@ export const getResourceTypeLabel = (type: string) => {
     reading: '拓展阅读',
     ppt: '演示文稿',
     video: '讲解视频',
-    reviewer: '质量审查',
   }
   return labelMap[type] || getAgentMeta(type).name || type
 }
@@ -210,7 +200,6 @@ export interface DagNodeState {
   metrics?: Record<string, any>
   artifactId?: string
   lastUpdatedAt?: number
-  reviewWarning?: boolean
 }
 
 export function createDagNode(id: string, isSystem: boolean): DagNodeState {

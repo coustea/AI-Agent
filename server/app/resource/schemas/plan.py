@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,17 +20,31 @@ class TeachingOutlineItem(BaseModel):
     must_not_miss: bool = True
 
 
-class TeachingPlan(BaseModel):
-    """PlanningAgent 的唯一输出：总体方向、概要、大纲和边界。"""
+class AgentAssignment(BaseModel):
+    """Planning 为每个 Worker Agent 生成的精确指派合约。"""
 
-    topic: str
-    learning_goal: str = ""
-    audience: str = ""
-    difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str = Field(description="Agent 标识，如 content, quiz, ppt")
+    assigned_outline_ids: list[str] = Field(description="该 Agent 必须覆盖的大纲 ID 列表")
+    focus_instruction: str = Field(default="", description="聚焦指令：该 Agent 应重点做什么")
+    style_constraint: str = Field(default="", description="风格约束：如 '案例驱动，先直觉后形式化'")
+    boundary_notes: list[str] = Field(default_factory=list, max_length=6, description="该 Agent 的边界提醒")
+    key_points_emphasis: list[str] = Field(default_factory=list, max_length=8, description="该 Agent 应强调的知识点")
+    avoid_overlap_with: list[str] = Field(default_factory=list, description="应避免内容重复的 Agent ID 列表")
+
+
+class TeachingPlan(BaseModel):
+    """PlanningAgent 的唯一输出：教学策略、大纲和 Agent 指派。
+
+    topic/learning_goal 由前端上传，不再由 LLM 重复生成。
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
     teaching_strategy: str = ""
-    summary: str = ""
     outline: list[TeachingOutlineItem] = Field(default_factory=list)
-    boundaries: list[str] = Field(default_factory=list)
+    agent_assignments: list[AgentAssignment] = Field(default_factory=list)
 
 
 class ReusableAssets(BaseModel):
@@ -41,26 +55,12 @@ class ReusableAssets(BaseModel):
     code_refs: list[str] = Field(default_factory=list)
 
 
-class DownstreamMaterial(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    outline_id: str = ""
-    type: Literal["explanation", "structure", "practice", "code", "reading", "example", "visual"] = "explanation"
-    summary: str = Field(default="", max_length=500)
-    key_points: list[str] = Field(default_factory=list, max_length=8)
-    evidence_excerpt: str = Field(default="", max_length=180)
-    priority: int = Field(default=3, ge=1, le=5)
-
-
 class DownstreamContext(BaseModel):
-    """基础 agent 给 PPT/Video/Review 的短交接摘要。"""
+    """基础 agent 给 PPT/Video 的短交接摘要。"""
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["resource_handoff/v1"] = "resource_handoff/v1"
     source_agent: str
     title: str = ""
     one_sentence_summary: str = Field(default="", max_length=180)
     covered_outline_ids: list[str] = Field(default_factory=list)
-    materials: list[DownstreamMaterial] = Field(default_factory=list, max_length=8)
     reusable_assets: ReusableAssets = Field(default_factory=ReusableAssets)
-    cautions: list[str] = Field(default_factory=list, max_length=6)

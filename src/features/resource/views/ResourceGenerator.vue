@@ -114,8 +114,6 @@ import type {
 
 import {
   PPT_AGENT_ID,
-  PRE_REVIEW_AGENT_ID,
-  PPT_REVIEW_AGENT_ID,
   COORDINATOR_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
@@ -146,6 +144,7 @@ const agentConfigs = reactive<AnyAgentConfigs>({
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
   ppt: { page_count: 6, difficulty: 'intermediate', output_format: 'preview' },
+  video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' },
 })
 
 const goToPersonalize = () => {
@@ -154,7 +153,7 @@ const goToPersonalize = () => {
 }
 
 const dagSelectedAgentIds = computed(() => {
-  return enabledAgentIds.value.filter(id => !['master', 'reviewer', 'assembler'].includes(id))
+  return enabledAgentIds.value.filter(id => !['master', 'assembler'].includes(id))
 })
 
 const dagNodeStates = ref<Record<string, DagNodeState>>({})
@@ -336,10 +335,8 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
     if (!display) continue
     nodes.push(dagNodeStates.value[agentId] || { id: agentId, label: display.label, icon: display.icon, status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
   }
-  nodes.push(dagNodeStates.value[PRE_REVIEW_AGENT_ID] || { id: PRE_REVIEW_AGENT_ID, label: '前置安全审核', icon: '🛡️', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   if (selected.includes(PPT_AGENT_ID)) {
     nodes.push(dagNodeStates.value[PPT_AGENT_ID] || { id: PPT_AGENT_ID, label: '演示文稿助手', icon: '📊', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
-    nodes.push(dagNodeStates.value[PPT_REVIEW_AGENT_ID] || { id: PPT_REVIEW_AGENT_ID, label: 'PPT 安全审核', icon: '🔍', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   }
   nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   return nodes
@@ -373,11 +370,9 @@ const previewGeneratedResource = (resource: any) => {
 function updateOverallProgressFromDag() {
   const stages = [
     { weight: 15, progress: getStageNode('planning').progress },
-    { weight: 45, progress: parallelPoolNodes.value.length ? parallelPoolNodes.value.reduce((sum, node) => sum + node.progress, 0) / parallelPoolNodes.value.length : 0 },
-    { weight: 10, progress: getStageNode(PRE_REVIEW_AGENT_ID).progress },
+    { weight: 55, progress: parallelPoolNodes.value.length ? parallelPoolNodes.value.reduce((sum, node) => sum + node.progress, 0) / parallelPoolNodes.value.length : 0 },
     ...(dagSelectedAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId) ? [
-      { weight: 15, progress: getStageNode(PPT_AGENT_ID).progress },
-      { weight: 5, progress: getStageNode(PPT_REVIEW_AGENT_ID).progress },
+      { weight: 20, progress: getStageNode(PPT_AGENT_ID).progress },
     ] : []),
     { weight: 10, progress: getStageNode(BUNDLE_AGENT_ID).progress },
   ]
@@ -399,11 +394,7 @@ function initializeWaitingNodes() {
   const nodes: Record<string, DagNodeState> = {
     planning: createDagNode('planning', true),
     [COORDINATOR_AGENT_ID]: createDagNode(COORDINATOR_AGENT_ID, true),
-    [PRE_REVIEW_AGENT_ID]: createDagNode(PRE_REVIEW_AGENT_ID, true),
     [BUNDLE_AGENT_ID]: createDagNode(BUNDLE_AGENT_ID, true),
-  }
-  if (enabledAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId)) {
-    nodes[PPT_REVIEW_AGENT_ID] = createDagNode(PPT_REVIEW_AGENT_ID, true)
   }
   enabledAgentIds.value.forEach((agentId) => { nodes[agentId] = createDagNode(agentId, false) })
   dagNodeStates.value = nodes
@@ -474,7 +465,6 @@ function applyAgentEvent(event: ResourceStreamEvent) {
   if (event.elapsed_ms != null) node.elapsedMs = event.elapsed_ms
   if (event.metrics) node.metrics = { ...(node.metrics || {}), ...event.metrics }
   if (event.artifact_id) node.artifactId = event.artifact_id
-  if (event.metrics?.review_warning) node.reviewWarning = true
   node.lastUpdatedAt = Date.now()
   if (event.message) {
     node.currentMessage = event.message
@@ -525,7 +515,7 @@ async function completeGeneration(resourceId: number, taskStatus: ResourceTaskSt
     const bundle = (await getResourceBundle(resourceId)).data.data
     finalBundle.value = bundle
     generatedResources.value = bundle.resources || taskStatus.resources || []
-    resultWarning.value = taskStatus.status === 'partial_completed' ? '部分资源生成失败或质量审查未通过，以下已完成内容仍可查看。' : ''
+    resultWarning.value = taskStatus.status === 'partial_completed' ? '部分资源生成失败，以下已完成内容仍可查看。' : ''
     isGenerating.value = false
     currentPhase.value = 'result'
     return

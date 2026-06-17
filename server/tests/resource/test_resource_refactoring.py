@@ -92,22 +92,21 @@ def test_agent_selection_rejects_knowledge_graph():
 
 
 def test_teaching_plan_has_required_fields():
-    """TeachingPlan must contain topic."""
-    plan = TeachingPlan(topic="操作系统处理机调度", learning_goal="理解典型调度算法")
-    assert plan.topic == "操作系统处理机调度"
-    assert plan.learning_goal == "理解典型调度算法"
+    """TeachingPlan must contain outline and agent_assignments."""
+    plan = TeachingPlan()
+    assert plan.outline == []
+    assert plan.agent_assignments == []
 
 
 def test_teaching_plan_default_lists_are_empty():
     """TeachingPlan list fields default to empty."""
-    plan = TeachingPlan(topic="test")
+    plan = TeachingPlan()
     assert plan.outline == []
-    assert plan.boundaries == []
 
 
 def test_teaching_plan_has_no_agent_instructions():
     """TeachingPlan must not have agent_instructions or resource_guidance."""
-    dumped = TeachingPlan(topic="test").model_dump(mode="json")
+    dumped = TeachingPlan().model_dump(mode="json")
     assert "agent_instructions" not in dumped
     assert "resource_guidance" not in dumped
 
@@ -125,7 +124,7 @@ def test_teaching_plan_outline_items_have_stable_ids():
 
 def test_worker_state_uses_teaching_plan_field():
     """ResourceInput must have teaching_plan field, not blueprint."""
-    plan = TeachingPlan(topic="test")
+    plan = TeachingPlan()
     state = ResourceInput(teaching_plan=plan, learning_need="OS调度")
     assert state.teaching_plan is plan
     assert not hasattr(state, "knowledge_graph")
@@ -229,7 +228,6 @@ def test_downstream_context_fields():
     )
     assert ctx.source_agent == "content"
     assert ctx.covered_outline_ids == ["o1", "o2"]
-    assert ctx.schema_version == "resource_handoff/v1"
 
 
 def test_downstream_context_defaults():
@@ -248,13 +246,10 @@ def test_downstream_context_defaults():
 def test_teaching_plan_to_worker_state():
     """A TeachingPlan can populate ResourceInput fields."""
     plan = TeachingPlan(
-        topic="OS scheduling",
-        learning_goal="understand FCFS, SJF, RR",
         outline=[
             TeachingOutlineItem(id="o1", title="FCFS 调度", key_points=["先来先服务"]),
             TeachingOutlineItem(id="o2", title="SJF 调度", key_points=["最短作业优先"]),
         ],
-        boundaries=["不要讨论多处理器调度"],
     )
     handoff = DownstreamContext(
         source_agent="content",
@@ -270,8 +265,8 @@ def test_teaching_plan_to_worker_state():
         agent_config={"question_count": 5},
     )
 
-    assert state.teaching_plan.topic == "OS scheduling"
     assert state.teaching_plan.outline[0].id == "o1"
+    assert len(state.teaching_plan.outline) == 2
     assert state.upstream_handoffs["content"].covered_outline_ids == ["o1", "o2"]
 
 
@@ -295,7 +290,7 @@ def test_path_node_resource_request_schema_removed():
 def test_persisted_resource_item_exposes_real_card_status():
     from types import SimpleNamespace
 
-    from app.resource.service import ResourceService
+    from app.resource.persistence.mappers import db_item_to_resource_item
 
     item = SimpleNamespace(
         id=1001,
@@ -315,7 +310,7 @@ def test_persisted_resource_item_exposes_real_card_status():
         downstream_context=None,
     )
 
-    mapped = ResourceService._db_item_to_resource_item(object(), item)
+    mapped = db_item_to_resource_item(item)
 
     assert mapped.status == "completed"
     assert mapped.error_message is None
