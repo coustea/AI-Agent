@@ -1,0 +1,202 @@
+[
+  {
+    "id": 1,
+    "query": "Java中如何定义一个类",
+    "category": "基础语法",
+    "difficulty": "easy",
+    "expected_keywords": ["class", "类", "定义", "public"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "基础类定义语法"
+  },
+  {
+    "id": 2,
+    "query": "什么是Java的封装",
+    "category": "面向对象",
+    "difficulty": "easy",
+    "expected_keywords": ["封装", "private", "getter", "setter", "访问权限"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "封装概念和实现方式"
+  },
+  {
+    "id": 3,
+    "query": "Java继承的概念和用法",
+    "category": "面向对象",
+    "difficulty": "medium",
+    "expected_keywords": ["继承", "extends", "父类", "子类", "super"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "继承机制和super关键字"
+  },
+  {
+    "id": 4,
+    "query": "Java中抽象类和接口的区别",
+    "category": "面向对象",
+    "difficulty": "medium",
+    "expected_keywords": ["abstract", "interface", "抽象类", "接口", "implements"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "抽象类与接口对比"
+  },
+  {
+    "id": 5,
+    "query": "Java多线程怎么创建",
+    "category": "多线程",
+    "difficulty": "medium",
+    "expected_keywords": ["Thread", "Runnable", "线程", "start", "run"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "多线程创建方式"
+  },
+  {
+    "id": 6,
+    "query": "Java集合框架中ArrayList和LinkedList的区别",
+    "category": "集合框架",
+    "difficulty": "medium",
+    "expected_keywords": ["ArrayList", "LinkedList", "数组", "链表", "增删效率"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "List实现类对比"
+  },
+  {
+    "id": 7,
+    "query": "Java异常处理机制",
+    "category": "异常处理",
+    "difficulty": "medium",
+    "expected_keywords": ["try", "catch", "finally", "throw", "throws", "异常"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "异常处理语法"
+  },
+  {
+    "id": 8,
+    "query": "Java中final关键字的作用",
+    "category": "关键字",
+    "difficulty": "easy",
+    "expected_keywords": ["final", "常量", "不可变", "修饰", "类", "方法", "变量"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "final三种用法"
+  },
+  {
+    "id": 9,
+    "query": "Java IO流的基本概念",
+    "category": "IO操作",
+    "difficulty": "medium",
+    "expected_keywords": ["IO", "流", "InputStream", "OutputStream", "字节流", "字符流"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "IO流分类和基础类"
+  },
+  {
+    "id": 10,
+    "query": "Java中String和StringBuilder的区别",
+    "category": "字符串处理",
+    "difficulty": "easy",
+    "expected_keywords": ["String", "StringBuilder", "不可变", "可变", "拼接效率"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "字符串处理效率对比"
+  },
+  {
+    "id": 11,
+    "query": "Java泛型的使用方法",
+    "category": "泛型",
+    "difficulty": "hard",
+    "expected_keywords": ["泛型", "<T>", "类型参数", "泛型类", "泛型方法"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "泛型语法和应用场景"
+  },
+  {
+    "id": 12,
+    "query": "Java反射机制是什么",
+    "category": "反射",
+    "difficulty": "hard",
+    "expected_keywords": ["反射", "Class", "Method", "Field", "动态", "运行时"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "反射概念和API"
+  },
+  {
+    "id": 13,
+    "query": "Java中的静态变量和静态方法",
+    "category": "基础语法",
+    "difficulty": "easy",
+    "expected_keywords": ["static", "静态", "类变量", "类方法", "共享"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "static关键字用法"
+  },
+  {
+    "id": 14,
+    "query": "Java中HashMap的工作原理",
+    "category": "集合框架",
+    "difficulty": "hard",
+    "expected_keywords": ["HashMap", "哈希", "put", "get", "Entry", "链表"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "HashMap内部结构"
+  },
+  {
+    "id": 15,
+    "query": "Java构造方法的特点",
+    "category": "面向对象",
+    "difficulty": "easy",
+    "expected_keywords": ["构造方法", "构造器", "初始化", "无返回值", "this"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "构造方法语法规则"
+  },
+  {
+    "id": 16,
+    "query": "Java中synchronized关键字的作用",
+    "category": "多线程",
+    "difficulty": "hard",
+    "expected_keywords": ["synchronized", "同步", "锁", "线程安全", "临界区"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "同步锁机制"
+  },
+  {
+    "id": 17,
+    "query": "Java数组如何声明和初始化",
+    "category": "基础语法",
+    "difficulty": "easy",
+    "expected_keywords": ["数组", "声明", "初始化", "int[]", "length", "索引"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "数组基础操作"
+  },
+  {
+    "id": 18,
+    "query": "Java中equals和==的区别",
+    "category": "基础语法",
+    "difficulty": "medium",
+    "expected_keywords": ["equals", "==", "比较", "引用", "内容", "字符串"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "对象比较方式"
+  },
+  {
+    "id": 19,
+    "query": "Java注解Annotation的使用",
+    "category": "注解",
+    "difficulty": "hard",
+    "expected_keywords": ["注解", "@Override", "@Deprecated", "Annotation", "元注解"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "注解语法和自定义注解"
+  },
+  {
+    "id": 20,
+    "query": "Java JDBC连接数据库的步骤",
+    "category": "数据库",
+    "difficulty": "medium",
+    "expected_keywords": ["JDBC", "Connection", "DriverManager", "Statement", "ResultSet", "数据库"],
+    "ground_truth_source": "Java从入门到精通",
+    "expected_sources": ["Java从入门到精通"],
+    "notes": "JDBC基本流程"
+  }
+]

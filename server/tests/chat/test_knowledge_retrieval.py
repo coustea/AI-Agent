@@ -400,3 +400,22 @@ def test_merge_ranked_results_uses_rrf_ordering() -> None:
     # db.md: 1/(60+2) + 1/(60+1) = 0.0159 + 0.0164 = 0.0323
     # Both have same score, so order should preserve dense rank order (java.md first)
     assert [item["metadata"]["source"] for item in merged] == ["java.md", "db.md"]
+
+
+def test_compute_source_metrics_counts_top1_accuracy_and_pollution() -> None:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "eval" / "knowledge_retrieval"))
+    from evaluate import compute_source_metrics
+
+    results = [
+        {
+            "expected_sources": ["Java从入门到精通"],
+            "result_sources": ["Java从入门到精通", "数据库系统概念"],
+        }
+    ]
+
+    metrics = compute_source_metrics(results)
+
+    assert metrics["top1_source_accuracy"] == 1.0
+    assert metrics["cross_book_pollution_rate"] == 0.5
