@@ -125,28 +125,26 @@ def build_sparse_search_text(text: str, metadata: dict[str, Any]) -> str:
 
 
 def _matches_source_filter(metadata: dict[str, Any], source_filter: tuple[str, ...] | None) -> bool:
+    """Check if metadata matches any of the source filter values.
+
+    Uses canonical source identity comparison for fuzzy matching across
+    different metadata field naming conventions.
+    """
     if not source_filter:
         return True
 
-    candidates = [
-        _normalize_source_text(metadata.get("source")),
-        _normalize_source_text(metadata.get("file_name")),
-        _normalize_source_text(metadata.get("book_title")),
-    ]
-    candidates = [candidate for candidate in candidates if candidate]
-    if not candidates:
+    candidate = extract_canonical_source_identity(metadata)
+    if not candidate:
         return False
 
-    normalized_filters = []
-    for item in source_filter:
-        normalized = _normalize_source_text(item)
-        if normalized:
-            normalized_filters.append(normalized)
-
-    for candidate in candidates:
-        for expected in normalized_filters:
-            if candidate == expected or expected in candidate or candidate in expected:
-                return True
+    expected_candidates = [
+        _normalize_source_identity_text(item)
+        for item in source_filter
+        if _normalize_source_identity_text(item)
+    ]
+    for expected in expected_candidates:
+        if candidate == expected or expected in candidate or candidate in expected:
+            return True
     return False
 
 

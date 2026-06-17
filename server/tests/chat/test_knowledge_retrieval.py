@@ -464,3 +464,21 @@ def test_extract_canonical_source_identity_strips_known_noise() -> None:
         )
         == "java从入门到精通第2版finalmd"
     )
+
+
+def test_matches_source_filter_accepts_canonical_match_across_metadata_fields() -> None:
+    from app.chat.tools.knowledge import _matches_source_filter
+
+    assert _matches_source_filter(
+        {"file_name": "Java从入门到精通-第06章.md"},
+        ("《Java从入门到精通》",),
+    )
+
+
+def test_matches_source_filter_rejects_ambiguous_non_matching_book() -> None:
+    from app.chat.tools.knowledge import _matches_source_filter
+
+    assert not _matches_source_filter(
+        {"source": "Redis设计与实现.md"},
+        ("《Java从入门到精通》",),
+    )
