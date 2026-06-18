@@ -18,14 +18,12 @@ export type {
   ProfileScoreData,
 }
 
-export function getProfile(userId?: number | string) {
-  const path = userId ? `/ai/profile/${userId}` : '/ai/profile'
-  return http.get<ApiResponse<ProfileData>>(path)
+export function getProfile() {
+  return http.get<ApiResponse<ProfileData>>('/ai/profile')
 }
 
-export function getProfileScore(userId?: number | string) {
-  const path = userId ? `/ai/profile/${userId}/score` : '/ai/profile/score'
-  return http.get<ApiResponse<ProfileScoreData>>(path)
+export function getProfileScore() {
+  return http.get<ApiResponse<ProfileScoreData>>('/ai/profile/score')
 }
 
 export function getProfileOnboarding() {
