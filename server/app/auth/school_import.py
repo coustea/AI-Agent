@@ -82,10 +82,15 @@ async def import_schools(session: AsyncSession) -> int:
         logger.info("[SchoolImport] 无学校数据需要导入")
         return 0
 
-    # 查询数据库中已存在的学校名称（避免重复插入）
-    existing_names: set[str] = {
-        school.name for school in (await session.exec(select(School))).scalars().all()
-    }
+    try:
+        # 查询数据库中已存在的学校名称（避免重复插入）
+        existing_names: set[str] = {
+            school.name for school in (await session.exec(select(School))).scalars().all()
+        }
+    except Exception as exc:
+        # 表不存在或其他数据库错误，跳过导入
+        logger.warning("[SchoolImport] 检查学校表失败，跳过导入: %s", exc)
+        return 0
 
     # 过滤出数据库中不存在的新学校
     new_schools = [

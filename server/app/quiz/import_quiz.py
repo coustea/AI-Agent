@@ -91,10 +91,15 @@ async def import_quiz_bank(session: AsyncSession) -> int:
     Returns:
         新增题目数量
     """
-    # 检查表中是否已有数据
-    count = (await session.exec(
-        select(func.count()).select_from(QuizQuestion)
-    )).scalar() or 0
+    try:
+        # 检查表中是否已有数据
+        count = (await session.exec(
+            select(func.count()).select_from(QuizQuestion)
+        )).scalar() or 0
+    except Exception as exc:
+        # 表不存在或其他数据库错误，跳过导入
+        logger.warning("[QuizImport] 检查题库表失败，跳过导入: %s", exc)
+        return 0
 
     if count > 0:
         logger.info("[QuizImport] 题库已有 %d 条数据，跳过导入", count)

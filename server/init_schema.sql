@@ -113,16 +113,6 @@ COMMENT ON COLUMN chat_sessions.ltm_token_count IS '长期记忆占用的Token�
 COMMENT ON COLUMN chat_sessions.last_profile_message_id IS '最后更新画像的消息ID';
 COMMENT ON COLUMN chat_sessions.last_ltm_message_id IS '最后更新长期记忆的消息ID';
 
-ALTER TABLE chat_sessions
-    DROP COLUMN IF EXISTS ltm_turn_count,
-    ADD COLUMN IF NOT EXISTS profile_token_count INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS profile_message_count INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS ltm_token_count INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS ltm_message_count INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS last_profile_message_id INTEGER,
-    ADD COLUMN IF NOT EXISTS last_ltm_message_id INTEGER,
-    ADD COLUMN IF NOT EXISTS last_profile_updated_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS last_ltm_updated_at TIMESTAMPTZ;
 
 -- ============================================================
 -- 5. chat_turns
@@ -682,7 +672,6 @@ COMMENT ON COLUMN generated_resource_items.resource_id IS '关联资源ID，级�
 COMMENT ON COLUMN generated_resource_items.agent_type IS 'Agent类型，如tutorial/quiz/exercise';
 COMMENT ON COLUMN generated_resource_items.title IS '子项标题';
 COMMENT ON COLUMN generated_resource_items.summary IS '子项摘要';
-COMMENT ON COLUMN generated_resource_items.output_contract IS '输出契约标识';
 COMMENT ON COLUMN generated_resource_items.generated_by IS '生成该子项的Agent标识';
 COMMENT ON COLUMN generated_resource_items.content_json IS '生成内容JSON';
 COMMENT ON COLUMN generated_resource_items.content_text IS '生成内容文本';
