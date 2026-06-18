@@ -29,6 +29,7 @@ from app.chat.agent.routing import (
     route_after_answer,
 )
 from app.chat.memory.service import get_chat_memory_service
+from app.chat.research import ResearchToolStep, WebResearchRunner
 from app.chat.schemas import (
     ChatStreamEvent,
     ClassificationResult,
@@ -52,9 +53,47 @@ from app.config import IMAGE_EXTENSIONS
 
 logger = get_logger(__name__)
 
+WEB_RESEARCH_TOOL_NAMES = (
+    "web_search",
+    "open_web_page",
+    "find_in_web_page",
+    "extract_web_links",
+    "read_web_pdf",
+)
+
 
 def _current_date_text() -> str:
     return datetime.now().date().isoformat()
+
+
+def build_evidence_context(evidence_list: list[dict[str, Any]]) -> str:
+    """Format answer-usable evidence, preserving precise web source identity."""
+    parts: list[str] = []
+    seen_urls: set[str] = set()
+    source_number = 0
+    for evidence in evidence_list:
+        if not isinstance(evidence, dict) or evidence.get("usable_for_answer", True) is False:
+            continue
+        summary = str(evidence.get("summary") or "").strip()
+        if not summary:
+            continue
+        evidence_type = str(evidence.get("evidence_type") or "unknown")
+        details = evidence.get("details") if isinstance(evidence.get("details"), dict) else {}
+        url = str(details.get("url") or "").strip()
+        if evidence_type == "web_search" and url:
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            source_number += 1
+            title = str(details.get("title") or url).strip()
+            parts.append(
+                f"[来源 {source_number}] {title}\n"
+                f"URL: {url}\n"
+                f"摘录: {summary[:3000]}"
+            )
+        else:
+            parts.append(f"[{evidence_type}] {summary[:3000]}")
+    return "\n\n".join(parts) if parts else "无额外证据。"
 
 
 # ===================================================================
@@ -526,8 +565,9 @@ class TutorAgent:
         state: TutorAgentState,
         executor: TutorToolExecutor,
         tool_name: str,
-        question: str,
+        payload: dict[str, Any],
         seq: int,
+        tool_call_id: str | None = None,
     ) -> tuple[list[ChatStreamEvent], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]], list[str]]:
         """Execute a single tool call and return its results.
 
@@ -543,9 +583,9 @@ class TutorAgent:
         start_event = ChatStreamEvent(type="tool_start", payload={"tool_name": tool_name}, sequence=seq, timestamp=time.time())
         node_events.extend(await self._emit_event(state, start_event, turn_event_type="tool.start"))
 
-        intent = TutorToolCall(tool_name=tool_name, payload={"query": question, "reason": "classify routed"})
+        intent = TutorToolCall(tool_name=tool_name, payload=payload)
         tool_status = "success"
-        tool_call_id = f"call-{uuid4().hex}"
+        tool_call_id = tool_call_id or f"call-{uuid4().hex}"
         result_text = ""
         result_evidence: list[dict[str, Any]] = []
         assistant_message_id: int | None = None
@@ -591,15 +631,24 @@ class TutorAgent:
                             raw_sources = (e.get("details") or {}).get("sources", [])
                             if isinstance(raw_sources, list):
                                 node_sources.extend(s for s in raw_sources if isinstance(s, dict))
-                elif tool_name == "web_search":
+                elif tool_name in WEB_RESEARCH_TOOL_NAMES:
                     for e in result_evidence:
                         if isinstance(e, dict):
                             details = e.get("details") or {}
-                            node_sources.append({
-                                "source": details.get("tool_name") or "web_search",
-                                "query": details.get("query") or "",
-                                "summary": e.get("summary", ""),
-                            })
+                            if details.get("url"):
+                                node_sources.append({
+                                    "source": details.get("tool_name") or tool_name,
+                                    "url": details.get("url"),
+                                    "title": details.get("title") or details.get("url"),
+                                    "summary": e.get("summary", ""),
+                                })
+                            elif tool_name == "web_search":
+                                args = details.get("args") if isinstance(details.get("args"), dict) else {}
+                                node_sources.append({
+                                    "source": details.get("tool_name") or "web_search",
+                                    "query": details.get("query") or args.get("query") or "",
+                                    "summary": e.get("summary", ""),
+                                })
 
         except Exception as exc:
             logger.warning("[TutorAgent] tool %s failed: %s", tool_name, exc)
@@ -691,6 +740,7 @@ class TutorAgent:
 
         # Reducer accumulates across nodes — only collect new items here.
         tools_to_call: list[str] = []
+        needs_web_research = bool(enable_web_search or (cls and cls.needs_web_search))
         if cls:
             if cls.needs_profile:
                 tools_to_call.append("get_learner_profile")
@@ -698,15 +748,10 @@ class TutorAgent:
                 tools_to_call.append("get_long_term_memory")
             if cls.needs_knowledge_search:
                 tools_to_call.append("search_knowledge_base")
-            if cls.needs_web_search or enable_web_search:
-                tools_to_call.append("web_search")
             if cls.needs_recent_evaluation:
                 tools_to_call.append("get_recent_evaluation")
 
-        if not tools_to_call and enable_web_search:
-            tools_to_call.append("web_search")
-
-        if not tools_to_call:
+        if not tools_to_call and not needs_web_research:
             return {
                 "evidence": [],
                 "tool_invocations": [],
@@ -716,23 +761,16 @@ class TutorAgent:
                 "_search_attempted": True,
             }
 
-        base_seq = len(state.get("stream_events", [])) + 1
-        coros = [
-            self._execute_single_tool(state, executor, name, question, base_seq + i * 2)
-            for i, name in enumerate(tools_to_call)
-        ]
-        results = await asyncio.gather(*coros, return_exceptions=True)
-
         node_events: list[ChatStreamEvent] = []
         node_evidence: list[dict[str, Any]] = []
         node_sources: list[dict[str, Any]] = []
         node_tool_invocations: list[dict[str, Any]] = []
         node_errors: list[str] = []
 
-        for result in results:
+        def collect_result(result: Any) -> None:
             if isinstance(result, Exception):
                 node_errors.append(f"parallel_tool_call: {result}")
-                continue
+                return
             events, invocation, evidence, sources, errors = result
             node_events.extend(events)
             if invocation:
@@ -740,6 +778,63 @@ class TutorAgent:
             node_evidence.extend(evidence)
             node_sources.extend(sources)
             node_errors.extend(errors)
+
+        base_seq = len(state.get("stream_events", [])) + 1
+        if tools_to_call:
+            coros = [
+                self._execute_single_tool(
+                    state,
+                    executor,
+                    name,
+                    {"query": question, "reason": "classify routed"},
+                    base_seq + i * 2,
+                )
+                for i, name in enumerate(tools_to_call)
+            ]
+            results = await asyncio.gather(*coros, return_exceptions=True)
+            for result in results:
+                collect_result(result)
+
+        if needs_web_research:
+            web_tools = [registry.by_name(name) for name in WEB_RESEARCH_TOOL_NAMES]
+            runner = WebResearchRunner(llm=self.llm, tools=web_tools)
+            next_seq = base_seq + len(tools_to_call) * 2
+
+            async def execute_research_tool(
+                tool_name: str,
+                payload: dict[str, Any],
+                call_id: str,
+            ) -> ResearchToolStep:
+                nonlocal next_seq
+                result = await self._execute_single_tool(
+                    state,
+                    executor,
+                    tool_name,
+                    payload,
+                    next_seq,
+                    tool_call_id=call_id,
+                )
+                next_seq += 2
+                events, invocation, evidence, sources, errors = result
+                return ResearchToolStep(
+                    tool_call_id=call_id,
+                    tool_name=tool_name,
+                    payload=payload,
+                    status=str((invocation or {}).get("status") or "failed"),
+                    result_text=str((invocation or {}).get("result_text") or ""),
+                    evidence=evidence,
+                    events=events,
+                    invocation=invocation,
+                    sources=sources,
+                    errors=errors,
+                )
+
+            research_steps = await runner.run(question, execute=execute_research_tool)
+            for step in research_steps:
+                if step.invocation is None:
+                    node_errors.extend(step.errors)
+                    continue
+                collect_result((step.events, step.invocation, step.evidence, step.sources, step.errors))
 
         return {
             "evidence": node_evidence,
@@ -763,11 +858,7 @@ class TutorAgent:
         attachments = state.get("attachments", [])
 
         # Build evidence context
-        evidence_parts: list[str] = []
-        for e in evidence_list:
-            if isinstance(e, dict) and e.get("summary"):
-                evidence_parts.append(f"[{e.get('evidence_type', 'unknown')}] {e['summary']}")
-        evidence_context = "\n".join(evidence_parts) if evidence_parts else "无额外证据。"
+        evidence_context = build_evidence_context(evidence_list)
 
         # Build system prompt
         system_prompt = prompts.get("chat").render(
@@ -787,6 +878,10 @@ class TutorAgent:
         extra_parts: list[str] = []
         if evidence_context and evidence_context != "无额外证据。":
             extra_parts.append(f"[检索证据]\n{evidence_context}")
+            extra_parts.append(
+                "引用外部事实时使用对应来源 URL；不要引用未出现在证据中的网页。"
+                "如果证据不足或互相冲突，请明确说明不确定性。"
+            )
         if extra_parts:
             system_prompt += "\n\n" + "\n\n".join(extra_parts)
 

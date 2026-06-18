@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from langchain_core.tools import StructuredTool
@@ -24,6 +25,13 @@ from app.chat.tools.evaluation import GetRecentEvaluationArgs, make_get_recent_e
 from app.chat.tools.knowledge import SearchKnowledgeBaseArgs, make_search_knowledge_base
 from app.chat.tools.memory import LONG_TERM_MEMORY_CATEGORY_ALIASES, GetLongTermMemoryArgs, make_get_long_term_memory
 from app.chat.tools.profile import GetLearnerProfileArgs, make_get_learner_profile
+from app.chat.tools.web_research import (
+    ExtractWebLinksArgs,
+    FindInWebPageArgs,
+    OpenWebPageArgs,
+    ReadWebPdfArgs,
+    WebResearchSession,
+)
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -34,6 +42,10 @@ TOOL_EVIDENCE_TYPES: dict[str, str] = {
     "get_long_term_memory": "long_term_memory",
     "search_knowledge_base": "knowledge_base",
     "web_search": "web_search",
+    "open_web_page": "web_search",
+    "find_in_web_page": "web_search",
+    "extract_web_links": "web_search",
+    "read_web_pdf": "web_search",
     "get_recent_evaluation": "recent_evaluation",
 }
 
@@ -59,12 +71,14 @@ class TutorToolRegistry:
         request: TutorTurnContext,
         memory_service: Any | None = None,
         web_search: Any | None = None,
+        web_research_session: Any | None = None,
         profile_service: Any | None = None,
     ) -> None:
         self.request = request
         self.memory_service = memory_service
         # web_search 默认使用 WebSearchTool，也可注入外部实例
         self.web_search = web_search or WebSearchTool()
+        self.web_research_session = web_research_session or WebResearchSession()
         self.profile_service = profile_service
         # 懒加载缓存：首次调用 tools() 时构建，后续直接返回
         self._tools: list[StructuredTool] | None = None
@@ -99,6 +113,30 @@ class TutorToolRegistry:
                     coroutine=self._web_search,
                     name="web_search",
                     description="Search the web only for current, recent, or explicitly requested external information.",
+                ),
+                StructuredTool.from_function(
+                    coroutine=self.web_research_session.open_page,
+                    name="open_web_page",
+                    description="Open and read a public web page selected from search results. Returns a page_id for follow-up inspection.",
+                    args_schema=OpenWebPageArgs,
+                ),
+                StructuredTool.from_function(
+                    coroutine=self.web_research_session.find_in_page,
+                    name="find_in_web_page",
+                    description="Find an exact word or phrase inside a page already opened during this research turn.",
+                    args_schema=FindInWebPageArgs,
+                ),
+                StructuredTool.from_function(
+                    coroutine=self.web_research_session.extract_links,
+                    name="extract_web_links",
+                    description="List relevant links from a page already opened during this research turn.",
+                    args_schema=ExtractWebLinksArgs,
+                ),
+                StructuredTool.from_function(
+                    coroutine=self.web_research_session.read_pdf,
+                    name="read_web_pdf",
+                    description="Read a public PDF and return page-aware excerpts.",
+                    args_schema=ReadWebPdfArgs,
                 ),
                 # 最近评估工具 — 获取近期测验/评估摘要，用于补救教学和学习规划
                 StructuredTool.from_function(
@@ -174,7 +212,12 @@ class TutorToolExecutor:
             # 第三步：查找工具并异步调用
             tool = self.registry.by_name(tool_name)
             raw_result = await tool.ainvoke(payload)
-            result_text = "" if raw_result is None else str(raw_result).strip()
+            if isinstance(raw_result, Mapping):
+                result_text = str(raw_result.get("text") or raw_result.get("message") or "").strip()
+                result_details = {key: value for key, value in raw_result.items() if key != "text"}
+            else:
+                result_text = "" if raw_result is None else str(raw_result).strip()
+                result_details = {}
         except Exception as exc:
             logger.warning("[TutorToolExecutor] tool failed: name=%s error=%s", tool_name, exc)
             return {
@@ -193,7 +236,7 @@ class TutorToolExecutor:
                 Evidence(
                     evidence_type=evidence_type,
                     summary=result_text,
-                    details={"tool_name": tool_name, "args": payload},
+                    details={"tool_name": tool_name, "args": payload, **result_details},
                 ).model_dump()
             )
         return {

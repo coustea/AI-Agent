@@ -630,7 +630,6 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     content_format                  VARCHAR(50)     DEFAULT 'json',
     title                           VARCHAR(200),
     summary                         TEXT,
-    output_contract                 VARCHAR(80),
     generated_by                    VARCHAR(50),
     content_json                    JSONB,
     content_text                    TEXT,
