@@ -55,3 +55,6 @@ server/test_pdf_md.py
 
 # Worktrees
 .worktrees/
+
+# Remotion local fixtures
+video-render/fixtures/
