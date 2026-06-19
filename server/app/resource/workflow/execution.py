@@ -1,0 +1,223 @@
+"""
+普通 Agent 唯一单次执行边界。
+
+职责：
+- 单次 timeout
+- 调用 Agent
+- 校验结果
+- 立即提交
+- 记录运行状态
+- 观察事件（best-effort）
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
+
+from app.infra.logging import get_module_logger
+from app.resource.workflow.validation import validate_agent_result
+
+if TYPE_CHECKING:
+    from app.resource.agents.base import BaseResourceAgent
+    from app.resource.events import AgentEventEmitter
+    from app.resource.schemas import AgentResult, ResourceInput
+    from app.resource.service import ResourceService
+
+logger = get_module_logger("resource", sub="execution")
+
+
+class AgentOutcome:
+    """Agent 执行结果。"""
+
+    def __init__(
+        self,
+        agent_id: str,
+        status: str,
+        item_id: int | None = None,
+        failure_stage: str | None = None,
+        failure_type: str | None = None,
+        failure_message: str | None = None,
+    ):
+        self.agent_id = agent_id
+        self.status = status  # "completed", "failed", "interrupted"
+        self.item_id = item_id
+        self.failure_stage = failure_stage
+        self.failure_type = failure_type
+        self.failure_message = failure_message
+
+
+async def _observe(coro: Any) -> None:
+    """执行观察事件，失败只记录日志。"""
+    try:
+        await coro
+    except Exception as e:
+        logger.warning(f"Event emission failed: {e}")
+
+
+async def execute_resource_agent(
+    *,
+    user_id: int,
+    resource_id: int,
+    run_id: str,
+    agent_id: str,
+    agent: "BaseResourceAgent",
+    input_data: "ResourceInput",
+    emitter: "AgentEventEmitter",
+    timeout_seconds: float,
+    source_item_ids: list[int] | None = None,
+) -> AgentOutcome:
+    """执行单个资源 Agent，包含完整的生命周期管理。"""
+    from app.resource.service import ResourceService, session_scope
+
+    started = time.perf_counter()
+
+    # 发送开始事件
+    await _observe(emitter.emit_agent(agent_id, "running", "开始生成", 0))
+
+    # 更新 run 状态为 running
+    try:
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.start_agent_run(
+                resource_id=resource_id,
+                run_id=run_id,
+                agent_id=agent_id,
+                stage="generation",
+            )
+    except Exception as exc:
+        return await _record_failure(
+            resource_id=resource_id,
+            run_id=run_id,
+            agent_id=agent_id,
+            stage="persistence",
+            exception=exc,
+            started_at=started,
+            emitter=emitter,
+        )
+
+    # 执行 Agent（带超时）
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            result = await agent.generate_resource(input_data)
+    except TimeoutError as exc:
+        return await _record_failure(
+            resource_id=resource_id,
+            run_id=run_id,
+            agent_id=agent_id,
+            stage="timeout",
+            exception=exc,
+            started_at=started,
+            emitter=emitter,
+        )
+    except Exception as exc:
+        return await _record_failure(
+            resource_id=resource_id,
+            run_id=run_id,
+            agent_id=agent_id,
+            stage="generation",
+            exception=exc,
+            started_at=started,
+            emitter=emitter,
+        )
+
+    # 校验结果
+    try:
+        validate_agent_result(agent_id, result, input_data)
+    except Exception as exc:
+        return await _record_failure(
+            resource_id=resource_id,
+            run_id=run_id,
+            agent_id=agent_id,
+            stage="validation",
+            exception=exc,
+            started_at=started,
+            emitter=emitter,
+        )
+
+    # 持久化结果
+    try:
+        async with session_scope() as session:
+            service = ResourceService(session)
+            item = await service.save_agent_result(
+                resource_id=resource_id,
+                user_id=user_id,
+                agent_id=agent_id,
+                result=result,
+                source_item_ids=source_item_ids,
+            )
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            await service.complete_agent_run(
+                resource_id=resource_id,
+                agent_id=agent_id,
+                elapsed_ms=elapsed_ms,
+                metrics=result.metrics,
+            )
+    except Exception as exc:
+        return await _record_failure(
+            resource_id=resource_id,
+            run_id=run_id,
+            agent_id=agent_id,
+            stage="persistence",
+            exception=exc,
+            started_at=started,
+            emitter=emitter,
+        )
+
+    # 发送成功事件
+    await _observe(emitter.emit_artifact_ready(agent_id, str(item.id)))
+    await _observe(emitter.emit_agent(agent_id, "finished", result.summary, 100))
+
+    return AgentOutcome(
+        agent_id=agent_id,
+        status="completed",
+        item_id=item.id,
+    )
+
+
+async def _record_failure(
+    *,
+    resource_id: int,
+    run_id: str,
+    agent_id: str,
+    stage: str,
+    exception: Exception,
+    started_at: float,
+    emitter: "AgentEventEmitter",
+) -> AgentOutcome:
+    """记录失败并返回失败结果。"""
+    from app.resource.service import ResourceService, session_scope
+
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    error_type = type(exception).__name__
+    error_message = str(exception)[:500]
+
+    try:
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.mark_agent_failed(
+                resource_id=resource_id,
+                run_id=run_id,
+                agent_id=agent_id,
+                stage=stage,
+                error_type=error_type,
+                error_message=error_message,
+                elapsed_ms=elapsed_ms,
+            )
+    except Exception as e:
+        logger.error(f"Failed to record agent failure: {e}")
+
+    await _observe(emitter.emit_agent(agent_id, "failed", error_message, 0))
+
+    return AgentOutcome(
+        agent_id=agent_id,
+        status="failed",
+        failure_stage=stage,
+        failure_type=error_type,
+        failure_message=error_message,
+    )
+
+
+__all__ = ["execute_resource_agent", "AgentOutcome"]
