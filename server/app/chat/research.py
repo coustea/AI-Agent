@@ -6,6 +6,7 @@ import json
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -42,11 +43,13 @@ class WebResearchRunner:
         llm: Any,
         tools: Sequence[Any],
         max_iterations: int = 8,
+        max_domains: int = 5,
         system_prompt: str | None = None,
     ) -> None:
         self.llm = llm
         self.tools = list(tools)
         self.max_iterations = max(1, int(max_iterations))
+        self.max_domains = max(1, int(max_domains))
         self.system_prompt = system_prompt or prompts.get("chat").get("search_instruction")
         self._allowed_tools = {str(tool.name) for tool in self.tools}
 
@@ -56,6 +59,7 @@ class WebResearchRunner:
             HumanMessage(content=str(question or "")),
         ]
         steps: list[ResearchToolStep] = []
+        visited_domains: set[str] = set()
 
         for _iteration in range(self.max_iterations):
             response = await self.llm.ainvoke_tools(messages, self.tools, temperature=0.1)
@@ -86,16 +90,27 @@ class WebResearchRunner:
                         "Tool arguments must be a JSON object.",
                     )
                 else:
-                    executed_valid_call = True
-                    try:
-                        step = await execute(tool_name, dict(payload), call_id)
-                    except Exception as exc:
+                    domain = self._requested_domain(tool_name, payload)
+                    if domain and domain not in visited_domains and len(visited_domains) >= self.max_domains:
                         step = self._failed_step(
                             call_id,
                             tool_name,
                             dict(payload),
-                            f"{tool_name} failed: {exc}",
+                            "Web research domain budget has been exhausted.",
                         )
+                    else:
+                        if domain:
+                            visited_domains.add(domain)
+                        executed_valid_call = True
+                        try:
+                            step = await execute(tool_name, dict(payload), call_id)
+                        except Exception as exc:
+                            step = self._failed_step(
+                                call_id,
+                                tool_name,
+                                dict(payload),
+                                f"{tool_name} failed: {exc}",
+                            )
 
                 steps.append(step)
                 messages.append(
@@ -109,6 +124,12 @@ class WebResearchRunner:
                 break
 
         return steps
+
+    @staticmethod
+    def _requested_domain(tool_name: str, payload: dict[str, Any]) -> str:
+        if tool_name not in {"open_web_page", "read_web_pdf"}:
+            return ""
+        return str(urlsplit(str(payload.get("url") or "")).hostname or "").lower()
 
     @staticmethod
     def _failed_step(
@@ -128,11 +149,19 @@ class WebResearchRunner:
 
     @staticmethod
     def _tool_message_content(step: ResearchToolStep) -> str:
+        metadata = []
+        for evidence in step.evidence:
+            if not isinstance(evidence, dict):
+                continue
+            details = evidence.get("details")
+            if isinstance(details, dict) and details:
+                metadata.append(details)
         return json.dumps(
             {
                 "status": step.status,
                 "result": step.result_text,
                 "sources": step.sources,
+                "metadata": metadata,
             },
             ensure_ascii=False,
         )

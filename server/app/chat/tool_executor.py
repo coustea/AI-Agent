@@ -20,7 +20,7 @@ from typing import Any
 from langchain_core.tools import StructuredTool
 
 from app.chat.schemas import Evidence, TutorToolCall, TutorTurnContext
-from app.chat.stages import WebSearchTool
+from app.chat.web_search import WebSearchTool
 from app.chat.tools.evaluation import GetRecentEvaluationArgs, make_get_recent_evaluation
 from app.chat.tools.knowledge import SearchKnowledgeBaseArgs, make_search_knowledge_base
 from app.chat.tools.memory import LONG_TERM_MEMORY_CATEGORY_ALIASES, GetLongTermMemoryArgs, make_get_long_term_memory
