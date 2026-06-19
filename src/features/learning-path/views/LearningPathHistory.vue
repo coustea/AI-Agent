@@ -3,7 +3,7 @@
     <section class="history-shell">
       <header class="page-head">
         <div class="head-left">
-          <button class="back-btn" type="button" @click="router.push('/path-planner/overview/latest')">
+          <button class="btn-text back-btn" type="button" @click="router.push('/path-planner/overview/latest')">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z" />
             </svg>
@@ -16,7 +16,7 @@
           </div>
         </div>
 
-        <button class="create-btn" type="button" @click="router.push('/path-planner')">
+        <button class="btn-outline" type="button" @click="router.push('/path-planner')">
           新建路径
         </button>
       </header>
@@ -55,7 +55,7 @@
       <section v-else-if="items.length === 0" class="state-panel">
         <h2>还没有历史路径记录</h2>
         <p>创建学习路径后，历史记录会在这里统一展示。</p>
-        <button class="primary-btn" type="button" @click="router.push('/path-planner')">
+        <button class="btn-primary" type="button" @click="router.push('/path-planner')">
           创建第一条学习路径
         </button>
       </section>
@@ -112,11 +112,12 @@
           </div>
 
           <div class="action-cell">
-            <button class="text-btn" type="button" @click="viewPath(item.id)">
+            <button class="btn-text" type="button" @click="viewPath(item.id)">
               查看
             </button>
             <button
-              class="primary-btn small"
+              class="btn-primary"
+              style="min-height: 34px; padding: 0 var(--space-3);"
               type="button"
               :disabled="!canActivate(item)"
               @click="activate(item.id)"
@@ -299,27 +300,13 @@ onMounted(loadHistory)
 }
 
 .back-btn {
-  min-height: 38px;
-  padding: 0 4px 0 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 0;
-  background: transparent;
-  color: var(--ph-primary);
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 900;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    color 0.18s ease,
-    transform 0.18s ease;
+  padding: 0 4px 0 0 !important;
+  color: var(--ph-primary) !important;
 }
 
 .back-btn:hover {
-  color: var(--ph-primary-dark);
-  transform: translateX(-2px);
+  color: var(--ph-primary-dark) !important;
+  transform: translateX(-2px) !important;
 }
 
 .title-block {
@@ -343,31 +330,6 @@ onMounted(loadHistory)
   letter-spacing: -0.04em;
 }
 
-.create-btn {
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid var(--ph-border);
-  border-radius: 12px;
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 900;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    background 0.18s ease;
-}
-
-.create-btn:hover {
-  color: var(--ph-primary-dark);
-  background: var(--ph-primary-soft);
-  border-color: var(--ph-border-strong);
-  transform: translateY(-1px);
-}
 
 .table-toolbar {
   min-height: 52px;
@@ -666,58 +628,7 @@ onMounted(loadHistory)
   gap: 8px;
 }
 
-.primary-btn,
-.text-btn {
-  min-height: 36px;
-  padding: 0 13px;
-  border-radius: 11px;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 900;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    transform 0.18s ease,
-    background 0.18s ease,
-    border-color 0.18s ease,
-    opacity 0.18s ease,
-    box-shadow 0.18s ease;
-}
 
-.primary-btn {
-  border: 0;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--ph-primary), var(--ph-blue));
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.18);
-}
-
-.primary-btn.small {
-  min-height: 34px;
-  padding-inline: 12px;
-}
-
-.text-btn {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--ph-primary);
-}
-
-.primary-btn:hover,
-.text-btn:hover {
-  transform: translateY(-1px);
-}
-
-.text-btn:hover {
-  background: var(--ph-primary-soft);
-  border-color: var(--ph-border-strong);
-}
-
-.primary-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
-  transform: none;
-  box-shadow: none;
-}
 
 @keyframes spin {
   to {

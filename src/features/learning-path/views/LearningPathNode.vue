@@ -37,7 +37,7 @@
     <template v-else-if="workspace">
       <nav class="node-toolbar">
         <div class="toolbar-left">
-          <button class="back-button" type="button" @click="router.push(`/path-planner/overview/${workspace.path.id}`)">
+          <button class="btn-text back-button" type="button" @click="router.push(`/path-planner/overview/${workspace.path.id}`)">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z" />
             </svg>
@@ -161,6 +161,7 @@
 
                   <button
                     type="button"
+                    class="btn-secondary"
                     :disabled="resourceLoading === item.type"
                     @click="item.resource ? openResourceDetail(item.resource.id) : createResource(item.type)"
                   >
@@ -182,7 +183,8 @@
 
               <button
                 v-if="!quizRound"
-                class="primary-wide-btn"
+                class="btn-primary"
+                style="width: 100%; margin-top: 4px;"
                 type="button"
                 :disabled="quizLoading"
                 @click="loadQuiz"
@@ -226,7 +228,8 @@
 
                 <button
                   v-if="!isQuizSubmitted"
-                  class="primary-wide-btn"
+                  class="btn-primary"
+                  style="width: 100%; margin-top: 4px;"
                   type="button"
                   :disabled="submitLoading"
                   @click="submitQuiz"
@@ -248,7 +251,8 @@
 
                   <button
                     v-if="quizResult.next_node_id"
-                    class="secondary-wide-btn"
+                    class="btn-secondary"
+                    style="width: 100%;"
                     type="button"
                     @click="goToNextNode(quizResult.next_node_id)"
                   >
@@ -919,30 +923,16 @@ onBeforeUnmount(() => {
 }
 
 .back-button {
-  min-height: 36px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+  min-height: 36px !important;
+  padding: 0 12px !important;
+  color: var(--np-primary) !important;
   border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--np-primary);
-  font: inherit;
-  font-size: 0.86rem;
-  font-weight: 900;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease;
 }
 
 .back-button:hover {
   background: var(--np-primary-soft);
   border-color: var(--np-border-strong);
-  transform: translateY(-1px);
+  transform: translateY(-1px) !important;
 }
 
 .toolbar-title {
@@ -1410,53 +1400,10 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
-.resource-item button,
-.primary-wide-btn,
-.secondary-wide-btn {
-  min-height: 34px;
-  border: 0;
-  border-radius: 12px;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 900;
-  cursor: pointer;
-  transition:
-    transform 0.18s ease,
-    opacity 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
 .resource-item button {
-  background: var(--np-primary-soft);
-  color: var(--np-primary-dark);
-}
-
-.resource-item button:hover,
-.primary-wide-btn:hover,
-.secondary-wide-btn:hover {
-  transform: translateY(-1px);
-}
-
-.resource-item button:disabled,
-.primary-wide-btn:disabled,
-.secondary-wide-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-  transform: none;
-}
-
-.primary-wide-btn {
-  width: 100%;
-  margin-top: 4px;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--np-primary), var(--np-blue));
-  box-shadow: 0 12px 26px rgba(79, 70, 229, 0.18);
-}
-
-.secondary-wide-btn {
-  width: 100%;
-  color: var(--np-primary-dark);
-  background: var(--np-primary-soft);
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  font-size: 0.78rem;
 }
 
 .quiz-area {

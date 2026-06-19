@@ -32,7 +32,7 @@
                 <span class="tag outline">{{ studentProfile.learning_goal || '学习目标待完善' }}</span>
               </div>
             </div>
-            <button class="custom-edit-btn" @click="openProfileEditor">
+            <button class="btn-outline custom-edit-btn" @click="openProfileEditor">
               <el-icon><Edit /></el-icon> 编辑资料
             </button>
           </div>
@@ -1512,20 +1512,16 @@ const openNotePreview = (note: { id?: string; content: string; savedAt?: string 
 /* ================= 銆愯嚜瀹氫箟 UI 缁勪欢鍖恒€?================= */
 
 /* 1. 鑷畾涔夎兌鍥婏細缂栬緫璧勬枡鎸夐挳 */
+/* 1. 自定义胶囊：编辑资料按钮 */
 .custom-edit-btn {
   position: absolute; right: 0; top: 0;
-  display: inline-flex; align-items: center; gap: 4px;
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  color: var(--color-text-strong); font-size: 0.8rem; font-weight: 600;
-  padding: 6px 14px; border-radius: 100px; cursor: pointer;
-  transition: all 0.25s ease; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-}
-.custom-edit-btn:hover {
-  color: var(--color-primary); border-color: var(--color-border-hover);
-  box-shadow: 0 4px 8px rgba(15, 23, 42, 0.06); transform: translateY(-1px);
+  font-size: 0.8rem;
+  padding: 6px 14px !important;
+  border-radius: var(--radius-pill) !important;
+  min-height: auto !important;
 }
 
-/* 2. 鑷畾涔変笣婊戝垎娈垫帶鍒跺櫒 (杩戞湡浠诲姟 / 璧勬簮鍘嗗彶) */
+/* 2. 自定义丝滑分段控制器 (近期任务 / 资源历史) */
 .custom-pill-group {
   display: inline-flex;
   background: var(--color-surface-hover, var(--color-surface-hover));
@@ -1543,23 +1539,31 @@ const openNotePreview = (note: { id?: string; content: string; savedAt?: string 
   color: var(--color-text-muted);
   font-size: 0.8rem;
   font-weight: 600;
-  padding: 4px 14px;
-  border-radius: 6px;
+  padding: 4px 14px !important;
+  border-radius: 6px !important;
+  min-height: auto !important;
   cursor: pointer;
+  box-shadow: none !important;
+  transform: none !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .custom-pill-group.mini .pill-btn {
-  padding: 3px 10px;
+  padding: 3px 10px !important;
   font-size: 0.75rem;
-  border-radius: 4px;
+  border-radius: 4px !important;
 }
 .custom-pill-group .pill-btn:hover {
   color: var(--color-text-strong);
+  transform: none !important;
+  box-shadow: none !important;
+}
+.custom-pill-group .pill-btn:active {
+  transform: none !important;
 }
 .custom-pill-group .pill-btn.active {
   background: var(--color-surface);
   color: var(--color-primary);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
   font-weight: 700;
 }
 
