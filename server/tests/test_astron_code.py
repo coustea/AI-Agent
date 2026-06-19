@@ -163,7 +163,7 @@ async def test_astron_code_universal_tier1_candidate(chat_model):
                     if isinstance(parsed, (dict, list)):
                         return parsed
                 except json.JSONDecodeError:
-                    # Try to repair common missing colons in LLM-generated JSON strings
+                    # 尝试修复 LLM 生成的 JSON 字符串中常见的缺失冒号问题
                     try:
                         import re
                         s_fixed = re.sub(r'("[\w_]+")\s*(?=[\[{"])', r'\1: ', s)

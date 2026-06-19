@@ -189,7 +189,7 @@ def _lenient_coerce(val: Any, annotation: Any) -> Any:
     from typing import get_origin, get_args, Union
     import types
 
-    # If annotation is a BaseModel subclass
+    # 如果注解是 BaseModel 的子类
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         if isinstance(val, dict):
             return _lenient_validate(val, annotation)
@@ -212,7 +212,7 @@ def _lenient_coerce(val: Any, annotation: Any) -> Any:
                 return {k: _lenient_coerce(v, value_type) for k, v in val.items()}
         return val
 
-    # Union or Optional
+    # 联合类型 (Union) 或 可选类型 (Optional)
     if origin is Union or (hasattr(types, "UnionType") and isinstance(annotation, types.UnionType)):
         for arg in args:
             if arg is not type(None):
