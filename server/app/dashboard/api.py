@@ -130,14 +130,14 @@ def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
 # 共享轻量级查询
 # ---------------------------------------------------------------------------
 
-async def _get_active_path(session: AsyncSession, user_id: int) -> LearningPath | None:
-    """获取用户当前活跃的学习路径。"""
-    return (await session.exec(
+async def _get_active_paths(session: AsyncSession, user_id: int, limit: int = 5) -> list[LearningPath]:
+    """获取用户所有活跃的学习路径列表。"""
+    return list((await session.exec(
         select(LearningPath)
         .where(LearningPath.user_id == user_id, LearningPath.status == "active")
         .order_by(col(LearningPath.updated_at).desc())
-        .limit(1)
-    )).first()
+        .limit(limit)
+    )).all())
 
 
 async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> list[PathNode]:
@@ -205,7 +205,8 @@ async def get_recommendation(
     courses = base_info.get("courses") or []
     primary_course = courses[0] if courses else ""
 
-    active_path = await _get_active_path(session, current_user.id)
+    active_paths = await _get_active_paths(session, current_user.id)
+    active_path = active_paths[0] if active_paths else None
     path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
     recent_events = await _get_recent_events(session, current_user.id, limit=20)
     recent_resources = list((await session.exec(
@@ -258,7 +259,7 @@ async def get_recommendation(
         recommendation = {
             "label": "今日建议",
             "title": f"继续推进：{node.title}",
-            "text": node.recommendation_reason or node.mastery_target or "根据当前路径进度，优先完成这一项，再回到题库或资源页形成反馈。",
+            "text": f"继续推进「{node.title}」，完成后再回到题库或资源页形成反馈。",
             "action": "继续学习",
             "path": "/path-planner",
             "icon": "path",
@@ -367,54 +368,43 @@ async def get_continue_learning(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取继续学习数据 — 当前路径和节点进度。"""
-    active_path = await _get_active_path(session, current_user.id)
-    if not active_path:
-        return HttpResponse.success(data={"active_path": None, "nodes": []})
+    """获取继续学习数据 — 每条活跃路径的当前节点（一条路径只显示一个节点）。"""
+    active_paths = await _get_active_paths(session, current_user.id)
 
-    path_nodes = await _get_path_nodes(session, current_user.id, active_path.id)
+    if not active_paths:
+        return HttpResponse.success(data={"active_paths": []})
 
-    last_learned_at: datetime | None = None
-    last_event = (await session.exec(
-        select(LearningEvent)
-        .where(
-            LearningEvent.user_id == current_user.id,
-            LearningEvent.path_id == active_path.id,
-        )
-        .order_by(col(LearningEvent.created_at).desc())
-        .limit(1)
-    )).first()
-    if last_event:
-        last_learned_at = last_event.created_at
+    result = []
+    for path in active_paths:
+        # 获取每条路径的节点
+        path_nodes = await _get_path_nodes(session, current_user.id, path.id)
+        current_node = _current_node(path_nodes)
 
-    nodes = [
-        {
-            "node_id": n.node_id,
-            "title": n.title,
-            "status": n.status,
-            "progress": 100 if n.status in ("completed", "completed_with_gaps")
-                        else 80 if n.status == "remediation"
-                        else 50 if n.started_at is not None
-                        else 30 if n.status == "available"
-                        else 0,
-            "attempt_count": n.attempt_count,
-            "started_at": n.started_at.isoformat() if n.started_at else None,
-            "completed_at": n.completed_at.isoformat() if n.completed_at else None,
-        }
-        for n in path_nodes
-    ]
+        # 获取该路径的最后学习时间
+        last_learned_at: datetime | None = None
+        last_event = (await session.exec(
+            select(LearningEvent)
+            .where(
+                LearningEvent.user_id == current_user.id,
+                LearningEvent.path_id == path.id,
+            )
+            .order_by(col(LearningEvent.created_at).desc())
+            .limit(1)
+        )).first()
+        if last_event:
+            last_learned_at = last_event.created_at
 
-    return HttpResponse.success(data={
-        "active_path": {
-            "id": active_path.id,
-            "title": active_path.title,
-            "overall_progress": active_path.overall_progress,
-            "current_node_title": (_current_node(path_nodes).title if _current_node(path_nodes) else None),
-            "updated_at": active_path.updated_at.isoformat() if active_path.updated_at else None,
+        result.append({
+            "id": path.id,
+            "title": path.title,
+            "overall_progress": path.overall_progress,
+            "current_node_title": current_node.title if current_node else None,
+            "current_node_id": current_node.node_id if current_node else None,
+            "updated_at": path.updated_at.isoformat() if path.updated_at else None,
             "last_learned_at": last_learned_at.isoformat() if last_learned_at else None,
-        },
-        "nodes": nodes,
-    })
+        })
+
+    return HttpResponse.success(data={"active_paths": result})
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +439,8 @@ async def get_quick_actions(
         .order_by(col(GeneratedResource.updated_at).desc())
         .limit(5)
     )).all())
-    active_path = await _get_active_path(session, current_user.id)
+    active_paths = await _get_active_paths(session, current_user.id)
+    active_path = active_paths[0] if active_paths else None
 
     weak_topics = _weak_topics_from_events(recent_events)
 
@@ -527,7 +518,7 @@ async def get_quick_actions(
         suggestions.append({
             "title": f"复盘「{topic}」错题",
             "reason": f"最近测验得分 {low_quiz.score:.0f}，先讲清错因再回到题库验证",
-            "path": "/mistake-book",
+            "path": "/question-bank?tab=wrong",
             "tone": tones[2],
         })
 
@@ -670,7 +661,8 @@ async def get_study_stats(
     )).one() or 0
     total_hours = math.ceil(int(total_seconds) / 3600)
 
-    active_path = await _get_active_path(session, current_user.id)
+    active_paths = await _get_active_paths(session, current_user.id)
+    active_path = active_paths[0] if active_paths else None
     pending_nodes = 0
     if active_path:
         pending_nodes = (await session.exec(

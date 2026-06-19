@@ -46,22 +46,14 @@ export function getProfileRadar() {
 // ---------------------------------------------------------------------------
 
 export interface ContinueLearningData {
-  active_path: {
+  active_paths: {
     id: number
     title: string
     overall_progress: number
     current_node_title: string | null
+    current_node_id: string | null
     updated_at: string | null
     last_learned_at: string | null
-  } | null
-  nodes: {
-    node_id: string
-    title: string
-    status: string
-    progress: number
-    attempt_count: number
-    started_at: string | null
-    completed_at: string | null
   }[]
 }
 

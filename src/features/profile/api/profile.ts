@@ -22,10 +22,6 @@ export function getProfile() {
   return http.get<ApiResponse<ProfileData>>('/ai/profile')
 }
 
-export function getProfileScore() {
-  return http.get<ApiResponse<ProfileScoreData>>('/ai/profile/score')
-}
-
 export function getProfileOnboarding() {
   return http.get<ApiResponse<ProfileOnboardingData>>('/ai/profile/onboarding')
 }

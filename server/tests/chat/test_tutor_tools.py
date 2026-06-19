@@ -6,7 +6,7 @@ from app.chat.schemas import TutorTurnContext
 
 
 def test_tutor_tool_registry_exposes_expected_names() -> None:
-    from app.chat.tool_execute import TutorToolRegistry
+    from app.chat.tool_executor import TutorToolRegistry
 
     request = TutorTurnContext(user_id=7, session_id="s-1", user_input="结合我的情况讲一下 TCP")
     registry = TutorToolRegistry(request=request)
@@ -18,6 +18,10 @@ def test_tutor_tool_registry_exposes_expected_names() -> None:
         "get_long_term_memory",
         "search_knowledge_base",
         "web_search",
+        "open_web_page",
+        "find_in_web_page",
+        "extract_web_links",
+        "read_web_pdf",
         "get_recent_evaluation",
     ]
 
@@ -27,7 +31,7 @@ def test_tutor_tool_registry_exposes_expected_names() -> None:
 
 def test_long_term_memory_categories_are_canonical() -> None:
     from app.chat.memory.types import LTM_CATEGORIES
-    from app.chat.tool_execute import GetLongTermMemoryArgs
+    from app.chat.tool_executor import GetLongTermMemoryArgs
 
     schema = GetLongTermMemoryArgs.model_json_schema()
     category_schema = schema["properties"]["category"]
@@ -38,8 +42,8 @@ def test_long_term_memory_categories_are_canonical() -> None:
 
 @pytest.mark.asyncio
 async def test_registry_profile_tool_uses_bound_request(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import tool_execute
-    from app.chat.tool_execute import TutorToolRegistry
+    from app.chat import tool_executor
+    from app.chat.tool_executor import TutorToolRegistry
 
     calls: list[tuple[int, str | None, str | None]] = []
 
@@ -72,8 +76,8 @@ async def test_registry_profile_tool_uses_bound_request(monkeypatch: pytest.Monk
 async def test_registry_profile_tool_returns_fallback_on_service_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.chat import tool_execute
-    from app.chat.tool_execute import TutorToolRegistry
+    from app.chat import tool_executor
+    from app.chat.tool_executor import TutorToolRegistry
 
     class FailingProfileService:
         async def get_profile_markdown(
@@ -98,9 +102,9 @@ async def test_registry_profile_tool_returns_fallback_on_service_failure(
 
 @pytest.mark.asyncio
 async def test_tool_executor_maps_profile_result_to_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import tool_execute
+    from app.chat import tool_executor
     from app.chat.schemas import TutorToolCall
-    from app.chat.tool_execute import TutorToolExecutor
+    from app.chat.tool_executor import TutorToolExecutor
 
     class FakeProfileService:
         async def get_profile_markdown(self, user_id: int, **_kwargs) -> str:
@@ -122,9 +126,9 @@ async def test_tool_executor_maps_profile_result_to_evidence(monkeypatch: pytest
 
 @pytest.mark.asyncio
 async def test_tool_executor_normalizes_legacy_profile_intent_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat import tool_execute
+    from app.chat import tool_executor
     from app.chat.schemas import TutorToolCall
-    from app.chat.tool_execute import TutorToolExecutor
+    from app.chat.tool_executor import TutorToolExecutor
 
     class FakeProfileService:
         async def get_profile_markdown(self, user_id: int, **_kwargs) -> str:
@@ -148,9 +152,9 @@ async def test_tool_executor_normalizes_legacy_profile_intent_name(monkeypatch: 
 async def test_tool_executor_normalizes_legacy_long_term_memory_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.chat import tool_execute
+    from app.chat import tool_executor
     from app.chat.schemas import TutorToolCall
-    from app.chat.tool_execute import TutorToolExecutor
+    from app.chat.tool_executor import TutorToolExecutor
 
     class FakeMemoryService:
         async def get_memory_markdown(self, user_id: int, category: str | None = None) -> str:
@@ -174,7 +178,7 @@ async def test_tool_executor_normalizes_legacy_long_term_memory_payload(
 @pytest.mark.asyncio
 async def test_tool_executor_treats_none_tool_output_as_ignored() -> None:
     from app.chat.schemas import TutorToolCall
-    from app.chat.tool_execute import TutorToolExecutor, TutorToolRegistry
+    from app.chat.tool_executor import TutorToolExecutor, TutorToolRegistry
 
     class FakeTool:
         name = "web_search"
@@ -201,7 +205,7 @@ async def test_tool_executor_treats_none_tool_output_as_ignored() -> None:
 @pytest.mark.asyncio
 async def test_tool_executor_converts_tool_failure_to_non_crashing_result() -> None:
     from app.chat.schemas import TutorToolCall
-    from app.chat.tool_execute import TutorToolExecutor, TutorToolRegistry
+    from app.chat.tool_executor import TutorToolExecutor, TutorToolRegistry
 
     class FakeTool:
         name = "web_search"

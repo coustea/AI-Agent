@@ -67,10 +67,11 @@
             <span class="section-label">学习进度</span>
             <h2>继续学习</h2>
           </div>
-          <button class="text-link" @click="goTo('/path-planner')">查看全部</button>
+          <button class="text-link" @click="goTo('/path-planner')" v-if="continueItems.length">查看全部</button>
         </div>
 
-        <div class="study-table">
+        <!-- 有数据时显示列表 -->
+        <div class="study-table" v-if="continueItems.length">
           <div class="study-table-head">
             <span>学习项</span>
             <span>进度</span>
@@ -95,6 +96,12 @@
             <button class="row-action" @click="goTo(item.path)">继续学习</button>
           </div>
         </div>
+
+        <!-- 无数据时显示空状态 -->
+        <div class="empty-state" v-else>
+          <p>还没有学习路径，开始规划你的学习计划吧</p>
+          <BaseButton size="small" @click="goTo('/path-planner')">开始规划</BaseButton>
+        </div>
       </BaseCard>
 
       <aside class="side-stack span-4">
@@ -105,7 +112,8 @@
               <h2>今日建议</h2>
             </div>
           </div>
-          <div class="suggestion-list">
+          <!-- 有建议时显示列表 -->
+          <div class="suggestion-list" v-if="todaySuggestions.length">
             <button
               class="suggestion-item"
               v-for="item in todaySuggestions"
@@ -120,9 +128,13 @@
               <span class="chevron">›</span>
             </button>
           </div>
+          <!-- 无建议时显示空状态 -->
+          <div class="empty-state compact" v-else>
+            <p>完善学习画像后可获得个性化建议</p>
+          </div>
         </BaseCard>
 
-        <BaseCard class="challenge-card">
+        <BaseCard class="challenge-card" v-if="dailyChallenge">
           <div class="challenge-top">
             <div>
               <span class="section-label">每日挑战</span>
@@ -146,10 +158,11 @@
             <span class="section-label">资源产物</span>
             <h2>最近生成</h2>
           </div>
-          <button class="text-link" @click="goTo('/resource-generator')">进入资源工坊</button>
+          <button class="text-link" @click="goTo('/resource-generator')" v-if="recentGeneratedItems.length">进入资源工坊</button>
         </div>
 
-        <div class="resource-table">
+        <!-- 有资源时显示列表 -->
+        <div class="resource-table" v-if="recentGeneratedItems.length">
           <div class="resource-table-head">
             <span>名称</span>
             <span>类型</span>
@@ -165,9 +178,15 @@
             <button class="row-action" @click="goTo(item.path)">打开</button>
           </div>
         </div>
+
+        <!-- 无资源时显示空状态 -->
+        <div class="empty-state" v-else>
+          <p>还没有生成过资源，开始创建你的第一个学习资源吧</p>
+          <BaseButton size="small" @click="goTo('/resource-generator')">生成资源</BaseButton>
+        </div>
       </BaseCard>
 
-      <BaseCard class="quick-card span-4">
+      <BaseCard class="quick-card span-4" v-if="quickActions.length">
         <div class="card-head compact">
           <div>
             <span class="section-label">操作入口</span>
@@ -436,111 +455,84 @@ const radarOption = computed(() => {
 const profileScore = computed(() => {
   const raw = profileRadarData.value as any
   const candidate = raw?.overall_score ?? raw?.total_score ?? raw?.score ?? raw?.profile_score ?? raw?.composite_score
-  if (candidate !== undefined && candidate !== null) return clampPercent(candidate, 82)
+  // 优先使用后端返回的真实分数，如果没有则使用雷达图平均值
+  if (candidate !== undefined && candidate !== null) return clampPercent(candidate)
 
   const values = radarValues.value
-  if (!values.length) return 82
-  return clampPercent(values.reduce((sum, value) => sum + value, 0) / values.length, 82)
+  if (!values.length) return 0  // 没有数据时返回 0，不使用假数据
+  return clampPercent(values.reduce((sum, value) => sum + value, 0) / values.length)
 })
 
 const profileDimensions = computed(() => {
-  const fallback = [
-    { name: '知识掌握度', score: 76 },
-    { name: '学习活跃度', score: 88 },
-    { name: '路径完成度', score: 64 },
-    { name: '资源匹配度', score: 91 }
-  ]
-
   const indicators = radarSource.value?.radar?.indicator
-  if (!Array.isArray(indicators) || !radarValues.value.length) return fallback
+  const values = radarValues.value
 
-  return fallback.map((item, index) => ({
-    name: indicators[index]?.name || item.name,
-    score: radarValues.value[index] ?? item.score
+  // 如果没有雷达图数据，返回空数组（不使用假数据）
+  if (!Array.isArray(indicators) || !values.length) {
+    return []
+  }
+
+  return indicators.map((item: any, index: number) => ({
+    name: item?.name || `维度 ${index + 1}`,
+    score: values[index] ?? 0
   }))
 })
 
 const weakAreas = computed(() => {
   const backendWeakAreas = profileRadarData.value?.weak_areas
+  // 使用后端返回的真实薄弱领域
   if (Array.isArray(backendWeakAreas) && backendWeakAreas.length) {
     return backendWeakAreas.slice(0, 3).map((item: unknown) => String(item))
   }
 
+  // 从画像维度中计算薄弱项
   const lowDimensions = profileDimensions.value
     .filter(item => item.score < 75)
     .sort((a, b) => a.score - b.score)
     .map(item => item.name)
 
-  return lowDimensions.length ? lowDimensions.slice(0, 2) : ['图论', '动态规划']
+  // 如果没有数据，返回空数组（不使用假数据）
+  return lowDimensions.length ? lowDimensions.slice(0, 2) : []
 })
 
 const weakAreaText = computed(() => weakAreas.value.join(' / '))
 
 const overviewStats = computed(() => {
   const stats = studyStatsData.value
+  // 使用后端返回的真实统计数据
   return [
-    { label: '本周学习', value: `${stats?.weekly_days ?? 5} 天` },
-    { label: '累计学习', value: `${stats?.total_hours ?? 27} 小时` },
-    { label: '待完成节点', value: `${stats?.pending_nodes ?? 3} 个` },
-    { label: '今日建议', value: `${stats?.today_suggestions ?? 4} 条` }
+    { label: '本周学习', value: `${stats?.weekly_days ?? 0} 天` },
+    { label: '累计学习', value: `${stats?.total_hours ?? 0} 小时` },
+    { label: '待完成节点', value: `${stats?.pending_nodes ?? 0} 个` },
+    { label: '今日建议', value: `${stats?.today_suggestions ?? 0} 条` }
   ]
 })
 
-const pathModulePath = computed(() => '/path-planner')
-
-const nodeLastTime = (node: any, activePath: any): string => {
-  if (node.completed_at) return formatDateTime(node.completed_at)
-  if (node.started_at) return formatDateTime(node.started_at)
-  return formatDateTime(activePath?.last_learned_at || activePath?.updated_at)
-}
-
 const continueItems = computed<ContinueItem[]>(() => {
   const data = continueLearningData.value
-  const activePath = data?.active_path
-  const nodes = data?.nodes || []
+  const activePaths = data?.active_paths || []
 
-  if (!activePath && !nodes.length) {
-    return [
-      { title: '快速排序', category: '算法 / 排序算法', progress: 68, lastTime: '今天 09:32', path: '/path-planner', icon: 'path', tone: 'tone-indigo' },
-      { title: '图的遍历', category: '数据结构 / 图', progress: 42, lastTime: '昨天 20:15', path: '/path-planner', icon: 'reading', tone: 'tone-emerald' },
-      { title: '动态规划', category: '算法进阶', progress: 25, lastTime: '5月20日 15:40', path: '/path-planner', icon: 'practice', tone: 'tone-amber' }
-    ]
+  // 如果没有真实数据，返回空数组（不使用假数据）
+  if (!activePaths.length) {
+    return []
   }
 
-  const items: ContinueItem[] = []
-
-  if (activePath) {
-    items.push({
-      title: activePath.current_node_title || activePath.title || '继续当前学习路径',
-      category: activePath.title || '学习路径',
-      progress: clampPercent(activePath.overall_progress, 0),
-      lastTime: formatDateTime(activePath.last_learned_at || activePath.updated_at),
-      path: pathModulePath.value,
-      icon: 'path',
-      tone: 'tone-emerald'
-    })
-  }
-
-  for (const node of nodes) {
-    if (items.some(item => item.title === node.title)) continue
-    const progress = node.progress ?? 0
-    const isCompleted = progress >= 100
-    items.push({
-      title: node.title,
-      category: activePath?.title || '学习路径',
-      progress,
-      lastTime: nodeLastTime(node, activePath),
-      path: pathModulePath.value,
-      icon: isCompleted ? 'reading' : 'path',
-      tone: isCompleted ? 'tone-indigo' : 'tone-emerald',
-    })
-  }
-
-  return items.slice(0, 5)
+  // 每条路径只显示当前节点（一条路径一个节点）
+  return activePaths.map(path => ({
+    title: path.current_node_title || path.title || '继续当前学习路径',
+    category: path.title || '学习路径',
+    progress: clampPercent(path.overall_progress, 0),
+    lastTime: formatDateTime(path.last_learned_at || path.updated_at),
+    // 如果有当前节点ID，跳转到节点学习页面；否则跳转到路径详情页
+    path: path.current_node_id ? `/path-planner/node/${path.current_node_id}` : `/path-planner/overview/${path.id}`,
+    icon: 'path',
+    tone: 'tone-emerald'
+  }))
 })
 
 const todaySuggestions = computed<SuggestionItem[]>(() => {
   const backendSuggestions = quickActionsData.value?.today_suggestions
+  // 使用后端返回的真实数据
   if (Array.isArray(backendSuggestions) && backendSuggestions.length) {
     return backendSuggestions.slice(0, 3).map((item: any, index: number) => ({
       title: item.title || item.label || '学习建议',
@@ -550,66 +542,35 @@ const todaySuggestions = computed<SuggestionItem[]>(() => {
     }))
   }
 
-  const mainTitle = recommendationData.value?.recommendation?.title || '当前学习任务'
-  const weakArea = weakAreas.value[0] || '薄弱知识点'
-  return [
-    {
-      title: `继续学习「${mainTitle}」`,
-      reason: `画像分 ${profileScore.value}，建议优先推进当前主线任务`,
-      path: recommendationData.value?.recommendation?.path || '/path-planner',
-      tone: 'blue'
-    },
-    {
-      title: `完成「${weakArea}」专项练习`,
-      reason: `${weakArea} 维度偏弱，需要通过题目巩固`,
-      path: '/question-bank',
-      tone: 'amber'
-    },
-    {
-      title: '复习最近错题与生成资料',
-      reason: '用错题和资源回顾保持知识稳定度',
-      path: '/mistake-book',
-      tone: 'green'
-    }
-  ]
+  // 如果没有后端数据，返回空数组（不使用假数据）
+  return []
 })
 
 const dailyChallenge = computed(() => {
   const challenge = dailyChallengeData.value
+  // 使用后端返回的真实数据
   if (challenge) {
     return {
-      title: challenge.subject || '二叉树层序遍历',
+      title: challenge.subject || '今日挑战',
       difficulty: challenge.difficulty || '中等',
       minutes: challenge.estimated_minutes || 12,
       source: challenge.source || '题库推荐',
       reason: challenge.reason || `推荐你从「${challenge.subject}」切入，保持每日练习节奏。`
     }
   }
-  return {
-    title: '二叉树层序遍历',
-    difficulty: '中等',
-    minutes: 12,
-    source: '画像推荐',
-    reason: `根据你的薄弱方向「${weakAreaText.value}」生成今日挑战。`
-  }
+  // 如果没有后端数据，返回 null 表示无挑战（不使用假数据）
+  return null
 })
 
 const quickActions = computed<HomeActionItem[]>(() => {
   const actions = quickActionsData.value?.actions || []
-  if (actions.length) return actions.slice(0, 6)
-
-  return [
-    { label: '新建对话辅导', description: '向智能体提问或获取学习指导', path: '/chat', icon: 'chat' },
-    { label: '进入资源工坊', description: '生成文档、题库、代码和图解', path: '/resource-generator', icon: 'resource' },
-    { label: '开始智能测评', description: '评估知识掌握情况', path: '/assessment', icon: 'practice' },
-    { label: '规划学习路径', description: '定制你的阶段学习计划', path: '/path-planner', icon: 'path' },
-    { label: '查看错题本', description: '复习历史错题与薄弱点', path: '/mistake-book', icon: 'reading' },
-    { label: '查看我的画像', description: '查看画像雷达和维度分析', path: profilePath.value, icon: 'monitor' }
-  ]
+  // 使用后端返回的真实数据，不使用假数据
+  return actions.slice(0, 6)
 })
 
 const recentGeneratedItems = computed<ResourceItem[]>(() => {
   const list = recentResourcesData.value
+  // 使用后端返回的真实数据
   if (list.length) {
     return list.slice(0, 4).map((item: any) => ({
       title: item.title || item.name || '未命名资源',
@@ -620,12 +581,8 @@ const recentGeneratedItems = computed<ResourceItem[]>(() => {
     }))
   }
 
-  return [
-    { title: '快速排序代码实现与测试', type: '代码文件', agent: '代码智造师', time: '今天 10:18', path: '/resource-generator' },
-    { title: '排序算法对比分析', type: '文档', agent: '知识分析师', time: '昨天 20:07', path: '/resource-generator' },
-    { title: '图的遍历可视化演示', type: '可视化', agent: '可视化工匠', time: '昨天 19:44', path: '/resource-generator' },
-    { title: '动态规划经典题汇总', type: '题库', agent: '测评专家', time: '5月20日 16:02', path: '/question-bank' }
-  ]
+  // 如果没有后端数据，返回空数组（不使用假数据）
+  return []
 })
 
 const loadAllData = async () => {
@@ -1341,6 +1298,27 @@ watch(
 .state-btn:focus-visible {
   outline: 3px solid rgba(79, 70, 229, 0.3);
   outline-offset: 2px;
+}
+
+/* 空状态样式 */
+.empty-state {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.empty-state.compact {
+  padding: var(--space-4);
+}
+
+.empty-state p {
+  margin: 0 0 var(--space-4) 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.empty-state.compact p {
+  margin-bottom: 0;
 }
 
 @media (max-width: 1200px) {

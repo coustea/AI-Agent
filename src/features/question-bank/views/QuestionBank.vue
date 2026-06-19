@@ -257,6 +257,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
 import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
@@ -311,6 +312,7 @@ interface WrongQuestionDTO {
 
 const viewMode = ref<ViewMode>('workspace')
 const activeModule = ref<ModuleKey>('daily')
+const route = useRoute()
 
 const subjects = ref<string[]>([])
 const difficulties = ref<string[]>([])
@@ -429,6 +431,13 @@ const moduleDescriptions: Record<ModuleKey, string> = {
 
 onMounted(() => {
   readLocalStats()
+
+  // 支持 URL query 参数切换 Tab (e.g., ?tab=wrong)
+  const tabParam = route.query.tab as string
+  if (tabParam && ['daily', 'practice', 'search', 'paper', 'wrong'].includes(tabParam)) {
+    activeModule.value = tabParam as ModuleKey
+  }
+
   void bootstrap()
 })
 
