@@ -171,7 +171,60 @@ def _lenient_validate(data: dict[str, Any], schema: type[BaseModel]) -> BaseMode
     try:
         return schema.model_validate(data, strict=False)
     except Exception:
-        return schema.model_construct(**data)
+        constructed = {}
+        for k, v in data.items():
+            if k in schema.model_fields:
+                field = schema.model_fields[k]
+                constructed[k] = _lenient_coerce(v, field.annotation)
+            else:
+                constructed[k] = v
+        return schema.model_construct(**constructed)
+
+
+def _lenient_coerce(val: Any, annotation: Any) -> Any:
+    if val is None or annotation is None:
+        return val
+
+    from pydantic import BaseModel
+    from typing import get_origin, get_args, Union
+    import types
+
+    # If annotation is a BaseModel subclass
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        if isinstance(val, dict):
+            return _lenient_validate(val, annotation)
+        return val
+
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin is list or annotation is list:
+        if isinstance(val, list):
+            item_type = args[0] if args else None
+            if item_type:
+                return [_lenient_coerce(item, item_type) for item in val]
+        return val
+
+    if origin is dict or annotation is dict:
+        if isinstance(val, dict):
+            value_type = args[1] if len(args) > 1 else None
+            if value_type:
+                return {k: _lenient_coerce(v, value_type) for k, v in val.items()}
+        return val
+
+    # Union or Optional
+    if origin is Union or (hasattr(types, "UnionType") and isinstance(annotation, types.UnionType)):
+        for arg in args:
+            if arg is not type(None):
+                try:
+                    res = _lenient_coerce(val, arg)
+                    if res is not val:
+                        return res
+                except Exception:
+                    pass
+        return val
+
+    return val
 
 
 def _required_fields(schema: type[BaseModel]) -> set[str]:

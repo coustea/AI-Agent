@@ -1085,7 +1085,7 @@ const getNoteSummary = (content: string) => {
   return normalized || '绌虹櫧绗旇'
 }
 
-const openNotePreview = (note: { content: string; savedAt?: string }, isDraft = false) => {
+const openNotePreview = (note: { id?: string; content: string; savedAt?: string }, isDraft = false) => {
   notePreviewContent.value = note.content
   notePreviewSavedAt.value = note.savedAt || ''
   notePreviewDraft.value = isDraft

@@ -353,8 +353,12 @@ const tutorialToc = computed<TocItem[]>(() => {
   let match: RegExpExecArray | null
 
   while ((match = headingRegex.exec(markdown)) !== null) {
-    const level = match[1].length
-    const title = match[2]
+    const rawLevel = match[1]
+    const rawTitle = match[2]
+    if (!rawLevel || !rawTitle) continue
+
+    const level = rawLevel.length
+    const title = rawTitle
       .replace(/[#*_`>]/g, '')
       .trim()
 
@@ -495,7 +499,10 @@ async function generatePrimaryTutorial() {
   let index = 0
   const interval = window.setInterval(() => {
     if (index < logs.length) {
-      generatingLogs.value.push(logs[index])
+      const log = logs[index]
+      if (log) {
+        generatingLogs.value.push(log)
+      }
       if (generatingLogs.value.length > 5) generatingLogs.value.shift()
       index += 1
     } else {

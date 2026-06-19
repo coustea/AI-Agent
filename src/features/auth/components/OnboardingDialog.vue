@@ -397,8 +397,9 @@ const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
 
 const shouldShowReplyHint = computed(() => [2, 7].includes(currentStep.value))
 
-const currentStepMeta = computed(() => {
-  return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) || ONBOARDING_STEPS[0]
+const currentStepMeta = computed<StepMeta>(() => {
+  const step = ONBOARDING_STEPS.find(item => item.key === Math.min(currentStep.value, 7))
+  return step || ONBOARDING_STEPS[0]!
 })
 
 const composerPlaceholder = computed(() => {
@@ -572,7 +573,7 @@ const splitToTypewriterChunks = (text: string) => {
   let buffer = ''
 
   for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]
+    const char = text.charAt(index)
     const isAscii = /[A-Za-z0-9_+#./-]/.test(char)
 
     if (isAscii) {
@@ -628,10 +629,11 @@ const streamAssistantMessage = async (content: string) => {
   for (const chunk of chunks) {
     if (runId !== streamRunId) return
     const msgIndex = messages.value.findIndex(item => item.id === messageId)
-    if (msgIndex === -1) return
+    const currentMsg = messages.value[msgIndex]
+    if (!currentMsg) return
     messages.value[msgIndex] = {
-      ...messages.value[msgIndex],
-      content: messages.value[msgIndex].content + chunk,
+      ...currentMsg,
+      content: currentMsg.content + chunk,
     }
 
     await scrollToBottom()
@@ -640,9 +642,12 @@ const streamAssistantMessage = async (content: string) => {
 
   const msgIndex = messages.value.findIndex(item => item.id === messageId)
   if (msgIndex !== -1) {
-    messages.value[msgIndex] = {
-      ...messages.value[msgIndex],
-      streaming: false,
+    const currentMsg = messages.value[msgIndex]
+    if (currentMsg) {
+      messages.value[msgIndex] = {
+        ...currentMsg,
+        streaming: false,
+      }
     }
   }
 
