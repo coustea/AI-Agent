@@ -603,7 +603,7 @@ function getCoverSvg(type: string): string {
           <rect x="212" y="124" width="174" height="10" rx="5" fill="#cbd5e1"/>
           <rect x="212" y="150" width="132" height="10" rx="5" fill="#cbd5e1"/>
           <rect x="212" y="176" width="158" height="10" rx="5" fill="#cbd5e1"/>
-          <rect x="212" y="202" width="84" height="10" rx="5" fill="#34d399"/>
+          <rect x="212" y="202" width="84" height="10" rx="5" fill="#818cf8"/>
         </g>
         <g filter="url(#shadow)">
           <rect x="84" y="112" width="108" height="136" rx="22" fill="url(#blue)" transform="rotate(-9 138 180)"/>
@@ -666,10 +666,10 @@ function getCoverSvg(type: string): string {
         <g filter="url(#shadow)">
           <rect x="88" y="70" width="380" height="206" rx="24" fill="white"/>
           <rect x="88" y="70" width="380" height="38" rx="24" fill="#f8fafc"/>
-          <circle cx="116" cy="90" r="7" fill="#fb7185"/><circle cx="140" cy="90" r="7" fill="#fbbf24"/><circle cx="164" cy="90" r="7" fill="#34d399"/>
+          <circle cx="116" cy="90" r="7" fill="#fb7185"/><circle cx="140" cy="90" r="7" fill="#fbbf24"/><circle cx="164" cy="90" r="7" fill="#818cf8"/>
           <rect x="118" y="136" width="220" height="10" rx="5" fill="#60a5fa"/>
           <rect x="118" y="164" width="154" height="10" rx="5" fill="#a78bfa"/>
-          <rect x="118" y="192" width="250" height="10" rx="5" fill="#34d399"/>
+          <rect x="118" y="192" width="250" height="10" rx="5" fill="#818cf8"/>
           <rect x="118" y="220" width="186" height="10" rx="5" fill="#fb7185"/>
           <rect x="352" y="126" width="76" height="34" rx="12" fill="#dbeafe"/>
           <text x="368" y="149" fill="#2563eb" font-family="Arial" font-weight="800" font-size="18">Py</text>
@@ -1583,15 +1583,15 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(236, 253, 245, 0.92);
-  color: #047857;
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
 }
 
 .review-pass-list b {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #10b981;
+  background: #6366f1;
 }
 
 .resource-result-card.tone-emerald .resource-icon-shell,

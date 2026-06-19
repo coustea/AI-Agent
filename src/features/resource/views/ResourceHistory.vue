@@ -256,7 +256,7 @@ onMounted(() => {
 }
 
 .card-status-bar.success, .card-status-bar.completed {
-  background: linear-gradient(90deg, #10B981, #34D399);
+  background: linear-gradient(90deg, #6366F1, #818CF8);
 }
 
 .card-status-bar.running, .card-status-bar.processing {

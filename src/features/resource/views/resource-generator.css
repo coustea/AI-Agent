@@ -1,9 +1,9 @@
 .elegant-generator-layout {
   --color-primary: var(--cat-resource);
-  --color-primary-hover: #059669;
+  --color-primary-hover: #4f46e5;
   --color-primary-soft: var(--cat-resource-soft);
-  --color-primary-border: #6ee7b7;
-  --color-primary-text: #047857;
+  --color-primary-border: #a5b4fc;
+  --color-primary-text: #4338ca;
   --gradient-primary: var(--gradient-resource);
   --resource-page-inset: clamp(16px, 2.4vw, 32px);
 
@@ -13,7 +13,7 @@
   overflow-x: hidden;
   background:
     radial-gradient(circle at 12% 8%, rgba(59, 130, 246, 0.08), transparent 34%),
-    radial-gradient(circle at 84% 18%, rgba(16, 185, 129, 0.10), transparent 30%),
+    radial-gradient(circle at 84% 18%, rgba(99, 102, 241, 0.10), transparent 30%),
     linear-gradient(180deg, #f8fafc 0%, #eef6ff 52%, #f7fbff 100%);
   color: var(--color-text);
   font-family: var(--font-sans);
@@ -46,7 +46,7 @@
 .resource-generator-ambient .glow-emerald {
   top: 18%;
   right: -14%;
-  background: rgba(16, 185, 129, 0.24);
+  background: rgba(99, 102, 241, 0.24);
 }
 
 .resource-generator-ambient .glow-indigo {

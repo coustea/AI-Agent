@@ -931,11 +931,11 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .route-line.done {
-  background: #34D399;
+  background: #818CF8;
 }
 
 .route-line.active {
-  background: linear-gradient(90deg, #34D399, var(--color-info, #2563eb));
+  background: linear-gradient(90deg, #818CF8, var(--color-info, #2563eb));
 }
 
 .stage-stat-group {
@@ -1067,9 +1067,9 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .control-pill.active {
-  background: rgba(209, 250, 229, 0.84);
-  color: #047857;
-  border-color: rgba(110, 231, 183, 0.78);
+  background: rgba(224, 231, 255, 0.84);
+  color: #4338ca;
+  border-color: rgba(165, 180, 252, 0.78);
 }
 
 .control-pill.muted {
@@ -1081,8 +1081,8 @@ function getPlanStepIcon(agentId: string) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #10B981;
-  box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.14);
+  background: #6366F1;
+  box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.14);
 }
 
 .workbench-header {
@@ -1289,7 +1289,7 @@ function getPlanStepIcon(agentId: string) {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #10B981, #22D3EE, #3B82F6);
+  background: linear-gradient(90deg, #6366F1, #22D3EE, #3B82F6);
 }
 
 .dispatch-card-layer {
@@ -1957,7 +1957,7 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .detail-status-dot.status-success {
-  background: #10B981;
+  background: #6366F1;
 }
 
 .detail-status-dot.status-failed {
@@ -1971,7 +1971,7 @@ function getPlanStepIcon(agentId: string) {
   display: grid;
   place-items: center;
   background: var(--cat-resource-soft, #dbeafe);
-  border: 1px solid rgba(16,185,129,0.3);
+  border: 1px solid rgba(99,102,241,0.3);
   font-size: 1.25rem;
 }
 
@@ -2729,7 +2729,7 @@ function getPlanStepIcon(agentId: string) {
 
 .agent-link-path.status-success {
   opacity: 0.78;
-  stroke: #10B981;
+  stroke: #6366F1;
   stroke-dasharray: 0;
 }
 
@@ -2740,7 +2740,7 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .agent-link-dot.status-success {
-  fill: #10B981;
+  fill: #6366F1;
 }
 
 .agent-link-dot.status-running {
