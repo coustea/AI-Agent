@@ -1,8 +1,8 @@
 import type { App } from 'vue'
 import type { Router } from 'vue-router'
 import { hasAuthToken } from '@/shared/auth/token'
-import { startTracking, stopTracking } from '@/features/learning/model/useLearningTracker'
-import type { TrackingContext } from '@/features/learning/model/useLearningTracker'
+import { startTracking, stopTracking } from '@/features/evaluation/model/useLearningTracker'
+import type { TrackingContext } from '@/features/evaluation/model/useLearningTracker'
 
 function toNumber(value: unknown): number | undefined {
   if (value === null || value === undefined || value === '') return undefined

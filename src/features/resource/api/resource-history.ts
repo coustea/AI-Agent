@@ -1,6 +1,6 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
-import type { PathResourceDetail } from '@/features/learning/model/path'
+import type { PathResourceDetail } from '@/features/learning-path/model/path'
 
 // ==========================================
 // 类型定义
