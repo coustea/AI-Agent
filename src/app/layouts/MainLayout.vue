@@ -117,7 +117,22 @@ const navItems = [
 
 useAuthPolling(60000)
 
-const activePath = computed(() => pendingPath.value || route.path)
+const activePath = computed(() => {
+  const current = pendingPath.value || route.path
+  if (current.startsWith('/resource-generator') || current.startsWith('/resource-detail') || current.startsWith('/resource-history')) {
+    return '/resource-generator'
+  }
+  if (current.startsWith('/path-planner') || current.startsWith('/path-resource') || current.startsWith('/path-resource-history')) {
+    return '/path-planner'
+  }
+  if (current.startsWith('/tutor')) {
+    return '/tutor'
+  }
+  if (current.startsWith('/question-bank')) {
+    return '/question-bank'
+  }
+  return '/dashboard'
+})
 
 const currentTime = ref('')
 let timer: number
