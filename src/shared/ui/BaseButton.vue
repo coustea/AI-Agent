@@ -112,8 +112,12 @@ const props = defineProps({
 /* Variants */
 .variant-primary {
   background: var(--color-primary);
-  color: #FFFFFF;
+  color: #FFFFFF !important;
   box-shadow: var(--shadow-sm);
+}
+
+.variant-primary .btn-text {
+  color: #FFFFFF !important;
 }
 .variant-primary:hover:not(.is-disabled) {
   background: var(--color-primary-hover);
