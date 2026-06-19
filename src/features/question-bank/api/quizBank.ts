@@ -1,7 +1,5 @@
 import http from '@/shared/api/http'
-import type {
-  QuizBankQuestionListResponse,
-} from '@/features/learning/model/evaluation'
+import type { QuizBankQuestionListResponse } from '@/features/question-bank/model/quiz'
 
 export type { QuizBankQuestionListResponse }
 

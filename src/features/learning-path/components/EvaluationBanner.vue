@@ -80,7 +80,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PropType } from 'vue'
-import type { PathLearningEvaluationResponse } from '@/features/learning/model/path'
+import type { PathLearningEvaluationResponse } from '@/features/learning-path/model/path'
 
 const props = defineProps({
   evaluation: {

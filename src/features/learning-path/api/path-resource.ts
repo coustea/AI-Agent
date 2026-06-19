@@ -3,7 +3,7 @@ import type { ApiResponse } from '@/shared/api/http'
 import type {
   PathGeneratedResourceItem,
 } from '@/features/resource/api/resource-history'
-import type { PathResourceDetail } from '@/features/learning/model/path'
+import type { PathResourceDetail } from '@/features/learning-path/model/path'
 
 export function getPathGeneratedResources(page = 1, limit = 20) {
   const offset = (page - 1) * limit

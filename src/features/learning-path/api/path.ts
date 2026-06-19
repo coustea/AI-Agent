@@ -12,7 +12,7 @@ import type {
   PathQuizSubmitResponse,
   PathResourceDetail,
   PathLearningEvaluationResponse,
-} from '@/features/learning/model/path'
+} from '@/features/learning-path/model/path'
 
 export type {
   AuxiliaryResourceRequest,

@@ -71,7 +71,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Clock, ArrowRight } from '@element-plus/icons-vue'
-import { getPathGeneratedResources } from '@/features/learning/api/path-resource'
+import { getPathGeneratedResources } from '@/features/learning-path/api/path-resource'
 import type { PathGeneratedResourceItem } from '@/features/resource/api/resource-history'
 import { getResourceTypeLabel } from '@/features/resource/model/ResourceGeneratorConstants'
 

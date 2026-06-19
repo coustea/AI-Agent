@@ -4,7 +4,7 @@ import type {
   LearningEventCreate,
   LearningSessionCreate,
   LearningTimeStats,
-} from '@/features/learning/model/evaluation'
+} from '@/features/evaluation/model/evaluation'
 
 export type {
   LearningEventCreate,

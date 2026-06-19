@@ -308,19 +308,19 @@ import { ElMessage } from 'element-plus'
 
 import BaseCard from '@/shared/ui/BaseCard.vue'
 import BaseButton from '@/shared/ui/BaseButton.vue'
-import EvaluationBanner from '@/features/learning/components/EvaluationBanner.vue'
+import EvaluationBanner from '@/features/learning-path/components/EvaluationBanner.vue'
 
 import {
   createLearningPath,
   getCurrentLearningPath,
   getLearningEvaluation,
   getLearningPathById,
-} from '@/features/learning/api/path'
+} from '@/features/learning-path/api/path'
 import type {
   LearningPathNode,
   LearningPathOverview,
   PathLearningEvaluationResponse,
-} from '@/features/learning/model/path'
+} from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 
 type StageLike = {

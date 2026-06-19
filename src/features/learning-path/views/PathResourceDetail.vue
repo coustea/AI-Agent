@@ -251,8 +251,8 @@ import MindmapView from '@/features/resource/components/MindmapView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
 import QuizView from '@/features/resource/components/QuizView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
-import { getPathGeneratedResourceDetail } from '@/features/learning/api/path-resource'
-import type { PathResourceDetail } from '@/features/learning/model/path'
+import { getPathGeneratedResourceDetail } from '@/features/learning-path/api/path-resource'
+import type { PathResourceDetail } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 
 type AgentPushItem = {

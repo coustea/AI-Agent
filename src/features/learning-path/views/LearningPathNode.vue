@@ -278,17 +278,17 @@ import {
   getLearningNodeWorkspace,
   startNodeLearning,
   submitNodeQuiz,
-} from '@/features/learning/api/path'
-import { recordPathLearningEvent } from '@/features/learning/api/evaluation'
+} from '@/features/learning-path/api/path'
+import { recordPathLearningEvent } from '@/features/evaluation/api/evaluation'
 import type {
   AuxiliaryResourceRequest,
   LearningPathTutorial,
   LearningPathWorkspace,
   PathQuizRound,
   PathQuizSubmitResponse,
-} from '@/features/learning/model/path'
+} from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
-import { startTracking, stopTracking } from '@/features/learning/model/useLearningTracker'
+import { startTracking, stopTracking } from '@/features/evaluation/model/useLearningTracker'
 
 type TocItem = {
   id: string

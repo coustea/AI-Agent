@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="question-bank-layout">
     <div v-if="viewMode === 'workspace'" class="question-bank-workspace">
       <section class="question-bank-hero">
@@ -259,19 +259,19 @@
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
-import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, type QuizReviewResult } from '@/features/learning/api/quizBank'
+import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
 import {
   archiveWrongQuestion,
   fetchRandomWrongQuestion,
   fetchWrongQuestions,
   removeWrongQuestion,
-} from '@/features/learning/api/wrongQuestions'
+} from '@/features/question-bank/api/wrongQuestions'
 
-import DailyPracticeTab from '@/features/learning/components/question-bank/DailyPracticeTab.vue'
-import PracticeTab from '@/features/learning/components/question-bank/PracticeTab.vue'
-import SearchTab from '@/features/learning/components/question-bank/SearchTab.vue'
-import ExamTab from '@/features/learning/components/question-bank/ExamTab.vue'
-import WrongBookTab from '@/features/learning/components/question-bank/WrongBookTab.vue'
+import DailyPracticeTab from '@/features/question-bank/components/DailyPracticeTab.vue'
+import PracticeTab from '@/features/question-bank/components/PracticeTab.vue'
+import SearchTab from '@/features/question-bank/components/SearchTab.vue'
+import ExamTab from '@/features/question-bank/components/ExamTab.vue'
+import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
 
 type ViewMode = 'workspace' | 'exam'
 type ModuleKey = 'daily' | 'practice' | 'search' | 'paper' | 'wrong'

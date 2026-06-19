@@ -50,7 +50,7 @@
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import BaseButton from '@/shared/ui/BaseButton.vue'
-import type { LearningPathNode } from '@/features/learning/model/path'
+import type { LearningPathNode } from '@/features/learning-path/model/path'
 
 const router = useRouter()
 

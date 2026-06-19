@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import type { PropType } from 'vue'
-import type { LearningPathNode, LearningPathStage } from '@/features/learning/model/path'
+import type { LearningPathNode, LearningPathStage } from '@/features/learning-path/model/path'
 
 const props = defineProps({
   stages: {

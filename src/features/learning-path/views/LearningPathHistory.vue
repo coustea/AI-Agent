@@ -135,8 +135,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import { activateLearningPath, getLearningPathHistory } from '@/features/learning/api/path'
-import type { LearningPathHistoryItem } from '@/features/learning/model/path'
+import { activateLearningPath, getLearningPathHistory } from '@/features/learning-path/api/path'
+import type { LearningPathHistoryItem } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 
 type StatusTab = {
