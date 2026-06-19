@@ -56,6 +56,10 @@ export function getLearningNodeWorkspace(nodeId: number) {
   return http.get<ApiResponse<LearningPathWorkspace>>(`/ai/path-plan/nodes/${nodeId}/workspace`)
 }
 
+export function startNodeLearning(nodeId: number) {
+  return http.post<ApiResponse<LearningPathWorkspace>>(`/ai/path-plan/nodes/${nodeId}/start-learning`)
+}
+
 export function generateNodeQuestions(nodeId: number) {
   return http.post<ApiResponse<PathQuizRound>>(`/ai/path-plan/nodes/${nodeId}/questions`)
 }

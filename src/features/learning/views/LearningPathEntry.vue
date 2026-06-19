@@ -1,6 +1,5 @@
 <template>
   <main class="blueprint-canvas">
-
     <div class="top-nav">
       <div class="brand">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -14,7 +13,6 @@
 
     <div class="canvas-center">
       <div class="topology-wrapper">
-
         <svg class="topology-lines" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
           <defs>
             <linearGradient id="line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -45,63 +43,120 @@
 
         <div class="destination-node" :class="{ 'is-focused': isFocused, 'has-input': goal.trim().length > 0 }">
           <div class="node-label">
-            <span class="badge">学习目标</span>
-            <h3>先定义你想学成什么样</h3>
+            <span class="badge">终极目标</span>
+            <h3>你想达到什么高度？</h3>
           </div>
 
-          <textarea
-            v-model="goal"
-            class="destination-input"
-            placeholder="例如：系统掌握 FastAPI 高并发架构与部署"
-            @focus="isFocused = true"
-            @blur="isFocused = false"
-            rows="3"
-            @keydown.enter.prevent="handleSubmit"
-          />
+          <div class="input-wrapper">
+            <textarea
+              ref="textareaRef"
+              v-model="goal"
+              class="destination-input"
+              placeholder="例如：系统掌握 FastAPI 高并发架构与部署..."
+              :maxlength="maxLength"
+              @focus="isFocused = true"
+              @blur="isFocused = false"
+              @input="autoResize"
+              @keydown.enter.exact.prevent="handleSubmit"
+              rows="2"
+            />
+            <div class="input-footer" v-show="isFocused || goal.trim().length > 0">
+              <span class="hint-text">↵ 提交 / Shift + ↵ 换行</span>
+              <span class="char-count" :class="{ 'is-near-limit': goal.length > maxLength * 0.9 }">
+                {{ goal.length }} / {{ maxLength }}
+              </span>
+            </div>
+          </div>
+
+          <transition name="fade-slide">
+            <div class="suggestions" v-if="isFocused && goal.trim().length === 0">
+              <span class="suggestion-tag" @click.stop="applySuggestion('从零构建一个基于 Rust 的 WebAssembly 游戏引擎')">Rust + Wasm 引擎</span>
+              <span class="suggestion-tag" @click.stop="applySuggestion('掌握 Kubernetes 集群的自动化运维与监控')">K8s 自动化运维</span>
+              <span class="suggestion-tag" @click.stop="applySuggestion('深入理解 Vue3 响应式原理与编译器源码')">Vue3 源码解析</span>
+            </div>
+          </transition>
 
           <transition name="fade">
             <div class="node-footer" v-if="goal.trim().length > 0">
-              <button class="reverse-btn" @click="handleSubmit">
-                <span class="btn-text">生成学习路径</span>
+              <button 
+                class="reverse-btn" 
+                :class="{ 'is-loading': isSubmitting }"
+                :disabled="isSubmitting"
+                @click="handleSubmit"
+              >
+                <span class="btn-text" v-if="!isSubmitting">生成学习路径图谱</span>
+                <span class="btn-text" v-else>
+                  <svg class="spinner" viewBox="0 0 50 50"><circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle></svg>
+                  构建中...
+                </span>
               </button>
             </div>
           </transition>
         </div>
-
       </div>
     </div>
 
     <div class="canvas-hints" v-if="!isFocused && !goal">
-      <p>输入目标后，系统会先生成一条可执行的学习路径；进入节点后再按需生成教程、题目和辅助资源。</p>
+      <p>输入你的终极学习目标，AI 将反向逆推所需的知识节点，为你构建一条可执行的最优学习图谱。</p>
     </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const goal = ref('')
 const isFocused = ref(false)
+const isSubmitting = ref(false)
+const maxLength = 100 // 目标长度限制
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
 
-const handleSubmit = () => {
+// 文本框自动调整高度
+const autoResize = () => {
+  if (!textareaRef.value) return
+  textareaRef.value.style.height = 'auto'
+  // 设置最大高度限制，防止超出卡片
+  const scrollHeight = textareaRef.value.scrollHeight
+  textareaRef.value.style.height = `${Math.min(scrollHeight, 120)}px`
+}
+
+// 应用快捷建议
+const applySuggestion = (text: string) => {
+  goal.value = text
+  nextTick(() => {
+    textareaRef.value?.focus()
+    autoResize()
+  })
+}
+
+const handleSubmit = async () => {
   const value = goal.value.trim()
   if (!value) {
     ElMessage.warning('请先输入终极学习目标')
+    textareaRef.value?.focus()
     return
   }
 
-  // 核心优化：直接带参数无缝切换到 Overview 的生成态路由
+  isSubmitting.value = true
+
+  // 模拟极短的计算延迟，增强 AI "思考" 的仪式感
+  await new Promise(resolve => setTimeout(resolve, 600))
+
   router.push({
     path: `/path-planner/overview/new`,
     query: { goal: value }
   })
+  
+  // 如果需要保持本页状态，这里可以不置为 false；因为直接路由跳转了
+  // isSubmitting.value = false 
 }
 </script>
 
 <style scoped>
+/* 原有的全局和画布样式保持不变 */
 .blueprint-canvas {
   position: relative;
   min-height: calc(100vh - 64px);
@@ -186,12 +241,10 @@ const handleSubmit = () => {
   height: 600px;
 }
 
-.topology-lines {
+.topology-lines, .ghost-nodes {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   pointer-events: none;
 }
 
@@ -208,15 +261,6 @@ const handleSubmit = () => {
   to { stroke-dashoffset: -16; }
 }
 
-.ghost-nodes {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
 .ghost-node {
   position: absolute;
   display: flex;
@@ -227,8 +271,7 @@ const handleSubmit = () => {
 }
 
 .pulse-dot {
-  width: 12px;
-  height: 12px;
+  width: 12px; height: 12px;
   background: var(--color-surface);
   border: 2px solid #4f46e5;
   border-radius: 50%;
@@ -272,10 +315,9 @@ const handleSubmit = () => {
 
 .destination-node {
   position: absolute;
-  top: 50%;
-  left: 500px;
+  top: 50%; left: 500px;
   transform: translate(0, -50%);
-  width: 380px;
+  width: 420px; /* 稍微加宽一点适应更多内容 */
   background: var(--color-surface);
   border: 2px solid var(--color-border);
   border-radius: 20px;
@@ -288,11 +330,9 @@ const handleSubmit = () => {
 .destination-node::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: -6px;
+  top: 50%; left: -6px;
   transform: translateY(-50%);
-  width: 12px;
-  height: 12px;
+  width: 12px; height: 12px;
   background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%);
   border-radius: 50%;
   box-shadow: 0 0 10px rgba(79, 70, 229, 0.4);
@@ -304,9 +344,7 @@ const handleSubmit = () => {
   box-shadow: 0 15px 50px rgba(79, 70, 229, 0.15);
 }
 
-.node-label {
-  margin-bottom: 16px;
-}
+.node-label { margin-bottom: 16px; }
 
 .badge {
   display: inline-block;
@@ -328,12 +366,27 @@ const handleSubmit = () => {
   font-weight: 800;
 }
 
-.destination-input {
-  width: 100%;
-  box-sizing: border-box;
+/* === 新增/优化的输入框样式 === */
+.input-wrapper {
+  position: relative;
   background: var(--color-bg);
   border: 2px solid var(--color-border);
   border-radius: 12px;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.destination-node.is-focused .input-wrapper {
+  border-color: #4f46e5;
+  background: var(--color-surface);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+}
+
+.destination-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
   padding: 16px;
   resize: none;
   font-size: 1.05rem;
@@ -341,21 +394,55 @@ const handleSubmit = () => {
   line-height: 1.6;
   outline: none;
   font-family: var(--font-sans);
-  transition: all 0.3s ease;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-}
-
-.destination-input:focus {
-  border-color: #4f46e5;
-  background: var(--color-surface);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15), inset 0 2px 4px rgba(0,0,0,0.02);
+  min-height: 70px;
 }
 
 .destination-input::placeholder {
   color: var(--color-text-muted);
-  opacity: 0.8;
+  opacity: 0.6;
 }
 
+.input-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: rgba(0,0,0,0.02);
+  border-top: 1px solid var(--color-border);
+}
+
+.char-count.is-near-limit {
+  color: #ef4444;
+  font-weight: bold;
+}
+
+/* 快捷标签 */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.suggestion-tag {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.suggestion-tag:hover {
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-color: #a5b4fc;
+}
+
+/* 按钮样式优化 */
 .node-footer {
   margin-top: 20px;
   padding-top: 20px;
@@ -375,16 +462,47 @@ const handleSubmit = () => {
   cursor: pointer;
   overflow: hidden;
   transition: all 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.reverse-btn:hover {
+.reverse-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+}
+
+.reverse-btn:disabled {
+  opacity: 0.8;
+  cursor: not-allowed;
 }
 
 .btn-text {
   position: relative;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Loading 动画 */
+.spinner {
+  animation: rotate 2s linear infinite;
+  width: 18px;
+  height: 18px;
+}
+
+.spinner .path {
+  stroke: white;
+  stroke-linecap: round;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes rotate { 100% { transform: rotate(360deg); } }
+@keyframes dash {
+  0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
 }
 
 .canvas-hints {
@@ -399,15 +517,21 @@ const handleSubmit = () => {
   z-index: 1;
 }
 
-.fade-enter-active,
-.fade-leave-active {
+/* 动画效果 */
+.fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
-
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-from, .fade-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.fade-slide-enter-active, .fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-slide-enter-from, .fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
 }
 
 @media (max-width: 900px) {
@@ -415,8 +539,7 @@ const handleSubmit = () => {
 }
 @media (max-width: 600px) {
   .topology-wrapper { transform: scale(0.6); }
-  .ghost-nodes { display: none; }
-  .topology-lines { display: none; }
-  .destination-node { left: 50%; transform: translate(-50%, -50%); }
+  .ghost-nodes, .topology-lines { display: none; }
+  .destination-node { left: 50%; transform: translate(-50%, -50%); width: 90%; }
 }
 </style>
