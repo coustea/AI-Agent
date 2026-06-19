@@ -332,7 +332,7 @@ function renderInline(text: string) {
 }
 
 .section-label {
-  color: #4f46e5;
+  color: var(--cat-eval, #8b5cf6);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -414,7 +414,7 @@ function renderInline(text: string) {
 
 .tag.type {
   background: rgba(238, 242, 255, 0.92);
-  color: #4338ca;
+  color: #6d28d9;
 }
 
 .drill-content {
@@ -474,7 +474,7 @@ function renderInline(text: string) {
 
 .opt-key {
   min-width: 20px;
-  color: #4338ca;
+  color: #6d28d9;
   font-weight: 800;
 }
 
@@ -521,39 +521,15 @@ function renderInline(text: string) {
   box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
 }
 
-.btn-primary,
-.btn-secondary,
 .page-btn {
   padding: 0 18px;
   font-weight: 700;
 }
 
-.btn-primary {
-  border: 1px solid #4f46e5;
-  background: #4f46e5;
-  color: #fff;
-  cursor: pointer;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #4338ca;
-  border-color: #4338ca;
-}
-
-.btn-secondary {
-  border: 1px solid rgba(203, 213, 225, 0.96);
-  background: #fff;
-  color: #334155;
-  cursor: pointer;
-}
-
-.btn-secondary:hover:not(:disabled),
 .page-btn:hover:not(:disabled) {
   background: #f8fafc;
 }
 
-.btn-primary:disabled,
-.btn-secondary:disabled,
 .page-btn:disabled {
   opacity: 0.52;
   cursor: not-allowed;
@@ -573,7 +549,7 @@ function renderInline(text: string) {
 }
 
 .btn-icon:hover {
-  color: #4338ca;
+  color: #6d28d9;
   background: rgba(238, 242, 255, 0.88);
 }
 
@@ -687,7 +663,7 @@ function renderInline(text: string) {
 }
 
 .btn-link:hover {
-  color: #4338ca;
+  color: #6d28d9;
 }
 
 .danger-link:hover {

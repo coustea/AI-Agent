@@ -109,7 +109,7 @@ function renderInline(text: string) {
 
 .section-label,
 .eyebrow {
-  color: #4f46e5;
+  color: var(--cat-eval, #8b5cf6);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -154,7 +154,7 @@ function renderInline(text: string) {
   flex-direction: column;
   gap: 24px;
   padding: 30px;
-  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  background: linear-gradient(135deg, #ffffff 0%, var(--cat-eval-soft, #f5f3ff) 100%);
 }
 
 .card-copy {
@@ -190,7 +190,7 @@ function renderInline(text: string) {
   padding: 0 12px;
   border-radius: 999px;
   background: rgba(79, 70, 229, 0.1);
-  color: #4338ca;
+  color: #6d28d9;
   font-size: 12px;
   font-weight: 700;
 }
@@ -215,40 +215,6 @@ function renderInline(text: string) {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.btn-primary,
-.btn-secondary {
-  min-height: 46px;
-  padding: 0 20px;
-  border-radius: 14px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-
-.btn-primary {
-  border: 1px solid #4f46e5;
-  background: #4f46e5;
-  color: #fff;
-  box-shadow: 0 10px 18px rgba(79, 70, 229, 0.18);
-}
-
-.btn-primary:hover {
-  background: #4338ca;
-  border-color: #4338ca;
-}
-
-.btn-secondary {
-  border: 1px solid rgba(165, 180, 252, 0.38);
-  background: rgba(255, 255, 255, 0.94);
-  color: #3730a3;
-}
-
-.btn-secondary:hover {
-  background: #fff;
-  border-color: rgba(129, 140, 248, 0.5);
 }
 
 .empty-state {

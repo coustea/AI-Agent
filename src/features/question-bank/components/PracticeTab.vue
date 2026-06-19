@@ -186,7 +186,7 @@ function handleCustomStart() {
 }
 
 .section-label {
-  color: #4f46e5;
+  color: var(--cat-eval, #8b5cf6);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -264,7 +264,7 @@ function handleCustomStart() {
 }
 
 .section-card.emphasized {
-  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  background: linear-gradient(135deg, #ffffff 0%, var(--cat-eval-soft, #f5f3ff) 100%);
   border-color: rgba(99, 102, 241, 0.22);
 }
 
@@ -298,7 +298,7 @@ function handleCustomStart() {
   padding: 0 12px;
   border-radius: 999px;
   background: rgba(238, 242, 255, 0.92);
-  color: #4338ca;
+  color: #6d28d9;
   font-size: 12px;
   font-weight: 700;
 }
@@ -328,32 +328,6 @@ function handleCustomStart() {
 .btn-secondary,
 .btn-ghost {
   min-width: 132px;
-  padding: 0 18px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
-}
-
-.btn-primary {
-  border: 1px solid #4f46e5;
-  background: #4f46e5;
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #4338ca;
-  border-color: #4338ca;
-}
-
-.btn-secondary {
-  border: 1px solid rgba(165, 180, 252, 0.4);
-  background: rgba(255, 255, 255, 0.9);
-  color: #3730a3;
-}
-
-.btn-secondary:hover:not(:disabled),
-.btn-ghost:hover:not(:disabled) {
-  background: #fff;
 }
 
 .btn-ghost {
@@ -362,15 +336,12 @@ function handleCustomStart() {
   color: #dc2626;
 }
 
-.btn-ghost.danger:hover:not(:disabled) {
-  background: rgba(254, 226, 226, 0.92);
+.btn-ghost:hover:not(:disabled) {
+  background: #fff;
 }
 
-.btn-primary:disabled,
-.btn-secondary:disabled,
-.btn-ghost:disabled {
-  opacity: 0.52;
-  cursor: not-allowed;
+.btn-ghost.danger:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.92);
 }
 
 .custom-card .btn-primary {
