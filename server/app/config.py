@@ -119,6 +119,27 @@ KB_TOP_K = get("knowledge.top_k", 4)
 # Ollama 本地模型服务地址
 KB_OLLAMA_BASE_URL = get("knowledge.ollama_base_url", "http://127.0.0.1:11434")
 
+# ============ 知识库路由配置 ============
+KB_COURSE_ROUTING: dict = get("knowledge.course_routing", {})
+KB_COURSE_LINKAGE: dict = get("knowledge.course_linkage", {})
+KB_ROUTING_LLM_MODEL: str = get("knowledge.routing.llm_model", "qwen2.5:1.5b")
+KB_ROUTING_LLM_CONFIDENCE: float = get("knowledge.routing.llm_confidence_threshold", 0.6)
+KB_ROUTING_KEYWORD_THRESHOLD: float = get("knowledge.routing.keyword_score_threshold", 3.0)
+
+# ============ 知识库查询改写配置 ============
+KB_REWRITE_ENABLED: bool = get("knowledge.rewrite.enabled", True)
+KB_REWRITE_LLM_MODEL: str = get("knowledge.rewrite.llm_model", "qwen2.5:1.5b")
+KB_REWRITE_MAX_VARIANTS: int = get("knowledge.rewrite.max_variants", 3)
+KB_REWRITE_SIMILARITY_THRESHOLD: float = get("knowledge.rewrite.similarity_threshold", 0.6)
+KB_REWRITE_CONFIDENCE_THRESHOLD: float = get("knowledge.rewrite.confidence_threshold", 1.4)
+KB_REWRITE_BUDGET_MS: int = get("knowledge.rewrite.budget_ms", 800)
+KB_REWRITE_EFFECTIVENESS_CACHE_SIZE: int = get("knowledge.rewrite.effectiveness_cache_size", 200)
+
+# ============ 知识库检索配置 ============
+KB_RRF_K: int = get("knowledge.retrieval.rrf_k", 60)
+KB_SNIPPET_MIN: int = get("knowledge.retrieval.snippet_min", 500)
+KB_SNIPPET_MAX: int = get("knowledge.retrieval.snippet_max", 900)
+
 # ============ 日志配置 ============
 # 日志级别（DEBUG / INFO / WARNING / ERROR）
 LOG_LEVEL = get("logging.level", "INFO")

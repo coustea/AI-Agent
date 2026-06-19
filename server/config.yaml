@@ -77,14 +77,179 @@ search:
 paths:
   workplace: "workplace"
   logs: "logs"
-  knowledge: "data/chroma_md_db"
+  knowledge: "data/book/my_chroma_db"
 
 knowledge:
   enabled: true
-  collection: "md_books"
+  collection: "langchain"
   embed_model: "bge-m3:latest"
   top_k: 4
   ollama_base_url: "http://127.0.0.1:11434"
+  course_routing:
+    Java:
+      Java: 2.0
+      JVM: 2.0
+      JDK: 2.0
+      JRE: 1.5
+      Spring: 2.0
+      MyBatis: 2.0
+      JDBC: 2.0
+      Servlet: 2.0
+      面向对象: 1.0
+      多线程: 1.0
+      集合框架: 1.0
+      异常处理: 0.5
+      泛型: 1.0
+      反射: 1.0
+      注解: 1.0
+      进程: 0.5
+      线程: 0.5
+      内存: 0.5
+    计算机网络:
+      TCP: 2.0
+      UDP: 2.0
+      HTTP: 2.0
+      DNS: 2.0
+      OSI: 2.0
+      IP: 1.5
+      子网掩码: 1.5
+      路由协议: 1.5
+      三次握手: 1.5
+      四次挥手: 1.5
+      网络层: 1.0
+      传输层: 1.0
+      应用层: 1.0
+      进程: 0.5
+    操作系统:
+      操作系统: 2.0
+      进程调度: 2.0
+      死锁: 2.0
+      内存管理: 2.0
+      虚拟内存: 2.0
+      页面置换: 2.0
+      进程: 1.0
+      线程: 1.0
+      调度算法: 1.5
+      信号量: 1.5
+      管道: 1.0
+      内存: 0.5
+    数据结构:
+      数据结构: 2.0
+      链表: 2.0
+      栈: 1.5
+      队列: 1.5
+      二叉树: 2.0
+      红黑树: 2.0
+      AVL: 2.0
+      哈希表: 1.5
+      图: 1.0
+      排序算法: 1.0
+      B+树: 1.5
+      进程: 0.5
+    数据库:
+      数据库: 2.0
+      SQL: 2.0
+      MySQL: 2.0
+      索引: 1.5
+      事务: 1.5
+      范式: 1.5
+      ER图: 1.5
+      触发器: 1.5
+      存储过程: 1.5
+      B+树: 1.0
+      进程: 0.5
+    Python:
+      Python: 2.0
+      pip: 2.0
+      Django: 2.0
+      Flask: 2.0
+      列表推导: 2.0
+      装饰器: 2.0
+      生成器: 1.5
+      迭代器: 1.0
+      面向对象: 0.5
+    Redis:
+      Redis: 2.0
+      缓存: 1.5
+      键值: 1.5
+      持久化: 1.5
+      哨兵: 2.0
+      集群: 1.0
+      线程: 0.5
+    Vue:
+      Vue: 2.0
+      组件: 1.0
+      路由: 1.0
+      Vuex: 2.0
+      Pinia: 2.0
+      生命周期: 1.0
+      虚拟DOM: 1.5
+    算法:
+      算法: 2.0
+      动态规划: 2.0
+      贪心: 1.5
+      分治: 1.5
+      回溯: 1.5
+      时间复杂度: 1.0
+      空间复杂度: 1.0
+    计算机组成原理:
+      计算机组成: 2.0
+      CPU: 2.0
+      指令集: 2.0
+      流水线: 2.0
+      Cache: 2.0
+      总线: 1.5
+      寻址: 1.5
+      内存: 0.5
+    软件工程:
+      软件工程: 2.0
+      需求分析: 1.5
+      UML: 2.0
+      敏捷: 1.5
+      设计模式: 1.0
+      测试: 0.5
+    高等数学:
+      微积分: 2.0
+      导数: 2.0
+      积分: 2.0
+      极限: 2.0
+      矩阵: 1.0
+    线性代数:
+      矩阵: 2.0
+      行列式: 2.0
+      线性方程组: 2.0
+      特征值: 2.0
+      向量空间: 2.0
+    概率论:
+      概率: 2.0
+      期望: 2.0
+      方差: 2.0
+      分布: 1.5
+      贝叶斯: 2.0
+  course_linkage:
+    算法: [数据结构]
+    数据结构: [算法]
+    Java: [数据结构]
+    数据库: [数据结构, 操作系统]
+    计算机组成原理: [操作系统]
+    高等数学: [线性代数, 概率论]
+  routing:
+    llm_model: "qwen2.5:1.5b"
+    llm_confidence_threshold: 0.6
+    keyword_score_threshold: 3.0
+  rewrite:
+    enabled: true
+    llm_model: "qwen2.5:1.5b"
+    max_variants: 3
+    similarity_threshold: 0.6
+    confidence_threshold: 1.4
+    budget_ms: 800
+    effectiveness_cache_size: 200
+  retrieval:
+    rrf_k: 60
+    default_top_k: 4
+    snippet_min: 500
+    snippet_max: 900
 # 自己本地ollama的bge-m3模型
 # 日志配置
 logging:

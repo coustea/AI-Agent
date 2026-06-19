@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import math
 import re
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -28,16 +27,28 @@ try:
 except ImportError:
     from langchain_community.vectorstores import Chroma
 
+from app.chat.tools.knowledge_rewrite import (
+    compute_retrieval_confidence,
+    filter_rewrite_variants,
+    get_effectiveness_cache,
+    rewrite_query_with_llm,
+    should_trigger_rewrite,
+)
 from app.config import (
     KB_COLLECTION,
     KB_DIR,
     KB_EMBED_MODEL,
     KB_ENABLED,
     KB_OLLAMA_BASE_URL,
+    KB_REWRITE_CONFIDENCE_THRESHOLD,
+    KB_RRF_K,
+    KB_SNIPPET_MAX,
+    KB_SNIPPET_MIN,
     KB_TOP_K,
     KB_QUERY_EMBEDDING_CACHE_SIZE,
     KB_SPARSE_CORPUS_LIMIT,
 )
+from app.chat.tools.knowledge_router import route_query_sources as _hybrid_route, QueryRouteResult as _RouterQueryRouteResult
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -56,24 +67,12 @@ _QUERY_REWRITE_RULES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"指针"), ("指针", "C语言", "变量", "地址")),
 )
 
-_JAVA_QUERY_RE = re.compile(r"\bjava\b|jvm|jdk|jre|spring|mybatis|jdbc|servlet", re.IGNORECASE)
-_JAVA_SOURCE_FILTER: tuple[str, ...] = ("Java从入门到精通",)
-
 _NOISE_TERMS: tuple[str, ...] = ("z-library.sk", "1lib.sk", "z-lib.sk")
 
 
-@dataclass(frozen=True)
-class QueryRouteResult:
-    query: str
-    source_filter: tuple[str, ...] | None = None
-
-
-def route_query_sources(query: str, course_name: str | None = None) -> QueryRouteResult:
-    normalized_query = (query or "").strip()
-    normalized_course_name = (course_name or "").strip()
-    routing_text = " ".join(part for part in (normalized_course_name, normalized_query) if part)
-    source_filter = ("Java从入门到精通",) if _JAVA_QUERY_RE.search(routing_text) else None
-    return QueryRouteResult(query=normalized_query, source_filter=source_filter)
+def route_query_sources(query: str, course_name: str | None = None) -> _RouterQueryRouteResult:
+    """Route query to relevant source textbooks using hybrid routing."""
+    return _hybrid_route(query, course_name=course_name)
 
 
 def _normalize_source_text(value: Any) -> str:
@@ -557,13 +556,13 @@ def retrieve_sparse_knowledge(
     )
 
 
-def _rrf_score(rank: int, constant: int = 60) -> float:
+def _rrf_score(rank: int, constant: int | None = None) -> float:
     """计算 Reciprocal Rank Fusion 分数。
 
     RRF 分数 = 1 / (constant + rank)
-    constant 默认为 60，与业界常见设置一致。
+    constant 默认从配置加载，与业界常见设置一致。
     """
-    return 1.0 / (constant + rank)
+    return 1.0 / ((constant or KB_RRF_K) + rank)
 
 
 def merge_ranked_results(
@@ -572,6 +571,8 @@ def merge_ranked_results(
     dense_rows: list[dict[str, Any]],
     sparse_rows: list[dict[str, Any]],
     top_k: int | None = None,
+    source_filter: tuple[str, ...] | None = None,
+    original_boost: float = 1.0,
 ) -> list[dict[str, Any]]:
     """合并 dense 和 sparse 两路检索结果，使用 Reciprocal Rank Fusion (RRF) 算法。
 
@@ -579,6 +580,7 @@ def merge_ranked_results(
     - 对每个列表中的每个结果，计算 RRF 分数 = 1/(60 + rank)
     - 同一文档在多个列表中出现时，分数相加
     - 按合并分数降序排列，相同分数时按原始 rank 排序
+    - 如果提供了 source_filter，匹配源的文档会优先排序
 
     该方法不需要调参，对排序融合有良好效果。
     """
@@ -590,6 +592,8 @@ def merge_ranked_results(
             metadata = dict(item.get("metadata") or {})
             key = _metadata_key(metadata)
             score = _rrf_score(int(item.get("rank") or 0))
+            if item.get("_is_original"):
+                score *= original_boost
             existing = merged_scores.get(key)
             if existing is None:
                 # 首次出现，直接插入
@@ -601,10 +605,14 @@ def merge_ranked_results(
                 if item.get("rank", 9999) < existing["item"].get("rank", 9999):
                     existing["item"] = {**item, "metadata": metadata}
 
-    # 按分数降序排列，相同分数时按 rank 升序排列（保序）
+    # 按分数降序排列，优先匹配源文档，相同分数时按 rank 升序排列（保序）
     ordered = sorted(
         merged_scores.values(),
-        key=lambda x: (-x["score"], x["item"].get("rank", 9999)),
+        key=lambda x: (
+            0 if _matches_source_filter(x["item"].get("metadata") or {}, source_filter) else 1,
+            -x["score"],
+            x["item"].get("rank", 9999),
+        ),
     )
     result: list[dict[str, Any]] = []
     for idx, candidate in enumerate(ordered[: (top_k or KB_TOP_K)], 1):
@@ -620,35 +628,130 @@ def retrieve_knowledge(
     course_name: str | None = None,
     top_k: int | None = None,
 ) -> list[dict[str, Any]]:
-    """混合检索入口：同时执行 dense 和 sparse 两路检索，合并排名。
-
-    每路检索取 2*top_k 个候选，合并后取最终 top_k，确保有足够的去重余量。
-    """
+    """Hybrid retrieval with retrieval-aware query rewrite."""
     normalized_query = (query or "").strip()
     if not normalized_query:
         return []
 
+    effective_top_k = top_k or KB_TOP_K
     route = route_query_sources(normalized_query, course_name=course_name)
 
-    # 两路检索各取 2 倍候选量，为合并去重留出余量
+    # Initial retrieval with original query
+    candidate_k = max(effective_top_k * 2, KB_TOP_K)
     dense_rows = retrieve_dense_knowledge(
         route.query,
-        top_k=max((top_k or KB_TOP_K) * 2, KB_TOP_K),
+        top_k=candidate_k,
         source_filter=route.source_filter,
     )
     sparse_rows = retrieve_sparse_knowledge(
         route.query,
-        top_k=max((top_k or KB_TOP_K) * 2, KB_TOP_K),
+        top_k=candidate_k,
         source_filter=route.source_filter,
     )
-    if not dense_rows and not sparse_rows:
+
+    # Check retrieval confidence
+    all_initial = dense_rows + sparse_rows
+    confidence = compute_retrieval_confidence(all_initial)
+
+    if confidence >= KB_REWRITE_CONFIDENCE_THRESHOLD or not should_trigger_rewrite(normalized_query):
+        if not dense_rows and not sparse_rows:
+            return []
+        return merge_ranked_results(
+            route.query,
+            dense_rows=dense_rows,
+            sparse_rows=sparse_rows,
+            top_k=effective_top_k,
+            source_filter=route.source_filter,
+        )
+
+    # Low confidence — check effectiveness cache
+    eff_cache = get_effectiveness_cache()
+    if not eff_cache.is_effective(normalized_query):
+        if not dense_rows and not sparse_rows:
+            return []
+        return merge_ranked_results(
+            route.query,
+            dense_rows=dense_rows,
+            sparse_rows=sparse_rows,
+            top_k=effective_top_k,
+            source_filter=route.source_filter,
+        )
+
+    # LLM rewrite
+    variants = rewrite_query_with_llm(normalized_query)
+    filtered_variants = filter_rewrite_variants(normalized_query, variants)
+
+    if not filtered_variants:
+        if not dense_rows and not sparse_rows:
+            return []
+        return merge_ranked_results(
+            route.query,
+            dense_rows=dense_rows,
+            sparse_rows=sparse_rows,
+            top_k=effective_top_k,
+            source_filter=route.source_filter,
+        )
+
+    # Parallel retrieval for rewrite variants
+    rewrite_dense: list[dict[str, Any]] = []
+    rewrite_sparse: list[dict[str, Any]] = []
+    for variant in filtered_variants:
+        v_dense = retrieve_dense_knowledge(variant, top_k=effective_top_k, source_filter=route.source_filter)
+        v_sparse = retrieve_sparse_knowledge(variant, top_k=effective_top_k, source_filter=route.source_filter)
+        rewrite_dense.extend(v_dense)
+        rewrite_sparse.extend(v_sparse)
+
+    all_dense = dense_rows + rewrite_dense
+    all_sparse = sparse_rows + rewrite_sparse
+
+    if not all_dense and not all_sparse:
         return []
-    return merge_ranked_results(
+
+    # Mark original query results for boost
+    for row in dense_rows:
+        row["_is_original"] = True
+    for row in sparse_rows:
+        row["_is_original"] = True
+
+    result = merge_ranked_results(
+        route.query,
+        dense_rows=all_dense,
+        sparse_rows=all_sparse,
+        top_k=effective_top_k,
+        source_filter=route.source_filter,
+        original_boost=1.5,
+    )
+
+    # Record effectiveness
+    initial_result = merge_ranked_results(
         route.query,
         dense_rows=dense_rows,
         sparse_rows=sparse_rows,
-        top_k=top_k or KB_TOP_K,
+        top_k=effective_top_k,
+        source_filter=route.source_filter,
     )
+    if initial_result and result:
+        initial_best = abs(initial_result[0].get("distance", 0))
+        rewritten_best = abs(result[0].get("distance", 0))
+        if initial_best > 0:
+            gain = (rewritten_best - initial_best) / initial_best
+            eff_cache.record(normalized_query, gain=gain)
+
+    return result
+
+
+def _semantic_truncate(text: str, *, min_len: int = 500, max_len: int = 900) -> str:
+    """Truncate text at semantic boundaries (sentence endings)."""
+    if len(text) <= min_len:
+        return text
+    search_start = min_len
+    search_end = min(max_len, len(text))
+    for i in range(search_start, search_end):
+        if text[i] in "。！？\n":
+            return text[:i + 1].rstrip()
+    if len(text) > max_len:
+        return text[:max_len].rstrip() + "..."
+    return text
 
 
 def format_knowledge_context(
@@ -679,9 +782,11 @@ def format_knowledge_context(
         distance = item.get("distance")
         score_text = f"{distance:.4f}" if isinstance(distance, (int, float)) else "NA"
         # 清理文本中的换行符，截断过长内容
-        snippet = str(item.get("text") or "").replace("\r", " ").replace("\n", " ").strip()
-        if len(snippet) > 700:
-            snippet = snippet[:700].rstrip() + "..."
+        snippet = _semantic_truncate(
+            str(item.get("text") or "").replace("\r", " ").replace("\n", " ").strip(),
+            min_len=KB_SNIPPET_MIN,
+            max_len=KB_SNIPPET_MAX,
+        )
         # 拼接头部信息：排名、来源、位置、距离分数
         header = f"[{item.get('rank', '?')}] 来源: {title}"
         if heading:

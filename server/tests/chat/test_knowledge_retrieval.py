@@ -13,8 +13,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 JAVA_SOURCE = "Java从入门到精通"
 
 
-def test_route_query_sources_routes_java_queries_to_exact_java_book_source() -> None:
+def test_route_query_sources_routes_java_queries_to_exact_java_book_source(monkeypatch) -> None:
     from app.chat.tools import knowledge
+
+    # Mock the hybrid router to return a deterministic Java-only result
+    monkeypatch.setattr(
+        knowledge,
+        "_hybrid_route",
+        lambda query, course_name=None: knowledge._RouterQueryRouteResult(
+            query=query, source_filter=(JAVA_SOURCE,)
+        ),
+    )
 
     route = knowledge.route_query_sources("Java 多态 和 继承")
 
@@ -255,7 +264,7 @@ def test_retrieve_knowledge_forwards_course_name_and_routed_source_filter(monkey
 
     def fake_route(query: str, course_name: str | None = None):
         route_calls.append({"query": query, "course_name": course_name})
-        return knowledge.QueryRouteResult(query=query, source_filter=(JAVA_SOURCE,))
+        return knowledge._RouterQueryRouteResult(query=query, source_filter=(JAVA_SOURCE,))
 
     def fake_dense(query: str, *, top_k: int | None = None, source_filter=None):
         dense_calls.append({"query": query, "top_k": top_k, "source_filter": source_filter})
@@ -567,3 +576,35 @@ def test_rank_with_bm25_uses_canonical_source_identity_for_filtering() -> None:
 
     assert len(rows) == 1
     assert rows[0]["metadata"]["book_title"] == "《Java从入门到精通》"
+
+
+def test_merge_ranked_results_prefers_rows_matching_routed_source() -> None:
+    from app.chat.tools.knowledge import merge_ranked_results
+
+    dense_rows = [
+        {
+            "rank": 1,
+            "distance": 0.2,
+            "metadata": {"source": "Redis设计与实现.md", "chunk_index": 1},
+            "text": "redis-hit",
+            "retrieval_mode": "dense",
+        },
+        {
+            "rank": 2,
+            "distance": 0.3,
+            "metadata": {"file_name": "Java从入门到精通-第06章.md", "chunk_index": 2},
+            "text": "java-hit",
+            "retrieval_mode": "dense",
+        },
+    ]
+    sparse_rows = []
+
+    merged = merge_ranked_results(
+        "Java 集合",
+        dense_rows=dense_rows,
+        sparse_rows=sparse_rows,
+        top_k=2,
+        source_filter=("《Java从入门到精通》",),
+    )
+
+    assert [item["text"] for item in merged] == ["java-hit", "redis-hit"]
