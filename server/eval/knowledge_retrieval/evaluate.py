@@ -60,9 +60,10 @@ def evaluate_single_query(
     """评估单个查询的检索质量。"""
     query = test_case["query"]
     expected_keywords = test_case["expected_keywords"]
+    course_name = test_case.get("ground_truth_source")  # Use course name for routing
 
-    # 执行检索
-    results = retrieve_knowledge(query, top_k=top_k)
+    # 执行检索（启用路由）
+    results = retrieve_knowledge(query, top_k=top_k, course_name=course_name)
 
     # 计算指标
     total_keyword_hits = 0
@@ -88,6 +89,14 @@ def evaluate_single_query(
     distances = [r.get("distance", 999) for r in results]
     avg_distance = sum(distances) / len(distances) if distances else 999
 
+    # Compute retrieval confidence
+    confidence = 0.0
+    if len(results) >= 2:
+        scores = [abs(r.get("distance", 0.0)) for r in results[:5]]
+        top1 = scores[0]
+        avg_rest = sum(scores[1:]) / len(scores[1:]) if len(scores) > 1 else top1
+        confidence = top1 / avg_rest if avg_rest > 0 else 0.0
+
     return {
         "id": test_case["id"],
         "query": query,
@@ -101,6 +110,7 @@ def evaluate_single_query(
         "avg_distance": avg_distance,
         "total_keyword_hits": total_keyword_hits,
         "expected_keyword_count": len(expected_keywords),
+        "retrieval_confidence": confidence,
         "retrieval_modes": [r.get("retrieval_mode") for r in results],
         "top_result_snippet": (results[0].get("text") or "")[:200] if results else "",
         "result_sources": [r.get("metadata", {}).get("source", "") for r in results],
@@ -159,12 +169,19 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
             by_category[cat]["hit"] += 1
         by_category[cat]["mrr"] += r["mrr"]
 
+    # Retrieval confidence aggregate
+    confidences = [r.get("retrieval_confidence", 0.0) for r in results if r.get("retrieval_confidence")]
+    mean_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+    low_confidence_rate = sum(1 for c in confidences if c < 1.4) / len(confidences) if confidences else 0.0
+
     return {
         "total_queries": n,
         "hit_at_k_rate": hit_at_k_count / n,
         "mean_mrr": total_mrr / n,
         "mean_keyword_coverage": total_keyword_coverage / n,
         "mean_avg_distance": total_avg_distance / n,
+        "mean_confidence": mean_confidence,
+        "low_confidence_rate": low_confidence_rate,
         "by_difficulty": {
             k: {
                 "hit_rate": v["hit"] / v["count"],

@@ -62,12 +62,31 @@ _ASCII_TERM_RE = re.compile(r"[A-Za-z0-9+#.-]{2,}")
 # 查询改写规则：对特定领域术语进行同义词扩展，提升召回率
 # 格式：(匹配模式, 扩展词列表)
 _QUERY_REWRITE_RULES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    # 网络相关
     (re.compile(r"tcp\s*三次握手", re.IGNORECASE), ("TCP", "三次握手", "连接建立", "传输控制协议")),
+    (re.compile(r"udp", re.IGNORECASE), ("UDP", "用户数据报协议", "无连接", "传输层")),
+    # Java面向对象核心概念
+    (re.compile(r"封装"), ("封装", "private", "getter", "setter", "访问权限", "隐藏")),
+    (re.compile(r"继承"), ("继承", "extends", "子类", "父类", "super", "重写")),
+    (re.compile(r"多态"), ("多态", "重写", "override", "接口", "抽象方法")),
+    (re.compile(r"抽象类"), ("抽象类", "abstract", "接口", "不能实例化")),
+    (re.compile(r"接口"), ("接口", "interface", "implements", "抽象方法", "多态")),
+    # Java多线程
+    (re.compile(r"多线程"), ("多线程", "Thread", "Runnable", "并发", "同步", "synchronized")),
+    (re.compile(r"synchronized", re.IGNORECASE), ("synchronized", "同步", "锁", "线程安全")),
+    # Java集合
+    (re.compile(r"HashMap", re.IGNORECASE), ("HashMap", "哈希表", "put", "get", "Entry", "键值对")),
+    (re.compile(r"ArrayList", re.IGNORECASE), ("ArrayList", "动态数组", "List", "增删")),
+    # 其他
     (re.compile(r"逻辑回归"), ("逻辑回归", "机器学习", "分类", "logistic regression")),
     (re.compile(r"指针"), ("指针", "C语言", "变量", "地址")),
+    # Redis
+    (re.compile(r"缓存穿透"), ("缓存穿透", "Redis", "空值", "布隆过滤器")),
+    (re.compile(r"缓存雪崩"), ("缓存雪崩", "Redis", "失效", "过期时间")),
 )
 
 _NOISE_TERMS: tuple[str, ...] = ("z-library.sk", "1lib.sk", "z-lib.sk")
+_LOW_VALUE_TEXT_MARKERS: tuple[str, ...] = ("前言", "目录", "致谢", "未知")
 
 
 def route_query_sources(query: str, course_name: str | None = None) -> _RouterQueryRouteResult:
@@ -328,6 +347,8 @@ def _get_sparse_corpus() -> list[dict[str, Any]]:
         if not text:
             continue
         meta = dict(metadata or {})
+        if _is_low_value_sparse_chunk(meta, text):
+            continue
         # 拼接全文搜索字段：正文 + 来源 + 文件名 + 章节标题，全部小写化
         corpus.append(
             {
@@ -565,6 +586,53 @@ def _rrf_score(rank: int, constant: int | None = None) -> float:
     return 1.0 / ((constant or KB_RRF_K) + rank)
 
 
+def _low_value_chunk_penalty(metadata: dict[str, Any], text: str) -> float:
+    """Return an additive penalty for cover/preface-like chunks."""
+    normalized_text = str(text or "").strip()
+    if not normalized_text:
+        return 0.0
+
+    heading = str(metadata.get("heading_path") or "").strip()
+    preview = normalized_text[:200]
+    penalty = 0.0
+
+    if not heading:
+        penalty += 0.02
+
+    if any(marker in preview for marker in _LOW_VALUE_TEXT_MARKERS):
+        penalty += 0.02
+
+    lines = [line.strip() for line in normalized_text.splitlines() if line.strip()]
+    if lines:
+        first_line = lines[0]
+        if len(lines) <= 3 and len(first_line) >= 6 and first_line in normalized_text[1:160]:
+            penalty += 0.02
+
+    return penalty
+
+
+def _is_low_value_sparse_chunk(metadata: dict[str, Any], text: str) -> bool:
+    """Return True when a chunk should be excluded from sparse indexing only."""
+    normalized_text = str(text or "").strip()
+    if not normalized_text:
+        return True
+
+    heading = str(metadata.get("heading_path") or "").strip()
+    preview = normalized_text[:200]
+
+    if heading:
+        return False
+
+    if any(marker in preview for marker in _LOW_VALUE_TEXT_MARKERS):
+        return True
+
+    lines = [line.strip() for line in normalized_text.splitlines() if line.strip()]
+    if len(lines) <= 3 and lines and len(lines[0]) >= 6:
+        return True
+
+    return False
+
+
 def merge_ranked_results(
     query: str,
     *,
@@ -594,6 +662,7 @@ def merge_ranked_results(
             score = _rrf_score(int(item.get("rank") or 0))
             if item.get("_is_original"):
                 score *= original_boost
+            score -= _low_value_chunk_penalty(metadata, str(item.get("text") or ""))
             existing = merged_scores.get(key)
             if existing is None:
                 # 首次出现，直接插入

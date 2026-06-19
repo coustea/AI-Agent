@@ -149,20 +149,18 @@ def _split_by_headings(
     ``heading_path`` and propagated to children.
     """
     result: list[_Segment] = []
-    # Inherit heading_path from the first segment so that a second pass
-    # (e.g. splitting on ### after ##) does not reset it to empty.
-    current_heading = segments[0].heading_path if segments else ""
+
+    def compose_heading_path(base_heading: str, title: str) -> str:
+        base = base_heading.strip()
+        clean_title = title.strip()
+        if not base:
+            return clean_title
+        return f"{base} > {clean_title}"
 
     for seg in segments:
+        current_heading = seg.heading_path
         if seg.type != "text":
-            # Code / table segments: keep existing heading_path if set,
-            # otherwise inherit current_heading.
-            if not seg.heading_path:
-                seg.heading_path = current_heading
             result.append(seg)
-            # Update current_heading so subsequent segments inherit it.
-            if seg.heading_path:
-                current_heading = seg.heading_path
             continue
 
         lines = seg.text.split("\n")
@@ -183,11 +181,7 @@ def _split_by_headings(
             title = _split_heading_line(line.strip(), heading_prefix)
             if title is not None:
                 flush()
-                # Build hierarchical heading path.
-                if current_heading:
-                    current_heading = f"{current_heading} > {title}"
-                else:
-                    current_heading = title
+                current_heading = compose_heading_path(seg.heading_path, title)
                 # Include the heading line itself in the new chunk.
                 buf.append(line)
             else:
@@ -205,8 +199,7 @@ def _split_by_headings(
 def _merge_orphans(segments: list[_Segment], min_size: int, max_size: int) -> list[_Segment]:
     """Backward-merge short segments into the previous one.
 
-    If the merged result would exceed *max_size*, we still merge but
-    do **not** re-split — this is the hard-termination rule.
+    If the merged result exceeds *max_size*, split at sentence boundaries.
     """
     if not segments:
         return []
@@ -215,11 +208,15 @@ def _merge_orphans(segments: list[_Segment], min_size: int, max_size: int) -> li
 
     for seg in segments[1:]:
         prev = merged[-1]
+        # Only merge short segments into text segments
         if len(seg.text.strip()) < min_size and prev.type == "text":
-            # Merge into previous.
+            # Merge into previous
             combined = prev.text.rstrip("\n") + "\n\n" + seg.text.strip()
-            prev.text = combined
-            # If the orphan had a different heading, keep the parent's path.
+            # If result exceeds max_size, keep them separate instead of merging
+            if len(combined) > max_size * 1.5:  # Allow 50% overflow before splitting
+                merged.append(seg)
+            else:
+                prev.text = combined
         else:
             merged.append(seg)
 
@@ -342,7 +339,7 @@ class MarkdownSplitter:
         return chunks
 
     def _split_oversized_text(self, text: str, heading_path: str) -> list[tuple[str, str]]:
-        """Split an oversized text segment at paragraph boundaries."""
+        """Split an oversized text segment at paragraph, then sentence boundaries."""
         if len(text) <= self.max_size:
             return [(text, heading_path)]
 
@@ -352,14 +349,62 @@ class MarkdownSplitter:
 
         for para in paragraphs:
             candidate = (buf + "\n\n" + para).strip() if buf else para.strip()
-            if len(candidate) > self.max_size and buf:
+
+            # If single paragraph exceeds max_size, split at sentence level
+            if len(para) > self.max_size:
+                # First flush existing buffer
+                if buf:
+                    parts.append((buf.strip(), heading_path))
+                    buf = ""
+                # Split the large paragraph at sentence boundaries
+                sentence_parts = self._split_at_sentences(para, heading_path)
+                parts.extend(sentence_parts)
+            elif len(candidate) > self.max_size and buf:
                 parts.append((buf.strip(), heading_path))
                 buf = para
             else:
                 buf = candidate
 
         if buf.strip():
-            parts.append((buf.strip(), heading_path))
+            # Final check: if still too large, split at sentences
+            if len(buf) > self.max_size:
+                parts.extend(self._split_at_sentences(buf, heading_path))
+            else:
+                parts.append((buf.strip(), heading_path))
+
+        return parts
+
+    def _split_at_sentences(self, text: str, heading_path: str) -> list[tuple[str, str]]:
+        """Split text at sentence boundaries when paragraph-level split fails."""
+        if len(text) <= self.max_size:
+            return [(text, heading_path)]
+
+        parts: list[tuple[str, str]] = []
+        # Split at Chinese/English sentence endings
+        sentences = re.split(r'([。！？\n\.!?]+)', text)
+
+        buf = ""
+        for i in range(0, len(sentences) - 1, 2):
+            sentence = sentences[i] + (sentences[i + 1] if i + 1 < len(sentences) else "")
+            candidate = (buf + sentence).strip()
+
+            if len(candidate) > self.max_size and buf:
+                parts.append((buf.strip(), heading_path))
+                buf = sentence
+            else:
+                buf = candidate
+
+        # Handle any remaining (odd-indexed) content
+        if len(sentences) % 2 == 1 and sentences[-1]:
+            buf = (buf + sentences[-1]).strip()
+
+        if buf.strip():
+            if len(buf) > self.max_size:
+                # Last resort: hard split
+                for i in range(0, len(buf), self.max_size):
+                    parts.append((buf[i:i+self.max_size], heading_path))
+            else:
+                parts.append((buf.strip(), heading_path))
 
         return parts
 

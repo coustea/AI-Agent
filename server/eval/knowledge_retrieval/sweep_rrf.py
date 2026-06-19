@@ -58,8 +58,11 @@ def sweep():
             sparse = retrieve_sparse_knowledge(route.query, top_k=8, source_filter=route.source_filter)
 
             results = _rrf_merge(dense, sparse, k, top_k=4, source_filter=route.source_filter)
-            result_text = " ".join(r["item"].get("text", "") for r in results)
-            kw_hits = check_keyword_hits(result_text, case.get("expected_keywords", []))
+            # check_keyword_hits expects a dict with "text" key, so pass each result properly
+            kw_hits = 0
+            for r in results:
+                item = r.get("item", {})
+                kw_hits += check_keyword_hits(item, case.get("expected_keywords", []))
             if kw_hits > 0:
                 hits += 1
             matched_keywords += kw_hits
