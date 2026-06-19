@@ -23,7 +23,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, func, text
+from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, CheckConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
 from sqlmodel import SQLModel, Field
 
@@ -538,7 +538,6 @@ class GeneratedResource(SQLModel, table=True):
 
     # 配置信息
     teaching_plan: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    review_result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     failed_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     workflow_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     selected_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
@@ -548,6 +547,14 @@ class GeneratedResource(SQLModel, table=True):
     # 状态
     status: str = Field(default="pending", max_length=50)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
+
+    # 运行快照字段 — 用于持久化和恢复
+    run_id: str | None = Field(default=None, max_length=96)
+    request_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    profile_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    finished_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    heartbeat_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -560,16 +567,20 @@ class GeneratedResource(SQLModel, table=True):
 
 
 class GeneratedResourceItem(SQLModel, table=True):
-    """资源项明细表 — 每个 agent 生成一个资源项。"""
+    """资源项明细表 — 每个 agent 生成一个资源项。
+
+    每个 (resource_id, agent_type) 组合只能有一条成功记录。
+    失败 Agent 不创建记录，仅在工作流状态中保留失败信息。
+    """
     __tablename__ = "generated_resource_items"
     __table_args__ = (
+        UniqueConstraint("resource_id", "agent_type", name="uq_generated_resource_items_resource_agent"),
         Index("ix_generated_resource_items_content_json", "content_json", postgresql_using="gin"),
         Index("ix_generated_resource_items_metadata_json", "metadata_json", postgresql_using="gin"),
         Index("ix_generated_resource_items_metrics", "metrics", postgresql_using="gin"),
         Index("ix_generated_resource_items_downstream_context", "downstream_context", postgresql_using="gin"),
         Index("ix_generated_resource_items_covered_knowledge_points", "covered_knowledge_points", postgresql_using="gin"),
         Index("ix_generated_resource_items_weak_points_covered", "weak_points_covered", postgresql_using="gin"),
-        Index("ix_generated_resource_items_resource_agent", "resource_id", "agent_type"),
         Index("ix_generated_resource_items_user_created_at", "user_id", "created_at"),
     )
 
@@ -600,6 +611,7 @@ class GeneratedResourceItem(SQLModel, table=True):
     # Agent 协作与路径规划检索字段
     depends_on_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     source_resource_item_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
+    source_item_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
     covered_knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     weak_points_covered: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     recommended_next_resource_types: list[str] | None = Field(default=None, sa_column=Column(JSONB))
@@ -615,6 +627,35 @@ class GeneratedResourceItem(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
+
+
+class GeneratedResourceAgentRun(SQLModel, table=True):
+    """Agent 运行状态表 — 记录每个 Agent 的生命周期状态。
+
+    每个 (resource_id, agent_id) 组合只有一条记录。
+    用于持久化 Agent 运行状态，支持重启后恢复。
+    """
+    __tablename__ = "generated_resource_agent_runs"
+    __table_args__ = (
+        UniqueConstraint("resource_id", "agent_id", name="uq_resource_agent_run"),
+        CheckConstraint(
+            "status IN ('pending','running','completed','failed','interrupted')",
+            name="ck_resource_agent_run_status",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
+    run_id: str = Field(max_length=96, index=True)
+    agent_id: str = Field(max_length=32)
+    stage: str = Field(max_length=32)
+    status: str = Field(default="pending", max_length=16)
+    error_type: str | None = Field(default=None, max_length=128)
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    finished_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    elapsed_ms: int | None = Field(default=None)
+    metrics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
 
 # ---------------------------------------------------------------------------
@@ -969,6 +1010,7 @@ REGISTERED_MODELS = (
     CourseProfile,
     GeneratedResource,
     GeneratedResourceItem,
+    GeneratedResourceAgentRun,
     QuizQuestion,
     LearningEvent,
     LearningSession,

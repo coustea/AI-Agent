@@ -581,7 +581,6 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
     teaching_plan       JSONB,
-    review_result       JSONB,
     failed_agents       JSONB,
     workflow_metadata   JSONB,
     selected_agents     JSONB,
@@ -589,6 +588,12 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     source              VARCHAR(255),
     status              VARCHAR(50)     DEFAULT 'pending',
     error_message       TEXT,
+    run_id              VARCHAR(96),
+    request_snapshot    JSONB,
+    profile_snapshot    JSONB,
+    started_at          TIMESTAMPTZ,
+    finished_at         TIMESTAMPTZ,
+    heartbeat_at        TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     DEFAULT NOW()
 );
@@ -602,7 +607,6 @@ COMMENT ON TABLE generated_resources IS 'AI生成资源的主表，记录一次�
 COMMENT ON COLUMN generated_resources.user_id IS '用户ID';
 COMMENT ON COLUMN generated_resources.learning_need IS '学习需求描述';
 COMMENT ON COLUMN generated_resources.teaching_plan IS '教学计划JSON';
-COMMENT ON COLUMN generated_resources.review_result IS '审核结果JSON';
 COMMENT ON COLUMN generated_resources.failed_agents IS '执行失败的Agent列表JSON';
 COMMENT ON COLUMN generated_resources.workflow_metadata IS '工作流执行元数据JSON';
 COMMENT ON COLUMN generated_resources.selected_agents IS '选用的Agent列表JSON';
@@ -628,6 +632,7 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     downstream_context              JSONB,
     depends_on_agents               JSONB,
     source_resource_item_ids        JSONB,
+    source_item_ids                 JSONB,
     covered_knowledge_points        JSONB,
     weak_points_covered             JSONB,
     recommended_next_resource_types JSONB,
@@ -635,7 +640,10 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     status                          VARCHAR(50)     DEFAULT 'pending',
     error_message                   TEXT,
     created_at                      TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at                      TIMESTAMPTZ     DEFAULT NOW()
+    updated_at                      TIMESTAMPTZ     DEFAULT NOW(),
+
+    CONSTRAINT uq_generated_resource_items_resource_agent
+        UNIQUE (resource_id, agent_type)
 );
 
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_resource_id
@@ -648,8 +656,6 @@ CREATE INDEX IF NOT EXISTS ix_generated_resource_items_generated_by
     ON generated_resource_items (generated_by);
 
 -- Composite indexes
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_resource_agent
-    ON generated_resource_items (resource_id, agent_type);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_user_created_at
     ON generated_resource_items (user_id, created_at);
 
@@ -681,6 +687,46 @@ COMMENT ON COLUMN generated_resource_items.depends_on_agents IS '依赖的Agent�
 COMMENT ON COLUMN generated_resource_items.covered_knowledge_points IS '覆盖的知识点JSON';
 COMMENT ON COLUMN generated_resource_items.weak_points_covered IS '覆盖的薄弱点JSON';
 COMMENT ON COLUMN generated_resource_items.status IS '子项状态：pending/running/completed/failed';
+
+-- ============================================================
+-- 11b. generated_resource_agent_runs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS generated_resource_agent_runs (
+    id              SERIAL          PRIMARY KEY,
+    resource_id     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
+    run_id          VARCHAR(96)     NOT NULL,
+    agent_id        VARCHAR(32)     NOT NULL,
+    stage           VARCHAR(32)     NOT NULL,
+    status          VARCHAR(16)     NOT NULL DEFAULT 'pending',
+    error_type      VARCHAR(128),
+    error_message   TEXT,
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ,
+    elapsed_ms      INTEGER,
+    metrics         JSONB,
+
+    CONSTRAINT uq_resource_agent_run UNIQUE (resource_id, agent_id),
+    CONSTRAINT ck_resource_agent_run_status
+        CHECK (status IN ('pending','running','completed','failed','interrupted'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_generated_resource_agent_runs_resource_id
+    ON generated_resource_agent_runs (resource_id);
+CREATE INDEX IF NOT EXISTS ix_generated_resource_agent_runs_run_id
+    ON generated_resource_agent_runs (run_id);
+
+COMMENT ON TABLE generated_resource_agent_runs IS 'Agent运行状态表，记录每个Agent的生命周期状态';
+COMMENT ON COLUMN generated_resource_agent_runs.resource_id IS '关联资源ID，级联删除';
+COMMENT ON COLUMN generated_resource_agent_runs.run_id IS '运行唯一标识';
+COMMENT ON COLUMN generated_resource_agent_runs.agent_id IS 'Agent类型标识';
+COMMENT ON COLUMN generated_resource_agent_runs.stage IS '运行阶段：generation/validation/persistence/timeout/interrupted';
+COMMENT ON COLUMN generated_resource_agent_runs.status IS '运行状态：pending/running/completed/failed/interrupted';
+COMMENT ON COLUMN generated_resource_agent_runs.error_type IS '错误类型';
+COMMENT ON COLUMN generated_resource_agent_runs.error_message IS '错误信息';
+COMMENT ON COLUMN generated_resource_agent_runs.started_at IS '开始时间';
+COMMENT ON COLUMN generated_resource_agent_runs.finished_at IS '完成时间';
+COMMENT ON COLUMN generated_resource_agent_runs.elapsed_ms IS '执行耗时（毫秒）';
+COMMENT ON COLUMN generated_resource_agent_runs.metrics IS '执行指标JSON';
 
 -- ============================================================
 -- 12. quiz_questions

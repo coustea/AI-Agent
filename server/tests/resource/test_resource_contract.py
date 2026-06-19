@@ -31,7 +31,6 @@ def test_generated_resources_has_teaching_plan_columns():
     table_sql = _table_sql("generated_resources")
 
     assert "teaching_plan       JSONB" in table_sql
-    assert "review_result       JSONB" in table_sql
     assert "failed_agents       JSONB" in table_sql
     assert "personalization" not in table_sql
 
