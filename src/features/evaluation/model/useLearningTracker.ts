@@ -1,5 +1,5 @@
-import { recordLearningSession } from '@/features/learning/api/evaluation'
-import type { LearningSessionCreate } from '@/features/learning/model/evaluation'
+import { recordLearningSession } from '@/features/evaluation/api/evaluation'
+import type { LearningSessionCreate } from '@/features/evaluation/model/evaluation'
 
 export interface TrackingContext {
   sourcePage: string
