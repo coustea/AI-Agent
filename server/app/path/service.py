@@ -30,9 +30,9 @@ from app.infra.models import (
     PathNodeResource,
     PathNodeTutorial,
 )
-from app.path.events import PathEvent, path_event_bus
-from app.path.agents.planner import PathPlannerAgent
-from app.path.workflows.plan_workflow import repair_generated_plan_from_macro_stages
+import asyncio
+from typing import Literal
+from pydantic import BaseModel, Field
 from app.path.schemas import (
     AgentLearningPathPlan,
     AuxiliaryResourceRequest,
@@ -49,15 +49,67 @@ from app.path.schemas import (
     PathQuizRoundResponse,
     PathQuizSubmitRequest,
     PathQuizSubmitResponse,
+    LearnState,
+    validate_path_plan,
 )
-from app.path.validation import validate_path_plan
-from app.path.workflows.learn_workflow import (
+from app.path.workflows import (
+    PathPlannerAgent,
+    get_learn_workflow,
     ACTIVE_NODE_STATUSES,
     COMPLETED_NODE_STATUSES,
-    get_learn_workflow,
 )
-from app.path.workflows.state import LearnState
 from app.profile.service import get_profile_service
+
+# ======================================================================
+# SSE 路径事件定义 (源自 events.py)
+# ======================================================================
+
+PathEventType = Literal["path.generating", "path.step", "path.done"]
+PathStatus = Literal["generating", "active", "failed"]
+
+
+class PathEvent(BaseModel):
+    """单个路径事件 — 通过 SSE 推送给前端的进度通知。"""
+
+    event_type: PathEventType = "path.step"
+    path_id: int
+    status: PathStatus = "generating"
+    message: str | None = None
+    progress: int = 0
+    success: bool | None = None
+    timestamp: float = Field(default_factory=lambda: __import__("time").time())
+
+
+class PathEventBus:
+    """路径事件总线 — 基于 asyncio.Queue 的发布/订阅模式。"""
+
+    def __init__(self) -> None:
+        self._subscribers: dict[int, list[asyncio.Queue[PathEvent]]] = {}
+
+    def subscribe(self, path_id: int) -> asyncio.Queue[PathEvent]:
+        q: asyncio.Queue[PathEvent] = asyncio.Queue(maxsize=256)
+        if path_id not in self._subscribers:
+            self._subscribers[path_id] = []
+        self._subscribers[path_id].append(q)
+        return q
+
+    def unsubscribe(self, path_id: int, queue: asyncio.Queue[PathEvent]) -> None:
+        if path_id in self._subscribers:
+            subs = self._subscribers[path_id]
+            subs[:] = [q for q in subs if q is not queue]
+            if not subs:
+                del self._subscribers[path_id]
+
+    async def publish(self, path_id: int, event: PathEvent) -> None:
+        subs = self._subscribers.get(path_id, [])
+        for q in subs:
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                logger.warning("PathEventBus queue full for path_id=%s, dropping event", path_id)
+
+
+path_event_bus = PathEventBus()
 
 logger = get_logger(__name__)
 

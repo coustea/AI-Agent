@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal, TYPE_CHECKING
+from typing_extensions import TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -308,6 +309,197 @@ class PathLearningEvaluationResponse(BaseModel):
     optimization_tips: list[str] = Field(default_factory=list)
 
 
+# ======================================================================
+# LangGraph 工作流状态定义
+# ======================================================================
+
+class LearnState(TypedDict, total=False):
+    """节点学习工作流的状态结构。
+
+    每次 API 调用会填充对应 phase 的字段子集，图根据 ``phase`` 路由，
+    并在节点流水线推进过程中逐步修改状态。
+
+    标记 ``total=False`` 的字段为可选 — 图在执行过程中按需初始化。
+    """
+
+    # ── 服务层注入字段 ──────────────────────────────────────────────
+    user_id: int
+    """已认证的用户 ID。"""
+    node_id: int
+    """PathNode 主键 — 当前正在学习的节点。"""
+    phase: str
+    """路由键：``'start'``（开始学习）| ``'questions'``（生成题目）| ``'quiz'``（提交测验）| ``'resource'``（生成资源）。"""
+    session: Any
+    """AsyncSession — 由 PathService 注入，供数据库访问节点使用。"""
+
+    # ── 上下文加载字段（由 ``node_load_context`` 填充）────────────
+    node: Any
+    """PathNode ORM 实例。"""
+    path: Any
+    """LearningPath ORM 实例。"""
+    tutorials: list[Any]
+    """当前节点的所有 PathNodeTutorial 实例，按版本号排序。"""
+    current_tutorial: Any
+    """当前激活的 PathNodeTutorial，不存在时为 None。"""
+    profile_markdown: str
+    """预渲染的学习者画像 Markdown 文本。"""
+
+    # ── 阶段输入字段 ──────────────────────────────────────────────
+    quiz_answers: list[dict]
+    """用户提交的答案：``[{'question_id': int, 'response': str}]``。"""
+    resource_type: str
+    """辅助资源类型：``'mindmap'`` | ``'code'`` | ``'reading'`` | ``'ppt'`` | ``'content'``。"""
+
+    # ── 教程参数 ──────────────────────────────────────────────────
+    tutorial_type: str
+    """教程类型：``'primary'``（主教程）| ``'remediation'``（补救教程）| ``'reinforced'``（强化教程）。"""
+    weak_knowledge_points: list[str]
+    """学习者在测验中暴露出的薄弱知识点。"""
+    based_on_tutorial_id: int | None
+    """强化教程所基于的主教程 ID。"""
+
+    # ── 生成输出字段 ──────────────────────────────────────────────
+    tutorial: Any
+    """新创建的 PathNodeTutorial ORM 实例。"""
+    tutorial_content: str
+    """LLM 生成的教程原始 Markdown 内容。"""
+    generated_questions: list[dict]
+    """持久化前的原始题目字典列表。"""
+    score: int
+    """测验得分（0-5 分）。"""
+    passed: bool
+    """测验是否通过（得分 ≥ 通过线）。"""
+    outcome: str
+    """节点推进结果：``'completed'``（通过）| ``'remediation'``（需补救）| ``'completed_with_gaps'``（有缺陷通过）。"""
+    next_node_id: int | None
+    """完成后下一个可用节点的 ID。"""
+    resource_result: Any
+    """资源生成的 AgentResult 结果。"""
+    resource_dto: dict
+    """序列化后的资源 DTO，用于 API 响应。"""
+
+    # ── 测验轮次追踪 ──────────────────────────────────────────────
+    round_no: int
+    """当前测验轮次编号。"""
+    quiz_questions: list[Any]
+    """当前轮次的 PathNodeQuestion ORM 实例列表。"""
+
+    # ── 错误处理 ──────────────────────────────────────────────────
+    error: str | None
+    """错误信息 — 设置后图应中止执行。"""
+
+
+# ======================================================================
+# 路径规划结构校验
+# ======================================================================
+
+VALID_DIFFICULTIES: tuple[str, ...] = ("beginner", "intermediate", "advanced")
+
+
+class PathPlanValidationError(ValueError):
+    """路径规划结构校验失败 — LLM 输出不安全，不应持久化。"""
+
+
+def validate_path_plan(plan: AgentLearningPathPlan) -> None:
+    """校验生成的路径规划，不合格时抛出 PathPlanValidationError。
+
+    校验项：
+    1. stages 和 nodes 非空
+    2. 阶段 ID 唯一且非空
+    3. 节点 ID 唯一且非空
+    4. 节点引用的 stage_id 存在
+    5. 难度等级合法
+    6. 前置依赖节点存在且不自引用
+    7. 无依赖环
+    8. 至少一个无前置依赖的起始节点
+    9. 每个阶段至少包含一个节点
+    """
+    if not plan.stages:
+        raise PathPlanValidationError("学习路径必须包含至少一个阶段")
+    if not plan.nodes:
+        raise PathPlanValidationError("学习路径必须包含至少一个学习节点")
+
+    # 校验阶段 ID 唯一性
+    stage_ids: set[str] = set()
+    for stage in plan.stages:
+        if not stage.stage_id.strip():
+            raise PathPlanValidationError("阶段 stage_id 不能为空")
+        if stage.stage_id in stage_ids:
+            raise PathPlanValidationError(f"阶段 ID 重复: {stage.stage_id}")
+        stage_ids.add(stage.stage_id)
+
+    # 校验节点：ID 唯一性、阶段引用、难度等级、构建邻接表
+    node_ids: set[str] = set()
+    adjacency: dict[str, list[str]] = {}
+    for node in plan.nodes:
+        if not node.node_id.strip():
+            raise PathPlanValidationError("节点 node_id 不能为空")
+        if node.node_id in node_ids:
+            raise PathPlanValidationError(f"节点 ID 重复: {node.node_id}")
+        if node.stage_id not in stage_ids:
+            raise PathPlanValidationError(f"节点 {node.node_id} 引用了不存在的阶段: {node.stage_id}")
+        if node.difficulty and node.difficulty not in VALID_DIFFICULTIES:
+            raise PathPlanValidationError(
+                f"节点 {node.node_id} 的 difficulty 必须是 {', '.join(VALID_DIFFICULTIES)} 之一"
+            )
+        node_ids.add(node.node_id)
+        adjacency[node.node_id] = list(node.prerequisites or [])
+
+    # 校验前置依赖：存在性 + 不自引用
+    for node_id, prerequisites in adjacency.items():
+        for prerequisite_id in prerequisites:
+            if prerequisite_id == node_id:
+                raise PathPlanValidationError(f"节点 {node_id} 不能依赖自身")
+            if prerequisite_id not in node_ids:
+                raise PathPlanValidationError(f"节点 {node_id} 引用了不存在的前置节点: {prerequisite_id}")
+
+    # 校验无依赖环
+    _assert_no_dependency_cycle(adjacency)
+
+    # 校验至少有一个起始节点
+    root_nodes = [node for node in plan.nodes if not node.prerequisites]
+    if not root_nodes:
+        raise PathPlanValidationError("学习路径必须至少包含一个无前置依赖 of 起始节点")
+
+    # 校验每个阶段至少包含一个节点
+    _validate_stage_node_coverage(plan, stage_ids)
+
+
+def _validate_stage_node_coverage(plan: AgentLearningPathPlan, stage_ids: set[str]) -> None:
+    """校验每个阶段至少包含一个节点。"""
+    stages_with_nodes: set[str] = set()
+    for node in plan.nodes:
+        stages_with_nodes.add(node.stage_id)
+    empty_stages = stage_ids - stages_with_nodes
+    if empty_stages:
+        raise PathPlanValidationError(
+            f"以下阶段没有节点: {', '.join(sorted(empty_stages))}"
+        )
+
+
+def _assert_no_dependency_cycle(adjacency: dict[str, list[str]]) -> None:
+    """DFS 检测依赖环，发现环时抛出异常。"""
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node_id: str, trail: list[str]) -> None:
+        if node_id in visited:
+            return
+        if node_id in visiting:
+            # 检测到环，输出环路径
+            cycle = " -> ".join([*trail, node_id])
+            raise PathPlanValidationError(f"学习路径依赖存在环: {cycle}")
+
+        visiting.add(node_id)
+        for prerequisite_id in adjacency.get(node_id, []):
+            visit(prerequisite_id, [*trail, node_id])
+        visiting.remove(node_id)
+        visited.add(node_id)
+
+    for node_id in adjacency:
+        visit(node_id, [])
+
+
 __all__ = [
     # Request
     "CreateLearningPathRequest",
@@ -322,6 +514,12 @@ __all__ = [
     "ALLOWED_RESOURCE_TYPES",
     # Signal
     "LearningSignalSnapshot",
+    # State
+    "LearnState",
+    # Validation
+    "VALID_DIFFICULTIES",
+    "PathPlanValidationError",
+    "validate_path_plan",
     # Response
     "LearningPathQuestionDTO",
     "LearningPathResourceDTO",

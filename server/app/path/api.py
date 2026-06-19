@@ -44,7 +44,7 @@ async def stream_path_events(
     session: AsyncSession = Depends(get_session),
 ):
     from fastapi.responses import StreamingResponse
-    from app.path.events import path_event_bus
+    from app.path.service import path_event_bus
     import asyncio
 
     service = PathService(session)
