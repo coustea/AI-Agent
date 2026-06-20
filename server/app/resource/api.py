@@ -20,17 +20,19 @@ from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user
+from app.auth.security import get_current_user, get_current_user_flexible
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.constants import STANDALONE_RESOURCE_SOURCES
 from app.resource.events import resource_event_bus
 from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
+
+STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
+
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -49,8 +51,8 @@ async def create_resource_task(
         current_user.id,
         req.enabled_agent_ids(),
     )
-    usecases = ResourceService(session)
-    result = await usecases.start_resource_task(
+    repo = ResourceService(session)
+    result = await repo.create_task(
         user_id=current_user.id,
         request=req,
         source="standalone",
@@ -90,8 +92,8 @@ async def create_single_resource_task(
     profile_record = await profile_builder.get_profile(user_id=current_user.id)
     profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
 
-    usecases = ResourceService(session)
-    result = await usecases.start_resource_task(
+    repo = ResourceService(session)
+    result = await repo.create_task(
         user_id=current_user.id,
         request=ResourceGenerationRequest(
             learning_need=req.learning_need,
@@ -123,54 +125,62 @@ async def get_generation_status(
     session: AsyncSession = Depends(get_session),
 ):
     """查询后台生成任务的状态。"""
-    usecases = ResourceService(session)
-    status_data = await usecases.get_generation_status(
+    service = ResourceService(session)
+    status_data = await service.get_generation_status(
         user_id=current_user.id,
         resource_id=resource_id,
         allowed_sources=STANDALONE_RESOURCE_SOURCES,
     )
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
-
     return HttpResponse.success(data=status_data)
 
 
 @router.get("/resources/{resource_id}/events")
 async def stream_resource_events(
     resource_id: int,
-    token: str = Query(default="", description="JWT token for SSE auth"),
+    current_user: User = Depends(get_current_user_flexible),
+    session: AsyncSession = Depends(get_session),
 ):
     """SSE 端点：订阅资源生成事件，实时推送 agent 状态变更。"""
-    if not token:
-        return HttpResponse.error(code=401, message="缺少认证 token")
-
-    from app.auth.security import decode_token
-    try:
-        decode_token(token)
-    except Exception:
-        return HttpResponse.error(code=401, message="认证失败")
+    service = ResourceService(session)
+    resource = await service.get_resource(
+        current_user.id,
+        resource_id,
+        allowed_sources=STANDALONE_RESOURCE_SOURCES,
+    )
+    if resource is None:
+        return HttpResponse.error(code=404, message="资源不存在或无权限")
 
     async def event_stream():
-        # 先回填当前已有的快照状态，避免 SSE 连接晚于事件导致前端空白
         from app.resource.events import AgentEvent
-        snapshot = resource_event_bus.get_latest_snapshot(resource_id)
-        for agent_id, agent_snapshot in snapshot.get("agent_snapshots", {}).items():
-            snapshot_event = AgentEvent(
-                event_type="agent.snapshot",
-                agent_id=agent_id,
-                **{k: v for k, v in agent_snapshot.items() if k in AgentEvent.model_fields},
-            )
-            yield f"event: {snapshot_event.event_type}\ndata: {snapshot_event.model_dump_json()}\n\n"
-        if snapshot.get("current_message") and not snapshot.get("agent_snapshots"):
-            snapshot_event = AgentEvent(
-                event_type="agent",
-                message=snapshot["current_message"],
-            )
-            yield f"event: agent\ndata: {snapshot_event.model_dump_json()}\n\n"
-
-        # 然后订阅实时事件
         queue = resource_event_bus.subscribe(resource_id)
         try:
+            snapshot = resource_event_bus.get_latest_snapshot(resource_id)
+            for agent_id, agent_snapshot in snapshot.get("agent_snapshots", {}).items():
+                snapshot_data = {
+                    key: value
+                    for key, value in agent_snapshot.items()
+                    if key in AgentEvent.model_fields
+                    and key not in {"event_type", "agent_id"}
+                }
+                snapshot_event = AgentEvent(
+                    event_type="agent.snapshot",
+                    agent_id=agent_id,
+                    **snapshot_data,
+                )
+                yield f"event: {snapshot_event.event_type}\ndata: {snapshot_event.model_dump_json()}\n\n"
+
+            await session.refresh(resource)
+            if resource.status in {"completed", "partial_completed", "failed"}:
+                done_event = AgentEvent(
+                    event_type="resource.done",
+                    success=resource.status in {"completed", "partial_completed"},
+                    message="资源生成完成" if resource.status != "failed" else "资源生成失败",
+                )
+                yield f"event: {done_event.event_type}\ndata: {done_event.model_dump_json()}\n\n"
+                return
+
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
@@ -179,7 +189,7 @@ async def stream_resource_events(
                     continue
                 data = event.model_dump_json()
                 yield f"event: {event.event_type}\ndata: {data}\n\n"
-                if event.event_type == "done":
+                if event.event_type == "resource.done":
                     break
         finally:
             resource_event_bus.unsubscribe(resource_id, queue)
@@ -214,15 +224,15 @@ async def list_resources(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源列表。"""
-    usecases = ResourceService(session)
-    resources = await usecases.list_resources(
+    service = ResourceService(session)
+    resources = await service.list_resources(
         current_user.id,
         limit,
         offset,
         sources=STANDALONE_RESOURCE_SOURCES,
     )
-    total = await usecases.count_resources(current_user.id, sources=STANDALONE_RESOURCE_SOURCES)
-    type_summary = await usecases.list_resource_type_summary(
+    total = await service.count_resources(current_user.id, sources=STANDALONE_RESOURCE_SOURCES)
+    type_summary = await service.list_resource_type_summary(
         user_id=current_user.id,
         resource_ids=[value.id for value in resources if value.id is not None],
     )
@@ -250,8 +260,8 @@ async def get_resource(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源详情。"""
-    usecases = ResourceService(session)
-    bundle = await usecases.get_resource_bundle(
+    service = ResourceService(session)
+    bundle = await service.get_resource_bundle(
         current_user.id,
         resource_id,
         allowed_sources=STANDALONE_RESOURCE_SOURCES,
@@ -262,16 +272,41 @@ async def get_resource(
 
 
 @router.get("/video/audio/{filename:path}")
-async def get_video_audio(filename: str):
-    """提供生成的视频音频文件。"""
+async def get_video_audio(
+    filename: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """提供生成的视频音频文件。
+
+    安全措施：
+    - 用户认证
+    - 目录遍历防护
+    - 路径规范化检查
+    """
     from app.config import WORKPLACE_DIR
     from fastapi.responses import FileResponse
+    import re
 
-    # 简单的目录遍历安全检查
-    if ".." in filename or "/" in filename or "\\" in filename:
+    # 目录遍历安全检查
+    if ".." in filename or filename.startswith("/") or filename.startswith("\\"):
         return HttpResponse.error(code=400, message="Illegal filename")
 
+    # 只允许安全字符（字母、数字、下划线、横线、点）
+    if not re.match(r'^[\w\-\.]+\.mp3$', filename):
+        return HttpResponse.error(code=400, message="Invalid filename format")
+
     file_path = WORKPLACE_DIR / "video_audio" / filename
+
+    # 路径规范化检查
+    try:
+        file_path = file_path.resolve()
+        base_dir = (WORKPLACE_DIR / "video_audio").resolve()
+        if not str(file_path).startswith(str(base_dir)):
+            return HttpResponse.error(code=400, message="Path traversal detected")
+    except Exception:
+        return HttpResponse.error(code=400, message="Invalid path")
+
     if not file_path.exists():
         return HttpResponse.error(code=404, message="Audio file not found")
 
@@ -279,10 +314,17 @@ async def get_video_audio(filename: str):
 
 
 @router.post("/video/render")
-async def render_video(request: dict[str, Any]):
+async def render_video(
+    request: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+):
     """从 VideoPayload JSON 触发 GPU 加速视频渲染。
 
-    接受 VideoPayload JSON，写入临时文件，调用 Remotion 渲染脚本，返回 MP4。
+    安全措施：
+    - 用户认证
+    - 参数白名单验证
+    - 使用 subprocess 列表参数避免 shell 注入
+    - 超时限制
 
     请求体：
         payload: VideoPayload JSON 对象
@@ -302,7 +344,11 @@ async def render_video(request: dict[str, Any]):
     if not payload or not isinstance(payload, dict):
         return HttpResponse.error(code=400, message="Missing 'payload' in request body")
 
+    # gl 参数白名单
     gl = request.get("gl", "angle")
+    if gl not in ("angle", "swiftshader", "egl"):
+        return HttpResponse.error(code=400, message="Invalid gl parameter, must be one of: angle, swiftshader, egl")
+
     job_id = str(uuid.uuid4())[:8]
 
     # Paths
@@ -319,22 +365,19 @@ async def render_video(request: dict[str, Any]):
     # 写入 payload JSON 文件
     plan_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 构建并执行渲染命令
+    # 使用列表参数避免 shell 注入
     render_script = video_render_dir / "scripts" / "render.ts"
-    cmd = (
-        f"cd {video_render_dir} && "
-        f"npx tsx {render_script} "
-        f"--input {plan_path} "
-        f"--output {output_path} "
-        f"--gl {gl} "
-        f"--concurrency 4"
-    )
 
     logger.info("Starting video render job %s with gl=%s", job_id, gl)
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        proc = await asyncio.create_subprocess_exec(
+            "npx", "tsx", str(render_script),
+            "--input", str(plan_path),
+            "--output", str(output_path),
+            "--gl", gl,
+            "--concurrency", "4",
+            cwd=str(video_render_dir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -363,5 +406,3 @@ async def render_video(request: dict[str, Any]):
     except Exception as e:
         logger.error("Render job %s error: %s", job_id, e)
         return HttpResponse.error(code=500, message=f"Render error: {e}")
-
-
