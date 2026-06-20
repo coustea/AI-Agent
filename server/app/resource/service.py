@@ -421,9 +421,9 @@ class ResourceService:
             raise ValueError("资源不存在或无权限")
 
         # 从数据库查询成功 item
-        successful = set(await self._select_completed_item_agent_ids(resource_id))
+        successful = set(await self.get_completed_agent_ids(resource_id))
         # 从数据库查询失败/中断 run
-        failed = set(await self._select_failed_run_agent_ids(resource_id))
+        failed = set(await self.get_failed_agent_ids(resource_id))
 
         unresolved = expected_agent_ids - successful - failed
         overlap = successful & failed
@@ -455,8 +455,8 @@ class ResourceService:
         await self._commit(resource)
         return status
 
-    async def _select_completed_item_agent_ids(self, resource_id: int) -> list[str]:
-        """查询已完成 item 的 agent_id 列表。"""
+    async def get_completed_agent_ids(self, resource_id: int) -> list[str]:
+        """获取已完成 item 的 agent_id 列表。"""
         stmt = (
             select(ItemModel.agent_type)
             .where(ItemModel.resource_id == resource_id)
@@ -464,8 +464,8 @@ class ResourceService:
         )
         return list((await self.session.exec(stmt)).all())
 
-    async def _select_failed_run_agent_ids(self, resource_id: int) -> list[str]:
-        """查询失败/中断 run 的 agent_id 列表。"""
+    async def get_failed_agent_ids(self, resource_id: int) -> list[str]:
+        """获取失败/中断 run 的 agent_id 列表。"""
         stmt = (
             select(GeneratedResourceAgentRun.agent_id)
             .where(GeneratedResourceAgentRun.resource_id == resource_id)

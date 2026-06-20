@@ -39,6 +39,15 @@ class PlanningAgent(BaseResourceAgent):
             temperature=INFERENCE_TEMPERATURE,
         )
 
+        expected_agents = set(input_data.agent_config.get("enabled_agents", []))
+        assigned_agents = {assignment.agent_id for assignment in plan.agent_assignments}
+        if assigned_agents != expected_agents:
+            raise ValueError(
+                "TeachingPlan assignments do not match selected base Agents: "
+                f"missing={sorted(expected_agents - assigned_agents)} "
+                f"unexpected={sorted(assigned_agents - expected_agents)}"
+            )
+
         await self.emit_start("教学方向与大纲已生成", progress=85)
 
         result = AgentResult(
@@ -67,7 +76,7 @@ class PlanningAgent(BaseResourceAgent):
             metadata={"agent_id": "planning"},
         )
 
-    def _build_planning_input(self, input_data: ResourceInput) -> str:
+    def build_planning_input(self, input_data: ResourceInput) -> str:
         """构建规划阶段的 LLM 输入文本。"""
         parts = [
             f"## 学习需求\n{input_data.learning_need}",

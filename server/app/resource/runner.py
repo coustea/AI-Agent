@@ -113,7 +113,7 @@ async def recover_pending_agents(
     return outcomes
 
 
-def _build_recovery_input(
+def build_recovery_input(
     *,
     resource_id: int,
     agent_id: str,
