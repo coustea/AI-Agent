@@ -1,10 +1,10 @@
-# Chat 自研工具调用设计
+# 自研 ToolExcute 工具调用设计
 
 ## 目标
 
-优先重构 Chat 模块的工具调用，保留 LangChain `ChatOpenAI` 作为模型客户端，但彻底移除 Chat 对 LangChain 工具体系的依赖，包括 `@tool`、`StructuredTool`、`bind_tools()` 与工具对象的 `.ainvoke()`。
+优先重构 Chat 模块的工具调用，保留 LangChain `ChatOpenAI` 作为模型客户端，但彻底移除项目对 LangChain 工具体系的依赖，包括 `@tool`、`StructuredTool`、`bind_tools()`、`Llm.ainvoke_tools()` 与工具对象的 `.ainvoke()`。
 
-本阶段不修改 Path 和 Resource。它们将在 Chat 验证稳定后复用相同的 `Tool` / `ToolExcute` 基础接口，但继续保持各自的业务流程、记录和持久化模型。
+本次重构不提供兼容层或双轨入口。Chat 迁移完成后，同一轮继续迁移 Path 的模型工具调用并删除旧接口。Resource 只有在存在真实模型工具调用时才接入，不为了接口统一增加空注册或代理代码。Resource 与 Path 继续保持各自的业务流程、记录、详情页和持久化模型。
 
 ## 文件结构
 
@@ -39,11 +39,11 @@ server/app/infra/tool_excute.py
 - `register_many(tools)`：批量注册。
 - `get_tool(name)`：获取已注册工具；未知名称给出明确错误。
 - `get_tools_description()`：返回 OpenAI-compatible `tools` JSON Schema。
-- `invoke(messages, **model_kwargs)`：调用 `ChatOpenAI.ainvoke()`，通过原生 `tools` 参数发送工具描述，自行规范化并返回工具调用列表。
+- `invoke(messages, **model_kwargs)`：调用 `ChatOpenAI.ainvoke()`，通过原生 `tools` 参数发送工具描述，返回模型消息和规范化工具调用列表。
 - `execute(tool_call)`：查找工具、解析参数、执行 Pydantic 校验并调用 handler。
 - `execute_all(tool_calls)`：并发执行一批工具调用，并保留与输入一致的结果顺序。
 
-`invoke()` 不调用 `bind_tools()`。工具描述以原生 OpenAI-compatible JSON 通过 `ChatOpenAI.ainvoke(messages, tools=...)` 传入。
+`invoke()` 不调用 `bind_tools()`。工具描述以原生 OpenAI-compatible JSON 通过 `ChatOpenAI.ainvoke(messages, tools=...)` 传入。返回值使用二元组 `(response, tool_calls)`，保留原始模型消息供 Chat 和 Path 继续构造工具结果上下文，同时避免再增加结果包装类。
 
 ## 模型响应兼容
 
@@ -105,7 +105,17 @@ Chat 工具改为普通异步函数：
 
 `Llm` 保留普通生成、流式输出、结构化 JSON 和视觉接口。它新增一个轻量创建入口，根据当前文本模型返回请求级 `ToolExcute`。
 
-旧 `ainvoke_tools()` 和 `ChatModel` 内仅为 LangChain 工具解析服务的兼容代码，在 Chat 完成迁移且无其他调用者依赖后删除。由于 Path 仍在使用旧工具链，本阶段允许旧入口暂时保留，但 Chat 不再引用它；删除工作放入 Path 迁移阶段。
+删除旧 `ainvoke_tools()`。任何调用者不得通过 `bind_tools()` 或旧入口请求工具调用，也不保留转发、弃用提示或别名。
+
+## Path 迁移
+
+Path 现有搜索工具改为普通异步 callable，并使用 `Tool` 描述参数。工作流通过 `ToolExcute.invoke()` 获取模型消息与工具调用，再通过 `ToolExcute.execute()` 执行。Path 自己继续负责搜索结果整理、规划状态和持久化，不复用 Chat 的 Evidence 或调用记录。
+
+迁移完成后，全仓库生产代码和测试中都不得再出现 `bind_tools()`、`StructuredTool`、`@tool` 或 `ainvoke_tools()`。
+
+## Resource 边界
+
+Resource 当前以 LangGraph 节点直接调度 agent，没有模型选择工具的调用链，因此本次不增加 `ToolExcute` 依赖。若检查发现真实的模型工具调用，则只迁移该调用点；不得合并 Resource 与 Path 的记录、详情页或持久化模型。
 
 ## 错误处理
 
@@ -128,13 +138,15 @@ Chat 工具改为普通异步函数：
 6. Chat 请求级工具注册不再产生 LangChain `StructuredTool`。
 7. WebResearchRunner 能完成多轮“模型选择 → 工具执行 → 结果回传”。
 8. Chat 工具调用事件、Evidence 和持久化契约保持不变。
+9. Path 搜索循环使用 `ToolExcute`，结果与规划状态契约保持不变。
+10. 全仓库静态扫描确认旧工具接口零残留。
 
 验证命令以 Chat 定向测试为主，并避开项目文档中注明的既有失败测试；最后运行后端相关测试集合。
 
-## 后续阶段
+## 完成标准
 
-Chat 稳定后：
-
-1. Path 将搜索工具迁移到 `ToolExcute`，删除其 `bind_tools()` 和工具 `.ainvoke()`。
-2. Resource 根据明确的业务调用场景注册自己的工具，不与 Path 合并记录、详情页或持久化模型。
-3. 全仓库无调用者后，从 `llm.py` 删除旧 `ainvoke_tools()` 及不再需要的 LangChain 工具兼容代码，并清理相关依赖引用。
+1. Chat 与 Path 的模型工具调用全部经过 `ToolExcute`。
+2. `ChatOpenAI` 仍是模型客户端，普通生成和结构化输出接口不受影响。
+3. 全仓库不存在 LangChain 工具注册、绑定或执行代码。
+4. 不存在旧工具接口兼容层。
+5. Chat、Path、Resource 的业务数据与持久化边界保持独立。
