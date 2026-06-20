@@ -532,16 +532,20 @@ class VideoAgent(BaseResourceAgent):
             from app.config import WORKPLACE_DIR
 
             res_id = state.get("resource_id")
-            prefix = f"res_{res_id}" if res_id else f"digest_{abs(hash(state['digest'].topic)) % 10000}"
-            filename = f"{prefix}_scene_{draft.scene_id}.mp3"
-            file_path = WORKPLACE_DIR / "video_audio" / filename
+            # 统一保存到 videos/res_{id}/ 目录
+            video_dir = WORKPLACE_DIR / "videos" / f"res_{res_id}"
+            video_dir.mkdir(parents=True, exist_ok=True)
+
+            filename = f"scene_{draft.scene_id}.mp3"
+            file_path = video_dir / filename
 
             tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
             duration_ms = round(tts_result.duration * 1000)
             if duration_ms <= 0:
                 raise ValueError(f"TTS returned invalid duration for scene {draft.scene_id}")
             draft.duration_ms = duration_ms
-            draft.audio_src = f"/api/v1/ai/video/audio/{filename}"
+            # 音频文件相对路径（用于前端访问）
+            draft.audio_src = f"/static/videos/res_{res_id}/{filename}"
             draft.caption_words = [
                 CaptionWord.model_validate(caption.to_dict())
                 for caption in tts_result.captions
@@ -592,7 +596,7 @@ class VideoAgent(BaseResourceAgent):
                 },
             )
 
-        # 保存 JSON 文件到 static 目录
+        # 保存 JSON 文件到 static/videos/res_{id}/ 目录
         from app.config import WORKPLACE_DIR
         from pathlib import Path
         import json
@@ -601,18 +605,20 @@ class VideoAgent(BaseResourceAgent):
         video_dir = WORKPLACE_DIR / "videos" / f"res_{resource_id}"
         video_dir.mkdir(parents=True, exist_ok=True)
 
-        json_filename = f"video_payload.json"
+        json_filename = "video_payload.json"
         json_path = video_dir / json_filename
         json_path.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
 
-        # 记录音频文件路径
+        # 记录音频文件路径（相对于 static 目录）
         audio_files = []
         for scene in payload.scenes:
             if scene.audio_src:
-                audio_files.append(scene.audio_src)
+                # 提取相对路径，如 "videos/res_123/scene_s1.mp3"
+                audio_rel_path = scene.audio_src.replace("/static/", "")
+                audio_files.append(audio_rel_path)
 
         # 相对于 static 目录的路径
-        output_file_rel_path = f"videos/res_{resource_id}/{json_filename}"
+        json_file_rel_path = f"videos/res_{resource_id}/{json_filename}"
 
         content = payload.model_dump_json(indent=2)
         source_handoff_agent_ids = sorted(input_data.upstream_handoffs.keys()) if input_data.upstream_handoffs else sorted({agent for scene in payload.scenes for agent in scene.source_agents})
@@ -636,8 +642,8 @@ class VideoAgent(BaseResourceAgent):
                 "aspect_ratio": payload.aspect_ratio,
                 "style": payload.style,
                 "source_handoff_agent_ids": source_handoff_agent_ids,
-                "audio_files": audio_files,
-                "output_file_path": output_file_rel_path,
+                "audio_file_paths": audio_files,
+                "json_file_path": json_file_rel_path,
                 "internal_pipeline": "material/outline/scenes/payload",
             },
         )

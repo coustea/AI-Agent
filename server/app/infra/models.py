@@ -611,6 +611,10 @@ class GeneratedResourceItem(SQLModel, table=True):
     # 输出文件路径（用于视频、PPT 等需要额外文件的资源）
     # 存储相对于 static 目录的路径，如 "videos/res_123/video.mp4"
     output_file_path: str | None = Field(default=None, max_length=500)
+    # JSON 文件路径（存储生成的 JSON 配置文件）
+    json_file_path: str | None = Field(default=None, max_length=500)
+    # 音频文件路径列表（存储 TTS 生成的音频文件）
+    audio_file_paths: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     # Agent 协作与路径规划检索字段
     depends_on_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
