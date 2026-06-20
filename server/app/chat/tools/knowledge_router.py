@@ -177,8 +177,6 @@ def _llm_route(query: str) -> list[_CourseScore]:
         if not raw_response:
             return []
 
-        import json
-
         parsed = json.loads(raw_response)
         courses_raw = parsed.get("courses", [])
         results: list[_CourseScore] = []

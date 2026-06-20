@@ -8,6 +8,7 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.auth.security import get_current_user
+from app.avatar.bridge.manager import avatar_bridge_manager
 from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
 from app.infra.models import User
 from app.infra.response import HttpResponse
@@ -20,7 +21,6 @@ async def get_avatar_status(
     user: User = Depends(get_current_user),
 ):
     """获取数字人连接状态"""
-    from app.avatar.bridge.manager import avatar_bridge_manager
     status = await avatar_bridge_manager.get_status(user.id)
     return HttpResponse.success(data=status)
 
@@ -30,7 +30,6 @@ async def get_avatar_stream(
     user: User = Depends(get_current_user),
 ):
     """获取数字人视频流信息"""
-    from app.avatar.bridge.manager import avatar_bridge_manager
     stream_info = await avatar_bridge_manager.get_stream_info(user.id)
     if not stream_info:
         return HttpResponse.error(message="数字人视频流未就绪", code=404)
@@ -42,7 +41,6 @@ async def stop_avatar(
     user: User = Depends(get_current_user),
 ):
     """停止数字人说话"""
-    from app.avatar.bridge.manager import avatar_bridge_manager
     await avatar_bridge_manager.stop(user.id)
     return HttpResponse.success(data={"status": "stopped"})
 
@@ -52,7 +50,6 @@ async def cleanup_avatar(
     user: User = Depends(get_current_user),
 ):
     """清理数字人连接资源"""
-    from app.avatar.bridge.manager import avatar_bridge_manager
     await avatar_bridge_manager.cleanup(user.id)
     return HttpResponse.success()
 
@@ -63,7 +60,6 @@ async def clear_avatar_history(
     user: User = Depends(get_current_user),
 ):
     """清空数字人会话历史消息（默认清空当前会话）。"""
-    from app.avatar.bridge.manager import avatar_bridge_manager
     chat_uc = get_chat_usecases()
 
     target_session_id = (session_id or "").strip()

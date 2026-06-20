@@ -14,18 +14,22 @@ API 端点：
 from __future__ import annotations
 
 import asyncio
+import json
+import re
+import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse
-from sqlmodel.ext.asyncio.session import AsyncSession
+from fastapi.responses import StreamingResponse, FileResponse
 
 from app.auth.security import get_current_user, get_current_user_flexible
+from app.config import WORKPLACE_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.events import resource_event_bus
-from app.resource.schemas import ResourceGenerationRequest, SingleResourceRequest, AgentSelection
+from app.resource.events import AgentEvent, resource_event_bus
+from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.profile.service import get_profile_service
@@ -153,7 +157,6 @@ async def stream_resource_events(
         return HttpResponse.error(code=404, message="资源不存在或无权限")
 
     async def event_stream():
-        from app.resource.events import AgentEvent
         queue = resource_event_bus.subscribe(resource_id)
         try:
             snapshot = resource_event_bus.get_latest_snapshot(resource_id)
@@ -200,8 +203,6 @@ async def stream_resource_events(
 @router.get("/agents")
 async def list_agents():
     """查询可用 Agent 列表。"""
-    from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER
-
     agents: list[dict[str, Any]] = []
     for agent_id in AGENT_DEFAULT_ORDER:
         meta = AGENT_META.get(agent_id, {})
@@ -284,10 +285,6 @@ async def get_video_audio(
     - 目录遍历防护
     - 路径规范化检查
     """
-    from app.config import WORKPLACE_DIR
-    from fastapi.responses import FileResponse
-    import re
-
     # 目录遍历安全检查
     if ".." in filename or filename.startswith("/") or filename.startswith("\\"):
         return HttpResponse.error(code=400, message="Illegal filename")
@@ -330,16 +327,6 @@ async def render_video(
         payload: VideoPayload JSON 对象
         gl: 可选 GPU 后端 — "angle"（默认）, "swiftshader", "egl"
     """
-    import json
-    import uuid
-    from pathlib import Path
-    from fastapi.responses import FileResponse
-
-    from app.config import WORKPLACE_DIR
-    from app.infra.logging import get_logger
-
-    logger = get_logger(__name__)
-
     payload = request.get("payload")
     if not payload or not isinstance(payload, dict):
         return HttpResponse.error(code=400, message="Missing 'payload' in request body")

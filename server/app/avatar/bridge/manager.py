@@ -100,7 +100,6 @@ class RealtimeBridge:
                     await self._avatar_controller.close()
                 except Exception:
                     logger.debug("[Bridge] close stale avatar controller failed", exc_info=True)
-            from app.avatar.services.avatar_ctrl import AvatarController
             self._avatar_controller = AvatarController()
             await self._avatar_controller.connect(
                 on_reconnect_callback=self._on_avatar_reconnect
@@ -216,8 +215,6 @@ class RealtimeBridge:
 
     async def _route_message(self, data: dict):
         """前端消息路由 — 根据消息类型分发到对应的处理方法。"""
-        from app.avatar.bridge.state import MessageType
-
         msg_type = data.get("type", "")
 
         if msg_type == MessageType.AUDIO_CHUNK:
@@ -318,7 +315,6 @@ class RealtimeBridge:
 
     async def _handle_audio_chunk(self, data: dict):
         """Handle audio chunk from frontend."""
-        import base64
         audio_b64 = data.get("audio", "")
         if not audio_b64 or not self.current_audio_queue:
             return
@@ -332,7 +328,6 @@ class RealtimeBridge:
                 self.current_audio_queue.qsize(),
             )
         # 音频块切分（1280 字节 = 40ms @ 16kHz）
-        import time
         for i in range(0, len(pcm_bytes), 1280):
             chunk = pcm_bytes[i:i + 1280]
             await self.current_audio_queue.put((time.monotonic(), chunk))
@@ -370,9 +365,6 @@ class RealtimeBridge:
 
     async def _handle_clear_history(self):
         """Clear current session chat history."""
-        from app.avatar.bridge.state import MessageType
-        from app.chat.service import get_chat_usecases
-
         if not self.session_id:
             await self._send_to_frontend(
                 {
@@ -419,10 +411,6 @@ class RealtimeBridge:
 
     async def _continuous_listen_loop(self):
         """Continuous ASR loop."""
-        from app.avatar.services.xfyun_auth import assemble_auth_url
-        from app.config import ASR_APP_ID, ASR_API_KEY, ASR_API_SECRET, AVATAR_IAT_URL
-        import websockets, json, base64, time
-
         while self.is_listening:
             try:
                 await self._single_recognition_round()
@@ -438,10 +426,6 @@ class RealtimeBridge:
 
     async def _single_recognition_round(self):
         """Run one ASR recognition round."""
-        import websockets, json, base64, time, asyncio
-        from app.avatar.services.xfyun_auth import assemble_auth_url
-        from app.config import ASR_APP_ID, ASR_API_KEY, ASR_API_SECRET, AVATAR_IAT_URL
-
         if not self.current_audio_queue:
             return
 
@@ -514,7 +498,6 @@ class RealtimeBridge:
             if result_text:
                 normalized = str(result_text).strip()
                 if normalized:
-                    import time
                     now_ts = time.monotonic()
                     is_dup = normalized == self._last_asr_text
                     recent_dup = is_dup and (now_ts - self._last_asr_at < 1.6)
@@ -560,9 +543,6 @@ class RealtimeBridge:
 
     async def _send_audio_to_asr(self, ws, first_chunk: bytes, vad_eos: int) -> dict:
         """Send ASR audio stream with first frame carrying first audio chunk."""
-        import base64
-        from app.config import ASR_APP_ID
-
         # First frame: status=0 with first chunk audio (align with working demo/common iat usage)
         first_audio_b64 = base64.b64encode(first_chunk).decode()
         start_params = {
@@ -669,8 +649,6 @@ class RealtimeBridge:
         enable_search: bool = False,
     ):
         """执行一轮完整的对话 turn：调用 chat 服务 → 流式处理事件 → 触发 Avatar 播报。"""
-        from app.chat.service import chat, get_chat_usecases
-
         # 合并附件 URL 并去重
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()

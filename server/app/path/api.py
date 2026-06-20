@@ -43,10 +43,6 @@ async def stream_path_events(
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
-    from fastapi.responses import StreamingResponse
-    from app.path.service import path_event_bus
-    import asyncio
-
     service = PathService(session)
     try:
         await service.get_path_by_id(current_user.id, path_id)
@@ -292,5 +288,4 @@ async def get_path_learning_evaluation(
 # ── Background task wrapper ──────────────────────────────────────────────────
 
 async def _run_generation_bg(user_id: int, path_id: int, request: CreateLearningPathRequest):
-    from app.path.service import run_generation_bg
     await run_generation_bg(user_id, path_id, request)

@@ -1,14 +1,10 @@
-"""路径规划服务 — 路径生成、节点工作区、测验、评估一体化。
-
-节点学习闭环（教程 → 题目 → 测验 → 评估）已迁移至 LangGraph 工作流，
-由 ``workflows/learn_workflow.py`` 中的 ``StateGraph`` 编排。
-"""
-
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -20,6 +16,7 @@ from app.evaluation.service import (
     EvaluationService,
     build_summary_from_events,
 )
+from app.infra.database import session_scope
 from app.infra.logging import get_logger
 from app.infra.models import (
     LearningEvent,
@@ -30,9 +27,6 @@ from app.infra.models import (
     PathNodeResource,
     PathNodeTutorial,
 )
-import asyncio
-from typing import Literal
-from pydantic import BaseModel, Field
 from app.path.schemas import (
     AgentLearningPathPlan,
     AuxiliaryResourceRequest,
@@ -59,6 +53,7 @@ from app.path.workflows import (
     COMPLETED_NODE_STATUSES,
 )
 from app.profile.service import get_profile_service
+
 
 # ======================================================================
 # SSE 路径事件定义 (源自 events.py)
@@ -844,8 +839,6 @@ def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
 async def run_generation_bg(
     user_id: int, path_id: int, request: CreateLearningPathRequest,
 ):
-    from app.infra.database import session_scope
-
     async with session_scope() as session:
         service = PathService(session)
         await service.run_generation(path_id, user_id, request)
