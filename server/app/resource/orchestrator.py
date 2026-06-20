@@ -18,6 +18,7 @@ from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
 from app.resource.events import AgentEventEmitter
 from app.resource.schemas import ResourceGenerationRequest
+from app.resource.service import ResourceService
 from app.resource.workflow import build_parent_graph
 from app.resource.workflow.state import ParentState
 
@@ -30,8 +31,6 @@ async def run_multi_agent_generation(
     profile: dict[str, Any],
     resource_id: int,
 ) -> None:
-    from app.resource.service import ResourceService
-
     run_id = f"resource-{resource_id}-{uuid4().hex[:8]}"
     emitter = AgentEventEmitter(resource_id=resource_id, run_id=run_id)
     start_time = time.perf_counter()
@@ -44,8 +43,8 @@ async def run_multi_agent_generation(
         )
 
         async with session_scope() as session:
-            usecases = ResourceService(session)
-            await usecases.update_resource_status(resource_id, "generating")
+            service = ResourceService(session)
+            await service.update_resource_status(resource_id, "generating")
 
         graph = build_parent_graph()
         initial_state = ParentState(
@@ -56,6 +55,7 @@ async def run_multi_agent_generation(
             run_id=run_id,
             emitter=emitter,
             results={},
+            failures={},
         )
         final_state = await graph.ainvoke(initial_state)
         success = bool(final_state.get("success", False))
@@ -63,10 +63,10 @@ async def run_multi_agent_generation(
         if not success:
             logger.warning("LangGraph 未产生成功终态: resource_id=%s", resource_id)
             async with session_scope() as session:
-                usecases = ResourceService(session)
-                resource = await usecases.get_resource(user_id, resource_id)
+                service = ResourceService(session)
+                resource = await service.get_resource(user_id, resource_id)
                 if resource is not None and resource.status == "generating":
-                    await usecases.update_resource_status(resource_id, "failed")
+                    await service.update_resource_status(resource_id, "failed")
 
         await emitter.emit_done(
             success=success,
@@ -78,8 +78,6 @@ async def run_multi_agent_generation(
         total_elapsed = time.perf_counter() - start_time
         logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
         async with session_scope() as session:
-            usecases = ResourceService(session)
-            await usecases.update_resource_status(resource_id, "failed")
+            service = ResourceService(session)
+            await service.update_resource_status(resource_id, "failed")
         await emitter.emit_done(success=False, message=f"资源生成失败: {exc}")
-    finally:
-        ResourceService.release_write_lock(resource_id)

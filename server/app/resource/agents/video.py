@@ -11,17 +11,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any, Annotated, Literal, Union, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
+from app.config import WORKPLACE_DIR
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import outline_coverage_summary
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.resource.schemas import AgentResult, DownstreamContext, NodeInput, ReusableAssets, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -246,7 +249,6 @@ class VideoMaterialAgent:
 
         prompt = prompts.get("resource").get("video_material")
         message = f"{prompt}\n\n输入 JSON:\n{_safe_json(context)}"
-        from app.infra.llm import get_llm
 
         llm = get_llm()
         return await llm.ainvoke_json(VideoMaterialDigest, message)
@@ -264,7 +266,6 @@ class VideoOutlineAgent:
         prompt = prompts.get("resource").get("video_outline")
         payload = {"digest": digest.model_dump(mode="json"), "constraints": constraints.model_dump(mode="json")}
         message = f"{prompt}\n\n输入 JSON:\n{_safe_json(payload)}"
-        from app.infra.llm import get_llm
 
         llm = get_llm()
         return await llm.ainvoke_json(VideoOutline, message)
@@ -280,7 +281,6 @@ class SceneWriterAgent:
             "constraints": constraints.model_dump(mode="json"),
         }
         message = f"{prompt}\n\n输入 JSON:\n{_safe_json(payload)}"
-        from app.infra.llm import get_llm
 
         llm = get_llm()
         return await llm.ainvoke_json(SceneDraft, message)
@@ -428,8 +428,6 @@ class VideoAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         """路径节点场景：从 NodeInput 构建素材并执行嵌套子图。"""
-        from app.resource.schemas import DownstreamContext, ReusableAssets
-
         mock_handoffs = {
             "content": DownstreamContext(
                 source_agent="content",
@@ -597,10 +595,6 @@ class VideoAgent(BaseResourceAgent):
             )
 
         # 保存 JSON 文件到 static/videos/res_{id}/ 目录
-        from app.config import WORKPLACE_DIR
-        from pathlib import Path
-        import json
-
         resource_id = input_data.resource_id
         video_dir = WORKPLACE_DIR / "videos" / f"res_{resource_id}"
         video_dir.mkdir(parents=True, exist_ok=True)
@@ -662,7 +656,6 @@ class VideoAgent(BaseResourceAgent):
                 error="tutor_context 缺少 learning_need/question/topic",
                 metadata={"agent_id": "video", "reserved_for_tutor": True},
             )
-        from app.resource.schemas import DownstreamContext
         raw_handoffs = tutor_context.get("upstream_handoffs") or {}
         normalized_handoffs: dict[str, DownstreamContext] = {}
         for agent_id, value in raw_handoffs.items():

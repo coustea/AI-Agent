@@ -17,8 +17,10 @@ import logging
 from typing import Any
 
 from langgraph.types import Send
+from sqlalchemy import select
 
 from app.infra.database import session_scope
+from app.infra.models import GeneratedResourceItem
 from app.resource.agents import AGENT_REGISTRY
 from app.resource.events import AgentRunTracker
 from app.resource.service import ResourceService
@@ -108,8 +110,6 @@ async def get_coverage(
         service = ResourceService(session)
         # 使用 user_id=0 因为我们只需要 resource_id 级别的数据
         # 实际上 list_resource_items 需要 user_id，这里用子查询
-        from sqlalchemy import select
-        from app.infra.models import GeneratedResourceItem
         stmt = (
             select(GeneratedResourceItem.downstream_context)
             .where(GeneratedResourceItem.resource_id == resource_id)

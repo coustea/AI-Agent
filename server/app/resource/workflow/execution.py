@@ -17,14 +17,15 @@ import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
+from app.resource.service import ResourceService
 from app.resource.workflow.validation import validate_agent_result
 
 if TYPE_CHECKING:
     from app.resource.agents.base import BaseResourceAgent
     from app.resource.events import AgentEventEmitter
     from app.resource.schemas import AgentResult, ResourceInput
-    from app.resource.service import ResourceService
 
 logger = get_module_logger("resource", sub="execution")
 
@@ -70,8 +71,6 @@ async def execute_resource_agent(
     source_item_ids: list[int] | None = None,
 ) -> AgentOutcome:
     """执行单个资源 Agent，包含完整的生命周期管理。"""
-    from app.resource.service import ResourceService, session_scope
-
     started = time.perf_counter()
 
     # 发送开始事件
@@ -188,8 +187,6 @@ async def _record_failure(
     emitter: "AgentEventEmitter",
 ) -> AgentOutcome:
     """记录失败并返回失败结果。"""
-    from app.resource.service import ResourceService, session_scope
-
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     error_type = type(exception).__name__
     error_message = str(exception)[:500]
