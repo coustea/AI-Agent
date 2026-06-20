@@ -277,6 +277,21 @@ async def _execute_non_planning_agent(
     agent = AGENT_REGISTRY[agent_id](emitter)
     timeout_seconds = AGENT_TIMEOUTS.get(agent_id, 300.0)
 
+    # 从数据库查询依赖 Agent 的成功 item IDs
+    source_item_ids: list[int] | None = None
+    if depends_on_agents:
+        async with session_scope() as session:
+            from sqlalchemy import select
+            from app.infra.models import GeneratedResourceItem
+            stmt = (
+                select(GeneratedResourceItem.id)
+                .where(GeneratedResourceItem.resource_id == resource_id)
+                .where(GeneratedResourceItem.status == "completed")
+                .where(GeneratedResourceItem.agent_type.in_(depends_on_agents))
+            )
+            result = await session.exec(stmt)
+            source_item_ids = list(result.all())
+
     outcome = await execute_resource_agent(
         user_id=user_id,
         resource_id=resource_id,
@@ -286,12 +301,11 @@ async def _execute_non_planning_agent(
         input_data=resource_input,
         emitter=emitter,
         timeout_seconds=timeout_seconds,
-        source_item_ids=None,  # TODO: 从 depends_on_agents 查询数据库获取
+        source_item_ids=source_item_ids,
     )
 
     if outcome.status == "completed":
-        # 成功 - 返回空 results（因为 execute_resource_agent 已持久化）
-        # 但 merge_workers_node 需要从数据库重建 state，这里返回 agent_id 标记
+        # 成功 - 返回标记（execute_resource_agent 已持久化）
         return {"results": {agent_id: True}}
     else:
         # 失败 - 返回失败记录
