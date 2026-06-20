@@ -45,17 +45,6 @@ BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
 AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID)
 
 
-def select_worker_agents(enabled_agents: list[str], registry: dict[str, Any]) -> list[str]:
-    """筛选基础 worker agent（排除 planning、review 和聚合 agent）。"""
-    return [
-        agent_id
-        for agent_id in enabled_agents
-        if agent_id in registry
-        and agent_id not in ("planning", "review")
-        and agent_id not in AGGREGATION_AGENT_IDS
-    ]
-
-
 def build_agent_resource_input(
     *,
     request,
@@ -391,7 +380,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     failures = state.get("failures") or {}
     success_count = len(results)
     fail_count = len(failures)
-    worker_agents = select_worker_agents(state["request"].enabled_agent_ids(), AGENT_REGISTRY)
+    # 直接使用 request 的 enabled_agent_ids，前端已按要求传参
     coordinator_status = "failed" if worker_agents and success_count == 0 else "finished"
     message = (
         f"基础资源并行生成完成：成功 {success_count} 个，失败 {fail_count} 个"
