@@ -630,6 +630,7 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     metadata_json                   JSONB,
     metrics                         JSONB,
     downstream_context              JSONB,
+    output_file_path                VARCHAR(500),
     depends_on_agents               JSONB,
     source_resource_item_ids        JSONB,
     source_item_ids                 JSONB,

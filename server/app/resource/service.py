@@ -358,6 +358,9 @@ class ResourceService:
         # 使用 split_content 进行严格分流
         content_json, content_text = split_content(result)
 
+        # 从 metadata 提取 output_file_path
+        output_file_path = result.metadata.get("output_file_path") if result.metadata else None
+
         item = ItemModel(
             resource_id=resource_id,
             user_id=user_id,
@@ -371,6 +374,7 @@ class ResourceService:
             metadata_json=result.metadata,
             metrics=result.metrics,
             downstream_context=result.downstream_context.model_dump(mode="json") if result.downstream_context else None,
+            output_file_path=output_file_path,
             depends_on_agents=dependencies or None,
             source_item_ids=source_item_ids,
             status="completed",

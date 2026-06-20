@@ -45,12 +45,49 @@ class _FakeLlmResponse:
 
 
 def _make_input(agent_id: str, config: dict[str, Any] | None = None) -> ResourceInput:
+    from app.resource.schemas import TeachingPlan, TeachingOutlineItem, AgentAssignment
+
+    teaching_plan = TeachingPlan(
+        teaching_strategy="从基础概念到实际应用",
+        outline=[
+            TeachingOutlineItem(
+                id="o1",
+                title="变量与数据类型",
+                goal="理解 Python 变量和基本数据类型",
+                key_points=["变量定义", "数据类型分类"],
+                must_not_miss=True,
+            ),
+            TeachingOutlineItem(
+                id="o2",
+                title="控制流",
+                goal="掌握条件判断和循环",
+                key_points=["if-else", "for/while 循环"],
+                must_not_miss=False,
+            ),
+            TeachingOutlineItem(
+                id="o3",
+                title="函数基础",
+                goal="学会定义和调用函数",
+                key_points=["函数定义", "参数传递"],
+                must_not_miss=False,
+            ),
+        ],
+        agent_assignments=[
+            AgentAssignment(
+                agent_id="content",
+                assigned_outline_ids=["o1", "o2", "o3"],
+                focus_instruction="讲解基础概念",
+                style_constraint="案例驱动",
+            ),
+        ],
+    )
     return ResourceInput(
         resource_id=1,
         learning_need="Python 基础语法",
         learning_scenario="self_study",
         agent_name=agent_id,
         agent_config=config or {},
+        teaching_plan=teaching_plan,
     )
 
 

@@ -30,6 +30,7 @@ VideoVoice = Literal["teacher", "coach", "concise"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
 SceneRole = Literal["hook", "concept", "example", "process", "misconception", "practice", "recap"]
 VisualType = Literal["card", "diagram", "code", "timeline", "comparison", "quiz", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture"]
+VideoSourceAgentId = Literal["content", "mindmap", "quiz", "code", "reading"]
 
 
 class VideoConstraints(BaseModel):
@@ -45,7 +46,7 @@ class VideoConstraints(BaseModel):
 
 class VideoMaterialDigest(BaseModel):
     """视频素材摘要 — 从上游资源提取的主题、概念、事实、示例等。"""
-    topic: str
+    topic: str = Field(min_length=1)
     audience: str = ""
     learning_goal: str = ""
     core_concepts: list[str] = Field(default_factory=list)
@@ -63,18 +64,18 @@ class SceneContract(BaseModel):
     scene_id: str
     index: int = Field(ge=1)
     role: SceneRole
-    title: str
+    title: str = Field(min_length=1)
     duration_seconds: int = Field(ge=10)
-    learning_objective: str
+    learning_objective: str = Field(min_length=1)
     visual_type: VisualType = "card"
-    content_hint: str
-    required_sources: list[str] = Field(default_factory=list)
+    content_hint: str = Field(min_length=1)
+    required_sources: list[VideoSourceAgentId] = Field(min_length=1)
 
 
 class VideoOutline(BaseModel):
     """视频大纲 — 包含所有场景合约，校验场景连续性和时长一致性。"""
-    title: str
-    topic: str
+    title: str = Field(min_length=1)
+    topic: str = Field(min_length=1)
     duration_seconds: int = Field(ge=60)
     style: VideoStyle = "explainer"
     aspect_ratio: AspectRatio = "16:9"
@@ -88,6 +89,12 @@ class VideoOutline(BaseModel):
         indexes = [scene.index for scene in self.scenes]
         if indexes != list(range(1, len(self.scenes) + 1)):
             raise ValueError("scene indexes must be contiguous from 1")
+        scene_ids = [scene.scene_id for scene in self.scenes]
+        if len(scene_ids) != len(set(scene_ids)):
+            raise ValueError("scene IDs must be unique")
+        for scene in self.scenes:
+            if len(scene.required_sources) != len(set(scene.required_sources)):
+                raise ValueError(f"scene required_sources must be unique: {scene.scene_id}")
         if self.scenes[0].role != "hook":
             raise ValueError("first scene role must be hook")
         if self.scenes[-1].role != "recap":
@@ -99,26 +106,38 @@ class VideoOutline(BaseModel):
 
 
 class CaptionWord(BaseModel):
-    text: str
-    start_ms: int
-    end_ms: int
+    text: str = Field(min_length=1)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_timing(self) -> "CaptionWord":
+        if self.end_ms <= self.start_ms:
+            raise ValueError("caption word end_ms must be greater than start_ms")
+        return self
 
 
 class SceneDraft(BaseModel):
     scene_id: str
     index: int = Field(ge=1)
-    title: str
-    narration: str
+    title: str = Field(min_length=1)
+    narration: str = Field(min_length=1)
     captions: list[str] = Field(default_factory=list)
     on_screen_text: list[str] = Field(default_factory=list)
-    visual_prompt: str
+    visual_prompt: str = Field(min_length=1)
     visual_type: VisualType = "card"
     interaction_prompt: str = ""
-    visual: dict[str, Any] = Field(default_factory=dict)
-    source_agents: list[str] = Field(default_factory=list)
+    visual: dict[str, Any] = Field(min_length=1)
+    source_agents: list[VideoSourceAgentId] = Field(min_length=1)
     audio_src: str | None = None
     duration_ms: int = 0
     caption_words: list[CaptionWord] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "SceneDraft":
+        if len(self.source_agents) != len(set(self.source_agents)):
+            raise ValueError("scene draft source_agents must be unique")
+        return self
 
 
 
@@ -133,27 +152,27 @@ class VideoScene(BaseModel):
     scene_id: str
     index: int = Field(ge=1)
     role: SceneRole
-    title: str
+    title: str = Field(min_length=1)
     start_ms: int = Field(ge=0)
     duration_ms: int = Field(gt=0)
     visual_type: VisualType = "card"
-    narration: str
+    narration: str = Field(min_length=1)
     captions: list[str] = Field(default_factory=list)
     on_screen_text: list[str] = Field(default_factory=list)
-    visual_prompt: str
+    visual_prompt: str = Field(min_length=1)
     interaction_prompt: str = ""
-    visual: dict[str, Any] = Field(default_factory=dict)
-    source_agents: list[str] = Field(default_factory=list)
-    audio_src: str | None = None
+    visual: dict[str, Any] = Field(min_length=1)
+    source_agents: list[VideoSourceAgentId] = Field(min_length=1)
+    audio_src: str = Field(min_length=1)
     caption_words: list[CaptionWord] = Field(default_factory=list)
 
 
 
 class VideoPayload(BaseModel):
     schema_version: Literal["video/v1"] = "video/v1"
-    title: str
-    topic: str
-    duration_seconds: int = Field(ge=60)
+    title: str = Field(min_length=1)
+    topic: str = Field(min_length=1)
+    duration_seconds: float = Field(ge=60)
     aspect_ratio: AspectRatio = "16:9"
     style: VideoStyle = "explainer"
     voice: VideoVoice = "teacher"
@@ -171,8 +190,10 @@ class VideoPayload(BaseModel):
         for scene in self.scenes:
             if scene.start_ms != expected_start:
                 raise ValueError("scene timings must be contiguous")
+            if any(word.end_ms > scene.duration_ms for word in scene.caption_words):
+                raise ValueError(f"caption timing exceeds scene duration: {scene.scene_id}")
             expected_start += scene.duration_ms
-        if expected_start != self.duration_seconds * 1000:
+        if expected_start != round(self.duration_seconds * 1000):
             raise ValueError("scene timings must equal video duration_seconds")
         return self
 
@@ -214,19 +235,14 @@ def _input_context(input_data: ResourceInput, config: dict[str, Any]) -> dict[st
 
 
 class VideoMaterialAgent:
-    """视频素材提取 Agent — 从上游 handoff 中提取 PPT 可用的教学素材。"""
+    """视频素材提取 Agent — 从上游 handoff 中提取视频可用的教学素材。
+
+    上游 handoff 为空或提取失败时直接抛出异常。
+    """
     async def run(self, input_data: ResourceInput, config: dict[str, Any]) -> VideoMaterialDigest:
         context = _input_context(input_data, config)
-        fallback_topic = input_data.learning_need
         if not context["upstream_handoffs"]:
-            return VideoMaterialDigest(
-                topic=fallback_topic,
-                audience="自学学习者",
-                learning_goal=input_data.learning_need,
-                facts=[input_data.learning_need],
-                visual_opportunities=["标题卡片"],
-                source_map={"facts": ["learning_need"]},
-            )
+            raise ValueError("VideoMaterialAgent requires upstream handoffs from base agents")
 
         prompt = prompts.get("resource").get("video_material")
         message = f"{prompt}\n\n输入 JSON:\n{_safe_json(context)}"
@@ -236,23 +252,14 @@ class VideoMaterialAgent:
         return await llm.ainvoke_json(VideoMaterialDigest, message)
 
 
-def _duration_plan(total: int, count: int) -> list[int]:
-    base = total // count
-    durations = [base for _ in range(count)]
-    durations[-1] += total - sum(durations)
-    return durations
-
-
 class VideoOutlineAgent:
-    """视频大纲规划 Agent — 生成场景合约列表。"""
+    """视频大纲规划 Agent — 生成场景合约列表。
+
+    素材不足时直接抛出异常。
+    """
     async def run(self, digest: VideoMaterialDigest, constraints: VideoConstraints) -> VideoOutline:
         if not digest.core_concepts and not digest.facts:
-            durations = _duration_plan(constraints.duration_seconds, constraints.scene_count)
-            scenes = [
-                SceneContract(scene_id=f"scene-{idx}", index=idx, role="hook" if idx == 1 else "recap" if idx == constraints.scene_count else "concept", title=f"{digest.topic} {idx}", duration_seconds=durations[idx - 1], learning_objective=digest.learning_goal or digest.topic, visual_type="card", content_hint=digest.topic, required_sources=["learning_need"])
-                for idx in range(1, constraints.scene_count + 1)
-            ]
-            return VideoOutline(title=f"{digest.topic}讲解", topic=digest.topic, duration_seconds=constraints.duration_seconds, style=constraints.style, aspect_ratio=constraints.aspect_ratio, narrative=digest.learning_goal, scenes=scenes)
+            raise ValueError("VideoOutlineAgent requires digest with core_concepts or facts")
 
         prompt = prompts.get("resource").get("video_outline")
         payload = {"digest": digest.model_dump(mode="json"), "constraints": constraints.model_dump(mode="json")}
@@ -282,69 +289,64 @@ class SceneWriterAgent:
 
 
 class VideoPayloadBuilder:
-    """视频载荷构建器 — 确定性地将 outline + drafts 转换为 VideoPayload。
-
-    处理：
-    - 场景时长对齐和连续性校验
-    - 资产（asset）自动生成
-    - 总时长补差（确保 scene durations 之和等于 duration_seconds）
-    """
+    """严格地将完整 outline 和 TTS 分镜转换为 VideoPayload。"""
     def build(
         self,
         outline: VideoOutline,
         drafts: list[SceneDraft],
         constraints: VideoConstraints,
-        digest: VideoMaterialDigest,
     ) -> VideoPayload:
+        draft_ids = [draft.scene_id for draft in drafts]
+        if len(draft_ids) != len(set(draft_ids)):
+            raise ValueError("video drafts contain duplicate scene IDs")
+        expected_scene_ids = {contract.scene_id for contract in outline.scenes}
+        if set(draft_ids) != expected_scene_ids:
+            raise ValueError(
+                "video drafts do not match outline scenes: "
+                f"missing={sorted(expected_scene_ids - set(draft_ids))} "
+                f"unexpected={sorted(set(draft_ids) - expected_scene_ids)}"
+            )
+
         draft_by_id = {draft.scene_id: draft for draft in drafts}
         scenes: list[VideoScene] = []
         cursor_ms = 0
         for contract in outline.scenes:
             draft = draft_by_id[contract.scene_id]
-            # Use generated duration_ms or fallback to contract planned duration
-            duration_ms = getattr(draft, "duration_ms", 0) or (contract.duration_seconds * 1000)
+            if draft.index != contract.index:
+                raise ValueError(f"video draft index mismatch for scene {contract.scene_id}")
+            if draft.visual_type != contract.visual_type:
+                raise ValueError(f"video draft visual type mismatch for scene {contract.scene_id}")
+            if draft.duration_ms <= 0 or not draft.audio_src:
+                raise ValueError(f"video draft missing synthesized audio for scene {contract.scene_id}")
+            if set(draft.source_agents) != set(contract.required_sources):
+                raise ValueError(f"video draft source agents mismatch for scene {contract.scene_id}")
             scenes.append(
                 VideoScene(
                     scene_id=contract.scene_id,
                     index=contract.index,
                     role=contract.role,
-                    title=draft.title or contract.title,
+                    title=draft.title,
                     start_ms=cursor_ms,
-                    duration_ms=duration_ms,
+                    duration_ms=draft.duration_ms,
                     visual_type=draft.visual_type,
                     narration=draft.narration,
                     captions=draft.captions if constraints.include_captions else [],
                     on_screen_text=draft.on_screen_text,
                     visual_prompt=draft.visual_prompt,
                     interaction_prompt=draft.interaction_prompt,
-                    visual=draft.visual or {},
+                    visual=draft.visual,
                     audio_src=draft.audio_src,
-                    source_agents=draft.source_agents or contract.required_sources,
+                    source_agents=draft.source_agents,
                     caption_words=draft.caption_words,
                 )
             )
-            cursor_ms += duration_ms
-
-        # Adjust total duration and last scene padding to satisfy model validators
-        total_ms = cursor_ms
-        duration_seconds = (total_ms + 999) // 1000
-        target_total_ms = duration_seconds * 1000
-        diff_ms = target_total_ms - total_ms
-        
-        if scenes and diff_ms > 0:
-            scenes[-1].duration_ms += diff_ms
-            
-        # Re-align contiguous start times
-        expected_start = 0
-        for scene in scenes:
-            scene.start_ms = expected_start
-            expected_start += scene.duration_ms
+            cursor_ms += draft.duration_ms
 
         source_agent_ids = sorted({agent for scene in scenes for agent in scene.source_agents})
         return VideoPayload(
             title=outline.title,
-            topic=outline.topic or digest.topic,
-            duration_seconds=duration_seconds,
+            topic=outline.topic,
+            duration_seconds=cursor_ms / 1000,
             aspect_ratio=constraints.aspect_ratio,
             style=constraints.style,
             voice=constraints.voice,
@@ -489,6 +491,20 @@ class VideoAgent(BaseResourceAgent):
             raise ValueError(
                 f"视频场景数与预期不符：期望 {state['constraints'].scene_count}，实际 {len(outline.scenes)}"
             )
+        if outline.duration_seconds != state["constraints"].duration_seconds:
+            raise ValueError("视频大纲时长与配置不一致")
+        if outline.style != state["constraints"].style:
+            raise ValueError("视频大纲风格与配置不一致")
+        if outline.aspect_ratio != state["constraints"].aspect_ratio:
+            raise ValueError("视频大纲画幅与配置不一致")
+        available_sources = set(state["input_data"].upstream_handoffs)
+        for scene in outline.scenes:
+            unknown_sources = set(scene.required_sources) - available_sources
+            if unknown_sources:
+                raise ValueError(
+                    f"视频场景引用未成功的来源 Agent: scene={scene.scene_id!r} "
+                    f"sources={sorted(unknown_sources)}"
+                )
         return {"outline": outline}
 
     def _route_scenes(self, state: VideoGraphState) -> list[Send]:
@@ -520,24 +536,23 @@ class VideoAgent(BaseResourceAgent):
             filename = f"{prefix}_scene_{draft.scene_id}.mp3"
             file_path = WORKPLACE_DIR / "video_audio" / filename
 
-            try:
-                tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
-                # Add 500ms safety buffer, but keep a minimum of 4 seconds
-                draft.duration_ms = max(int(tts_result.duration * 1000) + 500, 4000)
-                draft.audio_src = f"/api/v1/ai/video/audio/{filename}"
-                draft.caption_words = tts_result.captions
-            except Exception as e:
-                logger.error("TTS synthesis failed for scene %s: %s", draft.scene_id, e)
-                # Fallback to contract planned duration
-                draft.duration_ms = state["contract"].duration_seconds * 1000
-                draft.audio_src = None
+            tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
+            duration_ms = round(tts_result.duration * 1000)
+            if duration_ms <= 0:
+                raise ValueError(f"TTS returned invalid duration for scene {draft.scene_id}")
+            draft.duration_ms = duration_ms
+            draft.audio_src = f"/api/v1/ai/video/audio/{filename}"
+            draft.caption_words = [
+                CaptionWord.model_validate(caption.to_dict())
+                for caption in tts_result.captions
+            ]
 
             return {"drafts": [draft]}
 
     async def _payload_node(self, state: VideoGraphState) -> dict[str, Any]:
         await self.emit_start("正在构建视频预览载荷", progress=85)
         payload = VideoPayloadBuilder().build(
-            state["outline"], state["drafts"], state["constraints"], state["digest"]
+            state["outline"], state["drafts"], state["constraints"]
         )
         return {"payload": payload}
 
@@ -577,6 +592,28 @@ class VideoAgent(BaseResourceAgent):
                 },
             )
 
+        # 保存 JSON 文件到 static 目录
+        from app.config import WORKPLACE_DIR
+        from pathlib import Path
+        import json
+
+        resource_id = input_data.resource_id
+        video_dir = WORKPLACE_DIR / "videos" / f"res_{resource_id}"
+        video_dir.mkdir(parents=True, exist_ok=True)
+
+        json_filename = f"video_payload.json"
+        json_path = video_dir / json_filename
+        json_path.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
+
+        # 记录音频文件路径
+        audio_files = []
+        for scene in payload.scenes:
+            if scene.audio_src:
+                audio_files.append(scene.audio_src)
+
+        # 相对于 static 目录的路径
+        output_file_rel_path = f"videos/res_{resource_id}/{json_filename}"
+
         content = payload.model_dump_json(indent=2)
         source_handoff_agent_ids = sorted(input_data.upstream_handoffs.keys()) if input_data.upstream_handoffs else sorted({agent for scene in payload.scenes for agent in scene.source_agents})
         return AgentResult(
@@ -599,6 +636,8 @@ class VideoAgent(BaseResourceAgent):
                 "aspect_ratio": payload.aspect_ratio,
                 "style": payload.style,
                 "source_handoff_agent_ids": source_handoff_agent_ids,
+                "audio_files": audio_files,
+                "output_file_path": output_file_rel_path,
                 "internal_pipeline": "material/outline/scenes/payload",
             },
         )

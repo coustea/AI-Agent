@@ -588,7 +588,7 @@ class GeneratedResourceItem(SQLModel, table=True):
     resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
     user_id: int = Field(index=True)
 
-    # Agent 类型（content/mindmap/quiz/code/reading/ppt）
+    # Agent 类型（content/mindmap/quiz/code/reading/ppt/video）
     agent_type: str = Field(max_length=50, index=True)
 
     # 内容格式（markdown/json/text/code）
@@ -607,6 +607,10 @@ class GeneratedResourceItem(SQLModel, table=True):
     downstream_context: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     status: str = Field(default="pending", max_length=50)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
+
+    # 输出文件路径（用于视频、PPT 等需要额外文件的资源）
+    # 存储相对于 static 目录的路径，如 "videos/res_123/video.mp4"
+    output_file_path: str | None = Field(default=None, max_length=500)
 
     # Agent 协作与路径规划检索字段
     depends_on_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
