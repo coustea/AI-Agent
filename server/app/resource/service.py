@@ -489,18 +489,69 @@ class ResourceService:
         return (await self.session.exec(stmt)).one()
 
     async def get_generation_status(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> dict[str, Any] | None:
+        """从数据库重建资源生成状态。
+
+        优先级：数据库 > event_bus snapshot
+        返回已完成 items、运行中/失败的 agent runs 状态。
+        """
         resource = await self.get_resource(user_id, resource_id, allowed_sources=allowed_sources)
         if resource is None:
             return None
+
+        # 从数据库读取成功 items
         db_items = await self.list_resource_items(user_id, resource_id)
-        snapshots = resource_event_bus.get_latest_snapshot(resource_id).get("agent_snapshots", {})
-        merged = {aid: dict(s) for aid, s in snapshots.items()}
-        for item in db_items:
-            prev = dict(merged.get(item.agent_type, {}))
-            prev.update({"event_type": prev.get("event_type", "agent.artifact_ready"), "agent_id": item.agent_type, "status": "finished", "message": prev.get("message") or f"{item.agent_type} 资源已保存", "progress": 100, "phase": "artifact_saved", "artifact_id": str(item.id)})
-            merged[item.agent_type] = prev
-        selected = list(resource.selected_agents or [])
-        return {"resource_id": resource_id, "status": resource.status, "selected_agents": selected, "agent_snapshots": merged, "current_message": resource_event_bus.get_latest_snapshot(resource_id).get("current_message", ""), "resources": [_db_item_to_dto(item).model_dump(mode="json") for item in db_items]}
+        items_by_agent = {item.agent_type: item for item in db_items}
+
+        # 从数据库读取 agent runs 状态
+        runs_stmt = (
+            select(GeneratedResourceAgentRun)
+            .where(GeneratedResourceAgentRun.resource_id == resource_id)
+        )
+        runs_result = await self.session.exec(runs_stmt)
+        runs_by_agent = {run.agent_id: run for run in runs_result.all()}
+
+        # 构建 agent_snapshots：数据库状态优先
+        merged: dict[str, dict[str, Any]] = {}
+        selected_agents = list(resource.selected_agents or [])
+
+        for agent_id in selected_agents:
+            # 成功 item 优先
+            if agent_id in items_by_agent:
+                item = items_by_agent[agent_id]
+                merged[agent_id] = {
+                    "event_type": "agent.artifact_ready",
+                    "agent_id": agent_id,
+                    "status": "finished",
+                    "message": f"{agent_id} 资源已保存",
+                    "progress": 100,
+                    "phase": "artifact_saved",
+                    "artifact_id": str(item.id),
+                }
+            # 否则查看 run 状态
+            elif agent_id in runs_by_agent:
+                run = runs_by_agent[agent_id]
+                merged[agent_id] = {
+                    "event_type": f"agent.{run.status}",
+                    "agent_id": agent_id,
+                    "status": run.status,
+                    "message": run.error_message or f"{agent_id} {run.status}",
+                    "progress": 100 if run.status == "completed" else 0,
+                    "phase": run.stage,
+                }
+            # 最后使用 event_bus snapshot
+            else:
+                snapshot = resource_event_bus.get_latest_snapshot(resource_id).get("agent_snapshots", {}).get(agent_id, {})
+                if snapshot:
+                    merged[agent_id] = dict(snapshot)
+
+        return {
+            "resource_id": resource_id,
+            "status": resource.status,
+            "selected_agents": selected_agents,
+            "agent_snapshots": merged,
+            "current_message": resource_event_bus.get_latest_snapshot(resource_id).get("current_message", ""),
+            "resources": [_db_item_to_dto(item).model_dump(mode="json") for item in db_items],
+        }
 
     async def get_resource_bundle(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> ResourceBundle | None:
         resource = await self.get_resource(user_id, resource_id, allowed_sources=allowed_sources)
