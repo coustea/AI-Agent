@@ -93,7 +93,32 @@ Chat 工具改为普通异步函数：
 
 - 删除 `@tool`。
 - 不再调用工具对象 `.ainvoke(payload)`。
-- 包装器直接调用底层 handler，并继续发送现有 `tool_start` / `tool_done` 事件。
+- 包装器直接调用底层 handler。
+- 删除工具函数和业务包装器中分散发送的 `tool_start` / `tool_done`，避免重复事件和工具遗漏。
+
+### 前端运行状态事件
+
+工具执行状态由 `ToolExcute` 统一产生，Chat 将其转换为单一 SSE 事件 `agent_status`。基础设施层不依赖 Chat schema：`ToolExcute` 只接受一个可选异步事件回调，并在 handler 执行前、成功后和失败后报告工具名、参数与运行阶段；Chat 请求级工厂负责将该内部事件翻译为 `ChatStreamEvent`。
+
+`agent_status` 的载荷固定为：
+
+```json
+{
+  "stage": "tool_running",
+  "status": "running",
+  "tool_name": "duckduckgo_search",
+  "message": "正在搜索相关资料「Python 3.14 新特性」..."
+}
+```
+
+- `status` 取值为 `running`、`done` 或 `failed`。
+- `message` 由 Chat 层根据工具名和经过裁剪的非敏感参数生成；通用基础设施不包含中文 UI 文案。
+- 前端只展示当前一条状态，不保存或渲染完整执行步骤。
+- 新工具开始时直接覆盖上一条状态；工具完成后显示“正在整理工具结果...”。
+- 首个回答文本分片、流结束或流失败时清除状态，避免状态残留在最终回答上。
+- Path 可不传事件回调，因此不会被迫接入 Chat SSE；Resource 仍保持自身事件和持久化边界。
+
+后端 SSE 映射保留事件原名 `agent_status`。不再把工具事件重命名为笼统的 `tool`，也不保留旧 `tool_start` / `tool_done` 的兼容发送路径。
 
 ### 研究循环
 
@@ -123,25 +148,12 @@ Resource 当前以 LangGraph 节点直接调度 agent，没有模型选择工具
 - 未知工具：产生失败结果，不执行任何 handler。
 - 参数 JSON 错误：产生失败结果并保留原始调用 ID。
 - Pydantic 校验错误：产生失败结果，错误信息可记录但不把敏感上下文暴露给前端。
-- handler 异常：由 Chat 现有执行层转换为失败事件和失败 invocation。
+- handler 异常：`ToolExcute` 先报告 `failed` 运行阶段，再由 Chat 执行层转换为失败 invocation；前端只接收安全概括，不接收异常堆栈。
 - 单个并发工具失败：不取消同批其他工具。
 
-## 测试
+## 验证
 
-采用 TDD，先补失败测试，再修改生产代码。覆盖：
-
-1. `Tool` 生成正确的 OpenAI function schema。
-2. `ToolExcute` 注册、重复名称拒绝和工具描述获取。
-3. 标准、Spark 单字典、缺失 ID、字符串/字典 arguments 的解析。
-4. Pydantic 校验后调用正确 handler。
-5. 未知工具、非法 JSON、handler 异常。
-6. Chat 请求级工具注册不再产生 LangChain `StructuredTool`。
-7. WebResearchRunner 能完成多轮“模型选择 → 工具执行 → 结果回传”。
-8. Chat 工具调用事件、Evidence 和持久化契约保持不变。
-9. Path 搜索循环使用 `ToolExcute`，结果与规划状态契约保持不变。
-10. 全仓库静态扫描确认旧工具接口零残留。
-
-验证命令以 Chat 定向测试为主，并避开项目文档中注明的既有失败测试；最后运行后端相关测试集合。
+本轮只修改源代码，不新增或修改测试文件。完成后通过现有后端测试、Python 编译检查、前端 `npm run build` 和旧工具接口静态扫描验证。需要新增的自动化测试场景整理为提示词，交由 Claude Code 后续实现，重点覆盖 `ToolExcute` 生命周期回调、SSE `agent_status` 映射、前端状态覆盖与首个回答分片清理。
 
 ## 完成标准
 
@@ -150,3 +162,4 @@ Resource 当前以 LangGraph 节点直接调度 agent，没有模型选择工具
 3. 全仓库不存在 LangChain 工具注册、绑定或执行代码。
 4. 不存在旧工具接口兼容层。
 5. Chat、Path、Resource 的业务数据与持久化边界保持独立。
+6. Chat 调用工具时，前端在回答前只显示一条简洁的实时状态，并在回答开始或流结束时清除。
