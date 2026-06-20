@@ -72,11 +72,11 @@ def build_agent_resource_input(
     )
 
 
-async def _fetch_successful_handoffs_from_db(
+async def get_handoffs(
     resource_id: int,
     user_id: int,
 ) -> dict[str, DownstreamContext]:
-    """从数据库读取成功持久化的基础 Agent handoffs，供聚合 Agent 使用。"""
+    """获取成功持久化的基础 Agent handoffs。"""
     async with session_scope() as session:
         service = ResourceService(session)
         items = await service.list_resource_items(user_id, resource_id)
@@ -92,11 +92,11 @@ async def _fetch_successful_handoffs_from_db(
     return handoffs
 
 
-async def _fetch_coverage_from_db(
+async def get_coverage(
     resource_id: int,
     teaching_plan: TeachingPlan | None,
 ) -> CoverageReport:
-    """从数据库读取成功持久化的 Agent 覆盖情况。"""
+    """获取 Agent 覆盖情况。"""
     if not teaching_plan or not teaching_plan.outline:
         return CoverageReport(
             covered_outline_ids=[],
