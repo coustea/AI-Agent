@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from build_chroma import (
+from app.rag.build_chroma import (
     batch_chunks,
     ensure_docs_dir,
     get_loader,

@@ -2,7 +2,7 @@
 
 from langchain_core.documents import Document
 
-from markdown_splitter import MarkdownSplitter, _protect_tables_and_code
+from app.rag.markdown_splitter import MarkdownSplitter, _protect_tables_and_code
 
 
 class TestProtectCodeBlocksAndTables:

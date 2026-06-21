@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from search_chroma import format_result, get_vector_store_settings
+from app.rag.search_chroma import format_result, get_vector_store_settings
 
 
 def test_get_vector_store_settings_uses_shared_chroma_dir():
