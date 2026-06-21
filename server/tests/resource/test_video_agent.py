@@ -31,7 +31,7 @@ def _valid_payload_dict():
                 "title": "为什么连接需要三次确认",
                 "start_ms": 0,
                 "duration_ms": 30000,
-                "visual_type": "card",
+                "visual_type": "title_intro",
                 "narration": "如果只握手两次，历史报文可能让服务端误以为连接成立。",
                 "captions": ["两次握手无法排除历史报文"],
                 "on_screen_text": ["问题：为什么不是两次？"],
@@ -48,7 +48,7 @@ def _valid_payload_dict():
                 "title": "SYN、SYN+ACK、ACK",
                 "start_ms": 30000,
                 "duration_ms": 60000,
-                "visual_type": "diagram",
+                "visual_type": "concept_explain",
                 "narration": "客户端发送 SYN，服务端回复 SYN 加 ACK，客户端再确认 ACK。",
                 "captions": ["SYN", "SYN+ACK", "ACK"],
                 "on_screen_text": ["三次握手时序"],
@@ -65,7 +65,7 @@ def _valid_payload_dict():
                 "title": "总结",
                 "start_ms": 90000,
                 "duration_ms": 90000,
-                "visual_type": "card",
+                "visual_type": "compare_summary",
                 "narration": "三次握手的本质，是在不可靠网络里确认双方收发能力和初始序号。",
                 "captions": ["确认双方收发能力", "同步初始序号"],
                 "on_screen_text": ["结论：可靠连接从状态同步开始"],
@@ -139,9 +139,9 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
             aspect_ratio=constraints.aspect_ratio,
             narrative="从问题到流程再到总结",
             scenes=[
-                SceneContract(scene_id="scene-1", index=1, role="hook", title="问题", duration_seconds=60, learning_objective="引入问题", visual_type="card", content_hint="为什么不是两次", required_sources=["content"]),
-                SceneContract(scene_id="scene-2", index=2, role="concept", title="流程", duration_seconds=60, learning_objective="解释流程", visual_type="diagram", content_hint="三次报文", required_sources=["content"]),
-                SceneContract(scene_id="scene-3", index=3, role="recap", title="总结", duration_seconds=60, learning_objective="总结", visual_type="card", content_hint="回顾", required_sources=["content"]),
+                SceneContract(scene_id="scene-1", index=1, role="hook", title="问题", duration_seconds=60, learning_objective="引入问题", visual_type="title_intro", content_hint="为什么不是两次", required_sources=["content"]),
+                SceneContract(scene_id="scene-2", index=2, role="concept", title="流程", duration_seconds=60, learning_objective="解释流程", visual_type="concept_explain", content_hint="三次报文", required_sources=["content"]),
+                SceneContract(scene_id="scene-3", index=3, role="recap", title="总结", duration_seconds=60, learning_objective="总结", visual_type="compare_summary", content_hint="回顾", required_sources=["content"]),
             ],
         )
 
@@ -252,9 +252,9 @@ async def test_video_agent_generate_node_path_learning(monkeypatch):
             aspect_ratio=constraints.aspect_ratio,
             narrative="大纲",
             scenes=[
-                SceneContract(scene_id="scene-1", index=1, role="hook", title="问题", duration_seconds=60, learning_objective="引入问题", visual_type="card", content_hint="为什么不是两次", required_sources=["content"]),
-                SceneContract(scene_id="scene-2", index=2, role="concept", title="流程", duration_seconds=60, learning_objective="解释流程", visual_type="diagram", content_hint="三次报文", required_sources=["content"]),
-                SceneContract(scene_id="scene-3", index=3, role="recap", title="总结", duration_seconds=60, learning_objective="总结", visual_type="card", content_hint="回顾", required_sources=["content"]),
+                SceneContract(scene_id="scene-1", index=1, role="hook", title="问题", duration_seconds=60, learning_objective="引入问题", visual_type="title_intro", content_hint="为什么不是两次", required_sources=["content"]),
+                SceneContract(scene_id="scene-2", index=2, role="concept", title="流程", duration_seconds=60, learning_objective="解释流程", visual_type="concept_explain", content_hint="三次报文", required_sources=["content"]),
+                SceneContract(scene_id="scene-3", index=3, role="recap", title="总结", duration_seconds=60, learning_objective="总结", visual_type="compare_summary", content_hint="回顾", required_sources=["content"]),
             ],
         )
 

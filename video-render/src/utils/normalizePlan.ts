@@ -7,16 +7,6 @@ import {
   SceneType,
 } from "../schema/types";
 
-// SceneRole type matching backend definition
-type SceneRole =
-  | "hook"
-  | "concept"
-  | "example"
-  | "process"
-  | "misconception"
-  | "practice"
-  | "recap";
-
 // Default Styles and Configurations
 const DEFAULT_GLOBAL_STYLE: GlobalStyle = {
   theme: "clean_tech_education",
@@ -72,48 +62,11 @@ const VALID_SCENE_TYPES: SceneType[] = [
 ];
 
 /**
- * Maps SceneRole to the most appropriate SceneType.
- * Backend defines roles to express pedagogical intent.
- */
-const ROLE_TO_SCENE_TYPE: Record<SceneRole, SceneType> = {
-  hook: "title_intro",
-  concept: "concept_explain",
-  example: "code_execution",
-  process: "process_flow",
-  misconception: "compare_summary",
-  practice: "knowledge_check",
-  recap: "compare_summary",
-};
-
-/**
- * Maps backend visual_type to frontend SceneType for backward compatibility.
- */
-const VISUAL_TYPE_TO_SCENE_TYPE: Record<string, SceneType> = {
-  card: "concept_explain",
-  diagram: "concept_explain",
-  code: "code_execution",
-  timeline: "process_flow",
-  comparison: "compare_summary",
-  quiz: "knowledge_check",
-  state_machine: "state_machine",
-  data_structure: "data_structure",
-  algorithm_trace: "algorithm_trace",
-  memory_layout: "memory_layout",
-  cpu_architecture: "cpu_architecture",
-  network_protocol: "network_protocol",
-  layered_architecture: "layered_architecture",
-  // CS Theory templates
-  array_linked_list: "array_linked_list",
-  stack_queue: "stack_queue",
-  process_state: "process_state",
-  storage_hierarchy: "storage_hierarchy",
-};
-
-/**
  * Determines the SceneType based on available information.
- * Priority: explicit type > role mapping > visual_type mapping > default
+ * Priority: explicit type > visual_type > default
  */
 function determineSceneType(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scene: any,
   idx: number,
   isLastScene: boolean,
@@ -123,23 +76,12 @@ function determineSceneType(
     return scene.type;
   }
 
-  // 2. Use role mapping if available
-  const role = scene.role as SceneRole | undefined;
-  if (role && ROLE_TO_SCENE_TYPE[role]) {
-    // Special case: first scene with hook role should be title_intro
-    if (role === "hook" && idx === 0) {
-      return "title_intro";
-    }
-    return ROLE_TO_SCENE_TYPE[role];
+  // 2. Use visual_type if valid
+  if (scene.visual_type && VALID_SCENE_TYPES.includes(scene.visual_type)) {
+    return scene.visual_type as SceneType;
   }
 
-  // 3. Use visual_type mapping for backward compatibility
-  const visualType = scene.visual_type;
-  if (visualType && VISUAL_TYPE_TO_SCENE_TYPE[visualType]) {
-    return VISUAL_TYPE_TO_SCENE_TYPE[visualType];
-  }
-
-  // 4. Default based on position
+  // 3. Default based on position
   if (idx === 0) {
     return "title_intro";
   }
@@ -153,6 +95,7 @@ function determineSceneType(
  * Normalizes input JSON into the schema format expected by the frontend.
  * Supports both rich_video_plan.json (V2) and backend VideoPayload formats.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizePlan(rawPlan: any): RichVideoPlan {
   if (!rawPlan) {
     throw new Error("Input video plan is null or undefined");
@@ -218,6 +161,7 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
 
   const rawScenes = rawPlan.scenes || [];
   const scenes: RichVideoScene[] = rawScenes.map(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (scene: any, idx: number): RichVideoScene => {
       const id = scene.id || scene.scene_id || `scene_${idx + 1}`;
       const title = scene.title || `分镜 ${idx + 1}`;
@@ -243,25 +187,8 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
       const isLastScene = idx === rawScenes.length - 1;
       const type = determineSceneType(scene, idx, isLastScene);
 
-      // Use visual data from backend; generate minimal fallback if missing
-      let visual = scene.visual;
-      if (
-        !visual ||
-        typeof visual !== "object" ||
-        Object.keys(visual).length === 0
-      ) {
-        // Backend is expected to provide complete visual data for each scene.
-        // Fallback only for backward compatibility with old payloads.
-        const onScreenText: string[] = Array.isArray(scene.on_screen_text)
-          ? scene.on_screen_text
-          : [];
-        const visualPrompt = scene.visual_prompt || "";
-        visual = {
-          title,
-          content: visualPrompt || narration,
-          points: onScreenText,
-        };
-      }
+      // Use visual data from backend directly
+      const visual = scene.visual || {};
 
       // Pass TTS word-level captions from backend
       const caption_words: Array<{

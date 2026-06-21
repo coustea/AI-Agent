@@ -36,7 +36,7 @@ export interface RichVideoScene {
   duration_seconds: number;
   title: string;
   narration: string;
-  visual: Record<string, any>;
+  visual: Record<string, unknown>;
   audio_src?: string;
   transition: "fade" | "slide_left" | "slide_up" | "zoom" | "none";
   caption_words?: CaptionWord[];

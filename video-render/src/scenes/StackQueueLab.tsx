@@ -48,8 +48,7 @@ export const StackQueueLab: React.FC<StackQueueLabProps> = ({
     (scene.visual.items as StackQueueItem[]) || [];
   const operations: StackQueueOperation[] =
     (scene.visual.operations as StackQueueOperation[]) || [];
-  const peekValue = (scene.visual.peek_value as string) || "";
-  const timeComplexity = (scene.visual.time_complexity as string) || "";
+
 
   // Build dynamic item list based on operations
   const getItemsAtFrame = () => {
@@ -60,7 +59,7 @@ export const StackQueueLab: React.FC<StackQueueLabProps> = ({
     );
     const opProgress = (frame % opDuration) / opDuration;
 
-    let items = [...initialItems];
+    const items = [...initialItems];
     for (let i = 0; i <= currentOpIdx; i++) {
       const op = operations[i];
       if (!op) continue;
@@ -107,8 +106,7 @@ export const StackQueueLab: React.FC<StackQueueLabProps> = ({
 
   // Get item animation transform
   const getItemTransform = (idx: number, item: StackQueueItem) => {
-    const baseX = 0;
-    const baseY = 0;
+
 
     if (item.status === "entering") {
       const enterProgress = spring({
