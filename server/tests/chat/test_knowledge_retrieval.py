@@ -646,3 +646,52 @@ def test_rewrite_query_expands_cache_mapping_queries() -> None:
     assert "全相联" in terms
     assert "组相联" in terms
     assert "局部性" in terms
+
+
+def test_extract_source_identities_returns_book_name_before_legacy_fields() -> None:
+    from app.chat.tools import knowledge
+
+    # New metadata format with book_name and source_stem
+    metadata = {
+        "source": "408/java/Java从入门到精通（第5版）.final.md",
+        "file_name": "Java从入门到精通（第5版）.final.md",
+        "book_name": "Java从入门到精通（第5版）",
+        "source_stem": "408/java/Java从入门到精通（第5版）",
+    }
+
+    identities = knowledge.extract_source_identities(metadata)
+
+    # book_name should be first in the tuple
+    assert identities[0] == "java从入门到精通第5版"
+    # source_stem should be second
+    assert identities[1] == "408javajava从入门到精通第5版"
+
+
+def test_matches_source_filter_uses_book_name_and_source_stem_fallbacks() -> None:
+    from app.chat.tools import knowledge
+
+    metadata = {
+        "source": "408/java/Java从入门到精通（第5版）.final.md",
+        "file_name": "Java从入门到精通（第5版）.final.md",
+        "book_name": "Java从入门到精通（第5版）",
+        "source_stem": "408/java/Java从入门到精通（第5版）",
+        "chunk_index": 1,
+    }
+
+    assert knowledge._matches_source_filter(metadata, (JAVA_SOURCE,)) is True
+
+
+def test_build_sparse_search_text_prefers_book_name_heading_and_text() -> None:
+    from app.chat.tools import knowledge
+
+    metadata = {
+        "book_name": "计算机网络（第7版）",
+        "heading_path": "第五章 运输层 > 5.3 TCP",
+        "source": "408/network/计算机网络（第7版）.final.md",
+    }
+
+    search_text = knowledge.build_sparse_search_text("TCP 三次握手", metadata)
+
+    assert "tcp 三次握手" in search_text
+    assert "第五章 运输层 > 5.3 tcp" in search_text
+    assert "计算机网络（第7版）".lower() in search_text

@@ -130,21 +130,37 @@ def _normalize_source_identity_text(value: Any) -> str:
     return "".join(ch for ch in text if ch.isalnum())
 
 
+def extract_source_identities(metadata: dict[str, Any]) -> tuple[str, ...]:
+    identities: list[str] = []
+    seen: set[str] = set()
+    for key in ("book_name", "source_stem", "book_title", "source", "file_name"):
+        normalized = _normalize_source_identity_text(metadata.get(key))
+        if normalized and normalized not in seen:
+            identities.append(normalized)
+            seen.add(normalized)
+    return tuple(identities)
+
+
 def extract_canonical_source_identity(metadata: dict[str, Any]) -> str:
     """Extract a canonical source identity from metadata.
 
-    Tries metadata keys in priority order: book_title, source, file_name.
+    Tries metadata keys in priority order: book_name, source_stem, book_title, file_name, source.
     Returns casefolded alphanumeric-only string for fuzzy matching.
     """
-    for key in ("book_title", "source", "file_name"):
-        normalized = _normalize_source_identity_text(metadata.get(key))
-        if normalized:
-            return normalized
-    return ""
+    identities = extract_source_identities(metadata)
+    return identities[0] if identities else ""
 
 
 def build_sparse_search_text(text: str, metadata: dict[str, Any]) -> str:
-    title = _normalize_book_title(str(metadata.get("source") or metadata.get("file_name") or ""))
+    title = _normalize_book_title(
+        str(
+            metadata.get("book_name")
+            or metadata.get("source_stem")
+            or metadata.get("source")
+            or metadata.get("file_name")
+            or ""
+        )
+    )
     heading = str(metadata.get("heading_path") or metadata.get("h1") or metadata.get("h2") or "").strip()
     return "\n".join(part for part in (str(text or "").strip(), heading, title) if part).lower()
 
@@ -152,24 +168,26 @@ def build_sparse_search_text(text: str, metadata: dict[str, Any]) -> str:
 def _matches_source_filter(metadata: dict[str, Any], source_filter: tuple[str, ...] | None) -> bool:
     """Check if metadata matches any of the source filter values.
 
-    Uses canonical source identity comparison for fuzzy matching across
+    Uses multi-identity matching with fallback for fuzzy matching across
     different metadata field naming conventions.
     """
     if not source_filter:
         return True
 
-    candidate = extract_canonical_source_identity(metadata)
-    if not candidate:
+    candidate_identities = extract_source_identities(metadata)
+    if not candidate_identities:
         return False
 
-    expected_candidates = [
-        _normalize_source_identity_text(item)
+    expected_identities = tuple(
+        normalized
         for item in source_filter
-        if _normalize_source_identity_text(item)
-    ]
-    for expected in expected_candidates:
-        if candidate == expected or expected in candidate or candidate in expected:
-            return True
+        for normalized in (_normalize_source_identity_text(item),)
+        if normalized
+    )
+    for candidate in candidate_identities:
+        for expected in expected_identities:
+            if candidate == expected or expected in candidate or candidate in expected:
+                return True
     return False
 
 
