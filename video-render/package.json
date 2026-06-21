@@ -9,6 +9,7 @@
     "@remotion/bundler": "^4.0.478",
     "@remotion/captions": "^4.0.478",
     "@remotion/cli": "4.0.478",
+    "@remotion/google-fonts": "^4.0.478",
     "@remotion/renderer": "^4.0.478",
     "@remotion/tailwind-v4": "4.0.478",
     "react": "19.2.3",

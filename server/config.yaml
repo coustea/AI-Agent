@@ -23,17 +23,19 @@ jwt:
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
 
-  # --- 云端：讯飞 Maas ---
-#  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-#  api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
-#  model_name: "astron-code-latest"
+  # openrouter
+#  base_url: "https://openrouter.ai/api/v1/chat/completions"
+#  api_key: "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"
+#  model_name: "nex-agi/nex-n2-pro:free"
 
-  base_url: "https://spark-api-open.xf-yun.com/v1/chat/completions"
-  api_key: "qKQfPkOoAVxugyXmGteT:XLCDajLSrONSRwixokwr"
-  model_name: "generalv3"
+  # --- 云端：讯飞 Maas ---
+  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+  api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
+  model_name: "astron-code-latest"
+
   # 推理参数
   temperature: 0.3
-  max_tokens: 4096
+  max_tokens: 8192
   # 结构化输出策略：json_mode_first / prompt_first / tool_first / auto
   structured_output_strategy: "json_mode_first"
   # 网络与重试参数
@@ -75,7 +77,7 @@ search:
 
 # 路径配置
 paths:
-  workplace: "workplace"
+  workplace: "static"
   logs: "logs"
   knowledge: "data/book/my_chroma_db"
 

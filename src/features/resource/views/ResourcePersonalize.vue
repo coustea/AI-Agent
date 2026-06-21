@@ -172,27 +172,40 @@
 
               <template v-if="agent.id === 'ppt'">
                 <div class="ctrl-group">
-                  <label>交付方式</label>
-                  <el-tag effect="plain" round>在线预览课件</el-tag>
-                </div>
-                <div class="ctrl-group">
-                  <label>幻灯片主题风格</label>
-                  <el-tag effect="plain" round type="primary">逻辑蓝 · 教学演示主题</el-tag>
-                </div>
-                <div class="ctrl-group">
-                  <label>内容深度/难度</label>
+                  <label>内容深度 / 难度</label>
                   <el-radio-group v-model="agentConfigs.ppt.difficulty" size="small" class="custom-radio-group">
-                    <el-radio-button value="beginner">入门演示</el-radio-button>
-                    <el-radio-button value="intermediate">进阶讲解</el-radio-button>
-                    <el-radio-button value="advanced">硬核干货</el-radio-button>
+                    <el-radio-button value="beginner">入门</el-radio-button>
+                    <el-radio-button value="intermediate">进阶</el-radio-button>
+                    <el-radio-button value="advanced">挑战</el-radio-button>
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <div class="slider-label-row">
-                    <label>期望生成页数</label>
-                    <span class="slider-value"><b>{{ agentConfigs.ppt.page_count }}</b> 页</span>
-                  </div>
-                  <el-slider v-model="agentConfigs.ppt.page_count" :min="3" :max="20" :step="1" class="custom-slider-v2" />
+                  <label>课件深度</label>
+                  <el-radio-group v-model="agentConfigs.ppt.lesson_depth" size="small" class="custom-radio-group">
+                    <el-radio-button value="quick">快速</el-radio-button>
+                    <el-radio-button value="standard">标准</el-radio-button>
+                    <el-radio-button value="deep">深入</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <div class="ctrl-group">
+                  <label>课程形态</label>
+                  <el-select v-model="agentConfigs.ppt.lesson_kind" size="default" class="w-full custom-select">
+                    <el-option label="自动判断" value="auto" />
+                    <el-option label="概念课" value="concept" />
+                    <el-option label="算法课" value="algorithm" />
+                    <el-option label="系统课" value="system" />
+                    <el-option label="调试课" value="debugging" />
+                    <el-option label="项目课" value="project" />
+                  </el-select>
+                </div>
+                <div class="ctrl-group">
+                  <label>学习重点</label>
+                  <el-radio-group v-model="agentConfigs.ppt.learning_focus" size="small" class="custom-radio-group">
+                    <el-radio-button value="balanced">均衡</el-radio-button>
+                    <el-radio-button value="concept">概念</el-radio-button>
+                    <el-radio-button value="code">代码</el-radio-button>
+                    <el-radio-button value="practice">练习</el-radio-button>
+                  </el-radio-group>
                 </div>
               </template>
 
@@ -260,7 +273,7 @@ const emit = defineEmits<{
   launch: []
 }>()
 
-const personalizeAgents = computed(() => agentMetaList.filter(agent => !['master', 'reviewer', 'assembler'].includes(agent.id)))
+const personalizeAgents = computed(() => agentMetaList.filter(agent => !['master', 'assembler'].includes(agent.id)))
 
 const learningScenario = computed({
   get: () => props.learningScenario,
@@ -363,8 +376,8 @@ const selectScenario = (scenario: LearningScenario) => {
 .sw-info { display: flex; flex-direction: column; gap: 2px; }
 .sw-label { font-size: 0.9rem; font-weight: var(--weight-semibold); color: var(--color-text-strong); }
 .sw-desc { font-size: 0.75rem; color: var(--color-text-faint); line-height: 1.4; }
-.custom-radio-group { display: flex; gap: var(--space-2); width: 100%; }
-:deep(.custom-radio-group .el-radio-button) { flex: 1; }
+.custom-radio-group { display: flex; gap: var(--space-2); width: 100%; flex-wrap: wrap; }
+:deep(.custom-radio-group .el-radio-button) { flex: 1; min-width: 0; }
 :deep(.custom-radio-group .el-radio-button__inner) { width: 100%; border-radius: var(--radius-md) !important; border: 1px solid transparent !important; background: rgba(241, 245, 249, 0.6); color: var(--color-text-muted); font-weight: var(--weight-semibold); transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base); padding: 10px 0; }
 :deep(.custom-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) { background-color: var(--color-surface) !important; color: var(--color-text) !important; border-color: rgba(226, 232, 240, 0.8) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important; }
 .slider-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: -4px; }

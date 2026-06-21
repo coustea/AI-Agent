@@ -143,8 +143,6 @@ class ReadingAgent(BaseResourceAgent):
             ReadingPayload,
             f"{prompt}\n\n{input_text}",
             temperature=INFERENCE_TEMPERATURE,
-            function_name="generate_reading_resources",
-            function_description="生成拓展阅读推荐资源",
         )
 
         reading_data = result.model_dump(mode="json")

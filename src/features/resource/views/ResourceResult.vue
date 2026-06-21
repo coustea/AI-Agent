@@ -18,28 +18,19 @@
           <span>资源</span>
           <strong>{{ resourceCards.length }}</strong>
         </div>
-        <div class="hero-metric-pill">
+        <div v-if="totalEstimatedMinutes > 0" class="hero-metric-pill">
           <span>预计</span>
           <strong>{{ totalEstimatedMinutes }}min</strong>
         </div>
-        <div class="hero-metric-pill">
-          <span>评分</span>
-          <strong>{{ reviewScore }}</strong>
-        </div>
-        <div class="hero-metric-pill">
+        <div v-if="studyPathSteps.length" class="hero-metric-pill">
           <span>路径</span>
           <strong>{{ studyPathSteps.length }}步</strong>
         </div>
       </div>
 
       <div class="hero-side-panel">
-        <button v-if="resultWarning" class="hero-warning-dock" type="button" @click="scrollToReview">
-          <el-icon><WarningFilled /></el-icon>
-          <span>{{ resultWarning }}</span>
-        </button>
-
         <div class="hero-action-row">
-          <el-button round type="primary" class="hero-primary-btn" @click="scrollToPath">
+          <el-button v-if="studyPathSteps.length" round type="primary" class="hero-primary-btn" @click="scrollToPath">
             按路径学习
             <el-icon class="el-icon--right"><ArrowRight /></el-icon>
           </el-button>
@@ -53,13 +44,15 @@
 
 
     <main class="package-result-body">
-      <section ref="pathSectionRef" class="learning-path-section package-section-card">
+      <section v-if="studyPathSteps.length" ref="pathSectionRef" class="learning-path-section package-section-card">
         <div class="section-heading-row path-heading">
           <div>
             <span class="section-eyebrow">LEARNING PATH</span>
             <h2>推荐学习顺序</h2>
           </div>
-          <span class="section-summary-pill">{{ studyPathSteps.length }} 步 · {{ totalEstimatedMinutes }} 分钟</span>
+          <span class="section-summary-pill">
+            {{ studyPathSteps.length }} 步<span v-if="studyPathEstimatedMinutes"> · {{ studyPathEstimatedMinutes }} 分钟</span>
+          </span>
         </div>
 
         <div class="path-step-track">
@@ -74,13 +67,13 @@
             <div class="path-step-main">
               <div class="path-step-topline">
                 <span class="path-resource-type">{{ getResourceTypeLabel(normalizeType(step.resource_type)) }}</span>
-                <span class="path-time-badge">
+                <span v-if="step.estimated_time" class="path-time-badge">
                   <el-icon><Clock /></el-icon>
-                  {{ step.estimated_time || getEstimatedMinutesByType(normalizeType(step.resource_type)) }}min
+                  {{ step.estimated_time }}min
                 </span>
               </div>
               <h3>{{ step.title }}</h3>
-              <p>{{ step.reason || getPathReason(normalizeType(step.resource_type)) }}</p>
+              <p v-if="step.reason">{{ step.reason }}</p>
               <div class="path-focus-list" v-if="step.focus_points?.length">
                 <span v-for="point in step.focus_points.slice(0, 2)" :key="point">{{ point }}</span>
               </div>
@@ -124,7 +117,7 @@
               </div>
               <div class="resource-header-text">
                 <span>{{ getResourceTypeLabel(card.type) }}</span>
-                <strong>{{ card.format || getDefaultResourceFormat(card.type) }}</strong>
+                <strong>{{ card.format }}</strong>
               </div>
               <span class="resource-status-badge" :class="card.status">
                 {{ getStatusLabel(card.status) }}
@@ -141,21 +134,21 @@
 
             <div class="resource-card-body">
               <h3>{{ getShortCardTitle(card) }}</h3>
-              <p>{{ getCardSubtitle(card.type) }}</p>
+              <p v-if="card.summary">{{ card.summary }}</p>
             </div>
 
             <div class="resource-tag-row">
-              <span v-for="tag in getResourceCardTags(card)" :key="`${card.id}-${tag}`">
+              <span v-for="tag in getResourceHighlights(card)" :key="`${card.id}-${tag}`">
                 {{ tag }}
               </span>
             </div>
 
-            <div class="resource-meta-grid">
-              <span>
+            <div v-if="card.metadata?.difficulty || card.estimatedMinutes || getResourceHighlights(card).length" class="resource-meta-grid">
+              <span v-if="card.metadata?.difficulty">
                 <el-icon><Odometer /></el-icon>
                 {{ getDifficultyLabel(card.metadata?.difficulty) }}
               </span>
-              <span>
+              <span v-if="card.estimatedMinutes">
                 <el-icon><Clock /></el-icon>
                 {{ card.estimatedLabel }}
               </span>
@@ -183,42 +176,6 @@
           <el-button round type="primary" @click="emit('reset')">重新生成</el-button>
         </div>
       </section>
-
-      <section ref="reviewSectionRef" class="review-strip">
-        <article class="review-tile package-section-card quality-tile">
-          <div>
-            <span class="section-eyebrow">QUALITY REVIEW</span>
-            <h2>质量审查</h2>
-            <p>{{ resultWarning || (reviewPassed ? '内容完整性、个性化匹配和安全性均已完成检查。' : '存在审查提醒，建议查看问题后再使用资源。') }}</p>
-          </div>
-          <span class="quality-score" :class="{ warning: !reviewPassed }">{{ reviewScore }}</span>
-        </article>
-
-        <article class="review-tile package-section-card">
-          <span class="section-eyebrow">COVERAGE</span>
-          <h2>资源覆盖</h2>
-          <p>{{ resourceTypeSummary }}</p>
-        </article>
-
-        <article class="review-tile package-section-card" :class="{ warning: failedAgents.length }">
-          <span class="section-eyebrow">AGENT STATUS</span>
-          <h2>{{ failedAgents.length ? '存在失败智能体' : '智能体协同完成' }}</h2>
-          <p>{{ failedAgents.length ? failedAgents.join(' / ') : '文档、导图、题库、实操与拓展阅读已完成串联。' }}</p>
-        </article>
-
-        <article class="review-tile package-section-card">
-          <span class="section-eyebrow">REVIEW ITEMS</span>
-          <h2>{{ reviewIssues.length ? '审查提醒' : '审查项通过' }}</h2>
-          <div v-if="reviewIssues.length" class="review-issue-list">
-            <span v-for="issue in reviewIssues.slice(0, 3)" :key="issue">{{ issue }}</span>
-          </div>
-          <div v-else class="review-pass-list">
-            <span><b></b>完整性</span>
-            <span><b></b>一致性</span>
-            <span><b></b>安全性</span>
-          </div>
-        </article>
-      </section>
     </main>
   </div>
 </template>
@@ -237,13 +194,10 @@ import {
 import {
   getAgentMeta,
   getResourceTypeLabel,
-  getResourceUsageHint,
-  getDefaultResourceFormat,
-  getEstimatedTime,
   getDifficultyLabel,
   getResourceToneClass,
-  formatBentoTitle,
 } from '@/features/resource/model/ResourceGeneratorConstants'
+import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
 
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
@@ -256,8 +210,8 @@ type ResourceCard = GeneratedResourceItem & {
   title: string
   summary: string
   format: string
-  status: 'completed' | 'partial' | 'failed'
-  estimatedMinutes: number
+  status: 'completed'
+  estimatedMinutes: number | null
   estimatedLabel: string
   metadata: Record<string, any>
 }
@@ -273,7 +227,6 @@ type StudyPathStepLike = {
 
 const props = defineProps<{
   finalBundle: any | null
-  generatedResources: GeneratedResourceItem[]
   resultWarning: string
 }>()
 
@@ -283,18 +236,19 @@ const emit = defineEmits<{
 }>()
 
 const pathSectionRef = ref<HTMLElement | null>(null)
-const reviewSectionRef = ref<HTMLElement | null>(null)
 
 const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'video']
+const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
 
 const rawResources = computed<GeneratedResourceItem[]>(() => {
   const resources = props.finalBundle?.resources
-  return Array.isArray(resources) && resources.length ? resources : props.generatedResources
+  return Array.isArray(resources) ? resources : []
 })
 
 const resourceCards = computed<ResourceCard[]>(() => {
   return rawResources.value
     .map((resource, index) => normalizeResource(resource, index))
+    .filter((resource): resource is ResourceCard => resource !== null)
     .sort((a, b) => {
       const orderA = RESOURCE_ORDER.indexOf(a.type)
       const orderB = RESOURCE_ORDER.indexOf(b.type)
@@ -310,105 +264,91 @@ const primaryCardType = computed(() => {
 const bundleTitle = computed(() => props.finalBundle?.title || '个性化学习资源包')
 
 const learningNeedText = computed(() => {
-  return props.finalBundle?.learning_need || resourceCards.value[0]?.title || '本次学习目标'
+  return String(props.finalBundle?.learning_need || '')
 })
 
 const heroSummary = computed(() => {
   const count = resourceCards.value.length
   if (!count) return '本次任务暂未生成可展示资源，建议重新生成或查看任务日志。'
   const types = resourceCards.value.map(item => getResourceTypeLabel(item.type)).filter(Boolean).slice(0, 6).join('、')
-  return `已生成 ${count} 类学习资源：${types}。建议按下方学习路径逐步完成，先建立理解，再完成练习与实操。`
+  return `已生成 ${count} 类学习资源：${types}。`
 })
 
 const totalEstimatedMinutes = computed(() => {
-  const total = resourceCards.value.reduce((sum, card) => sum + card.estimatedMinutes, 0)
-  return total || 45
-})
-
-const reviewResult = computed(() => props.finalBundle?.review_result || null)
-
-const reviewPassed = computed(() => {
-  if (props.resultWarning) return false
-  if (!reviewResult.value) return true
-  return reviewResult.value.passed !== false
-})
-
-const reviewScore = computed(() => {
-  const raw = reviewResult.value?.overall_score
-  if (typeof raw === 'number') return Math.max(0, Math.min(100, raw))
-  return reviewPassed.value ? 96 : 72
-})
-
-const failedAgents = computed<string[]>(() => {
-  const fromReview = reviewResult.value?.failed_agents
-  const fromMeta = props.finalBundle?.metadata?.failed_agents
-  if (Array.isArray(fromReview) && fromReview.length) return fromReview.map(String)
-  if (Array.isArray(fromMeta)) return fromMeta.map(String)
-  return []
-})
-
-const reviewIssues = computed<string[]>(() => {
-  const issues = reviewResult.value?.issues
-  if (Array.isArray(issues)) return issues.map((item: any) => String(item)).filter(Boolean)
-  return []
+  return resourceCards.value.reduce((sum, card) => sum + (card.estimatedMinutes || 0), 0)
 })
 
 const studyPathSteps = computed<StudyPathStepLike[]>(() => {
-  const path = reviewResult.value?.study_path || props.finalBundle?.study_path
-  if (Array.isArray(path) && path.length) {
-    return path
-      .map((step: any, index: number) => ({
-        order: Number(step.order || index + 1),
-        resource_type: normalizeType(step.resource_type || step.type || ''),
-        title: String(step.title || getResourceTypeLabel(step.resource_type || step.type || 'content')),
-        reason: step.reason || '',
-        estimated_time: typeof step.estimated_time === 'number' ? step.estimated_time : null,
-        focus_points: Array.isArray(step.focus_points) ? step.focus_points.map(String) : [],
-      }))
-      .sort((a, b) => a.order - b.order)
+  const path = props.finalBundle?.study_path
+  if (!Array.isArray(path) || !path.length) {
+    return []
   }
-  return buildFallbackStudyPath(resourceCards.value)
+  return path
+    .map((step: any, index: number) => ({
+      order: Number(step.order || index + 1),
+      resource_type: normalizeType(step.resource_type),
+      title: String(step.title || ''),
+      reason: step.reason || '',
+      estimated_time: typeof step.estimated_time === 'number' ? step.estimated_time : null,
+      focus_points: Array.isArray(step.focus_points) ? step.focus_points.map(String) : [],
+    }))
+    .filter(step => RESOURCE_TYPES.has(step.resource_type) && step.title.trim().length > 0)
+    .sort((a, b) => a.order - b.order)
 })
 
-const resourceTypeSummary = computed(() => {
-  if (!resourceCards.value.length) return '暂无资源'
-  return resourceCards.value.map(item => getResourceTypeLabel(item.type)).join(' / ')
+const studyPathEstimatedMinutes = computed(() => {
+  return studyPathSteps.value.reduce((sum, step) => sum + (step.estimated_time || 0), 0)
 })
 
-function normalizeResource(resource: GeneratedResourceItem, index: number): ResourceCard {
-  const type = normalizeType(resource.type || resource.agent_type || resource.generated_by || '')
-  const metadata = isPlainObject(resource.metadata) ? resource.metadata : {}
-  const estimatedMinutes = getEstimatedMinutesByType(type, metadata)
+function normalizeResource(resource: GeneratedResourceItem, index: number): ResourceCard | null {
+  const type = normalizeType(resource.type)
   const rawStatus = String(resource.status || '').toLowerCase()
-  const status: ResourceCard['status'] = rawStatus.includes('fail')
-    ? 'failed'
-    : rawStatus.includes('partial')
-      ? 'partial'
-      : 'completed'
+  if (!RESOURCE_TYPES.has(type) || !['finished', 'completed'].includes(rawStatus)) {
+    console.error('Invalid persisted resource artifact omitted', {
+      index,
+      resourceId: resource.id,
+      type: resource.type,
+      status: resource.status,
+    })
+    return null
+  }
+  if (!hasContent(resource.content)) {
+    console.error('Empty persisted resource artifact omitted', { index, resourceId: resource.id, type })
+    return null
+  }
+  if (type === 'ppt') {
+    const parsed = parsePptDocument(resource.content)
+    if (!parsed.ok) {
+      console.error('Invalid persisted PPT artifact omitted', {
+        resourceId: resource.id,
+        reason: parsed.reason,
+        details: parsed.details,
+      })
+      return null
+    }
+  }
+  if (resource.id == null || typeof resource.title !== 'string' || !resource.title.trim() || typeof resource.format !== 'string' || !resource.format.trim()) {
+    console.error('Incomplete persisted resource artifact omitted', { index, resourceId: resource.id, type })
+    return null
+  }
+  const metadata = isPlainObject(resource.metadata) ? resource.metadata : {}
+  const estimatedMinutes = getEstimatedMinutes(metadata)
   return {
     ...resource,
-    id: String(resource.id || `${type}-${index}`),
+    id: String(resource.id),
     type,
-    title: formatBentoTitle(resource.title || getResourceTypeLabel(type), type),
-    summary: String(resource.summary || getResourceUsageHint(type) || ''),
-    format: String(resource.format || resource.content_format || getDefaultResourceFormat(type) || ''),
-    status,
+    title: resource.title.trim(),
+    summary: typeof resource.summary === 'string' ? resource.summary : '',
+    format: resource.format.trim(),
+    status: 'completed',
     estimatedMinutes,
-    estimatedLabel: `${estimatedMinutes} 分钟`,
+    estimatedLabel: estimatedMinutes ? `${estimatedMinutes} 分钟` : '',
     metadata,
   }
 }
 
-function normalizeType(type: string) {
-  const value = String(type || '').toLowerCase()
-  if (value.includes('content') || value.includes('doc')) return 'content'
-  if (value.includes('mind')) return 'mindmap'
-  if (value.includes('quiz') || value.includes('question')) return 'quiz'
-  if (value.includes('code')) return 'code'
-  if (value.includes('read')) return 'reading'
-  if (value.includes('ppt') || value.includes('slide')) return 'ppt'
-  if (value.includes('video')) return 'video'
-  return value || 'content'
+function normalizeType(type: unknown) {
+  return typeof type === 'string' ? type.trim().toLowerCase() : ''
 }
 
 function openPreview(card: ResourceCard) {
@@ -432,78 +372,12 @@ function scrollToPath() {
   pathSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function scrollToReview() {
-  reviewSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function buildFallbackStudyPath(cards: ResourceCard[]): StudyPathStepLike[] {
-  const ordered = RESOURCE_ORDER
-    .map(type => cards.find(card => card.type === type))
-    .filter(Boolean) as ResourceCard[]
-
-  return ordered.map((card, index) => ({
-    order: index + 1,
-    resource_type: card.type,
-    title: getFallbackPathTitle(card.type),
-    reason: getPathReason(card.type),
-    estimated_time: card.estimatedMinutes,
-    focus_points: getFallbackFocusPoints(card.type),
-  }))
-}
-
-function getFallbackPathTitle(type: string) {
-  const map: Record<string, string> = {
-    content: '先阅读课程讲解文档，建立基础理解',
-    mindmap: '查看知识结构导图，梳理概念关系',
-    quiz: '完成个性化练习题，检测掌握情况',
-    code: '进入代码实操案例，完成实践巩固',
-    reading: '阅读拓展材料，补充应用场景',
-    ppt: '查看 PPT 文稿，快速复盘重点',
-    video: '观看动画讲解，强化直观理解',
-  }
-  return map[type] || `学习${getResourceTypeLabel(type)}`
-}
-
-function getPathReason(type: string) {
-  const map: Record<string, string> = {
-    content: '先理解概念、原理和典型例子，降低后续练习成本。',
-    mindmap: '用结构化视图建立知识框架，明确前置概念与核心考点。',
-    quiz: '通过题目及时暴露薄弱点，并结合解析修正理解。',
-    code: '把概念落实到可运行代码，形成可迁移的实践能力。',
-    reading: '补充工程应用和延伸知识，拓宽对知识点的理解。',
-    ppt: '用于最后复盘，也可作为课堂展示或汇报材料。',
-    video: '通过动态演示理解抽象过程，适合快速回看。',
-  }
-  return map[type] || '按资源内容完成学习。'
-}
-
-function getFallbackFocusPoints(type: string) {
-  const map: Record<string, string[]> = {
-    content: ['核心概念', '高频考点', '易错点'],
-    mindmap: ['知识结构', '概念关系', '前置知识'],
-    quiz: ['基础题', '提高题', '答案解析'],
-    code: ['可运行代码', '关键注释', '实践步骤'],
-    reading: ['应用场景', '拓展资料', '延伸知识'],
-    ppt: ['重点复盘', '页面结构', '汇报使用'],
-  }
-  return map[type] || ['学习重点']
-}
-
-function getEstimatedMinutesByType(type: string, metadata: Record<string, any> = {}) {
-  const raw = metadata.estimated_minutes || metadata.estimated_time || getEstimatedTime(type)
+function getEstimatedMinutes(metadata: Record<string, any>) {
+  const raw = metadata.estimated_minutes ?? metadata.estimated_time
   if (typeof raw === 'number') return raw
   const parsed = Number(String(raw || '').match(/\d+/)?.[0])
   if (Number.isFinite(parsed) && parsed > 0) return parsed
-  const fallback: Record<string, number> = {
-    content: 20,
-    mindmap: 8,
-    quiz: 18,
-    code: 25,
-    reading: 12,
-    ppt: 10,
-    video: 12,
-  }
-  return fallback[type] || 10
+  return null
 }
 
 function getStatusLabel(status: ResourceCard['status']) {
@@ -527,19 +401,6 @@ function getMainTopic(card: ResourceCard) {
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
-function getCardSubtitle(type: string) {
-  const map: Record<string, string> = {
-    content: '系统讲解核心概念与原理',
-    mindmap: '梳理知识结构与关联',
-    quiz: '检验掌握情况与理解程度',
-    code: '代码示例与实操演练',
-    reading: '延伸阅读与应用拓展',
-    ppt: '重点内容压缩复盘',
-    video: '动态讲解关键过程',
-  }
-  return map[type] || getResourceUsageHint(type)
-}
-
 function getCardVisualLabel(type: string) {
   const map: Record<string, string> = {
     content: 'COURSE NOTE',
@@ -551,23 +412,6 @@ function getCardVisualLabel(type: string) {
     video: 'ANIMATION',
   }
   return map[type] || 'RESOURCE'
-}
-
-function getResourceCardTags(card: ResourceCard) {
-  const metrics = isPlainObject(card.metrics) ? card.metrics : {}
-  const language = String(metrics.language || card.metadata?.programming_language || 'Python')
-  const count = metrics.question_count || metrics.node_count || metrics.page_count || ''
-  const preset: Record<string, string[]> = {
-    content: ['概念', '原理', '易错点'],
-    mindmap: ['结构图', '概念关系', count ? `${count} 节点` : '重点脉络'],
-    quiz: [count ? `${count} 题` : '10 题', '选择题', '即时反馈'],
-    code: ['实战案例', language, '可运行'],
-    reading: ['延伸材料', '应用场景', '拓展视角'],
-    ppt: [count ? `${count} 页` : '复盘', '重点页', '展示用'],
-    video: ['分镜', '动画', '讲解稿'],
-  }
-  const tags = preset[card.type] || getResourceHighlights(card)
-  return tags.filter(Boolean).slice(0, 3)
 }
 
 function getResourceCoverImage(type: string) {
@@ -712,7 +556,13 @@ function getResourceHighlights(card: ResourceCard) {
     metrics.language ? String(metrics.language) : '',
     card.metadata?.programming_language ? String(card.metadata.programming_language) : '',
   ]
-  return candidates.filter(Boolean)
+  return candidates.filter(Boolean).slice(0, 3)
+}
+
+function hasContent(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  return isPlainObject(value) && Object.keys(value).length > 0
 }
 
 function isPlainObject(value: unknown): value is Record<string, any> {
@@ -723,15 +573,20 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 
 
 <style scoped>
+/* ============================================================
+   Resource Result Page — Design System Compliant
+   Follows: Typography scale, font weights, color tokens
+   ============================================================ */
+
 .resource-package-page {
   position: relative;
   min-height: calc(100vh - var(--navbar-height, 64px));
-  padding: 16px clamp(18px, 2vw, 30px) 30px;
+  padding: var(--space-4) clamp(var(--space-4), 2vw, 30px) 30px;
   overflow-y: auto;
   background:
     radial-gradient(circle at 8% 0%, rgba(59, 130, 246, 0.10), transparent 26%),
     radial-gradient(circle at 94% 8%, rgba(20, 184, 166, 0.12), transparent 28%),
-    linear-gradient(180deg, #f8fafc 0%, #eef6ff 58%, #f8fafc 100%);
+    linear-gradient(180deg, var(--color-bg) 0%, #eef6ff 58%, var(--color-bg) 100%);
 }
 
 .package-hero-card,
@@ -739,7 +594,7 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .resource-result-card {
   border: 1px solid rgba(203, 213, 225, 0.78);
   background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.065);
+  box-shadow: var(--shadow-xl);
   backdrop-filter: blur(18px);
 }
 
@@ -747,11 +602,11 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) auto auto;
   align-items: center;
-  gap: 18px;
+  gap: var(--space-5);
   width: min(100%, 1760px);
   margin: 0 auto;
-  border-radius: 22px;
-  padding: 16px 18px;
+  border-radius: var(--radius-2xl);
+  padding: var(--space-4) var(--space-5);
 }
 
 .package-hero-title {
@@ -762,57 +617,57 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .hero-status-pill,
 .section-summary-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   height: 26px;
   padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
-  font-size: 12px;
-  font-weight: 800;
+  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
   border: 1px solid rgba(16, 185, 129, 0.24);
   white-space: nowrap;
 }
 
 .hero-status-pill.warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
   border-color: rgba(245, 158, 11, 0.28);
 }
 
 .hero-kicker,
 .section-eyebrow {
-  font-size: 12px;
+  font-size: var(--text-xs);
   letter-spacing: 0.12em;
-  font-weight: 900;
-  color: #2563eb;
+  font-weight: var(--weight-extrabold);
+  color: var(--cat-tutor);
 }
 
 .package-hero-card h1 {
   margin: 0;
-  color: #0f172a;
-  font-size: clamp(22px, 2.1vw, 30px);
-  line-height: 1.15;
-  font-weight: 950;
+  color: var(--color-text-strong);
+  font-size: clamp(var(--text-xl), 2.1vw, var(--text-3xl));
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-extrabold);
   letter-spacing: -0.035em;
 }
 
 .package-hero-title p {
   display: -webkit-box;
   max-width: 860px;
-  margin: 8px 0 0;
+  margin: var(--space-2) 0 0;
   overflow: hidden;
-  color: #475569;
-  font-size: 14px;
-  line-height: 1.55;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   line-clamp: 1;
@@ -821,7 +676,7 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .hero-metric-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(86px, 1fr));
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .hero-metric-pill {
@@ -829,116 +684,82 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   place-items: center;
   min-width: 86px;
   height: 54px;
-  padding: 6px 10px;
-  border-radius: 16px;
+  padding: var(--space-1_5) 10px;
+  border-radius: var(--radius-lg);
   background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid var(--color-border-light);
 }
 
 .hero-metric-pill span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .hero-metric-pill strong {
-  color: #0f172a;
-  font-size: 17px;
-  font-weight: 950;
+  color: var(--color-text-strong);
+  font-size: var(--text-md);
+  font-weight: var(--weight-extrabold);
   line-height: 1.1;
 }
 
 .hero-action-row {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: var(--space-2_5);
   flex-wrap: wrap;
 }
 
 .hero-primary-btn {
-  background: linear-gradient(135deg, #2563eb, #14b8a6);
+  background: linear-gradient(135deg, var(--cat-tutor), var(--color-success));
   border: none;
 }
 
 .hero-side-panel {
   display: grid;
   justify-items: end;
-  gap: 10px;
+  gap: var(--space-2_5);
   min-width: 260px;
-}
-
-.hero-warning-dock {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  width: min(100%, 300px);
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid rgba(245, 158, 11, 0.22);
-  border-radius: 14px;
-  background: rgba(255, 247, 237, 0.9);
-  color: #b45309;
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-.hero-warning-dock:hover {
-  transform: translateY(-1px);
-  border-color: rgba(245, 158, 11, 0.38);
-  background: #fff7ed;
-}
-
-.hero-warning-dock span {
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
 }
 
 
 .package-result-body {
   width: min(100%, 1760px);
-  margin: 14px auto 0;
+  margin: var(--space-3_5) auto 0;
   display: grid;
-  gap: 14px;
+  gap: var(--space-3_5);
 }
 
 .package-section-card {
-  border-radius: 22px;
-  padding: 16px;
+  border-radius: var(--radius-2xl);
+  padding: var(--space-4);
 }
 
 .section-heading-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: var(--space-3_5);
+  margin-bottom: var(--space-3_5);
 }
 
 .section-heading-row h2,
 .review-tile h2 {
-  margin: 3px 0 0;
-  color: #0f172a;
-  font-size: 19px;
-  font-weight: 950;
+  margin: var(--space-0_5) 0 0;
+  color: var(--color-text-strong);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
   letter-spacing: -0.02em;
 }
 
 .section-summary-pill {
-  background: rgba(59, 130, 246, 0.10);
-  color: #2563eb;
+  background: var(--cat-tutor-soft);
+  color: var(--cat-tutor);
   border-color: rgba(59, 130, 246, 0.22);
 }
 
 .learning-path-section {
-  padding: 16px 18px 18px;
+  padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
 .path-heading {
@@ -948,18 +769,18 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .path-step-track {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-2_5);
 }
 
 .path-step-card {
   position: relative;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--space-2_5);
   min-height: 138px;
-  padding: 12px;
+  padding: var(--space-3);
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   background: rgba(248, 250, 252, 0.84);
   border: 1px solid rgba(226, 232, 240, 0.88);
   cursor: pointer;
@@ -968,9 +789,9 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 
 .path-step-card::after {
   position: absolute;
-  inset: auto 12px 0 56px;
+  inset: auto var(--space-3) 0 56px;
   height: 3px;
-  border-radius: 999px 999px 0 0;
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
   background: linear-gradient(90deg, rgba(37, 99, 235, 0.24), rgba(20, 184, 166, 0.24));
   content: '';
 }
@@ -979,7 +800,7 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   transform: translateY(-3px);
   border-color: rgba(59, 130, 246, 0.32);
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-lg);
 }
 
 .path-step-index {
@@ -988,11 +809,11 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(20, 184, 166, 0.14));
-  color: #2563eb;
-  font-size: 16px;
-  font-weight: 950;
+  color: var(--cat-tutor);
+  font-size: var(--text-base);
+  font-weight: var(--weight-extrabold);
 }
 
 .path-step-main {
@@ -1002,7 +823,7 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .path-step-topline {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   min-width: 0;
 }
 
@@ -1012,32 +833,32 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--cat-tutor-soft);
+  color: var(--cat-tutor);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: var(--weight-extrabold);
 }
 
 .path-time-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   margin-left: auto;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
 
 .path-step-card h3 {
   display: -webkit-box;
-  margin: 9px 0 0;
+  margin: var(--space-2_5) 0 0;
   overflow: hidden;
-  color: #0f172a;
-  font-size: 14px;
-  font-weight: 900;
+  color: var(--color-text-strong);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-extrabold);
   line-height: 1.42;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1046,10 +867,10 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 
 .path-step-card p {
   display: -webkit-box;
-  margin: 6px 0 0;
+  margin: var(--space-1_5) 0 0;
   overflow: hidden;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1059,17 +880,17 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .path-focus-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .path-focus-list span {
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(241, 245, 249, 0.96);
-  color: #475569;
+  color: var(--color-text-secondary);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 
 .resource-board-section {
@@ -1078,17 +899,17 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 
 .board-heading {
   align-items: flex-end;
-  margin: 4px 0 12px;
+  margin: var(--space-1) 0 var(--space-3);
 }
 
 .board-heading p {
   display: -webkit-box;
   max-width: 900px;
-  margin: 6px 0 0;
+  margin: var(--space-1_5) 0 0;
   overflow: hidden;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.55;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   line-clamp: 1;
@@ -1097,24 +918,24 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .board-filter-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 
 .board-filter-pills span {
   padding: 7px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(226, 232, 240, 0.92);
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .resource-card-grid-v2 {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .resource-result-card {
@@ -1124,8 +945,8 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   min-width: 0;
   min-height: 374px;
   overflow: hidden;
-  border-radius: 20px;
-  padding: 14px;
+  border-radius: var(--radius-2xl);
+  padding: var(--space-3_5);
   cursor: pointer;
   animation: cardRise 0.42s ease backwards;
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
@@ -1147,7 +968,7 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .resource-result-card:focus-visible {
   transform: translateY(-4px);
   border-color: rgba(37, 99, 235, 0.32);
-  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.11);
+  box-shadow: var(--shadow-xl);
   outline: none;
 }
 
@@ -1164,7 +985,7 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .resource-card-header {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-2);
 }
 
 .resource-icon-shell {
@@ -1174,10 +995,10 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   width: 38px;
   height: 38px;
   flex: 0 0 auto;
-  border-radius: 15px;
-  background: rgba(239, 246, 255, 0.9);
-  color: #2563eb;
-  font-size: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--cat-tutor-soft);
+  color: var(--cat-tutor);
+  font-size: var(--text-lg);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
 }
 
@@ -1189,44 +1010,43 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 }
 
 .resource-header-text span {
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 900;
+  color: var(--color-text-strong);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-extrabold);
 }
 
 .resource-header-text strong {
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 
 .resource-status-badge {
   margin-left: auto;
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-success);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
 
 .resource-status-badge.partial {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .resource-status-badge.failed {
-  background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .resource-preview-panel {
-  margin: 12px 0;
-  padding: 11px 12px;
-  border-radius: 16px;
-  background:
-    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.92));
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.92));
   border: 1px solid rgba(226, 232, 240, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
@@ -1235,44 +1055,44 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: var(--space-2_5);
+  margin-bottom: var(--space-2);
 }
 
 .preview-panel-title span {
-  color: #0f172a;
-  font-size: 12px;
-  font-weight: 950;
+  color: var(--color-text-strong);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .preview-panel-title strong {
   padding: 3px 7px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
+  border-radius: var(--radius-pill);
+  background: var(--cat-tutor-soft);
+  color: var(--cat-tutor);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
 
 .preview-row-list {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1_5);
   margin: 0;
 }
 
 .preview-row {
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr);
-  gap: 8px;
+  gap: var(--space-2);
   align-items: start;
   min-height: 24px;
 }
 
 .preview-row dt {
-  color: #2563eb;
+  color: var(--cat-tutor);
   font-size: 11px;
-  font-weight: 950;
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
 
@@ -1280,8 +1100,8 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  color: #475569;
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
   line-height: 1.42;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
@@ -1292,9 +1112,9 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  color: #0f172a;
-  font-size: 15px;
-  font-weight: 950;
+  color: var(--color-text-strong);
+  font-size: var(--text-base);
+  font-weight: var(--weight-extrabold);
   line-height: 1.38;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1303,10 +1123,10 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 
 .resource-card-body p {
   display: -webkit-box;
-  margin: 7px 0 0;
+  margin: var(--space-2) 0 0;
   overflow: hidden;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
@@ -1314,27 +1134,27 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 }
 
 .resource-insight-box {
-  margin-top: 10px;
-  padding: 9px 10px;
-  border-radius: 15px;
+  margin-top: var(--space-2_5);
+  padding: var(--space-2) var(--space-2_5);
+  border-radius: var(--radius-lg);
   background: rgba(248, 250, 252, 0.86);
   border: 1px solid rgba(226, 232, 240, 0.82);
 }
 
 .resource-insight-box span {
   display: block;
-  margin-bottom: 3px;
-  color: #2563eb;
+  margin-bottom: var(--space-0_5);
+  color: var(--cat-tutor);
   font-size: 11px;
-  font-weight: 950;
+  font-weight: var(--weight-extrabold);
 }
 
 .resource-insight-box p {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  color: #475569;
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
   line-height: 1.42;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1344,29 +1164,29 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .resource-meta-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1_5);
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: var(--space-2_5);
 }
 
 .resource-meta-grid span {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  border-radius: 999px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
   background: rgba(241, 245, 249, 0.9);
-  color: #475569;
+  color: var(--color-text-secondary);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 
 .resource-card-actions {
   display: grid;
   grid-template-columns: 0.9fr 1.1fr;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
+  gap: var(--space-2);
+  margin-top: var(--space-2_5);
+  padding-top: var(--space-2_5);
   border-top: 1px solid rgba(226, 232, 240, 0.82);
 }
 
@@ -1374,12 +1194,12 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-1_5);
   height: 34px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
-  font-size: 12px;
-  font-weight: 900;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
   cursor: pointer;
   transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
@@ -1391,18 +1211,18 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 .card-action-button.secondary {
   background: rgba(248, 250, 252, 0.92);
   border-color: rgba(203, 213, 225, 0.9);
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .card-action-button.secondary:hover {
-  background: #ffffff;
+  background: var(--color-surface);
   border-color: rgba(37, 99, 235, 0.28);
-  color: #2563eb;
+  color: var(--cat-tutor);
 }
 
 .card-action-button.primary {
-  background: linear-gradient(135deg, #2563eb, #14b8a6);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--cat-tutor), var(--color-success));
+  color: var(--color-surface);
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
 }
 
@@ -1415,9 +1235,9 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   position: relative;
   z-index: 1;
   height: 166px;
-  margin: 13px 0 12px;
+  margin: var(--space-3) 0 var(--space-3);
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   background-position: center;
   background-size: cover;
   border: 1px solid rgba(226, 232, 240, 0.9);
@@ -1442,13 +1262,13 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   top: 10px;
   z-index: 2;
   max-width: calc(100% - 20px);
-  padding: 5px 9px;
-  border-radius: 999px;
+  padding: var(--space-1) 9px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(226, 232, 240, 0.88);
-  color: #2563eb;
+  color: var(--cat-tutor);
   font-size: 10px;
-  font-weight: 950;
+  font-weight: var(--weight-extrabold);
   letter-spacing: 0.04em;
   backdrop-filter: blur(10px);
 }
@@ -1458,27 +1278,27 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   z-index: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: var(--space-1_5);
+  margin-top: var(--space-2_5);
 }
 
 .resource-tag-row span {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(239, 246, 255, 0.96);
-  color: #2563eb;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--cat-tutor-soft);
+  color: var(--cat-tutor);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: var(--weight-bold);
 }
 
-.resource-result-card.tone-purple .resource-tag-row span { background: rgba(237, 233, 254, 0.95); color: #7c3aed; }
+.resource-result-card.tone-purple .resource-tag-row span { background: var(--cat-eval-soft); color: var(--cat-eval); }
 .resource-result-card.tone-emerald .resource-tag-row span,
-.resource-result-card.tone-green .resource-tag-row span { background: rgba(209, 250, 229, 0.9); color: #047857; }
+.resource-result-card.tone-green .resource-tag-row span { background: var(--color-success-soft); color: var(--color-success); }
 .resource-result-card.tone-rose .resource-tag-row span,
-.resource-result-card.tone-pink .resource-tag-row span { background: rgba(255, 228, 230, 0.92); color: #e11d48; }
+.resource-result-card.tone-pink .resource-tag-row span { background: var(--cat-rose-soft); color: var(--cat-rose); }
 .resource-result-card.tone-orange .resource-tag-row span { background: rgba(255, 237, 213, 0.92); color: #ea580c; }
 
 .empty-resource-board {
@@ -1487,119 +1307,33 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  border-radius: 22px;
+  gap: var(--space-3);
+  border-radius: var(--radius-2xl);
   background: rgba(255, 255, 255, 0.78);
   border: 1px dashed rgba(148, 163, 184, 0.65);
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .empty-resource-board .el-icon {
   font-size: 42px;
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .empty-resource-board strong {
-  color: #0f172a;
-  font-size: 20px;
+  color: var(--color-text-strong);
+  font-size: var(--text-xl);
 }
 
 .empty-resource-board p {
   margin: 0;
 }
 
-.review-strip {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.review-tile {
-  min-height: 122px;
-}
-
-.quality-tile {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.review-tile p {
-  display: -webkit-box;
-  margin: 8px 0 0;
-  overflow: hidden;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-.review-tile.warning {
-  border-color: rgba(245, 158, 11, 0.25);
-  background: rgba(255, 251, 235, 0.72);
-}
-
-.quality-score {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 54px;
-  height: 54px;
-  flex: 0 0 auto;
-  border-radius: 18px;
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
-  font-size: 21px;
-  font-weight: 950;
-}
-
-.quality-score.warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
-}
-
-.review-issue-list,
-.review-pass-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 10px;
-}
-
-.review-issue-list span,
-.review-pass-list span {
-  padding: 6px 9px;
-  border-radius: 999px;
-  background: rgba(255, 247, 237, 0.92);
-  color: #b45309;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.review-pass-list span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(238, 242, 255, 0.92);
-  color: #4338ca;
-}
-
-.review-pass-list b {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #6366f1;
-}
-
 .resource-result-card.tone-emerald .resource-icon-shell,
-.resource-result-card.tone-green .resource-icon-shell { background: rgba(16, 185, 129, 0.12); color: #059669; }
-.resource-result-card.tone-blue .resource-icon-shell { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
-.resource-result-card.tone-purple .resource-icon-shell { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
-.resource-result-card.tone-rose .resource-icon-shell { background: rgba(244, 63, 94, 0.12); color: #e11d48; }
-.resource-result-card.tone-indigo .resource-icon-shell { background: rgba(99, 102, 241, 0.12); color: #4f46e5; }
+.resource-result-card.tone-green .resource-icon-shell { background: var(--color-success-soft); color: var(--color-success); }
+.resource-result-card.tone-blue .resource-icon-shell { background: var(--cat-tutor-soft); color: var(--cat-tutor); }
+.resource-result-card.tone-purple .resource-icon-shell { background: var(--cat-eval-soft); color: var(--cat-eval); }
+.resource-result-card.tone-rose .resource-icon-shell { background: var(--cat-rose-soft); color: var(--cat-rose); }
+.resource-result-card.tone-indigo .resource-icon-shell { background: var(--cat-resource-soft); color: var(--cat-resource); }
 .resource-result-card.tone-pink .resource-icon-shell { background: rgba(219, 39, 119, 0.12); color: #db2777; }
 .resource-result-card.tone-orange .resource-icon-shell { background: rgba(249, 115, 22, 0.12); color: #ea580c; }
 
@@ -1617,10 +1351,6 @@ function isPlainObject(value: unknown): value is Record<string, any> {
     min-width: 0;
   }
 
-  .hero-warning-dock {
-    width: min(100%, 560px);
-  }
-
   .hero-action-row {
     justify-content: flex-start;
   }
@@ -1632,19 +1362,19 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 }
 
 @media (max-width: 1080px) {
-  .review-strip {
+  .path-step-track {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .resource-package-page {
-    padding: 14px;
+    padding: var(--space-3_5);
   }
 
   .package-hero-card,
   .package-section-card {
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
   }
 
   .section-heading-row,
@@ -1659,13 +1389,8 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 
   .hero-metric-strip,
   .path-step-track,
-  .resource-card-grid-v2,
-  .review-strip {
+  .resource-card-grid-v2 {
     grid-template-columns: 1fr;
-  }
-
-  .hero-warning-dock {
-    width: 100%;
   }
 
   .hero-action-row {

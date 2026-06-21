@@ -24,8 +24,7 @@ from app.resource.utils import format_learner_profile_for_prompt
 def build_resource_context(input_data: ResourceInput) -> list[str]:
     """构建 standalone 多智能体资源生成上下文。
 
-    当 TeachingPlan 包含 agent_assignments 时，使用切片注入（仅注入该 Agent
-    被指派的大纲项和聚焦指令）；否则回退到全量注入。
+    TeachingPlan 存在时只注入该 Agent 的严格指派切片。
     """
     parts = [f"## 学习需求\n{input_data.learning_need}"]
     parts.append(f"## 学习场景\n{input_data.learning_scenario}")
@@ -35,16 +34,10 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
         parts.append(f"## 学习者画像摘要\n{profile_text}")
 
     if input_data.teaching_plan:
-        agent_id = input_data.agent_config.get("agent_id", "") if input_data.agent_config else ""
-        assignments = input_data.teaching_plan.agent_assignments
-
-        if assignments and agent_id:
-            assignment_context = build_agent_assignment_context(
-                input_data.teaching_plan, agent_id
-            )
-            parts.extend(assignment_context)
-        else:
-            parts.append(f"## 教学计划\n{input_data.teaching_plan.model_dump_json(indent=2)}")
+        agent_id = (input_data.agent_config.get("agent_id") if input_data.agent_config else None) or input_data.agent_name
+        if not agent_id:
+            raise ValueError("resource Agent input missing agent_id")
+        parts.extend(build_agent_assignment_context(input_data.teaching_plan, agent_id))
 
     if input_data.upstream_handoffs:
         handoffs = {
@@ -63,6 +56,8 @@ def build_agent_assignment_context(plan: TeachingPlan, agent_id: str) -> list[st
     - 该 Agent 的 AgentAssignment（聚焦指令、风格约束、边界提醒、强调知识点、重叠回避）
     - 仅该 Agent 被指派的大纲项（而非全量 outline）
     """
+    parts: list[str] = [f"## 教学计划 - Agent 指派（{agent_id}）"]
+
     assignment: AgentAssignment | None = None
     for a in plan.agent_assignments:
         if a.agent_id == agent_id:
@@ -70,11 +65,15 @@ def build_agent_assignment_context(plan: TeachingPlan, agent_id: str) -> list[st
             break
 
     if assignment is None:
-        return [f"## 教学计划\n{plan.model_dump_json(indent=2)}"]
+        if plan.teaching_strategy:
+            parts.append(f"全局教学策略：{plan.teaching_strategy}")
+        if plan.outline:
+            outline_lines = ["全量大纲："]
+            for item in plan.outline:
+                outline_lines.append(f"- {item.id}: {item.title} (目标: {item.goal})")
+            parts.append("\n".join(outline_lines))
+        return parts
 
-    parts: list[str] = []
-
-    parts.append(f"## Agent 指派（{agent_id}）")
     if assignment.focus_instruction:
         parts.append(f"**聚焦指令**：{assignment.focus_instruction}")
     if assignment.style_constraint:
@@ -118,52 +117,13 @@ def outline_ids_from_plan(plan: TeachingPlan | None) -> list[str]:
 
 
 def assigned_outline_ids(plan: TeachingPlan | None, agent_id: str) -> list[str]:
-    """获取指定 Agent 被指派的大纲 ID 列表，不存在时回退到全量。"""
+    """获取指定 Agent 被指派的大纲 ID 列表。"""
     if not plan:
         return []
     for a in plan.agent_assignments:
         if a.agent_id == agent_id:
-            return [oid for oid in a.assigned_outline_ids if oid in {item.id for item in plan.outline}]
-    return outline_ids_from_plan(plan)
-
-
-def first_outline_id(plan: TeachingPlan | None) -> str:
-    """获取第一个大纲项的 ID。"""
-    ids = outline_ids_from_plan(plan)
-    return ids[0] if ids else ""
-
-
-def _valid_outline_ids(plan: TeachingPlan | None, outline_ids: list[str] | None) -> list[str]:
-    """过滤出教学计划中有效的大纲 ID（去重、保序）。"""
-    allowed = set(outline_ids_from_plan(plan))
-    if not allowed:
-        return []
-    result: list[str] = []
-    for outline_id in outline_ids or []:
-        if outline_id in allowed and outline_id not in result:
-            result.append(outline_id)
-    return result
-
-
-def select_outline_ids_by_keywords(plan: TeachingPlan | None, keywords: list[str]) -> list[str]:
-    """根据关键词匹配大纲项，返回匹配的 ID 列表。"""
-    if not plan:
-        return []
-    normalized = [item.strip().lower() for item in keywords if item.strip()]
-    if not normalized:
-        return [first_outline_id(plan)] if first_outline_id(plan) else []
-    matched: list[str] = []
-    for item in plan.outline:
-        haystack = " ".join([
-            item.title,
-            item.goal,
-            " ".join(item.key_points),
-            " ".join(item.suggested_examples),
-            " ".join(item.suggested_visuals),
-        ]).lower()
-        if any(keyword in haystack for keyword in normalized):
-            matched.append(item.id)
-    return matched or ([first_outline_id(plan)] if first_outline_id(plan) else [])
+            return list(a.assigned_outline_ids)
+    return [item.id for item in plan.outline]
 
 
 def outline_coverage_summary(
@@ -172,11 +132,12 @@ def outline_coverage_summary(
 ) -> dict[str, list[str]]:
     """汇总大纲覆盖情况 — 哪些被覆盖、哪些缺失。"""
     plan_ids = outline_ids_from_plan(plan)
-    allowed = set(plan_ids)
     covered: list[str] = []
     for handoff in handoffs.values():
         for outline_id in handoff.covered_outline_ids:
-            if outline_id in allowed and outline_id not in covered:
+            if outline_id not in set(plan_ids):
+                raise ValueError(f"handoff references unknown outline ID: {outline_id}")
+            if outline_id not in covered:
                 covered.append(outline_id)
     return {
         "teaching_plan_outline_ids": plan_ids,
@@ -219,15 +180,23 @@ def build_basic_handoff(
     code_refs: list[str] | None = None,
 ) -> DownstreamContext:
     """构建基础的 DownstreamContext 交接摘要。"""
-    filtered_covered_ids = _valid_outline_ids(
-        teaching_plan,
-        covered_outline_ids or ([first_outline_id(teaching_plan)] if first_outline_id(teaching_plan) else []),
-    )
+    if teaching_plan is None:
+        raise ValueError("standalone handoff requires TeachingPlan")
+    provided_outline_ids = list(covered_outline_ids or [])
+    if not provided_outline_ids:
+        raise ValueError(f"Agent {source_agent!r} handoff must cover at least one outline ID")
+    if len(provided_outline_ids) != len(set(provided_outline_ids)):
+        raise ValueError(f"Agent {source_agent!r} handoff contains duplicate outline IDs")
+    unknown_outline_ids = set(provided_outline_ids) - set(outline_ids_from_plan(teaching_plan))
+    if unknown_outline_ids:
+        raise ValueError(
+            f"Agent {source_agent!r} handoff references unknown outline IDs: {sorted(unknown_outline_ids)}"
+        )
     return DownstreamContext(
         source_agent=source_agent,
         title=clip_text(title, 120),
         one_sentence_summary=clip_text(summary, 180),
-        covered_outline_ids=filtered_covered_ids,
+        covered_outline_ids=provided_outline_ids,
         reusable_assets=ReusableAssets(
             examples=(examples or [])[:6],
             visual_ideas=(visual_ideas or [])[:6],

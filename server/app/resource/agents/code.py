@@ -11,7 +11,6 @@ from app.resource.agents.common import (
     build_node_context,
     build_resource_context,
     assigned_outline_ids,
-    select_outline_ids_by_keywords,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -44,11 +43,6 @@ class CodeAgent(BaseResourceAgent):
         case_type = result.metrics.get("case_type") or "basic_demo"
         difficulty = result.metrics.get("difficulty") or "beginner"
         code_outline_ids = assigned_outline_ids(input_data.teaching_plan, "code")
-        if not code_outline_ids:
-            code_outline_ids = select_outline_ids_by_keywords(
-                input_data.teaching_plan,
-                [lang, case_type, "代码", "示例", "实践", "编程", "实现", "code"],
-            )
         handoff = build_basic_handoff(
             source_agent="code",
             title=result.title,

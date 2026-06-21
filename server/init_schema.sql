@@ -57,6 +57,33 @@ COMMENT ON COLUMN active_tokens.token IS 'JWT令牌值';
 COMMENT ON COLUMN active_tokens.expires_at IS '令牌过期时间';
 
 -- ============================================================
+-- 2b. agent_runs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id              SERIAL          PRIMARY KEY,
+    run_id          VARCHAR(36)     NOT NULL UNIQUE,
+    user_id         INTEGER         NOT NULL,
+    module          VARCHAR(32)     NOT NULL,
+    business_id     VARCHAR(128)    NOT NULL,
+    status          VARCHAR(32)     NOT NULL DEFAULT 'pending',
+    sequence        INTEGER         NOT NULL DEFAULT 0 CHECK (sequence >= 0),
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at    TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_runs_run_id ON agent_runs (run_id);
+CREATE INDEX IF NOT EXISTS ix_agent_runs_user_id ON agent_runs (user_id);
+CREATE INDEX IF NOT EXISTS ix_agent_runs_module ON agent_runs (module);
+CREATE INDEX IF NOT EXISTS ix_agent_runs_business_id ON agent_runs (business_id);
+CREATE INDEX IF NOT EXISTS ix_agent_runs_status ON agent_runs (status);
+CREATE INDEX IF NOT EXISTS ix_agent_runs_user_created ON agent_runs (user_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_agent_runs_business ON agent_runs (module, business_id);
+
+COMMENT ON TABLE agent_runs IS '统一 Agent 运行记录，仅保存归属、序号与终态';
+
+-- ============================================================
 -- 3. schools
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schools (

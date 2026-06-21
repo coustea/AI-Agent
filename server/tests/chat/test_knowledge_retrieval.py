@@ -335,11 +335,9 @@ def test_search_knowledge_base_tool_accepts_structured_arguments(monkeypatch) ->
 
     monkeypatch.setattr(knowledge, "aformat_knowledge_context", fake_aformat)
 
-    result = asyncio.run(
-        knowledge.search_knowledge_base.ainvoke(
-            {"query": "集合", "course_name": "Java程序设计", "top_k": 2}
-        )
-    )
+    # 使用 make_search_knowledge_base 工厂函数创建工具，直接调用
+    tool = knowledge.make_search_knowledge_base()
+    result = asyncio.run(tool("集合", course_name="Java程序设计", top_k=2))
 
     assert result == "tool-context"
     assert calls == [{"query": "集合", "course_name": "Java程序设计", "top_k": 2}]

@@ -171,13 +171,18 @@
               <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答</p>
             </div>
 
-            <div
-                v-for="msg in messages"
-                :key="msg.id"
+            <template v-for="msg in messages" :key="msg.id">
+              <AgentActivityCard
+                  v-if="msg.role === 'ai' && msg.agentActivities?.length"
+                  :activities="msg.agentActivities"
+                  :active="isStreamingMessage(msg) && !getDisplayContent(msg)"
+              />
+              <div
+                v-if="msg.role === 'user' || getDisplayContent(msg) || msg.teachingDiagramGenerating || msg.teachingDiagram"
                 v-memo="[
                   msg.id === streamingMsgId ? streamDisplayText : msg.content,
                   msg.id === streamingMsgId ? isAIThinking : false,
-                  msg.searchStage,
+                  msg.agentActivities,
                   msg.contextCompressionStage,
                   msg.teachingDiagramGenerating,
                   msg.teachingDiagram,
@@ -196,25 +201,13 @@
                   <span class="time">{{ msg.time }}</span>
                 </div>
 
-                <div
-                    v-if="msg.role === 'user' || getDisplayContent(msg) || (!msg.teachingDiagramGenerating && (msg.searchStage || !msg.teachingDiagram))"
-                    :class="['bubble', 'markdown-body', { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' }]"
-                >
+                <div :class="['bubble', 'markdown-body', { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' }]">
                   <template v-if="msg.role === 'user'">
                     <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
                   </template>
                   <template v-else>
-                    <div v-if="msg.searchStage && !getDisplayContent(msg)" class="search-status-indicator">
-                      <span class="diagram-spinner"></span>
-                      <span class="search-status-text">{{ msg.searchMessage }}</span>
-                    </div>
-                    <div v-else-if="isStreamingMessage(msg) && !getDisplayContent(msg) && !msg.teachingDiagramGenerating" class="thinking-loader">
-                      <span class="dot"></span>
-                      <span class="dot"></span>
-                      <span class="dot"></span>
-                    </div>
                     <TutorMessageContent
-                        v-else-if="getDisplayContent(msg)"
+                        v-if="getDisplayContent(msg)"
                         :content="getDisplayContent(msg)"
                         :is-streaming="isStreamingMessage(msg)"
                     />
@@ -265,7 +258,8 @@
                 </div>
 
               </div>
-            </div>
+              </div>
+            </template>
 
           </div>
 
@@ -468,6 +462,7 @@ import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
+import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
 
 import { useDiagramCapture } from '@/features/chat/model/useDiagramCapture'
 
@@ -482,10 +477,11 @@ import {
   getChatHistory,
 } from '@/features/chat/api/chat'
 import type {
+  AgentActivity,
   ChatSession,
-  KnowledgeSource,
   TeachingDiagram,
 } from '@/features/chat/model/chat'
+import type { AgentEvent } from '@/shared/agent-events/model'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
 import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
@@ -759,6 +755,81 @@ const applyCompressionStatus = (aiMsg: ChatMsg, payload: { stage?: string; messa
     scheduleCompressionClear(aiMsg)
   }
   return true
+}
+
+type AgentStatusPayload = {
+  activity_id?: string
+  kind?: AgentActivity['kind']
+  stage?: string
+  status?: 'running' | 'done' | 'failed'
+  tool_name?: string
+  title?: string
+  summary?: string
+  message?: string
+  detail?: AgentActivity['detail']
+}
+
+const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayload) => {
+  if (!aiMsg) return
+  aiMsg.searchStage = payload.stage || 'tool_running'
+  aiMsg.searchMessage = payload.message || '正在调用工具...'
+  const activity: AgentActivity = {
+    activity_id: payload.activity_id || `${payload.kind || 'workflow'}-${payload.stage || payload.tool_name || 'status'}`,
+    kind: payload.kind || 'workflow',
+    stage: payload.stage,
+    status: payload.status || 'running',
+    tool_name: payload.tool_name,
+    title: payload.title || payload.message || '准备回答',
+    summary: payload.summary,
+    message: payload.message || '正在准备回答...',
+    detail: payload.detail,
+  }
+  const activities = aiMsg.agentActivities || (aiMsg.agentActivities = [])
+  const index = activities.findIndex(item => item.activity_id === activity.activity_id)
+  if (index >= 0) activities.splice(index, 1, activity)
+  else activities.push(activity)
+}
+
+const applyUnifiedAgentEvent = (aiMsg: ChatMsg | undefined, event: AgentEvent) => {
+  if (!aiMsg) return
+  if (event.type === 'artifact.ready') {
+    const diagram = normalizeTeachingDiagram(event.detail as unknown as TeachingDiagram)
+    if (diagram) {
+      clearAgentStatus(aiMsg)
+      aiMsg.teachingDiagram = diagram
+      aiMsg.teachingDiagramGenerating = false
+    }
+    return
+  }
+  if (event.type !== 'agent.status' && event.type !== 'tool.status') return
+
+  const stage = String(event.detail.stage || event.activity_id || '')
+  const message = event.summary || event.title
+  if (applyCompressionStatus(aiMsg, { stage, message })) return
+  if (stage === 'teaching_diagram_generate') {
+    clearAgentStatus(aiMsg)
+    aiMsg.teachingDiagramGenerating = true
+    return
+  }
+  applyAgentStatus(aiMsg, {
+    activity_id: event.activity_id || undefined,
+    kind: event.type === 'tool.status'
+      ? 'tool'
+      : (event.agent_id === 'attachment_analyzer' ? 'attachment' : 'workflow'),
+    stage,
+    status: event.status === 'completed' ? 'done' : event.status === 'failed' ? 'failed' : 'running',
+    tool_name: event.type === 'tool.status' ? event.agent_id || undefined : undefined,
+    title: event.title,
+    summary: event.summary,
+    message,
+    detail: event.detail as AgentActivity['detail'],
+  })
+}
+
+const clearAgentStatus = (aiMsg?: ChatMsg) => {
+  if (!aiMsg) return
+  aiMsg.searchStage = undefined
+  aiMsg.searchMessage = undefined
 }
 
 const clearAvatarThinkingTimeout = () => {
@@ -1409,13 +1480,15 @@ const loadHistoryFromAPI = async (sessionId: string) => {
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
-    const mapped = history.map((msg, i) => ({
+    const visibleHistory = history.filter(msg => msg.role === 'user' || msg.message_kind === 'assistant_answer')
+    const mapped = visibleHistory.map((msg, i) => ({
       id: Date.now() + i,
-      role: (msg.role === 'assistant' || msg.role === 'tool' || msg.role === 'system') ? 'ai' as const : 'user' as const,
+      role: msg.role === 'user' ? 'user' as const : 'ai' as const,
       content: msg.content,
       time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
       attachments: msg.attachments || null,
       teachingDiagram: normalizeTeachingDiagram(msg.teaching_diagram),
+      agentActivities: msg.agent_activities || [],
     }))
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = mapped.filter((item, idx) => {
@@ -1458,37 +1531,20 @@ const switchSession = async (sessionId: string) => {
 
     // Process buffered events (diagrams, status, etc.)
     for (const evt of events) {
-      if (evt.event === 'diagram') {
-        const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
-        if (diagram) {
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (aiMsg) {
-            aiMsg.teachingDiagram = diagram
-            aiMsg.teachingDiagramGenerating = false
-          }
-        }
-        continue
-      }
-      if (evt.event === 'status') {
-        const payload = evt.data as { stage?: string; message?: string }
-        if (payload?.stage === 'teaching_diagram_generate') {
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (aiMsg) {
-            aiMsg.teachingDiagramGenerating = true
-          }
-        }
-      }
+      applyUnifiedAgentEvent(messages.value.find(m => m.id === aiMsgId), evt)
     }
 
     // Resubscribe callbacks so new chunks flow to this component
     streamManager.resubscribe(sessionId, {
       onChunk: (chunk) => {
+        clearAgentStatus(messages.value.find(m => m.id === aiMsgId))
         enqueueStreamChunk(aiMsgId, chunk)
       },
       onDone: () => {
         isStreamDone = true
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         clearCompressionStatus(aiMsg)
+        clearAgentStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
         }
@@ -1505,6 +1561,7 @@ const switchSession = async (sessionId: string) => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         clearCompressionStatus(aiMsg)
+        clearAgentStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
           if (!aiMsg.content) {
@@ -1517,66 +1574,8 @@ const switchSession = async (sessionId: string) => {
         streamingMsgRef.value = null
       },
       onEvent: (evt) => {
-        if (evt.event === 'status') {
-          const payload = evt.data as { stage?: string; message?: string }
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg) return
-
-          if (applyCompressionStatus(aiMsg, payload)) {
-            aiMsg.searchStage = undefined
-            aiMsg.searchMessage = undefined
-            scrollToBottom()
-            return
-          }
-
-          if ([
-            'preparing_context', 'classify', 'search_node', 'spark_summary',
-            'direct_answer', 'attachment_answer', 'reading_profile',
-            'searching_learning_memory', 'persisting_turn',
-          ].includes(payload?.stage || '')) {
-            aiMsg.searchStage = payload.stage
-            aiMsg.searchMessage = payload.message || '正在组织本轮回答...'
-            scrollToBottom()
-            return
-          }
-          if (payload?.stage === 'teaching_diagram_generate') {
-            aiMsg.searchStage = undefined
-            aiMsg.searchMessage = undefined
-            aiMsg.teachingDiagramGenerating = true
-            scrollToBottom()
-            return
-          }
-          return
-        }
-        if (evt.event === 'diagram') {
-          const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg || !diagram) return
-          aiMsg.searchStage = undefined
-          aiMsg.searchMessage = undefined
-          aiMsg.teachingDiagram = diagram
-          aiMsg.teachingDiagramGenerating = false
-          scrollToBottom()
-          return
-        }
-        if (evt.event === 'done') {
-          const payload = evt.data as {
-            teaching_diagram?: TeachingDiagram | null
-            resources?: { teaching_diagram?: TeachingDiagram | null }
-            knowledge_sources?: KnowledgeSource[]
-          }
-          const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          if (!aiMsg) return
-          clearCompressionStatus(aiMsg)
-          aiMsg.searchStage = undefined
-          aiMsg.searchMessage = undefined
-          aiMsg.teachingDiagramGenerating = false
-          if (diagram) {
-            aiMsg.teachingDiagram = diagram
-          }
-          scrollToBottom()
-        }
+        applyUnifiedAgentEvent(messages.value.find(m => m.id === aiMsgId), evt)
+        scrollToBottom()
       },
     })
 
@@ -1885,6 +1884,7 @@ const handleSend = async () => {
       },
       {
         onChunk: (chunk) => {
+          clearAgentStatus(messages.value.find(m => m.id === aiMsgId))
           enqueueStreamChunk(aiMsgId, chunk)
         },
         onDone: () => {
@@ -1892,6 +1892,7 @@ const handleSend = async () => {
           const finishedSessionId = currentSessionId.value
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           clearCompressionStatus(aiMsg)
+          clearAgentStatus(aiMsg)
           if (aiMsg) {
             aiMsg.teachingDiagramGenerating = false
           }
@@ -1910,6 +1911,7 @@ const handleSend = async () => {
           commitStreamTextToMessage(aiMsgId)
           const aiMsg = messages.value.find(m => m.id === aiMsgId)
           clearCompressionStatus(aiMsg)
+          clearAgentStatus(aiMsg)
           if (aiMsg) {
             aiMsg.teachingDiagramGenerating = false
             if (!aiMsg.content) {
@@ -1922,77 +1924,8 @@ const handleSend = async () => {
           streamingMsgRef.value = null
         },
         onEvent: (evt) => {
-          if (evt.event === 'status') {
-            const payload = evt.data as { stage?: string; message?: string }
-            const aiMsg = messages.value.find(m => m.id === aiMsgId)
-            if (!aiMsg) return
-
-            if (applyCompressionStatus(aiMsg, payload)) {
-              aiMsg.searchStage = undefined
-              aiMsg.searchMessage = undefined
-              scrollToBottom()
-              return
-            }
-
-            if ([
-              'preparing_context',
-              'classify',
-              'search_node',
-              'spark_summary',
-              'direct_answer',
-              'attachment_answer',
-              'reading_profile',
-              'searching_learning_memory',
-              'persisting_turn',
-            ].includes(payload?.stage || '')) {
-              aiMsg.searchStage = payload.stage
-              aiMsg.searchMessage = payload.message || '正在组织本轮回答...'
-              scrollToBottom()
-              return
-            }
-            if (payload?.stage === 'teaching_diagram_generate') {
-              aiMsg.searchStage = undefined
-              aiMsg.searchMessage = undefined
-              aiMsg.teachingDiagramGenerating = true
-              scrollToBottom()
-              return
-            }
-            return
-          }
-
-          if (evt.event === 'diagram') {
-            const diagram = normalizeTeachingDiagram(evt.data as TeachingDiagram)
-            const aiMsg = messages.value.find(m => m.id === aiMsgId)
-            if (!aiMsg || !diagram) return
-            aiMsg.searchStage = undefined
-            aiMsg.searchMessage = undefined
-            aiMsg.teachingDiagram = diagram
-            aiMsg.teachingDiagramGenerating = false
-            scrollToBottom()
-            return
-          }
-
-          if (evt.event === 'done') {
-            const payload = evt.data as {
-              full_response?: string
-              teaching_diagram?: TeachingDiagram | null
-              resources?: { teaching_diagram?: TeachingDiagram | null }
-              knowledge_sources?: KnowledgeSource[]
-            }
-            const diagram = normalizeTeachingDiagram(payload?.teaching_diagram || payload?.resources?.teaching_diagram)
-            const aiMsg = messages.value.find(m => m.id === aiMsgId)
-            if (!aiMsg) return
-            clearCompressionStatus(aiMsg)
-            aiMsg.searchStage = undefined
-            aiMsg.searchMessage = undefined
-            aiMsg.teachingDiagramGenerating = false
-            if (!aiMsg.content && !streamDisplayText.value && payload?.full_response) {
-              aiMsg.content = payload.full_response
-            }
-            if (!diagram) return
-            aiMsg.teachingDiagram = diagram
-            scrollToBottom()
-          }
+          applyUnifiedAgentEvent(messages.value.find(m => m.id === aiMsgId), evt)
+          scrollToBottom()
         },
       },
     )
@@ -2106,25 +2039,6 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-xl) !important;
   border: none !important;
   box-shadow: var(--shadow-lg) !important;
-}
-
-.search-status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--el-color-primary-light-9);
-  border: 1px solid var(--el-color-primary-light-8);
-  border-radius: 10px;
-  margin-top: 10px;
-  color: var(--el-color-primary);
-  font-size: 13px;
-  font-weight: 500;
-  width: fit-content;
-}
-
-.search-status-text {
-  animation: pulse-text 1.5s infinite ease-in-out;
 }
 
 .context-compression-card {
@@ -2975,45 +2889,6 @@ onBeforeUnmount(() => {
 .message-row.ai .bubble:hover {
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06), 0 3px 10px rgba(15, 23, 42, 0.03);
 }
-
-/* AI 正在思考/输入指示器 */
-.thinking-loader {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-1) var(--space-2);
-  height: 20px;
-}
-
-.thinking-loader .dot {
-  width: 8px;
-  height: 8px;
-  background-color: var(--tone-indigo);
-  border-radius: var(--radius-pill);
-  opacity: 0.4;
-  animation: thinking-bounce 1.4s infinite ease-in-out both;
-}
-
-.thinking-loader .dot:nth-child(1) {
-  animation-delay: -0.32s;
-}
-
-.thinking-loader .dot:nth-child(2) {
-  animation-delay: -0.16s;
-}
-
-@keyframes thinking-bounce {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.4;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-    background-color: var(--color-primary);
-  }
-}
-
 
 /* 用户气泡：现代渐变蓝紫与发光阴影 */
 .message-row.user .bubble {

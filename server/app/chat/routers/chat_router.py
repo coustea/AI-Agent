@@ -1,17 +1,17 @@
-"""SSE 流式对话 + 文件上传/读取路由。"""
+"""智能辅导运行创建 + 文件上传/读取路由。"""
 
 from __future__ import annotations
 
-import json
-from typing import TYPE_CHECKING, AsyncIterator
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
+from fastapi.responses import FileResponse
 
 from app.auth.security import get_current_user
-from app.chat.service import chat, get_chat_usecases
+from app.chat.service import get_chat_usecases, run_chat_agent
 from app.config import CHAT_DIR
 from app.infra.logging import get_logger
+from app.infra.agent_events import create_agent_run
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
@@ -25,19 +25,12 @@ def _get_chat_memory_service() -> "ChatMemoryService":
     return get_chat_usecases()._memory_service
 
 
-async def _sse_wrap(events: AsyncIterator) -> AsyncIterator[str]:
-    async for ev in events:
-        etype = ev.get("event", "message")
-        data = ev.get("data")
-        data_str = json.dumps(data, ensure_ascii=False) if data is not None else ""
-        yield f"event: {etype}\ndata: {data_str}\n\n"
-
-
 def register_chat_routes(router: APIRouter) -> None:
     """将聊天核心端点注册到给定 router。"""
 
-    @router.post("/chat/stream")
-    async def mentor_chat_stream(
+    @router.post("/chat/runs")
+    async def create_mentor_chat_run(
+        background_tasks: BackgroundTasks,
         user_input: str = Form(default=""),
         session_id: str | None = Form(default=None),
         attachments: str | None = Form(default=None),
@@ -53,26 +46,30 @@ def register_chat_routes(router: APIRouter) -> None:
         if not effective_message:
             return HttpResponse.error(code=400, message="请输入您的问题")
 
-        logger.info(
-            "[ChatAPI] 流式对话请求: user_id=%s session_id=%s msg_len=%d attachments=%d",
-            current_user.id, effective_session, len(effective_message), len(parsed_attachments),
+        run = await create_agent_run(
+            user_id=current_user.id,
+            module="chat",
+            business_id=effective_session,
+        )
+        background_tasks.add_task(
+            run_chat_agent,
+            run_id=run.run_id,
+            user_id=current_user.id,
+            session_id=effective_session,
+            user_input=effective_message,
+            attachments=parsed_attachments,
+            enable_web_search=enable_web_search,
+            need_teaching_diagram=need_teaching_diagram,
         )
 
-        return StreamingResponse(
-            _sse_wrap(chat(
-                user_id=current_user.id,
-                session_id=effective_session,
-                user_input=effective_message,
-                attachments=parsed_attachments or None,
-                enable_web_search=enable_web_search,
-                need_teaching_diagram=need_teaching_diagram,
-            )),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+        logger.info(
+            "[ChatAPI] 创建辅导运行: run_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
+            run.run_id,
+            current_user.id, effective_session, len(effective_message), len(parsed_attachments),
+        )
+        return HttpResponse.success(
+            data={"run_id": run.run_id, "session_id": effective_session, "status": "pending"},
+            status_code=202,
         )
 
     @router.post("/chat/upload")

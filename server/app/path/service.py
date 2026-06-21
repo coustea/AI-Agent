@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, Field
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -17,6 +15,7 @@ from app.evaluation.service import (
     build_summary_from_events,
 )
 from app.infra.database import session_scope
+from app.infra.agent_events import AgentEventEmitter
 from app.infra.logging import get_logger
 from app.infra.models import (
     LearningEvent,
@@ -54,57 +53,6 @@ from app.path.workflows import (
 )
 from app.profile.service import get_profile_service
 
-
-# ======================================================================
-# SSE 路径事件定义 (源自 events.py)
-# ======================================================================
-
-PathEventType = Literal["path.generating", "path.step", "path.done"]
-PathStatus = Literal["generating", "active", "failed"]
-
-
-class PathEvent(BaseModel):
-    """单个路径事件 — 通过 SSE 推送给前端的进度通知。"""
-
-    event_type: PathEventType = "path.step"
-    path_id: int
-    status: PathStatus = "generating"
-    message: str | None = None
-    progress: int = 0
-    success: bool | None = None
-    timestamp: float = Field(default_factory=lambda: __import__("time").time())
-
-
-class PathEventBus:
-    """路径事件总线 — 基于 asyncio.Queue 的发布/订阅模式。"""
-
-    def __init__(self) -> None:
-        self._subscribers: dict[int, list[asyncio.Queue[PathEvent]]] = {}
-
-    def subscribe(self, path_id: int) -> asyncio.Queue[PathEvent]:
-        q: asyncio.Queue[PathEvent] = asyncio.Queue(maxsize=256)
-        if path_id not in self._subscribers:
-            self._subscribers[path_id] = []
-        self._subscribers[path_id].append(q)
-        return q
-
-    def unsubscribe(self, path_id: int, queue: asyncio.Queue[PathEvent]) -> None:
-        if path_id in self._subscribers:
-            subs = self._subscribers[path_id]
-            subs[:] = [q for q in subs if q is not queue]
-            if not subs:
-                del self._subscribers[path_id]
-
-    async def publish(self, path_id: int, event: PathEvent) -> None:
-        subs = self._subscribers.get(path_id, [])
-        for q in subs:
-            try:
-                q.put_nowait(event)
-            except asyncio.QueueFull:
-                logger.warning("PathEventBus queue full for path_id=%s, dropping event", path_id)
-
-
-path_event_bus = PathEventBus()
 
 logger = get_logger(__name__)
 
@@ -192,32 +140,29 @@ class PathService:
         path_id: int,
         user_id: int,
         request: CreateLearningPathRequest,
+        run_id: str,
     ) -> None:
-        profile = await self._get_profile_dict(user_id)
-        profile_md = await self.get_user_learning_profile(user_id)
+        emitter = AgentEventEmitter(run_id=run_id, module="path", business_id=str(path_id))
 
         async def progress_cb(status: str, progress: int, message: str):
-            await path_event_bus.publish(
-                path_id,
-                PathEvent(
-                    event_type="path.step",
-                    path_id=path_id,
-                    status="generating",
-                    message=message,
-                    progress=progress,
-                ),
+            await emitter.agent_status(
+                activity_id=f"path-plan:{path_id}",
+                agent_id="path_planner",
+                title=message,
+                summary=message,
+                progress=progress,
             )
 
         try:
-            await path_event_bus.publish(
-                path_id,
-                PathEvent(
-                    event_type="path.step",
-                    path_id=path_id,
-                    status="generating",
-                    message="正在初始化路径推演引擎",
-                    progress=10,
-                ),
+            await emitter.started(title="路径规划已开始")
+            profile = await self._get_profile_dict(user_id)
+            profile_md = await self.get_user_learning_profile(user_id)
+            await emitter.agent_status(
+                activity_id=f"path-plan:{path_id}",
+                agent_id="path_planner",
+                title="正在初始化路径推演引擎",
+                summary="正在初始化路径推演引擎",
+                progress=10,
             )
 
             plan = await self.path_planner.generate_plan(
@@ -227,15 +172,12 @@ class PathService:
                 profile_markdown=profile_md,
             )
 
-            await path_event_bus.publish(
-                path_id,
-                PathEvent(
-                    event_type="path.step",
-                    path_id=path_id,
-                    status="generating",
-                    message="正在生成节点结构",
-                    progress=85,
-                ),
+            await emitter.agent_status(
+                activity_id=f"path-plan:{path_id}",
+                agent_id="path_planner",
+                title="正在生成节点结构",
+                summary="正在生成节点结构",
+                progress=85,
             )
 
             plan = repair_generated_plan_from_macro_stages(
@@ -247,33 +189,17 @@ class PathService:
             validate_path_plan(plan)
             await self._persist_path_plan(path_id, user_id, plan)
 
-            await path_event_bus.publish(
-                path_id,
-                PathEvent(
-                    event_type="path.done",
-                    path_id=path_id,
-                    status="active",
-                    message="路径规划完成",
-                    progress=100,
-                    success=True,
-                ),
-            )
+            await emitter.completed(title="路径规划完成", progress=100)
         except Exception as exc:
             logger.error(f"路径规划任务异常: {exc}", exc_info=True)
             path = await self.session.get(LearningPath, path_id)
             if path:
                 path.status = "failed"
                 await self.session.commit()
-            await path_event_bus.publish(
-                path_id,
-                PathEvent(
-                    event_type="path.done",
-                    path_id=path_id,
-                    status="failed",
-                    message=f"路径规划失败: {str(exc)}",
-                    progress=0,
-                    success=False,
-                ),
+            await emitter.failed(
+                title="路径规划失败",
+                summary="暂时无法完成本次路径规划",
+                progress=0,
             )
 
     # ── 路径查询 ────────────────────────────────────────────────────────────
@@ -837,8 +763,11 @@ def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
 
 
 async def run_generation_bg(
-    user_id: int, path_id: int, request: CreateLearningPathRequest,
+    user_id: int,
+    path_id: int,
+    request: CreateLearningPathRequest,
+    run_id: str,
 ):
     async with session_scope() as session:
         service = PathService(session)
-        await service.run_generation(path_id, user_id, request)
+        await service.run_generation(path_id, user_id, request, run_id)

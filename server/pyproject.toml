@@ -48,6 +48,7 @@ dependencies = [
     "langchain-tavily>=0.2.18",
     "edge-tts>=6.1.12",
     "mutagen>=1.47.0",
+    "pypdf>=6.10.0",
 ]
 
 [dependency-groups]

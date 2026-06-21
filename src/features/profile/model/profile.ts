@@ -9,25 +9,47 @@ export interface BaseInfoData {
   courses: string[]
 }
 
-export interface GlobalDimensionValue {
+export interface DimensionValue {
   value: string
   evidence: string[]
 }
 
+/**
+ * 7 维度画像键
+ * - 赛题要求: knowledge_level, cognitive_style, weak_knowledge_points
+ * - 新增维度: knowledge_gap_pattern, learning_goal_type, difficulty_tolerance, self_correction_ability
+ */
+export type ProfileDimensionKey =
+  | 'knowledge_level'
+  | 'cognitive_style'
+  | 'weak_knowledge_points'
+  | 'knowledge_gap_pattern'
+  | 'learning_goal_type'
+  | 'difficulty_tolerance'
+  | 'self_correction_ability'
+
 export interface ProfileJsonData {
   base_info: BaseInfoData
-  dimensions: Record<string, GlobalDimensionValue>
+  dimensions: Record<ProfileDimensionKey, DimensionValue>
 }
 
 export interface ProfileData {
   user_id: number | null
   module: string | null
   base_info: BaseInfoData
-  dimensions: Record<string, GlobalDimensionValue>
+  dimensions: Record<ProfileDimensionKey, DimensionValue>
   profile_json: ProfileJsonData | null
-  profile_score_json: Record<string, unknown> | null
+  profile_score_json: {
+    overall_score: number
+    dimension_scores: Record<ProfileDimensionKey, number>
+    dimension_evidence: Record<ProfileDimensionKey, string[]>
+    scored_at: string
+  } | null
   updated_at: string | null
 }
+
+// 向后兼容别名
+export type GlobalDimensionValue = DimensionValue
 
 export interface ProfileOnboardingData {
   base_info: BaseInfoData

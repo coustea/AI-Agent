@@ -61,7 +61,7 @@
               </div>
             </header>
 
-            <section v-if="resource.status === 'failed'" class="failure-card">
+            <section v-if="resource.status === 'failed' || resourceProtocolError" class="failure-card">
               <div class="failure-icon">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M11 7h2v7h-2V7Zm0 9h2v2h-2v-2Zm1-14 11 20H1L12 2Zm0 4.1L4.4 20h15.2L12 6.1Z" />
@@ -69,7 +69,7 @@
               </div>
               <div>
                 <strong>资源生成失败</strong>
-                <p>{{ resource.error_message || '多智能体资源生成过程中出现异常，请返回节点学习页重新生成。' }}</p>
+                <p>{{ resourceProtocolError || resource.error_message || '多智能体资源生成过程中出现异常，请返回节点学习页重新生成。' }}</p>
               </div>
             </section>
 
@@ -101,7 +101,7 @@
                 />
                 <PptView
                   v-else-if="resource.resource_type === 'ppt'"
-                  :result-data="resourceContent"
+                  :document-data="pathPptDocument!"
                 />
                 <ReadingView
                   v-else-if="resource.resource_type === 'reading'"
@@ -241,7 +241,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -249,6 +249,7 @@ import CodeView from '@/features/resource/components/CodeView.vue'
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
 import MindmapView from '@/features/resource/components/MindmapView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
+import { parsePptDocument, type PPTDocument } from '@/features/resource/components/ppt-engine/types/ppt'
 import QuizView from '@/features/resource/components/QuizView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
 import { getPathGeneratedResourceDetail } from '@/features/learning-path/api/path-resource'
@@ -267,6 +268,8 @@ const router = useRouter()
 
 const loading = ref(false)
 const resource = ref<PathResourceDetail | null>(null)
+const pathPptDocument = shallowRef<PPTDocument | null>(null)
+const resourceProtocolError = ref('')
 
 const resourceId = computed(() => Number(route.params.id || 0))
 const pathNodeId = computed(() => Number(route.query.pathNodeId || 0))
@@ -362,6 +365,21 @@ const loadDetail = async () => {
   try {
     const res = await getPathGeneratedResourceDetail(resourceId.value)
     resource.value = res.data.data
+    pathPptDocument.value = null
+    resourceProtocolError.value = ''
+    if (resource.value.resource_type === 'ppt') {
+      const parsed = parsePptDocument(resource.value.content_json ?? resource.value.content_text)
+      if (!parsed.ok) {
+        resourceProtocolError.value = 'PPT 资源协议校验失败，已停止渲染。'
+        console.error('Invalid persisted path PPT artifact rejected', {
+          resourceId: resource.value.id,
+          reason: parsed.reason,
+          details: parsed.details,
+        })
+      } else {
+        pathPptDocument.value = parsed.document
+      }
+    }
   } catch (error) {
     ElMessage.error(getErrorMessage(error, '加载路径资源失败'))
   } finally {

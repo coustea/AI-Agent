@@ -12,10 +12,10 @@
 
 <script setup lang="ts">
 import MarkdownPreview from '@/shared/ui/MarkdownPreview.vue'
-import type { BlockText } from '../../types/ppt'
+import type { TextBlock } from '../../types/ppt'
 
 defineProps<{
-  block: BlockText
+  block: TextBlock
 }>()
 </script>
 

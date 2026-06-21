@@ -90,17 +90,23 @@ class ReadingConfig(BaseModel):
 
     @field_validator("language_preference", mode="before")
     @classmethod
-    def normalize_language_preference(cls, value: Any) -> Any:
+    def normalize_language_preference(cls, value: Any) -> str:
         if value == "bilingual":
             return "both"
         return value
 
 
 class PptConfig(BaseModel):
-    """PPT Agent 配置。"""
-    page_count: int = Field(default=6, ge=3, le=20)
+    """计算机教学课件配置；模板、主题、布局和页数由后端推导。"""
+
+    model_config = ConfigDict(extra="forbid")
+
     difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
-    output_format: Literal["preview"] = "preview"
+    lesson_depth: Literal["quick", "standard", "deep"] = "standard"
+    lesson_kind: Literal[
+        "auto", "concept", "algorithm", "system", "debugging", "project"
+    ] = "auto"
+    learning_focus: Literal["balanced", "concept", "code", "practice"] = "balanced"
 
 
 class VideoConfig(BaseModel):
@@ -162,8 +168,21 @@ class ResourceGenerationRequest(BaseModel):
                 AgentSelection(agent_id=agent_id, enabled=True, priority=index)
                 for index, agent_id in enumerate(DEFAULT_SELECTED_AGENT_IDS)
             ]
-        if not [item for item in self.selected_agents if item.enabled]:
+        agent_ids = [item.agent_id.value for item in self.selected_agents]
+        duplicate_agent_ids = sorted({agent_id for agent_id in agent_ids if agent_ids.count(agent_id) > 1})
+        if duplicate_agent_ids:
+            raise ValueError(f"selected_agents 包含重复 Agent: {duplicate_agent_ids}")
+        enabled_agent_ids = {
+            item.agent_id.value for item in self.selected_agents if item.enabled
+        }
+        if not enabled_agent_ids:
             raise ValueError("selected_agents 过滤 enabled=true 后不能为空")
+        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video"}
+        base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
+        if aggregation_agent_ids and not base_agent_ids:
+            raise ValueError(
+                "PPT/Video 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
+            )
         self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
         return self
 

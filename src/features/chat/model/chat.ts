@@ -140,12 +140,37 @@ export interface KnowledgeSource {
   distance?: number
 }
 
+export interface AgentActivityDetail {
+  tool_name?: string
+  input?: string
+  output?: string
+  error?: string
+  duration_ms?: number | null
+  analysis_type?: string
+  files?: string[]
+}
+
+export interface AgentActivity {
+  activity_id: string
+  kind: 'tool' | 'attachment' | 'workflow'
+  stage?: string
+  status: 'running' | 'done' | 'failed'
+  tool_name?: string
+  title: string
+  summary?: string
+  message: string
+  detail?: AgentActivityDetail
+}
+
 export interface ChatMessageItem {
   role: string
   content: string
   attachments: AttachmentInfo[] | null
   teaching_diagram: TeachingDiagram | null
   knowledge_sources?: KnowledgeSource[] | null
+  message_kind?: string | null
+  attachment_analyses?: Array<Record<string, unknown>> | null
+  agent_activities?: AgentActivity[] | null
   created_at: string | null
 }
 
@@ -168,9 +193,4 @@ export interface StreamChatParams {
   attachments?: string[]
   need_teaching_diagram?: boolean
   enable_web_search?: boolean
-}
-
-export interface StreamChatEvent {
-  event: string
-  data: unknown
 }

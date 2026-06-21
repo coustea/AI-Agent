@@ -134,6 +134,7 @@ export interface CreateLearningPathRequest {
 
 export interface CreateLearningPathResponse {
   id: number
+  run_id: string
   status: string
 }
 

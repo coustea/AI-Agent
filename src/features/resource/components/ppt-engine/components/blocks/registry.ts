@@ -1,23 +1,29 @@
-import BlockHeading from './BlockHeading.vue'
 import BlockText from './BlockText.vue'
 import BlockCallout from './BlockCallout.vue'
-import BlockCode from './BlockCode.vue'
-import BlockBigNumber from './BlockBigNumber.vue'
+import BlockKeyPoint from './BlockKeyPoint.vue'
+import BlockDiagram from './BlockDiagram.vue'
+import BlockFlowChart from './BlockFlowChart.vue'
+import BlockTable from './BlockTable.vue'
+import BlockCardList from './BlockCardList.vue'
 import BlockFormula from './BlockFormula.vue'
-import BlockTimeline from './BlockTimeline.vue'
-import BlockTerminal from './BlockTerminal.vue'
+import BlockCodeSnippet from './BlockCodeSnippet.vue'
 
 const BlockRegistry: Record<string, any> = {
-  Heading: BlockHeading,
   Text: BlockText,
   Callout: BlockCallout,
-  Code: BlockCode,
-  BigNumber: BlockBigNumber,
+  KeyPoint: BlockKeyPoint,
+  Diagram: BlockDiagram,
+  FlowChart: BlockFlowChart,
+  Table: BlockTable,
+  CardList: BlockCardList,
   Formula: BlockFormula,
-  Timeline: BlockTimeline,
-  Terminal: BlockTerminal
+  CodeSnippet: BlockCodeSnippet,
 }
 
 export const resolveBlock = (type: string) => {
-  return BlockRegistry[type] || null
+  const component = BlockRegistry[type]
+  if (!component) {
+    throw new Error(`[PPT Engine] Unknown block: ${type}. Expected one of: ${Object.keys(BlockRegistry).join(', ')}`)
+  }
+  return component
 }

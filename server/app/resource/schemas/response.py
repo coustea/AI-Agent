@@ -60,3 +60,10 @@ class SingleResourceRequest(BaseModel):
         if not value:
             raise ValueError("学习需求不能为空")
         return value
+
+    @field_validator("agent_id")
+    @classmethod
+    def reject_aggregation_agent(cls, value: ResourceAgentId) -> ResourceAgentId:
+        if value in {ResourceAgentId.PPT, ResourceAgentId.VIDEO}:
+            raise ValueError("PPT/Video 是聚合 Agent，不能作为单智能体任务运行")
+        return value

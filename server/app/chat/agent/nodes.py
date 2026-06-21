@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -19,32 +20,151 @@ from uuid import uuid4
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.chat.agent.state import TutorAgentState
+from app.chat.events import build_agent_status_payload, build_attachment_status_payload
 from app.chat.schemas import (
-    ChatStreamEvent,
+    TutorRuntimeEvent,
     ClassificationResult,
     Evidence,
     EvidenceSet,
-    TutorToolCall,
     TutorTurnContext,
 )
 from app.chat.diagram import TeachingDiagramGenerator
 from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer
-from app.chat.tool_executor import TutorToolExecutor, TutorToolRegistry
+from app.chat.tools.knowledge import SearchKnowledgeBaseArgs, make_search_knowledge_base
+from app.chat.tools.memory import (
+    LONG_TERM_MEMORY_CATEGORY_ALIASES,
+    GetLongTermMemoryArgs,
+    make_get_long_term_memory,
+)
+from app.chat.tools.profile import GetLearnerProfileArgs, make_get_learner_profile
+from app.chat.tools.search import (
+    SearchQueryArgs,
+    duckduckgo_instant_answer,
+    duckduckgo_search,
+    spark_search,
+    tavily_search,
+)
+from app.chat.tools.web_research import (
+    ExtractWebLinksArgs,
+    FindInWebPageArgs,
+    OpenWebPageArgs,
+    ReadWebPdfArgs,
+    WebResearchSession,
+)
 from app.chat.utils import normalize_message_content
 from app.chat.utils.files import analyze_documents
 from app.chat.utils.vision import VisionService
 from app.config import IMAGE_EXTENSIONS
 from app.infra.logging import get_logger
+from app.infra.tool_excute import Tool, ToolExcute, ToolRuntimeEvent
 
 logger = get_logger(__name__)
 
 WEB_RESEARCH_TOOL_NAMES = (
-    "web_search",
+    "duckduckgo_search",
+    "duckduckgo_instant_answer",
+    "tavily_search",
+    "spark_search",
     "open_web_page",
     "find_in_web_page",
     "extract_web_links",
     "read_web_pdf",
 )
+
+TOOL_EVIDENCE_TYPES: dict[str, str] = {
+    "get_learner_profile": "learner_profile",
+    "get_long_term_memory": "long_term_memory",
+    "search_knowledge_base": "knowledge_base",
+    **{name: "web_search" for name in WEB_RESEARCH_TOOL_NAMES},
+}
+
+
+def _string_result_handler(
+    handler: Callable[..., Awaitable[Any]],
+    tool_name: str,
+) -> Callable[..., Awaitable[str]]:
+    async def _wrapped(**kwargs: Any) -> str:
+        try:
+            result = await handler(**kwargs)
+            return "" if result is None else str(result)
+        except Exception as exc:
+            logger.warning("[%s] failed: error=%s", tool_name, exc)
+            raise
+
+    return _wrapped
+
+
+def _build_tutor_tools(request: TutorTurnContext) -> list[Tool]:
+    """装配当前辅导请求可用的业务工具；执行统一交给 infra.ToolExcute。"""
+    web_session = WebResearchSession()
+    return [
+        Tool(
+            "get_learner_profile",
+            "Read learner profile when personalization, goals, preferences, or background matter.",
+            GetLearnerProfileArgs,
+            make_get_learner_profile(request),
+        ),
+        Tool(
+            "get_long_term_memory",
+            "Read durable learning memory for previous goals, preferences, weaknesses, strategies, or corrections.",
+            GetLongTermMemoryArgs,
+            make_get_long_term_memory(request),
+        ),
+        Tool(
+            "search_knowledge_base",
+            "Search local course knowledge base for definitions, concepts, textbook facts, and course material.",
+            SearchKnowledgeBaseArgs,
+            make_search_knowledge_base(),
+        ),
+        Tool(
+            "duckduckgo_search",
+            "General web search for articles, tutorials, blogs, and web content.",
+            SearchQueryArgs,
+            _string_result_handler(duckduckgo_search, "duckduckgo_search"),
+        ),
+        Tool(
+            "duckduckgo_instant_answer",
+            "Get instant answers, definitions, and encyclopedia summaries.",
+            SearchQueryArgs,
+            _string_result_handler(duckduckgo_instant_answer, "duckduckgo_instant_answer"),
+        ),
+        Tool(
+            "tavily_search",
+            "AI-optimized search with structured, relevance-ranked results.",
+            SearchQueryArgs,
+            _string_result_handler(tavily_search, "tavily_search"),
+        ),
+        Tool(
+            "spark_search",
+            "Chinese semantic search with reranking support.",
+            SearchQueryArgs,
+            _string_result_handler(spark_search, "spark_search"),
+        ),
+        Tool(
+            "open_web_page",
+            "Open and read a public web page selected from search results.",
+            OpenWebPageArgs,
+            _string_result_handler(web_session.open_page, "open_web_page"),
+        ),
+        Tool(
+            "find_in_web_page",
+            "Find an exact word or phrase inside an opened page.",
+            FindInWebPageArgs,
+            _string_result_handler(web_session.find_in_page, "find_in_web_page"),
+        ),
+        Tool(
+            "extract_web_links",
+            "List relevant links from an opened page.",
+            ExtractWebLinksArgs,
+            _string_result_handler(web_session.extract_links, "extract_web_links"),
+        ),
+        Tool(
+            "read_web_pdf",
+            "Read a public PDF and return page-aware excerpts.",
+            ReadWebPdfArgs,
+            _string_result_handler(web_session.read_pdf, "read_web_pdf"),
+        ),
+    ]
 
 
 def _current_date_text() -> str:
@@ -130,7 +250,7 @@ async def classify_node(
     if has_web_search and not classification.needs_web_search:
         classification = classification.model_copy(update={"needs_web_search": True})
 
-    event = ChatStreamEvent(
+    event = TutorRuntimeEvent(
         type="classify_done",
         payload=classification.model_dump(),
         sequence=1,
@@ -153,14 +273,6 @@ async def analysis_files_node(
     user_id = state.get("user_id", 0)
     session_id = state.get("session_id", "")
 
-    start_event = ChatStreamEvent(
-        type="file_analysis_start",
-        payload={"count": len(attachments)},
-        sequence=2,
-        timestamp=time.time()
-    )
-    events = await agent._emit_event(state, start_event, turn_event_type="file.analysis.start")
-
     image_urls, file_urls = [], []
     for url in attachments:
         ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
@@ -169,7 +281,26 @@ async def analysis_files_node(
         else:
             file_urls.append(url)
 
+    events: list[TutorRuntimeEvent] = []
+    activity_groups = (("image", image_urls), ("document", file_urls))
+    for index, (analysis_type, urls) in enumerate(activity_groups):
+        if not urls:
+            continue
+        event = TutorRuntimeEvent(
+            type="agent_status",
+            payload=build_attachment_status_payload(
+                activity_id=f"attachment-{state.get('turn_id')}-{analysis_type}",
+                status="running",
+                file_names=[url.split("/")[-1] for url in urls],
+                analysis_type=analysis_type,
+            ),
+            sequence=2 + index,
+            timestamp=time.time(),
+        )
+        events.extend(await agent._emit_event(state, event, turn_event_type="file.analysis.start"))
+
     parts: list[str] = []
+    analysis_errors: dict[str, str] = {}
 
     if image_urls:
         try:
@@ -182,6 +313,7 @@ async def analysis_files_node(
                 parts.append(f"[图片] {analysis_text}")
         except Exception as exc:
             logger.warning("[analysis_files_node] image analysis failed: %s", exc)
+            analysis_errors["image"] = str(exc)
 
     if file_urls:
         try:
@@ -195,6 +327,7 @@ async def analysis_files_node(
                 parts.append(f"[文档] {summary}")
         except Exception as exc:
             logger.warning("[analysis_files_node] document analysis failed: %s", exc)
+            analysis_errors["document"] = str(exc)
 
     attachment_context = "\n".join(parts)
     attachment_analyses: list[dict[str, Any]] = []
@@ -225,13 +358,30 @@ async def analysis_files_node(
             "structured_json": {"file_urls": file_urls},
         })
 
-    done_event = ChatStreamEvent(
-        type="file_analysis_done",
-        payload={"context_length": len(attachment_context)},
-        sequence=3,
-        timestamp=time.time(),
-    )
-    done_events = await agent._emit_event(state, done_event, turn_event_type="file.analysis.done")
+    done_events: list[TutorRuntimeEvent] = []
+    analyses_by_type = {
+        str(item.get("analysis_type") or "document"): item
+        for item in attachment_analyses
+    }
+    for index, (analysis_type, urls) in enumerate(activity_groups):
+        if not urls:
+            continue
+        analysis = analyses_by_type.get(analysis_type, {})
+        status = "done" if analysis else "failed"
+        event = TutorRuntimeEvent(
+            type="agent_status",
+            payload=build_attachment_status_payload(
+                activity_id=f"attachment-{state.get('turn_id')}-{analysis_type}",
+                status=status,
+                file_names=[str(url).split("/")[-1] for url in urls],
+                analysis_type=analysis_type,
+                summary=str(analysis.get("summary_text") or ""),
+                error=analysis_errors.get(analysis_type, "未提取到可用内容") if status == "failed" else "",
+            ),
+            sequence=4 + index,
+            timestamp=time.time(),
+        )
+        done_events.extend(await agent._emit_event(state, event, turn_event_type="file.analysis.done"))
 
     return {
         "attachment_context": attachment_context,
@@ -248,7 +398,7 @@ async def search_node(
     memory_service: Any,
 ) -> dict:
     """搜索节点：工具调用和联网搜索。"""
-    from app.chat.research import ResearchToolStep, WebResearchRunner
+    from app.chat.tools.web_research import ResearchToolStep, WebResearchRunner
 
     cls = state.get("classification")
     question = state.get("question", "")
@@ -267,8 +417,34 @@ async def search_node(
         need_teaching_diagram=need_diagram,
     )
 
-    registry = TutorToolRegistry(request=turn_context)
-    executor = TutorToolExecutor(request=turn_context, registry=registry)
+    # 创建事件收集列表和 emit_event 回调
+    node_events: list[TutorRuntimeEvent] = []
+    base_seq = len(state.get("stream_events", [])) + 1
+
+    async def emit_event_callback(event: TutorRuntimeEvent) -> None:
+        """事件发送回调：收集工具发送的事件并发送给前端。"""
+        node_events.append(event)
+        # 同时通过 agent._emit_event 发送（用于 SSE 和持久化）
+        await agent._emit_event(state, event)
+
+    event_sequence = base_seq
+
+    async def emit_tool_status(event: ToolRuntimeEvent) -> None:
+        nonlocal event_sequence
+        event_sequence += 1
+        await emit_event_callback(
+            TutorRuntimeEvent(
+                type="agent_status",
+                payload=build_agent_status_payload(event),
+                sequence=event_sequence,
+            )
+        )
+
+    tool_excute = ToolExcute(
+        llm.model,
+        _build_tutor_tools(turn_context),
+        event_handler=emit_tool_status,
+    )
 
     tools_to_call: list[str] = []
     needs_web_research = bool(enable_web_search or (cls and cls.needs_web_search))
@@ -280,8 +456,6 @@ async def search_node(
             tools_to_call.append("get_long_term_memory")
         if cls.needs_knowledge_search:
             tools_to_call.append("search_knowledge_base")
-        if cls.needs_recent_evaluation:
-            tools_to_call.append("get_recent_evaluation")
 
     if not tools_to_call and not needs_web_research:
         return {
@@ -293,7 +467,6 @@ async def search_node(
             "_search_attempted": True,
         }
 
-    node_events: list[ChatStreamEvent] = []
     node_evidence: list[dict[str, Any]] = []
     node_sources: list[dict[str, Any]] = []
     node_tool_invocations: list[dict[str, Any]] = []
@@ -304,19 +477,17 @@ async def search_node(
             node_errors.append(f"parallel_tool_call: {result}")
             return
         events, invocation, evidence, sources, errors = result
-        node_events.extend(events)
+        # 事件已通过 emit_event_callback 收集，这里不需要再添加
         if invocation:
             node_tool_invocations.append(invocation)
         node_evidence.extend(evidence)
         node_sources.extend(sources)
         node_errors.extend(errors)
 
-    base_seq = len(state.get("stream_events", [])) + 1
-
     if tools_to_call:
         coros = [
             _execute_single_tool(
-                agent, state, executor, name,
+                agent, state, tool_excute, name,
                 {"query": question, "reason": "classify routed"},
                 base_seq + i * 2,
                 memory_service=memory_service,
@@ -328,7 +499,7 @@ async def search_node(
             collect_result(result)
 
     if needs_web_research:
-        web_tools = [registry.by_name(name) for name in WEB_RESEARCH_TOOL_NAMES]
+        web_tool_excute = tool_excute.subset(WEB_RESEARCH_TOOL_NAMES)
         research_prompt = prompts.get("chat").render(
             "search_instruction",
             attachment_context_section=(
@@ -338,8 +509,7 @@ async def search_node(
             ),
         )
         runner = WebResearchRunner(
-            llm=llm,
-            tools=web_tools,
+            tool_excute=web_tool_excute,
             system_prompt=research_prompt,
         )
         next_seq = base_seq + len(tools_to_call) * 2
@@ -351,7 +521,7 @@ async def search_node(
         ) -> ResearchToolStep:
             nonlocal next_seq
             result = await _execute_single_tool(
-                agent, state, executor, tool_name, payload, next_seq,
+                agent, state, tool_excute, tool_name, payload, next_seq,
                 tool_call_id=call_id, memory_service=memory_service
             )
             next_seq += 2
@@ -409,7 +579,6 @@ async def answer_node(
         session_summary_context=session_summary,
         file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
         attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
-        evaluation_summary_context="如需近期测验、薄弱点或学习计划依据，请调用 get_recent_evaluation 工具。",
     )
     system_prompt += (
         f"\n\n# 当前日期\n{_current_date_text()}\n"
@@ -434,7 +603,7 @@ async def answer_node(
     history_without_system = [msg for msg in history if not isinstance(msg, SystemMessage)]
     messages = [SystemMessage(content=system_prompt), *history_without_system, HumanMessage(content=human_content)]
 
-    node_events: list[ChatStreamEvent] = []
+    node_events: list[TutorRuntimeEvent] = []
     full_answer = ""
     raw_answer = ""
     seq = len(state.get("stream_events", [])) + 1
@@ -460,7 +629,7 @@ async def answer_node(
                 if not token:
                     continue
                 full_answer += token
-                event = ChatStreamEvent(
+                event = TutorRuntimeEvent(
                     type="answer_token",
                     payload={"token": token},
                     sequence=seq,
@@ -474,7 +643,7 @@ async def answer_node(
             if not token:
                 continue
             full_answer += token
-            event = ChatStreamEvent(
+            event = TutorRuntimeEvent(
                 type="answer_token",
                 payload={"token": token},
                 sequence=seq,
@@ -499,7 +668,7 @@ async def answer_node(
                 "errors": [f"answer_node: {exc}"]
             }
 
-    answer_done_event = ChatStreamEvent(
+    answer_done_event = TutorRuntimeEvent(
         type="answer_done",
         payload={"answer_length": len(full_answer)},
         sequence=seq,
@@ -523,10 +692,10 @@ async def diagram_node(
     enable_web_search = state.get("enable_web_search", False)
     need_diagram = state.get("need_teaching_diagram", False)
 
-    node_events: list[ChatStreamEvent] = []
+    node_events: list[TutorRuntimeEvent] = []
     diagram_result: dict[str, Any] | None = None
 
-    start_event = ChatStreamEvent(
+    start_event = TutorRuntimeEvent(
         type="diagram_start",
         payload={},
         sequence=len(state.get("stream_events", [])) + 1,
@@ -552,7 +721,7 @@ async def diagram_node(
         )
     except Exception as exc:
         logger.warning("[diagram_node] generation failed: %s", exc)
-        done_event = ChatStreamEvent(
+        done_event = TutorRuntimeEvent(
             type="diagram_done",
             payload={"has_diagram": False},
             sequence=len(state.get("stream_events", [])) + len(node_events) + 1,
@@ -565,7 +734,7 @@ async def diagram_node(
             "errors": [f"diagram_node: {exc}"]
         }
 
-    done_event = ChatStreamEvent(
+    done_event = TutorRuntimeEvent(
         type="diagram_done",
         payload={"has_diagram": diagram_result is not None},
         sequence=len(state.get("stream_events", [])) + len(node_events) + 1,
@@ -584,34 +753,35 @@ async def diagram_node(
 async def _execute_single_tool(
     agent: Any,
     state: TutorAgentState,
-    executor: TutorToolExecutor,
+    tool_excute: ToolExcute,
     tool_name: str,
     payload: dict[str, Any],
     seq: int,
     tool_call_id: str | None = None,
     memory_service: Any | None = None,
-) -> tuple[list[ChatStreamEvent], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+) -> tuple[list[TutorRuntimeEvent], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     """执行单个工具调用并返回结果。
+
+    注意：ToolExcute 已通过请求级回调发送 agent_status 事件，此函数只负责：
+    - 执行工具调用
+    - 保存工具请求/结果消息到数据库
+    - 收集 evidence 和 sources
 
     Returns:
         (events, invocation_entry, evidence, sources, errors)
     """
-    node_events: list[ChatStreamEvent] = []
+    node_events: list[TutorRuntimeEvent] = []  # 运行状态已通过回调入队，这里返回空列表
     node_evidence: list[dict[str, Any]] = []
     node_sources: list[dict[str, Any]] = []
     node_errors: list[str] = []
     user_id = state.get("user_id", 0)
     session_id = state.get("session_id", "")
 
-    start_event = ChatStreamEvent(
-        type="tool_start",
-        payload={"tool_name": tool_name},
-        sequence=seq,
-        timestamp=time.time()
-    )
-    node_events.extend(await agent._emit_event(state, start_event, turn_event_type="tool.start"))
-
-    intent = TutorToolCall(tool_name=tool_name, payload=payload)
+    normalized_payload = dict(payload)
+    if tool_name == "get_long_term_memory":
+        category = str(normalized_payload.get("category") or "").strip()
+        if category:
+            normalized_payload["category"] = LONG_TERM_MEMORY_CATEGORY_ALIASES.get(category, category)
     tool_status = "success"
     tool_call_id = tool_call_id or f"call-{uuid4().hex}"
     result_text = ""
@@ -628,7 +798,7 @@ async def _execute_single_tool(
                 session_id=session_id,
                 role="assistant",
                 content=f"正在调用工具：{tool_name}",
-                tool_calls=[{"id": tool_call_id, "name": tool_name, "args": intent.payload}],
+                tool_calls=[{"id": tool_call_id, "name": tool_name, "args": normalized_payload}],
                 turn_id=state.get("turn_id"),
                 message_kind="assistant_tool_request",
             )
@@ -636,24 +806,38 @@ async def _execute_single_tool(
         except Exception as exc:
             logger.warning("[_execute_single_tool] save tool request message failed: %s", exc)
 
-    # 执行工具
+    # 执行工具（ToolExcute 会统一发送 agent_status 事件）
     try:
-        result = await executor.execute(intent)
-        tool_status = str(result.get("status", "success")) if isinstance(result, dict) else "success"
-        result_text = str((result or {}).get("result_text", "")) if isinstance(result, dict) else ""
-        result_evidence = (result or {}).get("evidence", []) if isinstance(result, dict) else []
+        raw_result = await tool_excute.execute({"id": tool_call_id, "name": tool_name, "args": normalized_payload})
+        if isinstance(raw_result, Mapping):
+            result_text = str(raw_result.get("text") or raw_result.get("message") or "").strip()
+            result_details = {key: value for key, value in raw_result.items() if key != "text"}
+        else:
+            result_text = "" if raw_result is None else str(raw_result).strip()
+            result_details = {}
+
+        tool_status = "success" if result_text else "ignored"
+        evidence_type = TOOL_EVIDENCE_TYPES.get(tool_name)
+        if evidence_type and result_text:
+            result_evidence = [
+                Evidence(
+                    evidence_type=evidence_type,
+                    summary=result_text,
+                    details={"tool_name": tool_name, "args": normalized_payload, **result_details},
+                ).model_dump()
+            ]
 
         invocation_entry = {
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
-            "payload": intent.payload,
+            "payload": normalized_payload,
             "result_text": result_text,
             "status": tool_status,
             "evidence": result_evidence,
             "assistant_message_id": assistant_message_id,
         }
 
-        if isinstance(result, dict):
+        if isinstance(raw_result, Mapping):
             if result_evidence:
                 node_evidence.extend(result_evidence)
 
@@ -690,7 +874,7 @@ async def _execute_single_tool(
         invocation_entry = {
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
-            "payload": intent.payload,
+            "payload": normalized_payload,
             "result_text": result_text,
             "status": "error",
             "evidence": [],
@@ -727,7 +911,7 @@ async def _execute_single_tool(
                     {
                         "tool_call_id": tool_call_id,
                         "tool_name": tool_name,
-                        "arguments_json": intent.payload,
+                        "arguments_json": normalized_payload,
                         "result_text": result_text,
                         "result_json": {"evidence": result_evidence},
                         "status": tool_status,
@@ -739,12 +923,5 @@ async def _execute_single_tool(
         except Exception as exc:
             logger.warning("[_execute_single_tool] save tool invocation failed: %s", exc)
 
-    done_event = ChatStreamEvent(
-        type="tool_done",
-        payload={"tool_name": tool_name, "status": tool_status},
-        sequence=seq + 1,
-        timestamp=time.time(),
-    )
-    node_events.extend(await agent._emit_event(state, done_event, turn_event_type="tool.done"))
-
+    # agent_status 事件由 ToolExcute 的请求级回调发送
     return node_events, invocation_entry, node_evidence, node_sources, node_errors

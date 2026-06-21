@@ -54,7 +54,7 @@
                 v-for="(scene, index) in activeScenes"
                 :key="'track-' + index"
                 class="timeline-track"
-                :style="{ flex: scene.duration || 4000 }"
+                :style="{ flex: scene.duration }"
             >
               <div class="timeline-fill" :style="{ width: getTrackProgress(index) + '%' }"></div>
             </div>
@@ -74,52 +74,89 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import { ElMessage } from 'element-plus'
 
-const props = defineProps<{ resultData?: any }>()
+const props = defineProps<{ resultData?: unknown }>()
 
-// 新增归一化逻辑，兼容资源详情页 envelope
-const videoPayload = computed(() => {
-  const raw = props.resultData
-  if (!raw) return null
-  if (raw.content_json?.content) return raw.content_json.content
-  if (raw.content_json) return raw.content_json
-  if (raw.content) {
+type VideoSceneView = {
+  id: string
+  duration: number
+  title: string
+  desc: string
+  visualPrompt: string
+  visualType: string
+  captions: string[]
+  imageUrl: string
+  animation: 'static' | 'zoom-in' | 'pan-right'
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseVideoPayload(value: unknown): Record<string, any> | null {
+  let payload = value
+  if (typeof payload === 'string') {
     try {
-      return typeof raw.content === 'string' ? JSON.parse(raw.content) : raw.content
-    } catch {
+      payload = JSON.parse(payload)
+    } catch (error) {
+      console.error('Invalid persisted video artifact omitted', { reason: 'invalid JSON', error })
       return null
     }
   }
-  return raw
+  if (!isRecord(payload) || payload.schema_version !== 'video/v1' || typeof payload.title !== 'string' || !payload.title.trim() || !Array.isArray(payload.scenes) || payload.scenes.length === 0) {
+    console.error('Invalid persisted video artifact omitted', { reason: 'invalid video/v1 payload' })
+    return null
+  }
+  const validScenes = payload.scenes.every((scene: unknown, index: number) => {
+    if (!isRecord(scene)) return false
+    return typeof scene.scene_id === 'string' && scene.scene_id.length > 0
+      && scene.index === index + 1
+      && typeof scene.duration_ms === 'number' && scene.duration_ms > 0
+      && typeof scene.start_ms === 'number' && scene.start_ms >= 0
+      && typeof scene.title === 'string' && scene.title.length > 0
+      && typeof scene.narration === 'string' && scene.narration.length > 0
+      && typeof scene.visual_prompt === 'string' && scene.visual_prompt.length > 0
+      && typeof scene.visual_type === 'string' && scene.visual_type.length > 0
+      && Array.isArray(scene.captions) && scene.captions.every((caption: unknown) => typeof caption === 'string')
+      && isRecord(scene.visual)
+  })
+  if (!validScenes) {
+    console.error('Invalid persisted video artifact omitted', { reason: 'invalid scene contract' })
+    return null
+  }
+  return payload
+}
+
+const videoPayload = computed(() => {
+  return parseVideoPayload(props.resultData)
 })
 
-const activeScenes = computed(() => {
+const activeScenes = computed<VideoSceneView[]>(() => {
   const scenes = videoPayload.value?.scenes
   return Array.isArray(scenes)
     ? scenes.map((scene: any) => ({
-        id: scene.scene_id || `scene-${scene.index}`,
-        duration: scene.duration_ms || 4000,
-        title: scene.title || `分镜 ${scene.index || ''}`.trim(),
-        desc: scene.narration || scene.visual_prompt || '',
-        visualPrompt: scene.visual_prompt || '',
-        visualType: scene.visual_type || 'card',
-        captions: Array.isArray(scene.captions) ? scene.captions : [],
-        imageUrl: scene.imageUrl || '',
-        animation: scene.animation || 'zoom-in',
-        filter: scene.filter || 'none'
+        id: scene.scene_id,
+        duration: scene.duration_ms,
+        title: scene.title,
+        desc: scene.narration,
+        visualPrompt: scene.visual_prompt,
+        visualType: scene.visual_type,
+        captions: scene.captions,
+        imageUrl: typeof scene.visual.image_url === 'string' ? scene.visual.image_url : '',
+        animation: scene.visual_type === 'timeline' ? 'pan-right' : scene.visual_type === 'card' || scene.visual_type === 'code' ? 'static' : 'zoom-in'
       }))
     : []
 })
 
 const hasScenes = computed(() => activeScenes.value.length > 0)
-const resourceTitle = computed(() => videoPayload.value?.title || '讲解视频')
+const resourceTitle = computed(() => videoPayload.value?.title || '')
 const isWebCodecsSupported = typeof VideoEncoder !== 'undefined'
 
-const totalDuration = computed(() => activeScenes.value.reduce((acc, cur) => acc + (cur.duration || 4000), 0))
+const totalDuration = computed(() => activeScenes.value.reduce((acc, cur) => acc + cur.duration, 0))
 const sceneTimepoints = computed(() => {
   return activeScenes.value.reduce((acc, _scene, idx) => {
     const previousStart = acc[idx - 1] ?? 0
     const previousScene = activeScenes.value[idx - 1]
-    acc.push(idx === 0 ? 0 : previousStart + (previousScene?.duration || 4000))
+    acc.push(idx === 0 ? 0 : previousStart + (previousScene?.duration ?? 0))
     return acc
   }, [] as number[])
 })
@@ -184,7 +221,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
   if (!scene) return
 
   const sceneStart = sceneTimepoints.value[currentIdx] ?? 0
-  const sceneDuration = scene.duration || 4000
+  const sceneDuration = scene.duration
   const progress = Math.max(0, Math.min(1, (timeMs - sceneStart) / sceneDuration)) // 0.0 ~ 1.0
 
   const img = imageCache.get(scene.id)
@@ -193,28 +230,17 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
   if (img) {
     ctx.save()
 
-    // 智能体滤镜解析 (Filter Mapping)
-    const activeFilter = scene.filter || 'none'
-    let filterString = 'none'
-    if (activeFilter === 'grayscale') filterString = 'grayscale(100%)'
-    if (activeFilter === 'blur') filterString = 'blur(10px)'
-    if (activeFilter === 'sepia') filterString = 'sepia(80%)'
-    if (activeFilter === 'contrast') filterString = 'contrast(150%) saturate(1.2)'
-    ctx.filter = filterString
+    ctx.filter = 'none'
 
     // 智能体运镜解析 (Camera Transforms)
-    const animType = scene.animation || 'zoom-in'
+    const animType = scene.animation
     let currentScale = 1.0
     let translateX = 0
-    let translateY = 0
     const panRange = 60 // 像素平移范围
 
     switch (animType) {
       case 'zoom-in': currentScale = 1.0 + (0.1 * progress); break;
-      case 'zoom-out': currentScale = 1.1 - (0.1 * progress); break;
       case 'pan-right': currentScale = 1.08; translateX = -panRange + (panRange * 2 * progress); break;
-      case 'pan-left': currentScale = 1.08; translateX = panRange - (panRange * 2 * progress); break;
-      case 'pan-down': currentScale = 1.08; translateY = -panRange + (panRange * 2 * progress); break;
       case 'static': currentScale = 1.0; break;
     }
 
@@ -227,7 +253,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
 
     // 施加 Camera 矩阵
     ctx.translate(width / 2, height / 2) // 中心点
-    ctx.translate(translateX, translateY) // 摇摄 (Pan)
+    ctx.translate(translateX, 0) // 摇摄 (Pan)
     ctx.scale(currentScale, currentScale) // 推拉镜头 (Zoom)
 
     ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH)
@@ -248,7 +274,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
     ctx.strokeRect(40, 40, width - 80, height - 80)
 
     // 绘制视觉类型徽章 (Visual Type Badge)
-    const badgeText = (scene.visualType || 'CARD').toUpperCase()
+    const badgeText = scene.visualType.toUpperCase()
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'
     ctx.font = 'bold 28px monospace'
     const badgeW = ctx.measureText(badgeText).width + 30
@@ -262,7 +288,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
     ctx.textAlign = 'center'
     
     // 自动折行绘制 visual_prompt
-    const promptText = scene.visualPrompt || '无画面提示'
+    const promptText = scene.visualPrompt
     const words = promptText.split('')
     let line = ''
     const lines: string[] = []
@@ -273,7 +299,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
       const metrics = ctx.measureText(testLine)
       if (metrics.width > maxWidth && n > 0) {
         lines.push(line)
-        line = words[n]
+        line = words[n]!
       } else {
         line = testLine
       }
@@ -319,7 +345,7 @@ const drawFrameAtTime = (ctx: CanvasRenderingContext2D, timeMs: number, width = 
   const yOffset = 25 * (1 - easeOut) // 浮现动效
 
   // 智能体全局主题皮肤解析
-  const styleTheme = videoPayload.value?.style || 'standard'
+  const styleTheme = videoPayload.value?.style
   const titleColor = styleTheme === 'cyberpunk' ? '#facc15' : '#ffffff' // 赛博朋克用明黄
   const descColor = styleTheme === 'cyberpunk' ? '#2dd4bf' : '#38bdf8'  // 赛博朋克用青绿，标准用亮蓝
 
@@ -362,14 +388,8 @@ const renderLoop = (timestamp: number) => {
 // --- 6. 核心：WebCodecs API 离屏超速渲染导出 ---
 const startExportMP4 = async () => {
   if (!isWebCodecsSupported) {
-    ElMessage.warning('当前浏览器不支持 WebCodecs 导出视频，已降级为导出 JSON 脚本。')
-    const blob = new Blob([JSON.stringify(videoPayload.value, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${resourceTitle.value.replace(/\s+/g, '_')}_script.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    console.error('MP4 export stopped: WebCodecs is unavailable')
+    ElMessage.error('当前浏览器不支持 WebCodecs，无法导出 MP4')
     return
   }
 
@@ -456,7 +476,7 @@ const getTrackProgress = (index: number) => {
   if (!scene) return 0
 
   const start = sceneTimepoints.value[index] ?? 0
-  const duration = scene.duration || 4000
+  const duration = scene.duration
   const end = start + duration
   if (currentTime.value >= end) return 100
   if (currentTime.value <= start) return 0

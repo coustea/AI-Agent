@@ -1,24 +1,27 @@
 <template>
-  <div class="ppt-player-container" :class="documentData.template_id" ref="containerRef">
+  <div class="ppt-player-container" :class="`theme-${documentData.theme_id}`" ref="containerRef">
     <template v-if="isExportMode">
       <div
         v-for="(slide, index) in documentData.slides"
         :key="`export-${index}`"
         class="slide-frame export-slide"
       >
-        <div
-          class="slide-shell"
-          :style="slide.metadata?.background_override ? { background: slide.metadata.background_override } : undefined"
-        >
+        <div class="slide-shell">
+          <div class="slide-header">
+            <div>
+              <div class="slide-title">{{ slide.title }}</div>
+              <div v-if="slide.subtitle" class="slide-subtitle">{{ slide.subtitle }}</div>
+            </div>
+            <div class="slide-role">{{ slide.role }}</div>
+          </div>
           <component
             :is="resolveLayoutComponent(slide.layout)"
-            v-if="resolveLayoutComponent(slide.layout)"
+            :slide="slide"
             :slots="slide.slots"
-            :config="slide.layoutConfig"
           />
-          <div v-else class="fallback-slide">
-            <h3>布局组件缺失</h3>
-            <p>{{ documentData.template_id }} / {{ slide.layout }}</p>
+          <div class="slide-footer">
+            <div class="slide-takeaway">{{ slide.takeaway }}</div>
+            <div class="slide-index">{{ index + 1 }} / {{ documentData.slides.length }}</div>
           </div>
         </div>
       </div>
@@ -27,28 +30,26 @@
     <template v-else>
       <div class="viewer-stage">
         <div class="viewer-canvas" :style="{ transform: `scale(${scale})` }">
-          <transition :name="`ppt-${currentSlide?.metadata?.transition || 'fade'}`" mode="out-in">
-            <div
-              :key="currentIndex"
-              class="slide-frame preview-slide"
-            >
-              <div
-                class="slide-shell"
-                :style="currentSlide?.metadata?.background_override ? { background: currentSlide.metadata.background_override } : undefined"
-              >
-                <component
-                  :is="resolveLayoutComponent(currentSlide?.layout)"
-                  v-if="currentSlide && resolveLayoutComponent(currentSlide.layout)"
-                  :slots="currentSlide.slots"
-                  :config="currentSlide.layoutConfig"
-                />
-                <div v-else class="fallback-slide">
-                  <h3>布局组件缺失</h3>
-                  <p>{{ documentData.template_id }} / {{ currentSlide?.layout }}</p>
+          <div class="slide-frame preview-slide">
+            <div v-if="currentSlide" class="slide-shell">
+              <div class="slide-header">
+                <div>
+                  <div class="slide-title">{{ currentSlide.title }}</div>
+                  <div v-if="currentSlide.subtitle" class="slide-subtitle">{{ currentSlide.subtitle }}</div>
                 </div>
+                <div class="slide-role">{{ currentSlide.role }}</div>
+              </div>
+              <component
+                :is="resolveLayoutComponent(currentSlide.layout)"
+                :slide="currentSlide"
+                :slots="currentSlide.slots"
+              />
+              <div class="slide-footer">
+                <div class="slide-takeaway">{{ currentSlide.takeaway }}</div>
+                <div class="slide-index">{{ currentIndex + 1 }} / {{ documentData.slides.length }}</div>
               </div>
             </div>
-          </transition>
+          </div>
         </div>
       </div>
 
@@ -174,35 +175,70 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
   border-radius: 28px;
-  background: #fff;
+  background: var(--ppt-bg-primary);
   box-shadow:
     0 30px 60px rgba(15, 23, 42, 0.16),
     0 10px 24px rgba(15, 23, 42, 0.08);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
 }
 
-.fallback-slide {
-  width: 100%;
-  height: 100%;
+.slide-header {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #fff1f2, #ffe4e6);
-  color: #9f1239;
-  text-align: center;
-  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 36px 0;
 }
 
-.fallback-slide h3 {
-  margin: 0;
-  font-size: 34px;
+.slide-title {
+  font-size: 2rem;
   font-weight: 800;
+  line-height: 1.15;
+  color: var(--ppt-text-primary);
 }
 
-.fallback-slide p {
-  margin: 0;
-  font-size: 18px;
+.slide-subtitle {
+  margin-top: 8px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ppt-text-secondary);
+}
+
+.slide-role {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--ppt-badge-bg);
+  color: var(--ppt-badge-text);
+  border: 1px solid var(--ppt-border);
+}
+
+.slide-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 36px 24px;
+}
+
+.slide-takeaway {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.95rem;
   font-weight: 600;
+  line-height: 1.5;
+  color: var(--ppt-text-secondary);
+}
+
+.slide-index {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ppt-text-secondary);
 }
 
 .controls {
@@ -249,41 +285,5 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-}
-
-/* Transitions */
-.ppt-fade-enter-active,
-.ppt-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.ppt-fade-enter-from,
-.ppt-fade-leave-to {
-  opacity: 0;
-}
-
-.ppt-slide-enter-active,
-.ppt-slide-leave-active {
-  transition: all 0.4s ease;
-}
-.ppt-slide-enter-from {
-  opacity: 0;
-  transform: translateX(50px);
-}
-.ppt-slide-leave-to {
-  opacity: 0;
-  transform: translateX(-50px);
-}
-
-.ppt-zoom-enter-active,
-.ppt-zoom-leave-active {
-  transition: all 0.4s ease;
-}
-.ppt-zoom-enter-from {
-  opacity: 0;
-  transform: scale(0.95);
-}
-.ppt-zoom-leave-to {
-  opacity: 0;
-  transform: scale(1.05);
 }
 </style>

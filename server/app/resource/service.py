@@ -21,7 +21,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_module_logger
 from app.infra.models import GeneratedResource, GeneratedResourceAgentRun, GeneratedResourceItem as ItemModel
-from app.resource.events import resource_event_bus
 from app.resource.schemas import (
     AgentResult,
     DownstreamContext,
@@ -455,6 +454,14 @@ class ResourceService:
         await self._commit(resource)
         return status
 
+    async def update_resource_status(self, resource_id: int, status: str) -> None:
+        """更新资源任务状态。"""
+        resource = await self.session.get(GeneratedResource, resource_id)
+        if resource:
+            resource.status = status
+            resource.updated_at = datetime.now(timezone.utc)
+            await self._commit(resource)
+
     async def get_completed_agent_ids(self, resource_id: int) -> list[str]:
         """获取已完成 item 的 agent_id 列表。"""
         stmt = (
@@ -546,18 +553,13 @@ class ResourceService:
                     "progress": 100 if run.status == "completed" else 0,
                     "phase": run.stage,
                 }
-            # 最后使用 event_bus snapshot
-            else:
-                snapshot = resource_event_bus.get_latest_snapshot(resource_id).get("agent_snapshots", {}).get(agent_id, {})
-                if snapshot:
-                    merged[agent_id] = dict(snapshot)
 
         return {
             "resource_id": resource_id,
             "status": resource.status,
             "selected_agents": selected_agents,
             "agent_snapshots": merged,
-            "current_message": resource_event_bus.get_latest_snapshot(resource_id).get("current_message", ""),
+            "current_message": "",
             "resources": [_db_item_to_dto(item).model_dump(mode="json") for item in db_items],
         }
 

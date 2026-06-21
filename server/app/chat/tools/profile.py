@@ -54,10 +54,9 @@ def make_get_learner_profile(
                 course_name=course_name,
                 dimension=dimension,
             )
+            return _compact(f"画像读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
             logger.warning("[get_learner_profile] failed: %s", exc)
             return "暂时无法读取学习者画像。"
-        # 将画像内容与读取原因拼接，方便 LLM 理解上下文
-        return _compact(f"画像读取原因: {reason or '未提供'}\n{markdown}")
 
     return _impl

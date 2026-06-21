@@ -322,6 +322,8 @@ import type {
   PathLearningEvaluationResponse,
 } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
+import type { AgentEvent } from '@/shared/agent-events/model'
+import { useAgentRun } from '@/shared/agent-events/useAgentRun'
 
 type StageLike = {
   stage_id?: string
@@ -347,7 +349,8 @@ const activeDetailNode = ref<LearningPathNode | null>(null)
 const isGenerating = ref(false)
 const generatingProgress = ref(12)
 const generatingMessages = ref<string[]>([])
-let eventSource: EventSource | null = null
+const agentRun = useAgentRun()
+const activeRunId = ref<string | null>(null)
 
 const learningStatuses = new Set(['in_progress', 'remediation', 'reinforced'])
 const completedStatuses = new Set(['completed', 'completed_with_gaps'])
@@ -535,64 +538,46 @@ const handleNodeClick = (node: LearningPathNode) => {
 }
 
 const stopSSE = () => {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
+  agentRun.close()
 }
 
-const handlePathEvent = (event: MessageEvent) => {
-  try {
-    const data = JSON.parse(event.data)
-
-    if (typeof data.progress === 'number') {
-      generatingProgress.value = Math.max(generatingProgress.value, Math.min(data.progress, 100))
+const handlePathEvent = (event: AgentEvent) => {
+    if (typeof event.progress === 'number') {
+      generatingProgress.value = Math.max(generatingProgress.value, Math.min(event.progress, 100))
     }
 
-    if (data.message && !generatingMessages.value.includes(data.message)) {
-      generatingMessages.value.push(data.message)
+    const message = event.summary || event.title
+    if (message && !generatingMessages.value.includes(message)) {
+      generatingMessages.value.push(message)
 
       if (generatingMessages.value.length > 6) {
         generatingMessages.value.shift()
       }
     }
 
-    if (data.event_type === 'path.done') {
-      stopSSE()
+}
 
-      if (data.success === false) {
-        ElMessage.error(data.message || '路径规划失败')
-        isGenerating.value = false
-        loadPath()
-        return
-      }
-
+const startSSE = (runId: string) => {
+  stopSSE()
+  agentRun.connect(runId, {
+    onEvent: handlePathEvent,
+    onCompleted: () => {
       generatingProgress.value = 100
-
       setTimeout(() => {
         loadPath()
       }, 700)
-    }
-  } catch {
-    // SSE 心跳或非 JSON 消息不处理
-  }
-}
-
-const startSSE = (pathId: number) => {
-  stopSSE()
-
-  const token = localStorage.getItem('token') || ''
-  eventSource = new EventSource(`/api/v1/ai/path-plan/${pathId}/events?token=${encodeURIComponent(token)}`)
-
-  eventSource.onmessage = handlePathEvent
-  eventSource.addEventListener('path.step', handlePathEvent)
-  eventSource.addEventListener('path.done', handlePathEvent)
-
-  eventSource.onerror = () => {
-    if (isGenerating.value && !generatingMessages.value.includes('正在等待后端继续推送路径生成状态...')) {
-      generatingMessages.value.push('正在等待后端继续推送路径生成状态...')
-    }
-  }
+    },
+    onFailed: (error) => {
+      ElMessage.error(error.message || '路径规划失败')
+      isGenerating.value = false
+      loadPath()
+    },
+    onConnectionError: () => {
+      if (isGenerating.value && !generatingMessages.value.includes('正在等待后端继续推送路径生成状态...')) {
+        generatingMessages.value.push('正在等待后端继续推送路径生成状态...')
+      }
+    },
+  })
 }
 
 const loadEvaluation = async (pathId: number) => {
@@ -632,7 +617,11 @@ const loadPath = async () => {
     try {
       const res = await createLearningPath({ goal: newGoal, topic: newGoal })
       const newPath = res.data.data
-      router.replace(`/path-planner/overview/${newPath.id}`)
+      activeRunId.value = newPath.run_id
+      router.replace({
+        path: `/path-planner/overview/${newPath.id}`,
+        query: { run_id: newPath.run_id },
+      })
     } catch (error) {
       ElMessage.error(getErrorMessage(error, '路径规划任务创建失败'))
       isGenerating.value = false
@@ -685,7 +674,8 @@ const loadPath = async () => {
         ]
       }
 
-      startSSE(currentPathId)
+      activeRunId.value = String(route.query.run_id || activeRunId.value || '') || null
+      if (activeRunId.value) startSSE(activeRunId.value)
     } else {
       isGenerating.value = false
       generatingProgress.value = 100
@@ -721,8 +711,8 @@ watch(
 )
 
 onActivated(() => {
-  if (isGenerating.value && path.value) {
-    startSSE(path.value.id)
+  if (isGenerating.value && activeRunId.value) {
+    startSSE(activeRunId.value)
   }
 })
 

@@ -155,28 +155,3 @@ def test_resource_generation_request_video_is_not_default_enabled():
 
     assert "video" not in request.enabled_agent_ids()
 
-
-@pytest.mark.asyncio
-async def test_resource_workflow_created_event_is_emitted_before_generation():
-    from app.resource.events import AgentEventEmitter, resource_event_bus
-    request = ResourceGenerationRequest.model_validate(
-        {
-            "learning_need": "复习 TCP 三次握手",
-            "selected_agents": [
-                {"agent_id": "content", "enabled": True, "priority": 0},
-            ],
-        }
-    )
-    emitter = AgentEventEmitter(resource_id=999, run_id="test-run")
-    queue = resource_event_bus.subscribe(999)
-
-    try:
-        await emitter.emit_done(success=True, message="资源生成完成")
-        event = await queue.get()
-    finally:
-        resource_event_bus.unsubscribe(999, queue)
-
-    assert request.enabled_agent_ids() == ["content"]
-    assert event.event_type == "done"
-    assert event.success is True
-    assert event.message == "资源生成完成"

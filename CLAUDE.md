@@ -26,9 +26,9 @@ npm run preview
 ```
 
 Notes:
-- `npm run build` runs `vue-tsc -b && vite build`.
-- There is no committed frontend lint or test script; use `npm run build` as the main automated frontend check.
-- `vite.config.ts` currently proxies `/api` and `/ws` to `http://127.0.0.1:9000`, but `server/config.yaml` defaults the backend to port `9999`. If you run both apps together, update one side or start the backend on the port the frontend expects.
+- `npm run build` runs `vue-tsc -b && vite build` and is the main frontend validation path.
+- There is no committed frontend lint or test script.
+- `vite.config.ts` proxies `/api` and `/ws` to `http://127.0.0.1:9999` by default, overridable with `VITE_API_PROXY_TARGET` and `VITE_WS_PROXY_TARGET`.
 
 ### Backend (run from `server/`)
 
@@ -38,10 +38,13 @@ uv run fastapi dev app/main.py
 uv run python app/main.py
 uv run pytest
 uv run pytest tests/chat/test_history.py -q
+uv run pytest tests/dashboard/test_home_api.py -q
+uv run pytest tests/chat/test_history.py -q -k summary
 uv run pytest -x
 ```
 
 Notes:
+- Backend requires Python `>=3.13`.
 - FastAPI docs are served at `/docs` on the configured backend port.
 - `pytest` is the main backend verification path.
 - `vulture` is installed in the dev dependency group, but no project-standard lint command is configured.
@@ -51,83 +54,85 @@ Notes:
 ### Frontend shape
 
 The frontend is organized by app shell + feature domains rather than a flat component tree:
-- `src/app/` — router, guards, layouts
-- `src/features/` — domain features (`auth`, `chat`, `dashboard`, `learning`, `profile`, `resource`)
+- `src/app/` — router, layouts, app-level wiring
+- `src/features/` — feature domains such as `auth`, `chat`, `dashboard`, `learning-path`, `profile`, `question-bank`, `resource`
 - `src/shared/` — shared API clients, auth helpers, UI, types, utilities
 
-Routing lives in `src/app/router/routes.ts`. Protected pages are rendered inside `src/app/layouts/MainLayout.vue`. The main user-facing surfaces are dashboard, tutor, standalone resource generation/history, learning-path planning/overview/node learning, profile, question bank, and wrong-question review.
+Routing lives in `src/app/router/routes.ts`. Authenticated pages render inside `src/app/layouts/MainLayout.vue`. Main user-facing surfaces include dashboard, tutor, standalone resource generation/history/detail, learning-path entry/overview/node/history, path-resource history/detail, profile, and question bank.
 
 ### Backend shape
 
 The backend is modular by feature area under `server/app/`. Most domains follow the same pattern:
 - `api.py` — FastAPI routes
 - `service.py` — business logic / orchestration
-- `schemas.py` or `request.py` / `response.py` — DTOs
+- `schemas.py`, `request.py`, or `response.py` — DTOs
 
 Key domains:
-- `auth` — registration, login, token validation, user info
-- `chat` — streaming tutor conversation, uploads, chat history, diagram generation
-- `resource` — standalone multi-agent resource generation
-- `path` — learning-path planning, node workspace, node questions/resources, path evaluation
-- `profile` — learner profile inference and storage
-- `evaluation` — learning events and derived signals
-- `dashboard` — homepage aggregation
-- `quiz` — question-bank and wrong-question APIs
-- `avatar` — digital-human / websocket-related flows
-- `infra` — database, models, logging, prompts, LLM client, response envelope
+- `auth` — registration, login, token validation, current-user resolution
+- `chat` — SSE tutor conversation, uploads, chat history, profile/school endpoints, memory integration
+- `resource` — standalone resource generation and event streaming
+- `path` — learning-path planning, node workspace, quizzes, auxiliary node resources, path evaluation
+- `profile` — learner profile inference and retrieval
+- `evaluation` — learning events and summaries
+- `dashboard` — homepage aggregation and recommendations
+- `quiz` — question bank and wrong-question APIs
+- `avatar` — digital-human REST endpoints and WebSocket bridge
+- `infra` — database, models, logging, prompts, config, response envelope
 
-Application startup is split across:
-- `server/app/app_factory.py` — create FastAPI app, CORS, exception handlers, route installation
-- `server/app/lifecycle.py` — warm prompts, initialize DB-related startup work, run health checks
-- `server/app/routes.py` — mounts feature routers under `/api/v1/...`
+Application startup is centered on `server/app/main.py`:
+- `create_app()` configures CORS, exception handlers, and route installation
+- `lifespan()` warms prompt templates, initializes the database, and runs health checks
+- `server/app/routes.py` mounts all HTTP and WebSocket routers
 
-### API boundaries that matter
+## API boundaries that matter
 
 Current route grouping is:
-- `/api/v1/users` — auth/user endpoints
-- `/api/v1/ai/chat/*` — tutor chat, uploads, session/history endpoints
-- `/api/v1/ai/resources*` — standalone resource generation/history/detail/SSE
-- `/api/v1/ai/path-plan*` — learning-path generation, node workspace, node resources, path events/evaluation
-- `/api/v1/ai/dashboard*`, `/evaluation*`, `/quiz*`, `/wrong-*`, `/avatar*` — supporting domains
+- `/api/v1/users/*` — auth/user endpoints
+- `/api/v1/ai/chat/*` — tutor chat stream, uploads, sessions, profile/school helpers
+- `/api/v1/ai/resources*` — standalone resource generation, status, detail, history, agents, SSE
+- `/api/v1/ai/path-plan*` — learning-path generation, active/history views, node workspace, node quizzes/resources, path events/evaluation
+- `/api/v1/ai/dashboard*`, `/api/v1/ai/evaluation*`, `/api/v1/ai/quiz-bank*`, `/api/v1/ai/wrong-questions*`, `/api/v1/ai/avatar*` — supporting domains
+- `/ws/avatar` — avatar WebSocket bridge authenticated by `?token=...`
 
-When wiring frontend/backend changes, use the real mounted prefixes above rather than older docs that refer to `/generate` or `/path` shorthand.
+When wiring frontend/backend changes, trust `server/app/routes.py` and each domain `api.py` over older docs that refer to `/resource` vs `/resources` or `/path` shorthand.
 
 ## Critical Runtime Flows
 
 ### Tutor chat flow
 
-`server/app/chat/api.py` exposes the SSE entrypoint at `POST /api/v1/ai/chat/stream`.
-The tutoring runtime is centered on `server/app/chat/agent.py`, which builds a LangGraph workflow roughly shaped as:
-- `classify`
-- optional `attachment_analysis`
-- optional `search`
-- `answer`
-- optional `teaching_diagram_generate`
+`server/app/chat/routers/chat_router.py` exposes the SSE entrypoint at `POST /api/v1/ai/chat/stream`.
+The runtime is orchestrated by `server/app/chat/service.py`:
+- create a `ChatTurn`
+- persist the user message and attachments
+- build context and delegate answering to `TutorAgent`
+- stream SSE events back to the client
+- persist the final assistant reply
+- run post-turn compression / long-term-memory checks
 
-The chat system composes context from multiple sources:
+Chat context is assembled from multiple layers spanning chat, profile, and memory code:
 - raw chat history
-- compressed summary blocks
-- long-term memory
-- learner profile
-- optional knowledge-base and web-search results
+- compressed summary blocks (`ChatSessionSummaryBlock`)
+- long-term memory (`ChatLongTermMemory`)
+- learner profile (`GlobalProfile`, `CourseProfile`)
+- optional web-search / knowledge-base sources
 
 This is the main personalization pipeline in the repo.
 
 ### Standalone resource generation flow
 
-`server/app/resource/api.py` and `server/app/resource/service.py` implement two distinct execution modes:
-- `POST /api/v1/ai/resources` — creates a background multi-agent task
-- `POST /api/v1/ai/resources/single` — runs a single selected agent without the full planning/review pipeline
+`server/app/resource/api.py` and `server/app/resource/orchestrator.py` implement two request modes:
+- `POST /api/v1/ai/resources` — creates a background standalone resource task
+- `POST /api/v1/ai/resources/single` — creates a single-agent task through the same background orchestration entrypoint
 
-The multi-agent flow is:
+The runtime flow is:
 1. persist a `GeneratedResource` task record
-2. build a plan / blueprint
-3. run worker agents in parallel
-4. review aggregated output
+2. start a background job
+3. mark the resource as `generating`
+4. run the LangGraph parent workflow from `server/app/resource/workflow/`
 5. persist `GeneratedResourceItem` rows and final status
-6. stream progress via SSE events
+6. stream progress via SSE from `/api/v1/ai/resources/{id}/events`
 
-Agent implementations live in `server/app/resource/agents/` and are registered into a shared registry.
+Agent implementations live in `server/app/resource/agents/` and are coordinated through the resource workflow/orchestrator layer.
 
 ### Learning-path flow
 
@@ -135,9 +140,11 @@ The `path` domain is not just another view over standalone resources.
 It owns its own API surface, background generation flow, and persistence models.
 Typical flow:
 1. `POST /api/v1/ai/path-plan` creates a path-generation task
-2. background generation fills path, nodes, and related records
-3. node workspace endpoints drive tutorial/questions/resources inside the path context
-4. path learning events feed profile/evaluation updates
+2. background generation in `PathService.run_generation()` and `PathPlannerAgent` builds stages and nodes
+3. `GET /api/v1/ai/path-plan/nodes/{node_id}/workspace` drives the node workspace
+4. node learning uses the LangGraph learn workflow exposed by `server/app/path/workflows.py`
+5. node resources are generated and stored as `PathNodeResource`
+6. path learning events feed profile/evaluation updates
 
 Path-node resources are stored and queried separately from standalone resource records. Preserve that boundary.
 
@@ -148,7 +155,7 @@ The learner model is spread across chat, profile, and evaluation domains:
 - compressed history is stored in `ChatSessionSummaryBlock`
 - reusable long-term facts are stored in `ChatLongTermMemory`
 - learner profiles live in `GlobalProfile` and `CourseProfile`
-- learning events feed back into profile/evaluation updates
+- learning events and learning sessions feed back into profile/evaluation updates
 
 When changing personalization behavior, inspect `chat`, `profile`, and `evaluation` together rather than treating them as isolated modules.
 
@@ -157,7 +164,7 @@ When changing personalization behavior, inspect `chat`, `profile`, and `evaluati
 ### Configuration
 
 Backend runtime configuration comes from `server/config.yaml`, not `.env`.
-Important families include:
+Important groups include:
 - `app` — host/port/debug
 - `database`
 - `jwt`
@@ -169,6 +176,11 @@ Important families include:
 - `knowledge`
 - `memory`
 - `chat`
+- `evaluation`
+- `paths_config`
+- `resource`
+- `quiz`
+- `asr`
 
 ### Database and schema source of truth
 
@@ -178,22 +190,29 @@ Two files matter whenever schema changes are involved:
 - `server/init_schema.sql` — operational schema/bootstrap SQL
 - `server/app/infra/models.py` — SQLModel definitions used by application code
 
-Keep them in sync. Do **not** assume startup will reconcile schema drift for you.
+Keep them in sync. Startup does not reconcile schema drift for you.
+New tables also need to be added to `REGISTERED_MODELS` in `server/app/infra/models.py` so `init_db()` can create them.
+
+### Session and auth conventions
+
+Database session usage is intentionally split:
+- `get_session()` — FastAPI dependency injection for request handlers
+- `session_scope()` — background tasks / manual async context manager with commit/rollback handling
+
+Auth resolution in `server/app/auth/security.py` depends on the request-scoped `AsyncSession` from `get_session()`. Avoid swapping auth dependencies over to `session_scope()`.
 
 ### Shared backend conventions
 
 - API responses use the `HttpResponse` envelope: `{code, message, data}`.
 - Auth is JWT-based and additionally checked against the `ActiveToken` whitelist table.
-- Prompt loading is centralized through `app.infra.prompts`.
-- Chat uploads and generated working files live under directories derived from `server/config.yaml` paths (typically `server/workplace/`).
+- Prompt loading is centralized and warmed during app startup.
+- Chat uploads and generated working files live under paths derived from `server/config.yaml`.
 
-## Frontend code style
+## Frontend conventions reflected in the repo
 
-Vue files must follow `docs/vue-code-style.md`:
-- use `<script setup lang="ts">`
-- use `<style scoped>`
-- keep the required ordering inside `<script setup>`
-- do not destructure `props` or `reactive()` state directly
+- Vue SFCs use `<script setup lang="ts">`.
+- Components and views are split by feature domain instead of a global component hierarchy.
+- There is no committed standalone frontend rule file to trust more than the code itself, so follow the existing local patterns in nearby files.
 
 ## Files worth reading first
 
@@ -201,10 +220,12 @@ For quick orientation, start here:
 1. `README.md`
 2. `server/README.md`
 3. `src/app/router/routes.ts`
-4. `server/app/app_factory.py`
+4. `server/app/main.py`
 5. `server/app/routes.py`
-6. `server/app/chat/agent.py`
-7. `server/app/resource/service.py`
-8. `server/app/path/api.py`
-9. `server/app/infra/models.py`
-10. `server/init_schema.sql`
+6. `server/app/chat/service.py`
+7. `server/app/resource/api.py`
+8. `server/app/resource/orchestrator.py`
+9. `server/app/path/api.py`
+10. `server/app/path/service.py`
+11. `server/app/infra/models.py`
+12. `server/init_schema.sql`

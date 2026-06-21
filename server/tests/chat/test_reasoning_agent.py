@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.chat.agent import TutorAgent, TutorAgentState
-from app.chat.schemas import ChatStreamEvent, ClassificationResult, TutorAgentInput
+from app.chat.schemas import ClassificationResult, TutorAgentInput
 
 
 @pytest.mark.asyncio
@@ -108,19 +108,6 @@ async def test_classification_result_defaults() -> None:
     assert cls.needs_knowledge_search is False
     assert cls.needs_diagram is False
     assert cls.safety_risk == "none"
-
-
-@pytest.mark.asyncio
-async def test_chat_stream_event_types() -> None:
-    """Verify ChatStreamEvent can be created with all defined types."""
-    for event_type in [
-        "message_start", "classify_done", "file_analysis_start", "file_analysis_done",
-        "tool_start", "tool_done", "answer_token", "answer_done",
-        "diagram_start", "diagram_done", "memory_update_start", "memory_update_done",
-        "final", "error",
-    ]:
-        event = ChatStreamEvent(type=event_type, payload={}, sequence=0, timestamp=0.0)
-        assert event.type == event_type
 
 
 @pytest.mark.asyncio

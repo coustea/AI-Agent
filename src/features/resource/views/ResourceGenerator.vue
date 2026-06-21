@@ -42,9 +42,7 @@
         :generated-resources="generatedResources"
         :dag-selected-agent-ids="dagSelectedAgentIds"
         :generation-error="generationError"
-        :plan-steps="planSteps"
         :plan-ready="planReady"
-        :dispatch-cards="dispatchCards"
         :latest-artifact-agent-id="latestArtifactAgentId"
         :visible-workflow-nodes="visibleWorkflowNodes"
         @select-node="selectDagNode"
@@ -55,7 +53,6 @@
         v-else-if="currentPhase === 'result'"
         key="result"
         :final-bundle="finalBundle"
-        :generated-resources="generatedResources"
         :result-warning="resultWarning"
         @reset="resetGenerator"
         @preview="handlePreview"
@@ -69,7 +66,7 @@
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
         <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
-        <PptView v-else-if="previewData.agentId === 'ppt'" :result-data="previewData.resultData" />
+        <PptView v-else-if="previewData.agentId === 'ppt'" :document-data="previewData.resultData" />
         <VideoView v-else-if="previewData.agentId === 'video'" :result-data="previewData.resultData" />
         <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
@@ -95,31 +92,32 @@ import QuizView from '@/features/resource/components/QuizView.vue'
 import CodeView from '@/features/resource/components/CodeView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
+import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
 import VideoView from '@/features/resource/components/VideoView.vue'
 
 import {
   startResourceGeneration,
   pollResourceStatus,
   getResourceBundle,
-  streamResourceEvents,
 } from '@/features/resource/api/resource'
+import type { AgentEvent } from '@/shared/agent-events/model'
+import { useAgentRun } from '@/shared/agent-events/useAgentRun'
 
 import type {
   LearningScenario,
   ResourceAgentId,
   ResourceTaskStatus,
   ResourceGenerationRequest,
-  ResourceStreamEvent,
 } from '@/features/resource/model/resource'
 
 import {
   PPT_AGENT_ID,
+  VIDEO_AGENT_ID,
   COORDINATOR_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
   getResourceTypeLabel,
-  getAgentOutputFormat,
   createDagNode,
   type AnyAgentConfigs,
   type DagNodeState,
@@ -143,7 +141,7 @@ const agentConfigs = reactive<AnyAgentConfigs>({
   quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge'] },
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-  ppt: { page_count: 6, difficulty: 'intermediate', output_format: 'preview' },
+  ppt: { difficulty: 'intermediate', lesson_depth: 'standard', lesson_kind: 'auto', learning_focus: 'balanced' },
   video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' },
 })
 
@@ -165,165 +163,41 @@ const finalBundle = shallowRef<any | null>(null)
 const generationError = ref<string | null>(null)
 const resultWarning = ref('')
 
-type PlanStepStatus = 'pending' | 'created' | 'dispatching' | 'running' | 'finished'
-type PlanStepState = {
-  id: string; agentId: ResourceAgentId; title: string; summary: string;
-  input: string; output: string; status: PlanStepStatus
-}
-type DispatchCardState = {
-  id: string; stepId: string; from: 'planning' | 'coordinator';
-  to: string; title: string; active: boolean
-}
-
 const planReady = ref(false)
-const planSteps = ref<PlanStepState[]>([])
-const dispatchCards = ref<DispatchCardState[]>([])
 const latestArtifactAgentId = ref<string | null>(null)
 
 const isGenerating = ref(false)
 const generationFinalized = ref(false)
 const activeResourceId = ref<number | null>(null)
+const activeRunId = ref<string | null>(null)
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
-const resourceStreamController = ref<EventSource | null>(null)
-
-const planRevealStarted = ref(false)
-const planRevealTimers: ReturnType<typeof setTimeout>[] = []
-const dispatchStarted = ref(false)
-
-function clearPlanRevealTimers() {
-  while (planRevealTimers.length) {
-    const timer = planRevealTimers.pop()
-    if (timer) clearTimeout(timer)
-  }
-}
-
-function getPlanStepTitle(agentId: string) {
-  const map: Record<string, string> = {
-    content: '生成课程讲解文档', mindmap: '生成知识结构思维导图',
-    quiz: '生成个性化练习题', code: '生成代码实操案例',
-    reading: '生成拓展阅读材料', ppt: '生成 PPT 文稿',
-  }
-  return map[agentId] || `${agentId} 资源生成`
-}
-
-function getPlanStepSummary(agentId: string) {
-  const map: Record<string, string> = {
-    content: '包含概念、原理、示例与易错点讲解',
-    mindmap: '构建知识结构、前置概念与关联关系',
-    quiz: '按难度生成练习题，并附答案与解析',
-    code: '提供可运行代码、注释和实操步骤',
-    reading: '推荐拓展文章与延伸知识点',
-    ppt: '汇总知识结构并生成可视化课件文稿',
-  }
-  return map[agentId] || '根据教学蓝图生成个性化学习资源'
-}
-
-function buildFallbackPlanSteps(): PlanStepState[] {
-  return dagSelectedAgentIds.value.map((agentId) => ({
-    id: `plan-${agentId}`, agentId,
-    title: getPlanStepTitle(agentId), summary: getPlanStepSummary(agentId),
-    input: '学习需求 / 用户画像 / 教学蓝图', output: getAgentOutputFormat(agentId),
-    status: 'pending',
-  }))
-}
-
-function ensurePlanSteps() {
-  if (!planSteps.value.length) planSteps.value = buildFallbackPlanSteps()
-}
-
-function revealPlanStepsStaggered() {
-  ensurePlanSteps()
-  if (planRevealStarted.value) return
-  planRevealStarted.value = true
-  clearPlanRevealTimers()
-  planSteps.value.forEach((step, index) => {
-    const timer = setTimeout(() => {
-      planSteps.value = planSteps.value.map(item => (
-        item.id === step.id && item.status === 'pending'
-          ? { ...item, status: 'created' }
-          : item
-      ))
-    }, 180 + index * 220)
-    planRevealTimers.push(timer)
-  })
-}
-
-function markPlanStep(agentId: string, status: PlanStepStatus) {
-  ensurePlanSteps()
-  planSteps.value = planSteps.value.map(step => (
-    step.agentId === agentId ? { ...step, status } : step
-  ))
-}
+const agentRun = useAgentRun()
 
 function selectDagNode(id: string) {
   selectedDagNodeId.value = id
 }
 
-function triggerDispatchCards(agentIds: string[]) {
-  ensurePlanSteps()
-  dispatchCards.value = agentIds.map((agentId, index) => {
-    const step = planSteps.value.find(item => item.agentId === agentId)
-    return {
-      id: `dispatch-${agentId}-${Date.now()}-${index}`,
-      stepId: step?.id || `plan-${agentId}`,
-      from: 'coordinator', to: agentId,
-      title: step?.title || getPlanStepTitle(agentId),
-      active: true,
-    }
-  })
-  window.setTimeout(() => { dispatchCards.value = [] }, 1400)
+function handlePlanningAnimation(event: AgentEvent) {
+  if (event.status === 'completed') planReady.value = true
 }
 
-function handlePlanningAnimation(event: ResourceStreamEvent) {
-  ensurePlanSteps()
-  if (event.status === 'running') revealPlanStepsStaggered()
-  if (event.status === 'finished') {
-    planReady.value = true
-    planSteps.value = planSteps.value.map(step => (
-      step.status === 'pending' ? { ...step, status: 'created' } : step
-    ))
-  }
-}
-
-function handleCoordinatorAnimation(event: ResourceStreamEvent) {
-  if (event.status !== 'running' || dispatchStarted.value) return
-  dispatchStarted.value = true
-  const workerIds = baseGenerationAgentIds.value
-  workerIds.forEach(agentId => markPlanStep(agentId, 'dispatching'))
-  triggerDispatchCards(workerIds)
-  window.setTimeout(() => { workerIds.forEach(agentId => markPlanStep(agentId, 'running')) }, 900)
-}
-
-function handleWorkerAnimation(event: ResourceStreamEvent) {
+function handleArtifactReadyAnimation(event: AgentEvent) {
   if (!event.agent_id) return
-  const agentId = event.agent_id
-  if (!dagSelectedAgentIds.value.includes(agentId as ResourceAgentId)) return
-  if (!dispatchStarted.value && (baseGenerationAgentIds.value as string[]).includes(agentId)) {
-    dispatchStarted.value = true
-    triggerDispatchCards(baseGenerationAgentIds.value)
-  }
-  if (event.status === 'finished') markPlanStep(agentId, 'finished')
-  else if (event.status === 'running') markPlanStep(agentId, 'running')
-}
-
-function handleArtifactReadyAnimation(event: ResourceStreamEvent) {
-  if (!event.agent_id) return
-  markPlanStep(event.agent_id, 'finished')
   latestArtifactAgentId.value = event.agent_id
   window.setTimeout(() => {
     if (latestArtifactAgentId.value === event.agent_id) latestArtifactAgentId.value = null
   }, 1400)
 }
 
-function handleWorkflowAnimation(event: ResourceStreamEvent) {
+function handleWorkflowAnimation(event: AgentEvent) {
   if (!event.agent_id) return
   if (event.agent_id === 'planning') handlePlanningAnimation(event)
-  if (event.agent_id === COORDINATOR_AGENT_ID) handleCoordinatorAnimation(event)
-  if (event.event_type === 'agent.artifact_ready') handleArtifactReadyAnimation(event)
-  handleWorkerAnimation(event)
+  if (event.type === 'artifact.ready') handleArtifactReadyAnimation(event)
 }
 
-const baseGenerationAgentIds = computed(() => dagSelectedAgentIds.value.filter(id => id !== PPT_AGENT_ID))
+const baseGenerationAgentIds = computed(() => (
+  dagSelectedAgentIds.value.filter(id => id !== PPT_AGENT_ID && id !== VIDEO_AGENT_ID)
+))
 
 const dagNodesV2 = computed<DagNodeState[]>(() => {
   const selected = dagSelectedAgentIds.value
@@ -337,6 +211,9 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
   }
   if (selected.includes(PPT_AGENT_ID)) {
     nodes.push(dagNodeStates.value[PPT_AGENT_ID] || { id: PPT_AGENT_ID, label: '演示文稿助手', icon: '📊', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
+  }
+  if (selected.includes(VIDEO_AGENT_ID)) {
+    nodes.push(dagNodeStates.value[VIDEO_AGENT_ID] || { id: VIDEO_AGENT_ID, label: '讲解视频助手', icon: '🎬', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
   }
   nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   return nodes
@@ -374,6 +251,9 @@ function updateOverallProgressFromDag() {
     ...(dagSelectedAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId) ? [
       { weight: 20, progress: getStageNode(PPT_AGENT_ID).progress },
     ] : []),
+    ...(dagSelectedAgentIds.value.includes(VIDEO_AGENT_ID as ResourceAgentId) ? [
+      { weight: 20, progress: getStageNode(VIDEO_AGENT_ID).progress },
+    ] : []),
     { weight: 10, progress: getStageNode(BUNDLE_AGENT_ID).progress },
   ]
   const weightTotal = stages.reduce((sum, item) => sum + item.weight, 0)
@@ -399,33 +279,31 @@ function initializeWaitingNodes() {
   enabledAgentIds.value.forEach((agentId) => { nodes[agentId] = createDagNode(agentId, false) })
   dagNodeStates.value = nodes
   selectedDagNodeId.value = null
-  planSteps.value = buildFallbackPlanSteps()
   planReady.value = false
-  dispatchStarted.value = false
-  planRevealStarted.value = false
   latestArtifactAgentId.value = null
   updateOverallProgressFromDag()
 }
 
 function normalizeEventStatus(status?: string | null): DagNodeState['status'] | undefined {
   if (!status) return undefined
-  if (status === 'finished') return 'success'
+  if (status === 'finished' || status === 'completed') return 'success'
   if (status === 'failed') return 'failed'
   if (status === 'skipped') return 'skipped'
   if (status === 'running') return 'running'
   return undefined
 }
 
-function appendAgentEventLog(node: DagNodeState, event: ResourceStreamEvent) {
-  if (!event.message?.trim()) return
+function appendAgentEventLog(node: DagNodeState, event: AgentEvent) {
+  const message = (event.summary || event.title).trim()
+  if (!message) return
 
   const eventStatus = normalizeEventStatus(event.status)
   const logs = node.eventLogs || []
   const last = logs[logs.length - 1]
-  const eventPhase = event.phase ?? undefined
+  const eventPhase = typeof event.detail.phase === 'string' ? event.detail.phase : undefined
   const eventElapsedMs = event.elapsed_ms ?? undefined
 
-  const sameMessage = last && last.message === event.message && last.phase === eventPhase
+  const sameMessage = last && last.message === message && last.phase === eventPhase
 
   if (sameMessage) {
     node.eventLogs = [
@@ -444,32 +322,38 @@ function appendAgentEventLog(node: DagNodeState, event: ResourceStreamEvent) {
   node.eventLogs = [
     ...logs.slice(-11),
     {
-      id: `${event.agent_id || node.id}-${event.event_type || 'event'}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      eventType: event.event_type,
+      id: `${event.agent_id || node.id}-${event.type}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      eventType: event.type,
       phase: eventPhase,
-      message: event.message,
+      message,
       status: eventStatus || node.status,
-      progress: event.progress,
+      progress: event.progress ?? undefined,
       elapsedMs: eventElapsedMs,
       timestamp: Date.now(),
     },
   ]
 }
 
-function applyAgentEvent(event: ResourceStreamEvent) {
+function applyAgentEvent(event: AgentEvent) {
   if (!event.agent_id) return
   const node = dagNodeStates.value[event.agent_id] || createDagNode(event.agent_id, SYSTEM_AGENT_IDS.includes(event.agent_id))
-  if (event.status) node.status = event.status === 'finished' ? 'success' : event.status
+  if (event.status) {
+    node.status = event.status === 'completed'
+      ? 'success'
+      : event.status === 'pending' ? 'waiting' : event.status
+  }
   if (event.progress != null) node.progress = Math.max(node.progress, event.progress)
-  if (event.phase) node.phase = event.phase
+  if (typeof event.detail.phase === 'string') node.phase = event.detail.phase
   if (event.elapsed_ms != null) node.elapsedMs = event.elapsed_ms
-  if (event.metrics) node.metrics = { ...(node.metrics || {}), ...event.metrics }
-  if (event.artifact_id) node.artifactId = event.artifact_id
+  const metrics = event.detail.metrics
+  if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) node.metrics = { ...(node.metrics || {}), ...metrics }
+  if (typeof event.detail.artifact_id === 'string') node.artifactId = event.detail.artifact_id
   node.lastUpdatedAt = Date.now()
-  if (event.message) {
-    node.currentMessage = event.message
-    if (node.stepHistory[node.stepHistory.length - 1] !== event.message) {
-      node.stepHistory = [...node.stepHistory.slice(-7), event.message]
+  const message = event.summary || event.title
+  if (message) {
+    node.currentMessage = message
+    if (node.stepHistory[node.stepHistory.length - 1] !== message) {
+      node.stepHistory = [...node.stepHistory.slice(-7), message]
     }
     appendAgentEventLog(node, event)
   }
@@ -488,13 +372,17 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
     Object.values(taskStatus.agent_snapshots).forEach((snapshot) => {
       if (snapshot.agent_id) {
         applyAgentEvent({
-          event_type: snapshot.event_type || 'agent.snapshot', agent_id: snapshot.agent_id,
-          status: snapshot.status || null, message: snapshot.message || null,
-          progress: snapshot.progress ?? 0, run_id: snapshot.run_id || null,
-          span_id: snapshot.span_id || null, phase: snapshot.phase || null,
-          elapsed_ms: snapshot.elapsed_ms || null, metrics: snapshot.metrics || {},
-          dependency: snapshot.dependency || null, artifact_id: snapshot.artifact_id || null,
-          success: snapshot.success || null, timestamp: snapshot.timestamp || Date.now() / 1000,
+          event_id: `snapshot-${snapshot.agent_id}-${Date.now()}`,
+          run_id: '', sequence: 0, module: 'resource', business_id: String(taskStatus.resource_id),
+          type: snapshot.event_type === 'agent.artifact_ready' ? 'artifact.ready' : 'agent.status',
+          status: snapshot.status === 'finished' || snapshot.status === 'completed'
+            ? 'completed'
+            : snapshot.status === 'failed' ? 'failed' : snapshot.status === 'skipped' ? 'skipped' : 'running',
+          activity_id: `agent:${snapshot.agent_id}`, agent_id: snapshot.agent_id,
+          title: snapshot.message || snapshot.agent_id, summary: snapshot.message || '',
+          progress: snapshot.progress ?? 0,
+          detail: { phase: snapshot.phase, metrics: snapshot.metrics || {}, artifact_id: snapshot.artifact_id },
+          elapsed_ms: snapshot.elapsed_ms || null, timestamp: snapshot.timestamp || Date.now() / 1000,
         })
       }
     })
@@ -514,7 +402,7 @@ async function completeGeneration(resourceId: number, taskStatus: ResourceTaskSt
   if (taskStatus.status === 'completed' || taskStatus.status === 'partial_completed') {
     const bundle = (await getResourceBundle(resourceId)).data.data
     finalBundle.value = bundle
-    generatedResources.value = bundle.resources || taskStatus.resources || []
+    generatedResources.value = Array.isArray(bundle.resources) ? bundle.resources : []
     resultWarning.value = taskStatus.status === 'partial_completed' ? '部分资源生成失败，以下已完成内容仍可查看。' : ''
     isGenerating.value = false
     currentPhase.value = 'result'
@@ -550,30 +438,32 @@ function syncStatusSoon(resourceId: number) {
   void checkStatusOnce(resourceId).catch((err: any) => { console.warn('[ResourceGenerator] 状态同步失败:', err) })
 }
 
-function startResourceStream(resourceId: number) {
+function startResourceStream(runId: string, resourceId: number) {
   stopResourceStream()
   startPollingFallback(resourceId)
-  resourceStreamController.value = streamResourceEvents(
-    resourceId,
-    (event) => {
+  agentRun.connect(runId, {
+    onEvent: (event) => {
       applyAgentEvent(event)
-      if (event.message) latestWorkflowMessage.value = event.message
-      if (event.status === 'finished') syncStatusSoon(resourceId)
+      if (event.summary || event.title) latestWorkflowMessage.value = event.summary || event.title
+      if (event.status === 'completed') syncStatusSoon(resourceId)
     },
-    (event) => {
-      if (isGenerating.value && !generationFinalized.value) {
-        void checkStatusOnce(resourceId).catch(() => {
-          void completeGeneration(resourceId, { resource_id: resourceId, status: event.success ? 'completed' : 'failed' })
-        })
-      }
+    onCompleted: () => {
+      void checkStatusOnce(resourceId).catch(() => {
+        void completeGeneration(resourceId, { resource_id: resourceId, status: 'completed' })
+      })
     },
-    (err) => {
+    onFailed: () => {
+      void checkStatusOnce(resourceId).catch(() => {
+        void completeGeneration(resourceId, { resource_id: resourceId, status: 'failed' })
+      })
+    },
+    onConnectionError: (err) => {
       if (!isGenerating.value || generationFinalized.value) return
       console.warn('[ResourceGenerator] SSE 连接失败，切换到轮询兜底:', err)
       latestWorkflowMessage.value = '实时连接中断，已切换到状态同步模式'
       startPollingFallback(resourceId)
     },
-  )
+  })
 }
 
 const startGeneration = async () => {
@@ -587,11 +477,20 @@ const startGeneration = async () => {
       learning_need: naturalInput.value,
       learning_scenario: learningScenario.value,
       selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })).filter(a => a.enabled),
-      agent_configs: { content: agentConfigs.content, mindmap: agentConfigs.mindmap, quiz: agentConfigs.quiz, code: agentConfigs.code, reading: agentConfigs.reading, ppt: agentConfigs.ppt } as any,
+      agent_configs: {
+        content: agentConfigs.content,
+        mindmap: agentConfigs.mindmap,
+        quiz: agentConfigs.quiz,
+        code: agentConfigs.code,
+        reading: agentConfigs.reading,
+        ppt: agentConfigs.ppt,
+        video: agentConfigs.video,
+      },
     }
-    const { resource_id } = (await startResourceGeneration(requestParams)).data.data
+    const { resource_id, run_id } = (await startResourceGeneration(requestParams)).data.data
     activeResourceId.value = resource_id
-    startResourceStream(resource_id)
+    activeRunId.value = run_id
+    startResourceStream(run_id, resource_id)
   } catch (err: any) {
     generationError.value = err.message || '生成请求失败'
     isGenerating.value = false
@@ -609,15 +508,11 @@ const resetGenerationState = () => {
   isGenerating.value = false
   generationFinalized.value = false
   activeResourceId.value = null
+  activeRunId.value = null
   dagNodeStates.value = {}
   selectedDagNodeId.value = null
-  planSteps.value = []
-  dispatchCards.value = []
   planReady.value = false
-  dispatchStarted.value = false
-  planRevealStarted.value = false
   latestArtifactAgentId.value = null
-  clearPlanRevealTimers()
 }
 
 const stopPolling = () => {
@@ -625,21 +520,37 @@ const stopPolling = () => {
 }
 
 const stopResourceStream = () => {
-  if (resourceStreamController.value) { resourceStreamController.value.close(); resourceStreamController.value = null }
+  agentRun.close()
 }
 
 const pauseLiveGenerationUpdates = () => { stopPolling(); stopResourceStream() }
 
 const resumeLiveGenerationUpdates = async () => {
   const resourceId = activeResourceId.value
-  if (!resourceId || !isGenerating.value || generationFinalized.value) return
+  const runId = activeRunId.value
+  if (!resourceId || !runId || !isGenerating.value || generationFinalized.value) return
   try { await checkStatusOnce(resourceId) } catch { latestWorkflowMessage.value = '状态同步失败，正在重试实时连接' }
-  if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(resourceId)
+  if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(runId, resourceId)
 }
 
 const previewVisible = ref(false)
 const previewData = ref<any>(null)
-const handlePreview = (data: any) => { previewData.value = data; previewVisible.value = true }
+const handlePreview = (data: any) => {
+  if (data?.agentId === 'ppt') {
+    const parsed = parsePptDocument(data.resultData)
+    if (!parsed.ok) {
+      console.error('Invalid persisted PPT artifact omitted', {
+        reason: parsed.reason,
+        details: parsed.details,
+      })
+      return
+    }
+    previewData.value = { ...data, resultData: parsed.document }
+  } else {
+    previewData.value = data
+  }
+  previewVisible.value = true
+}
 
 const resetGenerator = () => {
   stopPolling(); stopResourceStream(); naturalInput.value = ''; resetGenerationState(); currentPhase.value = 'input'

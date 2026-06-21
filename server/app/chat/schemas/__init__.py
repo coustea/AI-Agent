@@ -15,8 +15,8 @@ from app.chat.schemas.agent import (
     TutorTurnContext,
     TutorAgentInput,
     ClassificationResult,
-    ChatStreamEventType,
-    ChatStreamEvent,
+    TutorRuntimeEventType,
+    TutorRuntimeEvent,
 )
 
 from app.chat.schemas.diagram import (
@@ -44,7 +44,7 @@ from app.chat.schemas.diagram import (
 __all__ = [
     "EvidenceType", "Evidence", "EvidenceSet", "UploadResponse",
     "TutorToolCall", "TutorTurnContext", "TutorAgentInput",
-    "ClassificationResult", "ChatStreamEventType", "ChatStreamEvent",
+    "ClassificationResult", "TutorRuntimeEventType", "TutorRuntimeEvent",
     "TeachingDiagramType", "TeachingContent",
     "ComparisonEntity", "ComparisonDimension", "VisualSummary", "ComparisonPayload",
     "FlowchartNodeType", "FlowchartNode", "FlowchartEdge", "FlowchartPayload",

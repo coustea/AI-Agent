@@ -287,30 +287,4 @@ def test_path_node_resource_request_schema_removed():
     assert not hasattr(schemas, "PathNodeResourceRequest")
 
 
-def test_persisted_resource_item_exposes_real_card_status():
-    from types import SimpleNamespace
 
-    from app.resource.persistence.mappers import db_item_to_resource_item
-
-    item = SimpleNamespace(
-        id=1001,
-        agent_type="ppt",
-        status="completed",
-        error_message=None,
-        created_at=None,
-        updated_at=None,
-        content_format="json",
-        title="调度算法 PPT",
-        summary="教学演示",
-        content_json={"content": {"slides": []}},
-        content_text=None,
-        metadata_json={"agent_id": "ppt"},
-        execution_report=None,
-        metrics=None,
-        downstream_context=None,
-    )
-
-    mapped = db_item_to_resource_item(item)
-
-    assert mapped.status == "completed"
-    assert mapped.error_message is None

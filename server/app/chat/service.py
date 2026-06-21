@@ -19,6 +19,7 @@ from typing import Any, AsyncIterator
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.chat.agent import TutorAgent
+from app.chat.events import build_attachment_status_payload, build_persisted_tool_activity
 from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
 from app.chat.safety import ContentSafetyFilter, SafetyResult, safety_filter
 from app.chat.schemas import (
@@ -30,6 +31,7 @@ from app.chat.storage.message_item import ChatMessageItem
 from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, IMAGE_EXTENSIONS, CHAT_HISTORY_LIMIT
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage
+from app.infra.agent_events import AgentEventEmitter
 
 logger = get_logger(__name__)
 
@@ -267,6 +269,23 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
 
     # 查询历史消息
     raw_messages = await svc.list_messages(user_id=user_id, session_id=session_id, limit=CHAT_HISTORY_LIMIT)
+    if raw_messages and getattr(raw_messages[0], "role", "") != "user":
+        first_user_index = next(
+            (index for index, item in enumerate(raw_messages) if getattr(item, "role", "") == "user"),
+            len(raw_messages),
+        )
+        raw_messages = raw_messages[first_user_index:]
+
+    attachment_analyses = await svc.list_attachment_analyses(
+        user_id=user_id,
+        session_id=session_id,
+        limit=max(CHAT_HISTORY_LIMIT * 2, 50),
+    )
+    analyses_by_turn: dict[int, list[Any]] = {}
+    for analysis in attachment_analyses:
+        turn_id = getattr(analysis, "turn_id", None)
+        if turn_id is not None:
+            analyses_by_turn.setdefault(turn_id, []).append(analysis)
 
     # 查询工具调用记录，按 tool_call_id 建索引
     tool_invocations = await svc.list_tool_invocations(user_id=user_id, session_id=session_id, limit=50)
@@ -285,6 +304,14 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
         tool_call_id = getattr(msg, "tool_call_id", None)
 
         if role == "user" and content:
+            analyses = analyses_by_turn.get(getattr(msg, "turn_id", None), [])
+            analysis_context = "\n\n".join(
+                f"[{getattr(item, 'analysis_type', 'attachment')}] {getattr(item, 'summary_text', '')}"
+                for item in reversed(analyses)
+                if str(getattr(item, "summary_text", "") or "").strip()
+            )
+            if analysis_context:
+                content = f"{content}\n\n[历史附件分析结果]\n{analysis_context}"
             messages.append(HumanMessage(content=content))
         elif role in {"assistant", "ai"} and (content or tool_calls):
             # 如果有 tool_calls，构建 AIMessage(tool_calls=[...])
@@ -309,8 +336,7 @@ _SSE_EVENT_MAP: dict[str, str] = {
     "classify_done": "status",
     "file_analysis_start": "status",
     "file_analysis_done": "attachment",
-    "tool_start": "tool",
-    "tool_done": "tool",
+    "agent_status": "agent_status",
     "answer_token": "token",
     "answer_done": "status",
     "diagram_start": "status",
@@ -509,6 +535,102 @@ async def chat(
         uc._spawn_background(_post_turn(), label="post_turn")
 
 
+def _runtime_status(value: Any) -> str:
+    status = str(value or "running")
+    return {
+        "done": "completed",
+        "finished": "completed",
+        "error": "failed",
+    }.get(status, status if status in {"pending", "running", "completed", "failed", "skipped"} else "running")
+
+
+async def _publish_chat_runtime_event(
+    emitter: AgentEventEmitter,
+    event: dict[str, Any],
+) -> bool:
+    """把辅导内部事件映射成唯一的 AgentEvent；返回是否失败。"""
+    event_name = str(event.get("event") or "status")
+    data = event.get("data")
+    payload = data if isinstance(data, dict) else {}
+
+    if event_name == "token":
+        await emitter.content_delta(str(data or ""))
+        return False
+    if event_name == "agent_status":
+        await emitter.tool_status(
+            status=_runtime_status(payload.get("status")),
+            activity_id=str(payload.get("activity_id") or "") or None,
+            agent_id=str(payload.get("tool_name") or "") or None,
+            title=str(payload.get("title") or "工具调用"),
+            summary=str(payload.get("summary") or payload.get("message") or ""),
+            detail=payload.get("detail") if isinstance(payload.get("detail"), dict) else {},
+            elapsed_ms=(payload.get("detail") or {}).get("duration_ms") if isinstance(payload.get("detail"), dict) else None,
+        )
+        return False
+    if event_name == "attachment":
+        await emitter.agent_status(
+            status=_runtime_status(payload.get("status")),
+            activity_id=str(payload.get("activity_id") or "") or None,
+            agent_id="attachment_analyzer",
+            title=str(payload.get("title") or "附件分析"),
+            summary=str(payload.get("summary") or payload.get("message") or ""),
+            detail=payload.get("detail") if isinstance(payload.get("detail"), dict) else {},
+        )
+        return False
+    if event_name == "diagram" and payload:
+        await emitter.artifact_ready(
+            activity_id="teaching-diagram",
+            agent_id="diagram_generator",
+            title="教学图解已生成",
+            detail=payload,
+        )
+        return False
+    if event_name == "error":
+        return True
+    if event_name == "status":
+        await emitter.agent_status(
+            activity_id=str(payload.get("stage") or "chat-workflow"),
+            agent_id="tutor",
+            title=str(payload.get("message") or "正在处理"),
+            summary=str(payload.get("message") or ""),
+            detail={key: value for key, value in payload.items() if key != "message"},
+        )
+    return False
+
+
+async def run_chat_agent(
+    *,
+    run_id: str,
+    user_id: int,
+    session_id: str,
+    user_input: str,
+    attachments: list[str],
+    enable_web_search: bool,
+    need_teaching_diagram: bool,
+) -> None:
+    """后台执行一次辅导，并通过全局事件流主动推送运行状态。"""
+    emitter = AgentEventEmitter(run_id=run_id, module="chat", business_id=session_id)
+    await emitter.started(title="智能辅导已开始")
+    failed = False
+    try:
+        async for event in chat(
+            user_id=user_id,
+            session_id=session_id,
+            user_input=user_input,
+            attachments=attachments or None,
+            enable_web_search=enable_web_search,
+            need_teaching_diagram=need_teaching_diagram,
+        ):
+            failed = await _publish_chat_runtime_event(emitter, event) or failed
+        if failed:
+            await emitter.failed(title="回答失败", summary="智能辅导暂时无法完成本次回答")
+        else:
+            await emitter.completed(title="回答完成")
+    except Exception:
+        logger.exception("chat_agent_run_failed: run_id=%s", run_id)
+        await emitter.failed(title="回答失败", summary="智能辅导暂时无法完成本次回答")
+
+
 
 
 
@@ -588,6 +710,19 @@ class ChatUseCases:
             session_id=session_id,
             limit=max(limit, 20),
         )
+        tool_invocations = await self._memory_service.list_tool_invocations(
+            user_id=user_id,
+            session_id=session_id,
+            limit=max(limit * 2, 50),
+        )
+        activities_by_turn: dict[int, list[tuple[int, Any, dict[str, Any]]]] = {}
+        for invocation in tool_invocations:
+            turn_id = getattr(invocation, "turn_id", None)
+            if turn_id is None:
+                continue
+            activities_by_turn.setdefault(turn_id, []).append(
+                (1, getattr(invocation, "created_at", None), build_persisted_tool_activity(invocation))
+            )
         # 按 message_id 分组附件分析结果，供后续组装使用
         analyses_by_message_id: dict[int, list[dict[str, Any]]] = {}
         for analysis in attachment_analyses:
@@ -605,6 +740,24 @@ class ChatUseCases:
                     "structured_json": getattr(analysis, "structured_json", None),
                 }
             )
+            turn_id = getattr(analysis, "turn_id", None)
+            if turn_id is not None:
+                structured = getattr(analysis, "structured_json", None) or {}
+                urls = structured.get("file_urls", []) if isinstance(structured, dict) else []
+                file_names = [str(url).split("/")[-1] for url in urls]
+                if not file_names and getattr(analysis, "file_name", None):
+                    file_names = [str(analysis.file_name)]
+                activities_by_turn.setdefault(turn_id, []).append((
+                    0,
+                    getattr(analysis, "created_at", None),
+                    build_attachment_status_payload(
+                        activity_id=f"attachment-{turn_id}-{getattr(analysis, 'analysis_type', 'document')}",
+                        status="done",
+                        file_names=file_names,
+                        analysis_type=str(getattr(analysis, "analysis_type", "document")),
+                        summary=str(getattr(analysis, "summary_text", "") or ""),
+                    ),
+                ))
         # 查询附件绑定关系：新版本用 message_attachments 表，旧版本用 message.attachments 字段
         attachment_records_by_message_id = await self._memory_service.list_message_attachments(
             user_id=user_id,
@@ -643,6 +796,12 @@ class ChatUseCases:
                     tool_call_id=getattr(message, "tool_call_id", None),
                     knowledge_sources=message.knowledge_sources if isinstance(message.knowledge_sources, list) else None,
                     attachment_analyses=analyses_by_message_id.get(message.id, []),  # 关联的附件分析结果
+                    agent_activities=[
+                        activity for _, _, activity in sorted(
+                            activities_by_turn.get(getattr(message, "turn_id", None), []),
+                            key=lambda item: (item[0], item[1].isoformat() if item[1] is not None else ""),
+                        )
+                    ] if getattr(message, "message_kind", None) == "assistant_answer" else None,
                     teaching_diagram=message.teaching_diagram if isinstance(message.teaching_diagram, dict) else None,
                     turn_id=getattr(message, "turn_id", None),
                     message_kind=getattr(message, "message_kind", None),

@@ -38,8 +38,6 @@ export interface GeneratedResourceBundle {
   learning_need: string
   selected_agents: string[]
   resources: ResourceItemDetail[]
-  study_path: unknown[]
-  review_result: unknown
   status: string
   created_at: string | null
   updated_at: string | null

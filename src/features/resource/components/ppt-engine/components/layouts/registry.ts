@@ -1,21 +1,30 @@
-import LayoutFocusTitle from './LayoutFocusTitle.vue'
-import LayoutSplitScreen from './LayoutSplitScreen.vue'
-import LayoutBentoGrid from './LayoutBentoGrid.vue'
-import LayoutLayerStack from './LayoutLayerStack.vue'
+import LayoutHeroCover from './LayoutHeroCover.vue'
+import LayoutDualPane from './LayoutDualPane.vue'
+import LayoutTriplePane from './LayoutTriplePane.vue'
+import LayoutDiagramFocus from './LayoutDiagramFocus.vue'
+import LayoutFlowCanvas from './LayoutFlowCanvas.vue'
+import LayoutCompareTable from './LayoutCompareTable.vue'
+import LayoutCardCluster from './LayoutCardCluster.vue'
+import LayoutKnowledgeMap from './LayoutKnowledgeMap.vue'
 
 const LayoutRegistry: Record<string, any> = {
-  FocusTitle: LayoutFocusTitle,
-  SplitScreen: LayoutSplitScreen,
-  BentoGrid: LayoutBentoGrid,
-  LayerStack: LayoutLayerStack
+  HeroCover: LayoutHeroCover,
+  DualPane: LayoutDualPane,
+  TriplePane: LayoutTriplePane,
+  DiagramFocus: LayoutDiagramFocus,
+  FlowCanvas: LayoutFlowCanvas,
+  CompareTable: LayoutCompareTable,
+  CardCluster: LayoutCardCluster,
+  KnowledgeMap: LayoutKnowledgeMap,
 }
 
 export const resolveLayoutComponent = (layout?: string) => {
-  if (!layout) return null
+  if (!layout) {
+    throw new Error(`[PPT Engine] Layout is required`)
+  }
   const component = LayoutRegistry[layout]
   if (!component) {
-    console.error(`[PPT Engine] 缺少布局组件: ${layout}`)
-    return null
+    throw new Error(`[PPT Engine] Unknown layout: ${layout}. Expected one of: ${Object.keys(LayoutRegistry).join(', ')}`)
   }
   return component
 }

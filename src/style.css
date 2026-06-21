@@ -13,9 +13,9 @@
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
   --el-border-radius-round: 999px;
-  --el-text-color-primary: #0F172A;
-  --el-text-color-regular: #475569;
-  --el-text-color-secondary: #64748B;
+  --el-text-color-primary: #1E293B;
+  --el-text-color-regular: #334155;
+  --el-text-color-secondary: #475569;
   --el-text-color-placeholder: #94A3B8;
   --el-border-color: #E2E8F0;
   --el-border-color-light: #F1F5F9;
@@ -40,9 +40,9 @@
   --color-border-hover: #CBD5E1;    /* Slate 300 — hover border */
   --color-border-light: #F1F5F9;    /* Slate 100 — subtle divider */
 
-  --color-text: #0F172A;            /* Slate 900 — primary text */
-  --color-text-strong: #1E293B;     /* Slate 800 — headings */
-  --color-text-secondary: #475569;  /* Slate 600 — secondary text */
+  --color-text: #1E293B;            /* Slate 800 — primary text (not pure black) */
+  --color-text-strong: #0F172A;     /* Slate 900 — headings */
+  --color-text-secondary: #334155;  /* Slate 700 — secondary text */
   --color-text-muted: #64748B;      /* Slate 500 — muted / labels */
   --color-text-faint: #94A3B8;      /* Slate 400 — timestamps / hints */
 
@@ -202,56 +202,71 @@ img, svg, video {
 }
 
 /* ============================================================
-   Unified Button Styles
+   Unified Button Styles — Apple HIG + Material Design 3
    ============================================================ */
+
+/* Base button reset */
 button, .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   border: none;
-  border-radius: var(--radius-lg); /* 统一使用圆润的 12px 圆角 */
+  border-radius: var(--radius-lg);
   font-family: var(--font-sans);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition:
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 120ms cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
-  outline: none;
   user-select: none;
   text-decoration: none;
-  min-height: 40px; /* 统一默认按钮高度 */
-  padding: 0 var(--space-4);
+  -webkit-tap-highlight-color: transparent;
+  /* Touch target minimum: 44px (HIG/MD standard) */
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-5);
 }
 
-button:hover:not(:disabled), .btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
+/* Press feedback */
 button:active:not(:disabled), .btn:active:not(:disabled) {
   transform: scale(0.98);
 }
 
+/* Disabled state */
 button:disabled, .btn:disabled {
-  opacity: 0.52;
+  opacity: 0.48;
   cursor: not-allowed;
   pointer-events: none;
   transform: none !important;
   box-shadow: none !important;
 }
 
-/* Primary Button */
+/* Focus state (accessibility) */
+button:focus-visible, .btn:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Primary Button — Highest emphasis */
 .btn-primary {
   background: var(--color-primary);
   color: #FFFFFF;
+  box-shadow: var(--shadow-sm), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-hover);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
+}
+.btn-primary:active:not(:disabled) {
+  box-shadow: var(--shadow-xs), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
 }
 
-/* Secondary Button */
+/* Secondary Button — Medium emphasis */
 .btn-secondary {
   background: var(--color-primary-soft);
   color: var(--color-primary);
@@ -260,15 +275,36 @@ button:disabled, .btn:disabled {
   background: var(--color-primary-border);
 }
 
-/* Outline Button */
+/* Outline Button — Lower emphasis */
 .btn-outline {
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: 1.5px solid var(--color-border);
   color: var(--color-text);
 }
 .btn-outline:hover:not(:disabled) {
-  border-color: var(--color-border-hover);
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Ghost Button — Lowest emphasis */
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+.btn-ghost:hover:not(:disabled) {
   background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+/* Danger Button — Destructive actions */
+.btn-danger {
+  background: var(--color-danger);
+  color: #FFFFFF;
+  box-shadow: var(--shadow-sm);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #DC2626;
+  box-shadow: var(--shadow-md);
 }
 
 /* Text/Link Button */
@@ -278,17 +314,160 @@ button:disabled, .btn:disabled {
   color: var(--color-text-secondary);
   padding: 0 !important;
   min-height: auto !important;
+  min-width: auto !important;
   box-shadow: none !important;
   transform: none !important;
 }
 .btn-text:hover:not(:disabled) {
   color: var(--color-primary);
-  box-shadow: none !important;
-  transform: none !important;
+}
+
+/* Icon Button — Icon-only action */
+.btn-icon {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-md);
+  padding: 0;
+}
+.btn-icon:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-primary);
+}
+.btn-icon:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* Pill Button — Tags / Filters / Toggle groups */
+.btn-pill {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  border: 1px solid transparent;
+  min-height: 36px;
+  min-width: auto;
+}
+.btn-pill:hover:not(:disabled) {
+  background: var(--color-border);
+}
+.btn-pill.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: var(--color-primary-border);
+}
+
+/* Link Button — Inline text link style */
+.btn-link {
+  background: transparent;
+  color: var(--color-primary);
+  padding: 0;
+  min-height: auto;
+  min-width: auto;
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+.btn-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.btn-link.danger-link {
+  color: var(--color-danger);
+}
+.btn-link.success-link {
+  color: var(--color-success);
+}
+
+/* Page Button — Pagination */
+.btn-page, .page-btn {
+  height: 36px;
+  min-width: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  min-height: 36px;
+}
+.btn-page:hover:not(:disabled), .page-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.btn-page:disabled, .page-btn:disabled {
+  opacity: 0.5;
+}
+
+/* Minimal Icon Button — Toolbar actions */
+.btn-minimal, .minimal-icon-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: none;
+  min-height: 40px;
+  min-width: 40px;
+}
+.btn-minimal:hover:not(:disabled), .minimal-icon-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+.btn-minimal.is-active-blue, .minimal-icon-btn.is-active-blue {
+  background: var(--cat-tutor-soft);
+  color: var(--cat-tutor);
+}
+.btn-minimal.is-active-teal, .minimal-icon-btn.is-active-teal {
+  background: #CCFBF1;
+  color: #0D9488;
+}
+
+/* Size Variants */
+.btn-sm {
+  height: 36px;
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0 14px;
+  font-size: var(--text-xs);
+  border-radius: var(--radius-md);
+}
+
+.btn-lg {
+  height: 52px;
+  min-height: 52px;
+  min-width: 52px;
+  padding: 0 28px;
+  font-size: var(--text-base);
+  border-radius: var(--radius-xl);
+}
+
+/* Full Width */
+.btn-block, .btn.full-width {
+  width: 100%;
+}
+
+/* Success Variant */
+.btn-success {
+  background: var(--color-success);
+  color: #FFFFFF;
+}
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+}
+
+/* Warning Variant */
+.btn-warning {
+  background: var(--color-warning);
+  color: #FFFFFF;
+}
+.btn-warning:hover:not(:disabled) {
+  background: #D97706;
 }
 
 /* ============================================================
-   Element Plus Overrides
+   Element Plus Overrides — Unified with Design System
    ============================================================ */
 
 /* Primary Button */
@@ -297,19 +476,74 @@ button:disabled, .btn:disabled {
   --el-button-border-color: var(--color-primary) !important;
   --el-button-hover-bg-color: var(--color-primary-hover) !important;
   --el-button-hover-border-color: var(--color-primary-hover) !important;
+  --el-button-disabled-bg-color: var(--color-primary) !important;
+  --el-button-disabled-border-color: var(--color-primary) !important;
   border-radius: var(--radius-lg) !important;
   font-weight: var(--weight-semibold) !important;
+  min-height: 44px !important;
   transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
-
-.el-button--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px -3px rgba(79, 70, 229, 0.45);
+.el-button--primary:hover:not(:disabled) {
+  transform: scale(0.98);
+  box-shadow: var(--shadow-md), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
+}
+.el-button--primary:active:not(:disabled) {
+  transform: scale(0.96);
+  box-shadow: var(--shadow-xs);
+}
+.el-button--primary:disabled {
+  opacity: 0.48 !important;
 }
 
-.el-button--primary:active {
-  transform: translateY(0);
-  box-shadow: none;
+/* Default Button (Outline) */
+.el-button--default {
+  --el-button-bg-color: transparent !important;
+  --el-button-border-color: var(--color-border) !important;
+  --el-button-hover-bg-color: var(--color-primary-soft) !important;
+  --el-button-hover-border-color: var(--color-primary) !important;
+  --el-button-text-color: var(--color-text) !important;
+  --el-button-hover-text-color: var(--color-text) !important;
+  border-radius: var(--radius-lg) !important;
+  font-weight: var(--weight-semibold) !important;
+  min-height: 44px !important;
+}
+
+/* Danger Button */
+.el-button--danger {
+  --el-button-bg-color: var(--color-danger) !important;
+  --el-button-border-color: var(--color-danger) !important;
+  --el-button-hover-bg-color: #DC2626 !important;
+  --el-button-hover-border-color: #DC2626 !important;
+  border-radius: var(--radius-lg) !important;
+  font-weight: var(--weight-semibold) !important;
+  min-height: 44px !important;
+}
+
+/* Success Button */
+.el-button--success {
+  --el-button-bg-color: var(--color-success) !important;
+  --el-button-border-color: var(--color-success) !important;
+  --el-button-hover-bg-color: #059669 !important;
+  --el-button-hover-border-color: #059669 !important;
+  border-radius: var(--radius-lg) !important;
+  font-weight: var(--weight-semibold) !important;
+  min-height: 44px !important;
+}
+
+/* Small size */
+.el-button--small {
+  min-height: 36px !important;
+  padding: 0 14px !important;
+  font-size: var(--text-xs) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+/* Large size */
+.el-button--large {
+  min-height: 52px !important;
+  padding: 0 28px !important;
+  font-size: var(--text-base) !important;
+  border-radius: var(--radius-xl) !important;
 }
 
 /* Card */

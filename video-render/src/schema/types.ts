@@ -11,7 +11,12 @@ export type SceneType =
   | "layered_architecture"
   | "code_execution"
   | "compare_summary"
-  | "knowledge_check";
+  | "knowledge_check"
+  // CS Theory templates
+  | "array_linked_list"
+  | "stack_queue"
+  | "process_state"
+  | "storage_hierarchy";
 
 export interface SubtitleChunk {
   start: number;

@@ -82,6 +82,37 @@ class ActiveToken(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True))
     )
 
+
+class AgentRun(SQLModel, table=True):
+    """跨业务模块统一的 Agent 执行记录。"""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_user_created", "user_id", "created_at"),
+        Index("ix_agent_runs_business", "module", "business_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: str = Field(max_length=36, unique=True, index=True)
+    user_id: int = Field(index=True)
+    module: str = Field(max_length=32, index=True)
+    business_id: str = Field(max_length=128, index=True)
+    status: str = Field(default="pending", max_length=32, index=True)
+    sequence: int = Field(default=0, ge=0)
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now()),
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+
 class School(SQLModel, table=True):
     """学校存储"""
     __tablename__ = "schools"
@@ -1004,6 +1035,7 @@ class WrongQuestion(SQLModel, table=True):
 
 REGISTERED_MODELS = (
     ActiveToken,
+    AgentRun,
     ChatSession,
     ChatTurn,
     ChatMessage,

@@ -117,17 +117,17 @@ function toText(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
 }
 
-function normalizeLanguage(language: unknown, fallback = 'text'): string {
-  const raw = toText(language || fallback).trim().toLowerCase()
-  return languageAlias[raw] || raw || fallback
+function normalizeLanguage(language: unknown, defaultLanguage = 'text'): string {
+  const raw = toText(language || defaultLanguage).trim().toLowerCase()
+  return languageAlias[raw] || raw || defaultLanguage
 }
 
-function unwrapFencedCode(text: string, fallbackLanguage = 'text'): FenceResult {
+function unwrapFencedCode(text: string, defaultLanguage = 'text'): FenceResult {
   const trimmed = text.trim()
   const match = trimmed.match(/^```([\w#+.-]*)\s*\n([\s\S]*?)\n```$/)
-  if (!match) return { code: text, language: normalizeLanguage(fallbackLanguage) }
+  if (!match) return { code: text, language: normalizeLanguage(defaultLanguage) }
   return {
-    language: normalizeLanguage(match[1]!, fallbackLanguage),
+    language: normalizeLanguage(match[1]!, defaultLanguage),
     code: match[2]!.trimEnd(),
   }
 }
@@ -192,11 +192,11 @@ const pureCodeInfo = computed(() => {
   const data = parsedData.value
   if (!data) return { code: '', language: 'text' }
 
-  const fallbackLanguage = normalizeLanguage(data.language || data.lang || 'text')
+  const defaultLanguage = normalizeLanguage(data.language || data.lang || 'text')
   const codeContent = toText(data.code || data.full_code || '')
-  if (!codeContent.trim()) return { code: '', language: fallbackLanguage }
+  if (!codeContent.trim()) return { code: '', language: defaultLanguage }
 
-  return unwrapFencedCode(codeContent, fallbackLanguage)
+  return unwrapFencedCode(codeContent, defaultLanguage)
 })
 
 const pureCode = computed(() => pureCodeInfo.value.code)
@@ -271,7 +271,7 @@ const performHighlight = async () => {
 
     hideDetachedCodeToolbar(pre)
 
-    // 代码高亮兼容处理
+    // 对当前 Markdown 协议中的代码块执行高亮
     if (!code.dataset.highlighted && !code.classList.contains('hljs')) {
       try {
         hljs.highlightElement(code)

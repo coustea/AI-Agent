@@ -23,6 +23,8 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
+from app.infra.tool_excute import ToolExcute
+
 
 Resolver = Callable[[str], Iterable[str] | Awaitable[Iterable[str]]]
 
@@ -316,3 +318,166 @@ class WebResearchSession:
 
 def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+# ---------------------------------------------------------------------------
+# Web Research Runner - 自主研究循环
+# ---------------------------------------------------------------------------
+
+import json
+
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+
+from app.infra.prompts import prompts
+
+
+@dataclass
+class ResearchToolStep:
+    """研究工具调用步骤记录。"""
+    tool_call_id: str
+    tool_name: str
+    payload: dict[str, Any]
+    status: str
+    result_text: str
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+    events: list[Any] = field(default_factory=list)
+    invocation: dict[str, Any] | None = None
+    sources: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+
+ResearchExecutor = Callable[
+    [str, dict[str, Any], str],
+    Awaitable[ResearchToolStep],
+]
+
+
+class WebResearchRunner:
+    """自主研究循环 — 让模型选择网页工具直到收集足够证据。"""
+
+    def __init__(
+        self,
+        *,
+        tool_excute: ToolExcute,
+        max_iterations: int = 8,
+        max_domains: int = 5,
+        system_prompt: str | None = None,
+    ) -> None:
+        self.tool_excute = tool_excute
+        self.max_iterations = max(1, int(max_iterations))
+        self.max_domains = max(1, int(max_domains))
+        self.system_prompt = system_prompt or prompts.get("chat").get("search_instruction")
+        self._allowed_tools = {tool.name for tool in self.tool_excute.get_tools()}
+
+    async def run(self, question: str, *, execute: ResearchExecutor) -> list[ResearchToolStep]:
+        """运行研究循环，返回所有工具调用步骤。"""
+        messages: list[Any] = [
+            SystemMessage(content=self.system_prompt),
+            HumanMessage(content=str(question or "")),
+        ]
+        steps: list[ResearchToolStep] = []
+        visited_domains: set[str] = set()
+
+        for _iteration in range(self.max_iterations):
+            response, tool_calls = await self.tool_excute.invoke(messages, temperature=0.1)
+            messages.append(response)
+            if not tool_calls:
+                break
+
+            executed_valid_call = False
+            for raw_call in tool_calls:
+                call = raw_call if isinstance(raw_call, dict) else {}
+                call_id = str(call.get("id") or f"call-{uuid4().hex}")
+                tool_name = str(call.get("name") or "").strip()
+                payload = call.get("args")
+
+                if tool_name not in self._allowed_tools:
+                    step = self._failed_step(
+                        call_id,
+                        tool_name,
+                        {},
+                        f"Tool {tool_name or '<missing>'} is not available for web research.",
+                    )
+                elif not isinstance(payload, dict):
+                    step = self._failed_step(
+                        call_id,
+                        tool_name,
+                        {},
+                        "Tool arguments must be a JSON object.",
+                    )
+                else:
+                    domain = self._requested_domain(tool_name, payload)
+                    if domain and domain not in visited_domains and len(visited_domains) >= self.max_domains:
+                        step = self._failed_step(
+                            call_id,
+                            tool_name,
+                            dict(payload),
+                            "Web research domain budget has been exhausted.",
+                        )
+                    else:
+                        if domain:
+                            visited_domains.add(domain)
+                        executed_valid_call = True
+                        try:
+                            step = await execute(tool_name, dict(payload), call_id)
+                        except Exception as exc:
+                            step = self._failed_step(
+                                call_id,
+                                tool_name,
+                                dict(payload),
+                                f"{tool_name} failed: {exc}",
+                            )
+
+                steps.append(step)
+                messages.append(
+                    ToolMessage(
+                        content=self._tool_message_content(step),
+                        tool_call_id=call_id,
+                    )
+                )
+
+            if not executed_valid_call:
+                break
+
+        return steps
+
+    @staticmethod
+    def _requested_domain(tool_name: str, payload: dict[str, Any]) -> str:
+        if tool_name not in {"open_web_page", "read_web_pdf"}:
+            return ""
+        return str(urlsplit(str(payload.get("url") or "")).hostname or "").lower()
+
+    @staticmethod
+    def _failed_step(
+        call_id: str,
+        tool_name: str,
+        payload: dict[str, Any],
+        message: str,
+    ) -> ResearchToolStep:
+        return ResearchToolStep(
+            tool_call_id=call_id,
+            tool_name=tool_name,
+            payload=payload,
+            status="failed",
+            result_text=message,
+            errors=[message],
+        )
+
+    @staticmethod
+    def _tool_message_content(step: ResearchToolStep) -> str:
+        metadata = []
+        for evidence in step.evidence:
+            if not isinstance(evidence, dict):
+                continue
+            details = evidence.get("details")
+            if isinstance(details, dict) and details:
+                metadata.append(details)
+        return json.dumps(
+            {
+                "status": step.status,
+                "result": step.result_text,
+                "sources": step.sources,
+                "metadata": metadata,
+            },
+            ensure_ascii=False,
+        )

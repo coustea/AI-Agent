@@ -47,16 +47,15 @@ class ClassificationResult(BaseModel):
     needs_web_search: bool = False
     needs_profile: bool = False
     needs_long_term_memory: bool = False
-    needs_recent_evaluation: bool = False
     needs_diagram: bool = False
     safety_risk: str = "none"
     answer_style: str = "explain"
 
 
-ChatStreamEventType = Literal[
+TutorRuntimeEventType = Literal[
     "message_start", "classify_done",
     "file_analysis_start", "file_analysis_done",
-    "tool_start", "tool_done",
+    "agent_status",
     "answer_token", "answer_done",
     "diagram_start", "diagram_done",
     "memory_update_start", "memory_update_done",
@@ -64,9 +63,9 @@ ChatStreamEventType = Literal[
 ]
 
 
-class ChatStreamEvent(BaseModel):
+class TutorRuntimeEvent(BaseModel):
     """TutorAgent 流式事件。"""
-    type: ChatStreamEventType
+    type: TutorRuntimeEventType
     payload: dict[str, Any] = Field(default_factory=dict)
     sequence: int = 0
     timestamp: float = 0.0

@@ -32,8 +32,301 @@ VideoStyle = Literal["explainer", "lecture", "screencast", "case_walkthrough"]
 VideoVoice = Literal["teacher", "coach", "concise"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
 SceneRole = Literal["hook", "concept", "example", "process", "misconception", "practice", "recap"]
-VisualType = Literal["card", "diagram", "code", "timeline", "comparison", "quiz", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture"]
+VisualType = Literal["card", "diagram", "code", "timeline", "comparison", "quiz", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"]
 VideoSourceAgentId = Literal["content", "mindmap", "quiz", "code", "reading"]
+
+
+# =============================================================================
+# Visual Schema Definitions — 前端 Remotion 模板与后端的数据契约
+# =============================================================================
+
+class TitleIntroVisual(BaseModel):
+    """title_intro 场景的 visual 字段结构。
+
+    前端模板 TitleIntroPro.tsx 需要的字段。
+    """
+    course: str = Field(default="", description="课程名称")
+    chapter: str = Field(default="", description="章节名称")
+    subtitle: str = Field(default="", description="副标题")
+    tags: list[str] = Field(default_factory=list, description="标签列表")
+    hero_keywords: list[str] = Field(default_factory=list, description="核心关键词")
+
+
+class ConceptExplainVisual(BaseModel):
+    """concept_explain 场景的 visual 字段结构。
+
+    前端模板 ConceptExplainPro.tsx 需要的字段。
+    """
+    main_concept: str = Field(default="", description="核心概念名称")
+    definition: str = Field(default="", description="概念定义")
+    keywords: list[str] = Field(default_factory=list, description="关键词标签")
+    why_it_matters: list[str] = Field(default_factory=list, description="重要性要点")
+    related_concepts: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="相关概念，每项包含 name 和 relation"
+    )
+    common_misconception: str = Field(default="", description="常见误解")
+
+
+class ProcessFlowVisual(BaseModel):
+    """process_flow 场景的 visual 字段结构。
+
+    前端模板 ProcessFlowPro.tsx 需要的字段。
+    """
+    process_name: str = Field(default="", description="流程名称")
+    inputs: list[str] = Field(default_factory=list, description="输入要求")
+    outputs: list[str] = Field(default_factory=list, description="输出结果")
+    steps: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="流程步骤，每项包含 id, label, description, icon"
+    )
+    failure_points: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="故障点，每项包含 step_id 和 reason"
+    )
+
+
+class StateMachineVisual(BaseModel):
+    """state_machine 场景的 visual 字段结构。
+
+    前端模板 StateMachineLab.tsx 需要的字段。
+    """
+    machine_name: str = Field(default="", description="状态机名称")
+    states: list[str] = Field(default_factory=list, description="状态列表")
+    transitions: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="状态转换，每项包含 from, to, trigger, description"
+    )
+    initial_state: str = Field(default="", description="初始状态")
+    current_state: str = Field(default="", description="当前状态")
+
+
+class DataStructureVisual(BaseModel):
+    """data_structure 场景的 visual 字段结构。
+
+    前端模板 DataStructureLab.tsx 需要的字段。
+    """
+    structure_name: str = Field(default="", description="数据结构名称")
+    structure_type: str = Field(default="", description="类型如 array, linked_list, tree")
+    nodes: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="节点数据，每项包含 id, value, connections"
+    )
+    operations: list[str] = Field(default_factory=list, description="支持的操作")
+    complexity: dict[str, str] = Field(default_factory=dict, description="时间复杂度")
+
+
+class AlgorithmTraceVisual(BaseModel):
+    """algorithm_trace 场景的 visual 字段结构。
+
+    前端模板 AlgorithmTraceBoard.tsx 需要的字段。
+    """
+    algorithm_name: str = Field(default="", description="算法名称")
+    input_data: list[Any] = Field(default_factory=list, description="输入数据")
+    steps: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="算法步骤，每项包含 step_index, state, description, highlight_indices"
+    )
+    complexity: str = Field(default="", description="复杂度说明")
+
+
+class MemoryLayoutVisual(BaseModel):
+    """memory_layout 场景的 visual 字段结构。
+
+    前端模板 MemoryLayoutLab.tsx 需要的字段。
+    """
+    layout_name: str = Field(default="", description="内存布局名称")
+    segments: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="内存段，每项包含 name, start, end, content, active"
+    )
+    address_range: str = Field(default="", description="地址范围")
+    active_segment: str = Field(default="", description="当前活跃段")
+
+
+class CpuArchitectureVisual(BaseModel):
+    """cpu_architecture 场景的 visual 字段结构。
+
+    前端模板 CpuArchitectureLab.tsx 需要的字段。
+    """
+    architecture_name: str = Field(default="", description="架构名称")
+    components: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="组件，每项包含 name, type, description, active"
+    )
+    data_flow: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="数据流，每项包含 from, to, label"
+    )
+    active_component: str = Field(default="", description="当前活跃组件")
+
+
+class NetworkProtocolVisual(BaseModel):
+    """network_protocol 场景的 visual 字段结构。
+
+    前端模板 NetworkProtocolTimeline.tsx 需要的字段。
+    """
+    protocol_name: str = Field(default="", description="协议名称")
+    participants: list[str] = Field(default_factory=list, description="参与方")
+    messages: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="消息，每项包含 seq, from, to, content, type"
+    )
+    current_step: int = Field(default=0, description="当前步骤")
+
+
+class LayeredArchitectureVisual(BaseModel):
+    """layered_architecture 场景的 visual 字段结构。
+
+    前端模板 LayeredArchitectureScene.tsx 需要的字段。
+    """
+    system_name: str = Field(default="", description="系统名称")
+    layers: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="层级，每项包含 name, responsibility, components, active"
+    )
+    data_flow_direction: str = Field(default="down", description="数据流方向")
+
+
+class CodeExecutionVisual(BaseModel):
+    """code_execution 场景的 visual 字段结构。
+
+    前端模板 CodeExecutionLab.tsx 需要的字段。
+    """
+    language: str = Field(default="python", description="编程语言")
+    code: str = Field(default="", description="代码内容")
+    steps: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="执行步骤，每项包含 step_index, active_line, description, variables, call_stack"
+    )
+    output: str = Field(default="", description="输出结果")
+    error_or_misconception: str = Field(default="", description="错误或误解说明")
+
+
+class CompareSummaryVisual(BaseModel):
+    """compare_summary 场景的 visual 字段结构。
+
+    前端模板 CompareSummaryPro.tsx 需要的字段。
+    """
+    comparison_title: str = Field(default="", description="对比标题")
+    items: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="对比项，每项包含 name, attributes"
+    )
+    dimensions: list[str] = Field(default_factory=list, description="对比维度")
+    conclusion: str = Field(default="", description="总结结论")
+
+
+class KnowledgeCheckVisual(BaseModel):
+    """knowledge_check 场景的 visual 字段结构。
+
+    前端模板 KnowledgeCheckScene.tsx 需要的字段。
+    """
+    question: str = Field(default="", description="问题")
+    options: list[str] = Field(default_factory=list, description="选项")
+    correct_answer: str = Field(default="", description="正确答案")
+    explanation: str = Field(default="", description="解释说明")
+    difficulty: str = Field(default="medium", description="难度")
+
+
+class ArrayLinkedListVisual(BaseModel):
+    """array_linked_list 场景的 visual 字段结构。
+
+    前端模板 ArrayLinkedListLab.tsx 需要的字段。
+    """
+    structure_type: str = Field(default="array", description="结构类型: array 或 linked_list")
+    nodes: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="节点数据，每项包含 value, index, highlight, status"
+    )
+    operations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="操作序列，每项包含 type, indices, description"
+    )
+    pointer_name: str = Field(default="", description="指针名称")
+    time_complexity: str = Field(default="", description="时间复杂度")
+    space_complexity: str = Field(default="", description="空间复杂度")
+
+
+class StackQueueVisual(BaseModel):
+    """stack_queue 场景的 visual 字段结构。
+
+    前端模板 StackQueueLab.tsx 需要的字段。
+    """
+    structure_type: str = Field(default="stack", description="结构类型: stack 或 queue")
+    items: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="数据项，每项包含 value, status"
+    )
+    operations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="操作序列，每项包含 type, value, description"
+    )
+    peek_value: str = Field(default="", description="栈顶/队头值")
+    time_complexity: str = Field(default="", description="时间复杂度")
+
+
+class ProcessStateVisual(BaseModel):
+    """process_state 场景的 visual 字段结构。
+
+    前端模板 ProcessStateTransition.tsx 需要的字段。
+    """
+    states: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="进程状态，每项包含 name, label, description"
+    )
+    transitions: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="状态转换，每项包含 from, to, trigger, description"
+    )
+    current_process: str = Field(default="", description="当前进程名")
+    highlight_path: list[str] = Field(default_factory=list, description="高亮路径")
+
+
+class StorageHierarchyVisual(BaseModel):
+    """storage_hierarchy 场景的 visual 字段结构。
+
+    前端模板 StorageHierarchy.tsx 需要的字段。
+    """
+    levels: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="存储层级，每项包含 name, label, capacity, access_time, cost_per_gb, level"
+    )
+    transfers: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="数据传输，每项包含 from, to, data_size, description"
+    )
+    highlight_level: str = Field(default="", description="高亮层级")
+
+
+# VisualType 到 Schema 的映射
+VISUAL_SCHEMAS: dict[str, type[BaseModel]] = {
+    "title_intro": TitleIntroVisual,
+    "concept_explain": ConceptExplainVisual,
+    "process_flow": ProcessFlowVisual,
+    "state_machine": StateMachineVisual,
+    "data_structure": DataStructureVisual,
+    "algorithm_trace": AlgorithmTraceVisual,
+    "memory_layout": MemoryLayoutVisual,
+    "cpu_architecture": CpuArchitectureVisual,
+    "network_protocol": NetworkProtocolVisual,
+    "layered_architecture": LayeredArchitectureVisual,
+    "code_execution": CodeExecutionVisual,
+    "compare_summary": CompareSummaryVisual,
+    "knowledge_check": KnowledgeCheckVisual,
+    # CS Theory templates
+    "array_linked_list": ArrayLinkedListVisual,
+    "stack_queue": StackQueueVisual,
+    "process_state": ProcessStateVisual,
+    "storage_hierarchy": StorageHierarchyVisual,
+    # Backward compatibility mappings
+    "card": TitleIntroVisual,
+    "diagram": ConceptExplainVisual,
+    "code": CodeExecutionVisual,
+    "timeline": ProcessFlowVisual,
+    "comparison": CompareSummaryVisual,
+    "quiz": KnowledgeCheckVisual,
+}
 
 
 class VideoConstraints(BaseModel):

@@ -14,7 +14,7 @@ from typing import Annotated, Any, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.channels.untracked_value import UntrackedValue
 
-from app.chat.schemas import ChatStreamEvent, ClassificationResult
+from app.chat.schemas import TutorRuntimeEvent, ClassificationResult
 
 
 class TutorAgentState(TypedDict, total=False):
@@ -45,7 +45,7 @@ class TutorAgentState(TypedDict, total=False):
 
     # 运行时（列表字段用约简器，Queue 用 UntrackedValue）
     tool_invocations: Annotated[list[dict[str, Any]], operator.add]
-    stream_events: Annotated[list[ChatStreamEvent], operator.add]
+    stream_events: Annotated[list[TutorRuntimeEvent], operator.add]
     event_queue: Annotated[asyncio.Queue, UntrackedValue]
     errors: Annotated[list[str], operator.add]
 

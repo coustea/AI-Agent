@@ -239,165 +239,331 @@ def test_reading_agent_execute_success():
 
 
 def test_ppt_agent_execute_success():
+    """PPT Agent 使用新的两阶段架构生成课件。"""
     async def run():
         from app.resource.agents.ppt import PptAgent
-        from app.resource.agents.ppt import (
-            PptPayload, PptSlide, BlockHeading, BlockText, BlockCode,
-            MaterialDigest, DeckOutline, SlideContract, BlockContract,
-            SlideDraft, RenderedBlock,
+        from app.resource.ppt_contract import (
+            DeckBlueprint, ChapterBlueprint, SlideBlueprint,
+            CompiledDeck, CompiledChapter, CompiledSlide,
+            CompiledBlock, BlockBudget,
+            ChapterDraft, SlideContentDraft,
+            TextBlock, KeyPointBlock,
         )
         from unittest.mock import AsyncMock, patch
 
-        digest = MaterialDigest(topic="Python", audience="学生", learning_goal="学习语法")
-        outline = DeckOutline(
-            topic="Python", title="Python 基础", theme="theme-logic-blue",
-            audience_level="intermediate", narrative="从语法到执行",
-            slides=[
-                SlideContract(slide_id="s1", index=1, role="cover",
-                    title="Python 基础", learning_objective="学习语法",
-                    layout="FocusTitle",
-                    blocks=[BlockContract(block_id="b1", slot="main", type="Heading",
-                              required_fields=["text"], content_hint="h")]),
-                SlideContract(slide_id="s2", index=2, role="agenda",
-                    title="目录", learning_objective="了解结构",
-                    layout="BentoGrid",
-                    blocks=[BlockContract(block_id="b2", slot="main", type="Heading",
-                              required_fields=["text"], content_hint="h")]),
-                SlideContract(slide_id="s3", index=3, role="concept",
-                    title="变量", learning_objective="理解变量",
-                    layout="SplitScreen",
-                    blocks=[
-                        BlockContract(block_id="b3", slot="left", type="Heading",
-                                      required_fields=["text"], content_hint="h"),
-                        BlockContract(block_id="b4", slot="right", type="Code",
-                                      required_fields=["language", "code"], content_hint="c"),
-                    ]),
+        blueprint = DeckBlueprint(
+            template_id="teaching-lesson",
+            theme_id="logic-blue",
+            title="Python 基础",
+            audience="计算机专业学生",
+            narrative="从语法基础到实践应用",
+            primary_example="Python 变量定义",
+            terminology={"变量": "存储数据的容器"},
+            chapters=[
+                ChapterBlueprint(
+                    chapter_id="ch1",
+                    title="变量基础",
+                    objective="帮助学生理解变量的概念",
+                    slides=[
+                        SlideBlueprint(
+                            slide_id="slide-01",
+                            index=1,
+                            role="cover",
+                            title="Python 基础",
+                            teaching_intent="介绍本节课的主题内容",
+                            unique_value="课件封面",
+                            composition_id="cover-slide",
+                        ),
+                        SlideBlueprint(
+                            slide_id="slide-02",
+                            index=2,
+                            role="objectives",
+                            title="学习目标",
+                            teaching_intent="明确本节的学习目标",
+                            unique_value="学习目标页",
+                            composition_id="learning-objectives",
+                        ),
+                        SlideBlueprint(
+                            slide_id="slide-03",
+                            index=3,
+                            role="concept",
+                            title="变量定义",
+                            teaching_intent="讲解变量的核心概念",
+                            unique_value="核心概念讲解",
+                            composition_id="core-concept",
+                        ),
+                        SlideBlueprint(
+                            slide_id="slide-04",
+                            index=4,
+                            role="summary",
+                            title="本节小结",
+                            teaching_intent="总结本节课的核心内容",
+                            unique_value="知识框架总结",
+                            composition_id="knowledge-summary",
+                        ),
+                    ],
+                ),
+                ChapterBlueprint(
+                    chapter_id="ch2",
+                    title="数据类型",
+                    objective="理解 Python 的基本数据类型",
+                    slides=[
+                        SlideBlueprint(
+                            slide_id="slide-05",
+                            index=5,
+                            role="concept",
+                            title="数据类型概述",
+                            teaching_intent="介绍 Python 的基本数据类型",
+                            unique_value="数据类型概念",
+                            composition_id="core-concept",
+                        ),
+                        SlideBlueprint(
+                            slide_id="slide-06",
+                            index=6,
+                            role="summary",
+                            title="章节总结",
+                            teaching_intent="总结变量与数据类型",
+                            unique_value="章节收尾",
+                            composition_id="knowledge-summary",
+                        ),
+                    ],
+                ),
             ],
         )
-        drafts = [
-            SlideDraft(slide_id="s1", index=1, title="Python 基础",
-                blocks=[RenderedBlock(block_id="b1", type="Heading", data={"text": "Python 基础"})],
-                speaker_notes=""),
-            SlideDraft(slide_id="s2", index=2, title="目录",
-                blocks=[RenderedBlock(block_id="b2", type="Heading", data={"text": "目录"})],
-                speaker_notes=""),
-            SlideDraft(slide_id="s3", index=3, title="变量",
-                blocks=[
-                    RenderedBlock(block_id="b3", type="Heading", data={"text": "变量"}),
-                    RenderedBlock(block_id="b4", type="Code", data={"language": "python", "code": "x = 1"}),
-                ],
-                speaker_notes="讲解变量"),
-        ]
 
-        with patch("app.resource.agents.ppt.MaterialAgent") as MockM, \
-             patch("app.resource.agents.ppt.OutlineAgent") as MockO, \
-             patch("app.resource.agents.ppt.SlideAgent") as MockS, \
-             patch("app.resource.agents.ppt.PayloadBuilder") as MockB:
+        compiled = CompiledDeck(
+            template_id="teaching-lesson",
+            theme_id="logic-blue",
+            title="Python 基础",
+            audience="计算机专业学生",
+            chapters=[
+                CompiledChapter(
+                    chapter_id="ch1",
+                    title="变量基础",
+                    objective="帮助学生理解变量的概念",
+                    slides=[
+                        CompiledSlide(
+                            slide_id="slide-01",
+                            index=1,
+                            role="cover",
+                            title="Python 基础",
+                            subtitle=None,
+                            teaching_intent="介绍本节课的主题内容",
+                            unique_value="课件封面",
+                            layout="HeroCover",
+                            blocks=[
+                                CompiledBlock(
+                                    block_id="course-title",
+                                    slot="main",
+                                    type="Text",
+                                    instruction="课程标题",
+                                    budget=BlockBudget(max_chars=120),
+                                ),
+                                CompiledBlock(
+                                    block_id="topic-title",
+                                    slot="main",
+                                    type="KeyPoint",
+                                    instruction="主题标签",
+                                    budget=BlockBudget(max_chars=64),
+                                ),
+                            ],
+                        ),
+                        CompiledSlide(
+                            slide_id="slide-02",
+                            index=2,
+                            role="objectives",
+                            title="学习目标",
+                            subtitle=None,
+                            teaching_intent="明确本节的学习目标",
+                            unique_value="学习目标页",
+                            layout="HeroCover",
+                            blocks=[
+                                CompiledBlock(
+                                    block_id="objective-summary",
+                                    slot="main",
+                                    type="KeyPoint",
+                                    instruction="学习目标",
+                                    budget=BlockBudget(max_chars=64),
+                                ),
+                            ],
+                        ),
+                        CompiledSlide(
+                            slide_id="slide-03",
+                            index=3,
+                            role="concept",
+                            title="变量定义",
+                            subtitle=None,
+                            teaching_intent="讲解变量的核心概念",
+                            unique_value="核心概念讲解",
+                            layout="HeroCover",
+                            blocks=[
+                                CompiledBlock(
+                                    block_id="definition",
+                                    slot="main",
+                                    type="Text",
+                                    instruction="变量定义",
+                                    budget=BlockBudget(max_chars=120),
+                                ),
+                            ],
+                        ),
+                        CompiledSlide(
+                            slide_id="slide-04",
+                            index=4,
+                            role="summary",
+                            title="本节小结",
+                            subtitle=None,
+                            teaching_intent="总结本节课的核心内容",
+                            unique_value="知识框架总结",
+                            layout="HeroCover",
+                            blocks=[
+                                CompiledBlock(
+                                    block_id="summary-highlight",
+                                    slot="main",
+                                    type="KeyPoint",
+                                    instruction="总结要点",
+                                    budget=BlockBudget(max_chars=64),
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+                CompiledChapter(
+                    chapter_id="ch2",
+                    title="数据类型",
+                    objective="理解 Python 的基本数据类型",
+                    slides=[
+                        CompiledSlide(
+                            slide_id="slide-05",
+                            index=5,
+                            role="concept",
+                            title="数据类型概述",
+                            subtitle=None,
+                            teaching_intent="介绍 Python 的基本数据类型",
+                            unique_value="数据类型概念",
+                            layout="HeroCover",
+                            blocks=[
+                                CompiledBlock(
+                                    block_id="type-intro",
+                                    slot="main",
+                                    type="Text",
+                                    instruction="数据类型介绍",
+                                    budget=BlockBudget(max_chars=120),
+                                ),
+                            ],
+                        ),
+                        CompiledSlide(
+                            slide_id="slide-06",
+                            index=6,
+                            role="summary",
+                            title="章节总结",
+                            subtitle=None,
+                            teaching_intent="总结变量与数据类型",
+                            unique_value="章节收尾",
+                            layout="HeroCover",
+                            blocks=[
+                                CompiledBlock(
+                                    block_id="final-summary",
+                                    slot="main",
+                                    type="KeyPoint",
+                                    instruction="最终总结",
+                                    budget=BlockBudget(max_chars=64),
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+        )
 
-            MockM.return_value.run = AsyncMock(return_value=digest)
-            MockO.return_value.run = AsyncMock(return_value=outline)
-            drafts_map = {d.slide_id: d for d in drafts}
-            MockS.return_value.run = AsyncMock(side_effect=lambda contract, digest, outline: drafts_map[contract.slide_id])
-            MockB.return_value.build.return_value = PptPayload(
-                template_id="theme-logic-blue", topic="Python 基础",
-                author="AI", date="2026-06-15",
-                slides=[
-                    PptSlide(id="s1", layout="FocusTitle", slots={"main": [BlockHeading(id="b1", type="Heading", level=1, content="Python 基础")]}),
-                    PptSlide(id="s2", layout="BentoGrid", slots={"main": [BlockHeading(id="b2", type="Heading", level=2, content="目录")]}),
-                    PptSlide(id="s3", layout="SplitScreen", slots={
-                        "left": [BlockHeading(id="b3", type="Heading", level=2, content="变量")],
-                        "right": [BlockCode(id="b4", type="Code", language="python", code="x = 1")],
-                    }),
-                ],
-            )
+        draft_ch1 = ChapterDraft(
+            chapter_id="ch1",
+            slides=[
+                SlideContentDraft(
+                    slide_id="slide-01",
+                    blocks=[
+                        TextBlock(block_id="course-title", type="Text", content="Python 基础", format="plain"),
+                        KeyPointBlock(block_id="topic-title", type="KeyPoint", label="主题", content="变量与数据类型"),
+                    ],
+                    takeaway="Python 基础入门",
+                    speaker_notes="欢迎学习 Python 基础课程，今天我们将学习变量与数据类型。",
+                ),
+                SlideContentDraft(
+                    slide_id="slide-02",
+                    blocks=[
+                        KeyPointBlock(block_id="objective-summary", type="KeyPoint", label="目标", content="掌握变量定义"),
+                    ],
+                    takeaway="明确学习目标",
+                    speaker_notes="本节的学习目标是理解并掌握 Python 变量的定义和使用。",
+                ),
+                SlideContentDraft(
+                    slide_id="slide-03",
+                    blocks=[
+                        TextBlock(block_id="definition", type="Text", content="变量是存储数据的容器", format="plain"),
+                    ],
+                    takeaway="理解变量概念",
+                    speaker_notes="变量是程序中存储数据的基本单元，让我们通过示例来理解。",
+                ),
+                SlideContentDraft(
+                    slide_id="slide-04",
+                    blocks=[
+                        KeyPointBlock(block_id="summary-highlight", type="KeyPoint", label="总结", content="变量是基础"),
+                    ],
+                    takeaway="回顾本节要点",
+                    speaker_notes="本节我们学习了变量的基本概念，下节将学习数据类型。",
+                ),
+            ],
+        )
+
+        draft_ch2 = ChapterDraft(
+            chapter_id="ch2",
+            slides=[
+                SlideContentDraft(
+                    slide_id="slide-05",
+                    blocks=[
+                        TextBlock(block_id="type-intro", type="Text", content="Python 有多种数据类型", format="plain"),
+                    ],
+                    takeaway="认识数据类型",
+                    speaker_notes="Python 支持多种数据类型，包括整数、浮点数、字符串等。",
+                ),
+                SlideContentDraft(
+                    slide_id="slide-06",
+                    blocks=[
+                        KeyPointBlock(block_id="final-summary", type="KeyPoint", label="总结", content="掌握基础类型"),
+                    ],
+                    takeaway="课程总结",
+                    speaker_notes="本课程介绍了变量和数据类型，这是 Python 编程的基础。",
+                ),
+            ],
+        )
+
+        with patch("app.resource.agents.ppt.DeckDirectorAgent") as MockDirector, \
+             patch("app.resource.agents.ppt.ChapterWriterAgent") as MockWriter, \
+             patch("app.resource.agents.ppt.compile_deck", return_value=compiled):
+
+            MockDirector.return_value.run = AsyncMock(return_value=blueprint)
+            MockWriter.return_value.run = AsyncMock(side_effect=[draft_ch1, draft_ch2])
 
             agent = PptAgent(emitter=None)
-            result = await agent.generate_resource(_make_input("ppt", {"page_count": 3}))
+            result = await agent.generate_resource(_make_input("ppt", {"lesson_depth": "quick"}))
             assert result.success is True
             assert result.file_type == "json"
-            assert result.metrics.get("page_count") == 3
+            assert result.metrics.get("page_count") == 6
 
     asyncio.run(run())
 
 
 def test_ppt_agent_page_count_mismatch():
+    """PPT Agent 在页数不符合 depth 要求时返回失败。"""
     async def run():
         from app.resource.agents.ppt import PptAgent
-        from app.resource.agents.ppt import (
-            PptPayload, PptSlide, BlockHeading, BlockText, BlockCode,
-            MaterialDigest, DeckOutline, SlideContract, BlockContract,
-            SlideDraft, RenderedBlock,
-        )
         from unittest.mock import AsyncMock, patch
 
-        digest = MaterialDigest(topic="Python", audience="学生", learning_goal="学习语法")
-        outline = DeckOutline(
-            topic="Python", title="Python 基础", theme="theme-logic-blue",
-            audience_level="intermediate", narrative="从语法到执行",
-            slides=[
-                SlideContract(slide_id="s1", index=1, role="cover",
-                    title="Python 基础", learning_objective="学习语法",
-                    layout="FocusTitle",
-                    blocks=[BlockContract(block_id="b1", slot="main", type="Heading",
-                              required_fields=["text"], content_hint="h")]),
-                SlideContract(slide_id="s2", index=2, role="agenda",
-                    title="目录", learning_objective="了解结构",
-                    layout="BentoGrid",
-                    blocks=[BlockContract(block_id="b2", slot="main", type="Heading",
-                              required_fields=["text"], content_hint="h")]),
-                SlideContract(slide_id="s3", index=3, role="concept",
-                    title="变量", learning_objective="理解变量",
-                    layout="SplitScreen",
-                    blocks=[
-                        BlockContract(block_id="b3", slot="left", type="Heading",
-                                      required_fields=["text"], content_hint="h"),
-                        BlockContract(block_id="b4", slot="right", type="Code",
-                                      required_fields=["language", "code"], content_hint="c"),
-                    ]),
-            ],
-        )
-        drafts = [
-            SlideDraft(slide_id="s1", index=1, title="Python 基础",
-                blocks=[RenderedBlock(block_id="b1", type="Heading", data={"text": "Python 基础"})],
-                speaker_notes=""),
-            SlideDraft(slide_id="s2", index=2, title="目录",
-                blocks=[RenderedBlock(block_id="b2", type="Heading", data={"text": "目录"})],
-                speaker_notes=""),
-            SlideDraft(slide_id="s3", index=3, title="变量",
-                blocks=[
-                    RenderedBlock(block_id="b3", type="Heading", data={"text": "变量"}),
-                    RenderedBlock(block_id="b4", type="Code", data={"language": "python", "code": "x = 1"}),
-                ],
-                speaker_notes="讲解变量"),
-        ]
-
-        with patch("app.resource.agents.ppt.MaterialAgent") as MockM, \
-             patch("app.resource.agents.ppt.OutlineAgent") as MockO, \
-             patch("app.resource.agents.ppt.SlideAgent") as MockS, \
-             patch("app.resource.agents.ppt.PayloadBuilder") as MockB:
-
-            MockM.return_value.run = AsyncMock(return_value=digest)
-            MockO.return_value.run = AsyncMock(return_value=outline)
-            drafts_map = {d.slide_id: d for d in drafts}
-            MockS.return_value.run = AsyncMock(side_effect=lambda contract, digest, outline: drafts_map[contract.slide_id])
-            MockB.return_value.build.return_value = PptPayload(
-                template_id="theme-logic-blue", topic="Python 基础",
-                author="AI", date="2026-06-15",
-                slides=[
-                    PptSlide(id="s1", layout="FocusTitle", slots={"main": [BlockHeading(id="b1", type="Heading", level=1, content="Python 基础")]}),
-                    PptSlide(id="s2", layout="BentoGrid", slots={"main": [BlockHeading(id="b2", type="Heading", level=2, content="目录")]}),
-                    PptSlide(id="s3", layout="SplitScreen", slots={
-                        "left": [BlockHeading(id="b3", type="Heading", level=2, content="变量")],
-                        "right": [BlockCode(id="b4", type="Code", language="python", code="x = 1")],
-                    }),
-                ],
-            )
-
+        with patch("app.resource.agents.ppt.DeckDirectorAgent") as MockDirector:
+            MockDirector.return_value.run = AsyncMock(side_effect=ValueError("slide count 4 is invalid for depth standard"))
             agent = PptAgent(emitter=None)
-            result = await agent.generate_resource(_make_input("ppt", {"page_count": 6}))
+            result = await agent.generate_resource(_make_input("ppt", {"lesson_depth": "standard"}))
             assert result.success is False
-            assert "期望 6 页" in result.error
-            assert "实际 3 页" in result.error
+            assert "invalid for depth" in result.error
 
     asyncio.run(run())
 
@@ -437,16 +603,17 @@ def test_content_agent_llm_failure_raises():
 
 
 def test_ppt_agent_pipeline_failure_returns_failed_result():
+    """PPT Agent 在 Director 阶段失败时返回失败结果。"""
     async def run():
         from app.resource.agents.ppt import PptAgent
         from unittest.mock import AsyncMock, patch
 
-        with patch("app.resource.agents.ppt.MaterialAgent") as MockM:
-            MockM.return_value.run = AsyncMock(side_effect=RuntimeError("素材提取失败"))
+        with patch("app.resource.agents.ppt.DeckDirectorAgent") as MockDirector:
+            MockDirector.return_value.run = AsyncMock(side_effect=RuntimeError("课件规划失败"))
             agent = PptAgent(emitter=None)
             result = await agent.generate_resource(_make_input("ppt"))
             assert result.success is False
-            assert "素材提取失败" in result.error
+            assert "课件规划失败" in result.error
     asyncio.run(run())
 
 

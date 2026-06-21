@@ -117,13 +117,13 @@
         :class="['resource-preview-dialog', { 'is-ppt-dialog': previewItem?.type === 'ppt' }]"
     >
       <div v-if="previewItem" class="preview-dialog-body" :class="{ 'is-ppt-preview': previewItem.type === 'ppt' }">
-        <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem" />
-        <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem" />
-        <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem" />
-        <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem" />
-        <PptView v-else-if="previewItem.type === 'ppt'" :result-data="previewItem" />
-        <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem" />
-        <MarkdownView v-else :result-data="previewItem" />
+        <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem.content" />
+        <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem.content" />
+        <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem.content" />
+        <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem.content" />
+        <PptView v-else-if="previewItem.type === 'ppt' && previewPptDocument" :document-data="previewPptDocument" />
+        <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem.content" />
+        <MarkdownView v-else :result-data="previewItem.content" />
       </div>
     </el-dialog>
   </div>
@@ -143,6 +143,9 @@ import PptView from '@/features/resource/components/PptView.vue'
 import VideoView from '@/features/resource/components/VideoView.vue'
 import { getGeneratedResourceDetail } from '@/features/resource/api/resource-history'
 import type { GeneratedResourceBundle, ResourceItemDetail } from '@/features/resource/api/resource-history'
+import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
+
+const RESOURCE_TYPES = new Set(['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'video'])
 
 const route = useRoute()
 const router = useRouter()
@@ -156,6 +159,12 @@ const previewVisible = ref(false)
 const previewTitle = computed(() => {
   if (!previewItem.value) return '资源预览'
   return previewItem.value.title || `${getAgentTypeName(previewItem.value.type)}资源`
+})
+
+const previewPptDocument = computed(() => {
+  if (previewItem.value?.type !== 'ppt') return null
+  const parsed = parsePptDocument(previewItem.value.content)
+  return parsed.ok ? parsed.document : null
 })
 
 const resourceId = computed(() => Number(route.params.id) || null)
@@ -176,7 +185,11 @@ const loadResource = async () => {
   try {
     const res = await getGeneratedResourceDetail(resourceId.value)
     if (res.data && res.data.data) {
-      resource.value = res.data.data
+      const bundle = res.data.data
+      resource.value = {
+        ...bundle,
+        resources: bundle.resources.filter(isValidPersistedResource),
+      }
     } else {
       error.value = true
     }
@@ -247,10 +260,36 @@ const getAgentTypeName = (type: string) => {
 }
 
 const hasPreviewContent = (item: ResourceItemDetail) => {
-  if (item.content != null && String(item.content).trim()) return true
-  if (item.metrics && Object.keys(item.metrics).length) return true
-  if (item.metadata && Object.keys(item.metadata).length) return true
-  return false
+  return hasContent(item.content)
+}
+
+function hasContent(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  return Boolean(value) && typeof value === 'object' && Object.keys(value as object).length > 0
+}
+
+function isValidPersistedResource(item: ResourceItemDetail): boolean {
+  if (!RESOURCE_TYPES.has(item.type) || !['finished', 'completed'].includes(item.status) || !hasContent(item.content)) {
+    console.error('Invalid persisted resource artifact omitted', {
+      resourceId: item.id,
+      type: item.type,
+      status: item.status,
+    })
+    return false
+  }
+  if (item.type === 'ppt') {
+    const parsed = parsePptDocument(item.content)
+    if (!parsed.ok) {
+      console.error('Invalid persisted PPT artifact omitted', {
+        resourceId: item.id,
+        reason: parsed.reason,
+        details: parsed.details,
+      })
+      return false
+    }
+  }
+  return true
 }
 
 const openResourcePreview = (item: ResourceItemDetail) => {
@@ -270,27 +309,25 @@ const exportToLocal = async (item: ResourceItemDetail) => {
   let ext = '.md'
   let mimeType = 'text/markdown'
 
-  // 1. 尝试从不同字段获取可导出的内容，并自动判断格式
-  if (item.content != null && String(item.content).trim()) {
-    contentStr = String(item.content)
-    // 简单试探内容是否为原生 JSON
+  // 1. 只导出持久化资源正文，不使用 metadata 或 metrics 代替正文
+  if (typeof item.content === 'string' && item.content.trim()) {
+    contentStr = item.content
     if (contentStr.trim().startsWith('{') || contentStr.trim().startsWith('[')) {
       try {
         JSON.parse(contentStr)
         ext = '.json'
         mimeType = 'application/json'
-      } catch (e) {
-        // 如果解析失败，则按正常的 markdown/普通文本处理
-      }
+      } catch {}
     }
-  } else if (item.metrics && Object.keys(item.metrics).length > 0) {
-    contentStr = JSON.stringify(item.metrics, null, 2)
+  } else if (item.content && typeof item.content === 'object') {
+    contentStr = JSON.stringify(item.content, null, 2)
     ext = '.json'
     mimeType = 'application/json'
-  } else if (item.metadata && Object.keys(item.metadata).length > 0) {
-    contentStr = JSON.stringify(item.metadata, null, 2)
-    ext = '.json'
-    mimeType = 'application/json'
+  }
+
+  if (!contentStr.trim()) {
+    ElMessage.error('资源正文为空，无法导出')
+    return
   }
 
   // 2. 构造默认文件名
@@ -316,7 +353,7 @@ const exportToLocal = async (item: ResourceItemDetail) => {
       await writable.close()
       ElMessage.success('已成功导出到本地')
     } else {
-      // 4. 降级方案：使用传统 <a> 标签下载（路径由浏览器控制，通常在浏览器设置里可以开启“下载前询问每个文件的保存位置”）
+      // 4. 浏览器标准下载流程
       const blob = new Blob([contentStr], { type: mimeType })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')

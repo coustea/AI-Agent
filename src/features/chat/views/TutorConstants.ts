@@ -1,4 +1,4 @@
-import type { TeachingDiagram } from '@/features/chat/model/chat'
+import type { AgentActivity, TeachingDiagram } from '@/features/chat/model/chat'
 
 export interface PendingFile {
   file?: File
@@ -16,6 +16,46 @@ export interface Attachment {
 
 export type ContextCompressionStage = 'compression_checking' | 'compression_running' | 'compression_done'
 
+/** Agent 工作状态 - 基于后端事件 */
+export type AgentStage =
+  | 'idle'           // 空闲
+  | 'classifying'    // 正在分析问题
+  | 'analyzing_files' // 正在分析附件
+  | 'searching'      // 正在搜索资料
+  | 'reading_profile' // 正在了解学习情况
+  | 'reading_memory'  // 正在回顾学习记录
+  | 'searching_knowledge' // 正在检索知识库
+  | 'generating'     // 正在生成回答
+  | 'generating_diagram' // 正在生成图解
+
+/** 工具名称到状态的映射 */
+export const TOOL_NAME_TO_STAGE: Record<string, AgentStage> = {
+  'duckduckgo_search': 'searching',
+  'duckduckgo_instant_answer': 'searching',
+  'tavily_search': 'searching',
+  'spark_search': 'searching',
+  'open_web_page': 'searching',
+  'find_in_web_page': 'searching',
+  'extract_web_links': 'searching',
+  'read_web_pdf': 'searching',
+  'get_learner_profile': 'reading_profile',
+  'get_long_term_memory': 'reading_memory',
+  'search_knowledge_base': 'searching_knowledge',
+}
+
+/** 状态对应的展示文案 */
+export const STAGE_MESSAGE: Record<AgentStage, string> = {
+  idle: '',
+  classifying: '正在分析问题...',
+  analyzing_files: '正在分析附件...',
+  searching: '正在搜索资料...',
+  reading_profile: '正在了解你的学习情况...',
+  reading_memory: '正在回顾学习记录...',
+  searching_knowledge: '正在检索知识库...',
+  generating: '正在生成回答...',
+  generating_diagram: '正在生成教学图解...',
+}
+
 export interface ChatMsg {
   id: number
   role: 'user' | 'ai'
@@ -24,8 +64,15 @@ export interface ChatMsg {
   attachments?: Attachment[] | null
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
+  /** @deprecated 使用 agentStage 替代 */
   searchStage?: string
+  /** @deprecated 使用 agentStage 替代 */
   searchMessage?: string
+  /** Agent 当前工作状态 - 基于后端事件 */
+  agentStage?: AgentStage
+  /** 当前正在执行的工具列表 */
+  activeTools?: string[]
+  agentActivities?: AgentActivity[]
   contextCompressionStage?: ContextCompressionStage
   contextCompressionMessage?: string
 }

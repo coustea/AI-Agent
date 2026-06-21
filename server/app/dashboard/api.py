@@ -29,7 +29,9 @@ from app.infra.models import (
 from app.infra.response import HttpResponse
 from app.profile.service import get_profile_service
 from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
-from app.resource.constants import STANDALONE_RESOURCE_SOURCES
+
+# 资源源类型常量
+STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

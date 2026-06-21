@@ -28,11 +28,9 @@ from app.infra.models import (
     School,
 )
 from app.profile.types import (
-    GLOBAL_DIMENSIONS,
-    SCORE_DIMENSIONS,
     ALL_DIMENSIONS,
     DIMENSION_NAMES,
-    GlobalDimensionValue,
+    DimensionValue,
     OnboardingGlobalInferenceOutput,
     GlobalTutoringInferenceOutput,
     ProfileScoreOutput,
@@ -94,17 +92,17 @@ def validate_course_markdown(markdown_text: str, course_name: str) -> str:
 
 
 def merge_global_dimensions(profile_json: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    """合并全局画像维度增量更新。只更新支持的七个全局维度。"""
+    """合并全局画像维度增量更新。只更新支持的七个维度。"""
     merged = deepcopy(profile_json) if profile_json else make_default_profile_json()
     dimensions = merged.setdefault("dimensions", {})
     for key, val in patch.items():
-        if key in GLOBAL_DIMENSIONS:
+        if key in ALL_DIMENSIONS:
             if isinstance(val, dict):
                 dimensions[key] = {
                     "value": str(val.get("value", "")).strip(),
                     "evidence": [str(item).strip() for item in val.get("evidence", []) if str(item).strip()],
                 }
-            elif isinstance(val, GlobalDimensionValue):
+            elif isinstance(val, DimensionValue):
                 dimensions[key] = {
                     "value": val.value.strip(),
                     "evidence": [item.strip() for item in val.evidence if item.strip()],
@@ -116,12 +114,12 @@ def validate_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
     """对打分输出进行后置验证与清洗：
     1. 限制分数在 0..100 之间；
     2. 如果某维度无任何证据记录（为空列表），强制给该维度评分置为 0；
-    3. 总体评分为 10 个维度洗净后分数的算术平均值（四舍五入到整数）；
+    3. 总体评分为 7 个维度洗净后分数的算术平均值（四舍五入到整数）；
     4. 自动记录评分时间。
     """
     scores = {}
     evidence = {}
-    for key in SCORE_DIMENSIONS:
+    for key in ALL_DIMENSIONS:
         # 提取并清洗证据
         items = [str(item).strip() for item in raw.dimension_evidence.get(key, []) if str(item).strip()]
         evidence[key] = items
@@ -140,7 +138,7 @@ def validate_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
 
         scores[key] = max(0, min(100, round(float(raw_score))))
 
-    overall = round(sum(scores.values()) / len(SCORE_DIMENSIONS))
+    overall = round(sum(scores.values()) / len(ALL_DIMENSIONS))
 
     return {
         "overall_score": overall,
@@ -353,7 +351,7 @@ class ProfileService:
                 )
 
                 # 精简输出维度推理结果
-                dims_summary = {k: v.value[:50] if isinstance(v, GlobalDimensionValue) else str(v)[:50]
+                dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
                                 for k, v in resp.dimensions_patch.items()}
                 logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
                             user_id, dims_summary)

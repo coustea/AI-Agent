@@ -135,8 +135,6 @@ class QuizAgent(BaseResourceAgent):
             QuizPayload,
             full_prompt,
             temperature=INFERENCE_TEMPERATURE,
-            function_name="generate_quiz",
-            function_description="生成习题集",
         )
 
         quiz_data = result.model_dump(mode="json")

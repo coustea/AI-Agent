@@ -1,7 +1,4 @@
-"""资源域 Schema — 从子模块重新导出，保持向后兼容。
-
-所有外部导入 ``from app.resource.schemas import X`` 继续可用。
-"""
+"""资源域公共 Schema 导出。"""
 
 # ── Meta ──────────────────────────────────────────────────────────────────
 from app.resource.schemas.meta import (

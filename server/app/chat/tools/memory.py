@@ -74,10 +74,9 @@ def make_get_long_term_memory(
         try:
             # 调用记忆服务获取指定分类的 Markdown 格式记忆内容
             markdown = await svc.get_memory_markdown(request.user_id, category=category_value)
+            return _compact(f"长期记忆读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
             logger.warning("[get_long_term_memory] failed: %s", exc)
             return "暂时无法读取长期学习记忆。"
-        # 将记忆内容与读取原因拼接，方便 LLM 理解上下文
-        return _compact(f"长期记忆读取原因: {reason or '未提供'}\n{markdown}")
 
     return _impl

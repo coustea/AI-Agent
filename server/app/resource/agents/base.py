@@ -13,7 +13,7 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from app.resource.events import AgentEventEmitter
+    from app.infra.agent_events import AgentEventEmitter
     from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
 

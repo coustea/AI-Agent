@@ -3,37 +3,22 @@
 export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
-type ResourceStreamEventName = 'agent' | 'done'
-  | 'agent.snapshot'
-  | 'agent.step'
-  | 'agent.heartbeat'
-  | 'agent.artifact_ready'
+export type PptDifficulty = 'beginner' | 'intermediate' | 'advanced'
+export type PptLessonDepth = 'quick' | 'standard' | 'deep'
+export type PptLessonKind = 'auto' | 'concept' | 'algorithm' | 'system' | 'debugging' | 'project'
+export type PptLearningFocus = 'balanced' | 'concept' | 'code' | 'practice'
 
-/** Agent 状态值 */
-type AgentStatus = 'running' | 'finished' | 'failed' | 'skipped'
-
-/** 单条 SSE 事件数据 — 与后端 AgentEvent 对齐 */
-export interface ResourceStreamEvent {
-  event_type: ResourceStreamEventName
-  agent_id?: string | null
-  status?: AgentStatus | null
+export type ResourceAgentSnapshot = {
+  agent_id: string
+  event_type?: string
+  status?: string | null
   message?: string | null
-  progress: number
-  run_id?: string | null
-  span_id?: string | null
+  progress?: number
   phase?: string | null
   elapsed_ms?: number | null
   metrics?: Record<string, any>
-  dependency?: string | null
   artifact_id?: string | null
-  /** done 事件专用 */
-  success?: boolean | null
-  timestamp: number
-}
-
-export type ResourceAgentSnapshot = Partial<ResourceStreamEvent> & {
-  agent_id: string
-  progress?: number
+  timestamp?: number
 }
 
 export interface ResourceGenerationRequest {
@@ -78,8 +63,10 @@ export interface ResourceGenerationRequest {
       language_preference: 'chinese' | 'english' | 'both'
     }
     ppt: {
-      page_count: number
-      difficulty: 'beginner' | 'intermediate' | 'advanced'
+      difficulty: PptDifficulty
+      lesson_depth: PptLessonDepth
+      lesson_kind: PptLessonKind
+      learning_focus: PptLearningFocus
     }
     video: {
       duration_seconds: number

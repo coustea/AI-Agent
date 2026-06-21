@@ -26,8 +26,6 @@ from app.chat.agent.nodes import (
     diagram_node,
     build_evidence_context,
 )
-# Re-export for backward compatibility with tests
-from app.chat.tool_executor import TutorToolExecutor, TutorToolRegistry
 from app.chat.agent.routing import (
     route_after_classify,
     route_after_analysis,
@@ -36,7 +34,7 @@ from app.chat.agent.routing import (
 )
 from app.chat.agent.state import TutorAgentState
 from app.chat.memory.service import get_chat_memory_service
-from app.chat.schemas import ChatStreamEvent, TutorAgentInput
+from app.chat.schemas import TutorRuntimeEvent, TutorAgentInput
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
@@ -52,12 +50,12 @@ class TutorAgent:
         self.memory_service = memory_service or get_chat_memory_service()
         self._graph = self._build_graph()
 
-    async def chat(self, input: TutorAgentInput) -> AsyncIterator[ChatStreamEvent]:
+    async def chat(self, input: TutorAgentInput) -> AsyncIterator[TutorRuntimeEvent]:
         """执行一次辅导对话，流式返回事件。
 
         ChatService 调用此方法，逐事件转发为 SSE。
         """
-        event_queue: asyncio.Queue[ChatStreamEvent] = asyncio.Queue()
+        event_queue: asyncio.Queue[TutorRuntimeEvent] = asyncio.Queue()
         initial_state: TutorAgentState = {
             "user_id": input.user_id,
             "session_id": input.session_id,
@@ -82,7 +80,7 @@ class TutorAgent:
             "_search_attempted": False,
         }
 
-        yield ChatStreamEvent(type="message_start", payload={}, sequence=0, timestamp=time.time())
+        yield TutorRuntimeEvent(type="message_start", payload={}, sequence=0, timestamp=time.time())
 
         graph_task: asyncio.Task[Any] | None = None
         try:
@@ -107,7 +105,7 @@ class TutorAgent:
 
             final_state = await graph_task
 
-            yield ChatStreamEvent(
+            yield TutorRuntimeEvent(
                 type="final",
                 payload={
                     "final_answer": final_state.get("final_answer", ""),
@@ -124,7 +122,7 @@ class TutorAgent:
             logger.exception("[TutorAgent] graph execution failed")
             if graph_task is not None and not graph_task.done():
                 graph_task.cancel()
-            yield ChatStreamEvent(
+            yield TutorRuntimeEvent(
                 type="error",
                 payload={"error": str(exc)},
                 sequence=9999,
@@ -138,11 +136,11 @@ class TutorAgent:
     async def _emit_event(
         self,
         state: TutorAgentState,
-        event: ChatStreamEvent,
+        event: TutorRuntimeEvent,
         *,
         turn_event_type: str | None = None,
         persist: bool = True,
-    ) -> list[ChatStreamEvent]:
+    ) -> list[TutorRuntimeEvent]:
         """Emit a stream event to the SSE queue and optionally persist it.
 
         Returns a single-element list containing the event, for the caller

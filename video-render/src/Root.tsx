@@ -1,12 +1,21 @@
 import "./index.css";
 import { Composition, CalculateMetadataFunction } from "remotion";
+import { loadFont as loadInterFont } from "@remotion/google-fonts/Inter";
+import { loadFont as loadOutfitFont } from "@remotion/google-fonts/Outfit";
 import { MainVideo } from "./MainVideo";
 import { normalizePlan } from "./utils/normalizePlan";
 import defaultPlan from "../input/rich_video_plan.json";
 
+// Load Google Fonts synchronously at module load time
+// Remotion will handle font loading during the render phase
+loadInterFont();
+
+loadOutfitFont();
+
 const calculateMetadata: CalculateMetadataFunction<any> = ({ props }) => {
   try {
-    const hasProps = props && Object.keys(props).length > 0 && Array.isArray(props.scenes);
+    const hasProps =
+      props && Object.keys(props).length > 0 && Array.isArray(props.scenes);
     const normalized = normalizePlan(hasProps ? props : defaultPlan);
     const { scenes, render_config: renderConfig } = normalized;
 
@@ -17,7 +26,7 @@ const calculateMetadata: CalculateMetadataFunction<any> = ({ props }) => {
     // Calculate total duration in frames
     const totalDurationSeconds = scenes.reduce(
       (acc: number, scene) => acc + (scene.duration_seconds || 0),
-      0
+      0,
     );
     const durationInFrames = Math.round(totalDurationSeconds * fps);
 
@@ -47,7 +56,7 @@ export const RemotionRoot: React.FC = () => {
   // Initial duration estimate for bootstrap
   const totalDurationSeconds = normalizedDefault.scenes.reduce(
     (acc: number, scene) => acc + scene.duration_seconds,
-    0
+    0,
   );
   const initialDurationInFrames = Math.round(totalDurationSeconds * defaultFps);
 

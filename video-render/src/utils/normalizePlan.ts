@@ -7,6 +7,16 @@ import {
   SceneType,
 } from "../schema/types";
 
+// SceneRole type matching backend definition
+type SceneRole =
+  | "hook"
+  | "concept"
+  | "example"
+  | "process"
+  | "misconception"
+  | "practice"
+  | "recap";
+
 // Default Styles and Configurations
 const DEFAULT_GLOBAL_STYLE: GlobalStyle = {
   theme: "clean_tech_education",
@@ -40,6 +50,104 @@ const VALID_BACKGROUNDS = [
   "minimal_blueprint",
 ];
 const VALID_TRANSITIONS = ["fade", "slide_left", "slide_up", "zoom", "none"];
+const VALID_SCENE_TYPES: SceneType[] = [
+  "title_intro",
+  "concept_explain",
+  "process_flow",
+  "state_machine",
+  "data_structure",
+  "algorithm_trace",
+  "memory_layout",
+  "cpu_architecture",
+  "network_protocol",
+  "layered_architecture",
+  "code_execution",
+  "compare_summary",
+  "knowledge_check",
+  // CS Theory templates
+  "array_linked_list",
+  "stack_queue",
+  "process_state",
+  "storage_hierarchy",
+];
+
+/**
+ * Maps SceneRole to the most appropriate SceneType.
+ * Backend defines roles to express pedagogical intent.
+ */
+const ROLE_TO_SCENE_TYPE: Record<SceneRole, SceneType> = {
+  hook: "title_intro",
+  concept: "concept_explain",
+  example: "code_execution",
+  process: "process_flow",
+  misconception: "compare_summary",
+  practice: "knowledge_check",
+  recap: "compare_summary",
+};
+
+/**
+ * Maps backend visual_type to frontend SceneType for backward compatibility.
+ */
+const VISUAL_TYPE_TO_SCENE_TYPE: Record<string, SceneType> = {
+  card: "concept_explain",
+  diagram: "concept_explain",
+  code: "code_execution",
+  timeline: "process_flow",
+  comparison: "compare_summary",
+  quiz: "knowledge_check",
+  state_machine: "state_machine",
+  data_structure: "data_structure",
+  algorithm_trace: "algorithm_trace",
+  memory_layout: "memory_layout",
+  cpu_architecture: "cpu_architecture",
+  network_protocol: "network_protocol",
+  layered_architecture: "layered_architecture",
+  // CS Theory templates
+  array_linked_list: "array_linked_list",
+  stack_queue: "stack_queue",
+  process_state: "process_state",
+  storage_hierarchy: "storage_hierarchy",
+};
+
+/**
+ * Determines the SceneType based on available information.
+ * Priority: explicit type > role mapping > visual_type mapping > default
+ */
+function determineSceneType(
+  scene: any,
+  idx: number,
+  isLastScene: boolean,
+): SceneType {
+  // 1. Use explicit type if valid
+  if (scene.type && VALID_SCENE_TYPES.includes(scene.type)) {
+    return scene.type;
+  }
+
+  // 2. Use role mapping if available
+  const role = scene.role as SceneRole | undefined;
+  if (role && ROLE_TO_SCENE_TYPE[role]) {
+    // Special case: first scene with hook role should be title_intro
+    if (role === "hook" && idx === 0) {
+      return "title_intro";
+    }
+    return ROLE_TO_SCENE_TYPE[role];
+  }
+
+  // 3. Use visual_type mapping for backward compatibility
+  const visualType = scene.visual_type;
+  if (visualType && VISUAL_TYPE_TO_SCENE_TYPE[visualType]) {
+    return VISUAL_TYPE_TO_SCENE_TYPE[visualType];
+  }
+
+  // 4. Default based on position
+  if (idx === 0) {
+    return "title_intro";
+  }
+  if (isLastScene) {
+    return "compare_summary";
+  }
+  return "concept_explain";
+}
 
 /**
  * Normalizes input JSON into the schema format expected by the frontend.
@@ -108,7 +216,8 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
     bgm_volume: rawPlan.audio?.bgm_volume ?? 0.15,
   };
 
-  const scenes: RichVideoScene[] = (rawPlan.scenes || []).map(
+  const rawScenes = rawPlan.scenes || [];
+  const scenes: RichVideoScene[] = rawScenes.map(
     (scene: any, idx: number): RichVideoScene => {
       const id = scene.id || scene.scene_id || `scene_${idx + 1}`;
       const title = scene.title || `分镜 ${idx + 1}`;
@@ -130,29 +239,9 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
         duration_seconds = scene.duration / 1000;
       }
 
-      // Determine type mapping
-      let type = scene.type as SceneType;
-      const visualType = scene.visual_type || "card";
-
-      if (!type) {
-        // Direct mapping from backend visual_type to frontend SceneType
-        const visualTypeToSceneType: Record<string, SceneType> = {
-          card: idx === 0 ? "title_intro" : "concept_explain",
-          diagram: "concept_explain",
-          code: "code_execution",
-          timeline: "process_flow",
-          comparison: "compare_summary",
-          quiz: "knowledge_check",
-          state_machine: "state_machine",
-          data_structure: "data_structure",
-          algorithm_trace: "algorithm_trace",
-          memory_layout: "memory_layout",
-          cpu_architecture: "cpu_architecture",
-          network_protocol: "network_protocol",
-          layered_architecture: "layered_architecture",
-        };
-        type = visualTypeToSceneType[visualType] || "concept_explain";
-      }
+      // Determine scene type using the new unified logic
+      const isLastScene = idx === rawScenes.length - 1;
+      const type = determineSceneType(scene, idx, isLastScene);
 
       // Use visual data from backend; generate minimal fallback if missing
       let visual = scene.visual;

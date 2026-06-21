@@ -37,6 +37,8 @@ def _valid_payload_dict():
                 "on_screen_text": ["问题：为什么不是两次？"],
                 "visual_prompt": "白底信息卡展示客户端和服务端的连接疑问",
                 "interaction_prompt": "暂停 3 秒，让学习者先回答。",
+                "visual": {"course": "计算机网络", "chapter": "传输层", "subtitle": "TCP连接建立"},
+                "audio_src": "/static/videos/res_1/scene_scene-1.mp3",
                 "source_agents": ["content"],
             },
             {
@@ -52,6 +54,8 @@ def _valid_payload_dict():
                 "on_screen_text": ["三次握手时序"],
                 "visual_prompt": "左右两列分别是客户端和服务端，中间用三条箭头展示报文顺序",
                 "interaction_prompt": "",
+                "visual": {"main_concept": "三次握手", "definition": "TCP连接建立过程"},
+                "audio_src": "/static/videos/res_1/scene_scene-2.mp3",
                 "source_agents": ["content", "mindmap"],
             },
             {
@@ -67,6 +71,8 @@ def _valid_payload_dict():
                 "on_screen_text": ["结论：可靠连接从状态同步开始"],
                 "visual_prompt": "总结卡片列出两个关键词：收发能力、序号同步",
                 "interaction_prompt": "请用一句话解释第三次 ACK 的意义。",
+                "visual": {"comparison_title": "总结", "conclusion": "可靠连接从状态同步开始"},
+                "audio_src": "/static/videos/res_1/scene_scene-3.mp3",
                 "source_agents": ["content"],
             },
         ],
@@ -150,6 +156,7 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
             visual_prompt=contract.content_hint,
             visual_type=contract.visual_type,
             interaction_prompt="",
+            visual={"title": contract.title, "content": contract.content_hint},
             source_agents=contract.required_sources,
         )
 
@@ -188,7 +195,7 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
     assert result.metadata["agent_id"] == "video"
     assert result.metadata["schema_version"] == "video/v1"
     parsed = json.loads(result.content)
-    assert parsed["duration_seconds"] == 62  # 3 scenes × 20.5s each (20s TTS + 500ms buffer)
+    assert parsed["duration_seconds"] == 60  # 3 scenes × 20.0s each
     assert len(parsed["scenes"]) == 3
 
 
@@ -262,6 +269,7 @@ async def test_video_agent_generate_node_path_learning(monkeypatch):
             visual_prompt=contract.content_hint,
             visual_type=contract.visual_type,
             interaction_prompt="",
+            visual={"title": contract.title, "content": contract.content_hint},
             source_agents=contract.required_sources,
         )
 

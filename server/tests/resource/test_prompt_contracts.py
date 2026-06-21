@@ -26,11 +26,4 @@ def test_video_material_prompt_uses_teaching_plan_and_handoffs_only():
         assert term not in text
 
 
-def test_ppt_material_prompt_uses_teaching_plan_and_handoffs_only():
-    text = _read_prompt("ppt_material.md")
 
-    assert "teaching_plan" in text
-    assert "upstream_handoffs" in text
-    assert "DownstreamContext" in text
-    for term in OLD_CONTRACT_TERMS:
-        assert term not in text

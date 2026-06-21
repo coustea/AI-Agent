@@ -1,12 +1,10 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
-import { createSseStream } from '@/shared/api/sse'
 import type {
   ChatMessageItem,
   ChatSession,
   UploadResult,
   StreamChatParams,
-  StreamChatEvent,
 } from '@/features/chat/model/chat'
 
 // ==========================================
@@ -56,18 +54,10 @@ export function uploadFile(file: File, sessionId: string) {
 }
 
 // ==========================================
-// SSE 流式聊天
+// 创建智能辅导运行
 // ==========================================
 
-export function streamChat(
-  params: StreamChatParams,
-  onChunk: (text: string) => void,
-  onDone: () => void,
-  onError: (err: Error) => void,
-  onEvent?: (event: StreamChatEvent) => void,
-): AbortController {
-  const controller = new AbortController()
-
+export function createChatRun(params: StreamChatParams) {
   const formData = new FormData()
   if (params.message) {
     formData.append('user_input', params.message)
@@ -85,18 +75,11 @@ export function streamChat(
     formData.append('enable_web_search', String(Boolean(params.enable_web_search)))
   }
 
-  createSseStream({
-    url: '/api/v1/ai/chat/stream',
-    method: 'POST',
-    body: formData,
-    signal: controller.signal,
-    onChunk,
-    onEvent: (eventName, data) => {
-      onEvent?.({ event: eventName, data })
+  return http.post<ApiResponse<{ run_id: string; session_id: string; status: string }>>(
+    '/ai/chat/runs',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
     },
-    onDone,
-    onError,
-  })
-
-  return controller
+  )
 }

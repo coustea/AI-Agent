@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Annotated, TypedDict
+from typing import Any, Annotated, Literal, TypedDict
 
 from app.resource.schemas import (
     AgentResult,
@@ -12,12 +12,52 @@ from app.resource.schemas import (
 
 
 def merge_results_dict(left: dict[str, AgentResult] | None, right: dict[str, AgentResult] | None) -> dict[str, AgentResult]:
-    """合并两个 Agent 结果字典（LangGraph Send 并行后的归约器）。"""
+    """合并两个 Agent 结果字典（LangGraph Send 并行后的归约器）。
+
+    仅包含成功持久化的 Agent 结果。失败 Agent 存储在 failures 字段中。
+
+    Raises:
+        RuntimeError: 如果同一 agent_id 在两边都存在（工作流不变量违反）。
+    """
     if left is None:
         left = {}
     if right is None:
         right = {}
+    overlap = set(left.keys()) & set(right.keys())
+    if overlap:
+        raise RuntimeError(f"workflow invariant violated: duplicate agent results for {sorted(overlap)}")
     return {**left, **right}
+
+
+def merge_failures_dict(left: dict[str, "AgentFailure"] | None, right: dict[str, "AgentFailure"] | None) -> dict[str, "AgentFailure"]:
+    """合并两个 Agent 失败字典（LangGraph Send 并行后的归约器）。
+
+    Raises:
+        RuntimeError: 如果同一 agent_id 在两边都存在（工作流不变量违反）。
+    """
+    if left is None:
+        left = {}
+    if right is None:
+        right = {}
+    overlap = set(left.keys()) & set(right.keys())
+    if overlap:
+        raise RuntimeError(f"workflow invariant violated: duplicate agent failures for {sorted(overlap)}")
+    return {**left, **right}
+
+
+class AgentFailure(TypedDict):
+    """Agent 执行失败记录 — 用于追踪非致命的 Agent 失败。
+
+    失败 Agent 不会创建 GeneratedResourceItem 记录，
+    仅在工作流状态中保留失败信息以供日志和状态计算使用。
+
+    注意：event 不在 stage 中，因为事件发布失败是 observational，
+    不能使已持久化的 Agent 变为失败。
+    """
+    agent_id: str
+    stage: Literal["generation", "validation", "persistence"]
+    error_type: str
+    message: str
 
 
 class CoverageReport(TypedDict, total=False):
@@ -28,7 +68,11 @@ class CoverageReport(TypedDict, total=False):
 
 
 class ParentState(TypedDict, total=False):
-    """全局编排状态 — 供 LangGraph 全局图节点共享。"""
+    """全局编排状态 — 供 LangGraph 全局图节点共享。
+
+    results: 仅包含成功持久化的 AgentResult，key 为 agent_id。
+    failures: 包含失败的 AgentFailure 记录，key 为 agent_id。
+    """
     user_id: int
     resource_id: int
     request: ResourceGenerationRequest
@@ -37,6 +81,7 @@ class ParentState(TypedDict, total=False):
     emitter: Any
     teaching_plan: TeachingPlan
     results: Annotated[dict[str, AgentResult], merge_results_dict]
+    failures: Annotated[dict[str, AgentFailure], merge_failures_dict]
     success: bool
     coverage_report: CoverageReport
 

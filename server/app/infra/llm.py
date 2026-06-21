@@ -2,7 +2,7 @@
 
 提供统一的异步 LLM 调用接口，支持：
 - 普通文本生成（ainvoke / astream）
-- 工具调用（ainvoke_tools）
+- 自研工具调用执行器创建
 - 结构化 JSON 输出（ainvoke_json），带 json_mode 重试 + prompt 回退
 - 视觉模型调用（vision）
 
@@ -16,7 +16,7 @@ import json
 import time
 import uuid
 from functools import lru_cache
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -24,7 +24,10 @@ from pydantic import BaseModel, Field
 
 from app.config import INFERENCE_TEMPERATURE, VISION_TEMPERATURE, get
 from app.infra.logging import get_logger
-from app.infra.utils import ServiceError, parse_first_json_object, parse_first_json_value, strip_markdown_code_fences
+from app.infra.utils import ServiceError, parse_first_json_object
+
+if TYPE_CHECKING:
+    from app.infra.tool_excute import Tool, ToolEventHandler, ToolExcute
 
 logger = get_logger(__name__)
 
@@ -138,139 +141,8 @@ def _bind(model: Any, *, temperature: float | None = None, max_tokens: int | Non
 
 
 def _parse_json(text: str, schema: type[BaseModel]) -> BaseModel:
-    """从 LLM 输出文本中解析 JSON 并校验为指定 schema。"""
-    raw = parse_first_json_object(text)
-    data = _lift_nested_config(raw, schema)
-    try:
-        return schema.model_validate(data)
-    except Exception:
-        return _find_matching_json(text, schema)
-
-
-def _find_matching_json(text: str, schema: type[BaseModel]) -> BaseModel:
-    """扫描文本中所有 JSON 对象，返回匹配 schema 必填字段的那个。"""
-    required = _required_fields(schema)
-    candidates = _extract_json_objects(text)
-    if required:
-        candidates = [c for c in candidates if required.issubset(c.keys())]
-    for candidate in candidates:
-        data = _lift_nested_config(candidate, schema)
-        try:
-            return schema.model_validate(data)
-        except Exception:
-            pass
-        try:
-            return _lenient_validate(data, schema)
-        except Exception:
-            continue
-    raise ValueError(f"未找到符合 {schema.__name__} 的 JSON 对象")
-
-
-def _lenient_validate(data: dict[str, Any], schema: type[BaseModel]) -> BaseModel:
-    """宽松模式校验：根级标量严格校验，嵌套对象强制转换。"""
-    try:
-        return schema.model_validate(data, strict=False)
-    except Exception:
-        constructed = {}
-        for k, v in data.items():
-            if k in schema.model_fields:
-                field = schema.model_fields[k]
-                constructed[k] = _lenient_coerce(v, field.annotation)
-            else:
-                constructed[k] = v
-        return schema.model_construct(**constructed)
-
-
-def _lenient_coerce(val: Any, annotation: Any) -> Any:
-    if val is None or annotation is None:
-        return val
-
-    from pydantic import BaseModel
-    from typing import get_origin, get_args, Union
-    import types
-
-    # 如果注解是 BaseModel 的子类
-    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-        if isinstance(val, dict):
-            return _lenient_validate(val, annotation)
-        return val
-
-    origin = get_origin(annotation)
-    args = get_args(annotation)
-
-    if origin is list or annotation is list:
-        if isinstance(val, list):
-            item_type = args[0] if args else None
-            if item_type:
-                return [_lenient_coerce(item, item_type) for item in val]
-        return val
-
-    if origin is dict or annotation is dict:
-        if isinstance(val, dict):
-            value_type = args[1] if len(args) > 1 else None
-            if value_type:
-                return {k: _lenient_coerce(v, value_type) for k, v in val.items()}
-        return val
-
-    # 联合类型 (Union) 或 可选类型 (Optional)
-    if origin is Union or (hasattr(types, "UnionType") and isinstance(annotation, types.UnionType)):
-        for arg in args:
-            if arg is not type(None):
-                try:
-                    res = _lenient_coerce(val, arg)
-                    if res is not val:
-                        return res
-                except Exception:
-                    pass
-        return val
-
-    return val
-
-
-def _required_fields(schema: type[BaseModel]) -> set[str]:
-    """获取 schema 的必填字段集合。"""
-    try:
-        return set(schema.model_json_schema().get("required", []) or [])
-    except Exception:
-        return set()
-
-
-def _extract_json_objects(text: str) -> list[dict[str, Any]]:
-    """从文本中提取所有不重复的 JSON 对象。"""
-    decoder = json.JSONDecoder()
-    content = strip_markdown_code_fences(text or "").strip()
-    seen: set[str] = set()
-    results: list[dict[str, Any]] = []
-    for i, ch in enumerate(content):
-        if ch not in "{[":
-            continue
-        try:
-            value, _ = decoder.raw_decode(content[i:])
-        except json.JSONDecodeError:
-            continue
-        for obj in ([value] if isinstance(value, dict) else [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []):
-            key = json.dumps(obj, ensure_ascii=False, sort_keys=True, default=str)
-            if key not in seen:
-                seen.add(key)
-                results.append(obj)
-    return results
-
-
-def _lift_nested_config(data: dict[str, Any], schema: type[BaseModel]) -> dict[str, Any]:
-    """将嵌套的 config 字段提升到顶层（适配 LLM 输出格式）。"""
-    config = data.get("config")
-    if not isinstance(config, dict):
-        return data
-    fields = set(getattr(schema, "model_fields", {}).keys())
-    lifted = dict(data)
-    changed = False
-    for k, v in config.items():
-        if k in fields and k not in lifted:
-            lifted[k] = v
-            changed = True
-    if changed:
-        lifted.pop("config", None)
-    return lifted
+    """从 LLM 输出文本中严格解析 JSON 并校验为指定 schema。"""
+    return schema.model_validate(parse_first_json_object(text))
 
 
 def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
@@ -292,39 +164,68 @@ def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
 
 
 def _describe_property(prop: dict[str, Any], defs: dict[str, Any], depth: int = 0) -> str:
-    """以人类可读形式描述 JSON schema 属性。"""
-    if depth > 2:
+    """以人类可读形式描述 JSON schema 属性，包含关键约束。"""
+    if depth > 3:
         return "..."
     if "enum" in prop:
         return "enum(" + ", ".join(str(v) for v in prop["enum"]) + ")"
     if "const" in prop:
         return f"const({prop['const']})"
     t = prop.get("type", "")
-    if t == "string" and "maxLength" in prop:
-        return f"str (max {prop['maxLength']} chars)"
+    # String with constraints
     if t == "string":
-        return "str"
+        parts: list[str] = ["str"]
+        if "pattern" in prop:
+            parts.append(f"pattern={prop['pattern']}")
+        if "minLength" in prop or "maxLength" in prop:
+            mn = prop.get("minLength", "")
+            mx = prop.get("maxLength", "")
+            if mn and mx:
+                parts.append(f"len={mn}-{mx}")
+            elif mx:
+                parts.append(f"max {mx} chars")
+            elif mn:
+                parts.append(f"min {mn} chars")
+        return " (".join(parts) + ")" if len(parts) > 1 else "str"
     if t == "integer":
-        return "int"
+        parts = ["int"]
+        if "minimum" in prop:
+            parts.append(f"min={prop['minimum']}")
+        if "maximum" in prop:
+            parts.append(f"max={prop['maximum']}")
+        return " (".join(parts) + ")" if len(parts) > 1 else "int"
     if t == "number":
         return "float"
     if t == "boolean":
         return "bool"
+    # Array with item constraints
     if t == "array":
         items = prop.get("items", {})
         item_desc = _describe_property(items, defs, depth + 1)
-        return f"list[{item_desc}]"
+        parts = [f"list[{item_desc}]"]
+        if "minItems" in prop:
+            parts.append(f"min={prop['minItems']}")
+        if "maxItems" in prop:
+            parts.append(f"max={prop['maxItems']}")
+        return " (".join(parts) + ")" if len(parts) > 1 else f"list[{item_desc}]"
     if t == "object" and "properties" in prop:
         inner = prop["properties"]
         fields = ", ".join(inner.keys())
         return f"object({fields})"
+    # Reference to another type - expand with required fields
     if "$ref" in prop:
         ref_name = prop["$ref"].split("/")[-1]
         ref_def = defs.get(ref_name, {})
         ref_props = ref_def.get("properties", {})
+        ref_required = set(ref_def.get("required", []))
         if ref_props:
-            fields = ", ".join(ref_props.keys())
-            return f"{ref_name}({fields})"
+            # Build field descriptions with required marker
+            field_descs: list[str] = []
+            for fname in ref_props:
+                ftype = _describe_property(ref_props[fname], defs, depth + 1)
+                marker = "*" if fname in ref_required else ""
+                field_descs.append(f"{fname}{marker}: {ftype}")
+            return f"{ref_name}({'; '.join(field_descs)})"
         return ref_name
     if "anyOf" in prop:
         parts = [_describe_property(p, defs, depth + 1) for p in prop["anyOf"] if isinstance(p, dict)]
@@ -365,11 +266,11 @@ def _inject_json_instruction(input_data: Any, schema: type[BaseModel]) -> list[B
 class Llm:
     """统一异步 LLM 网关。
 
-    结构化输出策略：json_mode（重试一次）→ prompt 回退。
+    结构化输出策略：
+    1. json_schema（strict=True）：API 服务端强制执行完整 schema 约束
+    2. json_mode 回退：只保证返回 JSON，Pydantic 校验
+    3. prompt 回退：最后手段
     """
-
-    def __init__(self) -> None:
-        """初始化 LLM 网关，加载文本模型和视觉模型配置。"""
 
     def __init__(self) -> None:
         self.text_config = _load_config("models")
@@ -390,44 +291,127 @@ class Llm:
         async for chunk in _bind(model or self.model, temperature=temperature, max_tokens=max_tokens).astream(input_data):
             yield chunk
 
-    async def ainvoke_tools(self, input_data: Any, tools: list[Any], *, tool_choice: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> Any:
-        m = _bind(self.model, temperature=temperature, max_tokens=max_tokens)
-        runnable = m.bind_tools(tools, tool_choice=tool_choice) if tool_choice else m.bind_tools(tools)
-        return await runnable.ainvoke(input_data)
+    def create_tool_excute(
+        self,
+        tools: list[Tool] | None = None,
+        event_handler: ToolEventHandler | None = None,
+    ) -> ToolExcute:
+        from app.infra.tool_excute import ToolExcute
 
-    async def ainvoke_json(self, schema: type[BaseModel], input_data: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> BaseModel:
-        messages = _inject_json_instruction(input_data, schema)
+        return ToolExcute(self.model, tools, event_handler=event_handler)
+
+    async def ainvoke_json(
+        self,
+        schema: type[BaseModel],
+        input_data: Any,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        max_attempts: int = 1,
+        prompt_fallback: bool = True,
+    ) -> BaseModel:
+        """结构化 JSON 输出，优先使用 API 服务端的 strict schema 强制。
+
+        Args:
+            schema: Pydantic 模型类，定义输出结构
+            input_data: 输入消息（字符串、BaseMessage 或消息列表）
+            temperature: 采样温度
+            max_tokens: 最大输出长度
+            max_attempts: json_schema 模式重试次数（默认 1 次）
+            prompt_fallback: 是否启用 prompt 回退模式
+
+        Returns:
+            校验后的 Pydantic 模型实例
+
+        Raises:
+            ServiceError: 所有模式都失败时抛出
+        """
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+
+        # 将输入转换为消息列表
+        if isinstance(input_data, str):
+            messages: list[BaseMessage] = [HumanMessage(content=input_data)]
+        elif isinstance(input_data, BaseMessage):
+            messages = [input_data]
+        elif isinstance(input_data, list):
+            messages = list(input_data)
+        else:
+            raise ValueError(f"Unsupported input_data type: {type(input_data)}")
+
         model = _bind(self.model, temperature=temperature, max_tokens=max_tokens)
         errors: list[str] = []
 
-        # Tier 1: json_mode, retry once on failure
-        for attempt in range(2):
+        # Tier 1: json_schema strict mode - API 服务端强制 schema
+        for attempt in range(max_attempts):
             t0 = time.perf_counter()
             try:
-                resp = await model.bind(response_format={"type": "json_object"}).ainvoke(messages)
+                runnable = model.with_structured_output(schema, method="json_schema", strict=True)
+                result = await runnable.ainvoke(messages)
+                # with_structured_output 直接返回 Pydantic 实例，无需手动解析
+                if not isinstance(result, schema):
+                    raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
+                logger.info(
+                    "[LLM] ainvoke_json ok schema=%s tier=json_schema strict=True attempt=%d %dms",
+                    schema.__name__,
+                    attempt + 1,
+                    round((time.perf_counter() - t0) * 1000),
+                )
+                return result
+            except Exception as exc:
+                errors.append(f"json_schema(attempt={attempt + 1})={type(exc).__name__}: {exc}")
+                logger.warning(
+                    "[LLM] ainvoke_json fail schema=%s tier=json_schema attempt=%d error=%s",
+                    schema.__name__,
+                    attempt + 1,
+                    exc,
+                )
+
+        # Tier 2: json_mode - 只保证返回 JSON，Pydantic 校验
+        t0 = time.perf_counter()
+        try:
+            runnable = model.with_structured_output(schema, method="json_mode")
+            result = await runnable.ainvoke(messages)
+            if not isinstance(result, schema):
+                raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
+            logger.info(
+                "[LLM] ainvoke_json ok schema=%s tier=json_mode %dms",
+                schema.__name__,
+                round((time.perf_counter() - t0) * 1000),
+            )
+            return result
+        except Exception as exc:
+            errors.append(f"json_mode={type(exc).__name__}: {exc}")
+            logger.warning(
+                "[LLM] ainvoke_json fail schema=%s tier=json_mode error=%s",
+                schema.__name__,
+                exc,
+            )
+
+        # Tier 3: prompt fallback - 最后手段
+        if prompt_fallback:
+            t0 = time.perf_counter()
+            try:
+                # 注入 schema 描述到 prompt
+                injected_messages = _inject_json_instruction(messages, schema)
+                resp = await model.ainvoke(injected_messages)
                 content = getattr(resp, "content", "") or ""
                 if not content.strip():
                     raise ValueError("empty response")
                 result = _parse_json(content, schema)
-                logger.info("[LLM] ainvoke_json ok schema=%s tier=json_mode attempt=%d %dms", schema.__name__, attempt + 1, round((time.perf_counter() - t0) * 1000))
+                logger.info(
+                    "[LLM] ainvoke_json ok schema=%s tier=prompt %dms",
+                    schema.__name__,
+                    round((time.perf_counter() - t0) * 1000),
+                )
                 return result
             except Exception as exc:
-                errors.append(f"json_mode(attempt={attempt + 1})={type(exc).__name__}: {exc}")
-                logger.warning("[LLM] ainvoke_json fail schema=%s tier=json_mode attempt=%d error=%s", schema.__name__, attempt + 1, exc)
-
-        # Tier 2: prompt fallback
-        t0 = time.perf_counter()
-        try:
-            resp = await model.ainvoke(messages)
-            content = getattr(resp, "content", "") or ""
-            if not content.strip():
-                raise ValueError("empty response")
-            result = _parse_json(content, schema)
-            logger.info("[LLM] ainvoke_json ok schema=%s tier=prompt %dms", schema.__name__, round((time.perf_counter() - t0) * 1000))
-            return result
-        except Exception as exc:
-            errors.append(f"prompt={type(exc).__name__}: {exc}")
-            logger.warning("[LLM] ainvoke_json fail schema=%s tier=prompt error=%s", schema.__name__, exc)
+                errors.append(f"prompt={type(exc).__name__}: {exc}")
+                logger.warning(
+                    "[LLM] ainvoke_json fail schema=%s tier=prompt error=%s",
+                    schema.__name__,
+                    exc,
+                )
 
         raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
 

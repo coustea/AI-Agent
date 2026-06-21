@@ -5,9 +5,9 @@
         <div class="stage-route-progress">
           <span class="route-step done">1 需求解析</span>
           <span class="route-line done"></span>
-          <span class="route-step done">2 计划生成</span>
-          <span class="route-line active"></span>
-          <span class="route-step active">3 任务调度</span>
+          <span class="route-step" :class="planReady ? 'done' : 'active'">2 计划生成</span>
+          <span class="route-line" :class="{ active: planReady }"></span>
+          <span class="route-step" :class="{ active: planReady }">3 任务调度</span>
           <span class="route-line"></span>
           <span class="route-step">4 资源生成</span>
           <span class="route-line"></span>
@@ -59,7 +59,7 @@
           </div>
           <div class="workbench-actions">
             <span class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
-            <span class="control-pill muted">计划 {{ createdPlanStepCount }}/{{ planSteps.length || dagSelectedAgentIds.length }}</span>
+            <span class="control-pill muted">计划 {{ planReady ? '已生成' : '生成中' }}</span>
             <el-button round size="small" @click="workflowLogDrawerVisible = true">查看日志</el-button>
           </div>
         </div>
@@ -81,24 +81,8 @@
               <span class="panel-eyebrow">MASTER PLAN</span>
               <strong>{{ planReady ? '计划已生成' : '计划生成中' }}</strong>
             </div>
-            <div class="master-plan-icons">
-              <i v-for="step in planSteps" :key="step.id" :class="`is-${step.status}`">{{ getPlanStepIcon(step.agentId) }}</i>
-            </div>
-            <div class="master-plan-track"><b :style="{ width: `${planProgressPercent}%` }"></b></div>
+            <div class="master-plan-track"><b :style="{ width: `${getStageNode('planning').progress}%` }"></b></div>
           </div>
-
-          <transition-group name="dispatch-card" tag="div" class="dispatch-card-layer">
-            <div
-              v-for="card in dispatchCards"
-              :key="card.id"
-              class="dispatch-flight-card"
-              :class="`to-${card.to}`"
-            >
-              <span>TASK</span>
-              <strong>{{ card.title }}</strong>
-              <em>{{ getPlanStepIcon(card.to) }}</em>
-            </div>
-          </transition-group>
 
           <div class="flow-core-stack flow-core-stack-v4">
             <article
@@ -370,6 +354,7 @@ import type { ResourceAgentId } from '@/features/resource/model/resource'
 import {
   COORDINATOR_AGENT_ID,
   PPT_AGENT_ID,
+  VIDEO_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
@@ -383,27 +368,6 @@ import {
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
   displayOrder?: number
-}
-
-type PlanStepStatus = 'pending' | 'created' | 'dispatching' | 'running' | 'finished'
-
-type PlanStepState = {
-  id: string
-  agentId: ResourceAgentId
-  title: string
-  summary: string
-  input: string
-  output: string
-  status: PlanStepStatus
-}
-
-type DispatchCardState = {
-  id: string
-  stepId: string
-  from: 'planning' | 'coordinator'
-  to: string
-  title: string
-  active: boolean
 }
 
 type AgentLinkGeometry = {
@@ -422,9 +386,7 @@ const props = defineProps<{
   generatedResources: GeneratedResourceItem[]
   dagSelectedAgentIds: ResourceAgentId[]
   generationError: string | null
-  planSteps: PlanStepState[]
   planReady: boolean
-  dispatchCards: DispatchCardState[]
   latestArtifactAgentId: string | null
   visibleWorkflowNodes: DagNodeState[]
 }>()
@@ -455,7 +417,7 @@ function closeAgentDetail() {
 }
 
 const baseGenerationAgentIds = computed(() => {
-  return props.dagSelectedAgentIds.filter(id => id !== PPT_AGENT_ID)
+  return props.dagSelectedAgentIds.filter(id => id !== PPT_AGENT_ID && id !== VIDEO_AGENT_ID)
 })
 
 const parallelPoolNodes = computed(() => {
@@ -473,29 +435,11 @@ const parallelPoolNodes = computed(() => {
 
 const agentLinkPaths = computed(() => {
   const nodes = parallelPoolNodes.value
-  const count = Math.max(nodes.length, 1)
-  const width = linkCanvasSize.value.width || 1000
-  const height = linkCanvasSize.value.height || 700
   const measuredMap = new Map(measuredAgentLinks.value.map(link => [link.id, link]))
-  const fallbackStartX = Math.round(width / 2)
-  const fallbackStartY = Math.round(Math.min(height * 0.58, 420))
-  const fallbackEndY = Math.round(Math.min(height - 120, fallbackStartY + 150))
 
-  return nodes.map((node, index) => {
+  return nodes.flatMap((node) => {
     const measured = measuredMap.get(node.id)
-    if (measured) {
-      return { ...measured, status: node.status }
-    }
-
-    const x = Math.round(((index + 0.5) / count) * width)
-    const controlY = Math.round(fallbackStartY + (fallbackEndY - fallbackStartY) * 0.45)
-    return {
-      id: node.id,
-      x,
-      y: fallbackEndY,
-      status: node.status,
-      d: `M ${fallbackStartX} ${fallbackStartY} C ${fallbackStartX} ${controlY}, ${x} ${controlY}, ${x} ${fallbackEndY}`,
-    }
+    return measured ? [{ ...measured, status: node.status }] : []
   })
 })
 
@@ -610,6 +554,9 @@ const trailingStageNodes = computed(() => {
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(PPT_AGENT_ID))
   }
+  if (props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId)) {
+    nodes.push(getStageNode(VIDEO_AGENT_ID))
+  }
   nodes.push(getStageNode(BUNDLE_AGENT_ID))
   return nodes
 })
@@ -630,15 +577,6 @@ const dagHeroMessage = computed(() => {
   const allDone = Object.values(props.dagNodeStates).every(n => n.status === 'success')
   if (allDone) return '所有资源生成完成'
   return props.latestWorkflowMessage || '多智能体协同生成中'
-})
-
-const createdPlanStepCount = computed(() => {
-  return props.planSteps.filter(step => step.status !== 'pending').length
-})
-
-const planProgressPercent = computed(() => {
-  const total = props.planSteps.length || props.dagSelectedAgentIds.length || 1
-  return Math.round((createdPlanStepCount.value / total) * 100)
 })
 
 const visibleOutputAgentIds = computed(() => {
@@ -670,13 +608,6 @@ const workflowLogItems = computed(() => {
           message: step,
           status: node.status,
         })
-      })
-    } else {
-      items.push({
-        id: `${node.id}-fallback`,
-        title: node.label,
-        message: node.currentMessage || getNodeFallbackMessage(node),
-        status: node.status,
       })
     }
   })
@@ -796,6 +727,7 @@ function getNodeDisplayMessage(node: DagNodeState) {
   if (node.status === 'failed') return node.currentMessage || '执行失败，请检查该智能体输出'
   if (node.currentMessage) return node.currentMessage
   if (node.id === PPT_AGENT_ID) return '等待基础资源完成后生成演示文稿'
+  if (node.id === VIDEO_AGENT_ID) return '等待基础资源完成后生成讲解视频'
   if (node.id === BUNDLE_AGENT_ID) return '等待资源完成后组装资源包'
   return getNodeFallbackMessage(node)
 }
@@ -826,9 +758,6 @@ function getMetricChips(node: DagNodeState) {
     .map(([key, value]) => `${key}: ${String(value)}`)
 }
 
-function getPlanStepIcon(agentId: string) {
-  return getDagNodeIcon(agentId) || AGENT_DISPLAY[agentId]?.icon || '✨'
-}
 </script>
 
 <style scoped>
@@ -882,15 +811,15 @@ function getPlanStepIcon(agentId: string) {
 
 .stage-title-area h2 {
   margin: 0;
-  font-size: 1.24rem;
-  font-weight: 900;
-  color: var(--color-text, #0f172a);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-extrabold);
+  color: var(--color-text);
 }
 
 .stage-title-area p {
   margin: 0;
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .stage-route-progress {
@@ -904,22 +833,22 @@ function getPlanStepIcon(agentId: string) {
   display: inline-flex;
   align-items: center;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   border-radius: 999px;
-  background: var(--color-surface-hover, #f1f5f9);
-  color: var(--color-text-faint, #94a3b8);
-  font-size: 0.72rem;
-  font-weight: 800;
+  background: var(--color-surface-hover);
+  color: var(--color-text-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .route-step.done {
-  background: #ECFDF5;
-  color: #059669;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .route-step.active {
-  background: var(--cat-resource-soft, #dbeafe);
-  color: var(--color-info, #2563eb);
+  background: var(--cat-resource-soft);
+  color: var(--cat-resource);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16);
 }
 
@@ -927,15 +856,15 @@ function getPlanStepIcon(agentId: string) {
   width: 28px;
   height: 2px;
   border-radius: 99px;
-  background: var(--color-border-hover, #cbd5e1);
+  background: var(--color-border-hover);
 }
 
 .route-line.done {
-  background: #818CF8;
+  background: var(--color-primary);
 }
 
 .route-line.active {
-  background: linear-gradient(90deg, #818CF8, var(--color-info, #2563eb));
+  background: linear-gradient(90deg, var(--color-primary), var(--cat-resource));
 }
 
 .stage-stat-group {
@@ -965,21 +894,21 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .stage-stat-card span {
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.72rem;
-  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
 }
 
 .stage-stat-card strong {
-  color: var(--color-text, #0f172a);
-  font-size: 1.22rem;
+  color: var(--color-text);
+  font-size: var(--text-xl);
   line-height: 1;
-  font-weight: 900;
+  font-weight: var(--weight-extrabold);
 }
 
 .stage-stat-card small {
-  color: var(--color-text-faint, #94a3b8);
-  font-size: 0.78rem;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
   margin-left: 2px;
 }
 
@@ -1044,10 +973,10 @@ function getPlanStepIcon(agentId: string) {
 .panel-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #2563EB;
-  font-size: 0.7rem;
-  font-weight: 900;
+  gap: var(--space-1);
+  color: var(--cat-resource);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1095,15 +1024,15 @@ function getPlanStepIcon(agentId: string) {
 
 .workbench-header h3 {
   margin: 6px 0 0;
-  color: var(--color-text, #0f172a);
-  font-size: 1.22rem;
-  font-weight: 950;
+  color: var(--color-text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
 }
 
 .workbench-header p {
   margin: 6px 0 0;
-  color: #64748B;
-  font-size: 0.86rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .workbench-actions {
@@ -1242,41 +1171,6 @@ function getPlanStepIcon(agentId: string) {
   gap: 12px;
 }
 
-.master-plan-icons {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-
-.master-plan-icons i {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-style: normal;
-  background: rgba(241, 245, 249, 0.82);
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  opacity: 0.5;
-}
-
-.master-plan-icons i.is-created,
-.master-plan-icons i.is-dispatching,
-.master-plan-icons i.is-running,
-.master-plan-icons i.is-finished {
-  opacity: 1;
-}
-
-.master-plan-icons i.is-running {
-  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.1);
-}
-
-.master-plan-icons i.is-finished {
-  background: #ECFDF5;
-  border-color: #A7F3D0;
-}
-
 .master-plan-track {
   margin-top: 12px;
   height: 5px;
@@ -1290,80 +1184,6 @@ function getPlanStepIcon(agentId: string) {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #6366F1, #22D3EE, #3B82F6);
-}
-
-.dispatch-card-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 8;
-}
-
-.dispatch-flight-card {
-  position: absolute;
-  left: 50%;
-  top: 154px;
-  width: 136px;
-  min-height: 62px;
-  padding: 9px 12px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  box-shadow: 0 20px 48px rgba(37, 99, 235, 0.16);
-  animation: dispatchFlyCenter 1.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-.dispatch-flight-card span {
-  display: block;
-  color: #64748B;
-  font-size: 0.62rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-}
-
-.dispatch-flight-card strong {
-  display: block;
-  color: #0F172A;
-  font-size: 0.76rem;
-  margin-top: 4px;
-}
-
-.dispatch-flight-card em {
-  position: absolute;
-  right: 9px;
-  bottom: 8px;
-  font-style: normal;
-}
-
-.dispatch-flight-card.to-content { --tx: -34vw; --ty: 220px; }
-.dispatch-flight-card.to-mindmap { --tx: -20vw; --ty: 220px; }
-.dispatch-flight-card.to-quiz { --tx: -6vw; --ty: 220px; }
-.dispatch-flight-card.to-code { --tx: 6vw; --ty: 220px; }
-.dispatch-flight-card.to-reading { --tx: 20vw; --ty: 220px; }
-.dispatch-flight-card.to-ppt { --tx: 34vw; --ty: 220px; }
-
-@keyframes dispatchFlyCenter {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 0) scale(0.9) rotate(-3deg);
-  }
-  18% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(calc(-50% + var(--tx, 0px)), var(--ty, 240px)) scale(0.82) rotate(5deg);
-  }
-}
-
-.dispatch-card-enter-active,
-.dispatch-card-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.dispatch-card-enter-from,
-.dispatch-card-leave-to {
-  opacity: 0;
 }
 
 .flow-core-stack {
@@ -1416,20 +1236,20 @@ function getPlanStepIcon(agentId: string) {
 
 .core-agent-node strong {
   display: block;
-  color: #0F172A;
-  font-size: 1rem;
+  color: var(--color-text);
+  font-size: var(--text-base);
 }
 
 .core-agent-node span {
-  color: #2563EB;
-  font-size: 0.78rem;
-  font-weight: 800;
+  color: var(--cat-resource);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .core-progress {
-  font-size: 0.78rem;
-  font-weight: 900;
-  color: #0F172A;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
+  color: var(--color-text);
 }
 
 .core-link-line {
@@ -1559,21 +1379,21 @@ function getPlanStepIcon(agentId: string) {
 
 .station-header strong {
   display: block;
-  color: #0F172A;
-  font-size: 0.86rem;
+  color: var(--color-text);
+  font-size: var(--text-sm);
 }
 
 .station-header span {
-  color: #64748B;
-  font-size: 0.68rem;
-  font-weight: 800;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .station-header em {
-  font-size: 0.66rem;
+  font-size: var(--text-2xs);
   font-style: normal;
-  color: #2563EB;
-  font-weight: 900;
+  color: var(--cat-resource);
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
 
@@ -1638,17 +1458,17 @@ function getPlanStepIcon(agentId: string) {
 
 .station-live-current strong {
   display: block;
-  color: #2563EB;
-  font-size: 0.68rem;
-  font-weight: 950;
+  color: var(--cat-resource);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
   line-height: 1.2;
 }
 
 .station-live-current p {
   margin: 3px 0 0;
-  color: #0F172A;
-  font-size: 0.76rem;
-  font-weight: 800;
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
   line-height: 1.36;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1673,34 +1493,34 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .station-live-line span {
-  padding: 2px 6px;
+  padding: 2px var(--space-2);
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.08);
-  color: #2563EB;
-  font-size: 0.62rem;
-  font-weight: 900;
+  background: var(--cat-resource-soft);
+  color: var(--cat-resource);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
 
 .station-live-line em {
   min-width: 0;
-  color: #64748B;
-  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
   font-style: normal;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .station-live-line.is-success span {
-  background: rgba(16, 185, 129, 0.1);
-  color: #059669;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .station-live-line.is-failed span {
-  background: rgba(239, 68, 68, 0.1);
-  color: #DC2626;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .station-live-empty {
@@ -1709,15 +1529,15 @@ function getPlanStepIcon(agentId: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  color: #94A3B8;
-  font-size: 0.76rem;
-  font-weight: 800;
+  gap: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .station-live-empty p {
   margin: 0;
-  color: #94A3B8;
+  color: var(--color-text-faint);
 }
 
 .detail-live-log-item {
@@ -1736,22 +1556,22 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .detail-live-log-item span {
-  color: #2563EB;
-  font-size: 0.68rem;
-  font-weight: 950;
+  color: var(--cat-resource);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
 }
 
 .detail-live-log-item em {
-  color: #94A3B8;
-  font-size: 0.66rem;
+  color: var(--color-text-faint);
+  font-size: var(--text-2xs);
   font-style: normal;
-  font-weight: 800;
+  font-weight: var(--weight-extrabold);
 }
 
 .detail-live-log-item p {
   margin: 6px 0 0;
-  color: #475569;
-  font-size: 0.74rem;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -1769,10 +1589,10 @@ function getPlanStepIcon(agentId: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  color: #059669;
-  font-size: 0.72rem;
-  font-weight: 900;
+  gap: var(--space-2);
+  color: var(--color-success);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .station-footer i {
@@ -1845,22 +1665,22 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .review-station-card strong {
-  color: #0F172A;
-  font-size: 0.9rem;
+  color: var(--color-text);
+  font-size: var(--text-sm);
   display: block;
 }
 
 .review-station-card span {
-  color: #64748B;
-  font-size: 0.72rem;
-  font-weight: 800;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .review-station-card em {
   font-style: normal;
-  color: #2563EB;
-  font-weight: 900;
-  font-size: 0.74rem;
+  color: var(--cat-resource);
+  font-weight: var(--weight-extrabold);
+  font-size: var(--text-xs);
 }
 
 .agent-detail-floating-panel {
@@ -1909,9 +1729,9 @@ function getPlanStepIcon(agentId: string) {
 
 .detail-panel-title h3 {
   margin: 6px 0 0;
-  color: #0F172A;
-  font-size: 1.04rem;
-  font-weight: 950;
+  color: var(--color-text);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
 }
 
 .selected-agent-detail-card {
@@ -1933,15 +1753,15 @@ function getPlanStepIcon(agentId: string) {
 
 .detail-agent-head h4 {
   margin: 0;
-  color: #0F172A;
-  font-size: 1.02rem;
+  color: var(--color-text);
+  font-size: var(--text-lg);
 }
 
 .detail-agent-head p {
   margin: 4px 0 0;
-  color: #059669;
-  font-size: 0.76rem;
-  font-weight: 800;
+  color: var(--color-success);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .detail-status-dot {
@@ -1984,16 +1804,16 @@ function getPlanStepIcon(agentId: string) {
 
 .detail-current-task span {
   display: block;
-  color: #64748B;
-  font-size: 0.74rem;
-  font-weight: 900;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
   margin-bottom: 7px;
 }
 
 .detail-current-task strong {
   display: block;
-  color: #0F172A;
-  font-size: 0.86rem;
+  color: var(--color-text);
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -2018,9 +1838,9 @@ function getPlanStepIcon(agentId: string) {
   text-align: right;
   margin-top: 5px;
   font-style: normal;
-  color: #2563EB;
-  font-size: 0.72rem;
-  font-weight: 900;
+  color: var(--cat-resource);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .focus-metrics {
@@ -2038,16 +1858,16 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .focus-metrics dt {
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.66rem;
-  font-weight: 850;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
 }
 
 .focus-metrics dd {
   margin: 4px 0 0;
-  color: var(--color-text, #0f172a);
-  font-size: 0.78rem;
-  font-weight: 900;
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .detail-metrics-v3 {
@@ -2069,15 +1889,15 @@ function getPlanStepIcon(agentId: string) {
 
 .detail-io-grid span {
   display: block;
-  color: #2563EB;
-  font-size: 0.72rem;
-  font-weight: 900;
+  color: var(--cat-resource);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .detail-io-grid p {
   margin: 5px 0 0;
-  color: #475569;
-  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -2089,13 +1909,13 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .focus-metric-chips span {
-  padding: 5px 8px;
+  padding: 5px var(--space-2);
   border-radius: 999px;
-  color: var(--color-text-secondary, #475569);
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-border, #e2e8f0);
-  font-size: 0.68rem;
-  font-weight: 800;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
 }
 
 .focus-history {
@@ -2108,11 +1928,11 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .focus-history p {
-  margin: 8px 0 0;
-  padding-left: 10px;
-  border-left: 2px solid rgba(16,185,129,0.3);
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.74rem;
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--color-success-border);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -2163,16 +1983,16 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .output-dock-heading strong {
-  color: var(--color-text, #0f172a);
-  font-size: 0.98rem;
-  font-weight: 900;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-extrabold);
   line-height: 1.2;
 }
 
 .output-dock-heading p {
   margin: 0;
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
@@ -2230,9 +2050,9 @@ function getPlanStepIcon(agentId: string) {
 
 .output-dock-item strong {
   display: block;
-  color: var(--color-text, #0f172a);
-  font-size: 0.74rem;
-  font-weight: 900;
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2240,8 +2060,8 @@ function getPlanStepIcon(agentId: string) {
 
 .output-dock-item p {
   margin: 2px 0 0;
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.66rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2249,20 +2069,20 @@ function getPlanStepIcon(agentId: string) {
 
 .output-dock-item-v4 em {
   position: absolute;
-  right: 12px;
-  top: 12px;
+  right: var(--space-3);
+  top: var(--space-3);
   font-style: normal;
-  font-size: 0.68rem;
-  font-weight: 900;
-  color: #64748B;
-  background: rgba(241, 245, 249, 0.9);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-extrabold);
+  color: var(--color-text-muted);
+  background: var(--color-surface-hover);
   border-radius: 999px;
-  padding: 3px 8px;
+  padding: 3px var(--space-2);
 }
 
 .output-dock-item-v4.ready em {
-  color: #059669;
-  background: rgba(209, 250, 229, 0.9);
+  color: var(--color-success);
+  background: var(--color-success-soft);
 }
 
 .output-dock-item-v4.just-arrived {
@@ -2331,15 +2151,15 @@ function getPlanStepIcon(agentId: string) {
 }
 
 .drawer-log-item strong {
-  color: var(--color-text, #0f172a);
-  font-size: 0.86rem;
-  font-weight: 900;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-extrabold);
 }
 
 .drawer-log-item p {
   margin: 4px 0 0;
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -2552,13 +2372,6 @@ function getPlanStepIcon(agentId: string) {
   align-self: flex-end;
 }
 
-.master-plan-icons {
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-}
-
 .flow-core-stack-v4 {
   margin-top: 0;
 }
@@ -2612,13 +2425,6 @@ function getPlanStepIcon(agentId: string) {
   max-width: calc(100vw - 24px);
 }
 
-.dispatch-flight-card.to-content { --tx: -34vw; --ty: 300px; }
-.dispatch-flight-card.to-mindmap { --tx: -20vw; --ty: 300px; }
-.dispatch-flight-card.to-quiz { --tx: -6vw; --ty: 300px; }
-.dispatch-flight-card.to-code { --tx: 6vw; --ty: 300px; }
-.dispatch-flight-card.to-reading { --tx: 20vw; --ty: 300px; }
-.dispatch-flight-card.to-ppt { --tx: 34vw; --ty: 300px; }
-
 @media (max-width: 1120px) {
   .agent-connection-field {
     display: none;
@@ -2654,9 +2460,6 @@ function getPlanStepIcon(agentId: string) {
     width: 100%;
   }
 
-  .dispatch-flight-card {
-    display: none;
-  }
 }
 
 
@@ -2801,13 +2604,6 @@ function getPlanStepIcon(agentId: string) {
   top: 232px;
   height: 220px;
 }
-
-.dispatch-flight-card.to-content { --tx: -34vw; --ty: 210px; }
-.dispatch-flight-card.to-mindmap { --tx: -20vw; --ty: 210px; }
-.dispatch-flight-card.to-quiz { --tx: -6vw; --ty: 210px; }
-.dispatch-flight-card.to-code { --tx: 6vw; --ty: 210px; }
-.dispatch-flight-card.to-reading { --tx: 20vw; --ty: 210px; }
-.dispatch-flight-card.to-ppt { --tx: 34vw; --ty: 210px; }
 
 @media (max-width: 1180px) {
   .agent-link-svg {

@@ -6,10 +6,10 @@
 </template>
 
 <script setup lang="ts">
-import type { BlockCallout } from '../../types/ppt'
+import type { CalloutBlock } from '../../types/ppt'
 
 defineProps<{
-  block: BlockCallout
+  block: CalloutBlock
 }>()
 </script>
 

@@ -2,10 +2,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user, get_current_user_flexible
+from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import bg_apply_profile_update_from_learning_event
 from app.infra.database import get_session
+from app.infra.agent_events import create_agent_run
 from app.infra.models import PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
 from app.path.schemas import (
@@ -14,7 +15,7 @@ from app.path.schemas import (
     LearningPathResourceDTO,
     PathQuizSubmitRequest,
 )
-from app.path.service import PathService, build_learning_event_item
+from app.path.service import PathService, build_learning_event_item, run_generation_bg
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])  # 路径规划模块路由，挂载在 /api/v1/ai/path-plan/ 下
 
@@ -28,44 +29,18 @@ async def create_path(
 ):
     service = PathService(session)
     path_id = await service.init_path_task(current_user.id, request)  # 创建路径记录（状态=generating）
+    run = await create_agent_run(user_id=current_user.id, module="path", business_id=str(path_id))
     background_tasks.add_task(  # 后台异步执行路径生成（LLM 规划 + 节点创建）
         _run_generation_bg,
         user_id=current_user.id,
         path_id=path_id,
         request=request,
+        run_id=run.run_id,
     )
-    return HttpResponse.success(data={"id": path_id, "status": "generating"}, status_code=201)
-
-
-@router.get("/{path_id}/events")  # GET /api/v1/ai/path-plan/{id}/events — SSE 订阅路径生成进度
-async def stream_path_events(
-    path_id: int,
-    current_user: User = Depends(get_current_user_flexible),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        await service.get_path_by_id(current_user.id, path_id)
-    except ValueError as exc:
-        return HttpResponse.error(code=404, message=str(exc))
-
-    async def event_stream():
-        queue = path_event_bus.subscribe(path_id)  # 订阅路径事件队列
-        try:
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)  # 30秒超时发心跳
-                except asyncio.TimeoutError:
-                    yield f": heartbeat\n\n"  # SSE 心跳保持连接
-                    continue
-                data = event.model_dump_json()
-                yield f"event: {event.event_type}\ndata: {data}\n\n"
-                if event.event_type == "path.done":
-                    break  # 路径生成完成，结束 SSE 流
-        finally:
-            path_event_bus.unsubscribe(path_id, queue)  # 清理订阅
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return HttpResponse.success(
+        data={"id": path_id, "run_id": run.run_id, "status": "generating"},
+        status_code=201,
+    )
 
 
 @router.get("/active")  # GET /api/v1/ai/path-plan/active — 获取当前激活的学习路径
@@ -287,5 +262,10 @@ async def get_path_learning_evaluation(
 
 # ── Background task wrapper ──────────────────────────────────────────────────
 
-async def _run_generation_bg(user_id: int, path_id: int, request: CreateLearningPathRequest):
-    await run_generation_bg(user_id, path_id, request)
+async def _run_generation_bg(
+    user_id: int,
+    path_id: int,
+    request: CreateLearningPathRequest,
+    run_id: str,
+):
+    await run_generation_bg(user_id, path_id, request, run_id)

@@ -224,15 +224,15 @@ onMounted(() => {
 
 .history-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.65);
+  background: var(--color-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 20px;
-  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -240,10 +240,10 @@ onMounted(() => {
 }
 
 .history-card:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--color-surface);
   transform: translateY(-6px);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.08);
-  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-strong);
 }
 
 .card-status-bar {
@@ -256,31 +256,31 @@ onMounted(() => {
 }
 
 .card-status-bar.success, .card-status-bar.completed {
-  background: linear-gradient(90deg, #6366F1, #818CF8);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
 }
 
 .card-status-bar.running, .card-status-bar.processing {
-  background: linear-gradient(90deg, #3B82F6, #60A5FA);
+  background: linear-gradient(90deg, var(--cat-tutor), #60A5FA);
 }
 
 .card-status-bar.failed, .card-status-bar.error {
-  background: linear-gradient(90deg, #EF4444, #F87171);
+  background: linear-gradient(90deg, var(--color-danger), #F87171);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .card-time {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-family: monospace;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
 }
 
 .card-body {
@@ -288,11 +288,11 @@ onMounted(() => {
 }
 
 .learning-need {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
   color: var(--color-text);
   line-height: 1.5;
-  margin: 0 0 16px 0;
+  margin: 0 0 var(--space-4) 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -302,27 +302,27 @@ onMounted(() => {
 .resource-types {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
 }
 
 .type-badge {
-  background: rgba(59, 130, 246, 0.08);
-  color: #2563EB;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  background: var(--cat-resource-soft);
+  color: var(--cat-resource);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
 }
 
 .card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
-  padding-top: 16px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   color: var(--color-primary);
   opacity: 0.8;
   transition: opacity 0.2s;

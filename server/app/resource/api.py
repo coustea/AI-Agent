@@ -13,7 +13,6 @@ API 端点：
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 import uuid
@@ -21,14 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import FileResponse
 
-from app.auth.security import get_current_user, get_current_user_flexible
+from app.auth.security import get_current_user
 from app.config import WORKPLACE_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
+from app.infra.agent_events import create_agent_run
 from app.infra.models import User
-from app.resource.events import AgentEvent, resource_event_bus
 from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
@@ -62,6 +61,7 @@ async def create_resource_task(
         source="standalone",
     )
     resource_id = result["resource_id"]
+    run = await create_agent_run(user_id=current_user.id, module="resource", business_id=str(resource_id))
 
     profile_builder = get_profile_service()
     profile_record = await profile_builder.get_profile(user_id=current_user.id)
@@ -73,9 +73,10 @@ async def create_resource_task(
         request=req,
         profile=profile_dict,
         resource_id=resource_id,
+        run_id=run.run_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
+    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run.run_id, "status": "pending"}, status_code=201)
 
 
 @router.post("/resources/single")
@@ -106,6 +107,7 @@ async def create_single_resource_task(
         source="single_agent",
     )
     resource_id = result["resource_id"]
+    run = await create_agent_run(user_id=current_user.id, module="resource", business_id=str(resource_id))
 
     # 单智能体模式：通过多智能体流水线执行，只启用一个 agent
     background_tasks.add_task(
@@ -117,9 +119,10 @@ async def create_single_resource_task(
         ),
         profile=profile_dict,
         resource_id=resource_id,
+        run_id=run.run_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
+    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run.run_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
 
 
 @router.get("/resources/{resource_id}/status")
@@ -138,66 +141,6 @@ async def get_generation_status(
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
     return HttpResponse.success(data=status_data)
-
-
-@router.get("/resources/{resource_id}/events")
-async def stream_resource_events(
-    resource_id: int,
-    current_user: User = Depends(get_current_user_flexible),
-    session: AsyncSession = Depends(get_session),
-):
-    """SSE 端点：订阅资源生成事件，实时推送 agent 状态变更。"""
-    service = ResourceService(session)
-    resource = await service.get_resource(
-        current_user.id,
-        resource_id,
-        allowed_sources=STANDALONE_RESOURCE_SOURCES,
-    )
-    if resource is None:
-        return HttpResponse.error(code=404, message="资源不存在或无权限")
-
-    async def event_stream():
-        queue = resource_event_bus.subscribe(resource_id)
-        try:
-            snapshot = resource_event_bus.get_latest_snapshot(resource_id)
-            for agent_id, agent_snapshot in snapshot.get("agent_snapshots", {}).items():
-                snapshot_data = {
-                    key: value
-                    for key, value in agent_snapshot.items()
-                    if key in AgentEvent.model_fields
-                    and key not in {"event_type", "agent_id"}
-                }
-                snapshot_event = AgentEvent(
-                    event_type="agent.snapshot",
-                    agent_id=agent_id,
-                    **snapshot_data,
-                )
-                yield f"event: {snapshot_event.event_type}\ndata: {snapshot_event.model_dump_json()}\n\n"
-
-            await session.refresh(resource)
-            if resource.status in {"completed", "partial_completed", "failed"}:
-                done_event = AgentEvent(
-                    event_type="resource.done",
-                    success=resource.status in {"completed", "partial_completed"},
-                    message="资源生成完成" if resource.status != "failed" else "资源生成失败",
-                )
-                yield f"event: {done_event.event_type}\ndata: {done_event.model_dump_json()}\n\n"
-                return
-
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    yield f": heartbeat\n\n"
-                    continue
-                data = event.model_dump_json()
-                yield f"event: {event.event_type}\ndata: {data}\n\n"
-                if event.event_type == "resource.done":
-                    break
-        finally:
-            resource_event_bus.unsubscribe(resource_id, queue)
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.get("/agents")

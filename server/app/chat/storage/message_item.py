@@ -17,6 +17,7 @@ class ChatMessageItem:
     - tool_call_id: 关联的工具调用 ID
     - knowledge_sources: 知识来源
     - attachment_analyses: 附件分析结果
+    - agent_activities: 本轮工具调用与附件分析的可展示记录
     - teaching_diagram: 教学图解数据
     - turn_id: 所属 turn 的 ID
     - message_kind: 消息分类
@@ -34,6 +35,7 @@ class ChatMessageItem:
         tool_call_id: str | None = None,
         knowledge_sources: list[dict[str, Any]] | None = None,
         attachment_analyses: list[dict[str, Any]] | None = None,
+        agent_activities: list[dict[str, Any]] | None = None,
         teaching_diagram: dict[str, Any] | None = None,
         turn_id: int | None = None,
         message_kind: str | None = None,
@@ -47,6 +49,7 @@ class ChatMessageItem:
         self.tool_call_id = tool_call_id
         self.knowledge_sources = knowledge_sources
         self.attachment_analyses = attachment_analyses
+        self.agent_activities = agent_activities
         self.teaching_diagram = teaching_diagram
         self.turn_id = turn_id
         self.message_kind = message_kind
@@ -70,6 +73,8 @@ class ChatMessageItem:
             data["knowledge_sources"] = self.knowledge_sources
         if self.attachment_analyses:
             data["attachment_analyses"] = self.attachment_analyses
+        if self.agent_activities:
+            data["agent_activities"] = self.agent_activities
         if self.teaching_diagram:
             data["teaching_diagram"] = self.teaching_diagram
         if self.turn_id is not None:

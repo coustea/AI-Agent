@@ -173,8 +173,6 @@ class ChatLongTermMemoryService:
         resp = await self.llm.ainvoke_json(
             MemoryUpdateOutput,
             prompt,
-            function_name="update_chat_long_term_memory",
-            function_description="判断是否需要更新 chat 长期记忆，如需更新返回新的记忆 Markdown。",
             temperature=0.1,
         )
 

@@ -7,6 +7,8 @@ import type {
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
   ProfileScoreData,
+  ProfileDimensionKey,
+  DimensionValue,
 } from '@/features/profile/model/profile'
 
 export type {
@@ -16,6 +18,8 @@ export type {
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
   ProfileScoreData,
+  ProfileDimensionKey,
+  DimensionValue,
 }
 
 export function getProfile() {

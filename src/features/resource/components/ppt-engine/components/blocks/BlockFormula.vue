@@ -7,10 +7,10 @@
 </template>
 
 <script setup lang="ts">
-import type { BlockFormula } from '../../types/ppt'
+import type { FormulaBlock } from '../../types/ppt'
 
 defineProps<{
-  block: BlockFormula
+  block: FormulaBlock
 }>()
 </script>
 

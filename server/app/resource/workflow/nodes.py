@@ -22,7 +22,7 @@ from sqlalchemy import select
 from app.infra.database import session_scope
 from app.infra.models import GeneratedResourceItem
 from app.resource.agents import AGENT_REGISTRY
-from app.resource.events import AgentRunTracker
+from app.infra.agent_events import AgentRunTracker
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
 from app.resource.workflow.validation import validate_agent_result
@@ -380,6 +380,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     failures = state.get("failures") or {}
     success_count = len(results)
     fail_count = len(failures)
+    worker_agents = base_worker_ids(state)
     # 直接使用 request 的 enabled_agent_ids，前端已按要求传参
     coordinator_status = "failed" if worker_agents and success_count == 0 else "finished"
     message = (
@@ -395,7 +396,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     )
 
     # 从数据库读取覆盖情况
-    coverage_report = await _fetch_coverage_from_db(
+    coverage_report = await get_coverage(
         resource_id=state["resource_id"],
         teaching_plan=state.get("teaching_plan"),
     )
@@ -463,7 +464,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
     )
 
     # 从数据库读取成功持久化的基础 Agent handoffs
-    base_handoffs = await _fetch_successful_handoffs_from_db(
+    base_handoffs = await get_handoffs(
         resource_id=state["resource_id"],
         user_id=state["user_id"],
     )
@@ -510,7 +511,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
     )
 
     # 从数据库读取成功持久化的基础 Agent handoffs
-    base_handoffs = await _fetch_successful_handoffs_from_db(
+    base_handoffs = await get_handoffs(
         resource_id=state["resource_id"],
         user_id=state["user_id"],
     )

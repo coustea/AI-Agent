@@ -214,14 +214,15 @@
 
     </div>
 
-    <section v-else class="home-state-panel" v-loading="loading">
-      <div class="state-copy">
-        <span class="state-badge">{{ loading ? '加载中' : '加载失败' }}</span>
-        <h1>{{ loading ? '正在同步学习控制台' : '首页数据加载失败' }}</h1>
-        <p>{{ loading ? '正在读取画像、路径、资源和学习事件...' : (loadError || '暂时无法获取数据') }}</p>
-        <BaseButton v-if="!loading" class="state-btn" @click="loadAllData">重新加载</BaseButton>
-      </div>
-    </section>
+    <ErrorStatePanel
+      v-else
+      :is-loading="loading"
+      :loading-title="'正在同步学习控制台'"
+      :loading-message="'正在读取画像、路径、资源和学习事件...'"
+      :error-title="'首页数据加载失败'"
+      :error-message="loadError || '暂时无法获取数据'"
+      @retry="loadAllData"
+    />
   </main>
 </template>
 
@@ -231,6 +232,7 @@ import { useRouter, useRoute } from 'vue-router'
 import BaseCard from '@/shared/ui/BaseCard.vue'
 import BaseButton from '@/shared/ui/BaseButton.vue'
 import BaseTag from '@/shared/ui/BaseTag.vue'
+import ErrorStatePanel from '@/shared/ui/ErrorStatePanel.vue'
 
 import {
   getRecommendation,
@@ -1231,71 +1233,11 @@ watch(
   font-size: 1.16rem;
 }
 
-.home-state-panel {
-  min-height: 400px;
-  max-width: 600px;
-  margin: 0 auto;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48px;
-  box-shadow: var(--shadow-sm);
-}
-
-.state-copy {
-  max-width: 400px;
-  text-align: center;
-}
-
-.state-badge {
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  border-radius: 999px;
-  padding: 4px 14px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
-
-.state-copy h1 {
-  margin: 0 0 var(--space-2_5) 0;
-  color: var(--color-text-strong);
-  font-size: var(--text-2xl);
-  line-height: 1.25;
-}
-
-.state-copy p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
-}
-
-.state-btn {
-  margin-top: 20px;
-  border: none;
-  background: var(--color-primary);
-  color: #ffffff;
-  border-radius: var(--radius-base);
-  padding: 10px 20px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background var(--transition-base);
-}
-
-.state-btn:hover { background: var(--color-primary-hover); }
-
 .text-link:focus-visible,
 .row-action:focus-visible,
 .quick-item:focus-visible,
 .suggestion-item:focus-visible,
-.primary-task-btn:focus-visible,
-.state-btn:focus-visible {
+.primary-task-btn:focus-visible {
   outline: 3px solid rgba(79, 70, 229, 0.3);
   outline-offset: 2px;
 }

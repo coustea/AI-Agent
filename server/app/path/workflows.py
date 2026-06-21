@@ -26,6 +26,7 @@ from app.evaluation.service import (
 )
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm
+from app.infra.tool_excute import Tool
 from app.infra.prompts import prompts
 from app.infra.models import (
     LearningPath,
@@ -37,7 +38,13 @@ from app.infra.models import (
 from app.profile.service import get_profile_service
 from app.resource.path_helpers import generate_path_node_resource
 from app.resource.schemas import NodeInput
-from app.chat.tools.search import duckduckgo_search, spark_search, tavily_search
+from app.chat.tools.search import (
+    SearchQueryArgs,
+    duckduckgo_search,
+    duckduckgo_instant_answer,
+    spark_search,
+    tavily_search,
+)
 
 # 从本地合并后的 schemas 导入
 from app.path.schemas import (
@@ -196,13 +203,15 @@ class PathState(TypedDict):
 class PathPlannerAgent:
     """课程级学习路径规划智能体。"""
 
-    def __init__(self, search_tools: list[Any] | None = None):
+    def __init__(self, search_tools: list[Tool] | None = None):
         self.llm = get_llm()
         self.search_tools = search_tools if search_tools is not None else [
-            tavily_search,
-            duckduckgo_search,
-            spark_search,
+            Tool("duckduckgo_search", "General web search for articles and tutorials.", SearchQueryArgs, duckduckgo_search),
+            Tool("duckduckgo_instant_answer", "Instant definitions and encyclopedia summaries.", SearchQueryArgs, duckduckgo_instant_answer),
+            Tool("tavily_search", "AI-optimized structured web search.", SearchQueryArgs, tavily_search),
+            Tool("spark_search", "Chinese semantic web search.", SearchQueryArgs, spark_search),
         ]
+        self.tool_excute = self.llm.create_tool_excute(self.search_tools)
         self.max_search_tool_calls = 3
         self.system_prompt = prompts.get("path").get("planner_system")
         self.generate_graph = self._build_generate_graph()
@@ -326,10 +335,9 @@ class PathPlannerAgent:
             return ""
 
         try:
-            bound_model = self.llm.model.bind_tools(self.search_tools)
             messages = _build_search_messages(request, profile)
-            response = await self.llm.ainvoke(
-                messages, model=bound_model, max_tokens=1000
+            response, tool_calls = await self.tool_excute.invoke(
+                messages, max_tokens=1000
             )
         except Exception as exc:
             loguru_logger.warning(
@@ -337,17 +345,18 @@ class PathPlannerAgent:
             )
             return ""
 
-        tool_calls = list(
-            getattr(response, "tool_calls", []) or []
-        )[: self.max_search_tool_calls]
+        tool_calls = tool_calls[: self.max_search_tool_calls]
         if not tool_calls:
             direct = _message_content(response)
             if is_usable_search_result(direct):
                 return f"\n\n联网检索参考:\n{direct[:6000]}"
             return ""
 
-        tools_by_name = {tool.name: tool for tool in self.search_tools}
-        results = await _run_tool_calls(tool_calls, tools_by_name)
+        raw_results = await self.tool_excute.execute_all(tool_calls)
+        results = [
+            f"{call.get('name', '')} 搜索失败: {result}" if isinstance(result, Exception) else str(result)
+            for call, result in zip(tool_calls, raw_results, strict=True)
+        ]
         usable = [r for r in results if is_usable_search_result(r)]
         if not usable:
             return ""
@@ -439,35 +448,6 @@ def _message_content(message: Any) -> str:
     if isinstance(content, list):
         return "\n".join(str(item) for item in content)
     return str(content or "")
-
-
-async def _run_tool_calls(
-    tool_calls: list[Any], tools_by_name: dict[str, Any]
-) -> list[str]:
-    import asyncio
-
-    async def _run_one(tool_call: Any) -> str:
-        if isinstance(tool_call, dict):
-            name = str(tool_call.get("name", ""))
-            args = tool_call.get("args") or {}
-        else:
-            name = str(getattr(tool_call, "name", ""))
-            args = getattr(tool_call, "args", {}) or {}
-        tool = tools_by_name.get(name)
-        if tool is None:
-            return f"搜索工具不存在: {name}"
-        try:
-            result = await tool.ainvoke(dict(args))
-            return str(result)
-        except Exception as exc:
-            loguru_logger.warning(
-                "[PathPlannerAgent] search tool failed: tool=%s error=%s",
-                name,
-                exc,
-            )
-            return f"{name} 搜索失败: {exc}"
-
-    return list(await asyncio.gather(*[_run_one(tc) for tc in tool_calls]))
 
 
 async def emit_progress(

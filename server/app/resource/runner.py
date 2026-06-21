@@ -20,7 +20,7 @@ from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
 from app.infra.models import GeneratedResource, GeneratedResourceAgentRun
 from app.resource.agents import AGENT_REGISTRY
-from app.resource.events import AgentEventEmitter
+from app.infra.agent_events import AgentEventEmitter
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
 from app.resource.workflow.nodes import AGENT_TIMEOUTS, BASE_RESOURCE_AGENT_IDS, AGGREGATION_AGENT_IDS
 from app.resource.schemas import ResourceInput, TeachingPlan
@@ -113,7 +113,7 @@ async def recover_pending_agents(
     return outcomes
 
 
-def build_recovery_input(
+def _build_recovery_input(
     *,
     resource_id: int,
     agent_id: str,

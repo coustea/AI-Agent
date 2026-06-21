@@ -1,19 +1,20 @@
 // src/composables/useChatStreamManager.ts
 
-import { ref, readonly } from 'vue'
+import { readonly, shallowRef } from 'vue'
 import {
-  streamChat,
+  createChatRun,
 } from '@/features/chat/api/chat'
 import type {
   StreamChatParams,
-  StreamChatEvent,
 } from '@/features/chat/model/chat'
+import type { AgentEvent } from '@/shared/agent-events/model'
+import { useAgentRun } from '@/shared/agent-events/useAgentRun'
 
 // ── Types ──────────────────────────────────────────────
 
 export interface StreamCallbacks {
   onChunk?: (text: string) => void
-  onEvent?: (event: StreamChatEvent) => void
+  onEvent?: (event: AgentEvent) => void
   onDone?: () => void
   onError?: (error: Error) => void
 }
@@ -21,17 +22,15 @@ export interface StreamCallbacks {
 export interface StreamState {
   sessionId: string
   status: 'streaming' | 'done' | 'error'
-  accumulatedText: string
-  events: StreamChatEvent[]
   error?: Error
-  abortController?: AbortController
+  agentRun: ReturnType<typeof useAgentRun>
   callbacks: StreamCallbacks
   completedAt?: number
 }
 
 // ── Global singleton state ─────────────────────────────
 
-const activeStreams = ref(new Map<string, StreamState>())
+const activeStreams = shallowRef(new Map<string, StreamState>())
 
 const CLEANUP_DELAY_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -47,7 +46,7 @@ function scheduleCleanup(sessionId: string) {
 // ── Composable ─────────────────────────────────────────
 
 export function useChatStreamManager() {
-  const startStream = (
+  const startStream = async (
     sessionId: string,
     params: StreamChatParams,
     callbacks: StreamCallbacks,
@@ -57,51 +56,55 @@ export function useChatStreamManager() {
     const state: StreamState = {
       sessionId,
       status: 'streaming',
-      accumulatedText: '',
-      events: [],
       callbacks,
+      agentRun: useAgentRun(),
     }
 
-    // CRITICAL: Pass wrappers that read from state.callbacks dynamically.
-    // This allows resubscribe() to replace callbacks on a running stream —
-    // the streamChat closures resolve state.callbacks at call time, not
-    // at creation time.
-    const controller = streamChat(
-      params,
-      // onChunk — 2nd positional arg
-      (chunk) => {
-        state.accumulatedText += chunk
-        state.callbacks.onChunk?.(chunk)
-      },
-      // onDone — 3rd positional arg
-      () => {
-        state.status = 'done'
-        state.completedAt = Date.now()
-        state.callbacks.onDone?.()
-        scheduleCleanup(sessionId)
-      },
-      // onError — 4th positional arg
-      (err) => {
-        state.status = 'error'
-        state.error = err
-        state.callbacks.onError?.(err)
-        scheduleCleanup(sessionId)
-      },
-      // onEvent — 5th positional arg
-      (event) => {
-        state.events.push(event)
-        state.callbacks.onEvent?.(event)
-      },
-    )
-
-    state.abortController = controller
     activeStreams.value.set(sessionId, state)
+    try {
+      const response = await createChatRun(params)
+      const runId = response.data.data.run_id
+      state.agentRun.connect(runId, {
+        onContentDelta: (chunk) => {
+          state.callbacks.onChunk?.(chunk)
+        },
+        onEvent: (event) => {
+          state.callbacks.onEvent?.(event)
+        },
+        onCompleted: () => {
+          state.status = 'done'
+          state.completedAt = Date.now()
+          state.callbacks.onDone?.()
+          scheduleCleanup(sessionId)
+        },
+        onFailed: (error) => {
+          state.status = 'error'
+          state.error = error
+          state.callbacks.onError?.(error)
+          scheduleCleanup(sessionId)
+        },
+        onConnectionError: (_, willRetry) => {
+          if (willRetry || state.status !== 'streaming') return
+          const error = new Error('智能辅导实时连接中断')
+          state.status = 'error'
+          state.error = error
+          state.callbacks.onError?.(error)
+          scheduleCleanup(sessionId)
+        },
+      })
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error('智能辅导运行创建失败')
+      state.status = 'error'
+      state.error = error
+      state.callbacks.onError?.(error)
+      scheduleCleanup(sessionId)
+    }
   }
 
   const stopStream = (sessionId: string) => {
     const state = activeStreams.value.get(sessionId)
     if (state) {
-      state.abortController?.abort()
+      state.agentRun.close()
       activeStreams.value.delete(sessionId)
     }
   }
@@ -116,12 +119,12 @@ export function useChatStreamManager() {
 
   const getBuffer = (
     sessionId: string,
-  ): { text: string; events: StreamChatEvent[] } => {
+  ): { text: string; events: AgentEvent[] } => {
     const state = activeStreams.value.get(sessionId)
     if (!state) return { text: '', events: [] }
     return {
-      text: state.accumulatedText,
-      events: [...state.events],
+      text: state.agentRun.content.value,
+      events: [...state.agentRun.events.value],
     }
   }
 

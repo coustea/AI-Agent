@@ -289,8 +289,6 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
             result = await llm.ainvoke_json(  # 调用 LLM 结构化输出
                 QuizReviewOutput,
                 messages,
-                function_name="quiz_review",
-                function_description="评判主观题答案质量",
             )
             output = QuizReviewOutput.model_validate(result)  # Pydantic 校验
         except Exception as e:

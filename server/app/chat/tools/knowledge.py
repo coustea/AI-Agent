@@ -18,7 +18,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from langchain_core.tools import tool
 from langchain_ollama import OllamaEmbeddings
 from pydantic import BaseModel, Field
 
@@ -886,13 +885,12 @@ class SearchKnowledgeBaseArgs(BaseModel):
     top_k: int = Field(default=4, ge=1, le=8, description="Maximum number of snippets to return.")
 
 
-@tool("search_knowledge_base", args_schema=SearchKnowledgeBaseArgs)
 async def search_knowledge_base(
     query: str,
     course_name: str | None = None,
     top_k: int = 4,
 ) -> str:
-    """LangChain tool 入口：搜索本地课程知识库。
+    """搜索本地课程知识库。
 
     适用于查询学术概念、定义、理论等教材内容。
     内部执行混合检索（dense + sparse），返回格式化的上下文片段。
@@ -933,9 +931,9 @@ def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
                 course_name=course_name,
                 top_k=top_k,
             )
+            return _compact(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
         except Exception as exc:
             logger.warning("[search_knowledge_base] failed: %s", exc)
             return "本地知识库暂时不可用。"
-        return _compact(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
 
     return _impl

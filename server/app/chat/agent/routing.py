@@ -17,14 +17,19 @@ def route_after_classify(state: TutorAgentState) -> str:
         return "answer_node"
     if cls.needs_file_analysis and state.get("attachments"):
         return "analysis_files"
-    if cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory or cls.needs_recent_evaluation:
+    if cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory:
         return "search_node"
     return "answer_node"
 
 
 def route_after_analysis(state: TutorAgentState) -> str:
     cls = state.get("classification")
-    if cls and (cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory or cls.needs_recent_evaluation):
+    if cls and (
+        cls.needs_knowledge_search
+        or cls.needs_web_search
+        or cls.needs_profile
+        or cls.needs_long_term_memory
+    ):
         return "search_node"
     return "answer_node"
 

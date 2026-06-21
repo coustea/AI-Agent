@@ -1,0 +1,350 @@
+{
+  "themes": ["logic-blue", "paper-light", "lab-light"],
+  "layouts": {
+    "HeroCover": {"slots": ["main"]},
+    "DualPane": {"slots": ["left", "right"]},
+    "TriplePane": {"slots": ["left", "center", "right"]},
+    "DiagramFocus": {"slots": ["diagram", "explanation"]},
+    "FlowCanvas": {"slots": ["flow", "annotation"]},
+    "CompareTable": {"slots": ["comparison", "insight"]},
+    "CardCluster": {"slots": ["featured", "cards"]},
+    "KnowledgeMap": {"slots": ["map", "legend"]}
+  },
+  "blocks": {
+    "Text": {"fields": ["content", "format"]},
+    "Callout": {"fields": ["intent", "icon", "content"]},
+    "KeyPoint": {"fields": ["label", "content"]},
+    "Diagram": {"fields": ["direction", "nodes", "edges"]},
+    "FlowChart": {"fields": ["steps"]},
+    "Table": {"fields": ["columns", "rows"]},
+    "CardList": {"fields": ["cards"]},
+    "Formula": {"fields": ["formula"]},
+    "CodeSnippet": {"fields": ["language", "code", "highlights"]}
+  },
+  "compositions": {
+    "cover-slide": {
+      "layout": "HeroCover",
+      "allowed_roles": ["cover"],
+      "blocks": [
+        {
+          "block_id": "course-title",
+          "slot": "main",
+          "type": "Text",
+          "instruction": "课程名称，简洁有力",
+          "budget": {"max_chars": 32}
+        },
+        {
+          "block_id": "chapter-title",
+          "slot": "main",
+          "type": "Text",
+          "instruction": "章节名称",
+          "budget": {"max_chars": 48}
+        },
+        {
+          "block_id": "topic-title",
+          "slot": "main",
+          "type": "KeyPoint",
+          "instruction": "本节知识点名称",
+          "budget": {"max_chars": 48}
+        }
+      ]
+    },
+    "learning-objectives": {
+      "layout": "CardCluster",
+      "allowed_roles": ["objectives"],
+      "blocks": [
+        {
+          "block_id": "objective-summary",
+          "slot": "featured",
+          "type": "KeyPoint",
+          "instruction": "一句话概括本节学习目标",
+          "budget": {"max_chars": 48}
+        },
+        {
+          "block_id": "objective-list",
+          "slot": "cards",
+          "type": "CardList",
+          "instruction": "3-5个具体学习目标，每个目标描述学生应该理解什么",
+          "budget": {"min_items": 3, "max_items": 5}
+        }
+      ]
+    },
+    "prerequisites": {
+      "layout": "DualPane",
+      "allowed_roles": ["prerequisite"],
+      "blocks": [
+        {
+          "block_id": "prereq-intro",
+          "slot": "left",
+          "type": "Text",
+          "instruction": "说明学习本节之前需要具备的基础",
+          "budget": {"max_chars": 120}
+        },
+        {
+          "block_id": "prereq-list",
+          "slot": "right",
+          "type": "CardList",
+          "instruction": "列出前置知识点，每项包含概念名称和简要说明",
+          "budget": {"min_items": 2, "max_items": 5}
+        }
+      ]
+    },
+    "problem-intro": {
+      "layout": "DualPane",
+      "allowed_roles": ["problem_intro"],
+      "blocks": [
+        {
+          "block_id": "problem-statement",
+          "slot": "left",
+          "type": "Callout",
+          "instruction": "用一个真实问题、学习困惑或系统现象引出主题",
+          "budget": {"max_chars": 100}
+        },
+        {
+          "block_id": "problem-why",
+          "slot": "right",
+          "type": "Text",
+          "instruction": "解释为什么这个问题值得学习，引发学生兴趣",
+          "budget": {"max_chars": 120}
+        }
+      ]
+    },
+    "knowledge-roadmap": {
+      "layout": "KnowledgeMap",
+      "allowed_roles": ["roadmap"],
+      "blocks": [
+        {
+          "block_id": "roadmap-diagram",
+          "slot": "map",
+          "type": "Diagram",
+          "instruction": "展示本节知识的讲解顺序和逻辑关系",
+          "budget": {"min_items": 3, "max_items": 8}
+        },
+        {
+          "block_id": "roadmap-legend",
+          "slot": "legend",
+          "type": "Text",
+          "instruction": "简要说明路线图的结构和关键节点",
+          "budget": {"max_chars": 80}
+        }
+      ]
+    },
+    "core-concept": {
+      "layout": "DualPane",
+      "allowed_roles": ["concept"],
+      "blocks": [
+        {
+          "block_id": "definition",
+          "slot": "left",
+          "type": "Text",
+          "instruction": "核心概念的定义，使用精确但易懂的语言",
+          "budget": {"max_chars": 120}
+        },
+        {
+          "block_id": "keywords",
+          "slot": "right",
+          "type": "CardList",
+          "instruction": "关键术语及其简要解释",
+          "budget": {"min_items": 2, "max_items": 4}
+        }
+      ]
+    },
+    "analogy-explanation": {
+      "layout": "DualPane",
+      "allowed_roles": ["analogy"],
+      "blocks": [
+        {
+          "block_id": "analogy-story",
+          "slot": "left",
+          "type": "Callout",
+          "instruction": "用生活化类比或场景帮助学生建立直觉理解",
+          "budget": {"max_chars": 100}
+        },
+        {
+          "block_id": "analogy-mapping",
+          "slot": "right",
+          "type": "Table",
+          "instruction": "对比类比对象与知识点的对应关系",
+          "budget": {"min_columns": 2, "max_columns": 3, "min_rows": 2, "max_rows": 4}
+        }
+      ]
+    },
+    "principle-diagram": {
+      "layout": "DiagramFocus",
+      "allowed_roles": ["principle_diagram"],
+      "blocks": [
+        {
+          "block_id": "structure-diagram",
+          "slot": "diagram",
+          "type": "Diagram",
+          "instruction": "用结构图展示内部组成、运行机制或数据流向",
+          "budget": {"min_items": 4, "max_items": 8}
+        },
+        {
+          "block_id": "diagram-explanation",
+          "slot": "explanation",
+          "type": "Text",
+          "instruction": "解释图中各部分的作用和关系",
+          "budget": {"max_chars": 120}
+        }
+      ]
+    },
+    "process-demo": {
+      "layout": "FlowCanvas",
+      "allowed_roles": ["process_demo"],
+      "blocks": [
+        {
+          "block_id": "process-flow",
+          "slot": "flow",
+          "type": "FlowChart",
+          "instruction": "按步骤展示机制如何运行、状态如何变化",
+          "budget": {"min_items": 3, "max_items": 6}
+        },
+        {
+          "block_id": "process-note",
+          "slot": "annotation",
+          "type": "Text",
+          "instruction": "标注关键步骤的注意事项或易错点",
+          "budget": {"max_chars": 100}
+        }
+      ]
+    },
+    "mechanism-breakdown": {
+      "layout": "TriplePane",
+      "allowed_roles": ["mechanism_breakdown"],
+      "blocks": [
+        {
+          "block_id": "mechanism-overview",
+          "slot": "left",
+          "type": "KeyPoint",
+          "instruction": "概括复杂机制的核心思想",
+          "budget": {"max_chars": 48}
+        },
+        {
+          "block_id": "mechanism-steps",
+          "slot": "center",
+          "type": "CardList",
+          "instruction": "拆分为3-5个小机制，每个说明其作用",
+          "budget": {"min_items": 3, "max_items": 5}
+        },
+        {
+          "block_id": "mechanism-insight",
+          "slot": "right",
+          "type": "Text",
+          "instruction": "总结机制之间的协作关系",
+          "budget": {"max_chars": 80}
+        }
+      ]
+    },
+    "concept-relation": {
+      "layout": "DiagramFocus",
+      "allowed_roles": ["concept_relation"],
+      "blocks": [
+        {
+          "block_id": "relation-diagram",
+          "slot": "diagram",
+          "type": "Diagram",
+          "instruction": "展示本知识点与相关概念之间的上下游关系",
+          "budget": {"min_items": 3, "max_items": 7}
+        },
+        {
+          "block_id": "relation-explanation",
+          "slot": "explanation",
+          "type": "Text",
+          "instruction": "说明概念之间的关系类型和影响",
+          "budget": {"max_chars": 100}
+        }
+      ]
+    },
+    "concept-compare": {
+      "layout": "CompareTable",
+      "allowed_roles": ["concept_compare"],
+      "blocks": [
+        {
+          "block_id": "compare-table",
+          "slot": "comparison",
+          "type": "Table",
+          "instruction": "对比相似概念的区别、使用场景和判断依据",
+          "budget": {"min_columns": 2, "max_columns": 4, "min_rows": 2, "max_rows": 5}
+        },
+        {
+          "block_id": "compare-insight",
+          "slot": "insight",
+          "type": "KeyPoint",
+          "instruction": "给出判断标准或选择建议",
+          "budget": {"max_chars": 48}
+        }
+      ]
+    },
+    "misconception-correction": {
+      "layout": "DualPane",
+      "allowed_roles": ["misconception"],
+      "blocks": [
+        {
+          "block_id": "wrong-idea",
+          "slot": "left",
+          "type": "Callout",
+          "instruction": "指出学生容易产生的误解",
+          "budget": {"max_chars": 80}
+        },
+        {
+          "block_id": "correct-understanding",
+          "slot": "right",
+          "type": "Text",
+          "instruction": "给出正确的理解方式和解释",
+          "budget": {"max_chars": 120}
+        }
+      ]
+    },
+    "knowledge-summary": {
+      "layout": "CardCluster",
+      "allowed_roles": ["summary"],
+      "blocks": [
+        {
+          "block_id": "summary-highlight",
+          "slot": "featured",
+          "type": "KeyPoint",
+          "instruction": "本节最重要的核心结论",
+          "budget": {"max_chars": 48}
+        },
+        {
+          "block_id": "summary-cards",
+          "slot": "cards",
+          "type": "CardList",
+          "instruction": "用框架图、流程图、表格总结本节知识结构",
+          "budget": {"min_items": 3, "max_items": 5}
+        }
+      ]
+    },
+    "next-steps": {
+      "layout": "DualPane",
+      "allowed_roles": ["next_steps"],
+      "blocks": [
+        {
+          "block_id": "connection-diagram",
+          "slot": "left",
+          "type": "Diagram",
+          "instruction": "展示本节内容与后续知识点的衔接关系",
+          "budget": {"min_items": 2, "max_items": 5}
+        },
+        {
+          "block_id": "connection-text",
+          "slot": "right",
+          "type": "Text",
+          "instruction": "说明后续学习方向和本节知识的应用场景",
+          "budget": {"max_chars": 100}
+        }
+      ]
+    }
+  },
+  "templates": {
+    "teaching-lesson": {
+      "lesson_kind": "concept",
+      "required_roles": ["cover", "objectives", "roadmap", "concept", "summary"],
+      "optional_roles": ["prerequisite", "problem_intro", "analogy", "principle_diagram", "process_demo", "mechanism_breakdown", "concept_relation", "concept_compare", "misconception", "next_steps"],
+      "min_pages": 6,
+      "max_pages": 16,
+      "role_order": ["cover", "objectives", "prerequisite", "problem_intro", "roadmap", "concept", "analogy", "principle_diagram", "process_demo", "mechanism_breakdown", "concept_relation", "concept_compare", "misconception", "summary", "next_steps"]
+    }
+  }
+}

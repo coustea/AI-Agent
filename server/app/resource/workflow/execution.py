@@ -24,7 +24,7 @@ from app.resource.workflow.validation import validate_agent_result
 
 if TYPE_CHECKING:
     from app.resource.agents.base import BaseResourceAgent
-    from app.resource.events import AgentEventEmitter
+    from app.infra.agent_events import AgentEventEmitter
     from app.resource.schemas import AgentResult, ResourceInput
 
 logger = get_module_logger("resource", sub="execution")
@@ -166,7 +166,13 @@ async def execute_resource_agent(
         )
 
     # 发送成功事件
-    await _observe(emitter.emit_artifact_ready(agent_id, str(item.id)))
+    await _observe(
+        emitter.emit_artifact_ready(
+            agent_id,
+            f"{agent_id} 资源已保存",
+            artifact_id=str(item.id),
+        )
+    )
     await _observe(emitter.emit_agent(agent_id, "finished", result.summary, 100))
 
     return AgentOutcome(
