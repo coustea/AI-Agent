@@ -198,5 +198,365 @@
     "ground_truth_source": "Java从入门到精通",
     "expected_sources": ["Java从入门到精通"],
     "notes": "JDBC基本流程"
+  },
+  {
+    "id": 21,
+    "query": "TCP三次握手的过程是什么",
+    "category": "传输层",
+    "difficulty": "medium",
+    "expected_keywords": ["TCP", "三次握手", "SYN", "ACK", "连接"],
+    "ground_truth_source": "计算机网络（第7版）",
+    "expected_sources": ["计算机网络（第7版）"],
+    "notes": "TCP连接建立过程"
+  },
+  {
+    "id": 22,
+    "query": "UDP协议和TCP协议有什么区别",
+    "category": "传输层",
+    "difficulty": "medium",
+    "expected_keywords": ["UDP", "TCP", "可靠", "无连接", "面向连接", "传输"],
+    "ground_truth_source": "计算机网络（第7版）",
+    "expected_sources": ["计算机网络（第7版）"],
+    "notes": "传输层协议对比"
+  },
+  {
+    "id": 23,
+    "query": "HTTP请求的常用方法有哪些",
+    "category": "应用层",
+    "difficulty": "easy",
+    "expected_keywords": ["HTTP", "GET", "POST", "PUT", "DELETE", "请求方法"],
+    "ground_truth_source": "计算机网络（第7版）",
+    "expected_sources": ["计算机网络（第7版）"],
+    "notes": "HTTP方法概述"
+  },
+  {
+    "id": 24,
+    "query": "DNS域名解析的过程",
+    "category": "应用层",
+    "difficulty": "medium",
+    "expected_keywords": ["DNS", "域名", "解析", "递归", "迭代", "IP地址"],
+    "ground_truth_source": "计算机网络（第7版）",
+    "expected_sources": ["计算机网络（第7版）"],
+    "notes": "DNS解析流程"
+  },
+  {
+    "id": 25,
+    "query": "子网掩码的作用和计算方法",
+    "category": "网络层",
+    "difficulty": "hard",
+    "expected_keywords": ["子网掩码", "网络号", "主机号", "CIDR", "子网划分"],
+    "ground_truth_source": "计算机网络（第7版）",
+    "expected_sources": ["计算机网络（第7版）"],
+    "notes": "子网掩码与地址划分"
+  },
+  {
+    "id": 26,
+    "query": "进程调度的常见算法有哪些",
+    "category": "进程管理",
+    "difficulty": "medium",
+    "expected_keywords": ["进程调度", "FCFS", "SJF", "优先级", "时间片轮转"],
+    "ground_truth_source": "计算机操作系统（慕课版）",
+    "expected_sources": ["计算机操作系统（慕课版）"],
+    "notes": "进程调度算法概述"
+  },
+  {
+    "id": 27,
+    "query": "产生死锁的四个必要条件",
+    "category": "死锁",
+    "difficulty": "medium",
+    "expected_keywords": ["死锁", "互斥", "占有并等待", "不可抢占", "循环等待"],
+    "ground_truth_source": "计算机操作系统（慕课版）",
+    "expected_sources": ["计算机操作系统（慕课版）"],
+    "notes": "死锁必要条件"
+  },
+  {
+    "id": 28,
+    "query": "虚拟内存的工作原理",
+    "category": "内存管理",
+    "difficulty": "hard",
+    "expected_keywords": ["虚拟内存", "页表", "缺页", "交换", "地址变换"],
+    "ground_truth_source": "计算机操作系统（慕课版）",
+    "expected_sources": ["计算机操作系统（慕课版）"],
+    "notes": "虚拟内存机制"
+  },
+  {
+    "id": 29,
+    "query": "页面置换算法有哪些",
+    "category": "内存管理",
+    "difficulty": "hard",
+    "expected_keywords": ["页面置换", "FIFO", "LRU", "OPT", "缺页率"],
+    "ground_truth_source": "计算机操作系统（慕课版）",
+    "expected_sources": ["计算机操作系统（慕课版）"],
+    "notes": "页面置换算法对比"
+  },
+  {
+    "id": 30,
+    "query": "信号量的PV操作",
+    "category": "进程同步",
+    "difficulty": "medium",
+    "expected_keywords": ["信号量", "P操作", "V操作", "wait", "signal", "同步"],
+    "ground_truth_source": "计算机操作系统（慕课版）",
+    "expected_sources": ["计算机操作系统（慕课版）"],
+    "notes": "PV操作原理和应用"
+  },
+  {
+    "id": 31,
+    "query": "二叉树的三种遍历方式",
+    "category": "树",
+    "difficulty": "medium",
+    "expected_keywords": ["二叉树", "前序", "中序", "后序", "遍历"],
+    "ground_truth_source": "数据结构（C语言版）（第2版）",
+    "expected_sources": ["数据结构（C语言版）（第2版）"],
+    "notes": "二叉树遍历算法"
+  },
+  {
+    "id": 32,
+    "query": "链表的基本操作",
+    "category": "线性表",
+    "difficulty": "easy",
+    "expected_keywords": ["链表", "插入", "删除", "节点", "指针", "单链表"],
+    "ground_truth_source": "数据结构（C语言版）（第2版）",
+    "expected_sources": ["数据结构（C语言版）（第2版）"],
+    "notes": "链表增删查改"
+  },
+  {
+    "id": 33,
+    "query": "栈在表达式求值中的应用",
+    "category": "栈和队列",
+    "difficulty": "medium",
+    "expected_keywords": ["栈", "表达式", "后缀", "中缀", "运算符", "求值"],
+    "ground_truth_source": "数据结构（C语言版）（第2版）",
+    "expected_sources": ["数据结构（C语言版）（第2版）"],
+    "notes": "栈与表达式计算"
+  },
+  {
+    "id": 34,
+    "query": "哈希表处理冲突的方法",
+    "category": "查找",
+    "difficulty": "medium",
+    "expected_keywords": ["哈希", "冲突", "开放定址", "链地址", "再哈希"],
+    "ground_truth_source": "数据结构（C语言版）（第2版）",
+    "expected_sources": ["数据结构（C语言版）（第2版）"],
+    "notes": "哈希冲突解决策略"
+  },
+  {
+    "id": 35,
+    "query": "常见排序算法的时间复杂度比较",
+    "category": "排序",
+    "difficulty": "hard",
+    "expected_keywords": ["排序", "时间复杂度", "快速排序", "归并排序", "冒泡排序"],
+    "ground_truth_source": "数据结构（C语言版）（第2版）",
+    "expected_sources": ["数据结构（C语言版）（第2版）"],
+    "notes": "排序算法复杂度对比"
+  },
+  {
+    "id": 36,
+    "query": "SQL查询语句的基本语法",
+    "category": "SQL",
+    "difficulty": "easy",
+    "expected_keywords": ["SQL", "SELECT", "FROM", "WHERE", "查询"],
+    "ground_truth_source": "数据库系统概念 （原书第6版）",
+    "expected_sources": ["数据库系统概念 （原书第6版）"],
+    "notes": "SQL基本查询语法"
+  },
+  {
+    "id": 37,
+    "query": "数据库事务的ACID特性",
+    "category": "事务",
+    "difficulty": "medium",
+    "expected_keywords": ["事务", "ACID", "原子性", "一致性", "隔离性", "持久性"],
+    "ground_truth_source": "数据库系统概念 （原书第6版）",
+    "expected_sources": ["数据库系统概念 （原书第6版）"],
+    "notes": "事务ACID特性"
+  },
+  {
+    "id": 38,
+    "query": "数据库索引的类型和作用",
+    "category": "索引",
+    "difficulty": "medium",
+    "expected_keywords": ["索引", "B树", "哈希索引", "聚簇", "查询优化"],
+    "ground_truth_source": "数据库系统概念 （原书第6版）",
+    "expected_sources": ["数据库系统概念 （原书第6版）"],
+    "notes": "索引类型与性能"
+  },
+  {
+    "id": 39,
+    "query": "数据库范式的概念",
+    "category": "关系数据库理论",
+    "difficulty": "hard",
+    "expected_keywords": ["范式", "第一范式", "第二范式", "第三范式", "函数依赖", "规范化"],
+    "ground_truth_source": "数据库系统概念 （原书第6版）",
+    "expected_sources": ["数据库系统概念 （原书第6版）"],
+    "notes": "数据库范式理论"
+  },
+  {
+    "id": 40,
+    "query": "存储过程和触发器的区别",
+    "category": "存储过程",
+    "difficulty": "medium",
+    "expected_keywords": ["存储过程", "触发器", "自动", "调用", "事件"],
+    "ground_truth_source": "数据库系统概念 （原书第6版）",
+    "expected_sources": ["数据库系统概念 （原书第6版）"],
+    "notes": "存储过程与触发器对比"
+  },
+  {
+    "id": 41,
+    "query": "Python装饰器的使用方法",
+    "category": "高级特性",
+    "difficulty": "medium",
+    "expected_keywords": ["装饰器", "decorator", "@", "函数", "包装", "闭包"],
+    "ground_truth_source": "Python编程三剑客：Python编程从入门到实践 快速上手 极客编程",
+    "expected_sources": ["Python编程三剑客：Python编程从入门到实践 快速上手 极客编程"],
+    "notes": "装饰器语法和应用"
+  },
+  {
+    "id": 42,
+    "query": "Python列表推导式的写法",
+    "category": "基础语法",
+    "difficulty": "easy",
+    "expected_keywords": ["列表推导", "list comprehension", "for", "if", "表达式"],
+    "ground_truth_source": "Python编程三剑客：Python编程从入门到实践 快速上手 极客编程",
+    "expected_sources": ["Python编程三剑客：Python编程从入门到实践 快速上手 极客编程"],
+    "notes": "列表推导式语法"
+  },
+  {
+    "id": 43,
+    "query": "Python生成器和迭代器的区别",
+    "category": "高级特性",
+    "difficulty": "hard",
+    "expected_keywords": ["生成器", "迭代器", "yield", "next", "惰性求值"],
+    "ground_truth_source": "Python编程三剑客：Python编程从入门到实践 快速上手 极客编程",
+    "expected_sources": ["Python编程三剑客：Python编程从入门到实践 快速上手 极客编程"],
+    "notes": "生成器与迭代器对比"
+  },
+  {
+    "id": 44,
+    "query": "Redis持久化机制RDB和AOF",
+    "category": "持久化",
+    "difficulty": "medium",
+    "expected_keywords": ["Redis", "RDB", "AOF", "持久化", "快照", "日志"],
+    "ground_truth_source": "Redis设计与实现",
+    "expected_sources": ["Redis设计与实现"],
+    "notes": "Redis两种持久化方式"
+  },
+  {
+    "id": 45,
+    "query": "Redis缓存穿透和缓存雪崩",
+    "category": "缓存",
+    "difficulty": "hard",
+    "expected_keywords": ["缓存穿透", "缓存雪崩", "Redis", "布隆过滤器", "过期"],
+    "ground_truth_source": "Redis设计与实现",
+    "expected_sources": ["Redis设计与实现"],
+    "notes": "缓存异常问题及解决方案"
+  },
+  {
+    "id": 46,
+    "query": "Redis哨兵模式的作用",
+    "category": "高可用",
+    "difficulty": "medium",
+    "expected_keywords": ["哨兵", "Sentinel", "主从", "故障转移", "监控"],
+    "ground_truth_source": "Redis设计与实现",
+    "expected_sources": ["Redis设计与实现"],
+    "notes": "Redis哨兵高可用机制"
+  },
+  {
+    "id": 47,
+    "query": "动态规划的基本思想",
+    "category": "动态规划",
+    "difficulty": "hard",
+    "expected_keywords": ["动态规划", "最优子结构", "重叠子问题", "状态转移", "递推"],
+    "ground_truth_source": "算法（第4版）",
+    "expected_sources": ["算法（第4版）"],
+    "notes": "动态规划核心思想"
+  },
+  {
+    "id": 48,
+    "query": "贪心算法的适用条件",
+    "category": "贪心",
+    "difficulty": "medium",
+    "expected_keywords": ["贪心", "贪心选择", "最优子结构", "局部最优", "全局最优"],
+    "ground_truth_source": "算法（第4版）",
+    "expected_sources": ["算法（第4版）"],
+    "notes": "贪心算法适用性分析"
+  },
+  {
+    "id": 49,
+    "query": "时间复杂度和空间复杂度的分析",
+    "category": "复杂度分析",
+    "difficulty": "easy",
+    "expected_keywords": ["时间复杂度", "空间复杂度", "大O", "O(n)", "O(logn)"],
+    "ground_truth_source": "算法（第4版）",
+    "expected_sources": ["算法（第4版）"],
+    "notes": "算法复杂度分析方法"
+  },
+  {
+    "id": 50,
+    "query": "Cache的映射方式有哪些",
+    "category": "存储系统",
+    "difficulty": "hard",
+    "expected_keywords": ["Cache", "直接映射", "全相联", "组相联", "映射"],
+    "ground_truth_source": "计算机组成原理 (谭志虎)",
+    "expected_sources": ["计算机组成原理 (谭志虎)"],
+    "notes": "Cache映射方式对比"
+  },
+  {
+    "id": 51,
+    "query": "流水线技术的基本原理",
+    "category": "CPU",
+    "difficulty": "medium",
+    "expected_keywords": ["流水线", "指令", "并行", "吞吐率", "加速比"],
+    "ground_truth_source": "计算机组成原理 (谭志虎)",
+    "expected_sources": ["计算机组成原理 (谭志虎)"],
+    "notes": "流水线执行原理"
+  },
+  {
+    "id": 52,
+    "query": "指令集架构的分类",
+    "category": "指令系统",
+    "difficulty": "medium",
+    "expected_keywords": ["指令集", "CISC", "RISC", "指令格式", "寻址方式"],
+    "ground_truth_source": "计算机组成原理 (谭志虎)",
+    "expected_sources": ["计算机组成原理 (谭志虎)"],
+    "notes": "CISC与RISC对比"
+  },
+  {
+    "id": 53,
+    "query": "导数的定义和几何意义",
+    "category": "微积分",
+    "difficulty": "medium",
+    "expected_keywords": ["导数", "极限", "切线", "斜率", "变化率"],
+    "ground_truth_source": "张宇带你学高等数学 同济7版. 上册",
+    "expected_sources": ["张宇带你学高等数学 同济7版. 上册"],
+    "notes": "导数定义与几何解释"
+  },
+  {
+    "id": 54,
+    "query": "定积分的计算方法",
+    "category": "积分",
+    "difficulty": "hard",
+    "expected_keywords": ["定积分", "牛顿莱布尼茨", "换元", "分部积分", "积分上限"],
+    "ground_truth_source": "张宇带你学高等数学 同济7版. 上册",
+    "expected_sources": ["张宇带你学高等数学 同济7版. 上册"],
+    "notes": "定积分计算技巧"
+  },
+  {
+    "id": 55,
+    "query": "贝叶斯公式的应用",
+    "category": "条件概率",
+    "difficulty": "hard",
+    "expected_keywords": ["贝叶斯", "先验", "后验", "条件概率", "全概率"],
+    "ground_truth_source": "概率论与数理统计（慕课版）【数字版】",
+    "expected_sources": ["概率论与数理统计（慕课版）【数字版】"],
+    "notes": "贝叶斯公式推导与应用"
+  },
+  {
+    "id": 56,
+    "query": "期望和方差的性质",
+    "category": "随机变量",
+    "difficulty": "medium",
+    "expected_keywords": ["期望", "方差", "E(X)", "D(X)", "线性", "独立"],
+    "ground_truth_source": "概率论与数理统计（慕课版）【数字版】",
+    "expected_sources": ["概率论与数理统计（慕课版）【数字版】"],
+    "notes": "期望方差基本性质"
   }
 ]

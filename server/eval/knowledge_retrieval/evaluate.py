@@ -25,7 +25,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 server_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(server_dir))
 
-from app.chat.tools.knowledge import (
+from app.rag.knowledge import (
     format_knowledge_context,
     retrieve_dense_knowledge,
     retrieve_sparse_knowledge,

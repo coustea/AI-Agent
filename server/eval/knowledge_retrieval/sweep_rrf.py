@@ -6,7 +6,7 @@ from pathlib import Path
 # Add server dir to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app.chat.tools.knowledge import (
+from app.rag.knowledge import (
     retrieve_dense_knowledge,
     retrieve_sparse_knowledge,
     _metadata_key,
@@ -19,7 +19,7 @@ K_VALUES = [10, 20, 30, 40, 60, 100]
 
 def _rrf_merge(dense_rows, sparse_rows, k, top_k=4, source_filter=None):
     """Manually merge with a specific k value for sweep testing."""
-    from app.chat.tools.knowledge import _matches_source_filter
+    from app.rag.knowledge import _matches_source_filter
     merged_scores: dict = {}
     for rows in (dense_rows, sparse_rows):
         for item in rows:

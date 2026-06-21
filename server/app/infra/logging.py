@@ -12,7 +12,12 @@ import logging
 import sys
 from typing import Any, Optional
 
-from loguru import logger as _loguru_logger
+try:
+    from loguru import logger as _loguru_logger
+    _HAS_LOGURU = True
+except ImportError:  # pragma: no cover - exercised in minimal test envs
+    _loguru_logger = None
+    _HAS_LOGURU = False
 
 from app.config import (
     DEEPAGENTS_DEBUG,
@@ -87,11 +92,13 @@ class LoguruLoggerProxy:
 
     def __init__(self, name: str):
         self._name = name
-        self._logger = _loguru_logger.bind(logger_name=name)
+        self._stdlib_logger = logging.getLogger(name)
+        self._logger = _loguru_logger.bind(logger_name=name) if _HAS_LOGURU else None
 
     def bind(self, **kwargs: Any) -> "LoguruLoggerProxy":
         proxy = LoguruLoggerProxy(self._name)
-        proxy._logger = self._logger.bind(**kwargs)  # type: ignore[attr-defined]
+        if _HAS_LOGURU and self._logger is not None:
+            proxy._logger = self._logger.bind(**kwargs)  # type: ignore[attr-defined]
         return proxy
 
     def _format_message(self, message: Any, args: tuple[Any, ...]) -> tuple[str, tuple[Any, ...]]:
@@ -116,6 +123,14 @@ class LoguruLoggerProxy:
         exc_info = kwargs.pop("exc_info", None)
         msg, fmt_args = self._format_message(message, args)
 
+        if not _HAS_LOGURU or self._logger is None:
+            self._stdlib_logger.log(
+                getattr(logging, level.upper(), logging.INFO),
+                msg.format(*fmt_args) if fmt_args else msg,
+                exc_info=exc_info if exc_info else None,
+            )
+            return
+
         l = self._logger
         if exc_info:
             if exc_info is True:
@@ -139,6 +154,9 @@ class LoguruLoggerProxy:
     def exception(self, message: Any, *args: Any, **kwargs: Any) -> None:
         # 与 logging 行为一致：记录当前异常堆栈（需要在 except 块内调用）
         msg, fmt_args = self._format_message(message, args)
+        if not _HAS_LOGURU or self._logger is None:
+            self._stdlib_logger.exception(msg.format(*fmt_args) if fmt_args else msg)
+            return
         self._logger.opt(exception=True).error(msg, *fmt_args, **kwargs)
 
 
@@ -239,6 +257,14 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
     """
     global _CONFIGURED
     if _CONFIGURED and not force:
+        return
+
+    if not _HAS_LOGURU:
+        logging.basicConfig(
+            level=getattr(logging, _parse_level(level or LOG_LEVEL), logging.INFO),
+            force=True,
+        )
+        _CONFIGURED = True
         return
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)

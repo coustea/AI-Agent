@@ -4,6 +4,7 @@
 不包含任何业务逻辑，所有配置项在模块加载时一次性读取并缓存。
 """
 
+import json
 from pathlib import Path
 
 import yaml
@@ -29,6 +30,14 @@ def _load() -> dict:
 
 # 模块加载时立即读取配置
 _config = _load()
+
+
+def _load_knowledge_routes() -> dict:
+    routes_file = Path(__file__).resolve().parent / "rag" / "config" / "knowledge_routes.json"
+    if not routes_file.exists():
+        return {}
+    with open(routes_file, encoding="utf-8") as f:
+        return json.load(f) or {}
 
 
 def get(path: str, default=None):
@@ -120,8 +129,9 @@ KB_TOP_K = get("knowledge.top_k", 4)
 KB_OLLAMA_BASE_URL = get("knowledge.ollama_base_url", "http://127.0.0.1:11434")
 
 # ============ 知识库路由配置 ============
-KB_COURSE_ROUTING: dict = get("knowledge.course_routing", {})
-KB_COURSE_LINKAGE: dict = get("knowledge.course_linkage", {})
+_knowledge_routes = _load_knowledge_routes()
+KB_COURSE_ROUTING: dict = _knowledge_routes.get("course_routing", {})
+KB_COURSE_LINKAGE: dict = _knowledge_routes.get("course_linkage", {})
 KB_ROUTING_LLM_MODEL: str = get("knowledge.routing.llm_model", "qwen2.5:1.5b")
 KB_ROUTING_LLM_CONFIDENCE: float = get("knowledge.routing.llm_confidence_threshold", 0.6)
 KB_ROUTING_KEYWORD_THRESHOLD: float = get("knowledge.routing.keyword_score_threshold", 3.0)
