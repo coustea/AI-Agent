@@ -58,3 +58,9 @@ server/test_pdf_md.py
 
 # Remotion local fixtures
 video-render/fixtures/
+
+# Documentation
+docs/
+
+# OpenSpec
+openspec/
