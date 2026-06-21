@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&family=Montserrat:wght@700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
 
 /* ============================================================
    Design Tokens — White Theme (Indigo accent)
@@ -87,8 +87,12 @@
   --gradient-eval: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
 
   /* ---- Typography ---- */
-  --font-sans: 'Outfit', system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+  --font-ui: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  --font-body: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace;
+  --font-note: 'LXGW WenKai', 'STKaiti', 'KaiTi', serif;
+  --font-display: 'Montserrat', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-sans: var(--font-ui);
 
   /* Type scale — 1.200 ratio (Minor Third) with mobile-first base ≥16px */
   --text-xs: 0.75rem;       /* 12px — captions, badges */
@@ -890,3 +894,32 @@ button:focus-visible, .btn:focus-visible {
 .token.variable {
   color: #24292f !important; /* 接近黑色 */
 }
+
+/* ============================================================
+   Academic Copywriting & Agent Workspace Custom Typographic Styles
+   ============================================================ */
+
+/* Eyebrow label for agents or sub-tasks */
+.agent-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+  opacity: 0.85;
+  margin-bottom: 4px;
+  display: block;
+}
+
+/* Socratic/Cognitive insight notes in serif/italic-like typeface */
+.cognitive-note {
+  font-family: var(--font-note), var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  border-left: 3px solid var(--color-primary-border);
+  padding: 2px 0 2px 14px;
+  margin: 12px 0;
+  font-style: normal;
+}
+

@@ -324,7 +324,17 @@ const selectScenario = (scenario: LearningScenario) => {
 </script>
 
 <style scoped>
-.personalize-view { background: transparent; align-items: center; overflow-y: auto; padding: 60px var(--space-5); position: relative; }
+.personalize-view {
+  --font-sans: var(--font-ui);
+  --agent-body-font: var(--font-body);
+
+  background: transparent;
+  align-items: center;
+  overflow-y: auto;
+  padding: 60px var(--space-5);
+  position: relative;
+  font-family: var(--font-sans);
+}
 .personalize-container { width: 100%; max-width: 1160px; display: flex; flex-direction: column; gap: var(--space-12); position: relative; z-index: 10; }
 .view-header { text-align: center; margin-bottom: 0; }
 .header-badge { margin-bottom: var(--space-4); font-weight: 700; letter-spacing: 0.05em; background: var(--color-border) !important; color: var(--color-text-secondary) !important; border: none; padding: 0 12px; }
@@ -337,7 +347,7 @@ const selectScenario = (scenario: LearningScenario) => {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.view-header p { font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+.view-header p { font-family: var(--agent-body-font); font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 40px; }
 .scenario-card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(24px); border: 2px solid var(--color-border); border-radius: 20px; padding: 20px 24px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04); }
 .scenario-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--color-border-hover); box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08); background: #ffffff; }
@@ -346,7 +356,7 @@ const selectScenario = (scenario: LearningScenario) => {
 .scenario-card.active .scenario-icon-box { background: var(--color-primary); color: var(--color-surface); border-color: var(--color-primary); transform: scale(1.05); }
 .scenario-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .s-name { font-weight: 800; font-size: 1.1rem; color: var(--color-text-strong); letter-spacing: 0.02em; }
-.s-desc { font-size: 0.8rem; color: var(--color-text-muted); line-height: 1.4; opacity: 0.8; }
+.s-desc { font-family: var(--agent-body-font); font-size: 0.8rem; color: var(--color-text-muted); line-height: 1.4; opacity: 0.8; }
 .active-dot { position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; background: var(--color-primary); border-radius: 50%; box-shadow: 0 0 12px var(--color-primary-glow, rgba(16, 185, 129, 0.3)); }
 .config-section-v2 { margin-top: 10px; }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
@@ -375,7 +385,7 @@ const selectScenario = (scenario: LearningScenario) => {
 .ctrl-switch-v2 { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); }
 .sw-info { display: flex; flex-direction: column; gap: 2px; }
 .sw-label { font-size: 0.9rem; font-weight: var(--weight-semibold); color: var(--color-text-strong); }
-.sw-desc { font-size: 0.75rem; color: var(--color-text-faint); line-height: 1.4; }
+.sw-desc { font-family: var(--agent-body-font); font-size: 0.75rem; color: var(--color-text-faint); line-height: 1.4; }
 .custom-radio-group { display: flex; gap: var(--space-2); width: 100%; flex-wrap: wrap; }
 :deep(.custom-radio-group .el-radio-button) { flex: 1; min-width: 0; }
 :deep(.custom-radio-group .el-radio-button__inner) { width: 100%; border-radius: var(--radius-md) !important; border: 1px solid transparent !important; background: rgba(241, 245, 249, 0.6); color: var(--color-text-muted); font-weight: var(--weight-semibold); transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base); padding: 10px 0; }
@@ -386,7 +396,7 @@ const selectScenario = (scenario: LearningScenario) => {
 .personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: 24px; margin-top: 16px; padding-bottom: 60px; }
 .footer-btns { display: flex; justify-content: center; gap: 20px; }
 .selected-agents-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid var(--color-border); border-radius: 24px; padding: 16px 24px; max-width: 860px; box-shadow: 0 4px 24px rgba(148, 163, 184, 0.08); }
-.sab-label { font-size: 0.9rem; color: var(--color-text-muted); font-weight: 700; white-space: nowrap; }
+.sab-label { font-family: var(--agent-body-font); font-size: 0.9rem; color: var(--color-text-muted); font-weight: 700; white-space: nowrap; }
 .sab-pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .sab-pills :deep(.el-tag.sab-pill) { background: var(--color-bg) !important; border: 1px solid var(--color-border) !important; color: var(--color-text-secondary) !important; border-radius: 99px !important; padding: 0 16px !important; height: 32px !important; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; }
 .sab-pills :deep(.el-tag.sab-pill) .el-icon { color: var(--cat-resource); font-size: 1rem; }

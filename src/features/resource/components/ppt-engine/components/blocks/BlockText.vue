@@ -6,7 +6,7 @@
       :is-streaming="false"
       class="ppt-markdown"
     />
-    <p v-else>{{ block.content }}</p>
+    <p v-else class="text-content">{{ block.content }}</p>
   </div>
 </template>
 
@@ -22,37 +22,58 @@ defineProps<{
 <style scoped>
 .block-text {
   color: var(--ppt-text-secondary);
-  line-height: 1.55;
-  font-size: 1.08rem;
-  margin-bottom: 0.85em;
+  line-height: 1.7;
+  font-size: 1.12rem;
+  margin-bottom: 0.5em;
   min-width: 0;
 }
 
-.block-text p {
+.text-content {
   margin: 0;
+  white-space: pre-wrap;
 }
 
 .ppt-markdown {
   color: inherit;
 }
 
-.ppt-markdown :deep(p),
-.ppt-markdown :deep(ul),
-.ppt-markdown :deep(ol) {
-  margin: 0 0 0.55em;
+.ppt-markdown :deep(p) {
+  margin: 0 0 0.75em;
+  line-height: 1.7;
+}
+
+.ppt-markdown :deep(strong) {
+  color: var(--ppt-accent);
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .ppt-markdown :deep(ul),
 .ppt-markdown :deep(ol) {
-  padding-left: 1.2em;
+  padding-left: 1.4em;
+  margin: 0 0 0.85em;
 }
 
 .ppt-markdown :deep(li) {
-  margin: 0.18em 0;
+  margin: 0.35em 0;
+}
+
+.ppt-markdown :deep(code) {
+  font-family: var(--ppt-font-mono);
+  background: var(--ppt-bg-tertiary);
+  color: var(--ppt-code-text);
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 0.95em;
 }
 
 .ppt-markdown :deep(.code-block-wrapper) {
-  margin: 0.6em 0;
+  margin: 1em 0;
   max-width: 100%;
+  border-radius: var(--ppt-radius-md);
+  overflow: hidden;
+  box-shadow: var(--ppt-shadow-soft);
 }
 </style>

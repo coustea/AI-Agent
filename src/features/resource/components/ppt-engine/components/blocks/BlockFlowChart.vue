@@ -4,19 +4,28 @@
       <div
         v-for="(step, index) in block.steps"
         :key="step.step_id"
-        class="flow-step"
+        class="flow-step-card"
         :class="{ active: index === activeStep }"
         @click="activeStep = index"
       >
-        <div class="step-number">{{ index + 1 }}</div>
-        <div class="step-content">
-          <div class="step-title">{{ step.title }}</div>
-          <div class="step-description">{{ step.description }}</div>
+        <div class="step-badge-wrap">
+          <div class="step-index-badge">
+            <span class="step-num-text">0{{ index + 1 }}</span>
+          </div>
+          <!-- 虚线连接器 (非最后一个元素) -->
+          <div v-if="index < block.steps.length - 1" class="step-timeline-connector"></div>
         </div>
-        <div v-if="step.state_before && step.state_after" class="step-state">
-          <span class="state-before">{{ step.state_before }}</span>
-          <span class="state-arrow">→</span>
-          <span class="state-after">{{ step.state_after }}</span>
+        
+        <div class="step-body-card ppt-card">
+          <div class="step-header">
+            <div class="step-title">{{ step.title }}</div>
+            <div v-if="step.state_before || step.state_after" class="step-state-badge">
+              <span class="state-value before">{{ step.state_before || '无' }}</span>
+              <span class="state-arrow">→</span>
+              <span class="state-value after">{{ step.state_after || '无' }}</span>
+            </div>
+          </div>
+          <div class="step-description">{{ step.description }}</div>
         </div>
       </div>
     </div>
@@ -42,84 +51,126 @@ const activeStep = ref(0)
 .flow-steps {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
-.flow-step {
+.flow-step-card {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: var(--ppt-bg-secondary, #f8fafc);
-  border: 1px solid var(--ppt-border, #e2e8f0);
+  align-items: stretch;
+  gap: 20px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.flow-step:hover {
-  background: var(--ppt-bg-hover, #f1f5f9);
-}
-
-.flow-step.active {
-  border-color: var(--ppt-primary, #2563eb);
-  background: var(--ppt-bg-active, #eff6ff);
-}
-
-.step-number {
+.step-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+}
+
+.step-index-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--ppt-bg-tertiary);
+  border: 2px solid var(--ppt-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--ppt-primary, #2563eb);
-  color: white;
-  font-weight: 700;
-  font-size: 14px;
+  z-index: 2;
+  transition: all 0.2s ease;
 }
 
-.step-content {
+.step-num-text {
+  font-family: var(--ppt-font-mono);
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--ppt-text-secondary);
+}
+
+.step-timeline-connector {
+  width: 2px;
+  position: absolute;
+  top: 40px;
+  bottom: -16px;
+  background-image: linear-gradient(to bottom, var(--ppt-border) 50%, transparent 50%);
+  background-size: 2px 8px;
+  background-repeat: repeat-y;
+  z-index: 1;
+}
+
+.step-body-card {
   flex: 1;
   min-width: 0;
+  padding: 18px 24px;
+  background: var(--ppt-bg-secondary);
+  border: 1px solid var(--ppt-border);
+  border-radius: var(--ppt-radius-md);
+  box-shadow: var(--ppt-shadow-card);
+  transition: all 0.2s ease;
+}
+
+/* 激活状态 */
+.flow-step-card.active .step-index-badge {
+  background: var(--ppt-accent-gradient);
+  border-color: transparent;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+}
+
+.flow-step-card.active .step-num-text {
+  color: #FFFFFF;
+}
+
+.flow-step-card.active .step-body-card {
+  border-color: var(--ppt-accent);
+  box-shadow: var(--ppt-shadow-glow), var(--ppt-shadow-card);
+  transform: translateX(4px);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
 }
 
 .step-title {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--ppt-text-primary, #0f172a);
-  margin-bottom: 4px;
+  font-weight: 800;
+  font-size: 1.08rem;
+  color: var(--ppt-text-primary);
 }
 
 .step-description {
-  font-size: 13px;
-  color: var(--ppt-text-secondary, #64748b);
-  line-height: 1.4;
+  font-size: 0.95rem;
+  color: var(--ppt-text-secondary);
+  line-height: 1.5;
 }
 
-.step-state {
-  flex-shrink: 0;
+.step-state-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: var(--ppt-bg-tertiary, #f1f5f9);
-  font-size: 12px;
-  font-family: monospace;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--ppt-bg-tertiary);
+  border: 1px solid var(--ppt-border);
+  font-size: 0.78rem;
+  font-family: var(--ppt-font-mono);
 }
 
-.state-before {
-  color: var(--ppt-text-muted, #94a3b8);
+.state-value.before {
+  color: var(--ppt-text-secondary);
 }
 
 .state-arrow {
-  color: var(--ppt-primary, #2563eb);
+  color: var(--ppt-accent);
+  font-weight: 800;
 }
 
-.state-after {
-  color: var(--ppt-success, #16a34a);
-  font-weight: 600;
+.state-value.after {
+  color: #059669;
+  font-weight: 700;
 }
 </style>

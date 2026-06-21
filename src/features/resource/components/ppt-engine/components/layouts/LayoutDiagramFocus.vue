@@ -31,10 +31,10 @@ defineProps<{
 <style scoped>
 .layout-diagram-focus {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 28px;
+  grid-template-columns: 68% 32%;
+  gap: 36px;
   height: 100%;
-  padding: 24px 36px;
+  padding: 32px 48px;
 }
 
 .diagram-pane,
@@ -42,7 +42,20 @@ defineProps<{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   justify-content: center;
+}
+
+.diagram-pane {
+  background: var(--ppt-bg-tertiary);
+  border-radius: var(--ppt-radius-lg);
+  padding: 24px;
+  border: 1px dashed var(--ppt-border);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.explanation-pane {
+  border-left: 1px dashed var(--ppt-border);
+  padding-left: 36px;
 }
 </style>

@@ -397,6 +397,8 @@ onMounted(loadDetail)
 
 <style scoped>
 .path-resource-detail-page {
+  --font-sans: var(--font-ui);
+  --agent-body-font: var(--font-body);
   --pr-primary: #4f46e5;
   --pr-primary-dark: #3730a3;
   --pr-primary-soft: #eef2ff;
@@ -420,6 +422,7 @@ onMounted(loadDetail)
     radial-gradient(circle at 92% 0%, rgba(14, 165, 233, 0.07), transparent 28%),
     linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   color: var(--pr-text);
+  font-family: var(--font-sans);
 }
 
 .path-resource-detail-page svg {
@@ -529,6 +532,7 @@ onMounted(loadDetail)
 .state-card p {
   margin: 0;
   color: var(--pr-slate);
+  font-family: var(--agent-body-font);
 }
 
 .state-spinner {
@@ -600,6 +604,7 @@ onMounted(loadDetail)
   color: var(--pr-slate);
   line-height: 1.7;
   font-size: 0.94rem;
+  font-family: var(--agent-body-font);
 }
 
 .tutorial-meta {
@@ -822,6 +827,7 @@ onMounted(loadDetail)
   color: var(--pr-slate);
   font-size: 0.86rem;
   line-height: 1.65;
+  font-family: var(--agent-body-font);
 }
 
 .resource-info-grid {
@@ -898,6 +904,7 @@ onMounted(loadDetail)
   color: var(--pr-slate);
   font-size: 0.74rem;
   line-height: 1.35;
+  font-family: var(--agent-body-font);
 }
 
 .agent-item em {
@@ -975,6 +982,7 @@ onMounted(loadDetail)
   font-size: 0.8rem;
   line-height: 1.55;
   font-weight: 700;
+  font-family: var(--agent-body-font);
 }
 
 @keyframes spin {

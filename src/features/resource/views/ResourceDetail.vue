@@ -400,10 +400,14 @@ const formatTime = (time: string | null) => {
 
 <style scoped>
 .resource-detail-page {
+  --font-sans: var(--font-ui);
+  --agent-body-font: var(--font-body);
+
   background: #F4F7FB;
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
+  font-family: var(--font-sans);
 }
 .resource-detail-page::before {
   content: '';
@@ -554,7 +558,7 @@ const formatTime = (time: string | null) => {
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
 }
 .pill-label { color: var(--color-text-muted); font-weight: 800; margin-right: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem; }
-.pill-value { color: var(--color-text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.pill-value { color: var(--color-text); font-weight: 600; display: flex; align-items: center; gap: 6px; font-family: var(--agent-body-font); }
 
 .detail-body-bento {
   padding: 0 60px 60px;
@@ -688,7 +692,7 @@ const formatTime = (time: string | null) => {
 
 .card-body { display: flex; flex-direction: column; gap: 12px; flex: 1; }
 .card-title { margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--color-text); line-height: 1.45; }
-.card-summary { margin: 0; font-size: 0.95rem; color: var(--color-text-secondary); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-summary { margin: 0; font-size: 0.95rem; color: var(--color-text-secondary); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-family: var(--agent-body-font); }
 
 .item-error {
   display: flex; align-items: center; gap: 8px;

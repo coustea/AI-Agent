@@ -31,10 +31,10 @@ defineProps<{
 <style scoped>
 .layout-knowledge-map {
   display: grid;
-  grid-template-columns: 1.3fr 0.7fr;
-  gap: 28px;
+  grid-template-columns: 68% 32%;
+  gap: 36px;
   height: 100%;
-  padding: 24px 36px;
+  padding: 32px 48px;
 }
 
 .map-pane,
@@ -42,7 +42,19 @@ defineProps<{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   justify-content: center;
+}
+
+.map-pane {
+  background: var(--ppt-bg-tertiary);
+  border-radius: var(--ppt-radius-lg);
+  padding: 24px;
+  border: 1px dashed var(--ppt-border);
+}
+
+.legend-pane {
+  border-left: 1px dashed var(--ppt-border);
+  padding-left: 36px;
 }
 </style>

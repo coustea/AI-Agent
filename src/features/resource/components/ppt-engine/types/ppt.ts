@@ -19,6 +19,9 @@ export type SlideRole =
   | 'misconception'
   | 'summary'
   | 'next_steps'
+  | 'algorithm_visualization'
+  | 'code_walkthrough'
+  | 'architecture_diagram'
 
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced'
 
@@ -165,6 +168,7 @@ const validRoles = new Set<string>([
   'cover', 'objectives', 'prerequisite', 'problem_intro', 'roadmap', 'concept',
   'analogy', 'principle_diagram', 'process_demo', 'mechanism_breakdown',
   'concept_relation', 'concept_compare', 'misconception', 'summary', 'next_steps',
+  'algorithm_visualization', 'code_walkthrough', 'architecture_diagram',
 ])
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -30,26 +30,24 @@ defineProps<{
 
 <style scoped>
 .layout-compare-table {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  display: grid;
+  grid-template-columns: 70% 30%;
+  gap: 36px;
   height: 100%;
-  padding: 24px 36px;
+  padding: 32px 48px;
 }
 
-.comparison-pane {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
+.comparison-pane,
 .insight-pane {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   justify-content: center;
+}
+
+.insight-pane {
+  border-left: 1px dashed var(--ppt-border);
+  padding-left: 36px;
 }
 </style>

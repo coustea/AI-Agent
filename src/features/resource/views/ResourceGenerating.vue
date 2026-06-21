@@ -3,17 +3,14 @@
     <header class="stage-topbar stage-topbar-v4">
       <div class="stage-title-area">
         <div class="stage-route-progress">
-          <span class="route-step done">1 需求解析</span>
-          <span class="route-line done"></span>
-          <span class="route-step" :class="planReady ? 'done' : 'active'">2 计划生成</span>
-          <span class="route-line" :class="{ active: planReady }"></span>
-          <span class="route-step" :class="{ active: planReady }">3 任务调度</span>
-          <span class="route-line"></span>
-          <span class="route-step">4 资源生成</span>
-          <span class="route-line"></span>
-          <span class="route-step">5 质量校验</span>
-          <span class="route-line"></span>
-          <span class="route-step">6 打包交付</span>
+          <template v-for="(step, index) in routeSteps" :key="step.key">
+            <span class="route-step" :class="step.state">{{ step.label }}</span>
+            <span
+              v-if="index < routeSteps.length - 1"
+              class="route-line"
+              :class="step.lineState"
+            ></span>
+          </template>
         </div>
         <h2>多智能体资源生成</h2>
         <p>{{ dagHeroMessage }}</p>
@@ -30,7 +27,7 @@
           <strong>{{ runningAgentCount }}<small>/{{ dagSelectedAgentIds.length }}</small></strong>
         </div>
         <div class="stage-stat-card wide">
-          <span>产物坞</span>
+          <span>已交付资源</span>
           <strong>{{ generatedResources.length }}<small> 项</small></strong>
         </div>
         <el-button round class="stage-log-btn" @click="workflowLogDrawerVisible = true">
@@ -53,9 +50,9 @@
       <section class="dispatch-workbench-panel dispatch-workbench-panel-v4">
         <div class="workbench-header workbench-header-v4">
           <div>
-            <span class="panel-eyebrow">DISPATCH WORKBENCH</span>
-            <h3>多智能体协作流程</h3>
-            <p>点击任意 Agent 工位查看详情；详情面板默认隐藏，不占用主舞台空间。</p>
+            <span class="panel-eyebrow">RESOURCE PIPELINE</span>
+            <h3>按真实后端拓扑推进资源生成</h3>
+            <p>流程固定为计划生成、任务调度、基础资源并行、聚合资源生成，最后打包交付。</p>
           </div>
           <div class="workbench-actions">
             <span class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
@@ -69,20 +66,6 @@
           <div class="flow-orbit orbit-one"></div>
           <div class="flow-orbit orbit-two"></div>
           <div class="flow-orbit orbit-three"></div>
-
-          <div class="learning-demand-float">
-            <span>学习需求</span>
-            <strong>{{ naturalInput || '等待学习需求' }}</strong>
-            <p>{{ latestWorkflowMessage || 'PlanningAgent 正在解析目标、画像与资源需求' }}</p>
-          </div>
-
-          <div class="master-plan-float">
-            <div>
-              <span class="panel-eyebrow">MASTER PLAN</span>
-              <strong>{{ planReady ? '计划已生成' : '计划生成中' }}</strong>
-            </div>
-            <div class="master-plan-track"><b :style="{ width: `${getStageNode('planning').progress}%` }"></b></div>
-          </div>
 
           <div class="flow-core-stack flow-core-stack-v4">
             <article
@@ -200,20 +183,116 @@
             </article>
           </transition-group>
 
-          <div class="review-station-row review-station-row-v4">
+          <div v-if="showAggregationStage" class="agent-station-row agent-station-row-v4 aggregation-agent-row">
             <article
-              v-for="node in trailingStageNodes"
-              :key="node.id"
-              class="review-station-card review-station-card-v4"
-              :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id }]"
-              @click="handleAgentClick(node.id)"
+              v-if="showPptNode"
+              class="agent-station-card agent-station-card-v4"
+              :class="['status-' + pptNode.status, { 'is-selected': selectedDagNodeId === pptNode.id, 'has-artifact': hasGeneratedResource(pptNode.id) }]"
+              @click="handleAgentClick(pptNode.id)"
             >
-              <div class="review-icon">{{ node.icon }}</div>
-              <div>
-                <strong>{{ node.label }}</strong>
-                <span>{{ getNodeStageLabel(node) }}</span>
+              <div class="station-header">
+                <div class="station-icon">{{ pptNode.icon }}</div>
+                <div>
+                  <strong>PPT Agent</strong>
+                  <span>{{ pptNode.label }}</span>
+                </div>
+                <em>{{ getNodeStatusLabel(pptNode) }}</em>
               </div>
-              <em>{{ node.progress }}%</em>
+              <div class="station-live-log" :class="[`is-${pptNode.status}`, { 'is-empty': !getNodeLiveLogs(pptNode).length }]">
+                <template v-if="getNodeLiveLogs(pptNode).length">
+                  <div class="station-live-current">
+                    <span class="station-live-dot"></span>
+                    <div>
+                      <strong>{{ getNodePhaseLabel(pptNode) }}</strong>
+                      <p>{{ getNodeDisplayMessage(pptNode) }}</p>
+                    </div>
+                  </div>
+
+                  <div class="station-live-lines">
+                    <p
+                      v-for="log in getNodeLiveLogs(pptNode, 3)"
+                      :key="log.id"
+                      class="station-live-line"
+                      :class="`is-${log.status || pptNode.status}`"
+                    >
+                      <span>{{ getLogPhaseLabel(log.phase) }}</span>
+                      <em>{{ log.message }}</em>
+                    </p>
+                  </div>
+                </template>
+
+                <div v-else class="station-live-empty">
+                  <span class="station-live-dot muted"></span>
+                  <p>等待基础资源完成后开始聚合生成</p>
+                </div>
+              </div>
+              <div class="station-footer">
+                <span>{{ getNodeStageLabel(pptNode) }}</span>
+                <i :style="{ width: `${pptNode.progress}%` }"></i>
+              </div>
+            </article>
+
+            <article
+              v-if="showVideoNode"
+              class="agent-station-card agent-station-card-v4"
+              :class="['status-' + videoNode.status, { 'is-selected': selectedDagNodeId === videoNode.id, 'has-artifact': hasGeneratedResource(videoNode.id) }]"
+              @click="handleAgentClick(videoNode.id)"
+            >
+              <div class="station-header">
+                <div class="station-icon">{{ videoNode.icon }}</div>
+                <div>
+                  <strong>Video Agent</strong>
+                  <span>{{ videoNode.label }}</span>
+                </div>
+                <em>{{ getNodeStatusLabel(videoNode) }}</em>
+              </div>
+              <div class="station-live-log" :class="[`is-${videoNode.status}`, { 'is-empty': !getNodeLiveLogs(videoNode).length }]">
+                <template v-if="getNodeLiveLogs(videoNode).length">
+                  <div class="station-live-current">
+                    <span class="station-live-dot"></span>
+                    <div>
+                      <strong>{{ getNodePhaseLabel(videoNode) }}</strong>
+                      <p>{{ getNodeDisplayMessage(videoNode) }}</p>
+                    </div>
+                  </div>
+
+                  <div class="station-live-lines">
+                    <p
+                      v-for="log in getNodeLiveLogs(videoNode, 3)"
+                      :key="log.id"
+                      class="station-live-line"
+                      :class="`is-${log.status || videoNode.status}`"
+                    >
+                      <span>{{ getLogPhaseLabel(log.phase) }}</span>
+                      <em>{{ log.message }}</em>
+                    </p>
+                  </div>
+                </template>
+
+                <div v-else class="station-live-empty">
+                  <span class="station-live-dot muted"></span>
+                  <p>等待基础资源完成后开始聚合生成</p>
+                </div>
+              </div>
+              <div class="station-footer">
+                <span>{{ getNodeStageLabel(videoNode) }}</span>
+                <i :style="{ width: `${videoNode.progress}%` }"></i>
+              </div>
+            </article>
+          </div>
+
+          <div class="bundle-stage-shell">
+            <article
+              class="review-station-card review-station-card-v4 bundle-stage-card"
+              :class="['status-' + bundleNode.status, { 'is-selected': selectedDagNodeId === bundleNode.id }]"
+              @click="handleAgentClick(bundleNode.id)"
+            >
+              <div class="review-icon">{{ bundleNode.icon }}</div>
+              <div>
+                <strong>{{ bundleNode.label }}</strong>
+                <span>{{ getNodeStageLabel(bundleNode) }}</span>
+              </div>
+              <em>{{ bundleNode.progress }}%</em>
             </article>
           </div>
         </div>
@@ -264,19 +343,19 @@
                 <dd>{{ getNodeTimeLabel(selectedDagNode) }}</dd>
               </div>
               <div>
-                <dt>产物状态</dt>
-                <dd>{{ hasGeneratedResource(selectedDagNode.id) ? '已进入产物坞' : '等待生成' }}</dd>
+                <dt>成果状态</dt>
+                <dd>{{ getNodeArtifactStatus(selectedDagNode) }}</dd>
               </div>
             </dl>
 
             <div class="detail-io-grid">
               <div>
                 <span>输入</span>
-                <p>学习需求 / 用户画像 / 教学蓝图</p>
+                <p>{{ getNodeInputSummary(selectedDagNode) }}</p>
               </div>
               <div>
                 <span>输出</span>
-                <p>{{ hasGeneratedResource(selectedDagNode.id) ? getAgentOutputFormat(selectedDagNode.id) : '生成中 / 等待中' }}</p>
+                <p>{{ getNodeOutputSummary(selectedDagNode) }}</p>
               </div>
             </div>
 
@@ -310,10 +389,10 @@
     <section class="output-dock-section output-dock-section-v4">
       <div class="output-dock-heading">
         <div>
-          <span class="panel-eyebrow">OUTPUT DOCK</span>
-          <strong>产物坞</strong>
+          <span class="panel-eyebrow">READY RESOURCES</span>
+          <strong>已交付资源</strong>
         </div>
-        <p>Agent 产物到达后会在这里高亮，可直接点击预览</p>
+        <p>这里仅展示已经完成并可预览的资源，不改变主流水线的阅读顺序。</p>
       </div>
       <div class="output-dock-list output-dock-list-v4">
         <article
@@ -557,9 +636,22 @@ const trailingStageNodes = computed(() => {
   if (props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(VIDEO_AGENT_ID))
   }
-  nodes.push(getStageNode(BUNDLE_AGENT_ID))
   return nodes
 })
+
+const aggregationNodes = computed(() => trailingStageNodes.value)
+
+const showPptNode = computed(() => props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId))
+
+const showVideoNode = computed(() => props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId))
+
+const showAggregationStage = computed(() => showPptNode.value || showVideoNode.value)
+
+const pptNode = computed(() => getStageNode(PPT_AGENT_ID))
+
+const videoNode = computed(() => getStageNode(VIDEO_AGENT_ID))
+
+const bundleNode = computed(() => getStageNode(BUNDLE_AGENT_ID))
 
 const selectedDagNode = computed(() => {
   if (!props.selectedDagNodeId) return null
@@ -577,6 +669,49 @@ const dagHeroMessage = computed(() => {
   const allDone = Object.values(props.dagNodeStates).every(n => n.status === 'success')
   if (allDone) return '所有资源生成完成'
   return props.latestWorkflowMessage || '多智能体协同生成中'
+})
+
+const routeSteps = computed(() => {
+  const planning = getStageNode('planning')
+  const coordinator = getStageNode(COORDINATOR_AGENT_ID)
+  const baseDone = parallelPoolNodes.value.length > 0 && parallelPoolNodes.value.every(node => ['success', 'failed', 'skipped'].includes(node.status))
+  const baseRunning = parallelPoolNodes.value.some(node => node.status === 'running')
+  const aggregationRunning = aggregationNodes.value.some(node => node.status === 'running')
+  const aggregationDone = aggregationNodes.value.length === 0 || aggregationNodes.value.every(node => ['success', 'failed', 'skipped'].includes(node.status))
+  const bundle = bundleNode.value
+
+  return [
+    {
+      key: 'plan',
+      label: 'Plan',
+      state: planning.status === 'success' ? 'done' : 'active',
+      lineState: planning.status === 'success' ? 'done' : 'active',
+    },
+    {
+      key: 'dispatch',
+      label: '调度',
+      state: coordinator.status === 'success' ? 'done' : coordinator.status === 'running' || planning.status === 'success' ? 'active' : '',
+      lineState: coordinator.status === 'success' || baseRunning || baseDone ? 'done' : coordinator.status === 'running' ? 'active' : '',
+    },
+    {
+      key: 'base',
+      label: '基础资源',
+      state: baseDone ? 'done' : baseRunning ? 'active' : '',
+      lineState: baseDone && aggregationNodes.value.length ? 'done' : aggregationRunning ? 'active' : '',
+    },
+    {
+      key: 'aggregation',
+      label: '聚合资源',
+      state: aggregationDone && aggregationNodes.value.length ? 'done' : aggregationRunning ? 'active' : '',
+      lineState: aggregationDone || bundle.status === 'running' || bundle.status === 'success' ? 'done' : aggregationRunning ? 'active' : '',
+    },
+    {
+      key: 'bundle',
+      label: '打包交付',
+      state: bundle.status === 'success' ? 'done' : bundle.status === 'running' ? 'active' : '',
+      lineState: '',
+    },
+  ]
 })
 
 const visibleOutputAgentIds = computed(() => {
@@ -684,52 +819,102 @@ function hasGeneratedResource(type: string) {
 }
 
 function getNodeStatusLabel(node: DagNodeState) {
-  if (node.status === 'failed') return '失败'
-  if (node.status === 'skipped') return '跳过'
-  if (node.status === 'success') return '完成'
-  if (node.status === 'running') return '运行中'
-  return '等待'
+  if (node.status === 'failed') return '受阻'
+  if (node.status === 'skipped') return '已跳过'
+  if (node.status === 'success') return '就绪'
+  if (node.status === 'running') return '执行中'
+  return '就绪待命'
 }
 
 function getNodeStageLabel(node: DagNodeState) {
-  if (node.status === 'success') return '已就绪'
-  if (node.status === 'failed') return '执行失败'
+  if (node.status === 'success') return node.id === BUNDLE_AGENT_ID ? '已打包交付' : '已完成'
+  if (node.status === 'failed') return '协作中断'
   if (node.status === 'skipped') return '已跳过'
   if (node.status === 'running') {
-    if (node.phase === 'llm_generating') return '模型生成中'
-    if (node.phase === 'validating') return '解析校验中'
-    if (node.phase === 'artifact_saved') return '产物已保存'
-    if (node.phase === 'bundling') return '资源打包中'
-    return '执行中'
+    if (node.id === 'planning') return '计划生成中'
+    if (node.id === COORDINATOR_AGENT_ID) return '任务调度中'
+    if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '聚合生成中'
+    if (node.phase === 'llm_generating') return '核心推演中'
+    if (node.phase === 'validating') return '一致性校验中'
+    if (node.phase === 'artifact_saved') return '资源已保存'
+    if (node.phase === 'bundling') return '打包交付中'
+    return '工位执行中'
   }
-  return '等待依赖'
+  if (node.id === BUNDLE_AGENT_ID) return '等待聚合结果'
+  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '等待基础资源'
+  return '等待上游协同'
 }
 
 function getNodePhaseLabel(node: DagNodeState) {
   const phaseMap: Record<string, string> = {
-    planning_blueprint: '规划蓝图',
-    llm_generating: '模型调用',
-    validating: '解析校验',
-    ppt_waiting_sources: '等待事实来源',
-    artifact_saved: '产物保存',
-    bundling: '资源组装',
-    finished: '完成',
-    failed: '失败',
+    planning_blueprint: '蓝图构建',
+    coverage_gap_warning: '覆盖校验',
+    llm_generating: '深度推演',
+    validating: '一致性校验',
+    ppt_generating: 'PPT 聚合',
+    video_generating: '视频聚合',
+    ppt_waiting_sources: '等待讲义要义',
+    artifact_saved: '成果移交',
+    aggregation_done: '聚合完成',
+    bundling: '资源打包',
+    finished: '已完成',
+    failed: '受阻',
   }
   if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
+  if (node.id === 'planning' && node.status === 'running') return '计划生成'
+  if (node.id === COORDINATOR_AGENT_ID && node.status === 'running') return '任务调度'
+  if ((node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) && node.status === 'running') return '聚合生成'
+  if (node.id === BUNDLE_AGENT_ID && node.status === 'running') return '打包交付'
   if (node.status === 'waiting') return '等待上游'
-  if (node.status === 'success') return '完成'
-  if (node.status === 'failed') return '失败'
-  return '执行阶段'
+  if (node.status === 'success') return '已完成'
+  if (node.status === 'failed') return '受阻'
+  return '工位状态'
 }
 
 function getNodeDisplayMessage(node: DagNodeState) {
-  if (node.status === 'failed') return node.currentMessage || '执行失败，请检查该智能体输出'
+  if (node.status === 'failed') return node.currentMessage || '工位执行受阻，请检查协同日志'
   if (node.currentMessage) return node.currentMessage
-  if (node.id === PPT_AGENT_ID) return '等待基础资源完成后生成演示文稿'
-  if (node.id === VIDEO_AGENT_ID) return '等待基础资源完成后生成讲解视频'
-  if (node.id === BUNDLE_AGENT_ID) return '等待资源完成后组装资源包'
+  if (node.id === 'planning') return '正在根据学习需求与画像生成教学计划'
+  if (node.id === COORDINATOR_AGENT_ID) return '正在向基础资源 Agent 分发任务并汇总覆盖情况'
+  if (node.id === PPT_AGENT_ID) return '等待讲义要义就绪以重排宣讲幻灯'
+  if (node.id === VIDEO_AGENT_ID) return '等待讲义就绪以生成讲解视频分镜'
+  if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与聚合结果就绪后打包交付'
   return getNodeFallbackMessage(node)
+}
+
+function getNodeArtifactStatus(node: DagNodeState) {
+  if (node.id === 'planning') {
+    return node.status === 'success' ? '教学计划已生成' : '正在生成教学计划'
+  }
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return node.status === 'success' ? '调度与汇总已完成' : '正在分发并汇总执行状态'
+  }
+  if (node.id === BUNDLE_AGENT_ID) {
+    if (node.status === 'success') return '资源包已交付'
+    if (node.status === 'running') return '正在汇总并打包资源'
+    return '等待上游资源就绪'
+  }
+  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) {
+    return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
+  }
+  return hasGeneratedResource(node.id) ? '基础资源已交付' : '工位响应中'
+}
+
+function getNodeInputSummary(node: DagNodeState) {
+  if (node.id === 'planning') return '学习需求 / 学习场景 / 用户画像 / 已选 Agent'
+  if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础 Agent 选择 / 当前执行快照'
+  if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
+  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
+  return '学习需求 / 用户画像 / 教学计划'
+}
+
+function getNodeOutputSummary(node: DagNodeState) {
+  if (node.id === 'planning') return '教学计划 / 大纲 / Agent 分工'
+  if (node.id === COORDINATOR_AGENT_ID) return '任务分发状态 / 覆盖情况 / 执行汇总'
+  if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
+  if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
+  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '聚合资源生成中 / 等待中'
+  return '基础资源生成中 / 等待中'
 }
 
 function formatElapsed(ms?: number | null) {
@@ -775,12 +960,16 @@ function getMetricChips(node: DagNodeState) {
 }
 
 .workflow-stage-page-v4 {
+  --font-sans: var(--font-ui);
+  --agent-body-font: var(--font-body);
+
   min-height: auto;
   padding: 18px clamp(18px, 2vw, 30px) 24px;
   background:
     radial-gradient(circle at 20% 12%, rgba(59, 130, 246, 0.12), transparent 32%),
     radial-gradient(circle at 82% 46%, rgba(45, 212, 191, 0.12), transparent 30%),
     linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.86));
+  font-family: var(--font-sans);
 }
 
 .stage-topbar {
@@ -820,6 +1009,7 @@ function getMetricChips(node: DagNodeState) {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+  font-family: var(--agent-body-font);
 }
 
 .stage-route-progress {
@@ -850,6 +1040,10 @@ function getMetricChips(node: DagNodeState) {
   background: var(--cat-resource-soft);
   color: var(--cat-resource);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16);
+}
+
+.route-step:not(.done):not(.active) {
+  background: rgba(241, 245, 249, 0.92);
 }
 
 .route-line {
@@ -1033,6 +1227,7 @@ function getMetricChips(node: DagNodeState) {
   margin: 6px 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+  font-family: var(--agent-body-font);
 }
 
 .workbench-actions {
@@ -1065,7 +1260,6 @@ function getMetricChips(node: DagNodeState) {
   min-height: clamp(660px, 70vh, 840px);
   padding: clamp(20px, 2.2vw, 32px) clamp(18px, 2.4vw, 34px) clamp(24px, 2.4vw, 34px);
 }
-
 
 .agent-flow-canvas-v4::before {
   content: '';
@@ -1119,73 +1313,6 @@ function getMetricChips(node: DagNodeState) {
   border-color: rgba(139, 92, 246, 0.16);
 }
 
-.learning-demand-float,
-.master-plan-float {
-  position: absolute;
-  z-index: 6;
-  top: 22px;
-  width: min(280px, 24vw);
-  min-height: 72px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.075);
-  padding: 14px 16px;
-}
-
-.learning-demand-float {
-  left: 20px;
-}
-
-.master-plan-float {
-  right: 20px;
-}
-
-.learning-demand-float span,
-.master-plan-float strong {
-  display: block;
-  color: #2563EB;
-  font-size: 0.72rem;
-  font-weight: 900;
-}
-
-.learning-demand-float strong {
-  display: block;
-  margin-top: 6px;
-  color: #0F172A;
-  font-size: 0.88rem;
-  line-height: 1.45;
-}
-
-.learning-demand-float p {
-  margin: 6px 0 0;
-  color: #64748B;
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-
-.master-plan-float > div:first-child {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.master-plan-track {
-  margin-top: 12px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.16);
-  overflow: hidden;
-}
-
-.master-plan-track b {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #6366F1, #22D3EE, #3B82F6);
-}
-
 .flow-core-stack {
   position: relative;
   z-index: 4;
@@ -1237,17 +1364,18 @@ function getMetricChips(node: DagNodeState) {
 .core-agent-node strong {
   display: block;
   color: var(--color-text);
-  font-size: var(--text-base);
+  font-size: 0.95rem;
+  line-height: 1.2;
 }
 
 .core-agent-node span {
   color: var(--cat-resource);
-  font-size: var(--text-xs);
+  font-size: 0.72rem;
   font-weight: var(--weight-extrabold);
 }
 
 .core-progress {
-  font-size: var(--text-xs);
+  font-size: 0.72rem;
   font-weight: var(--weight-extrabold);
   color: var(--color-text);
 }
@@ -1321,6 +1449,11 @@ function getMetricChips(node: DagNodeState) {
   align-items: stretch;
 }
 
+.aggregation-agent-row {
+  max-width: 920px;
+  margin-top: 30px;
+}
+
 .agent-station-card {
   border-radius: 24px;
   padding: 13px;
@@ -1332,7 +1465,7 @@ function getMetricChips(node: DagNodeState) {
 }
 
 .agent-station-card-v4 {
-  min-height: 210px;
+  min-height: 196px;
   display: flex;
   flex-direction: column;
 }
@@ -1380,17 +1513,19 @@ function getMetricChips(node: DagNodeState) {
 .station-header strong {
   display: block;
   color: var(--color-text);
-  font-size: var(--text-sm);
+  font-size: 0.8rem;
+  line-height: 1.2;
 }
 
 .station-header span {
   color: var(--color-text-muted);
-  font-size: var(--text-2xs);
+  font-size: 0.68rem;
   font-weight: var(--weight-extrabold);
+  line-height: 1.15;
 }
 
 .station-header em {
-  font-size: var(--text-2xs);
+  font-size: 0.7rem;
   font-style: normal;
   color: var(--cat-resource);
   font-weight: var(--weight-extrabold);
@@ -1398,8 +1533,8 @@ function getMetricChips(node: DagNodeState) {
 }
 
 .station-live-log {
-  min-height: 92px;
-  margin: 16px 0 14px;
+  min-height: 78px;
+  margin: 12px 0 12px;
   border-radius: 18px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
@@ -1459,7 +1594,7 @@ function getMetricChips(node: DagNodeState) {
 .station-live-current strong {
   display: block;
   color: var(--cat-resource);
-  font-size: var(--text-2xs);
+  font-size: 0.68rem;
   font-weight: var(--weight-bold);
   line-height: 1.2;
 }
@@ -1467,13 +1602,14 @@ function getMetricChips(node: DagNodeState) {
 .station-live-current p {
   margin: 3px 0 0;
   color: var(--color-text);
-  font-size: var(--text-xs);
+  font-size: 0.74rem;
   font-weight: var(--weight-extrabold);
-  line-height: 1.36;
+  line-height: 1.32;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  font-family: var(--agent-body-font);
 }
 
 .station-live-lines {
@@ -1497,7 +1633,7 @@ function getMetricChips(node: DagNodeState) {
   border-radius: 999px;
   background: var(--cat-resource-soft);
   color: var(--cat-resource);
-  font-size: var(--text-2xs);
+  font-size: 0.66rem;
   font-weight: var(--weight-extrabold);
   white-space: nowrap;
 }
@@ -1505,12 +1641,13 @@ function getMetricChips(node: DagNodeState) {
 .station-live-line em {
   min-width: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-2xs);
+  font-size: 0.67rem;
   font-style: normal;
   font-weight: var(--weight-bold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: var(--agent-body-font);
 }
 
 .station-live-line.is-success span {
@@ -1531,13 +1668,14 @@ function getMetricChips(node: DagNodeState) {
   justify-content: center;
   gap: var(--space-2);
   color: var(--color-text-faint);
-  font-size: var(--text-xs);
+  font-size: 0.72rem;
   font-weight: var(--weight-extrabold);
 }
 
 .station-live-empty p {
   margin: 0;
   color: var(--color-text-faint);
+  font-family: var(--agent-body-font);
 }
 
 .detail-live-log-item {
@@ -1573,6 +1711,7 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-text-secondary);
   font-size: var(--text-xs);
   line-height: 1.45;
+  font-family: var(--agent-body-font);
 }
 
 .detail-live-log-item.is-success {
@@ -1591,7 +1730,7 @@ function getMetricChips(node: DagNodeState) {
   justify-content: space-between;
   gap: var(--space-2);
   color: var(--color-success);
-  font-size: var(--text-2xs);
+  font-size: 0.68rem;
   font-weight: var(--weight-extrabold);
 }
 
@@ -1626,7 +1765,47 @@ function getMetricChips(node: DagNodeState) {
 .review-station-row-v4 {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   width: min(1100px, 92%);
-  margin: 28px auto 0;
+  margin: 30px auto 0;
+}
+
+.bundle-stage-shell {
+  position: relative;
+  z-index: 5;
+  width: min(420px, 100%);
+  margin: 30px auto 0;
+}
+
+.bundle-stage-card {
+  position: relative;
+  min-height: 102px;
+  border-color: rgba(99, 102, 241, 0.26);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08), transparent 54%),
+    rgba(255, 255, 255, 0.9);
+}
+
+.bundle-stage-card::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -18px;
+  width: 2px;
+  height: 18px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0), rgba(99, 102, 241, 0.55));
+  border-radius: 999px;
+}
+
+.bundle-stage-card.status-running {
+  border-color: rgba(59, 130, 246, 0.42);
+  box-shadow: 0 20px 48px rgba(37, 99, 235, 0.12);
+}
+
+.bundle-stage-card.status-success {
+  border-color: rgba(16, 185, 129, 0.4);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08), transparent 54%),
+    rgba(240, 253, 250, 0.9);
 }
 
 .review-station-card {
@@ -1666,13 +1845,14 @@ function getMetricChips(node: DagNodeState) {
 
 .review-station-card strong {
   color: var(--color-text);
-  font-size: var(--text-sm);
+  font-size: 0.82rem;
+  line-height: 1.2;
   display: block;
 }
 
 .review-station-card span {
   color: var(--color-text-muted);
-  font-size: var(--text-2xs);
+  font-size: 0.68rem;
   font-weight: var(--weight-extrabold);
 }
 
@@ -1680,7 +1860,7 @@ function getMetricChips(node: DagNodeState) {
   font-style: normal;
   color: var(--cat-resource);
   font-weight: var(--weight-extrabold);
-  font-size: var(--text-xs);
+  font-size: 0.72rem;
 }
 
 .agent-detail-floating-panel {
@@ -1762,6 +1942,7 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-success);
   font-size: var(--text-xs);
   font-weight: var(--weight-extrabold);
+  font-family: var(--agent-body-font);
 }
 
 .detail-status-dot {
@@ -1815,6 +1996,7 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-text);
   font-size: var(--text-sm);
   line-height: 1.5;
+  font-family: var(--agent-body-font);
 }
 
 .detail-progress-line {
@@ -1899,6 +2081,7 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-text-secondary);
   font-size: var(--text-xs);
   line-height: 1.45;
+  font-family: var(--agent-body-font);
 }
 
 .focus-metric-chips {
@@ -1934,6 +2117,7 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   line-height: 1.45;
+  font-family: var(--agent-body-font);
 }
 
 .detail-float-enter-active,
@@ -1969,6 +2153,10 @@ function getMetricChips(node: DagNodeState) {
   padding: 14px 16px 16px;
 }
 
+.output-dock-section-v4 .panel-eyebrow {
+  color: #0f766e;
+}
+
 .output-dock-heading {
   display: flex;
   flex-direction: column;
@@ -1994,6 +2182,7 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   line-height: 1.5;
+  font-family: var(--agent-body-font);
 }
 
 .output-dock-list {
@@ -2065,6 +2254,7 @@ function getMetricChips(node: DagNodeState) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: var(--agent-body-font);
 }
 
 .output-dock-item-v4 em {
@@ -2161,23 +2351,10 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   line-height: 1.45;
+  font-family: var(--agent-body-font);
 }
 
 @media (max-width: 1280px) {
-  .learning-demand-float,
-  .master-plan-float {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    width: 100%;
-    margin-bottom: 14px;
-  }
-
-  .master-plan-float {
-    margin-top: 0;
-  }
-
   .flow-core-stack-v4 {
     margin-top: 24px;
   }
@@ -2231,6 +2408,10 @@ function getMetricChips(node: DagNodeState) {
   .review-station-row-v4 {
     grid-template-columns: 1fr 1fr;
     margin-top: 24px;
+  }
+
+  .bundle-stage-shell {
+    width: 100%;
   }
 
   .output-dock-section {
@@ -2353,25 +2534,6 @@ function getMetricChips(node: DagNodeState) {
   overflow: hidden;
 }
 
-.learning-demand-float,
-.master-plan-float {
-  position: relative;
-  top: auto;
-  left: auto;
-  right: auto;
-  width: min(560px, 100%);
-  max-width: 100%;
-  min-height: auto;
-}
-
-.learning-demand-float {
-  align-self: flex-start;
-}
-
-.master-plan-float {
-  align-self: flex-end;
-}
-
 .flow-core-stack-v4 {
   margin-top: 0;
 }
@@ -2454,12 +2616,6 @@ function getMetricChips(node: DagNodeState) {
     justify-content: flex-start;
   }
 
-  .master-plan-float,
-  .learning-demand-float {
-    align-self: stretch;
-    width: 100%;
-  }
-
 }
 
 
@@ -2469,22 +2625,8 @@ function getMetricChips(node: DagNodeState) {
   padding: clamp(18px, 2vw, 28px) clamp(20px, 2.4vw, 36px) clamp(24px, 2.4vw, 36px);
 }
 
-.learning-demand-float,
-.master-plan-float {
-  top: 20px;
-  width: min(300px, 25vw);
-}
-
-.learning-demand-float {
-  left: 20px;
-}
-
-.master-plan-float {
-  right: 20px;
-}
-
 .flow-core-stack-v4 {
-  margin-top: 116px;
+  margin-top: 52px;
   gap: 8px;
 }
 
@@ -2615,26 +2757,11 @@ function getMetricChips(node: DagNodeState) {
   }
 
   .flow-core-stack-v4 {
-    margin-top: 150px;
-  }
-
-  .learning-demand-float,
-  .master-plan-float {
-    width: calc(50% - 34px);
+    margin-top: 52px;
   }
 }
 
 @media (max-width: 760px) {
-  .learning-demand-float,
-  .master-plan-float {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    width: 100%;
-    margin-bottom: 12px;
-  }
-
   .flow-core-stack-v4 {
     margin-top: 16px;
   }

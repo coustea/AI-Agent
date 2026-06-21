@@ -31,10 +31,10 @@ defineProps<{
 <style scoped>
 .layout-flow-canvas {
   display: grid;
-  grid-template-columns: 1.3fr 0.7fr;
-  gap: 28px;
+  grid-template-columns: 65% 35%;
+  gap: 36px;
   height: 100%;
-  padding: 24px 36px;
+  padding: 32px 48px;
 }
 
 .flow-pane,
@@ -42,7 +42,14 @@ defineProps<{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   justify-content: center;
+}
+
+.annotation-pane {
+  background: rgba(37, 99, 235, 0.02);
+  border-radius: var(--ppt-radius-lg);
+  padding: 24px;
+  border: 1px solid var(--ppt-border);
 }
 </style>

@@ -137,6 +137,9 @@ onMounted(() => {
 
 <style scoped>
 .elegant-generator-layout {
+  --font-sans: var(--font-ui);
+  --agent-body-font: var(--font-body);
+
   min-height: calc(100vh - 64px);
   position: relative;
   background: var(--color-bg);
@@ -214,6 +217,7 @@ onMounted(() => {
   font-size: 1.1rem;
   color: var(--color-text-secondary);
   margin: 0;
+  font-family: var(--agent-body-font);
 }
 
 .history-grid {
@@ -297,6 +301,7 @@ onMounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  font-family: var(--agent-body-font);
 }
 
 .resource-types {

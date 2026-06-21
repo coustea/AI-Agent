@@ -1,9 +1,9 @@
 <template>
   <div class="block-card-list">
-    <div v-for="(card, index) in block.cards" :key="`${card.title}-${index}`" class="card-item">
+    <div v-for="(card, index) in block.cards" :key="`${card.title}-${index}`" class="card-item ppt-card">
       <div class="card-title">
         <span v-if="card.icon" class="icon">{{ card.icon }}</span>
-        <span>{{ card.title }}</span>
+        <span class="title-text">{{ card.title }}</span>
       </div>
       <div class="card-content">{{ card.content }}</div>
     </div>
@@ -21,31 +21,50 @@ defineProps<{
 <style scoped>
 .block-card-list {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  width: 100%;
 }
 
 .card-item {
-  padding: 14px 16px;
-  border-radius: var(--ppt-radius);
+  padding: 20px;
+  border-radius: var(--ppt-radius-md);
   background: var(--ppt-bg-secondary);
   border: 1px solid var(--ppt-border);
+  box-shadow: var(--ppt-shadow-card);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
 }
 
 .card-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.title-text {
   font-weight: 800;
+  font-size: 1.1rem;
   color: var(--ppt-text-primary);
 }
 
 .icon {
-  font-size: 1rem;
+  font-size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-content {
-  margin-top: 8px;
-  line-height: 1.55;
+  line-height: 1.6;
+  font-size: 0.98rem;
   color: var(--ppt-text-secondary);
 }
 </style>

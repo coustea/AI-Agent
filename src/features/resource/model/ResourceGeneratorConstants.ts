@@ -16,28 +16,28 @@ export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, BUNDLE_AGENT_
 export const MIN_AGENTS = 3
 
 export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
-  planning: { label: '规划任务', icon: '🎯' },
-  coordinator: { label: '并行调度中枢', icon: '⚙️' },
-  content: { label: '讲义生成助手', icon: '📝' },
-  mindmap: { label: '导图绘制助手', icon: '🧠' },
-  quiz: { label: '自测题生成助手', icon: '📋' },
-  code: { label: '实战演练助手', icon: '💻' },
-  reading: { label: '拓展阅读助手', icon: '📚' },
-  ppt: { label: '演示文稿助手', icon: '📊' },
-  video: { label: '讲解视频助手', icon: '🎬' },
-  bundle: { label: '资源打包助手', icon: '📦' },
+  planning: { label: '认知架构工位', icon: '🎯' },
+  coordinator: { label: '协同中枢工位', icon: '⚙️' },
+  content: { label: '义理智笔工位', icon: '📝' },
+  mindmap: { label: '结构图解工位', icon: '🧠' },
+  quiz: { label: '考工检校工位', icon: '📋' },
+  code: { label: '工程实训工位', icon: '💻' },
+  reading: { label: '学术博览工位', icon: '📚' },
+  ppt: { label: '宣讲排版工位', icon: '📊' },
+  video: { label: '微课导演工位', icon: '🎬' },
+  bundle: { label: '汇编归档工位', icon: '📦' },
 }
 
 export const agentMetaList = [
-  { id: 'master', name: '规划中枢', icon: Cpu, colorClass: 'text-blue' },
-  { id: 'assembler', name: '资源打包助手', icon: Position, colorClass: 'text-indigo' },
-  { id: 'content', name: '讲义生成助手', icon: Document, colorClass: 'text-blue' },
-  { id: 'mindmap', name: '导图绘制助手', icon: Share, colorClass: 'text-purple' },
-  { id: 'code', name: '实战演练助手', icon: Cpu, colorClass: 'text-red' },
-  { id: 'quiz', name: '自测题生成助手', icon: Edit, colorClass: 'text-emerald' },
-  { id: 'reading', name: '拓展阅读助手', icon: Collection, colorClass: 'text-indigo' },
-  { id: 'ppt', name: '演示文稿助手', icon: DataBoard, colorClass: 'text-pink' },
-  { id: 'video', name: '讲解视频助手', icon: DataBoard, colorClass: 'text-orange' },
+  { id: 'master', name: '认知架构师', icon: Cpu, colorClass: 'text-blue' },
+  { id: 'assembler', name: '汇编归档仓', icon: Position, colorClass: 'text-indigo' },
+  { id: 'content', name: '义理智笔', icon: Document, colorClass: 'text-blue' },
+  { id: 'mindmap', name: '结构图解师', icon: Share, colorClass: 'text-purple' },
+  { id: 'code', name: '工程实训师', icon: Cpu, colorClass: 'text-red' },
+  { id: 'quiz', name: '考工检校', icon: Edit, colorClass: 'text-emerald' },
+  { id: 'reading', name: '学术博览', icon: Collection, colorClass: 'text-indigo' },
+  { id: 'ppt', name: '宣讲排版师', icon: DataBoard, colorClass: 'text-pink' },
+  { id: 'video', name: '微课导演', icon: DataBoard, colorClass: 'text-orange' },
 ]
 
 export const getAgentMeta = (id: string) =>
@@ -108,13 +108,13 @@ export const getScenarioDesc = (scenario: string) => {
 
 export const getResourceTypeLabel = (type: string) => {
   const labelMap: Record<string, string> = {
-    content: '专业讲解',
-    mindmap: '知识导图',
-    code: '代码案例',
-    quiz: '自测题',
-    reading: '拓展阅读',
-    ppt: '演示文稿',
-    video: '讲解视频',
+    content: '讲义精解',
+    mindmap: '结构导图',
+    code: '实战演练',
+    quiz: '学力检校',
+    reading: '学术博览',
+    ppt: '演示幻灯',
+    video: '音影微课',
   }
   return labelMap[type] || getAgentMeta(type).name || type
 }
@@ -203,11 +203,11 @@ export function createDagNode(id: string, isSystem: boolean): DagNodeState {
 }
 
 export function getNodeFallbackMessage(node: DagNodeState) {
-  if (node.status === 'waiting') return '等待 MasterAgent 调度'
-  if (node.status === 'success') return '该节点已完成处理'
-  if (node.status === 'failed') return '该节点执行失败，请查看日志'
-  if (node.status === 'skipped') return '本次任务未启用该节点'
-  return '正在处理任务'
+  if (node.status === 'waiting') return '等待协同中枢分发任务'
+  if (node.status === 'success') return '该工位已提交成果'
+  if (node.status === 'failed') return '工位发生执行阻塞，请在审计日志中查看详情'
+  if (node.status === 'skipped') return '本次协同已越过该工位'
+  return '正在研制认知成果...'
 }
 
 export function getDagNodeIcon(type: string): string {

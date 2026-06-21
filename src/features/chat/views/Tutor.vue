@@ -162,13 +162,13 @@
         <div class="chat-interaction-area">
           <div class="chat-viewport" ref="chatScroll">
             <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
-              <h2>你好，{{ userName }}！</h2>
+              <h2>你好，{{ userName }}。欢迎回到思辨书房。</h2>
             </div>
 
             <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
               <div class="welcome-icon"><el-icon><Cpu /></el-icon></div>
-              <h3>我是您的 AI 私人导师</h3>
-              <p>支持文字、图片、文档等多模态交流，<br>我将在对话中自动更新您的学习画像并提供量身定制的解答</p>
+              <h3>进入您的专属认知书房</h3>
+              <p class="cognitive-note">在这里，每一次对话都会成为塑形您学习画像的线索。<br>我支持跨媒介文献与视听分析，我们将共同构建您的个性化认知图谱。</p>
             </div>
 
             <template v-for="msg in messages" :key="msg.id">
@@ -222,7 +222,7 @@
                   </div>
                   <div class="compression-copy">
                     <strong>{{ getCompressionTitle(msg) }}</strong>
-                    <span>{{ msg.contextCompressionMessage || '正在整理较早的对话上下文...' }}</span>
+                    <span>{{ msg.contextCompressionMessage || '正在将先前的探索过程提炼并归档至长期记忆库...' }}</span>
                   </div>
                 </div>
 
@@ -283,7 +283,7 @@
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
-                  placeholder="向 AI 导师提问（Enter 发送，Shift + Enter 换行）"
+                  placeholder="在此开启学术思辨（Enter 递交，Shift + Enter 换行）"
                   @keydown.enter="handleEnter"
                   @input="autoResize"
               ></textarea>
@@ -309,8 +309,8 @@
                     </button>
                   </el-tooltip>
 
-                  <el-tooltip content="生成图解说明" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭图解说明' : '生成图解说明'">
+                  <el-tooltip content="协同绘制结构图解" placement="top" :show-after="500">
+                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭结构图解' : '协同绘制结构图解'">
                       <el-icon aria-hidden="true"><DataLine /></el-icon>
                     </button>
                   </el-tooltip>
@@ -720,7 +720,7 @@ const COMPRESSION_STAGES = new Set<ContextCompressionStage>([
 const compressionClearTimers = new Map<ChatMsg['id'], ReturnType<typeof window.setTimeout>>()
 
 const getCompressionTitle = (msg: ChatMsg) => {
-  return msg.contextCompressionStage === 'compression_done' ? '上下文整理完成' : '上下文整理中'
+  return msg.contextCompressionStage === 'compression_done' ? '[认知断代] 核心记忆归档' : '[认知断代] 记忆整理中'
 }
 
 const clearCompressionStatus = (aiMsg?: ChatMsg) => {
@@ -750,7 +750,7 @@ const scheduleCompressionClear = (aiMsg: ChatMsg) => {
 const applyCompressionStatus = (aiMsg: ChatMsg, payload: { stage?: string; message?: string }) => {
   if (!payload.stage || !COMPRESSION_STAGES.has(payload.stage as ContextCompressionStage)) return false
   aiMsg.contextCompressionStage = payload.stage as ContextCompressionStage
-  aiMsg.contextCompressionMessage = payload.message || '正在整理上下文...'
+  aiMsg.contextCompressionMessage = payload.message || '正在将先前的探索过程提炼并归档至长期记忆库...'
   if (aiMsg.contextCompressionStage === 'compression_done') {
     scheduleCompressionClear(aiMsg)
   }

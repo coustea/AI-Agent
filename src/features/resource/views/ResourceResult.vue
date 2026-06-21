@@ -1,203 +1,309 @@
 <template>
-  <div class="phase-view results-view resource-package-page">
-    <header class="package-hero-card">
-      <div class="package-hero-title">
-        <div class="hero-kicker-row">
-          <span class="hero-status-pill" :class="{ warning: !!resultWarning }">
-            <el-icon><CircleCheckFilled /></el-icon>
-            {{ resultWarning ? '部分完成' : '生成完成' }}
-          </span>
-          <span class="hero-kicker">RESOURCE PACKAGE</span>
-        </div>
-        <h1>{{ bundleTitle }}</h1>
-        <p>{{ learningNeedText }}</p>
-      </div>
+  <div class="phase-view results-view resource-result-page">
 
-      <div class="hero-metric-strip">
-        <div class="hero-metric-pill">
-          <span>资源</span>
-          <strong>{{ resourceCards.length }}</strong>
-        </div>
-        <div v-if="totalEstimatedMinutes > 0" class="hero-metric-pill">
-          <span>预计</span>
-          <strong>{{ totalEstimatedMinutes }}min</strong>
-        </div>
-        <div v-if="studyPathSteps.length" class="hero-metric-pill">
-          <span>路径</span>
-          <strong>{{ studyPathSteps.length }}步</strong>
-        </div>
-      </div>
+    <!-- Ambient Blur Glows for Immersive Atelier Vibe -->
+    <div class="result-ambient-glows" aria-hidden="true">
+      <div class="glow-sphere glow-primary"></div>
+      <div class="glow-sphere glow-secondary"></div>
+    </div>
 
-      <div class="hero-side-panel">
-        <div class="hero-action-row">
-          <el-button v-if="studyPathSteps.length" round type="primary" class="hero-primary-btn" @click="scrollToPath">
-            按路径学习
-            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-          </el-button>
-          <el-button round plain @click="emit('reset')">
-            <el-icon><RefreshLeft /></el-icon>
-            新建任务
-          </el-button>
-        </div>
-      </div>
-    </header>
+    <!-- Bento Workspace Grid -->
+    <div class="result-workspace-grid">
 
-
-    <main class="package-result-body">
-      <section v-if="studyPathSteps.length" ref="pathSectionRef" class="learning-path-section package-section-card">
-        <div class="section-heading-row path-heading">
-          <div>
-            <span class="section-eyebrow">LEARNING PATH</span>
-            <h2>推荐学习顺序</h2>
+      <!-- HEADER BRIEF CARD: Task Brief Card (智源任务概要卡) - 全宽 -->
+      <section class="bento-card atelier-brief-card col-span-3">
+        <div class="brief-glass-backdrop"></div>
+        <div class="brief-content">
+          <div class="brief-header">
+            <span class="result-status-badge" :class="{ warning: isPartialResult }">
+              <el-icon aria-hidden="true">
+                <component :is="isPartialResult ? WarningFilled : CircleCheckFilled" />
+              </el-icon>
+              {{ isPartialResult ? '部分工位就绪' : '工坊汇编完成' }}
+            </span>
+            <span class="result-package-label">COGNITIVE COMPILING BLUEPRINT</span>
           </div>
-          <span class="section-summary-pill">
-            {{ studyPathSteps.length }} 步<span v-if="studyPathEstimatedMinutes"> · {{ studyPathEstimatedMinutes }} 分钟</span>
-          </span>
-        </div>
+          <h1>{{ bundleTitle }}</h1>
+          <p class="prompt-text-quote">{{ learningNeedText || heroSummary }}</p>
 
-        <div class="path-step-track">
-          <article
-            v-for="step in studyPathSteps"
-            :key="`${step.order}-${step.resource_type}-${step.title}`"
-            class="path-step-card"
-            :class="getResourceToneClass(normalizeType(step.resource_type))"
-            @click="openResourceByType(normalizeType(step.resource_type))"
-          >
-            <div class="path-step-index">{{ step.order }}</div>
-            <div class="path-step-main">
-              <div class="path-step-topline">
-                <span class="path-resource-type">{{ getResourceTypeLabel(normalizeType(step.resource_type)) }}</span>
-                <span v-if="step.estimated_time" class="path-time-badge">
-                  <el-icon><Clock /></el-icon>
-                  {{ step.estimated_time }}min
-                </span>
-              </div>
-              <h3>{{ step.title }}</h3>
-              <p v-if="step.reason">{{ step.reason }}</p>
-              <div class="path-focus-list" v-if="step.focus_points?.length">
-                <span v-for="point in step.focus_points.slice(0, 2)" :key="point">{{ point }}</span>
-              </div>
+          <!-- Stats inline in brief card -->
+          <div class="brief-stats-row">
+            <div class="stat-chip">
+              <span class="stat-label">交付产物</span>
+              <strong class="stat-val">{{ resourceCards.length }}<small>项</small></strong>
             </div>
-          </article>
+            <div class="stat-chip">
+              <span class="stat-label">认知媒介</span>
+              <strong class="stat-val">{{ generatedTypeCount }}<small>种</small></strong>
+            </div>
+            <div v-if="totalEstimatedMinutes" class="stat-chip">
+              <span class="stat-label">研习周期</span>
+              <strong class="stat-val">{{ totalEstimatedMinutes }}<small>分</small></strong>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="resource-board-section">
-        <div class="section-heading-row board-heading">
-          <div>
-            <span class="section-eyebrow">RESOURCE CARDS</span>
-            <h2>多模态资源卡片</h2>
-            <p>{{ heroSummary }}</p>
-          </div>
-          <div class="board-filter-pills">
-            <span>文档</span>
-            <span>导图</span>
-            <span>题库</span>
-            <span>实操</span>
-            <span>PPT</span>
-          </div>
+      <!-- Partial Result Alert Banner -->
+      <section v-if="resultWarning" class="bento-card partial-result-banner col-span-3">
+        <div class="partial-banner-icon-box">
+          <el-icon aria-hidden="true"><WarningFilled /></el-icon>
         </div>
+        <div class="banner-body-text">
+          <strong>协同链路受阻 (Collaboration Interrupted)</strong>
+          <p>{{ resultWarning }}</p>
+        </div>
+        <span class="banner-hint-note">部分并行工位协同受限，已就绪的成果已通过质量校验，可正常开启研习。</span>
+      </section>
 
-        <div v-if="resourceCards.length" class="resource-card-grid-v2">
-          <article
-            v-for="card in resourceCards"
-            :key="card.id || `${card.type}-${card.title}`"
-            class="resource-result-card"
-            :class="[getResourceToneClass(card.type), { featured: card.type === primaryCardType }]"
-            tabindex="0"
-            role="button"
-            :aria-label="`预览 ${card.title}`"
-            @click="openPreview(card)"
-            @keydown.enter.prevent="openPreview(card)"
-            @keydown.space.prevent="openPreview(card)"
-          >
-            <header class="resource-card-header">
-              <div class="resource-icon-shell">
-                <el-icon><component :is="getAgentMeta(card.type).icon" /></el-icon>
+      <!-- Bento-Style Recommended Hero Card (Large Card) - 2/3宽度，占据2行 -->
+      <section v-if="recommendedCard" class="bento-card recommended-hero-card col-span-2 row-span-2">
+        <div class="recommended-hero-content">
+          <span class="section-kicker">RECOMMENDED START</span>
+          <h2>以此开启学习探索</h2>
+          <p class="recommended-intro">认知架构师建议优先从此项核心精解讲义切入，梳理整体概念脉络，再结合其他认知媒介完成知识闭环。</p>
+
+          <!-- Recommended card preview -->
+          <div class="recommended-preview-card">
+            <div class="preview-card-header">
+              <div class="preview-type-badge" :class="`type-${recommendedCard.type}`">
+                <span class="type-icon">{{ getResourceIcon(recommendedCard.type) }}</span>
+                <span>{{ getResourceTypeLabel(recommendedCard.type) }}</span>
               </div>
-              <div class="resource-header-text">
-                <span>{{ getResourceTypeLabel(card.type) }}</span>
-                <strong>{{ card.format }}</strong>
-              </div>
-              <span class="resource-status-badge" :class="card.status">
-                {{ getStatusLabel(card.status) }}
+              <span class="preview-format-tag">{{ recommendedCard.format }}</span>
+            </div>
+            <h3 class="preview-title">{{ recommendedCard.title }}</h3>
+            <p class="preview-summary">{{ recommendedCard.summary || getDefaultSummary(recommendedCard.type) }}</p>
+            <div class="preview-meta-row">
+              <span v-if="recommendedCard.estimatedLabel" class="meta-pill">
+                <el-icon aria-hidden="true"><Clock /></el-icon>
+                {{ recommendedCard.estimatedLabel }}
               </span>
-            </header>
-
-            <div
-              class="resource-cover"
-              :class="`cover-${card.type}`"
-              :style="{ backgroundImage: getResourceCoverImage(card.type) }"
-            >
-              <span class="cover-type-badge">{{ getCardVisualLabel(card.type) }}</span>
-            </div>
-
-            <div class="resource-card-body">
-              <h3>{{ getShortCardTitle(card) }}</h3>
-              <p v-if="card.summary">{{ card.summary }}</p>
-            </div>
-
-            <div class="resource-tag-row">
-              <span v-for="tag in getResourceHighlights(card)" :key="`${card.id}-${tag}`">
+              <span v-for="tag in getResourceHighlights(recommendedCard).slice(0, 2)" :key="tag" class="meta-pill highlight">
                 {{ tag }}
               </span>
             </div>
+          </div>
 
-            <div v-if="card.metadata?.difficulty || card.estimatedMinutes || getResourceHighlights(card).length" class="resource-meta-grid">
-              <span v-if="card.metadata?.difficulty">
-                <el-icon><Odometer /></el-icon>
-                {{ getDifficultyLabel(card.metadata?.difficulty) }}
-              </span>
-              <span v-if="card.estimatedMinutes">
-                <el-icon><Clock /></el-icon>
-                {{ card.estimatedLabel }}
-              </span>
-              <span v-if="getResourceHighlights(card).length">
-                {{ getResourceHighlights(card)[0] }}
-              </span>
+          <div class="recommended-actions">
+            <button type="button" class="start-learning-hero-btn" @click="startLearning(recommendedCard)">
+              <span>即刻开启研习</span>
+              <el-icon aria-hidden="true"><ArrowRight /></el-icon>
+            </button>
+            <button type="button" class="preview-btn-secondary" @click="openPreview(recommendedCard)">
+              <el-icon aria-hidden="true"><View /></el-icon>
+              <span>预览</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cognitive Profile Calibration Bento Card - 1/3宽度 -->
+      <section class="bento-card glassmorphic-panel cognitive-profile-calibration col-span-1">
+        <span class="panel-eyebrow">PROFILE CALIBRATION</span>
+        <h3 class="panel-title">学情画像映射修正</h3>
+        <p class="calibration-desc">本次生成的资源包已根据以下维度校正您的动态画像：</p>
+
+        <div class="calibration-dimension-list">
+          <div class="dimension-row-widget">
+            <div class="dim-info">
+              <span class="dim-label">学习风格映射</span>
+              <strong class="dim-value">{{ getScenarioCalibration.style }}</strong>
+            </div>
+            <div class="dim-bar-progress"><span class="progress-fill" style="width: 85%"></span></div>
+          </div>
+          <div class="dimension-row-widget">
+            <div class="dim-info">
+              <span class="dim-label">关注聚焦重点</span>
+              <strong class="dim-value">{{ getScenarioCalibration.focus }}</strong>
+            </div>
+            <div class="dim-bar-progress"><span class="progress-fill" style="width: 90%"></span></div>
+          </div>
+          <div class="dimension-row-widget highlight-emerald">
+            <div class="dim-info">
+              <span class="dim-label">画像提升幅度</span>
+              <strong class="dim-value text-emerald">+2% 认知熟练度</strong>
+            </div>
+            <div class="dim-bar-progress"><span class="progress-fill fill-emerald" style="width: 100%"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MAS Workflow Timeline Bento Card - 1/3宽度 -->
+      <section class="bento-card glassmorphic-panel mas-process-timeline col-span-1">
+        <span class="panel-eyebrow">COLLABORATIVE LINEAGE</span>
+        <h3 class="panel-title">工位协同工序谱系</h3>
+
+        <div class="workflow-steps-vertical">
+          <div class="step-timeline-item completed">
+            <div class="step-bullet"><span>✓</span></div>
+            <div class="step-info">
+              <strong>认知架构工位</strong>
+              <p>分析目标与场景</p>
+            </div>
+          </div>
+          <div class="step-timeline-item completed">
+            <div class="step-bullet"><span>✓</span></div>
+            <div class="step-info">
+              <strong>协同中枢工位</strong>
+              <p>任务并发调度</p>
+            </div>
+          </div>
+          <div class="step-timeline-item completed">
+            <div class="step-bullet"><span>✓</span></div>
+            <div class="step-info">
+              <strong>并发协同成果</strong>
+              <p>多媒介同步研制</p>
+            </div>
+          </div>
+          <div class="step-timeline-item completed">
+            <div class="step-bullet"><span>✓</span></div>
+            <div class="step-info">
+              <strong>汇编归档工位</strong>
+              <p>跨格式校验归档</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filters Section - 全宽 -->
+      <section class="bento-card filters-section col-span-3">
+        <div class="filters-header">
+          <h3 class="filters-title">已就绪成果名录</h3>
+          <div v-if="resourceCards.length > 1" class="resource-pill-filters">
+            <button
+                type="button"
+                :class="{ active: activeFilter === 'all' }"
+                @click="activeFilter = 'all'"
+            >
+              全部 ({{ resourceCards.length }})
+            </button>
+            <button
+                v-for="filter in availableFilters"
+                :key="filter.type"
+                type="button"
+                :class="{ active: activeFilter === filter.type }"
+                @click="activeFilter = filter.type"
+            >
+              {{ filter.label }} ({{ filter.count }})
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Main Resources Bento Grid - 全宽 -->
+      <section class="bento-card resources-gallery col-span-3">
+        <!-- Bento Grid of Visual Interactive Cards -->
+        <div v-if="filteredResourceCards.length" class="resource-card-bento-grid">
+          <article
+              v-for="card in filteredResourceCards"
+              :key="card.id"
+              class="visual-resource-card"
+              :class="[`type-${card.type}`, { 'is-recommended': card.id === recommendedCard?.id }]"
+              tabindex="0"
+              role="button"
+              :aria-label="`查看${card.title}`"
+              @click="openPreview(card)"
+              @keydown.enter.prevent="openPreview(card)"
+              @keydown.space.prevent="openPreview(card)"
+          >
+            <!-- Card Cover Artwork with Custom Thematic Visuals -->
+            <div class="card-visual-header">
+              <div class="card-glow-bg"></div>
+              <ResourceArtwork :type="card.type" />
+              <div class="visual-top-overlay">
+                <span class="card-type-indicator">
+                  <span class="type-icon">{{ getResourceIcon(card.type) }}</span>
+                  {{ getResourceTypeLabel(card.type) }}
+                </span>
+                <span class="card-status-dot-pill"><i></i>就绪</span>
+              </div>
+              <span class="visual-format-badge">{{ card.format }}</span>
             </div>
 
-            <footer class="resource-card-actions" @click.stop>
-              <button class="card-action-button secondary" type="button" @click="openPreview(card)">
-                查看内容
+            <!-- Card Body -->
+            <div class="card-body-content">
+              <h3 class="card-title-text">{{ card.title }}</h3>
+              <p class="card-summary-text">{{ card.summary || getDefaultSummary(card.type) }}</p>
+
+              <div v-if="getResourceHighlights(card).length" class="card-tags-row">
+                <span v-for="tag in getResourceHighlights(card)" :key="`${card.id}-${tag}`" class="card-tag-badge">
+                  {{ tag }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Card Footer Actions -->
+            <footer class="card-footer-actions">
+              <button type="button" class="action-btn preview-btn" @click.stop="openPreview(card)">
+                <el-icon aria-hidden="true"><View /></el-icon>
+                预览
               </button>
-              <button class="card-action-button primary" type="button" @click="startLearning(card)">
-                开始学习
-                <el-icon><ArrowRight /></el-icon>
+              <button type="button" class="action-btn learn-btn" @click.stop="startLearning(card)">
+                <span>开启学习</span>
+                <el-icon aria-hidden="true"><ArrowRight /></el-icon>
               </button>
             </footer>
           </article>
         </div>
 
-        <div v-else class="empty-resource-board">
-          <el-icon><WarningFilled /></el-icon>
-          <strong>暂无可展示资源</strong>
-          <p>当前任务未返回资源项，可重新生成或查看运行日志定位问题。</p>
-          <el-button round type="primary" @click="emit('reset')">重新生成</el-button>
+        <!-- Empty filter state -->
+        <div v-else class="empty-state-box">
+          <div class="empty-state-icon-wrapper">
+            <el-icon aria-hidden="true"><WarningFilled /></el-icon>
+          </div>
+          <h3>当前筛选下无就绪成果</h3>
+          <p>该分类下暂无已生成的资源，请选择其他类别或查看全部成果。</p>
+          <button type="button" class="clear-filter-btn" @click="activeFilter = 'all'">查看全部</button>
         </div>
       </section>
-    </main>
+
+      <!-- New Task Action Card - 全宽 -->
+      <section class="bento-card new-task-action-card col-span-3">
+        <div class="action-box">
+          <h4>准备好进行下一阶段规划了吗？</h4>
+          <p>重置当前工坊运行参数，重新输入新的学习需求意向。</p>
+          <button
+              type="button"
+              class="rebuild-action-btn"
+              @click="emit('reset')"
+          >
+            <el-icon aria-hidden="true"><RefreshLeft /></el-icon>
+            <span>发起新探索任务</span>
+          </button>
+        </div>
+      </section>
+
+    </div>
   </div>
 </template>
 
-
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import {
+  computed,
+  defineComponent,
+  h,
+  ref,
+  type PropType,
+} from 'vue'
+
 import {
   ArrowRight,
   CircleCheckFilled,
-  Clock,
-  Odometer,
   RefreshLeft,
   WarningFilled,
+  Clock,
+  View,
 } from '@element-plus/icons-vue'
+
 import {
-  getAgentMeta,
-  getResourceTypeLabel,
   getDifficultyLabel,
-  getResourceToneClass,
+  getResourceTypeLabel,
 } from '@/features/resource/model/ResourceGeneratorConstants'
-import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
+
+import {
+  parsePptDocument,
+} from '@/features/resource/components/ppt-engine/types/ppt'
 
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
@@ -214,15 +320,7 @@ type ResourceCard = GeneratedResourceItem & {
   estimatedMinutes: number | null
   estimatedLabel: string
   metadata: Record<string, any>
-}
-
-type StudyPathStepLike = {
-  order: number
-  resource_type: string
-  title: string
-  reason?: string
-  estimated_time?: number | null
-  focus_points?: string[]
+  metrics: Record<string, any>
 }
 
 const props = defineProps<{
@@ -232,123 +330,564 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   reset: []
-  preview: [data: { agentId: string; resultData: any; title: string }]
+  preview: [
+    data: {
+      agentId: string
+      resultData: any
+      title: string
+    },
+  ]
 }>()
 
-const pathSectionRef = ref<HTMLElement | null>(null)
+const RESOURCE_ORDER = [
+  'content',
+  'mindmap',
+  'quiz',
+  'code',
+  'reading',
+  'ppt',
+  'video',
+]
 
-const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'video']
 const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
 
+const activeFilter = ref('all')
+
+const SCENARIO_CALIBRATION_MAP: Record<string, { style: string; focus: string; dim: string }> = {
+  exam_prep: { style: '考试强化型 (Exam Oriented)', focus: '自测查漏与重难点剖析', dim: '认知深度与应试大纲映射' },
+  daily_review: { style: '循序渐进型 (Incremental)', focus: '知识点微反馈与概念建构', dim: '认知宽度与记忆连存率' },
+  project_practice: { style: '工程实训型 (Project Driven)', focus: '沙箱实验与真实代码实训', dim: '操作效能与工程系统思维' },
+  self_study: { style: '自主探索型 (Self Guided)', focus: '前置依赖关系检索与全局大纲', dim: '新领域知识图谱完备度' },
+}
+
+const getScenarioCalibration = computed<{ style: string; focus: string; dim: string }>(() => {
+  const sc = props.finalBundle?.scenario || props.finalBundle?.learningScenario || 'daily_review'
+  const fallback = { style: '循序渐进型 (Incremental)', focus: '知识点微反馈与概念建构', dim: '认知宽度与记忆连存率' }
+  return SCENARIO_CALIBRATION_MAP[sc] || fallback
+})
+
+const ResourceArtwork = defineComponent({
+  name: 'ResourceArtwork',
+
+  props: {
+    type: {
+      type: String as PropType<string>,
+      required: true,
+    },
+
+    large: {
+      type: Boolean,
+      default: false,
+    },
+  },
+
+  setup(componentProps) {
+    return () =>
+        h(
+            'div',
+            {
+              class: [
+                'artwork',
+                `artwork-${componentProps.type}`,
+                {
+                  'is-large': componentProps.large,
+                },
+              ],
+              'aria-hidden': 'true',
+            },
+            createArtworkNodes(componentProps.type),
+        )
+  },
+})
+
+function createArtworkNodes(type: string) {
+  if (type === 'mindmap') {
+    return [
+      h('span', { class: 'map-center' }, 'AI'),
+
+      ...[1, 2, 3, 4].map(index =>
+          h('i', {
+            class: `map-node node-${index}`,
+          }),
+      ),
+
+      ...[1, 2, 3, 4].map(index =>
+          h('b', {
+            class: `map-line line-${index}`,
+          }),
+      ),
+    ]
+  }
+
+  if (type === 'quiz') {
+    return [
+      h('span', { class: 'quiz-sheet' }, [
+        h('i'),
+        h('i'),
+        h('i'),
+        h('b'),
+        h('b'),
+        h('b'),
+      ]),
+
+      h('span', { class: 'quiz-score' }, 'A+'),
+    ]
+  }
+
+  if (type === 'code') {
+    return [
+      h('span', { class: 'code-window' }, [
+        h('i', { class: 'code-dots' }),
+        h('b', { class: 'code-line line-a' }),
+        h('b', { class: 'code-line line-b' }),
+        h('b', { class: 'code-line line-c' }),
+        h('b', { class: 'code-line line-d' }),
+      ]),
+
+      h('span', { class: 'code-badge' }, '</>'),
+    ]
+  }
+
+  if (type === 'reading') {
+    return [
+      h('span', {
+        class: 'book book-back',
+      }),
+
+      h(
+          'span',
+          {
+            class: 'book book-front',
+          },
+          [
+            h('i'),
+            h('b'),
+          ],
+      ),
+
+      h(
+          'span',
+          {
+            class: 'reading-mark',
+          },
+          '↗',
+      ),
+    ]
+  }
+
+  if (type === 'ppt') {
+    return [
+      h('span', {
+        class: 'slide slide-back',
+      }),
+
+      h(
+          'span',
+          {
+            class: 'slide slide-front',
+          },
+          [
+            h('i'),
+            h('b'),
+            h('em'),
+          ],
+      ),
+
+      h(
+          'span',
+          {
+            class: 'slide-number',
+          },
+          '12',
+      ),
+    ]
+  }
+
+  if (type === 'video') {
+    return [
+      h(
+          'span',
+          {
+            class: 'video-screen',
+          },
+          [
+            h('i', {
+              class: 'play-button',
+            }),
+          ],
+      ),
+
+      h(
+          'span',
+          {
+            class: 'video-track',
+          },
+          [
+            h('i'),
+          ],
+      ),
+
+      h(
+          'span',
+          {
+            class: 'video-time',
+          },
+          '03:00',
+      ),
+    ]
+  }
+
+  return [
+    h('span', {
+      class: 'document-back',
+    }),
+
+    h(
+        'span',
+        {
+          class: 'document-front',
+        },
+        [
+          h('i', {
+            class: 'document-title',
+          }),
+          h('b'),
+          h('b'),
+          h('b'),
+          h('em'),
+        ],
+    ),
+
+    h('span', {
+      class: 'document-pen',
+    }),
+  ]
+}
+
 const rawResources = computed<GeneratedResourceItem[]>(() => {
-  const resources = props.finalBundle?.resources
-  return Array.isArray(resources) ? resources : []
+  const resources =
+      props.finalBundle?.resources ??
+      props.finalBundle?.items
+
+  return Array.isArray(resources)
+      ? resources
+      : []
 })
 
 const resourceCards = computed<ResourceCard[]>(() => {
   return rawResources.value
-    .map((resource, index) => normalizeResource(resource, index))
-    .filter((resource): resource is ResourceCard => resource !== null)
-    .sort((a, b) => {
-      const orderA = RESOURCE_ORDER.indexOf(a.type)
-      const orderB = RESOURCE_ORDER.indexOf(b.type)
-      return (orderA === -1 ? 99 : orderA) - (orderB === -1 ? 99 : orderB)
-    })
+      .map((resource, index) =>
+          normalizeResource(resource, index),
+      )
+      .filter(
+          (resource): resource is ResourceCard =>
+              resource !== null,
+      )
+      .sort((a, b) => {
+        const orderA = RESOURCE_ORDER.indexOf(a.type)
+        const orderB = RESOURCE_ORDER.indexOf(b.type)
+
+        if (orderA !== orderB) {
+          return (
+              (orderA === -1 ? 99 : orderA) -
+              (orderB === -1 ? 99 : orderB)
+          )
+        }
+
+        return (
+            Number(a.displayOrder || 0) -
+            Number(b.displayOrder || 0)
+        )
+      })
 })
 
-const primaryCardType = computed(() => {
-  const preferred = resourceCards.value.find(item => item.type === 'content')
-  return preferred?.type || resourceCards.value[0]?.type || 'content'
+const filteredResourceCards = computed(() => {
+  if (activeFilter.value === 'all') {
+    return resourceCards.value
+  }
+
+  return resourceCards.value.filter(
+      card => card.type === activeFilter.value,
+  )
 })
 
-const bundleTitle = computed(() => props.finalBundle?.title || '个性化学习资源包')
+const availableFilters = computed(() => {
+  return RESOURCE_ORDER
+      .map(type => ({
+        type,
+        label: getResourceTypeLabel(type),
+        count: resourceCards.value.filter(
+            card => card.type === type,
+        ).length,
+      }))
+      .filter(item => item.count > 0)
+})
+
+const recommendedCard = computed(() => {
+  return (
+      resourceCards.value.find(
+          card => card.type === 'content',
+      ) ||
+      resourceCards.value.find(
+          card => card.type === 'mindmap',
+      ) ||
+      resourceCards.value[0] ||
+      null
+  )
+})
+
+const bundleTitle = computed(() => {
+  return String(
+      props.finalBundle?.title ||
+      props.finalBundle?.name ||
+      '个性化学习资源包',
+  )
+})
 
 const learningNeedText = computed(() => {
-  return String(props.finalBundle?.learning_need || '')
+  return String(
+      props.finalBundle?.learning_need ||
+      props.finalBundle?.learningNeed ||
+      '',
+  ).trim()
 })
 
 const heroSummary = computed(() => {
   const count = resourceCards.value.length
-  if (!count) return '本次任务暂未生成可展示资源，建议重新生成或查看任务日志。'
-  const types = resourceCards.value.map(item => getResourceTypeLabel(item.type)).filter(Boolean).slice(0, 6).join('、')
-  return `已生成 ${count} 类学习资源：${types}。`
+
+  if (!count) {
+    return '本次任务暂未生成可展示资源。'
+  }
+
+  const typeNames = availableFilters.value
+      .map(item => item.label)
+      .slice(0, 7)
+      .join('、')
+
+  return `已生成 ${count} 项资源，包含${typeNames}，可按需要选择查看。`
+})
+
+const generatedTypeCount = computed(() => {
+  return new Set(
+      resourceCards.value.map(card => card.type),
+  ).size
 })
 
 const totalEstimatedMinutes = computed(() => {
-  return resourceCards.value.reduce((sum, card) => sum + (card.estimatedMinutes || 0), 0)
+  const total = resourceCards.value.reduce(
+      (sum, card) =>
+          sum + (card.estimatedMinutes || 0),
+      0,
+  )
+
+  return total > 0
+      ? total
+      : null
 })
 
-const studyPathSteps = computed<StudyPathStepLike[]>(() => {
-  const path = props.finalBundle?.study_path
-  if (!Array.isArray(path) || !path.length) {
-    return []
-  }
-  return path
-    .map((step: any, index: number) => ({
-      order: Number(step.order || index + 1),
-      resource_type: normalizeType(step.resource_type),
-      title: String(step.title || ''),
-      reason: step.reason || '',
-      estimated_time: typeof step.estimated_time === 'number' ? step.estimated_time : null,
-      focus_points: Array.isArray(step.focus_points) ? step.focus_points.map(String) : [],
-    }))
-    .filter(step => RESOURCE_TYPES.has(step.resource_type) && step.title.trim().length > 0)
-    .sort((a, b) => a.order - b.order)
+const isPartialResult = computed(() => {
+  return Boolean(props.resultWarning?.trim())
 })
 
-const studyPathEstimatedMinutes = computed(() => {
-  return studyPathSteps.value.reduce((sum, step) => sum + (step.estimated_time || 0), 0)
-})
+function normalizeResource(
+    resource: GeneratedResourceItem,
+    index: number,
+): ResourceCard | null {
+  const type = normalizeType(
+      resource.type ||
+      resource.agent_type ||
+      resource.agentId,
+  )
 
-function normalizeResource(resource: GeneratedResourceItem, index: number): ResourceCard | null {
-  const type = normalizeType(resource.type)
-  const rawStatus = String(resource.status || '').toLowerCase()
-  if (!RESOURCE_TYPES.has(type) || !['finished', 'completed'].includes(rawStatus)) {
-    console.error('Invalid persisted resource artifact omitted', {
-      index,
-      resourceId: resource.id,
-      type: resource.type,
-      status: resource.status,
-    })
+  const rawStatus = String(
+      resource.status || 'completed',
+  ).toLowerCase()
+
+  if (
+      !RESOURCE_TYPES.has(type) ||
+      ![
+        'finished',
+        'completed',
+        'success',
+      ].includes(rawStatus)
+  ) {
+    console.warn(
+        '[ResourceResult] 忽略不可展示资源',
+        {
+          index,
+          resourceId: resource.id,
+          type,
+          status: resource.status,
+        },
+    )
+
     return null
   }
+
   if (!hasContent(resource.content)) {
-    console.error('Empty persisted resource artifact omitted', { index, resourceId: resource.id, type })
+    console.warn(
+        '[ResourceResult] 忽略空资源',
+        {
+          index,
+          resourceId: resource.id,
+          type,
+        },
+    )
+
     return null
   }
+
   if (type === 'ppt') {
-    const parsed = parsePptDocument(resource.content)
+    const parsed = parsePptDocument(
+        resource.content,
+    )
+
     if (!parsed.ok) {
-      console.error('Invalid persisted PPT artifact omitted', {
-        resourceId: resource.id,
-        reason: parsed.reason,
-        details: parsed.details,
-      })
+      console.warn(
+          '[ResourceResult] 忽略无效 PPT 资源',
+          {
+            resourceId: resource.id,
+            reason: parsed.reason,
+          },
+      )
+
       return null
     }
   }
-  if (resource.id == null || typeof resource.title !== 'string' || !resource.title.trim() || typeof resource.format !== 'string' || !resource.format.trim()) {
-    console.error('Incomplete persisted resource artifact omitted', { index, resourceId: resource.id, type })
-    return null
-  }
-  const metadata = isPlainObject(resource.metadata) ? resource.metadata : {}
-  const estimatedMinutes = getEstimatedMinutes(metadata)
+
+  const metadata = isPlainObject(resource.metadata)
+      ? resource.metadata
+      : {}
+
+  const metrics = isPlainObject(resource.metrics)
+      ? resource.metrics
+      : {}
+
+  const title = getResourceTitle(resource, type)
+  const format = getResourceFormat(resource, type)
+
+  const estimatedMinutes = getEstimatedMinutes(
+      metadata,
+      metrics,
+  )
+
   return {
     ...resource,
-    id: String(resource.id),
+    id: String(
+        resource.id ??
+        `${type}-${index}`,
+    ),
     type,
-    title: resource.title.trim(),
-    summary: typeof resource.summary === 'string' ? resource.summary : '',
-    format: resource.format.trim(),
+    title,
+    summary: getResourceSummary(resource, type),
+    format,
     status: 'completed',
     estimatedMinutes,
-    estimatedLabel: estimatedMinutes ? `${estimatedMinutes} 分钟` : '',
+    estimatedLabel: estimatedMinutes
+        ? `${estimatedMinutes} 分钟`
+        : '',
     metadata,
+    metrics,
   }
 }
 
 function normalizeType(type: unknown) {
-  return typeof type === 'string' ? type.trim().toLowerCase() : ''
+  return typeof type === 'string'
+      ? type.trim().toLowerCase()
+      : ''
+}
+
+function getResourceTitle(
+    resource: GeneratedResourceItem,
+    type: string,
+) {
+  const title =
+      typeof resource.title === 'string'
+          ? resource.title.trim()
+          : ''
+
+  if (title) {
+    return title
+  }
+
+  return `${getResourceTypeLabel(type)} · ${bundleTitle.value}`
+}
+
+function getResourceSummary(
+    resource: GeneratedResourceItem,
+    type: string,
+) {
+  const candidates = [
+    resource.summary,
+    resource.description,
+    resource.metadata?.summary,
+  ]
+
+  const summary = candidates.find(
+      value =>
+          typeof value === 'string' &&
+          value.trim(),
+  )
+
+  return typeof summary === 'string'
+      ? summary.trim()
+      : getDefaultSummary(type)
+}
+
+function getResourceFormat(
+    resource: GeneratedResourceItem,
+    type: string,
+) {
+  const raw =
+      resource.format ||
+      resource.file_type ||
+      resource.fileType
+
+  if (
+      typeof raw === 'string' &&
+      raw.trim()
+  ) {
+    return raw.trim().toUpperCase()
+  }
+
+  const fallback: Record<string, string> = {
+    content: 'MARKDOWN',
+    mindmap: 'MARKMAP',
+    quiz: 'JSON',
+    code: 'CODE',
+    reading: 'LINKS',
+    ppt: 'SLIDES',
+    video: 'VIDEO',
+  }
+
+  return fallback[type] || 'RESOURCE'
+}
+
+function getEstimatedMinutes(
+    metadata: Record<string, any>,
+    metrics: Record<string, any>,
+) {
+  const raw =
+      metadata.estimated_minutes ??
+      metadata.estimated_time ??
+      metrics.estimated_minutes ??
+      metrics.estimated_time
+
+  if (
+      typeof raw === 'number' &&
+      raw > 0
+  ) {
+    return Math.round(raw)
+  }
+
+  const parsed = Number(
+      String(raw || '').match(/\d+/)?.[0],
+  )
+
+  return Number.isFinite(parsed) &&
+  parsed > 0
+      ? parsed
+      : null
 }
 
 function openPreview(card: ResourceCard) {
@@ -363,1042 +902,1321 @@ function startLearning(card: ResourceCard) {
   openPreview(card)
 }
 
-function openResourceByType(type: string) {
-  const target = resourceCards.value.find(card => card.type === type)
-  if (target) openPreview(target)
-}
-
-function scrollToPath() {
-  pathSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function getEstimatedMinutes(metadata: Record<string, any>) {
-  const raw = metadata.estimated_minutes ?? metadata.estimated_time
-  if (typeof raw === 'number') return raw
-  const parsed = Number(String(raw || '').match(/\d+/)?.[0])
-  if (Number.isFinite(parsed) && parsed > 0) return parsed
-  return null
-}
-
-function getStatusLabel(status: ResourceCard['status']) {
-  const map = {
-    completed: '已完成',
-    partial: '部分完成',
-    failed: '生成失败',
+function getResourceIcon(type: string) {
+  const icons: Record<string, string> = {
+    content: '📘',
+    mindmap: '🧠',
+    quiz: '✅',
+    code: '💻',
+    reading: '📚',
+    ppt: '📊',
+    video: '🎬',
   }
-  return map[status]
+
+  return icons[type] || '✨'
 }
 
-function getShortCardTitle(card: ResourceCard) {
-  const topic = getMainTopic(card)
-  if (topic && topic !== '当前知识主题') return topic
-  return getResourceTypeLabel(card.type) || card.title
-}
-
-function getMainTopic(card: ResourceCard) {
-  const summaryData = isPlainObject(card.metrics) ? card.metrics : {}
-  const raw = summaryData.topic || card.metadata?.topic || card.title
-  return typeof raw === 'string' ? raw.trim() : ''
-}
-
-function getCardVisualLabel(type: string) {
+function getDefaultSummary(type: string) {
   const map: Record<string, string> = {
-    content: 'COURSE NOTE',
-    mindmap: 'KNOWLEDGE MAP',
-    quiz: 'QUIZ CHECK',
-    code: 'CODE LAB',
-    reading: 'READING LIST',
-    ppt: 'SLIDE DECK',
-    video: 'ANIMATION',
-  }
-  return map[type] || 'RESOURCE'
-}
-
-function getResourceCoverImage(type: string) {
-  const svg = getCoverSvg(type || 'content')
-  const encoded = encodeURIComponent(svg)
-  return `url("data:image/svg+xml;charset=UTF-8,${encoded}")`
-}
-
-function getCoverSvg(type: string): string {
-  const commonDefs = `
-    <defs>
-      <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#0f172a" flood-opacity="0.12"/>
-      </filter>
-      <linearGradient id="blue" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#dbeafe"/><stop offset="1" stop-color="#bfdbfe"/></linearGradient>
-      <linearGradient id="mint" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#d1fae5"/><stop offset="1" stop-color="#a7f3d0"/></linearGradient>
-      <linearGradient id="violet" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ede9fe"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient>
-      <linearGradient id="rose" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffe4e6"/><stop offset="1" stop-color="#fecdd3"/></linearGradient>
-      <linearGradient id="amber" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fef3c7"/><stop offset="1" stop-color="#93c5fd"/></linearGradient>
-    </defs>`
-
-  const svgMap: Record<string, string> = {
-    content: `
-      <svg xmlns="http://www.w3.org/2000/svg" width="560" height="320" viewBox="0 0 560 320">
-        ${commonDefs}
-        <rect width="560" height="320" rx="34" fill="#eff6ff"/>
-        <circle cx="90" cy="70" r="48" fill="#dbeafe" opacity=".9"/>
-        <circle cx="450" cy="80" r="70" fill="#bfdbfe" opacity=".45"/>
-        <path d="M66 244c58-46 132-47 206-8s145 37 222-19v68H66z" fill="#dbeafe" opacity=".65"/>
-        <g filter="url(#shadow)">
-          <rect x="176" y="58" width="244" height="188" rx="24" fill="white"/>
-          <rect x="212" y="92" width="146" height="14" rx="7" fill="#bfdbfe"/>
-          <rect x="212" y="124" width="174" height="10" rx="5" fill="#cbd5e1"/>
-          <rect x="212" y="150" width="132" height="10" rx="5" fill="#cbd5e1"/>
-          <rect x="212" y="176" width="158" height="10" rx="5" fill="#cbd5e1"/>
-          <rect x="212" y="202" width="84" height="10" rx="5" fill="#818cf8"/>
-        </g>
-        <g filter="url(#shadow)">
-          <rect x="84" y="112" width="108" height="136" rx="22" fill="url(#blue)" transform="rotate(-9 138 180)"/>
-          <path d="M116 146h44M111 174h54M108 202h45" stroke="white" stroke-width="12" stroke-linecap="round" opacity=".8"/>
-        </g>
-        <rect x="82" y="250" width="102" height="18" rx="9" fill="#93c5fd"/>
-        <rect x="58" y="268" width="136" height="18" rx="9" fill="#67e8f9" opacity=".75"/>
-        <path d="M360 264l92-20" stroke="#60a5fa" stroke-width="12" stroke-linecap="round"/>
-      </svg>`,
-    mindmap: `
-      <svg xmlns="http://www.w3.org/2000/svg" width="560" height="320" viewBox="0 0 560 320">
-        ${commonDefs}
-        <rect width="560" height="320" rx="34" fill="#f5f3ff"/>
-        <circle cx="430" cy="72" r="74" fill="#ede9fe"/>
-        <circle cx="92" cy="244" r="64" fill="#dbeafe" opacity=".72"/>
-        <g opacity=".28" stroke="#c4b5fd" stroke-width="2"><path d="M0 72h560M0 144h560M0 216h560M112 0v320M224 0v320M336 0v320M448 0v320"/></g>
-        <g filter="url(#shadow)">
-          <circle cx="280" cy="160" r="42" fill="url(#violet)"/>
-          <path d="M252 158c14 22 44 22 56 0" stroke="white" stroke-width="8" stroke-linecap="round" fill="none"/>
-          <circle cx="264" cy="148" r="5" fill="white"/><circle cx="300" cy="148" r="5" fill="white"/>
-        </g>
-        <g stroke="#8b5cf6" stroke-width="5" stroke-linecap="round" opacity=".55">
-          <path d="M242 146L146 96M244 174l-116 50M318 143l96-48M320 177l104 58M280 118V58M280 202v58"/>
-        </g>
-        <g filter="url(#shadow)">
-          <rect x="74" y="70" width="112" height="48" rx="16" fill="#dbeafe"/><rect x="68" y="202" width="124" height="48" rx="16" fill="#bfdbfe"/>
-          <rect x="374" y="70" width="126" height="48" rx="16" fill="#ddd6fe"/><rect x="368" y="214" width="132" height="48" rx="16" fill="#c4b5fd"/>
-          <circle cx="280" cy="58" r="22" fill="#a7f3d0"/><circle cx="280" cy="262" r="22" fill="#93c5fd"/>
-        </g>
-      </svg>`,
-    quiz: `
-      <svg xmlns="http://www.w3.org/2000/svg" width="560" height="320" viewBox="0 0 560 320">
-        ${commonDefs}
-        <rect width="560" height="320" rx="34" fill="#ecfdf5"/>
-        <circle cx="450" cy="72" r="82" fill="#a7f3d0" opacity=".45"/>
-        <circle cx="98" cy="246" r="70" fill="#bfdbfe" opacity=".35"/>
-        <g filter="url(#shadow)">
-          <rect x="122" y="58" width="292" height="210" rx="28" fill="white"/>
-          <rect x="166" y="102" width="28" height="28" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="3"/>
-          <path d="M173 116l8 8 18-22" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <rect x="218" y="107" width="138" height="12" rx="6" fill="#cbd5e1"/>
-          <rect x="166" y="154" width="28" height="28" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="3"/>
-          <path d="M173 168l8 8 18-22" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <rect x="218" y="159" width="160" height="12" rx="6" fill="#cbd5e1"/>
-          <rect x="166" y="206" width="28" height="28" rx="8" fill="white" stroke="#94a3b8" stroke-width="3"/>
-          <rect x="218" y="211" width="108" height="12" rx="6" fill="#cbd5e1"/>
-        </g>
-        <g filter="url(#shadow)">
-          <circle cx="408" cy="226" r="46" fill="url(#mint)"/>
-          <path d="M400 208c3-15 28-13 28 4 0 18-20 17-20 31" stroke="white" stroke-width="10" stroke-linecap="round" fill="none"/>
-          <circle cx="408" cy="256" r="5" fill="white"/>
-        </g>
-      </svg>`,
-    code: `
-      <svg xmlns="http://www.w3.org/2000/svg" width="560" height="320" viewBox="0 0 560 320">
-        ${commonDefs}
-        <rect width="560" height="320" rx="34" fill="#fff1f2"/>
-        <circle cx="100" cy="82" r="62" fill="#ffe4e6"/>
-        <circle cx="450" cy="244" r="76" fill="#bfdbfe" opacity=".42"/>
-        <g filter="url(#shadow)">
-          <rect x="88" y="70" width="380" height="206" rx="24" fill="white"/>
-          <rect x="88" y="70" width="380" height="38" rx="24" fill="#f8fafc"/>
-          <circle cx="116" cy="90" r="7" fill="#fb7185"/><circle cx="140" cy="90" r="7" fill="#fbbf24"/><circle cx="164" cy="90" r="7" fill="#818cf8"/>
-          <rect x="118" y="136" width="220" height="10" rx="5" fill="#60a5fa"/>
-          <rect x="118" y="164" width="154" height="10" rx="5" fill="#a78bfa"/>
-          <rect x="118" y="192" width="250" height="10" rx="5" fill="#818cf8"/>
-          <rect x="118" y="220" width="186" height="10" rx="5" fill="#fb7185"/>
-          <rect x="352" y="126" width="76" height="34" rx="12" fill="#dbeafe"/>
-          <text x="368" y="149" fill="#2563eb" font-family="Arial" font-weight="800" font-size="18">Py</text>
-        </g>
-        <g filter="url(#shadow)">
-          <rect x="386" y="216" width="80" height="58" rx="18" fill="#fecdd3"/>
-          <path d="M416 232l26 13-26 13z" fill="#fb7185"/>
-        </g>
-      </svg>`,
-    reading: `
-      <svg xmlns="http://www.w3.org/2000/svg" width="560" height="320" viewBox="0 0 560 320">
-        ${commonDefs}
-        <rect width="560" height="320" rx="34" fill="#eff6ff"/>
-        <circle cx="92" cy="78" r="62" fill="#dbeafe"/><circle cx="460" cy="78" r="58" fill="#bfdbfe" opacity=".5"/>
-        <g filter="url(#shadow)">
-          <path d="M116 76h142c34 0 58 24 58 58v126H172c-32 0-56-24-56-56z" fill="white"/>
-          <path d="M316 134c0-34 24-58 58-58h70v128c0 32-24 56-56 56H316z" fill="#f8fafc"/>
-          <path d="M336 76h42v78l-21-14-21 14z" fill="#2563eb" opacity=".85"/>
-          <rect x="158" y="126" width="96" height="10" rx="5" fill="#cbd5e1"/><rect x="158" y="156" width="112" height="10" rx="5" fill="#cbd5e1"/><rect x="158" y="186" width="76" height="10" rx="5" fill="#cbd5e1"/>
-          <rect x="348" y="126" width="72" height="10" rx="5" fill="#cbd5e1"/><rect x="348" y="156" width="58" height="10" rx="5" fill="#cbd5e1"/>
-        </g>
-        <g filter="url(#shadow)">
-          <rect x="96" y="172" width="96" height="98" rx="22" fill="url(#amber)"/>
-          <path d="M118 232l26-34 18 24 12-14 22 24z" fill="white" opacity=".78"/>
-        </g>
-        <circle cx="426" cy="228" r="42" fill="none" stroke="#60a5fa" stroke-width="16" opacity=".76"/>
-        <path d="M456 258l42 42" stroke="#60a5fa" stroke-width="16" stroke-linecap="round" opacity=".76"/>
-      </svg>`,
+    content:
+        '围绕本次学习目标组织的系统讲解，帮助建立完整知识框架。',
+    mindmap:
+        '将核心概念、关系和层级整理为可视化知识结构。',
+    quiz:
+        '通过不同题型检查理解程度，并用于学习后的即时巩固。',
+    code:
+        '提供可阅读、可实践的代码案例，帮助将概念转化为操作能力。',
+    reading:
+        '补充可靠的课程资料与延伸阅读，便于继续深入学习。',
+    ppt:
+        '整合基础资源形成结构化教学课件，适合快速复习和演示。',
+    video:
+        '以分镜和讲解节奏组织知识内容，适合视听化学习。',
   }
 
-  return svgMap[type] ?? svgMap.content ?? ''
+  return (
+      map[type] ||
+      '根据本次学习需求生成的个性化学习资源。'
+  )
 }
 
 function getResourceHighlights(card: ResourceCard) {
-  const metrics = isPlainObject(card.metrics) ? card.metrics : {}
   const candidates = [
-    metrics.question_count ? `${metrics.question_count} 题` : '',
-    metrics.node_count ? `${metrics.node_count} 节点` : '',
-    metrics.page_count ? `${metrics.page_count} 页` : '',
-    metrics.language ? String(metrics.language) : '',
-    card.metadata?.programming_language ? String(card.metadata.programming_language) : '',
+    card.metrics.question_count
+        ? `${card.metrics.question_count} 道题`
+        : '',
+
+    card.metrics.node_count
+        ? `${card.metrics.node_count} 个节点`
+        : '',
+
+    card.metrics.page_count
+        ? `${card.metrics.page_count} 页`
+        : '',
+
+    card.metrics.slide_count
+        ? `${card.metrics.slide_count} 页课件`
+        : '',
+
+    card.metrics.scene_count
+        ? `${card.metrics.scene_count} 个场景`
+        : '',
+
+    card.metrics.resource_count
+        ? `${card.metrics.resource_count} 条资料`
+        : '',
+
+    card.metrics.language
+        ? String(card.metrics.language)
+        : '',
+
+    card.metadata.programming_language
+        ? String(card.metadata.programming_language)
+        : '',
+
+    card.metadata.difficulty
+        ? getDifficultyLabel(
+            card.metadata.difficulty,
+        )
+        : '',
   ]
-  return candidates.filter(Boolean).slice(0, 3)
+
+  return [
+    ...new Set(
+        candidates.filter(Boolean),
+    ),
+  ].slice(0, 3)
 }
 
 function hasContent(value: unknown): boolean {
-  if (typeof value === 'string') return value.trim().length > 0
-  if (Array.isArray(value)) return value.length > 0
-  return isPlainObject(value) && Object.keys(value).length > 0
+  if (typeof value === 'string') {
+    return value.trim().length > 0
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0
+  }
+
+  return (
+      isPlainObject(value) &&
+      Object.keys(value).length > 0
+  )
 }
 
-function isPlainObject(value: unknown): value is Record<string, any> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
+function isPlainObject(
+    value: unknown,
+): value is Record<string, any> {
+  return (
+      !!value &&
+      typeof value === 'object' &&
+      !Array.isArray(value)
+  )
 }
 </script>
 
-
-
 <style scoped>
-/* ============================================================
-   Resource Result Page — Design System Compliant
-   Follows: Typography scale, font weights, color tokens
-   ============================================================ */
+/* ================= PAGE BASE ================= */
+.resource-detail-page,
+.resource-result-page {
+  --font-sans: var(--font-ui);
+  --agent-body-font: var(--font-body);
 
-.resource-package-page {
+  background: #F4F7FB;
+  min-height: 100vh;
   position: relative;
-  min-height: calc(100vh - var(--navbar-height, 64px));
-  padding: var(--space-4) clamp(var(--space-4), 2vw, 30px) 30px;
-  overflow-y: auto;
-  background:
-    radial-gradient(circle at 8% 0%, rgba(59, 130, 246, 0.10), transparent 26%),
-    radial-gradient(circle at 94% 8%, rgba(20, 184, 166, 0.12), transparent 28%),
-    linear-gradient(180deg, var(--color-bg) 0%, #eef6ff 58%, var(--color-bg) 100%);
+  overflow-x: hidden;
+  font-family: var(--font-sans);
 }
 
-.package-hero-card,
-.package-section-card,
-.resource-result-card {
-  border: 1px solid rgba(203, 213, 225, 0.78);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: var(--shadow-xl);
-  backdrop-filter: blur(18px);
+/* Ambient background glow */
+.resource-result-page::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 500px;
+  background: linear-gradient(180deg, rgba(224, 231, 255, 0.6) 0%, rgba(244, 247, 251, 0) 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 
-.package-hero-card {
+/* Ambient glow spheres */
+.result-ambient-glows {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.glow-sphere {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  animation: float-glow 8s ease-in-out infinite;
+}
+
+.glow-primary {
+  width: 400px; height: 400px;
+  background: #6366F1;
+  top: -100px; left: 10%;
+}
+
+.glow-secondary {
+  width: 350px; height: 350px;
+  background: #3B82F6;
+  top: 200px; right: 5%;
+  animation-delay: 4s;
+}
+
+@keyframes float-glow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.25; }
+}
+
+/* ================= BENTO GRID SYSTEM ================= */
+.result-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) auto auto;
-  align-items: center;
-  gap: var(--space-5);
-  width: min(100%, 1760px);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  padding: 60px;
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
   margin: 0 auto;
-  border-radius: var(--radius-2xl);
-  padding: var(--space-4) var(--space-5);
 }
 
-.package-hero-title {
-  min-width: 0;
+.col-span-1 { grid-column: span 1; }
+.col-span-2 { grid-column: span 2; }
+.col-span-3 { grid-column: span 3; }
+.row-span-2 { grid-row: span 2; }
+
+@media (max-width: 1200px) {
+  .result-workspace-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 40px;
+  }
+  .col-span-3 { grid-column: span 2; }
 }
 
-.hero-kicker-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
+@media (max-width: 768px) {
+  .result-workspace-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 20px;
+  }
+  .col-span-1, .col-span-2, .col-span-3 { grid-column: span 1; }
+  .row-span-2 { grid-row: span 1; }
 }
 
-.hero-status-pill,
-.section-summary-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  height: 26px;
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-success-soft);
-  color: var(--color-success);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  border: 1px solid rgba(16, 185, 129, 0.24);
-  white-space: nowrap;
-}
-
-.hero-status-pill.warning {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-  border-color: rgba(245, 158, 11, 0.28);
-}
-
-.hero-kicker,
-.section-eyebrow {
-  font-size: var(--text-xs);
-  letter-spacing: 0.12em;
-  font-weight: var(--weight-extrabold);
-  color: var(--cat-tutor);
-}
-
-.package-hero-card h1 {
-  margin: 0;
-  color: var(--color-text-strong);
-  font-size: clamp(var(--text-xl), 2.1vw, var(--text-3xl));
-  line-height: var(--leading-tight);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: -0.035em;
-}
-
-.package-hero-title p {
-  display: -webkit-box;
-  max-width: 860px;
-  margin: var(--space-2) 0 0;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-}
-
-.hero-metric-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(86px, 1fr));
-  gap: var(--space-2);
-}
-
-.hero-metric-pill {
-  display: grid;
-  place-items: center;
-  min-width: 86px;
-  height: 54px;
-  padding: var(--space-1_5) 10px;
-  border-radius: var(--radius-lg);
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid var(--color-border-light);
-}
-
-.hero-metric-pill span {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.hero-metric-pill strong {
-  color: var(--color-text-strong);
-  font-size: var(--text-md);
-  font-weight: var(--weight-extrabold);
-  line-height: 1.1;
-}
-
-.hero-action-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2_5);
-  flex-wrap: wrap;
-}
-
-.hero-primary-btn {
-  background: linear-gradient(135deg, var(--cat-tutor), var(--color-success));
-  border: none;
-}
-
-.hero-side-panel {
-  display: grid;
-  justify-items: end;
-  gap: var(--space-2_5);
-  min-width: 260px;
-}
-
-
-.package-result-body {
-  width: min(100%, 1760px);
-  margin: var(--space-3_5) auto 0;
-  display: grid;
-  gap: var(--space-3_5);
-}
-
-.package-section-card {
-  border-radius: var(--radius-2xl);
-  padding: var(--space-4);
-}
-
-.section-heading-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3_5);
-  margin-bottom: var(--space-3_5);
-}
-
-.section-heading-row h2,
-.review-tile h2 {
-  margin: var(--space-0_5) 0 0;
-  color: var(--color-text-strong);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: -0.02em;
-}
-
-.section-summary-pill {
-  background: var(--cat-tutor-soft);
-  color: var(--cat-tutor);
-  border-color: rgba(59, 130, 246, 0.22);
-}
-
-.learning-path-section {
-  padding: var(--space-4) var(--space-5) var(--space-5);
-}
-
-.path-heading {
-  align-items: center;
-}
-
-.path-step-track {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-2_5);
-}
-
-.path-step-card {
+/* ================= BENTO CARD BASE ================= */
+.bento-card {
   position: relative;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: var(--space-2_5);
-  min-height: 138px;
-  padding: var(--space-3);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+  padding: 32px;
   overflow: hidden;
-  border-radius: var(--radius-xl);
-  background: rgba(248, 250, 252, 0.84);
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  cursor: pointer;
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+  animation: card-fade-in 0.5s ease-out backwards;
 }
 
-.path-step-card::after {
+@keyframes card-fade-in {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ================= BRIEF CARD ================= */
+.atelier-brief-card {
+  padding: 40px 48px;
+}
+
+.brief-glass-backdrop {
   position: absolute;
-  inset: auto var(--space-3) 0 56px;
-  height: 3px;
-  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.24), rgba(20, 184, 166, 0.24));
-  content: '';
-}
-
-.path-step-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(59, 130, 246, 0.32);
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: var(--shadow-lg);
-}
-
-.path-step-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(20, 184, 166, 0.14));
-  color: var(--cat-tutor);
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-}
-
-.path-step-main {
-  min-width: 0;
-}
-
-.path-step-topline {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  min-width: 0;
-}
-
-.path-resource-type {
-  display: inline-flex;
-  max-width: 98px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--cat-tutor-soft);
-  color: var(--cat-tutor);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-}
-
-.path-time-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-left: auto;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-}
-
-.path-step-card h3 {
-  display: -webkit-box;
-  margin: var(--space-2_5) 0 0;
-  overflow: hidden;
-  color: var(--color-text-strong);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-extrabold);
-  line-height: 1.42;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-.path-step-card p {
-  display: -webkit-box;
-  margin: var(--space-1_5) 0 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-.path-focus-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-
-.path-focus-list span {
-  padding: 3px 7px;
-  border-radius: var(--radius-pill);
-  background: rgba(241, 245, 249, 0.96);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-}
-
-.resource-board-section {
-  min-width: 0;
-}
-
-.board-heading {
-  align-items: flex-end;
-  margin: var(--space-1) 0 var(--space-3);
-}
-
-.board-heading p {
-  display: -webkit-box;
-  max-width: 900px;
-  margin: var(--space-1_5) 0 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-}
-
-.board-filter-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  justify-content: flex-end;
-}
-
-.board-filter-pills span {
-  padding: 7px 10px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.resource-card-grid-v2 {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
-.resource-result-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 374px;
-  overflow: hidden;
-  border-radius: var(--radius-2xl);
-  padding: var(--space-3_5);
-  cursor: pointer;
-  animation: cardRise 0.42s ease backwards;
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-}
-
-.resource-result-card:nth-child(1) { animation-delay: 0.02s; }
-.resource-result-card:nth-child(2) { animation-delay: 0.06s; }
-.resource-result-card:nth-child(3) { animation-delay: 0.10s; }
-.resource-result-card:nth-child(4) { animation-delay: 0.14s; }
-.resource-result-card:nth-child(5) { animation-delay: 0.18s; }
-.resource-result-card:nth-child(6) { animation-delay: 0.22s; }
-
-@keyframes cardRise {
-  from { opacity: 0; transform: translateY(12px) scale(0.99); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.resource-result-card:hover,
-.resource-result-card:focus-visible {
-  transform: translateY(-4px);
-  border-color: rgba(37, 99, 235, 0.32);
-  box-shadow: var(--shadow-xl);
-  outline: none;
-}
-
-.resource-card-header,
-.resource-card-body,
-.resource-insight-box,
-.resource-meta-grid,
-.resource-card-actions,
-.resource-preview-panel {
-  position: relative;
-  z-index: 1;
-}
-
-.resource-card-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.resource-icon-shell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  border-radius: var(--radius-lg);
-  background: var(--cat-tutor-soft);
-  color: var(--cat-tutor);
-  font-size: var(--text-lg);
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
-}
-
-.resource-header-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.resource-header-text span {
-  color: var(--color-text-strong);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-extrabold);
-}
-
-.resource-header-text strong {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-}
-
-.resource-status-badge {
-  margin-left: auto;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--color-success-soft);
-  color: var(--color-success);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-}
-
-.resource-status-badge.partial {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-
-.resource-status-badge.failed {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-.resource-preview-panel {
-  margin: var(--space-3) 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.92));
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.preview-panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2_5);
-  margin-bottom: var(--space-2);
-}
-
-.preview-panel-title span {
-  color: var(--color-text-strong);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.preview-panel-title strong {
-  padding: 3px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--cat-tutor-soft);
-  color: var(--cat-tutor);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-}
-
-.preview-row-list {
-  display: grid;
-  gap: var(--space-1_5);
-  margin: 0;
-}
-
-.preview-row {
-  display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
-  gap: var(--space-2);
-  align-items: start;
-  min-height: 24px;
-}
-
-.preview-row dt {
-  color: var(--cat-tutor);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-}
-
-.preview-row dd {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.42;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-}
-
-.resource-card-body h3 {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-text-strong);
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-  line-height: 1.38;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-.resource-card-body p {
-  display: -webkit-box;
-  margin: var(--space-2) 0 0;
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-}
-
-.resource-insight-box {
-  margin-top: var(--space-2_5);
-  padding: var(--space-2) var(--space-2_5);
-  border-radius: var(--radius-lg);
-  background: rgba(248, 250, 252, 0.86);
-  border: 1px solid rgba(226, 232, 240, 0.82);
-}
-
-.resource-insight-box span {
-  display: block;
-  margin-bottom: var(--space-0_5);
-  color: var(--cat-tutor);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-}
-
-.resource-insight-box p {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.42;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-.resource-meta-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1_5);
-  margin-top: auto;
-  padding-top: var(--space-2_5);
-}
-
-.resource-meta-grid span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
-  background: rgba(241, 245, 249, 0.9);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: var(--weight-extrabold);
-}
-
-.resource-card-actions {
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: var(--space-2);
-  margin-top: var(--space-2_5);
-  padding-top: var(--space-2_5);
-  border-top: 1px solid rgba(226, 232, 240, 0.82);
-}
-
-.card-action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1_5);
-  height: 34px;
-  border-radius: var(--radius-lg);
-  border: 1px solid transparent;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card-action-button:hover {
-  transform: translateY(-1px);
-}
-
-.card-action-button.secondary {
-  background: rgba(248, 250, 252, 0.92);
-  border-color: rgba(203, 213, 225, 0.9);
-  color: var(--color-text-secondary);
-}
-
-.card-action-button.secondary:hover {
-  background: var(--color-surface);
-  border-color: rgba(37, 99, 235, 0.28);
-  color: var(--cat-tutor);
-}
-
-.card-action-button.primary {
-  background: linear-gradient(135deg, var(--cat-tutor), var(--color-success));
-  color: var(--color-surface);
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
-}
-
-.card-action-button.primary:hover {
-  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.24);
-}
-
-
-.resource-cover {
-  position: relative;
-  z-index: 1;
-  height: 166px;
-  margin: var(--space-3) 0 var(--space-3);
-  overflow: hidden;
-  border-radius: var(--radius-xl);
-  background-position: center;
-  background-size: cover;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.resource-cover::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 50%, rgba(15, 23, 42, 0.08));
-  content: '';
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(59, 130, 246, 0.03) 100%);
   pointer-events: none;
 }
 
-.resource-result-card:hover .resource-cover {
-  transform: translateY(-1px);
-}
-
-.cover-type-badge {
-  position: absolute;
-  left: 10px;
-  top: 10px;
-  z-index: 2;
-  max-width: calc(100% - 20px);
-  padding: var(--space-1) 9px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  color: var(--cat-tutor);
-  font-size: 10px;
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.04em;
-  backdrop-filter: blur(10px);
-}
-
-.resource-tag-row {
+.brief-content {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1_5);
-  margin-top: var(--space-2_5);
 }
 
-.resource-tag-row span {
+.brief-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.result-status-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--cat-tutor-soft);
-  color: var(--cat-tutor);
-  font-size: 11px;
-  font-weight: var(--weight-bold);
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
-.resource-result-card.tone-purple .resource-tag-row span { background: var(--cat-eval-soft); color: var(--cat-eval); }
-.resource-result-card.tone-emerald .resource-tag-row span,
-.resource-result-card.tone-green .resource-tag-row span { background: var(--color-success-soft); color: var(--color-success); }
-.resource-result-card.tone-rose .resource-tag-row span,
-.resource-result-card.tone-pink .resource-tag-row span { background: var(--cat-rose-soft); color: var(--cat-rose); }
-.resource-result-card.tone-orange .resource-tag-row span { background: rgba(255, 237, 213, 0.92); color: #ea580c; }
+.result-status-badge.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #D97706;
+  border-color: rgba(245, 158, 11, 0.2);
+}
 
-.empty-resource-board {
+.result-package-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #6366f1;
+  text-transform: uppercase;
+}
+
+.atelier-brief-card h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.prompt-text-quote {
+  margin: 12px 0 0 0;
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  font-family: var(--agent-body-font);
+}
+
+/* Brief stats inline */
+.brief-stats-row {
   display: flex;
-  min-height: 260px;
+  gap: 16px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.stat-chip .stat-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
+.stat-chip .stat-val {
+  font-size: 1.1rem;
+  color: var(--color-text);
+  font-weight: 900;
+}
+
+.stat-chip .stat-val small {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-left: 2px;
+}
+
+/* ================= PARTIAL BANNER ================= */
+.partial-result-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 20px 24px;
+  background: rgba(254, 243, 199, 0.5);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.partial-banner-icon-box {
+  display: grid;
+  place-items: center;
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #D97706;
+  font-size: 20px;
+}
+
+.banner-body-text strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #92400E;
+  font-weight: 800;
+}
+
+.banner-body-text p {
+  margin: 4px 0 0 0;
+  font-size: 0.85rem;
+  color: #B45309;
+}
+
+.banner-hint-note {
+  font-size: 0.8rem;
+  color: #D97706;
+  text-align: right;
+}
+
+/* ================= RECOMMENDED HERO CARD ================= */
+.recommended-hero-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(59, 130, 246, 0.08) 100%);
+  padding: 0;
+  display: flex;
   flex-direction: column;
+}
+
+.recommended-hero-content {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.section-kicker {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #6366f1;
+  text-transform: uppercase;
+}
+
+.recommended-hero-card h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--color-text);
+}
+
+.recommended-intro {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* Recommended preview card */
+.recommended-preview-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 20px;
+  padding: 24px;
+  margin-top: 12px;
+}
+
+.preview-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.preview-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.preview-type-badge.type-content { background: rgba(59, 130, 246, 0.1); color: #3B82F6; }
+.preview-type-badge.type-mindmap { background: rgba(139, 92, 246, 0.1); color: #8B5CF6; }
+.preview-type-badge.type-quiz { background: rgba(16, 185, 129, 0.1); color: #059669; }
+.preview-type-badge.type-code { background: rgba(244, 63, 94, 0.1); color: #F43F5E; }
+.preview-type-badge.type-ppt { background: rgba(245, 158, 11, 0.1); color: #D97706; }
+.preview-type-badge.type-video { background: rgba(6, 182, 212, 0.1); color: #06B6D4; }
+
+.preview-type-badge .type-icon {
+  font-size: 1rem;
+}
+
+.preview-format-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.preview-title {
+  margin: 0 0 8px 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.preview-summary {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.preview-meta-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--color-text-secondary);
+}
+
+.meta-pill.highlight {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+}
+
+/* Recommended actions */
+.recommended-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.start-learning-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 28px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #ffffff;
+  background: #6366f1;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  transition: all 0.25s ease;
+}
+
+.start-learning-hero-btn:hover {
+  background: #4f46e5;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  transform: translateY(-2px);
+}
+
+.preview-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.preview-btn-secondary:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #6366f1;
+}
+
+/* ================= GLASSMORPHIC PANELS ================= */
+.glassmorphic-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 28px;
+}
+
+.panel-eyebrow {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  color: #6366f1;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.panel-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin: 0 0 12px 0;
+}
+
+/* Profile calibration */
+.calibration-desc {
+  margin: 0 0 16px 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.calibration-dimension-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dimension-row-widget {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.dim-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.dim-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
+.dim-value {
+  font-size: 0.75rem;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.dim-bar-progress {
+  height: 4px;
+  width: 100%;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dim-bar-progress .progress-fill {
+  display: block;
+  height: 100%;
+  background: #6366f1;
+  border-radius: 2px;
+}
+
+.dim-bar-progress .progress-fill.fill-emerald {
+  background: #10b981;
+}
+
+.highlight-emerald {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.text-emerald {
+  color: #10b981 !important;
+}
+
+/* ================= WORKFLOW TIMELINE ================= */
+.workflow-steps-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  margin-top: 12px;
+}
+
+.step-timeline-item {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.step-bullet {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.1);
+  border: 2px solid #10b981;
+  color: #10b981;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.step-info strong {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.step-info p {
+  margin: 2px 0 0 0;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+}
+
+/* ================= FILTERS SECTION ================= */
+.filters-section {
+  padding: 24px 32px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.filters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.filters-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.resource-pill-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.resource-pill-filters button {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resource-pill-filters button:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+}
+
+.resource-pill-filters button.active {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #6366f1;
+}
+
+/* ================= RESOURCES GALLERY ================= */
+.resources-gallery {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.resource-card-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 32px;
+}
+
+/* ================= VISUAL RESOURCE CARD ================= */
+.visual-resource-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.visual-resource-card:hover,
+.visual-resource-card:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.visual-resource-card.is-recommended {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.02) 0%, rgba(255, 255, 255, 0.95) 100%);
+}
+
+/* Card visual header */
+.card-visual-header {
+  position: relative;
+  height: 140px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.02) 0%, rgba(15, 23, 42, 0.05) 100%);
+  overflow: hidden;
+}
+
+.card-glow-bg {
+  position: absolute;
+  top: -20px; right: -20px;
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.15;
+  background: #6366f1;
+}
+
+.visual-top-overlay {
+  position: absolute;
+  top: 12px; left: 12px; right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-type-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
+}
+
+.card-type-indicator .type-icon {
+  font-size: 1rem;
+}
+
+.card-status-dot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.card-status-dot-pill i {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.visual-format-badge {
+  position: absolute;
+  bottom: 12px; right: 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-secondary);
+}
+
+/* Card body */
+.card-body-content {
+  padding: 20px;
+}
+
+.card-title-text {
+  margin: 0 0 8px 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.card-summary-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-tags-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.card-tag-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+}
+
+/* Card footer actions */
+.card-footer-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(226, 232, 240, 0.4);
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.action-btn.preview-btn {
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--color-text-secondary);
+}
+
+.action-btn.preview-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+}
+
+.action-btn.learn-btn {
+  justify-content: flex-end;
+  background: transparent;
+  color: #6366f1;
+}
+
+.action-btn.learn-btn:hover {
+  color: #4f46e5;
+}
+
+.action-btn.learn-btn span {
+  transition: transform 0.2s ease;
+}
+
+.action-btn.learn-btn:hover span {
+  transform: translateX(4px);
+}
+
+/* ================= EMPTY STATE ================= */
+.empty-state-box {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 280px;
+  padding: 40px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  margin: 32px;
+}
+
+.empty-state-icon-wrapper {
+  display: grid;
+  place-items: center;
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  color: var(--color-text-faint);
+  background: #f1f5f9;
+  font-size: 24px;
+}
+
+.empty-state-box h3 {
+  margin: 16px 0 0 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.empty-state-box p {
+  max-width: 400px;
+  margin: 8px 0 20px 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.clear-filter-btn {
+  padding: 10px 24px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #6366f1;
+  background: transparent;
+  border: 1px solid #6366f1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-filter-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* ================= NEW TASK ACTION CARD ================= */
+.new-task-action-card {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: none;
+  color: #ffffff;
+  text-align: center;
+  padding: 32px;
+}
+
+.new-task-action-card h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.new-task-action-card p {
+  margin: 12px 0 24px 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.rebuild-action-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
-  border-radius: var(--radius-2xl);
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px dashed rgba(148, 163, 184, 0.65);
-  color: var(--color-text-muted);
+  gap: 10px;
+  padding: 14px 32px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #ffffff;
+  background: #6366f1;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  transition: all 0.25s ease;
 }
 
-.empty-resource-board .el-icon {
-  font-size: 42px;
-  color: var(--color-warning);
+.rebuild-action-btn:hover {
+  background: #4f46e5;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  transform: translateY(-2px);
 }
 
-.empty-resource-board strong {
-  color: var(--color-text-strong);
-  font-size: var(--text-xl);
+/* ================= TYPE-SPECIFIC CARD COLORS ================= */
+.visual-resource-card.type-content:hover { border-color: rgba(59, 130, 246, 0.3); }
+.visual-resource-card.type-mindmap:hover { border-color: rgba(139, 92, 246, 0.3); }
+.visual-resource-card.type-quiz:hover { border-color: rgba(16, 185, 129, 0.3); }
+.visual-resource-card.type-code:hover { border-color: rgba(244, 63, 94, 0.3); }
+.visual-resource-card.type-reading:hover { border-color: rgba(99, 102, 241, 0.3); }
+.visual-resource-card.type-ppt:hover { border-color: rgba(245, 158, 11, 0.3); }
+.visual-resource-card.type-video:hover { border-color: rgba(6, 182, 212, 0.3); }
+
+/* ================= ARTWORK COMPONENT ================= */
+.artwork {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.empty-resource-board p {
-  margin: 0;
+.artwork.is-large {
+  width: 120px;
+  height: 120px;
 }
 
-.resource-result-card.tone-emerald .resource-icon-shell,
-.resource-result-card.tone-green .resource-icon-shell { background: var(--color-success-soft); color: var(--color-success); }
-.resource-result-card.tone-blue .resource-icon-shell { background: var(--cat-tutor-soft); color: var(--cat-tutor); }
-.resource-result-card.tone-purple .resource-icon-shell { background: var(--cat-eval-soft); color: var(--cat-eval); }
-.resource-result-card.tone-rose .resource-icon-shell { background: var(--cat-rose-soft); color: var(--cat-rose); }
-.resource-result-card.tone-indigo .resource-icon-shell { background: var(--cat-resource-soft); color: var(--cat-resource); }
-.resource-result-card.tone-pink .resource-icon-shell { background: rgba(219, 39, 119, 0.12); color: #db2777; }
-.resource-result-card.tone-orange .resource-icon-shell { background: rgba(249, 115, 22, 0.12); color: #ea580c; }
-
-@media (max-width: 1500px) {
-  .package-hero-card {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .hero-metric-strip {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .hero-side-panel {
-    justify-items: start;
-    min-width: 0;
-  }
-
-  .hero-action-row {
-    justify-content: flex-start;
-  }
-
-  .path-step-track,
-  .resource-card-grid-v2 {
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  }
+/* Mindmap artwork */
+.artwork-mindmap .map-center {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.15);
+  border: 2px solid rgba(139, 92, 246, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #8B5CF6;
 }
 
-@media (max-width: 1080px) {
-  .path-step-track {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.artwork-mindmap .map-node {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
-@media (max-width: 760px) {
-  .resource-package-page {
-    padding: var(--space-3_5);
-  }
+.artwork-mindmap .node-1 { top: 8px; left: 50%; }
+.artwork-mindmap .node-2 { top: 50%; left: 8px; }
+.artwork-mindmap .node-3 { top: 50%; right: 8px; }
+.artwork-mindmap .node-4 { bottom: 8px; left: 50%; }
 
-  .package-hero-card,
-  .package-section-card {
-    border-radius: var(--radius-xl);
-  }
+.artwork-mindmap .map-line {
+  position: absolute;
+  height: 1px;
+  background: rgba(139, 92, 246, 0.2);
+}
 
-  .section-heading-row,
-  .board-heading {
+.artwork-mindmap .line-1 { width: 20px; top: 24px; left: 50%; }
+.artwork-mindmap .line-2 { width: 20px; top: 50%; left: 24px; }
+.artwork-mindmap .line-3 { width: 20px; top: 50%; right: 24px; }
+.artwork-mindmap .line-4 { width: 20px; bottom: 24px; left: 50%; }
+
+/* Quiz artwork */
+.artwork-quiz .quiz-sheet {
+  position: absolute;
+  width: 48px;
+  height: 56px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.artwork-quiz .quiz-sheet i {
+  width: 100%;
+  height: 3px;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.artwork-quiz .quiz-sheet b {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.artwork-quiz .quiz-score {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  color: #10b981;
+}
+
+/* Code artwork */
+.artwork-code .code-window {
+  position: absolute;
+  width: 48px;
+  height: 40px;
+  background: rgba(244, 63, 94, 0.05);
+  border: 1px solid rgba(244, 63, 94, 0.15);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.artwork-code .code-dots {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+}
+
+.artwork-code .code-dots::before,
+.artwork-code .code-dots::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(244, 63, 94, 0.3);
+}
+
+.artwork-code .code-line {
+  height: 2px;
+  margin: 2px 4px;
+  background: rgba(244, 63, 94, 0.1);
+}
+
+.artwork-code .code-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: #F43F5E;
+  background: rgba(244, 63, 94, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Reading artwork */
+.artwork-reading .book {
+  position: absolute;
+  width: 32px;
+  height: 40px;
+  border-radius: 3px;
+}
+
+.artwork-reading .book-back {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  left: -4px;
+}
+
+.artwork-reading .book-front {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  left: 4px;
+}
+
+.artwork-reading .reading-mark {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 0.7rem;
+  color: #6366f1;
+}
+
+/* PPT artwork */
+.artwork-ppt .slide {
+  position: absolute;
+  width: 36px;
+  height: 24px;
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  border-radius: 3px;
+}
+
+.artwork-ppt .slide-back {
+  top: 0;
+  left: -4px;
+}
+
+.artwork-ppt .slide-front {
+  top: 8px;
+  left: 4px;
+}
+
+.artwork-ppt .slide-number {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: #D97706;
+}
+
+/* Video artwork */
+.artwork-video .video-screen {
+  position: absolute;
+  width: 48px;
+  height: 32px;
+  background: rgba(6, 182, 212, 0.05);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.artwork-video .play-button {
+  width: 12px;
+  height: 12px;
+  background: rgba(6, 182, 212, 0.2);
+  border-radius: 50%;
+}
+
+.artwork-video .video-track {
+  position: absolute;
+  bottom: 4px;
+  width: 40px;
+  height: 3px;
+  background: rgba(6, 182, 212, 0.1);
+  border-radius: 1px;
+}
+
+.artwork-video .video-time {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: #06B6D4;
+}
+
+/* Content (document) artwork */
+.artwork-content .document-back,
+.artwork-content .document-front {
+  position: absolute;
+  width: 36px;
+  height: 44px;
+  border-radius: 4px;
+}
+
+.artwork-content .document-back {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  left: -4px;
+}
+
+.artwork-content .document-front {
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  left: 4px;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 680px) {
+  .brief-stats-row {
     flex-direction: column;
-    align-items: stretch;
   }
 
-  .board-filter-pills {
-    justify-content: flex-start;
-  }
-
-  .hero-metric-strip,
-  .path-step-track,
-  .resource-card-grid-v2 {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-action-row {
+  .recommended-actions {
     flex-direction: column;
-    align-items: stretch;
   }
 
-  .resource-card-actions {
+  .resource-card-bento-grid {
     grid-template-columns: 1fr;
   }
 }

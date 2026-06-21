@@ -6,21 +6,41 @@
         :key="`export-${index}`"
         class="slide-frame export-slide"
       >
-        <div class="slide-shell">
+        <div class="slide-shell ppt-grid-bg">
+          <!-- 顶部横向进度条 -->
+          <div class="slide-progress-tracker">
+            <div 
+              v-for="(_, idx) in documentData.slides" 
+              :key="idx"
+              class="tracker-dot"
+              :class="{ active: idx === index, passed: idx < index }"
+            ></div>
+          </div>
+
           <div class="slide-header">
             <div>
               <div class="slide-title">{{ slide.title }}</div>
               <div v-if="slide.subtitle" class="slide-subtitle">{{ slide.subtitle }}</div>
             </div>
-            <div class="slide-role">{{ slide.role }}</div>
+            <div class="slide-role-badge">
+              <span class="role-icon">✦</span>
+              <span class="role-text">{{ slide.role }}</span>
+            </div>
           </div>
-          <component
-            :is="resolveLayoutComponent(slide.layout)"
-            :slide="slide"
-            :slots="slide.slots"
-          />
+
+          <div class="slide-content-wrapper">
+            <component
+              :is="resolveLayoutComponent(slide.layout)"
+              :slide="slide"
+              :slots="slide.slots"
+            />
+          </div>
+
           <div class="slide-footer">
-            <div class="slide-takeaway">{{ slide.takeaway }}</div>
+            <div class="slide-takeaway-container">
+              <span class="takeaway-tag">要点</span>
+              <div class="slide-takeaway">{{ slide.takeaway }}</div>
+            </div>
             <div class="slide-index">{{ index + 1 }} / {{ documentData.slides.length }}</div>
           </div>
         </div>
@@ -31,21 +51,42 @@
       <div class="viewer-stage">
         <div class="viewer-canvas" :style="{ transform: `scale(${scale})` }">
           <div class="slide-frame preview-slide">
-            <div v-if="currentSlide" class="slide-shell">
+            <div v-if="currentSlide" class="slide-shell ppt-grid-bg">
+              <!-- 顶部横向进度条 -->
+              <div class="slide-progress-tracker">
+                <div 
+                  v-for="(_, idx) in documentData.slides" 
+                  :key="idx"
+                  class="tracker-dot"
+                  :class="{ active: idx === currentIndex, passed: idx < currentIndex }"
+                  @click="jumpToSlide(idx)"
+                ></div>
+              </div>
+
               <div class="slide-header">
                 <div>
                   <div class="slide-title">{{ currentSlide.title }}</div>
                   <div v-if="currentSlide.subtitle" class="slide-subtitle">{{ currentSlide.subtitle }}</div>
                 </div>
-                <div class="slide-role">{{ currentSlide.role }}</div>
+                <div class="slide-role-badge">
+                  <span class="role-icon">✦</span>
+                  <span class="role-text">{{ currentSlide.role }}</span>
+                </div>
               </div>
-              <component
-                :is="resolveLayoutComponent(currentSlide.layout)"
-                :slide="currentSlide"
-                :slots="currentSlide.slots"
-              />
+
+              <div class="slide-content-wrapper">
+                <component
+                  :is="resolveLayoutComponent(currentSlide.layout)"
+                  :slide="currentSlide"
+                  :slots="currentSlide.slots"
+                />
+              </div>
+
               <div class="slide-footer">
-                <div class="slide-takeaway">{{ currentSlide.takeaway }}</div>
+                <div class="slide-takeaway-container">
+                  <span class="takeaway-tag">要点</span>
+                  <div class="slide-takeaway">{{ currentSlide.takeaway }}</div>
+                </div>
                 <div class="slide-index">{{ currentIndex + 1 }} / {{ documentData.slides.length }}</div>
               </div>
             </div>
@@ -54,9 +95,13 @@
       </div>
 
       <div class="controls">
-        <button @click="prevSlide" :disabled="currentIndex === 0" class="control-btn">上一页</button>
+        <button @click="prevSlide" :disabled="currentIndex === 0" class="control-btn prev-btn">
+          <span>上一页</span>
+        </button>
         <span class="page-indicator">{{ currentIndex + 1 }} / {{ documentData.slides.length }}</span>
-        <button @click="nextSlide" :disabled="currentIndex === documentData.slides.length - 1" class="control-btn">下一页</button>
+        <button @click="nextSlide" :disabled="currentIndex === documentData.slides.length - 1" class="control-btn next-btn">
+          <span>下一页</span>
+        </button>
       </div>
     </template>
   </div>
@@ -86,6 +131,10 @@ const prevSlide = () => {
 
 const nextSlide = () => {
   if (currentIndex.value < props.documentData.slides.length - 1) currentIndex.value += 1
+}
+
+const jumpToSlide = (idx: number) => {
+  currentIndex.value = idx
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {
@@ -132,10 +181,13 @@ onUnmounted(() => {
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.1), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(15, 23, 42, 0.08), transparent 30%),
-    linear-gradient(180deg, #e7edf7 0%, #d8dde6 100%);
+  background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.05), transparent 35%),
+              linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+.theme-logic-blue.ppt-player-container {
+  background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 35%),
+              linear-gradient(180deg, #020617 0%, #0b1329 100%);
 }
 
 .viewer-stage {
@@ -144,7 +196,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px 28px 96px;
+  padding: 24px 24px 88px;
 }
 
 .viewer-canvas {
@@ -174,13 +226,42 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  border-radius: 28px;
+  border-radius: var(--ppt-radius-lg);
   background: var(--ppt-bg-primary);
-  box-shadow:
-    0 30px 60px rgba(15, 23, 42, 0.16),
-    0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.1),
+              0 1px 3px rgba(15, 23, 42, 0.05);
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
+  position: relative;
+  border: 1px solid var(--ppt-border);
+}
+
+/* 顶部进度条 */
+.slide-progress-tracker {
+  display: flex;
+  width: 100%;
+  padding: 10px 36px 0;
+  gap: 6px;
+  z-index: 10;
+}
+
+.tracker-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--ppt-border);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.tracker-dot.active {
+  background: var(--ppt-accent);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.3);
+}
+
+.tracker-dot.passed {
+  background: var(--ppt-accent);
+  opacity: 0.4;
 }
 
 .slide-header {
@@ -188,33 +269,54 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 28px 36px 0;
+  padding: 20px 36px 8px;
+  border-bottom: 1px dashed var(--ppt-border);
+  z-index: 5;
 }
 
 .slide-title {
-  font-size: 2rem;
+  font-size: 2.1rem;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--ppt-text-primary);
+  letter-spacing: -0.02em;
 }
 
 .slide-subtitle {
-  margin-top: 8px;
-  font-size: 1rem;
+  margin-top: 6px;
+  font-size: 1.05rem;
   line-height: 1.5;
   color: var(--ppt-text-secondary);
 }
 
-.slide-role {
-  padding: 6px 12px;
+.slide-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: 999px;
+  background: var(--ppt-badge-bg);
+  border: 1px solid var(--ppt-border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.role-icon {
+  color: var(--ppt-accent);
+  font-size: 0.9rem;
+}
+
+.role-text {
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 800;
+  color: var(--ppt-badge-text);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  background: var(--ppt-badge-bg);
-  color: var(--ppt-badge-text);
-  border: 1px solid var(--ppt-border);
+}
+
+.slide-content-wrapper {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .slide-footer {
@@ -222,23 +324,46 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 0 36px 24px;
+  padding: 8px 36px 20px;
+  border-top: 1px dashed var(--ppt-border);
+  z-index: 5;
+}
+
+.slide-takeaway-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.takeaway-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: var(--ppt-accent-gradient);
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .slide-takeaway {
-  flex: 1;
-  min-width: 0;
   font-size: 0.95rem;
   font-weight: 600;
-  line-height: 1.5;
   color: var(--ppt-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .slide-index {
   flex-shrink: 0;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--ppt-text-secondary);
+  font-family: var(--ppt-font-mono);
 }
 
 .controls {
@@ -249,41 +374,61 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 12px 20px;
+  padding: 10px 18px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
-  backdrop-filter: blur(14px);
-  z-index: 10;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.theme-logic-blue .controls {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .control-btn {
   border: none;
   background: transparent;
   color: #334155;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: all 0.2s ease;
+}
+
+.theme-logic-blue .control-btn {
+  color: #94a3b8;
 }
 
 .control-btn:hover:not(:disabled) {
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1c52d5;
+}
+
+.theme-logic-blue .control-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
 }
 
 .control-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
 .page-indicator {
-  min-width: 64px;
+  min-width: 60px;
   text-align: center;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   color: #0f172a;
+  font-family: var(--ppt-font-mono);
+}
+
+.theme-logic-blue .page-indicator {
+  color: #f8fafc;
 }
 </style>

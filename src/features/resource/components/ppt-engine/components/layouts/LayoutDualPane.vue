@@ -31,10 +31,10 @@ defineProps<{
 <style scoped>
 .layout-dual-pane {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
+  grid-template-columns: 62% 38%;
+  gap: 36px;
   height: 100%;
-  padding: 24px 36px;
+  padding: 32px 48px;
 }
 
 .left-pane,
@@ -42,7 +42,12 @@ defineProps<{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   justify-content: center;
+}
+
+.right-pane {
+  border-left: 1px dashed var(--ppt-border);
+  padding-left: 36px;
 }
 </style>

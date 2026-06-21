@@ -7,7 +7,7 @@
       </span>
       <span class="activity-summary-copy">
         <strong>{{ headline }}</strong>
-        <small>{{ active ? 'Agent 正在准备回答' : '点击查看本轮执行信息' }}</small>
+        <small>{{ active ? '智能协同体正在研判论据中...' : '点击展开协同研判细节' }}</small>
       </span>
       <span class="activity-toggle">{{ expanded ? '收起' : '详情' }}</span>
     </button>
@@ -60,14 +60,14 @@ const expanded = ref(false)
 const headline = computed(() => {
   if (props.active) {
     const running = [...props.activities].reverse().find(item => item.status === 'running')
-    return running?.message || props.activities[props.activities.length - 1]?.message || '正在准备回答...'
+    return running?.message || props.activities[props.activities.length - 1]?.message || '多智能体研判中...'
   }
   const actualActivities = props.activities.filter(item => item.kind !== 'workflow')
   const failures = actualActivities.filter(item => item.status === 'failed').length
-  if (!actualActivities.length) return '回答准备完成'
+  if (!actualActivities.length) return '协同研判已就绪'
   return failures
-    ? `已完成 ${actualActivities.length} 项准备 · ${failures} 项未完成`
-    : `已完成 ${actualActivities.length} 项准备`
+    ? `已聚合 ${actualActivities.length} 项成果 · ${failures} 项协同受阻`
+    : `已聚合 ${actualActivities.length} 项认知成果`
 })
 
 watch(() => props.active, active => {
