@@ -34,12 +34,12 @@ from app.resource.schemas import (
     TeachingPlan,
 )
 from app.resource.workflow.state import ParentState, WorkerInputState, CoverageReport, AgentFailure
-from app.resource.constants import (
+from app.resource.service import (
+    AGGREGATION_AGENT_IDS,
     BUNDLE_AGENT_ID,
     COORDINATOR_AGENT_ID,
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
-    AGGREGATION_AGENT_IDS,
 )
 
 logger = logging.getLogger(__name__)
