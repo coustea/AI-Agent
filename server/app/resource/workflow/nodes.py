@@ -115,8 +115,8 @@ async def get_coverage(
         result = await session.exec(stmt)
         rows = result.all()
 
-    all_outline_ids = {item.id for item in teaching_plan.outline}
-    must_not_miss_ids = {item.id for item in teaching_plan.outline if item.must_not_miss}
+    all_outline_ids = {item.get("id") for item in teaching_plan.outline}
+    must_not_miss_ids = {item.get("id") for item in teaching_plan.outline if item.get("must_not_miss")}
 
     covered: set[str] = set()
     for row in rows:
@@ -189,7 +189,7 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         raise ValueError("规划阶段未返回教学计划")
 
     # 校验 agent assignments
-    assigned_agents = {assignment.agent_id for assignment in teaching_plan.agent_assignments}
+    assigned_agents = {assignment.get("agent_id") for assignment in teaching_plan.agent_assignments}
     expected_agents = set(enabled_base_agents)
     if assigned_agents != expected_agents:
         raise ValueError(
@@ -401,8 +401,8 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         plan = state.get("teaching_plan")
         if plan:
             for item in plan.outline:
-                if item.id in coverage_report["critical_missing_ids"]:
-                    critical_titles.append(item.title)
+                if item.get("id") in coverage_report["critical_missing_ids"]:
+                    critical_titles.append(item.get("title", ""))
         await state["emitter"].emit_agent(
             COORDINATOR_AGENT_ID,
             status="running",
@@ -413,7 +413,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     elif coverage_report.get("missing_outline_ids"):
         missing_ids = coverage_report["missing_outline_ids"]
         if plan := state.get("teaching_plan"):
-            missing_titles = [item.title for item in plan.outline if item.id in missing_ids]
+            missing_titles = [item.get("title", "") for item in plan.outline if item.get("id") in missing_ids]
             await state["emitter"].emit_agent(
                 COORDINATOR_AGENT_ID,
                 status="running",

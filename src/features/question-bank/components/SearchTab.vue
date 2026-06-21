@@ -1,38 +1,55 @@
 <template>
   <div class="search-tab">
-    <header class="module-header">
-      <div>
-        <span class="section-label">Question Bank</span>
-        <h2>全部题目</h2>
-        <p class="subtitle">按学科、难度和题型检索题库，并直接在线作答。</p>
+    <section class="filter-bar-capsule glass-panel">
+      <!-- Search Input -->
+      <div class="search-field">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input
+          v-model="filters.query"
+          type="text"
+          placeholder="搜索题目关键字..."
+          class="search-input-raw"
+          @keyup.enter="handleSearch"
+        />
       </div>
-    </header>
-
-    <section class="filter-card">
-      <div class="filter-bar">
-        <div class="search-input-wrapper">
-          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input
-            v-model="filters.query"
-            type="text"
-            placeholder="搜索题目..."
-            class="search-input"
-            @keyup.enter="handleSearch"
-          />
-        </div>
-        <select v-model="filters.subject" class="filter-select" @change="handleSearch">
+      
+      <div class="field-divider"></div>
+      
+      <!-- Select Subject -->
+      <div class="select-field">
+        <label>选择学科</label>
+        <select v-model="filters.subject" class="select-raw" @change="handleSearch">
           <option value="">全部学科</option>
           <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
         </select>
-        <select v-model="filters.difficulty" class="filter-select" @change="handleSearch">
+      </div>
+      
+      <div class="field-divider"></div>
+      
+      <!-- Select Difficulty -->
+      <div class="select-field">
+        <label>设定难度</label>
+        <select v-model="filters.difficulty" class="select-raw" @change="handleSearch">
           <option value="">全部难度</option>
           <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
         </select>
-        <select v-model="filters.type" class="filter-select" @change="handleSearch">
+      </div>
+      
+      <div class="field-divider"></div>
+      
+      <!-- Select Type -->
+      <div class="select-field">
+        <label>选择题型</label>
+        <select v-model="filters.type" class="select-raw" @change="handleSearch">
           <option value="">全部题型</option>
           <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
         </select>
       </div>
+
+      <button class="btn-search-submit" @click="handleSearch">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>检索</span>
+      </button>
     </section>
 
     <div v-if="loading" class="loading-card">
@@ -233,122 +250,145 @@ function renderInline(text: string) {
 .search-tab {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
-.module-header,
-.filter-card,
-.question-card,
-.pagination-card,
-.loading-card,
-.empty-state {
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 22px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-}
-
-.module-header,
-.filter-card,
-.pagination-card,
-.loading-card,
-.empty-state {
-  padding: 22px 24px;
-}
-
-.section-label {
-  color: var(--cat-eval, #8b5cf6);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.module-header h2 {
-  margin: 6px 0 0;
-  color: #0f172a;
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-.subtitle {
-  margin: 8px 0 0;
-  color: #64748b;
-  line-height: 1.65;
-}
-
-.filter-bar {
+/* ================== Capsule Filter Bar ================== */
+.filter-bar-capsule {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px 8px 24px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 10px 30px 0 rgba(15, 23, 42, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.search-input-wrapper {
+.filter-bar-capsule:focus-within {
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.12), 0 10px 30px 0 rgba(15, 23, 42, 0.04);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 2 1 240px;
   position: relative;
-  flex: 1 1 320px;
 }
 
 .search-icon {
-  position: absolute;
-  top: 50%;
-  left: 14px;
-  transform: translateY(-50%);
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.search-input-raw {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+}
+
+.search-input-raw::placeholder {
   color: #94a3b8;
 }
 
-.search-input,
-.filter-select,
-.page-btn,
-.btn-primary {
-  min-height: 42px;
-  border-radius: 14px;
-  font-size: 14px;
+.select-field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1 1 120px;
+  min-width: 110px;
+  padding: 0 4px;
 }
 
-.search-input,
-.filter-select {
+.select-field label {
+  font-size: 9px;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.select-raw {
   width: 100%;
-  border: 1px solid rgba(203, 213, 225, 0.96);
-  background: #fff;
-  color: #0f172a;
+  border: none;
+  background: transparent;
+  color: #1e293b;
   font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
   outline: none;
-  box-sizing: border-box;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  cursor: pointer;
+  padding-right: 12px;
 }
 
-.search-input {
-  padding: 0 14px 0 42px;
+.field-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(226, 232, 240, 0.9);
+  flex-shrink: 0;
 }
 
-.filter-select {
-  flex: 0 0 148px;
-  padding: 0 14px;
+.btn-search-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 24px;
+  border-radius: 99px;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 
-.search-input:focus,
-.filter-select:focus,
-.text-area-input:focus {
-  border-color: rgba(79, 70, 229, 0.42);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+.btn-search-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.38);
 }
 
+.btn-search-submit:active {
+  transform: translateY(0);
+}
+
+/* ================== Loading & Empty State ================== */
 .loading-card,
 .empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  padding: 48px 32px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   color: #64748b;
   text-align: center;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
 }
 
 .spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(203, 213, 225, 0.96);
-  border-top-color: var(--cat-eval, #8b5cf6);
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(226, 232, 240, 0.8);
+  border-top-color: #8b5cf6;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -357,14 +397,27 @@ function renderInline(text: string) {
   to { transform: rotate(360deg); }
 }
 
+/* ================== Question List & Cards ================== */
 .question-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .question-card {
-  padding: 24px;
+  padding: 28px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s ease;
+}
+
+.question-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(139, 92, 246, 0.25);
+  box-shadow: 0 14px 36px rgba(139, 92, 246, 0.06), 0 4px 12px rgba(0, 0, 0, 0.01);
 }
 
 .card-header,
@@ -376,14 +429,14 @@ function renderInline(text: string) {
 
 .card-header {
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .card-footer {
   align-items: center;
-  margin-top: 8px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  margin-top: 12px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .tags,
@@ -399,41 +452,48 @@ function renderInline(text: string) {
   align-items: center;
   min-height: 28px;
   padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(238, 242, 255, 0.92);
-  color: #6d28d9;
+  border-radius: 99px;
+  background: rgba(139, 92, 246, 0.06);
+  color: #7c3aed;
   font-size: 12px;
   font-weight: 700;
+  border: 1px solid rgba(139, 92, 246, 0.12);
 }
 
 .tag.outline {
   background: #fff;
-  border: 1px solid rgba(203, 213, 225, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   color: #475569;
 }
 
 .tag.type {
   border: 1px solid rgba(99, 102, 241, 0.16);
+  background: rgba(99, 102, 241, 0.04);
+  color: #4f46e5;
 }
 
 .tag.small {
   min-height: 24px;
   padding: 0 10px;
+  font-size: 11px;
 }
 
 .success-text {
   color: #059669;
-  border-color: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+  background: rgba(16, 185, 129, 0.02) !important;
 }
 
 .warning-text {
   color: #d97706;
-  border-color: rgba(245, 158, 11, 0.24) !important;
+  border-color: rgba(245, 158, 11, 0.25) !important;
+  background: rgba(245, 158, 11, 0.02) !important;
 }
 
 .danger-text {
   color: #dc2626;
-  border-color: rgba(248, 113, 113, 0.24) !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  background: rgba(239, 68, 68, 0.02) !important;
 }
 
 .neutral-text {
@@ -443,110 +503,162 @@ function renderInline(text: string) {
 .question-id {
   color: #94a3b8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .question-content {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   color: #0f172a;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.8;
 }
 
+/* ================== Options Styling (Circular Badge) ================== */
 .options-grid {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 24px;
 }
 
 .option-btn {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px 18px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 18px;
-  background: #fff;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
   text-align: left;
-  color: #0f172a;
+  color: #1e293b;
   cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .option-btn:hover:not(:disabled) {
-  border-color: rgba(99, 102, 241, 0.32);
-  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(139, 92, 246, 0.35);
+  background: rgba(255, 255, 255, 0.95);
+  transform: translateX(4px);
 }
 
-.option-btn.selected {
-  border-color: rgba(79, 70, 229, 0.36);
-  background: rgba(238, 242, 255, 0.94);
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.08);
-}
-
-.option-btn.correct {
-  border-color: rgba(16, 185, 129, 0.28);
-  background: rgba(236, 253, 245, 0.92);
-}
-
-.option-btn.wrong {
-  border-color: rgba(239, 68, 68, 0.24);
-  background: rgba(254, 242, 242, 0.94);
+.option-btn:disabled {
+  cursor: not-allowed;
 }
 
 .opt-key {
-  min-width: 20px;
-  color: #6d28d9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  color: #8b5cf6;
   font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
 }
 
 .opt-text {
   color: #334155;
+  font-size: 14.5px;
+  font-weight: 500;
   line-height: 1.6;
+}
+
+.option-btn.selected {
+  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(139, 92, 246, 0.04);
+}
+
+.option-btn.selected .opt-key {
+  background: #8b5cf6;
+  border-color: #8b5cf6;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.25);
+}
+
+.option-btn.correct {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.option-btn.correct .opt-key {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);
+}
+
+.option-btn.wrong {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.option-btn.wrong .opt-key {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.25);
 }
 
 .text-area-input {
   width: 100%;
   margin-top: 4px;
-  padding: 14px 16px;
-  border: 1px solid rgba(203, 213, 225, 0.96);
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 18px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.6);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 14.5px;
   color: #0f172a;
   resize: vertical;
   outline: none;
   box-sizing: border-box;
+  transition: all 0.25s ease;
 }
 
+.text-area-input:focus {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
+}
+
+/* ================== Result Badges & Footer Actions ================== */
 .result-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.result-badge.success {
-  background: rgba(236, 253, 245, 0.92);
-  color: #059669;
-}
-
-.result-badge.danger {
-  background: rgba(254, 242, 242, 0.94);
-  color: #dc2626;
-}
-
-.score-text {
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 99px;
+  font-size: 13px;
   font-weight: 700;
 }
 
+.result-badge.success {
+  background: rgba(209, 250, 229, 0.6);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.result-badge.danger {
+  background: rgba(254, 226, 226, 0.6);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.score-text {
+  font-weight: 800;
+  margin-left: 4px;
+}
+
 .result-placeholder {
-  min-height: 32px;
+  min-height: 36px;
 }
 
 .btn-link {
@@ -556,31 +668,63 @@ function renderInline(text: string) {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  transition: color 0.2s ease;
+  padding: 0 8px;
 }
 
 .btn-link:hover {
-  color: #6d28d9;
+  color: #4f46e5;
 }
 
-.page-btn:disabled {
-  opacity: 0.52;
+.btn-primary {
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  background: #8b5cf6;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.15);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #7c3aed;
+  box-shadow: 0 6px 14px rgba(139, 92, 246, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
+/* ================== Analysis Panel ================== */
 .analysis-panel {
-  margin-top: 18px;
-  padding: 18px;
-  border-radius: 18px;
-  background: #f8fafc;
-  border: 1px solid rgba(226, 232, 240, 0.92);
+  margin-top: 24px;
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.85);
+  border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .analysis-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(226, 232, 240, 0.9);
+}
+
+.analysis-header strong {
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .feedback-text {
@@ -591,60 +735,106 @@ function renderInline(text: string) {
 
 .analysis-content {
   color: #475569;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.75;
 }
 
+/* ================== Pagination Card ================== */
 .pagination-card {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
+  padding: 20px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.03);
 }
 
 .page-btn {
-  padding: 0 14px;
-  border: 1px solid rgba(203, 213, 225, 0.96);
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   background: #fff;
-  color: #334155;
+  color: #475569;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #f8fafc;
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.02);
+}
+
+.page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .page-info {
   color: #475569;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
 }
 
-@media (max-width: 720px) {
-  .module-header,
-  .filter-card,
-  .question-card,
-  .pagination-card,
-  .loading-card,
-  .empty-state {
-    padding: 18px;
-  }
-
-  .filter-select {
-    flex: 1 1 calc(50% - 12px);
-  }
-
-  .card-footer,
-  .analysis-header,
-  .pagination-card {
+/* ================== Responsive Styles ================== */
+@media (max-width: 900px) {
+  .filter-bar-capsule {
+    border-radius: 24px;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .field-divider {
+    display: none;
+  }
+
+  .search-field {
+    flex: 1 1 auto;
+  }
+
+  .select-field {
+    flex: 1 1 auto;
+  }
+
+  .btn-search-submit {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .question-card {
+    padding: 20px;
+  }
+
+  .card-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
   }
 
   .action-buttons {
-    width: 100%;
+    justify-content: space-between;
   }
 
-  .btn-primary,
+  .btn-primary {
+    flex-grow: 1;
+    justify-content: center;
+  }
+
+  .pagination-card {
+    flex-direction: column;
+    gap: 12px;
+  }
+
   .page-btn {
     width: 100%;
     justify-content: center;

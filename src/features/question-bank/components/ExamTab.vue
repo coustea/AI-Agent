@@ -1,12 +1,5 @@
 <template>
   <div class="exam-tab">
-    <header class="module-header">
-      <div>
-        <span class="section-label">Builder</span>
-        <h2>模拟组卷</h2>
-        <p class="subtitle">配置参数并预览试卷，再进入完整考试模式。</p>
-      </div>
-    </header>
 
     <div class="builder-grid">
       <section class="config-panel">

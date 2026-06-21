@@ -42,15 +42,12 @@ class ContentAgent(BaseResourceAgent):
             config=config,
         )
         outline_ids = assigned_outline_ids(input_data.teaching_plan, "content")
-        first_outline = input_data.teaching_plan.outline[0] if input_data.teaching_plan and input_data.teaching_plan.outline else None
         handoff = build_basic_handoff(
             source_agent="content",
             title=result.title,
             summary=result.summary,
             teaching_plan=input_data.teaching_plan,
             covered_outline_ids=outline_ids,
-            examples=first_outline.suggested_examples if first_outline else [],
-            visual_ideas=first_outline.suggested_visuals if first_outline else [],
         )
         result.downstream_context = handoff
         await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)

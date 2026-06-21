@@ -105,7 +105,7 @@
                 <em v-else>点击后自动进入下一步</em>
               </div>
 
-              <div :class="['quick-replies-grid', { 'is-card-mode': shouldShowReplyHint }]">
+              <div :class="['quick-replies-grid', { 'is-card-mode': shouldShowReplyHint, 'is-grade-mode': isGradeStep }]">
                 <button
                     v-for="reply in currentQuickReplies"
                     :key="reply"
@@ -410,7 +410,8 @@ const canSend = computed(() => {
 })
 
 const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
-const shouldShowReplyHint = computed(() => [2, 7].includes(currentStep.value))
+const shouldShowReplyHint = computed(() => [7].includes(currentStep.value))
+const isGradeStep = computed(() => currentStep.value === 2)
 
 const currentStepMeta = computed<StepMeta>(() => {
   return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
@@ -842,6 +843,7 @@ const extractMultiple = (text: string, presets: string[]) => {
   return result
 }
 
+/*
 const getGradeHint = (grade: string) => {
   if (grade.includes('大一')) return '偏基础导入'
   if (grade.includes('大二')) return '核心专业课'
@@ -850,12 +852,9 @@ const getGradeHint = (grade: string) => {
   if (grade.includes('研')) return '专题深入'
   return '调整难度'
 }
+*/
 
 const getReplyHint = (reply: string) => {
-  if (currentStep.value === 2) {
-    return getGradeHint(reply)
-  }
-
   if (currentStep.value === 7) {
     const courseHints: Record<string, string> = {
       数据结构: '算法、树图',
@@ -1030,10 +1029,12 @@ const handleNeverShow = async () => {
   justify-content: center;
   padding: 28px 0;
   color: #0f172a;
-  background:
-      radial-gradient(circle at 14% 12%, rgba(99, 102, 241, 0.12), transparent 30%),
-      radial-gradient(circle at 86% 10%, rgba(59, 130, 246, 0.12), transparent 28%),
-      linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%);
+  /* 深色半透明遮罩 + 背景模糊，让底层页面模糊可见 */
+  background: rgba(10, 15, 35, 0.55);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  /* 阻止点击穿透到下层所有元素 */
+  pointer-events: all;
 }
 
 .onboarding-page,
@@ -1045,6 +1046,12 @@ const handleNeverShow = async () => {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
+  background:
+      radial-gradient(circle at 14% 12%, rgba(99, 102, 241, 0.12), transparent 30%),
+      radial-gradient(circle at 86% 10%, rgba(59, 130, 246, 0.12), transparent 28%),
+      linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .onboarding-container {
@@ -1055,13 +1062,14 @@ const handleNeverShow = async () => {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgba(219, 228, 242, 0.98);
+  border: 1px solid rgba(219, 228, 242, 0.6);
   border-radius: 30px;
   background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.96)),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 255, 0.98)),
       #ffffff;
   box-shadow:
-      0 24px 64px rgba(15, 23, 42, 0.11),
+      0 40px 100px rgba(10, 15, 35, 0.35),
+      0 8px 32px rgba(99, 102, 241, 0.12),
       0 1px 0 rgba(255, 255, 255, 0.95) inset;
 }
 
@@ -1522,6 +1530,40 @@ const handleNeverShow = async () => {
   padding: 9px 13px;
   border-radius: 16px;
   text-align: left;
+}
+
+/* 年级专属：紧凑胶囊 pill，稍宽以容纳副标题 */
+.quick-replies-grid.is-grade-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+}
+
+.quick-replies-grid.is-grade-mode .quick-reply-btn {
+  min-height: 44px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  min-width: 68px;
+}
+
+.quick-replies-grid.is-grade-mode .quick-reply-btn small {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.quick-replies-grid.is-grade-mode .quick-reply-btn.is-selected small {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .quick-reply-btn span {

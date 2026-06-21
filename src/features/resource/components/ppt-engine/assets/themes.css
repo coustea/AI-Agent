@@ -65,36 +65,36 @@
 }
 
 .theme-logic-blue {
-  /* 逻辑蓝 (logic-blue) - 深色极客 */
-  --ppt-bg-primary: #0B1120;
-  --ppt-bg-secondary: #111827;
-  --ppt-bg-tertiary: #1E293B;
-  --ppt-text-primary: #F8FAFC;
-  --ppt-text-secondary: #94A3B8;
-  --ppt-accent: #38BDF8;
-  --ppt-accent-gradient: linear-gradient(135deg, #0EA5E9 0%, #38BDF8 100%);
-  --ppt-border: rgba(56, 189, 248, 0.15);
-  --ppt-shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.2);
-  --ppt-shadow-card: 0 10px 30px rgba(56, 189, 248, 0.05), 0 1px 3px rgba(56, 189, 248, 0.02);
+  /* 逻辑蓝 (logic-blue) - 浅色经典蓝 */
+  --ppt-bg-primary: #FAFBFD;       /* 浅蓝色护眼底色 */
+  --ppt-bg-secondary: #FFFFFF;     /* 纯白卡片 */
+  --ppt-bg-tertiary: #F0F4F8;      /* 灰色面板 */
+  --ppt-text-primary: #0F172A;     /* 深板岩灰 */
+  --ppt-text-secondary: #475569;   /* 柔和石板灰 */
+  --ppt-accent: #0284C7;           /* 逻辑天蓝色 */
+  --ppt-accent-gradient: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%);
+  --ppt-border: rgba(2, 132, 199, 0.08);
+  --ppt-shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.02);
+  --ppt-shadow-card: 0 10px 30px rgba(2, 132, 199, 0.03), 0 1px 3px rgba(2, 132, 199, 0.02);
   --ppt-radius-sm: 8px;
   --ppt-radius-md: 14px;
   --ppt-radius-lg: 24px;
-  --ppt-badge-bg: rgba(56, 189, 248, 0.12);
-  --ppt-badge-text: #7dd3fc;
+  --ppt-badge-bg: #e0f2fe;
+  --ppt-badge-text: #0369a1;
 
-  --ppt-callout-info-bg: rgba(56, 189, 248, 0.12);
-  --ppt-callout-info-text: #7dd3fc;
-  --ppt-callout-warning-bg: rgba(251, 191, 36, 0.12);
-  --ppt-callout-warning-text: #fde68a;
-  --ppt-callout-success-bg: rgba(74, 222, 128, 0.12);
-  --ppt-callout-success-text: #bbf7d0;
-  --ppt-callout-danger-bg: rgba(248, 113, 113, 0.12);
-  --ppt-callout-danger-text: #fecaca;
+  --ppt-callout-info-bg: #e0f2fe;
+  --ppt-callout-info-text: #0369a1;
+  --ppt-callout-warning-bg: #fef3c7;
+  --ppt-callout-warning-text: #b45309;
+  --ppt-callout-success-bg: #dcfce7;
+  --ppt-callout-success-text: #15803d;
+  --ppt-callout-danger-bg: #fee2e2;
+  --ppt-callout-danger-text: #b91c1c;
 
-  --ppt-code-bg: #1f2937;
-  --ppt-code-text: #f472b6;
-  --ppt-code-block-bg: #020617;
-  --ppt-code-block-text: #e2e8f0;
+  --ppt-code-bg: #f8fafc;
+  --ppt-code-text: #0284C7;
+  --ppt-code-block-bg: #1e293b;
+  --ppt-code-block-text: #f1f5f9;
 }
 
 .ppt-player-container {

@@ -436,6 +436,26 @@ class DeckBlueprint(BaseModel):
             raise ValueError("deck must start with cover")
         if slides[-1].role != "summary":
             raise ValueError("deck must end with summary")
+
+        # Validate that slide roles strictly follow the role_order defined in manifest template
+        manifest = load_ppt_manifest()
+        role_order = manifest["templates"]["teaching-lesson"]["role_order"]
+        role_to_index = {role: i for i, role in enumerate(role_order)}
+
+        last_index = -1
+        for slide in slides:
+            role = slide.role
+            if role not in role_to_index:
+                raise ValueError(f"invalid slide role '{role}': not in manifest role_order")
+            current_index = role_to_index[role]
+            if current_index < last_index:
+                prev_role = slides[slides.index(slide) - 1].role
+                raise ValueError(
+                    f"Slide roles are out of order: role '{role}' cannot appear after role '{prev_role}'. "
+                    f"Must strictly follow the manifest role_order sequence: {', '.join(role_order)}"
+                )
+            last_index = current_index
+
         return self
 
 

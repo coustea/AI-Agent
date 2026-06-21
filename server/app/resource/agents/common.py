@@ -11,7 +11,6 @@ import json
 import re
 
 from app.resource.schemas import (
-    AgentAssignment,
     DownstreamContext,
     NodeInput,
     ReusableAssets,
@@ -52,14 +51,14 @@ def build_agent_assignment_context(plan: TeachingPlan, agent_id: str) -> list[st
     """为指定 Agent 构建 assignment 切片上下文。
 
     注入：
-    - 该 Agent 的 AgentAssignment（聚焦指令、风格约束、边界提醒、强调知识点、重叠回避）
+    - 该 Agent 的指派信息（聚焦指令、覆盖的大纲项）
     - 仅该 Agent 被指派的大纲项（而非全量 outline）
     """
     parts: list[str] = [f"## 教学计划 - Agent 指派（{agent_id}）"]
 
-    assignment: AgentAssignment | None = None
+    assignment: dict | None = None
     for a in plan.agent_assignments:
-        if a.agent_id == agent_id:
+        if a.get("agent_id") == agent_id:
             assignment = a
             break
 
@@ -69,35 +68,22 @@ def build_agent_assignment_context(plan: TeachingPlan, agent_id: str) -> list[st
         if plan.outline:
             outline_lines = ["全量大纲："]
             for item in plan.outline:
-                outline_lines.append(f"- {item.id}: {item.title} (目标: {item.goal})")
+                outline_lines.append(f"- {item.get('id', '')}: {item.get('title', '')}")
             parts.append("\n".join(outline_lines))
         return parts
 
-    if assignment.focus_instruction:
-        parts.append(f"**聚焦指令**：{assignment.focus_instruction}")
-    if assignment.style_constraint:
-        parts.append(f"**风格约束**：{assignment.style_constraint}")
-    if assignment.boundary_notes:
-        parts.append("**边界提醒**：")
-        for note in assignment.boundary_notes:
-            parts.append(f"  - {note}")
-    if assignment.key_points_emphasis:
-        parts.append("**重点强调**：")
-        for kp in assignment.key_points_emphasis:
-            parts.append(f"  - {kp}")
-    if assignment.avoid_overlap_with:
-        parts.append(f"**避免与以下 Agent 内容重叠**：{', '.join(assignment.avoid_overlap_with)}")
+    if assignment.get("focus_instruction"):
+        parts.append(f"**聚焦指令**：{assignment['focus_instruction']}")
 
-    assigned_ids = set(assignment.assigned_outline_ids)
-    sliced_outline = [item for item in plan.outline if item.id in assigned_ids]
+    assigned_ids = set(assignment.get("assigned_outline_ids", []))
+    sliced_outline = [item for item in plan.outline if item.get("id") in assigned_ids]
     if sliced_outline:
         outline_lines = ["## 你负责的大纲项\n"]
         for item in sliced_outline:
-            outline_lines.append(f"### {item.id}: {item.title}")
-            outline_lines.append(f"目标：{item.goal}")
-            if item.key_points:
-                outline_lines.append("关键知识点：" + "、".join(item.key_points))
-            if item.must_not_miss:
+            outline_lines.append(f"### {item.get('id', '')}: {item.get('title', '')}")
+            if item.get("key_points"):
+                outline_lines.append("关键知识点：" + "、".join(item["key_points"]))
+            if item.get("must_not_miss"):
                 outline_lines.append("⚠️ 核心大纲（必须覆盖）")
             outline_lines.append("")
         parts.append("\n".join(outline_lines))
@@ -112,7 +98,7 @@ def outline_ids_from_plan(plan: TeachingPlan | None) -> list[str]:
     """获取教学计划中所有大纲项的 ID 列表。"""
     if not plan:
         return []
-    return [item.id for item in plan.outline]
+    return [item.get("id", "") for item in plan.outline]
 
 
 def assigned_outline_ids(plan: TeachingPlan | None, agent_id: str) -> list[str]:
@@ -120,9 +106,9 @@ def assigned_outline_ids(plan: TeachingPlan | None, agent_id: str) -> list[str]:
     if not plan:
         return []
     for a in plan.agent_assignments:
-        if a.agent_id == agent_id:
-            return list(a.assigned_outline_ids)
-    return [item.id for item in plan.outline]
+        if a.get("agent_id") == agent_id:
+            return list(a.get("assigned_outline_ids", []))
+    return [item.get("id", "") for item in plan.outline]
 
 
 def outline_coverage_summary(

@@ -40,7 +40,7 @@ class PlanningAgent(BaseResourceAgent):
 
         if plan.agent_assignments:
             expected_agents = set(input_data.agent_config.get("enabled_agents", []))
-            assigned_agents = {assignment.agent_id for assignment in plan.agent_assignments}
+            assigned_agents = {assignment.get("agent_id") for assignment in plan.agent_assignments}
             if assigned_agents != expected_agents:
                 raise ValueError(
                     "TeachingPlan assignments do not match selected base Agents: "
@@ -82,10 +82,24 @@ class PlanningAgent(BaseResourceAgent):
             f"## 学习需求\n{input_data.learning_need}",
             f"## 学习场景\n{input_data.learning_scenario}",
         ]
-        # profile 已经是 Markdown 格式，直接使用
         if input_data.profile:
             parts.append(input_data.profile)
         agents = list(input_data.agent_config.get("enabled_agents", [])) if input_data.agent_config else []
         if agents:
-            parts.append(f"## 需要生成的资源类型\n{', '.join(agents)}")
+            agent_lines = ["## 必须生成的 Agent 指派（硬性约束）"]
+            agent_lines.append("")
+            agent_lines.append("你必须且只能为以下 Agent 生成 agent_assignments，不多不少：")
+            agent_role_map = {
+                "content": "讲解 Agent — 生成结构化教学讲解",
+                "mindmap": "思维导图 Agent — 生成知识结构可视化",
+                "quiz": "题目 Agent — 生成练习题和测试题",
+                "code": "代码示例 Agent — 生成代码示例和编程练习",
+                "reading": "阅读材料 Agent — 生成延伸阅读材料",
+            }
+            for agent_id in agents:
+                role = agent_role_map.get(agent_id, agent_id)
+                agent_lines.append(f"- `{agent_id}`（{role}）")
+            agent_lines.append("")
+            agent_lines.append("每个 Agent 必须有且仅有一条 assignment，agent_id 必须与上述列表完全一致。")
+            parts.append("\n".join(agent_lines))
         return "\n\n".join(parts)

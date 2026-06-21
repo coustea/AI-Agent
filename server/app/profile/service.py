@@ -416,7 +416,7 @@ class ProfileService:
             )
 
             # 精简输出推理结果
-            dims_summary = {k: v.value[:50] if isinstance(v, GlobalDimensionValue) else str(v)[:50]
+            dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
                             for k, v in resp.dimensions_patch.items()}
             logger.info("[ProfileService] 全局画像 LLM推理结果: should_update=%s dimensions_patch=%s",
                          resp.should_update, dims_summary)

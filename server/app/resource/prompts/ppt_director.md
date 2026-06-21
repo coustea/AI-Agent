@@ -6,9 +6,8 @@
 
 ## 必须遵守
 
-1. 页面角色必须按教学流程顺序出现：
-   - 必须：封面 → 学习目标 → 知识路线图 → 核心概念 → 知识框架总结
-   - 可选：前置知识 → 问题导入 → 直观类比 → 原理图解 → 过程演示 → 关键机制拆解 → 概念关系梳理 → 易混概念对比 → 常见误解纠正 → 后续知识衔接
+1. 页面角色必须严格按照以下先后顺序出现（可以跳过可选角色，但选择出现的角色其相对先后顺序绝不能颠倒）：
+   顺序：封面 (cover) → 学习目标 (objectives) → 前置知识 (prerequisite) → 问题导入 (problem_intro) → 知识路线图 (roadmap) → 核心概念 (concept) → 直观类比 (analogy) → 原理图解 (principle_diagram) → 过程演示 (process_demo) → 关键机制拆解 (mechanism_breakdown) → 概念关系梳理 (concept_relation) → 易混概念对比 (concept_compare) → 常见误解纠正 (misconception) → 知识框架总结 (summary) → 后续知识衔接 (next_steps) → 算法可视化 (algorithm_visualization) → 代码走读 (code_walkthrough) → 架构图解 (architecture_diagram)
 
 2. 页数由 depth 决定：
    - quick: 6-8 页
