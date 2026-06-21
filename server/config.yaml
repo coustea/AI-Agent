@@ -79,7 +79,7 @@ search:
 paths:
   workplace: "static"
   logs: "logs"
-  knowledge: "data/book/my_chroma_db"
+  knowledge: "app/rag/data/book/my_chroma_db"
 
 knowledge:
   enabled: true

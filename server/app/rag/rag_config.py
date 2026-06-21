@@ -1,0 +1,22 @@
+from pathlib import Path
+
+
+RAG_DIR = Path(__file__).resolve().parent
+BOOK_DATA_DIR = RAG_DIR / "data" / "book"
+PROJECT_ROOT = BOOK_DATA_DIR
+CHROMA_DIR = BOOK_DATA_DIR / "my_chroma_db"
+DOCS_DIR = BOOK_DATA_DIR
+DOCS_GLOB = "*.final.md"
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+EMBEDDING_MODEL = "bge-m3"
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
+EMBED_BATCH_SIZE = 32
+
+# ============ 语义分块配置 ============
+CHUNK_MAX_SIZE = 800
+CHUNK_MIN_SIZE = 100
+CHUNK_OVERLAP = 150
+HEADING_IN_BODY = True
+PRIMARY_SPLIT_HEADING = "##"
+SECONDARY_SPLIT_HEADING = "###"
