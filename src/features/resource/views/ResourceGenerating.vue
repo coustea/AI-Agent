@@ -2,6 +2,10 @@
   <div class="phase-view generating-view workflow-stage-page workflow-stage-page-v4">
     <header class="stage-topbar stage-topbar-v4">
       <div class="stage-title-area">
+        <div class="stage-title-copy">
+          <h2>资源生成工作流</h2>
+          <p>{{ dagHeroMessage }}</p>
+        </div>
         <div class="stage-route-progress">
           <template v-for="(step, index) in routeSteps" :key="step.key">
             <span class="route-step" :class="step.state">{{ step.label }}</span>
@@ -12,8 +16,6 @@
             ></span>
           </template>
         </div>
-        <h2>多智能体资源生成</h2>
-        <p>{{ dagHeroMessage }}</p>
       </div>
 
       <div class="stage-stat-group stage-stat-group-v4">
@@ -37,27 +39,30 @@
       </div>
     </header>
 
-    <el-alert
-      v-if="generationError"
-      class="stage-generation-error"
-      type="error"
-      :closable="false"
-      show-icon
-      :title="generationError"
-    />
-
     <main class="agent-stage-shell-v4">
       <section class="dispatch-workbench-panel dispatch-workbench-panel-v4">
         <div class="workbench-header workbench-header-v4">
           <div>
-            <span class="panel-eyebrow">RESOURCE PIPELINE</span>
-            <h3>按真实后端拓扑推进资源生成</h3>
-            <p>流程固定为计划生成、任务调度、基础资源并行、聚合资源生成，最后打包交付。</p>
+            <span class="panel-eyebrow">执行流程</span>
+            <h3>资源生成进度</h3>
+            <p>教学计划完成后生成基础资源，再生成课件与视频，最后完成资源整合。</p>
           </div>
           <div class="workbench-actions">
-            <span class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
+            <button
+              v-if="generationError"
+              class="workflow-error-status"
+              type="button"
+              :title="generationError"
+              @click="workflowLogDrawerVisible = true"
+            >
+              <span></span>
+              <strong>生成中断</strong>
+              <em>查看详情</em>
+              <el-icon><ArrowRight /></el-icon>
+            </button>
+            <span v-else class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
             <span class="control-pill muted">计划 {{ planReady ? '已生成' : '生成中' }}</span>
-            <el-button round size="small" @click="workflowLogDrawerVisible = true">查看日志</el-button>
+            <el-button v-if="!generationError" round size="small" @click="workflowLogDrawerVisible = true">查看日志</el-button>
           </div>
         </div>
 
@@ -69,32 +74,19 @@
 
           <div class="flow-core-stack flow-core-stack-v4">
             <article
+              ref="planningNodeRef"
               class="core-agent-node planning-core"
               :class="['status-' + getStageNode('planning').status, { 'is-selected': selectedDagNodeId === 'planning' }]"
-              @click="handleAgentClick('planning')"
+              @click="handleAgentClick('planning', $event)"
             >
-              <div class="core-icon">🤖</div>
+              <div class="core-icon">
+                <el-icon><component :is="getWorkflowIcon('planning')" /></el-icon>
+              </div>
               <div>
-                <strong>PlanningAgent</strong>
+                <strong>教学计划</strong>
                 <span>{{ getNodeStageLabel(getStageNode('planning')) }}</span>
               </div>
               <div class="core-progress">{{ getStageNode('planning').progress }}%</div>
-            </article>
-
-            <div class="core-link-line"><i></i></div>
-
-            <article
-              ref="coordinatorNodeRef"
-              class="core-agent-node coordinator-core"
-              :class="['status-' + getStageNode(COORDINATOR_AGENT_ID).status, { 'is-selected': selectedDagNodeId === COORDINATOR_AGENT_ID }]"
-              @click="handleAgentClick(COORDINATOR_AGENT_ID)"
-            >
-              <div class="core-icon">⚙️</div>
-              <div>
-                <strong>Coordinator</strong>
-                <span>{{ getNodeStageLabel(getStageNode(COORDINATOR_AGENT_ID)) }}</span>
-              </div>
-              <div class="core-progress">{{ getStageNode(COORDINATOR_AGENT_ID).progress }}%</div>
             </article>
           </div>
 
@@ -131,20 +123,22 @@
             />
           </svg>
 
-          <transition-group name="agent-station" tag="div" class="agent-station-row agent-station-row-v4">
+          <transition-group name="agent-station" tag="div" class="agent-station-row agent-station-row-v4 base-agent-row">
             <article
               v-for="node in parallelPoolNodes"
               :key="node.id"
               class="agent-station-card agent-station-card-v4"
               :ref="el => setStationCardRef(node.id, el)"
               :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id, 'has-artifact': hasGeneratedResource(node.id) }]"
-              @click="handleAgentClick(node.id)"
+              @click="handleAgentClick(node.id, $event)"
             >
               <div class="station-header">
-                <div class="station-icon">{{ node.icon }}</div>
+                <div class="station-icon">
+                  <el-icon><component :is="getWorkflowIcon(node.id)" /></el-icon>
+                </div>
                 <div>
-                  <strong>{{ node.label }}</strong>
-                  <span>Agent</span>
+                  <strong>{{ getWorkflowTitle(node.id) }}</strong>
+                  <span>基础资源</span>
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
@@ -183,23 +177,28 @@
             </article>
           </transition-group>
 
+          <div v-if="showAggregationStage" class="dual-flow-connector" aria-hidden="true">
+            <span></span><i></i><i></i>
+          </div>
+
           <div v-if="showAggregationStage" class="agent-station-row agent-station-row-v4 aggregation-agent-row">
             <article
-              v-if="showPptNode"
               class="agent-station-card agent-station-card-v4"
-              :class="['status-' + pptNode.status, { 'is-selected': selectedDagNodeId === pptNode.id, 'has-artifact': hasGeneratedResource(pptNode.id) }]"
-              @click="handleAgentClick(pptNode.id)"
+              :class="['status-' + pptNode.status, { 'is-selected': selectedDagNodeId === pptNode.id, 'has-artifact': hasGeneratedResource(pptNode.id), 'is-unselected': !showPptNode }]"
+              @click="showPptNode && handleAgentClick(pptNode.id, $event)"
             >
               <div class="station-header">
-                <div class="station-icon">{{ pptNode.icon }}</div>
-                <div>
-                  <strong>PPT Agent</strong>
-                  <span>{{ pptNode.label }}</span>
+                <div class="station-icon">
+                  <el-icon><component :is="getWorkflowIcon(pptNode.id)" /></el-icon>
                 </div>
-                <em>{{ getNodeStatusLabel(pptNode) }}</em>
+                <div>
+                  <strong>教学课件</strong>
+                  <span>PPT Agent</span>
+                </div>
+                <em>{{ showPptNode ? getNodeStatusLabel(pptNode) : '未选择' }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${pptNode.status}`, { 'is-empty': !getNodeLiveLogs(pptNode).length }]">
-                <template v-if="getNodeLiveLogs(pptNode).length">
+              <div class="station-live-log" :class="[`is-${pptNode.status}`, { 'is-empty': !showPptNode || !getNodeLiveLogs(pptNode).length }]">
+                <template v-if="showPptNode && getNodeLiveLogs(pptNode).length">
                   <div class="station-live-current">
                     <span class="station-live-dot"></span>
                     <div>
@@ -223,31 +222,32 @@
 
                 <div v-else class="station-live-empty">
                   <span class="station-live-dot muted"></span>
-                  <p>等待基础资源完成后开始聚合生成</p>
+                  <p>{{ showPptNode ? '等待基础资源完成后开始生成课件' : '当前任务未选择 PPT Agent' }}</p>
                 </div>
               </div>
               <div class="station-footer">
-                <span>{{ getNodeStageLabel(pptNode) }}</span>
+                <span>{{ showPptNode ? getNodeStageLabel(pptNode) : '未加入本次任务' }}</span>
                 <i :style="{ width: `${pptNode.progress}%` }"></i>
               </div>
             </article>
 
             <article
-              v-if="showVideoNode"
               class="agent-station-card agent-station-card-v4"
-              :class="['status-' + videoNode.status, { 'is-selected': selectedDagNodeId === videoNode.id, 'has-artifact': hasGeneratedResource(videoNode.id) }]"
-              @click="handleAgentClick(videoNode.id)"
+              :class="['status-' + videoNode.status, { 'is-selected': selectedDagNodeId === videoNode.id, 'has-artifact': hasGeneratedResource(videoNode.id), 'is-unselected': !showVideoNode }]"
+              @click="showVideoNode && handleAgentClick(videoNode.id, $event)"
             >
               <div class="station-header">
-                <div class="station-icon">{{ videoNode.icon }}</div>
-                <div>
-                  <strong>Video Agent</strong>
-                  <span>{{ videoNode.label }}</span>
+                <div class="station-icon">
+                  <el-icon><component :is="getWorkflowIcon(videoNode.id)" /></el-icon>
                 </div>
-                <em>{{ getNodeStatusLabel(videoNode) }}</em>
+                <div>
+                  <strong>讲解视频</strong>
+                  <span>Video Agent</span>
+                </div>
+                <em>{{ showVideoNode ? getNodeStatusLabel(videoNode) : '未选择' }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${videoNode.status}`, { 'is-empty': !getNodeLiveLogs(videoNode).length }]">
-                <template v-if="getNodeLiveLogs(videoNode).length">
+              <div class="station-live-log" :class="[`is-${videoNode.status}`, { 'is-empty': !showVideoNode || !getNodeLiveLogs(videoNode).length }]">
+                <template v-if="showVideoNode && getNodeLiveLogs(videoNode).length">
                   <div class="station-live-current">
                     <span class="station-live-dot"></span>
                     <div>
@@ -271,25 +271,31 @@
 
                 <div v-else class="station-live-empty">
                   <span class="station-live-dot muted"></span>
-                  <p>等待基础资源完成后开始聚合生成</p>
+                  <p>{{ showVideoNode ? '等待基础资源完成后开始生成视频' : '当前任务未选择 Video Agent' }}</p>
                 </div>
               </div>
               <div class="station-footer">
-                <span>{{ getNodeStageLabel(videoNode) }}</span>
+                <span>{{ showVideoNode ? getNodeStageLabel(videoNode) : '未加入本次任务' }}</span>
                 <i :style="{ width: `${videoNode.progress}%` }"></i>
               </div>
             </article>
+          </div>
+
+          <div v-if="showAggregationStage" class="dual-flow-connector is-merge" aria-hidden="true">
+            <span></span><i></i><i></i>
           </div>
 
           <div class="bundle-stage-shell">
             <article
               class="review-station-card review-station-card-v4 bundle-stage-card"
               :class="['status-' + bundleNode.status, { 'is-selected': selectedDagNodeId === bundleNode.id }]"
-              @click="handleAgentClick(bundleNode.id)"
+              @click="handleAgentClick(bundleNode.id, $event)"
             >
-              <div class="review-icon">{{ bundleNode.icon }}</div>
+              <div class="review-icon">
+                <el-icon><component :is="getWorkflowIcon(bundleNode.id)" /></el-icon>
+              </div>
               <div>
-                <strong>{{ bundleNode.label }}</strong>
+                <strong>资源整合</strong>
                 <span>{{ getNodeStageLabel(bundleNode) }}</span>
               </div>
               <em>{{ bundleNode.progress }}%</em>
@@ -299,27 +305,29 @@
       </section>
 
       <transition name="detail-float">
-        <aside v-if="detailPanelVisible && selectedDagNode" class="agent-detail-floating-panel">
-          <button class="detail-close-btn" type="button" @click="closeAgentDetail">×</button>
+        <aside
+          v-if="detailPanelVisible && selectedDagNode"
+          class="agent-detail-floating-panel"
+          :style="detailPanelStyle"
+          role="dialog"
+          aria-label="Agent 运行详情"
+        >
+          <span class="detail-anchor-caret" aria-hidden="true"></span>
 
           <div class="detail-panel-title">
-            <div>
-              <span class="panel-eyebrow">AGENT DETAIL</span>
-              <h3>Agent 详情</h3>
+            <div class="focus-agent-icon">
+              <el-icon><component :is="getWorkflowIcon(selectedDagNode.id)" /></el-icon>
             </div>
-            <span class="control-pill muted">点击后显示</span>
+            <div class="detail-title-copy">
+              <span>运行详情</span>
+              <h3>{{ getWorkflowTitle(selectedDagNode.id) }}</h3>
+              <p>{{ getNodeStageLabel(selectedDagNode) }}</p>
+            </div>
+            <span class="detail-status-dot" :class="`status-${selectedDagNode.status}`"></span>
+            <button class="detail-close-btn" type="button" aria-label="关闭 Agent 详情" @click="closeAgentDetail">×</button>
           </div>
 
           <div class="selected-agent-detail-card">
-            <div class="detail-agent-head">
-              <div class="focus-agent-icon">{{ selectedDagNode.icon }}</div>
-              <div>
-                <h4>{{ selectedDagNode.label }}</h4>
-                <p>{{ getNodeStageLabel(selectedDagNode) }}</p>
-              </div>
-              <span class="detail-status-dot" :class="`status-${selectedDagNode.status}`"></span>
-            </div>
-
             <div class="detail-current-task">
               <span>当前任务</span>
               <strong>{{ getNodeDisplayMessage(selectedDagNode) }}</strong>
@@ -402,7 +410,7 @@
           :class="{ ready: hasGeneratedResource(agentId), 'just-arrived': latestArtifactAgentId === agentId }"
           @click="emit('openResource', agentId)"
         >
-          <span>{{ getDagNodeIcon(agentId) }}</span>
+          <span><el-icon><component :is="getWorkflowIcon(agentId)" /></el-icon></span>
           <div>
             <strong>{{ getResourceTypeLabel(agentId) }}</strong>
             <p>{{ hasGeneratedResource(agentId) ? '已生成，可预览' : getAgentOutputFormat(agentId) }}</p>
@@ -427,8 +435,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
-import { ArrowRight } from '@element-plus/icons-vue'
+import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch, type Component } from 'vue'
+import {
+  Aim,
+  ArrowRight,
+  Box,
+  Connection,
+  Cpu,
+  DataBoard,
+  Document,
+  EditPen,
+  Reading,
+  Share,
+  VideoCamera,
+} from '@element-plus/icons-vue'
 import type { ResourceAgentId } from '@/features/resource/model/resource'
 import {
   COORDINATOR_AGENT_ID,
@@ -439,7 +459,6 @@ import {
   AGENT_DISPLAY,
   getResourceTypeLabel,
   getAgentOutputFormat,
-  getDagNodeIcon,
   getNodeFallbackMessage,
   type DagNodeState,
 } from '@/features/resource/model/ResourceGeneratorConstants'
@@ -477,22 +496,93 @@ const emit = defineEmits<{
 
 const workflowLogDrawerVisible = ref(false)
 const detailPanelVisible = ref(false)
+const detailPanelStyle = ref<Record<string, string>>({})
+const detailAnchorElement = ref<HTMLElement | null>(null)
+
+const workflowIconMap: Record<string, Component> = {
+  planning: Aim,
+  coordinator: Connection,
+  content: Document,
+  mindmap: Share,
+  quiz: EditPen,
+  code: Cpu,
+  reading: Reading,
+  ppt: DataBoard,
+  video: VideoCamera,
+  bundle: Box,
+}
+
+const workflowTitleMap: Record<string, string> = {
+  planning: '教学计划',
+  coordinator: '结果汇总',
+  content: '讲义精解',
+  mindmap: '知识导图',
+  quiz: '练习题',
+  code: '代码示例',
+  reading: '拓展阅读',
+  ppt: '教学课件',
+  video: '讲解视频',
+  bundle: '资源包交付',
+}
+
+function getWorkflowIcon(id: string) {
+  return workflowIconMap[id] || Document
+}
+
+function getWorkflowTitle(id: string) {
+  return workflowTitleMap[id] || AGENT_DISPLAY[id]?.label || id
+}
 
 const flowCanvasRef = ref<HTMLElement | null>(null)
-const coordinatorNodeRef = ref<HTMLElement | null>(null)
+const planningNodeRef = ref<HTMLElement | null>(null)
 const stationCardRefs = new Map<string, HTMLElement>()
 const linkCanvasSize = ref({ width: 1000, height: 700 })
 const measuredAgentLinks = ref<AgentLinkGeometry[]>([])
 let linkMeasureFrame = 0
+let detailPositionFrame = 0
 let canvasResizeObserver: ResizeObserver | null = null
 
-function handleAgentClick(id: string) {
+function handleAgentClick(id: string, event: MouseEvent) {
+  const target = event.currentTarget
+  detailAnchorElement.value = target instanceof HTMLElement ? target : null
   detailPanelVisible.value = true
   emit('selectNode', id)
+  nextTick(scheduleDetailPanelPosition)
 }
 
 function closeAgentDetail() {
   detailPanelVisible.value = false
+  detailAnchorElement.value = null
+}
+
+function scheduleDetailPanelPosition() {
+  if (typeof window === 'undefined' || !detailPanelVisible.value) return
+  if (detailPositionFrame) window.cancelAnimationFrame(detailPositionFrame)
+  detailPositionFrame = window.requestAnimationFrame(() => {
+    detailPositionFrame = 0
+    updateDetailPanelPosition()
+  })
+}
+
+function updateDetailPanelPosition() {
+  const anchor = detailAnchorElement.value
+  if (!anchor || typeof window === 'undefined') return
+
+  const anchorRect = anchor.getBoundingClientRect()
+  const viewportGap = 12
+  const anchorGap = 14
+  const panelWidth = Math.min(380, window.innerWidth - viewportGap * 2)
+  const preferredLeft = anchorRect.right + anchorGap
+  const left = Math.max(viewportGap, Math.min(preferredLeft, window.innerWidth - panelWidth - viewportGap))
+  const top = Math.max(viewportGap, anchorRect.top)
+  const maxHeight = Math.max(120, window.innerHeight - top - viewportGap)
+
+  detailPanelStyle.value = {
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(panelWidth)}px`,
+    maxHeight: `${Math.round(maxHeight)}px`,
+  }
 }
 
 const baseGenerationAgentIds = computed(() => {
@@ -500,16 +590,7 @@ const baseGenerationAgentIds = computed(() => {
 })
 
 const parallelPoolNodes = computed(() => {
-  const agentStatusRank: Record<DagNodeState['status'], number> = {
-    failed: 0, running: 1, success: 2, waiting: 3, skipped: 4,
-  }
-  return baseGenerationAgentIds.value
-    .map(agentId => getStageNode(agentId))
-    .sort((a, b) => {
-      const rankDiff = agentStatusRank[a.status] - agentStatusRank[b.status]
-      if (rankDiff !== 0) return rankDiff
-      return b.progress - a.progress
-    })
+  return baseGenerationAgentIds.value.map(agentId => getStageNode(agentId))
 })
 
 const agentLinkPaths = computed(() => {
@@ -543,8 +624,8 @@ function scheduleLinkMeasure() {
 
 function measureAgentLinks() {
   const canvas = flowCanvasRef.value
-  const coordinator = coordinatorNodeRef.value
-  if (!canvas || !coordinator) return
+  const planning = planningNodeRef.value
+  if (!canvas || !planning) return
 
   const canvasRect = canvas.getBoundingClientRect()
   const width = Math.max(1, Math.round(canvasRect.width))
@@ -553,9 +634,9 @@ function measureAgentLinks() {
     linkCanvasSize.value = { width, height }
   }
 
-  const coordinatorRect = coordinator.getBoundingClientRect()
-  const startX = Math.round(coordinatorRect.left - canvasRect.left + coordinatorRect.width / 2)
-  const startY = Math.round(coordinatorRect.bottom - canvasRect.top + 8)
+  const planningRect = planning.getBoundingClientRect()
+  const startX = Math.round(planningRect.left - canvasRect.left + planningRect.width / 2)
+  const startY = Math.round(planningRect.bottom - canvasRect.top + 8)
 
   const links = parallelPoolNodes.value
     .map((node) => {
@@ -600,6 +681,8 @@ onMounted(async () => {
   await nextTick()
   scheduleLinkMeasure()
   window.addEventListener('resize', scheduleLinkMeasure)
+  window.addEventListener('resize', scheduleDetailPanelPosition)
+  window.addEventListener('scroll', scheduleDetailPanelPosition, true)
 
   if (typeof ResizeObserver !== 'undefined' && flowCanvasRef.value) {
     canvasResizeObserver = new ResizeObserver(scheduleLinkMeasure)
@@ -610,7 +693,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', scheduleLinkMeasure)
+    window.removeEventListener('resize', scheduleDetailPanelPosition)
+    window.removeEventListener('scroll', scheduleDetailPanelPosition, true)
     if (linkMeasureFrame) window.cancelAnimationFrame(linkMeasureFrame)
+    if (detailPositionFrame) window.cancelAnimationFrame(detailPositionFrame)
   }
   canvasResizeObserver?.disconnect()
 })
@@ -660,12 +746,13 @@ const selectedDagNode = computed(() => {
 })
 
 const runningAgentCount = computed(() => {
-  return props.visibleWorkflowNodes.filter(node => node.status === 'running').length
+  return props.visibleWorkflowNodes.filter(node => node.id !== COORDINATOR_AGENT_ID && node.status === 'running').length
 })
 
 const dagHeroMessage = computed(() => {
-  const running = Object.values(props.dagNodeStates).find(n => n.status === 'running')
+  const running = Object.values(props.dagNodeStates).find(n => n.id !== COORDINATOR_AGENT_ID && n.status === 'running')
   if (running) return running.currentMessage || `${running.label}处理中...`
+  if (getStageNode(COORDINATOR_AGENT_ID).status === 'running') return '正在准备课件与视频...'
   const allDone = Object.values(props.dagNodeStates).every(n => n.status === 'success')
   if (allDone) return '所有资源生成完成'
   return props.latestWorkflowMessage || '多智能体协同生成中'
@@ -683,31 +770,25 @@ const routeSteps = computed(() => {
   return [
     {
       key: 'plan',
-      label: 'Plan',
+      label: '教学计划',
       state: planning.status === 'success' ? 'done' : 'active',
       lineState: planning.status === 'success' ? 'done' : 'active',
-    },
-    {
-      key: 'dispatch',
-      label: '调度',
-      state: coordinator.status === 'success' ? 'done' : coordinator.status === 'running' || planning.status === 'success' ? 'active' : '',
-      lineState: coordinator.status === 'success' || baseRunning || baseDone ? 'done' : coordinator.status === 'running' ? 'active' : '',
     },
     {
       key: 'base',
       label: '基础资源',
       state: baseDone ? 'done' : baseRunning ? 'active' : '',
-      lineState: baseDone && aggregationNodes.value.length ? 'done' : aggregationRunning ? 'active' : '',
+      lineState: coordinator.status === 'success' ? 'done' : baseDone || coordinator.status === 'running' ? 'active' : '',
     },
     {
       key: 'aggregation',
-      label: '聚合资源',
-      state: aggregationDone && aggregationNodes.value.length ? 'done' : aggregationRunning ? 'active' : '',
+      label: 'PPT / Video',
+      state: aggregationDone && aggregationNodes.value.length ? 'done' : aggregationRunning || coordinator.status === 'running' ? 'active' : '',
       lineState: aggregationDone || bundle.status === 'running' || bundle.status === 'success' ? 'done' : aggregationRunning ? 'active' : '',
     },
     {
       key: 'bundle',
-      label: '打包交付',
+      label: '资源整合',
       state: bundle.status === 'success' ? 'done' : bundle.status === 'running' ? 'active' : '',
       lineState: '',
     },
@@ -720,7 +801,18 @@ const visibleOutputAgentIds = computed(() => {
 
 const workflowLogItems = computed(() => {
   const items: Array<{ id: string; title: string; message: string; status: DagNodeState['status'] }> = []
+
+  if (props.generationError) {
+    items.push({
+      id: 'global-generation-error',
+      title: '资源生成任务',
+      message: props.generationError,
+      status: 'failed',
+    })
+  }
+
   props.visibleWorkflowNodes.forEach((node) => {
+    if (node.id === COORDINATOR_AGENT_ID) return
     const richLogs = node.eventLogs || []
 
     if (richLogs.length) {
@@ -827,20 +919,20 @@ function getNodeStatusLabel(node: DagNodeState) {
 }
 
 function getNodeStageLabel(node: DagNodeState) {
-  if (node.status === 'success') return node.id === BUNDLE_AGENT_ID ? '已打包交付' : '已完成'
+  if (node.status === 'success') return node.id === BUNDLE_AGENT_ID ? '整合完成' : '已完成'
   if (node.status === 'failed') return '协作中断'
   if (node.status === 'skipped') return '已跳过'
   if (node.status === 'running') {
     if (node.id === 'planning') return '计划生成中'
-    if (node.id === COORDINATOR_AGENT_ID) return '任务调度中'
-    if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '聚合生成中'
+    if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
+    if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '生成中'
     if (node.phase === 'llm_generating') return '核心推演中'
     if (node.phase === 'validating') return '一致性校验中'
     if (node.phase === 'artifact_saved') return '资源已保存'
-    if (node.phase === 'bundling') return '打包交付中'
+    if (node.phase === 'bundling') return '资源整合中'
     return '工位执行中'
   }
-  if (node.id === BUNDLE_AGENT_ID) return '等待聚合结果'
+  if (node.id === BUNDLE_AGENT_ID) return '等待课件与视频'
   if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '等待基础资源'
   return '等待上游协同'
 }
@@ -875,7 +967,7 @@ function getNodeDisplayMessage(node: DagNodeState) {
   if (node.status === 'failed') return node.currentMessage || '工位执行受阻，请检查协同日志'
   if (node.currentMessage) return node.currentMessage
   if (node.id === 'planning') return '正在根据学习需求与画像生成教学计划'
-  if (node.id === COORDINATOR_AGENT_ID) return '正在向基础资源 Agent 分发任务并汇总覆盖情况'
+  if (node.id === COORDINATOR_AGENT_ID) return '等待基础资源完成后汇总成功、失败与大纲覆盖情况'
   if (node.id === PPT_AGENT_ID) return '等待讲义要义就绪以重排宣讲幻灯'
   if (node.id === VIDEO_AGENT_ID) return '等待讲义就绪以生成讲解视频分镜'
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与聚合结果就绪后打包交付'
@@ -902,7 +994,7 @@ function getNodeArtifactStatus(node: DagNodeState) {
 
 function getNodeInputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '学习需求 / 学习场景 / 用户画像 / 已选 Agent'
-  if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础 Agent 选择 / 当前执行快照'
+  if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
   if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
   if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
   return '学习需求 / 用户画像 / 教学计划'
@@ -910,7 +1002,7 @@ function getNodeInputSummary(node: DagNodeState) {
 
 function getNodeOutputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '教学计划 / 大纲 / Agent 分工'
-  if (node.id === COORDINATOR_AGENT_ID) return '任务分发状态 / 覆盖情况 / 执行汇总'
+  if (node.id === COORDINATOR_AGENT_ID) return '成功失败统计 / 覆盖情况 / 基础资源 handoff'
   if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
   if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
   if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '聚合资源生成中 / 等待中'
@@ -1130,12 +1222,6 @@ function getMetricChips(node: DagNodeState) {
   background: linear-gradient(90deg, #22C55E, #06B6D4, #3B82F6);
   box-shadow: 0 0 18px rgba(59, 130, 246, 0.42);
   transition: width 0.35s ease;
-}
-
-.stage-generation-error {
-  position: relative;
-  z-index: 2;
-  border-radius: 16px;
 }
 
 .agent-stage-shell-v4 {
@@ -2802,6 +2888,928 @@ function getMetricChips(node: DagNodeState) {
   .agent-link-svg {
     display: none;
   }
+}
+
+/* ===== v7 incremental visual polish: preserve the original component behavior ===== */
+.workflow-stage-page-v4 {
+  --workflow-border: #dfe3e8;
+  --workflow-border-strong: #c8ced6;
+  --workflow-surface: #ffffff;
+  --workflow-surface-subtle: #f7f8fa;
+  --workflow-text: #172033;
+  --workflow-muted: #667085;
+
+  background: #f2f4f7;
+}
+
+.stage-topbar,
+.dispatch-workbench-panel,
+.agent-detail-floating-panel,
+.output-dock-section-v4 {
+  border-color: var(--workflow-border);
+  border-radius: 16px;
+  background: var(--workflow-surface);
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.06);
+  backdrop-filter: none;
+}
+
+.stage-stat-card {
+  border-color: var(--workflow-border);
+  border-radius: 10px;
+  background: var(--workflow-surface-subtle);
+}
+
+.route-step,
+.control-pill {
+  border-radius: 7px;
+}
+
+.panel-eyebrow {
+  color: var(--workflow-muted);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.live-dot {
+  box-shadow: none;
+}
+
+.mini-progress-track i {
+  background: #2563eb;
+  box-shadow: none;
+}
+
+.agent-flow-canvas,
+.agent-flow-canvas-v4 {
+  min-height: auto;
+  border-color: var(--workflow-border);
+  border-radius: 14px;
+  background: var(--workflow-surface-subtle);
+}
+
+.agent-flow-canvas-v4::before,
+.flow-grid-bg,
+.flow-orbit {
+  display: none !important;
+}
+
+.agent-link-svg {
+  z-index: 2;
+}
+
+.agent-link-path,
+.agent-link-path.status-running,
+.agent-link-path.status-success {
+  stroke: #aebccc;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+  filter: none;
+  opacity: 0.8;
+  animation: none;
+}
+
+.agent-link-dot,
+.agent-link-dot.status-running,
+.agent-link-dot.status-success {
+  fill: #7c8da3;
+  filter: none;
+  opacity: 0.85;
+  animation: none;
+}
+
+.flow-core-stack-v4 {
+  margin-top: 0;
+}
+
+.core-agent-node {
+  min-height: 70px;
+  border-color: var(--workflow-border-strong);
+  border-radius: 12px;
+  background: var(--workflow-surface);
+  box-shadow: 0 5px 14px rgba(23, 32, 51, 0.06);
+}
+
+.core-agent-node:hover,
+.core-agent-node.is-selected {
+  border-color: #7ba8ed;
+  box-shadow: 0 0 0 2px #dbeafe;
+  transform: translateY(-1px);
+}
+
+.core-icon,
+.station-icon,
+.review-icon,
+.focus-agent-icon {
+  border: 1px solid #d8e2ef;
+  border-radius: 9px;
+  color: #315c9d;
+  background: #f1f5fa;
+}
+
+.core-icon .el-icon,
+.station-icon .el-icon,
+.review-icon .el-icon,
+.focus-agent-icon .el-icon,
+.output-dock-item-v4 > span .el-icon {
+  font-size: 18px;
+}
+
+.flow-stage-label,
+.aggregation-stage-heading {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  margin: 26px auto 0;
+  padding: 0 2px;
+}
+
+.flow-stage-label > span,
+.aggregation-stage-heading > span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 1px solid var(--workflow-border-strong);
+  border-radius: 8px;
+  color: #475467;
+  background: var(--workflow-surface);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.flow-stage-label > div,
+.aggregation-stage-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.flow-stage-label strong,
+.aggregation-stage-heading strong {
+  display: block;
+  color: var(--workflow-text);
+  font-size: 13px;
+}
+
+.flow-stage-label p,
+.aggregation-stage-heading p {
+  margin: 3px 0 0;
+  color: var(--workflow-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.aggregation-stage-heading em {
+  padding: 5px 8px;
+  border: 1px solid #cfe0ff;
+  border-radius: 6px;
+  color: #2456a6;
+  background: #f5f8ff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.agent-station-row-v4.base-agent-row,
+.agent-station-row-v4.aggregation-agent-row {
+  margin-top: 14px;
+}
+
+.agent-station-card,
+.agent-station-card-v4 {
+  border-color: var(--workflow-border);
+  border-radius: 12px;
+  background: var(--workflow-surface);
+  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.05);
+}
+
+.agent-station-card:hover,
+.agent-station-card.is-selected {
+  border-color: #7ba8ed;
+  box-shadow: 0 0 0 2px #dbeafe;
+  transform: translateY(-1px);
+}
+
+.agent-station-card.status-running {
+  border-color: #79a6e8;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.agent-station-card.status-success,
+.agent-station-card.has-artifact {
+  border-color: #a9d6c3;
+  background: #fbfefc;
+}
+
+.station-live-log {
+  border-color: var(--workflow-border);
+  border-radius: 9px;
+  background: var(--workflow-surface-subtle);
+}
+
+.station-live-dot {
+  box-shadow: none;
+}
+
+.flow-stage-divider {
+  position: relative;
+  display: flex;
+  width: min(560px, 100%);
+  align-items: center;
+  gap: 10px;
+  margin: 24px auto 14px;
+  color: #98a2b3;
+  font-size: 10px;
+  text-align: center;
+}
+
+.flow-stage-divider::before,
+.flow-stage-divider::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  height: 14px;
+  background: #aebccc;
+  transform: translateX(-50%);
+}
+
+.flow-stage-divider::before {
+  top: -14px;
+}
+
+.flow-stage-divider::after {
+  bottom: -14px;
+}
+
+.flow-stage-divider i {
+  height: 1px;
+  flex: 1;
+  background: var(--workflow-border-strong);
+}
+
+.coordinator-checkpoint-row {
+  display: flex;
+  justify-content: center;
+}
+
+.coordinator-checkpoint {
+  width: min(420px, 100%);
+}
+
+.aggregation-stage-heading {
+  position: relative;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--workflow-border);
+}
+
+.aggregation-stage-heading::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -22px;
+  width: 1px;
+  height: 22px;
+  background: #aebccc;
+  transform: translateX(-50%);
+}
+
+.aggregation-agent-row {
+  max-width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.aggregation-agent-row .agent-station-card-v4.is-unselected {
+  cursor: default;
+  opacity: 0.62;
+  box-shadow: none;
+}
+
+.aggregation-agent-row .agent-station-card-v4.is-unselected:hover {
+  border-color: var(--workflow-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.aggregation-agent-row .agent-station-card-v4.is-unselected .station-footer i {
+  visibility: hidden;
+}
+
+.dual-flow-connector {
+  position: relative;
+  width: 50%;
+  height: 30px;
+  margin: 6px auto 0;
+  color: #aebccc;
+}
+
+.dual-flow-connector::before,
+.dual-flow-connector span,
+.dual-flow-connector i {
+  position: absolute;
+  display: block;
+  background: currentColor;
+}
+
+.dual-flow-connector::before {
+  content: '';
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 15px;
+  transform: translateX(-50%);
+}
+
+.dual-flow-connector span {
+  left: 0;
+  right: 0;
+  top: 14px;
+  height: 1px;
+}
+
+.dual-flow-connector i {
+  top: 14px;
+  width: 1px;
+  height: 16px;
+}
+
+.dual-flow-connector i:first-of-type {
+  left: 0;
+}
+
+.dual-flow-connector i:last-of-type {
+  right: 0;
+}
+
+.dual-flow-connector + .aggregation-agent-row {
+  margin-top: 0;
+}
+
+.dual-flow-connector.is-merge {
+  margin-top: 0;
+  transform: rotate(180deg);
+}
+
+.dual-flow-connector.is-merge + .bundle-stage-shell {
+  margin-top: 0;
+}
+
+.output-dock-item-v4 > span:first-child {
+  display: grid;
+  place-items: center;
+  color: #315c9d;
+}
+
+.output-dock-section-v4 {
+  grid-template-columns: 170px minmax(0, 1fr);
+  padding: 11px 14px;
+}
+
+.output-dock-section-v4 .panel-eyebrow {
+  font-size: 9px;
+}
+
+.output-dock-section-v4 .output-dock-heading {
+  gap: 4px;
+}
+
+.output-dock-section-v4 .output-dock-heading strong {
+  font-size: 13px;
+}
+
+.output-dock-section-v4 .output-dock-heading p {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.output-dock-list-v4 {
+  gap: 8px;
+}
+
+.output-dock-item-v4 {
+  min-height: 64px;
+  padding: 7px 76px 7px 9px;
+  border-radius: 10px;
+}
+
+.output-dock-item-v4 > span {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.output-dock-item-v4 > span .el-icon {
+  font-size: 15px;
+}
+
+.output-dock-item-v4 strong {
+  font-size: 11px;
+}
+
+.output-dock-item-v4 p {
+  font-size: 9px;
+}
+
+.output-dock-item-v4 em {
+  right: 9px;
+  top: 9px;
+  padding: 2px 6px;
+  font-size: 9px;
+}
+
+.detail-close-btn:focus-visible,
+.core-agent-node:focus-visible,
+.agent-station-card:focus-visible,
+.review-station-card:focus-visible,
+.output-dock-item-v4:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .flow-stage-label,
+  .aggregation-stage-heading {
+    align-items: flex-start;
+  }
+
+  .aggregation-stage-heading em {
+    display: none;
+  }
+
+  .aggregation-agent-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dual-flow-connector {
+    width: 1px;
+  }
+
+  .dual-flow-connector span,
+  .dual-flow-connector i {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-stage-page-v4 *,
+  .workflow-stage-page-v4 *::before,
+  .workflow-stage-page-v4 *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .core-agent-node:hover,
+  .agent-station-card:hover {
+    transform: none;
+  }
+}
+
+/* v8 compact header: turn the oversized dashboard card into a quiet status bar */
+.stage-topbar-v4 {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 10px;
+  padding: 4px 2px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--workflow-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stage-title-area {
+  display: grid;
+  grid-template-columns: auto minmax(280px, 1fr);
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
+}
+
+.stage-title-copy {
+  min-width: 0;
+}
+
+.stage-title-area h2 {
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.stage-title-area p {
+  max-width: 360px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #7a8495;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage-route-progress {
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.route-step {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.route-line {
+  width: clamp(12px, 2vw, 28px);
+  min-width: 12px;
+}
+
+.stage-stat-group-v4 {
+  display: flex;
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 0;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.stage-stat-group-v4 .stage-stat-card,
+.stage-stat-group-v4 .progress-stat-card {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 7px;
+  flex: none;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  padding: 3px 14px;
+  border: 0;
+  border-left: 1px solid var(--workflow-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.stage-stat-card span {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stage-stat-card strong {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.stage-stat-card small {
+  font-size: 9px;
+}
+
+.stage-stat-group-v4 .mini-progress-track {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 3px;
+  margin-top: 5px;
+}
+
+.stage-log-btn {
+  flex: none;
+  height: 32px;
+  margin-left: 10px;
+  padding: 0 13px;
+  border-color: var(--workflow-border-strong) !important;
+  color: #44546a !important;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 1180px) {
+  .stage-topbar-v4 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .stage-stat-group-v4 {
+    justify-content: flex-start;
+  }
+
+  .stage-stat-group-v4 .stage-stat-card:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .stage-title-area {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .stage-title-area p {
+    white-space: normal;
+  }
+
+  .stage-route-progress {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .stage-stat-group-v4 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .stage-stat-group-v4 .stage-stat-card,
+  .stage-stat-group-v4 .progress-stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 3px 9px;
+  }
+
+  .stage-log-btn {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin: 8px 0 0;
+  }
+}
+
+/* v9 anchored Agent detail: follows the card that opened it */
+.agent-detail-floating-panel {
+  right: auto !important;
+  bottom: auto;
+  z-index: 90;
+  max-width: calc(100vw - 24px);
+  padding: 0;
+  overflow-x: visible;
+  overflow-y: auto;
+  border: 1px solid #d9e0e8;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(23, 32, 51, 0.16), 0 3px 10px rgba(23, 32, 51, 0.06);
+  backdrop-filter: none;
+  transform-origin: left top;
+}
+
+.detail-anchor-caret {
+  position: absolute;
+  top: 26px;
+  left: -7px;
+  width: 13px;
+  height: 13px;
+  border-bottom: 1px solid #d9e0e8;
+  border-left: 1px solid #d9e0e8;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.detail-panel-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 10px;
+  align-items: center;
+  gap: 11px;
+  min-height: 72px;
+  margin: 0;
+  padding: 13px 52px 13px 14px;
+  border-bottom: 1px solid #e6eaf0;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.detail-panel-title .focus-agent-icon {
+  width: 40px;
+  height: 40px;
+  font-size: 17px;
+}
+
+.detail-title-copy {
+  min-width: 0;
+}
+
+.detail-title-copy > span {
+  display: block;
+  margin-bottom: 2px;
+  color: #7a8495;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.detail-title-copy h3 {
+  margin: 0;
+  overflow: hidden;
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-title-copy p {
+  margin: 2px 0 0;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.detail-close-btn {
+  position: absolute;
+  top: 15px;
+  right: 14px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  background: #f7f8fa;
+  color: #5d6879;
+  font-size: 18px;
+}
+
+.selected-agent-detail-card {
+  gap: 12px;
+  padding: 14px;
+}
+
+.detail-current-task {
+  padding: 12px 13px;
+  border-color: #dde4ec;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.detail-current-task span {
+  margin-bottom: 5px;
+  font-size: 10px;
+}
+
+.detail-current-task strong {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.detail-progress-line {
+  height: 5px;
+  margin-top: 10px;
+}
+
+.detail-current-task em {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.detail-metrics-v3 {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #e1e6ed;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.detail-metrics-v3 > div {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+.detail-metrics-v3 > div:nth-child(odd) {
+  border-right: 1px solid #e8ecf1;
+}
+
+.detail-metrics-v3 > div:nth-child(-n + 2) {
+  border-bottom: 1px solid #e8ecf1;
+}
+
+.detail-metrics-v3 dt {
+  font-size: 9px;
+}
+
+.detail-metrics-v3 dd {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.detail-io-grid {
+  gap: 8px;
+}
+
+.detail-io-grid div {
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.detail-io-grid span {
+  color: #476b9e;
+  font-size: 9px;
+}
+
+.detail-io-grid p {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.focus-metric-chips {
+  gap: 5px;
+}
+
+.focus-metric-chips span {
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+.detail-history-v3 {
+  max-height: none;
+  padding-top: 2px;
+}
+
+.detail-live-log-item {
+  padding: 8px 0 8px 10px;
+}
+
+.detail-live-log-item span,
+.detail-live-log-item em,
+.detail-live-log-item p {
+  font-size: 9px;
+}
+
+.detail-float-enter-from,
+.detail-float-leave-to {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+@media (max-width: 760px) {
+  .agent-detail-floating-panel {
+    right: auto !important;
+  }
+
+  .detail-anchor-caret {
+    display: none;
+  }
+}
+
+/* v10 contextual failure status: keep errors with the workflow they belong to */
+.workflow-error-status {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #f4b8b8;
+  border-radius: 7px;
+  color: #9f2f2f;
+  background: #fff7f6;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.workflow-error-status:hover {
+  border-color: #e58c8c;
+  background: #fff0ee;
+}
+
+.workflow-error-status > span {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #d94a4a;
+}
+
+.workflow-error-status strong {
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.workflow-error-status em {
+  color: #b45a5a;
+  font-size: 9px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.workflow-error-status .el-icon {
+  font-size: 11px;
+}
+
+.workflow-error-status:focus-visible {
+  outline: 3px solid rgba(217, 74, 74, 0.2);
+  outline-offset: 2px;
 }
 
 </style>

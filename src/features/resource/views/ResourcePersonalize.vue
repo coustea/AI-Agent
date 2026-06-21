@@ -44,7 +44,7 @@
               <template v-if="agent.id === 'content'">
                 <div class="ctrl-group">
                   <label>讲解结构</label>
-                  <el-select v-model="agentConfigs.content.structure" size="default" class="w-full custom-select">
+                  <el-select v-model="localConfigs.content.structure" size="default" class="w-full custom-select">
                     <el-option label="渐进式引导 (Progressive)" value="progressive" />
                     <el-option label="先总后分 (Summary First)" value="summary_first" />
                     <el-option label="考点驱动 (Exam Points)" value="exam_points" />
@@ -57,14 +57,14 @@
                       <span class="sw-label">涵盖易错点解析</span>
                       <span class="sw-desc">针对常见误区进行深度剖析</span>
                     </div>
-                    <el-switch v-model="agentConfigs.content.include_common_mistakes" />
+                    <el-switch v-model="localConfigs.content.include_common_mistakes" />
                   </div>
                   <div class="ctrl-switch-v2">
                     <div class="sw-info">
                       <span class="sw-label">丰富生活化示例</span>
                       <span class="sw-desc">用直观的案例辅助理解抽象概念</span>
                     </div>
-                    <el-switch v-model="agentConfigs.content.include_examples" />
+                    <el-switch v-model="localConfigs.content.include_examples" />
                   </div>
                 </div>
               </template>
@@ -72,7 +72,7 @@
               <template v-if="agent.id === 'mindmap'">
                 <div class="ctrl-group">
                   <label>导图生成策略</label>
-                  <el-select v-model="agentConfigs.mindmap.map_type" size="default" class="w-full custom-select">
+                  <el-select v-model="localConfigs.mindmap.map_type" size="default" class="w-full custom-select">
                     <el-option label="核心知识树 (Knowledge Tree)" value="knowledge_tree" />
                     <el-option label="高频考点图 (Exam Map)" value="exam_map" />
                     <el-option label="对比复习图 (Comparison)" value="comparison_map" />
@@ -81,16 +81,16 @@
                 <div class="ctrl-group">
                   <div class="slider-label-row">
                     <label>节点发散层级</label>
-                    <span class="slider-value"><b>{{ agentConfigs.mindmap.max_depth }}</b> 层</span>
+                    <span class="slider-value"><b>{{ localConfigs.mindmap.max_depth }}</b> 层</span>
                   </div>
-                  <el-slider v-model="agentConfigs.mindmap.max_depth" :min="2" :max="5" :step="1" class="custom-slider-v2" show-stops />
+                  <el-slider v-model="localConfigs.mindmap.max_depth" :min="2" :max="5" :step="1" class="custom-slider-v2" show-stops />
                 </div>
               </template>
 
               <template v-if="agent.id === 'code'">
                 <div class="ctrl-group">
                   <label>编程语言目标</label>
-                  <el-select v-model="agentConfigs.code.programming_language" size="default" class="w-full custom-select">
+                  <el-select v-model="localConfigs.code.programming_language" size="default" class="w-full custom-select">
                     <el-option label="Python" value="python" />
                     <el-option label="C" value="c" />
                     <el-option label="JavaScript" value="javascript" />
@@ -102,7 +102,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>案例难度级别</label>
-                  <el-radio-group v-model="agentConfigs.code.difficulty" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.code.difficulty" size="small" class="custom-radio-group">
                     <el-radio-button value="beginner">入门</el-radio-button>
                     <el-radio-button value="intermediate">进阶</el-radio-button>
                     <el-radio-button value="advanced">挑战</el-radio-button>
@@ -110,7 +110,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>案例交付形态</label>
-                  <el-radio-group v-model="agentConfigs.code.case_type" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.code.case_type" size="small" class="custom-radio-group">
                     <el-radio-button value="basic_demo">基础教学</el-radio-button>
                     <el-radio-button value="algorithm_template">算法模板</el-radio-button>
                   </el-radio-group>
@@ -120,7 +120,7 @@
               <template v-if="agent.id === 'quiz'">
                 <div class="ctrl-group">
                   <label>测验难度引擎</label>
-                  <el-radio-group v-model="agentConfigs.quiz.difficulty_mode" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.quiz.difficulty_mode" size="small" class="custom-radio-group">
                     <el-radio-button value="basic">基础巩固</el-radio-button>
                     <el-radio-button value="adaptive">动态自适应</el-radio-button>
                     <el-radio-button value="exam">硬核考研</el-radio-button>
@@ -128,7 +128,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>题型偏好（可多选）</label>
-                  <el-checkbox-group v-model="agentConfigs.quiz.question_types" class="question-type-group">
+                  <el-checkbox-group v-model="localConfigs.quiz.question_types" class="question-type-group">
                     <el-checkbox value="single">单选题</el-checkbox>
                     <el-checkbox value="multiple">多选题</el-checkbox>
                     <el-checkbox value="judge">判断题</el-checkbox>
@@ -138,16 +138,16 @@
                 <div class="ctrl-group">
                   <div class="slider-label-row">
                     <label>生成题目数量</label>
-                    <span class="slider-value"><b>{{ agentConfigs.quiz.question_count }}</b> 道</span>
+                    <span class="slider-value"><b>{{ localConfigs.quiz.question_count }}</b> 道</span>
                   </div>
-                  <el-slider v-model="agentConfigs.quiz.question_count" :min="1" :max="20" :step="1" class="custom-slider-v2" />
+                  <el-slider v-model="localConfigs.quiz.question_count" :min="1" :max="20" :step="1" class="custom-slider-v2" />
                 </div>
               </template>
 
               <template v-if="agent.id === 'reading'">
                 <div class="ctrl-group">
                   <label>阅读文献深度</label>
-                  <el-select v-model="agentConfigs.reading.reading_depth" size="default" class="w-full custom-select">
+                  <el-select v-model="localConfigs.reading.reading_depth" size="default" class="w-full custom-select">
                     <el-option label="课程内延展 (Course Extended)" value="course_extended" />
                     <el-option label="工程化实践 (Engineering)" value="engineering" />
                     <el-option label="前沿学术论文 (Frontier)" value="frontier" />
@@ -155,7 +155,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>资料语言偏好</label>
-                  <el-radio-group v-model="agentConfigs.reading.language_preference" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.reading.language_preference" size="small" class="custom-radio-group">
                     <el-radio-button value="chinese">中文优先</el-radio-button>
                     <el-radio-button value="both">中英双语</el-radio-button>
                     <el-radio-button value="english">英文原版</el-radio-button>
@@ -164,16 +164,16 @@
                 <div class="ctrl-group">
                   <div class="slider-label-row">
                     <label>文献推送数量</label>
-                    <span class="slider-value"><b>{{ agentConfigs.reading.max_items }}</b> 篇</span>
+                    <span class="slider-value"><b>{{ localConfigs.reading.max_items }}</b> 篇</span>
                   </div>
-                  <el-slider v-model="agentConfigs.reading.max_items" :min="1" :max="10" :step="1" class="custom-slider-v2" />
+                  <el-slider v-model="localConfigs.reading.max_items" :min="1" :max="10" :step="1" class="custom-slider-v2" />
                 </div>
               </template>
 
               <template v-if="agent.id === 'ppt'">
                 <div class="ctrl-group">
                   <label>内容深度 / 难度</label>
-                  <el-radio-group v-model="agentConfigs.ppt.difficulty" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.ppt.difficulty" size="small" class="custom-radio-group">
                     <el-radio-button value="beginner">入门</el-radio-button>
                     <el-radio-button value="intermediate">进阶</el-radio-button>
                     <el-radio-button value="advanced">挑战</el-radio-button>
@@ -181,7 +181,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>课件深度</label>
-                  <el-radio-group v-model="agentConfigs.ppt.lesson_depth" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.ppt.lesson_depth" size="small" class="custom-radio-group">
                     <el-radio-button value="quick">快速</el-radio-button>
                     <el-radio-button value="standard">标准</el-radio-button>
                     <el-radio-button value="deep">深入</el-radio-button>
@@ -189,7 +189,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>课程形态</label>
-                  <el-select v-model="agentConfigs.ppt.lesson_kind" size="default" class="w-full custom-select">
+                  <el-select v-model="localConfigs.ppt.lesson_kind" size="default" class="w-full custom-select">
                     <el-option label="自动判断" value="auto" />
                     <el-option label="概念课" value="concept" />
                     <el-option label="算法课" value="algorithm" />
@@ -200,7 +200,7 @@
                 </div>
                 <div class="ctrl-group">
                   <label>学习重点</label>
-                  <el-radio-group v-model="agentConfigs.ppt.learning_focus" size="small" class="custom-radio-group">
+                  <el-radio-group v-model="localConfigs.ppt.learning_focus" size="small" class="custom-radio-group">
                     <el-radio-button value="balanced">均衡</el-radio-button>
                     <el-radio-button value="concept">概念</el-radio-button>
                     <el-radio-button value="code">代码</el-radio-button>
@@ -244,7 +244,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import BaseCard from '@/shared/ui/BaseCard.vue'
 import { Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -285,10 +285,17 @@ const enabledAgentIds = computed({
   set: (v) => emit('update:enabledAgentIds', v),
 })
 
-const agentConfigs = computed({
-  get: () => props.agentConfigs,
-  set: (v) => emit('update:agentConfigs', v),
-})
+const localConfigs = ref<AnyAgentConfigs>(JSON.parse(JSON.stringify(props.agentConfigs)))
+
+// Watch parent prop changes (e.g. when scenario changes or is initialized)
+watch(() => props.agentConfigs, (newVal) => {
+  localConfigs.value = JSON.parse(JSON.stringify(newVal))
+}, { deep: true })
+
+// Emit changes back to parent
+watch(localConfigs, (newVal) => {
+  emit('update:agentConfigs', JSON.parse(JSON.stringify(newVal)))
+}, { deep: true })
 
 const isAgentEnabled = (id: string) => enabledAgentIds.value.includes(id as ResourceAgentId)
 
@@ -311,7 +318,7 @@ const selectScenario = (scenario: LearningScenario) => {
   emit('update:learningScenario', scenario)
   const defaults = SCENARIO_DEFAULTS[scenario]
   if (!defaults) return
-  const merged = { ...agentConfigs.value } as AnyAgentConfigs
+  const merged = JSON.parse(JSON.stringify(localConfigs.value)) as AnyAgentConfigs
   Object.keys(defaults).forEach((key) => {
     const agentKey = key as keyof AnyAgentConfigs
     const agentDefaults = defaults[agentKey]
@@ -319,7 +326,7 @@ const selectScenario = (scenario: LearningScenario) => {
       ;(merged as any)[agentKey] = { ...(merged as any)[agentKey], ...agentDefaults }
     }
   })
-  emit('update:agentConfigs', merged)
+  localConfigs.value = merged
 }
 </script>
 
@@ -351,13 +358,13 @@ const selectScenario = (scenario: LearningScenario) => {
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 40px; }
 .scenario-card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(24px); border: 2px solid var(--color-border); border-radius: 20px; padding: 20px 24px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04); }
 .scenario-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--color-border-hover); box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08); background: #ffffff; }
-.scenario-card.active { border-color: var(--color-primary); box-shadow: 0 12px 32px var(--color-primary-glow, rgba(16, 185, 129, 0.25)); background: #ffffff; }
+.scenario-card.active { border-color: var(--color-primary); box-shadow: 0 12px 32px var(--color-primary-glow, rgba(99, 102, 241, 0.25)); background: #ffffff; }
 .scenario-icon-box { width: 48px; height: 48px; background: var(--color-bg); border: 2px solid var(--color-border); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: var(--color-text-secondary); transition: all 0.3s; }
 .scenario-card.active .scenario-icon-box { background: var(--color-primary); color: var(--color-surface); border-color: var(--color-primary); transform: scale(1.05); }
 .scenario-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .s-name { font-weight: 800; font-size: 1.1rem; color: var(--color-text-strong); letter-spacing: 0.02em; }
 .s-desc { font-family: var(--agent-body-font); font-size: 0.8rem; color: var(--color-text-muted); line-height: 1.4; opacity: 0.8; }
-.active-dot { position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; background: var(--color-primary); border-radius: 50%; box-shadow: 0 0 12px var(--color-primary-glow, rgba(16, 185, 129, 0.3)); }
+.active-dot { position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; background: var(--color-primary); border-radius: 50%; box-shadow: 0 0 12px var(--color-primary-glow, rgba(99, 102, 241, 0.3)); }
 .config-section-v2 { margin-top: 10px; }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
 .config-card-v2 { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(24px); border: 2px solid var(--color-border); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04); }

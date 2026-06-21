@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, reactive, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Timer } from '@element-plus/icons-vue'
@@ -135,7 +135,7 @@ const naturalInput = ref('')
 const learningScenario = ref<LearningScenario>('daily_review')
 const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt'])
 
-const agentConfigs = reactive<AnyAgentConfigs>({
+const agentConfigs = ref<AnyAgentConfigs>({
   content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'standard' },
   mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
   quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge'] },
@@ -477,15 +477,7 @@ const startGeneration = async () => {
       learning_need: naturalInput.value,
       learning_scenario: learningScenario.value,
       selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })).filter(a => a.enabled),
-      agent_configs: {
-        content: agentConfigs.content,
-        mindmap: agentConfigs.mindmap,
-        quiz: agentConfigs.quiz,
-        code: agentConfigs.code,
-        reading: agentConfigs.reading,
-        ppt: agentConfigs.ppt,
-        video: agentConfigs.video,
-      },
+      agent_configs: agentConfigs.value,
     }
     const { resource_id, run_id } = (await startResourceGeneration(requestParams)).data.data
     activeResourceId.value = resource_id
@@ -569,14 +561,17 @@ onBeforeUnmount(() => { pauseLiveGenerationUpdates() })
 <style scoped>
 .elegant-generator-layout {
   --color-primary: var(--cat-resource);
-  --color-primary-hover: #059669;
+  --color-primary-hover: #4f46e5;
   --color-primary-soft: var(--cat-resource-soft);
-  --color-primary-border: #6EE7B7;
-  --color-primary-text: #047857;
+  --color-primary-border: #a5b4fc;
+  --color-primary-text: #4338ca;
   --gradient-primary: var(--gradient-resource);
   min-height: calc(100vh - 64px);
   position: relative;
-  background: var(--color-bg);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(59, 130, 246, 0.08), transparent 34%),
+    radial-gradient(circle at 84% 18%, rgba(99, 102, 241, 0.10), transparent 30%),
+    linear-gradient(180deg, #f8fafc 0%, #eef6ff 52%, #f7fbff 100%);
   overflow-x: hidden;
   font-family: var(--font-sans);
 }
