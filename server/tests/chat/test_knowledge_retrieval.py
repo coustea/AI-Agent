@@ -606,3 +606,43 @@ def test_merge_ranked_results_prefers_rows_matching_routed_source() -> None:
     )
 
     assert [item["text"] for item in merged] == ["java-hit", "redis-hit"]
+
+
+def test_rewrite_query_expands_dns_queries() -> None:
+    from app.chat.tools import knowledge
+
+    rewritten = knowledge.rewrite_query("DNS 域名解析")
+    terms = rewritten.split()
+
+    assert "DNS" in terms
+    assert "域名解析" in terms
+    assert "递归查询" in terms
+    assert "迭代查询" in terms
+    assert "CNAME" in terms
+    assert "IP地址" in terms
+
+
+def test_rewrite_query_expands_virtual_memory_queries() -> None:
+    from app.chat.tools import knowledge
+
+    rewritten = knowledge.rewrite_query("虚拟内存")
+    terms = rewritten.split()
+
+    assert "虚拟内存" in terms
+    assert "页表" in terms
+    assert "缺页中断" in terms
+    assert "地址变换" in terms
+    assert "交换" in terms
+
+
+def test_rewrite_query_expands_cache_mapping_queries() -> None:
+    from app.chat.tools import knowledge
+
+    rewritten = knowledge.rewrite_query("Cache 映射方式")
+    terms = rewritten.split()
+
+    assert "Cache" in terms
+    assert "直接映射" in terms
+    assert "全相联" in terms
+    assert "组相联" in terms
+    assert "局部性" in terms

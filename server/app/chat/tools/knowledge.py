@@ -64,6 +64,14 @@ _QUERY_REWRITE_RULES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     # 网络相关
     (re.compile(r"tcp\s*三次握手", re.IGNORECASE), ("TCP", "三次握手", "连接建立", "传输控制协议")),
     (re.compile(r"udp", re.IGNORECASE), ("UDP", "用户数据报协议", "无连接", "传输层")),
+    # 408 计算机网络 - 应用层（DNS/HTTP）
+    (re.compile(r"dns|域名解析", re.IGNORECASE), ("DNS", "域名解析", "递归查询", "迭代查询", "CNAME", "IP地址")),
+    (re.compile(r"http|请求方法", re.IGNORECASE), ("HTTP", "GET", "POST", "PUT", "DELETE", "请求方法")),
+    # 408 操作系统 - 内存管理
+    (re.compile(r"虚拟内存", re.IGNORECASE), ("虚拟内存", "页表", "缺页中断", "地址变换", "交换")),
+    (re.compile(r"页面置换", re.IGNORECASE), ("页面置换", "FIFO", "LRU", "OPT", "Belady", "缺页率")),
+    # 408 计算机组成原理 - 存储系统（Cache映射）
+    (re.compile(r"cache.*映射|映射方式", re.IGNORECASE), ("Cache", "直接映射", "全相联", "组相联", "局部性")),
     # Java面向对象核心概念
     (re.compile(r"封装"), ("封装", "private", "getter", "setter", "访问权限", "隐藏")),
     (re.compile(r"继承"), ("继承", "extends", "子类", "父类", "super", "重写")),
