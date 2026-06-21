@@ -41,21 +41,3 @@ class BaseResourceAgent:
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         raise NotImplementedError(f"{self.__class__.__name__}.generate_node is required")
-
-    async def emit_start(self, message: str, progress: int = 10) -> None:
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id,
-                status="running",
-                message=message,
-                progress=progress,
-            )
-
-    async def emit_finish(self, result: AgentResult) -> None:
-        if self.emitter:
-            await self.emitter.emit_agent(
-                self.agent_id,
-                status="finished" if result.success else "failed",
-                message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"),
-                progress=100 if result.success else 0,
-            )

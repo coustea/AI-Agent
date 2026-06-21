@@ -50,7 +50,7 @@ class MindmapAgent(BaseResourceAgent):
             visual_ideas=branches,
         )
         result.downstream_context = handoff
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -61,7 +61,7 @@ class MindmapAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def _generate_mindmap(
@@ -83,7 +83,7 @@ class MindmapAgent(BaseResourceAgent):
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题和列表文本。"
         )
 
-        await self.emit_start("正在构建知识导图提示词", progress=25)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在构建知识导图提示词", progress=25)
         prompt = prompts.get("resource").get("mindmap")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)

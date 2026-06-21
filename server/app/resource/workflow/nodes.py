@@ -17,18 +17,14 @@ import logging
 from typing import Any
 
 from langgraph.types import Send
-from sqlalchemy import select
-
 from app.infra.database import session_scope
-from app.infra.models import GeneratedResourceItem
 from app.resource.agents import AGENT_REGISTRY
 from app.infra.agent_events import AgentRunTracker
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
-from app.resource.workflow.validation import validate_agent_result
-
+from sqlalchemy import select
+from app.infra.models import GeneratedResourceItem
 from app.resource.schemas import (
-    AgentResult,
     DownstreamContext,
     ResourceInput,
     TeachingPlan,
@@ -270,8 +266,7 @@ async def _execute_non_planning_agent(
     source_item_ids: list[int] | None = None
     if depends_on_agents:
         async with session_scope() as session:
-            from sqlalchemy import select
-            from app.infra.models import GeneratedResourceItem
+
             stmt = (
                 select(GeneratedResourceItem.id)
                 .where(GeneratedResourceItem.resource_id == resource_id)

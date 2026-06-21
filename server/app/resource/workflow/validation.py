@@ -77,11 +77,29 @@ def validate_content(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_mindmap(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Mindmap 资源校验：单根、至少两分支、深度不超过配置且仅接受 Markmap。"""
-    if result.file_type != "mermaid":
-        raise ValidationError("Mindmap must be mermaid format")
-    if "mindmap" not in result.content.lower():
-        raise ValidationError("Mindmap must contain mindmap directive")
+    """Mindmap 资源校验：Markdown 格式（Markmap）、至少包含一级标题和二级标题。
+
+    Mindmap agent 生成标准 Markdown 标题+列表结构，前端使用 Markmap 渲染。
+    不使用 Mermaid 语法。
+    """
+    if result.file_type != "markdown":
+        raise ValidationError("Mindmap must be markdown format (for Markmap rendering)")
+
+    # 检查基本的 Markdown 标题结构
+    content = result.content.strip()
+    if not content:
+        raise ValidationError("Mindmap content is empty")
+
+    # 至少需要一个一级标题（根节点）和至少两个二级标题（分支）
+    lines = content.splitlines()
+    has_h1 = any(line.strip().startswith("# ") for line in lines)
+    h2_count = sum(1 for line in lines if line.strip().startswith("## "))
+
+    if not has_h1:
+        raise ValidationError("Mindmap must have at least one level-1 heading (#) as root")
+
+    if h2_count < 2:
+        raise ValidationError("Mindmap must have at least two level-2 headings (##) as branches")
 
 
 def validate_quiz(result: "AgentResult", input_data: "ResourceInput") -> None:
@@ -120,7 +138,7 @@ def validate_code(result: "AgentResult", input_data: "ResourceInput") -> None:
 
 
 def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Reading 资源校验：仅接受 http/https、数量不超过配置且每条有真实来源字段。"""
+    """Reading 资源校验：所有资源必须有有效的 http/https URL。"""
     if result.file_type != "json":
         raise ValidationError("Reading must be JSON")
 
@@ -136,11 +154,22 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
     else:
         raise ValidationError("Reading must be object with resources or array")
 
+    if not resources:
+        raise ValidationError("Reading must have at least one resource")
+
     url_pattern = re.compile(r"^https?://")
-    for item in resources:
+    for i, item in enumerate(resources, start=1):
+        if not isinstance(item, dict):
+            raise ValidationError(f"Resource #{i} must be an object")
+
         url = item.get("url", "")
+        if not url or not url.strip():
+            raise ValidationError(f"Resource #{i} '{item.get('title', 'unknown')}' must have a URL")
+
         if not url_pattern.match(url):
-            raise ValidationError(f"Reading URL must be http/https: {url[:50]}")
+            raise ValidationError(
+                f"Resource #{i} '{item.get('title', 'unknown')}' URL must be http/https: {url[:50]}"
+            )
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:

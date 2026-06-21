@@ -93,7 +93,7 @@ class QuizAgent(BaseResourceAgent):
             practice_refs=q_ids,
         )
         result.downstream_context = handoff
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -106,7 +106,7 @@ class QuizAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def _generate_quiz(
@@ -128,7 +128,7 @@ class QuizAgent(BaseResourceAgent):
         prompt = prompts.get("resource").get("quiz")
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
-        await self.emit_start("正在构建习题集提示词", progress=25)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在构建习题集提示词", progress=25)
 
         logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
         result = await self.llm.ainvoke_json(

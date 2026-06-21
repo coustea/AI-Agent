@@ -197,6 +197,17 @@ async def _record_failure(
     error_type = type(exception).__name__
     error_message = str(exception)[:500]
 
+    # 输出失败日志（重要：让开发者能看到失败原因）
+    logger.error(
+        "Agent 执行失败: agent_id=%s resource_id=%s stage=%s error_type=%s error=%s elapsed_ms=%d",
+        agent_id,
+        resource_id,
+        stage,
+        error_type,
+        error_message,
+        elapsed_ms,
+    )
+
     try:
         async with session_scope() as session:
             service = ResourceService(session)
@@ -210,7 +221,7 @@ async def _record_failure(
                 elapsed_ms=elapsed_ms,
             )
     except Exception as e:
-        logger.error(f"Failed to record agent failure: {e}")
+        logger.error(f"Failed to record agent failure to database: {e}")
 
     await _observe(emitter.emit_agent(agent_id, "failed", error_message, 0))
 

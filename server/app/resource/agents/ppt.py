@@ -249,7 +249,7 @@ class PptAgent(BaseResourceAgent):
             result.metadata["teaching_plan_outline_ids"] = coverage["teaching_plan_outline_ids"]
             result.metadata["covered_source_outline_ids"] = coverage["covered_source_outline_ids"]
             result.metadata["missing_source_outline_ids"] = coverage["missing_source_outline_ids"]
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -257,7 +257,7 @@ class PptAgent(BaseResourceAgent):
         result = await self._run_pipeline(source_pack=source_pack, depth="standard", title_prefix=input_data.node_title)
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def _run_pipeline(
@@ -274,10 +274,10 @@ class PptAgent(BaseResourceAgent):
             len(source_pack.artifacts),
         )
         try:
-            await self.emit_start("正在规划整套教学课件", progress=25)
+            await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在规划整套教学课件", progress=25)
             blueprint = await DeckDirectorAgent().run(source_pack, depth)
             compiled = compile_deck(blueprint)
-            await self.emit_start("正在并发生成章节页面内容", progress=55)
+            await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在并发生成章节页面内容", progress=55)
             async with asyncio.TaskGroup() as group:
                 tasks = [
                     group.create_task(

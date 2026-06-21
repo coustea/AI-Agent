@@ -760,21 +760,6 @@ wheels = [
 ]
 
 [[package]]
-name = "edge-tts"
-version = "7.2.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "certifi" },
-    { name = "tabulate" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/60/afbf548b43c78355e03926c6b1fff7500303a2da4d84db9e1324119e21ae/edge_tts-7.2.8.tar.gz", hash = "sha256:fcf185a0d527a0d2d003f9d5841facc1d5e0e7b3b88d5df9c32990402c6b8cd0", size = 27875, upload-time = "2026-03-22T19:57:50.962Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/2b/a8cb687b92a2690d2ad171f0c2fd1c8f18690363cca7618bab2bbe4cdf2b/edge_tts-7.2.8-py3-none-any.whl", hash = "sha256:361fe48ce7ef613adbe30f664e3765dd71029c6cb57427279eff8ad6df2eb211", size = 31026, upload-time = "2026-03-22T19:57:49.672Z" },
-]
-
-[[package]]
 name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3898,7 +3883,6 @@ dependencies = [
     { name = "chromadb" },
     { name = "ddgs" },
     { name = "deepagents" },
-    { name = "edge-tts" },
     { name = "faiss-cpu" },
     { name = "fastapi", extra = ["standard"] },
     { name = "fonttools" },
@@ -3934,6 +3918,7 @@ dependencies = [
     { name = "unstructured" },
     { name = "uvicorn" },
     { name = "websockets" },
+    { name = "xfyunsdkspeech" },
     { name = "xlrd" },
     { name = "zhipuai" },
 ]
@@ -3954,7 +3939,6 @@ requires-dist = [
     { name = "chromadb", specifier = ">=0.6.3" },
     { name = "ddgs", specifier = ">=9.13.1" },
     { name = "deepagents", specifier = ">=0.5.3" },
-    { name = "edge-tts", specifier = ">=6.1.12" },
     { name = "faiss-cpu", specifier = ">=1.13.2" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.135.3" },
     { name = "fonttools", specifier = ">=4.62.1" },
@@ -3990,6 +3974,7 @@ requires-dist = [
     { name = "unstructured", specifier = ">=0.22.16" },
     { name = "uvicorn", specifier = ">=0.44.0" },
     { name = "websockets", specifier = ">=12.0,<14" },
+    { name = "xfyunsdkspeech", specifier = ">=0.0.4" },
     { name = "xlrd", specifier = ">=2.0.2" },
     { name = "zhipuai", specifier = ">=1.0.7" },
 ]
@@ -4244,15 +4229,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
-]
-
-[[package]]
-name = "tabulate"
-version = "0.10.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/46/58/8c37dea7bbf769b20d58e7ace7e5edfe65b849442b00ffcdd56be88697c6/tabulate-0.10.0.tar.gz", hash = "sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d", size = 91754, upload-time = "2026-03-04T18:55:34.402Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl", hash = "sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3", size = 39814, upload-time = "2026-03-04T18:55:31.284Z" },
 ]
 
 [[package]]
@@ -4802,6 +4778,32 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/82/dd/e5176e4b241c9f528402cebb238a36785a628179d7d8b71091154b3e4c9e/wrapt-2.1.2-cp314-cp314t-win_amd64.whl", hash = "sha256:08ffa54146a7559f5b8df4b289b46d963a8e74ed16ba3687f99896101a3990c5", size = 63969, upload-time = "2026-03-06T02:54:39Z" },
     { url = "https://files.pythonhosted.org/packages/5c/99/79f17046cf67e4a95b9987ea129632ba8bcec0bc81f3fb3d19bdb0bd60cd/wrapt-2.1.2-cp314-cp314t-win_arm64.whl", hash = "sha256:72aaa9d0d8e4ed0e2e98019cea47a21f823c9dd4b43c7b77bba6679ffcca6a00", size = 60554, upload-time = "2026-03-06T02:53:14.132Z" },
     { url = "https://files.pythonhosted.org/packages/1a/c7/8528ac2dfa2c1e6708f647df7ae144ead13f0a31146f43c7264b4942bf12/wrapt-2.1.2-py3-none-any.whl", hash = "sha256:b8fd6fa2b2c4e7621808f8c62e8317f4aae56e59721ad933bac5239d913cf0e8", size = 43993, upload-time = "2026-03-06T02:53:12.905Z" },
+]
+
+[[package]]
+name = "xfyunsdkcore"
+version = "0.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "websocket-client" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/54/91/fd68625a91d982efdb55f16556c32c34d0c6e2197da8594238105dc073be/xfyunsdkcore-0.0.3.tar.gz", hash = "sha256:23933f45c3f4445536367d2f900027b5c5f69887f5b1a44b05a869548581f95c", size = 16024, upload-time = "2025-11-18T05:35:54.522Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3c/62/9b2f1d513e168c9cb43bdf969868275eae456f188f12af09b87475df0b00/xfyunsdkcore-0.0.3-py3-none-any.whl", hash = "sha256:02d109f79f6d061780c0f71c5a8483863e44dc67cfc576e4927b8c281c6035cb", size = 18130, upload-time = "2025-11-18T05:35:52.728Z" },
+]
+
+[[package]]
+name = "xfyunsdkspeech"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dotenv" },
+    { name = "xfyunsdkcore" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8a/6e/85a375cf7e0f97e4c794e292832cf39076cd9a4b339436d76d781ac13720/xfyunsdkspeech-0.0.4.tar.gz", hash = "sha256:442fc3845e1ea99aa1effdb9463d12a03501c782d37bfc6eb2102276b009c1ff", size = 19897, upload-time = "2025-11-18T05:46:52.212Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/4e/e512b16dfe41a9d0c4162ee984ac4c13cd5d5c5363779407d92e82011407/xfyunsdkspeech-0.0.4-py3-none-any.whl", hash = "sha256:edbbc1487efc7f71dce16e398e8890a4cf1c0525ab902418d5e0a51670408102", size = 26446, upload-time = "2025-11-18T05:46:50.971Z" },
 ]
 
 [[package]]

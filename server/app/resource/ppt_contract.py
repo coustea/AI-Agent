@@ -50,6 +50,10 @@ SlideRole = Literal[
     "misconception",
     "summary",
     "next_steps",
+    # Computer theory teaching roles
+    "algorithm_visualization",
+    "code_walkthrough",
+    "architecture_diagram",
 ]
 
 LayoutId = Literal[

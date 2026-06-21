@@ -709,7 +709,7 @@ class VideoAgent(BaseResourceAgent):
             result.metadata["teaching_plan_outline_ids"] = coverage["teaching_plan_outline_ids"]
             result.metadata["covered_source_outline_ids"] = coverage["covered_source_outline_ids"]
             result.metadata["missing_source_outline_ids"] = coverage["missing_source_outline_ids"]
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -742,7 +742,7 @@ class VideoAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     def _build_graph(self) -> Any:
@@ -764,12 +764,12 @@ class VideoAgent(BaseResourceAgent):
         return self._cached_graph
 
     async def _material_node(self, state: VideoGraphState) -> dict[str, Any]:
-        await self.emit_start("正在提取视频素材", progress=20)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在提取视频素材", progress=20)
         digest = await VideoMaterialAgent().run(state["input_data"], state["config"])
         return {"digest": digest}
 
     async def _outline_node(self, state: VideoGraphState) -> dict[str, Any]:
-        await self.emit_start("正在规划视频结构", progress=35)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在规划视频结构", progress=35)
         outline = await VideoOutlineAgent().run(state["digest"], state["constraints"])
         if len(outline.scenes) != state["constraints"].scene_count:
             raise ValueError(
@@ -811,8 +811,8 @@ class VideoAgent(BaseResourceAgent):
             writer = SceneWriterAgent()
             draft = await writer.run(state["contract"], state["digest"], state["constraints"])
 
-            # Synthesize TTS with word-level captions
-            from app.resource.infra.tts import TtsService
+            # Synthesize TTS with word-level captions (Xunfei)
+            from app.resource.infra.xf_tts import TtsService
             from app.config import WORKPLACE_DIR
 
             res_id = state.get("resource_id")
@@ -838,7 +838,7 @@ class VideoAgent(BaseResourceAgent):
             return {"drafts": [draft]}
 
     async def _payload_node(self, state: VideoGraphState) -> dict[str, Any]:
-        await self.emit_start("正在构建视频预览载荷", progress=85)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在构建视频预览载荷", progress=85)
         payload = VideoPayloadBuilder().build(
             state["outline"], state["drafts"], state["constraints"]
         )

@@ -25,12 +25,12 @@ class PlanningAgent(BaseResourceAgent):
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         """多智能体场景：分析学习需求，生成总体教学方向、概要和大纲。"""
-        await self.emit_start("正在分析学习需求并构建教学方向与大纲", progress=10)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在分析学习需求并构建教学方向与大纲", progress=10)
 
         prompt = prompts.get("resource").get("planning")
         input_text = self._build_planning_input(input_data)
 
-        await self.emit_start("正在调用大模型生成教学方向与大纲", progress=25)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在调用大模型生成教学方向与大纲", progress=25)
 
         plan = await self.llm.ainvoke_json(
             TeachingPlan,
@@ -48,7 +48,7 @@ class PlanningAgent(BaseResourceAgent):
                     f"unexpected={sorted(assigned_agents - expected_agents)}"
                 )
 
-        await self.emit_start("教学方向与大纲已生成", progress=85)
+        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="教学方向与大纲已生成", progress=85)
 
         result = AgentResult(
             success=True,
@@ -62,7 +62,7 @@ class PlanningAgent(BaseResourceAgent):
                 "teaching_plan": plan.model_dump(mode="json"),
             },
         )
-        await self.emit_finish(result)
+        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
 
