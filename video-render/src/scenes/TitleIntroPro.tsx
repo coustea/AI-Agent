@@ -17,8 +17,6 @@ export const TitleIntroPro: React.FC<TitleIntroProProps> = ({
   scene,
   meta,
   globalStyle,
-  currentSceneIndex,
-  totalScenes,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();

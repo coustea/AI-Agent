@@ -54,8 +54,6 @@ export const ProcessStateTransition: React.FC<ProcessStateTransitionProps> = ({
 
   const transitions: ProcessTransition[] =
     (scene.visual.transitions as ProcessTransition[]) || [];
-  const currentProcessName = (scene.visual.current_process as string) || "";
-  const highlightPath = (scene.visual.highlight_path as string[]) || [];
 
   // Calculate current transition
   const transitionDuration = durationInFrames / Math.max(transitions.length, 1);
@@ -64,7 +62,6 @@ export const ProcessStateTransition: React.FC<ProcessStateTransitionProps> = ({
     transitions.length - 1,
   );
   const currentTransition = transitions[currentTransitionIdx];
-  const transitionProgress = (frame % transitionDuration) / transitionDuration;
 
   // Entrance animations
   const diagramEntrance = getSpringProgress(frame, fps, 10, 25);
@@ -102,8 +99,7 @@ export const ProcessStateTransition: React.FC<ProcessStateTransitionProps> = ({
     return "var(--text-muted)";
   };
 
-  // Render transition arrow with animation
-  const renderTransitionArrow = (t: ProcessTransition, idx: number) => {
+  const renderTransitionArrow = (t: ProcessTransition) => {
     const fromPos = getStatePosition(t.from);
     const toPos = getStatePosition(t.to);
     const isActive = isTransitionActive(t);
@@ -236,7 +232,7 @@ export const ProcessStateTransition: React.FC<ProcessStateTransitionProps> = ({
             </defs>
 
             {/* Render all transitions */}
-            {transitions.map((t, idx) => renderTransitionArrow(t, idx))}
+            {transitions.map((t) => renderTransitionArrow(t))}
 
             {/* Render states */}
             {states.map((state, idx) => {

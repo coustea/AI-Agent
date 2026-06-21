@@ -51,7 +51,7 @@ export const DataStructureLab: React.FC<DataStructureLabProps> = ({
   const currentOp = operations[activeOpIdx];
 
   // Derive current nodes list and edge lists based on the current operation
-  let nodes = [...initialState.nodes];
+  const nodes = [...initialState.nodes];
   let edges = [...initialState.edges];
   let activeNodeId = '';
   let activeEdge: Edge | null = null;

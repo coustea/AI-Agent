@@ -12,7 +12,7 @@ loadInterFont();
 
 loadOutfitFont();
 
-const calculateMetadata: CalculateMetadataFunction<any> = ({ props }) => {
+const calculateMetadata: CalculateMetadataFunction<Record<string, unknown>> = ({ props }) => {
   try {
     const hasProps =
       props && Object.keys(props).length > 0 && Array.isArray(props.scenes);

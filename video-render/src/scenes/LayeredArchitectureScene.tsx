@@ -66,7 +66,7 @@ export const LayeredArchitectureScene: React.FC<LayeredArchitectureSceneProps> =
 
             {/* Vertical Stack */}
             <div className="flex flex-col space-y-3 p-4 bg-slate-50/50 rounded-xl">
-              {layers.map((layer, idx) => {
+              {layers.map((layer) => {
                 const isFocus = layer.id === currentFocusLayer;
                 const scaleAnim = isFocus ? getSlideInterpolation(Math.sin(frame / 15), -1, 1, 1, 1.02) : 1;
 

@@ -15,6 +15,10 @@ export const sceneTypeSchema = z.enum([
   'code_execution',
   'compare_summary',
   'knowledge_check',
+  'array_linked_list',
+  'stack_queue',
+  'process_state',
+  'storage_hierarchy',
 ]);
 
 // Rich Video Scene Schema

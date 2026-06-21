@@ -31,7 +31,7 @@ interface SceneRouterProps {
 }
 
 // Router Mapping
-const sceneMap: Record<string, React.FC<any>> = {
+const sceneMap: Record<string, React.FC<SceneRouterProps>> = {
   title_intro: TitleIntroPro,
   concept_explain: ConceptExplainPro,
   process_flow: ProcessFlowPro,
