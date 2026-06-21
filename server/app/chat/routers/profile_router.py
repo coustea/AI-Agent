@@ -83,7 +83,8 @@ def register_profile_routes(router: APIRouter) -> None:
         current_user: User = Depends(get_current_user),
     ):
         profile_builder = get_profile_service()
-        base_info = await profile_builder.get_onboarding(user_id=current_user.id)
+        profile = await profile_builder.get_or_create_global_profile(user_id=current_user.id)
+        base_info = profile.profile_json.get("base_info") or {}
         return HttpResponse.success(data=OnboardingResponse(
             base_info=BaseInfoData(**base_info),
             student_profile=StudentProfileData(

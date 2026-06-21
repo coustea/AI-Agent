@@ -30,6 +30,8 @@ from app.infra.models import (
 from app.profile.types import (
     ALL_DIMENSIONS,
     DIMENSION_NAMES,
+    KNOWLEDGE_DIMENSIONS,
+    COGNITIVE_DIMENSIONS,
     DimensionValue,
     OnboardingGlobalInferenceOutput,
     GlobalTutoringInferenceOutput,
@@ -151,23 +153,11 @@ def validate_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
 # ── ProfileService ────────────────────────────────────────────────────
 
 class ProfileService:
-    """学习者画像服务 V2 — CRUD、LLM 异步推理、全局评分。"""
+    """学习者画像服务 — CRUD、LLM 推理与评分。"""
 
     def __init__(self, *, module: str = "mentor") -> None:
         self.module = module
         self.llm = get_llm()
-
-    async def get_profile(self, *, user_id: int) -> GlobalProfile | None:
-        """获取用户的全局画像（不存在返回 None）。"""
-        async with session_scope() as db:
-            return (
-                await db.exec(
-                    select(GlobalProfile).where(
-                        GlobalProfile.user_id == user_id,
-                        GlobalProfile.module == self.module,
-                    )
-                )
-            ).first()
 
     async def get_or_create_global_profile(
         self,
@@ -177,68 +167,52 @@ class ProfileService:
     ) -> GlobalProfile:
         """获取或创建用户的全局画像。
 
-        使用 INSERT ... ON CONFLICT DO NOTHING 保证并发安全，
-        不会因并发请求产生 UniqueViolationError。
+        使用 INSERT ... ON CONFLICT DO NOTHING 保证并发安全。
 
         Args:
             user_id: 用户 ID。
-            db: 可选的已有数据库会话。传入时复用该会话（避免 session.merge 开销），
-                不传时自动创建短生命周期会话。
+            db: 可选的已有数据库会话。传入时复用该会话，不传时自动创建短生命周期会话。
         """
-        if db is not None:
-            return await self._get_or_create_global_profile_inner(db, user_id)
-
-        async with session_scope() as db:
-            return await self._get_or_create_global_profile_inner(db, user_id)
-
-    async def _get_or_create_global_profile_inner(
-        self,
-        db: AsyncSession,
-        user_id: int,
-    ) -> GlobalProfile:
-        """get_or_create 的内部实现，在给定会话中执行。"""
-        # 原子 upsert：INSERT ... ON CONFLICT DO NOTHING
-        now = datetime.now(timezone.utc)
-        stmt = pg_insert(GlobalProfile).values(
-            user_id=user_id,
-            module=self.module,
-            profile_json=make_default_profile_json(),
-            profile_score_json=make_default_score_json(),
-            created_at=now,
-            updated_at=now,
-        ).on_conflict_do_nothing(
-            constraint="uq_global_profile_user_module",
-        )
-        await db.exec(stmt)  # type: ignore[arg-type]
-        await db.flush()
-
-        # 无论刚插入还是已存在，都 SELECT 返回
-        profile = (
-            await db.exec(
-                select(GlobalProfile).where(
-                    GlobalProfile.user_id == user_id,
-                    GlobalProfile.module == self.module,
-                )
-            )
-        ).first()
-
-        # on_conflict_do_nothing 后 profile 理论上一定存在
-        if profile is None:
-            # 极端防御：flush 后仍然查不到，再次尝试创建（不应发生）
-            logger.warning(
-                "[ProfileService] upsert 后未查到画像，降级创建: user_id=%s module=%s",
-                user_id, self.module,
-            )
-            profile = GlobalProfile(
+        async def _upsert(db: AsyncSession) -> GlobalProfile:
+            now = datetime.now(timezone.utc)
+            stmt = pg_insert(GlobalProfile).values(
                 user_id=user_id,
                 module=self.module,
                 profile_json=make_default_profile_json(),
                 profile_score_json=make_default_score_json(),
+                created_at=now,
+                updated_at=now,
+            ).on_conflict_do_nothing(
+                constraint="uq_global_profile_user_module",
             )
-            db.add(profile)
+            await db.exec(stmt)  # type: ignore[arg-type]
             await db.flush()
 
-        return profile
+            profile = (
+                await db.exec(
+                    select(GlobalProfile).where(
+                        GlobalProfile.user_id == user_id,
+                        GlobalProfile.module == self.module,
+                    )
+                )
+            ).first()
+
+            if profile is None:
+                profile = GlobalProfile(
+                    user_id=user_id,
+                    module=self.module,
+                    profile_json=make_default_profile_json(),
+                    profile_score_json=make_default_score_json(),
+                )
+                db.add(profile)
+                await db.flush()
+
+            return profile
+
+        if db is None:
+            async with session_scope() as db:
+                return await _upsert(db)
+        return await _upsert(db)
 
     async def get_course_profiles(self, *, user_id: int) -> list[CourseProfile]:
         """获取用户的所有课程子画像。"""
@@ -249,47 +223,84 @@ class ProfileService:
             )
             return list((await db.exec(stmt)).all())
 
-    async def get_onboarding(self, *, user_id: int) -> dict[str, Any]:
-        """获取用户 onboarding 基础信息。"""
-        profile = await self.get_profile(user_id=user_id)
-        if profile and profile.profile_json:
-            return profile.profile_json.get("base_info") or {}
-        return {}
+    async def get_profile_for_agents(self, *, user_id: int) -> str:
+        """获取用户画像 Markdown，供多智能体资源生成、路径规划和智能辅导使用。
 
-    async def get_profile_markdown(
-        self,
-        user_id: int,
-        course_name: str | None = None,
-        dimension: str | None = None,
-    ) -> str:
-        """将画像转为 Markdown 文本，供 LLM prompt 注入。"""
+        将 profile_json 中的 base_info 和 7 个维度转换为结构化 Markdown 文本，
+        便于 LLM 理解和下游智能体使用。
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            结构化 Markdown 文本，包含：
+            - 基础信息（学校、专业、年级等）
+            - 知识层维度（知识基础、易错点偏好、知识缺口模式）
+            - 认知层维度（认知风格、学习目标导向、难度耐受度、自纠能力水平）
+        """
         global_profile = await self.get_or_create_global_profile(user_id=user_id)
-        profile_json = global_profile.profile_json or {}
+        profile_json = global_profile.profile_json or make_default_profile_json()
 
-        if not course_name:
-            if dimension and profile_json:
-                field_data = profile_json.get("dimensions", {}).get(dimension, {})
-                if not field_data and dimension == "base_info":
-                    field_data = profile_json.get("base_info", {})
-                return f"```json\n{json.dumps({dimension: field_data}, ensure_ascii=False, indent=2)}\n```"
-            return f"```json\n{json.dumps(profile_json, ensure_ascii=False, indent=2)}\n```"
+        lines: list[str] = ["# 学习者画像"]
 
-        # 包含特定课程子画像
-        course_profiles = await self.get_course_profiles(user_id=user_id)
-        target_key = normalize_course_key(course_name)
-        target_profile = None
-        for cp in course_profiles:
-            if cp.course_key == target_key or cp.course_name == course_name or course_name in cp.aliases:
-                target_profile = cp
-                break
+        # 1. 基础信息
+        base_info = profile_json.get("base_info", {})
+        if base_info:
+            lines.append("\n## 基础信息")
+            info_items: list[str] = []
+            if base_info.get("school"):
+                info_items.append(f"- 学校：{base_info['school']}")
+            if base_info.get("school_level"):
+                info_items.append(f"- 学校层次：{base_info['school_level']}")
+            if base_info.get("major"):
+                info_items.append(f"- 专业：{base_info['major']}")
+            if base_info.get("grade"):
+                info_items.append(f"- 年级：{base_info['grade']}")
+            if base_info.get("daily_study_time"):
+                info_items.append(f"- 每日学习时长：{base_info['daily_study_time']}")
+            if base_info.get("global_learning_goal"):
+                info_items.append(f"- 全局学习目标：{base_info['global_learning_goal']}")
+            if base_info.get("programming_languages"):
+                langs = "、".join(base_info["programming_languages"])
+                info_items.append(f"- 掌握的编程语言：{langs}")
+            if base_info.get("courses"):
+                courses = "、".join(base_info["courses"])
+                info_items.append(f"- 学习的课程：{courses}")
+            if info_items:
+                lines.extend(info_items)
+            else:
+                lines.append("- 暂无基础信息")
 
-        course_md = target_profile.profile_markdown if target_profile else make_default_course_markdown(course_name)
-        global_summary = json.dumps(profile_json, ensure_ascii=False, indent=2)
+        # 2. 知识层维度
+        dimensions = profile_json.get("dimensions", {})
+        lines.append("\n## 知识层维度")
 
-        return (
-            f"【全局画像信息】\n```json\n{global_summary}\n```\n\n"
-            f"【{course_name} 课程画像】\n{course_md}"
-        )
+        for dim_key in KNOWLEDGE_DIMENSIONS:
+            dim_data = dimensions.get(dim_key, {})
+            dim_name = DIMENSION_NAMES.get(dim_key, dim_key)
+            value = dim_data.get("value", "")
+
+            lines.append(f"\n### {dim_name}")
+            if value:
+                lines.append(value)
+            else:
+                lines.append("暂无明确画像")
+
+        # 3. 认知层维度
+        lines.append("\n## 认知层维度")
+
+        for dim_key in COGNITIVE_DIMENSIONS:
+            dim_data = dimensions.get(dim_key, {})
+            dim_name = DIMENSION_NAMES.get(dim_key, dim_key)
+            value = dim_data.get("value", "")
+
+            lines.append(f"\n### {dim_name}")
+            if value:
+                lines.append(value)
+            else:
+                lines.append("暂无明确画像")
+
+        return "\n".join(lines)
 
     async def update_from_onboarding(
         self,

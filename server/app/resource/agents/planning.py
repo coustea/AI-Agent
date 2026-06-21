@@ -10,7 +10,6 @@ from app.infra.llm import get_llm
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput, TeachingPlan
-from app.resource.utils import format_learner_profile_for_prompt
 
 
 @register_agent
@@ -83,9 +82,9 @@ class PlanningAgent(BaseResourceAgent):
             f"## 学习需求\n{input_data.learning_need}",
             f"## 学习场景\n{input_data.learning_scenario}",
         ]
-        profile_text = format_learner_profile_for_prompt(input_data.profile)
-        if profile_text:
-            parts.append(f"## 学习者画像\n{profile_text}")
+        # profile 已经是 Markdown 格式，直接使用
+        if input_data.profile:
+            parts.append(input_data.profile)
         agents = list(input_data.agent_config.get("enabled_agents", [])) if input_data.agent_config else []
         if agents:
             parts.append(f"## 需要生成的资源类型\n{', '.join(agents)}")

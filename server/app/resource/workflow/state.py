@@ -76,7 +76,7 @@ class ParentState(TypedDict, total=False):
     user_id: int
     resource_id: int
     request: ResourceGenerationRequest
-    profile: dict[str, Any]
+    profile: str  # Markdown 格式的学习者画像
     run_id: str
     emitter: Any
     teaching_plan: TeachingPlan
@@ -93,6 +93,6 @@ class WorkerInputState(TypedDict):
     resource_id: int
     request: ResourceGenerationRequest
     teaching_plan: TeachingPlan
-    profile: dict[str, Any]
+    profile: str  # Markdown 格式的学习者画像
     run_id: str
     emitter: Any

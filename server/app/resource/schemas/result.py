@@ -40,7 +40,7 @@ class ResourceInput(BaseModel):
     agent_name: str = ""
     agent_config: dict[str, Any] = Field(default_factory=dict)
     teaching_plan: TeachingPlan | None = None
-    profile: dict[str, Any] = Field(default_factory=dict)
+    profile: str = ""  # Markdown 格式的学习者画像
     upstream_handoffs: dict[str, DownstreamContext] = Field(default_factory=dict)
 
 
@@ -64,6 +64,6 @@ class NodeInput(BaseModel):
     tutorial_title: str
     tutorial_summary: str | None = None
     tutorial_markdown: str
-    profile: dict[str, Any] = Field(default_factory=dict)
+    profile: str = ""  # Markdown 格式的学习者画像
     existing_resources: dict[str, AgentResult] = Field(default_factory=dict)
     agent_config: dict[str, Any] = Field(default_factory=dict)

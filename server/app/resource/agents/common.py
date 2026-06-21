@@ -18,7 +18,6 @@ from app.resource.schemas import (
     ResourceInput,
     TeachingPlan,
 )
-from app.resource.utils import format_learner_profile_for_prompt
 
 
 def build_resource_context(input_data: ResourceInput) -> list[str]:
@@ -29,9 +28,9 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
     parts = [f"## 学习需求\n{input_data.learning_need}"]
     parts.append(f"## 学习场景\n{input_data.learning_scenario}")
 
-    profile_text = format_learner_profile_for_prompt(input_data.profile)
-    if profile_text:
-        parts.append(f"## 学习者画像摘要\n{profile_text}")
+    # profile 已经是 Markdown 格式，直接使用
+    if input_data.profile:
+        parts.append(input_data.profile)
 
     if input_data.teaching_plan:
         agent_id = (input_data.agent_config.get("agent_id") if input_data.agent_config else None) or input_data.agent_name
@@ -228,9 +227,9 @@ def build_node_context(input_data: NodeInput) -> list[str]:
     if input_data.generation_focus:
         parts.append("## 生成重点\n" + "\n".join(f"- {item}" for item in input_data.generation_focus))
 
-    profile_text = format_learner_profile_for_prompt(input_data.profile)
-    if profile_text:
-        parts.append(f"## 学习者画像摘要\n{profile_text}")
+    # profile 已经是 Markdown 格式，直接使用
+    if input_data.profile:
+        parts.append(input_data.profile)
 
     parts.append("\n".join([
         "## 当前教程",
