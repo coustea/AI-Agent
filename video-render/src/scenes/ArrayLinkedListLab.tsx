@@ -48,7 +48,6 @@ export const ArrayLinkedListLab: React.FC<ArrayLinkedListLabProps> = ({
   const nodes: ArrayNode[] = (scene.visual.nodes as ArrayNode[]) || [];
   const operations: Operation[] =
     (scene.visual.operations as Operation[]) || [];
-  const pointerName = (scene.visual.pointer_name as string) || "ptr";
   const timeComplexity = (scene.visual.time_complexity as string) || "";
   const spaceComplexity = (scene.visual.space_complexity as string) || "";
 
@@ -64,7 +63,6 @@ export const ArrayLinkedListLab: React.FC<ArrayLinkedListLabProps> = ({
   const opProgress = (frame % operationDuration) / operationDuration;
 
   // Entrance animations
-  const headerEntrance = getSpringProgress(frame, fps, 5, 20);
   const arrayEntrance = getSpringProgress(frame, fps, 15, 25);
   const infoEntrance = getSpringProgress(frame, fps, 25, 20);
 

@@ -34,6 +34,7 @@ logger = get_module_logger("resource", sub="service")
 
 # Agent ID 常量
 PPT_AGENT_ID = "ppt"
+COORDINATOR_AGENT_ID = "coordinator"
 VIDEO_AGENT_ID = "video"
 BUNDLE_AGENT_ID = "bundle"
 AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID)

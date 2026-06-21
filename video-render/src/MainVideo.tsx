@@ -53,7 +53,7 @@ export const MainVideo: React.FC = () => {
       {bgmConfig?.bgm_src && (
         <Audio
           src={getAudioSrc(bgmConfig.bgm_src)}
-          volume={bgmConfig.bgm_volume}
+          volume={() => bgmConfig.bgm_volume}
           loop
         />
       )}
@@ -63,7 +63,7 @@ export const MainVideo: React.FC = () => {
         const startFrame = accumulatedFrames;
         accumulatedFrames += sceneDurationFrames;
 
-        const transitionType = (scene.transition as any) || 'fade';
+        const transitionType = scene.transition || 'fade';
 
         return (
           <Sequence

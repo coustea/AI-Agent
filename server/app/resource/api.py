@@ -64,14 +64,13 @@ async def create_resource_task(
     run = await create_agent_run(user_id=current_user.id, module="resource", business_id=str(resource_id))
 
     profile_builder = get_profile_service()
-    profile_record = await profile_builder.get_profile(user_id=current_user.id)
-    profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
+    profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
 
     background_tasks.add_task(
         run_multi_agent_generation,
         user_id=current_user.id,
         request=req,
-        profile=profile_dict,
+        profile=profile_markdown,
         resource_id=resource_id,
         run_id=run.run_id,
     )
@@ -94,8 +93,7 @@ async def create_single_resource_task(
     )
 
     profile_builder = get_profile_service()
-    profile_record = await profile_builder.get_profile(user_id=current_user.id)
-    profile_dict = profile_record.model_dump(exclude_none=True) if profile_record else {}
+    profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
 
     repo = ResourceService(session)
     result = await repo.create_task(
@@ -117,7 +115,7 @@ async def create_single_resource_task(
             learning_need=req.learning_need,
             selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
         ),
-        profile=profile_dict,
+        profile=profile_markdown,
         resource_id=resource_id,
         run_id=run.run_id,
     )

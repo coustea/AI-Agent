@@ -33,18 +33,18 @@ from app.resource.schemas import (
     ResourceInput,
     TeachingPlan,
 )
-from app.resource.workflow.audit import (
+from app.resource.workflow.state import ParentState, WorkerInputState, CoverageReport, AgentFailure
+from app.resource.service import (
+    AGGREGATION_AGENT_IDS,
     BUNDLE_AGENT_ID,
     COORDINATOR_AGENT_ID,
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
 )
-from app.resource.workflow.state import ParentState, WorkerInputState, CoverageReport, AgentFailure
 
 logger = logging.getLogger(__name__)
 
 BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
-AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID)
 
 
 def build_agent_resource_input(

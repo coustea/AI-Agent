@@ -13,7 +13,7 @@ export function generateSubtitles(
   }
 
   // Define split characters (Chinese and English punctuation)
-  const regex = /([，。！？；、,\.\?!;]+)/g;
+  const regex = /([，。！？；、,.?!;]+)/g;
   const parts = narration.split(regex);
   
   const sentences: string[] = [];

@@ -212,7 +212,7 @@ export function useStepAnimation(config: {
   delay?: number;
 }) {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
+  const { durationInFrames } = useVideoConfig();
 
   const { steps, delay = 0 } = config;
 

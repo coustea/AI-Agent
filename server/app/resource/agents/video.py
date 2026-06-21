@@ -32,7 +32,7 @@ VideoStyle = Literal["explainer", "lecture", "screencast", "case_walkthrough"]
 VideoVoice = Literal["teacher", "coach", "concise"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
 SceneRole = Literal["hook", "concept", "example", "process", "misconception", "practice", "recap"]
-VisualType = Literal["card", "diagram", "code", "timeline", "comparison", "quiz", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"]
+VisualType = Literal["title_intro", "concept_explain", "process_flow", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "code_execution", "compare_summary", "knowledge_check", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"]
 VideoSourceAgentId = Literal["content", "mindmap", "quiz", "code", "reading"]
 
 
@@ -319,13 +319,6 @@ VISUAL_SCHEMAS: dict[str, type[BaseModel]] = {
     "stack_queue": StackQueueVisual,
     "process_state": ProcessStateVisual,
     "storage_hierarchy": StorageHierarchyVisual,
-    # Backward compatibility mappings
-    "card": TitleIntroVisual,
-    "diagram": ConceptExplainVisual,
-    "code": CodeExecutionVisual,
-    "timeline": ProcessFlowVisual,
-    "comparison": CompareSummaryVisual,
-    "quiz": KnowledgeCheckVisual,
 }
 
 
@@ -363,7 +356,7 @@ class SceneContract(BaseModel):
     title: str = Field(min_length=1)
     duration_seconds: int = Field(ge=10)
     learning_objective: str = Field(min_length=1)
-    visual_type: VisualType = "card"
+    visual_type: VisualType = "concept_explain"
     content_hint: str = Field(min_length=1)
     required_sources: list[VideoSourceAgentId] = Field(min_length=1)
 
@@ -421,7 +414,7 @@ class SceneDraft(BaseModel):
     captions: list[str] = Field(default_factory=list)
     on_screen_text: list[str] = Field(default_factory=list)
     visual_prompt: str = Field(min_length=1)
-    visual_type: VisualType = "card"
+    visual_type: VisualType = "concept_explain"
     interaction_prompt: str = ""
     visual: dict[str, Any] = Field(min_length=1)
     source_agents: list[VideoSourceAgentId] = Field(min_length=1)
@@ -451,7 +444,7 @@ class VideoScene(BaseModel):
     title: str = Field(min_length=1)
     start_ms: int = Field(ge=0)
     duration_ms: int = Field(gt=0)
-    visual_type: VisualType = "card"
+    visual_type: VisualType = "concept_explain"
     narration: str = Field(min_length=1)
     captions: list[str] = Field(default_factory=list)
     on_screen_text: list[str] = Field(default_factory=list)
@@ -647,7 +640,7 @@ class VideoPayloadBuilder:
             assets=[
                 VideoAsset(
                     asset_id=f"asset-{scene.index}",
-                    type="diagram_prompt" if scene.visual_type in {"diagram", "timeline", "comparison", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture"} else "image_prompt",
+                    type="diagram_prompt" if scene.visual_type in {"concept_explain", "process_flow", "compare_summary", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"} else "image_prompt",
                     description=scene.visual_prompt,
                     source_scene_id=scene.scene_id,
                 )

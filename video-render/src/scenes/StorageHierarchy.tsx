@@ -3,7 +3,6 @@ import {
   AbsoluteFill,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
   spring,
 } from "remotion";
 import { RichVideoScene, GlobalStyle, VideoMeta } from "../schema/types";
@@ -117,7 +116,6 @@ export const StorageHierarchy: React.FC<StorageHierarchyProps> = ({
     transfers.length - 1,
   );
   const currentTransfer = transfers[currentTransferIdx];
-  const transferProgress = (frame % transferDuration) / transferDuration;
 
   // Entrance animations
   const pyramidEntrance = getSpringProgress(frame, fps, 10, 30);

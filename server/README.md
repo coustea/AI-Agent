@@ -30,7 +30,7 @@ server/
 │   ├── profile/             # 用户画像
 │   ├── infra/               # 基础设施（DB, LLM, 配置, 日志, 模型注册）
 │   ├── prompts/             # 全局 Prompt 模板
-│   ├── app_factory.py       # FastAPI 应用工厂
+│   ├── app.py               # FastAPI 应用工厂
 │   ├── lifecycle.py         # 启动生命周期
 │   ├── routes.py            # 路由挂载
 │   ├── ws_routes.py         # WebSocket 路由
@@ -148,13 +148,13 @@ WebSocket 桥接讯飞数字人服务，ASR → 数字人播报。前端通过 `
 
 | 领域 | 表 |
 |------|-----|
-| 认证 | `users`, `active_tokens` |
-| 对话 | `chat_sessions`, `chat_messages`, `chat_session_summaries` |
-| 记忆 | `user_long_term_memories`, `user_profiles`, `user_profile_histories` |
+| 认证 | `users`, `active_tokens`, `schools` |
+| 对话 | `chat_sessions`, `chat_turns`, `chat_messages`, `chat_session_summary_blocks`, `chat_long_term_memories`, `chat_attachment_analyses`, `chat_uploaded_files`, `chat_message_attachments`, `chat_tool_invocations`, `chat_turn_transcripts` |
+| 画像 | `global_profiles`, `course_profiles` |
 | 资源生成 | `generated_resources`, `generated_resource_items` |
 | 学习路径 | `learning_paths`, `path_nodes`, `path_node_tutorials`, `path_node_questions`, `path_node_resources` |
 | 评估 | `learning_events`, `learning_sessions` |
-| 题库 | `quiz_questions`, `programming_problems` |
+| 题库 | `quiz_questions`, `wrong_questions` |
 
 数据库结构变更需同步修改 `init_schema.sql` 和 `infra/models.py`，新表必须加入 `REGISTERED_MODELS` 元组。
 
@@ -163,9 +163,9 @@ WebSocket 桥接讯飞数字人服务，ASR → 数字人播报。前端通过 `
 每个模块拥有独立的 `prompts/` 目录，使用 `.md` 模板文件：
 
 - `chat/prompts/` — 辅导系统指令, 回答策略, 搜索指令, 教学图
-- `memory/prompts/` — 压缩, 长期记忆更新, 画像
+- `chat/memory/prompts/` — 压缩, 长期记忆更新
 - `path/prompts/` — 路径规划, 教程, 题目生成
-- `resource/prompts/` — 各 Agent 指令
+- `resource/prompts/` — 各 Agent 指令（planning, content, mindmap, quiz, code, reading, ppt, review, video）
 
 模板支持 `{variable_name}` 变量替换，启动时通过 `warm_prompt_loaders()` 预加载缓存。
 
@@ -196,8 +196,6 @@ uv run pytest -x
 
 已知的预存在问题（不要浪费时间调试）：
 
-- `tests/chat/test_agent_single_module_refactor.py` — 过时断言
-- `tests/chat/test_onboarding_api.py` — 缺少 `background_tasks` 参数
 - `tests/chat/test_reasoning_agent.py` — `FakeLlm` 缺少 `astream` 属性
 
 ## 开发约定
@@ -206,7 +204,6 @@ uv run pytest -x
 - 数据库结构变更同步修改 `init_schema.sql` 和 `infra/models.py`
 - 新表必须加入 `REGISTERED_MODELS` 元组
 - `get_session()` 用于 FastAPI 依赖注入（手动提交），`session_scope()` 用于后台任务（自动提交/回滚）
-- `runtime_context(user_id, session_id)` ContextVar 在异步调用链中传递用户身份
 - LLM 通过 `get_llm()` 单例访问，使用 OpenAI 兼容 API
 - Python 代码遵循 Google Python Style Guide
 - 4-space indent, type hints, snake_case modules
