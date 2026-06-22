@@ -19,6 +19,7 @@ from typing import Any, AsyncIterator
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.chat.agent import TutorAgent
+from app.chat.event import ChatEvents, ChatEventName
 from app.chat.events import build_attachment_status_payload, build_persisted_tool_activity
 from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
 from app.chat.safety import ContentSafetyFilter, SafetyResult, safety_filter
@@ -31,7 +32,6 @@ from app.chat.storage.message_item import ChatMessageItem
 from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, IMAGE_EXTENSIONS, CHAT_HISTORY_LIMIT
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage
-from app.infra.agent_events import AgentEventEmitter
 
 logger = get_logger(__name__)
 
@@ -545,55 +545,67 @@ def _runtime_status(value: Any) -> str:
 
 
 async def _publish_chat_runtime_event(
-    emitter: AgentEventEmitter,
+    events: ChatEvents,
     event: dict[str, Any],
 ) -> bool:
-    """把辅导内部事件映射成唯一的 AgentEvent；返回是否失败。"""
+    """把辅导内部事件映射成 ChatEvent 并发送；返回是否失败。"""
     event_name = str(event.get("event") or "status")
     data = event.get("data")
     payload = data if isinstance(data, dict) else {}
 
     if event_name == "token":
-        await emitter.content_delta(str(data or ""))
+        await events.send(event="content.delta", message="", data={"delta": str(data or "")})
         return False
     if event_name == "agent_status":
-        await emitter.tool_status(
-            status=_runtime_status(payload.get("status")),
-            activity_id=str(payload.get("activity_id") or "") or None,
-            agent_id=str(payload.get("tool_name") or "") or None,
-            title=str(payload.get("title") or "工具调用"),
-            summary=str(payload.get("summary") or payload.get("message") or ""),
-            detail=payload.get("detail") if isinstance(payload.get("detail"), dict) else {},
-            elapsed_ms=(payload.get("detail") or {}).get("duration_ms") if isinstance(payload.get("detail"), dict) else None,
+        status = _runtime_status(payload.get("status"))
+        # 映射到 tool.running/tool.completed/tool.failed
+        if status == "running":
+            chat_event: ChatEventName = "tool.running"
+        elif status == "failed":
+            chat_event = "tool.failed"
+        else:
+            chat_event = "tool.completed"
+        await events.send(
+            event=chat_event,
+            message=str(payload.get("message") or payload.get("title") or ""),
+            data={
+                "activity_id": payload.get("activity_id"),
+                "tool_name": payload.get("tool_name"),
+                "detail": payload.get("detail"),
+            },
         )
         return False
     if event_name == "attachment":
-        await emitter.agent_status(
-            status=_runtime_status(payload.get("status")),
-            activity_id=str(payload.get("activity_id") or "") or None,
-            agent_id="attachment_analyzer",
-            title=str(payload.get("title") or "附件分析"),
-            summary=str(payload.get("summary") or payload.get("message") or ""),
-            detail=payload.get("detail") if isinstance(payload.get("detail"), dict) else {},
+        status = _runtime_status(payload.get("status"))
+        if status == "running":
+            chat_event: ChatEventName = "attachment.running"
+        elif status == "failed":
+            chat_event = "attachment.failed"
+        else:
+            chat_event = "attachment.completed"
+        await events.send(
+            event=chat_event,
+            message=str(payload.get("message") or payload.get("title") or ""),
+            data={
+                "activity_id": payload.get("activity_id"),
+                "detail": payload.get("detail"),
+            },
         )
         return False
     if event_name == "diagram" and payload:
-        await emitter.artifact_ready(
-            activity_id="teaching-diagram",
-            agent_id="diagram_generator",
-            title="教学图解已生成",
-            detail=payload,
+        await events.send(
+            event="diagram.ready",
+            message="教学图解已生成",
+            data=payload,
         )
         return False
     if event_name == "error":
         return True
     if event_name == "status":
-        await emitter.agent_status(
-            activity_id=str(payload.get("stage") or "chat-workflow"),
-            agent_id="tutor",
-            title=str(payload.get("message") or "正在处理"),
-            summary=str(payload.get("message") or ""),
-            detail={key: value for key, value in payload.items() if key != "message"},
+        await events.send(
+            event="thinking",
+            message=str(payload.get("message") or "正在处理"),
+            data={key: value for key, value in payload.items() if key != "message"},
         )
     return False
 
@@ -608,9 +620,13 @@ async def run_chat_agent(
     enable_web_search: bool,
     need_teaching_diagram: bool,
 ) -> None:
-    """后台执行一次辅导，并通过全局事件流主动推送运行状态。"""
-    emitter = AgentEventEmitter(run_id=run_id, module="chat", business_id=session_id)
-    await emitter.started(title="智能辅导已开始")
+    """后台执行一次辅导，并通过 ChatEvents 推送运行状态。
+
+    频道已在 router 中通过 ChatEvents.open() 注册。
+    """
+    events = ChatEvents(user_id=user_id, session_id=session_id, run_id=run_id)
+    # 频道已由 router 打开，直接获取
+    await events.send(event="run.started", message="智能辅导已开始", data={})
     failed = False
     try:
         async for event in chat(
@@ -621,14 +637,14 @@ async def run_chat_agent(
             enable_web_search=enable_web_search,
             need_teaching_diagram=need_teaching_diagram,
         ):
-            failed = await _publish_chat_runtime_event(emitter, event) or failed
+            failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:
-            await emitter.failed(title="回答失败", summary="智能辅导暂时无法完成本次回答")
+            await events.send(event="run.failed", message="回答失败", data={"error": "智能辅导暂时无法完成本次回答"})
         else:
-            await emitter.completed(title="回答完成")
-    except Exception:
+            await events.send(event="run.completed", message="回答完成", data={})
+    except Exception as e:
         logger.exception("chat_agent_run_failed: run_id=%s", run_id)
-        await emitter.failed(title="回答失败", summary="智能辅导暂时无法完成本次回答")
+        await events.send(event="run.failed", message="回答失败", data={"error": str(e)})
 
 
 
