@@ -7,6 +7,17 @@
   --gradient-primary: var(--gradient-resource);
   --resource-page-inset: clamp(16px, 2.4vw, 32px);
 
+  /* Glassmorphism token standard */
+  --generator-card-bg: rgba(255, 255, 255, 0.76);
+  --generator-card-blur: blur(20px);
+  --generator-card-border: 1px solid rgba(255, 255, 255, 0.8);
+  --generator-card-shadow: 0 10px 30px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+
+  /* Rounded corner standards */
+  --radius-outer: 24px;   /* Top bars, bottom shells, floating panels */
+  --radius-card: 20px;    /* Scenarios, agent nodes, config wrappers */
+  --radius-inner: 12px;   /* Small badges, inner selectors, stat cards */
+
   min-height: calc(100vh - var(--navbar-height, 64px));
   position: relative;
   isolation: isolate;
@@ -83,7 +94,7 @@
 
 .elegant-generator-layout .personalize-view {
   align-items: center;
-  padding: clamp(40px, 5vw, 72px) var(--resource-page-inset);
+  padding: clamp(24px, 4vw, 48px) var(--resource-page-inset) 80px;
 }
 
 .elegant-generator-layout .workflow-stage-page {
