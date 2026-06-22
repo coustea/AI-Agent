@@ -1,7 +1,13 @@
 import { readonly, ref, shallowRef } from 'vue'
 import type { PathEvent, PathEventName } from '@/features/learning-path/model/pathEvent'
 
-export type PathConnectionStatus = 'idle' | 'connecting' | 'running' | 'completed' | 'failed'
+export type PathConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'running'
+  | 'reconnecting'
+  | 'completed'
+  | 'failed'
 
 export interface PathEventHandlers {
   onEvent?: (event: PathEvent) => void

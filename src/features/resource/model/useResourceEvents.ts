@@ -1,7 +1,13 @@
 import { readonly, ref, shallowRef } from 'vue'
 import type { ResourceEvent, ResourceEventName } from '@/features/resource/model/resourceEvent'
 
-export type ResourceConnectionStatus = 'idle' | 'connecting' | 'running' | 'completed' | 'failed'
+export type ResourceConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'running'
+  | 'reconnecting'
+  | 'completed'
+  | 'failed'
 
 export interface ResourceEventHandlers {
   onEvent?: (event: ResourceEvent) => void
