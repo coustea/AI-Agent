@@ -370,7 +370,7 @@ const selectScenario = (scenario: LearningScenario) => {
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   position: relative;
 }
-.scenario-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--color-border-hover); box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08); background: #ffffff; }
+.scenario-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--color-border-hover); box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08); background: rgba(255, 255, 255, 0.96); }
 .scenario-card.active {
   border-color: var(--cat-resource);
   box-shadow: 0 12px 32px var(--cat-resource-glow);
@@ -400,6 +400,7 @@ const selectScenario = (scenario: LearningScenario) => {
   transform: translateY(-4px);
   border-color: var(--cat-resource);
   box-shadow: 0 16px 32px var(--cat-resource-glow);
+  background: rgba(255, 255, 255, 0.96);
 }
 .cc-header-v2 { padding: 20px 24px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px dashed var(--color-border-light); margin-bottom: 16px; }
 .cc-icon-wrap { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
@@ -410,9 +411,9 @@ const selectScenario = (scenario: LearningScenario) => {
 .cc-body-v2.body-disabled { opacity: 0.38; pointer-events: none; filter: grayscale(60%); }
 .question-type-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .question-type-group :deep(.el-checkbox) { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 4px 12px; margin: 0; transition: all 0.2s; }
-.question-type-group :deep(.el-checkbox.is-checked) { background: var(--color-primary-soft); border-color: var(--color-primary-border); }
+.question-type-group :deep(.el-checkbox.is-checked) { background: var(--cat-resource-soft); border-color: var(--cat-resource); }
 .question-type-group :deep(.el-checkbox__label) { font-size: 0.85rem; font-weight: 600; color: var(--color-text-strong); }
-.question-type-group :deep(.el-checkbox.is-checked .el-checkbox__label) { color: var(--color-primary-text); }
+.question-type-group :deep(.el-checkbox.is-checked .el-checkbox__label) { color: var(--cat-resource); }
 .cc-title { font-family: var(--font-sans); font-weight: 800; font-size: 1.15rem; color: var(--color-text); letter-spacing: 0.02em; }
 .cc-body-v2 { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
 .ctrl-group { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -461,6 +462,6 @@ const selectScenario = (scenario: LearningScenario) => {
 .sab-hint { font-size: 0.8rem; color: var(--color-text-muted); font-weight: 600; margin-left: 8px; }
 .footer-back-btn { font-weight: 600; color: var(--color-text-muted); border: 1px solid var(--color-border); background: var(--color-surface); }
 .footer-back-btn:hover { color: var(--color-text-strong); border-color: var(--color-border-hover); background: var(--color-bg); }
-.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: var(--cat-resource) !important; color: var(--color-surface) !important; border: none; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
-.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); background: var(--color-info) !important; }
+.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: var(--cat-resource) !important; color: var(--color-surface) !important; border: none; box-shadow: 0 4px 16px var(--cat-resource-glow); transition: transform 0.2s, box-shadow 0.2s; }
+.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--cat-resource-glow); background: var(--color-primary-hover) !important; }
 </style>
