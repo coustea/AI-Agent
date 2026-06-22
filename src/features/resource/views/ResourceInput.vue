@@ -125,12 +125,9 @@ function fillExample(text: string) {
 .hero-title {
   font-size: 2.8rem;
   font-weight: 800;
-  color: var(--color-text);
+  color: var(--color-text-strong);
   letter-spacing: -0.03em;
   margin: 0 0 12px 0;
-  background: linear-gradient(135deg, var(--color-text-strong), var(--cat-resource));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 .hero-subtitle {
   font-size: 1.1rem;
@@ -159,10 +156,10 @@ function fillExample(text: string) {
   100% { opacity: 1; transform: scale(1); }
 }
 .omni-spotlight-wrapper.is-focused, .omni-spotlight-wrapper.has-content {
-  border-color: var(--cat-resource-glow);
+  border-color: var(--cat-resource);
   box-shadow:
-    0 8px 30px rgba(99, 102, 241, 0.08),
-    0 0 0 4px rgba(99, 102, 241, 0.1);
+    0 8px 30px var(--cat-resource-glow),
+    0 0 0 4px var(--cat-resource-glow);
   transform: translateY(-2px);
 }
 .omni-textarea :deep(.el-textarea__inner) {
@@ -223,7 +220,7 @@ function fillExample(text: string) {
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn:hover {
   transform: translateY(-2px) scale(1.05);
-  background: var(--color-primary-hover, #4f46e5);
+  background: var(--color-primary-hover, #1d4ed8);
   box-shadow: 0 6px 16px var(--cat-resource-glow);
 }
 
