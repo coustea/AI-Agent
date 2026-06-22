@@ -1,9 +1,15 @@
 .elegant-generator-layout {
+  /* Override resource variables with clean Bright Blue */
+  --cat-resource: #2563EB;          /* Royal Blue / Bright Blue */
+  --cat-resource-soft: #EFF6FF;     /* Light Blue 50 */
+  --cat-resource-glow: rgba(37, 99, 235, 0.15);
+  --gradient-resource: linear-gradient(135deg, #2563EB 0%, #3B82F6 100%);
+
   --color-primary: var(--cat-resource);
-  --color-primary-hover: #4f46e5;
+  --color-primary-hover: #1D4ED8;   /* Darker blue */
   --color-primary-soft: var(--cat-resource-soft);
-  --color-primary-border: #a5b4fc;
-  --color-primary-text: #4338ca;
+  --color-primary-border: #93C5FD;  /* Light blue 200 */
+  --color-primary-text: #1E40AF;    /* Dark blue text */
   --gradient-primary: var(--gradient-resource);
   --resource-page-inset: clamp(16px, 2.4vw, 32px);
 
@@ -45,25 +51,25 @@
   aspect-ratio: 1;
   border-radius: 50%;
   filter: blur(120px);
-  opacity: 0.44;
+  opacity: 0.15; /* down from 0.44 */
 }
 
 .resource-generator-ambient .glow-blue {
   top: -18%;
   left: -16%;
-  background: rgba(59, 130, 246, 0.28);
+  background: rgba(37, 99, 235, 0.2);
 }
 
 .resource-generator-ambient .glow-emerald {
   top: 18%;
   right: -14%;
-  background: rgba(99, 102, 241, 0.24);
+  background: rgba(59, 130, 246, 0.15); /* Blue-ish */
 }
 
 .resource-generator-ambient .glow-indigo {
   bottom: -24%;
   left: 28%;
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(59, 130, 246, 0.12); /* Blue-ish */
 }
 
 .resource-pattern-bg {
@@ -74,7 +80,7 @@
     linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
   background-size: 26px 26px;
   mask-image: radial-gradient(circle at 50% 32%, #000 0, transparent 78%);
-  opacity: 0.86;
+  opacity: 0.2;
 }
 
 .elegant-generator-layout .phase-view {
