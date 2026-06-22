@@ -57,14 +57,14 @@
                       <span class="sw-label">涵盖易错点解析</span>
                       <span class="sw-desc">针对常见误区进行深度剖析</span>
                     </div>
-                    <el-switch v-model="localConfigs.content.include_common_mistakes" />
+                    <el-switch v-model="localConfigs.content.include_common_mistakes" active-color="var(--cat-resource)" />
                   </div>
                   <div class="ctrl-switch-v2">
                     <div class="sw-info">
                       <span class="sw-label">丰富生活化示例</span>
                       <span class="sw-desc">用直观的案例辅助理解抽象概念</span>
                     </div>
-                    <el-switch v-model="localConfigs.content.include_examples" />
+                    <el-switch v-model="localConfigs.content.include_examples" active-color="var(--cat-resource)" />
                   </div>
                 </div>
               </template>
@@ -171,6 +171,14 @@
               </template>
 
               <template v-if="agent.id === 'ppt'">
+                <div class="ctrl-group">
+                  <label>模板风格</label>
+                  <el-radio-group v-model="localConfigs.ppt.template_style" size="small" class="custom-radio-group">
+                    <el-radio-button value="logic-blue">逻辑蓝</el-radio-button>
+                    <el-radio-button value="paper-light">纸墨白</el-radio-button>
+                    <el-radio-button value="lab-light">实验室</el-radio-button>
+                  </el-radio-group>
+                </div>
                 <div class="ctrl-group">
                   <label>内容深度 / 难度</label>
                   <el-radio-group v-model="localConfigs.ppt.difficulty" size="small" class="custom-radio-group">
@@ -288,7 +296,9 @@ const localConfigs = ref<AnyAgentConfigs>(JSON.parse(JSON.stringify(props.agentC
 
 // Watch parent prop changes (e.g. when scenario changes or is initialized)
 watch(() => props.agentConfigs, (newVal) => {
-  localConfigs.value = JSON.parse(JSON.stringify(newVal))
+  if (JSON.stringify(newVal) !== JSON.stringify(localConfigs.value)) {
+    localConfigs.value = JSON.parse(JSON.stringify(newVal))
+  }
 }, { deep: true })
 
 // Emit changes back to parent
@@ -349,9 +359,7 @@ const selectScenario = (scenario: LearningScenario) => {
   font-weight: 800;
   margin: 0 0 12px 0;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--color-text-strong), var(--cat-resource));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--color-text-strong); /* solid color instead of gradient */
 }
 .view-header p { font-family: var(--agent-body-font); font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 40px; }
@@ -403,8 +411,18 @@ const selectScenario = (scenario: LearningScenario) => {
   background: rgba(255, 255, 255, 0.96);
 }
 .cc-header-v2 { padding: 20px 24px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px dashed var(--color-border-light); margin-bottom: 16px; }
-.cc-icon-wrap { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
-.cc-icon-wrap.text-emerald, .cc-icon-wrap.text-orange, .cc-icon-wrap.text-purple, .cc-icon-wrap.text-red, .cc-icon-wrap.text-emerald, .cc-icon-wrap.text-indigo, .cc-icon-wrap.text-slate { background: #F3F4F6; color: #374151; }
+.cc-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  background: var(--cat-resource-soft) !important;
+  border: 1px solid rgba(37, 99, 235, 0.15) !important;
+  color: var(--cat-resource) !important;
+}
 .config-card-v2.disabled { opacity: 0.7; background: #F9FAFB; }
 .config-card-v2.agent-off { border-color: #E5E7EB; opacity: 0.85; }
 .cc-header-switch { margin-left: auto; flex-shrink: 0; }
