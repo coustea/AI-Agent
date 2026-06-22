@@ -8,7 +8,7 @@
       @mousedown="startDrag"
       @touchstart="startDrag"
     >
-      <button class="note-fab-button" type="button" aria-label="打开全局笔记">
+      <button class="note-fab-button" type="button" aria-label="打开笔记">
         <el-icon><EditPen /></el-icon>
       </button>
     </div>
@@ -28,7 +28,7 @@
               <el-icon><Document /></el-icon>
             </div>
             <div>
-              <h3>全局笔记</h3>
+              <h3>笔记</h3>
               <p>{{ panelSubtitle }}</p>
             </div>
           </div>
@@ -46,7 +46,7 @@
           <textarea
             v-model="editorText"
             class="note-textarea"
-            placeholder="记录临时想法、待办、课堂重点。未保存时会自动保留草稿，保存后下次打开会是新的空白页。"
+            placeholder="记录临时想法、待办、学习重点。未保存时会自动保留草稿，保存后下次打开会是新的空白页"
           />
 
           <div class="note-panel-footer">
@@ -678,11 +678,12 @@ onBeforeUnmount(() => {
 }
 
 .note-panel-header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 16px;
-  padding: 18px 18px 14px;
+  padding: 18px 56px 14px;
   background:
     radial-gradient(circle at top right, rgba(191, 219, 254, 0.95), transparent 40%),
     linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.92));
@@ -693,8 +694,11 @@ onBeforeUnmount(() => {
 .note-panel-title-wrap {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   min-width: 0;
+  flex: 1;
+  text-align: center;
 }
 
 .note-panel-icon {
@@ -724,17 +728,40 @@ onBeforeUnmount(() => {
 }
 
 .collapse-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
   width: 34px;
   height: 34px;
+  min-height: 34px;
+  padding: 0;
   border: none;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.8);
-  color: #475569;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.96);
+  color: #1e293b;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  box-shadow: 0 6px 16px rgba(148, 163, 184, 0.16);
+  z-index: 1;
+}
+
+.collapse-btn .el-icon {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.collapse-btn:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: rgba(96, 165, 250, 0.42);
+}
+
+.collapse-btn:active {
+  transform: scale(0.96);
 }
 
 .note-panel-body {
@@ -793,15 +820,18 @@ onBeforeUnmount(() => {
 
 .note-panel-footer {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
 }
 
 .footer-hint {
-  min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .saved-count {
@@ -823,6 +853,8 @@ onBeforeUnmount(() => {
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
+  justify-content: center;
+  min-width: 132px;
 }
 
 .save-btn:hover {
