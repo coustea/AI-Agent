@@ -1056,11 +1056,8 @@ function getMetricChips(node: DagNodeState) {
   --agent-body-font: var(--font-body);
 
   min-height: auto;
-  padding: 18px clamp(18px, 2vw, 30px) 24px;
-  background:
-    radial-gradient(circle at 20% 12%, rgba(59, 130, 246, 0.12), transparent 32%),
-    radial-gradient(circle at 82% 46%, rgba(45, 212, 191, 0.12), transparent 30%),
-    linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.86));
+  padding: clamp(24px, 3vw, 36px) var(--resource-page-inset) 80px;
+  background: transparent; /* allow parent background glow to show */
   font-family: var(--font-sans);
 }
 
@@ -1071,12 +1068,13 @@ function getMetricChips(node: DagNodeState) {
   justify-content: space-between;
   gap: 18px;
   align-items: center;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 22px;
+  background: var(--generator-card-bg);
+  backdrop-filter: var(--generator-card-blur);
+  -webkit-backdrop-filter: var(--generator-card-blur);
+  border: var(--generator-card-border);
+  border-radius: var(--radius-outer);
   padding: 14px 18px;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
+  box-shadow: var(--generator-card-shadow);
 }
 
 .stage-topbar-v4 {
@@ -1167,9 +1165,9 @@ function getMetricChips(node: DagNodeState) {
 .stage-stat-card {
   min-width: 92px;
   padding: 10px 14px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-inner);
+  background: rgba(255, 255, 255, 0.52);
+  border: var(--generator-card-border);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1541,13 +1539,13 @@ function getMetricChips(node: DagNodeState) {
 }
 
 .agent-station-card {
-  border-radius: 24px;
+  border-radius: var(--radius-card);
   padding: 13px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: var(--generator-card-bg);
+  border: var(--generator-card-border);
   cursor: pointer;
   transition: all 0.26s ease;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.055);
+  box-shadow: var(--generator-card-shadow);
 }
 
 .agent-station-card-v4 {
@@ -1559,8 +1557,8 @@ function getMetricChips(node: DagNodeState) {
 .agent-station-card:hover,
 .agent-station-card.is-selected {
   transform: translateY(-5px);
-  border-color: rgba(59, 130, 246, 0.52);
-  box-shadow: 0 24px 54px rgba(37, 99, 235, 0.16);
+  border-color: var(--cat-resource);
+  box-shadow: 0 16px 36px var(--cat-resource-glow);
 }
 
 .agent-station-card.status-running {
@@ -1957,10 +1955,13 @@ function getMetricChips(node: DagNodeState) {
   width: min(420px, calc(100vw - 36px));
   max-height: calc(100vh - var(--navbar-height, 64px) - 112px);
   overflow-y: auto;
-  padding: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.18);
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: var(--generator-card-border);
+  border-radius: var(--radius-outer); /* unified round corners */
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
 }
 
 .detail-close-btn {
@@ -2899,12 +2900,10 @@ function getMetricChips(node: DagNodeState) {
   --workflow-text: #172033;
   --workflow-muted: #667085;
 
-  background: #f2f4f7;
+  background: transparent;
 }
 
-.stage-topbar,
 .dispatch-workbench-panel,
-.agent-detail-floating-panel,
 .output-dock-section-v4 {
   border-color: var(--workflow-border);
   border-radius: 16px;
@@ -2914,9 +2913,9 @@ function getMetricChips(node: DagNodeState) {
 }
 
 .stage-stat-card {
-  border-color: var(--workflow-border);
-  border-radius: 10px;
-  background: var(--workflow-surface-subtle);
+  background: rgba(255, 255, 255, 0.52);
+  border: var(--generator-card-border);
+  border-radius: var(--radius-inner);
 }
 
 .route-step,
@@ -3078,17 +3077,17 @@ function getMetricChips(node: DagNodeState) {
 
 .agent-station-card,
 .agent-station-card-v4 {
-  border-color: var(--workflow-border);
-  border-radius: 12px;
-  background: var(--workflow-surface);
-  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.05);
+  border-radius: var(--radius-card);
+  background: var(--generator-card-bg);
+  border: var(--generator-card-border);
+  box-shadow: var(--generator-card-shadow);
 }
 
 .agent-station-card:hover,
 .agent-station-card.is-selected {
-  border-color: #7ba8ed;
-  box-shadow: 0 0 0 2px #dbeafe;
-  transform: translateY(-1px);
+  transform: translateY(-5px);
+  border-color: var(--cat-resource);
+  box-shadow: 0 16px 36px var(--cat-resource-glow);
 }
 
 .agent-station-card.status-running {
@@ -3551,11 +3550,12 @@ function getMetricChips(node: DagNodeState) {
   padding: 0;
   overflow-x: visible;
   overflow-y: auto;
-  border: 1px solid #d9e0e8;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgba(23, 32, 51, 0.16), 0 3px 10px rgba(23, 32, 51, 0.06);
-  backdrop-filter: none;
+  border: var(--generator-card-border);
+  border-radius: var(--radius-outer);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
   transform-origin: left top;
 }
 
