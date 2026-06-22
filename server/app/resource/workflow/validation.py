@@ -56,7 +56,7 @@ def validate_common_result(
             raise ValidationError("Base Agent requires truthful downstream_context")
 
         plan_ids = {
-            entry.id
+            entry.get("id", "")
             for entry in (input_data.teaching_plan.outline if input_data.teaching_plan else [])
         }
         covered = handoff.covered_outline_ids

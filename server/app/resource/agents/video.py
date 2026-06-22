@@ -811,8 +811,8 @@ class VideoAgent(BaseResourceAgent):
             writer = SceneWriterAgent()
             draft = await writer.run(state["contract"], state["digest"], state["constraints"])
 
-            # Synthesize TTS with word-level captions (Xunfei)
-            from app.resource.infra.xf_tts import TtsService
+            # Synthesize TTS with word-level captions (edge-tts)
+            from app.resource.infra.tts import TtsService
             from app.config import WORKPLACE_DIR
 
             res_id = state.get("resource_id")

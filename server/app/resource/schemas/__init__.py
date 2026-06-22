@@ -26,8 +26,10 @@ from app.resource.schemas.request import (
 
 # ── Plan ──────────────────────────────────────────────────────────────────
 from app.resource.schemas.plan import (
+    AgentAssignment,
     DownstreamContext,
     ReusableAssets,
+    TeachingOutlineItem,
     TeachingPlan,
 )
 
@@ -55,6 +57,8 @@ __all__ = [
     "SingleResourceRequest",
     # Learning blueprint & planning
     "TeachingPlan",
+    "TeachingOutlineItem",
+    "AgentAssignment",
     "ReusableAssets",
     "DownstreamContext",
     # Runtime input/output

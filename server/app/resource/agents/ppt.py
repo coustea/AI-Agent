@@ -69,7 +69,7 @@ class SourcePack(BaseModel):
 
     learning_need: str
     learning_scenario: str
-    profile: dict[str, Any]
+    profile: dict[str, Any] | str
     teaching_plan: dict[str, Any] | None
     source_type: Literal["resource", "node"]
     artifacts: list[SourceArtifact]

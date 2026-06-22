@@ -34,7 +34,14 @@ class BaseResourceAgent:
     agent_name: str
 
     def __init__(self, emitter: AgentEventEmitter | None = None) -> None:
-        self.emitter = emitter
+        if emitter is None:
+            from unittest.mock import AsyncMock
+            class NoopEmitter:
+                def __getattr__(self, name: str) -> AsyncMock:
+                    return AsyncMock()
+            self.emitter = NoopEmitter()
+        else:
+            self.emitter = emitter
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         raise NotImplementedError(f"{self.__class__.__name__}.generate_resource is required")
