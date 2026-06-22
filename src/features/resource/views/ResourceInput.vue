@@ -24,13 +24,15 @@
           <span class="omni-hint" v-else>
             描述考研、期末、或任意技术栈...
           </span>
-          <BaseButton variant="primary" class="omni-submit-btn"
+          <el-button
+              type="primary"
+              class="omni-submit-btn"
               :disabled="!localInput.trim()"
               aria-label="进入参数配置"
               @click="handleSubmit"
           >
             <el-icon><Top /></el-icon>
-          </BaseButton>
+          </el-button>
         </div>
       </div>
 
@@ -63,7 +65,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import BaseButton from '@/shared/ui/BaseButton.vue'
 import { Top, StarFilled, Cpu, Odometer } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -139,14 +140,12 @@ function fillExample(text: string) {
 
 .omni-spotlight-wrapper {
   width: 100%;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 20px;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 10px 15px -3px rgba(0, 0, 0, 0.03),
-    0 25px 50px -12px rgba(0, 0, 0, 0.05);
+  background: var(--generator-card-bg);
+  backdrop-filter: var(--generator-card-blur);
+  -webkit-backdrop-filter: var(--generator-card-blur);
+  border: var(--generator-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--generator-card-shadow);
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -237,10 +236,11 @@ function fillExample(text: string) {
   100% { opacity: 1; transform: translateY(0); }
 }
 .inspiration-card {
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 16px;
+  -webkit-backdrop-filter: blur(12px);
+  border: var(--generator-card-border);
+  border-radius: var(--radius-inner);
   padding: 16px;
   display: flex;
   flex-direction: column;
