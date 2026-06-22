@@ -94,8 +94,8 @@
             <defs>
               <linearGradient id="agentLinkGradient" x1="0" x2="1" y1="0" y2="1">
                 <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.22" />
-                <stop offset="52%" stop-color="#06B6D4" stop-opacity="0.8" />
-                <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.28" />
+                <stop offset="52%" stop-color="#2563EB" stop-opacity="0.8" />
+                <stop offset="100%" stop-color="#1D4ED8" stop-opacity="0.28" />
               </linearGradient>
               <filter id="agentLinkGlow" x="-20%" y="-20%" width="140%" height="140%">
                 <feGaussianBlur stdDeviation="3" result="blur" />
@@ -2761,7 +2761,7 @@ function getMetricChips(node: DagNodeState) {
 
 .agent-link-path.status-success {
   opacity: 0.78;
-  stroke: #6366F1;
+  stroke: var(--cat-resource);
   stroke-dasharray: 0;
 }
 
@@ -2772,7 +2772,7 @@ function getMetricChips(node: DagNodeState) {
 }
 
 .agent-link-dot.status-success {
-  fill: #6366F1;
+  fill: var(--cat-resource);
 }
 
 .agent-link-dot.status-running {

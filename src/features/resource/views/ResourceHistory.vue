@@ -173,7 +173,7 @@ onMounted(() => {
 .glow-indigo {
   bottom: -20%; right: -10%;
   width: 70vw; height: 70vw;
-  background: radial-gradient(circle, rgba(99,102,241,0.25) 0%, rgba(99,102,241,0) 70%);
+  background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0) 70%);
   animation-delay: -10s;
 }
 
@@ -208,7 +208,7 @@ onMounted(() => {
 .header-titles h2 {
   font-size: 2.5rem;
   font-weight: 800;
-  color: var(--color-text);
+  color: var(--color-text-strong);
   margin: 0 0 12px 0;
   letter-spacing: -0.03em;
 }
