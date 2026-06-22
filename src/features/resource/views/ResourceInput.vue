@@ -26,6 +26,7 @@
           </span>
           <el-button
               type="primary"
+              circle
               class="omni-submit-btn"
               :disabled="!localInput.trim()"
               aria-label="进入参数配置"
@@ -158,10 +159,10 @@ function fillExample(text: string) {
   100% { opacity: 1; transform: scale(1); }
 }
 .omni-spotlight-wrapper.is-focused, .omni-spotlight-wrapper.has-content {
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: var(--cat-resource-glow);
   box-shadow:
-    0 8px 30px rgba(59, 130, 246, 0.08),
-    0 0 0 4px rgba(59, 130, 246, 0.1);
+    0 8px 30px rgba(99, 102, 241, 0.08),
+    0 0 0 4px rgba(99, 102, 241, 0.1);
   transform: translateY(-2px);
 }
 .omni-textarea :deep(.el-textarea__inner) {
@@ -213,15 +214,17 @@ function fillExample(text: string) {
   font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn {
   background: var(--cat-resource);
   color: var(--color-surface);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 4px 12px var(--cat-resource-glow);
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn:hover {
   transform: translateY(-2px) scale(1.05);
-  background: var(--color-info);
+  background: var(--color-primary-hover, #4f46e5);
+  box-shadow: 0 6px 16px var(--cat-resource-glow);
 }
 
 .omni-inspiration-grid {
