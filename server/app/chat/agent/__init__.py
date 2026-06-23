@@ -59,8 +59,6 @@ class TutorAgent:
         initial_state: TutorAgentState = {
             "user_id": input.user_id,
             "session_id": input.session_id,
-            "turn_id": input.turn_id,
-            "user_message_id": input.user_message_id,
             "question": input.question,
             "attachments": input.attachments,
             "enable_web_search": input.enable_web_search,
@@ -137,11 +135,8 @@ class TutorAgent:
         self,
         state: TutorAgentState,
         event: TutorRuntimeEvent,
-        *,
-        turn_event_type: str | None = None,
-        persist: bool = True,
     ) -> list[TutorRuntimeEvent]:
-        """Emit a stream event to the SSE queue and optionally persist it.
+        """Emit a stream event to the SSE queue.
 
         Returns a single-element list containing the event, for the caller
         to return as ``{"stream_events": [event]}`` — the operator.add reducer
@@ -150,58 +145,23 @@ class TutorAgent:
         queue = state.get("event_queue")
         if queue is not None:
             await queue.put(event)
-
-        if persist:
-            await self._persist_turn_event(
-                state,
-                turn_event_type or self._default_turn_event_type(event.type),
-                event.payload,
-            )
         return [event]
-
-    @staticmethod
-    def _default_turn_event_type(event_type: str) -> str:
-        return event_type.replace("_", ".")
-
-    async def _persist_turn_event(
-        self,
-        state: TutorAgentState,
-        event_type: str,
-        payload: dict[str, Any] | None = None,
-    ) -> None:
-        turn_id = state.get("turn_id")
-        if not turn_id:
-            return
-        try:
-            await self.memory_service.append_turn_event(
-                user_id=state.get("user_id", 0),
-                session_id=state.get("session_id", ""),
-                turn_id=turn_id,
-                event_type=event_type,
-                payload=payload or {},
-            )
-        except Exception as exc:
-            logger.warning("[TutorAgent] persist turn event failed: %s", exc)
 
     async def run_background_memory_jobs(
         self,
         *,
         user_id: int,
         session_id: str,
-        turn_id: int,
         user_message: str,
         assistant_reply: str,
-        turn_index: int = 0,
     ) -> None:
         """后台记忆管线 — 委托给 background.py。"""
         await run_background_memory_jobs(
             self.memory_service,
             user_id=user_id,
             session_id=session_id,
-            turn_id=turn_id,
             user_message=user_message,
             assistant_reply=assistant_reply,
-            turn_index=turn_index,
         )
 
     async def run_post_turn_jobs(self, **kwargs) -> None:
