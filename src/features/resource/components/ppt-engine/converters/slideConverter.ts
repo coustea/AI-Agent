@@ -380,17 +380,20 @@ function generateFlowChartHtml(block: FlowChartBlock): string {
 export function convertSlide(slide: PptSlide, _theme: string): PPTSlide {
   const elements: PPTElement[] = []
 
+  // 确保 layout 存在，否则使用默认值
+  const layout = slide.layout || 'DualPane'
+
   // 转换所有槽位的Block
   for (const [slotName, blocks] of Object.entries(slide.slots)) {
     blocks.forEach((block, index) => {
-      const position = getSlotPosition(slide.layout, slotName, index)
+      const position = getSlotPosition(layout, slotName, index)
       const element = convertBlockToElement(block, position)
       elements.push(element)
     })
   }
 
   return {
-    id: slide.id,
+    id: slide.id || `slide-${Math.random().toString(36).slice(2, 9)}`,
     elements,
     background: { type: 'solid', color: whiteTheme.backgroundColor },
     turningMode: 'fade',
@@ -401,5 +404,6 @@ export function convertSlide(slide: PptSlide, _theme: string): PPTSlide {
  * 转换完整的PptDocument为PPTist Slides
  */
 export function convertToPptistSlides(doc: PPTDocument): PPTSlide[] {
-  return doc.slides.map(slide => convertSlide(slide, doc.theme_id))
+  const themeId = doc.theme_id || 'logic-blue'
+  return doc.slides.map(slide => convertSlide(slide, themeId))
 }

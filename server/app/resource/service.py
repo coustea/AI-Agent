@@ -15,7 +15,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import and_
 from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -25,8 +24,10 @@ from app.resource.schemas import (
     AgentResult,
     DownstreamContext,
     GeneratedResourceItem,
+    GeneratedResourceItemSummary,
     ResourceBundle,
     ResourceGenerationRequest,
+    ResourceStatusSnapshot,
     TeachingPlan,
 )
 
@@ -83,6 +84,25 @@ def _db_item_to_dto(item: ItemModel) -> GeneratedResourceItem:
         downstream_context=DownstreamContext.model_validate(item.downstream_context) if isinstance(item.downstream_context, dict) else None,
         execution_report=item.execution_report, metadata=item.metadata_json or {},
         status=item.status, error_message=item.error_message,
+        created_at=item.created_at.isoformat() if item.created_at else None,
+        updated_at=item.updated_at.isoformat() if item.updated_at else None,
+    )
+
+
+def _db_item_to_summary_dto(item: ItemModel) -> GeneratedResourceItemSummary:
+    """将数据库行转换为轻量资源摘要 DTO，不包含正文内容。"""
+    if not item.title or not item.content_format:
+        raise ValueError(f"资源项 {item.id} 缺少标题或格式")
+    return GeneratedResourceItemSummary(
+        id=str(item.id),
+        type=item.agent_type,
+        title=item.title,
+        format=item.content_format,
+        summary=item.summary or "",
+        metrics=item.metrics or {},
+        metadata=item.metadata_json or {},
+        status=item.status,
+        error_message=item.error_message,
         created_at=item.created_at.isoformat() if item.created_at else None,
         updated_at=item.updated_at.isoformat() if item.updated_at else None,
     )
@@ -504,7 +524,7 @@ class ResourceService:
             stmt = stmt.where(col(GeneratedResource.source).in_(sources))
         return (await self.session.exec(stmt)).one()
 
-    async def get_generation_status(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> dict[str, Any] | None:
+    async def get_generation_status(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> ResourceStatusSnapshot | None:
         """从数据库重建资源生成状态。
 
         优先级：数据库 > event_bus snapshot
@@ -555,14 +575,14 @@ class ResourceService:
                     "phase": run.stage,
                 }
 
-        return {
-            "resource_id": resource_id,
-            "status": resource.status,
-            "selected_agents": selected_agents,
-            "agent_snapshots": merged,
-            "current_message": "",
-            "resources": [_db_item_to_dto(item).model_dump(mode="json") for item in db_items],
-        }
+        return ResourceStatusSnapshot(
+            resource_id=resource_id,
+            status=resource.status,
+            selected_agents=selected_agents,
+            agent_snapshots=merged,
+            current_message="",
+            resources=[_db_item_to_summary_dto(item) for item in db_items],
+        )
 
     async def get_resource_bundle(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> ResourceBundle | None:
         resource = await self.get_resource(user_id, resource_id, allowed_sources=allowed_sources)

@@ -19,7 +19,6 @@ from typing import Any
 from langgraph.types import Send
 from app.infra.database import session_scope
 from app.resource.agents import AGENT_REGISTRY
-from app.resource.event import ResourceAgentTracker
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
 from sqlalchemy import select
@@ -238,7 +237,7 @@ async def _execute_non_planning_agent(
     run_id: str,
     resource_input: ResourceInput,
     events,
-    require_downstream_context: bool,
+    _require_downstream_context: bool = False,
     depends_on_agents: list[str] | None = None,
 ) -> dict[str, Any]:
     """统一执行非 Planning Agent 的生命周期。
@@ -359,7 +358,7 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
         run_id=state["run_id"],
         resource_input=resource_input,
         events=state["events"],
-        require_downstream_context=True,
+        __require_downstream_context=True,
     )
 
 

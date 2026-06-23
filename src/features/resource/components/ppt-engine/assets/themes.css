@@ -1,3 +1,8 @@
+:root {
+  --ppt-font-sans: 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --ppt-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+}
+
 :root, .theme-paper-light {
   /* 纸墨白 (paper-light) - 默认护眼 */
   --ppt-bg-primary: #FAF9F6;       /* 护眼麦胚黄/暖白 */
@@ -15,6 +20,7 @@
   --ppt-radius-lg: 24px;
   --ppt-badge-bg: #eff6ff;
   --ppt-badge-text: #1d4ed8;
+  --ppt-accent-glow: rgba(37, 99, 235, 0.4);
 
   --ppt-callout-info-bg: #eff6ff;
   --ppt-callout-info-text: #1d4ed8;
@@ -48,6 +54,7 @@
   --ppt-radius-lg: 28px;
   --ppt-badge-bg: #ecfeff;
   --ppt-badge-text: #0f766e;
+  --ppt-accent-glow: rgba(8, 145, 178, 0.4);
 
   --ppt-callout-info-bg: #ecfeff;
   --ppt-callout-info-text: #0f766e;
@@ -81,6 +88,7 @@
   --ppt-radius-lg: 24px;
   --ppt-badge-bg: #e0f2fe;
   --ppt-badge-text: #0369a1;
+  --ppt-accent-glow: rgba(2, 132, 199, 0.4);
 
   --ppt-callout-info-bg: #e0f2fe;
   --ppt-callout-info-text: #0369a1;
@@ -98,7 +106,7 @@
 }
 
 .ppt-player-container {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--ppt-font-sans);
   color: var(--ppt-text-primary);
   background-color: var(--ppt-bg-primary);
   margin: 0;

@@ -41,7 +41,6 @@ def make_get_learner_profile(
     profile_service 可注入以支持测试。
     """
     async def _impl(
-        dimension: str | None = None,
         course_name: str | None = None,
         reason: str = "",
     ) -> str:

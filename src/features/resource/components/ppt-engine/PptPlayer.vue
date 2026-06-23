@@ -1,9 +1,9 @@
 <template>
-  <div class="ppt-player-wrapper" :class="`theme-${documentData.theme_id}`">
+  <div class="ppt-player-wrapper" :class="`theme-${normalizedDoc.theme_id}`">
     <!-- Export Mode: Render all slides vertically -->
     <template v-if="isExportMode">
       <div
-        v-for="(slide, index) in documentData.slides"
+        v-for="(slide, index) in normalizedDoc.slides"
         :key="`export-${index}`"
         class="slide-frame export-slide"
       >
@@ -20,7 +20,7 @@
           </div>
 
           <div class="slide-content-wrapper">
-            <DynamicSlotLayout :layout="slide.layout" :slots="slide.slots" />
+            <DynamicSlotLayout :layout="slide.layout || 'DualPane'" :slots="slide.slots" />
           </div>
 
           <div class="slide-footer">
@@ -28,7 +28,7 @@
               <span class="takeaway-tag">要点</span>
               <div class="slide-takeaway">{{ slide.takeaway }}</div>
             </div>
-            <div class="slide-index">{{ index + 1 }} / {{ documentData.slides.length }}</div>
+            <div class="slide-index">{{ index + 1 }} / {{ normalizedDoc.slides.length }}</div>
           </div>
         </div>
       </div>
@@ -39,7 +39,7 @@
       <div class="reveal" ref="deckRef">
         <div class="slides">
           <section
-            v-for="(slide, index) in documentData.slides"
+            v-for="(slide, index) in normalizedDoc.slides"
             :key="slide.id"
             class="slide-frame"
           >
@@ -56,7 +56,7 @@
               </div>
 
               <div class="slide-content-wrapper">
-                <DynamicSlotLayout :layout="slide.layout" :slots="slide.slots" />
+                <DynamicSlotLayout :layout="slide.layout || 'DualPane'" :slots="slide.slots" />
               </div>
 
               <div class="slide-footer">
@@ -64,7 +64,7 @@
                   <span class="takeaway-tag">要点</span>
                   <div class="slide-takeaway">{{ slide.takeaway }}</div>
                 </div>
-                <div class="slide-index">{{ index + 1 }} / {{ documentData.slides.length }}</div>
+                <div class="slide-index">{{ index + 1 }} / {{ normalizedDoc.slides.length }}</div>
               </div>
             </div>
           </section>
@@ -75,10 +75,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import Reveal from 'reveal.js'
 import 'reveal.js/dist/reveal.css'
 import type { PPTDocument } from './types/ppt'
+import { normalizePptDocument } from './types/ppt'
 import './assets/themes.css'
 import DynamicSlotLayout from './components/layouts/DynamicSlotLayout.vue'
 
@@ -86,6 +87,9 @@ const props = defineProps<{
   documentData: PPTDocument
   isExportMode?: boolean
 }>()
+
+// 自动补全缺失字段（id, index, layout, template_id, theme_id）
+const normalizedDoc = computed(() => normalizePptDocument(props.documentData))
 
 const deckRef = ref<HTMLElement | null>(null)
 let deckInstance: any = null
@@ -140,7 +144,7 @@ onBeforeUnmount(() => {
   background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.05), transparent 35%),
               linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
   color: var(--ppt-text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--ppt-font-sans), sans-serif;
 }
 
 .theme-logic-blue .reveal {
@@ -198,6 +202,7 @@ onBeforeUnmount(() => {
 }
 
 .slide-title {
+  font-family: var(--ppt-font-sans), sans-serif;
   font-size: 2.1rem;
   font-weight: 800;
   line-height: 1.2;
@@ -206,6 +211,7 @@ onBeforeUnmount(() => {
 }
 
 .slide-subtitle {
+  font-family: var(--ppt-font-sans), sans-serif;
   margin-top: 6px;
   font-size: 1.05rem;
   line-height: 1.5;

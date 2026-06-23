@@ -31,6 +31,31 @@ class GeneratedResourceItem(BaseModel):
     updated_at: str | None = None
 
 
+class GeneratedResourceItemSummary(BaseModel):
+    """生成中状态接口使用的轻量资源摘要。"""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    type: ResourceAgentId
+    title: str
+    format: str
+    summary: str = ""
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    status: str = "completed"
+    error_message: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ResourceStatusSnapshot(BaseModel):
+    """SSE/轮询状态接口返回的轻量任务快照。"""
+    resource_id: int
+    status: str
+    selected_agents: list[str] = Field(default_factory=list)
+    agent_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    current_message: str = ""
+    resources: list[GeneratedResourceItemSummary] = Field(default_factory=list)
+
+
 class ResourceBundle(BaseModel):
     """资源生成完成后的资源包。"""
     id: str

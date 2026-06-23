@@ -49,6 +49,7 @@ dependencies = [
     "mutagen>=1.47.0",
     "pypdf>=6.10.0",
     "xfyunsdkspeech>=0.0.4",
+    "edge-tts>=7.2.8",
 ]
 
 [dependency-groups]

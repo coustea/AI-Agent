@@ -45,7 +45,7 @@ defineProps<{
 .ppt-markdown :deep(strong) {
   color: var(--ppt-accent);
   font-weight: 700;
-  background: rgba(37, 99, 235, 0.05);
+  background: var(--ppt-badge-bg);
   padding: 2px 6px;
   border-radius: 4px;
 }

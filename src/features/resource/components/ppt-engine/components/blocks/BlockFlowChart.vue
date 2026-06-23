@@ -115,7 +115,7 @@ const activeStep = ref(0)
 .flow-step-card.active .step-index-badge {
   background: var(--ppt-accent-gradient);
   border-color: transparent;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 4px 12px var(--ppt-accent-glow);
 }
 
 .flow-step-card.active .step-num-text {
@@ -124,7 +124,7 @@ const activeStep = ref(0)
 
 .flow-step-card.active .step-body-card {
   border-color: var(--ppt-accent);
-  box-shadow: var(--ppt-shadow-glow), var(--ppt-shadow-card);
+  box-shadow: 0 8px 24px var(--ppt-accent-glow), var(--ppt-shadow-card);
   transform: translateX(4px);
 }
 

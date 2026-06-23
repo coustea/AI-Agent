@@ -328,7 +328,7 @@ class ResourceAgentTracker:
         )
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(self, exc_type, exc_val, _exc_tb) -> None:
         if exc_type is not None:
             await self._events.send_agent_status(
                 self._agent_id,

@@ -43,7 +43,9 @@ from app.resource.schemas.result import (
 # ── Response ──────────────────────────────────────────────────────────────
 from app.resource.schemas.response import (
     GeneratedResourceItem,
+    GeneratedResourceItemSummary,
     ResourceBundle,
+    ResourceStatusSnapshot,
     SingleResourceRequest,
 )
 
@@ -66,6 +68,8 @@ __all__ = [
     "ResourceInput",
     "NodeInput",
     "GeneratedResourceItem",
+    "GeneratedResourceItemSummary",
     "ResourceBundle",
+    "ResourceStatusSnapshot",
     # Response models
 ]

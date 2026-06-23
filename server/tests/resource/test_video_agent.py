@@ -161,8 +161,8 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
         )
 
     # Mock TtsService.synthesize_with_captions to return 20.0s duration without network calls
-    from app.resource.infra.tts import TtsService, TtsResult
-    async def fake_tts_synthesize_with_captions(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
+    from app.resource.infra.xf_tts import TtsService, XfTtsResult as TtsResult
+    async def fake_tts_synthesize_with_captions(text, file_path, voice="xiaoyan"):
         return TtsResult(duration=20.0, captions=[])
     monkeypatch.setattr(TtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
 
@@ -274,8 +274,8 @@ async def test_video_agent_generate_node_path_learning(monkeypatch):
         )
 
     # Mock TtsService.synthesize_with_captions to return 20.0s duration without network calls
-    from app.resource.infra.tts import TtsService, TtsResult
-    async def fake_tts_synthesize_with_captions(text, file_path, voice="zh-CN-XiaoxiaoNeural"):
+    from app.resource.infra.xf_tts import TtsService, XfTtsResult as TtsResult
+    async def fake_tts_synthesize_with_captions(text, file_path, voice="xiaoyan"):
         return TtsResult(duration=20.0, captions=[])
     monkeypatch.setattr(TtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
 

@@ -65,9 +65,9 @@ const isSingleCenter = (slotName: string | number) => {
   justify-content: center;
 }
 
-/* 默认双栏或多栏的右边栏带有一条虚线间隔，与之前的 Layout 保持风格一致 */
+/* 默认双栏或多栏的右边栏之间有一条极细的实线分隔，减少视觉杂音 */
 .dynamic-slot-grid > .grid-pane:not(:first-child) {
-  border-left: 1px dashed var(--ppt-border);
+  border-left: 1px solid var(--ppt-border);
   padding-left: 36px;
 }
 

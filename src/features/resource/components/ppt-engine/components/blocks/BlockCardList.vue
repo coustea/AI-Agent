@@ -27,20 +27,23 @@ defineProps<{
 }
 
 .card-item {
-  padding: 20px;
+  padding: 22px;
   border-radius: var(--ppt-radius-md);
-  background: var(--ppt-bg-secondary);
+  background: linear-gradient(135deg, var(--ppt-bg-secondary) 0%, rgba(148, 163, 184, 0.04) 100%);
   border: 1px solid var(--ppt-border);
   box-shadow: var(--ppt-shadow-card);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.3s ease, 
+              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .card-item:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+  transform: translateY(-5px);
+  border-color: var(--ppt-accent);
+  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.07);
 }
 
 .card-title {

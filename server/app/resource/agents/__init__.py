@@ -28,7 +28,7 @@ from app.resource.agents.code import CodeAgent
 from app.resource.agents.reading import ReadingAgent
 
 # 课件 Agent：生成教学 PPT
-from app.resource.agents.ppt import PptAgent
+from app.resource.agents.ppt import PPTAgent
 
 # 视频 Agent：生成结构化讲解视频脚本
 from app.resource.agents.video import VideoAgent
