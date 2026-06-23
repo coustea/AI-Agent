@@ -9,10 +9,6 @@
 
 其余方法提供会话 CRUD、消息存取、摘要查询等基础能力。
 
-内联模块（原 persistence.py 合并）：
-  - TranscriptEvent / TurnTranscript — transcript 事件模型
-  - ChatPersistenceAdapter — transcript 持久化适配器（追加事件 + 终态落盘）
-
 单例管理：get_chat_memory_service(module=) 按 module 缓存实例。
 """
 
@@ -23,7 +19,6 @@ from datetime import timedelta
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
 from sqlmodel import func, select
 
 from app.chat.memory.compression import ChatSessionCompressor
@@ -57,9 +52,6 @@ from app.infra.models import (
     ChatMessage,
     ChatSession,
     ChatSessionSummaryBlock,
-    ChatToolInvocation,
-    ChatTurn,
-    ChatTurnTranscript,
     ChatUploadedFile,
 )
 
@@ -70,144 +62,16 @@ logger = get_logger(__name__)
 # -----------------------------------------------------------------------
 
 
-# -----------------------------------------------------------------------
-# Transcript 模型（原 persistence.py 内联）
-#
-# Transcript 是一个 turn 的完整事件记录，包含：
-#   - events：有序事件列表（如 tool_call、thought、search_result 等）
-#   - final_answer：最终回复文本
-#   - constraint_report：约束检查报告（如安全拒绝原因）
-#
-# 以 JSON 形式存储在 ChatTurnTranscript.transcript_json 列中，
-# 避免为每个事件创建独立行，保证事件序列的原子性和有序性。
-# -----------------------------------------------------------------------
-
-class TranscriptEvent(BaseModel):
-    """单条 transcript 事件：事件类型 + 负载数据。"""
-    event_type: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-
-
-class TurnTranscript(BaseModel):
-    """一个 turn 的完整 transcript，包含事件列表、最终答案和约束报告。"""
-    turn_id: int | None = None
-    events: list[TranscriptEvent] = Field(default_factory=list)
-    final_answer: str = ""
-    constraint_report: dict[str, Any] | None = None
-
-    def append(self, event_type: str, **payload: Any) -> None:
-        """向事件列表追加一条新事件。"""
-        self.events.append(TranscriptEvent(event_type=event_type, payload=payload))
-
-
-class ChatPersistenceAdapter:
-    # -------------------------------------------------------------------
-    # append_transcript_event: 追加单条 transcript 事件到指定 turn
-    #
-    # 工作流：
-    #   1. 按 turn_id 查询是否已有 transcript 行
-    #   2. 有 → 反序列化现有 JSON；无 → 创建空 TurnTranscript
-    #   3. append(event_type, payload) 追加事件
-    #   4. 若为新行 → INSERT；若已有行 → UPDATE 覆写 transcript_json
-    #   5. commit 落盘
-    #
-    # 为什么用 JSON 而非独立行：
-    #   transcript 是一个 turn 的有序事件流，JSON 列保证原子追加
-    #   且查询时一次性拿到完整事件序列，避免多次 JOIN。
-    # -------------------------------------------------------------------
-    async def append_transcript_event(
-        self,
-        *,
-        turn_id: int,
-        event_type: str,
-        payload: dict[str, Any] | None = None,
-    ) -> None:
-        async with session_scope() as db:
-            # 按 turn_id 查找已有的 transcript 行（首次调用时 row 为 None）
-            row = (
-                await db.exec(
-                    select(ChatTurnTranscript).where(ChatTurnTranscript.turn_id == turn_id)
-                )
-            ).first()
-            transcript = TurnTranscript()
-            # 若已有行且 JSON 合法，反序列化恢复状态
-            if row is not None and isinstance(row.transcript_json, dict):
-                transcript = TurnTranscript.model_validate(row.transcript_json)
-            transcript.turn_id = turn_id
-            # 追加新事件到事件列表
-            transcript.append(event_type, **(payload or {}))
-            # 根据是否新建决定 INSERT 还是 UPDATE
-            if row is None:
-                row = ChatTurnTranscript(
-                    turn_id=turn_id,
-                    transcript_json=transcript.model_dump(),
-                    final_answer=transcript.final_answer,
-                )
-            else:
-                row.transcript_json = transcript.model_dump()
-                row.final_answer = transcript.final_answer
-            db.add(row)
-            await db.commit()
-
-    # -------------------------------------------------------------------
-    # finalize_turn: 结束一个 turn 的 transcript，写入最终答案和约束报告
-    #
-    # 与 append_transcript_event 的区别：
-    #   - append 是增量追加事件（流式过程中调用）
-    #   - finalize 是终态落盘（turn 结束后一次性写入）
-    #
-    # constraint_report 记录本轮对话是否符合约束规则（如拒绝违规请求），
-    # 供后续分析和审计使用。
-    # -------------------------------------------------------------------
-    async def finalize_turn(
-        self,
-        *,
-        turn_id: int,
-        final_answer: str,
-        constraint_report: dict[str, Any] | None = None,
-    ) -> None:
-        async with session_scope() as db:
-            # 查询已有 transcript 行（通常 finalize 时行已存在）
-            row = (
-                await db.exec(
-                    select(ChatTurnTranscript).where(ChatTurnTranscript.turn_id == turn_id)
-                )
-            ).first()
-            # 构造终态 TurnTranscript 对象
-            transcript = TurnTranscript(turn_id=turn_id, final_answer=final_answer)
-            if row is not None and isinstance(row.transcript_json, dict):
-                transcript = TurnTranscript.model_validate(row.transcript_json)
-                transcript.turn_id = turn_id
-                transcript.final_answer = final_answer
-            # 附加约束报告（如安全检查结果）
-            transcript.constraint_report = constraint_report
-            # INSERT 或 UPDATE 落盘
-            if row is None:
-                row = ChatTurnTranscript(
-                    turn_id=turn_id,
-                    transcript_json=transcript.model_dump(),
-                    final_answer=final_answer,
-                    constraint_report_json=constraint_report,
-                )
-            else:
-                row.transcript_json = transcript.model_dump()
-                row.final_answer = final_answer
-                row.constraint_report_json = constraint_report
-            db.add(row)
-            await db.commit()
-
-
 class ChatMemoryService:
     """Chat-owned memory pipeline and persistence facade."""
 
     # -------------------------------------------------------------------
-    # __init__: 初始化记忆管线的三大组件
+    # __init__: 初始化记忆管线的组件
     #
     # 组件职责：
     #   compressor        — 短期记忆压缩：消息过多时将旧消息摘要化
     #   long_term_memory  — 长期记忆更新：检测稳定信号（如重复出现的知识偏好）
     #                       并增量写入长期记忆 markdown
-    #   persistence       — transcript 持久化：事件追加 + 终态落盘
     #   llm               — LLM 实例，供标题生成等辅助功能使用
     #
     # module 参数区分不同业务模块（mentor/quiz 等），
@@ -223,15 +87,13 @@ class ChatMemoryService:
             min_messages=COMPRESS_MIN_MESSAGES,
             min_tokens=COMPRESS_MIN_TOKENS,
         )
-        # 长期记忆服务：按新增消息/token 调度，置信度 ≥ 0.75 才写入，冷却期 30 分钟
+        # 长期记忆服务：按新增消息/token 调度，置信度 >= 0.75 才写入，冷却期 30 分钟
         self.long_term_memory = ChatLongTermMemoryService(
             module=module,
             periodic_turns=LTM_MIN_MESSAGES,
             min_confidence=LTM_MIN_CONFIDENCE,
             cooldown_minutes=LTM_COOLDOWN_MINUTES,
         )
-        # transcript 持久化适配器，负责事件追加和终态落盘
-        self.persistence = ChatPersistenceAdapter()
         # LLM 实例，用于标题生成等需要语言模型的辅助功能
         self.llm = get_llm()
 
@@ -349,17 +211,6 @@ class ChatMemoryService:
 
     # -------------------------------------------------------------------
     # save_message: 持久化单条聊天消息及其附件分析结果
-    #
-    # 工作流：
-    #   1. 查找/创建 session（upsert），更新 updated_at
-    #   2. 校验 session 所属用户和模块（权限检查）
-    #   3. 构造 ChatMessage 并 flush 获取 message.id
-    #   4. 遍历 attachment_analyses，为每条非空分析写入 ChatAttachmentAnalysis
-    #   5. 一次性 commit 提交所有变更
-    #
-    # 为什么用 flush 而非直接 commit：
-    #   需要 message.id 来关联 attachment_analyses，flush 后 id 可用
-    #   但仍在一个事务内，便于原子提交。
     # -------------------------------------------------------------------
     async def save_message(
         self,
@@ -368,52 +219,35 @@ class ChatMemoryService:
         session_id: str,
         role: str,
         content: str,
-        attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
-        knowledge_sources: list[dict[str, Any]] | None = None,
         attachment_analyses: list[dict[str, Any]] | None = None,
-        teaching_diagram: dict[str, Any] | None = None,
         usage_metadata: dict[str, Any] | None = None,
         turn_id: int | None = None,
-        message_kind: str | None = None,
     ) -> ChatMessage:
         async with session_scope() as db:
-            # 查找 session，不存在则自动创建（隐式 upsert）
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if chat_session:
-                # 权限校验：session 必须属于当前用户且匹配模块
-                if chat_session.user_id != user_id or chat_session.module != self.module:
-                    raise PermissionError("会话不属于当前用户或模块")
-                # 更新 session 的最后活跃时间
+                if chat_session.user_id != user_id:
+                    raise PermissionError("会话不属于当前用户")
                 chat_session.updated_at = now()
             else:
-                # session 不存在时自动创建（首次发消息的场景）
                 chat_session = ChatSession(id=session_id, user_id=user_id, module=self.module)
             db.add(chat_session)
-            # 构造消息实体，包含角色、内容、工具调用、知识来源等所有元数据
             message = ChatMessage(
                 user_id=user_id,
                 session_id=session_id,
                 turn_id=turn_id,
-                module=self.module,
                 role=role,
-                message_kind=message_kind,
                 content=content,
-                attachments=attachments,
                 tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
-                knowledge_sources=knowledge_sources,
-                teaching_diagram=teaching_diagram,
                 usage_metadata=usage_metadata,
             )
             db.add(message)
-            # flush 以获取 message.id，后续 attachment 分析需要引用此 id
             await db.flush()
 
-            # 为每条附件分析结果创建独立的分析记录
             for analysis in attachment_analyses or []:
-                # 跳过没有有效摘要文本的分析条目
                 summary_text = str(analysis.get("summary_text") or "").strip()
                 if not summary_text:
                     continue
@@ -434,227 +268,9 @@ class ChatMemoryService:
                     )
                 )
 
-            # 原子提交：消息 + 所有附件分析在同一个事务中落盘
             await db.commit()
             return message
 
-    # -------------------------------------------------------------------
-    # save_tool_invocations: 批量保存工具调用记录
-    #
-    # 在 assistant 发起工具调用后调用，记录每次工具调用的：
-    #   - tool_call_id（LLM 生成的调用标识）
-    #   - tool_name（工具名称，如 web_search、calculate）
-    #   - arguments_json（输入参数）
-    #   - result_text / result_json（执行结果）
-    #   - status（success / error）
-    #
-    # 空列表时直接返回，避免不必要的数据库操作。
-    # -------------------------------------------------------------------
-    async def save_tool_invocations(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        invocations: list[dict[str, Any]],
-        turn_id: int | None = None,
-    ) -> None:
-        # 空列表时跳过，避免不必要的数据库操作
-        if not invocations:
-            return
-        async with session_scope() as db:
-            for invocation in invocations:
-                # 跳过缺少必要字段的条目
-                tool_call_id = str(invocation.get("tool_call_id") or "").strip()
-                tool_name = str(invocation.get("tool_name") or "").strip()
-                if not tool_call_id or not tool_name:
-                    continue
-                db.add(
-                    ChatToolInvocation(
-                        user_id=user_id,
-                        session_id=session_id,
-                        turn_id=turn_id,
-                        module=self.module,
-                        assistant_message_id=invocation.get("assistant_message_id"),
-                        tool_message_id=invocation.get("tool_message_id"),
-                        tool_call_id=tool_call_id,
-                        tool_name=tool_name,
-                        arguments_json=invocation.get("arguments_json"),
-                        result_text=invocation.get("result_text"),
-                        result_json=invocation.get("result_json"),
-                        status=str(invocation.get("status") or "success"),
-                    )
-                )
-            await db.commit()
-
-    # -------------------------------------------------------------------
-    # create_turn: 创建一个新的对话轮次（turn）
-    #
-    # turn 是记忆管线的核心调度单元，每次用户提问到回答完成为一个 turn。
-    # 它记录本轮的元数据：路由策略、执行模式、是否使用了附件/搜索/教学图。
-    #
-    # turn_index 自增逻辑：
-    #   查询当前 session 中最大 turn_index，+1 作为新 turn 的 index。
-    #   这保证同一 session 内 turn 有序，便于后续回溯和压缩。
-    # -------------------------------------------------------------------
-    async def create_turn(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        route: str = "default",
-        execution_mode: str = "default",
-        has_attachments: bool = False,
-        used_web_search: bool = False,
-        used_teaching_diagram: bool = False,
-        status: str = "running",
-    ) -> Any:
-        async with session_scope() as db:
-            # 查找/创建 session，更新最后活跃时间
-            chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
-            if chat_session:
-                # 权限校验：session 必须属于当前用户且匹配模块
-                if chat_session.user_id != user_id or chat_session.module != self.module:
-                    raise PermissionError("会话不属于当前用户或模块")
-                chat_session.updated_at = now()
-            else:
-                chat_session = ChatSession(id=session_id, user_id=user_id, module=self.module)
-            db.add(chat_session)
-            await db.flush()
-
-            # 查询当前 session 中最新的 turn，计算下一个 turn_index
-            latest = (
-                await db.exec(
-                    select(ChatTurn)
-                    .where(
-                        ChatTurn.user_id == user_id,
-                        ChatTurn.session_id == session_id,
-                        ChatTurn.module == self.module,
-                    )
-                    .order_by(ChatTurn.turn_index.desc())
-                    .limit(1)
-                )
-            ).first()
-            # 最新 turn 的 index + 1，若无历史 turn 则从 1 开始
-            next_index = int(getattr(latest, "turn_index", 0) or 0) + 1
-            turn = ChatTurn(
-                user_id=user_id,
-                session_id=session_id,
-                module=self.module,
-                turn_index=next_index,
-                route=route,
-                execution_mode=execution_mode,
-                has_attachments=has_attachments,
-                used_web_search=used_web_search,
-                used_teaching_diagram=used_teaching_diagram,
-                status=status,
-            )
-            db.add(turn)
-            await db.commit()
-            await db.refresh(turn)
-            return turn
-
-    # -------------------------------------------------------------------
-    # update_turn: 更新已有 turn 的状态和元数据
-    #
-    # 在 turn 执行过程中或结束后调用，用于：
-    #   - 标记 turn 为 completed/failed 等终态
-    #   - 记录最终的路由策略和执行模式
-    #   - 标记是否使用了网络搜索或教学图
-    #   - 记录错误信息（失败时）
-    #
-    # 只有 status == "completed" 时才写入 completed_at 时间戳，
-    # 用于后续统计 turn 耗时。
-    # -------------------------------------------------------------------
-    async def update_turn(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        turn_id: int,
-        status: str,
-        route: str = "default",
-        execution_mode: str = "default",
-        used_web_search: bool = False,
-        used_teaching_diagram: bool = False,
-        error_message: str | None = None,
-    ) -> None:
-        async with session_scope() as db:
-            # 按 id + user_id + session_id + module 精确查找 turn
-            turn = (
-                await db.exec(
-                    select(ChatTurn).where(
-                        ChatTurn.id == turn_id,
-                        ChatTurn.user_id == user_id,
-                        ChatTurn.session_id == session_id,
-                        ChatTurn.module == self.module,
-                    )
-                )
-            ).first()
-            if turn is None:
-                return
-            turn.status = status
-            turn.route = route
-            turn.execution_mode = execution_mode
-            turn.used_web_search = used_web_search
-            turn.used_teaching_diagram = used_teaching_diagram
-            turn.error_message = error_message
-            # 完成时记录完成时间，用于耗时统计
-            if status == "completed":
-                turn.completed_at = now()
-            db.add(turn)
-            await db.commit()
-
-    # -------------------------------------------------------------------
-    # append_turn_event: 向指定 turn 的 transcript 追加一条事件
-    #
-    # 这是 ChatPersistenceAdapter.append_transcript_event 的门面方法，
-    # 添加了 user_id 和 session_id 参数（当前未用于权限校验，但保持
-    # 接口一致性），便于上层调用方传入完整的会话上下文。
-    # -------------------------------------------------------------------
-    async def append_turn_event(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        turn_id: int,
-        event_type: str,
-        payload: dict[str, Any] | None = None,
-    ) -> None:
-        # 委托给 persistence 适配器执行实际的追加操作
-        await self.persistence.append_transcript_event(
-            turn_id=turn_id,
-            event_type=event_type,
-            payload=payload,
-        )
-
-    # -------------------------------------------------------------------
-    # finalize_turn_transcript: 结束 turn 的 transcript 并写入终态
-    #
-    # 将 status 注入 constraint_report 字典（作为顶层 status 字段），
-    # 然后委托给 persistence 适配器执行终态落盘。
-    #
-    # 与 finalize_turn 的区别：
-    #   - finalize_turn 是 persistence 适配器的底层方法
-    #   - 本方法是 ChatMemoryService 的门面，添加了 status 注入逻辑
-    # -------------------------------------------------------------------
-    async def finalize_turn_transcript(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        turn_id: int,
-        status: str,
-        final_answer: str,
-        constraint_report: dict[str, Any] | None = None,
-    ) -> None:
-        # 将 turn status 注入 constraint_report 顶层字段
-        report = dict(constraint_report or {})
-        report.setdefault("status", status)
-        await self.persistence.finalize_turn(
-            turn_id=turn_id,
-            final_answer=final_answer,
-            constraint_report=report,
-        )
 
     # -------------------------------------------------------------------
     # save_uploaded_file: 持久化用户上传的文件元数据
@@ -957,32 +573,6 @@ class ChatMemoryService:
                     ChatAttachmentAnalysis.module == self.module,
                 )
                 .order_by(ChatAttachmentAnalysis.created_at.desc())
-                .limit(limit)
-            )
-            return list((await db.exec(stmt)).all())
-
-    # -------------------------------------------------------------------
-    # list_tool_invocations: 获取会话中的工具调用记录列表
-    #
-    # 按 created_at 降序返回最近的 limit 条工具调用记录，
-    # 用于前端展示"已使用的工具"或后端审计工具调用历史。
-    # -------------------------------------------------------------------
-    async def list_tool_invocations(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        limit: int = 20,
-    ) -> list[Any]:
-        async with session_scope() as db:
-            stmt = (
-                select(ChatToolInvocation)
-                .where(
-                    ChatToolInvocation.user_id == user_id,
-                    ChatToolInvocation.session_id == session_id,
-                    ChatToolInvocation.module == self.module,
-                )
-                .order_by(ChatToolInvocation.created_at.desc())
                 .limit(limit)
             )
             return list((await db.exec(stmt)).all())
