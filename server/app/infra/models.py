@@ -214,42 +214,23 @@ class ChatTurn(SQLModel, table=True):
 
 
 class ChatMessage(SQLModel, table=True):
-    """聊天消息表 — 保存用户与助手的原始聊天记录"""
+    """聊天消息表 — OpenAI messages 格式"""
     __tablename__ = "chat_messages"
     __table_args__ = (
-        Index("ix_chat_messages_user_session_module_created_at", "user_id", "session_id", "module", "created_at"),
-        Index("ix_chat_messages_session_turn_created_at", "session_id", "turn_id", "created_at"),
-        Index("ix_chat_messages_attachments", "attachments", postgresql_using="gin"),
-        Index("ix_chat_messages_knowledge_sources", "knowledge_sources", postgresql_using="gin"),
+        Index("ix_chat_messages_user_session_created_at", "user_id", "session_id", "created_at"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    session_id: str = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
-    )
-    # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
-    turn_id: int | None = Field(default=None, index=True)
-    module: str = Field(default="mentor", index=True)
-    # 消息角色："user" | "assistant" | "system" | "tool"
-    role: str
-    message_kind: str | None = Field(default=None, max_length=50, index=True)
-    # 消息正文，使用 Text 类型支持长文本
-    content: str = Field(sa_column=Column(Text))
-    # 附件信息
-    attachments: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
-    # 工具调用记录
+    session_id: str = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True))
+
+    role: str  # "user" | "assistant" | "tool" | "system"
+    content: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSONB))
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
     tool_call_id: str | None = Field(default=None, max_length=120, index=True)
-    knowledge_sources: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
-    # 教学图解数据
-    teaching_diagram: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    # 记录该条消息消耗的精准 Token
     usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), index=True)
-    )
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(TIMESTAMP(timezone=True), index=True))
 
 
 # ---------------------------------------------------------------------------
@@ -438,37 +419,6 @@ class ChatMessageAttachment(SQLModel, table=True):
     module: str = Field(default="mentor", index=True)
     attachment_order: int = Field(default=0, ge=0)
     attachment_role: str = Field(default="input", max_length=32)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), index=True)
-    )
-
-
-class ChatToolInvocation(SQLModel, table=True):
-    """工具调用记录表。"""
-    __tablename__ = "chat_tool_invocations"
-    __table_args__ = (
-        Index("ix_chat_tool_invocations_user_session_created_at", "user_id", "session_id", "created_at"),
-        Index("ix_chat_tool_invocations_assistant_message_id", "assistant_message_id"),
-        Index("ix_chat_tool_invocations_tool_message_id", "tool_message_id"),
-        Index("ix_chat_tool_invocations_tool_call_id", "tool_call_id"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
-    session_id: str = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
-    )
-    turn_id: int | None = Field(default=None, index=True)
-    module: str = Field(default="mentor", index=True)
-    assistant_message_id: int | None = Field(default=None, index=True)
-    tool_message_id: int | None = Field(default=None, index=True)
-    tool_call_id: str = Field(max_length=120, index=True)
-    tool_name: str = Field(max_length=120, index=True)
-    arguments_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    result_text: str | None = Field(default=None, sa_column=Column(Text))
-    result_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    status: str = Field(default="success", max_length=32, index=True)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
@@ -1043,7 +993,6 @@ REGISTERED_MODELS = (
     ChatAttachmentAnalysis,
     ChatUploadedFile,
     ChatMessageAttachment,
-    ChatToolInvocation,
     ChatTurnTranscript,
     ChatLongTermMemory,
     GlobalProfile,
