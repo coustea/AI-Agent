@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from app.auth.security import get_current_user
+from app.chat.event import ChatEvents, encode_chat_sse, get_chat_channel
 from app.chat.service import get_chat_usecases, run_chat_agent
 from app.config import CHAT_DIR
+from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.agent_events import create_agent_run
-from app.infra.models import User
+from app.infra.models import ChatSession, User
 from app.infra.response import HttpResponse
 
 if TYPE_CHECKING:
@@ -46,14 +51,14 @@ def register_chat_routes(router: APIRouter) -> None:
         if not effective_message:
             return HttpResponse.error(code=400, message="请输入您的问题")
 
-        run = await create_agent_run(
-            user_id=current_user.id,
-            module="chat",
-            business_id=effective_session,
-        )
+        # 生成 run_id 并创建 ChatEvents 频道
+        run_id = str(uuid4())
+        events = ChatEvents(user_id=current_user.id, session_id=effective_session, run_id=run_id)
+        await events.open()
+
         background_tasks.add_task(
             run_chat_agent,
-            run_id=run.run_id,
+            run_id=run_id,
             user_id=current_user.id,
             session_id=effective_session,
             user_input=effective_message,
@@ -64,11 +69,11 @@ def register_chat_routes(router: APIRouter) -> None:
 
         logger.info(
             "[ChatAPI] 创建辅导运行: run_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
-            run.run_id,
+            run_id,
             current_user.id, effective_session, len(effective_message), len(parsed_attachments),
         )
         return HttpResponse.success(
-            data={"run_id": run.run_id, "session_id": effective_session, "status": "pending"},
+            data={"run_id": run_id, "session_id": effective_session, "status": "pending"},
             status_code=202,
         )
 
@@ -156,3 +161,67 @@ def register_chat_routes(router: APIRouter) -> None:
         if not file_path.exists():
             return HttpResponse.error(code=404, message="文件不存在")
         return FileResponse(path=str(file_path), filename=filename)
+
+    SSE_HEADERS = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+
+    @router.get("/chat/sessions/{session_id}/runs/{run_id}/events")
+    async def stream_chat_run_events(
+        session_id: str,
+        run_id: str,
+        after_sequence: int = Query(default=0, ge=0),
+        current_user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session),
+    ):
+        """订阅 Chat run 的实时事件流。
+
+        返回 404 如果 session 不属于用户。
+        返回 410 如果频道不存在（已过期或服务重启后丢失）。
+        """
+        # 验证 session 所有权
+        result = await session.exec(
+            select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == current_user.id,
+            )
+        )
+        chat_session = result.first()
+        if chat_session is None:
+            return HttpResponse.error(code=404, message="会话不存在或无权限")
+
+        # 获取频道
+        events = await get_chat_channel(current_user.id, session_id, run_id)
+        if events is None:
+            return HttpResponse.error(code=410, message="事件流已过期或不存在")
+
+        async def event_stream():
+            queue, replay = await events.subscribe(after_sequence)
+            try:
+                # 回放历史事件
+                for event in replay:
+                    yield encode_chat_sse(event)
+                # 如果回放中已有终态事件，直接结束
+                if replay and replay[-1].event in {"run.completed", "run.failed"}:
+                    return
+
+                # 持续监听新事件
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        yield ": heartbeat\n\n"
+                        continue
+                    yield encode_chat_sse(event)
+                    if event.event in {"run.completed", "run.failed"}:
+                        return
+            finally:
+                await events.unsubscribe(queue)
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers=SSE_HEADERS,
+        )

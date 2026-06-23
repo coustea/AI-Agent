@@ -158,7 +158,7 @@ export interface AgentActivity {
   tool_name?: string
   title: string
   summary?: string
-  message: string
+  message?: string
   detail?: AgentActivityDetail
 }
 

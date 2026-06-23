@@ -25,7 +25,7 @@
 
       <div class="config-section-v2">
         <div class="agent-configs-grid">
-          <div class="config-card-v2" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
+          <BaseCard class="config-card-v2" padding="large" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
             <div class="cc-header-v2">
               <div class="cc-icon-wrap" :class="agent.colorClass">
                 <el-icon><component :is="agent.icon" /></el-icon>
@@ -35,7 +35,7 @@
                 <el-switch
                     :model-value="isAgentEnabled(agent.id)"
                     @change="toggleAgent(agent.id)"
-                    active-color="var(--cat-resource)"
+                    active-color="#0369A1"
                 />
               </div>
             </div>
@@ -57,14 +57,14 @@
                       <span class="sw-label">涵盖易错点解析</span>
                       <span class="sw-desc">针对常见误区进行深度剖析</span>
                     </div>
-                    <el-switch v-model="localConfigs.content.include_common_mistakes" active-color="var(--cat-resource)" />
+                    <el-switch v-model="localConfigs.content.include_common_mistakes" />
                   </div>
                   <div class="ctrl-switch-v2">
                     <div class="sw-info">
                       <span class="sw-label">丰富生活化示例</span>
                       <span class="sw-desc">用直观的案例辅助理解抽象概念</span>
                     </div>
-                    <el-switch v-model="localConfigs.content.include_examples" active-color="var(--cat-resource)" />
+                    <el-switch v-model="localConfigs.content.include_examples" />
                   </div>
                 </div>
               </template>
@@ -127,15 +127,6 @@
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <label>题型偏好（可多选）</label>
-                  <el-checkbox-group v-model="localConfigs.quiz.question_types" class="question-type-group">
-                    <el-checkbox value="single">单选题</el-checkbox>
-                    <el-checkbox value="multiple">多选题</el-checkbox>
-                    <el-checkbox value="judge">判断题</el-checkbox>
-                    <el-checkbox value="fill">填空题</el-checkbox>
-                  </el-checkbox-group>
-                </div>
-                <div class="ctrl-group">
                   <div class="slider-label-row">
                     <label>生成题目数量</label>
                     <span class="slider-value"><b>{{ localConfigs.quiz.question_count }}</b> 道</span>
@@ -172,53 +163,33 @@
 
               <template v-if="agent.id === 'ppt'">
                 <div class="ctrl-group">
-                  <label>模板风格</label>
-                  <el-radio-group v-model="localConfigs.ppt.template_style" size="small" class="custom-radio-group">
-                    <el-radio-button value="logic-blue">逻辑蓝</el-radio-button>
+                  <label>主题风格</label>
+                  <el-radio-group v-model="localConfigs.ppt.theme_id" size="small" class="custom-radio-group">
+                    <el-radio-button value="logic-blue">科技蓝</el-radio-button>
                     <el-radio-button value="paper-light">纸墨白</el-radio-button>
                     <el-radio-button value="lab-light">实验室</el-radio-button>
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <label>内容深度 / 难度</label>
-                  <el-radio-group v-model="localConfigs.ppt.difficulty" size="small" class="custom-radio-group">
-                    <el-radio-button value="beginner">入门</el-radio-button>
-                    <el-radio-button value="intermediate">进阶</el-radio-button>
-                    <el-radio-button value="advanced">挑战</el-radio-button>
+                  <label>讲解风格</label>
+                  <el-radio-group v-model="localConfigs.ppt.explanation_style" size="small" class="custom-radio-group">
+                    <el-radio-button value="conceptual">概念优先</el-radio-button>
+                    <el-radio-button value="procedural">流程优先</el-radio-button>
+                    <el-radio-button value="comparative">对比优先</el-radio-button>
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <label>课件深度</label>
-                  <el-radio-group v-model="localConfigs.ppt.lesson_depth" size="small" class="custom-radio-group">
-                    <el-radio-button value="quick">快速</el-radio-button>
-                    <el-radio-button value="standard">标准</el-radio-button>
-                    <el-radio-button value="deep">深入</el-radio-button>
-                  </el-radio-group>
-                </div>
-                <div class="ctrl-group">
-                  <label>课程形态</label>
-                  <el-select v-model="localConfigs.ppt.lesson_kind" size="default" class="w-full custom-select">
-                    <el-option label="自动判断" value="auto" />
-                    <el-option label="概念课" value="concept" />
-                    <el-option label="算法课" value="algorithm" />
-                    <el-option label="系统课" value="system" />
-                    <el-option label="调试课" value="debugging" />
-                    <el-option label="项目课" value="project" />
-                  </el-select>
-                </div>
-                <div class="ctrl-group">
-                  <label>学习重点</label>
-                  <el-radio-group v-model="localConfigs.ppt.learning_focus" size="small" class="custom-radio-group">
-                    <el-radio-button value="balanced">均衡</el-radio-button>
-                    <el-radio-button value="concept">概念</el-radio-button>
-                    <el-radio-button value="code">代码</el-radio-button>
-                    <el-radio-button value="practice">练习</el-radio-button>
+                  <label>可视化程度</label>
+                  <el-radio-group v-model="localConfigs.ppt.visual_emphasis" size="small" class="custom-radio-group">
+                    <el-radio-button value="minimal">极简</el-radio-button>
+                    <el-radio-button value="balanced">平衡</el-radio-button>
+                    <el-radio-button value="rich">丰富</el-radio-button>
                   </el-radio-group>
                 </div>
               </template>
 
             </div>
-          </div>
+          </BaseCard>
         </div>
       </div>
 
@@ -253,6 +224,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import BaseCard from '@/shared/ui/BaseCard.vue'
 import { Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LearningScenario, ResourceAgentId } from '@/features/resource/model/resource'
@@ -296,9 +268,7 @@ const localConfigs = ref<AnyAgentConfigs>(JSON.parse(JSON.stringify(props.agentC
 
 // Watch parent prop changes (e.g. when scenario changes or is initialized)
 watch(() => props.agentConfigs, (newVal) => {
-  if (JSON.stringify(newVal) !== JSON.stringify(localConfigs.value)) {
-    localConfigs.value = JSON.parse(JSON.stringify(newVal))
-  }
+  localConfigs.value = JSON.parse(JSON.stringify(newVal))
 }, { deep: true })
 
 // Emit changes back to parent
@@ -347,7 +317,7 @@ const selectScenario = (scenario: LearningScenario) => {
   background: transparent;
   align-items: center;
   overflow-y: auto;
-  /* remove strict padding: 60px var(--space-5) to allow parent padding */
+  padding: 60px var(--space-5);
   position: relative;
   font-family: var(--font-sans);
 }
@@ -359,79 +329,37 @@ const selectScenario = (scenario: LearningScenario) => {
   font-weight: 800;
   margin: 0 0 12px 0;
   letter-spacing: -0.02em;
-  color: var(--color-text-strong); /* solid color instead of gradient */
+  background: linear-gradient(135deg, var(--color-text-strong), var(--cat-resource));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .view-header p { font-family: var(--agent-body-font); font-size: 1.1rem; color: var(--color-text-muted); margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6; }
 .scenario-selector-v2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 40px; }
-.scenario-card {
-  background: var(--generator-card-bg);
-  backdrop-filter: var(--generator-card-blur);
-  -webkit-backdrop-filter: var(--generator-card-blur);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--generator-card-shadow);
-  padding: 20px 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  position: relative;
-}
-.scenario-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--color-border-hover); box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08); background: rgba(255, 255, 255, 0.96); }
-.scenario-card.active {
-  border-color: var(--cat-resource);
-  box-shadow: 0 12px 32px var(--cat-resource-glow);
-}
+.scenario-card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(24px); border: 2px solid var(--color-border); border-radius: 20px; padding: 20px 24px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); position: relative; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04); }
+.scenario-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--color-border-hover); box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08); background: #ffffff; }
+.scenario-card.active { border-color: var(--color-primary); box-shadow: 0 12px 32px var(--color-primary-glow, rgba(99, 102, 241, 0.25)); background: #ffffff; }
 .scenario-icon-box { width: 48px; height: 48px; background: var(--color-bg); border: 2px solid var(--color-border); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: var(--color-text-secondary); transition: all 0.3s; }
-.scenario-card.active .scenario-icon-box { background: var(--cat-resource); color: var(--color-surface); border-color: var(--cat-resource); transform: scale(1.05); }
+.scenario-card.active .scenario-icon-box { background: var(--color-primary); color: var(--color-surface); border-color: var(--color-primary); transform: scale(1.05); }
 .scenario-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .s-name { font-weight: 800; font-size: 1.1rem; color: var(--color-text-strong); letter-spacing: 0.02em; }
 .s-desc { font-family: var(--agent-body-font); font-size: 0.8rem; color: var(--color-text-muted); line-height: 1.4; opacity: 0.8; }
-.active-dot { position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; background: var(--cat-resource); border-radius: 50%; box-shadow: 0 0 12px var(--cat-resource-glow); }
+.active-dot { position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; background: var(--color-primary); border-radius: 50%; box-shadow: 0 0 12px var(--color-primary-glow, rgba(99, 102, 241, 0.3)); }
 .config-section-v2 { margin-top: 10px; }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-.config-card-v2 {
-  background: var(--generator-card-bg);
-  backdrop-filter: var(--generator-card-blur);
-  -webkit-backdrop-filter: var(--generator-card-blur);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--generator-card-shadow);
-  padding: 24px; /* matching large padding */
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.config-card-v2:hover {
-  transform: translateY(-4px);
-  border-color: var(--cat-resource);
-  box-shadow: 0 16px 32px var(--cat-resource-glow);
-  background: rgba(255, 255, 255, 0.96);
-}
+.config-card-v2 { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(24px); border: 2px solid var(--color-border); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04); }
+.config-card-v2:hover { transform: translateY(-4px); border-color: var(--color-primary-border); box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08); background: #ffffff; }
 .cc-header-v2 { padding: 20px 24px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px dashed var(--color-border-light); margin-bottom: 16px; }
-.cc-icon-wrap {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.15rem;
-  background: var(--cat-resource-soft) !important;
-  border: 1px solid rgba(37, 99, 235, 0.15) !important;
-  color: var(--cat-resource) !important;
-}
+.cc-icon-wrap { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
+.cc-icon-wrap.text-emerald, .cc-icon-wrap.text-orange, .cc-icon-wrap.text-purple, .cc-icon-wrap.text-red, .cc-icon-wrap.text-emerald, .cc-icon-wrap.text-indigo, .cc-icon-wrap.text-slate { background: #F3F4F6; color: #374151; }
 .config-card-v2.disabled { opacity: 0.7; background: #F9FAFB; }
 .config-card-v2.agent-off { border-color: #E5E7EB; opacity: 0.85; }
 .cc-header-switch { margin-left: auto; flex-shrink: 0; }
 .cc-body-v2.body-disabled { opacity: 0.38; pointer-events: none; filter: grayscale(60%); }
 .question-type-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .question-type-group :deep(.el-checkbox) { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 4px 12px; margin: 0; transition: all 0.2s; }
-.question-type-group :deep(.el-checkbox.is-checked) { background: var(--cat-resource-soft); border-color: var(--cat-resource); }
+.question-type-group :deep(.el-checkbox.is-checked) { background: var(--color-primary-soft); border-color: var(--color-primary-border); }
 .question-type-group :deep(.el-checkbox__label) { font-size: 0.85rem; font-weight: 600; color: var(--color-text-strong); }
-.question-type-group :deep(.el-checkbox.is-checked .el-checkbox__label) { color: var(--cat-resource); }
+.question-type-group :deep(.el-checkbox.is-checked .el-checkbox__label) { color: var(--color-primary-text); }
 .cc-title { font-family: var(--font-sans); font-weight: 800; font-size: 1.15rem; color: var(--color-text); letter-spacing: 0.02em; }
 .cc-body-v2 { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
 .ctrl-group { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -447,32 +375,13 @@ const selectScenario = (scenario: LearningScenario) => {
 .custom-radio-group { display: flex; gap: var(--space-2); width: 100%; flex-wrap: wrap; }
 :deep(.custom-radio-group .el-radio-button) { flex: 1; min-width: 0; }
 :deep(.custom-radio-group .el-radio-button__inner) { width: 100%; border-radius: var(--radius-md) !important; border: 1px solid transparent !important; background: rgba(241, 245, 249, 0.6); color: var(--color-text-muted); font-weight: var(--weight-semibold); transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base); padding: 10px 0; }
-:deep(.custom-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background-color: var(--cat-resource) !important;
-  color: var(--color-surface) !important;
-  border-color: var(--cat-resource) !important;
-  box-shadow: 0 2px 8px var(--cat-resource-glow) !important;
-}
+:deep(.custom-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) { background-color: var(--color-surface) !important; color: var(--color-text) !important; border-color: rgba(226, 232, 240, 0.8) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important; }
 .slider-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: -4px; }
 .slider-value { font-size: 0.9rem; color: var(--cat-resource); font-weight: 700; }
 .custom-slider-v2 { padding: 0 var(--space-2); }
 .personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: 24px; margin-top: 16px; padding-bottom: 60px; }
 .footer-btns { display: flex; justify-content: center; gap: 20px; }
-.selected-agents-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  justify-content: center;
-  background: var(--generator-card-bg);
-  backdrop-filter: var(--generator-card-blur);
-  -webkit-backdrop-filter: var(--generator-card-blur);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-outer);
-  box-shadow: var(--generator-card-shadow);
-  padding: 16px 24px;
-  max-width: 860px;
-}
+.selected-agents-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid var(--color-border); border-radius: 24px; padding: 16px 24px; max-width: 860px; box-shadow: 0 4px 24px rgba(148, 163, 184, 0.08); }
 .sab-label { font-family: var(--agent-body-font); font-size: 0.9rem; color: var(--color-text-muted); font-weight: 700; white-space: nowrap; }
 .sab-pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .sab-pills :deep(.el-tag.sab-pill) { background: var(--color-bg) !important; border: 1px solid var(--color-border) !important; color: var(--color-text-secondary) !important; border-radius: 99px !important; padding: 0 16px !important; height: 32px !important; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; }
@@ -480,6 +389,6 @@ const selectScenario = (scenario: LearningScenario) => {
 .sab-hint { font-size: 0.8rem; color: var(--color-text-muted); font-weight: 600; margin-left: 8px; }
 .footer-back-btn { font-weight: 600; color: var(--color-text-muted); border: 1px solid var(--color-border); background: var(--color-surface); }
 .footer-back-btn:hover { color: var(--color-text-strong); border-color: var(--color-border-hover); background: var(--color-bg); }
-.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: var(--cat-resource) !important; color: var(--color-surface) !important; border: none; box-shadow: 0 4px 16px var(--cat-resource-glow); transition: transform 0.2s, box-shadow 0.2s; }
-.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--cat-resource-glow); background: var(--color-primary-hover) !important; }
+.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: var(--cat-resource) !important; color: var(--color-surface) !important; border: none; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
+.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); background: var(--color-info) !important; }
 </style>

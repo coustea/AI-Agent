@@ -25,8 +25,8 @@ class ContentAgent(BaseResourceAgent):
     agent_id = "content"
     agent_name = "内容生成"
 
-    def __init__(self, emitter=None):
-        super().__init__(emitter=emitter)
+    def __init__(self, events=None, emitter=None):
+        super().__init__(events=events, emitter=emitter)
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -50,7 +50,7 @@ class ContentAgent(BaseResourceAgent):
             covered_outline_ids=outline_ids,
         )
         result.downstream_context = handoff
-        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -63,7 +63,7 @@ class ContentAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emitter.emit_agent_snapshot(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
         return result
 
     async def _generate_content(
@@ -84,7 +84,7 @@ class ContentAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
 
-        await self.emitter.emit_agent_step(self.agent_id, phase="start", message="正在构建课程讲解提示词", progress=25)
+        await self.events.send_agent_step(self.agent_id, phase="start", message="正在构建课程讲解提示词", progress=25)
         prompt = prompts.get("resource").get("content")
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)

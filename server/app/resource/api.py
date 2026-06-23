@@ -26,7 +26,7 @@ from app.auth.security import get_current_user
 from app.config import WORKPLACE_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.agent_events import create_agent_run
+from app.resource.event import ResourceEvents
 from app.infra.models import User
 from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService
@@ -61,7 +61,9 @@ async def create_resource_task(
         source="standalone",
     )
     resource_id = result["resource_id"]
-    run = await create_agent_run(user_id=current_user.id, module="resource", business_id=str(resource_id))
+    run_id = str(uuid.uuid4())
+    events = ResourceEvents(user_id=current_user.id, resource_id=resource_id, run_id=run_id)
+    await events.open()
 
     profile_builder = get_profile_service()
     profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
@@ -72,10 +74,10 @@ async def create_resource_task(
         request=req,
         profile=profile_markdown,
         resource_id=resource_id,
-        run_id=run.run_id,
+        run_id=run_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run.run_id, "status": "pending"}, status_code=201)
+    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run_id, "status": "pending"}, status_code=201)
 
 
 @router.post("/resources/single")
@@ -105,7 +107,9 @@ async def create_single_resource_task(
         source="single_agent",
     )
     resource_id = result["resource_id"]
-    run = await create_agent_run(user_id=current_user.id, module="resource", business_id=str(resource_id))
+    run_id = str(uuid.uuid4())
+    events = ResourceEvents(user_id=current_user.id, resource_id=resource_id, run_id=run_id)
+    await events.open()
 
     # 单智能体模式：通过多智能体流水线执行，只启用一个 agent
     background_tasks.add_task(
@@ -117,10 +121,10 @@ async def create_single_resource_task(
         ),
         profile=profile_markdown,
         resource_id=resource_id,
-        run_id=run.run_id,
+        run_id=run_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run.run_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
+    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
 
 
 @router.get("/resources/{resource_id}/status")

@@ -24,7 +24,7 @@ from app.resource.workflow.validation import validate_agent_result
 
 if TYPE_CHECKING:
     from app.resource.agents.base import BaseResourceAgent
-    from app.infra.agent_events import AgentEventEmitter
+    from app.resource.event import ResourceEvents
     from app.resource.schemas import AgentResult, ResourceInput
 
 logger = get_module_logger("resource", sub="execution")
@@ -66,7 +66,7 @@ async def execute_resource_agent(
     agent_id: str,
     agent: "BaseResourceAgent",
     input_data: "ResourceInput",
-    emitter: "AgentEventEmitter",
+    events: "ResourceEvents",
     timeout_seconds: float,
     source_item_ids: list[int] | None = None,
 ) -> AgentOutcome:
@@ -74,7 +74,7 @@ async def execute_resource_agent(
     started = time.perf_counter()
 
     # 发送开始事件
-    await _observe(emitter.emit_agent(agent_id, "running", "开始生成", 0))
+    await _observe(events.send_agent_status(agent_id, "running", "开始生成", 0))
 
     # 更新 run 状态为 running
     try:
@@ -94,7 +94,7 @@ async def execute_resource_agent(
             stage="persistence",
             exception=exc,
             started_at=started,
-            emitter=emitter,
+            events=events,
         )
 
     # 执行 Agent（带超时）
@@ -109,7 +109,7 @@ async def execute_resource_agent(
             stage="timeout",
             exception=exc,
             started_at=started,
-            emitter=emitter,
+            events=events,
         )
     except Exception as exc:
         return await _record_failure(
@@ -119,7 +119,7 @@ async def execute_resource_agent(
             stage="generation",
             exception=exc,
             started_at=started,
-            emitter=emitter,
+            events=events,
         )
 
     # 校验结果
@@ -133,7 +133,7 @@ async def execute_resource_agent(
             stage="validation",
             exception=exc,
             started_at=started,
-            emitter=emitter,
+            events=events,
         )
 
     # 持久化结果
@@ -162,18 +162,18 @@ async def execute_resource_agent(
             stage="persistence",
             exception=exc,
             started_at=started,
-            emitter=emitter,
+            events=events,
         )
 
     # 发送成功事件
     await _observe(
-        emitter.emit_artifact_ready(
+        events.send_artifact_ready(
             agent_id,
             f"{agent_id} 资源已保存",
             artifact_id=str(item.id),
         )
     )
-    await _observe(emitter.emit_agent(agent_id, "finished", result.summary, 100))
+    await _observe(events.send_agent_status(agent_id, "finished", result.summary, 100))
 
     return AgentOutcome(
         agent_id=agent_id,
@@ -190,7 +190,7 @@ async def _record_failure(
     stage: str,
     exception: Exception,
     started_at: float,
-    emitter: "AgentEventEmitter",
+    events: "ResourceEvents",
 ) -> AgentOutcome:
     """记录失败并返回失败结果。"""
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
@@ -223,7 +223,7 @@ async def _record_failure(
     except Exception as e:
         logger.error(f"Failed to record agent failure to database: {e}")
 
-    await _observe(emitter.emit_agent(agent_id, "failed", error_message, 0))
+    await _observe(events.send_agent_status(agent_id, "failed", error_message, 0))
 
     return AgentOutcome(
         agent_id=agent_id,

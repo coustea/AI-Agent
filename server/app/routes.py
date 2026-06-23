@@ -18,7 +18,6 @@ from app.chat.api import router as chat_router
 from app.dashboard.api import router as dashboard_router
 # 评估路由
 from app.evaluation.api import router as evaluation_router
-from app.infra.agent_events_api import router as agent_events_router
 # 学习路径路由
 from app.path.api import router as path_router
 # 学习资源路由
@@ -43,7 +42,6 @@ def install_routes(app: FastAPI) -> None:
     app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
     # AI 聊天模块：/api/v1/ai/chat/*
     app.include_router(chat_router, prefix="/api/v1/ai", tags=["ai"])
-    app.include_router(agent_events_router, prefix="/api/v1/ai", tags=["agent-runs"])
     # 仪表盘模块：/api/v1/ai/dashboard/*
     app.include_router(dashboard_router, prefix="/api/v1/ai", tags=["dashboard"])
     # 学习资源模块：/api/v1/ai/resource/*

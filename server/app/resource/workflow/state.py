@@ -78,7 +78,7 @@ class ParentState(TypedDict, total=False):
     request: ResourceGenerationRequest
     profile: str  # Markdown 格式的学习者画像
     run_id: str
-    emitter: Any
+    events: Any
     teaching_plan: TeachingPlan
     results: Annotated[dict[str, AgentResult], merge_results_dict]
     failures: Annotated[dict[str, AgentFailure], merge_failures_dict]
@@ -95,4 +95,4 @@ class WorkerInputState(TypedDict):
     teaching_plan: TeachingPlan
     profile: str  # Markdown 格式的学习者画像
     run_id: str
-    emitter: Any
+    events: Any

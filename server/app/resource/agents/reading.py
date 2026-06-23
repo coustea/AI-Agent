@@ -66,8 +66,8 @@ class ReadingAgent(BaseResourceAgent):
     agent_id = "reading"
     agent_name = "阅读生成"
 
-    def __init__(self, emitter=None):
-        super().__init__(emitter=emitter)
+    def __init__(self, events=None, emitter=None):
+        super().__init__(events=events, emitter=emitter)
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -102,7 +102,7 @@ class ReadingAgent(BaseResourceAgent):
         )
         result.downstream_context = handoff
         if self.emitter:
-            await self.emitter.emit_agent_snapshot(
+            await self.events.send_agent_status(
                 self.agent_id,
                 status="completed" if result.success else "failed",
                 message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"),
@@ -121,7 +121,7 @@ class ReadingAgent(BaseResourceAgent):
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
         if self.emitter:
-            await self.emitter.emit_agent_snapshot(
+            await self.events.send_agent_status(
                 self.agent_id,
                 status="completed" if result.success else "failed",
                 message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"),
@@ -149,7 +149,7 @@ class ReadingAgent(BaseResourceAgent):
         language_preference = config.get("language_preference") or "chinese"
 
         if self.emitter:
-            await self.emitter.emit_agent_step(
+            await self.events.send_agent_step(
                 self.agent_id,
                 phase="search",
                 message="正在搜索相关阅读资源",
@@ -179,7 +179,7 @@ class ReadingAgent(BaseResourceAgent):
             )
 
         if self.emitter:
-            await self.emitter.emit_agent_step(
+            await self.events.send_agent_step(
                 self.agent_id,
                 phase="generate",
                 message=f"已获取 {len(search_results)} 条真实资源",

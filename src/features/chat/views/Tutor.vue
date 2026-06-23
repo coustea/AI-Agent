@@ -172,22 +172,8 @@
             </div>
 
             <template v-for="msg in messages" :key="msg.id">
-              <AgentActivityCard
-                  v-if="msg.role === 'ai' && msg.agentActivities?.length"
-                  :activities="msg.agentActivities"
-                  :active="isStreamingMessage(msg) && !getDisplayContent(msg)"
-              />
               <div
-                v-if="msg.role === 'user' || getDisplayContent(msg) || msg.teachingDiagramGenerating || msg.teachingDiagram"
-                v-memo="[
-                  msg.id === streamingMsgId ? streamDisplayText : msg.content,
-                  msg.id === streamingMsgId ? isAIThinking : false,
-                  msg.agentActivities,
-                  msg.contextCompressionStage,
-                  msg.teachingDiagramGenerating,
-                  msg.teachingDiagram,
-                  msg.attachments
-                ]"
+                v-if="msg.role === 'user' || getDisplayContent(msg) || msg.agentActivities?.length || msg.teachingDiagramGenerating || msg.teachingDiagram"
                 :class="['message-row', msg.role]"
             >
               <div class="msg-avatar">
@@ -201,7 +187,15 @@
                   <span class="time">{{ msg.time }}</span>
                 </div>
 
-                <div :class="['bubble', 'markdown-body', { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' }]">
+                <AgentActivityCard
+                    v-if="msg.role === 'ai' && msg.agentActivities?.length"
+                    :activities="msg.agentActivities"
+                />
+
+                <div
+                  v-if="msg.role === 'user' || getDisplayContent(msg)"
+                  :class="['bubble', 'markdown-body', { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' }]"
+                >
                   <template v-if="msg.role === 'user'">
                     <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
                   </template>
@@ -222,7 +216,7 @@
                   </div>
                   <div class="compression-copy">
                     <strong>{{ getCompressionTitle(msg) }}</strong>
-                    <span>{{ msg.contextCompressionMessage || '正在将先前的探索过程提炼并归档至长期记忆库...' }}</span>
+                    <span>{{ msg.contextCompressionMessage }}</span>
                   </div>
                 </div>
 
@@ -279,11 +273,18 @@
               </div>
             </div>
 
-            <div class="minimal-input-wrapper" :class="{ 'is-expanded': isExpandedInput }">
+            <form
+              ref="messageFormRef"
+              class="minimal-input-wrapper"
+              :class="{ 'is-expanded': isExpandedInput }"
+              @submit.prevent="handleSend"
+            >
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
                   placeholder="在此开启学术思辨（Enter 递交，Shift + Enter 换行）"
+                  @compositionstart="isComposing = true"
+                  @compositionend="isComposing = false"
                   @keydown.enter="handleEnter"
                   @input="autoResize"
               ></textarea>
@@ -291,13 +292,13 @@
               <div class="minimal-action-bar">
                 <div class="action-left">
                   <el-tooltip content="上传附件" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload" aria-label="上传附件">
+                    <button type="button" class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload" aria-label="上传附件">
                       <el-icon aria-hidden="true"><Paperclip /></el-icon>
                     </button>
                   </el-tooltip>
 
                   <el-tooltip content="联网搜索" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch" :aria-label="enableWebSearch ? '关闭联网搜索' : '开启联网搜索'">
+                    <button type="button" class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch" :aria-label="enableWebSearch ? '关闭联网搜索' : '开启联网搜索'">
                       <el-icon aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <circle cx="12" cy="12" r="10"></circle>
@@ -310,7 +311,7 @@
                   </el-tooltip>
 
                   <el-tooltip content="协同绘制结构图解" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭结构图解' : '协同绘制结构图解'">
+                    <button type="button" class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭结构图解' : '协同绘制结构图解'">
                       <el-icon aria-hidden="true"><DataLine /></el-icon>
                     </button>
                   </el-tooltip>
@@ -340,6 +341,7 @@
                       :show-after="500"
                   >
                     <button
+                        type="button"
                         class="minimal-icon-btn voice-chat-btn"
                         :class="{ 'is-active': isVoiceChatting }"
                         @click="handleVoiceChatToggle"
@@ -351,18 +353,29 @@
                     </button>
                   </el-tooltip>
 
-                  <el-tooltip :content="isRecording ? '结束录音' : '语音提问'" placement="top" :show-after="500">
-                    <button class="minimal-icon-btn voice" :class="{ 'is-recording': isRecording }" @click="handleVoiceToggle" :aria-label="isRecording ? '结束录音' : '语音提问'">
+                  <el-tooltip
+                    v-if="chatMode === 'digital_human'"
+                    :content="isRecording ? '结束录音' : '语音提问'"
+                    placement="top"
+                    :show-after="500"
+                  >
+                    <button
+                      type="button"
+                      class="minimal-icon-btn voice"
+                      :class="{ 'is-recording': isRecording }"
+                      @click="handleVoiceToggle"
+                      :aria-label="isRecording ? '结束录音' : '语音提问'"
+                    >
                       <el-icon aria-hidden="true"><Microphone /></el-icon>
                     </button>
                   </el-tooltip>
 
-                  <button class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" @click="handleSend" aria-label="发送消息">
-                    <el-icon aria-hidden="true"><Top /></el-icon>
+                  <button type="submit" class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" aria-label="发送消息">
+                    <span class="send-arrow-glyph" aria-hidden="true">↑</span>
                   </button>
                 </div>
               </div>
-            </div>
+            </form>
             <div class="input-footer">内容由 AI 生成，仅供参考。</div>
           </div>
         </div>
@@ -453,7 +466,7 @@ import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, 
 import {
   ChatLineRound, Avatar, Cpu, Service, UserFilled,
   Microphone, Document, ChatDotRound, ChatLineSquare,
-  Delete, Close, Top, Paperclip,
+  Delete, Close, Paperclip,
   EditPen, Search, Timer, DataLine,
   CircleCheckFilled, Download
 } from '@element-plus/icons-vue'
@@ -481,7 +494,7 @@ import type {
   ChatSession,
   TeachingDiagram,
 } from '@/features/chat/model/chat'
-import type { AgentEvent } from '@/shared/agent-events/model'
+import type { ChatEvent } from '@/features/chat/model/chatEvent'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
 import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
@@ -510,7 +523,9 @@ const isAIThinking = ref(false)
 const digitalHumanBackendStatus = ref('')
 const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const messageFormRef = ref<HTMLFormElement | null>(null)
 const isExpandedInput = ref(false)
+const isComposing = ref(false)
 
 const enableWebSearch = ref(false)
 const needTeachingDiagram = ref(false)
@@ -748,9 +763,9 @@ const scheduleCompressionClear = (aiMsg: ChatMsg) => {
 }
 
 const applyCompressionStatus = (aiMsg: ChatMsg, payload: { stage?: string; message?: string }) => {
-  if (!payload.stage || !COMPRESSION_STAGES.has(payload.stage as ContextCompressionStage)) return false
+  if (!payload.stage || !payload.message || !COMPRESSION_STAGES.has(payload.stage as ContextCompressionStage)) return false
   aiMsg.contextCompressionStage = payload.stage as ContextCompressionStage
-  aiMsg.contextCompressionMessage = payload.message || '正在将先前的探索过程提炼并归档至长期记忆库...'
+  aiMsg.contextCompressionMessage = payload.message
   if (aiMsg.contextCompressionStage === 'compression_done') {
     scheduleCompressionClear(aiMsg)
   }
@@ -758,12 +773,12 @@ const applyCompressionStatus = (aiMsg: ChatMsg, payload: { stage?: string; messa
 }
 
 type AgentStatusPayload = {
-  activity_id?: string
-  kind?: AgentActivity['kind']
+  activity_id: string
+  kind: AgentActivity['kind']
   stage?: string
-  status?: 'running' | 'done' | 'failed'
+  status: 'running' | 'done' | 'failed'
   tool_name?: string
-  title?: string
+  title: string
   summary?: string
   message?: string
   detail?: AgentActivity['detail']
@@ -771,17 +786,15 @@ type AgentStatusPayload = {
 
 const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayload) => {
   if (!aiMsg) return
-  aiMsg.searchStage = payload.stage || 'tool_running'
-  aiMsg.searchMessage = payload.message || '正在调用工具...'
   const activity: AgentActivity = {
-    activity_id: payload.activity_id || `${payload.kind || 'workflow'}-${payload.stage || payload.tool_name || 'status'}`,
-    kind: payload.kind || 'workflow',
+    activity_id: payload.activity_id,
+    kind: payload.kind,
     stage: payload.stage,
-    status: payload.status || 'running',
+    status: payload.status,
     tool_name: payload.tool_name,
-    title: payload.title || payload.message || '准备回答',
+    title: payload.title,
     summary: payload.summary,
-    message: payload.message || '正在准备回答...',
+    message: payload.message,
     detail: payload.detail,
   }
   const activities = aiMsg.agentActivities || (aiMsg.agentActivities = [])
@@ -790,10 +803,12 @@ const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayloa
   else activities.push(activity)
 }
 
-const applyUnifiedAgentEvent = (aiMsg: ChatMsg | undefined, event: AgentEvent) => {
+const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   if (!aiMsg) return
-  if (event.type === 'artifact.ready') {
-    const diagram = normalizeTeachingDiagram(event.detail as unknown as TeachingDiagram)
+
+  // Handle diagram.ready event
+  if (event.event === 'diagram.ready') {
+    const diagram = normalizeTeachingDiagram(event.data as unknown as TeachingDiagram)
     if (diagram) {
       clearAgentStatus(aiMsg)
       aiMsg.teachingDiagram = diagram
@@ -801,29 +816,57 @@ const applyUnifiedAgentEvent = (aiMsg: ChatMsg | undefined, event: AgentEvent) =
     }
     return
   }
-  if (event.type !== 'agent.status' && event.type !== 'tool.status') return
 
-  const stage = String(event.detail.stage || event.activity_id || '')
-  const message = event.summary || event.title
-  if (applyCompressionStatus(aiMsg, { stage, message })) return
-  if (stage === 'teaching_diagram_generate') {
-    clearAgentStatus(aiMsg)
-    aiMsg.teachingDiagramGenerating = true
+  // Handle thinking event - used for teaching diagram generation
+  if (event.event === 'thinking') {
+    const stage = event.data.stage as string | undefined
+    if (stage === 'teaching_diagram_generate') {
+      clearAgentStatus(aiMsg)
+      aiMsg.teachingDiagramGenerating = true
+      return
+    }
+    // Handle compression stages
+    if (applyCompressionStatus(aiMsg, { stage: stage || '', message: event.message })) return
     return
   }
-  applyAgentStatus(aiMsg, {
-    activity_id: event.activity_id || undefined,
-    kind: event.type === 'tool.status'
-      ? 'tool'
-      : (event.agent_id === 'attachment_analyzer' ? 'attachment' : 'workflow'),
-    stage,
-    status: event.status === 'completed' ? 'done' : event.status === 'failed' ? 'failed' : 'running',
-    tool_name: event.type === 'tool.status' ? event.agent_id || undefined : undefined,
-    title: event.title,
-    summary: event.summary,
-    message,
-    detail: event.detail as AgentActivity['detail'],
-  })
+
+  // Handle tool events
+  if (event.event === 'tool.running' || event.event === 'tool.completed' || event.event === 'tool.failed') {
+    const activityId = (event.data.activity_id as string)?.trim()
+    const toolName = event.data.tool_name as string | undefined
+    const title = event.message.trim()
+    if (!activityId || !title) return
+
+    applyAgentStatus(aiMsg, {
+      activity_id: activityId,
+      kind: 'tool',
+      stage: event.data.stage as string | undefined,
+      status: event.event === 'tool.completed' ? 'done' : event.event === 'tool.failed' ? 'failed' : 'running',
+      tool_name: toolName,
+      title,
+      summary: event.data.summary as string | undefined,
+      detail: event.data as AgentActivity['detail'],
+    })
+    return
+  }
+
+  // Handle attachment events
+  if (event.event === 'attachment.running' || event.event === 'attachment.completed' || event.event === 'attachment.failed') {
+    const activityId = (event.data.activity_id as string)?.trim()
+    const title = event.message.trim()
+    if (!activityId || !title) return
+
+    applyAgentStatus(aiMsg, {
+      activity_id: activityId,
+      kind: 'attachment',
+      stage: event.data.stage as string | undefined,
+      status: event.event === 'attachment.completed' ? 'done' : event.event === 'attachment.failed' ? 'failed' : 'running',
+      title,
+      summary: event.data.summary as string | undefined,
+      detail: event.data as AgentActivity['detail'],
+    })
+    return
+  }
 }
 
 const clearAgentStatus = (aiMsg?: ChatMsg) => {
@@ -1007,11 +1050,11 @@ const copyTeachingDiagramJson = async (diagram: TeachingDiagram) => {
 }
 
 const handleEnter = (e: KeyboardEvent) => {
-  if (e.isComposing) return
+  if (isComposing.value || e.isComposing) return
   if (e.shiftKey) return
-  
+
   e.preventDefault()
-  handleSend()
+  messageFormRef.value?.requestSubmit()
 }
 
 // 工具函数
@@ -1531,7 +1574,7 @@ const switchSession = async (sessionId: string) => {
 
     // Process buffered events (diagrams, status, etc.)
     for (const evt of events) {
-      applyUnifiedAgentEvent(messages.value.find(m => m.id === aiMsgId), evt)
+      applyChatEvent(messages.value.find(m => m.id === aiMsgId), evt)
     }
 
     // Resubscribe callbacks so new chunks flow to this component
@@ -1574,7 +1617,7 @@ const switchSession = async (sessionId: string) => {
         streamingMsgRef.value = null
       },
       onEvent: (evt) => {
-        applyUnifiedAgentEvent(messages.value.find(m => m.id === aiMsgId), evt)
+        applyChatEvent(messages.value.find(m => m.id === aiMsgId), evt)
         scrollToBottom()
       },
     })
@@ -1675,29 +1718,6 @@ const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standa
   }
 }
 
-const handleVoiceToggle = async () => {
-  if (chatMode.value === 'digital_human') {
-    if (isVadListening.value) {
-      stopVad()
-      isRecording.value = false
-      hasSpeechDetected.value = true
-      startAsrProcessing(8000)
-    } else {
-      if (!await ensureCurrentSession('digital_human')) return
-      await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-      isRecording.value = isVadListening.value
-      clearAsrProcessing()
-    }
-    return
-  }
-  isRecording.value = !isRecording.value
-  if (isRecording.value) {
-    ElMessage.success({ message: '开始录音，请说话...', plain: true })
-  } else {
-    ElMessage.info({ message: '录音结束，正在发送...', plain: true })
-  }
-}
-
 const handleVoiceChatToggle = async () => {
   if (!isVoiceChatting.value) {
     if (!await ensureCurrentSession('digital_human')) return
@@ -1719,6 +1739,21 @@ const handleVoiceChatToggle = async () => {
     isVoiceChatting.value = false
     ElMessage.info({ message: '已关闭语音通话模式', plain: true })
   }
+}
+
+const handleVoiceToggle = async () => {
+  if (isVadListening.value) {
+    stopVad()
+    isRecording.value = false
+    hasSpeechDetected.value = true
+    startAsrProcessing(8000)
+    return
+  }
+
+  if (!await ensureCurrentSession('digital_human')) return
+  await startVad(needTeachingDiagram.value, getAvatarCapabilities())
+  isRecording.value = isVadListening.value
+  clearAsrProcessing()
 }
 
 const handleAvatarReconnect = async () => {
@@ -1924,7 +1959,7 @@ const handleSend = async () => {
           streamingMsgRef.value = null
         },
         onEvent: (evt) => {
-          applyUnifiedAgentEvent(messages.value.find(m => m.id === aiMsgId), evt)
+          applyChatEvent(messages.value.find(m => m.id === aiMsgId), evt)
           scrollToBottom()
         },
       },
@@ -3206,11 +3241,6 @@ onBeforeUnmount(() => {
   background: rgba(20, 184, 166, 0.1);
 }
 
-.minimal-icon-btn.voice.is-recording {
-  background: var(--color-danger);
-  color: var(--color-surface);
-}
-
 .minimal-send-btn {
   width: 32px;
   height: 32px;
@@ -3225,6 +3255,20 @@ onBeforeUnmount(() => {
   transition: all var(--transition-base);
   font-size: 1.1rem;
   margin-left: 4px;
+}
+
+.send-arrow-glyph {
+  display: block;
+  font-family: Arial, sans-serif;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.minimal-icon-btn.voice.is-recording {
+  background: var(--color-danger);
+  color: var(--color-surface);
 }
 
 .minimal-send-btn.can-send {

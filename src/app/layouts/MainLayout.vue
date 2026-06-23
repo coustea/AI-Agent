@@ -131,6 +131,9 @@ const activePath = computed(() => {
   if (current.startsWith('/question-bank')) {
     return '/question-bank'
   }
+  if (current.startsWith('/profile')) {
+    return ''
+  }
   return '/dashboard'
 })
 
@@ -183,13 +186,12 @@ const handleCommand = async (command: string) => {
     try {
       await logout()
     } catch {
-      // ignore
     }
     clearCurrentUser()
     clearAuthToken()
-    router.push('/login')
+    await router.push('/login')
   } else if (command === 'profile' || command === 'history' || command === 'favorites' || command === 'settings') {
-    router.push('/profile')
+    await router.push('/profile')
   }
 }
 </script>

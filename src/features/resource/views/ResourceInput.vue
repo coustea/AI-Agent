@@ -6,7 +6,12 @@
         <p class="hero-subtitle">输入你的学习目标，自动构建专属的知识图谱、测试与课件</p>
       </div>
 
-      <div class="omni-spotlight-wrapper" :class="{ 'is-focused': isInputFocused, 'has-content': localInput.trim().length > 0 }">
+      <form
+        ref="formRef"
+        class="omni-spotlight-wrapper"
+        :class="{ 'is-focused': isInputFocused, 'has-content': localInput.trim().length > 0 }"
+        @submit.prevent="handleSubmit"
+      >
         <el-input
             v-model="localInput"
             type="textarea"
@@ -15,7 +20,9 @@
             class="omni-textarea"
             @focus="isInputFocused = true"
             @blur="isInputFocused = false"
-            @keydown.enter.exact.prevent="handleSubmit"
+            @compositionstart="isComposing = true"
+            @compositionend="isComposing = false"
+            @keydown.enter.exact="handleEnter"
         />
         <div class="omni-actions">
           <span class="omni-hint" v-if="localInput.trim().length > 0">
@@ -24,18 +31,15 @@
           <span class="omni-hint" v-else>
             描述考研、期末、或任意技术栈...
           </span>
-          <el-button
-              type="primary"
-              circle
-              class="omni-submit-btn"
+          <BaseButton variant="primary" class="omni-submit-btn"
+              type="submit"
               :disabled="!localInput.trim()"
               aria-label="进入参数配置"
-              @click="handleSubmit"
           >
             <el-icon><Top /></el-icon>
-          </el-button>
+          </BaseButton>
         </div>
-      </div>
+      </form>
 
       <div class="omni-inspiration-grid">
         <div class="inspiration-card" @click="fillExample('复习《计算机网络》TCP三次握手，请多出几道难题')">
@@ -66,6 +70,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import BaseButton from '@/shared/ui/BaseButton.vue'
 import { Top, StarFilled, Cpu, Odometer } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -79,6 +84,8 @@ const emit = defineEmits<{
 
 const localInput = ref(props.modelValue)
 const isInputFocused = ref(false)
+const isComposing = ref(false)
+const formRef = ref<HTMLFormElement | null>(null)
 
 watch(() => props.modelValue, (v) => { localInput.value = v })
 watch(localInput, (v) => { emit('update:modelValue', v) })
@@ -86,6 +93,13 @@ watch(localInput, (v) => { emit('update:modelValue', v) })
 function handleSubmit() {
   if (!localInput.value.trim()) return
   emit('submit')
+}
+
+function handleEnter(event: KeyboardEvent) {
+  if (isComposing.value || event.isComposing) return
+
+  event.preventDefault()
+  formRef.value?.requestSubmit()
 }
 
 function fillExample(text: string) {
@@ -125,9 +139,12 @@ function fillExample(text: string) {
 .hero-title {
   font-size: 2.8rem;
   font-weight: 800;
-  color: var(--color-text-strong);
+  color: var(--color-text);
   letter-spacing: -0.03em;
   margin: 0 0 12px 0;
+  background: linear-gradient(135deg, var(--color-text-strong), var(--cat-resource));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .hero-subtitle {
   font-size: 1.1rem;
@@ -138,12 +155,14 @@ function fillExample(text: string) {
 
 .omni-spotlight-wrapper {
   width: 100%;
-  background: var(--generator-card-bg);
-  backdrop-filter: var(--generator-card-blur);
-  -webkit-backdrop-filter: var(--generator-card-blur);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--generator-card-shadow);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 20px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 10px 15px -3px rgba(0, 0, 0, 0.03),
+    0 25px 50px -12px rgba(0, 0, 0, 0.05);
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -156,10 +175,10 @@ function fillExample(text: string) {
   100% { opacity: 1; transform: scale(1); }
 }
 .omni-spotlight-wrapper.is-focused, .omni-spotlight-wrapper.has-content {
-  border-color: var(--cat-resource);
+  border-color: rgba(59, 130, 246, 0.4);
   box-shadow:
-    0 8px 30px var(--cat-resource-glow),
-    0 0 0 4px var(--cat-resource-glow);
+    0 8px 30px rgba(59, 130, 246, 0.08),
+    0 0 0 4px rgba(59, 130, 246, 0.1);
   transform: translateY(-2px);
 }
 .omni-textarea :deep(.el-textarea__inner) {
@@ -211,17 +230,15 @@ function fillExample(text: string) {
   font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 0;
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn {
   background: var(--cat-resource);
   color: var(--color-surface);
-  box-shadow: 0 4px 12px var(--cat-resource-glow);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn:hover {
   transform: translateY(-2px) scale(1.05);
-  background: var(--color-primary-hover, #1d4ed8);
-  box-shadow: 0 6px 16px var(--cat-resource-glow);
+  background: var(--color-info);
 }
 
 .omni-inspiration-grid {
@@ -236,11 +253,10 @@ function fillExample(text: string) {
   100% { opacity: 1; transform: translateY(0); }
 }
 .inspiration-card {
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-inner);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 16px;
   padding: 16px;
   display: flex;
   flex-direction: column;
