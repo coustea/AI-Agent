@@ -46,13 +46,10 @@ from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
-    ChatAttachmentAnalysis,
     ChatLongTermMemory,
-    ChatMessageAttachment,
     ChatMessage,
     ChatSession,
     ChatSessionSummaryBlock,
-    ChatUploadedFile,
 )
 
 logger = get_logger(__name__)
@@ -210,7 +207,7 @@ class ChatMemoryService:
         return title
 
     # -------------------------------------------------------------------
-    # save_message: 持久化单条聊天消息及其附件分析结果
+    # save_message: 持久化单条聊天消息
     # -------------------------------------------------------------------
     async def save_message(
         self,
@@ -218,12 +215,10 @@ class ChatMemoryService:
         user_id: int,
         session_id: str,
         role: str,
-        content: str,
+        content: list[dict[str, Any]],
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
-        attachment_analyses: list[dict[str, Any]] | None = None,
         usage_metadata: dict[str, Any] | None = None,
-        turn_id: int | None = None,
     ) -> ChatMessage:
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
@@ -237,7 +232,6 @@ class ChatMemoryService:
             message = ChatMessage(
                 user_id=user_id,
                 session_id=session_id,
-                turn_id=turn_id,
                 role=role,
                 content=content,
                 tool_calls=tool_calls,
@@ -245,290 +239,9 @@ class ChatMemoryService:
                 usage_metadata=usage_metadata,
             )
             db.add(message)
-            await db.flush()
-
-            for analysis in attachment_analyses or []:
-                summary_text = str(analysis.get("summary_text") or "").strip()
-                if not summary_text:
-                    continue
-                db.add(
-                    ChatAttachmentAnalysis(
-                        user_id=user_id,
-                        session_id=session_id,
-                        message_id=message.id,
-                        file_id=analysis.get("file_id"),
-                        file_name=analysis.get("file_name"),
-                        file_url=analysis.get("file_url"),
-                        turn_id=turn_id,
-                        module=self.module,
-                        analysis_type=str(analysis.get("analysis_type") or "general"),
-                        summary_text=summary_text,
-                        extracted_text=analysis.get("extracted_text"),
-                        structured_json=analysis.get("structured_json"),
-                    )
-                )
-
             await db.commit()
             return message
 
-
-    # -------------------------------------------------------------------
-    # save_uploaded_file: 持久化用户上传的文件元数据
-    #
-    # 在文件上传到对象存储后调用，记录文件的：
-    #   - storage_url：对象存储中的访问 URL
-    #   - storage_key：对象存储中的文件标识（用于删除/引用）
-    #   - original_name：用户上传时的原始文件名
-    #   - file_kind：文件类型分类（document/image/audio 等）
-    #   - mime_type / extension：MIME 类型和扩展名
-    #   - size_bytes：文件大小（字节）
-    #
-    # 返回创建的记录对象，供后续 bind_message_attachments 使用。
-    # -------------------------------------------------------------------
-    async def save_uploaded_file(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        payload: dict[str, Any],
-    ) -> Any:
-        async with session_scope() as db:
-            record = ChatUploadedFile(
-                user_id=user_id,
-                session_id=session_id,
-                module=self.module,
-                storage_url=str(payload.get("url") or ""),
-                storage_key=payload.get("storage_key"),
-                original_name=str(payload.get("original_name") or ""),
-                file_kind=str(payload.get("file_type") or "document"),
-                mime_type=payload.get("mime_type"),
-                extension=payload.get("extension"),
-                size_bytes=int(payload.get("size_bytes") or 0),
-            )
-            db.add(record)
-            await db.commit()
-            await db.refresh(record)
-            return record
-
-    # -------------------------------------------------------------------
-    # bind_message_attachments: 将已上传的文件绑定到消息
-    #
-    # 工作流：
-    #   1. 从 attachments 中提取所有 URL
-    #   2. 通过 URL 批量查找对应的 ChatUploadedFile 记录
-    #   3. 为每个匹配的文件创建 ChatMessageAttachment 关联记录
-    #   4. 保留 attachment_order 以维持用户指定的文件顺序
-    #
-    # 为什么用 URL 匹配而非 file_id：
-    #   前端上传文件后只知道 URL，不知道数据库中的 file_id，
-    #   所以通过 storage_url 反查对应的文件记录。
-    # -------------------------------------------------------------------
-    async def bind_message_attachments(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        message_id: int,
-        turn_id: int | None,
-        attachments: list[dict[str, Any]],
-    ) -> None:
-        # 空列表时跳过
-        if not attachments:
-            return
-        async with session_scope() as db:
-            # 提取所有有效的 URL
-            urls = [str(item.get("url") or "").strip() for item in attachments if str(item.get("url") or "").strip()]
-            if not urls:
-                return
-            # 批量查找对应的上传文件记录
-            uploaded_files = list(
-                (
-                    await db.exec(
-                        select(ChatUploadedFile).where(
-                            ChatUploadedFile.user_id == user_id,
-                            ChatUploadedFile.session_id == session_id,
-                            ChatUploadedFile.module == self.module,
-                            ChatUploadedFile.storage_url.in_(urls),
-                        )
-                    )
-                ).all()
-            )
-            # 构建 URL → 文件记录的映射，便于快速查找
-            file_by_url = {item.storage_url: item for item in uploaded_files}
-            for index, attachment in enumerate(attachments):
-                url = str(attachment.get("url") or "").strip()
-                file_record = file_by_url.get(url)
-                # URL 未匹配到文件记录时跳过
-                if file_record is None:
-                    continue
-                # 创建消息-文件关联记录，保留原始顺序
-                db.add(
-                    ChatMessageAttachment(
-                        user_id=user_id,
-                        session_id=session_id,
-                        message_id=message_id,
-                        file_id=file_record.id,
-                        turn_id=turn_id,
-                        module=self.module,
-                        attachment_order=index,
-                        attachment_role="input",
-                    )
-                )
-            await db.commit()
-
-    # -------------------------------------------------------------------
-    # list_message_attachments: 批量查询多条消息的附件列表
-    #
-    # 通过 JOIN ChatUploadedFile 获取附件的完整元数据（URL、类型、大小等）。
-    # 返回格式：{message_id: [附件字典列表]}，按 message_id 和 attachment_order 排序。
-    #
-    # 为什么一次查多条消息：
-    #   避免 N+1 查询问题，前端展示消息列表时需要一次性拿到
-    #   所有消息的附件信息。
-    # -------------------------------------------------------------------
-    async def list_message_attachments(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        message_ids: list[int],
-    ) -> dict[int, list[dict[str, Any]]]:
-        # 空列表时直接返回空字典
-        if not message_ids:
-            return {}
-        async with session_scope() as db:
-            # JOIN 查询：消息附件关联 + 上传文件元数据
-            stmt = (
-                select(ChatMessageAttachment, ChatUploadedFile)
-                .join(ChatUploadedFile, ChatUploadedFile.id == ChatMessageAttachment.file_id)
-                .where(
-                    ChatMessageAttachment.user_id == user_id,
-                    ChatMessageAttachment.session_id == session_id,
-                    ChatMessageAttachment.module == self.module,
-                    ChatMessageAttachment.message_id.in_(message_ids),
-                )
-                # 先按 message_id 分组，再按附件顺序排列
-                .order_by(ChatMessageAttachment.message_id.asc(), ChatMessageAttachment.attachment_order.asc())
-            )
-            rows = (await db.exec(stmt)).all()
-            # 构建 message_id → 附件列表 的映射
-            result: dict[int, list[dict[str, Any]]] = {}
-            for relation, uploaded in rows:
-                result.setdefault(relation.message_id, []).append(
-                    {
-                        "file_id": uploaded.id,
-                        "url": uploaded.storage_url,
-                        "type": uploaded.file_kind,
-                        "name": uploaded.original_name,
-                        "mime_type": uploaded.mime_type,
-                        "extension": uploaded.extension,
-                        "storage_key": uploaded.storage_key,
-                        "size_bytes": uploaded.size_bytes,
-                    }
-                )
-            return result
-
-    # -------------------------------------------------------------------
-    # list_messages: 获取指定 session 的消息列表
-    #
-    # 支持两种查询模式：
-    #   - only_unexpired=True（默认）：仅返回未过期的消息（MESSAGE_EXPIRE_DAYS 天内）
-    #   - only_unexpired=False：返回所有消息
-    #
-    # 智能分页逻辑：
-    #   当总消息数超过 limit 时，只返回最新的 limit 条（offset=total-limit），
-    #   而非从第 0 条开始取。这保证用户始终看到最新的对话内容。
-    #
-    # 消息按 created_at 升序排列，保证对话时间线的正确性。
-    # -------------------------------------------------------------------
-    async def list_messages(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        limit: int | None = None,
-        only_unexpired: bool = True,
-    ) -> list[Any]:
-        async with session_scope() as db:
-            # 构建过滤条件
-            filters = [
-                ChatMessage.user_id == user_id,
-                ChatMessage.session_id == session_id,
-                ChatMessage.module == self.module,
-            ]
-            # 过期消息过滤（仅返回 MESSAGE_EXPIRE_DAYS 天内的消息）
-            if only_unexpired:
-                filters.append(ChatMessage.created_at >= now() - timedelta(days=MESSAGE_EXPIRE_DAYS))
-            # 统计符合条件的总消息数
-            total = (await db.exec(select(func.count()).where(*filters))).one()
-            # 按时间升序查询所有消息
-            stmt = select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc())
-            # 当消息数超限时，用 offset 跳过旧消息，只保留最新的 limit 条
-            if limit is not None and limit > 0 and total > limit:
-                stmt = stmt.offset(total - limit)
-            return list((await db.exec(stmt)).all())
-
-    # -------------------------------------------------------------------
-    # count_messages: 统计指定 session 中的消息总数
-    #
-    # 使用 COUNT 聚合函数，避免查询全部消息行再计数的性能开销。
-    # 用于压缩器判断是否需要触发压缩。
-    # -------------------------------------------------------------------
-    async def count_messages(self, *, user_id: int, session_id: str) -> int:
-        async with session_scope() as db:
-            return (
-                await db.exec(
-                    select(func.count()).where(
-                        ChatMessage.user_id == user_id,
-                        ChatMessage.session_id == session_id,
-                        ChatMessage.module == self.module,
-                    )
-                )
-            ).one()
-
-    # -------------------------------------------------------------------
-    # delete_short_term_messages: 删除指定 session 的所有短期消息
-    #
-    # 用于会话重置或压缩后清理旧消息。返回删除的消息数量。
-    # 注意：此操作不可逆，仅删除 ChatMessage 行，
-    # 不影响 transcript、摘要块等关联数据。
-    # -------------------------------------------------------------------
-    async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:
-        async with session_scope() as db:
-            # 查询该 session 下的所有消息
-            messages = (
-                await db.exec(
-                    select(ChatMessage).where(
-                        ChatMessage.user_id == user_id,
-                        ChatMessage.session_id == session_id,
-                        ChatMessage.module == self.module,
-                    )
-                )
-            ).all()
-            # 逐条删除（SQLModel 需要逐条 delete）
-            for message in messages:
-                await db.delete(message)
-            await db.commit()
-            return len(messages)
-
-    # -------------------------------------------------------------------
-    # reset_session_counters: 重置 session 的后处理计数器
-    #
-    # 将压缩、画像、长期记忆计数器归零，通常在会话重置或重新开始时调用。
-    # -------------------------------------------------------------------
-    async def reset_session_counters(self, *, user_id: int, session_id: str) -> None:
-        async with session_scope() as db:
-            chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
-            if chat_session:
-                chat_session.summary_token_count = 0
-                chat_session.profile_token_count = 0
-                chat_session.profile_message_count = 0
-                chat_session.ltm_token_count = 0
-                chat_session.ltm_message_count = 0
-                chat_session.last_profile_message_id = None
-                chat_session.last_ltm_message_id = None
-                db.add(chat_session)
-                await db.commit()
 
     # -------------------------------------------------------------------
     # list_summary_blocks: 获取最近的会话摘要块列表
@@ -547,32 +260,6 @@ class ChatMemoryService:
                     ChatSessionSummaryBlock.module == self.module,
                 )
                 .order_by(ChatSessionSummaryBlock.created_at.desc())
-                .limit(limit)
-            )
-            return list((await db.exec(stmt)).all())
-
-    # -------------------------------------------------------------------
-    # list_attachment_analyses: 获取消息附件的分析结果列表
-    #
-    # 分析结果由附件处理流程生成（如 OCR 提取、内容摘要等），
-    # 按 created_at 降序返回最近的 limit 条。
-    # -------------------------------------------------------------------
-    async def list_attachment_analyses(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        limit: int = 20,
-    ) -> list[Any]:
-        async with session_scope() as db:
-            stmt = (
-                select(ChatAttachmentAnalysis)
-                .where(
-                    ChatAttachmentAnalysis.user_id == user_id,
-                    ChatAttachmentAnalysis.session_id == session_id,
-                    ChatAttachmentAnalysis.module == self.module,
-                )
-                .order_by(ChatAttachmentAnalysis.created_at.desc())
                 .limit(limit)
             )
             return list((await db.exec(stmt)).all())
