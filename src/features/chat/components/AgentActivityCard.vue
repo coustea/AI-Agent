@@ -63,7 +63,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AgentActivity } from '@/features/chat/model/chat'
+import type { AgentActivity } from '@/features/chat/views/TutorConstants'
 
 const props = defineProps<{
   activities: AgentActivity[]

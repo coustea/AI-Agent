@@ -1,4 +1,4 @@
-import type { AgentActivity, TeachingDiagram } from '@/features/chat/model/chat'
+import type { TeachingDiagram } from '@/features/chat/model/chat'
 
 export interface PendingFile {
   file?: File
@@ -15,6 +15,30 @@ export interface Attachment {
 }
 
 export type ContextCompressionStage = 'compression_checking' | 'compression_running' | 'compression_done'
+
+/** Agent 活动详情 */
+export interface AgentActivityDetail {
+  tool_name?: string
+  input?: string
+  output?: string
+  error?: string
+  duration_ms?: number | null
+  analysis_type?: string
+  files?: string[]
+}
+
+/** Agent 活动 */
+export interface AgentActivity {
+  activity_id: string
+  kind: 'tool' | 'attachment' | 'workflow'
+  stage?: string
+  status: 'running' | 'done' | 'failed'
+  tool_name?: string
+  title: string
+  summary?: string
+  message?: string
+  detail?: AgentActivityDetail
+}
 
 /** Agent 工作状态 - 基于后端事件 */
 export type AgentStage =

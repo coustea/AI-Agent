@@ -1,10 +1,10 @@
 // src/types/chat.ts — 聊天相关类型定义
 
-interface AttachmentInfo {
-  url: string
-  type: string  // "image" | "document"
-  name: string
-}
+// OpenAI 格式的内容部分类型
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
+  | { type: "file"; file: { file_id?: string; file_data?: string; filename?: string } }
 
 type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy'
 type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -132,45 +132,12 @@ export interface TeachingDiagram {
   teaching_content: TeachingContent
 }
 
-export interface KnowledgeSource {
-  rank?: number
-  source: string
-  file_name?: string
-  chunk_index?: number
-  distance?: number
-}
-
-export interface AgentActivityDetail {
-  tool_name?: string
-  input?: string
-  output?: string
-  error?: string
-  duration_ms?: number | null
-  analysis_type?: string
-  files?: string[]
-}
-
-export interface AgentActivity {
-  activity_id: string
-  kind: 'tool' | 'attachment' | 'workflow'
-  stage?: string
-  status: 'running' | 'done' | 'failed'
-  tool_name?: string
-  title: string
-  summary?: string
-  message?: string
-  detail?: AgentActivityDetail
-}
-
 export interface ChatMessageItem {
+  id?: number
   role: string
-  content: string
-  attachments: AttachmentInfo[] | null
-  teaching_diagram: TeachingDiagram | null
-  knowledge_sources?: KnowledgeSource[] | null
-  message_kind?: string | null
-  attachment_analyses?: Array<Record<string, unknown>> | null
-  agent_activities?: AgentActivity[] | null
+  content: ContentPart[]
+  tool_calls?: Array<{ id: string; name: string; args?: Record<string, unknown> }> | null
+  tool_call_id?: string | null
   created_at: string | null
 }
 

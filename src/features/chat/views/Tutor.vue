@@ -490,7 +490,6 @@ import {
   getChatHistory,
 } from '@/features/chat/api/chat'
 import type {
-  AgentActivity,
   ChatSession,
   TeachingDiagram,
 } from '@/features/chat/model/chat'
@@ -502,6 +501,7 @@ import {
   type Attachment,
   type ChatMsg,
   type ContextCompressionStage,
+  type AgentActivity,
   normalizeTeachingDiagram,
   getDocumentType,
   getDocumentIconColor,
@@ -1523,16 +1523,33 @@ const loadHistoryFromAPI = async (sessionId: string) => {
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
-    const visibleHistory = history.filter(msg => msg.role === 'user' || msg.message_kind === 'assistant_answer')
-    const mapped = visibleHistory.map((msg, i) => ({
-      id: Date.now() + i,
-      role: msg.role === 'user' ? 'user' as const : 'ai' as const,
-      content: msg.content,
-      time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-      attachments: msg.attachments || null,
-      teachingDiagram: normalizeTeachingDiagram(msg.teaching_diagram),
-      agentActivities: msg.agent_activities || [],
-    }))
+    const visibleHistory = history.filter(msg => msg.role === 'user' || msg.role === 'assistant')
+    const mapped = visibleHistory.map((msg, i) => {
+      // 从 ContentPart[] 中提取文本和附件
+      const contentParts = msg.content || []
+      const textContent = contentParts
+        .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+        .map(part => part.text)
+        .join('')
+      const imageAttachments = contentParts
+        .filter((part): part is { type: 'image_url'; image_url: { url: string } } => part.type === 'image_url')
+        .map(part => ({ url: part.image_url.url, type: 'image', name: '' }))
+      const fileAttachments = contentParts
+        .filter((part): part is { type: 'file'; file: { file_id?: string; file_data?: string; filename?: string } } => part.type === 'file')
+        .map(part => ({ url: part.file.file_data || '', type: 'document', name: part.file.filename || '' }))
+      const attachments = [...imageAttachments, ...fileAttachments].length > 0
+        ? [...imageAttachments, ...fileAttachments]
+        : null
+
+      return {
+        id: msg.id || Date.now() + i,
+        role: msg.role === 'user' ? 'user' as const : 'ai' as const,
+        content: textContent,
+        time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+        attachments,
+        agentActivities: [],
+      }
+    })
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = mapped.filter((item, idx) => {
       if (idx === 0) return true
