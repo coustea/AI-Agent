@@ -11,27 +11,20 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
-from datetime import datetime
-from pathlib import Path
 from typing import Any, AsyncIterator
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.chat.agent import TutorAgent
 from app.chat.event import ChatEvents, ChatEventName
-from app.chat.events import build_attachment_status_payload, build_persisted_tool_activity
+from app.chat.events import build_attachment_status_payload, build_persisted_tool_activity_from_message
 from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
-from app.chat.safety import ContentSafetyFilter, SafetyResult, safety_filter
-from app.chat.schemas import (
-    TutorAgentInput,
-    UploadResponse,
-)
+from app.chat.safety import SafetyResult, safety_filter
+from app.chat.schemas import TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.storage.message_item import ChatMessageItem
-from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, IMAGE_EXTENSIONS, CHAT_HISTORY_LIMIT
+from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, CHAT_HISTORY_LIMIT
 from app.infra.logging import get_logger
-from app.infra.models import ChatMessage
 
 logger = get_logger(__name__)
 
@@ -41,203 +34,21 @@ logger = get_logger(__name__)
 # -----------------------------------------------------------------------
 
 
-async def _create_turn(
-    uc: ChatUseCases,
-    *,
-    user_id: int,
-    session_id: str,
-    user_input: str,
-    attachments: list[str],
-    enable_web_search: bool,
-    need_teaching_diagram: bool,
-) -> tuple[int, int, int | None, str]:
-    """Create turn, persist user message, and generate title if first message.
-
-    Returns (turn_id, turn_index, user_message_id, user_content).
-    """
-    svc = uc._memory_service
-    current_message = (user_input or "").strip()
-    merged_attachments = list(dict.fromkeys(attachments or []))
-
-    user_content = current_message
-    if merged_attachments:
-        image_urls, file_urls = [], []
-        for url in merged_attachments:
-            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-            if ext in IMAGE_EXTENSIONS:
-                image_urls.append(url)
-            else:
-                file_urls.append(url)
-        if image_urls:
-            user_content += f" [Attached Images: {', '.join(image_urls)}]"
-        if file_urls:
-            user_content += f" [Attached Files: {', '.join(file_urls)}]"
-
-    turn_row = await svc.create_turn(
-        user_id=user_id, session_id=session_id,
-        route="default", execution_mode="default",
-        has_attachments=bool(merged_attachments),
-        used_web_search=enable_web_search,
-        used_teaching_diagram=need_teaching_diagram,
-        status="running",
-    )
-    turn_id = turn_row.id
-    turn_index = int(getattr(turn_row, "turn_index", 0) or 0)
-
-    await svc.append_turn_event(
-        user_id=user_id, session_id=session_id, turn_id=turn_id,
-        event_type="turn.started", payload={"status": "running"},
-    )
-
-    user_attachment_records = [
-        {"url": url, "type": "image" if url.rsplit(".", 1)[-1].lower().split("?")[0] in IMAGE_EXTENSIONS else "document", "name": url.split("/")[-1]}
-        for url in merged_attachments
-    ] if merged_attachments else None
-
-    user_message = await uc.save_message(
-        user_id=user_id, session_id=session_id,
-        role="user", content=user_content,
-        attachments=user_attachment_records,
-        turn_id=turn_id, message_kind="user_input",
-    )
-    user_message_id = getattr(user_message, "id", None)
-
-    await svc.append_turn_event(
-        user_id=user_id, session_id=session_id, turn_id=turn_id,
-        event_type="user.message", payload={"content": user_content},
-    )
-
-    if await uc.count_messages(user_id, session_id) <= 1:
-        uc._spawn_background(
-            svc.generate_session_title(user_id=user_id, session_id=session_id, first_message=current_message),
-            label="generate_title",
-        )
-
-    return turn_id, turn_index, user_message_id, user_content
+IMAGE_EXTENSIONS = frozenset(["jpg", "jpeg", "png", "gif", "webp", "bmp"])
 
 
-async def _persist_assistant_reply(
-    uc: ChatUseCases,
-    *,
-    user_id: int,
-    session_id: str,
-    turn_id: int,
-    full_answer: str,
-    sources: list[dict[str, Any]],
-    diagram_result: dict[str, Any] | None,
-    attachment_analyses: list[dict[str, Any]],
-    enable_web_search: bool,
-    need_teaching_diagram: bool,
-) -> None:
-    """Safety-filter, save assistant message, finalize turn transcript and status."""
-    svc = uc._memory_service
-
-    if full_answer:
-        safety_result = await safety_filter.check(full_answer)
-        if safety_result.has_violation:
-            full_answer = safety_result.sanitized_text
-
-    if full_answer:
-        await uc.save_message(
-            user_id=user_id, session_id=session_id,
-            role="assistant", content=full_answer,
-            knowledge_sources=sources if sources else None,
-            teaching_diagram=diagram_result,
-            attachment_analyses=attachment_analyses if attachment_analyses else None,
-            turn_id=turn_id, message_kind="assistant_answer",
-        )
-
-    await svc.append_turn_event(
-        user_id=user_id, session_id=session_id, turn_id=turn_id,
-        event_type="answer.completed", payload={"answer": full_answer},
-    )
-    await svc.finalize_turn_transcript(
-        user_id=user_id, session_id=session_id, turn_id=turn_id,
-        status="completed", final_answer=full_answer,
-    )
-    await svc.update_turn(
-        user_id=user_id, session_id=session_id, turn_id=turn_id,
-        status="completed", route="answer", execution_mode="answer",
-        used_web_search=enable_web_search, used_teaching_diagram=need_teaching_diagram,
-        error_message=None,
-    )
-
-
-async def _run_compression_check(
-    svc: Any,
-    *,
-    user_id: int,
-    session_id: str,
-    turn_id: int,
-    user_message: str,
-    assistant_reply: str,
-) -> AsyncIterator[dict[str, Any]]:
-    """Check context compression, yield SSE status events, and send final compression_payload via send().
-
-    Usage: ``async for event in _run_compression_check(...): yield event``
-    After iteration, access ``compression_payload`` attribute on the generator.
-    """
-    compression_payload: dict[str, Any] = {"compressed": False}
-
-    yield {
-        "event": "status",
-        "data": {
-            "stage": "compression_checking",
-            "message": "正在检查是否需要整理上下文...",
-        },
-    }
-    try:
-        counters = await svc.update_post_turn_counters(
-            user_id=user_id,
-            session_id=session_id,
-            turn_id=turn_id,
-            user_message=user_message,
-            assistant_reply=assistant_reply,
-        )
-        compression_payload["counters"] = counters
-
-        if await svc.should_compress_session(user_id=user_id, session_id=session_id):
-            yield {
-                "event": "status",
-                "data": {
-                    "stage": "compression_running",
-                    "message": "正在整理较早的对话上下文...",
-                },
-            }
-            summary_block = await svc.compress_session(
-                user_id=user_id,
-                session_id=session_id,
-                reason="post_turn_visible",
-            )
+def _build_user_content(text: str, attachments: list[str]) -> list[dict[str, Any]]:
+    """构建 OpenAI 格式的用户消息 content"""
+    content: list[dict[str, Any]] = []
+    if text.strip():
+        content.append({"type": "text", "text": text.strip()})
+    for url in attachments:
+        ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
+        if ext in IMAGE_EXTENSIONS:
+            content.append({"type": "image_url", "image_url": {"url": url}})
         else:
-            summary_block = None
-
-        if summary_block is not None:
-            compression_payload.update(
-                {
-                    "compressed": True,
-                    "summary_block_id": getattr(summary_block, "id", None),
-                    "summarized_message_count": int(getattr(summary_block, "summarized_message_count", 0) or 0),
-                }
-            )
-            compression_message = "上下文整理完成，后续回答会继续使用摘要记忆。"
-        else:
-            compression_message = "当前上下文仍然轻量，无需整理。"
-    except Exception as exc:
-        logger.error("[chat] visible compression failed user=%s session=%s err=%s", user_id, session_id, exc)
-        compression_payload.update({"compressed": False, "error": str(exc)})
-        compression_message = "上下文整理暂时失败，本轮回答已保存。"
-
-    yield {
-        "event": "status",
-        "data": {
-            "stage": "compression_done",
-            "message": compression_message,
-            **compression_payload,
-        },
-    }
-
-    _run_compression_check.compression_payload = compression_payload
+            content.append({"type": "file", "file": {"filename": url.split("/")[-1], "file_id": url}})
+    return content
 
 
 def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
@@ -286,14 +97,6 @@ async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
         turn_id = getattr(analysis, "turn_id", None)
         if turn_id is not None:
             analyses_by_turn.setdefault(turn_id, []).append(analysis)
-
-    # 查询工具调用记录，按 tool_call_id 建索引
-    tool_invocations = await svc.list_tool_invocations(user_id=user_id, session_id=session_id, limit=50)
-    invocations_by_id: dict[str, Any] = {}
-    for inv in tool_invocations:
-        tc_id = getattr(inv, "tool_call_id", None)
-        if tc_id:
-            invocations_by_id[tc_id] = inv
 
     # 转换为 LangChain 消息
     messages: list[AnyMessage] = []
@@ -357,6 +160,15 @@ async def chat(
     enable_web_search: bool = False,
     need_teaching_diagram: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
+    """执行一次辅导对话，流式返回 SSE 事件。
+
+    简化流程（不再创建 turn）：
+    1. 保存用户消息
+    2. 构建上下文
+    3. 调用 TutorAgent
+    4. 保存助手回复
+    5. 后台记忆任务
+    """
     uc = get_chat_usecases()
     effective_session = session_id or uc.default_session_id(user_id)
     merged_attachments = list(dict.fromkeys(attachments or []))
@@ -380,19 +192,41 @@ async def chat(
         },
     }
 
-    # ── 1. 创建 turn + 持久化用户消息 ──
-    turn_id, turn_index, user_message_id, user_content = await _create_turn(
-        uc,
+    # ── 1. 持久化用户消息 ──
+    svc = uc._memory_service
+    user_content = current_message
+    if merged_attachments:
+        image_urls, file_urls = [], []
+        for url in merged_attachments:
+            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
+            if ext in IMAGE_EXTENSIONS:
+                image_urls.append(url)
+            else:
+                file_urls.append(url)
+        if image_urls:
+            user_content += f" [Attached Images: {', '.join(image_urls)}]"
+        if file_urls:
+            user_content += f" [Attached Files: {', '.join(file_urls)}]"
+
+    await uc.save_message(
         user_id=user_id,
         session_id=effective_session,
-        user_input=user_input,
-        attachments=merged_attachments,
-        enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        role="user",
+        content=user_content,
     )
 
+    # 如果是第一条消息，后台生成标题
+    if await uc.count_messages(user_id, effective_session) <= 1:
+        uc._spawn_background(
+            svc.generate_session_title(
+                user_id=user_id,
+                session_id=effective_session,
+                first_message=current_message,
+            ),
+            label="generate_title",
+        )
+
     # ── 2. 构建上下文 ──
-    svc = uc._memory_service
     history_messages = await build_messages(user_id, effective_session)
     session_summary = await svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
 
@@ -400,8 +234,6 @@ async def chat(
     agent_input = TutorAgentInput(
         user_id=user_id,
         session_id=effective_session,
-        turn_id=turn_id,
-        user_message_id=user_message_id,
         question=current_message,
         attachments=merged_attachments,
         history_messages=history_messages,
@@ -441,7 +273,7 @@ async def chat(
                     "event": "status",
                     "data": {
                         "stage": "answer_done",
-                        "message": "回答已生成，正在保存本轮学习记录...",
+                        "message": "回答已生成，正在保存...",
                     },
                 }
                 continue
@@ -457,82 +289,51 @@ async def chat(
     except Exception as exc:
         logger.exception("[chat] TutorAgent 执行失败")
         has_error = True
-        if turn_id is not None:
-            await svc.append_turn_event(
-                user_id=user_id, session_id=effective_session, turn_id=turn_id,
-                event_type="turn.failed", payload={"error": str(exc)},
-            )
-            await svc.update_turn(
-                user_id=user_id, session_id=effective_session, turn_id=turn_id,
-                status="failed", route="default", execution_mode="default",
-                used_web_search=enable_web_search, used_teaching_diagram=need_teaching_diagram,
-                error_message=str(exc),
-            )
         yield {"event": "error", "data": f"服务器出错: {exc}"}
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
 
     # ── 4. 持久化助手回复 ──
-    compression_payload: dict[str, Any] = {"compressed": False}
+    if not has_error and full_answer:
+        # 安全过滤
+        safety_result = await safety_filter.check(full_answer)
+        if safety_result.has_violation:
+            full_answer = safety_result.sanitized_text
 
-    if turn_id is not None:
-        yield {"event": "status", "data": {"stage": "persisting_turn", "message": "正在保存本轮学习记录..."}}
-        await _persist_assistant_reply(
-            uc,
+        await uc.save_message(
             user_id=user_id,
             session_id=effective_session,
-            turn_id=turn_id,
-            full_answer=full_answer,
-            sources=sources,
-            diagram_result=diagram_result,
-            attachment_analyses=attachment_analyses,
-            enable_web_search=enable_web_search,
-            need_teaching_diagram=need_teaching_diagram,
+            role="assistant",
+            content=full_answer,
+            attachment_analyses=attachment_analyses if attachment_analyses else None,
         )
 
-    # ── 5. 可见压缩检查 ──
-    if not has_error and full_answer and turn_id is not None:
-        async for sse_event in _run_compression_check(
-            svc,
-            user_id=user_id,
-            session_id=effective_session,
-            turn_id=turn_id,
-            user_message=current_message,
-            assistant_reply=full_answer,
-        ):
-            yield sse_event
-        compression_payload = getattr(_run_compression_check, "compression_payload", {"compressed": False})
-
+    # ── 5. 返回最终结果 ──
     if not has_error:
         yield {
             "event": "done",
             "data": {
                 "session_id": effective_session,
                 "full_response": full_answer,
-                "knowledge_sources": sources,
-                "teaching_diagram": diagram_result,
                 "tool_calls": [
                     {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
                     for inv in tool_invocations
                 ],
                 "attachment_analyses": attachment_analyses,
-                "context_compression": compression_payload,
             },
         }
 
-    # ── 6. 后台任务 ──
-    if full_answer and turn_id is not None:
-        async def _post_turn():
-            await agent.run_background_memory_jobs(
+    # ── 6. 后台记忆任务 ──
+    if full_answer:
+        uc._spawn_background(
+            agent.run_background_memory_jobs(
                 user_id=user_id,
                 session_id=effective_session,
-                turn_id=turn_id,
                 user_message=current_message,
                 assistant_reply=full_answer,
-                turn_index=turn_index,
-            )
-
-        uc._spawn_background(_post_turn(), label="post_turn")
+            ),
+            label="post_turn",
+        )
 
 
 def _runtime_status(value: Any) -> str:
@@ -726,19 +527,36 @@ class ChatUseCases:
             session_id=session_id,
             limit=max(limit, 20),
         )
-        tool_invocations = await self._memory_service.list_tool_invocations(
-            user_id=user_id,
-            session_id=session_id,
-            limit=max(limit * 2, 50),
-        )
+        # 从消息表中提取工具调用记录（替代 ChatToolInvocation 表查询）
+        # 按 turn_id 分组工具调用活动，同时获取工具执行结果
         activities_by_turn: dict[int, list[tuple[int, Any, dict[str, Any]]]] = {}
-        for invocation in tool_invocations:
-            turn_id = getattr(invocation, "turn_id", None)
+
+        # 先构建 tool_call_id -> result 的映射（从 tool 角色消息获取结果）
+        tool_results: dict[str, str] = {}
+        for msg in raw_messages:
+            if getattr(msg, "role", "") == "tool":
+                tc_id = getattr(msg, "tool_call_id", None)
+                content = getattr(msg, "content", "") or ""
+                if tc_id and content:
+                    tool_results[str(tc_id)] = content
+
+        # 从 assistant 消息的 tool_calls 字段构建活动
+        for msg in raw_messages:
+            turn_id = getattr(msg, "turn_id", None)
             if turn_id is None:
                 continue
-            activities_by_turn.setdefault(turn_id, []).append(
-                (1, getattr(invocation, "created_at", None), build_persisted_tool_activity(invocation))
-            )
+            tool_calls = getattr(msg, "tool_calls", None)
+            if not tool_calls or not isinstance(tool_calls, list):
+                continue
+            for tc in tool_calls:
+                if not isinstance(tc, dict):
+                    continue
+                tc_id = str(tc.get("id", "") or "")
+                # 获取对应的工具执行结果
+                result = tool_results.get(tc_id, "")
+                activities_by_turn.setdefault(turn_id, []).append(
+                    (1, getattr(msg, "created_at", None), build_persisted_tool_activity_from_message(tc, result))
+                )
         # 按 message_id 分组附件分析结果，供后续组装使用
         analyses_by_message_id: dict[int, list[dict[str, Any]]] = {}
         for analysis in attachment_analyses:
@@ -810,17 +628,14 @@ class ChatUseCases:
                     attachments=parsed_attachments,
                     tool_calls=message.tool_calls if isinstance(message.tool_calls, list) else None,
                     tool_call_id=getattr(message, "tool_call_id", None),
-                    knowledge_sources=message.knowledge_sources if isinstance(message.knowledge_sources, list) else None,
-                    attachment_analyses=analyses_by_message_id.get(message.id, []),  # 关联的附件分析结果
+                    attachment_analyses=analyses_by_message_id.get(message.id, []),
                     agent_activities=[
                         activity for _, _, activity in sorted(
                             activities_by_turn.get(getattr(message, "turn_id", None), []),
                             key=lambda item: (item[0], item[1].isoformat() if item[1] is not None else ""),
                         )
-                    ] if getattr(message, "message_kind", None) == "assistant_answer" else None,
-                    teaching_diagram=message.teaching_diagram if isinstance(message.teaching_diagram, dict) else None,
+                    ] if message.role == "assistant" else None,
                     turn_id=getattr(message, "turn_id", None),
-                    message_kind=getattr(message, "message_kind", None),
                     created_at=message.created_at,
                 )
             )
@@ -833,15 +648,11 @@ class ChatUseCases:
         session_id: str,
         role: str,
         content: str,
-        attachments: list[dict[str, Any]] | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
-        knowledge_sources: list[dict[str, Any]] | None = None,
         attachment_analyses: list[dict[str, Any]] | None = None,
-        teaching_diagram: dict[str, Any] | None = None,
         usage_metadata: dict[str, Any] | None = None,
         turn_id: int | None = None,
-        message_kind: str | None = None,
     ) -> Any:
         """保存单条消息到数据库。
 
@@ -853,15 +664,11 @@ class ChatUseCases:
             session_id=session_id,
             role=role,
             content=content,
-            attachments=attachments,
             tool_calls=tool_calls,
             tool_call_id=tool_call_id,
-            knowledge_sources=knowledge_sources,
             attachment_analyses=attachment_analyses,
-            teaching_diagram=teaching_diagram,
             usage_metadata=usage_metadata,
             turn_id=turn_id,
-            message_kind=message_kind,
         )
 
     async def count_messages(self, user_id: int, session_id: str) -> int:

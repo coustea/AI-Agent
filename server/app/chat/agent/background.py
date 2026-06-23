@@ -24,9 +24,9 @@ async def run_background_memory_jobs(
     *,
     user_id: int,
     session_id: str,
-    turn_id: int,
-    user_message: str,
-    assistant_reply: str,
+    turn_id: int | None = None,
+    user_message: str = "",
+    assistant_reply: str = "",
     turn_index: int = 0,
 ) -> None:
     """后台记忆管线：长期记忆和画像更新。
@@ -35,7 +35,7 @@ async def run_background_memory_jobs(
         memory_service: 记忆服务实例
         user_id: 用户ID
         session_id: 会话ID
-        turn_id: 轮次ID
+        turn_id: 轮次ID（可选，turn 逻辑已弃用）
         user_message: 用户消息
         assistant_reply: 助手回复
         turn_index: 轮次索引

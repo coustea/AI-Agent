@@ -21,8 +21,8 @@ class TutorAgentState(TypedDict, total=False):
     # 请求（无约简器 — 后写覆盖）
     user_id: int
     session_id: str
-    turn_id: int
-    user_message_id: int | None
+    turn_id: int | None  # 可选：turn 逻辑已弃用
+    user_message_id: int | None  # 可选：turn 逻辑已弃用
     question: str
     attachments: list[str]
     enable_web_search: bool

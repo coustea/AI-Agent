@@ -24,11 +24,14 @@ class TutorTurnContext(BaseModel):
 
 
 class TutorAgentInput(BaseModel):
-    """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。"""
+    """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。
+
+    turn_id 和 user_message_id 已弃用，保留仅为兼容旧代码。
+    """
     user_id: int
     session_id: str
-    turn_id: int
-    user_message_id: int | None = None
+    turn_id: int | None = None  # 弃用：不再创建 turn
+    user_message_id: int | None = None  # 弃用：不再创建 turn
     question: str
     attachments: list[str] = Field(default_factory=list)
     history_messages: list[Any] = Field(default_factory=list)
