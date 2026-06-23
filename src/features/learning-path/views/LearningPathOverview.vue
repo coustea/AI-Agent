@@ -322,8 +322,8 @@ import type {
   PathLearningEvaluationResponse,
 } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
-import type { AgentEvent } from '@/shared/agent-events/model'
-import { useAgentRun } from '@/shared/agent-events/useAgentRun'
+import type { PathEvent } from '@/features/learning-path/model/pathEvent'
+import { usePathEvents } from '@/features/learning-path/model/usePathEvents'
 
 type StageLike = {
   stage_id?: string
@@ -349,7 +349,7 @@ const activeDetailNode = ref<LearningPathNode | null>(null)
 const isGenerating = ref(false)
 const generatingProgress = ref(12)
 const generatingMessages = ref<string[]>([])
-const agentRun = useAgentRun()
+const pathEvents = usePathEvents()
 const activeRunId = ref<string | null>(null)
 
 const learningStatuses = new Set(['in_progress', 'remediation', 'reinforced'])
@@ -538,15 +538,15 @@ const handleNodeClick = (node: LearningPathNode) => {
 }
 
 const stopSSE = () => {
-  agentRun.close()
+  pathEvents.close()
 }
 
-const handlePathEvent = (event: AgentEvent) => {
+const handlePathEvent = (event: PathEvent) => {
     if (typeof event.progress === 'number') {
       generatingProgress.value = Math.max(generatingProgress.value, Math.min(event.progress, 100))
     }
 
-    const message = event.summary || event.title
+    const message = event.message
     if (message && !generatingMessages.value.includes(message)) {
       generatingMessages.value.push(message)
 
@@ -557,9 +557,9 @@ const handlePathEvent = (event: AgentEvent) => {
 
 }
 
-const startSSE = (runId: string) => {
+const startSSE = (pathId: number, runId: string) => {
   stopSSE()
-  agentRun.connect(runId, {
+  pathEvents.connect(pathId, runId, {
     onEvent: handlePathEvent,
     onCompleted: () => {
       generatingProgress.value = 100
@@ -571,11 +571,6 @@ const startSSE = (runId: string) => {
       ElMessage.error(error.message || '路径规划失败')
       isGenerating.value = false
       loadPath()
-    },
-    onConnectionError: () => {
-      if (isGenerating.value && !generatingMessages.value.includes('正在等待后端继续推送路径生成状态...')) {
-        generatingMessages.value.push('正在等待后端继续推送路径生成状态...')
-      }
     },
   })
 }
@@ -675,7 +670,7 @@ const loadPath = async () => {
       }
 
       activeRunId.value = String(route.query.run_id || activeRunId.value || '') || null
-      if (activeRunId.value) startSSE(activeRunId.value)
+      if (activeRunId.value && currentPathId) startSSE(currentPathId, activeRunId.value)
     } else {
       isGenerating.value = false
       generatingProgress.value = 100
@@ -711,8 +706,8 @@ watch(
 )
 
 onActivated(() => {
-  if (isGenerating.value && activeRunId.value) {
-    startSSE(activeRunId.value)
+  if (isGenerating.value && activeRunId.value && path.value?.id) {
+    startSSE(path.value.id, activeRunId.value)
   }
 })
 

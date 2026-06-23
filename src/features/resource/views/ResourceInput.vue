@@ -6,7 +6,12 @@
         <p class="hero-subtitle">输入你的学习目标，自动构建专属的知识图谱、测试与课件</p>
       </div>
 
-      <div class="omni-spotlight-wrapper" :class="{ 'is-focused': isInputFocused, 'has-content': localInput.trim().length > 0 }">
+      <form
+        ref="formRef"
+        class="omni-spotlight-wrapper"
+        :class="{ 'is-focused': isInputFocused, 'has-content': localInput.trim().length > 0 }"
+        @submit.prevent="handleSubmit"
+      >
         <el-input
             v-model="localInput"
             type="textarea"
@@ -15,7 +20,9 @@
             class="omni-textarea"
             @focus="isInputFocused = true"
             @blur="isInputFocused = false"
-            @keydown.enter.exact.prevent="handleSubmit"
+            @compositionstart="isComposing = true"
+            @compositionend="isComposing = false"
+            @keydown.enter.exact="handleEnter"
         />
         <div class="omni-actions">
           <span class="omni-hint" v-if="localInput.trim().length > 0">
@@ -25,14 +32,14 @@
             描述考研、期末、或任意技术栈...
           </span>
           <BaseButton variant="primary" class="omni-submit-btn"
+              type="submit"
               :disabled="!localInput.trim()"
               aria-label="进入参数配置"
-              @click="handleSubmit"
           >
             <el-icon><Top /></el-icon>
           </BaseButton>
         </div>
-      </div>
+      </form>
 
       <div class="omni-inspiration-grid">
         <div class="inspiration-card" @click="fillExample('复习《计算机网络》TCP三次握手，请多出几道难题')">
@@ -77,6 +84,8 @@ const emit = defineEmits<{
 
 const localInput = ref(props.modelValue)
 const isInputFocused = ref(false)
+const isComposing = ref(false)
+const formRef = ref<HTMLFormElement | null>(null)
 
 watch(() => props.modelValue, (v) => { localInput.value = v })
 watch(localInput, (v) => { emit('update:modelValue', v) })
@@ -84,6 +93,13 @@ watch(localInput, (v) => { emit('update:modelValue', v) })
 function handleSubmit() {
   if (!localInput.value.trim()) return
   emit('submit')
+}
+
+function handleEnter(event: KeyboardEvent) {
+  if (isComposing.value || event.isComposing) return
+
+  event.preventDefault()
+  formRef.value?.requestSubmit()
 }
 
 function fillExample(text: string) {

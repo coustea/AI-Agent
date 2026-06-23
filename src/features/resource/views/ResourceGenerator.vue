@@ -100,8 +100,8 @@ import {
   pollResourceStatus,
   getResourceBundle,
 } from '@/features/resource/api/resource'
-import type { AgentEvent } from '@/shared/agent-events/model'
-import { useAgentRun } from '@/shared/agent-events/useAgentRun'
+import type { ResourceEvent } from '@/features/resource/model/resourceEvent'
+import { useResourceEvents } from '@/features/resource/model/useResourceEvents'
 
 import type {
   LearningScenario,
@@ -137,11 +137,11 @@ const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'q
 
 const agentConfigs = ref<AnyAgentConfigs>({
   content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'standard' },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge'] },
+  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive', exam_style: 'school', include_analysis: true },
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-  ppt: { difficulty: 'intermediate', lesson_depth: 'standard', lesson_kind: 'auto', learning_focus: 'balanced' },
+  ppt: { theme_id: 'logic-blue', explanation_style: 'conceptual', visual_emphasis: 'balanced' },
   video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' },
 })
 
@@ -171,17 +171,17 @@ const generationFinalized = ref(false)
 const activeResourceId = ref<number | null>(null)
 const activeRunId = ref<string | null>(null)
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
-const agentRun = useAgentRun()
+const resourceEvents = useResourceEvents()
 
 function selectDagNode(id: string) {
   selectedDagNodeId.value = id
 }
 
-function handlePlanningAnimation(event: AgentEvent) {
-  if (event.status === 'completed') planReady.value = true
+function handlePlanningAnimation(event: ResourceEvent) {
+  if (event.event === 'plan.completed') planReady.value = true
 }
 
-function handleArtifactReadyAnimation(event: AgentEvent) {
+function handleArtifactReadyAnimation(event: ResourceEvent) {
   if (!event.agent_id) return
   latestArtifactAgentId.value = event.agent_id
   window.setTimeout(() => {
@@ -189,10 +189,10 @@ function handleArtifactReadyAnimation(event: AgentEvent) {
   }, 1400)
 }
 
-function handleWorkflowAnimation(event: AgentEvent) {
+function handleWorkflowAnimation(event: ResourceEvent) {
   if (!event.agent_id) return
   if (event.agent_id === 'planning') handlePlanningAnimation(event)
-  if (event.type === 'artifact.ready') handleArtifactReadyAnimation(event)
+  if (event.event === 'artifact.ready') handleArtifactReadyAnimation(event)
 }
 
 const baseGenerationAgentIds = computed(() => (
@@ -293,15 +293,15 @@ function normalizeEventStatus(status?: string | null): DagNodeState['status'] | 
   return undefined
 }
 
-function appendAgentEventLog(node: DagNodeState, event: AgentEvent) {
-  const message = (event.summary || event.title).trim()
+function appendResourceEventLog(node: DagNodeState, event: ResourceEvent) {
+  const message = event.message.trim()
   if (!message) return
 
-  const eventStatus = normalizeEventStatus(event.status)
+  const eventStatus = normalizeEventStatus(event.event.endsWith('.completed') ? 'completed' : event.event.endsWith('.failed') ? 'failed' : event.event.endsWith('.running') ? 'running' : null)
   const logs = node.eventLogs || []
   const last = logs[logs.length - 1]
-  const eventPhase = typeof event.detail.phase === 'string' ? event.detail.phase : undefined
-  const eventElapsedMs = event.elapsed_ms ?? undefined
+  const eventPhase = typeof event.data.phase === 'string' ? event.data.phase : undefined
+  const eventElapsedMs = event.data.elapsed_ms as number | undefined
 
   const sameMessage = last && last.message === message && last.phase === eventPhase
 
@@ -322,8 +322,8 @@ function appendAgentEventLog(node: DagNodeState, event: AgentEvent) {
   node.eventLogs = [
     ...logs.slice(-11),
     {
-      id: `${event.agent_id || node.id}-${event.type}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      eventType: event.type,
+      id: `${event.agent_id || node.id}-${event.event}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      eventType: event.event,
       phase: eventPhase,
       message,
       status: eventStatus || node.status,
@@ -334,28 +334,30 @@ function appendAgentEventLog(node: DagNodeState, event: AgentEvent) {
   ]
 }
 
-function applyAgentEvent(event: AgentEvent) {
+function applyResourceEvent(event: ResourceEvent) {
   if (!event.agent_id) return
   const node = dagNodeStates.value[event.agent_id] || createDagNode(event.agent_id, SYSTEM_AGENT_IDS.includes(event.agent_id))
-  if (event.status) {
-    node.status = event.status === 'completed'
-      ? 'success'
-      : event.status === 'pending' ? 'waiting' : event.status
-  }
+  // Map event names to status
+  if (event.event.endsWith('.completed')) node.status = 'success'
+  else if (event.event.endsWith('.failed')) node.status = 'failed'
+  else if (event.event === 'agent.pending') node.status = 'waiting'
+  else if (event.event.endsWith('.running')) node.status = 'running'
   if (event.progress != null) node.progress = Math.max(node.progress, event.progress)
-  if (typeof event.detail.phase === 'string') node.phase = event.detail.phase
-  if (event.elapsed_ms != null) node.elapsedMs = event.elapsed_ms
-  const metrics = event.detail.metrics
+  if (typeof event.data.phase === 'string') node.phase = event.data.phase
+  const elapsedMs = event.data.elapsed_ms as number | undefined
+  if (elapsedMs != null) node.elapsedMs = elapsedMs
+  const metrics = event.data.metrics as Record<string, unknown> | undefined
   if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) node.metrics = { ...(node.metrics || {}), ...metrics }
-  if (typeof event.detail.artifact_id === 'string') node.artifactId = event.detail.artifact_id
+  const artifactId = event.data.artifact_id as string | undefined
+  if (typeof artifactId === 'string') node.artifactId = artifactId
   node.lastUpdatedAt = Date.now()
-  const message = event.summary || event.title
+  const message = event.message
   if (message) {
     node.currentMessage = message
     if (node.stepHistory[node.stepHistory.length - 1] !== message) {
       node.stepHistory = [...node.stepHistory.slice(-7), message]
     }
-    appendAgentEventLog(node, event)
+    appendResourceEventLog(node, event)
   }
   dagNodeStates.value[event.agent_id] = node
   handleWorkflowAnimation(event)
@@ -371,18 +373,24 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
   if (taskStatus.agent_snapshots) {
     Object.values(taskStatus.agent_snapshots).forEach((snapshot) => {
       if (snapshot.agent_id) {
-        applyAgentEvent({
-          event_id: `snapshot-${snapshot.agent_id}-${Date.now()}`,
-          run_id: '', sequence: 0, module: 'resource', business_id: String(taskStatus.resource_id),
-          type: snapshot.event_type === 'agent.artifact_ready' ? 'artifact.ready' : 'agent.status',
-          status: snapshot.status === 'finished' || snapshot.status === 'completed'
-            ? 'completed'
-            : snapshot.status === 'failed' ? 'failed' : snapshot.status === 'skipped' ? 'skipped' : 'running',
-          activity_id: `agent:${snapshot.agent_id}`, agent_id: snapshot.agent_id,
-          title: snapshot.message || snapshot.agent_id, summary: snapshot.message || '',
+        // Map snapshot status to ResourceEvent
+        let eventName: ResourceEvent['event'] = 'agent.running'
+        if (snapshot.status === 'finished' || snapshot.status === 'completed') eventName = 'agent.completed'
+        else if (snapshot.status === 'failed') eventName = 'agent.failed'
+        else if (snapshot.status === 'skipped') eventName = 'agent.completed'
+        else if (snapshot.status === 'pending') eventName = 'agent.pending'
+        if (snapshot.event_type === 'agent.artifact_ready') eventName = 'artifact.ready'
+
+        applyResourceEvent({
+          sequence: 0,
+          run_id: '',
+          resource_id: taskStatus.resource_id,
+          event: eventName,
+          agent_id: snapshot.agent_id,
+          message: snapshot.message || snapshot.agent_id,
           progress: snapshot.progress ?? 0,
-          detail: { phase: snapshot.phase, metrics: snapshot.metrics || {}, artifact_id: snapshot.artifact_id },
-          elapsed_ms: snapshot.elapsed_ms || null, timestamp: snapshot.timestamp || Date.now() / 1000,
+          data: { phase: snapshot.phase, metrics: snapshot.metrics || {}, artifact_id: snapshot.artifact_id, elapsed_ms: snapshot.elapsed_ms },
+          timestamp: snapshot.timestamp || Date.now() / 1000,
         })
       }
     })
@@ -441,11 +449,11 @@ function syncStatusSoon(resourceId: number) {
 function startResourceStream(runId: string, resourceId: number) {
   stopResourceStream()
   startPollingFallback(resourceId)
-  agentRun.connect(runId, {
+  resourceEvents.connect(resourceId, runId, {
     onEvent: (event) => {
-      applyAgentEvent(event)
-      if (event.summary || event.title) latestWorkflowMessage.value = event.summary || event.title
-      if (event.status === 'completed') syncStatusSoon(resourceId)
+      applyResourceEvent(event)
+      if (event.message) latestWorkflowMessage.value = event.message
+      if (event.event.endsWith('.completed')) syncStatusSoon(resourceId)
     },
     onCompleted: () => {
       void checkStatusOnce(resourceId).catch(() => {
@@ -456,12 +464,6 @@ function startResourceStream(runId: string, resourceId: number) {
       void checkStatusOnce(resourceId).catch(() => {
         void completeGeneration(resourceId, { resource_id: resourceId, status: 'failed' })
       })
-    },
-    onConnectionError: (err) => {
-      if (!isGenerating.value || generationFinalized.value) return
-      console.warn('[ResourceGenerator] SSE 连接失败，切换到轮询兜底:', err)
-      latestWorkflowMessage.value = '实时连接中断，已切换到状态同步模式'
-      startPollingFallback(resourceId)
     },
   })
 }
@@ -512,7 +514,7 @@ const stopPolling = () => {
 }
 
 const stopResourceStream = () => {
-  agentRun.close()
+  resourceEvents.close()
 }
 
 const pauseLiveGenerationUpdates = () => { stopPolling(); stopResourceStream() }

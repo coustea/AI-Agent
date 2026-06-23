@@ -252,6 +252,105 @@ class ResourceEvents:
     def is_terminal(self) -> bool:
         return self._channel is not None and self._channel._is_terminal
 
+    # ===================== Agent helper methods =====================
+
+    async def send_agent_status(
+        self,
+        agent_id: str,
+        status: str,
+        message: str,
+        progress: int | None = None,
+    ) -> ResourceEvent:
+        """Helper method for agents to send status updates."""
+        event_map = {
+            "running": "agent.running",
+            "completed": "agent.completed",
+            "failed": "agent.failed",
+            "pending": "agent.pending",
+        }
+        event = event_map.get(status, "agent.running")
+        return await self.send(event=event, message=message, agent_id=agent_id, progress=progress)
+
+    async def send_agent_step(
+        self,
+        agent_id: str,
+        phase: str,
+        message: str,
+        progress: int | None = None,
+    ) -> ResourceEvent:
+        """Helper method for agents to send step updates."""
+        return await self.send(
+            event="agent.running",
+            message=message,
+            agent_id=agent_id,
+            progress=progress,
+            data={"phase": phase},
+        )
+
+    async def send_artifact_ready(
+        self,
+        agent_id: str,
+        message: str,
+        artifact_id: str | None = None,
+    ) -> ResourceEvent:
+        """Helper method for agents to signal artifact is ready."""
+        return await self.send(
+            event="artifact.ready",
+            message=message,
+            agent_id=agent_id,
+            data={"artifact_id": artifact_id} if artifact_id else {},
+        )
+
+
+class ResourceAgentTracker:
+    """Context manager for tracking agent runs with automatic status updates."""
+
+    def __init__(
+        self,
+        events: ResourceEvents,
+        agent_id: str,
+        phase: str,
+        message: str,
+        progress: int | None = None,
+    ):
+        self._events = events
+        self._agent_id = agent_id
+        self._phase = phase
+        self._message = message
+        self._progress = progress
+
+    async def __aenter__(self) -> "ResourceAgentTracker":
+        await self._events.send_agent_step(
+            self._agent_id,
+            phase=self._phase,
+            message=self._message,
+            progress=self._progress,
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        if exc_type is not None:
+            await self._events.send_agent_status(
+                self._agent_id,
+                status="failed",
+                message=str(exc_val)[:200] if exc_val else "Agent failed",
+                progress=None,
+            )
+
+    async def finish(
+        self,
+        message: str,
+        success: bool = True,
+        metrics: dict[str, Any] | None = None,
+    ) -> None:
+        """Mark agent as finished with final status."""
+        await self._events.send_agent_status(
+            self._agent_id,
+            status="completed" if success else "failed",
+            message=message,
+            progress=100 if success else None,
+        )
+
 
 # ===================== SSE 编码 =====================
 

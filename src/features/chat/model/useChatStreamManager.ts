@@ -1,20 +1,16 @@
 // src/composables/useChatStreamManager.ts
 
 import { readonly, shallowRef } from 'vue'
-import {
-  createChatRun,
-} from '@/features/chat/api/chat'
-import type {
-  StreamChatParams,
-} from '@/features/chat/model/chat'
-import type { AgentEvent } from '@/shared/agent-events/model'
-import { useAgentRun } from '@/shared/agent-events/useAgentRun'
+import { createChatRun } from '@/features/chat/api/chat'
+import type { StreamChatParams } from '@/features/chat/model/chat'
+import type { ChatEvent } from '@/features/chat/model/chatEvent'
+import { useChatEvents } from '@/features/chat/model/useChatEvents'
 
 // ── Types ──────────────────────────────────────────────
 
 export interface StreamCallbacks {
   onChunk?: (text: string) => void
-  onEvent?: (event: AgentEvent) => void
+  onEvent?: (event: ChatEvent) => void
   onDone?: () => void
   onError?: (error: Error) => void
 }
@@ -23,7 +19,7 @@ export interface StreamState {
   sessionId: string
   status: 'streaming' | 'done' | 'error'
   error?: Error
-  agentRun: ReturnType<typeof useAgentRun>
+  chatEvents: ReturnType<typeof useChatEvents>
   callbacks: StreamCallbacks
   completedAt?: number
 }
@@ -57,14 +53,14 @@ export function useChatStreamManager() {
       sessionId,
       status: 'streaming',
       callbacks,
-      agentRun: useAgentRun(),
+      chatEvents: useChatEvents(),
     }
 
     activeStreams.value.set(sessionId, state)
     try {
       const response = await createChatRun(params)
       const runId = response.data.data.run_id
-      state.agentRun.connect(runId, {
+      state.chatEvents.connect(sessionId, runId, {
         onContentDelta: (chunk) => {
           state.callbacks.onChunk?.(chunk)
         },
@@ -104,7 +100,7 @@ export function useChatStreamManager() {
   const stopStream = (sessionId: string) => {
     const state = activeStreams.value.get(sessionId)
     if (state) {
-      state.agentRun.close()
+      state.chatEvents.close()
       activeStreams.value.delete(sessionId)
     }
   }
@@ -119,12 +115,12 @@ export function useChatStreamManager() {
 
   const getBuffer = (
     sessionId: string,
-  ): { text: string; events: AgentEvent[] } => {
+  ): { text: string; events: ChatEvent[] } => {
     const state = activeStreams.value.get(sessionId)
     if (!state) return { text: '', events: [] }
     return {
-      text: state.agentRun.content.value,
-      events: [...state.agentRun.events.value],
+      text: state.chatEvents.content.value,
+      events: [...state.chatEvents.events.value],
     }
   }
 

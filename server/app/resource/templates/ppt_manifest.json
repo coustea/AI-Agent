@@ -335,87 +335,16 @@
           "budget": {"max_chars": 100}
         }
       ]
-    },
-    "algorithm-visualization": {
-      "layout": "FlowCanvas",
-      "allowed_roles": ["algorithm_visualization"],
-      "blocks": [
-        {
-          "block_id": "algorithm-flow",
-          "slot": "flow",
-          "type": "FlowChart",
-          "instruction": "算法核心执行步骤的流程图图解",
-          "budget": {"min_items": 3, "max_items": 6}
-        },
-        {
-          "block_id": "algorithm-notes",
-          "slot": "annotation",
-          "type": "Text",
-          "instruction": "说明算法的时间/空间复杂度及核心边界条件",
-          "budget": {"max_chars": 100}
-        }
-      ]
-    },
-    "code-walkthrough": {
-      "layout": "DualPane",
-      "allowed_roles": ["code_walkthrough"],
-      "blocks": [
-        {
-          "block_id": "code-block",
-          "slot": "left",
-          "type": "CodeSnippet",
-          "instruction": "展示关键算法的完整实现或核心逻辑代码段",
-          "budget": {"max_chars": 240}
-        },
-        {
-          "block_id": "code-explanation",
-          "slot": "right",
-          "type": "Text",
-          "instruction": "逐行对代码进行核心步骤讲解和机制剖析",
-          "budget": {"max_chars": 120}
-        }
-      ]
-    },
-    "architecture-diagram": {
-      "layout": "DiagramFocus",
-      "allowed_roles": ["architecture_diagram"],
-      "blocks": [
-        {
-          "block_id": "arch-diagram",
-          "slot": "diagram",
-          "type": "Diagram",
-          "instruction": "使用节点连接图展示系统或组件的架构设计",
-          "budget": {"min_items": 3, "max_items": 8}
-        },
-        {
-          "block_id": "arch-explanation",
-          "slot": "explanation",
-          "type": "Text",
-          "instruction": "说明架构各部分的协作关系和设计意图",
-          "budget": {"max_chars": 120}
-        }
-      ]
     }
   },
   "templates": {
     "teaching-lesson": {
       "lesson_kind": "concept",
       "required_roles": ["cover", "objectives", "roadmap", "concept", "summary"],
-      "optional_roles": [
-        "prerequisite", "problem_intro", "analogy", "principle_diagram",
-        "process_demo", "mechanism_breakdown", "concept_relation",
-        "concept_compare", "misconception", "next_steps",
-        "algorithm_visualization", "code_walkthrough", "architecture_diagram"
-      ],
+      "optional_roles": ["prerequisite", "problem_intro", "analogy", "principle_diagram", "process_demo", "mechanism_breakdown", "concept_relation", "concept_compare", "misconception", "next_steps"],
       "min_pages": 6,
       "max_pages": 16,
-      "role_order": [
-        "cover", "objectives", "prerequisite", "problem_intro", "roadmap",
-        "concept", "analogy", "principle_diagram", "process_demo",
-        "mechanism_breakdown", "concept_relation", "concept_compare",
-        "misconception", "summary", "next_steps",
-        "algorithm_visualization", "code_walkthrough", "architecture_diagram"
-      ]
+      "role_order": ["cover", "objectives", "prerequisite", "problem_intro", "roadmap", "concept", "analogy", "principle_diagram", "process_demo", "mechanism_breakdown", "concept_relation", "concept_compare", "misconception", "summary", "next_steps"]
     }
   }
 }

@@ -127,15 +127,6 @@
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <label>题型偏好（可多选）</label>
-                  <el-checkbox-group v-model="localConfigs.quiz.question_types" class="question-type-group">
-                    <el-checkbox value="single">单选题</el-checkbox>
-                    <el-checkbox value="multiple">多选题</el-checkbox>
-                    <el-checkbox value="judge">判断题</el-checkbox>
-                    <el-checkbox value="fill">填空题</el-checkbox>
-                  </el-checkbox-group>
-                </div>
-                <div class="ctrl-group">
                   <div class="slider-label-row">
                     <label>生成题目数量</label>
                     <span class="slider-value"><b>{{ localConfigs.quiz.question_count }}</b> 道</span>
@@ -172,39 +163,27 @@
 
               <template v-if="agent.id === 'ppt'">
                 <div class="ctrl-group">
-                  <label>内容深度 / 难度</label>
-                  <el-radio-group v-model="localConfigs.ppt.difficulty" size="small" class="custom-radio-group">
-                    <el-radio-button value="beginner">入门</el-radio-button>
-                    <el-radio-button value="intermediate">进阶</el-radio-button>
-                    <el-radio-button value="advanced">挑战</el-radio-button>
+                  <label>主题风格</label>
+                  <el-radio-group v-model="localConfigs.ppt.theme_id" size="small" class="custom-radio-group">
+                    <el-radio-button value="logic-blue">科技蓝</el-radio-button>
+                    <el-radio-button value="paper-light">纸墨白</el-radio-button>
+                    <el-radio-button value="lab-light">实验室</el-radio-button>
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <label>课件深度</label>
-                  <el-radio-group v-model="localConfigs.ppt.lesson_depth" size="small" class="custom-radio-group">
-                    <el-radio-button value="quick">快速</el-radio-button>
-                    <el-radio-button value="standard">标准</el-radio-button>
-                    <el-radio-button value="deep">深入</el-radio-button>
+                  <label>讲解风格</label>
+                  <el-radio-group v-model="localConfigs.ppt.explanation_style" size="small" class="custom-radio-group">
+                    <el-radio-button value="conceptual">概念优先</el-radio-button>
+                    <el-radio-button value="procedural">流程优先</el-radio-button>
+                    <el-radio-button value="comparative">对比优先</el-radio-button>
                   </el-radio-group>
                 </div>
                 <div class="ctrl-group">
-                  <label>课程形态</label>
-                  <el-select v-model="localConfigs.ppt.lesson_kind" size="default" class="w-full custom-select">
-                    <el-option label="自动判断" value="auto" />
-                    <el-option label="概念课" value="concept" />
-                    <el-option label="算法课" value="algorithm" />
-                    <el-option label="系统课" value="system" />
-                    <el-option label="调试课" value="debugging" />
-                    <el-option label="项目课" value="project" />
-                  </el-select>
-                </div>
-                <div class="ctrl-group">
-                  <label>学习重点</label>
-                  <el-radio-group v-model="localConfigs.ppt.learning_focus" size="small" class="custom-radio-group">
-                    <el-radio-button value="balanced">均衡</el-radio-button>
-                    <el-radio-button value="concept">概念</el-radio-button>
-                    <el-radio-button value="code">代码</el-radio-button>
-                    <el-radio-button value="practice">练习</el-radio-button>
+                  <label>可视化程度</label>
+                  <el-radio-group v-model="localConfigs.ppt.visual_emphasis" size="small" class="custom-radio-group">
+                    <el-radio-button value="minimal">极简</el-radio-button>
+                    <el-radio-button value="balanced">平衡</el-radio-button>
+                    <el-radio-button value="rich">丰富</el-radio-button>
                   </el-radio-group>
                 </div>
               </template>

@@ -19,7 +19,7 @@ from typing import Any
 from langgraph.types import Send
 from app.infra.database import session_scope
 from app.resource.agents import AGENT_REGISTRY
-from app.infra.agent_events import AgentRunTracker
+from app.resource.event import ResourceAgentTracker
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
 from sqlalchemy import select
@@ -159,13 +159,13 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
 
     # 执行 Planning
     async with AgentRunTracker(
-        emitter=state["emitter"],
+        events=state["events"],
         agent_id="planning",
         phase="planning",
         message="正在规划教学方向与大纲",
         progress=5,
     ) as planning_tracker:
-        planning_result = await AGENT_REGISTRY["planning"](state["emitter"]).generate_resource(planning_input)
+        planning_result = await AGENT_REGISTRY["planning"](state["events"]).generate_resource(planning_input)
         await planning_tracker.finish(
             "教学方向与大纲已生成" if planning_result.success else (planning_result.error or "规划失败"),
             success=planning_result.success,
@@ -237,7 +237,7 @@ async def _execute_non_planning_agent(
     resource_id: int,
     run_id: str,
     resource_input: ResourceInput,
-    emitter,
+    events,
     require_downstream_context: bool,
     depends_on_agents: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -252,14 +252,14 @@ async def _execute_non_planning_agent(
         resource_id: 资源任务 ID
         run_id: 运行 ID
         resource_input: Agent 输入参数
-        emitter: 事件发射器
+        events: 事件发射器
         require_downstream_context: 基础 Agent 必须有 downstream_context（用于验证）
         depends_on_agents: 依赖的 Agent ID 列表（用于聚合 Agent 的 source_item_ids）
 
     Returns:
         包含 results 或 failures 的字典
     """
-    agent = AGENT_REGISTRY[agent_id](emitter)
+    agent = AGENT_REGISTRY[agent_id](events)
     timeout_seconds = AGENT_TIMEOUTS.get(agent_id, 300.0)
 
     # 从数据库查询依赖 Agent 的成功 item IDs
@@ -283,7 +283,7 @@ async def _execute_non_planning_agent(
         agent_id=agent_id,
         agent=agent,
         input_data=resource_input,
-        emitter=emitter,
+        events=events,
         timeout_seconds=timeout_seconds,
         source_item_ids=source_item_ids,
     )
@@ -329,7 +329,7 @@ def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
             "teaching_plan": state["teaching_plan"],
             "profile": state["profile"],
             "run_id": state["run_id"],
-            "emitter": state["emitter"],
+            "events": state["events"],
         })
         for agent_id in worker_ids
     ]
@@ -358,7 +358,7 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
         resource_id=state["resource_id"],
         run_id=state["run_id"],
         resource_input=resource_input,
-        emitter=state["emitter"],
+        events=state["events"],
         require_downstream_context=True,
     )
 
@@ -383,7 +383,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         if worker_agents
         else "未选择基础资源，聚合资源将基于教学计划生成"
     )
-    await state["emitter"].emit_agent(
+    await state["events"].emit_agent(
         COORDINATOR_AGENT_ID,
         status=coordinator_status,
         message=message,
@@ -403,7 +403,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
             for item in plan.outline:
                 if item.get("id") in coverage_report["critical_missing_ids"]:
                     critical_titles.append(item.get("title", ""))
-        await state["emitter"].emit_agent(
+        await state["events"].emit_agent(
             COORDINATOR_AGENT_ID,
             status="running",
             message=f"大纲覆盖警告：核心大纲项未覆盖 — {', '.join(critical_titles)}",
@@ -414,7 +414,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         missing_ids = coverage_report["missing_outline_ids"]
         if plan := state.get("teaching_plan"):
             missing_titles = [item.get("title", "") for item in plan.outline if item.get("id") in missing_ids]
-            await state["emitter"].emit_agent(
+            await state["events"].emit_agent(
                 COORDINATOR_AGENT_ID,
                 status="running",
                 message=f"非核心大纲项未覆盖：{', '.join(missing_titles)}",
@@ -450,7 +450,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
     从数据库读取成功的基础 Agent handoffs，委托给 _execute_non_planning_agent。
     聚合 Agent 不需要 downstream_context。
     """
-    await state["emitter"].emit_agent(
+    await state["events"].emit_agent(
         PPT_AGENT_ID,
         status="running",
         message="正在生成 PPT",
@@ -485,7 +485,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         resource_id=state["resource_id"],
         run_id=state["run_id"],
         resource_input=resource_input,
-        emitter=state["emitter"],
+        events=state["events"],
         require_downstream_context=False,
         depends_on_agents=list(base_handoffs.keys()),
     )
@@ -497,7 +497,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
     从数据库读取成功的基础 Agent handoffs，委托给 _execute_non_planning_agent。
     聚合 Agent 不需要 downstream_context。
     """
-    await state["emitter"].emit_agent(
+    await state["events"].emit_agent(
         VIDEO_AGENT_ID,
         status="running",
         message="正在生成讲解视频配置与分镜",
@@ -531,7 +531,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         resource_id=state["resource_id"],
         run_id=state["run_id"],
         resource_input=resource_input,
-        emitter=state["emitter"],
+        events=state["events"],
         require_downstream_context=False,
         depends_on_agents=list(base_handoffs.keys()),
     )
@@ -552,7 +552,7 @@ async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
     agg_failures = {aid: f for aid, f in failures.items() if aid in AGGREGATION_AGENT_IDS}
     success_count = len(agg_results)
     fail_count = len(agg_failures)
-    await state["emitter"].emit_agent(
+    await state["events"].emit_agent(
         BUNDLE_AGENT_ID,
         status="running",
         message=f"聚合资源生成完成：成功 {success_count} 个，失败 {fail_count} 个",
@@ -571,7 +571,7 @@ async def save_node(state: ParentState) -> dict[str, Any]:
     终端状态由数据库已持久化的 Agent 集合严格计算。
     只调用 finalize_generation，不接收调用者声称的成功集合。
     """
-    await state["emitter"].emit_agent(
+    await state["events"].emit_agent(
         BUNDLE_AGENT_ID,
         status="running",
         message="正在组装资源包并保存结果",
@@ -591,7 +591,7 @@ async def save_node(state: ParentState) -> dict[str, Any]:
             )
             success = status in ("completed", "partial_completed")
 
-            await state["emitter"].emit_agent(
+            await state["events"].emit_agent(
                 BUNDLE_AGENT_ID,
                 status="finished" if success else "failed",
                 message="资源包组装完成" if success else "资源包组装失败",
@@ -599,5 +599,5 @@ async def save_node(state: ParentState) -> dict[str, Any]:
             )
             return {"success": success}
     except Exception:
-        await state["emitter"].emit_agent(BUNDLE_AGENT_ID, status="failed", message="资源包组装异常", progress=0)
+        await state["events"].emit_agent(BUNDLE_AGENT_ID, status="failed", message="资源包组装异常", progress=0)
         raise

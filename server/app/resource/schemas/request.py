@@ -97,16 +97,18 @@ class ReadingConfig(BaseModel):
 
 
 class PptConfig(BaseModel):
-    """计算机教学课件配置；模板、主题、布局和页数由后端推导。"""
+    """计算机教学课件配置。
+
+    theme_id: 用户选择的主题颜色，将直接写入输出 PptDocument
+    explanation_style: 控制讲解组织方式（概念优先/流程优先/对比优先）
+    visual_emphasis: 控制可视化元素密度（极简/平衡/丰富）
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
-    lesson_depth: Literal["quick", "standard", "deep"] = "standard"
-    lesson_kind: Literal[
-        "auto", "concept", "algorithm", "system", "debugging", "project"
-    ] = "auto"
-    learning_focus: Literal["balanced", "concept", "code", "practice"] = "balanced"
+    theme_id: Literal["logic-blue", "paper-light", "lab-light"] = "logic-blue"
+    explanation_style: Literal["conceptual", "procedural", "comparative"] = "conceptual"
+    visual_emphasis: Literal["minimal", "balanced", "rich"] = "balanced"
 
 
 class VideoConfig(BaseModel):

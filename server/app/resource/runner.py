@@ -20,7 +20,7 @@ from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
 from app.infra.models import GeneratedResource, GeneratedResourceAgentRun
 from app.resource.agents import AGENT_REGISTRY
-from app.infra.agent_events import AgentEventEmitter
+from app.resource.event import ResourceEvents
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
 from app.resource.workflow.nodes import AGENT_TIMEOUTS, BASE_RESOURCE_AGENT_IDS, AGGREGATION_AGENT_IDS
 from app.resource.schemas import ResourceInput, TeachingPlan
@@ -33,7 +33,7 @@ async def recover_pending_agents(
     resource_id: int,
     user_id: int,
     run_id: str,
-    emitter: AgentEventEmitter,
+    events: ResourceEvents,
     teaching_plan: TeachingPlan | None,
     profile: dict[str, Any],
     request: Any,
@@ -90,9 +90,9 @@ async def recover_pending_agents(
                 resource_id=resource_id,
                 run_id=run_id,
                 agent_id=agent_id,
-                agent=agent(emitter),
+                agent=agent(events),
                 input_data=resource_input,
-                emitter=emitter,
+                events=events,
                 timeout_seconds=timeout,
                 source_item_ids=None,
             ),

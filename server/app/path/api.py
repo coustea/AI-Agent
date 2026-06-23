@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -6,9 +8,9 @@ from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import bg_apply_profile_update_from_learning_event
 from app.infra.database import get_session
-from app.infra.agent_events import create_agent_run
 from app.infra.models import PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
+from app.path.event import PathEvents
 from app.path.schemas import (
     AuxiliaryResourceRequest,
     CreateLearningPathRequest,
@@ -29,16 +31,18 @@ async def create_path(
 ):
     service = PathService(session)
     path_id = await service.init_path_task(current_user.id, request)  # 创建路径记录（状态=generating）
-    run = await create_agent_run(user_id=current_user.id, module="path", business_id=str(path_id))
+    run_id = str(uuid4())
+    events = PathEvents(user_id=current_user.id, path_id=path_id, run_id=run_id)
+    await events.open()
     background_tasks.add_task(  # 后台异步执行路径生成（LLM 规划 + 节点创建）
         _run_generation_bg,
         user_id=current_user.id,
         path_id=path_id,
         request=request,
-        run_id=run.run_id,
+        run_id=run_id,
     )
     return HttpResponse.success(
-        data={"id": path_id, "run_id": run.run_id, "status": "generating"},
+        data={"id": path_id, "run_id": run_id, "status": "generating"},
         status_code=201,
     )
 

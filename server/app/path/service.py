@@ -15,7 +15,7 @@ from app.evaluation.service import (
     build_summary_from_events,
 )
 from app.infra.database import session_scope
-from app.infra.agent_events import AgentEventEmitter
+from app.path.event import PathEvents
 from app.infra.logging import get_logger
 from app.infra.models import (
     LearningEvent,
@@ -142,26 +142,23 @@ class PathService:
         request: CreateLearningPathRequest,
         run_id: str,
     ) -> None:
-        emitter = AgentEventEmitter(run_id=run_id, module="path", business_id=str(path_id))
+        events = PathEvents(user_id=user_id, path_id=path_id, run_id=run_id)
+        await events.open()
 
         async def progress_cb(status: str, progress: int, message: str):
-            await emitter.agent_status(
-                activity_id=f"path-plan:{path_id}",
-                agent_id="path_planner",
-                title=message,
-                summary=message,
+            await events.send(
+                event="structure.running",
+                message=message,
                 progress=progress,
             )
 
         try:
-            await emitter.started(title="路径规划已开始")
+            await events.send(event="planning.started", message="路径规划已开始")
             profile = await self._get_profile_dict(user_id)
             profile_md = await self.get_user_learning_profile(user_id)
-            await emitter.agent_status(
-                activity_id=f"path-plan:{path_id}",
-                agent_id="path_planner",
-                title="正在初始化路径推演引擎",
-                summary="正在初始化路径推演引擎",
+            await events.send(
+                event="profile.loaded",
+                message="正在初始化路径推演引擎",
                 progress=10,
             )
 
@@ -172,11 +169,9 @@ class PathService:
                 profile_markdown=profile_md,
             )
 
-            await emitter.agent_status(
-                activity_id=f"path-plan:{path_id}",
-                agent_id="path_planner",
-                title="正在生成节点结构",
-                summary="正在生成节点结构",
+            await events.send(
+                event="structure.running",
+                message="正在生成节点结构",
                 progress=85,
             )
 
@@ -189,16 +184,16 @@ class PathService:
             validate_path_plan(plan)
             await self._persist_path_plan(path_id, user_id, plan)
 
-            await emitter.completed(title="路径规划完成", progress=100)
+            await events.send(event="planning.completed", message="路径规划完成", progress=100)
         except Exception as exc:
             logger.error(f"路径规划任务异常: {exc}", exc_info=True)
             path = await self.session.get(LearningPath, path_id)
             if path:
                 path.status = "failed"
                 await self.session.commit()
-            await emitter.failed(
-                title="路径规划失败",
-                summary="暂时无法完成本次路径规划",
+            await events.send(
+                event="planning.failed",
+                message="暂时无法完成本次路径规划",
                 progress=0,
             )
 
