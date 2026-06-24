@@ -54,8 +54,8 @@ class QuizAgent(BaseResourceAgent):
     agent_id = "quiz"
     agent_name = "习题生成"
 
-    def __init__(self, events=None, emitter=None):
-        super().__init__(events=events, emitter=emitter)
+    def __init__(self, emitter=None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -93,7 +93,7 @@ class QuizAgent(BaseResourceAgent):
             practice_refs=q_ids,
         )
         result.downstream_context = handoff
-        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -106,7 +106,7 @@ class QuizAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_quiz(
@@ -126,11 +126,20 @@ class QuizAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
 
         prompt = prompts.get("resource").get("quiz")
+        # 执行搜索以获取相关的习题出题参考信息
+        await self.emitter.send(self.agent_id, "running", "正在搜索相关习题参考素材...", 30)
+        search_query = f"{title_prefix} 习题 题型"
+        search_text = await self.search(search_query)
+
+        if "搜索失败" not in search_text and "未找到" not in search_text:
+            input_text = f"## 搜索到的出题参考背景\n{search_text}\n\n" + input_text
+
         full_prompt = f"{prompt}\n\n{input_text}\n\n请生成习题集，以 JSON 格式输出。"
 
-        await self.events.send_agent_step(self.agent_id, phase="start", message="正在构建习题集提示词", progress=25)
+        await self.emitter.send(self.agent_id, "running", "正在构建习题集提示词...", 45)
 
         logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
+        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型生成测试题与解析...", 60)
         result = await self.llm.ainvoke_json(
             QuizPayload,
             full_prompt,

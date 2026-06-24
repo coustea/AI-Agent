@@ -25,8 +25,8 @@ class CodeAgent(BaseResourceAgent):
     agent_id = "code"
     agent_name = "代码生成"
 
-    def __init__(self, events=None, emitter=None):
-        super().__init__(events=events, emitter=emitter)
+    def __init__(self, emitter=None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -52,7 +52,7 @@ class CodeAgent(BaseResourceAgent):
             code_refs=[lang, case_type],
         )
         result.downstream_context = handoff
-        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -67,7 +67,7 @@ class CodeAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_code(
@@ -90,8 +90,17 @@ class CodeAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += "\n\n请生成教学代码示例，包含代码注释和说明，输出为 Markdown 格式（代码块内为代码）。"
 
-        await self.events.send_agent_step(self.agent_id, phase="start", message="正在构建代码示例提示词", progress=25)
+        # 执行搜索以获取该知识点的最佳实践或真实代码示例
+        await self.emitter.send(self.agent_id, "running", "正在搜索相关代码最佳实践...", 30)
+        search_query = f"{language} {title_prefix} 示例代码 best practice"
+        search_text = await self.search(search_query)
+
+        if "搜索失败" not in search_text and "未找到" not in search_text:
+            input_text = f"## 搜索到的参考代码示例背景\n{search_text}\n\n" + input_text
+
+        await self.emitter.send(self.agent_id, "running", "正在构建代码示例提示词...", 45)
         prompt = prompts.get("resource").get("code")
+        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型编写教学示例代码...", 60)
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
 

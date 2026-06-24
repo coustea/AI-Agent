@@ -2,6 +2,10 @@
 
 提供 Resource 专属的事件类型、内存频道、订阅管理和 SSE 编码。
 与 Chat、Path 模块完全隔离，不共享任何实现。
+
+设计原则：
+- ResourceEvents 是无状态代理，通过 channel key 获取/创建频道
+- 频道在首次 send/subscribe 时自动创建，无需显式 open()
 """
 
 from __future__ import annotations
@@ -21,15 +25,12 @@ logger = get_logger(__name__)
 
 ResourceEventName = Literal[
     "generation.started",
-    "plan.running",
-    "plan.completed",
+    "generation.completed",
+    "generation.failed",
     "agent.pending",
     "agent.running",
     "agent.completed",
     "agent.failed",
-    "artifact.ready",
-    "generation.completed",
-    "generation.failed",
 ]
 
 RESOURCE_TERMINAL_EVENTS: set[ResourceEventName] = {"generation.completed", "generation.failed"}
@@ -52,14 +53,14 @@ class ResourceEvent(BaseModel):
 # ===================== 异常定义 =====================
 
 
-class ResourceEventNotOpenError(RuntimeError):
-    """在 open() 之前调用 send() 时抛出。"""
+class ResourceEventClosedError(RuntimeError):
+    """终态事件后继续发送消息时抛出。"""
 
     pass
 
 
-class ResourceEventClosedError(RuntimeError):
-    """终态事件后继续发送消息时抛出。"""
+class ResourceEventExpiredError(RuntimeError):
+    """频道已过期或不存在时抛出。"""
 
     pass
 
@@ -168,7 +169,10 @@ class _ResourceChannel:
 
 
 class ResourceEvents:
-    """Resource 模块的实时事件流管理器。"""
+    """Resource 模块的实时事件流管理器。
+
+    无状态代理模式：实例本身不持有频道，通过 channel key 从 registry 获取。
+    """
 
     def __init__(
         self,
@@ -176,65 +180,86 @@ class ResourceEvents:
         user_id: int,
         resource_id: int,
         run_id: str,
-        queue_size: int = 256,
-        replay_size: int = 256,
-        terminal_retention_seconds: float = 1800.0,
+        auto_create: bool = True,
     ) -> None:
         self._user_id = user_id
         self._resource_id = resource_id
         self._run_id = run_id
-        self._queue_size = queue_size
-        self._replay_size = replay_size
-        self._terminal_retention_seconds = terminal_retention_seconds
-        self._channel: _ResourceChannel | None = None
+        self._auto_create = auto_create
         self._key: ChannelKey = (user_id, resource_id, run_id)
 
-    async def open(self) -> None:
+    async def _get_or_create_channel(self) -> _ResourceChannel:
+        """获取或创建频道。根据 auto_create 决定是否自动创建。"""
         async with _resource_lock:
-            if self._key in _resource_channels:
-                self._channel = _resource_channels[self._key]
-            else:
-                self._channel = _ResourceChannel(
-                    user_id=self._user_id,
-                    resource_id=self._resource_id,
-                    run_id=self._run_id,
-                    queue_size=self._queue_size,
-                    replay_size=self._replay_size,
-                    terminal_retention_seconds=self._terminal_retention_seconds,
+            channel = _resource_channels.get(self._key)
+            if channel is not None:
+                return channel
+            if not self._auto_create:
+                raise ResourceEventExpiredError(
+                    f"Resource channel not found for run_id={self._run_id}"
                 )
-                _resource_channels[self._key] = self._channel
+            channel = _ResourceChannel(
+                user_id=self._user_id,
+                resource_id=self._resource_id,
+                run_id=self._run_id,
+            )
+            _resource_channels[self._key] = channel
+            return channel
+
+    async def _get_channel(self) -> _ResourceChannel | None:
+        """仅获取频道，不创建。用于检查频道是否存在。"""
+        async with _resource_lock:
+            return _resource_channels.get(self._key)
 
     async def send(
         self,
-        *,
-        event: ResourceEventName,
+        agent_id: str,
+        status: Literal["pending", "running", "completed", "failed"],
         message: str,
-        data: dict[str, Any] | None = None,
-        agent_id: str | None = None,
         progress: int | None = None,
     ) -> ResourceEvent:
-        if self._channel is None:
-            raise ResourceEventNotOpenError(
-                f"Resource channel not opened for run_id={self._run_id}"
-            )
-        return await self._channel.send(event, message, data, agent_id, progress)
+        """发送智能体状态与消息给前端。"""
+        if agent_id == "global":
+            event_map = {
+                "running": "generation.started",
+                "completed": "generation.completed",
+                "failed": "generation.failed",
+            }
+            event = event_map.get(status, "generation.started")
+        else:
+            event_map = {
+                "pending": "agent.pending",
+                "running": "agent.running",
+                "completed": "agent.completed",
+                "failed": "agent.failed",
+            }
+            event = event_map.get(status, "agent.running")
+
+        channel = await self._get_or_create_channel()
+        return await channel.send(
+            event=event,
+            message=message,
+            agent_id=agent_id if agent_id != "global" else None,
+            progress=progress,
+            data={},
+        )
 
     async def subscribe(
         self, after_sequence: int = 0
     ) -> tuple[asyncio.Queue[ResourceEvent], list[ResourceEvent]]:
-        if self._channel is None:
-            async with _resource_lock:
-                self._channel = _resource_channels.get(self._key)
-        if self._channel is None:
-            raise ResourceEventNotOpenError(
-                f"Resource channel not found for run_id={self._run_id}"
-            )
-        return await self._channel.subscribe(after_sequence)
+        """订阅频道。频道必须已存在，否则抛出 ResourceEventExpiredError。"""
+        async with _resource_lock:
+            channel = _resource_channels.get(self._key)
+            if channel is None:
+                raise ResourceEventExpiredError(
+                    f"Resource channel not found for run_id={self._run_id}"
+                )
+            return await channel.subscribe(after_sequence)
 
     async def unsubscribe(self, queue: asyncio.Queue[ResourceEvent]) -> None:
-        if self._channel is None:
-            return
-        await self._channel.unsubscribe(queue)
+        channel = await self._get_channel()
+        if channel is not None:
+            await channel.unsubscribe(queue)
 
     @property
     def run_id(self) -> str:
@@ -250,106 +275,8 @@ class ResourceEvents:
 
     @property
     def is_terminal(self) -> bool:
-        return self._channel is not None and self._channel._is_terminal
-
-    # ===================== Agent helper methods =====================
-
-    async def send_agent_status(
-        self,
-        agent_id: str,
-        status: str,
-        message: str,
-        progress: int | None = None,
-    ) -> ResourceEvent:
-        """Helper method for agents to send status updates."""
-        event_map = {
-            "running": "agent.running",
-            "completed": "agent.completed",
-            "failed": "agent.failed",
-            "pending": "agent.pending",
-        }
-        event = event_map.get(status, "agent.running")
-        return await self.send(event=event, message=message, agent_id=agent_id, progress=progress)
-
-    async def send_agent_step(
-        self,
-        agent_id: str,
-        phase: str,
-        message: str,
-        progress: int | None = None,
-    ) -> ResourceEvent:
-        """Helper method for agents to send step updates."""
-        return await self.send(
-            event="agent.running",
-            message=message,
-            agent_id=agent_id,
-            progress=progress,
-            data={"phase": phase},
-        )
-
-    async def send_artifact_ready(
-        self,
-        agent_id: str,
-        message: str,
-        artifact_id: str | None = None,
-    ) -> ResourceEvent:
-        """Helper method for agents to signal artifact is ready."""
-        return await self.send(
-            event="artifact.ready",
-            message=message,
-            agent_id=agent_id,
-            data={"artifact_id": artifact_id} if artifact_id else {},
-        )
-
-
-class ResourceAgentTracker:
-    """Context manager for tracking agent runs with automatic status updates."""
-
-    def __init__(
-        self,
-        events: ResourceEvents,
-        agent_id: str,
-        phase: str,
-        message: str,
-        progress: int | None = None,
-    ):
-        self._events = events
-        self._agent_id = agent_id
-        self._phase = phase
-        self._message = message
-        self._progress = progress
-
-    async def __aenter__(self) -> "ResourceAgentTracker":
-        await self._events.send_agent_step(
-            self._agent_id,
-            phase=self._phase,
-            message=self._message,
-            progress=self._progress,
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, _exc_tb) -> None:
-        if exc_type is not None:
-            await self._events.send_agent_status(
-                self._agent_id,
-                status="failed",
-                message=str(exc_val)[:200] if exc_val else "Agent failed",
-                progress=None,
-            )
-
-    async def finish(
-        self,
-        message: str,
-        success: bool = True,
-        metrics: dict[str, Any] | None = None,
-    ) -> None:
-        """Mark agent as finished with final status."""
-        await self._events.send_agent_status(
-            self._agent_id,
-            status="completed" if success else "failed",
-            message=message,
-            progress=100 if success else None,
-        )
+        channel = _resource_channels.get(self._key)
+        return channel is not None and channel._is_terminal
 
 
 # ===================== SSE 编码 =====================
@@ -365,6 +292,7 @@ def encode_resource_sse(event: ResourceEvent) -> str:
 async def get_resource_channel(
     user_id: int, resource_id: int, run_id: str
 ) -> ResourceEvents | None:
+    """获取已存在的频道（不创建新频道）。用于 SSE 订阅端点。"""
     key = (user_id, resource_id, run_id)
     async with _resource_lock:
         channel = _resource_channels.get(key)
@@ -374,69 +302,6 @@ async def get_resource_channel(
             user_id=user_id,
             resource_id=resource_id,
             run_id=run_id,
+            auto_create=False,
         )
-        events._channel = channel
         return events
-
-
-# ===================== ResourceAgentTracker =====================
-
-
-class ResourceAgentTracker:
-    """Resource Agent 的阶段观测器。"""
-
-    def __init__(
-        self,
-        *,
-        events: ResourceEvents,
-        agent_id: str,
-        phase: str,
-        message: str,
-        progress: int = 10,
-    ) -> None:
-        self.events = events
-        self.agent_id = agent_id
-        self.phase = phase
-        self.message = message
-        self.progress = progress
-        self._start_time = 0.0
-
-    async def __aenter__(self) -> "ResourceAgentTracker":
-        self._start_time = time.perf_counter()
-        await self.events.send(
-            event="agent.running",
-            message=self.message,
-            agent_id=self.agent_id,
-            progress=self.progress,
-            data={"phase": self.phase},
-        )
-        return self
-
-    async def __aexit__(self, *args) -> None:
-        return None
-
-    @property
-    def elapsed_ms(self) -> int:
-        return int((time.perf_counter() - self._start_time) * 1000) if self._start_time else 0
-
-    async def step(self, phase: str, message: str, *, progress: int | None = None) -> None:
-        self.phase = phase
-        self.message = message
-        if progress is not None:
-            self.progress = progress
-        await self.events.send(
-            event="agent.running",
-            message=message,
-            agent_id=self.agent_id,
-            progress=self.progress,
-            data={"phase": phase, "elapsed_ms": self.elapsed_ms},
-        )
-
-    async def finish(self, message: str, *, success: bool, progress: int = 100) -> None:
-        await self.events.send(
-            event="agent.completed" if success else "agent.failed",
-            message=message,
-            agent_id=self.agent_id,
-            progress=progress if success else 0,
-            data={"phase": "finished" if success else "failed", "elapsed_ms": self.elapsed_ms},
-        )

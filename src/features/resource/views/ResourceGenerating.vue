@@ -142,32 +142,10 @@
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${node.status}`, { 'is-empty': !getNodeLiveLogs(node).length }]">
-                <template v-if="getNodeLiveLogs(node).length">
-                  <div class="station-live-current">
-                    <span class="station-live-dot"></span>
-                    <div>
-                      <strong>{{ getNodePhaseLabel(node) }}</strong>
-                      <p>{{ getNodeDisplayMessage(node) }}</p>
-                    </div>
-                  </div>
-
-                  <div class="station-live-lines">
-                    <p
-                      v-for="log in getNodeLiveLogs(node, 3)"
-                      :key="log.id"
-                      class="station-live-line"
-                      :class="`is-${log.status || node.status}`"
-                    >
-                      <span>{{ getLogPhaseLabel(log.phase) }}</span>
-                      <em>{{ log.message }}</em>
-                    </p>
-                  </div>
-                </template>
-
-                <div v-else class="station-live-empty">
-                  <span class="station-live-dot muted"></span>
-                  <p>等待该智能体接收调度指令</p>
+              <div class="station-live-log" :class="[`is-${node.status}`]">
+                <div class="station-live-current message-only-layout">
+                  <span class="station-live-dot" :class="node.status"></span>
+                  <p class="live-message-only">{{ getNodeDisplayMessage(node) }}</p>
                 </div>
               </div>
               <div class="station-footer">
@@ -197,32 +175,12 @@
                 </div>
                 <em>{{ showPptNode ? getNodeStatusLabel(pptNode) : '未选择' }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${pptNode.status}`, { 'is-empty': !showPptNode || !getNodeLiveLogs(pptNode).length }]">
-                <template v-if="showPptNode && getNodeLiveLogs(pptNode).length">
-                  <div class="station-live-current">
-                    <span class="station-live-dot"></span>
-                    <div>
-                      <strong>{{ getNodePhaseLabel(pptNode) }}</strong>
-                      <p>{{ getNodeDisplayMessage(pptNode) }}</p>
-                    </div>
-                  </div>
-
-                  <div class="station-live-lines">
-                    <p
-                      v-for="log in getNodeLiveLogs(pptNode, 3)"
-                      :key="log.id"
-                      class="station-live-line"
-                      :class="`is-${log.status || pptNode.status}`"
-                    >
-                      <span>{{ getLogPhaseLabel(log.phase) }}</span>
-                      <em>{{ log.message }}</em>
-                    </p>
-                  </div>
-                </template>
-
-                <div v-else class="station-live-empty">
-                  <span class="station-live-dot muted"></span>
-                  <p>{{ showPptNode ? '等待基础资源完成后开始生成课件' : '当前任务未选择 PPT Agent' }}</p>
+              <div class="station-live-log" :class="[`is-${pptNode.status}`]">
+                <div class="station-live-current message-only-layout">
+                  <span class="station-live-dot" :class="showPptNode ? pptNode.status : 'waiting'"></span>
+                  <p class="live-message-only">
+                    {{ showPptNode ? getNodeDisplayMessage(pptNode) : '当前任务未选择 PPT Agent' }}
+                  </p>
                 </div>
               </div>
               <div class="station-footer">
@@ -246,32 +204,12 @@
                 </div>
                 <em>{{ showVideoNode ? getNodeStatusLabel(videoNode) : '未选择' }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${videoNode.status}`, { 'is-empty': !showVideoNode || !getNodeLiveLogs(videoNode).length }]">
-                <template v-if="showVideoNode && getNodeLiveLogs(videoNode).length">
-                  <div class="station-live-current">
-                    <span class="station-live-dot"></span>
-                    <div>
-                      <strong>{{ getNodePhaseLabel(videoNode) }}</strong>
-                      <p>{{ getNodeDisplayMessage(videoNode) }}</p>
-                    </div>
-                  </div>
-
-                  <div class="station-live-lines">
-                    <p
-                      v-for="log in getNodeLiveLogs(videoNode, 3)"
-                      :key="log.id"
-                      class="station-live-line"
-                      :class="`is-${log.status || videoNode.status}`"
-                    >
-                      <span>{{ getLogPhaseLabel(log.phase) }}</span>
-                      <em>{{ log.message }}</em>
-                    </p>
-                  </div>
-                </template>
-
-                <div v-else class="station-live-empty">
-                  <span class="station-live-dot muted"></span>
-                  <p>{{ showVideoNode ? '等待基础资源完成后开始生成视频' : '当前任务未选择 Video Agent' }}</p>
+              <div class="station-live-log" :class="[`is-${videoNode.status}`]">
+                <div class="station-live-current message-only-layout">
+                  <span class="station-live-dot" :class="showVideoNode ? videoNode.status : 'waiting'"></span>
+                  <p class="live-message-only">
+                    {{ showVideoNode ? getNodeDisplayMessage(videoNode) : '当前任务未选择 Video Agent' }}
+                  </p>
                 </div>
               </div>
               <div class="station-footer">
@@ -3810,6 +3748,88 @@ function getMetricChips(node: DagNodeState) {
 .workflow-error-status:focus-visible {
   outline: 3px solid rgba(217, 74, 74, 0.2);
   outline-offset: 2px;
+}
+
+/* Custom Styles for Simplified Cards & Neon Breathing Glow */
+.message-only-layout {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  height: 100% !important;
+  grid-template-columns: none !important;
+}
+
+.live-message-only {
+  margin: 0 !important;
+  color: var(--color-text);
+  font-size: 0.76rem !important;
+  font-weight: var(--weight-bold) !important;
+  line-height: 1.4 !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: var(--agent-body-font);
+}
+
+/* Pulsing Neon border glow animation for running cards */
+@keyframes card-neon-glow {
+  0% {
+    border-color: rgba(59, 130, 246, 0.45);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2), 0 10px 25px rgba(59, 130, 246, 0.1);
+  }
+  50% {
+    border-color: rgba(59, 130, 246, 0.95);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.55), 0 10px 40px rgba(59, 130, 246, 0.25);
+  }
+  100% {
+    border-color: rgba(59, 130, 246, 0.45);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2), 0 10px 25px rgba(59, 130, 246, 0.1);
+  }
+}
+
+.agent-station-card.status-running {
+  animation: card-neon-glow 2s infinite ease-in-out !important;
+  border-color: rgba(59, 130, 246, 0.8) !important;
+}
+
+/* Beautiful custom status-aligned dots */
+.station-live-dot.waiting,
+.station-live-dot.skipped {
+  background: #94A3B8 !important;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.2) !important;
+}
+
+.station-live-dot.running {
+  background: #3B82F6 !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25) !important;
+  animation: dot-pulse-glow 1.5s infinite ease-in-out !important;
+}
+
+.station-live-dot.success {
+  background: #10B981 !important;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25) !important;
+}
+
+.station-live-dot.failed {
+  background: #EF4444 !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25) !important;
+}
+
+@keyframes dot-pulse-glow {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), 0 0 0 5px rgba(59, 130, 246, 0.3) !important;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
 }
 
 </style>

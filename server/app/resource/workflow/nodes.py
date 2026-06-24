@@ -36,7 +36,7 @@ from app.resource.service import (
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
 )
-
+# No ResourceAgentTracker needed
 logger = logging.getLogger(__name__)
 
 BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
@@ -157,19 +157,12 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     )
 
     # 执行 Planning
-    async with AgentRunTracker(
-        events=state["events"],
-        agent_id="planning",
-        phase="planning",
-        message="正在规划教学方向与大纲",
-        progress=5,
-    ) as planning_tracker:
-        planning_result = await AGENT_REGISTRY["planning"](state["events"]).generate_resource(planning_input)
-        await planning_tracker.finish(
-            "教学方向与大纲已生成" if planning_result.success else (planning_result.error or "规划失败"),
-            success=planning_result.success,
-            metrics={"enabled_agents": len(state["request"].enabled_agent_ids())},
-        )
+    await state["events"].send("planning", "running", "正在分析学习需求并构建大纲...", 10)
+    planning_result = await AGENT_REGISTRY["planning"](state["events"]).generate_resource(planning_input)
+    if planning_result.success:
+        await state["events"].send("planning", "completed", "教学大纲已生成", 100)
+    else:
+        await state["events"].send("planning", "failed", planning_result.error or "规划失败", 0)
 
     # Planning 失败直接抛出（致命）
     if not planning_result.success:
@@ -358,7 +351,7 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
         run_id=state["run_id"],
         resource_input=resource_input,
         events=state["events"],
-        __require_downstream_context=True,
+        _require_downstream_context=True,
     )
 
 
@@ -382,12 +375,8 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         if worker_agents
         else "未选择基础资源，聚合资源将基于教学计划生成"
     )
-    await state["events"].emit_agent(
-        COORDINATOR_AGENT_ID,
-        status=coordinator_status,
-        message=message,
-        progress=70,
-    )
+    stat = "completed" if coordinator_status == "finished" else "failed"
+    await state["events"].send(COORDINATOR_AGENT_ID, stat, message, 70)
 
     # 从数据库读取覆盖情况
     coverage_report = await get_coverage(
@@ -402,22 +391,21 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
             for item in plan.outline:
                 if item.get("id") in coverage_report["critical_missing_ids"]:
                     critical_titles.append(item.get("title", ""))
-        await state["events"].emit_agent(
+        await state["events"].send(
             COORDINATOR_AGENT_ID,
-            status="running",
-            message=f"大纲覆盖警告：核心大纲项未覆盖 — {', '.join(critical_titles)}",
-            progress=70,
-            phase="coverage_gap_warning",
+            "running",
+            f"大纲覆盖警告：核心大纲项未覆盖 — {', '.join(critical_titles)}",
+            70,
         )
     elif coverage_report.get("missing_outline_ids"):
         missing_ids = coverage_report["missing_outline_ids"]
         if plan := state.get("teaching_plan"):
             missing_titles = [item.get("title", "") for item in plan.outline if item.get("id") in missing_ids]
-            await state["events"].emit_agent(
+            await state["events"].send(
                 COORDINATOR_AGENT_ID,
-                status="running",
-                message=f"非核心大纲项未覆盖：{', '.join(missing_titles)}",
-                progress=70,
+                "running",
+                f"非核心大纲项未覆盖：{', '.join(missing_titles)}",
+                70,
             )
 
     return {"coverage_report": coverage_report}
@@ -449,12 +437,11 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
     从数据库读取成功的基础 Agent handoffs，委托给 _execute_non_planning_agent。
     聚合 Agent 不需要 downstream_context。
     """
-    await state["events"].emit_agent(
+    await state["events"].send(
         PPT_AGENT_ID,
-        status="running",
-        message="正在生成 PPT",
-        progress=80,
-        phase="ppt_generating",
+        "running",
+        "正在生成 PPT",
+        80,
     )
 
     # 从数据库读取成功持久化的基础 Agent handoffs
@@ -485,7 +472,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         run_id=state["run_id"],
         resource_input=resource_input,
         events=state["events"],
-        require_downstream_context=False,
+        _require_downstream_context=False,
         depends_on_agents=list(base_handoffs.keys()),
     )
 
@@ -496,12 +483,11 @@ async def video_node(state: ParentState) -> dict[str, Any]:
     从数据库读取成功的基础 Agent handoffs，委托给 _execute_non_planning_agent。
     聚合 Agent 不需要 downstream_context。
     """
-    await state["events"].emit_agent(
+    await state["events"].send(
         VIDEO_AGENT_ID,
-        status="running",
-        message="正在生成讲解视频配置与分镜",
-        progress=80,
-        phase="video_generating",
+        "running",
+        "正在生成讲解视频配置与分镜",
+        80,
     )
 
     # 从数据库读取成功持久化的基础 Agent handoffs
@@ -531,7 +517,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         run_id=state["run_id"],
         resource_input=resource_input,
         events=state["events"],
-        require_downstream_context=False,
+        _require_downstream_context=False,
         depends_on_agents=list(base_handoffs.keys()),
     )
 
@@ -551,12 +537,11 @@ async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
     agg_failures = {aid: f for aid, f in failures.items() if aid in AGGREGATION_AGENT_IDS}
     success_count = len(agg_results)
     fail_count = len(agg_failures)
-    await state["events"].emit_agent(
+    await state["events"].send(
         BUNDLE_AGENT_ID,
-        status="running",
-        message=f"聚合资源生成完成：成功 {success_count} 个，失败 {fail_count} 个",
-        progress=95,
-        phase="aggregation_done",
+        "running",
+        f"聚合资源生成完成：成功 {success_count} 个，失败 {fail_count} 个",
+        90,
     )
     return {}
 
@@ -570,12 +555,11 @@ async def save_node(state: ParentState) -> dict[str, Any]:
     终端状态由数据库已持久化的 Agent 集合严格计算。
     只调用 finalize_generation，不接收调用者声称的成功集合。
     """
-    await state["events"].emit_agent(
+    await state["events"].send(
         BUNDLE_AGENT_ID,
-        status="running",
-        message="正在组装资源包并保存结果",
-        progress=95,
-        phase="bundling",
+        "running",
+        "正在组装资源包并保存结果",
+        95,
     )
 
     selected_agent_ids = set(state["request"].enabled_agent_ids())
@@ -590,13 +574,13 @@ async def save_node(state: ParentState) -> dict[str, Any]:
             )
             success = status in ("completed", "partial_completed")
 
-            await state["events"].emit_agent(
+            await state["events"].send(
                 BUNDLE_AGENT_ID,
-                status="finished" if success else "failed",
-                message="资源包组装完成" if success else "资源包组装失败",
-                progress=100,
+                "completed" if success else "failed",
+                "资源包组装完成" if success else "资源包组装失败",
+                100,
             )
             return {"success": success}
     except Exception:
-        await state["events"].emit_agent(BUNDLE_AGENT_ID, status="failed", message="资源包组装异常", progress=0)
+        await state["events"].send(BUNDLE_AGENT_ID, "failed", "资源包组装异常", 0)
         raise

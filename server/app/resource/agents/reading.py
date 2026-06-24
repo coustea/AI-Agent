@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.chat.tools.search import tavily_search, duckduckgo_search
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
     build_basic_handoff,
@@ -66,8 +65,8 @@ class ReadingAgent(BaseResourceAgent):
     agent_id = "reading"
     agent_name = "阅读生成"
 
-    def __init__(self, events=None, emitter=None):
-        super().__init__(events=events, emitter=emitter)
+    def __init__(self, emitter=None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -101,13 +100,7 @@ class ReadingAgent(BaseResourceAgent):
             examples=resource_titles[:6],
         )
         result.downstream_context = handoff
-        if self.emitter:
-            await self.events.send_agent_status(
-                self.agent_id,
-                status="completed" if result.success else "failed",
-                message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"),
-                progress=100 if result.success else 0,
-            )
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -120,13 +113,7 @@ class ReadingAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        if self.emitter:
-            await self.events.send_agent_status(
-                self.agent_id,
-                status="completed" if result.success else "failed",
-                message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"),
-                progress=100 if result.success else 0,
-            )
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_reading(
@@ -148,13 +135,7 @@ class ReadingAgent(BaseResourceAgent):
         max_items = config.get("max_items", 5)
         language_preference = config.get("language_preference") or "chinese"
 
-        if self.emitter:
-            await self.events.send_agent_step(
-                self.agent_id,
-                phase="search",
-                message="正在搜索相关阅读资源",
-                progress=25,
-            )
+        await self.emitter.send(self.agent_id, "running", "正在搜索相关阅读资源...", 25)
 
         # 步骤 1: 构建搜索查询
         search_queries = self._build_search_queries(input_text, title_prefix, language_preference)
@@ -178,19 +159,14 @@ class ReadingAgent(BaseResourceAgent):
                 metadata={"agent_id": "reading", "error_type": "insufficient_search_results"},
             )
 
-        if self.emitter:
-            await self.events.send_agent_step(
-                self.agent_id,
-                phase="generate",
-                message=f"已获取 {len(search_results)} 条真实资源",
-                progress=50,
-            )
+        await self.emitter.send(self.agent_id, "running", f"已获取 {len(search_results)} 条真实资源", 50)
 
         # 步骤 3: 基于搜索结果生成阅读推荐
         prompt = prompts.get("resource").get("reading")
         enhanced_input = self._build_enhanced_input(search_results, input_text, config)
 
         logger.info("Agent[reading] 步骤: 调用 LLM 生成阅读推荐, search_results=%d", len(search_results))
+        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型提炼拓展阅读推荐...", 70)
         result = await self.llm.ainvoke_json(
             ReadingPayload,
             f"{prompt}\n\n{enhanced_input}",
@@ -268,13 +244,8 @@ class ReadingAgent(BaseResourceAgent):
 
         for query in queries:
             try:
-                # 优先使用 Tavily（AI 优化搜索）
-                search_text = await tavily_search(query)
-
-                # 如果 Tavily 不可用，使用 DuckDuckGo
-                if "Tavily 搜索不可用" in search_text or "Tavily 搜索失败" in search_text:
-                    logger.info("Agent[reading] Tavily 不可用，使用 DuckDuckGo: query=%s", query)
-                    search_text = await duckduckgo_search(query)
+                # 使用基类内置的统一搜索工具调用
+                search_text = await self.search(query)
 
                 # 解析搜索结果
                 parsed = self._parse_search_results(search_text)

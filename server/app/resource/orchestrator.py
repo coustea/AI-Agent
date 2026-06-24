@@ -31,12 +31,18 @@ async def run_multi_agent_generation(
     resource_id: int,
     run_id: str,
 ) -> None:
+    """后台资源生成编排入口。
+
+    ResourceEvents 在此函数内部创建，采用无状态代理模式：
+    - send() 时自动创建内存频道
+    - 频道在终态后保留 30 分钟供 SSE 断线重连
+    """
     events = ResourceEvents(user_id=user_id, resource_id=resource_id, run_id=run_id)
     start_time = time.perf_counter()
     success = False
 
     try:
-        await events.send(event="generation.started", message="资源生成已开始")
+        await events.send("global", "running", "资源生成已开始")
         logger.info(
             "启动 LangGraph 全局编排图资源生成: run_id=%s user_id=%s, resource_id=%s, agents=%s",
             run_id, user_id, resource_id, request.enabled_agent_ids(),
@@ -69,9 +75,9 @@ async def run_multi_agent_generation(
                     await service.update_resource_status(resource_id, "failed")
 
         if success:
-            await events.send(event="generation.completed", message="资源生成完成")
+            await events.send("global", "completed", "资源生成完成")
         else:
-            await events.send(event="generation.failed", message="资源生成未产生可用结果")
+            await events.send("global", "failed", "资源生成未产生可用结果")
         total_elapsed = time.perf_counter() - start_time
         logger.info("资源生成结束: resource_id=%s, success=%s, 耗时=%.2fs", resource_id, success, total_elapsed)
     except Exception as exc:
@@ -80,4 +86,4 @@ async def run_multi_agent_generation(
         async with session_scope() as session:
             service = ResourceService(session)
             await service.update_resource_status(resource_id, "failed")
-        await events.send(event="generation.failed", message="资源生成过程中发生异常")
+        await events.send("global", "failed", "资源生成过程中发生异常")

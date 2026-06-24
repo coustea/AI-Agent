@@ -133,8 +133,8 @@ class PPTAgent(BaseResourceAgent):
     agent_id = "ppt"
     agent_name = "教学课件"
 
-    def __init__(self, events):
-        super().__init__(events)
+    def __init__(self, emitter=None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm(temperature=INFERENCE_TEMPERATURE)
 
     async def generate_resource(self, input_data: ResourceInput | NodeInput) -> AgentResult:
@@ -144,6 +144,8 @@ class PPTAgent(BaseResourceAgent):
             source_pack = build_node_source_pack(input_data)
         else:
             source_pack = build_resource_source_pack(input_data)
+
+        await self.emitter.send(self.agent_id, "running", "正在收集并组织讲义内容与大纲...", 15)
 
         # 准备 LLM 输入
         prompt_template = prompts.get("ppt_chapter")
@@ -158,6 +160,7 @@ class PPTAgent(BaseResourceAgent):
 
         # 调用 LLM 生成
         try:
+            await self.emitter.send(self.agent_id, "running", "正在调用AI大模型研制课件大纲与幻灯片页面结构...", 45)
             response = await self.llm.ainvoke(
                 prompt_template.format(
                     source_pack=json.dumps(source_pack.model_dump(mode="json"), ensure_ascii=False, indent=2),
@@ -170,6 +173,7 @@ class PPTAgent(BaseResourceAgent):
             try:
                 ppt_data = json.loads(raw_content)
                 # 验证是否符合 PPTDocument schema
+                await self.emitter.send(self.agent_id, "running", "正在校验 PPT 页面布局与排版结构...", 85)
                 ppt_doc = PPTDocument.model_validate(ppt_data)
                 
                 logger.info(

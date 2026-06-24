@@ -57,11 +57,9 @@ def test_resource_generation_request_accepts_current_frontend_payload():
                     "language_preference": "both",
                 },
                 "ppt": {
-                    "difficulty": "intermediate",
-                    "lesson_depth": "standard",
-                    "lesson_kind": "concept",
-                    "learning_focus": "balanced",
-                    "template_style": "paper-light",
+                    "theme_id": "paper-light",
+                    "explanation_style": "conceptual",
+                    "visual_emphasis": "balanced",
                 },
             },
             }
@@ -72,7 +70,7 @@ def test_resource_generation_request_accepts_current_frontend_payload():
     assert request.agent_configs.quiz.difficulty_mode == "basic"
     assert request.agent_configs.quiz.question_types == ["single", "multiple", "judge", "fill"]
     assert request.agent_configs.reading.language_preference == "both"
-    assert request.agent_configs.ppt.template_style == "paper-light"
+    assert request.agent_configs.ppt.theme_id == "paper-light"
 
 
 def test_resource_generation_request_normalizes_frontend_bilingual_alias():

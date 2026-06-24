@@ -25,8 +25,8 @@ class MindmapAgent(BaseResourceAgent):
     agent_id = "mindmap"
     agent_name = "思维导图生成"
 
-    def __init__(self, events=None, emitter=None):
-        super().__init__(events=events, emitter=emitter)
+    def __init__(self, emitter=None):
+        super().__init__(emitter=emitter)
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -50,7 +50,7 @@ class MindmapAgent(BaseResourceAgent):
             visual_ideas=branches,
         )
         result.downstream_context = handoff
-        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
@@ -61,7 +61,7 @@ class MindmapAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.events.send_agent_status(self.agent_id, status="completed" if result.success else "failed", message=result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), progress=100 if result.success else 0)
+        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_mindmap(
@@ -80,11 +80,20 @@ class MindmapAgent(BaseResourceAgent):
             input_text += f"\n\n{chr(10).join(cfg)}"
         input_text += (
             "\n\n请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
-            "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题和列表文本。"
+            "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题 and 列表文本。"
         )
 
-        await self.events.send_agent_step(self.agent_id, phase="start", message="正在构建知识导图提示词", progress=25)
+        # 执行搜索以丰富导图中的分支深度与细化概念
+        await self.emitter.send(self.agent_id, "running", "正在搜索相关知识导图大纲...", 30)
+        search_query = f"{title_prefix} 知识图谱 知识链路"
+        search_text = await self.search(search_query)
+
+        if "搜索失败" not in search_text and "未找到" not in search_text:
+            input_text = f"## 搜索到的相关知识大纲参考\n{search_text}\n\n" + input_text
+
+        await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)
         prompt = prompts.get("resource").get("mindmap")
+        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型生成知识图谱结构...", 60)
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
         content = _clean_markdown(content)
