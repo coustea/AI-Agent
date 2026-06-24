@@ -6,7 +6,7 @@ export type ContentPart =
   | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
   | { type: "file"; file: { file_id?: string; file_data?: string; filename?: string } }
 
-type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy'
+export type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy' | 'tree' | 'grid' | 'protocol' | 'timeline'
 type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
 
 // ---- 1. 对比图 ----
@@ -103,6 +103,67 @@ export interface HierarchyPayload {
   branches: HierarchyBranch[]
 }
 
+// ---- 7. 二叉树图 ----
+export interface TreeDiagramNode {
+  id: string
+  label: string
+  left_id: string | null
+  right_id: string | null
+  type?: 'normal' | 'highlight' | 'null' | null
+  detail?: string | null
+}
+
+export interface TreePayload {
+  root_id: string
+  nodes: TreeDiagramNode[]
+}
+
+// ---- 8. 网格/内存/指针图 ----
+export interface GridCell {
+  index: string
+  label: string
+  status: 'normal' | 'active' | 'empty' | 'pointer'
+  pointer?: string | null
+  detail?: string | null
+}
+
+export interface GridPayload {
+  layout: 'horizontal' | 'vertical' | 'matrix'
+  cols?: number | null
+  cells: GridCell[]
+}
+
+// ---- 9. 协议字段/报文格式图 ----
+export interface ProtocolField {
+  name: string
+  detail: string
+  width_ratio?: number | null
+  highlight: boolean
+}
+
+export interface ProtocolPayload {
+  orientation: 'vertical' | 'horizontal_split'
+  fields: ProtocolField[]
+}
+
+// ---- 10. 时序轴/时空生命周期图 ----
+export interface TimelineBlock {
+  label: string
+  start: number
+  duration: number
+  status: 'normal' | 'active' | 'idle' | 'stall'
+}
+
+export interface TimelineTrack {
+  track_name: string
+  blocks: TimelineBlock[]
+}
+
+export interface TimelinePayload {
+  axis_label: string
+  tracks: TimelineTrack[]
+}
+
 // ---- 辅助文字 ----
 interface TeachingContent {
   core_explanation: string
@@ -120,6 +181,10 @@ export type VisualContent =
   | FrameworkPayload
   | SummaryPayload
   | HierarchyPayload
+  | TreePayload
+  | GridPayload
+  | ProtocolPayload
+  | TimelinePayload
 
 export interface TeachingDiagram {
   graph_type: TeachingDiagramType
