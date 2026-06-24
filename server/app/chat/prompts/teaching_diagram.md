@@ -18,6 +18,10 @@
 | `framework` | 展示章节或知识体系结构 | 操作系统整体框架、数据结构分类 |
 | `summary` | 高频考点、章节总结、一图速记 | 死锁四个必要条件、排序算法对比 |
 | `hierarchy` | 分类、分层归纳 | 软件测试分类、数据结构分类 |
+| `tree` | 数据结构中的树形和图结构 | 二叉搜索树、平衡二叉树、红黑树、最小生成树 |
+| `grid` | 数据结构/操作系统中的内存分配与顺序结构 | 循环队列、调用栈帧、内存分区、页表映射、页面置换算法状态 |
+| `protocol` | 计算机网络中的协议分层与报文首部格式 | OSI 7 层模型、TCP 首部结构、IP 分组格式 |
+| `timeline` | 操作系统中的 CPU 进程调度、计算机组成原理中的指令流水线时空图 | 进程调度甘特图、流水线冒险/气泡 |
 
 # JSON Schema
 
@@ -25,7 +29,7 @@
 
 ```json
 {
-  "graph_type": "comparison | flowchart | sequence | framework | summary | hierarchy",
+  "graph_type": "comparison | flowchart | sequence | framework | summary | hierarchy | tree | grid | protocol | timeline",
   "title": "主标题（1-80字）",
   "subtitle": "副标题（可选，≤60字）",
   "teaching_goal": "教学目标（≤60字）",
@@ -199,6 +203,341 @@
 }
 ```
 
+## tree — 树形图
+
+```json
+{
+  "graph_type": "tree",
+  "title": "AVL 树的 LL 旋转调整",
+  "subtitle": "插入节点 8 导致失衡后的右单旋过程",
+  "teaching_goal": "帮助理解 AVL 树在左左（LL）不平衡时的旋转平衡操作",
+  "difficulty": "intermediate",
+  "visual_content": {
+    "root_id": "n2",
+    "nodes": [
+      {
+        "id": "n2",
+        "label": "12",
+        "left_id": "n1",
+        "right_id": "n3",
+        "type": "root",
+        "detail": "LL 旋转后的新根节点，已恢复平衡"
+      },
+      {
+        "id": "n1",
+        "label": "8 (新插入)",
+        "left_id": null,
+        "right_id": null,
+        "type": "inserted",
+        "detail": "引发不平衡的源头节点"
+      },
+      {
+        "id": "n3",
+        "label": "15",
+        "left_id": null,
+        "right_id": null,
+        "type": "normal",
+        "detail": "原根节点，向右下旋转下降为右子节点"
+      }
+    ]
+  },
+  "teaching_content": {
+    "core_explanation": "当在最小不平衡子树的左孩子的左子树上插入新节点，导致该子树的平衡因子由 1 变为 2 时，需进行一次右单旋转（LL 旋转）来恢复平衡。",
+    "key_points": [
+      "最小不平衡子树的根节点是原先的 15",
+      "LL 旋转将左孩子 12 提升为新根，原根 15 降为右孩子",
+      "调整后所有节点的平衡因子绝对值均不超过 1"
+    ],
+    "common_mistakes": [
+      "旋转方向混淆：LL 旋转实际上是向右旋转",
+      "子树挂接错误：若 12 原有右子树，需挂接到 15 的左子树上"
+    ],
+    "examples": [
+      "插入序列 [15, 12, 8] 导致 LL 旋转"
+    ],
+    "summary": "LL 插入需进行右单旋，新根为原左孩子，原根变右孩子"
+  }
+}
+```
+
+## grid — 网格图
+
+```json
+{
+  "graph_type": "grid",
+  "title": "循环队列存储结构",
+  "subtitle": "基于数组实现的顺序循环队列当前状态",
+  "teaching_goal": "帮助掌握循环队列的判空/判满条件及头尾指针变化",
+  "difficulty": "intermediate",
+  "visual_content": {
+    "layout": "horizontal",
+    "cells": [
+      {
+        "index": 0,
+        "label": "空闲",
+        "status": "empty",
+        "detail": "已被读取的旧数据位置"
+      },
+      {
+        "index": 1,
+        "label": "元素 B",
+        "status": "active",
+        "pointer": "head",
+        "detail": "队头指针 head 指向当前第一个有效元素"
+      },
+      {
+        "index": 2,
+        "label": "元素 C",
+        "status": "active",
+        "detail": "有效队列元素"
+      },
+      {
+        "index": 3,
+        "label": "元素 D",
+        "status": "active",
+        "detail": "有效队列元素"
+      },
+      {
+        "index": 4,
+        "label": "空闲",
+        "status": "empty",
+        "pointer": "tail",
+        "detail": "队尾指针 tail 指向下一个待插入位置"
+      },
+      {
+        "index": 5,
+        "label": "空闲",
+        "status": "empty",
+        "detail": "空闲存储单元"
+      }
+    ]
+  },
+  "teaching_content": {
+    "core_explanation": "循环队列通过取模运算 `%` 实现首尾相连。head 指向队列首个元素，tail 指向队尾元素的下一个空闲位置。为了区分队空与队满，通常保留一个存储单元不使用。",
+    "key_points": [
+      "队空条件：head == tail",
+      "队满条件：(tail + 1) % QueueSize == head",
+      "队列当前长度：(tail - head + QueueSize) % QueueSize = 3"
+    ],
+    "common_mistakes": [
+      "混淆队满判定，误以为 tail == head 即为队满",
+      "出队入队时忘记加 1 后取模，导致越界或指针不循环"
+    ],
+    "examples": [
+      "大小为 6 的队列，当前存储了 B, C, D 三个元素"
+    ],
+    "summary": "循环队列利用模运算防假溢出，常用牺牲一单元法区分空与满"
+  }
+}
+```
+
+## protocol — 协议字段图
+
+```json
+{
+  "graph_type": "protocol",
+  "title": "TCP 报文段首部格式（前 96 位）",
+  "subtitle": "TCP 传输层报文的核心寻址与连接管理控制字段",
+  "teaching_goal": "掌握 TCP 报文段首部中源端口、目的端口、序号与确认号的作用",
+  "difficulty": "intermediate",
+  "visual_content": {
+    "orientation": "horizontal_split",
+    "fields": [
+      {
+        "name": "源端口 (16 bits)",
+        "detail": "标识发送方应用程序端口号",
+        "width_ratio": 16,
+        "highlight": false
+      },
+      {
+        "name": "目的端口 (16 bits)",
+        "detail": "标识接收方应用程序端口号",
+        "width_ratio": 16,
+        "highlight": false
+      },
+      {
+        "name": "序号 Sequence Number (32 bits)",
+        "detail": "传送数据流中第一个字节的序号，用于按序重组",
+        "width_ratio": 32,
+        "highlight": true
+      },
+      {
+        "name": "确认号 Acknowledgment Number (32 bits)",
+        "detail": "期望收到对方下一个报文段的第一个字节序号",
+        "width_ratio": 32,
+        "highlight": true
+      }
+    ]
+  },
+  "teaching_content": {
+    "core_explanation": "TCP 报文段首部前 12 字节（96 位）包含寻址和可靠传输的最关键字段。端口号实现应用进程的复用与分用；序号与确认号是 TCP 实现可靠传输（滑动窗口、确认应答）的基石。",
+    "key_points": [
+      "源/目的端口各占 16 位，标识端到端的应用进程",
+      "序号 (Seq) 用于解决网络包乱序问题",
+      "确认号 (Ack) 只有在 ACK 标志位为 1 时才有效，代表期望收到的下一个字节"
+    ],
+    "common_mistakes": [
+      "确认号不是当前已接收的最大字节序号，而是最大序号加 1",
+      "混淆 TCP 端口号与 IP 地址，端口号工作在传输层"
+    ],
+    "examples": [
+      "客户端 Seq=100 发送 50 字节，服务器响应 Ack=150"
+    ],
+    "summary": "端口负责进程寻址，Seq/Ack 协同保障可靠有序传输"
+  }
+}
+```
+
+## timeline — 时间线轨道图
+
+```json
+{
+  "graph_type": "timeline",
+  "title": "5 阶段指令流水线冒险与气泡",
+  "subtitle": "数据冒险（Data Hazard）导致流水线暂停（Stall）的时空图",
+  "teaching_goal": "理解指令流水线中数据冲突导致暂停及气泡插入的机制",
+  "difficulty": "intermediate",
+  "visual_content": {
+    "axis_label": "时钟周期 (Clock Cycles)",
+    "tracks": [
+      {
+        "track_name": "I1: ADD R1, R2, R3",
+        "blocks": [
+          {
+            "label": "IF",
+            "start": 0,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "ID",
+            "start": 1,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "EX",
+            "start": 2,
+            "duration": 1,
+            "status": "active"
+          },
+          {
+            "label": "MEM",
+            "start": 3,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "WB",
+            "start": 4,
+            "duration": 1,
+            "status": "normal"
+          }
+        ]
+      },
+      {
+        "track_name": "I2: SUB R4, R1, R5",
+        "blocks": [
+          {
+            "label": "IF",
+            "start": 1,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "ID",
+            "start": 2,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "Stall",
+            "start": 3,
+            "duration": 1,
+            "status": "stall"
+          },
+          {
+            "label": "EX",
+            "start": 4,
+            "duration": 1,
+            "status": "active"
+          },
+          {
+            "label": "MEM",
+            "start": 5,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "WB",
+            "start": 6,
+            "duration": 1,
+            "status": "normal"
+          }
+        ]
+      },
+      {
+        "track_name": "I3: AND R6, R7, R8",
+        "blocks": [
+          {
+            "label": "IF",
+            "start": 2,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "Stall",
+            "start": 3,
+            "duration": 1,
+            "status": "stall"
+          },
+          {
+            "label": "ID",
+            "start": 4,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "EX",
+            "start": 5,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "MEM",
+            "start": 6,
+            "duration": 1,
+            "status": "normal"
+          },
+          {
+            "label": "WB",
+            "start": 7,
+            "duration": 1,
+            "status": "normal"
+          }
+        ]
+      }
+    ]
+  },
+  "teaching_content": {
+    "core_explanation": "指令 I2 需要使用 I1 计算出的 R1 寄存器值。由于 I1 在第 4 周期写回 (WB)，I2 原本在第 3 周期 (EX) 就要使用 R1，从而产生写后读 (RAW) 数据冒险。硬件在第 3 周期对 I2 插入一个时钟周期的暂停 (Stall)，即产生流水线气泡，直到第 4 周期才允许 I2 进入 EX 阶段（假设无旁路技术）。",
+    "key_points": [
+      "数据冒险分为 RAW、WAR、WAW，指令流水线中以 RAW 最常见",
+      "未采用旁路技术时，后续指令必须暂停等待前序指令写回寄存器",
+      "流水线暂停 (Stall) 会导致后续指令的各阶段均向后延迟"
+    ],
+    "common_mistakes": [
+      "误以为所有流水线冒险都必须暂停，实际可通过旁路 (Forwarding) 技术消除大部分 RAW 暂停",
+      "暂停时，不仅当前受阻指令暂停，后面已进入流水线的指令也要一起暂停，不能超越"
+    ],
+    "examples": [
+      "经典 MIPS 5 阶段流水线中的数据冒险与插入 Bubble"
+    ],
+    "summary": "数据冲突需暂停，流水插空生原气，后序指令共顺延"
+  }
+}
+```
+
 # 质量约束
 
 1. **内容必须具体**：不允许使用"XXX"等占位符，每个字段必须填写与问题相关的真实内容。
@@ -212,3 +551,7 @@
    - `hierarchy`：2-6 个分支，且 children 必须为单层的字符串数组，不支持对象的嵌套。
    - `summary`：2-8 张卡片。
    - `comparison`：前端暂未专门渲染 dimension 中的 highlight 字段，如果某维度有关键差异，请直接通过 left 或 right 文本的前缀（如 "【优势】"）体现。
+   - `tree`：节点数量建议在 2-10 个，且左右子节点 ID 指向需真实对应。
+   - `grid`：单元格数量建议在 2-12 个，且指针（如 head, tail, sp）需准确对应到相关单元格的索引。
+   - `protocol`：字段数量建议在 2-10 个，必须合理分配 width_ratio（通常一行为 32 位）。
+   - `timeline`：轨道数量 2-5 个，单条轨道的事件块建议 2-8 个，合理规划 start 和 duration 以实现对齐或重叠。
