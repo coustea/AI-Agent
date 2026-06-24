@@ -29,6 +29,10 @@
         <FrameworkDiagram v-else-if="props.diagram.graph_type === 'framework'" :payload="props.diagram.visual_content as FrameworkPayload" />
         <SummaryDiagram v-else-if="props.diagram.graph_type === 'summary'" :payload="props.diagram.visual_content as SummaryPayload" />
         <HierarchyDiagram v-else-if="props.diagram.graph_type === 'hierarchy'" :payload="props.diagram.visual_content as HierarchyPayload" />
+        <TreeDiagram v-else-if="props.diagram.graph_type === 'tree'" :payload="props.diagram.visual_content as TreePayload" />
+        <GridDiagram v-else-if="props.diagram.graph_type === 'grid'" :payload="props.diagram.visual_content as GridPayload" />
+        <ProtocolDiagram v-else-if="props.diagram.graph_type === 'protocol'" :payload="props.diagram.visual_content as ProtocolPayload" />
+        <TimelineDiagram v-else-if="props.diagram.graph_type === 'timeline'" :payload="props.diagram.visual_content as TimelinePayload" />
       </div>
       
       <!-- Overlay for compact mode -->
@@ -84,6 +88,10 @@ import SequenceDiagram from './diagrams/SequenceDiagram.vue'
 import FrameworkDiagram from './diagrams/FrameworkDiagram.vue'
 import SummaryDiagram from './diagrams/SummaryDiagram.vue'
 import HierarchyDiagram from './diagrams/HierarchyDiagram.vue'
+import TreeDiagram from './diagrams/TreeDiagram.vue'
+import GridDiagram from './diagrams/GridDiagram.vue'
+import ProtocolDiagram from './diagrams/ProtocolDiagram.vue'
+import TimelineDiagram from './diagrams/TimelineDiagram.vue'
 
 import type {
   ComparisonPayload,
@@ -93,6 +101,10 @@ import type {
   SequencePayload,
   SummaryPayload,
   TeachingDiagram,
+  TreePayload,
+  GridPayload,
+  ProtocolPayload,
+  TimelinePayload,
 } from '@/features/chat/model/chat'
 
 const props = defineProps<{
@@ -111,6 +123,10 @@ const typeLabel: Record<string, string> = {
   framework: '框架图解',
   summary: '总结图解',
   hierarchy: '层级图解',
+  tree: '数据结构 - 树形结构',
+  grid: '数据结构/操作系统 - 内存状态格',
+  protocol: '网络协议/组成原理 - 报文格式图',
+  timeline: '操作系统/组成原理 - 时间时空图',
 }
 
 const difficultyLabel: Record<string, string> = {
