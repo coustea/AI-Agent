@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 TeachingDiagramType = Literal[
-    "comparison", "flowchart", "sequence", "framework", "summary", "hierarchy", "mindmap",
+    "comparison", "flowchart", "sequence", "framework", "summary", "hierarchy",
     "tree", "grid", "protocol", "timeline"
 ]
 
@@ -142,23 +142,6 @@ class HierarchyPayload(BaseModel):
     root: str = Field(max_length=20, description="根节点名称")
     branches: list[HierarchyBranch] = Field(min_length=2, max_length=8, description="分支列表")
 
-
-class MindMapNode(BaseModel):
-    """思维导图节点 — 支持递归嵌套（最多 3 层）。"""
-    model_config = ConfigDict(extra="forbid")
-    id: str = Field(description="节点唯一 ID（如 root, 1, 1-1）")
-    label: str = Field(max_length=24, description="节点文字")
-    note: Optional[str] = Field(default=None, max_length=60, description="可选补充说明")
-    children: list["MindMapNode"] = Field(default_factory=list, max_length=6, description="子节点列表")
-
-
-class MindMapPayload(BaseModel):
-    """思维导图数据 — 放射状或垂直树布局。"""
-    model_config = ConfigDict(extra="forbid")
-    root: MindMapNode = Field(description="根节点")
-    layout: Literal["radial", "vertical"] = Field(default="radial", description="布局方向")
-
-
 # ---- 7. 树形图 ----
 
 class TreeDiagramNode(BaseModel):
@@ -247,7 +230,7 @@ class TeachingDiagram(BaseModel):
     difficulty: Literal["beginner", "intermediate", "advanced"] = Field(default="intermediate", description="难度等级")
     visual_content: Union[
         ComparisonPayload, FlowchartPayload, SequencePayload,
-        FrameworkPayload, SummaryPayload, HierarchyPayload, MindMapPayload,
+        FrameworkPayload, SummaryPayload, HierarchyPayload,
         TreePayload, GridPayload, ProtocolPayload, TimelinePayload,
     ]
     teaching_content: TeachingContent
@@ -262,7 +245,6 @@ class TeachingDiagram(BaseModel):
             "framework": FrameworkPayload,
             "summary": SummaryPayload,
             "hierarchy": HierarchyPayload,
-            "mindmap": MindMapPayload,
             "tree": TreePayload,
             "grid": GridPayload,
             "protocol": ProtocolPayload,
