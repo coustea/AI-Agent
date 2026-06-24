@@ -11,7 +11,10 @@ from typing import Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-TeachingDiagramType = Literal["comparison", "flowchart", "sequence", "framework", "summary", "hierarchy"]
+TeachingDiagramType = Literal[
+    "comparison", "flowchart", "sequence", "framework", "summary", "hierarchy", "mindmap",
+    "tree", "grid", "protocol", "timeline"
+]
 
 
 class TeachingContent(BaseModel):
@@ -140,6 +143,96 @@ class HierarchyPayload(BaseModel):
     branches: list[HierarchyBranch] = Field(min_length=2, max_length=8, description="分支列表")
 
 
+class MindMapNode(BaseModel):
+    """思维导图节点 — 支持递归嵌套（最多 3 层）。"""
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(description="节点唯一 ID（如 root, 1, 1-1）")
+    label: str = Field(max_length=24, description="节点文字")
+    note: Optional[str] = Field(default=None, max_length=60, description="可选补充说明")
+    children: list["MindMapNode"] = Field(default_factory=list, max_length=6, description="子节点列表")
+
+
+class MindMapPayload(BaseModel):
+    """思维导图数据 — 放射状或垂直树布局。"""
+    model_config = ConfigDict(extra="forbid")
+    root: MindMapNode = Field(description="根节点")
+    layout: Literal["radial", "vertical"] = Field(default="radial", description="布局方向")
+
+
+# ---- 7. 树形图 ----
+
+class TreeDiagramNode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(description="节点唯一 ID")
+    label: str = Field(description="节点标签/展示文本")
+    left_id: Optional[str] = Field(default=None, description="左子节点 ID")
+    right_id: Optional[str] = Field(default=None, description="右子节点 ID")
+    type: Optional[str] = Field(default=None, description="节点类型（可选）")
+    detail: Optional[str] = Field(default=None, description="节点详细说明（可选）")
+
+
+class TreePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    root_id: str = Field(description="根节点 ID")
+    nodes: list[TreeDiagramNode] = Field(description="树节点列表")
+
+
+# ---- 8. 网格图 ----
+
+class GridCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    index: int = Field(description="单元格索引/位置")
+    label: str = Field(description="单元格展示文本")
+    status: Optional[str] = Field(default=None, description="单元格状态（可选）")
+    pointer: Optional[str] = Field(default=None, description="指向该单元格的指针名称/标签（可选）")
+    detail: Optional[str] = Field(default=None, description="单元格详细说明（可选）")
+
+
+class GridPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    layout: Literal["horizontal", "vertical", "matrix"] = Field(description="网格布局方向")
+    cols: Optional[int] = Field(default=None, description="列数（仅在 matrix 布局下生效且建议提供）")
+    cells: list[GridCell] = Field(description="网格单元格列表")
+
+
+# ---- 9. 协议字段图 ----
+
+class ProtocolField(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(description="协议字段名称")
+    detail: Optional[str] = Field(default=None, description="协议字段详细说明")
+    width_ratio: Optional[int] = Field(default=None, description="字段所占宽度比例（可选）")
+    highlight: bool = Field(default=False, description="是否高亮突出显示")
+
+
+class ProtocolPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    orientation: Literal["vertical", "horizontal_split"] = Field(description="协议报文展示方向")
+    fields: list[ProtocolField] = Field(description="协议字段列表")
+
+
+# ---- 10. 时间线轨道图 ----
+
+class TimelineBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(description="时间块/事件标签")
+    start: float = Field(description="开始时间/起始坐标位置")
+    duration: float = Field(description="持续时间/时间块长度")
+    status: Literal["normal", "active", "idle", "stall"] = Field(default="normal", description="时间块状态")
+
+
+class TimelineTrack(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    track_name: str = Field(description="轨道/并发线路名称")
+    blocks: list[TimelineBlock] = Field(description="该轨道下的时间块列表")
+
+
+class TimelinePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    axis_label: str = Field(description="时间轴标签，如时间单位(ms, s)或阶段描述")
+    tracks: list[TimelineTrack] = Field(description="时间线轨道列表")
+
+
 # ---- 顶层 TeachingDiagram ----
 
 class TeachingDiagram(BaseModel):
@@ -154,7 +247,8 @@ class TeachingDiagram(BaseModel):
     difficulty: Literal["beginner", "intermediate", "advanced"] = Field(default="intermediate", description="难度等级")
     visual_content: Union[
         ComparisonPayload, FlowchartPayload, SequencePayload,
-        FrameworkPayload, SummaryPayload, HierarchyPayload,
+        FrameworkPayload, SummaryPayload, HierarchyPayload, MindMapPayload,
+        TreePayload, GridPayload, ProtocolPayload, TimelinePayload,
     ]
     teaching_content: TeachingContent
 
@@ -168,6 +262,11 @@ class TeachingDiagram(BaseModel):
             "framework": FrameworkPayload,
             "summary": SummaryPayload,
             "hierarchy": HierarchyPayload,
+            "mindmap": MindMapPayload,
+            "tree": TreePayload,
+            "grid": GridPayload,
+            "protocol": ProtocolPayload,
+            "timeline": TimelinePayload,
         }[self.graph_type]
         if not isinstance(self.visual_content, expected_type):
             raise ValueError("visual_content must match graph_type")
