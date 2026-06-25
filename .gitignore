@@ -64,3 +64,20 @@ docs/
 
 # OpenSpec
 openspec/
+
+# AI assistant generated directories
+.codex/
+.omo/
+.sisyphus/
+.superpowers/
+.swarm/
+
+# Server temporary files
+server/tmp/
+server/static/videos/
+server/ruvector.db
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
