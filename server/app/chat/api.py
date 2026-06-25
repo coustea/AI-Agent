@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.auth.security import get_current_user, get_current_user_flexible
+from app.auth.security import get_current_user_flexible
 from app.chat.emitter import ChatEvents, encode_chat_sse, get_chat_channel
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import get_chat_usecases, run_chat_agent
