@@ -38,6 +38,7 @@ from app.profile.types import (
     make_default_profile_json,
     make_default_score_json,
 )
+from app.chat.memory.types import extract_content_text
 from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
@@ -625,7 +626,7 @@ class ProfileService:
         for msg in reversed(messages):
             latest_message_id = max(latest_message_id, int(msg.id or 0))
             role_label = "学生" if msg.role == "user" else "辅导老师"
-            content = (msg.content or "").strip()
+            content = extract_content_text(msg.content)
             if content:
                 lines.append(f"{role_label}：{content[:500]}")
         return "\n".join(lines), latest_message_id
