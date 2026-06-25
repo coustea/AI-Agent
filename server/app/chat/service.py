@@ -10,145 +10,48 @@ ChatUseCases 保留会话管理、文件上传等辅助功能，对话核心逻�
 from __future__ import annotations
 
 import asyncio
-import json
+from pathlib import Path
 from typing import Any, AsyncIterator
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
-
 from app.chat.agent import TutorAgent
-from app.chat.event import ChatEvents, ChatEventName
-from app.chat.events import build_attachment_status_payload, build_persisted_tool_activity_from_message
-from app.chat.memory.service import get_chat_memory_service as _get_chat_memory_service
-from app.chat.safety import SafetyResult, safety_filter
+from app.chat.application.context_builder import ChatContextBuilder, build_user_content
+from app.chat.application.event_mapper import ChatRuntimeEventMapper, SSE_EVENT_MAP, runtime_status
+from langchain_core.messages import AnyMessage
+from app.chat.emitter import ChatEvents, ChatEventName
+from app.chat.agent.background import run_background_memory_jobs
+from app.chat.memory.service import get_chat_memory_service
+from app.chat.streaming import safety_filter
 from app.chat.schemas import TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.storage.message_item import ChatMessageItem
-from app.config import CHAT_DIR, MAX_UPLOAD_FILES_PER_REQUEST, CHAT_HISTORY_LIMIT
+from app.config import MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+# 共享实例
+_context_builder = ChatContextBuilder()
+_event_mapper = ChatRuntimeEventMapper()
 
 # -----------------------------------------------------------------------
 # 核心函数：build_messages / chat helpers / chat
 # -----------------------------------------------------------------------
 
 
-IMAGE_EXTENSIONS = frozenset(["jpg", "jpeg", "png", "gif", "webp", "bmp"])
-
-
-def _build_user_content(text: str, attachments: list[str]) -> list[dict[str, Any]]:
-    """构建 OpenAI 格式的用户消息 content"""
-    content: list[dict[str, Any]] = []
-    if text.strip():
-        content.append({"type": "text", "text": text.strip()})
-    for url in attachments:
-        ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-        if ext in IMAGE_EXTENSIONS:
-            content.append({"type": "image_url", "image_url": {"url": url}})
-        else:
-            content.append({"type": "file", "file": {"filename": url.split("/")[-1], "file_id": url}})
-    return content
-
-
-def _normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
-    """标准化工具调用格式，确保字段存在且类型正确。"""
-    normalized: list[dict] = []
-    for tc in tool_calls or []:
-        if not isinstance(tc, dict):
-            continue
-        normalized.append({
-            "id": str(tc.get("id", "")),
-            "name": str(tc.get("name", "")),
-            "args": tc.get("args", {}) if isinstance(tc.get("args", {}), dict) else {},
-            "type": "tool_call",
-        })
-    return normalized
-
-
-async def build_messages(user_id: int, session_id: str) -> list[AnyMessage]:
-    """从数据库构建 LangChain 消息列表。
-
-    流程：
-    1. 查询 ChatMessage（按时间升序，最近 HISTORY_LIMIT 条）
-    2. 查询 ChatToolInvocation（关联到这些消息的工具调用）
-    3. 将消息转为 LangChain 类型：HumanMessage / AIMessage(tool_calls) / ToolMessage(tool_call_id)
-
-    注：会话压缩摘要由 TutorAgent 在系统提示词中注入，此处不再重复添加。
-    """
-    svc = _get_chat_memory_service()
-
-    # 查询历史消息
-    raw_messages = await svc.list_messages(user_id=user_id, session_id=session_id, limit=CHAT_HISTORY_LIMIT)
-    if raw_messages and getattr(raw_messages[0], "role", "") != "user":
-        first_user_index = next(
-            (index for index, item in enumerate(raw_messages) if getattr(item, "role", "") == "user"),
-            len(raw_messages),
-        )
-        raw_messages = raw_messages[first_user_index:]
-
-    attachment_analyses = await svc.list_attachment_analyses(
-        user_id=user_id,
-        session_id=session_id,
-        limit=max(CHAT_HISTORY_LIMIT * 2, 50),
+async def build_messages(
+    user_id: int,
+    session_id: str,
+    *,
+    exclude_message_id: int | None = None,
+) -> list[AnyMessage]:
+    """从数据库构建 LangChain 消息列表（委托给 ChatContextBuilder）。"""
+    return await _context_builder.build_history(
+        user_id, session_id, exclude_message_id=exclude_message_id,
     )
-    analyses_by_turn: dict[int, list[Any]] = {}
-    for analysis in attachment_analyses:
-        turn_id = getattr(analysis, "turn_id", None)
-        if turn_id is not None:
-            analyses_by_turn.setdefault(turn_id, []).append(analysis)
-
-    # 转换为 LangChain 消息
-    messages: list[AnyMessage] = []
-    for msg in raw_messages:
-        role = getattr(msg, "role", "")
-        content = (getattr(msg, "content", "") or "").strip()
-        tool_calls = getattr(msg, "tool_calls", None)
-        tool_call_id = getattr(msg, "tool_call_id", None)
-
-        if role == "user" and content:
-            analyses = analyses_by_turn.get(getattr(msg, "turn_id", None), [])
-            analysis_context = "\n\n".join(
-                f"[{getattr(item, 'analysis_type', 'attachment')}] {getattr(item, 'summary_text', '')}"
-                for item in reversed(analyses)
-                if str(getattr(item, "summary_text", "") or "").strip()
-            )
-            if analysis_context:
-                content = f"{content}\n\n[历史附件分析结果]\n{analysis_context}"
-            messages.append(HumanMessage(content=content))
-        elif role in {"assistant", "ai"} and (content or tool_calls):
-            # 如果有 tool_calls，构建 AIMessage(tool_calls=[...])
-            normalized_tc = _normalize_tool_calls(tool_calls)
-            if normalized_tc:
-                messages.append(AIMessage(content=content, tool_calls=normalized_tc))
-            elif content:
-                messages.append(AIMessage(content=content))
-        elif role == "system" and content:
-            messages.append(SystemMessage(content=content))
-        elif role == "tool" and tool_call_id:
-            # ToolMessage 必须关联 tool_call_id
-            tc_id_str = str(tool_call_id)
-            messages.append(ToolMessage(content=content or "", tool_call_id=tc_id_str))
-
-    return messages
 
 
-# SSE 事件类型 → 前端 SSE event 名称映射
-_SSE_EVENT_MAP: dict[str, str] = {
-    "message_start": "start",
-    "classify_done": "status",
-    "file_analysis_start": "status",
-    "file_analysis_done": "attachment",
-    "agent_status": "agent_status",
-    "answer_token": "token",
-    "answer_done": "status",
-    "diagram_start": "status",
-    "diagram_done": "diagram",
-    "memory_update_start": "status",
-    "memory_update_done": "status",
-    "final": "done",
-    "error": "error",
-}
+# 向后兼容 — 从 event_mapper 导入
+_SSE_EVENT_MAP = SSE_EVENT_MAP
 
 
 async def chat(
@@ -174,10 +77,13 @@ async def chat(
     merged_attachments = list(dict.fromkeys(attachments or []))
     current_message = (user_input or "").strip()
 
-    if not current_message:
+    if not current_message and not merged_attachments:
         yield {"event": "error", "data": "请输入您的问题。"}
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
+
+    if not current_message and merged_attachments:
+        current_message = "请分析我上传的附件，并解答其中的问题。"
 
     logger.info(
         "[chat] 开始对话: user_id=%s session_id=%s msg_len=%d attachments=%d",
@@ -193,32 +99,21 @@ async def chat(
     }
 
     # ── 1. 持久化用户消息 ──
-    svc = uc._memory_service
-    user_content = current_message
-    if merged_attachments:
-        image_urls, file_urls = [], []
-        for url in merged_attachments:
-            ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-            if ext in IMAGE_EXTENSIONS:
-                image_urls.append(url)
-            else:
-                file_urls.append(url)
-        if image_urls:
-            user_content += f" [Attached Images: {', '.join(image_urls)}]"
-        if file_urls:
-            user_content += f" [Attached Files: {', '.join(file_urls)}]"
+    memory_svc = get_chat_memory_service()
+    content_parts = build_user_content(current_message, merged_attachments)
 
-    await uc.save_message(
+    user_message = await memory_svc.save_message(
         user_id=user_id,
         session_id=effective_session,
         role="user",
-        content=user_content,
+        content=content_parts,
     )
+    user_message_id: int | None = getattr(user_message, "id", None)
 
     # 如果是第一条消息，后台生成标题
-    if await uc.count_messages(user_id, effective_session) <= 1:
+    if await memory_svc.count_messages(user_id=user_id, session_id=effective_session) <= 1:
         uc._spawn_background(
-            svc.generate_session_title(
+            memory_svc.generate_session_title(
                 user_id=user_id,
                 session_id=effective_session,
                 first_message=current_message,
@@ -227,8 +122,11 @@ async def chat(
         )
 
     # ── 2. 构建上下文 ──
-    history_messages = await build_messages(user_id, effective_session)
-    session_summary = await svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
+    history_messages = await build_messages(
+        user_id, effective_session,
+        exclude_message_id=user_message_id,
+    )
+    session_summary = await memory_svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
 
     # ── 3. 调用 TutorAgent ──
     agent_input = TutorAgentInput(
@@ -247,7 +145,6 @@ async def chat(
     tool_invocations: list[dict[str, Any]] = []
     diagram_result: dict[str, Any] | None = None
     sources: list[dict[str, Any]] = []
-    attachment_analyses: list[dict[str, Any]] = []
     has_error = False
 
     try:
@@ -264,7 +161,6 @@ async def chat(
                 diagram_result = sse_data.get("diagram_result")
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
-                attachment_analyses = sse_data.get("attachment_analyses", [])
 
                 if diagram_result is not None:
                     yield {"event": "diagram", "data": diagram_result}
@@ -293,22 +189,40 @@ async def chat(
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
 
-    # ── 4. 持久化助手回复 ──
+    # ── 4. 持久化助手回复（含图解、来源等元数据） ──
     if not has_error and full_answer:
         # 安全过滤
         safety_result = await safety_filter.check(full_answer)
         if safety_result.has_violation:
             full_answer = safety_result.sanitized_text
 
-        await uc.save_message(
+        usage_meta: dict[str, Any] = {}
+        if diagram_result:
+            usage_meta["diagram"] = diagram_result
+        if sources:
+            usage_meta["sources"] = sources
+        if tool_invocations:
+            usage_meta["tool_invocations"] = [
+                {"tool_name": inv.get("tool_name", ""), "payload": inv.get("payload", {})}
+                for inv in tool_invocations
+            ]
+
+        await memory_svc.save_message(
             user_id=user_id,
             session_id=effective_session,
             role="assistant",
             content=full_answer,
-            attachment_analyses=attachment_analyses if attachment_analyses else None,
+            usage_metadata=usage_meta or None,
         )
 
-    # ── 5. 返回最终结果 ──
+    # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
+    if not has_error and full_answer:
+        yield {
+            "event": "content_replace",
+            "data": {"content": full_answer},
+        }
+
+    # ── 6. 返回最终结果 ──
     if not has_error:
         yield {
             "event": "done",
@@ -319,14 +233,14 @@ async def chat(
                     {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
                     for inv in tool_invocations
                 ],
-                "attachment_analyses": attachment_analyses,
             },
         }
 
     # ── 6. 后台记忆任务 ──
     if full_answer:
         uc._spawn_background(
-            agent.run_background_memory_jobs(
+            run_background_memory_jobs(
+                uc._memory_service,
                 user_id=user_id,
                 session_id=effective_session,
                 user_message=current_message,
@@ -336,79 +250,13 @@ async def chat(
         )
 
 
-def _runtime_status(value: Any) -> str:
-    status = str(value or "running")
-    return {
-        "done": "completed",
-        "finished": "completed",
-        "error": "failed",
-    }.get(status, status if status in {"pending", "running", "completed", "failed", "skipped"} else "running")
-
-
 async def _publish_chat_runtime_event(
     events: ChatEvents,
     event: dict[str, Any],
 ) -> bool:
-    """把辅导内部事件映射成 ChatEvent 并发送；返回是否失败。"""
-    event_name = str(event.get("event") or "status")
-    data = event.get("data")
-    payload = data if isinstance(data, dict) else {}
-
-    if event_name == "token":
-        await events.send(event="content.delta", message="", data={"delta": str(data or "")})
-        return False
-    if event_name == "agent_status":
-        status = _runtime_status(payload.get("status"))
-        # 映射到 tool.running/tool.completed/tool.failed
-        if status == "running":
-            chat_event: ChatEventName = "tool.running"
-        elif status == "failed":
-            chat_event = "tool.failed"
-        else:
-            chat_event = "tool.completed"
-        await events.send(
-            event=chat_event,
-            message=str(payload.get("message") or payload.get("title") or ""),
-            data={
-                "activity_id": payload.get("activity_id"),
-                "tool_name": payload.get("tool_name"),
-                "detail": payload.get("detail"),
-            },
-        )
-        return False
-    if event_name == "attachment":
-        status = _runtime_status(payload.get("status"))
-        if status == "running":
-            chat_event: ChatEventName = "attachment.running"
-        elif status == "failed":
-            chat_event = "attachment.failed"
-        else:
-            chat_event = "attachment.completed"
-        await events.send(
-            event=chat_event,
-            message=str(payload.get("message") or payload.get("title") or ""),
-            data={
-                "activity_id": payload.get("activity_id"),
-                "detail": payload.get("detail"),
-            },
-        )
-        return False
-    if event_name == "diagram" and payload:
-        await events.send(
-            event="diagram.ready",
-            message="教学图解已生成",
-            data=payload,
-        )
-        return False
-    if event_name == "error":
-        return True
-    if event_name == "status":
-        await events.send(
-            event="thinking",
-            message=str(payload.get("message") or "正在处理"),
-            data={key: value for key, value in payload.items() if key != "message"},
-        )
-    return False
+    """把辅导内部事件映射成 ChatEvent 并发送（委托给 ChatRuntimeEventMapper）。"""
+    result = await _event_mapper.publish(events, event)
+    return result.failed
 
 
 async def run_chat_agent(
@@ -426,7 +274,7 @@ async def run_chat_agent(
     频道已在 router 中通过 ChatEvents.open() 注册。
     """
     events = ChatEvents(user_id=user_id, session_id=session_id, run_id=run_id)
-    # 频道已由 router 打开，直接获取
+    await events.open()
     await events.send(event="run.started", message="智能辅导已开始", data={})
     failed = False
     try:
@@ -452,50 +300,33 @@ async def run_chat_agent(
 
 
 class ChatUseCases:
-    """聊天服务核心类 — 编排完整的对话生命周期。
+    """聊天服务核心类 — 负责附件上传、文件解析和对话流编排。
 
     职责：
-    1. 请求解析和会话管理（创建/归档/查询）
-    2. 附件上传、存储和分析
-    3. 流式对话（SSE 事件流）
-    4. 安全过滤（敏感词检测）
-    5. 消息持久化（消息、工具调用、turn 事件）
-    6. 后台任务（记忆管线、画像更新）
+    1. 附件上传、存储和分析
+    2. 流式对话（SSE 事件流）
+    3. 安全过滤（敏感词检测）
+    4. 消息持久化（通过 memory_service）
+    5. 后台任务（记忆管线、画像更新）
 
-    通过 get_chat_usecases() 获取单例，避免重复初始化。
+    会话 CRUD 等简单操作直接通过 get_chat_memory_service() 调用，
+    不需要再经过此层转发。
     """
 
     def __init__(self) -> None:
-        # 记忆服务：管理会话、消息、turn 事件的持久化
-        self._memory_service = get_chat_memory_service()
         # 本地文件存储：用户上传文件的磁盘读写
         self.file_store: LocalFileStore = LocalFileStore()
         # 后台任务集合：防止未等待的协程被 GC 回收
         self._background_tasks: set[asyncio.Task] = set()
-        # 已上传文件的 URL→数据库 ID 映射
-        self._uploaded_file_ids_by_url: dict[str, int] = {}
+        self._memory_service = get_chat_memory_service()
 
     def default_session_id(self, user_id: int) -> str:
         """生成默认会话 ID — 格式: user-{user_id}-default-mentor。"""
         return f"user-{user_id}-default-mentor"
 
-    async def list_sessions(self, user_id: int, limit: int = 20) -> list[dict[str, Any]]:
-        """列出用户的最近 N 个会话，按更新时间倒序。"""
-        sessions = await self._memory_service.list_sessions(user_id=user_id, limit=limit)
-        return [{"id": item.id, "title": item.title, "updated_at": item.updated_at} for item in sessions]
 
-    async def create_session(self, user_id: int, title: str = "新对话") -> dict[str, Any]:
-        """创建新会话，默认标题为"新对话"，后续由后台任务自动生成标题。"""
-        session = await self._memory_service.create_session(user_id=user_id, title=title)
-        return {"id": session.id, "title": session.title}
 
-    async def archive_session(self, user_id: int, session_id: str) -> bool:
-        """归档会话（软删除），不物理删除消息数据。"""
-        return await self._memory_service.archive_session(user_id=user_id, session_id=session_id)
 
-    async def update_session_title(self, user_id: int, session_id: str, title: str) -> bool:
-        """更新会话标题。"""
-        return await self._memory_service.update_session_title(user_id=user_id, session_id=session_id, title=title)
 
     async def get_history(
         self,
@@ -504,185 +335,34 @@ class ChatUseCases:
         session_id: str | None = None,
         limit: int = 50,
     ) -> list[ChatMessageItem]:
-        """获取会话历史消息，组装为 ChatMessageItem 列表。
-
-        流程：
-        1. 若未指定 session_id，自动取用户最近的会话
-        2. 查询消息列表和附件分析结果
-        3. 按 message_id 分组附件分析
-        4. 查询附件绑定关系（新旧两种存储格式兼容）
-        5. 组装 ChatMessageItem 返回
-        """
+        """获取会话历史消息，组装为 ChatMessageItem 列表。"""
+        memory_svc = get_chat_memory_service()
         if not session_id:
-            sessions = await self._memory_service.list_sessions(user_id=user_id, limit=1)
+            sessions = await memory_svc.list_sessions(user_id=user_id, limit=1)
             if not sessions:
                 return []
             session_id = sessions[0].id
 
-        # 查询原始消息列表
-        raw_messages = await self._memory_service.list_messages(user_id=user_id, session_id=session_id, limit=limit)
-        # 查询附件分析结果（图片描述/文档摘要）
-        attachment_analyses = await self._memory_service.list_attachment_analyses(
-            user_id=user_id,
-            session_id=session_id,
-            limit=max(limit, 20),
-        )
-        # 从消息表中提取工具调用记录（替代 ChatToolInvocation 表查询）
-        # 按 turn_id 分组工具调用活动，同时获取工具执行结果
-        activities_by_turn: dict[int, list[tuple[int, Any, dict[str, Any]]]] = {}
+        raw_messages = await memory_svc.list_messages(user_id=user_id, session_id=session_id, limit=limit)
 
-        # 先构建 tool_call_id -> result 的映射（从 tool 角色消息获取结果）
-        tool_results: dict[str, str] = {}
-        for msg in raw_messages:
-            if getattr(msg, "role", "") == "tool":
-                tc_id = getattr(msg, "tool_call_id", None)
-                content = getattr(msg, "content", "") or ""
-                if tc_id and content:
-                    tool_results[str(tc_id)] = content
-
-        # 从 assistant 消息的 tool_calls 字段构建活动
-        for msg in raw_messages:
-            turn_id = getattr(msg, "turn_id", None)
-            if turn_id is None:
-                continue
-            tool_calls = getattr(msg, "tool_calls", None)
-            if not tool_calls or not isinstance(tool_calls, list):
-                continue
-            for tc in tool_calls:
-                if not isinstance(tc, dict):
-                    continue
-                tc_id = str(tc.get("id", "") or "")
-                # 获取对应的工具执行结果
-                result = tool_results.get(tc_id, "")
-                activities_by_turn.setdefault(turn_id, []).append(
-                    (1, getattr(msg, "created_at", None), build_persisted_tool_activity_from_message(tc, result))
-                )
-        # 按 message_id 分组附件分析结果，供后续组装使用
-        analyses_by_message_id: dict[int, list[dict[str, Any]]] = {}
-        for analysis in attachment_analyses:
-            message_id = getattr(analysis, "message_id", None)
-            if not message_id:
-                continue
-            analyses_by_message_id.setdefault(message_id, []).append(
-                {
-                    "id": getattr(analysis, "id", None),
-                    "file_id": getattr(analysis, "file_id", None),
-                    "file_name": getattr(analysis, "file_name", None),
-                    "file_url": getattr(analysis, "file_url", None),
-                    "analysis_type": getattr(analysis, "analysis_type", ""),
-                    "summary_text": getattr(analysis, "summary_text", ""),
-                    "structured_json": getattr(analysis, "structured_json", None),
-                }
-            )
-            turn_id = getattr(analysis, "turn_id", None)
-            if turn_id is not None:
-                structured = getattr(analysis, "structured_json", None) or {}
-                urls = structured.get("file_urls", []) if isinstance(structured, dict) else []
-                file_names = [str(url).split("/")[-1] for url in urls]
-                if not file_names and getattr(analysis, "file_name", None):
-                    file_names = [str(analysis.file_name)]
-                activities_by_turn.setdefault(turn_id, []).append((
-                    0,
-                    getattr(analysis, "created_at", None),
-                    build_attachment_status_payload(
-                        activity_id=f"attachment-{turn_id}-{getattr(analysis, 'analysis_type', 'document')}",
-                        status="done",
-                        file_names=file_names,
-                        analysis_type=str(getattr(analysis, "analysis_type", "document")),
-                        summary=str(getattr(analysis, "summary_text", "") or ""),
-                    ),
-                ))
-        # 查询附件绑定关系：新版本用 message_attachments 表，旧版本用 message.attachments 字段
-        attachment_records_by_message_id = await self._memory_service.list_message_attachments(
-            user_id=user_id,
-            session_id=session_id,
-            message_ids=[item.id for item in raw_messages if getattr(item, "id", None) is not None],
-        )
-        # 组装 ChatMessageItem 列表
         result: list[ChatMessageItem] = []
         for message in raw_messages:
-            parsed_attachments = None
-            # 优先使用新版本的附件绑定关系
-            bound_attachments = attachment_records_by_message_id.get(message.id, []) if isinstance(attachment_records_by_message_id, dict) else []
-            if bound_attachments:
-                parsed_attachments = [
-                    {"url": item.get("url", ""), "type": item.get("type", ""), "name": item.get("name", "")}
-                    for item in bound_attachments
-                ]
-            elif message.attachments:
-                # 兼容旧版本：附件信息直接存储在 message.attachments 字段（JSON 字符串或列表）
-                try:
-                    raw = message.attachments if isinstance(message.attachments, list) else json.loads(message.attachments)
-                    parsed_attachments = [
-                        {"url": item.get("url", ""), "type": item.get("type", ""), "name": item.get("name", "")}
-                        for item in raw
-                    ]
-                except Exception:
-                    parsed_attachments = None
-            # 组装 ChatMessageItem
+            msg_content: list[dict[str, Any]] = list(message.content) if isinstance(message.content, list) else [{"type": "text", "text": str(message.content)}]
+
             result.append(
                 ChatMessageItem(
                     id=message.id,
                     role=message.role,
-                    content=message.content,
-                    attachments=parsed_attachments,
+                    content=msg_content,
                     tool_calls=message.tool_calls if isinstance(message.tool_calls, list) else None,
                     tool_call_id=getattr(message, "tool_call_id", None),
-                    attachment_analyses=analyses_by_message_id.get(message.id, []),
-                    agent_activities=[
-                        activity for _, _, activity in sorted(
-                            activities_by_turn.get(getattr(message, "turn_id", None), []),
-                            key=lambda item: (item[0], item[1].isoformat() if item[1] is not None else ""),
-                        )
-                    ] if message.role == "assistant" else None,
-                    turn_id=getattr(message, "turn_id", None),
                     created_at=message.created_at,
                 )
             )
         return result
 
-    async def save_message(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        role: str,
-        content: str,
-        tool_calls: list[dict[str, Any]] | None = None,
-        tool_call_id: str | None = None,
-        attachment_analyses: list[dict[str, Any]] | None = None,
-        usage_metadata: dict[str, Any] | None = None,
-        turn_id: int | None = None,
-    ) -> Any:
-        """保存单条消息到数据库。
 
-        由 chat() 在流式结束后调用，持久化用户消息和助手回复。
-        turn_id 将消息关联到具体的对话轮次，便于后续记忆管线处理。
-        """
-        return await self._memory_service.save_message(
-            user_id=user_id,
-            session_id=session_id,
-            role=role,
-            content=content,
-            tool_calls=tool_calls,
-            tool_call_id=tool_call_id,
-            attachment_analyses=attachment_analyses,
-            usage_metadata=usage_metadata,
-            turn_id=turn_id,
-        )
 
-    async def count_messages(self, user_id: int, session_id: str) -> int:
-        """统计会话中的消息总数。"""
-        return await self._memory_service.count_messages(user_id=user_id, session_id=session_id)
-
-    async def clear_history(self, user_id: int, session_id: str) -> int:
-        """清空会话历史：删除短期消息并重置计数器。
-
-        返回删除的消息数量。注意：只删除短期消息，长期记忆保留。
-        """
-        deleted_count = await self._memory_service.delete_short_term_messages(user_id=user_id, session_id=session_id)
-        await self._memory_service.reset_session_counters(user_id=user_id, session_id=session_id)
-        return deleted_count
 
     async def save_upload(
         self,
@@ -714,10 +394,8 @@ class ChatUseCases:
             user_id=user_id,
             session_id=session_id,
         )
-        # 保存文件记录到数据库，返回带 ID 的记录
-        file_record = await self._memory_service.save_uploaded_file(user_id=user_id, session_id=session_id, payload=payload)
-        # 维护 URL→文件 ID 映射，附件分析器需要用这个 ID 引用文件
-        self._uploaded_file_ids_by_url[str(payload.get("url") or "")] = file_record.id
+        # 保存文件记录到数据库
+        await self._memory_service.save_uploaded_file(user_id=user_id, session_id=session_id, payload=payload)
         return payload
 
     def resolve_uploaded_file(
@@ -772,7 +450,7 @@ class ChatUseCases:
 
 
 # ── 单例管理 ──
-# 两个独立单例：主对话和数字人对话，避免共享状态（如 _uploaded_file_ids_by_url）
+# 两个独立单例：主对话和数字人对话，避免共享状态
 _chat_usecases: ChatUseCases | None = None
 _avatar_chat_usecases: ChatUseCases | None = None
 
@@ -786,11 +464,6 @@ def get_chat_usecases() -> ChatUseCases:
     if _chat_usecases is None:
         _chat_usecases = ChatUseCases()
     return _chat_usecases
-
-
-def get_chat_memory_service():
-    """获取记忆服务实例，委托给 memory 模块的工厂函数。"""
-    return _get_chat_memory_service()
 
 
 def get_avatar_chat_usecases() -> ChatUseCases:
