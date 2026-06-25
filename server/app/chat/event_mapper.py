@@ -21,7 +21,7 @@ SSE_EVENT_MAP: dict[str, str] = {
     "answer_done": "status",
     "content_replace": "content_replace",
     "diagram_start": "status",
-    "diagram_done": "status",  # 改为 status，避免重复发送 diagram.ready
+    "diagram_done": "diagram",  # 改为 diagram，触发 diagram.ready 事件
     "memory_update_start": "status",
     "memory_update_done": "status",
     "final": "done",

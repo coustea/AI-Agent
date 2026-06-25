@@ -132,6 +132,10 @@ async def classify_node(
     if has_web_search and not classification.needs_web_search:
         classification = classification.model_copy(update={"needs_web_search": True})
 
+    # 确保用户显式请求图解时，needs_diagram 被正确设置
+    if has_diagram and not classification.needs_diagram:
+        classification = classification.model_copy(update={"needs_diagram": True})
+
     event = TutorRuntimeEvent(
         type="classify_done",
         payload=classification.model_dump(),
