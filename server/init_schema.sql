@@ -57,33 +57,6 @@ COMMENT ON COLUMN active_tokens.token IS 'JWT令牌值';
 COMMENT ON COLUMN active_tokens.expires_at IS '令牌过期时间';
 
 -- ============================================================
--- 2b. agent_runs
--- ============================================================
-CREATE TABLE IF NOT EXISTS agent_runs (
-    id              SERIAL          PRIMARY KEY,
-    run_id          VARCHAR(36)     NOT NULL UNIQUE,
-    user_id         INTEGER         NOT NULL,
-    module          VARCHAR(32)     NOT NULL,
-    business_id     VARCHAR(128)    NOT NULL,
-    status          VARCHAR(32)     NOT NULL DEFAULT 'pending',
-    sequence        INTEGER         NOT NULL DEFAULT 0 CHECK (sequence >= 0),
-    error_message   TEXT,
-    created_at      TIMESTAMPTZ     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at    TIMESTAMPTZ
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_runs_run_id ON agent_runs (run_id);
-CREATE INDEX IF NOT EXISTS ix_agent_runs_user_id ON agent_runs (user_id);
-CREATE INDEX IF NOT EXISTS ix_agent_runs_module ON agent_runs (module);
-CREATE INDEX IF NOT EXISTS ix_agent_runs_business_id ON agent_runs (business_id);
-CREATE INDEX IF NOT EXISTS ix_agent_runs_status ON agent_runs (status);
-CREATE INDEX IF NOT EXISTS ix_agent_runs_user_created ON agent_runs (user_id, created_at);
-CREATE INDEX IF NOT EXISTS ix_agent_runs_business ON agent_runs (module, business_id);
-
-COMMENT ON TABLE agent_runs IS '统一 Agent 运行记录，仅保存归属、序号与终态';
-
--- ============================================================
 -- 3. schools
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schools (
@@ -142,133 +115,39 @@ COMMENT ON COLUMN chat_sessions.last_ltm_message_id IS '最后更新长期记忆
 
 
 -- ============================================================
--- 5. chat_turns
--- ============================================================
-CREATE TABLE IF NOT EXISTS chat_turns (
-    id                    SERIAL          PRIMARY KEY,
-    user_id               INTEGER         NOT NULL,
-    session_id            UUID            REFERENCES chat_sessions(id),
-    module                VARCHAR         NOT NULL DEFAULT 'mentor',
-    turn_index            INTEGER         NOT NULL DEFAULT 1,
-    status                VARCHAR(32)     NOT NULL DEFAULT 'running',
-    route                 VARCHAR(50)     NOT NULL DEFAULT 'default',
-    execution_mode        VARCHAR(50)     NOT NULL DEFAULT 'default',
-    has_attachments       BOOLEAN         NOT NULL DEFAULT FALSE,
-    used_web_search       BOOLEAN         NOT NULL DEFAULT FALSE,
-    used_teaching_diagram BOOLEAN         NOT NULL DEFAULT FALSE,
-    error_message         TEXT,
-    created_at            TIMESTAMPTZ     DEFAULT NOW(),
-    completed_at          TIMESTAMPTZ,
-    CONSTRAINT uq_chat_turns_session_turn_index UNIQUE (session_id, turn_index)
-);
-
-CREATE INDEX IF NOT EXISTS ix_chat_turns_user_id ON chat_turns (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_session_id ON chat_turns (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_module ON chat_turns (module);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_turn_index ON chat_turns (turn_index);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_status ON chat_turns (status);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_route ON chat_turns (route);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_execution_mode ON chat_turns (execution_mode);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_created_at ON chat_turns (created_at);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_completed_at ON chat_turns (completed_at);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_user_session_created_at
-    ON chat_turns (user_id, session_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS ix_chat_turns_user_session_status
-    ON chat_turns (user_id, session_id, status);
-
-COMMENT ON TABLE chat_turns IS '对话轮次表，记录每次问答的元信息';
-COMMENT ON COLUMN chat_turns.session_id IS '关联会话ID';
-COMMENT ON COLUMN chat_turns.turn_index IS '轮次序号，同一会话内递增';
-COMMENT ON COLUMN chat_turns.status IS '轮次状态：running/success/failed/timeout';
-COMMENT ON COLUMN chat_turns.route IS '路由策略标识';
-COMMENT ON COLUMN chat_turns.execution_mode IS '执行模式：default/parallel/tool_use等';
-COMMENT ON COLUMN chat_turns.has_attachments IS '是否包含附件';
-COMMENT ON COLUMN chat_turns.used_web_search IS '本轮是否使用了联网搜索';
-COMMENT ON COLUMN chat_turns.used_teaching_diagram IS '本轮是否使用了教学图示';
-COMMENT ON COLUMN chat_turns.error_message IS '错误信息，成功时为null';
-COMMENT ON COLUMN chat_turns.completed_at IS '轮次完成时间';
-
--- ============================================================
--- 6. chat_messages
+-- 5. chat_messages (OpenAI format)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_messages (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     session_id          UUID            REFERENCES chat_sessions(id),
-    turn_id             INTEGER,
-    module              VARCHAR         NOT NULL DEFAULT 'mentor',
     role                VARCHAR         NOT NULL,
-    message_kind        VARCHAR(50),
-    content             TEXT            NOT NULL,
-    attachments         JSONB,
+    content             JSONB           NOT NULL DEFAULT '[]'::jsonb,
     tool_calls          JSONB,
     tool_call_id        VARCHAR(120),
-    knowledge_sources   JSONB,
-    teaching_diagram    JSONB,
     usage_metadata      JSONB,
     created_at          TIMESTAMPTZ     DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS ix_chat_messages_user_id ON chat_messages (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_session_id ON chat_messages (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_turn_id ON chat_messages (turn_id);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_module ON chat_messages (module);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_message_kind ON chat_messages (message_kind);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_tool_call_id ON chat_messages (tool_call_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_created_at ON chat_messages (created_at);
 
 -- Composite index for common query pattern
-CREATE INDEX IF NOT EXISTS ix_chat_messages_user_session_module_created_at
-    ON chat_messages (user_id, session_id, module, created_at);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_session_turn_created_at
-    ON chat_messages (session_id, turn_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_user_session_created_at
+    ON chat_messages (user_id, session_id, created_at);
 
--- GIN indexes for JSONB columns
-CREATE INDEX IF NOT EXISTS ix_chat_messages_attachments
-    ON chat_messages USING GIN (attachments);
-CREATE INDEX IF NOT EXISTS ix_chat_messages_knowledge_sources
-    ON chat_messages USING GIN (knowledge_sources);
-
-COMMENT ON TABLE chat_messages IS '对话消息表，存储所有角色的消息内容';
+COMMENT ON TABLE chat_messages IS '聊天消息表 — OpenAI messages 格式';
 COMMENT ON COLUMN chat_messages.session_id IS '关联会话ID';
-COMMENT ON COLUMN chat_messages.turn_id IS '关联轮次ID';
-COMMENT ON COLUMN chat_messages.role IS '消息角色：user/assistant/system/tool';
-COMMENT ON COLUMN chat_messages.message_kind IS '消息类型：text/image/file/tool_call/tool_result等';
-COMMENT ON COLUMN chat_messages.content IS '消息文本内容';
-COMMENT ON COLUMN chat_messages.attachments IS '附件列表JSON';
-COMMENT ON COLUMN chat_messages.tool_calls IS '工具调用请求JSON';
+COMMENT ON COLUMN chat_messages.role IS '消息角色：user/assistant/tool/system';
+COMMENT ON COLUMN chat_messages.content IS '消息内容JSONB数组 [{type, text}]';
+COMMENT ON COLUMN chat_messages.tool_calls IS '工具调用请求JSONB数组';
 COMMENT ON COLUMN chat_messages.tool_call_id IS '工具调用ID，用于关联请求和结果';
-COMMENT ON COLUMN chat_messages.knowledge_sources IS '知识来源JSON，记录引用的知识点';
-COMMENT ON COLUMN chat_messages.teaching_diagram IS '教学图示JSON数据';
 COMMENT ON COLUMN chat_messages.usage_metadata IS 'LLM用量元数据，含token消耗等';
 
 -- ============================================================
--- 6b. chat_turn_transcripts
--- ============================================================
-CREATE TABLE IF NOT EXISTS chat_turn_transcripts (
-    id                    SERIAL          PRIMARY KEY,
-    turn_id               INTEGER         NOT NULL,
-    transcript_json       JSONB           NOT NULL DEFAULT '{}'::jsonb,
-    final_answer          TEXT            NOT NULL DEFAULT '',
-    constraint_report_json JSONB,
-    created_at            TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at            TIMESTAMPTZ     DEFAULT NOW(),
-    CONSTRAINT uq_chat_turn_transcripts_turn_id UNIQUE (turn_id)
-);
-
-CREATE INDEX IF NOT EXISTS ix_chat_turn_transcripts_turn_id
-    ON chat_turn_transcripts (turn_id);
-CREATE INDEX IF NOT EXISTS ix_chat_turn_transcripts_created_at
-    ON chat_turn_transcripts (created_at);
-
-COMMENT ON TABLE chat_turn_transcripts IS '轮次转录表，存储每轮对话的完整执行过程和最终答案';
-COMMENT ON COLUMN chat_turn_transcripts.turn_id IS '关联轮次ID，唯一';
-COMMENT ON COLUMN chat_turn_transcripts.transcript_json IS '转录详情JSON，包含思考过程、工具调用等';
-COMMENT ON COLUMN chat_turn_transcripts.final_answer IS '最终回答文本';
-COMMENT ON COLUMN chat_turn_transcripts.constraint_report_json IS '约束检查报告JSON';
-
--- ============================================================
--- 7. chat_session_summary_blocks
+-- 6. chat_session_summary_blocks
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_session_summary_blocks (
     id                          SERIAL          PRIMARY KEY,
@@ -321,7 +200,7 @@ COMMENT ON COLUMN chat_session_summary_blocks.topics IS '涉及话题JSON数组'
 COMMENT ON COLUMN chat_session_summary_blocks.keywords IS '关键词JSON数组';
 
 -- ============================================================
--- 8. chat_long_term_memories
+-- 7. chat_long_term_memories
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_long_term_memories (
     id                      SERIAL          PRIMARY KEY,
@@ -362,185 +241,6 @@ CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_message_ids
     ON chat_long_term_memories USING GIN (source_message_ids);
 CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_summary_block_ids
     ON chat_long_term_memories USING GIN (source_summary_block_ids);
-
--- ============================================================
--- 8b. chat_attachment_analyses
--- ============================================================
-CREATE TABLE IF NOT EXISTS chat_attachment_analyses (
-    id               SERIAL          PRIMARY KEY,
-    user_id          INTEGER         NOT NULL,
-    session_id       UUID            REFERENCES chat_sessions(id),
-    message_id       INTEGER,
-    file_id          INTEGER,
-    file_name        VARCHAR(255),
-    file_url         VARCHAR(1000),
-    turn_id          INTEGER,
-    module           VARCHAR         NOT NULL DEFAULT 'mentor',
-    analysis_type    VARCHAR(50)     NOT NULL,
-    summary_text     TEXT            NOT NULL,
-    extracted_text   TEXT,
-    structured_json  JSONB,
-    created_at       TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_user_id
-    ON chat_attachment_analyses (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_session_id
-    ON chat_attachment_analyses (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_message_id
-    ON chat_attachment_analyses (message_id);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_file_id
-    ON chat_attachment_analyses (file_id);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_turn_id
-    ON chat_attachment_analyses (turn_id);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_module
-    ON chat_attachment_analyses (module);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_analysis_type
-    ON chat_attachment_analyses (analysis_type);
-CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_user_session_created_at
-    ON chat_attachment_analyses (user_id, session_id, created_at DESC);
-
-COMMENT ON TABLE chat_attachment_analyses IS '附件分析结果表，存储对上传文件的AI分析结果';
-COMMENT ON COLUMN chat_attachment_analyses.session_id IS '关联会话ID';
-COMMENT ON COLUMN chat_attachment_analyses.message_id IS '关联消息ID';
-COMMENT ON COLUMN chat_attachment_analyses.file_id IS '关联文件ID';
-COMMENT ON COLUMN chat_attachment_analyses.turn_id IS '关联轮次ID';
-COMMENT ON COLUMN chat_attachment_analyses.analysis_type IS '分析类型，如image_ocr/pdf_extract等';
-COMMENT ON COLUMN chat_attachment_analyses.summary_text IS 'AI生成的分析摘要文本';
-COMMENT ON COLUMN chat_attachment_analyses.extracted_text IS '从文件中提取的原始文本';
-COMMENT ON COLUMN chat_attachment_analyses.structured_json IS '结构化分析结果JSON';
-
--- ============================================================
--- 8c. chat_uploaded_files
--- ============================================================
-CREATE TABLE IF NOT EXISTS chat_uploaded_files (
-    id             SERIAL          PRIMARY KEY,
-    user_id        INTEGER         NOT NULL,
-    session_id     UUID            REFERENCES chat_sessions(id),
-    module         VARCHAR         NOT NULL DEFAULT 'mentor',
-    storage_url    VARCHAR(1000)   NOT NULL,
-    storage_key    VARCHAR(500),
-    original_name  VARCHAR(255)    NOT NULL,
-    file_kind      VARCHAR(32)     NOT NULL,
-    mime_type      VARCHAR(120),
-    extension      VARCHAR(20),
-    size_bytes     INTEGER         NOT NULL DEFAULT 0,
-    created_at     TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_user_id
-    ON chat_uploaded_files (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_session_id
-    ON chat_uploaded_files (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_module
-    ON chat_uploaded_files (module);
-CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_storage_key
-    ON chat_uploaded_files (storage_key);
-CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_file_kind
-    ON chat_uploaded_files (file_kind);
-CREATE INDEX IF NOT EXISTS ix_chat_uploaded_files_user_session_created_at
-    ON chat_uploaded_files (user_id, session_id, created_at DESC);
-
-COMMENT ON TABLE chat_uploaded_files IS '用户上传文件表';
-COMMENT ON COLUMN chat_uploaded_files.session_id IS '上传时所属会话ID';
-COMMENT ON COLUMN chat_uploaded_files.storage_url IS '文件访问URL';
-COMMENT ON COLUMN chat_uploaded_files.storage_key IS '对象存储Key';
-COMMENT ON COLUMN chat_uploaded_files.original_name IS '原始文件名';
-COMMENT ON COLUMN chat_uploaded_files.file_kind IS '文件分类：image/pdf/doc/audio/video等';
-COMMENT ON COLUMN chat_uploaded_files.mime_type IS 'MIME类型';
-COMMENT ON COLUMN chat_uploaded_files.extension IS '文件扩展名';
-COMMENT ON COLUMN chat_uploaded_files.size_bytes IS '文件大小（字节）';
-
--- ============================================================
--- 7d. chat_message_attachments
--- ============================================================
-CREATE TABLE IF NOT EXISTS chat_message_attachments (
-    id                SERIAL          PRIMARY KEY,
-    user_id           INTEGER         NOT NULL,
-    session_id        UUID            REFERENCES chat_sessions(id),
-    message_id        INTEGER         NOT NULL,
-    file_id           INTEGER         NOT NULL,
-    turn_id           INTEGER,
-    module            VARCHAR         NOT NULL DEFAULT 'mentor',
-    attachment_order  INTEGER         NOT NULL DEFAULT 0,
-    attachment_role   VARCHAR(32)     NOT NULL DEFAULT 'input',
-    created_at        TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_user_id
-    ON chat_message_attachments (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_session_id
-    ON chat_message_attachments (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_message_id
-    ON chat_message_attachments (message_id);
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_file_id
-    ON chat_message_attachments (file_id);
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_turn_id
-    ON chat_message_attachments (turn_id);
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_module
-    ON chat_message_attachments (module);
-CREATE INDEX IF NOT EXISTS ix_chat_message_attachments_created_at
-    ON chat_message_attachments (created_at);
-
-COMMENT ON TABLE chat_message_attachments IS '消息与文件关联表，记录消息引用了哪些文件';
-COMMENT ON COLUMN chat_message_attachments.message_id IS '关联消息ID';
-COMMENT ON COLUMN chat_message_attachments.file_id IS '关联文件ID';
-COMMENT ON COLUMN chat_message_attachments.turn_id IS '关联轮次ID';
-COMMENT ON COLUMN chat_message_attachments.attachment_order IS '附件顺序，从0开始';
-COMMENT ON COLUMN chat_message_attachments.attachment_role IS '附件角色：input(用户上传)/output(AI生成)';
-
--- ============================================================
--- 7e. chat_tool_invocations
--- ============================================================
-CREATE TABLE IF NOT EXISTS chat_tool_invocations (
-    id                    SERIAL          PRIMARY KEY,
-    user_id               INTEGER         NOT NULL,
-    session_id            UUID            REFERENCES chat_sessions(id),
-    turn_id               INTEGER,
-    module                VARCHAR         NOT NULL DEFAULT 'mentor',
-    assistant_message_id  INTEGER,
-    tool_message_id       INTEGER,
-    tool_call_id          VARCHAR(120)    NOT NULL,
-    tool_name             VARCHAR(120)    NOT NULL,
-    arguments_json        JSONB,
-    result_text           TEXT,
-    result_json           JSONB,
-    status                VARCHAR(32)     NOT NULL DEFAULT 'success',
-    created_at            TIMESTAMPTZ     DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_user_id
-    ON chat_tool_invocations (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_session_id
-    ON chat_tool_invocations (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_turn_id
-    ON chat_tool_invocations (turn_id);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_module
-    ON chat_tool_invocations (module);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_assistant_message_id
-    ON chat_tool_invocations (assistant_message_id);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_tool_message_id
-    ON chat_tool_invocations (tool_message_id);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_tool_call_id
-    ON chat_tool_invocations (tool_call_id);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_tool_name
-    ON chat_tool_invocations (tool_name);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_status
-    ON chat_tool_invocations (status);
-CREATE INDEX IF NOT EXISTS ix_chat_tool_invocations_user_session_created_at
-    ON chat_tool_invocations (user_id, session_id, created_at DESC);
-
-COMMENT ON TABLE chat_tool_invocations IS '工具调用记录表，存储AI调用外部工具的完整记录';
-COMMENT ON COLUMN chat_tool_invocations.session_id IS '关联会话ID';
-COMMENT ON COLUMN chat_tool_invocations.turn_id IS '关联轮次ID';
-COMMENT ON COLUMN chat_tool_invocations.assistant_message_id IS '触发工具调用的助手消息ID';
-COMMENT ON COLUMN chat_tool_invocations.tool_message_id IS '工具返回结果的消息ID';
-COMMENT ON COLUMN chat_tool_invocations.tool_call_id IS '工具调用唯一标识';
-COMMENT ON COLUMN chat_tool_invocations.tool_name IS '工具名称，如web_search/knowledge_search';
-COMMENT ON COLUMN chat_tool_invocations.arguments_json IS '工具调用参数JSON';
-COMMENT ON COLUMN chat_tool_invocations.result_text IS '工具返回结果文本';
-COMMENT ON COLUMN chat_tool_invocations.result_json IS '工具返回结果JSON（结构化）';
-COMMENT ON COLUMN chat_tool_invocations.status IS '调用状态：success/error/timeout';
 
 -- ============================================================
 -- 8. global_profiles

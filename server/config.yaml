@@ -8,8 +8,8 @@ app:
 database:
   url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
   echo: false
-  pool_size: 10
-  max_overflow: 20
+  pool_size: 20
+  max_overflow: 30
   pool_recycle: 1800
   pool_timeout: 30
 

@@ -83,36 +83,6 @@ class ActiveToken(SQLModel, table=True):
     )
 
 
-class AgentRun(SQLModel, table=True):
-    """跨业务模块统一的 Agent 执行记录。"""
-
-    __tablename__ = "agent_runs"
-    __table_args__ = (
-        Index("ix_agent_runs_user_created", "user_id", "created_at"),
-        Index("ix_agent_runs_business", "module", "business_id"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    run_id: str = Field(max_length=36, unique=True, index=True)
-    user_id: int = Field(index=True)
-    module: str = Field(max_length=32, index=True)
-    business_id: str = Field(max_length=128, index=True)
-    status: str = Field(default="pending", max_length=32, index=True)
-    sequence: int = Field(default=0, ge=0)
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True)),
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now()),
-    )
-    completed_at: datetime | None = Field(
-        default=None,
-        sa_column=Column(TIMESTAMP(timezone=True)),
-    )
-
 class School(SQLModel, table=True):
     """学校存储"""
     __tablename__ = "schools"
@@ -838,17 +808,44 @@ class WrongQuestion(SQLModel, table=True):
     )
 
 
+class ChatDiagram(SQLModel, table=True):
+    """教学图解表 — 持久化 TutorAgent 生成的结构化图解。"""
+    __tablename__ = "chat_diagrams"
+    __table_args__ = (
+        Index("ix_chat_diagrams_user_session_created", "user_id", "session_id", "created_at"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    session_id: str = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+    )
+    message_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("chat_messages.id"), nullable=True, index=True),
+    )
+    module: str = Field(default="mentor", index=True)
+    graph_type: str = Field(max_length=50)
+    title: str = Field(max_length=200)
+    diagram_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Model registration — init_db() 通过此元组获取所有需要建表的模型类
 # ---------------------------------------------------------------------------
 
 REGISTERED_MODELS = (
     ActiveToken,
-    AgentRun,
     ChatSession,
     ChatMessage,
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
+    ChatDiagram,
     GlobalProfile,
     CourseProfile,
     GeneratedResource,

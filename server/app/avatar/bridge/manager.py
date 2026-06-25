@@ -374,7 +374,9 @@ class RealtimeBridge:
             )
             return
 
-        deleted_count = await get_chat_usecases().clear_history(self.user_id, self.session_id)
+        memory_svc = get_chat_memory_service()
+        deleted_count = await memory_svc.delete_short_term_messages(user_id=self.user_id, session_id=self.session_id)
+        await memory_svc.reset_session_counters(user_id=self.user_id, session_id=self.session_id)
         logger.info(
             "[Bridge] ? user=%s session=%s deleted=%s",
             self.user_id,

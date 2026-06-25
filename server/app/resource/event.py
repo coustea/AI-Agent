@@ -27,10 +27,7 @@ ResourceEventName = Literal[
     "generation.started",
     "generation.completed",
     "generation.failed",
-    "agent.pending",
-    "agent.running",
-    "agent.completed",
-    "agent.failed",
+    "agent.status",
 ]
 
 RESOURCE_TERMINAL_EVENTS: set[ResourceEventName] = {"generation.completed", "generation.failed"}
@@ -217,8 +214,15 @@ class ResourceEvents:
         status: Literal["pending", "running", "completed", "failed"],
         message: str,
         progress: int | None = None,
+        *,
+        data: dict[str, Any] | None = None,
     ) -> ResourceEvent:
-        """发送智能体状态与消息给前端。"""
+        """发送智能体状态与消息给前端。
+
+        统一使用 agent.status 事件，具体状态通过 data.status 传递。
+        """
+        channel = await self._get_or_create_channel()
+
         if agent_id == "global":
             event_map = {
                 "running": "generation.started",
@@ -226,22 +230,24 @@ class ResourceEvents:
                 "failed": "generation.failed",
             }
             event = event_map.get(status, "generation.started")
-        else:
-            event_map = {
-                "pending": "agent.pending",
-                "running": "agent.running",
-                "completed": "agent.completed",
-                "failed": "agent.failed",
-            }
-            event = event_map.get(status, "agent.running")
+            return await channel.send(
+                event=event,
+                message=message,
+                progress=progress,
+                data=data or {},
+            )
 
-        channel = await self._get_or_create_channel()
+        # Agent 事件统一为 agent.status
+        event_data = {"status": status}
+        if data:
+            event_data.update(data)
+
         return await channel.send(
-            event=event,
+            event="agent.status",
             message=message,
-            agent_id=agent_id if agent_id != "global" else None,
+            agent_id=agent_id,
             progress=progress,
-            data={},
+            data=event_data,
         )
 
     async def subscribe(

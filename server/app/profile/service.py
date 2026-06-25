@@ -21,7 +21,6 @@ from app.infra.logging import get_logger
 from app.infra.models import (
     ChatMessage,
     ChatSession,
-    ChatSessionSummaryBlock,
     ChatLongTermMemory,
     CourseProfile,
     GlobalProfile,
@@ -612,7 +611,6 @@ class ProfileService:
             .where(
                 ChatMessage.user_id == user_id,
                 ChatMessage.session_id == session_id,
-                ChatMessage.module == self.module,
                 ChatMessage.role.in_(["user", "assistant"]),
                 ChatMessage.id > after_message_id,
             )

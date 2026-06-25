@@ -13,6 +13,7 @@ API 端点：
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import uuid
@@ -20,19 +21,19 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.auth.security import get_current_user
 from app.config import WORKPLACE_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.resource.event import ResourceEvents
 from app.infra.models import User
 from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
+from app.resource.event import get_resource_channel, encode_resource_sse, RESOURCE_TERMINAL_EVENTS
 
 STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
 
@@ -62,8 +63,6 @@ async def create_resource_task(
     )
     resource_id = result["resource_id"]
     run_id = str(uuid.uuid4())
-    events = ResourceEvents(user_id=current_user.id, resource_id=resource_id, run_id=run_id)
-    await events.open()
 
     profile_builder = get_profile_service()
     profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
@@ -108,8 +107,6 @@ async def create_single_resource_task(
     )
     resource_id = result["resource_id"]
     run_id = str(uuid.uuid4())
-    events = ResourceEvents(user_id=current_user.id, resource_id=resource_id, run_id=run_id)
-    await events.open()
 
     # 单智能体模式：通过多智能体流水线执行，只启用一个 agent
     background_tasks.add_task(
@@ -143,6 +140,57 @@ async def get_generation_status(
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
     return HttpResponse.success(data=status_data)
+
+
+@router.get("/resources/{resource_id}/runs/{run_id}/events")
+async def get_resource_events(
+    resource_id: int,
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """SSE 推送任务事件。"""
+    # 验证资源所有权
+    service = ResourceService(session)
+    resource = await service.get_resource(current_user.id, resource_id)
+    if resource is None:
+        return HttpResponse.error(code=404, message="资源不存在或无权限")
+
+    # 获取已存在的频道
+    events = await get_resource_channel(current_user.id, resource_id, run_id)
+    if events is None:
+        return HttpResponse.error(code=410, message="事件流已过期或不存在")
+
+    async def event_generator():
+        try:
+            queue, replay = await events.subscribe(after_sequence=0)
+            # 先发送回放事件
+            for event in replay:
+                yield encode_resource_sse(event)
+            # 然后监听新事件
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield encode_resource_sse(event)
+                    if event.event in RESOURCE_TERMINAL_EVENTS:
+                        break
+                except asyncio.TimeoutError:
+                    # 发送心跳
+                    yield ": heartbeat\n\n"
+        except Exception as e:
+            logger.error("SSE event generator error: %s", e)
+        finally:
+            await events.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/agents")
