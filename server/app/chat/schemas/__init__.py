@@ -7,6 +7,12 @@ from app.chat.schemas.evidence import (
     EvidenceType,
     Evidence,
     EvidenceSet,
+    SourceItem,
+    AgentError,
+    ToolInvocation,
+    AttachmentAnalysis,
+    NormalizedToolResult,
+    normalize_tool_result,
     UploadResponse,
 )
 
@@ -52,6 +58,8 @@ from app.chat.schemas.diagram import (
 
 __all__ = [
     "EvidenceType", "Evidence", "EvidenceSet", "UploadResponse",
+    "SourceItem", "AgentError", "ToolInvocation", "AttachmentAnalysis",
+    "NormalizedToolResult", "normalize_tool_result",
     "TutorToolCall", "TutorTurnContext", "TutorAgentInput",
     "ClassificationResult", "TutorRuntimeEventType", "TutorRuntimeEvent",
     "TeachingDiagramType", "TeachingContent",

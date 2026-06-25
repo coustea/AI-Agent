@@ -9,11 +9,11 @@ LLM 失败时降级为 extract_fallback_summary_markdown（取前 N 行拼接）
 from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from sqlmodel import func, select
+from sqlmodel import delete, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.prompts import prompts
-from app.chat.memory.types import DIALOGUE_ROLES, extract_fallback_summary_markdown
+from app.chat.memory.types import extract_content_text, extract_fallback_summary_markdown
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
@@ -37,20 +37,13 @@ class ChatSessionCompressor:
     def __init__(
         self,
         *,
-        module: str = "mentor",
         keep_recent: int = 8,
         min_messages: int = 14,
         min_tokens: int = 3500,
     ) -> None:
-        # 模块名 — 用于隔离不同对话模块的消息（如 mentor、quiz 等）
-        self.module = module
-        # 压缩后保留的最近消息条数（这些消息不会被删除）
         self.keep_recent = keep_recent
-        # 触发压缩的消息数阈值（满足即压缩）
         self.min_messages = min_messages
-        # 触发压缩的 token 数阈值（满足即压缩）
         self.min_tokens = min_tokens
-        # LLM 实例 — 用于生成对话摘要
         self.llm = get_llm()
 
     async def maybe_compress(
@@ -74,6 +67,10 @@ class ChatSessionCompressor:
         Returns:
             压缩后的 ChatSessionSummaryBlock，或 None（无需压缩）
         """
+        logger.info(
+            "[ChatSessionCompressor] 开始检查压缩条件: user_id=%s session_id=%s force=%s reason=%s",
+            user_id, session_id, force, reason,
+        )
         # 强制模式直接压缩，否则检查是否达到压缩条件
         should_compress = force or await self._should_compress(
             db=db,
@@ -81,7 +78,9 @@ class ChatSessionCompressor:
             session_id=session_id,
         )
         if not should_compress:
+            logger.info("[ChatSessionCompressor] 不满足压缩条件，跳过: user_id=%s session_id=%s", user_id, session_id)
             return None
+        logger.info("[ChatSessionCompressor] 满足压缩条件，开始压缩: user_id=%s session_id=%s", user_id, session_id)
         return await self._compress(
             db=db,
             user_id=user_id,
@@ -101,19 +100,27 @@ class ChatSessionCompressor:
         """
         chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
         token_count = chat_session.summary_token_count if chat_session else 0
+        logger.info(
+            "[ChatSessionCompressor._should_compress] user_id=%s session_id=%s token_count=%s min_tokens=%s",
+            user_id, session_id, token_count, self.min_tokens,
+        )
         if token_count >= self.min_tokens:
+            logger.info("[ChatSessionCompressor._should_compress] token_count >= min_tokens, 触发压缩")
             return True
 
-        # 统计当前模块的消息条数
+        # 统计当前会话的消息条数
         count_result = (
             await db.exec(
                 select(func.count()).where(
                     ChatMessage.user_id == user_id,
                     ChatMessage.session_id == session_id,
-                    ChatMessage.module == self.module,
                 )
             )
         ).one()
+        logger.info(
+            "[ChatSessionCompressor._should_compress] user_id=%s session_id=%s message_count=%s min_messages=%s",
+            user_id, session_id, count_result, self.min_messages,
+        )
         return count_result >= self.min_messages
 
     async def _compress(
@@ -135,27 +142,29 @@ class ChatSessionCompressor:
           6. 物理删除已被摘要的旧消息
           7. 重置 token 计数器
         """
-        # 构建消息查询条件 — 限定用户、会话、模块
         filters = [
             ChatMessage.user_id == user_id,
             ChatMessage.session_id == session_id,
-            ChatMessage.module == self.module,
+            ChatMessage.role.in_(["user", "assistant"]),
         ]
-        # 按时间升序获取所有消息
         messages = list((await db.exec(select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc()))).all())
-        # 过滤：仅保留 user/assistant 角色且内容非空的消息
-        dialogue = [msg for msg in messages if msg.role in DIALOGUE_ROLES and str(msg.content or "").strip()]
+        dialogue = [msg for msg in messages if extract_content_text(msg.content)]
+        logger.info(
+            "[ChatSessionCompressor._compress] user_id=%s session_id=%s total_messages=%s dialogue_count=%s target_count=%s keep_recent=%s",
+            user_id, session_id, len(messages), len(dialogue), max(0, len(dialogue) - self.keep_recent), self.keep_recent,
+        )
         if len(dialogue) <= self.keep_recent:
+            logger.info("[ChatSessionCompressor._compress] dialogue_count <= keep_recent, 无需压缩")
             return None
 
         # 分离：目标消息 = 需要压缩的旧消息，保留消息 = 最近 keep_recent 条
         target = dialogue[:-self.keep_recent] if self.keep_recent > 0 else dialogue
         if not target:
+            logger.info("[ChatSessionCompressor._compress] target为空, 无需压缩")
             return None
 
-        # 格式化为带时间戳的对话文本，每条消息截取前500字符
         chat_text = "\n".join(
-            f"[{msg.created_at:%m-%d %H:%M}] {msg.role}: {msg.content[:500]}"
+            f"[{msg.created_at:%m-%d %H:%M}] {msg.role}: {extract_content_text(msg.content)[:500]}"
             for msg in target
         )
 
@@ -172,21 +181,27 @@ class ChatSessionCompressor:
                 temperature=0.1,
             )
             summary_markdown = str(resp.content or "").strip()
+            logger.info(
+                "[ChatSessionCompressor._compress] LLM生成摘要成功: user_id=%s session_id=%s summary_length=%s",
+                user_id, session_id, len(summary_markdown),
+            )
         except Exception as exc:
-            logger.warning("[ChatMemoryCompression] LLM compression failed: %s", exc)
+            logger.warning("[ChatSessionCompressor._compress] LLM compression failed: %s", exc)
 
         # LLM 失败或返回空结果时，降级为简易行拼接摘要
         if not summary_markdown or not summary_markdown.strip():
             summary_markdown = extract_fallback_summary_markdown(chat_text)
+            logger.info(
+                "[ChatSessionCompressor._compress] 使用降级摘要: user_id=%s session_id=%s summary_length=%s",
+                user_id, session_id, len(summary_markdown),
+            )
 
-        # 查找最新的摘要块，确定下一个 block_index（用于时序编号）
         latest_block = (
             await db.exec(
                 select(ChatSessionSummaryBlock)
                 .where(
                     ChatSessionSummaryBlock.user_id == user_id,
                     ChatSessionSummaryBlock.session_id == session_id,
-                    ChatSessionSummaryBlock.module == self.module,
                 )
                 .order_by(ChatSessionSummaryBlock.block_index.desc())
                 .limit(1)
@@ -194,11 +209,9 @@ class ChatSessionCompressor:
         ).first()
         next_block_index = (latest_block.block_index if latest_block else 0) + 1
 
-        # 创建新的摘要块记录 — 记录压缩的起止消息ID、时间范围和消息数量
         summary_block = ChatSessionSummaryBlock(
             user_id=user_id,
             session_id=session_id,
-            module=self.module,
             block_index=next_block_index,
             summary_markdown=summary_markdown,
             start_message_id=target[0].id,
@@ -211,48 +224,53 @@ class ChatSessionCompressor:
         )
         db.add(summary_block)
         await db.flush()
+        logger.info(
+            "[ChatSessionCompressor._compress] 摘要块创建成功: user_id=%s session_id=%s block_index=%s summarized_count=%s",
+            user_id, session_id, next_block_index, len(target),
+        )
 
         # 物理删除已被摘要覆盖的旧消息
         if self.keep_recent > 0:
             first_kept = dialogue[-self.keep_recent].id
-        else:
-            stale_ids = [msg.id for msg in target if msg.id is not None]
-
-        if self.keep_recent > 0 and first_kept:
             stale_messages = list(
                 (
                     await db.exec(
                         select(ChatMessage).where(
                             ChatMessage.user_id == user_id,
                             ChatMessage.session_id == session_id,
-                            ChatMessage.module == self.module,
                             ChatMessage.id < first_kept,
                         )
                     )
                 ).all()
             )
-        elif self.keep_recent == 0:
+        else:
             stale_messages = list(
                 (
                     await db.exec(
                         select(ChatMessage).where(
                             ChatMessage.user_id == user_id,
                             ChatMessage.session_id == session_id,
-                            ChatMessage.module == self.module,
-                            ChatMessage.id.in_(stale_ids),
+                            ChatMessage.id.in_([msg.id for msg in target if msg.id is not None]),
                         )
                     )
                 ).all()
             )
-        else:
-            stale_messages = []
-
-        for msg in stale_messages:
-            await db.delete(msg)
+        deleted_count = len(stale_messages)
+        stale_ids = [msg.id for msg in stale_messages if msg.id is not None]
+        if stale_ids:
+            await db.exec(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))
+        logger.info(
+            "[ChatSessionCompressor._compress] 删除旧消息: user_id=%s session_id=%s deleted_count=%s",
+            user_id, session_id, deleted_count,
+        )
 
         # 重置 token 计数器 — 压缩后重新开始累积
         chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
         if chat_session:
             chat_session.summary_token_count = 0
             db.add(chat_session)
+            logger.info(
+                "[ChatSessionCompressor._compress] 重置token计数器: user_id=%s session_id=%s",
+                user_id, session_id,
+            )
         return summary_block

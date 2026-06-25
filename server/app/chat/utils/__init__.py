@@ -7,7 +7,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Generator
 
-from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AnyMessage, HumanMessage
 
 from app.infra.logging import get_logger
 
@@ -136,58 +136,3 @@ def extract_question(messages: list[AnyMessage]) -> str:
                 .strip()
             )
     return ""
-
-
-def build_messages(system_prompt: str, messages: list[AnyMessage]) -> list[AnyMessage]:
-    """将系统提示词拼接到消息列表头部。
-
-    确保消息列表中只有一个系统消息。
-
-    Args:
-        system_prompt: 系统提示词。
-        messages: 原始消息列表。
-
-    Returns:
-        以系统消息开头的消息列表。
-    """
-    # 先移除消息列表中已有的系统消息，确保最终只有一条系统消息
-    pure = [msg for msg in messages if not isinstance(msg, SystemMessage)]
-    # 将新的系统提示词作为首条消息注入
-    return [SystemMessage(content=system_prompt)] + pure
-
-
-# ---------------------------------------------------------------------------
-# 路由判断
-# ---------------------------------------------------------------------------
-
-def classify_route(state: dict) -> str:
-    """LangGraph 条件路由：根据 classify 节点的结果选择路径。
-
-    Args:
-        state: LangGraph 状态字典。
-
-    Returns:
-        路由目标节点名称。
-    """
-    # 从状态中读取 classify 节点输出的路由类型，默认 direct（直接回答）
-    route = state.get("route", "direct")
-    # 白名单校验，防止非法路由值导致图执行异常
-    valid_routes = {"direct", "search", "attachment_needed"}
-    return route if route in valid_routes else "direct"
-
-
-# ---------------------------------------------------------------------------
-# SSE 事件
-# ---------------------------------------------------------------------------
-
-def stream_event(event: str, data: Any) -> dict[str, Any]:
-    """构造 SSE 事件对象。
-
-    Args:
-        event: 事件类型名称。
-        data: 事件数据。
-
-    Returns:
-        包含 event 和 data 字段的字典。
-    """
-    return {"event": event, "data": data}

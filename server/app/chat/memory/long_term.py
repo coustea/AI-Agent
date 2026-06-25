@@ -40,20 +40,11 @@ class ChatLongTermMemoryService:
     def __init__(
         self,
         *,
-        module: str = "mentor",
-        periodic_turns: int = 8,
         min_confidence: float = 0.75,
         cooldown_minutes: int = 30,
     ) -> None:
-        # 模块名 — 用于隔离不同对话模块的长期记忆
-        self.module = module
-        # 批量触发的新增消息间隔，由上层调度器按 token/message 共同决定
-        self.periodic_turns = periodic_turns
-        # 最小置信度阈值 — LLM 返回的 confidence 必须 ≥ 此值才写入
         self.min_confidence = min_confidence
-        # 冷却时间（秒）— 周期触发时距上次更新的最小间隔
         self.cooldown_seconds = cooldown_minutes * 60
-        # LLM 实例 — 用于判断是否需要更新以及生成新记忆
         self.llm = get_llm()
 
     def should_consider_update(
@@ -108,8 +99,13 @@ class ChatLongTermMemoryService:
             assistant_reply=assistant_reply,
         ) if signal_detected is None else signal_detected
         periodic_trigger = bool((new_dialogue or "").strip()) and turn_count > 0
+        logger.info(
+            "[ChatLongTermMemoryService.maybe_update] user_id=%s session_id=%s signal_detected=%s periodic_trigger=%s",
+            user_id, session_id, signal_detected, periodic_trigger,
+        )
         # 两种触发方式都未满足，直接返回
         if not signal_detected and not periodic_trigger:
+            logger.info("[ChatLongTermMemoryService.maybe_update] 未触发更新，跳过")
             return {"updated": False, "analyzed": False}
 
         # 加载现有的长期记忆记录，不存在则创建空白模板
@@ -117,7 +113,6 @@ class ChatLongTermMemoryService:
             await db.exec(
                 select(ChatLongTermMemory).where(
                     ChatLongTermMemory.user_id == user_id,
-                    ChatLongTermMemory.module == self.module,
                 )
             )
         ).first()
@@ -128,12 +123,12 @@ class ChatLongTermMemoryService:
             # 首次创建：使用空白模板初始化长期记忆
             old_memory = ChatLongTermMemory(
                 user_id=user_id,
-                module=self.module,
                 memory_markdown=make_default_memory_markdown(),
                 category="general",
             )
             db.add(old_memory)
             await db.flush()
+            logger.info("[ChatLongTermMemoryService.maybe_update] 首次创建长期记忆: user_id=%s", user_id)
 
         # 冷却时间检查 — 周期触发时，如果距上次更新时间不足 cooldown 则跳过
         # 信号触发不受冷却限制（用户明确表达偏好/纠正应立即响应）
@@ -143,6 +138,10 @@ class ChatLongTermMemoryService:
             and old_memory.updated_at
             and (now() - old_memory.updated_at).total_seconds() < self.cooldown_seconds
         ):
+            logger.info(
+                "[ChatLongTermMemoryService.maybe_update] 冷却期内，跳过更新: user_id=%s cooldown=%ss",
+                user_id, self.cooldown_seconds,
+            )
             return {"updated": False, "analyzed": False}
 
         # 获取最新的会话摘要块 — 作为 LLM 判断的上下文
@@ -152,7 +151,6 @@ class ChatLongTermMemoryService:
                 .where(
                     ChatSessionSummaryBlock.user_id == user_id,
                     ChatSessionSummaryBlock.session_id == session_id,
-                    ChatSessionSummaryBlock.module == self.module,
                 )
                 .order_by(ChatSessionSummaryBlock.created_at.desc())
                 .limit(1)
@@ -175,11 +173,20 @@ class ChatLongTermMemoryService:
             prompt,
             temperature=0.1,
         )
+        logger.info(
+            "[ChatLongTermMemoryService.maybe_update] LLM判断结果: user_id=%s need_update=%s confidence=%s",
+            user_id, resp.need_update, getattr(resp, "confidence", self.min_confidence),
+        )
 
         # 双重校验：LLM 判断不需要更新 → 跳过；置信度不足 → 跳过
         if not resp.need_update or not resp.memory_markdown:
+            logger.info("[ChatLongTermMemoryService.maybe_update] LLM判断不需要更新或memory_markdown为空")
             return {"updated": False, "analyzed": True}
         if getattr(resp, "confidence", self.min_confidence) < self.min_confidence:
+            logger.info(
+                "[ChatLongTermMemoryService.maybe_update] 置信度不足，跳过: confidence=%s min_confidence=%s",
+                getattr(resp, "confidence", self.min_confidence), self.min_confidence,
+            )
             return {"updated": False, "analyzed": True}
 
         # 写入更新后的长期记忆 — 版本号递增（仅已有记录时递增）
@@ -193,4 +200,8 @@ class ChatLongTermMemoryService:
         memory.source_summary_block_ids = [latest_summary_block.id] if latest_summary_block and latest_summary_block.id else None
         memory.updated_at = now()
         db.add(memory)
+        logger.info(
+            "[ChatLongTermMemoryService.maybe_update] 长期记忆更新成功: user_id=%s version=%s reason=%s",
+            user_id, memory.version, memory.updated_reason,
+        )
         return {"updated": True, "analyzed": True}

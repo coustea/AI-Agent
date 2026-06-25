@@ -24,14 +24,9 @@ class TutorTurnContext(BaseModel):
 
 
 class TutorAgentInput(BaseModel):
-    """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。
-
-    turn_id 和 user_message_id 已弃用，保留仅为兼容旧代码。
-    """
+    """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。"""
     user_id: int
     session_id: str
-    turn_id: int | None = None  # 弃用：不再创建 turn
-    user_message_id: int | None = None  # 弃用：不再创建 turn
     question: str
     attachments: list[str] = Field(default_factory=list)
     history_messages: list[Any] = Field(default_factory=list)
@@ -59,7 +54,9 @@ TutorRuntimeEventType = Literal[
     "message_start", "classify_done",
     "file_analysis_start", "file_analysis_done",
     "agent_status",
+    "attachment_status",
     "answer_token", "answer_done",
+    "content_replace",
     "diagram_start", "diagram_done",
     "memory_update_start", "memory_update_done",
     "final", "error",

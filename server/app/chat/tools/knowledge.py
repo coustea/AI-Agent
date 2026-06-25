@@ -26,7 +26,7 @@ try:
 except ImportError:
     from langchain_community.vectorstores import Chroma
 
-from app.chat.tools.knowledge_rewrite import (
+from app.rag.knowledge_rewrite import (
     compute_retrieval_confidence,
     filter_rewrite_variants,
     get_effectiveness_cache,

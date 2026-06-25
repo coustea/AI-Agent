@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Final
+from typing import Any, Final
 
 from pydantic import BaseModel
 
@@ -59,17 +59,30 @@ def now() -> datetime:
 
 
 def estimate_token_count(text: str) -> int:
-    """粗略估算文本 token 数 — 取字符数/4 和词数的较大值。
+    """估算文本 token 数 — 分段策略，中英文混合更精确。
 
-    这是一个快速估算，用于触发压缩阈值判断，不需要精确计数。
-    中文场景下字符数/4 更接近实际 token 数，英文场景下词数更准确。
+    策略：
+    - 中文字符 × 1.5（中文字符平均 token 密度）
+    - 非中文部分按词数估算
+    - 若已安装 tiktoken，优先使用精确计数
     """
-
     stripped = (text or "").strip()
     if not stripped:
         return 0
-    # 取两个估算值的较大值：字符数/4（适合中文）和词数（适合英文）
-    return max(max(1, len(stripped) // 4), len(stripped.split()))
+
+    # 优先尝试 tiktoken 精确计数
+    try:
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(stripped))
+    except Exception:
+        pass
+
+    # 分段估算：中文 vs 非中文
+    chinese_chars = len(re.findall(r"[一-鿿]", stripped))
+    non_chinese = re.sub(r"[一-鿿]", "", stripped)
+    non_chinese_words = len(non_chinese.split())
+    return int(chinese_chars * 1.5) + non_chinese_words
 
 
 def truncate_text(text: str, char_budget: int, suffix: str = "...") -> str:
@@ -146,8 +159,8 @@ STABLE_SIGNAL_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"(喜欢|不喜欢|更喜欢|偏好|习惯)"),
     # 模式4: 学习目标 — "在学考研"、"准备提高"等，表示长期目标
     re.compile(r"(在学|正在学|学过|准备|打算|想要).*(考研|提高|练习|项目)"),
-    # 模式5: 背景信息 — "专业是..."、"准备面试"等，表示学习背景
-    re.compile(r"(专业|年级|方向|课程|考试|证书|竞赛|实习|面试|项目)"),
+    # 模式5: 背景信息 — 需要第一人称陈述结构，避免单纯关键词出现误触发
+    re.compile(r"(我是|我的|我在|我学|我读|我准备|我打算|我考|我参加).*(专业|年级|方向|课程|考试|证书|竞赛|实习|面试|项目)"),
 )
 
 # 无意义文本集合 — 这些简短的确认性回复不包含稳定信号，应跳过检测
@@ -163,10 +176,52 @@ def has_stable_signal(text: str) -> bool:
     用于触发长期记忆的更新流程。
     """
 
-    # 归一化文本：去除多余空白，统一为单空格分隔
     normalized = " ".join((text or "").strip().split())
-    # 空文本或确认性回复（"好的"、"收到"等）直接返回 False
     if not normalized or normalized in NON_SIGNIFICANT_TEXTS:
         return False
-    # 遍历所有正则模式，任一匹配即返回 True
     return any(pattern.search(normalized) for pattern in STABLE_SIGNAL_PATTERNS)
+
+
+def extract_content_text(content: list[dict[str, Any]] | str | None) -> str:
+    """从 OpenAI Content Parts 或纯字符串中提取文本。
+
+    ChatMessage.content 存储为 list[dict]（OpenAI Content Parts 格式），
+    本函数提取 type=text 的 Part 内容，兼容旧版纯字符串格式。
+    """
+    if isinstance(content, list):
+        return " ".join(
+            p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"
+        ).strip()
+    return str(content or "").strip()
+
+
+# 画像更新触发模式 — 用于检测对话中是否包含画像更新信号
+GLOBAL_PROFILE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"(喜欢|习惯|偏好|擅长|感兴趣|反感|讨厌|更愿意|认知|风格|学习方式)"),
+    re.compile(r"(节奏|速度|时间|每天|太快|太慢|稍微|快一点|慢一点|进度|频繁)"),
+    re.compile(r"(实践|动手|写代码|做题|编程|实验|实战|练习|编码|Debug)"),
+)
+
+COURSE_PROFILE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"(这门课|操作系统|数据库|计网|网络|计组|算法|数据结构|高数|线代)"),
+    re.compile(r"(进程|线程|锁|事务|索引|内存|虚拟内存|调度|TCP|IP|握手|矩阵|导数|概念)"),
+    re.compile(r"(薄弱|搞错|出错|卡住|记不住|混淆|搞不清|老是错|不会做|不懂|理解不了)"),
+    re.compile(r"(基础|掌握|熟悉|了解|懂了|不明白|难度|简单|困难|稍微深点)"),
+)
+
+
+def classify_turn_signals(user_message: str, assistant_reply: str) -> dict[str, bool]:
+    """统一信号分类 — 一次匹配返回 LTM、全局画像、课程画像三类信号。
+
+    避免同一段对话文本在 service.py 和 background.py 中被分别正则匹配两轮。
+    """
+    turn_text = f"{user_message}\n{assistant_reply}"
+    ltm_signal = has_stable_signal(user_message) or (
+        has_stable_signal(assistant_reply)
+        and any(kw in assistant_reply for kw in ("以后", "下次", "记住", "偏好", "纠正"))
+    )
+    return {
+        "ltm": ltm_signal,
+        "global_profile": any(p.search(turn_text) for p in GLOBAL_PROFILE_PATTERNS),
+        "course_profile": any(p.search(turn_text) for p in COURSE_PROFILE_PATTERNS),
+    }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,82 @@ EvidenceType = Literal[
     "long_term_memory",
     "recent_evaluation",
 ]
+
+
+class SourceItem(BaseModel):
+    """来源条目 — 单个 URL 或知识库来源的元数据。"""
+    source: str = ""
+    title: str = ""
+    url: str = ""
+    summary: str = ""
+    published_at: str | None = None
+
+
+class AgentError(BaseModel):
+    """归一化的 Agent 错误。"""
+    stage: str = ""
+    code: str = ""
+    message: str = ""
+    recoverable: bool = True
+
+
+class ToolInvocation(BaseModel):
+    """单次工具调用记录。"""
+    tool_call_id: str = ""
+    tool_name: str = ""
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    result_text: str = ""
+    status: Literal["success", "ignored", "failed"] = "success"
+    assistant_message_id: int | None = None
+    tool_message_id: int | None = None
+
+
+class AttachmentAnalysis(BaseModel):
+    """附件分析结果。"""
+    file_url: str = ""
+    file_name: str = ""
+    analysis_type: Literal["image", "document"] = "image"
+    summary_text: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class NormalizedToolResult(BaseModel):
+    """统一标准化的工具执行结果。"""
+    text: str = ""
+    sources: list[SourceItem] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+def normalize_tool_result(raw_result: Any) -> NormalizedToolResult:
+    """将任意工具返回值标准化为 NormalizedToolResult。
+
+    规范：
+    - 字符串放入 text
+    - Mapping 中优先读取 text 或 message
+    - Mapping 中的 sources 单独提取
+    - 其他字段放入 metadata
+    - Pydantic 模型先 model_dump()
+    - None 返回空结果
+    """
+    if raw_result is None:
+        return NormalizedToolResult()
+    if isinstance(raw_result, str):
+        return NormalizedToolResult(text=raw_result)
+    if isinstance(raw_result, BaseModel):
+        raw_result = raw_result.model_dump()
+    if isinstance(raw_result, Mapping):
+        text = str(raw_result.get("text") or raw_result.get("message") or "").strip()
+        raw_sources = raw_result.get("sources", [])
+        sources: list[SourceItem] = []
+        if isinstance(raw_sources, list):
+            for s in raw_sources:
+                if isinstance(s, dict):
+                    sources.append(SourceItem(**s))
+                elif isinstance(s, SourceItem):
+                    sources.append(s)
+        metadata = {k: v for k, v in raw_result.items() if k not in ("text", "message", "sources")}
+        return NormalizedToolResult(text=text, sources=sources, metadata=metadata)
+    return NormalizedToolResult(text=str(raw_result).strip())
 
 
 class Evidence(BaseModel):

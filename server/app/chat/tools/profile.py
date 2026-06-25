@@ -41,6 +41,7 @@ def make_get_learner_profile(
     profile_service 可注入以支持测试。
     """
     async def _impl(
+        dimension: str | None = None,
         course_name: str | None = None,
         reason: str = "",
     ) -> str:
@@ -48,7 +49,7 @@ def make_get_learner_profile(
         svc = profile_service or get_profile_service()
         try:
             # 调用画像服务获取 Markdown 格式的学习者画像
-            markdown = await svc.get_profile_for_agents(user_id=request.user_id)
+            markdown = await svc.get_profile_for_agents(user_id=request.user_id, dimension=dimension)
             return _compact(f"画像读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
             logger.warning("[get_learner_profile] failed: %s", exc)

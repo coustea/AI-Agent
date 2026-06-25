@@ -133,10 +133,8 @@ class SparkImageService:
             "payload": {"message": {"text": [{"role": "user", "content": image_b64, "content_type": "image"}, {"role": "user", "content": question}]}},
         }
 
-        # 创建 SSL 上下文，跳过证书验证（讯飞 WebSocket 服务常用自签名证书）
-        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
+        # 创建 SSL 上下文，使用系统默认 CA 证书验证
+        ssl_ctx = ssl.create_default_context()
 
         answer = ""
         # 建立 WebSocket 连接并逐条接收流式响应

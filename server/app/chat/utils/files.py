@@ -54,7 +54,9 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
             return None
         upload_root = UPLOAD_DIR.resolve()
         # 路径遍历攻击防护：确保解析后的路径仍在上传根目录内
-        if not str(local_path).startswith(str(upload_root)):
+        try:
+            local_path.relative_to(upload_root)
+        except ValueError:
             return None
         if not local_path.exists():
             return None
