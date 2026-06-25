@@ -249,8 +249,7 @@ async def _publish_chat_runtime_event(
     event: dict[str, Any],
 ) -> bool:
     """把辅导内部事件映射成 ChatEvent 并发送（委托给 ChatRuntimeEventMapper）。"""
-    result = await _event_mapper.publish(events, event)
-    return result.failed
+    return await _event_mapper.publish(events, event)
 
 
 async def run_chat_agent(

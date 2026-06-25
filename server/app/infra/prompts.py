@@ -1,10 +1,8 @@
-"""Shared prompt loading utilities.
+"""Prompt 加载工具。
 
-```
-ModulePromptLoader  — loads .md files from one module's prompts/ directory
-PromptRegistry      — central singleton that owns all module loaders
-prompts             — the global PromptRegistry instance
-```
+ModulePromptLoader — 加载单个模块的 prompts/ 目录下的 .md 文件
+PromptRegistry — 中央注册表，管理所有模块的加载器
+prompts — 全局 PromptRegistry 实例
 
 Usage::
 
@@ -24,16 +22,18 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-_PLACEHOLDER_RE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
+_PLACEHOLDER_RE = re.compile(r"(?<!\\{)\\{([a-zA-Z_][a-zA-Z0-9_]*)\\}(?!\\})")
+
+_APP_DIR = Path(__file__).resolve().parent.parent  # app/
 
 
 class PromptNotFoundError(KeyError):
-    """Prompt 不存在时抛出，便于调用方处理"""
+    """Prompt 不存在时抛出，便于调用方处理。"""
     pass
 
 
 class ModulePromptLoader:
-    """Load prompt files for a single owning module."""
+    """加载单个模块的 prompt 文件。"""
 
     def __init__(self, prompt_dir: Path, *, module_name: str) -> None:
         self.prompt_dir = Path(prompt_dir)
@@ -144,7 +144,7 @@ class ModulePromptLoader:
 
 
 class PromptRegistry:
-    """Central registry that owns a ModulePromptLoader per business module."""
+    """中央注册表，管理每个业务模块的 ModulePromptLoader。"""
 
     def __init__(self) -> None:
         self._loaders: dict[str, ModulePromptLoader] = {}
@@ -171,12 +171,7 @@ class PromptRegistry:
         return {name: loader.status() for name, loader in self._loaders.items()}
 
 
-# ---------------------------------------------------------------------------
-# Global singleton — auto-registers all known modules
-# ---------------------------------------------------------------------------
-_PROMPTS_PKG_DIR = Path(__file__).resolve().parent   # app/infra/prompts/
-_APP_DIR = _PROMPTS_PKG_DIR.parent.parent             # app/
-
+# 全局单例 — 自动注册所有已知模块
 prompts = PromptRegistry()
 prompts.register("chat", _APP_DIR / "chat" / "prompts")
 prompts.register("chat_memory", _APP_DIR / "chat" / "memory" / "prompts")
@@ -184,3 +179,5 @@ prompts.register("resource", _APP_DIR / "resource" / "prompts")
 prompts.register("path", _APP_DIR / "path" / "prompts")
 prompts.register("profile", _APP_DIR / "profile" / "prompts")
 prompts.register("quiz", _APP_DIR / "quiz" / "prompts")
+
+__all__ = ["prompts", "PromptRegistry", "ModulePromptLoader", "PromptNotFoundError"]

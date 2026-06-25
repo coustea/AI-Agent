@@ -148,7 +148,7 @@ class PPTAgent(BaseResourceAgent):
         await self.emitter.send(self.agent_id, "running", "正在收集并组织讲义内容与大纲...", 15)
 
         # 准备 LLM 输入
-        prompt_template = prompts.get("ppt_chapter")
+        prompt_template = prompts.get("resource").get("ppt_chapter")
         if not prompt_template:
             return AgentResult(
                 success=False,

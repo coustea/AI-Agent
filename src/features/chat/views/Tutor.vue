@@ -333,19 +333,6 @@
                     </button>
                   </div>
 
-                  <div
-                    v-if="msg.contextCompressionStage"
-                    :class="['context-compression-card', { 'is-done': msg.contextCompressionStage === 'compression_done' }]"
-                  >
-                    <div class="compression-orbit" aria-hidden="true">
-                      <span></span><span></span><span></span>
-                    </div>
-                    <div class="compression-copy">
-                      <strong>{{ getCompressionTitle(msg) }}</strong>
-                      <span>{{ msg.contextCompressionMessage }}</span>
-                    </div>
-                  </div>
-
                   <div v-if="msg.teachingDiagramGenerating" class="diagram-generation-panel">
                     <div class="diagram-blueprint" aria-hidden="true">
                       <span class="blueprint-node node-a"></span>
@@ -381,7 +368,11 @@
             <form
               ref="messageFormRef"
               class="minimal-input-wrapper"
-              :class="{ 'is-expanded': isExpandedInput, 'has-attachments': pendingFiles.length > 0 }"
+              :class="{
+                'is-expanded': isExpandedInput,
+                'has-attachments': pendingFiles.length > 0,
+                'is-responding': isResponding,
+              }"
               @submit.prevent="handleSend"
             >
               <div v-if="pendingFiles.length > 0" class="composer-attachments">
@@ -426,7 +417,9 @@
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
-                  placeholder="在此开启学术思辨（Enter 递交，Shift + Enter 换行）"
+                  rows="1"
+                  aria-label="向 AI 导师提问"
+                  placeholder="向 AI 导师提问"
                   @compositionstart="isComposing = true"
                   @compositionend="isComposing = false"
                   @keydown.enter="handleEnter"
@@ -440,9 +433,13 @@
                     class="input-tool-btn"
                     :disabled="uploadingFile"
                     @click="triggerFileUpload"
-                    aria-label="上传附件"
+                    :aria-label="uploadingFile ? '正在上传附件' : '上传附件'"
+                    :title="uploadingFile ? '正在上传附件' : '上传附件'"
                   >
-                    <el-icon aria-hidden="true"><Paperclip /></el-icon>
+                    <el-icon aria-hidden="true">
+                      <Loading v-if="uploadingFile" />
+                      <Paperclip v-else />
+                    </el-icon>
                     <span>{{ uploadingFile ? '上传中' : '附件' }}</span>
                   </button>
 
@@ -527,13 +524,29 @@
                     </button>
                   </el-tooltip>
 
-                  <button type="submit" class="minimal-send-btn" :class="{ 'can-send': userInput.trim() || pendingFiles.length > 0 }" aria-label="发送消息">
-                    <span class="send-arrow-glyph" aria-hidden="true">↑</span>
+                  <button
+                    type="submit"
+                    class="minimal-send-btn"
+                    :class="{
+                      'can-send': canSendMessage,
+                      'is-responding': isResponding,
+                    }"
+                    :disabled="!canSendMessage"
+                    :aria-label="isResponding ? 'AI 正在回答' : '发送消息'"
+                    :title="isResponding ? 'AI 正在回答，请稍候' : (canSendMessage ? '发送消息' : '请输入消息')"
+                  >
+                    <el-icon v-if="isResponding" class="responding-spinner" aria-hidden="true">
+                      <Loading />
+                    </el-icon>
+                    <span v-else class="send-arrow-glyph" aria-hidden="true">↑</span>
                   </button>
                 </div>
               </div>
             </form>
-            <div class="input-footer">内容由 AI 生成，仅供参考。</div>
+            <div class="input-footer">
+              <span>Enter 发送 · Shift + Enter 换行</span>
+              <span>内容由 AI 生成，仅供参考</span>
+            </div>
           </div>
         </div>
 
@@ -640,9 +653,9 @@ import {
   Microphone, Document, ChatDotRound, ChatLineSquare,
   Delete, Close, Paperclip,
   EditPen, Search, Timer, DataLine,
-  CircleCheckFilled, Download
+  CircleCheckFilled, Download, Loading
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
@@ -672,7 +685,6 @@ import {
   type PendingFile,
   type Attachment,
   type ChatMsg,
-  type ContextCompressionStage,
   type AgentActivity,
   normalizeTeachingDiagram,
   getDocumentType,
@@ -709,6 +721,7 @@ const lastAsrText = ref('')
 const hasSpeechDetected = ref(false)
 const lastAsrCommittedText = ref('')
 let lastAsrCommitAt = 0
+
 
 const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
 const {
@@ -871,6 +884,7 @@ const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
 
+
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
 const digitalHumanSessionId = ref<string | undefined>(undefined)
@@ -881,6 +895,22 @@ const searchKeyword = ref('')
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
 const streamingMsgRef = ref<ChatMsg | null>(null)
+
+/**
+ * 当前会话是否正处于回答链路中。
+ * 覆盖附件上传、等待首个 token、流式输出和数字人回答阶段。
+ */
+const isResponding = computed(() => (
+  uploadingFile.value
+  || isAIThinking.value
+  || streamingMsgId.value !== null
+))
+
+const canSendMessage = computed(() => (
+  !isResponding.value
+  && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
+))
+
 const streamManager = useChatStreamManager()
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAsrProcessing = ref(false)
@@ -898,52 +928,6 @@ let dragInitialX = 0
 let dragInitialY = 0
 let dragDistance = 0
 let dimTimer: number | null = null
-
-const COMPRESSION_STAGES = new Set<ContextCompressionStage>([
-  'compression_checking',
-  'compression_running',
-  'compression_done',
-])
-
-const compressionClearTimers = new Map<ChatMsg['id'], ReturnType<typeof window.setTimeout>>()
-
-const getCompressionTitle = (msg: ChatMsg) => {
-  return msg.contextCompressionStage === 'compression_done' ? '[认知断代] 核心记忆归档' : '[认知断代] 记忆整理中'
-}
-
-const clearCompressionStatus = (aiMsg?: ChatMsg) => {
-  if (!aiMsg) return
-  const timer = compressionClearTimers.get(aiMsg.id)
-  if (timer != null) {
-    window.clearTimeout(timer)
-    compressionClearTimers.delete(aiMsg.id)
-  }
-  aiMsg.contextCompressionStage = undefined
-  aiMsg.contextCompressionMessage = undefined
-}
-
-const scheduleCompressionClear = (aiMsg: ChatMsg) => {
-  const existing = compressionClearTimers.get(aiMsg.id)
-  if (existing != null) {
-    window.clearTimeout(existing)
-  }
-  const timer = window.setTimeout(() => {
-    aiMsg.contextCompressionStage = undefined
-    aiMsg.contextCompressionMessage = undefined
-    compressionClearTimers.delete(aiMsg.id)
-  }, 1000)
-  compressionClearTimers.set(aiMsg.id, timer)
-}
-
-const applyCompressionStatus = (aiMsg: ChatMsg, payload: { stage?: string; message?: string }) => {
-  if (!payload.stage || !payload.message || !COMPRESSION_STAGES.has(payload.stage as ContextCompressionStage)) return false
-  aiMsg.contextCompressionStage = payload.stage as ContextCompressionStage
-  aiMsg.contextCompressionMessage = payload.message
-  if (aiMsg.contextCompressionStage === 'compression_done') {
-    scheduleCompressionClear(aiMsg)
-  }
-  return true
-}
 
 type AgentStatusPayload = {
   activity_id: string
@@ -994,9 +978,7 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
     const stage = data.stage as string | undefined
     if (['teaching_diagram_generate', 'diagram_start', 'diagram_generate'].includes(stage || '')) {
       aiMsg.teachingDiagramGenerating = true
-      return
     }
-    applyCompressionStatus(aiMsg, { stage: stage || '', message: event.message })
     return
   }
 
@@ -1598,16 +1580,16 @@ const stopStreamFlushLoop = () => {
 const autoResize = () => {
   const el = textareaRef.value
   if (!el) return
-  el.style.height = '24px'
-  const currentHeight = el.scrollHeight
 
-  if (currentHeight > 30) {
-    isExpandedInput.value = true
-    el.style.height = `${Math.min(currentHeight, 120)}px`
-  } else {
-    isExpandedInput.value = false
-    el.style.height = '24px'
-  }
+  const minHeight = 28
+  const maxHeight = 200
+
+  el.style.height = `${minHeight}px`
+  const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)
+
+  el.style.height = `${nextHeight}px`
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  isExpandedInput.value = nextHeight > 40
 }
 
 const getPointerPosition = (e: MouseEvent | TouchEvent) => {
@@ -1850,7 +1832,6 @@ const switchSession = async (sessionId: string) => {
       onDone: () => {
         isStreamDone = true
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        clearCompressionStatus(aiMsg)
         clearAgentStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
@@ -1867,7 +1848,6 @@ const switchSession = async (sessionId: string) => {
         stopStreamFlushLoop()
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        clearCompressionStatus(aiMsg)
         clearAgentStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
@@ -1915,19 +1895,47 @@ const switchSession = async (sessionId: string) => {
 }
 
 const archiveSession = async (sessionId: string) => {
+  const targetSession = sessions.value.find(session => session.id === sessionId)
+  const sessionTitle = targetSession?.title?.trim() || '新建对话'
+
   try {
-    // Clean up any stream state for this session before deleting
+    await ElMessageBox.confirm(
+      `确定删除“${sessionTitle}”吗？删除后无法恢复。`,
+      '删除会话',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        closeOnClickModal: false,
+        closeOnPressEscape: true,
+        showClose: false,
+        customClass: 'session-delete-confirm',
+        confirmButtonClass: 'session-delete-confirm-btn',
+        cancelButtonClass: 'session-delete-cancel-btn',
+      },
+    )
+  } catch {
+    // 用户取消或关闭确认框，不执行删除。
+    return
+  }
+
+  try {
+    // 只有确认后才清理流状态并调用删除接口。
     streamManager.clearStream(sessionId)
     await deleteSession(sessionId)
-    sessions.value = sessions.value.filter(s => s.id !== sessionId)
+    sessions.value = sessions.value.filter(session => session.id !== sessionId)
+
     if (currentSessionId.value === sessionId) {
       currentSessionId.value = undefined
       messages.value = []
+
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0]!.id)
       }
     }
-  } catch {
+
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error) || '删除会话失败，请稍后重试')
   }
 }
 
@@ -2230,7 +2238,6 @@ const handleSend = async () => {
       onDone: () => {
         isStreamDone = true
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        clearCompressionStatus(aiMsg)
         if (aiMsg) aiMsg.teachingDiagramGenerating = false
 
         if (pendingRenderQueueStart >= pendingRenderQueue.length) {
@@ -2245,7 +2252,6 @@ const handleSend = async () => {
         stopStreamFlushLoop()
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        clearCompressionStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
           if (!aiMsg.content) aiMsg.content = '连接中断，请刷新页面后重试。'
@@ -2355,8 +2361,6 @@ onBeforeUnmount(() => {
   streamingMsgRef.value = null
   clearPendingFiles()
   if (dimTimer) clearTimeout(dimTimer)
-  compressionClearTimers.forEach(timer => window.clearTimeout(timer))
-  compressionClearTimers.clear()
   document.removeEventListener('mousedown', handleGlobalClick)
   document.removeEventListener('touchstart', handleGlobalClick)
 })
@@ -2369,80 +2373,6 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-xl) !important;
   border: none !important;
   box-shadow: var(--shadow-lg) !important;
-}
-
-.context-compression-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  max-width: min(520px, 100%);
-  margin-top: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  box-shadow: var(--shadow-sm);
-}
-
-.context-compression-card.is-done {
-  border-color: rgba(22, 163, 74, 0.45);
-}
-
-.compression-orbit {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-}
-
-.compression-orbit span {
-  position: absolute;
-  inset: 6px;
-  border: 2px solid transparent;
-  border-top-color: #0891b2;
-  border-radius: 50%;
-  animation: compression-spin 1s linear infinite;
-}
-
-.compression-orbit span:nth-child(2) {
-  inset: 3px;
-  border-top-color: #16a34a;
-  animation-duration: 1.4s;
-  animation-direction: reverse;
-}
-
-.compression-orbit span:nth-child(3) {
-  inset: 9px;
-  border-top-color: #64748b;
-  animation-duration: 0.8s;
-}
-
-.compression-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.compression-copy strong {
-  font-size: 0.88rem;
-  font-weight: var(--weight-semibold);
-  color: var(--color-text);
-  line-height: 1.35;
-}
-
-.compression-copy span {
-  font-size: 0.8rem;
-  line-height: 1.45;
-  color: var(--color-text-secondary);
-}
-
-@keyframes compression-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .tutor-dashboard {
@@ -3825,10 +3755,22 @@ onBeforeUnmount(() => {
 
 .mode-standard .session-sidebar {
   background: var(--color-bg);
-  border-right: 1px solid var(--color-bg);
+  border-right: 1px solid #dde2e8;
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+.session-sidebar::after {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  z-index: 2;
+  width: 1px;
+  background: #dde2e8;
+  content: "";
+  pointer-events: none;
 }
 
 .mode-standard .chat-viewport {
@@ -4656,39 +4598,88 @@ onBeforeUnmount(() => {
 }
 
 .minimal-input-panel {
-  padding: 0 clamp(16px, 3vw, 38px) 16px;
-  background: linear-gradient(to top, var(--color-surface) 72%, transparent);
+  position: relative;
+  z-index: 5;
+  padding: 16px clamp(16px, 3vw, 38px) 14px;
+  background:
+    linear-gradient(
+      to top,
+      var(--color-surface) 0%,
+      var(--color-surface) 76%,
+      rgba(255, 255, 255, 0.88) 90%,
+      transparent 100%
+    );
 }
 
 .minimal-input-wrapper {
-  max-width: 900px;
-  gap: 9px;
-  padding: 11px 12px 10px;
+  width: min(100%, 860px);
+  max-width: 860px;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  overflow: hidden;
   background: var(--color-surface);
-  border: 1px solid #d9dee5;
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.075);
+  border: 1px solid #dfe3e8;
+  border-radius: 24px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 7px 24px rgba(15, 23, 42, 0.07);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.minimal-input-wrapper:hover {
+  border-color: #cfd5dc;
 }
 
 .minimal-input-wrapper:focus-within {
-  border-color: #9ba8b8;
-  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.09);
+  border-color: #b9c1cb;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 9px 30px rgba(15, 23, 42, 0.09);
 }
 
 .minimal-input-wrapper textarea {
-  min-height: 30px;
-  padding: 2px 4px;
-  font-size: 0.96rem;
+  width: 100%;
+  min-height: 28px;
+  max-height: 200px;
+  padding: 2px 4px 3px;
+  overflow-y: hidden;
+  color: var(--color-text);
+  font-size: 0.98rem;
   line-height: 1.55;
+  scrollbar-color: #c8ced6 transparent;
+  scrollbar-width: thin;
+}
+
+.minimal-input-wrapper textarea::placeholder {
+  color: #8b949f;
+  opacity: 1;
+}
+
+.minimal-input-wrapper textarea::-webkit-scrollbar {
+  width: 5px;
+}
+
+.minimal-input-wrapper textarea::-webkit-scrollbar-thumb {
+  background: #c8ced6;
+  border-radius: 999px;
+}
+
+.minimal-input-wrapper textarea::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .composer-attachments {
   display: flex;
   gap: 8px;
   width: 100%;
-  padding-bottom: 9px;
+  padding: 0 2px 10px;
   overflow-x: auto;
   border-bottom: 1px solid #edf0f3;
+  scrollbar-color: #cfd5dc transparent;
+  scrollbar-width: thin;
 }
 
 .composer-attachment {
@@ -4697,7 +4688,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: #f7f8fa;
   border: 1px solid #e1e5ea;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .composer-attachment.is-image {
@@ -4738,12 +4729,16 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 5px;
   right: 5px;
+  display: grid;
+  place-items: center;
   width: 22px;
   height: 22px;
   padding: 0;
   color: #fff;
   background: rgba(15, 23, 42, .65);
-  border-radius: 6px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
   backdrop-filter: blur(6px);
 }
 
@@ -4753,31 +4748,51 @@ onBeforeUnmount(() => {
   border: 1px solid #dfe3e8;
 }
 
+.minimal-action-bar {
+  min-height: 36px;
+  margin-top: 0;
+}
+
+.action-left,
+.action-right {
+  gap: 6px;
+}
+
+.action-left {
+  min-width: 0;
+}
+
 .input-tool-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  min-height: 30px;
-  padding: 5px 8px;
-  color: var(--color-text-muted);
+  min-height: 32px;
+  padding: 5px 10px;
+  color: #5f6874;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 999px;
   cursor: pointer;
-  font-size: 11px;
-  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+  font-size: 12px;
+  font-weight: 520;
+  white-space: nowrap;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
 .input-tool-btn .el-icon {
-  width: 15px;
-  height: 15px;
-  font-size: 15px;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
 }
 
-.input-tool-btn:hover {
-  color: var(--color-text-secondary);
-  background: #f4f6f8;
-  border-color: #e3e7eb;
+.input-tool-btn:hover:not(:disabled) {
+  color: #22272e;
+  background: #f3f5f7;
+  border-color: #e6e9ed;
 }
 
 .input-tool-btn.is-active-blue {
@@ -4794,22 +4809,74 @@ onBeforeUnmount(() => {
 
 .input-tool-btn:disabled {
   cursor: wait;
-  opacity: .55;
+  opacity: .58;
 }
 
 .minimal-send-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  margin-left: 2px;
+  border-radius: 50%;
 }
 
 .send-arrow-glyph {
-  font-size: 22px;
+  font-size: 23px;
+  transform: translateY(-1px);
 }
 
 .input-footer {
-  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+  width: min(100%, 860px);
+  margin-top: 7px;
+  color: #8a939e;
   font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.input-footer span + span::before {
+  margin-right: 14px;
+  color: #c2c8cf;
+  content: "·";
+}
+
+.minimal-input-wrapper.is-responding {
+  border-color: #d5dae0;
+  background: #fcfcfd;
+}
+
+.minimal-send-btn:disabled {
+  cursor: default;
+}
+
+.minimal-send-btn.is-responding,
+.minimal-send-btn.is-responding:disabled {
+  color: #475569;
+  background: #eef2f6;
+  cursor: wait;
+  opacity: 1;
+}
+
+.minimal-send-btn.is-responding:hover {
+  background: #eef2f6;
+  transform: none;
+}
+
+.responding-spinner {
+  width: 17px;
+  height: 17px;
+  font-size: 17px;
+  animation: tutor-response-spin 0.8s linear infinite;
+}
+
+@keyframes tutor-response-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .diagram-preview-dialog :deep(.el-dialog) {
@@ -5010,4 +5077,59 @@ onBeforeUnmount(() => {
     animation: none;
   }
 }
+
+
+/* 删除确认框会 Teleport 到 body，因此使用全局选择器。 */
+:global(.session-delete-confirm.el-message-box) {
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgb(15 23 42 / 18%);
+}
+
+:global(.session-delete-confirm .el-message-box__header) {
+  padding: 0 0 10px;
+}
+
+:global(.session-delete-confirm .el-message-box__title) {
+  color: #111827;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+:global(.session-delete-confirm .el-message-box__content) {
+  padding: 0;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+:global(.session-delete-confirm .el-message-box__btns) {
+  gap: 10px;
+  padding: 20px 0 0;
+}
+
+:global(.session-delete-confirm-btn.el-button) {
+  min-width: 76px;
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+:global(.session-delete-confirm-btn.el-button:hover),
+:global(.session-delete-confirm-btn.el-button:focus) {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: #fff;
+}
+
+:global(.session-delete-cancel-btn.el-button) {
+  min-width: 76px;
+  border-color: #d1d5db;
+  background: #fff;
+  color: #374151;
+}
+
 </style>

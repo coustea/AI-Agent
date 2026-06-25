@@ -4,6 +4,7 @@
 验证规则：
 - 通用校验：success, content 非空, title, file_type, identity
 - 每类资源的特定契约
+- 内容去重：检查 avoid_overlap_with 配置，警告相似度过高的内容
 """
 
 from __future__ import annotations
@@ -12,13 +13,20 @@ import json
 import re
 from typing import TYPE_CHECKING, Any, Callable
 
+from app.infra.logging import get_logger
+
 if TYPE_CHECKING:
-    from app.resource.schemas import AgentResult, ResourceInput
+    from app.resource.schemas import AgentResult, ResourceInput, TeachingPlan
+
+logger = get_logger(__name__)
 
 
 # Agent ID 常量
 BASE_RESOURCE_AGENT_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
 AGGREGATION_AGENT_IDS = frozenset({"ppt", "video"})
+
+# 内容相似度阈值
+CONTENT_SIMILARITY_THRESHOLD = 0.7
 
 
 class ValidationError(ValueError):
@@ -229,20 +237,145 @@ def validate_agent_result(
     agent_id: str,
     result: "AgentResult",
     input_data: "ResourceInput",
-) -> None:
-    """执行通用校验和特定校验。"""
+    existing_results: dict[str, "AgentResult"] | None = None,
+) -> list[str]:
+    """执行通用校验和特定校验，返回内容重复警告列表。
+
+    Args:
+        agent_id: Agent 标识符
+        result: Agent 输出结果
+        input_data: Agent 输入数据
+        existing_results: 已完成的其他 Agent 结果（用于去重检查）
+
+    Returns:
+        内容重复警告列表（不影响验证结果，仅作为警告）
+    """
     validate_common_result(agent_id, result, input_data)
 
     validator = AGENT_VALIDATORS.get(agent_id)
     if validator:
         validator(result, input_data)
 
+    # 内容去重检查
+    overlap_warnings = []
+    if existing_results and input_data.teaching_plan:
+        overlap_warnings = check_content_overlap(
+            agent_id, result, input_data.teaching_plan, existing_results
+        )
+
+    return overlap_warnings
+
+
+def check_content_overlap(
+    agent_id: str,
+    result: "AgentResult",
+    teaching_plan: "TeachingPlan",
+    existing_results: dict[str, "AgentResult"],
+) -> list[str]:
+    """检查内容是否与 avoid_overlap_with 配置中的 Agent 重复。
+
+    使用简单关键词重叠率作为相似度指标，避免引入重量级 NLP 库。
+
+    Args:
+        agent_id: 当前 Agent ID
+        result: 当前 Agent 结果
+        teaching_plan: 教学计划（包含 avoid_overlap_with 配置）
+        existing_results: 已完成的其他 Agent 结果
+
+    Returns:
+        重复警告列表
+    """
+    warnings = []
+
+    # 查找当前 Agent 的 assignment
+    assignment = None
+    for a in teaching_plan.agent_assignments:
+        if a.agent_id == agent_id:
+            assignment = a
+            break
+
+    if not assignment or not assignment.avoid_overlap_with:
+        return warnings
+
+    # 提取当前内容的关键词
+    current_keywords = extract_keywords(result.content)
+
+    for other_agent_id in assignment.avoid_overlap_with:
+        if other_agent_id not in existing_results:
+            continue
+
+        other_content = existing_results[other_agent_id].content
+        other_keywords = extract_keywords(other_content)
+
+        # 计算关键词重叠率
+        similarity = compute_keyword_overlap(current_keywords, other_keywords)
+
+        if similarity > CONTENT_SIMILARITY_THRESHOLD:
+            warning = (
+                f"内容与 {other_agent_id} 相似度 {similarity:.1%} 超过阈值 "
+                f"{CONTENT_SIMILARITY_THRESHOLD:.1%}，可能存在重复"
+            )
+            warnings.append(warning)
+            logger.warning(
+                "Agent %s 内容重复检测: overlap_with=%s similarity=%.2f",
+                agent_id, other_agent_id, similarity
+            )
+
+    return warnings
+
+
+def extract_keywords(content: str, max_keywords: int = 50) -> set[str]:
+    """从内容中提取关键词（简单实现：提取非停用词）。
+
+    使用分词和停用词过滤，不依赖外部 NLP 库。
+    """
+    # 中文停用词（简化版）
+    stop_words = {
+        "的", "是", "在", "有", "和", "与", "或", "但", "如果", "因为",
+        "所以", "那么", "这", "那", "它", "他", "她", "我", "你", "我们",
+        "可以", "需要", "应该", "必须", "能够", "可能", "已经", "将", "要",
+        "一个", "一些", "所有", "每个", "任何", "这种", "那种", "这样",
+        "通过", "使用", "进行", "实现", "完成", "开始", "结束", "继续",
+    }
+
+    # 提取中文词汇和英文单词
+    words = set()
+
+    # 提取中文连续字符（2-4字的词）
+    chinese_pattern = re.findall(r"[a-zA-Z0-9\u4e00-\u9fff]{2,10}", content)
+    for w in chinese_pattern:
+        w_lower = w.lower()
+        if w_lower not in stop_words and len(w_lower) >= 2:
+            words.add(w_lower)
+
+    # 提取英文单词
+    english_words = re.findall(r"[a-zA-Z]{3,}", content)
+    for w in english_words:
+        w_lower = w.lower()
+        if w_lower not in stop_words:
+            words.add(w_lower)
+
+    return set(list(words)[:max_keywords])
+
+
+def compute_keyword_overlap(set1: set[str], set2: set[str]) -> float:
+    """计算两个关键词集合的重叠率（Jaccard 相似度）。"""
+    if not set1 or not set2:
+        return 0.0
+
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+
+    return intersection / union if union > 0 else 0.0
+
 
 __all__ = [
     "ValidationError",
     "validate_common_result",
     "validate_agent_result",
+    "check_content_overlap",
     "AGENT_VALIDATORS",
     "BASE_RESOURCE_AGENT_IDS",
     "AGGREGATION_AGENT_IDS",
+    "CONTENT_SIMILARITY_THRESHOLD",
 ]

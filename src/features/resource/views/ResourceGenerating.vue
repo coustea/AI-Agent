@@ -38,7 +38,6 @@
         </el-button>
       </div>
     </header>
-
     <main class="agent-stage-shell-v4">
       <section class="dispatch-workbench-panel dispatch-workbench-panel-v4">
         <div class="workbench-header workbench-header-v4">

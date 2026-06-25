@@ -18,8 +18,6 @@ export interface Attachment {
   mimeType?: string
 }
 
-export type ContextCompressionStage = 'compression_checking' | 'compression_running' | 'compression_done'
-
 export interface AgentActivityDetail {
   tool_name?: string
   input?: string
@@ -51,8 +49,6 @@ export interface ChatMsg {
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
   agentActivities?: AgentActivity[]
-  contextCompressionStage?: ContextCompressionStage
-  contextCompressionMessage?: string
 }
 
 const SUPPORTED_DIAGRAM_TYPES = new Set([

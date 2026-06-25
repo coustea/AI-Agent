@@ -4,11 +4,10 @@
   START → planning → worker_node(×N, Send并行) → merge_workers
     → [ppt_node, video_node] (并行) → merge_aggregation → save_node
 
-重构说明（v2）：
-- 普通 Agent 通过 execution.execute_resource_agent 执行
-- 验证通过 validation.validate_agent_result 完成
-- 持久化由 execution 层直接调用 service.save_agent_result
-- 最终状态由 save_node 调用 service.finalize_generation 从数据库计算
+核心优化：
+- 策略传递：teaching_strategy 显式注入到每个 Agent 的 agent_config
+- 动态覆盖追踪：每个 Agent 生成时知道已覆盖的大纲项
+- 内容去重：在 merge_workers 时检查 avoid_overlap_with 配置
 """
 
 from __future__ import annotations
@@ -21,9 +20,11 @@ from app.infra.database import session_scope
 from app.resource.agents import AGENT_REGISTRY
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
+from app.resource.workflow.validation import check_content_overlap
 from sqlalchemy import select
 from app.infra.models import GeneratedResourceItem
 from app.resource.schemas import (
+    AgentResult,
     DownstreamContext,
     ResourceInput,
     TeachingPlan,
@@ -36,7 +37,7 @@ from app.resource.service import (
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
 )
-# No ResourceAgentTracker needed
+
 logger = logging.getLogger(__name__)
 
 BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
@@ -50,13 +51,38 @@ def build_agent_resource_input(
     teaching_plan: TeachingPlan | None,
     profile: dict[str, Any],
     upstream_handoffs: dict[str, DownstreamContext],
-    agent_config_extra: dict[str, Any] | None,
-):
-    """为指定 agent 构建 ResourceInput 输入。"""
+    agent_config_extra: dict[str, Any] | None = None,
+    covered_outline_ids: list[str] | None = None,
+) -> ResourceInput:
+    """为指定 agent 构建 ResourceInput 输入。
+
+    Args:
+        request: 用户请求
+        resource_id: 资源 ID
+        agent_id: Agent 标识符
+        teaching_plan: 教学计划（包含策略和大纲）
+        profile: 学习者画像
+        upstream_handoffs: 上游 Agent 交接数据
+        agent_config_extra: 额外配置
+        covered_outline_ids: 已覆盖的大纲 ID（动态追踪）
+
+    Returns:
+        ResourceInput 实例
+    """
     agent_config = request.agent_configs.get(agent_id, {})
     if agent_config_extra:
         agent_config = {**agent_config, **agent_config_extra}
+
+    # 策略传递：从 teaching_plan 提取 teaching_strategy
+    if teaching_plan and teaching_plan.teaching_strategy:
+        agent_config["teaching_strategy"] = teaching_plan.teaching_strategy
+
+    # 动态覆盖追踪：传递已覆盖的大纲项
+    if covered_outline_ids:
+        agent_config["already_covered_outline_ids"] = covered_outline_ids
+
     agent_config["agent_id"] = agent_id
+
     return ResourceInput(
         resource_id=resource_id,
         learning_need=request.learning_need,
@@ -87,6 +113,33 @@ async def get_handoffs(
         if item.downstream_context and isinstance(item.downstream_context, dict):
             handoffs[item.agent_type] = DownstreamContext.model_validate(item.downstream_context)
     return handoffs
+
+
+async def get_covered_outline_ids(
+    resource_id: int,
+) -> list[str]:
+    """获取已覆盖的大纲 ID（用于动态追踪）。
+
+    从数据库读取已完成 Agent 的 downstream_context，
+   提取 covered_outline_ids 并合并。
+    """
+    async with session_scope() as session:
+        stmt = (
+            select(GeneratedResourceItem.downstream_context)
+            .where(GeneratedResourceItem.resource_id == resource_id)
+            .where(GeneratedResourceItem.status == "completed")
+            .where(GeneratedResourceItem.agent_type.in_(BASE_RESOURCE_AGENT_IDS))
+        )
+        result = await session.exec(stmt)
+        rows = result.all()
+
+    covered: set[str] = set()
+    for row in rows:
+        if row and isinstance(row, dict):
+            for oid in row.get("covered_outline_ids", []):
+                covered.add(oid)
+
+    return sorted(covered)
 
 
 async def get_coverage(
@@ -330,10 +383,15 @@ def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
 async def worker_node(state: WorkerInputState) -> dict[str, Any]:
     """Worker 节点 — 执行单个基础 agent 的资源生成并持久化结果。
 
-    委托给 _execute_non_planning_agent，它调用 execute_resource_agent。
-    基础 Agent 必须有 downstream_context。
+    优化：
+    - 策略传递：teaching_strategy 注入 agent_config
+    - 动态覆盖追踪：传递已覆盖的大纲项，避免重复
     """
     agent_id = state["agent_id"]
+
+    # 动态覆盖追踪：获取已覆盖的大纲 ID
+    covered_ids = await get_covered_outline_ids(state["resource_id"])
+
     resource_input = build_agent_resource_input(
         request=state["request"],
         resource_id=state["resource_id"],
@@ -341,7 +399,7 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
         teaching_plan=state["teaching_plan"],
         profile=state["profile"],
         upstream_handoffs={},
-        agent_config_extra=None,
+        covered_outline_ids=covered_ids if covered_ids else None,
     )
 
     return await _execute_non_planning_agent(
@@ -359,16 +417,17 @@ async def worker_node(state: WorkerInputState) -> dict[str, Any]:
 
 
 async def merge_workers_node(state: ParentState) -> dict[str, Any]:
-    """合并 Worker 结果 — 汇总成功/失败计数，检查大纲覆盖情况。
+    """合并 Worker 结果 — 汇总成功/失败计数，检查大纲覆盖和内容重复。
 
-    从数据库读取成功持久化的 Agent 信息。
+    优化：
+    - 内容去重：检查 avoid_overlap_with 配置，警告相似度过高的内容
     """
     results = state.get("results") or {}
     failures = state.get("failures") or {}
     success_count = len(results)
     fail_count = len(failures)
     worker_agents = base_worker_ids(state)
-    # 直接使用 request 的 enabled_agent_ids，前端已按要求传参
+
     coordinator_status = "failed" if worker_agents and success_count == 0 else "finished"
     message = (
         f"基础资源并行生成完成：成功 {success_count} 个，失败 {fail_count} 个"
@@ -377,6 +436,34 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     )
     stat = "completed" if coordinator_status == "finished" else "failed"
     await state["events"].send(COORDINATOR_AGENT_ID, stat, message, 70)
+
+    # 内容去重检查：读取已完成 Agent 的内容并检查相似度
+    if results and state.get("teaching_plan"):
+        async with session_scope() as session:
+            service = ResourceService(session)
+            items = await service.list_resource_items(state["user_id"], state["resource_id"])
+
+        existing_results: dict[str, AgentResult] = {}
+        for item in items:
+            if item.agent_type in BASE_RESOURCE_AGENT_IDS and item.status == "completed":
+                existing_results[item.agent_type] = AgentResult(
+                    success=True,
+                    content=item.content or "",
+                    title=item.title or "",
+                    file_type=item.file_type or "markdown",
+                )
+
+        # 检查每个成功 Agent 的内容重叠
+        for agent_id in results:
+            if agent_id in existing_results:
+                warnings = check_content_overlap(
+                    agent_id,
+                    existing_results[agent_id],
+                    state["teaching_plan"],
+                    existing_results,
+                )
+                for warning in warnings:
+                    await state["events"].send(agent_id, "running", f"⚠️ {warning}", 70)
 
     # 从数据库读取覆盖情况
     coverage_report = await get_coverage(
