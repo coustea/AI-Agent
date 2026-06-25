@@ -31,7 +31,7 @@ from app.chat.schemas import (
     EvidenceSet,
     TutorTurnContext,
 )
-from app.chat.diagram import TeachingDiagramGenerator
+from app.chat.schemas.diagram import TeachingDiagramGenerator
 from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer
 from app.chat.agent.tools import (
     WEB_RESEARCH_TOOL_NAMES,

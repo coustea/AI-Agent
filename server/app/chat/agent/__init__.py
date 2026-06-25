@@ -25,11 +25,6 @@ from app.chat.agent.nodes import (
     answer_node,
     diagram_node,
 )
-from app.chat.agent.routing import (
-    route_after_classify,
-    route_after_analysis,
-    route_after_answer,
-)
 from app.chat.agent.state import TutorAgentState
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import TutorRuntimeEvent, TutorAgentInput
@@ -38,6 +33,44 @@ from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
+
+
+# ── 图路由函数 ──
+
+
+def route_after_classify(state: TutorAgentState) -> str:
+    cls = state.get("classification")
+    if cls is None:
+        return "answer_node"
+    if cls.needs_file_analysis and state.get("attachments"):
+        return "analysis_files"
+    if cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory:
+        return "search_node"
+    return "answer_node"
+
+
+def route_after_analysis(state: TutorAgentState) -> str:
+    cls = state.get("classification")
+    if cls and (
+        cls.needs_knowledge_search
+        or cls.needs_web_search
+        or cls.needs_profile
+        or cls.needs_long_term_memory
+    ):
+        return "search_node"
+    return "answer_node"
+
+
+def route_after_answer(state: TutorAgentState) -> str:
+    cls = state.get("classification")
+
+    if cls and cls.needs_diagram:
+        return "diagram_node"
+
+    if state.get("need_teaching_diagram") and state.get("final_answer"):
+        return "diagram_node"
+
+    return END
 
 
 class TutorAgent:

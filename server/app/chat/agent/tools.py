@@ -8,12 +8,13 @@ from __future__ import annotations
 from typing import Any
 
 from app.chat.tools.knowledge import SearchKnowledgeBaseArgs, make_search_knowledge_base
-from app.chat.tools.memory import (
+from app.chat.tools.user_context import (
     LONG_TERM_MEMORY_CATEGORY_ALIASES,
     GetLongTermMemoryArgs,
+    GetLearnerProfileArgs,
     make_get_long_term_memory,
+    make_get_learner_profile,
 )
-from app.chat.tools.profile import GetLearnerProfileArgs, make_get_learner_profile
 from app.chat.tools.search import (
     SearchQueryArgs,
     duckduckgo_instant_answer,

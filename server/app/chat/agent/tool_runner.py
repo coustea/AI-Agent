@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 from app.chat.agent.tools import (
-    LONG_TERM_MEMORY_CATEGORY_ALIASES,
     TOOL_EVIDENCE_TYPES,
     WEB_RESEARCH_TOOL_NAMES,
 )
+from app.chat.tools.user_context import LONG_TERM_MEMORY_CATEGORY_ALIASES
 from app.chat.schemas import Evidence, normalize_tool_result
 from app.infra.logging import get_logger
 from app.infra.tool_excute import ToolExcute

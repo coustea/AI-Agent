@@ -1,9 +1,4 @@
-"""LangGraph 图状态定义。
-
-各节点通过返回 dict 更新部分字段。列表字段使用 Annotated[T, operator.add] 约简器：
-节点只需返回新追加项，LangGraph 自动与已有值合并。
-event_queue 使用 UntrackedValue：运行时可读写但不参与序列化。
-"""
+"""LangGraph 图状态定义。"""
 
 from __future__ import annotations
 
@@ -18,6 +13,8 @@ from app.chat.schemas import TutorRuntimeEvent, ClassificationResult
 
 
 class TutorAgentState(TypedDict, total=False):
+    """LangGraph 图状态定义。"""
+
     # 请求（无约简器 — 后写覆盖）
     user_id: int
     session_id: str
