@@ -21,7 +21,6 @@ from app.chat.agent.state import TutorAgentState
 from app.chat.emitter import build_agent_status_payload, build_attachment_status_payload
 from app.chat.agent.tool_runner import (
     ToolExecutionContext,
-    ToolExecutionResult,
     TutorToolRunner,
 )
 from app.chat.schemas import (

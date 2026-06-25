@@ -8,10 +8,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.exc import ProgrammingError
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -19,8 +18,6 @@ from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
-    ChatMessage,
-    ChatSession,
     ChatLongTermMemory,
     CourseProfile,
     GlobalProfile,
@@ -38,7 +35,6 @@ from app.profile.types import (
     make_default_profile_json,
     make_default_score_json,
 )
-from app.chat.memory.types import extract_content_text
 from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
@@ -399,6 +395,16 @@ class ProfileService:
                 session_id=session_id,
             )
 
+            # 无对话内容时跳过更新
+            if not recent_dialogue or not recent_dialogue.strip():
+                logger.info("[ProfileService] 全局画像: 无对话内容可提取，跳过更新")
+                return {
+                    "profile_updated": False,
+                    "profile_json": global_profile.profile_json or {},
+                    "updated_at": global_profile.updated_at,
+                    "reason": "no_dialogue",
+                }
+
             long_term_memory = await self._get_long_term_memory_text(user_id=user_id)
             logger.info("[ProfileService] 全局画像: recent_dialogue长度=%s long_term_memory长度=%s",
                          len(recent_dialogue), len(long_term_memory))
@@ -501,6 +507,18 @@ class ProfileService:
                 user_id=user_id,
                 session_id=session_id,
             )
+
+            # 无对话内容时跳过更新
+            if not recent_dialogue or not recent_dialogue.strip():
+                logger.info("[ProfileService] 课程画像: 无对话内容可提取，跳过更新")
+                return {
+                    "profile_updated": False,
+                    "course_name": course_name,
+                    "profile_markdown": target_profile.profile_markdown,
+                    "updated_at": target_profile.updated_at,
+                    "reason": "no_dialogue",
+                }
+
             long_term_memory = await self._get_long_term_memory_text(user_id=user_id)
             logger.info("[ProfileService] 课程画像: recent_dialogue长度=%s long_term_memory长度=%s",
                          len(recent_dialogue), len(long_term_memory))
@@ -606,30 +624,25 @@ class ProfileService:
         max_messages: int = 20,
         after_message_id: int = 0,
     ) -> tuple[str, int]:
-        """构建最近对话文本，用于画像推理上下文注入。"""
-        stmt = (
-            select(ChatMessage)
-            .where(
-                ChatMessage.user_id == user_id,
-                ChatMessage.session_id == session_id,
-                ChatMessage.role.in_(["user", "assistant"]),
-                ChatMessage.id > after_message_id,
-            )
-            .order_by(ChatMessage.id.desc())
-            .limit(max_messages)
+        """构建最近对话文本，委托给 ChatMemoryService._build_dialogue_since。
+
+        避免与 memory/service.py 中的对话构建逻辑重复。
+        """
+        from app.chat.memory.service import get_chat_memory_service
+        memory_service = get_chat_memory_service()
+
+        dialogue, message_count, latest_message_id = await memory_service._build_dialogue_since(
+            db=db,
+            user_id=user_id,
+            session_id=session_id,
+            after_message_id=after_message_id,
+            limit=max_messages,
         )
-        messages = list((await db.exec(stmt)).all())
-        if not messages:
-            return "", after_message_id
-        lines: list[str] = []
-        latest_message_id = after_message_id
-        for msg in reversed(messages):
-            latest_message_id = max(latest_message_id, int(msg.id or 0))
-            role_label = "学生" if msg.role == "user" else "辅导老师"
-            content = extract_content_text(msg.content)
-            if content:
-                lines.append(f"{role_label}：{content[:500]}")
-        return "\n".join(lines), latest_message_id
+        logger.debug(
+            "[ProfileService._build_recent_dialogue] 委托构建对话: user_id=%s session_id=%s messages=%s length=%s",
+            user_id, session_id, message_count, len(dialogue),
+        )
+        return dialogue, latest_message_id
 
     async def _get_long_term_memory_text(self, *, user_id: int) -> str:
         """获取用户的长期记忆 Markdown 文本。"""

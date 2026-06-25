@@ -108,6 +108,11 @@ class ChatLongTermMemoryService:
             logger.info("[ChatLongTermMemoryService.maybe_update] 未触发更新，跳过")
             return {"updated": False, "analyzed": False}
 
+        # 检查是否有新对话内容可以提取 — 无内容则跳过
+        if not new_dialogue or not new_dialogue.strip():
+            logger.info("[ChatLongTermMemoryService.maybe_update] 无新对话内容可提取，跳过")
+            return {"updated": False, "analyzed": False, "reason": "no_dialogue"}
+
         # 加载现有的长期记忆记录，不存在则创建空白模板
         existing = (
             await db.exec(

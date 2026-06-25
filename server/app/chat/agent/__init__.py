@@ -19,7 +19,6 @@ from typing import Any, AsyncIterator
 from langgraph.graph import END, START, StateGraph
 
 from app.chat.agent.nodes import (
-    build_evidence_context,
     classify_node,
     analysis_files_node,
     search_node,
