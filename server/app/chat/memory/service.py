@@ -96,6 +96,30 @@ class ChatMemoryService:
             return chat_session
 
     # -------------------------------------------------------------------
+    # get_or_create_session: 获取或创建会话
+    #
+    # 如果 session_id 存在且属于该用户，返回现有会话；
+    # 否则创建一个新会话。
+    # -------------------------------------------------------------------
+    async def get_or_create_session(self, *, user_id: int, session_id: str) -> Any:
+        async with session_scope() as db:
+            chat_session = (
+                await db.exec(
+                    select(ChatSession).where(
+                        ChatSession.id == session_id,
+                        ChatSession.user_id == user_id,
+                    )
+                )
+            ).first()
+            if chat_session:
+                return chat_session
+            chat_session = ChatSession(id=session_id, user_id=user_id)
+            db.add(chat_session)
+            await db.commit()
+            await db.refresh(chat_session)
+            return chat_session
+
+    # -------------------------------------------------------------------
     # list_sessions: 获取用户未归档的会话列表
     #
     # 按 updated_at 降序排列（最近活跃的在前），限制返回数量。
