@@ -19,7 +19,7 @@ from app.infra.tool_excute import Tool, ToolExcute
 
 class TestToolConstants:
     def test_evidence_types_include_core_tools(self):
-        from app.chat.agent.nodes import TOOL_EVIDENCE_TYPES
+        from app.chat.agent.tools import TOOL_EVIDENCE_TYPES
 
         # 验证核心工具的 evidence_type 映射
         assert TOOL_EVIDENCE_TYPES["get_learner_profile"] == "learner_profile"
@@ -27,7 +27,7 @@ class TestToolConstants:
         assert TOOL_EVIDENCE_TYPES["search_knowledge_base"] == "knowledge_base"
 
     def test_evidence_types_include_web_research_tools(self):
-        from app.chat.agent.nodes import TOOL_EVIDENCE_TYPES, WEB_RESEARCH_TOOL_NAMES
+        from app.chat.agent.tools import TOOL_EVIDENCE_TYPES, WEB_RESEARCH_TOOL_NAMES
 
         # 所有 web 研究工具应该映射到 "web_search"
         for name in WEB_RESEARCH_TOOL_NAMES:
