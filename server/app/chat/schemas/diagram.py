@@ -1,4 +1,4 @@
-"""教学图解 Schema — 6 类图型。
+"""教学图解 Schema + 生成器。
 
 数据流：TeachingDiagramGenerator → LLM ainvoke_json(TeachingDiagram) → 前端渲染
 每个 Payload 使用 extra="forbid" 严格约束字段，防止 LLM 输出多余内容。
@@ -6,9 +6,20 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.infra.llm import get_llm
+from app.infra.logging import get_logger
+from app.infra.prompts import prompts
+
+if TYPE_CHECKING:
+    from app.chat.schemas.agent import TutorTurnContext
+    from app.chat.schemas.evidence import EvidenceSet
+
+logger = get_logger(__name__)
 
 
 TeachingDiagramType = Literal[
@@ -253,3 +264,39 @@ class TeachingDiagram(BaseModel):
         if not isinstance(self.visual_content, expected_type):
             raise ValueError("visual_content must match graph_type")
         return self
+
+
+# ── 教学图解生成器 ──
+
+
+class TeachingDiagramGenerator:
+    """教学图解生成器：基于学生问题和回答，让 LLM 生成结构化图解 JSON。"""
+
+    def __init__(self, llm=None) -> None:
+        self.llm = llm or get_llm()
+
+    async def generate(
+        self,
+        request: "TutorTurnContext",
+        answer: str,
+        evidence_set: "EvidenceSet",
+    ) -> dict:
+        attachment_context = "\n".join(
+            item.summary for item in evidence_set.items if item.evidence_type == "attachment"
+        ).strip()
+        context_text = attachment_context or "无额外上下文。"
+        prompt = (
+            f"学生问题：\n{request.user_input}\n\n"
+            f"最终回答：\n{answer}\n\n"
+            f"上下文：\n{context_text}\n\n"
+            "请生成一张能辅助学生理解答案的教学图解 JSON。"
+        )
+        diagram = await self.llm.ainvoke_json(
+            TeachingDiagram,
+            [
+                SystemMessage(content=prompts.get("chat").get("teaching_diagram")),
+                HumanMessage(content=prompt),
+            ],
+            temperature=0.1,
+        )
+        return diagram.model_dump(mode="json")

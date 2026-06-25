@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from app.chat.agent import TutorAgent
-from app.chat.application.context_builder import ChatContextBuilder, build_user_content
-from app.chat.application.event_mapper import ChatRuntimeEventMapper, SSE_EVENT_MAP, runtime_status
+from app.chat.context_builder import ChatContextBuilder, build_user_content
+from app.chat.event_mapper import ChatRuntimeEventMapper, SSE_EVENT_MAP, runtime_status
 from langchain_core.messages import AnyMessage
 from app.chat.emitter import ChatEvents, ChatEventName
 from app.chat.agent.background import run_background_memory_jobs
@@ -23,7 +23,7 @@ from app.chat.memory.service import get_chat_memory_service
 from app.chat.streaming import safety_filter
 from app.chat.schemas import TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
-from app.chat.storage.message_item import ChatMessageItem
+from app.chat.schemas import ChatMessageItem
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.logging import get_logger
 

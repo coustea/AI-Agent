@@ -14,6 +14,7 @@ from app.chat.schemas.evidence import (
     NormalizedToolResult,
     normalize_tool_result,
     UploadResponse,
+    ChatMessageItem,
 )
 
 from app.chat.schemas.agent import (
@@ -54,15 +55,16 @@ from app.chat.schemas.diagram import (
     TimelineTrack,
     TimelinePayload,
     TeachingDiagram,
+    TeachingDiagramGenerator,
 )
 
 __all__ = [
     "EvidenceType", "Evidence", "EvidenceSet", "UploadResponse",
     "SourceItem", "AgentError", "ToolInvocation", "AttachmentAnalysis",
-    "NormalizedToolResult", "normalize_tool_result",
+    "NormalizedToolResult", "normalize_tool_result", "ChatMessageItem",
     "TutorToolCall", "TutorTurnContext", "TutorAgentInput",
     "ClassificationResult", "TutorRuntimeEventType", "TutorRuntimeEvent",
-    "TeachingDiagramType", "TeachingContent",
+    "TeachingDiagramType", "TeachingContent", "TeachingDiagramGenerator",
     "ComparisonEntity", "ComparisonDimension", "VisualSummary", "ComparisonPayload",
     "FlowchartNodeType", "FlowchartNode", "FlowchartEdge", "FlowchartPayload",
     "SequenceMessage", "SequencePayload",

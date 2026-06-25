@@ -928,15 +928,7 @@ async def search_knowledge_base(
 
 
 # 知识库搜索工具的输入参数模型（用于 LLM tool call 参数校验）
-def _compact(text: str, *, limit: int = 3500) -> str:
-    """截断过长文本，防止撑爆 LLM 上下文窗口。
-
-    截断时会去除末尾空白并添加省略号标记。
-    """
-    value = str(text or "").strip()
-    if len(value) <= limit:
-        return value
-    return value[: limit - 3].rstrip() + "..."
+from app.chat.tools.user_context import _compact
 
 
 def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
