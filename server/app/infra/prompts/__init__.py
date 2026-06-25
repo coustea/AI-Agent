@@ -27,6 +27,11 @@ logger = get_logger(__name__)
 _PLACEHOLDER_RE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
 
 
+class PromptNotFoundError(KeyError):
+    """Prompt 不存在时抛出，便于调用方处理"""
+    pass
+
+
 class ModulePromptLoader:
     """Load prompt files for a single owning module."""
 
@@ -88,12 +93,10 @@ class ModulePromptLoader:
 
         text = self._store.get(key)
         if text is None:
-            logger.warning(
-                "[PromptLoader] %s prompt 不存在: %s",
-                self.module_name,
-                key,
+            raise PromptNotFoundError(
+                f"Prompt '{key}' not found in module '{self.module_name}'. "
+                f"Available: {sorted(self._store.keys())}"
             )
-            return ""
         return text
 
     def render(self, key: str, **kwargs: Any) -> str:

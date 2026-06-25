@@ -50,7 +50,7 @@ async def build_messages(
     )
 
 
-# 向后兼容 — 从 event_mapper 导入
+# 向后兼容 — 直接使用 SSE_EVENT_MAP
 _SSE_EVENT_MAP = SSE_EVENT_MAP
 
 

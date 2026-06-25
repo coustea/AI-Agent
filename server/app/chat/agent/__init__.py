@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from functools import partial
 from typing import Any, AsyncIterator
 
 from langgraph.graph import END, START, StateGraph
@@ -188,19 +189,12 @@ class TutorAgent:
     def _build_graph(self) -> Any:
         workflow = StateGraph(TutorAgentState)
 
-        # 节点函数是 async 的，LangGraph 会自动处理 async 节点
-        # 但必须直接传入 async callable，不能用同步 lambda 包装
-        async def _classify(s): return await classify_node(self, s, self.llm, prompts)
-        async def _analysis(s): return await analysis_files_node(self, s)
-        async def _search(s): return await search_node(self, s, self.llm, prompts, self.memory_service)
-        async def _answer(s): return await answer_node(self, s, self.llm, prompts)
-        async def _diagram(s): return await diagram_node(self, s)
-
-        workflow.add_node("classify",       _classify)
-        workflow.add_node("analysis_files", _analysis)
-        workflow.add_node("search_node",    _search)
-        workflow.add_node("answer_node",    _answer)
-        workflow.add_node("diagram_node",   _diagram)
+        # 使用 partial 绑定节点函数的额外参数，避免重复定义 lambda
+        workflow.add_node("classify",       partial(classify_node,       self, llm=self.llm, prompts=prompts))
+        workflow.add_node("analysis_files", partial(analysis_files_node, self))
+        workflow.add_node("search_node",    partial(search_node,         self, llm=self.llm, prompts=prompts, memory_service=self.memory_service))
+        workflow.add_node("answer_node",    partial(answer_node,         self, llm=self.llm, prompts=prompts))
+        workflow.add_node("diagram_node",   partial(diagram_node,        self))
 
         workflow.add_edge(START, "classify")
         workflow.add_conditional_edges("classify",       route_after_classify)
