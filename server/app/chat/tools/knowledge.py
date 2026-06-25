@@ -928,7 +928,7 @@ async def search_knowledge_base(
 
 
 # 知识库搜索工具的输入参数模型（用于 LLM tool call 参数校验）
-from app.chat.tools.user_context import _compact
+from app.chat.utils import compact_text
 
 
 def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
@@ -949,7 +949,7 @@ def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
                 course_name=course_name,
                 top_k=top_k,
             )
-            return _compact(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
+            return compact_text(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
         except Exception as exc:
             logger.warning("[search_knowledge_base] failed: %s", exc)
             return "本地知识库暂时不可用。"

@@ -14,13 +14,13 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 
+from app.chat.memory.types import extract_content_text
 from app.chat.memory.service import get_chat_memory_service
-from app.config import CHAT_HISTORY_LIMIT
+from app.config import CHAT_HISTORY_LIMIT, IMAGE_EXTENSIONS
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-IMAGE_EXTENSIONS = frozenset(["jpg", "jpeg", "png", "gif", "webp", "bmp"])
 
 
 def build_user_content(text: str, attachments: list[str]) -> list[dict[str, Any]]:
@@ -35,16 +35,6 @@ def build_user_content(text: str, attachments: list[str]) -> list[dict[str, Any]
         else:
             content.append({"type": "file", "file": {"filename": url.split("/")[-1], "file_id": url}})
     return content
-
-
-def extract_text_from_content(content: list[dict[str, Any]] | str | Any) -> str:
-    """从 list content 或 str 中提取纯文本。"""
-    if isinstance(content, list):
-        return "".join(
-            part["text"] for part in content
-            if isinstance(part, dict) and part.get("type") == "text" and "text" in part
-        )
-    return str(content or "")
 
 
 def normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
@@ -78,7 +68,7 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
         text = str(raw_content or "").strip()
         return HumanMessage(content=text) if text else None
     if role in {"assistant", "ai"}:
-        text_content = extract_text_from_content(raw_content).strip()
+        text_content = extract_content_text(raw_content).strip()
         if tool_calls:
             normalized_tc = normalize_tool_calls(tool_calls)
             if normalized_tc:
@@ -90,10 +80,10 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
             return AIMessage(content=text_content)
         return None
     if role == "system":
-        text_content = extract_text_from_content(raw_content).strip()
+        text_content = extract_content_text(raw_content).strip()
         return SystemMessage(content=text_content) if text_content else None
     if role == "tool" and tool_call_id:
-        text_content = extract_text_from_content(raw_content).strip()
+        text_content = extract_content_text(raw_content).strip()
         tc_id_str = str(tool_call_id)
         return ToolMessage(content=text_content or "", tool_call_id=tc_id_str)
     return None

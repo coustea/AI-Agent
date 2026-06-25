@@ -15,9 +15,7 @@ from typing import Any, AsyncIterator
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
-from app.chat.event_mapper import ChatRuntimeEventMapper, SSE_EVENT_MAP, runtime_status
-from langchain_core.messages import AnyMessage
-from app.chat.emitter import ChatEvents, ChatEventName
+from app.chat.emitter import ChatEvents, ChatEventName, ChatRuntimeEventMapper, SSE_EVENT_MAP, runtime_status
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.streaming import safety_filter
@@ -48,10 +46,6 @@ async def build_messages(
     return await _context_builder.build_history(
         user_id, session_id, exclude_message_id=exclude_message_id,
     )
-
-
-# 向后兼容 — 直接使用 SSE_EVENT_MAP
-_SSE_EVENT_MAP = SSE_EVENT_MAP
 
 
 async def chat(
@@ -149,7 +143,7 @@ async def chat(
 
     try:
         async for event in agent.chat(agent_input):
-            sse_event = _SSE_EVENT_MAP.get(event.type, "status")
+            sse_event = SSE_EVENT_MAP.get(event.type, "status")
             sse_data = event.payload
 
             if event.type == "answer_token":
@@ -236,7 +230,7 @@ async def chat(
             },
         }
 
-    # ── 6. 后台记忆任务 ──
+    # ── 5. 后台记忆任务 ──
     if full_answer:
         uc._spawn_background(
             run_background_memory_jobs(

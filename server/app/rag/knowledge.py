@@ -50,6 +50,7 @@ from app.config import (
 )
 from app.rag.knowledge_router import route_query_sources as _hybrid_route, QueryRouteResult as _RouterQueryRouteResult
 from app.infra.logging import get_logger
+from app.chat.utils import compact_text
 
 logger = get_logger(__name__)
 
@@ -922,15 +923,6 @@ async def search_knowledge_base(
 
 
 # 知识库搜索工具的输入参数模型（用于 LLM tool call 参数校验）
-def _compact(text: str, *, limit: int = 3500) -> str:
-    """截断过长文本，防止撑爆 LLM 上下文窗口。
-
-    截断时会去除末尾空白并添加省略号标记。
-    """
-    value = str(text or "").strip()
-    if len(value) <= limit:
-        return value
-    return value[: limit - 3].rstrip() + "..."
 
 
 def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
@@ -954,6 +946,6 @@ def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
         except Exception as exc:
             logger.warning("[search_knowledge_base] failed: %s", exc)
             return "本地知识库暂时不可用。"
-        return _compact(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
+        return compact_text(context or "本地知识库没有检索到相关内容，或知识库尚未正确加载。")
 
     return _impl

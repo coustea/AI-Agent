@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Literal
 from pydantic import BaseModel, Field
 
 from app.chat.memory.service import get_chat_memory_service
+from app.chat.utils import compact_text
 from app.chat.memory.types import LTM_CATEGORIES
 from app.chat.schemas import TutorTurnContext
 from app.infra.logging import get_logger
@@ -14,14 +15,6 @@ from app.infra.tool_excute import Tool
 from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
-
-
-def _compact(text: str, *, limit: int = 3500) -> str:
-    """截断过长文本，防止撑爆 LLM 上下文窗口。"""
-    value = str(text or "").strip()
-    if len(value) <= limit:
-        return value
-    return value[: limit - 3].rstrip() + "..."
 
 
 # ── 学习者画像 ──
@@ -47,7 +40,7 @@ def make_get_learner_profile(
         svc = profile_service or get_profile_service()
         try:
             markdown = await svc.get_profile_for_agents(user_id=request.user_id, dimension=dimension)
-            return _compact(f"画像读取原因: {reason or '未提供'}\n{markdown}")
+            return compact_text(f"画像读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
             logger.warning("[get_learner_profile] failed: %s", exc)
             return "暂时无法读取学习者画像。"
@@ -95,7 +88,7 @@ def make_get_long_term_memory(
             return f"长期记忆分类无效: {category_value}"
         try:
             markdown = await svc.get_memory_markdown(request.user_id, category=category_value)
-            return _compact(f"长期记忆读取原因: {reason or '未提供'}\n{markdown}")
+            return compact_text(f"长期记忆读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
             logger.warning("[get_long_term_memory] failed: %s", exc)
             return "暂时无法读取长期学习记忆。"
