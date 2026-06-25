@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.auth.security import get_current_user
+from app.auth.security import get_current_user, get_current_user_flexible
 from app.chat.emitter import ChatEvents, encode_chat_sse, get_chat_channel
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import get_chat_usecases, run_chat_agent
@@ -48,7 +48,7 @@ async def create_mentor_chat_run(
     attachments: str | None = Form(default=None),
     need_teaching_diagram: bool = Form(default=False),
     enable_web_search: bool = Form(default=False),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     uc = get_chat_usecases()
     parsed_attachments = [u.strip() for u in attachments.split(",") if u.strip()] if attachments else []
@@ -102,7 +102,7 @@ async def create_mentor_chat_run(
 async def upload_file(
     file: UploadFile = File(...),
     session_id: str = Form(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     if not file.filename:
         return HttpResponse.error(code=400, message="文件名不能为空")
@@ -126,7 +126,7 @@ async def get_uploaded_file(
     owner_id: int,
     session_id: str,
     filename: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     uc = get_chat_usecases()
     try:
@@ -150,7 +150,7 @@ async def get_diagram_file(
     owner_id: int,
     session_id: str,
     filename: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     uc = get_chat_usecases()
     try:
@@ -174,7 +174,7 @@ async def get_chat_file(
     owner_id: int,
     session_id: str,
     filename: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     if current_user.id != owner_id:
         return HttpResponse.error(code=403, message="无权访问此文件")
@@ -199,7 +199,7 @@ async def stream_chat_run_events(
     session_id: str,
     run_id: str,
     after_sequence: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
     """订阅 Chat run 的实时事件流。"""
@@ -251,7 +251,7 @@ async def stream_chat_run_events(
 @router.get("/chat/sessions")
 async def get_sessions(
     limit: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     svc = get_chat_memory_service()
     sessions = await svc.list_sessions(user_id=current_user.id, limit=limit)
@@ -260,7 +260,7 @@ async def get_sessions(
 
 @router.post("/chat/sessions")
 async def create_session(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     svc = get_chat_memory_service()
     session = await svc.create_session(user_id=current_user.id)
@@ -270,7 +270,7 @@ async def create_session(
 @router.delete("/chat/sessions/{session_id}")
 async def delete_session(
     session_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     svc = get_chat_memory_service()
     success = await svc.archive_session(user_id=current_user.id, session_id=session_id)
@@ -283,7 +283,7 @@ async def delete_session(
 async def update_session(
     session_id: str,
     payload: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     title = (payload.get("title") or "").strip()
     if not title:
@@ -299,7 +299,7 @@ async def update_session(
 async def chat_history(
     session_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     uc = get_chat_usecases()
     items = await uc.get_history(

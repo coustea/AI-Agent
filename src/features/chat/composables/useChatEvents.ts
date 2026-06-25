@@ -4,6 +4,7 @@
 import { readonly, ref, shallowRef } from 'vue'
 
 import type { ChatEvent, ChatEventName } from '@/features/chat/types/chatEvent'
+import { getAuthToken } from '@/shared/auth/token'
 
 export type ChatConnectionStatus =
   | 'idle'
@@ -78,7 +79,9 @@ export function useChatEvents() {
     sessionId.value = nextSessionId
     connectionStatus.value = 'connecting'
 
-    const url = `${API_BASE}/chat/sessions/${nextSessionId}/runs/${nextRunId}/events`
+    const token = getAuthToken()
+    const query = token ? `?token=${encodeURIComponent(token)}` : ''
+    const url = `${API_BASE}/chat/sessions/${nextSessionId}/runs/${nextRunId}/events${query}`
     const eventSource = new EventSource(url)
 
     eventSource.addEventListener('chat.event', (raw: MessageEvent) => {
