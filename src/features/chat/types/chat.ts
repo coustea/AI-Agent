@@ -216,7 +216,8 @@ export interface UploadResult {
   url: string
   file_type: string
   original_name: string
-  size_bytes: number
+  size?: number
+  mime_type?: string
 }
 
 export interface StreamChatParams {

@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FlowchartPayload } from '@/features/chat/model/chat'
+import type { FlowchartPayload } from '@/features/chat/types/chat'
 
 const props = defineProps<{
   payload: FlowchartPayload

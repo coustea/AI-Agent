@@ -1,87 +1,117 @@
 <template>
-  <article 
-    class="diagram-card" 
+  <article
+    class="diagram-card"
     :class="{ compact: props.compact, 'is-interactive': props.compact }"
-    @click="props.compact && emit('expand', props.diagram)"
+    :role="props.compact ? 'button' : undefined"
+    :tabindex="props.compact ? 0 : undefined"
+    @click="handleExpand"
+    @keydown.enter.prevent="handleExpand"
+    @keydown.space.prevent="handleExpand"
   >
-    <header class="card-header animate-block">
-      <div>
-        <p class="card-kicker">{{ typeLabel[props.diagram.graph_type] || '图解说明' }}</p>
-        <h3>{{ props.diagram.title }}</h3>
-        <p v-if="props.diagram.subtitle && !props.compact" class="card-subtitle">{{ props.diagram.subtitle }}</p>
+    <header class="diagram-header">
+      <div class="diagram-heading-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="4" width="7" height="6" rx="1.5" />
+          <rect x="14" y="4" width="7" height="6" rx="1.5" />
+          <rect x="8.5" y="15" width="7" height="5" rx="1.5" />
+          <path d="M6.5 10v2h11v-2M12 12v3" />
+        </svg>
       </div>
-      <div v-if="!props.compact" class="header-meta">
-        <span class="difficulty-badge" :class="props.diagram.difficulty">{{ difficultyLabel[props.diagram.difficulty] || props.diagram.difficulty }}</span>
-        <span v-if="props.diagram.course" class="course-badge">{{ props.diagram.course }}</span>
+
+      <div class="diagram-heading-copy">
+        <p class="diagram-kicker">{{ typeLabel[props.diagram.graph_type] || '教学图解' }}</p>
+        <h3>{{ props.diagram.title }}</h3>
+        <p v-if="props.diagram.subtitle" class="diagram-subtitle">{{ props.diagram.subtitle }}</p>
+      </div>
+
+      <div v-if="!props.compact" class="diagram-meta">
+        <span v-if="props.diagram.course" class="meta-chip">{{ props.diagram.course }}</span>
+        <span class="meta-chip" :class="`is-${props.diagram.difficulty}`">
+          {{ difficultyLabel[props.diagram.difficulty] || props.diagram.difficulty }}
+        </span>
       </div>
     </header>
 
-    <section v-if="!props.compact" class="goal-section animate-block" style="animation-delay: 0.1s;">
-      <span class="goal-label">教学目标</span>
-      <p>{{ props.diagram.teaching_goal }}</p>
-    </section>
-
-    <section class="visual-section animate-block" :class="{ 'compact-visual': props.compact }" style="animation-delay: 0.2s;">
-      <div class="visual-wrapper" :id="props.compact ? '' : 'capture-target'">
-        <ComparisonDiagram v-if="props.diagram.graph_type === 'comparison'" :payload="props.diagram.visual_content as ComparisonPayload" />
-        <FlowchartDiagram v-else-if="props.diagram.graph_type === 'flowchart'" :payload="props.diagram.visual_content as FlowchartPayload" />
-        <SequenceDiagram v-else-if="props.diagram.graph_type === 'sequence'" :payload="props.diagram.visual_content as SequencePayload" />
-        <FrameworkDiagram v-else-if="props.diagram.graph_type === 'framework'" :payload="props.diagram.visual_content as FrameworkPayload" />
-        <SummaryDiagram v-else-if="props.diagram.graph_type === 'summary'" :payload="props.diagram.visual_content as SummaryPayload" />
-        <HierarchyDiagram v-else-if="props.diagram.graph_type === 'hierarchy'" :payload="props.diagram.visual_content as HierarchyPayload" />
-        <TreeDiagram v-else-if="props.diagram.graph_type === 'tree'" :payload="props.diagram.visual_content as TreePayload" />
-        <GridDiagram v-else-if="props.diagram.graph_type === 'grid'" :payload="props.diagram.visual_content as GridPayload" />
-        <ProtocolDiagram v-else-if="props.diagram.graph_type === 'protocol'" :payload="props.diagram.visual_content as ProtocolPayload" />
-        <TimelineDiagram v-else-if="props.diagram.graph_type === 'timeline'" :payload="props.diagram.visual_content as TimelinePayload" />
-      </div>
-      
-      <!-- Overlay for compact mode -->
-      <div v-if="props.compact" class="zoom-overlay">
-        <div class="zoom-icon-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="zoom-icon">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            <line x1="11" y1="8" x2="11" y2="14"></line>
-            <line x1="8" y1="11" x2="14" y2="11"></line>
-          </svg>
-          <span>点击查看高清大图</span>
+    <div class="diagram-layout">
+      <section class="visual-panel" :class="{ 'is-compact': props.compact }">
+        <div v-if="!props.compact" class="visual-toolbar">
+          <span>结构视图</span>
+          <span>{{ visualHint }}</span>
         </div>
-      </div>
-    </section>
 
-    <section v-if="!props.compact" class="teaching-section animate-block" style="animation-delay: 0.3s;">
-      <div class="teaching-core">
-        <span class="section-label">核心解释</span>
-        <p>{{ props.diagram.teaching_content.core_explanation }}</p>
-      </div>
-      <div v-if="props.diagram.teaching_content.key_points.length" class="teaching-points">
-        <span class="section-label">要点</span>
-        <ul>
-          <li v-for="point in props.diagram.teaching_content.key_points" :key="point">{{ point }}</li>
-        </ul>
-      </div>
-      <div v-if="props.diagram.teaching_content.common_mistakes?.length" class="teaching-mistakes">
-        <span class="section-label warn">常见误区</span>
-        <ul>
-          <li v-for="mistake in props.diagram.teaching_content.common_mistakes" :key="mistake">{{ mistake }}</li>
-        </ul>
-      </div>
-      <div v-if="props.diagram.teaching_content.examples?.length" class="teaching-examples">
-        <span class="section-label">示例</span>
-        <ul>
-          <li v-for="example in props.diagram.teaching_content.examples" :key="example">{{ example }}</li>
-        </ul>
-      </div>
-    </section>
+        <div class="visual-viewport">
+          <div class="visual-wrapper" :id="props.compact ? undefined : 'capture-target'">
+            <ComparisonDiagram v-if="props.diagram.graph_type === 'comparison'" :payload="props.diagram.visual_content as ComparisonPayload" />
+            <FlowchartDiagram v-else-if="props.diagram.graph_type === 'flowchart'" :payload="props.diagram.visual_content as FlowchartPayload" />
+            <SequenceDiagram v-else-if="props.diagram.graph_type === 'sequence'" :payload="props.diagram.visual_content as SequencePayload" />
+            <FrameworkDiagram v-else-if="props.diagram.graph_type === 'framework'" :payload="props.diagram.visual_content as FrameworkPayload" />
+            <SummaryDiagram v-else-if="props.diagram.graph_type === 'summary'" :payload="props.diagram.visual_content as SummaryPayload" />
+            <HierarchyDiagram v-else-if="props.diagram.graph_type === 'hierarchy'" :payload="props.diagram.visual_content as HierarchyPayload" />
+            <TreeDiagram v-else-if="props.diagram.graph_type === 'tree'" :payload="props.diagram.visual_content as TreePayload" />
+            <GridDiagram v-else-if="props.diagram.graph_type === 'grid'" :payload="props.diagram.visual_content as GridPayload" />
+            <ProtocolDiagram v-else-if="props.diagram.graph_type === 'protocol'" :payload="props.diagram.visual_content as ProtocolPayload" />
+            <TimelineDiagram v-else-if="props.diagram.graph_type === 'timeline'" :payload="props.diagram.visual_content as TimelinePayload" />
+          </div>
+        </div>
 
-    <footer v-if="!props.compact" class="card-footer animate-block" style="animation-delay: 0.4s;">
-      <span class="footer-label">一句话总结</span>
+        <div v-if="props.compact" class="compact-fade" aria-hidden="true"></div>
+        <div v-if="props.compact" class="compact-action">
+          <span>展开查看完整图解与讲解</span>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M7 5h8v8M14.5 5.5 6 14" />
+          </svg>
+        </div>
+      </section>
+
+      <aside v-if="!props.compact" class="teaching-panel">
+        <section v-if="props.diagram.teaching_goal" class="teaching-block teaching-goal">
+          <span class="section-index">01</span>
+          <div>
+            <h4>先明确学习目标</h4>
+            <p>{{ props.diagram.teaching_goal }}</p>
+          </div>
+        </section>
+
+        <section class="teaching-block teaching-core">
+          <span class="section-index">02</span>
+          <div>
+            <h4>核心解释</h4>
+            <p>{{ props.diagram.teaching_content.core_explanation }}</p>
+          </div>
+        </section>
+
+        <section v-if="keyPoints.length" class="teaching-list-block">
+          <h4>理解这张图时抓住</h4>
+          <ol>
+            <li v-for="point in keyPoints" :key="point">{{ point }}</li>
+          </ol>
+        </section>
+
+        <section v-if="commonMistakes.length" class="teaching-list-block is-warning">
+          <h4>容易混淆</h4>
+          <ul>
+            <li v-for="mistake in commonMistakes" :key="mistake">{{ mistake }}</li>
+          </ul>
+        </section>
+
+        <section v-if="examples.length" class="teaching-list-block">
+          <h4>结合示例</h4>
+          <ul>
+            <li v-for="example in examples" :key="example">{{ example }}</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+
+    <footer v-if="!props.compact && props.diagram.teaching_content.summary" class="diagram-summary">
+      <span>一句话带走</span>
       <p>{{ props.diagram.teaching_content.summary }}</p>
     </footer>
   </article>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import ComparisonDiagram from './diagrams/ComparisonDiagram.vue'
 import FlowchartDiagram from './diagrams/FlowchartDiagram.vue'
 import SequenceDiagram from './diagrams/SequenceDiagram.vue'
@@ -105,7 +135,7 @@ import type {
   GridPayload,
   ProtocolPayload,
   TimelinePayload,
-} from '@/features/chat/model/chat'
+} from '@/features/chat/types/chat'
 
 const props = defineProps<{
   diagram: TeachingDiagram
@@ -123,10 +153,23 @@ const typeLabel: Record<string, string> = {
   framework: '框架图解',
   summary: '总结图解',
   hierarchy: '层级图解',
-  tree: '数据结构 - 树形结构',
-  grid: '数据结构/操作系统 - 内存状态格',
-  protocol: '网络协议/组成原理 - 报文格式图',
-  timeline: '操作系统/组成原理 - 时间时空图',
+  tree: '树形结构',
+  grid: '状态网格',
+  protocol: '协议结构',
+  timeline: '时间轴图解',
+}
+
+const visualHintMap: Record<string, string> = {
+  comparison: '横向比较关键差异',
+  flowchart: '沿箭头理解执行路径',
+  sequence: '按时间顺序阅读交互',
+  framework: '从整体进入局部结构',
+  summary: '围绕核心概念展开',
+  hierarchy: '从上到下理解层级',
+  tree: '关注父子节点关系',
+  grid: '观察状态与位置变化',
+  protocol: '按字段顺序理解结构',
+  timeline: '沿时间轴观察变化',
 }
 
 const difficultyLabel: Record<string, string> = {
@@ -134,304 +177,402 @@ const difficultyLabel: Record<string, string> = {
   intermediate: '进阶',
   advanced: '高级',
 }
+
+const visualHint = computed(() => visualHintMap[props.diagram.graph_type] || '结合图形理解知识结构')
+const keyPoints = computed(() => props.diagram.teaching_content?.key_points || [])
+const commonMistakes = computed(() => props.diagram.teaching_content?.common_mistakes || [])
+const examples = computed(() => props.diagram.teaching_content?.examples || [])
+
+const handleExpand = () => {
+  if (props.compact) emit('expand', props.diagram)
+}
 </script>
 
 <style scoped>
-@keyframes slideUpFade {
-  0% { opacity: 0; transform: translateY(12px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.animate-block { animation: slideUpFade 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
-
 .diagram-card {
-  --c-primary: #3b82f6;
-  --c-teal: #0d9488;
-  --c-amber: #d97706;
-  --c-red: var(--color-danger);
-  --c-ink: var(--color-text);
-  --c-muted: var(--color-text-muted);
-  --c-border: var(--color-border);
-  --c-bg: var(--color-bg);
-  --c-white: var(--color-surface);
+  --diagram-blue: #2563eb;
+  --diagram-blue-soft: #eff6ff;
+  --diagram-ink: var(--color-text);
+  --diagram-muted: var(--color-text-muted);
+  --diagram-border: var(--color-border);
+  --diagram-surface: var(--color-surface);
+  --diagram-bg: var(--color-bg);
 
   display: grid;
   gap: 16px;
-  padding: clamp(16px, 3vw, 24px);
-  color: var(--c-ink);
-  background: var(--c-white);
-  border: 1px solid var(--c-border);
+  width: 100%;
+  padding: 20px;
+  color: var(--diagram-ink);
+  background: var(--diagram-surface);
+  border: 1px solid var(--diagram-border);
   border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
 }
 
-.diagram-card:not(.compact):hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 20px 25px -5px rgba(0, 0, 0, 0.06);
-  transform: translateY(-2px);
+.diagram-card.compact {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 7px 24px rgba(15, 23, 42, 0.07);
 }
 
 .diagram-card.is-interactive {
   cursor: pointer;
-  border: 1px solid #bfdbfe;
-  box-shadow: 0 4px 15px -3px rgba(59, 130, 246, 0.1);
+  outline: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
-.diagram-card.is-interactive:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.2);
-  transform: translateY(-4px);
+.diagram-card.is-interactive:hover,
+.diagram-card.is-interactive:focus-visible {
+  border-color: color-mix(in srgb, var(--diagram-blue) 42%, var(--diagram-border));
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
+.diagram-header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
 }
 
-.card-header > div:first-child {
+.compact .diagram-header {
+  padding: 16px 17px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--diagram-border) 72%, transparent);
+}
+
+.diagram-heading-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--diagram-blue);
+  background: var(--diagram-blue-soft);
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+}
+
+.diagram-heading-mark svg {
+  width: 21px;
+  height: 21px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.45;
+}
+
+.diagram-heading-copy {
   min-width: 0;
 }
 
-.card-kicker {
-  margin: 0 0 6px;
-  color: var(--c-primary);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+.diagram-kicker {
+  margin: 0 0 3px;
+  color: var(--diagram-blue);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
 }
 
-h3, p { margin: 0; }
-
-h3 {
-  color: var(--c-ink);
-  font-size: clamp(19px, 3vw, 24px);
+.diagram-heading-copy h3 {
+  margin: 0;
+  color: var(--diagram-ink);
+  font-size: clamp(17px, 2vw, 22px);
+  font-weight: 720;
+  line-height: 1.35;
   text-wrap: balance;
-  line-height: 1.3;
   word-break: break-word;
 }
 
-.card-subtitle {
-  margin-top: 4px;
-  color: var(--c-muted);
-  font-size: 14px;
+.compact .diagram-heading-copy h3 {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.header-meta {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.difficulty-badge {
-  padding: 3px 10px;
-  border-radius: 999px;
+.diagram-subtitle {
+  margin: 4px 0 0;
+  color: var(--diagram-muted);
   font-size: 12px;
-  font-weight: 700;
-}
-
-.difficulty-badge.beginner {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.difficulty-badge.intermediate {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.difficulty-badge.advanced {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.course-badge {
-  padding: 3px 10px;
-  background: var(--color-surface-hover);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.goal-section {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 12px 16px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02) inset;
-}
-
-.goal-label, .section-label, .footer-label {
-  flex-shrink: 0;
-  color: var(--c-primary);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.goal-section p, .teaching-core p {
-  font-weight: 550;
   line-height: 1.5;
 }
 
-.visual-section {
-  display: grid;
-  gap: 12px;
-  position: relative;
-  background: var(--color-bg);
-  border-radius: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-}
-
-.compact-visual {
-  max-height: 220px;
+.compact .diagram-subtitle {
   overflow: hidden;
-  position: relative;
-  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.compact-visual .visual-wrapper {
-  transform: scale(0.6);
-  transform-origin: top left;
-  width: 166%; /* 1 / 0.6 */
+.diagram-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-chip {
+  padding: 4px 8px;
+  color: var(--color-text-secondary);
+  background: var(--diagram-bg);
+  border: 1px solid var(--diagram-border);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.meta-chip.is-beginner { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
+.meta-chip.is-intermediate { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+.meta-chip.is-advanced { color: #a16207; background: #fffbeb; border-color: #fde68a; }
+
+.diagram-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.compact .diagram-layout {
+  display: block;
+}
+
+.visual-panel {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    #fbfdff;
+  background-size: 24px 24px;
+  border: 1px solid var(--diagram-border);
+  border-radius: 9px;
+}
+
+.compact .visual-panel {
+  border: 0;
+  border-radius: 0;
+}
+
+.visual-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  color: var(--color-text-faint);
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid var(--diagram-border);
+  font-size: 10px;
+}
+
+.visual-toolbar span:first-child {
+  color: var(--color-text-secondary);
+  font-weight: 680;
+}
+
+.visual-viewport {
+  min-height: 360px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.compact .visual-viewport {
+  min-height: 250px;
+  max-height: 290px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.visual-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
+.compact .visual-wrapper {
+  pointer-events: none;
+  transform: scale(0.88);
+  transform-origin: top center;
+}
+
+.compact-fade {
+  position: absolute;
+  inset: auto 0 0;
+  height: 92px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.96) 76%);
   pointer-events: none;
 }
 
-.zoom-overlay {
+.compact-action {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.4) 60%, rgba(255,255,255,0) 100%);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 24px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: 10;
-}
-
-.diagram-card.is-interactive:hover .zoom-overlay {
-  opacity: 1;
-}
-
-.zoom-icon-wrapper {
+  right: 14px;
+  bottom: 12px;
+  left: 14px;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: #3b82f6;
-  color: white;
-  padding: 8px 20px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
-  transform: translateY(10px);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 11px;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid color-mix(in srgb, var(--diagram-blue) 22%, var(--diagram-border));
+  border-radius: 7px;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 650;
 }
 
-.diagram-card.is-interactive:hover .zoom-icon-wrapper {
-  transform: translateY(0);
-}
-
-.zoom-icon {
+.compact-action svg {
   width: 18px;
   height: 18px;
+  flex: 0 0 auto;
+  stroke: var(--diagram-blue);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
 }
 
-.teaching-section {
+.teaching-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
-.teaching-core,
-.teaching-points,
-.teaching-mistakes,
-.teaching-examples {
-  padding: 14px 16px;
-  background: var(--color-surface);
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: box-shadow 0.2s ease;
-}
-
-.teaching-core:hover,
-.teaching-points:hover,
-.teaching-mistakes:hover,
-.teaching-examples:hover {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04);
-}
-
-.section-label.warn {
-  color: var(--c-amber);
-}
-
-.teaching-section ul {
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
+.teaching-block {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  background: var(--diagram-surface);
+  border: 1px solid var(--diagram-border);
+  border-radius: 8px;
 }
 
-.teaching-section li {
-  padding-left: 14px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--c-muted);
-  position: relative;
+.teaching-goal {
+  background: color-mix(in srgb, var(--diagram-blue-soft) 55%, var(--diagram-surface));
+  border-color: #dbeafe;
 }
 
-.teaching-section li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  width: 5px;
-  height: 5px;
-  background: var(--color-text-faint);
-  border-radius: 50%;
+.section-index {
+  color: var(--diagram-blue);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.7;
 }
 
-.teaching-mistakes li::before {
-  background: var(--c-amber);
+.teaching-block h4,
+.teaching-list-block h4 {
+  margin: 0 0 5px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.card-footer {
-  padding: 14px 16px;
-  background: var(--color-bg);
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
+.teaching-block p {
+  margin: 0;
+  color: var(--diagram-muted);
+  font-size: 12px;
+  line-height: 1.65;
 }
 
-.card-footer p {
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 550;
-  line-height: 1.6;
-  color: var(--c-ink);
+.teaching-list-block {
+  padding: 12px;
+  background: var(--diagram-bg);
+  border: 1px solid var(--diagram-border);
+  border-radius: 8px;
 }
 
-.compact {
+.teaching-list-block.is-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.teaching-list-block ol,
+.teaching-list-block ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.teaching-list-block li {
+  color: var(--diagram-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.diagram-summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 12px;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-  overflow: hidden;
-}
-
-.compact .card-header {
   align-items: start;
-  padding: 16px 16px 0 16px;
+  padding: 13px 14px;
+  background: #f8fafc;
+  border-left: 3px solid var(--diagram-blue);
 }
 
-.compact h3 {
-  font-size: 18px;
+.diagram-summary span {
+  color: var(--diagram-blue);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.diagram-summary p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 580;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .diagram-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .visual-viewport {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 620px) {
+  .diagram-card:not(.compact) {
+    padding: 14px;
+  }
+
+  .diagram-header {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .diagram-meta {
+    grid-column: 2;
+    justify-self: start;
+    flex-wrap: wrap;
+  }
+
+  .compact .diagram-header {
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 13px;
+  }
+
+  .compact .diagram-heading-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .compact .visual-viewport {
+    min-height: 220px;
+    max-height: 260px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-card.is-interactive {
+    transition: none;
+  }
 }
 </style>

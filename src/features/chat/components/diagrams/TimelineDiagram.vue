@@ -158,7 +158,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted, watch } from 'vue'
-import type { TimelinePayload } from '@/features/chat/model/chat'
+import type { TimelinePayload } from '@/features/chat/types/chat'
 
 const props = defineProps<{
   payload: TimelinePayload

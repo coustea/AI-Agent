@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ComparisonPayload } from '@/features/chat/model/chat'
+import type { ComparisonPayload } from '@/features/chat/types/chat'
 
 defineProps<{
   payload: ComparisonPayload

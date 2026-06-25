@@ -139,7 +139,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ProtocolPayload, ProtocolField } from '@/features/chat/model/chat'
+import type { ProtocolPayload, ProtocolField } from '@/features/chat/types/chat'
 
 const props = defineProps<{
   payload: ProtocolPayload

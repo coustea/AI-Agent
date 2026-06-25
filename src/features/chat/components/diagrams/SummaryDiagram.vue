@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SummaryPayload } from '@/features/chat/model/chat'
+import type { SummaryPayload } from '@/features/chat/types/chat'
 
 defineProps<{
   payload: SummaryPayload

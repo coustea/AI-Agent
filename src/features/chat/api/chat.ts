@@ -5,7 +5,7 @@ import type {
   ChatSession,
   UploadResult,
   StreamChatParams,
-} from '@/features/chat/model/chat'
+} from '@/features/chat/types/chat'
 
 // ==========================================
 // 聊天历史 API

@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&family=Montserrat:wght@700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=LXGW+WenKai:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
 
 /* ============================================================
-   Design Tokens — White Theme (Indigo accent)
+   Design Tokens — Ink & Scholar Theme (东方墨韵)
    ============================================================ */
 :root {
   /* ---- Element Plus Overrides ---- */
@@ -25,22 +25,22 @@
   --el-box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
   --el-box-shadow-light: 0 2px 4px rgba(15, 23, 42, 0.06);
 
-  /* ---- Brand Colors ---- */
+  /* ---- Brand Colors (朱砂 + 靛青) ---- */
   --color-primary: #4F46E5;          /* Indigo 600 — main accent */
   --color-primary-hover: #4338CA;    /* Indigo 700 */
   --color-primary-soft: #EEF2FF;     /* Indigo 50 */
   --color-primary-border: #C7D2FE;   /* Indigo 200 */
   --color-primary-text: #312E81;     /* Indigo 900 */
 
-  /* ---- Neutral Palette (Slate) ---- */
-  --color-bg: #F8FAFC;              /* Slate 50 — page background */
-  --color-surface: #FFFFFF;          /* card / panel background */
-  --color-surface-hover: #F1F5F9;   /* Slate 100 — hover fill */
+  /* ---- Neutral Palette (宣纸墨色) ---- */
+  --color-bg: #FFFFFF;              /* White — page background */
+  --color-surface: #FFFFFF;          /* White — card / panel background */
+  --color-surface-hover: #F8FAFC;    /* Slate 50 — hover fill */
   --color-border: #E2E8F0;          /* Slate 200 — default border */
   --color-border-hover: #CBD5E1;    /* Slate 300 — hover border */
   --color-border-light: #F1F5F9;    /* Slate 100 — subtle divider */
 
-  --color-text: #1E293B;            /* Slate 800 — primary text (not pure black) */
+  --color-text: #1E293B;            /* Slate 800 — primary text */
   --color-text-strong: #0F172A;     /* Slate 900 — headings */
   --color-text-secondary: #334155;  /* Slate 700 — secondary text */
   --color-text-muted: #64748B;      /* Slate 500 — muted / labels */
@@ -48,7 +48,7 @@
 
   --color-text-light: var(--color-text-faint);
 
-  /* ---- Semantic Colors ---- */
+  /* ---- Semantic Colors (传统五色) ---- */
   --color-success: #10B981;         /* Emerald 500 */
   --color-success-soft: #ECFDF5;    /* Emerald 50 */
   --color-warning: #F59E0B;         /* Amber 500 */
@@ -86,12 +86,12 @@
   --gradient-path: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
   --gradient-eval: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
 
-  /* ---- Typography ---- */
-  --font-ui: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  /* ---- Typography (宋体为骨，黑体为肉) ---- */
+  --font-ui: -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-body: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace;
   --font-note: 'LXGW WenKai', 'STKaiti', 'KaiTi', serif;
-  --font-display: 'Montserrat', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
   --font-sans: var(--font-ui);
 
   /* Type scale — 1.200 ratio (Minor Third) with mobile-first base ≥16px */
@@ -144,7 +144,7 @@
 
   --radius-base: var(--radius-md);
 
-  /* ---- Shadows ---- */
+  /* ---- Shadows (弥散纸张浮起) ---- */
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
@@ -799,7 +799,7 @@ button:focus-visible, .btn:focus-visible {
   margin: 0.75rem 0;
   padding: 0.1rem 0 0.1rem 0.875rem;
   color: var(--color-text-muted);
-  border-left: 3px solid var(--color-primary-border);
+  border: 1px solid var(--color-border);
 }
 
 .markdown-body pre {
@@ -917,7 +917,7 @@ button:focus-visible, .btn:focus-visible {
   font-size: 15px;
   line-height: 1.6;
   color: var(--color-text-secondary);
-  border-left: 3px solid var(--color-primary-border);
+  border: 1px solid var(--color-border);
   padding: 2px 0 2px 14px;
   margin: 12px 0;
   font-style: normal;

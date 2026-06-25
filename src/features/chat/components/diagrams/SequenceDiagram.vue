@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { SequencePayload } from '@/features/chat/model/chat'
+import type { SequencePayload } from '@/features/chat/types/chat'
 
 const props = defineProps<{
   payload: SequencePayload

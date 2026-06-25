@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import type { HierarchyPayload } from '@/features/chat/model/chat'
+import type { HierarchyPayload } from '@/features/chat/types/chat'
 
 defineProps<{
   payload: HierarchyPayload

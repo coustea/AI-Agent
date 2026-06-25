@@ -1,69 +1,103 @@
 <template>
-  <section v-if="visibleActivities.length" class="thinking-block" :class="{ 'is-active': isActive }" aria-live="polite">
+  <section
+    v-if="visibleActivities.length"
+    class="process-panel"
+    :class="{ 'is-running': isActive, 'has-failure': hasFailure }"
+    aria-live="polite"
+  >
     <button
-      class="thinking-summary"
+      class="process-summary"
       type="button"
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
-      <span class="thinking-state" aria-hidden="true">
-        <span v-if="isActive" class="thinking-dots">
-          <i></i><i></i><i></i>
+      <span class="process-symbol" aria-hidden="true">
+        <span v-if="isActive" class="process-orbit">
+          <i></i>
+          <i></i>
         </span>
-        <span v-else-if="hasFailure" class="thinking-failed">×</span>
-        <span v-else class="thinking-check">✓</span>
+        <span v-else-if="hasFailure" class="process-result process-result--failed">!</span>
+        <span v-else class="process-result">✓</span>
       </span>
 
-      <span class="thinking-copy">
+      <span class="process-copy">
+        <span class="process-eyebrow">
+          <span>{{ isActive ? '正在处理' : hasFailure ? '处理完成，部分步骤异常' : '处理过程' }}</span>
+          <span class="process-count">{{ completedCount }}/{{ visibleActivities.length }}</span>
+        </span>
         <strong>{{ headline }}</strong>
         <small v-if="summaryLine">{{ summaryLine }}</small>
       </span>
 
-      <span class="thinking-toggle">
-        {{ expanded ? '收起' : '查看过程' }}
-        <span class="toggle-chevron" :class="{ expanded }">⌄</span>
+      <span class="process-toggle">
+        {{ expanded ? '收起详情' : '查看详情' }}
+        <svg viewBox="0 0 20 20" aria-hidden="true" :class="{ expanded }">
+          <path d="m6 8 4 4 4-4" />
+        </svg>
       </span>
     </button>
 
-    <div v-if="expanded" class="activity-list">
-      <article v-for="item in visibleActivities" :key="item.activity_id" class="activity-item">
-        <span class="activity-rail" :class="item.status">
-          <span></span>
-        </span>
+    <div v-if="isActive" class="process-progress" aria-hidden="true">
+      <span></span>
+    </div>
 
-        <div class="activity-copy">
-          <div class="activity-heading">
-            <strong>{{ item.title }}</strong>
-            <span v-if="item.detail?.duration_ms != null" class="activity-duration">
-              {{ formatDuration(item.detail.duration_ms) }}
-            </span>
+    <Transition name="process-expand">
+      <div v-if="expanded" class="activity-list">
+        <article
+          v-for="(item, index) in visibleActivities"
+          :key="item.activity_id"
+          class="activity-item"
+          :class="`is-${item.status}`"
+        >
+          <div class="activity-index" aria-hidden="true">
+            <span v-if="item.status === 'done'">✓</span>
+            <span v-else-if="item.status === 'failed'">!</span>
+            <span v-else class="activity-spinner"></span>
           </div>
 
-          <p v-if="getActivitySummary(item)">{{ getActivitySummary(item) }}</p>
+          <div class="activity-copy">
+            <div class="activity-heading">
+              <div>
+                <span class="activity-kind">{{ kindLabel(item.kind) }}</span>
+                <strong>{{ item.title }}</strong>
+              </div>
+              <span v-if="item.detail?.duration_ms != null" class="activity-duration">
+                {{ formatDuration(item.detail.duration_ms) }}
+              </span>
+            </div>
 
-          <dl v-if="hasDetail(item)" class="activity-detail">
-            <template v-if="item.detail?.tool_name || item.tool_name">
-              <dt>工具</dt><dd>{{ item.detail?.tool_name || item.tool_name }}</dd>
-            </template>
-            <template v-if="item.detail?.files?.length">
-              <dt>文件</dt><dd>{{ item.detail.files.join('、') }}</dd>
-            </template>
-            <template v-if="item.detail?.output">
-              <dt>结果</dt><dd class="detail-output">{{ item.detail.output }}</dd>
-            </template>
-            <template v-if="item.detail?.error">
-              <dt>异常</dt><dd class="detail-error">{{ item.detail.error }}</dd>
-            </template>
-          </dl>
-        </div>
-      </article>
-    </div>
+            <p v-if="getActivitySummary(item)">{{ getActivitySummary(item) }}</p>
+
+            <dl v-if="hasDetail(item)" class="activity-detail">
+              <template v-if="item.detail?.files?.length">
+                <dt>处理对象</dt>
+                <dd>{{ item.detail.files.join('、') }}</dd>
+              </template>
+              <template v-if="item.detail?.input">
+                <dt>输入</dt>
+                <dd>{{ item.detail.input }}</dd>
+              </template>
+              <template v-if="item.detail?.output">
+                <dt>结果摘要</dt>
+                <dd class="detail-output">{{ item.detail.output }}</dd>
+              </template>
+              <template v-if="item.detail?.error">
+                <dt>异常</dt>
+                <dd class="detail-error">{{ item.detail.error }}</dd>
+              </template>
+            </dl>
+          </div>
+
+          <span v-if="index < visibleActivities.length - 1" class="activity-line" aria-hidden="true"></span>
+        </article>
+      </div>
+    </Transition>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AgentActivity } from '@/features/chat/views/TutorConstants'
+import type { AgentActivity } from '@/features/chat/views/tutorUtils'
 
 const props = defineProps<{
   activities: AgentActivity[]
@@ -82,51 +116,68 @@ const currentActivity = computed(() => (
 
 const isActive = computed(() => visibleActivities.value.some(item => item.status === 'running'))
 const hasFailure = computed(() => visibleActivities.value.some(item => item.status === 'failed'))
+const completedCount = computed(() => visibleActivities.value.filter(item => item.status !== 'running').length)
 
-const headline = computed(() => currentActivity.value?.title || '')
+const headline = computed(() => currentActivity.value?.message || currentActivity.value?.title || '正在准备回答')
 
 const summaryLine = computed(() => {
-  const summary = currentActivity.value?.summary || currentActivity.value?.message || ''
-  return summary === currentActivity.value?.title ? '' : summary
+  const item = currentActivity.value
+  if (!item) return ''
+  const summary = item.summary || item.detail?.input || ''
+  return summary === item.title || summary === item.message ? '' : summary
 })
 
 watch(isActive, active => {
-  if (!active) expanded.value = false
+  if (active && visibleActivities.value.length <= 1) expanded.value = false
 })
 
-const getActivitySummary = (item: AgentActivity) => item.summary || item.message
+const kindLabel = (kind: AgentActivity['kind']) => ({
+  tool: '工具',
+  attachment: '附件',
+  workflow: '流程',
+}[kind] || '步骤')
+
+const getActivitySummary = (item: AgentActivity) => item.summary || item.message || item.detail?.input || ''
 
 const formatDuration = (durationMs: number) => durationMs < 1000
-  ? `${durationMs} ms`
+  ? `${Math.round(durationMs)} ms`
   : `${(durationMs / 1000).toFixed(1)} s`
 
 const hasDetail = (item: AgentActivity) => Boolean(
-  item.detail?.tool_name
-  || item.tool_name
-  || item.detail?.files?.length
+  item.detail?.files?.length
+  || item.detail?.input
   || item.detail?.output
   || item.detail?.error,
 )
 </script>
 
 <style scoped>
-.thinking-block {
-  width: min(620px, 100%);
+.process-panel {
+  width: min(680px, 100%);
   overflow: hidden;
   color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
-  border-radius: 14px;
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.035);
+  background: color-mix(in srgb, var(--color-surface) 96%, var(--color-bg));
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.045);
 }
 
-.thinking-summary {
-  display: flex;
+.process-panel.is-running {
+  border-color: color-mix(in srgb, #2563eb 26%, var(--color-border));
+}
+
+.process-panel.has-failure {
+  border-color: color-mix(in srgb, var(--color-danger) 28%, var(--color-border));
+}
+
+.process-summary {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   width: 100%;
-  min-height: 56px;
-  padding: 10px 13px;
+  min-height: 70px;
+  padding: 12px 14px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -134,148 +185,223 @@ const hasDetail = (item: AgentActivity) => Boolean(
   cursor: pointer;
 }
 
-.thinking-summary:hover {
-  background: color-mix(in srgb, var(--color-bg) 64%, transparent);
+.process-summary:hover {
+  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
 }
 
-.thinking-state {
+.process-symbol {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  color: var(--color-text-secondary);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  width: 32px;
+  height: 32px;
+  color: #2563eb;
+  background: color-mix(in srgb, #2563eb 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #2563eb 18%, var(--color-border));
   border-radius: 8px;
 }
 
-.thinking-dots {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+.process-orbit {
+  position: relative;
+  width: 18px;
+  height: 18px;
 }
 
-.thinking-dots i {
-  width: 3px;
-  height: 3px;
-  background: currentColor;
+.process-orbit i {
+  position: absolute;
+  inset: 2px;
+  border: 1.5px solid transparent;
+  border-top-color: currentColor;
   border-radius: 50%;
-  animation: thinking-pulse 1.15s ease-in-out infinite;
+  animation: process-spin 1s linear infinite;
 }
 
-.thinking-dots i:nth-child(2) { animation-delay: 0.16s; }
-.thinking-dots i:nth-child(3) { animation-delay: 0.32s; }
-.thinking-check,
-.thinking-failed { font-size: 13px; font-weight: 700; }
+.process-orbit i:last-child {
+  inset: 5px;
+  border-top-color: color-mix(in srgb, currentColor 55%, transparent);
+  animation-duration: 0.65s;
+  animation-direction: reverse;
+}
 
-.thinking-failed { color: var(--color-danger); }
+.process-result {
+  font-size: 14px;
+  font-weight: 750;
+}
 
-.thinking-copy {
+.process-result--failed {
+  color: var(--color-danger);
+}
+
+.process-copy {
   display: flex;
-  flex: 1;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
-.thinking-copy strong {
+.process-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-faint);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.process-count {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+}
+
+.process-copy strong {
   overflow: hidden;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 650;
-  line-height: 1.35;
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.thinking-copy small {
+.process-copy small {
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.thinking-toggle {
+.process-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 0 0 auto;
   color: var(--color-text-muted);
   font-size: 11px;
+  white-space: nowrap;
 }
 
-.toggle-chevron {
-  display: inline-block;
-  font-size: 14px;
-  line-height: 1;
-  transition: transform 160ms ease;
+.process-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  transition: transform 180ms ease;
 }
 
-.toggle-chevron.expanded { transform: rotate(180deg); }
+.process-toggle svg.expanded {
+  transform: rotate(180deg);
+}
+
+.process-progress {
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-border) 72%, transparent);
+}
+
+.process-progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #2563eb, transparent);
+  animation: process-scan 1.45s ease-in-out infinite;
+}
 
 .activity-list {
-  padding: 0 13px 12px 49px;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  padding: 6px 14px 14px 58px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
 }
 
 .activity-item {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 10px;
-  padding: 11px 0 3px;
+  padding: 11px 0 5px;
 }
 
-.activity-rail {
+.activity-index {
   position: relative;
-  width: 10px;
-  flex: 0 0 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 750;
 }
 
-.activity-rail::after {
+.activity-item.is-done .activity-index {
+  color: #15803d;
+  border-color: color-mix(in srgb, #15803d 28%, var(--color-border));
+  background: color-mix(in srgb, #15803d 6%, var(--color-surface));
+}
+
+.activity-item.is-failed .activity-index {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 28%, var(--color-border));
+}
+
+.activity-line {
   position: absolute;
-  top: 13px;
-  bottom: -12px;
-  left: 4px;
+  top: 31px;
+  bottom: -11px;
+  left: 9px;
   width: 1px;
   background: var(--color-border);
-  content: '';
 }
 
-.activity-item:last-child .activity-rail::after { display: none; }
-
-.activity-rail span {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 8px;
-  height: 8px;
-  margin-top: 4px;
-  background: var(--color-text-faint);
-  border: 2px solid var(--color-surface);
+.activity-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid color-mix(in srgb, #2563eb 26%, transparent);
+  border-top-color: #2563eb;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--color-border);
+  animation: process-spin 0.8s linear infinite;
 }
 
-.activity-rail.running span { background: var(--color-text-secondary); }
-.activity-rail.failed span { background: var(--color-danger); }
-.activity-copy { min-width: 0; flex: 1; }
+.activity-copy {
+  min-width: 0;
+}
 
 .activity-heading {
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activity-heading > div {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.activity-kind {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  color: var(--color-text-faint);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1.2;
 }
 
 .activity-heading strong {
   overflow: hidden;
-  flex: 1;
   color: var(--color-text-secondary);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 620;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -284,40 +410,83 @@ const hasDetail = (item: AgentActivity) => Boolean(
   flex: 0 0 auto;
   color: var(--color-text-faint);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .activity-copy p {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   color: var(--color-text-muted);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .activity-detail {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 5px 9px;
+  gap: 6px 10px;
   margin: 8px 0 0;
-  padding: 8px 10px;
+  padding: 9px 10px;
   background: var(--color-bg);
-  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-radius: 6px;
   font-size: 11px;
 }
 
-.activity-detail dt { color: var(--color-text-faint); }
-.activity-detail dd { min-width: 0; margin: 0; color: var(--color-text-secondary); overflow-wrap: anywhere; }
-.detail-output { max-height: 140px; overflow: auto; white-space: pre-wrap; }
-.detail-error { color: var(--color-danger) !important; }
+.activity-detail dt {
+  color: var(--color-text-faint);
+}
 
-@keyframes thinking-pulse {
-  0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
-  35% { opacity: 1; transform: translateY(-2px); }
+.activity-detail dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.detail-output {
+  max-height: 130px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.detail-error {
+  color: var(--color-danger) !important;
+}
+
+.process-expand-enter-active,
+.process-expand-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+  transform-origin: top;
+}
+
+.process-expand-enter-from,
+.process-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@keyframes process-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes process-scan {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(340%); }
 }
 
 @media (max-width: 720px) {
-  .thinking-block { width: 100%; }
-  .thinking-toggle { font-size: 0; }
-  .thinking-toggle .toggle-chevron { font-size: 14px; }
-  .activity-list { padding-left: 18px; }
+  .process-panel { width: 100%; }
+  .process-summary { grid-template-columns: 32px minmax(0, 1fr) 18px; }
+  .process-toggle { font-size: 0; }
+  .process-toggle svg { width: 17px; height: 17px; }
+  .activity-list { padding-left: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-orbit i,
+  .activity-spinner,
+  .process-progress span {
+    animation: none;
+  }
 }
 </style>

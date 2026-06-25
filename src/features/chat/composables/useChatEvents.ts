@@ -3,7 +3,7 @@
 
 import { readonly, ref, shallowRef } from 'vue'
 
-import type { ChatEvent, ChatEventName } from '@/features/chat/model/chatEvent'
+import type { ChatEvent, ChatEventName } from '@/features/chat/types/chatEvent'
 
 export type ChatConnectionStatus =
   | 'idle'

@@ -171,114 +171,258 @@
               <p class="cognitive-note">在这里，每一次对话都会成为塑形您学习画像的线索。<br>我支持跨媒介文献与视听分析，我们将共同构建您的个性化认知图谱。</p>
             </div>
 
+            <!-- AI 尚未输出首个字符时的准备状态 -->
+            <div
+              v-if="chatMode === 'standard' && isAIThinking && !streamingMsgId"
+              class="thinking-indicator-row"
+            >
+              <div class="thinking-avatar">
+                <div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
+              </div>
+              <div class="pre-answer-state" aria-live="polite">
+                <div class="pre-answer-head">
+                  <span class="thinking-core" aria-hidden="true">
+                    <i></i><i></i><i></i>
+                  </span>
+                  <div>
+                    <strong>{{ preparationTitle }}</strong>
+                    <span>{{ preparationDescription }}</span>
+                  </div>
+                </div>
+                <div class="pre-answer-lines" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+
             <template v-for="msg in messages" :key="msg.id">
               <div
-                v-if="msg.role === 'user' || getDisplayContent(msg) || msg.agentActivities?.length || msg.teachingDiagramGenerating || msg.teachingDiagram"
+                v-if="
+                  msg.role === 'user'
+                  || getDisplayContent(msg)
+                  || msg.attachments?.length
+                  || msg.agentActivities?.length
+                  || msg.teachingDiagramGenerating
+                  || msg.teachingDiagram
+                  || isWaitingForFirstToken(msg)
+                "
                 :class="['message-row', msg.role]"
-            >
-              <div class="msg-avatar">
-                <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
-                <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
-              </div>
-
-              <div class="bubble-wrapper" @click="handleMessageClick">
-                <div class="msg-meta">
-                  <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : 'You' }}</span>
-                  <span class="time">{{ msg.time }}</span>
+              >
+                <div class="msg-avatar">
+                  <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
+                  <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
                 </div>
 
-                <AgentActivityCard
+                <div class="bubble-wrapper" @click="handleMessageClick">
+                  <div class="msg-meta">
+                    <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : '我' }}</span>
+                    <span class="time">{{ msg.time }}</span>
+                  </div>
+
+                  <!-- 图片附件作为消息内容展示，而不是普通文件小图标 -->
+                  <div
+                    v-if="getImageAttachments(msg.attachments).length"
+                    class="message-image-gallery"
+                    :class="getImageGalleryClass(msg.attachments)"
+                  >
+                    <el-image
+                      v-for="(att, imageIndex) in getImageAttachments(msg.attachments)"
+                      :key="`${att.url}-${imageIndex}`"
+                      :src="att.url"
+                      :alt="att.name || `图片 ${imageIndex + 1}`"
+                      :preview-src-list="getImagePreviewUrls(msg.attachments)"
+                      :initial-index="imageIndex"
+                      fit="cover"
+                      preview-teleported
+                      hide-on-click-modal
+                      class="message-image"
+                      @click.stop
+                    >
+                      <template #error>
+                        <div class="image-load-error">
+                          <el-icon><Document /></el-icon>
+                          <span>图片加载失败</span>
+                        </div>
+                      </template>
+                    </el-image>
+                  </div>
+
+                  <div
+                    v-if="getDocumentAttachments(msg.attachments).length"
+                    class="message-file-list"
+                  >
+                    <a
+                      v-for="att in getDocumentAttachments(msg.attachments)"
+                      :key="att.url || att.name"
+                      :href="att.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="message-file-card"
+                    >
+                      <span
+                        class="file-icon-box"
+                        :style="{ backgroundColor: getDocumentIconColor(getDocumentType(att.name)) }"
+                      >
+                        <el-icon aria-hidden="true"><Document /></el-icon>
+                      </span>
+                      <span class="file-copy">
+                        <strong :title="att.name">{{ att.name || '文档附件' }}</strong>
+                        <small>{{ formatFileSize(att.size) || getDocumentType(att.name).toUpperCase() }}</small>
+                      </span>
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M7 5h8v8M14.5 5.5 6 14" />
+                      </svg>
+                    </a>
+                  </div>
+
+                  <div
+                    v-if="msg.role === 'ai' && isWaitingForFirstToken(msg) && !msg.agentActivities?.length"
+                    class="pre-answer-state is-inline"
+                    aria-live="polite"
+                  >
+                    <div class="pre-answer-head">
+                      <span class="thinking-core" aria-hidden="true">
+                        <i></i><i></i><i></i>
+                      </span>
+                      <div>
+                        <strong>{{ getMessageThinkingTitle(msg) }}</strong>
+                        <span>{{ getMessageThinkingDescription(msg) }}</span>
+                      </div>
+                    </div>
+                    <div class="pre-answer-lines" aria-hidden="true">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+
+                  <AgentActivityCard
                     v-if="msg.role === 'ai' && msg.agentActivities?.length"
                     :activities="msg.agentActivities"
-                />
+                  />
 
-                <div
-                  v-if="msg.role === 'user' || getDisplayContent(msg)"
-                  :class="['bubble', 'markdown-body', { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' }]"
-                >
-                  <template v-if="msg.role === 'user'">
-                    <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
-                  </template>
-                  <template v-else>
+                  <div
+                    v-if="getDisplayContent(msg)"
+                    :class="[
+                      'bubble',
+                      'markdown-body',
+                      msg.role === 'ai' ? 'assistant-answer' : 'user-message-bubble',
+                      { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' },
+                    ]"
+                  >
+                    <div v-if="msg.role === 'user'" class="user-plain-text">{{ getDisplayContent(msg) }}</div>
                     <TutorMessageContent
-                        v-if="getDisplayContent(msg)"
-                        :content="getDisplayContent(msg)"
-                        :is-streaming="isStreamingMessage(msg)"
+                      v-else
+                      :content="getDisplayContent(msg)"
+                      :is-streaming="isStreamingMessage(msg)"
                     />
-                  </template>
-                </div>
-
-                <div v-if="msg.contextCompressionStage" :class="['context-compression-card', { 'is-done': msg.contextCompressionStage === 'compression_done' }]">
-                  <div class="compression-orbit" aria-hidden="true">
-                    <span></span>
-                    <span></span>
-                    <span></span>
                   </div>
-                  <div class="compression-copy">
-                    <strong>{{ getCompressionTitle(msg) }}</strong>
-                    <span>{{ msg.contextCompressionMessage }}</span>
+
+                  <div
+                    v-if="msg.role === 'ai' && getDisplayContent(msg) && !isStreamingMessage(msg)"
+                    class="message-actions"
+                  >
+                    <button type="button" @click.stop="copyAssistantAnswer(msg)">
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <rect x="6" y="6" width="9" height="9" rx="1.5" />
+                        <path d="M4 12H3.5A1.5 1.5 0 0 1 2 10.5v-7A1.5 1.5 0 0 1 3.5 2h7A1.5 1.5 0 0 1 12 3.5V4" />
+                      </svg>
+                      复制回答
+                    </button>
+                  </div>
+
+                  <div
+                    v-if="msg.contextCompressionStage"
+                    :class="['context-compression-card', { 'is-done': msg.contextCompressionStage === 'compression_done' }]"
+                  >
+                    <div class="compression-orbit" aria-hidden="true">
+                      <span></span><span></span><span></span>
+                    </div>
+                    <div class="compression-copy">
+                      <strong>{{ getCompressionTitle(msg) }}</strong>
+                      <span>{{ msg.contextCompressionMessage }}</span>
+                    </div>
+                  </div>
+
+                  <div v-if="msg.teachingDiagramGenerating" class="diagram-generation-panel">
+                    <div class="diagram-blueprint" aria-hidden="true">
+                      <span class="blueprint-node node-a"></span>
+                      <span class="blueprint-node node-b"></span>
+                      <span class="blueprint-node node-c"></span>
+                      <span class="blueprint-node node-d"></span>
+                      <i class="blueprint-line line-a"></i>
+                      <i class="blueprint-line line-b"></i>
+                      <i class="blueprint-line line-c"></i>
+                    </div>
+                    <div class="diagram-generation-copy">
+                      <span class="diagram-generation-kicker">VISUAL EXPLANATION</span>
+                      <strong>正在绘制教学图解</strong>
+                      <p>将答案整理为关键节点、关系和理解顺序，完成后会直接显示在回答下方。</p>
+                      <div class="diagram-generation-progress" aria-hidden="true"><span></span></div>
+                    </div>
+                  </div>
+
+                  <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
+                    <TeachingDiagramCard
+                      :diagram="msg.teachingDiagram"
+                      compact
+                      @expand="previewTeachingDiagram"
+                    />
                   </div>
                 </div>
-
-                <div v-if="msg.attachments && msg.attachments.length > 0" class="msg-attachments">
-                  <a v-for="att in msg.attachments" :key="att.url" :href="att.url" target="_blank" class="attachment-link">
-                    <template v-if="att.type === 'image'">
-                      <el-image :src="att.url" :alt="att.name || '图片附件'" fit="cover" class="attachment-img-preview" lazy />
-                    </template>
-                    <template v-else>
-                      <div class="file-icon-box" :style="{ backgroundColor: getDocumentIconColor(getDocumentType(att.name)) }">
-                        <el-icon aria-hidden="true"><Document /></el-icon>
-                      </div>
-                      <span class="attachment-name" :title="att.name">{{ att.name }}</span>
-                    </template>
-                  </a>
-                </div>
-
-                <div v-if="msg.teachingDiagramGenerating" class="teaching-diagram-generating">
-                  <div class="kg-gen-header">
-                    <span class="diagram-spinner"></span>
-                    <span class="kg-gen-title">图解说明设计中</span>
-                    <span class="kg-gen-subtitle">正在挑选最合适的讲解视角和关键步骤...</span>
-                  </div>
-                  <div class="diagram-draft-grid">
-                    <span>关键结论</span>
-                    <span>理解路径</span>
-                    <span>快速自测</span>
-                  </div>
-                </div>
-
-                <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
-                  <TeachingDiagramCard :diagram="msg.teachingDiagram" compact @expand="previewTeachingDiagram" />
-                </div>
-
-              </div>
               </div>
             </template>
 
           </div>
 
           <div class="minimal-input-panel">
-            <div v-if="pendingFiles.length > 0" class="minimal-attachments-preview">
-              <div v-for="(f, idx) in pendingFiles" :key="idx" class="minimal-attachment-chip">
-                <template v-if="f.fileType === 'image'">
-                  <el-image :src="f.localUrl || f.url" :alt="f.name || '图片预览'" fit="cover" class="attachment-img-preview" />
-                </template>
-                <template v-else>
-                  <div class="file-icon-box" :style="{ backgroundColor: getDocumentIconColor(getDocumentType(f.name)) }">
-                    <el-icon aria-hidden="true"><Document /></el-icon>
-                  </div>
-                </template>
-                <span class="attachment-name" :title="f.name">{{ f.name }}</span>
-                <button class="remove-attachment-btn" @click="removeAttachment(idx)" aria-label="移除附件"><el-icon aria-hidden="true"><Close /></el-icon></button>
-              </div>
-            </div>
-
             <form
               ref="messageFormRef"
               class="minimal-input-wrapper"
-              :class="{ 'is-expanded': isExpandedInput }"
+              :class="{ 'is-expanded': isExpandedInput, 'has-attachments': pendingFiles.length > 0 }"
               @submit.prevent="handleSend"
             >
+              <div v-if="pendingFiles.length > 0" class="composer-attachments">
+                <div
+                  v-for="(f, idx) in pendingFiles"
+                  :key="`${f.name}-${idx}`"
+                  class="composer-attachment"
+                  :class="{ 'is-image': f.fileType === 'image', 'is-file': f.fileType !== 'image' }"
+                >
+                  <template v-if="f.fileType === 'image'">
+                    <el-image
+                      :src="f.localUrl || f.url"
+                      :alt="f.name || '图片预览'"
+                      fit="cover"
+                      class="composer-image"
+                    />
+                    <span class="composer-image-name" :title="f.name">{{ f.name }}</span>
+                  </template>
+                  <template v-else>
+                    <span
+                      class="file-icon-box"
+                      :style="{ backgroundColor: getDocumentIconColor(getDocumentType(f.name)) }"
+                    >
+                      <el-icon aria-hidden="true"><Document /></el-icon>
+                    </span>
+                    <span class="file-copy">
+                      <strong :title="f.name">{{ f.name }}</strong>
+                      <small>{{ formatFileSize(f.size) || getDocumentType(f.name).toUpperCase() }}</small>
+                    </span>
+                  </template>
+                  <button
+                    type="button"
+                    class="remove-attachment-btn"
+                    @click="removeAttachment(idx)"
+                    aria-label="移除附件"
+                  >
+                    <el-icon aria-hidden="true"><Close /></el-icon>
+                  </button>
+                </div>
+              </div>
+
               <textarea
                   ref="textareaRef"
                   v-model="userInput"
@@ -291,31 +435,44 @@
 
               <div class="minimal-action-bar">
                 <div class="action-left">
-                  <el-tooltip content="上传附件" placement="top" :show-after="500">
-                    <button type="button" class="minimal-icon-btn" :disabled="uploadingFile" @click="triggerFileUpload" aria-label="上传附件">
-                      <el-icon aria-hidden="true"><Paperclip /></el-icon>
-                    </button>
-                  </el-tooltip>
+                  <button
+                    type="button"
+                    class="input-tool-btn"
+                    :disabled="uploadingFile"
+                    @click="triggerFileUpload"
+                    aria-label="上传附件"
+                  >
+                    <el-icon aria-hidden="true"><Paperclip /></el-icon>
+                    <span>{{ uploadingFile ? '上传中' : '附件' }}</span>
+                  </button>
 
-                  <el-tooltip content="联网搜索" placement="top" :show-after="500">
-                    <button type="button" class="minimal-icon-btn" :class="{ 'is-active-blue': enableWebSearch }" @click="enableWebSearch = !enableWebSearch" :aria-label="enableWebSearch ? '关闭联网搜索' : '开启联网搜索'">
-                      <el-icon aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <ellipse cx="12" cy="12" rx="5" ry="10"></ellipse>
-                          <line x1="12" y1="2" x2="12" y2="22"></line>
-                          <line x1="2" y1="12" x2="22" y2="12"></line>
-                        </svg>
-                      </el-icon>
-                    </button>
-                  </el-tooltip>
+                  <button
+                    type="button"
+                    class="input-tool-btn"
+                    :class="{ 'is-active-blue': enableWebSearch }"
+                    @click="enableWebSearch = !enableWebSearch"
+                    :aria-pressed="enableWebSearch"
+                  >
+                    <el-icon aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <ellipse cx="12" cy="12" rx="4.5" ry="9"></ellipse>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                      </svg>
+                    </el-icon>
+                    <span>联网</span>
+                  </button>
 
-                  <el-tooltip content="协同绘制结构图解" placement="top" :show-after="500">
-                    <button type="button" class="minimal-icon-btn" :class="{ 'is-active-teal': needTeachingDiagram }" @click="handleTeachingDiagramToggle" :aria-label="needTeachingDiagram ? '关闭结构图解' : '协同绘制结构图解'">
-                      <el-icon aria-hidden="true"><DataLine /></el-icon>
-                    </button>
-                  </el-tooltip>
-
+                  <button
+                    type="button"
+                    class="input-tool-btn"
+                    :class="{ 'is-active-teal': needTeachingDiagram }"
+                    @click="handleTeachingDiagramToggle"
+                    :aria-pressed="needTeachingDiagram"
+                  >
+                    <el-icon aria-hidden="true"><DataLine /></el-icon>
+                    <span>图解</span>
+                  </button>
                 </div>
 
                 <div class="action-right">
@@ -380,7 +537,7 @@
           </div>
         </div>
 
-        <input ref="fileInput" type="file" accept=".pdf,.docx,.txt,.md,.log,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
+        <input ref="fileInput" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.log,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
       </section>
     </main>
 
@@ -436,25 +593,40 @@
       </transition>
     </div>
 
-    <!-- 教学图解预览 -->
+    <!-- 教学图解全屏预览 -->
     <el-dialog
-        v-model="teachingDiagramPreviewVisible"
-        :title="teachingDiagramPreviewData?.title || '图解说明'"
-        width="min(1080px, 92vw)"
-        top="5vh"
-        destroy-on-close
-        class="diagram-preview-dialog"
+      v-model="teachingDiagramPreviewVisible"
+      width="min(1180px, 94vw)"
+      top="3vh"
+      destroy-on-close
+      :show-close="false"
+      class="diagram-preview-dialog"
     >
-      <div class="diagram-preview-body" v-if="teachingDiagramPreviewData">
+      <template #header>
+        <div class="diagram-dialog-header">
+          <div>
+            <span>教学图解</span>
+            <strong>{{ teachingDiagramPreviewData?.title || '图解说明' }}</strong>
+          </div>
+          <button type="button" @click="teachingDiagramPreviewVisible = false" aria-label="关闭图解">
+            <el-icon><Close /></el-icon>
+          </button>
+        </div>
+      </template>
+
+      <div v-if="teachingDiagramPreviewData" class="diagram-preview-body">
         <div class="preview-content">
           <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
         </div>
         <div class="preview-footer">
-          <el-button type="success" :loading="isCapturing" @click="handleDownloadDiagram">
-            <el-icon><Download /></el-icon> 保存为图片
-          </el-button>
-          <el-button type="primary" plain @click="copyTeachingDiagramJson(teachingDiagramPreviewData)">复制图解 JSON</el-button>
-          <el-button @click="teachingDiagramPreviewVisible = false">关闭</el-button>
+          <span>图解可保存为高清图片，便于复习和整理笔记。</span>
+          <div>
+            <el-button :loading="isCapturing" @click="handleDownloadDiagram">
+              <el-icon><Download /></el-icon>
+              保存图片
+            </el-button>
+            <el-button type="primary" @click="teachingDiagramPreviewVisible = false">完成</el-button>
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -477,10 +649,10 @@ import TutorMessageContent from '@/features/chat/components/TutorMessageContent.
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
 
-import { useDiagramCapture } from '@/features/chat/model/useDiagramCapture'
+import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
 
 import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
-import { useChatStreamManager } from '@/features/chat/model/useChatStreamManager'
+import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
 import {
   uploadFile,
   getSessions,
@@ -492,8 +664,8 @@ import {
 import type {
   ChatSession,
   TeachingDiagram,
-} from '@/features/chat/model/chat'
-import type { ChatEvent } from '@/features/chat/model/chatEvent'
+} from '@/features/chat/types/chat'
+import type { ChatEvent } from '@/features/chat/types/chatEvent'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
 import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
@@ -505,10 +677,11 @@ import {
   normalizeTeachingDiagram,
   getDocumentType,
   getDocumentIconColor,
+  formatFileSize,
   formatRelativeTime,
   isInsideOpenFence,
   takeNextStreamUnit,
-} from './TutorConstants'
+} from './tutorUtils'
 
 defineOptions({ name: 'Tutor' })
 
@@ -806,73 +979,90 @@ const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayloa
 const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   if (!aiMsg) return
 
-  // Handle diagram.ready event
+  const data = (event.data || {}) as Record<string, unknown>
+
   if (event.event === 'diagram.ready') {
-    const diagram = normalizeTeachingDiagram(event.data as unknown as TeachingDiagram)
+    const diagram = normalizeTeachingDiagram(data as unknown as TeachingDiagram)
     if (diagram) {
-      clearAgentStatus(aiMsg)
       aiMsg.teachingDiagram = diagram
       aiMsg.teachingDiagramGenerating = false
     }
     return
   }
 
-  // Handle thinking event - used for teaching diagram generation
   if (event.event === 'thinking') {
-    const stage = event.data.stage as string | undefined
-    if (stage === 'teaching_diagram_generate') {
-      clearAgentStatus(aiMsg)
+    const stage = data.stage as string | undefined
+    if (['teaching_diagram_generate', 'diagram_start', 'diagram_generate'].includes(stage || '')) {
       aiMsg.teachingDiagramGenerating = true
       return
     }
-    // Handle compression stages
-    if (applyCompressionStatus(aiMsg, { stage: stage || '', message: event.message })) return
+    applyCompressionStatus(aiMsg, { stage: stage || '', message: event.message })
     return
   }
 
-  // Handle tool events
-  if (event.event === 'tool.running' || event.event === 'tool.completed' || event.event === 'tool.failed') {
-    const activityId = (event.data.activity_id as string)?.trim()
-    const toolName = event.data.tool_name as string | undefined
+  if (
+    event.event === 'tool.running'
+    || event.event === 'tool.completed'
+    || event.event === 'tool.failed'
+  ) {
+    const activityId = String(data.activity_id || '').trim()
+    const toolName = typeof data.tool_name === 'string' ? data.tool_name : undefined
+    const detail = (
+      data.detail && typeof data.detail === 'object'
+        ? data.detail
+        : {}
+    ) as AgentActivity['detail']
+    const isAttachmentActivity = Boolean(detail?.analysis_type || detail?.files?.length)
     const title = event.message.trim()
-    if (!activityId || !title) return
+      || (isAttachmentActivity ? '正在分析附件' : '正在调用学习工具')
+    if (!activityId) return
 
     applyAgentStatus(aiMsg, {
       activity_id: activityId,
-      kind: 'tool',
-      stage: event.data.stage as string | undefined,
+      kind: isAttachmentActivity ? 'attachment' : 'tool',
+      stage: typeof data.stage === 'string' ? data.stage : undefined,
       status: event.event === 'tool.completed' ? 'done' : event.event === 'tool.failed' ? 'failed' : 'running',
-      tool_name: toolName,
+      tool_name: toolName || detail?.tool_name,
       title,
-      summary: event.data.summary as string | undefined,
-      detail: event.data as AgentActivity['detail'],
+      summary: detail?.files?.length
+        ? detail.files.join('、')
+        : detail?.input || (typeof data.summary === 'string' ? data.summary : undefined),
+      message: event.message,
+      detail,
     })
     return
   }
 
-  // Handle attachment events
-  if (event.event === 'attachment.running' || event.event === 'attachment.completed' || event.event === 'attachment.failed') {
-    const activityId = (event.data.activity_id as string)?.trim()
-    const title = event.message.trim()
-    if (!activityId || !title) return
+  if (
+    event.event === 'attachment.running'
+    || event.event === 'attachment.completed'
+    || event.event === 'attachment.failed'
+  ) {
+    const activityId = String(data.activity_id || '').trim()
+    const detail = (
+      data.detail && typeof data.detail === 'object'
+        ? data.detail
+        : {}
+    ) as AgentActivity['detail']
+    if (!activityId) return
 
     applyAgentStatus(aiMsg, {
       activity_id: activityId,
       kind: 'attachment',
-      stage: event.data.stage as string | undefined,
+      stage: typeof data.stage === 'string' ? data.stage : 'attachment_analysis',
       status: event.event === 'attachment.completed' ? 'done' : event.event === 'attachment.failed' ? 'failed' : 'running',
-      title,
-      summary: event.data.summary as string | undefined,
-      detail: event.data as AgentActivity['detail'],
+      title: event.message.trim() || '附件分析',
+      summary: detail?.files?.length
+        ? detail.files.join('、')
+        : typeof data.summary === 'string' ? data.summary : undefined,
+      message: event.message,
+      detail,
     })
-    return
   }
 }
 
 const clearAgentStatus = (aiMsg?: ChatMsg) => {
   if (!aiMsg) return
-  aiMsg.searchStage = undefined
-  aiMsg.searchMessage = undefined
 }
 
 const clearAvatarThinkingTimeout = () => {
@@ -985,6 +1175,57 @@ const getDisplayContent = (msg: ChatMsg) => {
   return msg.content
 }
 
+const preparationTitle = computed(() => {
+  if (uploadingFile.value) return '正在上传并读取附件'
+  if (enableWebSearch.value) return '正在理解问题并准备检索'
+  return '正在理解你的问题'
+})
+
+const preparationDescription = computed(() => {
+  if (uploadingFile.value) return '图片或文档上传完成后，将继续提取关键信息。'
+  if (needTeachingDiagram.value) return '先组织文字回答，随后生成配套教学图解。'
+  return '正在判断问题重点并组织清晰的回答结构。'
+})
+
+const isWaitingForFirstToken = (msg: ChatMsg) => (
+  msg.role === 'ai'
+  && msg.id === streamingMsgId.value
+  && isAIThinking.value
+  && !getDisplayContent(msg)
+  && !msg.teachingDiagram
+)
+
+const getMessageThinkingTitle = (_msg: ChatMsg) => {
+  if (digitalHumanBackendStatus.value) return digitalHumanBackendStatus.value
+  if (enableWebSearch.value) return '正在分析问题与检索方向'
+  return '正在组织回答'
+}
+
+const getMessageThinkingDescription = (_msg: ChatMsg) => {
+  if (needTeachingDiagram.value) return '回答完成后会继续生成一张结构化教学图解。'
+  if (enableWebSearch.value) return '会根据问题时效性选择可靠资料，并整理为可读答案。'
+  return '正在提取关键概念、推导步骤和容易混淆的部分。'
+}
+
+const getImageAttachments = (attachments?: Attachment[] | null) => (
+  (attachments || []).filter(item => item.type === 'image' && Boolean(item.url))
+)
+
+const getDocumentAttachments = (attachments?: Attachment[] | null) => (
+  (attachments || []).filter(item => item.type !== 'image')
+)
+
+const getImagePreviewUrls = (attachments?: Attachment[] | null) => (
+  getImageAttachments(attachments).map(item => item.url)
+)
+
+const getImageGalleryClass = (attachments?: Attachment[] | null) => {
+  const count = getImageAttachments(attachments).length
+  if (count <= 1) return 'is-single'
+  if (count === 2) return 'is-pair'
+  return 'is-grid'
+}
+
 const isDigitalHumanPacedStream = () => chatMode.value === 'digital_human'
 
 const getDigitalHumanUnitsPerTick = (streamDone: boolean): number => {
@@ -1042,13 +1283,6 @@ const handleDownloadDiagram = async () => {
   }
 }
 
-const copyTeachingDiagramJson = async (diagram: TeachingDiagram) => {
-  if (diagram) {
-    await copyToClipboard(JSON.stringify(diagram, null, 2))
-    ElMessage.success({ message: '图解说明 JSON 已复制', plain: true })
-  }
-}
-
 const handleEnter = (e: KeyboardEvent) => {
   if (isComposing.value || e.isComposing) return
   if (e.shiftKey) return
@@ -1067,6 +1301,12 @@ const copyToClipboard = async (text: string) => {
   } catch (err) {
     ElMessage.error('复制失败，请重试')
   }
+}
+
+const copyAssistantAnswer = async (msg: ChatMsg) => {
+  const content = getDisplayContent(msg).trim()
+  if (!content) return
+  await copyToClipboard(content)
 }
 
 const handleMessageClick = (e: MouseEvent) => {
@@ -1516,7 +1756,7 @@ const newSession = () => {
 
   currentSessionId.value = undefined
   messages.value = []
-  pendingFiles.value = []
+  clearPendingFiles()
 }
 
 const loadHistoryFromAPI = async (sessionId: string) => {
@@ -1536,7 +1776,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         .map(part => ({ url: part.image_url.url, type: 'image', name: '' }))
       const fileAttachments = contentParts
         .filter((part): part is { type: 'file'; file: { file_id?: string; file_data?: string; filename?: string } } => part.type === 'file')
-        .map(part => ({ url: part.file.file_data || '', type: 'document', name: part.file.filename || '' }))
+        .map(part => ({ url: part.file.file_id || part.file.file_data || '', type: 'document', name: part.file.filename || '' }))
       const attachments = [...imageAttachments, ...fileAttachments].length > 0
         ? [...imageAttachments, ...fileAttachments]
         : null
@@ -1554,7 +1794,14 @@ const loadHistoryFromAPI = async (sessionId: string) => {
     messages.value = mapped.filter((item, idx) => {
       if (idx === 0) return true
       const prev = mapped[idx - 1]
-      return !(prev && prev.role === item.role && prev.content === item.content)
+      const currentAttachmentKey = (item.attachments || []).map(att => `${att.type}:${att.url}:${att.name}`).join('|')
+      const previousAttachmentKey = (prev?.attachments || []).map(att => `${att.type}:${att.url}:${att.name}`).join('|')
+      return !(
+        prev
+        && prev.role === item.role
+        && prev.content === item.content
+        && previousAttachmentKey === currentAttachmentKey
+      )
     })
   } catch (err) {
     ElMessage.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
@@ -1614,7 +1861,7 @@ const switchSession = async (sessionId: string) => {
         }
         void refreshSessionTitleWithRetry(sessionId)
       },
-      onError: (err) => {
+      onError: (_err) => {
         isStreamDone = false
         flushPendingStreamText(true)
         stopStreamFlushLoop()
@@ -1625,7 +1872,7 @@ const switchSession = async (sessionId: string) => {
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
           if (!aiMsg.content) {
-            aiMsg.content = `生成失败: ${err.message}`
+            aiMsg.content = "生成失败，请重试。"
           }
         }
         stopTeachingDiagramGeneratingForCurrentAi()
@@ -1686,20 +1933,36 @@ const archiveSession = async (sessionId: string) => {
 
 const triggerFileUpload = () => fileInput.value?.click()
 
-const onCombinedFileSelected = async (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+const MAX_COMPOSER_FILES = 5
 
-  const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)
-  const fileType = isImage ? 'image' : 'document'
-  const localUrl = isImage ? URL.createObjectURL(file) : undefined
-  pendingFiles.value.push({
-    file,
-    fileType,
-    name: file.name,
-    localUrl,
+const onCombinedFileSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const selectedFiles = Array.from(input.files || [])
+  if (!selectedFiles.length) return
+
+  const remaining = Math.max(0, MAX_COMPOSER_FILES - pendingFiles.value.length)
+  if (remaining === 0) {
+    ElMessage.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件`)
+    input.value = ''
+    return
+  }
+
+  if (selectedFiles.length > remaining) {
+    ElMessage.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件，已保留前 ${remaining} 个`)
+  }
+
+  selectedFiles.slice(0, remaining).forEach((file) => {
+    const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)
+    pendingFiles.value.push({
+      file,
+      fileType: isImage ? 'image' : 'document',
+      name: file.name,
+      localUrl: isImage ? URL.createObjectURL(file) : undefined,
+      size: file.size,
+      mimeType: file.type,
+    })
   })
+
   input.value = ''
 }
 
@@ -1709,6 +1972,13 @@ const removeAttachment = (idx: number) => {
     URL.revokeObjectURL(removed.localUrl)
   }
   pendingFiles.value.splice(idx, 1)
+}
+
+const clearPendingFiles = () => {
+  pendingFiles.value.forEach(file => {
+    if (file.localUrl) URL.revokeObjectURL(file.localUrl)
+  })
+  pendingFiles.value = []
 }
 
 const getAvatarCapabilities = () => ({
@@ -1791,8 +2061,10 @@ const handleAvatarSpeechRateChange = (val: number) => {
 
 const handleSend = async () => {
   const text = userInput.value.trim()
-  const hasFiles = pendingFiles.value.length > 0
+  const currentPending = [...pendingFiles.value]
+  const hasFiles = currentPending.length > 0
   if ((!text && !hasFiles) || isAIThinking.value) return
+
   const shouldGenerateTeachingDiagram = needTeachingDiagram.value
   const sessionMode = chatMode.value === 'digital_human' ? 'digital_human' : 'standard'
 
@@ -1802,107 +2074,121 @@ const handleSend = async () => {
   }
 
   if (!await ensureCurrentSession(sessionMode)) return
-  const activeSessionId = sessionMode === 'digital_human' ? digitalHumanSessionId.value : currentSessionId.value
+  const activeSessionId = sessionMode === 'digital_human'
+    ? digitalHumanSessionId.value
+    : currentSessionId.value
+  if (!activeSessionId) return
 
-  if (activeSessionId && text) {
-    const session = sessions.value.find(s => s.id === activeSessionId)
-    if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
-      // 使用用户消息的前20字符作为临时标题
-      const tempTitle = text.length > 20 ? text.slice(0, 20) + '...' : text
-      session.title = tempTitle
-      // 调用后端API更新标题
-      try {
-        await updateSessionTitle(activeSessionId, tempTitle)
-      } catch (err) {
-        console.warn('更新会话标题失败:', err)
-      }
+  const session = sessions.value.find(item => item.id === activeSessionId)
+  if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
+    const titleSource = text || currentPending.map(file => file.name).join('、') || '附件分析'
+    const tempTitle = titleSource.length > 20 ? `${titleSource.slice(0, 20)}...` : titleSource
+    session.title = tempTitle
+    try {
+      await updateSessionTitle(activeSessionId, tempTitle)
+    } catch (err) {
+      console.warn('更新会话标题失败:', err)
     }
   }
 
   const userMsgId = Date.now()
-  const displayText = text || (hasFiles ? `[附件分析] ${pendingFiles.value.map(f => f.name).join(', ')}` : '')
+  const optimisticAttachments: Attachment[] = currentPending.map(file => ({
+    url: file.localUrl || file.url || '',
+    type: file.fileType === 'image' ? 'image' : 'document',
+    name: file.name,
+    size: file.size,
+    mimeType: file.mimeType,
+  }))
 
-  if (displayText) {
-    messages.value.push({
-      id: userMsgId,
-      role: 'user',
-      content: displayText,
-      time: now(),
-      attachments: null,
-    })
-  }
+  messages.value.push({
+    id: userMsgId,
+    role: 'user',
+    content: text,
+    time: now(),
+    attachments: optimisticAttachments.length ? optimisticAttachments : null,
+  })
 
   userInput.value = ''
   isExpandedInput.value = false
   nextTick(() => {
-    if (textareaRef.value) {
-      textareaRef.value.style.height = '24px'
-    }
+    if (textareaRef.value) textareaRef.value.style.height = '24px'
   })
 
   isAIThinking.value = true
   digitalHumanBackendStatus.value = ''
   scrollToBottom()
 
-  const currentPending = [...pendingFiles.value]
   const uploadedAttachments: Attachment[] = []
+  uploadingFile.value = hasFiles
 
-  uploadingFile.value = true
   try {
     const uploaded = await Promise.all(
-        currentPending.map(async (pending) => {
-          if (pending.url) {
-            return {
-              url: pending.url,
-              fileType: pending.fileType,
-              name: pending.name,
-            }
-          }
-          const uploadSessionId = sessionMode === 'digital_human' ? digitalHumanSessionId.value : currentSessionId.value
-          if (!pending.file || !uploadSessionId) {
-            throw new Error('会话不存在，无法上传附件')
-          }
-          const res = await uploadFile(pending.file, uploadSessionId)
-          const data = res.data.data
+      currentPending.map(async (pending) => {
+        if (pending.url) {
           return {
-            url: data.url,
-            fileType: data.file_type,
-            name: data.original_name,
+            url: pending.url,
+            fileType: pending.fileType,
+            name: pending.name,
+            size: pending.size,
+            mimeType: pending.mimeType,
           }
-        })
+        }
+
+        if (!pending.file) throw new Error('附件内容不存在')
+        const res = await uploadFile(pending.file, activeSessionId)
+        const data = res.data.data
+        return {
+          url: data.url,
+          fileType: pending.fileType === 'image' || data.file_type === 'image' ? 'image' : 'document',
+          name: data.original_name || pending.name,
+          size: data.size || pending.size,
+          mimeType: data.mime_type || pending.mimeType,
+        }
+      }),
     )
-    uploaded.forEach((item) => {
+
+    uploaded.forEach(item => {
       uploadedAttachments.push({
         url: item.url,
         type: item.fileType,
         name: item.name,
+        size: item.size,
+        mimeType: item.mimeType,
       })
     })
-    pendingFiles.value.forEach(f => {
-      if (f.localUrl) URL.revokeObjectURL(f.localUrl)
+
+    const userMsg = messages.value.find(message => message.id === userMsgId)
+    if (userMsg) {
+      userMsg.attachments = uploadedAttachments.length ? uploadedAttachments : null
+    }
+
+    pendingFiles.value.forEach(file => {
+      if (file.localUrl) URL.revokeObjectURL(file.localUrl)
     })
     pendingFiles.value = []
-  } catch {
+  } catch (error) {
     uploadingFile.value = false
     isAIThinking.value = false
     messages.value.push({
       id: Date.now() + 99,
       role: 'ai',
-      content: '附件上传失败，请重试。',
+      content: `附件上传失败：${getErrorMessage(error, '请检查文件后重试。')}`,
       time: now(),
     })
     return
-  }
-  uploadingFile.value = false
-
-  const attachmentUrls = uploadedAttachments.map(f => f.url)
-  const userMsg = messages.value.find(m => m.id === userMsgId)
-  if (userMsg) {
-    userMsg.attachments = uploadedAttachments.length > 0 ? uploadedAttachments : null
+  } finally {
+    uploadingFile.value = false
   }
 
+  const attachmentUrls = uploadedAttachments.map(file => file.url).filter(Boolean)
   const aiMsgId = Date.now() + 1
-  messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
+  messages.value.push({
+    id: aiMsgId,
+    role: 'ai',
+    content: '',
+    time: now(),
+    agentActivities: [],
+  })
   streamingMsgId.value = aiMsgId
   streamingMsgRef.value = messages.value[messages.value.length - 1] || null
   isStreamDone = false
@@ -1911,14 +2197,13 @@ const handleSend = async () => {
 
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     startAvatarThinkingTimeout()
-    const aiMsg = messages.value.find(m => m.id === aiMsgId)
-    if (aiMsg) {
-      aiMsg.teachingDiagramGenerating = shouldGenerateTeachingDiagram
-    }
+    const aiMsg = messages.value.find(message => message.id === aiMsgId)
+    if (aiMsg) aiMsg.teachingDiagramGenerating = shouldGenerateTeachingDiagram
+
     sendAvatarText({
-      text: text || '请分析附件',
+      text: text || '请分析这些附件',
       need_diagram: shouldGenerateTeachingDiagram,
-      attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+      attachments: attachmentUrls.length ? attachmentUrls : undefined,
       ...getAvatarCapabilities(),
       speech_rate: avatarSpeechRate.value,
     })
@@ -1926,61 +2211,56 @@ const handleSend = async () => {
   }
 
   streamManager.startStream(
-      currentSessionId.value!,
-      {
-        message: text,
-        session_id: currentSessionId.value,
-        attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
-        need_teaching_diagram: shouldGenerateTeachingDiagram,
-        enable_web_search: enableWebSearch.value,
+    activeSessionId,
+    {
+      message: text || '请分析这些附件',
+      session_id: activeSessionId,
+      attachments: attachmentUrls.length ? attachmentUrls : undefined,
+      need_teaching_diagram: shouldGenerateTeachingDiagram,
+      enable_web_search: enableWebSearch.value,
+    },
+    {
+      onChunk: (chunk) => {
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        if (aiMsg && shouldGenerateTeachingDiagram && !aiMsg.teachingDiagram) {
+          aiMsg.teachingDiagramGenerating = true
+        }
+        enqueueStreamChunk(aiMsgId, chunk)
       },
-      {
-        onChunk: (chunk) => {
-          clearAgentStatus(messages.value.find(m => m.id === aiMsgId))
-          enqueueStreamChunk(aiMsgId, chunk)
-        },
-        onDone: () => {
-          isStreamDone = true
-          const finishedSessionId = currentSessionId.value
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          clearCompressionStatus(aiMsg)
-          clearAgentStatus(aiMsg)
-          if (aiMsg) {
-            aiMsg.teachingDiagramGenerating = false
-          }
-          if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-            stopStreamFlushLoop()
-            finishStream(aiMsgId)
-          }
-          if (finishedSessionId) {
-            void refreshSessionTitleWithRetry(finishedSessionId)
-          }
-        },
-        onError: (err) => {
-          isStreamDone = false
-          flushPendingStreamText(true)
+      onDone: () => {
+        isStreamDone = true
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        clearCompressionStatus(aiMsg)
+        if (aiMsg) aiMsg.teachingDiagramGenerating = false
+
+        if (pendingRenderQueueStart >= pendingRenderQueue.length) {
           stopStreamFlushLoop()
-          commitStreamTextToMessage(aiMsgId)
-          const aiMsg = messages.value.find(m => m.id === aiMsgId)
-          clearCompressionStatus(aiMsg)
-          clearAgentStatus(aiMsg)
-          if (aiMsg) {
-            aiMsg.teachingDiagramGenerating = false
-            if (!aiMsg.content) {
-              aiMsg.content = `生成失败: ${err.message}`
-            }
-          }
-          stopTeachingDiagramGeneratingForCurrentAi()
-          isAIThinking.value = false
-          streamingMsgId.value = null
-          streamingMsgRef.value = null
-        },
-        onEvent: (evt) => {
-          applyChatEvent(messages.value.find(m => m.id === aiMsgId), evt)
-          scrollToBottom()
-        },
+          finishStream(aiMsgId)
+        }
+        void refreshSessionTitleWithRetry(activeSessionId)
       },
-    )
+      onError: (_err) => {
+        isStreamDone = false
+        flushPendingStreamText(true)
+        stopStreamFlushLoop()
+        commitStreamTextToMessage(aiMsgId)
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        clearCompressionStatus(aiMsg)
+        if (aiMsg) {
+          aiMsg.teachingDiagramGenerating = false
+          if (!aiMsg.content) aiMsg.content = '连接中断，请刷新页面后重试。'
+        }
+        stopTeachingDiagramGeneratingForCurrentAi()
+        isAIThinking.value = false
+        streamingMsgId.value = null
+        streamingMsgRef.value = null
+      },
+      onEvent: (event) => {
+        applyChatEvent(messages.value.find(message => message.id === aiMsgId), event)
+        scrollToBottom()
+      },
+    },
+  )
 }
 
 watch(chatMode, async (newMode) => {
@@ -1988,7 +2268,7 @@ watch(chatMode, async (newMode) => {
     sessionSidebarCollapsed.value = true
     digitalHumanSessionId.value = undefined
     messages.value = []
-    pendingFiles.value = []
+    clearPendingFiles()
     if (!await ensureCurrentSession('digital_human')) return
     await connectAvatar()
     setAvatarNeedDiagram(needTeachingDiagram.value)
@@ -2001,7 +2281,7 @@ watch(chatMode, async (newMode) => {
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
     disconnectAvatar()
-    pendingFiles.value = []
+    clearPendingFiles()
     if (currentSessionId.value) {
       await switchSession(currentSessionId.value)
     } else {
@@ -2073,9 +2353,7 @@ onBeforeUnmount(() => {
   }
   isStreamDone = false
   streamingMsgRef.value = null
-  pendingFiles.value.forEach(f => {
-    if (f.localUrl) URL.revokeObjectURL(f.localUrl)
-  })
+  clearPendingFiles()
   if (dimTimer) clearTimeout(dimTimer)
   compressionClearTimers.forEach(timer => window.clearTimeout(timer))
   compressionClearTimers.clear()
@@ -2771,17 +3049,17 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
-/* ================= 聊天气泡深度优化 ================= */
+/* ================= 聊天气泡 — 墨韵书房风格 ================= */
 .message-row {
   display: flex;
-  gap: 1rem;
-  max-width: 60%;
-  animation: msg-appear var(--transition-slow)-out;
+  gap: 0.875rem;
+  max-width: 75%;
+  animation: msg-appear 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes msg-appear {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .message-row.user {
@@ -2789,29 +3067,34 @@ onBeforeUnmount(() => {
   flex-direction: row-reverse;
 }
 
+/* Avatar — 印章风格 */
 .msg-avatar {
   flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .avatar-circle {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  font-size: 0.875rem;
+  transition: all 0.3s ease;
 }
 
 .ai-av {
-  background: var(--color-text);
+  background: linear-gradient(135deg, var(--color-text), #3a3a38);
   color: var(--color-surface);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 
 .user-av {
-  background: var(--color-border);
-  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
 }
 
 .bubble-wrapper {
@@ -2830,6 +3113,8 @@ onBeforeUnmount(() => {
   color: var(--color-text-faint);
   display: flex;
   gap: var(--space-2);
+  margin-bottom: 4px;
+  align-items: center;
 }
 
 .message-row.user .msg-meta {
@@ -2838,7 +3123,17 @@ onBeforeUnmount(() => {
 
 .sender {
   font-weight: var(--weight-semibold);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+}
+
+.message-row.ai .sender {
+  color: var(--color-text-muted);
+}
+
+.message-row.user .sender {
+  color: var(--color-text-faint);
 }
 
 /* AI 和 User 气泡高级质感样式 */
@@ -2927,42 +3222,43 @@ onBeforeUnmount(() => {
   padding-left: 1.25rem;
 }
 
-/* AI 气泡：柔和浮动悬浮卡片 */
+/* AI 气泡：素白宣纸 */
 .message-row.ai .bubble {
   background: var(--color-surface);
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
   border-top-left-radius: 4px;
   color: var(--color-text);
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.02);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .message-row.ai .bubble:hover {
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06), 0 3px 10px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  border-color: var(--color-border-hover);
 }
 
-/* 用户气泡：现代渐变蓝紫与发光阴影 */
+/* 用户气泡：淡墨宣纸 */
 .message-row.user .bubble {
-  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
-  color: var(--color-surface);
-  border: none !important;
-  border-radius: var(--radius-xl);
+  background: var(--color-surface-hover) !important;
+  color: var(--color-text);
+  border: 1px solid var(--color-border) !important;
+  border-radius: 16px;
   border-top-right-radius: 4px;
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25), 0 2px 6px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
 }
 
-/* 覆盖用户气泡内的 Markdown 颜色 */
+/* 用户气泡内 Markdown 颜色 */
 .message-row.user :deep(.markdown-body) {
-  color: var(--color-surface) !important;
+  color: var(--color-text) !important;
 }
 .message-row.user :deep(.markdown-body a) {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--color-primary) !important;
   text-decoration: underline;
 }
 .message-row.user :deep(.markdown-body code:not(pre code)) {
-  background: rgba(255, 255, 255, 0.2) !important;
-  color: var(--color-surface) !important;
+  background: var(--color-border-light) !important;
+  color: var(--color-text-secondary) !important;
   border: none;
 }
 
@@ -3070,7 +3366,7 @@ onBeforeUnmount(() => {
 
 :deep(.markdown-body pre) {
   margin: 0.8rem 0;
-  padding: 1var(--space-1) var(--space-4);
+  padding: var(--space-3) var(--space-4);
   overflow-x: auto;
   background: var(--color-bg) !important;
   border: 1px solid var(--color-border);
@@ -3164,21 +3460,21 @@ onBeforeUnmount(() => {
 .minimal-input-wrapper {
   width: 100%;
   max-width: 800px;
-  background: var(--color-surface); /* 卡片底色 */
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-hover) 100%);
   border: 1px solid var(--color-border);
-  border-radius: 20px; /* 极简大圆角 */
+  border-radius: 16px;
   padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  transition: all var(--transition-base);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
 .minimal-input-wrapper:focus-within {
   border-color: var(--color-border-hover);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255,255,255,0.9);
 }
 
 .minimal-input-wrapper textarea {
@@ -3716,7 +4012,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  margin-right: 1var(--space-1);
+  margin-right: var(--space-3);
   margin-top: var(--space-2);
   margin-bottom: var(--space-2);
   flex-shrink: 0;
@@ -3792,5 +4088,926 @@ onBeforeUnmount(() => {
 .remove-attachment-btn:hover {
   color: var(--color-text);
   background: var(--color-surface-hover);
+}
+
+/* ================= 思考中指示器 — 类 ChatGPT 风格 ================= */
+.thinking-indicator-row {
+  display: flex;
+  gap: 0.875rem;
+  max-width: 75%;
+  animation: msg-appear 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.thinking-indicator-row .thinking-avatar {
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+.thinking-indicator-row .thinking-avatar .avatar-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  background: linear-gradient(135deg, var(--color-text), #3a3a38);
+  color: var(--color-surface);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.thinking-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  border-top-left-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  width: fit-content;
+}
+
+.thinking-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--color-text-muted);
+  border-radius: 50%;
+  animation: thinking-dot-bounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinking-dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.thinking-text {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
+}
+
+/* 思考状态与 AI 消息框的区别：
+   - AI 消息框：大段文字内容，白色背景，完整消息气泡
+   - 思考指示器：更紧凑，带点动画，灰色文字，表示"正在处理中"
+*/
+
+
+/* ================= 优化后的消息、附件、等待状态与输入区 ================= */
+.mode-standard .chat-viewport {
+  gap: 26px;
+  padding: 28px clamp(18px, 4vw, 56px) 32px;
+}
+
+.message-row {
+  width: min(900px, 100%);
+  max-width: 100%;
+  gap: 12px;
+}
+
+.message-row.ai {
+  align-self: flex-start;
+}
+
+.message-row.user {
+  width: auto;
+  max-width: min(680px, 78%);
+}
+
+.message-row.ai .bubble-wrapper {
+  width: min(830px, calc(100vw - 150px));
+  align-items: stretch;
+}
+
+.message-row.user .bubble-wrapper {
+  max-width: 100%;
+}
+
+.msg-avatar {
+  padding-top: 2px;
+}
+
+.avatar-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.ai-av {
+  background: #111827;
+  box-shadow: none;
+}
+
+.msg-meta {
+  min-height: 18px;
+  margin-bottom: 1px;
+  gap: 7px;
+}
+
+.sender {
+  font-size: 0.76rem;
+  letter-spacing: 0;
+}
+
+.msg-meta .time {
+  font-size: 0.68rem;
+}
+
+.bubble {
+  max-width: 100%;
+  padding: 0;
+}
+
+.message-row.ai .bubble,
+.message-row.ai .bubble:hover {
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.message-row.ai .assistant-answer {
+  padding: 3px 2px 0;
+}
+
+.message-row.user .bubble {
+  padding: 11px 14px;
+  color: var(--color-text);
+  background: #f4f5f7 !important;
+  border: 1px solid #e4e7eb !important;
+  border-radius: 12px;
+  border-top-right-radius: 4px;
+  box-shadow: none;
+}
+
+.user-plain-text {
+  font-size: 0.94rem;
+  line-height: 1.65;
+}
+
+.message-image-gallery {
+  display: grid;
+  gap: 5px;
+  width: min(520px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #eef1f4;
+}
+
+.message-row.user .message-image-gallery {
+  align-self: flex-end;
+}
+
+.message-image-gallery.is-single {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(440px, 100%);
+}
+
+.message-image-gallery.is-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.message-image-gallery.is-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.message-image {
+  display: block;
+  width: 100%;
+  height: 180px;
+  cursor: zoom-in;
+  background: #e5e7eb;
+}
+
+.message-image-gallery.is-single .message-image {
+  height: clamp(220px, 34vw, 360px);
+}
+
+.message-image-gallery.is-grid .message-image:first-child:nth-last-child(3) {
+  grid-row: span 2;
+  height: 365px;
+}
+
+.message-image-gallery.is-grid .message-image:first-child:nth-last-child(3) ~ .message-image {
+  height: 180px;
+}
+
+.message-image :deep(.el-image__inner) {
+  transition: transform 180ms ease;
+}
+
+.message-image:hover :deep(.el-image__inner) {
+  transform: scale(1.015);
+}
+
+.image-load-error {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text-muted);
+  background: #f8fafc;
+  font-size: 12px;
+}
+
+.message-file-list {
+  display: grid;
+  gap: 7px;
+  width: min(420px, 100%);
+}
+
+.message-row.user .message-file-list {
+  align-self: flex-end;
+}
+
+.message-file-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 9px 10px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.message-file-card:hover {
+  background: #fafbfc;
+  border-color: #cbd5e1;
+}
+
+.message-file-card > svg {
+  width: 17px;
+  height: 17px;
+  stroke: var(--color-text-faint);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.file-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-copy strong {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-copy small {
+  color: var(--color-text-faint);
+  font-size: 10px;
+}
+
+.message-actions {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.message-row.ai:hover .message-actions,
+.message-actions:focus-within {
+  opacity: 1;
+}
+
+.message-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  color: var(--color-text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.message-actions button:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+}
+
+.message-actions svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.thinking-indicator-row {
+  width: min(900px, 100%);
+  max-width: 100%;
+}
+
+.pre-answer-state {
+  width: min(620px, calc(100vw - 150px));
+  padding: 14px 15px;
+  overflow: hidden;
+  background: #fbfcfd;
+  border: 1px solid #e1e5ea;
+  border-radius: 10px;
+  box-shadow: 0 5px 20px rgba(15, 23, 42, 0.035);
+}
+
+.pre-answer-state.is-inline {
+  width: min(650px, 100%);
+}
+
+.pre-answer-head {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
+
+.pre-answer-head > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pre-answer-head strong {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pre-answer-head span:not(.thinking-core) {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.thinking-core {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+}
+
+.thinking-core i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: thinking-core-pulse 1.2s ease-in-out infinite;
+}
+
+.thinking-core i:nth-child(1) { transform: translateX(-7px); animation-delay: 0s; }
+.thinking-core i:nth-child(2) { animation-delay: 0.16s; }
+.thinking-core i:nth-child(3) { transform: translateX(7px); animation-delay: 0.32s; }
+
+.pre-answer-lines {
+  display: grid;
+  gap: 6px;
+  margin-top: 13px;
+  padding-left: 43px;
+}
+
+.pre-answer-lines span {
+  position: relative;
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  background: #edf0f3;
+  border-radius: 2px;
+}
+
+.pre-answer-lines span:nth-child(1) { width: 88%; }
+.pre-answer-lines span:nth-child(2) { width: 70%; }
+.pre-answer-lines span:nth-child(3) { width: 48%; }
+
+.pre-answer-lines span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent);
+  content: '';
+  transform: translateX(-100%);
+  animation: answer-skeleton-scan 1.45s ease-in-out infinite;
+}
+
+.diagram-generation-panel {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 18px;
+  width: min(680px, 100%);
+  margin-top: 8px;
+  padding: 14px;
+  overflow: hidden;
+  background: #fbfdff;
+  border: 1px solid #dbe5f2;
+  border-radius: 10px;
+}
+
+.diagram-blueprint {
+  position: relative;
+  min-height: 112px;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+    #f4f8ff;
+  background-size: 16px 16px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+}
+
+.blueprint-node {
+  position: absolute;
+  width: 28px;
+  height: 18px;
+  background: #fff;
+  border: 1.5px solid #60a5fa;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.08);
+  animation: blueprint-node-pulse 1.8s ease-in-out infinite;
+}
+
+.node-a { top: 20px; left: 18px; }
+.node-b { top: 19px; right: 20px; animation-delay: .2s; }
+.node-c { bottom: 18px; left: 46px; animation-delay: .4s; }
+.node-d { right: 34px; bottom: 20px; animation-delay: .6s; }
+
+.blueprint-line {
+  position: absolute;
+  display: block;
+  height: 1.5px;
+  background: #93c5fd;
+  transform-origin: left center;
+}
+
+.line-a { top: 29px; left: 46px; width: 70px; }
+.line-b { top: 38px; left: 37px; width: 54px; transform: rotate(54deg); }
+.line-c { top: 65px; left: 73px; width: 49px; transform: rotate(22deg); }
+
+.diagram-generation-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.diagram-generation-kicker {
+  color: #2563eb;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .11em;
+}
+
+.diagram-generation-copy strong {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.diagram-generation-copy p {
+  margin: 5px 0 10px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.diagram-generation-progress {
+  height: 3px;
+  overflow: hidden;
+  background: #e8eef7;
+  border-radius: 2px;
+}
+
+.diagram-generation-progress span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: linear-gradient(90deg, #93c5fd, #2563eb, #93c5fd);
+  animation: diagram-progress-scan 1.4s ease-in-out infinite;
+}
+
+.msg-teaching-diagram {
+  width: min(720px, 100%);
+  max-width: 100%;
+  margin-top: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.msg-teaching-diagram:hover {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.minimal-input-panel {
+  padding: 0 clamp(16px, 3vw, 38px) 16px;
+  background: linear-gradient(to top, var(--color-surface) 72%, transparent);
+}
+
+.minimal-input-wrapper {
+  max-width: 900px;
+  gap: 9px;
+  padding: 11px 12px 10px;
+  background: var(--color-surface);
+  border: 1px solid #d9dee5;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.075);
+}
+
+.minimal-input-wrapper:focus-within {
+  border-color: #9ba8b8;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.09);
+}
+
+.minimal-input-wrapper textarea {
+  min-height: 30px;
+  padding: 2px 4px;
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.composer-attachments {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding-bottom: 9px;
+  overflow-x: auto;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.composer-attachment {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: #f7f8fa;
+  border: 1px solid #e1e5ea;
+  border-radius: 8px;
+}
+
+.composer-attachment.is-image {
+  width: 116px;
+  height: 82px;
+}
+
+.composer-image {
+  width: 100%;
+  height: 100%;
+}
+
+.composer-image-name {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 18px 7px 5px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(15, 23, 42, .72));
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment.is-file {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  width: 230px;
+  min-height: 62px;
+  padding: 9px 32px 9px 9px;
+}
+
+.composer-attachment .remove-attachment-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: #fff;
+  background: rgba(15, 23, 42, .65);
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+}
+
+.composer-attachment.is-file .remove-attachment-btn {
+  color: var(--color-text-muted);
+  background: #fff;
+  border: 1px solid #dfe3e8;
+}
+
+.input-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 8px;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.input-tool-btn .el-icon {
+  width: 15px;
+  height: 15px;
+  font-size: 15px;
+}
+
+.input-tool-btn:hover {
+  color: var(--color-text-secondary);
+  background: #f4f6f8;
+  border-color: #e3e7eb;
+}
+
+.input-tool-btn.is-active-blue {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.input-tool-btn.is-active-teal {
+  color: #0f766e;
+  background: #f0fdfa;
+  border-color: #99f6e4;
+}
+
+.input-tool-btn:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.minimal-send-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+
+.send-arrow-glyph {
+  font-size: 22px;
+}
+
+.input-footer {
+  margin-top: 6px;
+  font-size: 10px;
+}
+
+.diagram-preview-dialog :deep(.el-dialog) {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.diagram-preview-dialog :deep(.el-dialog__header) {
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.diagram-preview-dialog :deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.diagram-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 62px;
+  padding: 11px 16px;
+}
+
+.diagram-dialog-header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diagram-dialog-header span {
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: .09em;
+}
+
+.diagram-dialog-header strong {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagram-dialog-header button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.diagram-dialog-header button:hover {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.diagram-preview-body {
+  gap: 0;
+  max-height: 84vh;
+  padding: 0;
+  background: #f5f7fa;
+}
+
+.preview-content {
+  min-height: 420px;
+  padding: 22px;
+  background: #f5f7fa;
+  border: 0;
+  border-radius: 0;
+  align-items: flex-start;
+}
+
+.preview-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 16px;
+  background: rgba(255, 255, 255, .94);
+  border-top: 1px solid var(--color-border);
+  backdrop-filter: blur(10px);
+}
+
+.preview-footer > span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.preview-footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+@keyframes thinking-core-pulse {
+  0%, 75%, 100% { opacity: .28; transform: translateX(var(--tx, 0)) scale(.72); }
+  36% { opacity: 1; transform: translateX(var(--tx, 0)) scale(1); }
+}
+
+.thinking-core i:nth-child(1) { --tx: -7px; }
+.thinking-core i:nth-child(2) { --tx: 0px; }
+.thinking-core i:nth-child(3) { --tx: 7px; }
+
+@keyframes answer-skeleton-scan {
+  to { transform: translateX(100%); }
+}
+
+@keyframes blueprint-node-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; box-shadow: 0 0 0 5px rgba(96,165,250,.1); }
+}
+
+@keyframes diagram-progress-scan {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(300%); }
+}
+
+@media (max-width: 760px) {
+  .mode-standard .chat-viewport {
+    padding: 18px 12px 24px;
+  }
+
+  .message-row.user {
+    max-width: 88%;
+  }
+
+  .message-row.ai .bubble-wrapper,
+  .pre-answer-state {
+    width: calc(100vw - 72px);
+  }
+
+  .message-image-gallery.is-single {
+    width: min(360px, 100%);
+  }
+
+  .message-image-gallery.is-grid .message-image:first-child:nth-last-child(3) {
+    grid-row: auto;
+    height: 160px;
+  }
+
+  .message-image-gallery.is-grid .message-image,
+  .message-image-gallery.is-pair .message-image {
+    height: 150px;
+  }
+
+  .diagram-generation-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .diagram-blueprint {
+    min-height: 96px;
+  }
+
+  .minimal-input-panel {
+    padding: 0 10px 10px;
+  }
+
+  .input-tool-btn span {
+    display: none;
+  }
+
+  .input-tool-btn {
+    width: 31px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .preview-content {
+    padding: 10px;
+  }
+
+  .preview-footer > span {
+    display: none;
+  }
+
+  .preview-footer {
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-core i,
+  .pre-answer-lines span::after,
+  .blueprint-node,
+  .diagram-generation-progress span {
+    animation: none;
+  }
 }
 </style>

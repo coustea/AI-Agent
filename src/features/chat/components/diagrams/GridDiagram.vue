@@ -122,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import type { GridPayload } from '@/features/chat/model/chat'
+import type { GridPayload } from '@/features/chat/types/chat'
 
 defineProps<{
   payload: GridPayload

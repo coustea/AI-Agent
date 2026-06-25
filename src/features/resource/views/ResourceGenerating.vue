@@ -75,18 +75,32 @@
           <div class="flow-core-stack flow-core-stack-v4">
             <article
               ref="planningNodeRef"
-              class="core-agent-node planning-core"
+              class="agent-station-card agent-station-card-v4 planning-core"
               :class="['status-' + getStageNode('planning').status, { 'is-selected': selectedDagNodeId === 'planning' }]"
               @click="handleAgentClick('planning', $event)"
             >
-              <div class="core-icon">
-                <el-icon><component :is="getWorkflowIcon('planning')" /></el-icon>
+              <div class="station-header">
+                <div class="station-icon">
+                  <el-icon><component :is="getWorkflowIcon('planning')" /></el-icon>
+                </div>
+                <div>
+                  <strong>教学计划</strong>
+                  <span>Planning Agent</span>
+                </div>
+                <em>{{ getNodeStatusLabel(getStageNode('planning')) }}</em>
               </div>
-              <div>
-                <strong>教学计划</strong>
+              <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]">
+                <div class="station-live-current message-only-layout">
+                  <span class="station-live-dot" :class="getStageNode('planning').status"></span>
+                  <p class="live-message-only">{{ getNodeDisplayMessage(getStageNode('planning')) }}</p>
+                </div>
+              </div>
+              <div class="station-footer">
                 <span>{{ getNodeStageLabel(getStageNode('planning')) }}</span>
+                <div class="station-progress-track">
+                  <i :style="{ width: `${getStageNode('planning').progress}%` }"></i>
+                </div>
               </div>
-              <div class="core-progress">{{ getStageNode('planning').progress }}%</div>
             </article>
           </div>
 
@@ -150,7 +164,9 @@
               </div>
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
-                <i :style="{ width: `${node.progress}%` }"></i>
+                <div class="station-progress-track">
+                  <i :style="{ width: `${node.progress}%` }"></i>
+                </div>
               </div>
             </article>
           </transition-group>
@@ -185,7 +201,9 @@
               </div>
               <div class="station-footer">
                 <span>{{ showPptNode ? getNodeStageLabel(pptNode) : '未加入本次任务' }}</span>
-                <i :style="{ width: `${pptNode.progress}%` }"></i>
+                <div class="station-progress-track">
+                  <i :style="{ width: `${pptNode.progress}%` }"></i>
+                </div>
               </div>
             </article>
 
@@ -214,7 +232,9 @@
               </div>
               <div class="station-footer">
                 <span>{{ showVideoNode ? getNodeStageLabel(videoNode) : '未加入本次任务' }}</span>
-                <i :style="{ width: `${videoNode.progress}%` }"></i>
+                <div class="station-progress-track">
+                  <i :style="{ width: `${videoNode.progress}%` }"></i>
+                </div>
               </div>
             </article>
           </div>
@@ -1365,6 +1385,11 @@ function getMetricChips(node: DagNodeState) {
   transition: all 0.24s ease;
 }
 
+.planning-core {
+  width: min(280px, 90vw) !important;
+  min-height: 196px !important;
+}
+
 .core-agent-node:hover,
 .core-agent-node.is-selected {
   transform: translateY(-2px);
@@ -1756,11 +1781,19 @@ function getMetricChips(node: DagNodeState) {
   font-weight: var(--weight-extrabold);
 }
 
-.station-footer i {
-  width: min(64px, 28%);
-  max-width: 64px;
+.station-progress-track {
+  width: 64px;
   height: 4px;
+  background: rgba(148, 163, 184, 0.16);
   border-radius: 999px;
+  overflow: hidden;
+  display: block;
+}
+
+.station-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
   background: linear-gradient(90deg, #22C55E, #3B82F6);
   box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
   transition: width 0.32s ease;
@@ -3131,7 +3164,7 @@ function getMetricChips(node: DagNodeState) {
   transform: none;
 }
 
-.aggregation-agent-row .agent-station-card-v4.is-unselected .station-footer i {
+.aggregation-agent-row .agent-station-card-v4.is-unselected .station-footer .station-progress-track {
   visibility: hidden;
 }
 

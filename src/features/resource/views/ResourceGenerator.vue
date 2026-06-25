@@ -178,7 +178,11 @@ function selectDagNode(id: string) {
 }
 
 function handlePlanningAnimation(event: ResourceEvent) {
-  if (event.event === 'plan.completed') planReady.value = true
+  // 新协议：planning 完成时 event 为 agent.status，data.status === 'completed'
+  if (event.agent_id === 'planning' && event.event === 'agent.status') {
+    const dataStatus = event.data.status as string | undefined
+    if (dataStatus === 'completed') planReady.value = true
+  }
 }
 
 function handleArtifactReadyAnimation(event: ResourceEvent) {
@@ -192,7 +196,8 @@ function handleArtifactReadyAnimation(event: ResourceEvent) {
 function handleWorkflowAnimation(event: ResourceEvent) {
   if (!event.agent_id) return
   if (event.agent_id === 'planning') handlePlanningAnimation(event)
-  if (event.event === 'artifact.ready') handleArtifactReadyAnimation(event)
+  // 新协议：artifact.ready 已移除，通过 agent.status + data.artifact_id 判断
+  if (typeof event.data.artifact_id === 'string' && event.data.artifact_id) handleArtifactReadyAnimation(event)
 }
 
 const baseGenerationAgentIds = computed(() => (
@@ -297,7 +302,9 @@ function appendResourceEventLog(node: DagNodeState, event: ResourceEvent) {
   const message = event.message.trim()
   if (!message) return
 
-  const eventStatus = normalizeEventStatus(event.event.endsWith('.completed') ? 'completed' : event.event.endsWith('.failed') ? 'failed' : event.event.endsWith('.running') ? 'running' : null)
+  // 新协议：从 data.status 读取状态
+  const dataStatus = event.data.status as string | undefined
+  const eventStatus = normalizeEventStatus(dataStatus)
   const logs = node.eventLogs || []
   const last = logs[logs.length - 1]
   const eventPhase = typeof event.data.phase === 'string' ? event.data.phase : undefined
@@ -335,13 +342,32 @@ function appendResourceEventLog(node: DagNodeState, event: ResourceEvent) {
 }
 
 function applyResourceEvent(event: ResourceEvent) {
-  if (!event.agent_id) return
-  const node = dagNodeStates.value[event.agent_id] || createDagNode(event.agent_id, SYSTEM_AGENT_IDS.includes(event.agent_id))
-  // Map event names to status
-  if (event.event.endsWith('.completed')) node.status = 'success'
-  else if (event.event.endsWith('.failed')) node.status = 'failed'
-  else if (event.event === 'agent.pending') node.status = 'waiting'
-  else if (event.event.endsWith('.running')) node.status = 'running'
+  // 全局事件处理（agent_id 为空）
+  if (!event.agent_id) {
+    if (event.event === 'generation.started') {
+      latestWorkflowMessage.value = event.message
+    } else if (event.event === 'generation.completed') {
+      latestWorkflowMessage.value = event.message
+    } else if (event.event === 'generation.failed') {
+      latestWorkflowMessage.value = event.message
+      generationError.value = event.message
+    }
+    return
+  }
+
+  // 创建新节点对象以触发 Vue 响应式
+  const existing = dagNodeStates.value[event.agent_id] || createDagNode(event.agent_id, SYSTEM_AGENT_IDS.includes(event.agent_id))
+  const node = { ...existing }
+
+  // 新协议：agent.status 事件，状态在 data.status 中
+  if (event.event === 'agent.status') {
+    const dataStatus = event.data.status as string | undefined
+    if (dataStatus === 'completed') node.status = 'success'
+    else if (dataStatus === 'failed') node.status = 'failed'
+    else if (dataStatus === 'pending') node.status = 'waiting'
+    else if (dataStatus === 'running') node.status = 'running'
+  }
+
   if (event.progress != null) node.progress = Math.max(node.progress, event.progress)
   if (typeof event.data.phase === 'string') node.phase = event.data.phase
   const elapsedMs = event.data.elapsed_ms as number | undefined
@@ -359,7 +385,12 @@ function applyResourceEvent(event: ResourceEvent) {
     }
     appendResourceEventLog(node, event)
   }
-  dagNodeStates.value[event.agent_id] = node
+
+  // 触发 Vue 响应式更新
+  dagNodeStates.value = {
+    ...dagNodeStates.value,
+    [event.agent_id]: node,
+  }
   handleWorkflowAnimation(event)
   updateOverallProgressFromDag()
 }
@@ -373,23 +404,28 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
   if (taskStatus.agent_snapshots) {
     Object.values(taskStatus.agent_snapshots).forEach((snapshot) => {
       if (snapshot.agent_id) {
-        // Map snapshot status to ResourceEvent
-        let eventName: ResourceEvent['event'] = 'agent.running'
-        if (snapshot.status === 'finished' || snapshot.status === 'completed') eventName = 'agent.completed'
-        else if (snapshot.status === 'failed') eventName = 'agent.failed'
-        else if (snapshot.status === 'skipped') eventName = 'agent.completed'
-        else if (snapshot.status === 'pending') eventName = 'agent.pending'
-        if (snapshot.event_type === 'agent.artifact_ready') eventName = 'artifact.ready'
+        // 新协议：统一为 agent.status，状态放入 data.status
+        let dataStatus = 'running'
+        if (snapshot.status === 'finished' || snapshot.status === 'completed') dataStatus = 'completed'
+        else if (snapshot.status === 'failed') dataStatus = 'failed'
+        else if (snapshot.status === 'skipped') dataStatus = 'completed'
+        else if (snapshot.status === 'pending') dataStatus = 'pending'
 
         applyResourceEvent({
           sequence: 0,
           run_id: '',
           resource_id: taskStatus.resource_id,
-          event: eventName,
+          event: 'agent.status',
           agent_id: snapshot.agent_id,
           message: snapshot.message || snapshot.agent_id,
           progress: snapshot.progress ?? 0,
-          data: { phase: snapshot.phase, metrics: snapshot.metrics || {}, artifact_id: snapshot.artifact_id, elapsed_ms: snapshot.elapsed_ms },
+          data: {
+            status: dataStatus,
+            phase: snapshot.phase,
+            metrics: snapshot.metrics || {},
+            artifact_id: snapshot.artifact_id,
+            elapsed_ms: snapshot.elapsed_ms,
+          },
           timestamp: snapshot.timestamp || Date.now() / 1000,
         })
       }
@@ -453,7 +489,7 @@ function startResourceStream(runId: string, resourceId: number) {
     onEvent: (event) => {
       applyResourceEvent(event)
       if (event.message) latestWorkflowMessage.value = event.message
-      if (event.event.endsWith('.completed')) syncStatusSoon(resourceId)
+      if (event.event === 'generation.completed') syncStatusSoon(resourceId)
     },
     onCompleted: () => {
       void checkStatusOnce(resourceId).catch(() => {

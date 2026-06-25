@@ -78,11 +78,8 @@ export function useResourceEvents() {
       lastSequence.value = event.sequence
       events.value = [...events.value, event]
 
-      if (event.event.startsWith('agent.')) {
+      if (event.event === 'agent.status') {
         handlers.onAgentStatus?.(event)
-      }
-      if (event.event === 'artifact.ready') {
-        handlers.onArtifactReady?.(event)
       }
       if (event.event === 'generation.completed') {
         connectionStatus.value = 'completed'

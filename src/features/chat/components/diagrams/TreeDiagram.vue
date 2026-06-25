@@ -120,7 +120,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TreePayload, TreeDiagramNode } from '@/features/chat/model/chat'
+import type { TreePayload, TreeDiagramNode } from '@/features/chat/types/chat'
 
 const props = defineProps<{
   payload: TreePayload

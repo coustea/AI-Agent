@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import type { FrameworkPayload } from '@/features/chat/model/chat'
+import type { FrameworkPayload } from '@/features/chat/types/chat'
 
 defineProps<{
   payload: FrameworkPayload

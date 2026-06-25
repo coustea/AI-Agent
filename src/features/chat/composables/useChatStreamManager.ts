@@ -2,9 +2,9 @@
 
 import { readonly, shallowRef } from 'vue'
 import { createChatRun } from '@/features/chat/api/chat'
-import type { StreamChatParams } from '@/features/chat/model/chat'
-import type { ChatEvent } from '@/features/chat/model/chatEvent'
-import { useChatEvents } from '@/features/chat/model/useChatEvents'
+import type { StreamChatParams } from '@/features/chat/types/chat'
+import type { ChatEvent } from '@/features/chat/types/chatEvent'
+import { useChatEvents } from '@/features/chat/composables/useChatEvents'
 
 // ── Types ──────────────────────────────────────────────
 
