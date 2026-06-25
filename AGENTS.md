@@ -8,7 +8,7 @@ Vue 3 + TypeScript frontend (`src/`) + FastAPI + SQLModel backend (`server/`).
 
 ### Frontend (repo root)
 ```bash
-npm run build    # vue-tsc + vite build — the only frontend check (no linter)
+npm run build    # vue-tsc -b && vite build — the only frontend check (no linter)
 npm run dev      # Vite dev server on :5173
 ```
 
