@@ -34,26 +34,13 @@ def route_after_analysis(state: TutorAgentState) -> str:
     return "answer_node"
 
 
-def route_after_search(state: TutorAgentState) -> str:
-    return "answer_node"
-
-
 def route_after_answer(state: TutorAgentState) -> str:
     cls = state.get("classification")
+
     if cls and cls.needs_diagram:
         return "diagram_node"
+
     if state.get("need_teaching_diagram") and state.get("final_answer"):
         return "diagram_node"
-
-    final_answer = state.get("final_answer", "")
-    search_attempted = state.get("_search_attempted", False)
-    enable_web_search = state.get("enable_web_search", False)
-
-    if (not search_attempted
-            and enable_web_search
-            and final_answer
-            and len(final_answer) < 30
-            and not state.get("evidence", [])):
-        return "search_node"
 
     return END

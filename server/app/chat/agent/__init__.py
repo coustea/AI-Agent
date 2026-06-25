@@ -17,19 +17,17 @@ from typing import Any, AsyncIterator
 
 from langgraph.graph import END, START, StateGraph
 
-from app.chat.agent.background import run_background_memory_jobs
 from app.chat.agent.nodes import (
+    build_evidence_context,
     classify_node,
     analysis_files_node,
     search_node,
     answer_node,
     diagram_node,
-    build_evidence_context,
 )
 from app.chat.agent.routing import (
     route_after_classify,
     route_after_analysis,
-    route_after_search,
     route_after_answer,
 )
 from app.chat.agent.state import TutorAgentState
@@ -81,27 +79,25 @@ class TutorAgent:
         yield TutorRuntimeEvent(type="message_start", payload={}, sequence=0, timestamp=time.time())
 
         graph_task: asyncio.Task[Any] | None = None
+        sentinel_task: asyncio.Task[Any] | None = None
         try:
             graph_task = asyncio.create_task(self._graph.ainvoke(initial_state))
 
-            while True:
-                if graph_task.done() and event_queue.empty():
-                    break
-                get_event_task = asyncio.create_task(event_queue.get())
-                done, pending = await asyncio.wait(
-                    {graph_task, get_event_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if get_event_task in done:
-                    yield get_event_task.result()
-                else:
-                    get_event_task.cancel()
-                    await asyncio.gather(get_event_task, return_exceptions=True)
-                for task in pending:
-                    if task is not graph_task:
-                        task.cancel()
+            async def _graph_with_sentinel() -> Any:
+                try:
+                    return await graph_task
+                finally:
+                    await event_queue.put(None)
 
-            final_state = await graph_task
+            sentinel_task = asyncio.create_task(_graph_with_sentinel())
+
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    break
+                yield event
+
+            final_state = await sentinel_task
 
             yield TutorRuntimeEvent(
                 type="final",
@@ -120,6 +116,8 @@ class TutorAgent:
             logger.exception("[TutorAgent] graph execution failed")
             if graph_task is not None and not graph_task.done():
                 graph_task.cancel()
+            if sentinel_task is not None and not sentinel_task.done():
+                sentinel_task.cancel()
             yield TutorRuntimeEvent(
                 type="error",
                 payload={"error": str(exc)},
@@ -135,6 +133,9 @@ class TutorAgent:
         self,
         state: TutorAgentState,
         event: TutorRuntimeEvent,
+        *,
+        turn_event_type: str | None = None,
+        persist: bool = True,
     ) -> list[TutorRuntimeEvent]:
         """Emit a stream event to the SSE queue.
 
@@ -147,27 +148,6 @@ class TutorAgent:
             await queue.put(event)
         return [event]
 
-    async def run_background_memory_jobs(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        user_message: str,
-        assistant_reply: str,
-    ) -> None:
-        """后台记忆管线 — 委托给 background.py。"""
-        await run_background_memory_jobs(
-            self.memory_service,
-            user_id=user_id,
-            session_id=session_id,
-            user_message=user_message,
-            assistant_reply=assistant_reply,
-        )
-
-    async def run_post_turn_jobs(self, **kwargs) -> None:
-        """Compatibility wrapper — delegates to run_background_memory_jobs."""
-        await self.run_background_memory_jobs(**kwargs)
-
     # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------
@@ -175,57 +155,25 @@ class TutorAgent:
     def _build_graph(self) -> Any:
         workflow = StateGraph(TutorAgentState)
 
-        # 添加节点 — 委托给 nodes.py 中的实现
-        workflow.add_node("classify", self._classify_node_wrapper)
-        workflow.add_node("analysis_files", self._analysis_files_node_wrapper)
-        workflow.add_node("search_node", self._search_node_wrapper)
-        workflow.add_node("answer_node", self._answer_node_wrapper)
-        workflow.add_node("diagram_node", self._diagram_node_wrapper)
+        # 节点函数是 async 的，LangGraph 会自动处理 async 节点
+        # 但必须直接传入 async callable，不能用同步 lambda 包装
+        async def _classify(s): return await classify_node(self, s, self.llm, prompts)
+        async def _analysis(s): return await analysis_files_node(self, s)
+        async def _search(s): return await search_node(self, s, self.llm, prompts, self.memory_service)
+        async def _answer(s): return await answer_node(self, s, self.llm, prompts)
+        async def _diagram(s): return await diagram_node(self, s)
+
+        workflow.add_node("classify",       _classify)
+        workflow.add_node("analysis_files", _analysis)
+        workflow.add_node("search_node",    _search)
+        workflow.add_node("answer_node",    _answer)
+        workflow.add_node("diagram_node",   _diagram)
 
         workflow.add_edge(START, "classify")
-        workflow.add_conditional_edges("classify", self._route_after_classify)
-        workflow.add_conditional_edges("analysis_files", self._route_after_analysis)
-        workflow.add_conditional_edges("search_node", self._route_after_search)
-        workflow.add_conditional_edges("answer_node", self._route_after_answer)
+        workflow.add_conditional_edges("classify",       route_after_classify)
+        workflow.add_conditional_edges("analysis_files", route_after_analysis)
+        workflow.add_edge("search_node", "answer_node")
+        workflow.add_conditional_edges("answer_node",    route_after_answer)
         workflow.add_edge("diagram_node", END)
 
         return workflow.compile()
-
-    # ------------------------------------------------------------------
-    # Node wrappers — 委托给 nodes.py
-    # ------------------------------------------------------------------
-
-    async def _classify_node_wrapper(self, state: TutorAgentState) -> dict:
-        return await classify_node(self, state, self.llm, prompts)
-
-    async def _analysis_files_node_wrapper(self, state: TutorAgentState) -> dict:
-        return await analysis_files_node(self, state)
-
-    async def _search_node_wrapper(self, state: TutorAgentState) -> dict:
-        return await search_node(self, state, self.llm, prompts, self.memory_service)
-
-    async def _answer_node_wrapper(self, state: TutorAgentState) -> dict:
-        return await answer_node(self, state, self.llm, prompts)
-
-    async def _diagram_node_wrapper(self, state: TutorAgentState) -> dict:
-        return await diagram_node(self, state)
-
-    # ------------------------------------------------------------------
-    # Routing functions — 委托给 routing.py
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _route_after_classify(state: TutorAgentState) -> str:
-        return route_after_classify(state)
-
-    @staticmethod
-    def _route_after_analysis(state: TutorAgentState) -> str:
-        return route_after_analysis(state)
-
-    @staticmethod
-    def _route_after_search(state: TutorAgentState) -> str:
-        return route_after_search(state)
-
-    @staticmethod
-    def _route_after_answer(state: TutorAgentState) -> str:
-        return route_after_answer(state)
