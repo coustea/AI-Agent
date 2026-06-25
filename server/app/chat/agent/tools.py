@@ -1,20 +1,23 @@
-"""TutorAgent 工具构建和执行辅助函数。
+"""TutorAgent 工具构建 — 收集各工具模块的 Tool 对象。
 
-从 nodes.py 中提取，保持节点文件只关注编排逻辑。
+职责：
+  - 导入各工具模块的 as_tool() 函数
+  - 组装为统一的 Tool 列表
+  - 定义工具名称到证据类型的映射
+
+各工具的具体实现在 app/chat/tools/ 下：
+  - user_context.py: 画像 + 长期记忆
+  - knowledge.py: 知识库搜索
+  - search.py: 网络搜索
+  - web_research.py: 网页研究
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.chat.tools.knowledge import SearchKnowledgeBaseArgs, make_search_knowledge_base
-from app.chat.tools.user_context import (
-    LONG_TERM_MEMORY_CATEGORY_ALIASES,
-    GetLongTermMemoryArgs,
-    GetLearnerProfileArgs,
-    make_get_long_term_memory,
-    make_get_learner_profile,
-)
+from app.chat.tools.knowledge import as_tool as _knowledge_tool
+from app.chat.tools.user_context import as_tool as _user_context_tools
 from app.chat.tools.search import (
     SearchQueryArgs,
     duckduckgo_instant_answer,
@@ -69,24 +72,11 @@ def build_tutor_tools(request: TutorTurnContext) -> list[Tool]:
     """装配当前辅导请求可用的业务工具。"""
     web_session = WebResearchSession()
     return [
-        Tool(
-            "get_learner_profile",
-            "Read learner profile when personalization, goals, preferences, or background matter.",
-            GetLearnerProfileArgs,
-            make_get_learner_profile(request),
-        ),
-        Tool(
-            "get_long_term_memory",
-            "Read durable learning memory for previous goals, preferences, weaknesses, strategies, or corrections.",
-            GetLongTermMemoryArgs,
-            make_get_long_term_memory(request),
-        ),
-        Tool(
-            "search_knowledge_base",
-            "Search local course knowledge base for definitions, concepts, textbook facts, and course material.",
-            SearchKnowledgeBaseArgs,
-            make_search_knowledge_base(),
-        ),
+        # 用户上下文工具（画像 + 长期记忆）
+        *_user_context_tools(request),
+        # 知识库搜索
+        _knowledge_tool(),
+        # 网络搜索
         Tool(
             "duckduckgo_search",
             "General web search for articles, tutorials, blogs, and web content.",
@@ -111,6 +101,7 @@ def build_tutor_tools(request: TutorTurnContext) -> list[Tool]:
             SearchQueryArgs,
             _result_handler(spark_search, "spark_search"),
         ),
+        # 网页研究
         Tool(
             "open_web_page",
             "Open and read a public web page selected from search results.",

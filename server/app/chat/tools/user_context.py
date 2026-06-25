@@ -10,6 +10,7 @@ from app.chat.memory.service import get_chat_memory_service
 from app.chat.memory.types import LTM_CATEGORIES
 from app.chat.schemas import TutorTurnContext
 from app.infra.logging import get_logger
+from app.infra.tool_excute import Tool
 from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
@@ -100,3 +101,21 @@ def make_get_long_term_memory(
             return "暂时无法读取长期学习记忆。"
 
     return _impl
+
+
+def as_tool(request: TutorTurnContext) -> list[Tool]:
+    """返回画像和长期记忆工具的 Tool 对象列表。"""
+    return [
+        Tool(
+            "get_learner_profile",
+            "Read learner profile when personalization, goals, preferences, or background matter.",
+            GetLearnerProfileArgs,
+            make_get_learner_profile(request),
+        ),
+        Tool(
+            "get_long_term_memory",
+            "Read durable learning memory for previous goals, preferences, weaknesses, strategies, or corrections.",
+            GetLongTermMemoryArgs,
+            make_get_long_term_memory(request),
+        ),
+    ]

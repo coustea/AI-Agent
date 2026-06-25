@@ -955,3 +955,16 @@ def make_search_knowledge_base() -> Callable[..., Awaitable[str]]:
             return "本地知识库暂时不可用。"
 
     return _impl
+
+
+from app.infra.tool_excute import Tool
+
+
+def as_tool() -> Tool:
+    """返回知识库搜索工具的 Tool 对象。"""
+    return Tool(
+        "search_knowledge_base",
+        "Search local course knowledge base for definitions, concepts, textbook facts, and course material.",
+        SearchKnowledgeBaseArgs,
+        make_search_knowledge_base(),
+    )
