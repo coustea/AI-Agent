@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from app.resource.schemas import TeachingPlan, TeachingOutlineItem
 from app.resource.agents.reading import ReadingPayload
 from app.resource.agents.quiz import QuizPayload
-from app.resource.agents.ppt import MaterialDigest, DeckOutline, SlideDraft
+from app.resource.ppt_contract import PPTDocument as PptDocument
 from app.resource.agents.video import VideoMaterialDigest, VideoOutline, SceneDraft
 from app.path.schemas import AgentLearningPathPlan, AgentQuestionSet
 from app.profile.types import (
@@ -100,59 +100,45 @@ AGENT_QUESTION_SET_JSON = {
     ]
 }
 
-MATERIAL_DIGEST_JSON = {
-    "topic": "Python 爬虫",
+PPT_DOCUMENT_JSON = {
+    "template_id": "teaching-lesson",
+    "theme_id": "technical-blueprint",
+    "explanation_style": "conceptual",
+    "visual_emphasis": "balanced",
+    "title": "Python 爬虫入门",
     "audience": "初学者",
-    "learning_goal": "掌握基础爬虫",
-    "core_concepts": ["requests", "BeautifulSoup"],
-    "structure_points": ["HTTP 基础", "HTML 解析"],
-    "examples": ["抓取新闻"],
-    "process_steps": ["发送请求", "解析响应", "提取数据"],
-    "comparisons": ["requests vs urllib"],
-    "misconceptions": ["爬虫等于黑客"],
-    "practice_prompts": ["抓取豆瓣电影"],
-    "code_cases": ["import requests\nresp = requests.get(url)"],
-    "source_map": {"reading": ["reading"], "quiz": ["quiz"]},
-}
-
-DECK_OUTLINE_JSON = {
-    "topic": "Python 爬虫",
-    "title": "爬虫入门指南",
-    "subtitle": "从零开始",
-    "theme": "theme-mac-light",
-    "audience_level": "beginner",
-    "narrative": "从 HTTP 基础讲起",
     "slides": [
         {
-            "slide_id": "s1",
-            "index": 1,
+            "id": "slide-01",
             "role": "cover",
             "title": "Python 爬虫入门",
-            "learning_objective": "了解爬虫概念",
-            "source_agents": ["reading"],
-            "layout": "FocusTitle",
-            "blocks": [
+            "key_message": "了解爬虫概念",
+            "density": "light",
+            "elements": [
                 {
-                    "block_id": "b1",
-                    "slot": "title",
-                    "type": "Heading",
-                    "required_fields": ["text"],
-                    "content_hint": "主标题",
-                    "min_length": 5,
+                    "type": "concept",
+                    "content": "网络爬虫",
+                    "label": "爬虫"
                 }
             ],
+            "relations": []
+        },
+        {
+            "id": "slide-02",
+            "role": "ending",
+            "title": "总结",
+            "key_message": "核心知识点回顾",
+            "density": "light",
+            "elements": [
+                {
+                    "type": "concept",
+                    "content": "爬虫开发",
+                    "label": "开发"
+                }
+            ],
+            "relations": []
         }
-    ],
-}
-
-SLIDE_DRAFT_JSON = {
-    "slide_id": "s1",
-    "index": 1,
-    "title": "Python 爬虫入门",
-    "blocks": [
-        {"block_id": "b1", "type": "Heading", "data": {"text": "爬虫入门"}}
-    ],
-    "speaker_notes": "欢迎大家",
+    ]
 }
 
 AGENT_LEARNING_PATH_PLAN_JSON = {
@@ -276,7 +262,7 @@ VIDEO_OUTLINE_JSON = {
             "title": "简介",
             "duration_seconds": 60,
             "learning_objective": "了解爬虫概念",
-            "visual_type": "card",
+            "visual_type": "title_intro",
             "content_hint": "主持人开场",
             "required_sources": ["reading"],
         },
@@ -287,9 +273,9 @@ VIDEO_OUTLINE_JSON = {
             "title": "总结",
             "duration_seconds": 60,
             "learning_objective": "回顾要点",
-            "visual_type": "card",
+            "visual_type": "concept_explain",
             "content_hint": "总结回顾",
-            "required_sources": [],
+            "required_sources": ["reading"],
         },
     ],
 }
@@ -302,7 +288,8 @@ SCENE_DRAFT_JSON = {
     "captions": ["欢迎"],
     "on_screen_text": ["Python 爬虫入门"],
     "visual_prompt": "主持人讲解",
-    "visual_type": "card",
+    "visual_type": "concept_explain",
+    "visual": {"concept": "网络爬虫", "explanation": "自动获取网页内容的程序"},
     "source_agents": ["reading"],
 }
 
@@ -353,30 +340,17 @@ class TestAgentQuestionSetSchema:
         assert result.questions[0].answer == "A"
 
 
-class TestMaterialDigestSchema:
+class TestPptDocumentSchema:
     def test_parses_valid_json(self) -> None:
-        result = MaterialDigest.model_validate(MATERIAL_DIGEST_JSON)
-        assert result.topic != ""
-        assert len(result.core_concepts) == 2
+        result = PptDocument.model_validate(PPT_DOCUMENT_JSON)
+        assert result.title == "Python 爬虫入门"
+        assert len(result.slides) == 2
+        assert result.slides[0].role == "cover"
 
-
-class TestDeckOutlineSchema:
-    def test_parses_valid_json(self) -> None:
-        result = DeckOutline.model_validate(DECK_OUTLINE_JSON)
-        assert result.title == "爬虫入门指南"
-        assert len(result.slides) == 1
-
-    def test_rejects_empty_slides(self) -> None:
-        data = {**DECK_OUTLINE_JSON, "slides": []}
+    def test_rejects_invalid_theme(self) -> None:
+        data = {**PPT_DOCUMENT_JSON, "theme_id": "invalid_theme"}
         with pytest.raises(ValidationError):
-            DeckOutline.model_validate(data)
-
-
-class TestSlideDraftSchema:
-    def test_parses_valid_json(self) -> None:
-        result = SlideDraft.model_validate(SLIDE_DRAFT_JSON)
-        assert result.slide_id == "s1"
-        assert len(result.blocks) == 1
+            PptDocument.model_validate(data)
 
 
 class TestAgentLearningPathPlanSchema:
@@ -465,9 +439,7 @@ class TestSchemaRoundTrip:
             (ReadingPayload, READING_PAYLOAD_JSON),
             (QuizPayload, QUIZ_PAYLOAD_JSON),
             (AgentQuestionSet, AGENT_QUESTION_SET_JSON),
-            (MaterialDigest, MATERIAL_DIGEST_JSON),
-            (DeckOutline, DECK_OUTLINE_JSON),
-            (SlideDraft, SLIDE_DRAFT_JSON),
+            (PptDocument, PPT_DOCUMENT_JSON),
             (AgentLearningPathPlan, AGENT_LEARNING_PATH_PLAN_JSON),
             (OnboardingGlobalInferenceOutput, ONBOARDING_GLOBAL_JSON),
             (GlobalTutoringInferenceOutput, GLOBAL_TUTORING_JSON),

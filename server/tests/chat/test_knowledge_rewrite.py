@@ -11,7 +11,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app.chat.tools.knowledge_rewrite import (
+from app.rag.knowledge_rewrite import (
     RewriteEffectivenessCache,
     _TERMINOLOGY_DB,
     compute_retrieval_confidence,

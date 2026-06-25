@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.chat.event import (
+from app.chat.emitter import (
     ChatEvent,
     ChatEventClosedError,
     ChatEventNotOpenError,
