@@ -39,13 +39,13 @@ class TestToolConstants:
 
 class TestLongTermMemoryCategoryAliases:
     def test_goals_progress_alias(self):
-        from app.chat.tools.memory import LONG_TERM_MEMORY_CATEGORY_ALIASES
+        from app.chat.tools.user_context import LONG_TERM_MEMORY_CATEGORY_ALIASES
 
         assert LONG_TERM_MEMORY_CATEGORY_ALIASES["goals_progress"] == "long_term_goals"
 
     def test_alias_used_in_normalization(self):
         # 验证 _execute_single_tool 使用别名规范化
-        from app.chat.tools.memory import LONG_TERM_MEMORY_CATEGORY_ALIASES
+        from app.chat.tools.user_context import LONG_TERM_MEMORY_CATEGORY_ALIASES
 
         category = "goals_progress"
         normalized = LONG_TERM_MEMORY_CATEGORY_ALIASES.get(category, category)
@@ -58,15 +58,15 @@ class TestLongTermMemoryCategoryAliases:
 class TestToolExcuteInChat:
     @pytest.mark.asyncio
     async def test_tool_excute_executes_profile_tool(self, monkeypatch: pytest.MonkeyPatch):
-        from app.chat.tools.profile import GetLearnerProfileArgs, make_get_learner_profile
+        from app.chat.tools.user_context import GetLearnerProfileArgs, make_get_learner_profile
 
         class FakeProfileService:
             async def get_profile_markdown(self, user_id: int, **_kwargs) -> str:
                 assert user_id == 7
                 return "画像: 喜欢先看例子"
 
-        import app.chat.tools.profile as profile_mod
-        monkeypatch.setattr(profile_mod, "get_profile_service", lambda: FakeProfileService())
+        import app.chat.tools.user_context as uc_mod
+        monkeypatch.setattr(uc_mod, "get_profile_service", lambda: FakeProfileService())
 
         request = TutorTurnContext(user_id=7, session_id="s-1", user_input="结合我的情况讲")
         profile_handler = make_get_learner_profile(request)
@@ -86,15 +86,15 @@ class TestToolExcuteInChat:
 
     @pytest.mark.asyncio
     async def test_tool_excute_executes_memory_tool(self, monkeypatch: pytest.MonkeyPatch):
-        from app.chat.tools.memory import GetLongTermMemoryArgs, make_get_long_term_memory
+        from app.chat.tools.user_context import GetLongTermMemoryArgs, make_get_long_term_memory
 
         class FakeMemoryService:
             async def get_memory_markdown(self, user_id: int, category: str | None = None) -> str:
                 assert user_id == 7
                 return "长期目标: 通过阶段练习追踪进度"
 
-        import app.chat.tools.memory as memory_mod
-        monkeypatch.setattr(memory_mod, "get_chat_memory_service", lambda: FakeMemoryService())
+        import app.chat.tools.user_context as uc_mod
+        monkeypatch.setattr(uc_mod, "get_chat_memory_service", lambda: FakeMemoryService())
 
         request = TutorTurnContext(user_id=7, session_id="s-1", user_input="看看目标进展")
         memory_handler = make_get_long_term_memory(request)
@@ -118,7 +118,7 @@ class TestToolExcuteInChat:
 
 def test_long_term_memory_categories_are_canonical() -> None:
     from app.chat.memory.types import LTM_CATEGORIES
-    from app.chat.tools.memory import GetLongTermMemoryArgs
+    from app.chat.tools.user_context import GetLongTermMemoryArgs
 
     schema = GetLongTermMemoryArgs.model_json_schema()
     category_schema = schema["properties"]["category"]

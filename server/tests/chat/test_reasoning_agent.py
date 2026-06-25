@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.chat.agent import TutorAgent, TutorAgentState
-from app.chat.agent.routing import route_after_classify, route_after_analysis, route_after_answer
+from app.chat.agent import TutorAgent, TutorAgentState, route_after_classify, route_after_analysis, route_after_answer
 from app.chat.schemas import ClassificationResult, TutorAgentInput
 
 

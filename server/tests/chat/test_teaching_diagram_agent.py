@@ -38,7 +38,7 @@ def _canvas_payload() -> dict:
 
 @pytest.mark.asyncio
 async def test_teaching_diagram_generator_returns_diagram(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat.diagram import TeachingDiagramGenerator
+    from app.chat.schemas.diagram import TeachingDiagramGenerator
     from app.chat.schemas import Evidence, EvidenceSet, TutorTurnContext
 
     class FakeLLM:
@@ -57,7 +57,7 @@ async def test_teaching_diagram_generator_returns_diagram(monkeypatch: pytest.Mo
 
 @pytest.mark.asyncio
 async def test_teaching_diagram_generator_propagates_failure() -> None:
-    from app.chat.diagram import TeachingDiagramGenerator
+    from app.chat.schemas.diagram import TeachingDiagramGenerator
     from app.chat.schemas import EvidenceSet, TutorTurnContext
 
     class RaisingLLM:
