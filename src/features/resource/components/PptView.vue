@@ -4,11 +4,11 @@
       <div class="header-actions" v-if="!compact">
         <el-button type="primary" size="small" :loading="isExporting" @click="handleExport">
           <el-icon v-if="!isExporting" style="margin-right: 4px;"><Download /></el-icon>
-          导出 PPTX (3x DPI)
+          导出 PPTX
         </el-button>
       </div>
       <div class="player-wrapper">
-        <PptPlayer :documentData="documentData" :isExportMode="isExporting" />
+        <PptPreview :documentData="documentData" />
       </div>
     </ResourceCardWrapper>
   </div>
@@ -17,11 +17,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import PptPlayer from './ppt-engine/PptPlayer.vue'
+import PptPreview from './ppt-engine/pptxgenjs-renderer/preview/PptPreview.vue'
 import type { PPTDocument } from './ppt-engine/types/ppt'
-import { convertToPptistSlides } from './ppt-engine/converters/slideConverter'
-import { exportToPptx } from './ppt-engine/utils/exportUtils'
-import { ElButton, ElIcon } from 'element-plus'
+import { renderPPT, downloadPPTX } from './ppt-engine/pptxgenjs-renderer'
+import { ElButton, ElIcon, ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 
 const props = defineProps<{
@@ -33,15 +32,17 @@ const isExporting = ref(false)
 
 const handleExport = async () => {
   isExporting.value = true
-  setTimeout(async () => {
-    try {
-      await exportToPptx(convertToPptistSlides(props.documentData), props.documentData.title || 'presentation')
-    } catch (e) {
-      console.error('Export error:', e)
-    } finally {
-      isExporting.value = false
-    }
-  }, 600)
+  try {
+    const pptx = renderPPT(props.documentData)
+    const filename = `${props.documentData.title || 'presentation'}.pptx`
+    await downloadPPTX(pptx, filename)
+    ElMessage.success('PPTX 导出成功')
+  } catch (e) {
+    console.error('Export error:', e)
+    ElMessage.error('导出失败，请重试')
+  } finally {
+    isExporting.value = false
+  }
 }
 </script>
 

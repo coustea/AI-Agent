@@ -1,98 +1,92 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=LXGW+WenKai:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
 
 /* ============================================================
-   Design Tokens — Ink & Scholar Theme (东方墨韵)
+   Design Tokens — Modern Cognitive Clean (现代高效认知风)
+   Design Core: 白得透亮、蓝得专业、线条利落、留白呼吸
    ============================================================ */
 :root {
   /* ---- Element Plus Overrides ---- */
-  --el-color-primary: #4F46E5;
+  --el-color-primary: #2563EB;
   --el-color-success: #10B981;
   --el-color-warning: #F59E0B;
   --el-color-danger: #EF4444;
   --el-color-info: #2563EB;
-  --el-border-radius-base: 8px;
+  --el-border-radius-base: 10px;
   --el-border-radius-small: 6px;
   --el-border-radius-round: 999px;
-  --el-text-color-primary: #1E293B;
+  --el-text-color-primary: #0F172A;
   --el-text-color-regular: #334155;
-  --el-text-color-secondary: #475569;
+  --el-text-color-secondary: #64748B;
   --el-text-color-placeholder: #94A3B8;
   --el-border-color: #E2E8F0;
   --el-border-color-light: #F1F5F9;
   --el-fill-color-blank: #FFFFFF;
   --el-fill-color: #F8FAFC;
   --el-fill-color-light: #F1F5F9;
-  --el-box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --el-box-shadow-light: 0 2px 4px rgba(15, 23, 42, 0.06);
+  --el-box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --el-box-shadow-light: 0 2px 4px rgba(15, 23, 42, 0.04);
 
-  /* ---- Brand Colors (朱砂 + 靛青) ---- */
-  --color-primary: #4F46E5;          /* Indigo 600 — main accent */
-  --color-primary-hover: #4338CA;    /* Indigo 700 */
-  --color-primary-soft: #EEF2FF;     /* Indigo 50 */
-  --color-primary-border: #C7D2FE;   /* Indigo 200 */
-  --color-primary-text: #312E81;     /* Indigo 900 */
+  /* ---- Brand Colors (现代教育 & AI 智慧标准蓝) ---- */
+  --color-primary: #2563EB;          /* Royal Blue 600 — 高阶智慧主色 */
+  --color-primary-hover: #1D4ED8;    /* Blue 700 */
+  --color-primary-soft: #EFF6FF;     /* Blue 50 — AI 选中激活、高亮节点 */
+  --color-primary-border: #BFDBFE;   /* Blue 200 — 轻量聚焦外圈边框 */
+  --color-primary-text: #1E3A8A;     /* Blue 900 */
 
-  /* ---- Neutral Palette (宣纸墨色) ---- */
-  --color-bg: #FFFFFF;              /* White — page background */
-  --color-surface: #FFFFFF;          /* White — card / panel background */
-  --color-surface-hover: #F8FAFC;    /* Slate 50 — hover fill */
-  --color-border: #E2E8F0;          /* Slate 200 — default border */
-  --color-border-hover: #CBD5E1;    /* Slate 300 — hover border */
+  /* ---- Neutral Palette (极客中性色层级) ---- */
+  --color-bg: #FFFFFF;              /* 全局主背景：绝对纯白 */
+  --color-surface: #FFFFFF;         /* 面板/卡片：纯白，通过细线建立层级 */
+  --color-surface-hover: #F8FAFC;   /* Slate 50 — 悬停填充态：干净高透的冷淡灰 */
+  --color-border: #E2E8F0;          /* Slate 200 — 全局主描边线 */
+  --color-border-hover: #CBD5E1;    /* Slate 300 — 交互悬停线 */
   --color-border-light: #F1F5F9;    /* Slate 100 — subtle divider */
 
-  --color-text: #1E293B;            /* Slate 800 — primary text */
-  --color-text-strong: #0F172A;     /* Slate 900 — headings */
-  --color-text-secondary: #334155;  /* Slate 700 — secondary text */
-  --color-text-muted: #64748B;      /* Slate 500 — muted / labels */
-  --color-text-faint: #94A3B8;      /* Slate 400 — timestamps / hints */
+  --color-text: #0F172A;            /* Slate 900 — primary text */
+  --color-text-strong: #0F172A;     /* Slate 900 — 标题、加粗公式、强强调字 */
+  --color-text-secondary: #334155;  /* Slate 700 — 正文、多选题干、逻辑说明 */
+  --color-text-muted: #64748B;      /* Slate 500 — 辅助标签、辅助时间、次要占位 */
+  --color-text-faint: #94A3B8;      /* Slate 400 — 时间戳、禁用提示 */
 
   --color-text-light: var(--color-text-faint);
 
-  /* ---- Semantic Colors (传统五色) ---- */
-  --color-success: #10B981;         /* Emerald 500 */
+  /* ---- Semantic Colors (扁平化无渐变语义色) ---- */
+  --color-success: #10B981;         /* 答题正确 / AI 生成完毕 */
   --color-success-soft: #ECFDF5;    /* Emerald 50 */
   --color-warning: #F59E0B;         /* Amber 500 */
   --color-warning-soft: #FFFBEB;    /* Amber 50 */
-  --color-danger: #EF4444;          /* Red 500 */
+  --color-danger: #EF4444;          /* 错题归纳 / 异常中断 */
   --color-danger-soft: #FEF2F2;     /* Red 50 */
   --color-info: #2563EB;            /* Blue 600 */
   --color-info-soft: #EFF6FF;       /* Blue 50 */
 
-  /* ---- Vibrant Category Accents ---- */
-  --cat-tutor: #3B82F6;          /* Blue 500 */
+  /* ---- Category Accents (扁平化分类色) ---- */
+  --cat-tutor: #2563EB;          /* Blue 600 */
   --cat-tutor-soft: #EFF6FF;     /* Blue 50 */
-  --cat-tutor-glow: rgba(59, 130, 246, 0.4);
+  --cat-tutor-glow: rgba(37, 99, 235, 0.15);
 
-  --cat-resource: #6366F1;       /* Indigo 500 */
-  --cat-resource-soft: #EEF2FF;  /* Indigo 50 */
-  --cat-resource-glow: rgba(99, 102, 241, 0.4);
+  --cat-resource: #2563EB;       /* Blue 600 */
+  --cat-resource-soft: #EFF6FF;  /* Blue 50 */
+  --cat-resource-glow: rgba(37, 99, 235, 0.15);
 
   --cat-path: #F59E0B;           /* Amber 500 */
   --cat-path-soft: #FFFBEB;      /* Amber 50 */
-  --cat-path-glow: rgba(245, 158, 11, 0.4);
+  --cat-path-glow: rgba(245, 158, 11, 0.15);
 
   --cat-eval: #8B5CF6;           /* Violet 500 */
   --cat-eval-soft: #F5F3FF;      /* Violet 50 */
-  --cat-eval-glow: rgba(139, 92, 246, 0.4);
+  --cat-eval-glow: rgba(139, 92, 246, 0.15);
 
   --cat-rose: #F43F5E;           /* Rose 500 */
   --cat-rose-soft: #FFF1F2;      /* Rose 50 */
-  --cat-rose-glow: rgba(244, 63, 94, 0.4);
+  --cat-rose-glow: rgba(244, 63, 94, 0.15);
 
-  /* ---- Premium Gradients ---- */
-  --gradient-primary: linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%);
-  --gradient-tutor: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%);
-  --gradient-resource: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
-  --gradient-path: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
-  --gradient-eval: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
-
-  /* ---- Typography (宋体为骨，黑体为肉) ---- */
-  --font-ui: -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-body: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace;
-  --font-note: 'LXGW WenKai', 'STKaiti', 'KaiTi', serif;
-  --font-display: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
-  --font-sans: var(--font-ui);
+  /* ---- Typography (屏幕阅读无衬线字体：全面告别宋体和书法楷体) ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-body: var(--font-sans);    /* 全局统一正文 */
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace; /* 仅用于代码、学术统计指标 */
+  --font-ui: var(--font-sans);
+  --font-note: var(--font-sans);
+  --font-display: var(--font-sans);
 
   /* Type scale — 1.200 ratio (Minor Third) with mobile-first base ≥16px */
   --text-xs: 0.75rem;       /* 12px — captions, badges */
@@ -134,27 +128,32 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---- Border Radius ---- */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  /* ---- Border Radius (Crisp Industrial Geometry — 精确工业几何) ---- */
+  --radius-sm: 6px;                 /* 标准按钮锐利切割 */
+  --radius-md: 8px;                 /* 输入框、中等元素 */
+  --radius-lg: 12px;                /* 大布局元素、大按钮 */
+  --radius-xl: 16px;                /* 全局卡片、路径节点、大对话框弹窗 */
   --radius-2xl: 20px;
-  --radius-pill: 999px;
+  --radius-pill: 999px;             /* 仅用于特定badge，普通按钮禁用 */
 
-  --radius-base: var(--radius-md);
+  --radius-base: var(--radius-sm);  /* 按钮默认使用锐利切割 */
 
-  /* ---- Shadows (弥散纸张浮起) ---- */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 10px 24px rgba(15, 23, 42, 0.1);
-  --shadow-xl: 0 20px 40px rgba(15, 23, 42, 0.12);
+  /* ---- Button Transitions (Crisp & Fast — 120ms响应) ---- */
+  --btn-transition: background-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
+                    border-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
+                    box-shadow 120ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* ---- Transitions ---- */
-  --transition-fast: 0.15s ease;
-  --transition-base: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  /* ---- Shadows (扁平化微浮雕：开阔留白、精细线条、柔和微光) ---- */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 8px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 10px 30px rgba(37, 99, 235, 0.05), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-xl: 0 20px 40px rgba(37, 99, 235, 0.08), 0 2px 4px rgba(15, 23, 42, 0.02);
+
+  /* ---- Transitions (现代利落过渡) ---- */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ---- Layout ---- */
   --page-max-width: 1680px;
@@ -173,12 +172,9 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: var(--leading-normal);
+  line-height: var(--leading-relaxed);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image:
-    radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.03) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.03) 0px, transparent 50%);
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -206,10 +202,10 @@ img, svg, video {
 }
 
 /* ============================================================
-   Unified Button Styles — Apple HIG + Material Design 3
+   Unified Button Styles — Modern Cognitive Clean (工业几何风格)
    ============================================================ */
 
-/* Base button reset */
+/* Base button — Crisp industrial geometry */
 button, .btn {
   position: relative;
   display: inline-flex;
@@ -217,28 +213,23 @@ button, .btn {
   justify-content: center;
   gap: 8px;
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);        /* 6px 锐利切割 */
   font-family: var(--font-sans);
   font-weight: var(--weight-semibold);
   font-size: var(--text-sm);
   cursor: pointer;
-  transition:
-    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--btn-transition);
   box-sizing: border-box;
   user-select: none;
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
-  /* Touch target minimum: 44px (HIG/MD standard) */
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0 var(--space-5);
+  height: 40px;                           /* 精确工业高度 */
+  padding: 0 var(--space-4);              /* 16px 紧凑水平padding */
 }
 
-/* Press feedback */
+/* Press feedback — Precise physical press */
 button:active:not(:disabled), .btn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(0.5px);           /* 精确下沉，不缩放 */
 }
 
 /* Disabled state */
@@ -256,38 +247,41 @@ button:focus-visible, .btn:focus-visible {
   outline-offset: 2px;
 }
 
-/* Primary Button — Highest emphasis */
+/* Primary Button — High-contrast solid brand color */
 .btn-primary {
   background: var(--color-primary);
   color: #FFFFFF;
-  box-shadow: var(--shadow-sm), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
+  border: none;
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-  box-shadow: var(--shadow-md), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
+  background: var(--color-primary-hover);  /* Solid color change, no gradient */
 }
 .btn-primary:active:not(:disabled) {
-  box-shadow: var(--shadow-xs), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
+  background: var(--color-primary-hover);
 }
 
-/* Secondary Button — Medium emphasis */
+/* Secondary Button — Elegant Slate neutral */
 .btn-secondary {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: #F1F5F9;                     /* Slate 100 中性背景 */
+  color: var(--color-text-strong);
+  border: none;
 }
 .btn-secondary:hover:not(:disabled) {
-  background: var(--color-primary-border);
+  background: #E2E8F0;                     /* Slate 200 */
+}
+.btn-secondary:active:not(:disabled) {
+  background: #CBD5E1;                     /* Slate 300 */
 }
 
-/* Outline Button — Lower emphasis */
+/* Outline Button — Refined border, white surface */
 .btn-outline {
-  background: transparent;
-  border: 1.5px solid var(--color-border);
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
   color: var(--color-text);
 }
 .btn-outline:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
+  border-color: #94A3B8;                   /* Slate 400 */
+  color: var(--color-text-strong);
 }
 
 /* Ghost Button — Lowest emphasis */
@@ -341,21 +335,25 @@ button:focus-visible, .btn:focus-visible {
   transform: scale(0.95);
 }
 
-/* Pill Button — Tags / Filters / Toggle groups */
-.btn-pill {
-  height: 36px;
-  padding: 0 16px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-hover);
+/* Pill Button / Tag Pill — Eliminate capsule, use crisp geometry */
+.btn-pill,
+.tag-pill {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 4px !important;          /* 锐利工业切割 */
+  background: #F8FAFC;
+  border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  border: 1px solid transparent;
-  min-height: 36px;
+  min-height: 32px;
   min-width: auto;
+  transition: var(--btn-transition);
 }
-.btn-pill:hover:not(:disabled) {
-  background: var(--color-border);
+.btn-pill:hover:not(:disabled),
+.tag-pill:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
 }
 .btn-pill.active {
   background: var(--color-primary-soft);
@@ -471,8 +469,16 @@ button:focus-visible, .btn:focus-visible {
 }
 
 /* ============================================================
-   Element Plus Overrides — Unified with Design System
+   Element Plus Overrides — Industrial Geometry Style
    ============================================================ */
+
+/* Base Element Plus Button */
+.el-button {
+  border-radius: 6px !important;          /* 锐利工业切割 */
+  height: 40px !important;                /* 精确工业高度 */
+  font-weight: var(--weight-semibold) !important;
+  transition: var(--btn-transition) !important;
+}
 
 /* Primary Button */
 .el-button--primary {
@@ -482,34 +488,25 @@ button:focus-visible, .btn:focus-visible {
   --el-button-hover-border-color: var(--color-primary-hover) !important;
   --el-button-disabled-bg-color: var(--color-primary) !important;
   --el-button-disabled-border-color: var(--color-primary) !important;
-  border-radius: var(--radius-lg) !important;
-  font-weight: var(--weight-semibold) !important;
-  min-height: 44px !important;
-  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 .el-button--primary:hover:not(:disabled) {
-  transform: scale(0.98);
-  box-shadow: var(--shadow-md), 0 1px 0 rgba(0, 0, 0, 0.05) inset;
+  transform: translateY(0.5px);
 }
 .el-button--primary:active:not(:disabled) {
-  transform: scale(0.96);
-  box-shadow: var(--shadow-xs);
+  transform: translateY(1px);
 }
 .el-button--primary:disabled {
   opacity: 0.48 !important;
 }
 
-/* Default Button (Outline) */
+/* Default Button — Clear neutral background */
 .el-button--default {
-  --el-button-bg-color: transparent !important;
+  --el-button-bg-color: #FFFFFF !important;
   --el-button-border-color: var(--color-border) !important;
-  --el-button-hover-bg-color: var(--color-primary-soft) !important;
-  --el-button-hover-border-color: var(--color-primary) !important;
+  --el-button-hover-bg-color: #F8FAFC !important;
+  --el-button-hover-border-color: #94A3B8 !important;
   --el-button-text-color: var(--color-text) !important;
-  --el-button-hover-text-color: var(--color-text) !important;
-  border-radius: var(--radius-lg) !important;
-  font-weight: var(--weight-semibold) !important;
-  min-height: 44px !important;
+  --el-button-hover-text-color: var(--color-text-strong) !important;
 }
 
 /* Danger Button */
@@ -518,9 +515,6 @@ button:focus-visible, .btn:focus-visible {
   --el-button-border-color: var(--color-danger) !important;
   --el-button-hover-bg-color: #DC2626 !important;
   --el-button-hover-border-color: #DC2626 !important;
-  border-radius: var(--radius-lg) !important;
-  font-weight: var(--weight-semibold) !important;
-  min-height: 44px !important;
 }
 
 /* Success Button */
@@ -529,32 +523,29 @@ button:focus-visible, .btn:focus-visible {
   --el-button-border-color: var(--color-success) !important;
   --el-button-hover-bg-color: #059669 !important;
   --el-button-hover-border-color: #059669 !important;
-  border-radius: var(--radius-lg) !important;
-  font-weight: var(--weight-semibold) !important;
-  min-height: 44px !important;
 }
 
-/* Small size */
+/* Small size — 32px height, 4px radius */
 .el-button--small {
-  min-height: 36px !important;
-  padding: 0 14px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
   font-size: var(--text-xs) !important;
-  border-radius: var(--radius-md) !important;
+  border-radius: 4px !important;
 }
 
-/* Large size */
+/* Large size — 48px height, 8px radius */
 .el-button--large {
-  min-height: 52px !important;
-  padding: 0 28px !important;
+  height: 48px !important;
+  padding: 0 24px !important;
   font-size: var(--text-base) !important;
-  border-radius: var(--radius-xl) !important;
+  border-radius: 8px !important;
 }
 
 /* Card */
 .el-card {
   border: 1px solid var(--color-border) !important;
   border-radius: var(--radius-xl) !important;
-  box-shadow: var(--shadow-sm) !important;
+  box-shadow: var(--shadow-xs) !important;
   background: var(--color-surface) !important;
   color: var(--color-text) !important;
 }
@@ -564,24 +555,25 @@ button:focus-visible, .btn:focus-visible {
   background: var(--color-surface) !important;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
 }
 
 /* Input */
 .el-input__wrapper,
 .el-select__wrapper {
   background: var(--color-surface-hover) !important;
-  border: 1px solid transparent !important;
+  border: 1px solid var(--color-border) !important;
   color: var(--color-text) !important;
   box-shadow: none !important;
-  border-radius: var(--radius-lg) !important;
-  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: var(--radius-md) !important;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .el-input__wrapper.is-focus,
 .el-select__wrapper.is-focus {
   background: var(--color-surface) !important;
   border: 1px solid var(--color-primary) !important;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1) !important;
 }
 
 .el-input__inner {
@@ -608,22 +600,22 @@ button:focus-visible, .btn:focus-visible {
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   box-shadow: var(--shadow-xs);
-  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .panel:hover {
-  border-color: var(--color-border-hover);
-  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-lg);
 }
 
 /* Glassmorphism Card — translucent with backdrop blur */
 .glass-card {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   backdrop-filter: blur(12px);
 }
 
@@ -677,20 +669,19 @@ button:focus-visible, .btn:focus-visible {
   font-weight: var(--weight-bold);
 }
 
-/* Tag / Badge */
+/* Tag / Badge — Crisp industrial tags */
 .tag-pill {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-hover);
+  border-radius: 4px !important;          /* 锐利工业切割 */
+  background: #F8FAFC;
+  border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
-  transition: background 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--btn-transition);
 }
 
 .tag-pill:hover {
@@ -704,22 +695,21 @@ button:focus-visible, .btn:focus-visible {
   min-height: 36px;
   padding: var(--space-2) var(--space-4) !important;
   border: 1px solid var(--color-primary-border) !important;
-  border-radius: var(--radius-lg) !important;
+  border-radius: var(--radius-md) !important;
   background: var(--color-primary-soft) !important;
   color: var(--color-primary) !important;
   font-weight: var(--weight-semibold) !important;
   box-shadow: none !important;
-  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .link-button:hover {
   background: var(--color-primary-soft) !important;
   border-color: var(--color-primary) !important;
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px -8px rgba(79, 70, 229, 0.35) !important;
+  box-shadow: 0 8px 18px -8px rgba(37, 99, 235, 0.2) !important;
 }
 
 /* Divider */

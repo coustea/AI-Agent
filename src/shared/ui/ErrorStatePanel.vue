@@ -18,10 +18,10 @@
       <p class="error-message">{{ isLoading ? loadingMessage : (errorMessage || defaultMessage) }}</p>
 
       <div class="error-actions" v-if="!isLoading && showRetry">
-        <BaseButton class="error-retry-btn" @click="handleRetry">
+        <el-button type="primary" class="error-retry-btn" @click="handleRetry">
           <el-icon><RefreshRight /></el-icon>
           重新加载
-        </BaseButton>
+        </el-button>
       </div>
 
       <div class="error-meta" v-if="!isLoading">
@@ -41,7 +41,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
-import BaseButton from '@/shared/ui/BaseButton.vue'
 
 const props = withDefaults(defineProps<{
   isLoading?: boolean

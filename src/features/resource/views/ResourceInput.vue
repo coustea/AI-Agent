@@ -31,13 +31,13 @@
           <span class="omni-hint" v-else>
             描述考研、期末、或任意技术栈...
           </span>
-          <BaseButton variant="primary" class="omni-submit-btn"
-              type="submit"
+          <el-button type="primary" class="omni-submit-btn"
+              native-type="submit"
               :disabled="!localInput.trim()"
               aria-label="进入参数配置"
           >
             <el-icon><Top /></el-icon>
-          </BaseButton>
+          </el-button>
         </div>
       </form>
 
@@ -70,7 +70,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import BaseButton from '@/shared/ui/BaseButton.vue'
 import { Top, StarFilled, Cpu, Odometer } from '@element-plus/icons-vue'
 
 const props = defineProps<{

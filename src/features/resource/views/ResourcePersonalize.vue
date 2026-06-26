@@ -25,7 +25,7 @@
 
       <div class="config-section-v2">
         <div class="agent-configs-grid">
-          <BaseCard class="config-card-v2" padding="large" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
+          <el-card class="config-card-v2" shadow="never" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
             <div class="cc-header-v2">
               <div class="cc-icon-wrap" :class="agent.colorClass">
                 <el-icon><component :is="agent.icon" /></el-icon>
@@ -189,7 +189,7 @@
               </template>
 
             </div>
-          </BaseCard>
+          </el-card>
         </div>
       </div>
 
@@ -224,7 +224,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import BaseCard from '@/shared/ui/BaseCard.vue'
 import { Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LearningScenario, ResourceAgentId } from '@/features/resource/model/resource'
