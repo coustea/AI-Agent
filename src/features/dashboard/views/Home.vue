@@ -2,13 +2,13 @@
   <main class="home-workspace">
     <div class="workspace-grid" v-if="recommendationData && profileRadarData">
       <!-- 第一行：学习总览 + 画像雷达 -->
-      <BaseCard class="overview-card span-8" padding="large">
+      <el-card class="overview-card span-8" shadow="never">
         <div class="overview-decoration"></div>
         <div class="overview-main">
           <div class="overview-copy">
-            <BaseTag tone="indigo" pill class="overview-badge">
+            <el-tag type="primary" effect="light" round class="overview-badge">
               <span class="badge-dot"></span>{{ recommendationData.recommendation.label || '智能推荐' }}
-            </BaseTag>
+            </el-tag>
             <h1>今天，从哪里继续？</h1>
             <p class="overview-desc">
               根据你的画像分数、学习路径进度和最近练习表现，系统已整理好下一步学习建议。
@@ -26,10 +26,10 @@
             <h2>{{ recommendationData.recommendation.title }}</h2>
             <p>{{ recommendationData.recommendation.text }}</p>
           </div>
-          <BaseButton size="large" class="primary-task-btn" @click="goTo(recommendationData.recommendation.path)">
+          <el-button type="primary" size="large" class="primary-task-btn" @click="goTo(recommendationData.recommendation.path)">
             <el-icon><component :is="getIconComponent(recommendationData.recommendation.icon)" /></el-icon>
             {{ recommendationData.recommendation.action }}
-          </BaseButton>
+          </el-button>
         </div>
 
         <div class="overview-stats">
@@ -38,9 +38,9 @@
             <span>{{ item.label }}</span>
           </div>
         </div>
-      </BaseCard>
+      </el-card>
 
-      <BaseCard class="radar-card span-4" padding="large">
+      <el-card class="radar-card span-4" shadow="never">
         <div class="radar-header">
           <div>
             <span class="section-label">学习画像</span>
@@ -58,10 +58,10 @@
         <p class="radar-note">
           {{ profileRadarData.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
         </p>
-      </BaseCard>
+      </el-card>
 
       <!-- 第二行：继续学习 + 今日建议/每日挑战 -->
-      <BaseCard class="continue-card span-8">
+      <el-card class="continue-card span-8" shadow="never">
         <div class="card-head">
           <div>
             <span class="section-label">学习进度</span>
@@ -100,12 +100,12 @@
         <!-- 无数据时显示空状态 -->
         <div class="empty-state" v-else>
           <p>还没有学习路径，开始规划你的学习计划吧</p>
-          <BaseButton size="small" @click="goTo('/path-planner')">开始规划</BaseButton>
+          <el-button type="primary" size="small" @click="goTo('/path-planner')">开始规划</el-button>
         </div>
-      </BaseCard>
+      </el-card>
 
       <aside class="side-stack span-4">
-        <BaseCard class="suggestion-card">
+        <el-card class="suggestion-card" shadow="never">
           <div class="card-head compact">
             <div>
               <span class="section-label">画像驱动</span>
@@ -132,27 +132,27 @@
           <div class="empty-state compact" v-else>
             <p>完善学习画像后可获得个性化建议</p>
           </div>
-        </BaseCard>
+        </el-card>
 
-        <BaseCard class="challenge-card" v-if="dailyChallenge">
+        <el-card class="challenge-card" shadow="never" v-if="dailyChallenge">
           <div class="challenge-top">
             <div>
               <span class="section-label">每日挑战</span>
               <h2>{{ dailyChallenge.title }}</h2>
             </div>
-            <BaseTag>{{ dailyChallenge.difficulty }}</BaseTag>
+            <el-tag type="primary" effect="light" round>{{ dailyChallenge.difficulty }}</el-tag>
           </div>
           <p>{{ dailyChallenge.reason }}</p>
           <div class="challenge-meta">
             <span>预计 {{ dailyChallenge.minutes }} 分钟</span>
             <span>{{ dailyChallenge.source }}</span>
           </div>
-          <BaseButton class="challenge-btn" size="small" @click="goTo('/question-bank')">开始挑战</BaseButton>
-        </BaseCard>
+          <el-button type="primary" class="challenge-btn" size="small" @click="goTo('/question-bank')">开始挑战</el-button>
+        </el-card>
       </aside>
 
       <!-- 第三行：最近生成 + 快速开始 -->
-      <BaseCard class="recent-card span-8">
+      <el-card class="recent-card span-8" shadow="never">
         <div class="card-head">
           <div>
             <span class="section-label">资源产物</span>
@@ -182,11 +182,11 @@
         <!-- 无资源时显示空状态 -->
         <div class="empty-state" v-else>
           <p>还没有生成过资源，开始创建你的第一个学习资源吧</p>
-          <BaseButton size="small" @click="goTo('/resource-generator')">生成资源</BaseButton>
+          <el-button type="primary" size="small" @click="goTo('/resource-generator')">生成资源</el-button>
         </div>
-      </BaseCard>
+      </el-card>
 
-      <BaseCard class="quick-card span-4" v-if="quickActions.length">
+      <el-card class="quick-card span-4" shadow="never" v-if="quickActions.length">
         <div class="card-head compact">
           <div>
             <span class="section-label">操作入口</span>
@@ -210,7 +210,7 @@
             <span class="chevron">›</span>
           </button>
         </div>
-      </BaseCard>
+      </el-card>
 
     </div>
 
@@ -229,9 +229,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import BaseCard from '@/shared/ui/BaseCard.vue'
-import BaseButton from '@/shared/ui/BaseButton.vue'
-import BaseTag from '@/shared/ui/BaseTag.vue'
 import ErrorStatePanel from '@/shared/ui/ErrorStatePanel.vue'
 
 import {

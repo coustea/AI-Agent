@@ -1,11 +1,16 @@
 <template>
   <main class="path-dashboard">
-    <BaseCard v-if="loading" class="state-card">
+    <el-card v-if="loading" class="state-card" shadow="never" :body-style="{ padding: '0' }">
       <div class="state-spinner"></div>
       <p>正在加载学习路径...</p>
-    </BaseCard>
+    </el-card>
 
-    <BaseCard v-else-if="!path && !isGenerating" class="state-card empty-state">
+    <el-card
+      v-else-if="!path && !isGenerating"
+      class="state-card empty-state"
+      shadow="never"
+      :body-style="{ padding: '0' }"
+    >
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 6.5h6l2 2h8v9.5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2Z" />
@@ -13,8 +18,8 @@
       </div>
       <h2>还没有可用的学习路径</h2>
       <p>输入学习目标后，系统会根据你的画像生成阶段化学习路径。</p>
-      <BaseButton variant="primary" @click="router.push('/path-planner')">创建学习路径</BaseButton>
-    </BaseCard>
+      <el-button type="primary" @click="router.push('/path-planner')">创建学习路径</el-button>
+    </el-card>
 
     <section v-else-if="isGenerating" class="generating-view">
       <div class="generate-panel">
@@ -74,9 +79,9 @@
           </div>
 
           <div class="header-actions">
-            <BaseButton variant="secondary" @click="router.push('/path-planner/history')">路径历史</BaseButton>
-            <BaseButton variant="secondary" @click="router.push('/path-resource-history')">资源记录</BaseButton>
-            <BaseButton variant="primary" @click="router.push('/path-planner')">重新规划</BaseButton>
+            <el-button plain @click="router.push('/path-planner/history')">路径历史</el-button>
+            <el-button plain @click="router.push('/path-resource-history')">资源记录</el-button>
+            <el-button type="primary" @click="router.push('/path-planner')">重新规划</el-button>
           </div>
         </div>
       </header>
@@ -306,8 +311,6 @@ import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import BaseCard from '@/shared/ui/BaseCard.vue'
-import BaseButton from '@/shared/ui/BaseButton.vue'
 import EvaluationBanner from '@/features/learning-path/components/EvaluationBanner.vue'
 
 import {
@@ -777,7 +780,7 @@ onMounted(loadPath)
   font-size: 1.35rem;
 }
 
-.empty-state :deep(.base-button) {
+.empty-state :deep(.el-button) {
   margin-top: 22px;
 }
 

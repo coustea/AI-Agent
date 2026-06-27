@@ -8,7 +8,7 @@
     <section v-else-if="!workspace && !isGeneratingTutorial" class="state-card">
       <h2>节点不存在或已经失效</h2>
       <p>请返回路径总览重新选择学习节点。</p>
-      <BaseButton variant="primary" @click="router.push('/path-planner')">返回路径总览</BaseButton>
+      <el-button type="primary" @click="router.push('/path-planner')">返回路径总览</el-button>
     </section>
 
     <section v-else-if="isGeneratingTutorial" class="generating-view">
@@ -273,7 +273,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import BaseButton from '@/shared/ui/BaseButton.vue'
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
 
 import {
