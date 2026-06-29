@@ -7,10 +7,14 @@
       <span class="resource-pattern-bg"></span>
     </div>
 
-    <div v-show="currentPhase === 'input'" class="floating-history-btn" @click="router.push('/resource-history')">
-      <el-icon><Timer /></el-icon>
+    <button
+      v-show="currentPhase === 'input'"
+      class="floating-history-btn btn btn-outline"
+      @click="router.push('/resource-history')"
+    >
+      <Timer class='w-4 h-4 inline-block align-middle' />
       <span>历史记录</span>
-    </div>
+    </button>
 
     <transition name="page-slide" mode="out-in">
 
@@ -60,7 +64,7 @@
 
     </transition>
 
-    <el-dialog v-model="previewVisible" :title="previewData ? getResourceTypeLabel(previewData.agentId) : '资源预览'" width="78%" top="6vh" destroy-on-close :class="['elegant-dialog', { 'is-ppt-dialog': previewData?.agentId === 'ppt' }]">
+    <Teleport to="body"><transition name="modal-fade"><div v-if="previewVisible" class="custom-modal-overlay" @click="previewVisible = false"><div class="custom-modal-content note-preview-modal max-w-[78%] w-full" @click.stop><div class="modal-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-start"><div><h3 class="text-lg font-bold text-slate-900">{{ previewData ? getResourceTypeLabel(previewData.agentId) : '资源预览' }}</h3></div><button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="previewVisible = false">×</button></div>>
       <div v-if="previewData" class="preview-dialog-body" :class="{ 'is-ppt-preview': previewData.agentId === 'ppt' }">
         <MindmapView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
@@ -70,15 +74,17 @@
         <VideoView v-else-if="previewData.agentId === 'video'" :result-data="previewData.resultData" />
         <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
-    </el-dialog>
+    </div></div></transition></Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Timer } from '@element-plus/icons-vue'
+import { toast } from 'vue-sonner'
+import {
+  PhClock as Timer
+} from '@phosphor-icons/vue'
 
 import ResourceInput from '@/features/resource/views/ResourceInput.vue'
 import ResourcePersonalize from '@/features/resource/views/ResourcePersonalize.vue'
@@ -292,7 +298,7 @@ function initializeWaitingNodes() {
 function normalizeEventStatus(status?: string | null): DagNodeState['status'] | undefined {
   if (!status) return undefined
   if (status === 'finished' || status === 'completed') return 'success'
-  if (status === 'failed') return 'failed'
+  if (status === 'failed' || status === 'interrupted') return 'failed'
   if (status === 'skipped') return 'skipped'
   if (status === 'running') return 'running'
   return undefined
@@ -396,6 +402,8 @@ function applyResourceEvent(event: ResourceEvent) {
 }
 
 function applyTaskStatus(taskStatus: ResourceTaskStatus) {
+  if (taskStatus.run_id) activeRunId.value = taskStatus.run_id
+  if (taskStatus.learning_need) naturalInput.value = taskStatus.learning_need
   if (Array.isArray(taskStatus.selected_agents) && taskStatus.selected_agents.length) {
     enabledAgentIds.value = taskStatus.selected_agents.filter(id => AGENT_DISPLAY[id]) as ResourceAgentId[]
   }
@@ -407,7 +415,7 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
         // 新协议：统一为 agent.status，状态放入 data.status
         let dataStatus = 'running'
         if (snapshot.status === 'finished' || snapshot.status === 'completed') dataStatus = 'completed'
-        else if (snapshot.status === 'failed') dataStatus = 'failed'
+        else if (snapshot.status === 'failed' || snapshot.status === 'interrupted') dataStatus = 'failed'
         else if (snapshot.status === 'skipped') dataStatus = 'completed'
         else if (snapshot.status === 'pending') dataStatus = 'pending'
 
@@ -454,7 +462,7 @@ async function completeGeneration(resourceId: number, taskStatus: ResourceTaskSt
   }
   generationError.value = '资源生成失败，暂无可展示内容'
   isGenerating.value = false
-  ElMessage.error(generationError.value || '资源生成失败，暂无可展示内容')
+  toast.error(generationError.value || '资源生成失败，暂无可展示内容')
 }
 
 async function checkStatusOnce(resourceId: number) {
@@ -473,9 +481,9 @@ function startPollingFallback(resourceId: number) {
       stopPolling()
       generationError.value = err.message || '生成中断，请稍后重试'
       isGenerating.value = false
-      ElMessage.error(generationError.value || '生成中断，请稍后重试')
+      toast.error(generationError.value || '生成中断，请稍后重试')
     })
-  }, 1500)
+  }, 4000)
 }
 
 function syncStatusSoon(resourceId: number) {
@@ -520,11 +528,17 @@ const startGeneration = async () => {
     const { resource_id, run_id } = (await startResourceGeneration(requestParams)).data.data
     activeResourceId.value = resource_id
     activeRunId.value = run_id
+    await router.replace({
+      query: {
+        ...route.query,
+        resourceId: String(resource_id),
+      },
+    })
     startResourceStream(run_id, resource_id)
   } catch (err: any) {
     generationError.value = err.message || '生成请求失败'
     isGenerating.value = false
-    ElMessage.error(generationError.value || '生成请求失败')
+    toast.error(generationError.value || '生成请求失败')
   }
 }
 
@@ -555,6 +569,36 @@ const stopResourceStream = () => {
 
 const pauseLiveGenerationUpdates = () => { stopPolling(); stopResourceStream() }
 
+const restoreGeneration = async (resourceId: number) => {
+  currentPhase.value = 'generating'
+  resetGenerationState()
+  initializeWaitingNodes()
+  activeResourceId.value = resourceId
+  isGenerating.value = true
+
+  try {
+    const taskStatus = (await pollResourceStatus(resourceId)).data.data
+    applyTaskStatus(taskStatus)
+    if (['completed', 'partial_completed', 'failed'].includes(taskStatus.status)) {
+      await completeGeneration(resourceId, taskStatus)
+      return
+    }
+    if (taskStatus.run_id) {
+      startResourceStream(taskStatus.run_id, resourceId)
+    } else {
+      startPollingFallback(resourceId)
+    }
+  } catch (err: any) {
+    generationError.value = err.message || '无法恢复资源生成任务'
+    isGenerating.value = false
+    currentPhase.value = 'input'
+    const query = { ...route.query }
+    delete query.resourceId
+    await router.replace({ query })
+    toast.error(generationError.value || '无法恢复资源生成任务')
+  }
+}
+
 const resumeLiveGenerationUpdates = async () => {
   const resourceId = activeResourceId.value
   const runId = activeRunId.value
@@ -583,12 +627,24 @@ const handlePreview = (data: any) => {
 }
 
 const resetGenerator = () => {
-  stopPolling(); stopResourceStream(); naturalInput.value = ''; resetGenerationState(); currentPhase.value = 'input'
+  stopPolling()
+  stopResourceStream()
+  naturalInput.value = ''
+  resetGenerationState()
+  currentPhase.value = 'input'
+  const query = { ...route.query }
+  delete query.resourceId
+  delete query.prompt
+  void router.replace({ query })
 }
 
 onMounted(() => {
   const prompt = route.query.prompt
   if (prompt) naturalInput.value = String(prompt)
+  const resourceId = Number(route.query.resourceId)
+  if (Number.isInteger(resourceId) && resourceId > 0) {
+    void restoreGeneration(resourceId)
+  }
 })
 
 onActivated(() => { void resumeLiveGenerationUpdates() })
@@ -606,31 +662,31 @@ onBeforeUnmount(() => { pauseLiveGenerationUpdates() })
   --gradient-primary: var(--gradient-resource);
   min-height: calc(100vh - 64px);
   position: relative;
-  background:
-    radial-gradient(circle at 12% 8%, rgba(59, 130, 246, 0.08), transparent 34%),
-    radial-gradient(circle at 84% 18%, rgba(99, 102, 241, 0.10), transparent 30%),
-    linear-gradient(180deg, #f8fafc 0%, #eef6ff 52%, #f7fbff 100%);
+  background: #f4f7fb;
   overflow-x: hidden;
   font-family: var(--font-sans);
 }
 
+.resource-generator-ambient {
+  display: none;
+}
+
 .floating-history-btn {
   position: absolute; top: 24px; right: 24px; z-index: 50;
+  height: 36px;
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 20px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
   color: var(--color-primary); font-weight: 600; font-size: 0.9rem;
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.05);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .floating-history-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  background: #fff;
+  border-color: #a5b4fc;
+  box-shadow: 0 4px 12px rgba(23, 32, 51, 0.08);
 }
 
 .phase-view { position: relative; width: 100%; min-height: calc(100vh - 64px); display: flex; flex-direction: column; background: transparent; backdrop-filter: blur(20px); }
@@ -638,16 +694,11 @@ onBeforeUnmount(() => { pauseLiveGenerationUpdates() })
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
 .page-slide-leave-to { opacity: 0; transform: translateY(-30px) scale(1.02); }
 
-.elegant-dialog :deep(.el-dialog) { border-radius: var(--radius-2xl); overflow: hidden; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.08); background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.5); }
-.elegant-dialog :deep(.el-dialog__header) { padding: var(--space-6) var(--space-8) var(--space-5); margin-right: 0; border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
-.elegant-dialog :deep(.el-dialog__title) { font-weight: var(--weight-extrabold); font-size: 1.2rem; color: var(--color-text); }
-.elegant-dialog :deep(.el-dialog__body) { padding: var(--space-8); background: transparent; }
 .elegant-dialog :deep(.resource-card-wrapper) { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; }
 .elegant-dialog :deep(.resource-card-wrapper:hover) { background: transparent !important; box-shadow: none !important; border: none !important; }
-.is-ppt-dialog :deep(.el-dialog__body) { padding: 0 !important; background: transparent !important; }
 .preview-dialog-body.is-ppt-preview { padding: 0 !important; background: transparent !important; border: none !important; box-shadow: none !important; }
 .preview-dialog-body.is-ppt-preview :deep(.player-wrapper) { margin-top: 0 !important; border: none !important; border-radius: 0 !important; }
 
-h1, h2, h3, h4 { letter-spacing: -0.025em; color: var(--color-text); font-weight: var(--weight-bold); }
-p, .card-summary, .s-desc { line-height: 1.65; letter-spacing: 0.01em; color: var(--color-text-secondary); }
+h1, h2, h3, h4 { letter-spacing: 0; color: var(--color-text); font-weight: var(--weight-bold); }
+p, .card-summary, .s-desc { line-height: 1.65; letter-spacing: 0; color: var(--color-text-secondary); }
 </style>

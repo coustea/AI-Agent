@@ -54,4 +54,6 @@ export interface LearningTimeStats {
   daily_breakdown: DailyTimeEntry[]
   hourly_distribution: HourlyDistributionEntry[]
   context_breakdown?: Record<string, number>
+  avg_seconds?: number
+  active_days?: number
 }

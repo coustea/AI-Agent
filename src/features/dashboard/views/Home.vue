@@ -1,228 +1,307 @@
 <template>
-  <main class="home-workspace">
-    <div class="workspace-grid" v-if="recommendationData && profileRadarData">
-      <!-- 第一行：学习总览 + 画像雷达 -->
-      <el-card class="overview-card span-8" shadow="never">
-        <div class="overview-decoration"></div>
-        <div class="overview-main">
-          <div class="overview-copy">
-            <el-tag type="primary" effect="light" round class="overview-badge">
-              <span class="badge-dot"></span>{{ recommendationData.recommendation.label || '智能推荐' }}
-            </el-tag>
-            <h1>今天，从哪里继续？</h1>
-            <p class="overview-desc">
-              根据你的画像分数、学习路径进度和最近练习表现，系统已整理好下一步学习建议。
-            </p>
-          </div>
-          <div class="date-panel">
-            <span>{{ todayText }}</span>
-            <strong>{{ todayWeekday }}</strong>
-          </div>
-        </div>
-
-        <div class="primary-task">
-          <div class="task-info">
-            <span class="section-label">主推荐任务</span>
-            <h2>{{ recommendationData.recommendation.title }}</h2>
-            <p>{{ recommendationData.recommendation.text }}</p>
-          </div>
-          <el-button type="primary" size="large" class="primary-task-btn" @click="goTo(recommendationData.recommendation.path)">
-            <el-icon><component :is="getIconComponent(recommendationData.recommendation.icon)" /></el-icon>
-            {{ recommendationData.recommendation.action }}
-          </el-button>
-        </div>
-
-        <div class="overview-stats">
-          <div class="overview-stat" v-for="item in overviewStats" :key="item.label">
-            <strong>{{ item.value }}</strong>
-            <span>{{ item.label }}</span>
-          </div>
-        </div>
-      </el-card>
-
-      <el-card class="radar-card span-4" shadow="never">
-        <div class="radar-header">
-          <div>
-            <span class="section-label">学习画像</span>
-            <h2>画像雷达图</h2>
-          </div>
-          <button class="text-link" @click="goTo(profilePath)">
-            {{ profileRadarData.radar?.link_label || '完整画像' }}
-          </button>
-        </div>
-
-        <div class="radar-chart-wrapper" v-loading="loading">
-          <v-chart class="chart" :option="radarOption" autoresize />
-        </div>
-
-        <p class="radar-note">
-          {{ profileRadarData.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
-        </p>
-      </el-card>
-
-      <!-- 第二行：继续学习 + 今日建议/每日挑战 -->
-      <el-card class="continue-card span-8" shadow="never">
-        <div class="card-head">
-          <div>
-            <span class="section-label">学习进度</span>
-            <h2>继续学习</h2>
-          </div>
-          <button class="text-link" @click="goTo('/path-planner')" v-if="continueItems.length">查看全部</button>
-        </div>
-
-        <!-- 有数据时显示列表 -->
-        <div class="study-table" v-if="continueItems.length">
-          <div class="study-table-head">
-            <span>学习项</span>
-            <span>进度</span>
-            <span>上次学习</span>
-            <span>操作</span>
-          </div>
-          <div class="study-row" v-for="item in continueItems" :key="item.title">
-            <div class="study-title-cell">
-              <div :class="['study-icon', item.tone]">
-                <el-icon><component :is="getIconComponent(item.icon)" /></el-icon>
+  <main class="home-page min-h-screen font-sans antialiased">
+    <div class="home-shell">
+      
+      <div class="dashboard-grid" v-if="recommendationData && profileRadarData">
+        
+        <!-- ================= LEFT COLUMN (col-span-8) ================= -->
+        <div class="primary-column">
+          
+          <!-- Block 1: Welcome & Today Header (Cardless) -->
+          <section class="recommendation-panel">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
+              <div class="space-y-1">
+                <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-bold bg-blue/10 text-blue px-2 py-0.5 rounded-sm">
+                  <span class="w-1.5 h-1.5 rounded-sm bg-blue animate-pulse"></span>
+                  {{ recommendationData.recommendation.label || '智能推荐' }}
+                </span>
+                <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">今天，从哪里继续？</h1>
+                <p class="text-xs text-slate-500 leading-relaxed max-w-[600px]">
+                  根据你的画像分数、学习路径进度和最近练习表现，系统已整理好下一步学习建议。
+                </p>
               </div>
-              <div>
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.category }}</span>
+
+              <!-- Today Date Display -->
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-sm shrink-0 font-mono text-xs">
+                <Calendar class="w-3.5 h-3.5 text-slate-400" />
+                <span class="text-slate-500">{{ todayText }}</span>
+                <span class="text-slate-300">|</span>
+                <span class="font-bold text-slate-800">{{ todayWeekday }}</span>
               </div>
             </div>
-            <div class="progress-cell">
-              <div class="mini-progress"><i :style="{ width: item.progress + '%' }"></i></div>
-              <span>{{ item.progress }}%</span>
-            </div>
-            <span class="last-time">{{ item.lastTime }}</span>
-            <button class="row-action" @click="goTo(item.path)">继续学习</button>
-          </div>
-        </div>
 
-        <!-- 无数据时显示空状态 -->
-        <div class="empty-state" v-else>
-          <p>还没有学习路径，开始规划你的学习计划吧</p>
-          <el-button type="primary" size="small" @click="goTo('/path-planner')">开始规划</el-button>
-        </div>
-      </el-card>
-
-      <aside class="side-stack span-4">
-        <el-card class="suggestion-card" shadow="never">
-          <div class="card-head compact">
-            <div>
-              <span class="section-label">画像驱动</span>
-              <h2>今日建议</h2>
-            </div>
-          </div>
-          <!-- 有建议时显示列表 -->
-          <div class="suggestion-list" v-if="todaySuggestions.length">
-            <button
-              class="suggestion-item"
-              v-for="item in todaySuggestions"
-              :key="item.title"
-              @click="goTo(item.path)"
-            >
-              <span :class="['suggestion-dot', item.tone]"></span>
-              <div>
-                <strong>{{ item.title }}</strong>
-                <p>{{ item.reason }}</p>
+            <!-- Recommended Action (Editorial Banner, Cardless) -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6 py-6 px-1 border-t border-b border-slate-100">
+              <div class="space-y-1 min-w-0">
+                <span class="text-[9px] font-mono text-blue font-black uppercase tracking-wider block">推荐学习项目</span>
+                <h2 class="text-sm font-bold text-slate-900 truncate">{{ recommendationData.recommendation.title }}</h2>
+                <p class="text-xs text-slate-500 leading-relaxed truncate">{{ recommendationData.recommendation.text }}</p>
               </div>
-              <span class="chevron">›</span>
-            </button>
-          </div>
-          <!-- 无建议时显示空状态 -->
-          <div class="empty-state compact" v-else>
-            <p>完善学习画像后可获得个性化建议</p>
-          </div>
-        </el-card>
-
-        <el-card class="challenge-card" shadow="never" v-if="dailyChallenge">
-          <div class="challenge-top">
-            <div>
-              <span class="section-label">每日挑战</span>
-              <h2>{{ dailyChallenge.title }}</h2>
+              <Button class="shrink-0 h-9 px-4 rounded-sm text-xs font-semibold cursor-pointer border border-blue text-blue hover:bg-blue/5 bg-transparent shadow-none" @click="goTo(recommendationData.recommendation.path)">
+                <component :is="getIconComponent(recommendationData.recommendation.icon)" class="w-3.5 h-3.5 mr-2" />
+                <span>{{ recommendationData.recommendation.action }}</span>
+              </Button>
             </div>
-            <el-tag type="primary" effect="light" round>{{ dailyChallenge.difficulty }}</el-tag>
-          </div>
-          <p>{{ dailyChallenge.reason }}</p>
-          <div class="challenge-meta">
-            <span>预计 {{ dailyChallenge.minutes }} 分钟</span>
-            <span>{{ dailyChallenge.source }}</span>
-          </div>
-          <el-button type="primary" class="challenge-btn" size="small" @click="goTo('/question-bank')">开始挑战</el-button>
-        </el-card>
-      </aside>
 
-      <!-- 第三行：最近生成 + 快速开始 -->
-      <el-card class="recent-card span-8" shadow="never">
-        <div class="card-head">
-          <div>
-            <span class="section-label">资源产物</span>
-            <h2>最近生成</h2>
-          </div>
-          <button class="text-link" @click="goTo('/resource-generator')" v-if="recentGeneratedItems.length">进入资源工坊</button>
-        </div>
-
-        <!-- 有资源时显示列表 -->
-        <div class="resource-table" v-if="recentGeneratedItems.length">
-          <div class="resource-table-head">
-            <span>名称</span>
-            <span>类型</span>
-            <span>来源智能体</span>
-            <span>生成时间</span>
-            <span>操作</span>
-          </div>
-          <div class="resource-row" v-for="item in recentGeneratedItems" :key="item.title">
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.type }}</span>
-            <span>{{ item.agent }}</span>
-            <span>{{ item.time }}</span>
-            <button class="row-action" @click="goTo(item.path)">打开</button>
-          </div>
-        </div>
-
-        <!-- 无资源时显示空状态 -->
-        <div class="empty-state" v-else>
-          <p>还没有生成过资源，开始创建你的第一个学习资源吧</p>
-          <el-button type="primary" size="small" @click="goTo('/resource-generator')">生成资源</el-button>
-        </div>
-      </el-card>
-
-      <el-card class="quick-card span-4" shadow="never" v-if="quickActions.length">
-        <div class="card-head compact">
-          <div>
-            <span class="section-label">操作入口</span>
-            <h2>快速开始</h2>
-          </div>
-        </div>
-        <div class="quick-list">
-          <button
-            class="quick-item"
-            v-for="action in quickActions"
-            :key="action.label"
-            @click="goTo(action.path)"
-          >
-            <div :class="['quick-icon', actionIconClass(action.icon)]">
-              <el-icon><component :is="getIconComponent(action.icon)" /></el-icon>
+            <!-- Stats Quantitative Indicators (Cardless Grid) -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-2">
+              <div class="space-y-1" v-for="item in overviewStats" :key="item.label">
+                <span class="text-[9px] text-slate-400 font-mono uppercase tracking-wider block">{{ item.label }}</span>
+                <strong class="text-xl font-extrabold text-slate-950 font-mono tracking-tight block mt-0.5">{{ item.value }}</strong>
+              </div>
             </div>
-            <div>
-              <strong>{{ action.label }}</strong>
-              <p>{{ action.description }}</p>
-            </div>
-            <span class="chevron">›</span>
-          </button>
-        </div>
-      </el-card>
+          </section>
 
+          <!-- Block 2: Continue Learning Section (Cardless List) -->
+          <section class="learning-panel">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">PROGRESS TRACKING</span>
+                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">继续学习进度</h2>
+              </div>
+              <Button variant="ghost" class="text-xs font-bold text-blue hover:text-blue/80 p-0 cursor-pointer h-7" @click="goTo('/path-planner')" v-if="continueItems.length">
+                查看全部
+              </Button>
+            </div>
+
+            <!-- Learning Items List -->
+            <div v-if="continueItems.length" class="divide-y divide-slate-100">
+              <div 
+                v-for="item in continueItems" 
+                :key="item.title" 
+                class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 first:pt-0 last:pb-0 hover:bg-slate-50/40 rounded-sm px-2 transition-colors"
+              >
+                <!-- Title & info -->
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-8 h-8 rounded-sm flex items-center justify-center shrink-0" :class="item.tone === 'tone-emerald' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue'">
+                    <component :is="getIconComponent(item.icon)" class="w-4 h-4" />
+                  </div>
+                  <div class="min-w-0">
+                    <strong class="text-xs font-bold text-slate-800 block truncate">{{ item.title }}</strong>
+                    <span class="text-[10px] text-slate-400 block mt-0.5">{{ item.category }}</span>
+                  </div>
+                </div>
+
+                <!-- Progress & action -->
+                <div class="flex items-center gap-6 justify-between sm:justify-end">
+                  <div class="flex items-center gap-2">
+                    <div class="w-24 h-1 bg-slate-100 rounded-sm overflow-hidden shrink-0">
+                      <div class="h-full bg-emerald-500 rounded-sm" :style="{ width: item.progress + '%' }"></div>
+                    </div>
+                    <span class="text-[10px] font-mono font-bold text-slate-700 min-w-[28px] text-right">{{ item.progress }}%</span>
+                  </div>
+                  <span class="text-[10px] text-slate-400 font-mono hidden md:inline">{{ item.lastTime }}</span>
+                  <Button variant="outline" size="sm" class="text-[10px] h-7 px-3 border-slate-200 hover:bg-slate-50 rounded-sm shrink-0 cursor-pointer bg-white" @click="goTo(item.path)">
+                    继续
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else class="py-10 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
+              <p>还没有学习路径，开始规划你的学习计划吧</p>
+              <Button size="sm" class="rounded-sm text-xs font-semibold cursor-pointer" @click="goTo('/path-planner')">
+                开始规划
+              </Button>
+            </div>
+          </section>
+
+          <!-- Block 3: Recently Generated Resources (Cardless List) -->
+          <section class="resource-panel">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">GENERATED ARTIFACTS</span>
+                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">最近生成资源</h2>
+              </div>
+              <Button variant="ghost" class="text-xs font-bold text-blue hover:text-blue/80 p-0 cursor-pointer h-7" @click="goTo('/resource-generator')" v-if="recentGeneratedItems.length">
+                进入资源工坊
+              </Button>
+            </div>
+
+            <!-- Generated resources list -->
+            <div v-if="recentGeneratedItems.length" class="divide-y divide-slate-100">
+              <div 
+                v-for="item in recentGeneratedItems" 
+                :key="item.title" 
+                class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 first:pt-0 last:pb-0 hover:bg-slate-50/40 rounded-sm px-2 transition-colors"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-8 h-8 rounded-sm bg-slate-50 flex items-center justify-center shrink-0">
+                    <FileText class="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div class="min-w-0">
+                    <strong class="text-xs font-bold text-slate-800 block truncate">{{ item.title }}</strong>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="text-[9px] font-mono text-slate-400 uppercase">{{ item.type }}</span>
+                      <span class="text-slate-200 text-[10px]">|</span>
+                      <span class="text-[9px] text-slate-400 truncate">{{ item.agent }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-4 justify-between sm:justify-end shrink-0">
+                  <span class="text-[9px] text-slate-400 font-mono">{{ item.time }}</span>
+                  <Button variant="outline" size="sm" class="text-[10px] h-7 px-3 border-slate-200 hover:bg-slate-50 rounded-sm cursor-pointer bg-white" @click="goTo(item.path)">
+                    打开
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else class="py-10 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
+              <p>还没有生成过资源，开始创建你的第一个学习资源吧</p>
+              <Button size="sm" class="rounded-sm text-xs font-semibold cursor-pointer" @click="goTo('/resource-generator')">
+                生成资源
+              </Button>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- ================= RIGHT COLUMN (col-span-4) ================= -->
+        <aside class="insight-column">
+          
+          <!-- Block 1: Radar Chart (Cardless) -->
+          <section class="radar-panel">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">CAPABILITY PROFILE</span>
+                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">画像雷达能力图</h2>
+              </div>
+              <Button variant="ghost" class="text-xs font-bold text-blue hover:text-blue/80 p-0 cursor-pointer h-7" @click="goTo(profilePath)">
+                完整画像
+              </Button>
+            </div>
+
+            <!-- Radar chart ECharts container -->
+            <div class="radar-canvas h-[248px] relative overflow-hidden">
+              <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs space-y-2">
+                <div class="w-5 h-5 rounded-sm border border-blue border-t-transparent animate-spin"></div>
+                <span>读取能力维度...</span>
+              </div>
+              <v-chart v-else class="chart" :option="radarOption" autoresize />
+            </div>
+
+            <!-- Headline Score note -->
+            <div class="p-3 bg-slate-50 border border-slate-100/80 rounded-sm text-xs text-slate-500 leading-relaxed font-medium">
+              {{ profileRadarData.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
+            </div>
+          </section>
+
+          <!-- Block 2: Today Suggestions (Cardless) -->
+          <section class="suggestion-panel">
+            <div class="space-y-0.5">
+              <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">PERSONALIZED RECOMMENDATION</span>
+              <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">今日能力画像建议</h2>
+            </div>
+
+            <!-- Suggestion items list -->
+            <div v-if="todaySuggestions.length" class="space-y-2">
+              <div 
+                v-for="item in todaySuggestions" 
+                :key="item.title" 
+                class="flex items-start gap-3 p-3 hover:bg-slate-50/40 rounded-sm transition-all cursor-pointer border-b border-slate-50"
+                @click="goTo(item.path)"
+              >
+                <span class="w-2.5 h-2.5 rounded-sm mt-1 shrink-0" :class="{
+                  'bg-blue': item.tone === 'blue',
+                  'bg-amber-500': item.tone === 'amber',
+                  'bg-emerald-500': item.tone === 'green'
+                }"></span>
+                <div class="space-y-0.5 min-w-0">
+                  <strong class="text-xs font-bold text-slate-800 block truncate">{{ item.title }}</strong>
+                  <p class="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{{ item.reason }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else class="py-6 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs">
+              完善学习画像后可获得个性化建议
+            </div>
+          </section>
+
+          <!-- Block 3: Daily Challenge (Cardless) -->
+          <section class="challenge-panel" v-if="dailyChallenge">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">DAILY CHALLENGE</span>
+                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">每日专项挑战</h2>
+              </div>
+              <Badge variant="secondary" class="text-[9px] font-bold px-2 py-0.5 rounded-sm">
+                {{ dailyChallenge.difficulty }}
+              </Badge>
+            </div>
+
+            <div class="space-y-3.5">
+              <div class="space-y-1">
+                <h3 class="text-xs font-bold text-slate-800">{{ dailyChallenge.title }}</h3>
+                <p class="text-[11px] text-slate-500 leading-relaxed">{{ dailyChallenge.reason }}</p>
+              </div>
+
+              <!-- Meta estimates -->
+              <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono border-t border-b border-slate-100 py-2">
+                <span>EST. TIME: {{ dailyChallenge.minutes }} MINS</span>
+                <span>{{ dailyChallenge.source }}</span>
+              </div>
+
+              <Button class="w-full h-9 rounded-sm text-xs font-semibold cursor-pointer" @click="goTo('/question-bank')">
+                开始挑战
+              </Button>
+            </div>
+          </section>
+
+          <!-- Block 4: Quick Start Links (Cardless) -->
+          <section class="quick-panel" v-if="quickActions.length">
+            <div class="space-y-0.5">
+              <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">QUICK ACCESS LINKS</span>
+              <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">导航快速开始</h2>
+            </div>
+
+            <!-- Grid links -->
+            <div class="grid grid-cols-1 gap-2">
+              <div 
+                v-for="action in quickActions" 
+                :key="action.label" 
+                class="flex items-center justify-between py-2 border-b border-slate-50 hover:border-slate-200 hover:bg-slate-50/40 px-2 rounded-sm transition-all cursor-pointer group"
+                @click="goTo(action.path)"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-7 h-7 rounded-sm flex items-center justify-center shrink-0" :class="{
+                    'bg-blue/5 text-blue': action.icon === 'chat',
+                    'bg-indigo-500/5 text-indigo-500': action.icon === 'resource',
+                    'bg-emerald-500/5 text-emerald-500': action.icon === 'path',
+                    'bg-amber-500/5 text-amber-500': action.icon === 'practice',
+                    'bg-purple-500/5 text-purple-500': action.icon === 'monitor'
+                  }">
+                    <component :is="getIconComponent(action.icon)" class="w-4 h-4" />
+                  </div>
+                  <div class="min-w-0">
+                    <strong class="text-xs font-bold text-slate-800 block truncate group-hover:text-blue transition-colors">{{ action.label }}</strong>
+                    <p class="text-[10px] text-slate-400 truncate">{{ action.description }}</p>
+                  </div>
+                </div>
+                <ChevronRight class="w-3.5 h-3.5 text-slate-300 group-hover:text-blue group-hover:translate-x-0.5 transition-all shrink-0" />
+              </div>
+            </div>
+          </section>
+
+        </aside>
+
+      </div>
+
+      <ErrorStatePanel
+        v-else
+        :is-loading="loading"
+        :loading-title="'正在同步学习控制台'"
+        :loading-message="'正在读取画像、路径、资源和学习事件...'"
+        :error-title="'首页数据加载失败'"
+        :error-message="loadError || '暂时无法获取数据'"
+        @retry="loadAllData"
+      />
     </div>
-
-    <ErrorStatePanel
-      v-else
-      :is-loading="loading"
-      :loading-title="'正在同步学习控制台'"
-      :loading-message="'正在读取画像、路径、资源和学习事件...'"
-      :error-title="'首页数据加载失败'"
-      :error-message="loadError || '暂时无法获取数据'"
-      @retry="loadAllData"
-    />
   </main>
 </template>
 
@@ -230,6 +309,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ErrorStatePanel from '@/shared/ui/ErrorStatePanel.vue'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 import {
   getRecommendation,
@@ -257,13 +338,16 @@ import { TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 
 import {
-  ChatDotRound,
-  DocumentCopy,
-  EditPen,
-  Guide,
-  Monitor,
-  Reading
-} from '@element-plus/icons-vue'
+  CalendarIcon as Calendar,
+  MessageSquareIcon as ChatDotRound,
+  FilesIcon as DocumentCopy,
+  PencilIcon as EditPen,
+  CompassIcon as Guide,
+  MonitorIcon as Monitor,
+  BookOpenIcon as Reading,
+  ChevronRightIcon as ChevronRight,
+  FileTextIcon as FileText,
+} from '@lucide/vue'
 
 use([CanvasRenderer, RadarChart, TooltipComponent])
 
@@ -318,17 +402,6 @@ const getIconComponent = (iconName: string) => {
     case 'monitor': return Monitor
     case 'reading': return Reading
     default: return DocumentCopy
-  }
-}
-
-const actionIconClass = (iconName: string) => {
-  switch (iconName) {
-    case 'chat': return 'icon-blue'
-    case 'resource': return 'icon-indigo'
-    case 'path': return 'icon-emerald'
-    case 'practice': return 'icon-amber'
-    case 'monitor': return 'icon-purple'
-    default: return 'icon-blue'
   }
 }
 
@@ -395,8 +468,6 @@ const todayWeekday = computed(() => new Intl.DateTimeFormat('zh-CN', {
   weekday: 'long'
 }).format(new Date()))
 
-// removed activeDashboardTab
-
 const profilePath = computed(() => profileRadarData.value?.radar?.path || '/profile')
 
 const radarSource = computed<any>(() => {
@@ -418,34 +489,36 @@ const radarOption = computed(() => {
     ...rawData,
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(255, 255, 255, 0.96)',
-      borderColor: 'rgba(226, 232, 240, 0.95)',
-      textStyle: { color: '#334155', fontSize: 12 }
+      backgroundColor: '#FCFFFF',
+      borderColor: '#C8E4E3',
+      borderWidth: 1,
+      textStyle: { color: '#173B42', fontSize: 11 }
     },
     radar: {
       ...rawData.radar,
-      radius: '64%',
-      center: ['50%', '52%'],
+      radius: '68%',
+      center: ['50%', '50%'],
       splitNumber: 4,
-      splitLine: { lineStyle: { color: 'rgba(203, 213, 225, 0.55)', width: 1 } },
+      splitLine: { lineStyle: { color: '#C8E4E3', width: 1 } },
       splitArea: {
         show: true,
         areaStyle: {
-          color: ['rgba(248, 250, 252, 0.85)', 'rgba(239, 246, 255, 0.65)']
+          color: ['rgba(252, 255, 255, 0.9)', 'rgba(216, 241, 240, 0.35)']
         }
       },
-      axisLine: { lineStyle: { color: 'rgba(203, 213, 225, 0.55)' } },
-      axisName: { color: '#64748B', fontSize: 11, fontWeight: 600 }
+      axisLine: { lineStyle: { color: '#B9DEDC' } },
+      axisLabel: { show: false },
+      axisName: { color: '#58747A', fontSize: 10, fontWeight: 'bold', fontFamily: 'Geist, sans-serif' }
     },
     series: [{
       type: 'radar',
       data: [{
         value: rawData.series?.[0]?.data?.[0]?.value || [],
         name: '能力得分',
-        areaStyle: { color: 'rgba(79, 70, 229, 0.16)' },
-        lineStyle: { color: '#4F46E5', width: 2 },
-        itemStyle: { color: '#4F46E5', borderColor: '#ffffff', borderWidth: 2 },
-        symbolSize: 5
+        areaStyle: { color: 'rgba(70, 184, 180, 0.2)' },
+        lineStyle: { color: '#205F67', width: 1.8 },
+        itemStyle: { color: '#46B8B4', borderColor: '#FCFFFF', borderWidth: 2 },
+        symbolSize: 4
       }]
     }]
   }
@@ -454,11 +527,10 @@ const radarOption = computed(() => {
 const profileScore = computed(() => {
   const raw = profileRadarData.value as any
   const candidate = raw?.overall_score ?? raw?.total_score ?? raw?.score ?? raw?.profile_score ?? raw?.composite_score
-  // 优先使用后端返回的真实分数，如果没有则使用雷达图平均值
   if (candidate !== undefined && candidate !== null) return clampPercent(candidate)
 
   const values = radarValues.value
-  if (!values.length) return 0  // 没有数据时返回 0，不使用假数据
+  if (!values.length) return 0
   return clampPercent(values.reduce((sum, value) => sum + value, 0) / values.length)
 })
 
@@ -466,7 +538,6 @@ const profileDimensions = computed(() => {
   const indicators = radarSource.value?.radar?.indicator
   const values = radarValues.value
 
-  // 如果没有雷达图数据，返回空数组（不使用假数据）
   if (!Array.isArray(indicators) || !values.length) {
     return []
   }
@@ -479,18 +550,15 @@ const profileDimensions = computed(() => {
 
 const weakAreas = computed(() => {
   const backendWeakAreas = profileRadarData.value?.weak_areas
-  // 使用后端返回的真实薄弱领域
   if (Array.isArray(backendWeakAreas) && backendWeakAreas.length) {
     return backendWeakAreas.slice(0, 3).map((item: unknown) => String(item))
   }
 
-  // 从画像维度中计算薄弱项
   const lowDimensions = profileDimensions.value
     .filter(item => item.score < 75)
     .sort((a, b) => a.score - b.score)
     .map(item => item.name)
 
-  // 如果没有数据，返回空数组（不使用假数据）
   return lowDimensions.length ? lowDimensions.slice(0, 2) : []
 })
 
@@ -498,7 +566,6 @@ const weakAreaText = computed(() => weakAreas.value.join(' / '))
 
 const overviewStats = computed(() => {
   const stats = studyStatsData.value
-  // 使用后端返回的真实统计数据
   return [
     { label: '本周学习', value: `${stats?.weekly_days ?? 0} 天` },
     { label: '累计学习', value: `${stats?.total_hours ?? 0} 小时` },
@@ -511,18 +578,15 @@ const continueItems = computed<ContinueItem[]>(() => {
   const data = continueLearningData.value
   const activePaths = data?.active_paths || []
 
-  // 如果没有真实数据，返回空数组（不使用假数据）
   if (!activePaths.length) {
     return []
   }
 
-  // 每条路径只显示当前节点（一条路径一个节点）
   return activePaths.map(path => ({
     title: path.current_node_title || path.title || '继续当前学习路径',
     category: path.title || '学习路径',
     progress: clampPercent(path.overall_progress, 0),
     lastTime: formatDateTime(path.last_learned_at || path.updated_at),
-    // 如果有当前节点ID，跳转到节点学习页面；否则跳转到路径详情页
     path: path.current_node_id ? `/path-planner/node/${path.current_node_id}` : `/path-planner/overview/${path.id}`,
     icon: 'path',
     tone: 'tone-emerald'
@@ -531,7 +595,6 @@ const continueItems = computed<ContinueItem[]>(() => {
 
 const todaySuggestions = computed<SuggestionItem[]>(() => {
   const backendSuggestions = quickActionsData.value?.today_suggestions
-  // 使用后端返回的真实数据
   if (Array.isArray(backendSuggestions) && backendSuggestions.length) {
     return backendSuggestions.slice(0, 3).map((item: any, index: number) => ({
       title: item.title || item.label || '学习建议',
@@ -540,14 +603,11 @@ const todaySuggestions = computed<SuggestionItem[]>(() => {
       tone: ['blue', 'amber', 'green'][index] || 'blue'
     }))
   }
-
-  // 如果没有后端数据，返回空数组（不使用假数据）
   return []
 })
 
 const dailyChallenge = computed(() => {
   const challenge = dailyChallengeData.value
-  // 使用后端返回的真实数据
   if (challenge) {
     return {
       title: challenge.subject || '今日挑战',
@@ -557,19 +617,16 @@ const dailyChallenge = computed(() => {
       reason: challenge.reason || `推荐你从「${challenge.subject}」切入，保持每日练习节奏。`
     }
   }
-  // 如果没有后端数据，返回 null 表示无挑战（不使用假数据）
   return null
 })
 
 const quickActions = computed<HomeActionItem[]>(() => {
   const actions = quickActionsData.value?.actions || []
-  // 使用后端返回的真实数据，不使用假数据
   return actions.slice(0, 6)
 })
 
 const recentGeneratedItems = computed<ResourceItem[]>(() => {
   const list = recentResourcesData.value
-  // 使用后端返回的真实数据
   if (list.length) {
     return list.slice(0, 4).map((item: any) => ({
       title: item.title || item.name || '未命名资源',
@@ -579,8 +636,6 @@ const recentGeneratedItems = computed<ResourceItem[]>(() => {
       path: item.id ? `/resource-detail/${item.id}` : '/resource-generator'
     }))
   }
-
-  // 如果没有后端数据，返回空数组（不使用假数据）
   return []
 })
 
@@ -625,7 +680,6 @@ const loadAllData = async () => {
 
 onMounted(loadAllData)
 
-// 每次路由切换到 dashboard 页面时自动刷新数据
 watch(
   () => route.path,
   (newPath) => {
@@ -637,673 +691,246 @@ watch(
 </script>
 
 <style scoped>
-.home-workspace {
-  min-height: calc(100vh - var(--navbar-height, 64px));
-  padding: var(--space-6) var(--space-8) var(--space-8);
-  background: var(--color-bg);
+.home-page {
+  padding: clamp(24px, 3vw, 46px) 0 56px;
   color: var(--color-text);
-  font-family: var(--font-sans);
-  overflow-y: auto;
+  background:
+    radial-gradient(circle at 84% 2%, rgba(98, 201, 197, 0.14), transparent 30rem),
+    var(--color-bg);
 }
 
-.workspace-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--space-5);
-  max-width: var(--page-max-width, 1400px);
+.home-shell {
+  width: min(1420px, calc(100% - 48px));
   margin: 0 auto;
-  padding-bottom: var(--space-8);
 }
 
-.span-4 { grid-column: span 4; }
-.span-8 { grid-column: span 8; }
-.span-12 { grid-column: span 12; }
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(340px, 4fr);
+  gap: 22px;
+  align-items: start;
+}
 
-.top-status {
-  min-height: 44px;
-  padding: 0 var(--space-1);
+.primary-column,
+.insight-column {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
 }
 
-.breadcrumb-area,
-.system-status,
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-}
-
-.breadcrumb-area { gap: 8px; }
-.breadcrumb-area strong { color: var(--color-text); }
-.slash { color: var(--color-text-light); }
-
-.home-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  box-shadow: 0 0 0 4px var(--color-primary-soft);
-}
-
-.system-status { gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-
-.status-pill {
-  min-height: 28px;
-  padding: 0 var(--space-2_5);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  margin-right: 6px;
-  background: var(--color-success);
-}
-
-.overview-card,
-.radar-card,
-.continue-card,
-.recent-card,
-.quick-card,
-.suggestion-card,
-.challenge-card {
-  border: 1px solid rgba(226, 232, 240, 0.9) !important;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04) !important;
-}
-
-.overview-card {
+.recommendation-panel,
+.radar-panel,
+.learning-panel,
+.resource-panel,
+.suggestion-panel,
+.challenge-panel,
+.quick-panel {
   position: relative;
-  min-height: 320px;
-  overflow: hidden;
-  background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+  background: rgba(252, 255, 255, 0.92);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
 }
 
-.overview-decoration {
+.recommendation-panel {
+  min-height: 356px;
+  padding: clamp(24px, 3vw, 38px);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.recommendation-panel::after {
+  content: '';
   position: absolute;
-  right: -80px;
-  top: -90px;
-  width: 320px;
-  height: 320px;
+  width: 260px;
+  height: 260px;
+  right: -120px;
+  top: -130px;
+  border: 40px solid rgba(98, 201, 197, 0.14);
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(79, 70, 229, 0.12) 0%, rgba(79, 70, 229, 0) 68%);
   pointer-events: none;
 }
 
-.overview-main,
-.primary-task,
-.overview-stats,
-.card-head,
-.challenge-top,
-.agent-title-row,
-.dimension-meta,
-.study-table-head,
-.study-row,
-.resource-table-head,
-.resource-row {
-  position: relative;
-  z-index: 1;
+.radar-panel {
+  min-height: 356px;
+  padding: 22px;
+  background:
+    linear-gradient(150deg, rgba(216, 241, 240, 0.58), rgba(252, 255, 255, 0.95) 48%);
+  box-shadow: var(--shadow-sm);
 }
 
-.overview-main {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-6);
-  align-items: flex-start;
-  margin-bottom: var(--space-7);
+.radar-canvas {
+  background: rgba(252, 255, 255, 0.64);
+  border: 1px solid rgba(200, 228, 227, 0.86);
+  border-radius: 13px;
 }
 
-.overview-copy h1 {
-  margin: var(--space-3) 0 var(--space-2_5);
-  color: var(--color-text-strong);
-  font-size: clamp(var(--text-2xl), 3vw, var(--text-3xl));
-  line-height: 1.15;
-  font-weight: var(--weight-extrabold);
-  letter-spacing: -0.04em;
+.learning-panel,
+.resource-panel,
+.suggestion-panel,
+.challenge-panel,
+.quick-panel {
+  padding: 22px;
 }
 
-.overview-desc {
-  max-width: 680px;
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-base);
-  line-height: var(--leading-relaxed);
+.recommendation-panel :deep(.text-blue),
+.recommendation-panel :deep(.text-slate-900),
+.primary-column :deep(.hover\:text-blue:hover),
+.insight-column :deep(.text-blue),
+.insight-column :deep(.hover\:text-blue:hover) {
+  color: var(--color-primary-text) !important;
 }
 
-.overview-badge {
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.12);
+.recommendation-panel :deep(.bg-blue),
+.suggestion-panel :deep(.bg-blue) {
+  background-color: var(--color-primary) !important;
 }
 
-.badge-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+.recommendation-panel :deep(.border-blue) {
+  border-color: var(--color-primary) !important;
+}
+
+.recommendation-panel :deep(h1) {
+  margin-top: 10px;
+  font-size: clamp(28px, 3vw, 42px);
+  letter-spacing: -0.045em;
+}
+
+.recommendation-panel :deep(.font-mono),
+.primary-column :deep(.font-mono),
+.insight-column :deep(.font-mono) {
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+.recommendation-panel :deep(button),
+.challenge-panel :deep(button) {
+  border-radius: 10px;
+}
+
+.learning-panel :deep(.divide-y > *),
+.resource-panel :deep(.divide-y > *) {
+  border-color: var(--color-border-light);
+}
+
+.learning-panel :deep(.bg-emerald-500) {
   background: var(--color-primary);
-  margin-right: 5px;
 }
 
-.date-panel {
-  min-width: 150px;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px solid var(--color-border-light);
-  text-align: right;
+.learning-panel :deep(.bg-emerald-50) {
+  background: var(--color-primary-soft);
 }
 
-.date-panel span,
-.date-panel strong {
-  display: block;
+.learning-panel :deep(.text-emerald-600) {
+  color: var(--color-primary-text);
 }
 
-.date-panel span {
+.learning-panel :deep(.hover\:bg-slate-50\/40:hover),
+.resource-panel :deep(.hover\:bg-slate-50\/40:hover),
+.suggestion-panel :deep(.hover\:bg-slate-50\/40:hover),
+.quick-panel :deep(.hover\:bg-slate-50\/40:hover) {
+  background: rgba(216, 241, 240, 0.34);
+}
+
+.resource-panel :deep(.bg-slate-50) {
+  background: var(--color-primary-soft);
+}
+
+.resource-panel :deep(.text-slate-400) {
   color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  margin-bottom: var(--space-1);
 }
 
-.date-panel strong {
-  color: var(--color-text-strong);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
+.suggestion-panel,
+.challenge-panel,
+.quick-panel {
+  box-shadow: none;
 }
 
-.primary-task {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px;
-  border: 1px solid rgba(79, 70, 229, 0.12);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.78);
+.challenge-panel {
+  background: linear-gradient(145deg, #FFFDF6, #FCFFFF);
+  border-color: #E9DDBB;
 }
 
-.task-info h2 {
-  margin: var(--space-1_5) 0 var(--space-2);
-  color: var(--color-text-strong);
-  font-size: var(--text-xl);
-  line-height: 1.3;
+.quick-panel :deep(.grid) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
 }
 
-.task-info p {
-  margin: 0;
-  max-width: 640px;
-  color: var(--color-text-secondary);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
-}
-
-.section-label {
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-primary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.primary-task-btn {
-  min-width: 138px;
-  flex-shrink: 0;
-  justify-content: center;
-}
-
-.overview-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2_5);
-  margin-top: var(--space-5);
-}
-
-.overview-stat {
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border-light);
-  background: rgba(255, 255, 255, 0.75);
-}
-
-.overview-stat strong,
-.overview-stat span {
-  display: block;
-}
-
-.overview-stat strong {
-  color: var(--color-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-  margin-bottom: var(--space-0_5);
-}
-
-.overview-stat span {
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-}
-
-.radar-card {
-  min-height: 320px;
-  display: flex;
-  flex-direction: column;
-  background: #ffffff;
-}
-
-.radar-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 10px;
-  position: relative;
-  z-index: 1;
-}
-
-.radar-header h2 {
-  margin: 5px 0 0;
-  color: var(--color-text);
-  font-size: 1.08rem;
-  line-height: 1.35;
-}
-
-.card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.card-head.compact { margin-bottom: 10px; }
-
-.card-head h2,
-.challenge-top h2 {
-  margin: var(--space-1_5) 0 0;
-  color: var(--color-text-strong);
-  font-size: var(--text-lg);
-  line-height: 1.3;
-}
-
-.text-link {
-  border: none;
-  background: transparent;
-  padding: var(--space-1) var(--space-0_5);
-  color: var(--color-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  cursor: pointer;
-  transition: opacity 150ms ease;
-}
-
-.text-link:hover,
-.row-action:hover { opacity: 0.72; }
-
-.radar-chart-wrapper {
-  flex: 1;
-  min-height: 228px;
-  margin-top: 4px;
-  border-radius: 20px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid var(--color-border-light);
-  overflow: hidden;
+.quick-panel :deep(.border-b) {
+  border-bottom-color: var(--color-border-light);
 }
 
 .chart {
   width: 100%;
   height: 100%;
-  min-height: 228px;
 }
 
-.radar-note {
-  margin: var(--space-3) 0 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+@media (max-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 7fr) minmax(310px, 5fr);
+  }
+
+  .home-shell {
+    width: min(100% - 32px, 1120px);
+  }
 }
 
-.bar-track,
-.mini-progress,
-.agent-progress {
-  height: 7px;
-  border-radius: 999px;
-  background: #edf1f7;
-  overflow: hidden;
-}
+@media (max-width: 767px) {
+  .home-page {
+    padding-top: 18px;
+  }
 
-.bar-track i,
-.mini-progress i,
-.agent-progress i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-primary), #818cf8);
-}
+  .home-shell {
+    width: min(100% - 24px, 680px);
+  }
 
-.continue-card,
-.recent-card,
-.quick-card,
-.suggestion-card,
-.challenge-card {
-  background: #ffffff;
-}
+  .dashboard-grid {
+    display: contents;
+  }
 
-.study-table,
-.resource-table {
-  display: grid;
-  gap: 4px;
-}
-
-.study-table-head,
-.study-row {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.55fr) minmax(140px, 0.75fr) minmax(110px, 0.65fr) 82px;
-  gap: 16px;
-  align-items: center;
-}
-
-.study-table-head,
-.resource-table-head {
-  padding: 0 var(--space-3) var(--space-2_5);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  border-bottom: 1px solid var(--color-border-light);
-  letter-spacing: 0.03em;
-}
-
-.study-row,
-.resource-row {
-  min-height: 64px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  transition: background var(--transition-base);
-}
-
-.study-row:hover,
-.resource-row:hover {
-  background: #f8fafc;
-}
-
-.study-title-cell {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.study-title-cell strong,
-.study-title-cell span {
-  display: block;
-}
-
-.study-title-cell strong,
-.resource-row strong {
-  color: var(--color-text-strong);
-  font-size: var(--text-base);
-  line-height: 1.4;
-}
-
-.study-title-cell span,
-.last-time,
-.resource-row span {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-}
-
-.study-icon,
-.quick-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: 14px;
-}
-
-.study-icon {
-  width: 38px;
-  height: 38px;
-  font-size: 1.16rem;
-}
-
-.tone-indigo,
-.icon-indigo { background: var(--color-primary-soft); color: var(--color-primary); }
-.tone-emerald,
-.icon-emerald { background: rgba(16, 185, 129, 0.12); color: var(--color-success); }
-.tone-amber,
-.icon-amber { background: rgba(245, 158, 11, 0.14); color: var(--color-warning); }
-.icon-blue { background: rgba(59, 130, 246, 0.11); color: #2563eb; }
-.icon-purple { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
-
-.progress-cell {
-  display: grid;
-  grid-template-columns: minmax(70px, 1fr) 42px;
-  align-items: center;
-  gap: 8px;
-}
-
-.progress-cell span {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-
-.row-action {
-  border: none;
-  background: transparent;
-  color: var(--color-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  cursor: pointer;
-  text-align: left;
-  transition: opacity 150ms ease;
-}
-
-.side-stack {
-  display: grid;
-  gap: 18px;
-}
-
-.suggestion-list,
-.quick-list {
-  display: grid;
-  gap: 8px;
-}
-
-.suggestion-item,
-.quick-item {
-  width: 100%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  display: grid;
-  align-items: center;
-  transition: background var(--transition-base), transform var(--transition-base);
-}
-
-.suggestion-item {
-  grid-template-columns: 10px minmax(0, 1fr) 14px;
-  gap: 12px;
-  padding: 12px 4px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.suggestion-item:last-child { border-bottom: none; }
-
-.suggestion-item:hover,
-.quick-item:hover {
-  background: #f8fafc;
-}
-
-.suggestion-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.suggestion-dot.blue { background: var(--color-primary); }
-.suggestion-dot.amber { background: var(--color-warning); }
-.suggestion-dot.green { background: var(--color-success); }
-
-.suggestion-item strong,
-.quick-item strong {
-  display: block;
-  color: var(--color-text-strong);
-  font-size: var(--text-base);
-  line-height: 1.35;
-  margin-bottom: var(--space-1);
-}
-
-.suggestion-item p,
-.quick-item p,
-.challenge-card p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.chevron {
-  color: var(--color-text-light);
-  font-size: 1.25rem;
-}
-
-.challenge-card {
-  border-left: 3px solid var(--color-warning) !important;
-}
-
-.challenge-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.challenge-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: var(--space-3) 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.challenge-btn { width: 100%; justify-content: center; }
-
-.resource-table-head,
-.resource-row {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.5fr) minmax(80px, 0.52fr) minmax(120px, 0.7fr) minmax(100px, 0.64fr) 52px;
-  gap: 14px;
-  align-items: center;
-}
-
-.quick-item {
-  grid-template-columns: 42px minmax(0, 1fr) 16px;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border-light);
-  border-radius: 16px;
-  background: #ffffff;
-}
-
-.quick-icon {
-  width: 42px;
-  height: 42px;
-  font-size: 1.16rem;
-}
-
-.text-link:focus-visible,
-.row-action:focus-visible,
-.quick-item:focus-visible,
-.suggestion-item:focus-visible,
-.primary-task-btn:focus-visible {
-  outline: 3px solid rgba(79, 70, 229, 0.3);
-  outline-offset: 2px;
-}
-
-/* 空状态样式 */
-.empty-state {
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-  color: var(--color-text-secondary);
-}
-
-.empty-state.compact {
-  padding: var(--space-4);
-}
-
-.empty-state p {
-  margin: 0 0 var(--space-4) 0;
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.empty-state.compact p {
-  margin-bottom: 0;
-}
-
-@media (max-width: 1200px) {
-  .span-4,
-  .span-8 { grid-column: span 12; }
-  .side-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (max-width: 900px) {
-  .home-workspace { padding: var(--space-4) var(--space-4) var(--space-5); }
-  .top-status,
-  .overview-main,
-  .primary-task,
-  .card-head {
-    align-items: flex-start;
+  .home-shell {
+    display: flex;
     flex-direction: column;
   }
-  .system-status { justify-content: flex-start; }
-  .date-panel { text-align: left; }
-  .overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .study-table-head,
-  .resource-table-head { display: none; }
-  .study-row,
-  .resource-row {
-    grid-template-columns: 1fr;
-    gap: var(--space-2_5);
-    align-items: flex-start;
-    border: 1px solid var(--color-border-light);
-  }
-  .row-action { padding: 0; }
-  .side-stack { grid-template-columns: 1fr; }
-}
 
-@media (max-width: 640px) {
-  .home-workspace { padding: var(--space-3); }
-  .workspace-grid { gap: var(--space-3); }
-  .overview-stats { grid-template-columns: 1fr; }
-  .primary-task-btn { width: 100%; }
-  .overview-copy h1 { font-size: var(--text-xl); }
+  .primary-column,
+  .insight-column {
+    display: contents;
+  }
+
+  .recommendation-panel { order: 1; }
+  .radar-panel { order: 2; margin-top: 16px; }
+  .learning-panel { order: 3; margin-top: 16px; }
+  .resource-panel { order: 4; margin-top: 16px; }
+  .suggestion-panel { order: 5; margin-top: 16px; }
+  .challenge-panel { order: 6; margin-top: 16px; }
+  .quick-panel { order: 7; margin-top: 16px; }
+
+  .recommendation-panel,
+  .radar-panel {
+    min-height: auto;
+  }
+
+  .recommendation-panel,
+  .radar-panel,
+  .learning-panel,
+  .resource-panel,
+  .suggestion-panel,
+  .challenge-panel,
+  .quick-panel {
+    border-radius: 14px;
+  }
+
+  .quick-panel :deep(.grid) {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  .home-page *,
+  .home-page *::before,
+  .home-page *::after {
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
 }

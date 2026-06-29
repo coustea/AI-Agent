@@ -49,11 +49,15 @@ class GeneratedResourceItemSummary(BaseModel):
 class ResourceStatusSnapshot(BaseModel):
     """SSE/轮询状态接口返回的轻量任务快照。"""
     resource_id: int
+    run_id: str | None = None
+    learning_need: str = ""
     status: str
     selected_agents: list[str] = Field(default_factory=list)
     agent_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
     current_message: str = ""
     resources: list[GeneratedResourceItemSummary] = Field(default_factory=list)
+    started_at: str | None = None
+    updated_at: str | None = None
 
 
 class ResourceBundle(BaseModel):

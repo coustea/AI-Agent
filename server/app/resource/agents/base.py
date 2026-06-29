@@ -104,6 +104,11 @@ class BaseResourceAgent:
                     agent_id,
                     "running",
                     f"正在调用工具 {tool_name}...",
+                    data={
+                        "phase": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_status": "running",
+                    },
                 )
             elif status == "done":
                 duration = event.get("duration_ms", 0)
@@ -111,6 +116,12 @@ class BaseResourceAgent:
                     agent_id,
                     "running",
                     f"工具 {tool_name} 执行成功 (耗时 {duration}ms)",
+                    data={
+                        "phase": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_status": "completed",
+                        "elapsed_ms": duration,
+                    },
                 )
             elif status == "failed":
                 error = event.get("error", "未知错误")
@@ -118,6 +129,11 @@ class BaseResourceAgent:
                     agent_id,
                     "running",
                     f"工具 {tool_name} 执行失败: {error}",
+                    data={
+                        "phase": "tool_call",
+                        "tool_name": tool_name,
+                        "tool_status": "failed",
+                    },
                 )
 
         self.tool_excute = get_llm().create_tool_excute(self.tools, event_handler=handle_tool_event)

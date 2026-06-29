@@ -1,16 +1,19 @@
 <template>
   <div class="resource-detail-page">
     <div v-if="loading" class="detail-state-shell" aria-label="正在加载资源包">
-      <el-skeleton :rows="8" animated />
+      <div class="custom-skeleton-loader">
+        <div class="skeleton-line" v-for="i in 8" :key="i"></div>
+      </div>
     </div>
 
     <div v-else-if="error" class="detail-state-shell detail-error-state">
-      <el-empty description="资源包加载失败">
+      <div class="custom-error-empty">
+        <p class="error-desc">资源包加载失败</p>
         <div class="error-actions">
-          <el-button @click="goBack">返回个人中心</el-button>
-          <el-button type="primary" @click="loadResource">重新加载</el-button>
+          <button class="btn btn-outline" @click="goBack">返回个人中心</button>
+          <button class="btn btn-primary" @click="loadResource">重新加载</button>
         </div>
-      </el-empty>
+      </div>
     </div>
 
     <ResourceBundleView
@@ -25,38 +28,45 @@
       @preview="openResourcePreview"
     />
 
-    <el-dialog
-      v-model="previewVisible"
-      :title="previewItem?.title || '资源预览'"
-      width="78%"
-      top="6vh"
-      destroy-on-close
-      :class="['resource-preview-dialog', { 'is-ppt-dialog': previewItem?.type === 'ppt' }]"
-    >
-      <div
-        v-if="previewItem"
-        class="preview-dialog-body"
-        :class="{ 'is-ppt-preview': previewItem.type === 'ppt' }"
-      >
-        <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem.content" />
-        <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem.content" />
-        <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem.content" />
-        <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem.content" />
-        <PptView
-          v-else-if="previewItem.type === 'ppt' && previewPptDocument"
-          :document-data="previewPptDocument"
-        />
-        <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem.content" />
-        <MarkdownView v-else :result-data="previewItem.content" />
-      </div>
-    </el-dialog>
+    <Teleport to="body">
+      <transition name="modal-fade">
+        <div v-if="previewVisible" class="custom-modal-overlay" @click.self="previewVisible = false">
+          <div class="custom-modal-container" :class="{ 'is-ppt-dialog': previewItem?.type === 'ppt' }">
+            <header class="custom-modal-header" v-if="previewItem?.type !== 'ppt'">
+              <h3>{{ previewItem?.title || '资源预览' }}</h3>
+              <button class="modal-close-btn" @click="previewVisible = false">
+                <svg viewBox="0 0 24 24" class="close-icon"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12Z"/></svg>
+              </button>
+            </header>
+            <div class="custom-modal-body" :class="{ 'is-ppt-body': previewItem?.type === 'ppt' }">
+              <div
+                v-if="previewItem"
+                class="preview-dialog-body"
+                :class="{ 'is-ppt-preview': previewItem.type === 'ppt' }"
+              >
+                <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem.content" />
+                <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem.content" />
+                <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem.content" />
+                <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem.content" />
+                <PptView
+                  v-else-if="previewItem.type === 'ppt' && previewPptDocument"
+                  :document-data="previewPptDocument"
+                />
+                <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem.content" />
+                <MarkdownView v-else :result-data="previewItem.content" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 import ResourceBundleView from '@/features/resource/components/ResourceBundleView.vue'
 import MindmapView from '@/features/resource/components/MindmapView.vue'
@@ -126,7 +136,7 @@ async function loadResource() {
     console.error('Failed to load resource detail:', requestError)
     resource.value = null
     error.value = true
-    ElMessage.error('加载资源详情失败')
+    toast.error('加载资源详情失败')
   } finally {
     loading.value = false
   }
@@ -165,7 +175,7 @@ function formatTime(time: string | null) {
 .resource-detail-page {
   width: 100%;
   min-height: 100%;
-  background: #f5f6f8;
+  background: #f4f7fb;
 }
 
 .detail-state-shell {
@@ -180,26 +190,138 @@ function formatTime(time: string | null) {
   place-items: center;
 }
 
+.custom-skeleton-loader {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.skeleton-line {
+  height: 16px;
+  background: linear-gradient(90deg, var(--color-surface-hover) 25%, var(--color-border) 37%, var(--color-surface-hover) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-loading 1.4s ease infinite;
+  border-radius: 4px;
+}
+
+.skeleton-line:nth-child(1) { width: 38%; }
+.skeleton-line:nth-child(2) { width: 94%; }
+.skeleton-line:nth-child(3) { width: 88%; }
+.skeleton-line:nth-child(4) { width: 56%; }
+.skeleton-line:nth-child(5) { width: 72%; }
+.skeleton-line:nth-child(6) { width: 80%; }
+.skeleton-line:nth-child(7) { width: 44%; }
+.skeleton-line:nth-child(8) { width: 62%; }
+
+@keyframes skeleton-loading {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.custom-error-empty {
+  text-align: center;
+  padding: 60px 40px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  max-width: 500px;
+  width: 100%;
+  box-shadow: var(--shadow-sm);
+}
+
+.error-desc {
+  font-size: 16px;
+  color: var(--color-text-secondary);
+  margin-bottom: 20px;
+}
+
 .error-actions {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-:global(.resource-preview-dialog) {
+/* Custom Modal CSS */
+.custom-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.custom-modal-container {
+  width: 78%;
+  max-width: 1200px;
+  max-height: 88vh;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-2xl);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  border-radius: 18px;
 }
 
-:global(.resource-preview-dialog .el-dialog__header) {
-  margin-right: 0;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #e7ebf0;
+.custom-modal-container.is-ppt-dialog {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  width: 90%;
+  max-width: 1400px;
 }
 
-:global(.resource-preview-dialog .el-dialog__body) {
-  padding: 20px 24px 24px;
-  background: #f5f6f8;
+.custom-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.custom-modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  transition: all var(--transition-base);
+}
+
+.modal-close-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.close-icon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.custom-modal-body {
+  flex: 1;
+  padding: 24px;
+  background: #f4f7fb;
+  overflow-y: auto;
+}
+
+.custom-modal-body.is-ppt-body {
+  padding: 0;
+  background: transparent;
 }
 
 .preview-dialog-body {
@@ -207,12 +329,8 @@ function formatTime(time: string | null) {
   overflow-y: auto;
   padding: 20px;
   border: 1px solid #e1e6ed;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #fff;
-}
-
-:global(.is-ppt-dialog .el-dialog__body) {
-  padding: 0;
 }
 
 .preview-dialog-body.is-ppt-preview {
@@ -221,6 +339,17 @@ function formatTime(time: string | null) {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+/* Animations */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
 }
 
 @media (max-width: 680px) {

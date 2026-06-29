@@ -32,10 +32,10 @@
           <span>已交付资源</span>
           <strong>{{ generatedResources.length }}<small> 项</small></strong>
         </div>
-        <el-button round class="stage-log-btn" @click="workflowLogDrawerVisible = true">
+        <button class="btn btn-outline rounded-full stage-log-btn" @click="workflowLogDrawerVisible = true">
           运行日志
-          <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
+          <ArrowRight class='w-4 h-4 inline-block align-middle' />
+        </button>
       </div>
     </header>
     <main class="agent-stage-shell-v4">
@@ -57,11 +57,11 @@
               <span></span>
               <strong>生成中断</strong>
               <em>查看详情</em>
-              <el-icon><ArrowRight /></el-icon>
+              <ArrowRight class='w-4 h-4 inline-block align-middle' />
             </button>
             <span v-else class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
             <span class="control-pill muted">计划 {{ planReady ? '已生成' : '生成中' }}</span>
-            <el-button v-if="!generationError" round size="small" @click="workflowLogDrawerVisible = true">查看日志</el-button>
+            <button v-if="!generationError" class="btn btn-outline btn-sm rounded-full" @click="workflowLogDrawerVisible = true">查看日志</button>
           </div>
         </div>
 
@@ -80,7 +80,7 @@
             >
               <div class="station-header">
                 <div class="station-icon">
-                  <el-icon><component :is="getWorkflowIcon('planning')" /></el-icon>
+                  <component :is="getWorkflowIcon('planning')"  class='w-4 h-4' />
                 </div>
                 <div>
                   <strong>教学计划</strong>
@@ -147,7 +147,7 @@
             >
               <div class="station-header">
                 <div class="station-icon">
-                  <el-icon><component :is="getWorkflowIcon(node.id)" /></el-icon>
+                  <component :is="getWorkflowIcon(node.id)"  class='w-4 h-4' />
                 </div>
                 <div>
                   <strong>{{ getWorkflowTitle(node.id) }}</strong>
@@ -182,7 +182,7 @@
             >
               <div class="station-header">
                 <div class="station-icon">
-                  <el-icon><component :is="getWorkflowIcon(pptNode.id)" /></el-icon>
+                  <component :is="getWorkflowIcon(pptNode.id)"  class='w-4 h-4' />
                 </div>
                 <div>
                   <strong>教学课件</strong>
@@ -213,7 +213,7 @@
             >
               <div class="station-header">
                 <div class="station-icon">
-                  <el-icon><component :is="getWorkflowIcon(videoNode.id)" /></el-icon>
+                  <component :is="getWorkflowIcon(videoNode.id)"  class='w-4 h-4' />
                 </div>
                 <div>
                   <strong>讲解视频</strong>
@@ -249,7 +249,7 @@
               @click="handleAgentClick(bundleNode.id, $event)"
             >
               <div class="review-icon">
-                <el-icon><component :is="getWorkflowIcon(bundleNode.id)" /></el-icon>
+                <component :is="getWorkflowIcon(bundleNode.id)"  class='w-4 h-4' />
               </div>
               <div>
                 <strong>资源整合</strong>
@@ -273,7 +273,7 @@
 
           <div class="detail-panel-title">
             <div class="focus-agent-icon">
-              <el-icon><component :is="getWorkflowIcon(selectedDagNode.id)" /></el-icon>
+              <component :is="getWorkflowIcon(selectedDagNode.id)"  class='w-4 h-4' />
             </div>
             <div class="detail-title-copy">
               <span>运行详情</span>
@@ -367,7 +367,7 @@
           :class="{ ready: hasGeneratedResource(agentId), 'just-arrived': latestArtifactAgentId === agentId }"
           @click="emit('openResource', agentId)"
         >
-          <span><el-icon><component :is="getWorkflowIcon(agentId)" /></el-icon></span>
+          <span><component :is="getWorkflowIcon(agentId)"  class='w-4 h-4' /></span>
           <div>
             <strong>{{ getResourceTypeLabel(agentId) }}</strong>
             <p>{{ hasGeneratedResource(agentId) ? '已生成，可预览' : getAgentOutputFormat(agentId) }}</p>
@@ -377,7 +377,7 @@
       </div>
     </section>
 
-    <el-drawer v-model="workflowLogDrawerVisible" title="实时调度日志" direction="rtl" size="420px" class="workflow-log-drawer">
+    <Teleport to="body"><transition name="slide-over"><div v-if="workflowLogDrawerVisible" class="custom-modal-overlay" @click="workflowLogDrawerVisible = false"><div class="custom-drawer-content max-w-[420px] w-full bg-white h-full absolute right-0 shadow-2xl p-6 flex flex-col z-50" @click.stop><div class="drawer-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-center"><h3 class="text-sm font-bold text-slate-900">实时调度日志</h3><button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="workflowLogDrawerVisible = false">×</button></div><div class="drawer-body flex-1 overflow-y-auto">
       <div class="drawer-log-list">
         <div v-for="item in workflowLogItems" :key="item.id" class="drawer-log-item" :class="`is-${item.status}`">
           <span class="drawer-log-dot"></span>
@@ -387,25 +387,25 @@
           </div>
         </div>
       </div>
-    </el-drawer>
+    </div></div></div></transition></Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch, type Component } from 'vue'
 import {
-  Aim,
-  ArrowRight,
-  Box,
-  Connection,
-  Cpu,
-  DataBoard,
-  Document,
-  EditPen,
-  Reading,
-  Share,
-  VideoCamera,
-} from '@element-plus/icons-vue'
+  PhTarget as Aim,
+  PhArrowRight as ArrowRight,
+  PhArchive as Box,
+  PhCompass as Connection,
+  PhCpu as Cpu,
+  PhChartBar as DataBoard,
+  PhFileText as Document,
+  PhNotePencil as EditPen,
+  PhBookOpen as Reading,
+  PhShareNetwork as Share,
+  PhVideoCamera as VideoCamera
+} from '@phosphor-icons/vue'
 import type { ResourceAgentId } from '@/features/resource/model/resource'
 import {
   COORDINATOR_AGENT_ID,
@@ -1277,13 +1277,6 @@ function getMetricChips(node: DagNodeState) {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.workbench-actions .el-button {
-  background: rgba(255, 255, 255, 0.72) !important;
-  border-color: rgba(191, 219, 254, 0.86) !important;
-  color: #2563EB !important;
-  font-weight: 800;
 }
 
 .agent-flow-canvas {
@@ -2350,14 +2343,6 @@ function getMetricChips(node: DagNodeState) {
   }
 }
 
-.workflow-log-drawer :deep(.el-drawer__header) {
-  margin-bottom: 0;
-  padding: 20px 22px;
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
-  font-weight: 900;
-  color: var(--color-text, #0f172a);
-}
-
 .drawer-log-list {
   display: flex;
   flex-direction: column;
@@ -2577,8 +2562,7 @@ function getMetricChips(node: DagNodeState) {
   max-width: 100%;
 }
 
-.workbench-actions .control-pill,
-.workbench-actions .el-button {
+.workbench-actions .control-pill {
   max-width: 100%;
 }
 
@@ -2975,11 +2959,11 @@ function getMetricChips(node: DagNodeState) {
   background: #f1f5fa;
 }
 
-.core-icon .el-icon,
-.station-icon .el-icon,
-.review-icon .el-icon,
-.focus-agent-icon .el-icon,
-.output-dock-item-v4 > span .el-icon {
+.core-icon svg,
+.station-icon svg,
+.review-icon svg,
+.focus-agent-icon svg,
+.output-dock-item-v4 > span svg {
   font-size: 18px;
 }
 
@@ -3270,7 +3254,7 @@ function getMetricChips(node: DagNodeState) {
   border-radius: 8px;
 }
 
-.output-dock-item-v4 > span .el-icon {
+.output-dock-item-v4 > span svg {
   font-size: 15px;
 }
 
@@ -3773,7 +3757,7 @@ function getMetricChips(node: DagNodeState) {
   white-space: nowrap;
 }
 
-.workflow-error-status .el-icon {
+.workflow-error-status svg {
   font-size: 11px;
 }
 

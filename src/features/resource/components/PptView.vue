@@ -2,10 +2,10 @@
   <div class="ppt-resource" :class="{ compact }">
     <ResourceCardWrapper :compact="compact" class="ppt-item">
       <div class="header-actions" v-if="!compact">
-        <el-button type="primary" size="small" :loading="isExporting" @click="handleExport">
-          <el-icon v-if="!isExporting" style="margin-right: 4px;"><Download /></el-icon>
+        <button class='btn btn-primary btn-sm' :disabled="isExporting" @click="handleExport">
+          <Download class='w-4 h-4 inline-block align-middle' />
           导出 PPTX
-        </el-button>
+        </button>
       </div>
       <div class="player-wrapper">
         <PptPreview :documentData="documentData" />
@@ -20,8 +20,10 @@ import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import PptPreview from './ppt-engine/pptxgenjs-renderer/preview/PptPreview.vue'
 import type { PPTDocument } from './ppt-engine/types/ppt'
 import { renderPPT, downloadPPTX } from './ppt-engine/pptxgenjs-renderer'
-import { ElButton, ElIcon, ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { toast } from 'vue-sonner'
+import {
+  PhDownload as Download
+} from '@phosphor-icons/vue'
 
 const props = defineProps<{
   documentData: PPTDocument
@@ -36,10 +38,10 @@ const handleExport = async () => {
     const pptx = renderPPT(props.documentData)
     const filename = `${props.documentData.title || 'presentation'}.pptx`
     await downloadPPTX(pptx, filename)
-    ElMessage.success('PPTX 导出成功')
+    toast.success('PPTX 导出成功')
   } catch (e) {
     console.error('Export error:', e)
-    ElMessage.error('导出失败，请重试')
+    toast.error('导出失败，请重试')
   } finally {
     isExporting.value = false
   }

@@ -72,6 +72,11 @@ async def run_multi_agent_generation(
                 service = ResourceService(session)
                 resource = await service.get_resource(user_id, resource_id)
                 if resource is not None and resource.status == "generating":
+                    await service.interrupt_unfinished_runs(
+                        resource_id=resource_id,
+                        run_id=run_id,
+                        error_message="工作流未产生成功终态",
+                    )
                     await service.update_resource_status(resource_id, "failed")
 
         if success:
@@ -85,5 +90,14 @@ async def run_multi_agent_generation(
         logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.update_resource_status(resource_id, "failed")
+            await service.interrupt_unfinished_runs(
+                resource_id=resource_id,
+                run_id=run_id,
+                error_message=str(exc) or type(exc).__name__,
+            )
+            await service.update_resource_status(
+                resource_id,
+                "failed",
+                error_message=str(exc) or type(exc).__name__,
+            )
         await events.send("global", "failed", "资源生成过程中发生异常")

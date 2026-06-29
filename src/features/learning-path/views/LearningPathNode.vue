@@ -8,7 +8,7 @@
     <section v-else-if="!workspace && !isGeneratingTutorial" class="state-card">
       <h2>节点不存在或已经失效</h2>
       <p>请返回路径总览重新选择学习节点。</p>
-      <el-button type="primary" @click="router.push('/path-planner')">返回路径总览</el-button>
+      <button class="btn btn-primary" @click="router.push('/path-planner')">返回路径总览</button>
     </section>
 
     <section v-else-if="isGeneratingTutorial" class="generating-view">
@@ -271,7 +271,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
 
@@ -478,7 +478,7 @@ async function loadWorkspace() {
     await startLearningTracking()
     await syncHeadingAnchors()
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '加载节点学习空间失败'))
+    toast.error(getErrorMessage(error, '加载节点学习空间失败'))
   } finally {
     loading.value = false
     isGeneratingTutorial.value = false
@@ -562,7 +562,7 @@ async function loadQuiz() {
     quizRound.value = res.data.data
     answers.value = {}
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '生成节点测验失败'))
+    toast.error(getErrorMessage(error, '生成节点测验失败'))
   } finally {
     quizLoading.value = false
   }
@@ -579,7 +579,7 @@ async function submitQuiz() {
   }
 
   if (payload.answers.some((item) => !item.response)) {
-    ElMessage.warning('请先完成全部 5 道题')
+    toast.warning('请先完成全部 5 道题')
     return
   }
 
@@ -611,7 +611,7 @@ async function submitQuiz() {
       selectedTutorialId.value = workspace.value.current_tutorial.id
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '提交节点测验失败'))
+    toast.error(getErrorMessage(error, '提交节点测验失败'))
   } finally {
     submitLoading.value = false
   }
@@ -626,7 +626,7 @@ async function createResource(type: ResourceKind) {
     const res = await generateAuxiliaryResource(workspace.value.node.id, { resource_type: type })
     openResourceDetail(res.data.data.id)
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '生成辅助资源失败'))
+    toast.error(getErrorMessage(error, '生成辅助资源失败'))
   } finally {
     resourceLoading.value = ''
 

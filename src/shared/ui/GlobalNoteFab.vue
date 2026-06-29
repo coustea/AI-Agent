@@ -9,7 +9,7 @@
       @touchstart="startDrag"
     >
       <button class="note-fab-button" type="button" aria-label="打开笔记">
-        <el-icon><EditPen /></el-icon>
+        <EditPen class="fab-icon" />
       </button>
     </div>
 
@@ -25,7 +25,7 @@
         <header class="note-panel-header" @click="collapsePanel">
           <div class="note-panel-title-wrap">
             <div class="note-panel-icon">
-              <el-icon><Document /></el-icon>
+              <Document class="panel-icon" />
             </div>
             <div>
               <h3>笔记</h3>
@@ -33,7 +33,7 @@
             </div>
           </div>
           <button class="collapse-btn" type="button" aria-label="收起笔记" @click.stop="collapsePanel">
-            <el-icon><Minus /></el-icon>
+            <Minus class="collapse-icon" />
           </button>
         </header>
 
@@ -54,7 +54,7 @@
               <span class="saved-count">{{ savedNotes.length }} 条已保存</span>
             </div>
             <button class="save-btn" type="button" @click="saveNote">
-              <el-icon><Check /></el-icon>
+              <Check class="btn-icon" />
               <span>保存</span>
             </button>
           </div>
@@ -67,8 +67,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Check, Document, EditPen, Minus } from '@element-plus/icons-vue'
+import { toast } from 'vue-sonner'
+import {
+  PhCheck as Check,
+  PhFileText as Document,
+  PhPencilSimple as EditPen,
+  PhMinus as Minus
+} from '@phosphor-icons/vue'
 import { useCurrentUser } from '@/features/auth/model/currentUser'
 import { GLOBAL_NOTE_STORAGE_LIMIT, readGlobalNotesState, writeGlobalNotesState } from '@/shared/model/globalNotes'
 
@@ -494,7 +499,7 @@ function endDrag() {
 function saveNote() {
   const content = editorText.value.trim()
   if (!content) {
-    ElMessage.warning({ message: '请先输入笔记内容', plain: true })
+    toast.warning({ message: '请先输入笔记内容', plain: true })
     return
   }
 
@@ -516,7 +521,7 @@ function saveNote() {
     }))
   }
   persistState()
-  ElMessage.success({ message: '笔记已保存，下次打开将展示新的空白页', plain: true })
+  toast.success({ message: '笔记已保存，下次打开将展示新的空白页', plain: true })
   schedulePanelPosition()
 }
 
@@ -747,11 +752,6 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   box-shadow: 0 6px 16px rgba(148, 163, 184, 0.16);
   z-index: 1;
-}
-
-.collapse-btn .el-icon {
-  font-size: 1rem;
-  font-weight: 700;
 }
 
 .collapse-btn:hover {

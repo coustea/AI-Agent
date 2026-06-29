@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from langgraph.types import Send
@@ -209,42 +210,50 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         agent_config={"enabled_agents": enabled_base_agents},
     )
 
-    # 执行 Planning
-    await state["events"].send("planning", "running", "正在分析学习需求并构建大纲...", 10)
-    planning_result = await AGENT_REGISTRY["planning"](state["events"]).generate_resource(planning_input)
-    if planning_result.success:
-        await state["events"].send("planning", "completed", "教学大纲已生成", 100)
-    else:
-        await state["events"].send("planning", "failed", planning_result.error or "规划失败", 0)
-
-    # Planning 失败直接抛出（致命）
-    if not planning_result.success:
-        error_msg = planning_result.error or "规划阶段失败"
-        logger.error("规划阶段失败: resource_id=%s, error=%s", state["resource_id"], error_msg)
-        raise ValueError(error_msg)
-
-    # 解析 TeachingPlan
-    teaching_plan = None
-    if planning_result.metadata:
-        plan_data = planning_result.metadata.get("teaching_plan")
-        if isinstance(plan_data, dict):
-            teaching_plan = TeachingPlan.model_validate(plan_data)
-
-    if teaching_plan is None:
-        raise ValueError("规划阶段未返回教学计划")
-
-    # 校验 agent assignments
-    assigned_agents = {assignment.get("agent_id") for assignment in teaching_plan.agent_assignments}
-    expected_agents = set(enabled_base_agents)
-    if assigned_agents != expected_agents:
-        raise ValueError(
-            "TeachingPlan assignments do not match selected base Agents: "
-            f"missing={sorted(expected_agents - assigned_agents)} "
-            f"unexpected={sorted(assigned_agents - expected_agents)}"
-        )
-
-    # 立即将 TeachingPlan 写入数据库
+    started = time.perf_counter()
     try:
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.start_agent_run(
+                resource_id=state["resource_id"],
+                run_id=state["run_id"],
+                agent_id="planning",
+                stage="planning",
+            )
+
+        await state["events"].send(
+            "planning",
+            "running",
+            "正在分析学习需求并构建大纲...",
+            10,
+            data={"phase": "planning"},
+        )
+        planning_result = await AGENT_REGISTRY["planning"](state["events"]).generate_resource(planning_input)
+        if not planning_result.success:
+            error_msg = planning_result.error or "规划阶段失败"
+            raise ValueError(error_msg)
+
+        teaching_plan = None
+        if planning_result.metadata:
+            plan_data = planning_result.metadata.get("teaching_plan")
+            if isinstance(plan_data, dict):
+                teaching_plan = TeachingPlan.model_validate(plan_data)
+        if teaching_plan is None:
+            raise ValueError("规划阶段未返回教学计划")
+
+        assigned_agents = {
+            assignment.get("agent_id")
+            for assignment in teaching_plan.agent_assignments
+        }
+        expected_agents = set(enabled_base_agents)
+        if assigned_agents != expected_agents:
+            raise ValueError(
+                "TeachingPlan assignments do not match selected base Agents: "
+                f"missing={sorted(expected_agents - assigned_agents)} "
+                f"unexpected={sorted(assigned_agents - expected_agents)}"
+            )
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         async with session_scope() as session:
             service = ResourceService(session)
             await service.save_teaching_plan(
@@ -253,8 +262,34 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
                 run_id=state["run_id"],
                 teaching_plan=teaching_plan,
             )
+        await state["events"].send(
+            "planning",
+            "completed",
+            "教学大纲已生成",
+            100,
+            data={"phase": "planning", "elapsed_ms": elapsed_ms},
+        )
     except Exception as exc:
-        logger.error("TeachingPlan 持久化失败: %s", exc)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.error("规划阶段失败: resource_id=%s error=%s", state["resource_id"], exc)
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.mark_agent_failed(
+                resource_id=state["resource_id"],
+                run_id=state["run_id"],
+                agent_id="planning",
+                stage="planning",
+                error_type=type(exc).__name__,
+                error_message=str(exc)[:500],
+                elapsed_ms=elapsed_ms,
+            )
+        await state["events"].send(
+            "planning",
+            "failed",
+            str(exc) or "规划失败",
+            0,
+            data={"phase": "planning", "elapsed_ms": elapsed_ms},
+        )
         raise
 
     return {"teaching_plan": teaching_plan}
@@ -422,6 +457,23 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     优化：
     - 内容去重：检查 avoid_overlap_with 配置，警告相似度过高的内容
     """
+    started = time.perf_counter()
+    async with session_scope() as session:
+        service = ResourceService(session)
+        await service.start_agent_run(
+            resource_id=state["resource_id"],
+            run_id=state["run_id"],
+            agent_id=COORDINATOR_AGENT_ID,
+            stage="coordination",
+        )
+    await state["events"].send(
+        COORDINATOR_AGENT_ID,
+        "running",
+        "正在汇总并校验基础资源",
+        65,
+        data={"phase": "coordination"},
+    )
+
     results = state.get("results") or {}
     failures = state.get("failures") or {}
     success_count = len(results)
@@ -435,7 +487,6 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         else "未选择基础资源，聚合资源将基于教学计划生成"
     )
     stat = "completed" if coordinator_status == "finished" else "failed"
-    await state["events"].send(COORDINATOR_AGENT_ID, stat, message, 70)
 
     # 内容去重检查：读取已完成 Agent 的内容并检查相似度
     if results and state.get("teaching_plan"):
@@ -446,11 +497,19 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
         existing_results: dict[str, AgentResult] = {}
         for item in items:
             if item.agent_type in BASE_RESOURCE_AGENT_IDS and item.status == "completed":
+                # 根据 content_format 选择正确的内容字段
+                if item.content_format == "json" and item.content_json:
+                    content = str(item.content_json)
+                elif item.content_text:
+                    content = item.content_text
+                else:
+                    content = ""
+
                 existing_results[item.agent_type] = AgentResult(
                     success=True,
-                    content=item.content or "",
+                    content=content,
                     title=item.title or "",
-                    file_type=item.file_type or "markdown",
+                    file_type=item.content_format or "markdown",
                 )
 
         # 检查每个成功 Agent 的内容重叠
@@ -495,6 +554,32 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
                 70,
             )
 
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    async with session_scope() as session:
+        service = ResourceService(session)
+        if stat == "completed":
+            await service.complete_agent_run(
+                resource_id=state["resource_id"],
+                agent_id=COORDINATOR_AGENT_ID,
+                elapsed_ms=elapsed_ms,
+            )
+        else:
+            await service.mark_agent_failed(
+                resource_id=state["resource_id"],
+                run_id=state["run_id"],
+                agent_id=COORDINATOR_AGENT_ID,
+                stage="coordination",
+                error_type="WorkerPoolFailed",
+                error_message=message,
+                elapsed_ms=elapsed_ms,
+            )
+    await state["events"].send(
+        COORDINATOR_AGENT_ID,
+        stat,
+        message,
+        70,
+        data={"phase": "coordination", "elapsed_ms": elapsed_ms},
+    )
     return {"coverage_report": coverage_report}
 
 
@@ -642,11 +727,21 @@ async def save_node(state: ParentState) -> dict[str, Any]:
     终端状态由数据库已持久化的 Agent 集合严格计算。
     只调用 finalize_generation，不接收调用者声称的成功集合。
     """
+    started = time.perf_counter()
+    async with session_scope() as session:
+        service = ResourceService(session)
+        await service.start_agent_run(
+            resource_id=state["resource_id"],
+            run_id=state["run_id"],
+            agent_id=BUNDLE_AGENT_ID,
+            stage="aggregation",
+        )
     await state["events"].send(
         BUNDLE_AGENT_ID,
         "running",
         "正在组装资源包并保存结果",
         95,
+        data={"phase": "aggregation"},
     )
 
     selected_agent_ids = set(state["request"].enabled_agent_ids())
@@ -660,14 +755,50 @@ async def save_node(state: ParentState) -> dict[str, Any]:
                 expected_agent_ids=selected_agent_ids,
             )
             success = status in ("completed", "partial_completed")
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            if success:
+                await service.complete_agent_run(
+                    resource_id=state["resource_id"],
+                    agent_id=BUNDLE_AGENT_ID,
+                    elapsed_ms=elapsed_ms,
+                )
+            else:
+                await service.mark_agent_failed(
+                    resource_id=state["resource_id"],
+                    run_id=state["run_id"],
+                    agent_id=BUNDLE_AGENT_ID,
+                    stage="aggregation",
+                    error_type="BundleFailed",
+                    error_message="资源包组装失败",
+                    elapsed_ms=elapsed_ms,
+                )
 
             await state["events"].send(
                 BUNDLE_AGENT_ID,
                 "completed" if success else "failed",
                 "资源包组装完成" if success else "资源包组装失败",
                 100,
+                data={"phase": "aggregation", "elapsed_ms": elapsed_ms},
             )
             return {"success": success}
-    except Exception:
-        await state["events"].send(BUNDLE_AGENT_ID, "failed", "资源包组装异常", 0)
+    except Exception as exc:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.mark_agent_failed(
+                resource_id=state["resource_id"],
+                run_id=state["run_id"],
+                agent_id=BUNDLE_AGENT_ID,
+                stage="aggregation",
+                error_type=type(exc).__name__,
+                error_message=str(exc)[:500],
+                elapsed_ms=elapsed_ms,
+            )
+        await state["events"].send(
+            BUNDLE_AGENT_ID,
+            "failed",
+            "资源包组装异常",
+            0,
+            data={"phase": "aggregation", "elapsed_ms": elapsed_ms},
+        )
         raise

@@ -14,40 +14,20 @@
         <div class="connector-dot" :class="{ 'is-active': field.highlight }"></div>
 
         <!-- Layer box (wrapped in tooltip if detail exists) -->
-        <el-tooltip
-          v-if="field.detail"
-          :content="field.detail"
-          placement="top"
-          effect="dark"
-          :show-after="100"
-        >
-          <div 
-            class="layer-card" 
-            :class="{ 'is-highlighted': field.highlight }"
-          >
-            <div class="layer-badge" :class="{ 'is-highlighted': field.highlight }">
-              {{ getLayerBadge(idx, payload.fields.length) }}
-            </div>
-            <div class="layer-content">
-              <strong class="layer-name">{{ field.name }}</strong>
-              <span class="layer-detail-inline">{{ field.detail }}</span>
-            </div>
-            <div v-if="field.highlight" class="pulse-indicator">
-              <span class="pulse-dot"></span>
-            </div>
-          </div>
-        </el-tooltip>
-        
         <div 
-          v-else 
           class="layer-card" 
           :class="{ 'is-highlighted': field.highlight }"
+          :title="field.detail ? field.detail : undefined"
         >
           <div class="layer-badge" :class="{ 'is-highlighted': field.highlight }">
             {{ getLayerBadge(idx, payload.fields.length) }}
           </div>
           <div class="layer-content">
             <strong class="layer-name">{{ field.name }}</strong>
+            <span v-if="field.detail" class="layer-detail-inline">{{ field.detail }}</span>
+          </div>
+          <div v-if="field.highlight && field.detail" class="pulse-indicator">
+            <span class="pulse-dot"></span>
           </div>
         </div>
       </div>
@@ -89,38 +69,14 @@
           <!-- Flex field container -->
           <div class="row-fields">
             <template v-for="(field, fIdx) in row.fields" :key="fIdx">
-              <el-tooltip
-                v-if="field.detail"
-                :content="`${field.name}: ${field.detail} (${field.width_ratio ?? 32} ${ (field.width_ratio ?? 32) === 1 ? 'bit' : 'bits' })`"
-                placement="top"
-                effect="dark"
-                :show-after="100"
-              >
-                <div 
-                  class="field-card" 
-                  :class="{ 'is-highlighted': field.highlight }"
-                  :style="{ 
-                    flex: `0 0 ${((field.width_ratio ?? 32) / 32 * 100)}%`,
-                    maxWidth: `${((field.width_ratio ?? 32) / 32 * 100)}%`
-                  }"
-                >
-                  <div class="field-card-content">
-                    <span class="field-name">{{ field.name }}</span>
-                    <span v-if="(field.width_ratio ?? 32) >= 4" class="field-bits">
-                      {{ field.width_ratio ?? 32 }} {{ (field.width_ratio ?? 32) === 1 ? 'bit' : 'bits' }}
-                    </span>
-                  </div>
-                </div>
-              </el-tooltip>
-              
               <div 
-                v-else
                 class="field-card" 
                 :class="{ 'is-highlighted': field.highlight }"
                 :style="{ 
                   flex: `0 0 ${((field.width_ratio ?? 32) / 32 * 100)}%`,
                   maxWidth: `${((field.width_ratio ?? 32) / 32 * 100)}%`
                 }"
+                :title="field.detail ? `${field.name}: ${field.detail} (${field.width_ratio ?? 32} ${ (field.width_ratio ?? 32) === 1 ? 'bit' : 'bits' })` : undefined"
               >
                 <div class="field-card-content">
                   <span class="field-name">{{ field.name }}</span>

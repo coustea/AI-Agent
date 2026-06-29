@@ -12,18 +12,17 @@
         :class="{ 'is-focused': isInputFocused, 'has-content': localInput.trim().length > 0 }"
         @submit.prevent="handleSubmit"
       >
-        <el-input
+        <textarea
             v-model="localInput"
-            type="textarea"
-            :autosize="{ minRows: 1, maxRows: 10 }"
+            rows="2"
             placeholder="输入学习需求，唤醒多智能体..."
-            class="omni-textarea"
+            class="omni-textarea w-full px-4 py-3 outline-none resize-none border-none bg-transparent"
             @focus="isInputFocused = true"
             @blur="isInputFocused = false"
             @compositionstart="isComposing = true"
             @compositionend="isComposing = false"
             @keydown.enter.exact="handleEnter"
-        />
+        ></textarea>
         <div class="omni-actions">
           <span class="omni-hint" v-if="localInput.trim().length > 0">
             回车键进入参数配置 ⏎
@@ -31,33 +30,33 @@
           <span class="omni-hint" v-else>
             描述考研、期末、或任意技术栈...
           </span>
-          <el-button type="primary" class="omni-submit-btn"
+          <button class="omni-submit-btn btn btn-primary"
               native-type="submit"
               :disabled="!localInput.trim()"
               aria-label="进入参数配置"
           >
-            <el-icon><Top /></el-icon>
-          </el-button>
+            <Top class='w-4 h-4 inline-block align-middle' />
+          </button>
         </div>
       </form>
 
       <div class="omni-inspiration-grid">
         <div class="inspiration-card" @click="fillExample('复习《计算机网络》TCP三次握手，请多出几道难题')">
-          <div class="ins-icon" style="background: var(--cat-resource-soft); color: var(--cat-resource);"><el-icon><StarFilled /></el-icon></div>
+          <div class="ins-icon" style="background: var(--cat-resource-soft); color: var(--cat-resource);"><StarFilled class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>深度复习</h4>
             <p>复习《计算机网络》TCP三次握手...</p>
           </div>
         </div>
         <div class="inspiration-card" @click="fillExample('零基础学习 Python 多线程，需要底层原理和代码')">
-          <div class="ins-icon" style="background: #F0FDF4; color: #22C55E;"><el-icon><Cpu /></el-icon></div>
+          <div class="ins-icon" style="background: #F0FDF4; color: #22C55E;"><Cpu class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>零基础入门</h4>
             <p>零基础学习 Python 多线程原理...</p>
           </div>
         </div>
         <div class="inspiration-card" @click="fillExample('考研冲刺《数据结构》二叉树，帮我精简思维导图，重点标注高频考点')">
-          <div class="ins-icon" style="background: #FEF2F2; color: #EF4444;"><el-icon><Odometer /></el-icon></div>
+          <div class="ins-icon" style="background: #FEF2F2; color: #EF4444;"><Odometer class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>考研冲刺</h4>
             <p>《数据结构》二叉树，精简思维导图...</p>
@@ -70,7 +69,12 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Top, StarFilled, Cpu, Odometer } from '@element-plus/icons-vue'
+import {
+  PhArrowUp as Top,
+  PhStar as StarFilled,
+  PhCpu as Cpu,
+  PhGauge as Odometer
+} from '@phosphor-icons/vue'
 
 const props = defineProps<{
   modelValue: string
@@ -180,7 +184,7 @@ function fillExample(text: string) {
     0 0 0 4px rgba(59, 130, 246, 0.1);
   transform: translateY(-2px);
 }
-.omni-textarea :deep(.el-textarea__inner) {
+.omni-textarea {
   border: none;
   background: transparent;
   box-shadow: none !important;
@@ -193,12 +197,12 @@ function fillExample(text: string) {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.omni-textarea :deep(.el-textarea__inner)::-webkit-scrollbar {
+.omni-textarea::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
-.omni-textarea :deep(.el-textarea__inner)::placeholder {
+.omni-textarea::placeholder {
   color: var(--color-text-faint);
   font-weight: 400;
 }

@@ -2,9 +2,11 @@
   <div class="phase-view personalize-view">
     <div class="personalize-container">
       <div class="view-header">
-        <el-tag size="small" effect="dark" round class="header-badge">AI CONFIGURATION</el-tag>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide uppercase bg-slate-900 text-white rounded-full mb-4">
+          AI CONFIGURATION
+        </span>
         <h2>多智能体参数定制中心</h2>
-        <p>请为即将出场的 AI 智能体配置加工参数，您的指令将作为最高优先级要求贯穿全局。</p>
+        <p>请为即将出场 AI 智能体配置加工参数，您的指令将作为最高优先级要求贯穿全局。</p>
       </div>
 
       <div class="scenario-selector-v2">
@@ -25,197 +27,400 @@
 
       <div class="config-section-v2">
         <div class="agent-configs-grid">
-          <el-card class="config-card-v2" shadow="never" :class="{ 'agent-off': !isAgentEnabled(agent.id) }" v-for="agent in personalizeAgents" :key="agent.id">
-            <div class="cc-header-v2">
-              <div class="cc-icon-wrap" :class="agent.colorClass">
-                <el-icon><component :is="agent.icon" /></el-icon>
+          <div 
+            class="config-card-v2 bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col" 
+            :class="{ 'agent-off': !isAgentEnabled(agent.id) }" 
+            v-for="agent in personalizeAgents" 
+            :key="agent.id"
+          >
+            <div class="cc-header-v2 border-b border-dashed border-slate-100 pb-4 mb-4 flex items-center gap-3">
+              <div class="cc-icon-wrap w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 bg-slate-50 border border-slate-100" :class="agent.colorClass">
+                <component :is="agent.icon" class="w-4 h-4" />
               </div>
-              <span class="cc-title">{{ agent.name }}</span>
-              <div class="cc-header-switch">
-                <el-switch
-                    :model-value="isAgentEnabled(agent.id)"
+              <span class="cc-title font-extrabold text-slate-800 text-sm tracking-wide">{{ agent.name }}</span>
+              
+              <div class="cc-header-switch ml-auto">
+                <label class="relative inline-flex items-center cursor-pointer select-none">
+                  <input 
+                    type="checkbox" 
+                    :checked="isAgentEnabled(agent.id)" 
                     @change="toggleAgent(agent.id)"
-                    active-color="#0369A1"
-                />
+                    class="sr-only peer"
+                  />
+                  <div class="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue"></div>
+                </label>
               </div>
             </div>
 
-            <div class="cc-body-v2" :class="{ 'body-disabled': !isAgentEnabled(agent.id) }">
+            <div class="cc-body-v2 flex-1 flex flex-col gap-5" :class="{ 'body-disabled': !isAgentEnabled(agent.id) }">
+              <!-- Content Agent -->
               <template v-if="agent.id === 'content'">
-                <div class="ctrl-group">
-                  <label>讲解结构</label>
-                  <el-select v-model="localConfigs.content.structure" size="default" class="w-full custom-select">
-                    <el-option label="渐进式引导 (Progressive)" value="progressive" />
-                    <el-option label="先总后分 (Summary First)" value="summary_first" />
-                    <el-option label="考点驱动 (Exam Points)" value="exam_points" />
-                    <el-option label="案例驱动 (Case Driven)" value="case_driven" />
-                  </el-select>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">讲解结构</label>
+                  <select 
+                    v-model="localConfigs.content.structure" 
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
+                  >
+                    <option value="progressive">渐进式引导 (Progressive)</option>
+                    <option value="summary_first">先总后分 (Summary First)</option>
+                    <option value="exam_points">考点驱动 (Exam Points)</option>
+                    <option value="case_driven">案例驱动 (Case Driven)</option>
+                  </select>
                 </div>
-                <div class="ctrl-group ctrl-switch-group-v2">
-                  <div class="ctrl-switch-v2">
-                    <div class="sw-info">
-                      <span class="sw-label">涵盖易错点解析</span>
-                      <span class="sw-desc">针对常见误区进行深度剖析</span>
+                
+                <div class="ctrl-switch-group-v2 flex flex-col gap-4">
+                  <div class="ctrl-switch-v2 flex justify-between items-start">
+                    <div class="sw-info flex flex-col">
+                      <span class="sw-label text-sm font-semibold text-slate-800">涵盖易错点解析</span>
+                      <span class="sw-desc text-xs text-slate-400">针对常见误区进行深度剖析</span>
                     </div>
-                    <el-switch v-model="localConfigs.content.include_common_mistakes" />
+                    <label class="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        v-model="localConfigs.content.include_common_mistakes" 
+                        class="sr-only peer"
+                      />
+                      <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue"></div>
+                    </label>
                   </div>
-                  <div class="ctrl-switch-v2">
-                    <div class="sw-info">
-                      <span class="sw-label">丰富生活化示例</span>
-                      <span class="sw-desc">用直观的案例辅助理解抽象概念</span>
+                  
+                  <div class="ctrl-switch-v2 flex justify-between items-start">
+                    <div class="sw-info flex flex-col">
+                      <span class="sw-label text-sm font-semibold text-slate-800">丰富生活化示例</span>
+                      <span class="sw-desc text-xs text-slate-400">用直观的案例辅助理解抽象概念</span>
                     </div>
-                    <el-switch v-model="localConfigs.content.include_examples" />
+                    <label class="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        v-model="localConfigs.content.include_examples" 
+                        class="sr-only peer"
+                      />
+                      <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue"></div>
+                    </label>
                   </div>
                 </div>
               </template>
 
+              <!-- Mindmap Agent -->
               <template v-if="agent.id === 'mindmap'">
-                <div class="ctrl-group">
-                  <label>导图生成策略</label>
-                  <el-select v-model="localConfigs.mindmap.map_type" size="default" class="w-full custom-select">
-                    <el-option label="核心知识树 (Knowledge Tree)" value="knowledge_tree" />
-                    <el-option label="高频考点图 (Exam Map)" value="exam_map" />
-                    <el-option label="对比复习图 (Comparison)" value="comparison_map" />
-                  </el-select>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">导图生成策略</label>
+                  <select 
+                    v-model="localConfigs.mindmap.map_type" 
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
+                  >
+                    <option value="knowledge_tree">核心知识树 (Knowledge Tree)</option>
+                    <option value="exam_map">高频考点图 (Exam Map)</option>
+                    <option value="comparison_map">对比复习图 (Comparison)</option>
+                  </select>
                 </div>
-                <div class="ctrl-group">
-                  <div class="slider-label-row">
-                    <label>节点发散层级</label>
-                    <span class="slider-value"><b>{{ localConfigs.mindmap.max_depth }}</b> 层</span>
+                
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <div class="slider-label-row flex justify-between items-center mb-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">节点发散层级</label>
+                    <span class="text-xs font-bold text-blue"><b>{{ localConfigs.mindmap.max_depth }}</b> 层</span>
                   </div>
-                  <el-slider v-model="localConfigs.mindmap.max_depth" :min="2" :max="5" :step="1" class="custom-slider-v2" show-stops />
+                  <input 
+                    type="range" 
+                    v-model.number="localConfigs.mindmap.max_depth" 
+                    :min="2" 
+                    :max="5" 
+                    :step="1"
+                    class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
+                  />
                 </div>
               </template>
 
+              <!-- Code Agent -->
               <template v-if="agent.id === 'code'">
-                <div class="ctrl-group">
-                  <label>编程语言目标</label>
-                  <el-select v-model="localConfigs.code.programming_language" size="default" class="w-full custom-select">
-                    <el-option label="Python" value="python" />
-                    <el-option label="C" value="c" />
-                    <el-option label="JavaScript" value="javascript" />
-                    <el-option label="TypeScript" value="typescript"/>
-                    <el-option label="C++" value="cpp" />
-                    <el-option label="Java" value="java" />
-                    <el-option label="Go" value="go" />
-                  </el-select>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">编程语言目标</label>
+                  <select 
+                    v-model="localConfigs.code.programming_language" 
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
+                  >
+                    <option value="python">Python</option>
+                    <option value="c">C</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="typescript">TypeScript</option>
+                    <option value="cpp">C++</option>
+                    <option value="java">Java</option>
+                    <option value="go">Go</option>
+                  </select>
                 </div>
-                <div class="ctrl-group">
-                  <label>案例难度级别</label>
-                  <el-radio-group v-model="localConfigs.code.difficulty" size="small" class="custom-radio-group">
-                    <el-radio-button value="beginner">入门</el-radio-button>
-                    <el-radio-button value="intermediate">进阶</el-radio-button>
-                    <el-radio-button value="advanced">挑战</el-radio-button>
-                  </el-radio-group>
+                
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">难度等级</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '入门', value: 'beginner' },
+                        { label: '进阶', value: 'intermediate' },
+                        { label: '挑战', value: 'advanced' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.code.difficulty === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setCodeDifficulty(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
                 </div>
-                <div class="ctrl-group">
-                  <label>案例交付形态</label>
-                  <el-radio-group v-model="localConfigs.code.case_type" size="small" class="custom-radio-group">
-                    <el-radio-button value="basic_demo">基础教学</el-radio-button>
-                    <el-radio-button value="algorithm_template">算法模板</el-radio-button>
-                  </el-radio-group>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">练习模板</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '基础教学', value: 'basic_demo' },
+                        { label: '算法模板', value: 'algorithm_template' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.code.case_type === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setCodeCaseType(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
                 </div>
               </template>
 
+              <!-- Quiz Agent -->
               <template v-if="agent.id === 'quiz'">
-                <div class="ctrl-group">
-                  <label>测验难度引擎</label>
-                  <el-radio-group v-model="localConfigs.quiz.difficulty_mode" size="small" class="custom-radio-group">
-                    <el-radio-button value="basic">基础巩固</el-radio-button>
-                    <el-radio-button value="adaptive">动态自适应</el-radio-button>
-                    <el-radio-button value="exam">硬核考研</el-radio-button>
-                  </el-radio-group>
-                </div>
-                <div class="ctrl-group">
-                  <div class="slider-label-row">
-                    <label>生成题目数量</label>
-                    <span class="slider-value"><b>{{ localConfigs.quiz.question_count }}</b> 道</span>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">考察策略</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '基础巩固', value: 'basic' },
+                        { label: '动态自适应', value: 'adaptive' },
+                        { label: '硬核考研', value: 'exam' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.quiz.difficulty_mode === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setQuizDifficultyMode(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
                   </div>
-                  <el-slider v-model="localConfigs.quiz.question_count" :min="1" :max="20" :step="1" class="custom-slider-v2" />
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <div class="slider-label-row flex justify-between items-center mb-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">生成题量</label>
+                    <span class="text-xs font-bold text-blue"><b>{{ localConfigs.quiz.question_count }}</b> 道题</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    v-model.number="localConfigs.quiz.question_count" 
+                    :min="1" 
+                    :max="20" 
+                    :step="1"
+                    class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
+                  />
                 </div>
               </template>
 
+              <!-- Reading Agent -->
               <template v-if="agent.id === 'reading'">
-                <div class="ctrl-group">
-                  <label>阅读文献深度</label>
-                  <el-select v-model="localConfigs.reading.reading_depth" size="default" class="w-full custom-select">
-                    <el-option label="课程内延展 (Course Extended)" value="course_extended" />
-                    <el-option label="工程化实践 (Engineering)" value="engineering" />
-                    <el-option label="前沿学术论文 (Frontier)" value="frontier" />
-                  </el-select>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">文献拓宽深度</label>
+                  <select 
+                    v-model="localConfigs.reading.reading_depth" 
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
+                  >
+                    <option value="course_extended">课程内延展 (Course Extended)</option>
+                    <option value="engineering">工程化实践 (Engineering)</option>
+                    <option value="frontier">前沿学术论文 (Frontier)</option>
+                  </select>
                 </div>
-                <div class="ctrl-group">
-                  <label>资料语言偏好</label>
-                  <el-radio-group v-model="localConfigs.reading.language_preference" size="small" class="custom-radio-group">
-                    <el-radio-button value="chinese">中文优先</el-radio-button>
-                    <el-radio-button value="both">中英双语</el-radio-button>
-                    <el-radio-button value="english">英文原版</el-radio-button>
-                  </el-radio-group>
-                </div>
-                <div class="ctrl-group">
-                  <div class="slider-label-row">
-                    <label>文献推送数量</label>
-                    <span class="slider-value"><b>{{ localConfigs.reading.max_items }}</b> 篇</span>
+                
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">语言偏好</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '中文优先', value: 'chinese' },
+                        { label: '中英双语', value: 'both' },
+                        { label: '英文原版', value: 'english' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.reading.language_preference === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setReadingLanguagePreference(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
                   </div>
-                  <el-slider v-model="localConfigs.reading.max_items" :min="1" :max="10" :step="1" class="custom-slider-v2" />
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <div class="slider-label-row flex justify-between items-center mb-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">拓展上限</label>
+                    <span class="text-xs font-bold text-blue"><b>{{ localConfigs.reading.max_items }}</b> 篇</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    v-model.number="localConfigs.reading.max_items" 
+                    :min="1" 
+                    :max="10" 
+                    :step="1"
+                    class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
+                  />
                 </div>
               </template>
 
+              <!-- PPT Agent -->
               <template v-if="agent.id === 'ppt'">
-                <div class="ctrl-group">
-                  <label>主题风格</label>
-                  <el-radio-group v-model="localConfigs.ppt.theme_id" size="small" class="custom-radio-group">
-                    <el-radio-button value="logic-blue">科技蓝</el-radio-button>
-                    <el-radio-button value="paper-light">纸墨白</el-radio-button>
-                    <el-radio-button value="lab-light">实验室</el-radio-button>
-                  </el-radio-group>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">视觉主题模板</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '科技蓝', value: 'logic-blue' },
+                        { label: '纸墨白', value: 'paper-light' },
+                        { label: '实验室', value: 'lab-light' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.ppt.theme_id === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setPptThemeId(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
                 </div>
-                <div class="ctrl-group">
-                  <label>讲解风格</label>
-                  <el-radio-group v-model="localConfigs.ppt.explanation_style" size="small" class="custom-radio-group">
-                    <el-radio-button value="conceptual">概念优先</el-radio-button>
-                    <el-radio-button value="procedural">流程优先</el-radio-button>
-                    <el-radio-button value="comparative">对比优先</el-radio-button>
-                  </el-radio-group>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">讲解路线</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '概念阐述', value: 'conceptual' },
+                        { label: '过程推演', value: 'procedural' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.ppt.explanation_style === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setPptExplanationStyle(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
                 </div>
-                <div class="ctrl-group">
-                  <label>可视化程度</label>
-                  <el-radio-group v-model="localConfigs.ppt.visual_emphasis" size="small" class="custom-radio-group">
-                    <el-radio-button value="minimal">极简</el-radio-button>
-                    <el-radio-button value="balanced">平衡</el-radio-button>
-                    <el-radio-button value="rich">丰富</el-radio-button>
-                  </el-radio-group>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">视觉元素占比</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '文字极简', value: 'minimal' },
+                        { label: '图文并茂', value: 'balanced' },
+                        { label: '图解加持', value: 'rich' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.ppt.visual_emphasis === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setPptVisualEmphasis(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
                 </div>
               </template>
 
+              <!-- Video Agent -->
+              <template v-if="agent.id === 'video'">
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">微课镜头风格</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '概念解析', value: 'explainer' },
+                        { label: '讲授微课', value: 'lecture' },
+                        { label: '实战录屏', value: 'screencast' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.video.style === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setVideoStyle(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">虚拟主播声线</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '亲和导师', value: 'teacher' },
+                        { label: '硬核教练', value: 'coach' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.video.voice === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="setVideoVoice(opt.value)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <div class="slider-label-row flex justify-between items-center mb-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">预估微课时长</label>
+                    <span class="text-xs font-bold text-blue"><b>{{ localConfigs.video.duration_seconds }}</b> 秒</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    v-model.number="localConfigs.video.duration_seconds" 
+                    :min="60" 
+                    :max="300" 
+                    :step="30"
+                    class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
+                  />
+                </div>
+              </template>
             </div>
-          </el-card>
+          </div>
         </div>
       </div>
 
-      <div class="personalize-footer-v2">
-        <div class="selected-agents-bar">
-          <span class="sab-label">本次将调度 {{ enabledAgentIds.length }} 个智能体：</span>
-          <div class="sab-pills">
-            <el-tag
-                v-for="id in enabledAgentIds"
-                :key="id"
-                size="small"
-                effect="plain"
-                round
-                class="sab-pill"
+      <div class="personalize-footer-v2 flex flex-col items-center gap-6 mt-4 pb-16">
+        <div class="selected-agents-bar flex items-center gap-4 flex-wrap justify-center bg-white border border-slate-100 rounded-3xl px-6 py-4 max-w-[860px] shadow-sm">
+          <span class="sab-label font-bold text-xs text-slate-500 tracking-wider">已选智能体工位：</span>
+          <div class="sab-pills flex gap-2 flex-wrap">
+            <span
+              v-for="id in enabledAgentIds"
+              :key="id"
+              class="inline-flex items-center gap-1.5 px-3.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-100 rounded-full"
             >
-              <el-icon><component :is="getAgentMeta(id).icon" /></el-icon>
+              <component :is="getAgentMeta(id).icon" class="w-3.5 h-3.5 text-blue" />
               {{ getAgentMeta(id).name }}
-            </el-tag>
+            </span>
           </div>
-          <span class="sab-hint" v-if="enabledAgentIds.length === MIN_AGENTS">⚠️ 已达最低要求</span>
+          <span class="sab-hint text-xs font-bold text-slate-400" v-if="enabledAgentIds.length === MIN_AGENTS">⚠️ 已达最低要求</span>
         </div>
-        <div class="footer-btns">
-          <el-button plain round size="large" @click="emit('back')" class="footer-back-btn">返回修改需求</el-button>
-          <el-button type="primary" round size="large" class="launch-btn-v2" @click="emit('launch')">
-            确认配置，启动多智能体加工 <el-icon class="el-icon--right"><Position /></el-icon>
-          </el-button>
+
+        <div class="footer-btns flex gap-4">
+          <button type="button" @click="emit('back')" class="btn btn-outline footer-back-btn px-6 py-3 rounded-full font-bold">返回修改需求</button>
+          <button type="button" class="btn btn-primary launch-btn-v2 px-8 py-3 rounded-full font-bold flex items-center gap-2" @click="emit('launch')">
+            确认配置，启动多智能体加工 <Position class="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
@@ -224,8 +429,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Position } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import {
+  PhPaperPlaneTilt as Position
+} from '@phosphor-icons/vue'
+import { toast } from 'vue-sonner'
 import type { LearningScenario, ResourceAgentId } from '@/features/resource/model/resource'
 import {
   MIN_AGENTS,
@@ -281,7 +488,7 @@ const toggleAgent = (id: string) => {
   const idx = enabledAgentIds.value.indexOf(id as ResourceAgentId)
   if (idx >= 0) {
     if (enabledAgentIds.value.length <= MIN_AGENTS) {
-      ElMessage.warning({ message: `至少需要保留 ${MIN_AGENTS} 个智能体才能生成有效的个性化学习资源`, plain: true })
+      toast.warning(`至少需要保留 ${MIN_AGENTS} 个智能体才能生成有效的个性化学习资源`)
       return
     }
     const next = [...enabledAgentIds.value]
@@ -306,6 +513,34 @@ const selectScenario = (scenario: LearningScenario) => {
   })
   localConfigs.value = merged
 }
+
+const setCodeDifficulty = (val: any) => {
+  if (localConfigs.value.code) localConfigs.value.code.difficulty = val
+}
+const setCodeCaseType = (val: any) => {
+  if (localConfigs.value.code) localConfigs.value.code.case_type = val
+}
+const setQuizDifficultyMode = (val: any) => {
+  if (localConfigs.value.quiz) localConfigs.value.quiz.difficulty_mode = val
+}
+const setReadingLanguagePreference = (val: any) => {
+  if (localConfigs.value.reading) localConfigs.value.reading.language_preference = val
+}
+const setPptThemeId = (val: any) => {
+  if (localConfigs.value.ppt) localConfigs.value.ppt.theme_id = val
+}
+const setPptExplanationStyle = (val: any) => {
+  if (localConfigs.value.ppt) localConfigs.value.ppt.explanation_style = val
+}
+const setPptVisualEmphasis = (val: any) => {
+  if (localConfigs.value.ppt) localConfigs.value.ppt.visual_emphasis = val
+}
+const setVideoStyle = (val: any) => {
+  if (localConfigs.value.video) localConfigs.value.video.style = val
+}
+const setVideoVoice = (val: any) => {
+  if (localConfigs.value.video) localConfigs.value.video.voice = val
+}
 </script>
 
 <style scoped>
@@ -322,7 +557,6 @@ const selectScenario = (scenario: LearningScenario) => {
 }
 .personalize-container { width: 100%; max-width: 1160px; display: flex; flex-direction: column; gap: var(--space-12); position: relative; z-index: 10; }
 .view-header { text-align: center; margin-bottom: 0; }
-.header-badge { margin-bottom: var(--space-4); font-weight: 700; letter-spacing: 0.05em; background: var(--color-border) !important; color: var(--color-text-secondary) !important; border: none; padding: 0 12px; }
 .view-header h2 {
   font-size: 2.5rem;
   font-weight: 800;
@@ -345,49 +579,18 @@ const selectScenario = (scenario: LearningScenario) => {
 .active-dot { position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; background: var(--color-primary); border-radius: 50%; box-shadow: 0 0 12px var(--color-primary-glow, rgba(99, 102, 241, 0.3)); }
 .config-section-v2 { margin-top: 10px; }
 .agent-configs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-.config-card-v2 { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(24px); border: 2px solid var(--color-border); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04); }
+.config-card-v2 { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .config-card-v2:hover { transform: translateY(-4px); border-color: var(--color-primary-border); box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08); background: #ffffff; }
-.cc-header-v2 { padding: 20px 24px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px dashed var(--color-border-light); margin-bottom: 16px; }
-.cc-icon-wrap { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; background: #F3F4F6; border: 1px solid #E5E7EB; color: #4B5563; }
-.cc-icon-wrap.text-emerald, .cc-icon-wrap.text-orange, .cc-icon-wrap.text-purple, .cc-icon-wrap.text-red, .cc-icon-wrap.text-emerald, .cc-icon-wrap.text-indigo, .cc-icon-wrap.text-slate { background: #F3F4F6; color: #374151; }
-.config-card-v2.disabled { opacity: 0.7; background: #F9FAFB; }
 .config-card-v2.agent-off { border-color: #E5E7EB; opacity: 0.85; }
 .cc-header-switch { margin-left: auto; flex-shrink: 0; }
 .cc-body-v2.body-disabled { opacity: 0.38; pointer-events: none; filter: grayscale(60%); }
-.question-type-group { display: flex; gap: 8px; flex-wrap: wrap; }
-.question-type-group :deep(.el-checkbox) { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 4px 12px; margin: 0; transition: all 0.2s; }
-.question-type-group :deep(.el-checkbox.is-checked) { background: var(--color-primary-soft); border-color: var(--color-primary-border); }
-.question-type-group :deep(.el-checkbox__label) { font-size: 0.85rem; font-weight: 600; color: var(--color-text-strong); }
-.question-type-group :deep(.el-checkbox.is-checked .el-checkbox__label) { color: var(--color-primary-text); }
 .cc-title { font-family: var(--font-sans); font-weight: 800; font-size: 1.15rem; color: var(--color-text); letter-spacing: 0.02em; }
-.cc-body-v2 { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
+.cc-body-v2 { padding: 0; display: flex; flex-direction: column; gap: 20px; flex: 1; }
 .ctrl-group { display: flex; flex-direction: column; gap: var(--space-3); }
 .ctrl-group label { font-size: 0.85rem; color: var(--color-text-muted); font-weight: var(--weight-bold); text-transform: uppercase; letter-spacing: 0.02em; }
-:deep(.custom-select .el-input__wrapper) { background-color: var(--color-bg); border-radius: var(--radius-lg); padding: var(--space-1) var(--space-3); box-shadow: 0 0 0 1px var(--color-border) inset !important; transition: background-color var(--transition-base), box-shadow var(--transition-base); }
-:deep(.custom-select .el-input__wrapper:hover) { background-color: var(--color-surface-hover); box-shadow: 0 0 0 1px var(--color-border-hover) inset !important; }
-:deep(.custom-select .el-input__wrapper.is-focus) { background-color: var(--color-surface); box-shadow: 0 0 0 2px var(--color-info) inset !important; }
 .ctrl-switch-group-v2 { display: flex; flex-direction: column; gap: var(--space-5); }
 .ctrl-switch-v2 { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); }
 .sw-info { display: flex; flex-direction: column; gap: 2px; }
 .sw-label { font-size: 0.9rem; font-weight: var(--weight-semibold); color: var(--color-text-strong); }
 .sw-desc { font-family: var(--agent-body-font); font-size: 0.75rem; color: var(--color-text-faint); line-height: 1.4; }
-.custom-radio-group { display: flex; gap: var(--space-2); width: 100%; flex-wrap: wrap; }
-:deep(.custom-radio-group .el-radio-button) { flex: 1; min-width: 0; }
-:deep(.custom-radio-group .el-radio-button__inner) { width: 100%; border-radius: var(--radius-md) !important; border: 1px solid transparent !important; background: rgba(241, 245, 249, 0.6); color: var(--color-text-muted); font-weight: var(--weight-semibold); transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base); padding: 10px 0; }
-:deep(.custom-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) { background-color: var(--color-surface) !important; color: var(--color-text) !important; border-color: rgba(226, 232, 240, 0.8) !important; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important; }
-.slider-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: -4px; }
-.slider-value { font-size: 0.9rem; color: var(--cat-resource); font-weight: 700; }
-.custom-slider-v2 { padding: 0 var(--space-2); }
-.personalize-footer-v2 { display: flex; flex-direction: column; align-items: center; gap: 24px; margin-top: 16px; padding-bottom: 60px; }
-.footer-btns { display: flex; justify-content: center; gap: 20px; }
-.selected-agents-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid var(--color-border); border-radius: 24px; padding: 16px 24px; max-width: 860px; box-shadow: 0 4px 24px rgba(148, 163, 184, 0.08); }
-.sab-label { font-family: var(--agent-body-font); font-size: 0.9rem; color: var(--color-text-muted); font-weight: 700; white-space: nowrap; }
-.sab-pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.sab-pills :deep(.el-tag.sab-pill) { background: var(--color-bg) !important; border: 1px solid var(--color-border) !important; color: var(--color-text-secondary) !important; border-radius: 99px !important; padding: 0 16px !important; height: 32px !important; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; }
-.sab-pills :deep(.el-tag.sab-pill) .el-icon { color: var(--cat-resource); font-size: 1rem; }
-.sab-hint { font-size: 0.8rem; color: var(--color-text-muted); font-weight: 600; margin-left: 8px; }
-.footer-back-btn { font-weight: 600; color: var(--color-text-muted); border: 1px solid var(--color-border); background: var(--color-surface); }
-.footer-back-btn:hover { color: var(--color-text-strong); border-color: var(--color-border-hover); background: var(--color-bg); }
-.launch-btn-v2 { font-weight: 700; padding: 0 32px; background: var(--cat-resource) !important; color: var(--color-surface) !important; border: none; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3); transition: transform 0.2s, box-shadow 0.2s; }
-.launch-btn-v2:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); background: var(--color-info) !important; }
 </style>

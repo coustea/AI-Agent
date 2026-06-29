@@ -42,18 +42,20 @@
 
     <!-- 导出按钮 -->
     <div class="export-actions">
-      <el-button type="primary" :loading="isExporting" @click="handleExport">
-        <el-icon v-if="!isExporting" style="margin-right: 4px;"><Download /></el-icon>
+      <button class='btn btn-primary' :disabled="isExporting"  @click="handleExport">
+        <Download class='w-4 h-4 inline-block align-middle' />
         {{ isExporting ? '导出中...' : '下载 PPTX' }}
-      </el-button>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElButton, ElIcon, ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { toast } from 'vue-sonner'
+import {
+  PhDownload as Download
+} from '@phosphor-icons/vue'
 import type { PPTDocument, SlideBlock } from '../../types/ppt'
 import { renderPPT, downloadPPTX } from '../index'
 
@@ -105,10 +107,10 @@ async function handleExport() {
     const pptx = renderPPT(props.documentData)
     const filename = `${props.documentData.title || 'presentation'}.pptx`
     await downloadPPTX(pptx, filename)
-    ElMessage.success('PPTX 导出成功')
+    toast.success('PPTX 导出成功')
   } catch (error) {
     console.error('Export error:', error)
-    ElMessage.error('导出失败，请重试')
+    toast.error('导出失败，请重试')
   } finally {
     isExporting.value = false
   }

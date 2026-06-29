@@ -2,9 +2,14 @@
 
 import type { LearningScenario, ResourceGenerationRequest } from '@/features/resource/model/resource'
 import {
-  Cpu, Position,
-  Document, Share, Edit, Collection, DataBoard,
-} from '@element-plus/icons-vue'
+  PhCpu as Cpu,
+  PhPaperPlaneTilt as Position,
+  PhFileText as Document,
+  PhShareNetwork as Share,
+  PhNotePencil as Edit,
+  PhBooks as Collection,
+  PhGraduationCap as DataBoard,
+} from '@phosphor-icons/vue'
 
 // ===================== Agent 元数据 =====================
 

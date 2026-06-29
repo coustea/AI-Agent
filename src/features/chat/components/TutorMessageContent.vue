@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
 
 const props = defineProps<{
@@ -61,7 +61,7 @@ const handleContentClick = async (event: MouseEvent) => {
     const originalText = target.innerText
     target.innerText = '已复制'
     target.classList.add('copied')
-    ElMessage.success('代码已复制到剪贴板')
+    toast.success('代码已复制到剪贴板')
 
     setTimeout(() => {
       target.innerText = originalText
@@ -69,7 +69,7 @@ const handleContentClick = async (event: MouseEvent) => {
     }, 1600)
   } catch (error) {
     console.error('Copy failed:', error)
-    ElMessage.error('复制失败，请重试')
+    toast.error('复制失败，请重试')
   }
 }
 

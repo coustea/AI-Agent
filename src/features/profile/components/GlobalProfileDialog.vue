@@ -1,89 +1,87 @@
 <template>
-  <el-dialog
-    v-model="isGlobalProfileVisible"
-    title=""
-    width="920px"
-    class="global-profile-dialog"
-    :append-to-body="true"
-    @open="handleOpen"
-  >
-    <div class="profile-panel" v-loading="loading">
-      <!-- 头部 -->
-      <header class="profile-header">
-        <div class="header-brand">
-          <div class="brand-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
-          <div>
-            <h2>全局学习画像</h2>
-            <p>基于学习行为推断的 7 个维度特征</p>
-          </div>
-        </div>
-        <div class="header-meta" v-if="profile?.updated_at">
-          <span class="update-label">最后更新</span>
-          <span class="update-time">{{ formatTime(profile.updated_at) }}</span>
-        </div>
-      </header>
-
-      <!-- 维度列表 -->
-      <div class="dimensions-list" v-if="dimensionCards.length">
-        <article
-          v-for="(dim, idx) in dimensionCards"
-          :key="dim.key"
-          class="dimension-row"
-          :class="{ 'is-expanded': expandedKey === dim.key }"
-          @click="toggleExpand(dim.key)"
-        >
-          <div class="row-index">{{ String(idx + 1).padStart(2, '0') }}</div>
-
-          <div class="row-main">
-            <div class="row-header">
-              <h4>{{ dim.label }}</h4>
-              <span class="row-status" v-if="dim.value">已推断</span>
-              <span class="row-status pending" v-else>待推断</span>
-            </div>
-
-            <p class="row-value">{{ dim.value || '系统尚未推断出此维度特征，继续学习后将自动生成' }}</p>
-
-            <!-- 证据列表 -->
-            <div class="row-evidence" v-if="dim.evidence?.length && expandedKey === dim.key">
-              <div class="evidence-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14,2 14,8 20,8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="isGlobalProfileVisible" class="custom-modal-overlay" @click="isGlobalProfileVisible = false">
+        <div class="custom-modal-content global-profile-modal" @click.stop>
+          <div class="modal-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-start">
+            <div class="header-brand flex items-center gap-3">
+              <div class="brand-icon w-10 h-10 bg-blue text-white flex items-center justify-center rounded-xl">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
                 </svg>
-                <span>推断依据</span>
               </div>
-              <ul class="evidence-list">
-                <li v-for="(ev, i) in dim.evidence" :key="i">{{ ev }}</li>
-              </ul>
+              <div>
+                <h2 class="text-lg font-bold text-slate-900">全局学习画像</h2>
+                <p class="text-xs text-slate-400 mt-0.5">
+                  基于学习行为推断的 7 个维度特征
+                  <span v-if="profile?.updated_at">· 最后更新 {{ formatTime(profile.updated_at) }}</span>
+                </p>
+              </div>
+            </div>
+            <button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="isGlobalProfileVisible = false">×</button>
+          </div>
+
+          <div class="profile-panel py-2">
+            <!-- 维度列表 -->
+            <div class="dimensions-list" v-if="dimensionCards.length">
+              <article
+                v-for="(dim, idx) in dimensionCards"
+                :key="dim.key"
+                class="dimension-row"
+                :class="{ 'is-expanded': expandedKey === dim.key }"
+                @click="toggleExpand(dim.key)"
+              >
+                <div class="row-index">{{ String(idx + 1).padStart(2, '0') }}</div>
+
+                <div class="row-main">
+                  <div class="row-header flex justify-between items-center mb-1">
+                    <h4 class="font-bold text-slate-800 text-sm">{{ dim.label }}</h4>
+                    <span class="row-status text-xs text-green bg-green-50 px-2 py-0.5 rounded-full" v-if="dim.value">已推断</span>
+                    <span class="row-status pending text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full" v-else>待推断</span>
+                  </div>
+
+                  <p class="row-value text-xs text-slate-500 leading-relaxed">{{ dim.value || '系统尚未推断出此维度特征，继续学习后将自动生成' }}</p>
+
+                  <!-- 证据列表 -->
+                  <div class="row-evidence mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg" v-if="dim.evidence?.length && expandedKey === dim.key">
+                    <div class="evidence-label flex items-center gap-1.5 text-xs text-slate-400 mb-1 font-semibold">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                      <span>推断依据</span>
+                    </div>
+                    <ul class="evidence-list list-disc pl-4 text-xs text-slate-500 space-y-0.5">
+                      <li v-for="(ev, i) in dim.evidence" :key="i">{{ ev }}</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="row-expand-icon text-slate-400 self-center" v-if="dim.evidence?.length">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline :points="expandedKey === dim.key ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/>
+                  </svg>
+                </div>
+              </article>
+            </div>
+
+            <div class="empty-state py-12 flex flex-col items-center justify-center text-center text-slate-400" v-else>
+              <div class="empty-icon w-12 h-12 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <p class="text-sm">完成更多学习后，系统将自动推断你的画像维度</p>
             </div>
           </div>
-
-          <div class="row-expand-icon" v-if="dim.evidence?.length">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline :points="expandedKey === dim.key ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/>
-            </svg>
-          </div>
-        </article>
-      </div>
-
-      <div class="empty-state" v-else>
-        <div class="empty-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 6v6l4 2"/>
-          </svg>
         </div>
-        <p>完成更多学习后，系统将自动推断你的画像维度</p>
       </div>
-    </div>
-  </el-dialog>
+    </transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -154,10 +152,12 @@ const fetchProfile = async () => {
   }
 }
 
-const handleOpen = () => {
-  expandedKey.value = null
-  fetchProfile()
-}
+watch(isGlobalProfileVisible, (newVal) => {
+  if (newVal) {
+    expandedKey.value = null
+    fetchProfile()
+  }
+})
 
 watch(profileRefreshTrigger, () => {
   if (isGlobalProfileVisible.value) {
@@ -170,91 +170,34 @@ watch(profileRefreshTrigger, () => {
 .profile-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5);
-  min-height: 520px;
-}
-
-/* 头部 */
-.profile-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.header-brand {
-  display: flex;
-  align-items: center;
   gap: var(--space-4);
 }
 
-.brand-icon {
-  width: 52px;
-  height: 52px;
-  background: var(--color-primary);
-  color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.header-brand h2 {
-  margin: 0 0 var(--space-1);
-  color: var(--color-text-strong);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-extrabold);
-}
-
-.header-brand p {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  max-width: 360px;
-}
-
-.header-meta {
-  text-align: right;
-}
-
-.update-label {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  margin-bottom: 2px;
-}
-
-.update-time {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-/* 维度列表 */
 .dimensions-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-2);
 }
 
 .dimension-row {
   display: flex;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-4);
-  margin: 0 calc(-1 * var(--space-4));
-  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
   cursor: pointer;
+  background: var(--color-surface);
   transition: all var(--transition-base);
 }
 
 .dimension-row:hover {
-  background: var(--color-bg);
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
 }
 
 .dimension-row.is-expanded {
-  background: var(--color-bg);
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
 }
 
 .row-index {
@@ -264,8 +207,8 @@ watch(profileRefreshTrigger, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-surface-hover);
-  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
   color: var(--color-text-muted);
   font-size: var(--text-2xs);
   font-family: var(--font-mono);
@@ -275,128 +218,5 @@ watch(profileRefreshTrigger, () => {
 .row-main {
   flex: 1;
   min-width: 0;
-}
-
-.row-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-4);
-  margin-bottom: var(--space-2);
-}
-
-.row-header h4 {
-  margin: 0;
-  color: var(--color-text-strong);
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
-}
-
-.row-status {
-  font-size: var(--text-xs);
-  color: var(--color-success);
-  padding: 2px var(--space-2);
-  background: var(--color-success-soft);
-  border-radius: var(--radius-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.row-status.pending {
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-}
-
-.row-value {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-/* 证据 */
-.row-evidence {
-  margin-top: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.evidence-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-}
-
-.evidence-list {
-  margin: 0;
-  padding-left: var(--space-4);
-  list-style: disc;
-}
-
-.evidence-list li {
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  margin-bottom: var(--space-1);
-}
-
-.evidence-list li:last-child {
-  margin-bottom: 0;
-}
-
-.row-expand-icon {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-  transition: transform var(--transition-base);
-}
-
-.dimension-row.is-expanded .row-expand-icon {
-  transform: rotate(180deg);
-}
-
-/* 空状态 */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  min-height: 320px;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 64px;
-  height: 64px;
-  background: var(--color-bg);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
-}
-
-.empty-state p {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-/* 响应式 */
-@media (max-width: 768px) {
-  .row-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
-
-  .header-meta {
-    display: none;
-  }
 }
 </style>

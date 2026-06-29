@@ -8,9 +8,10 @@
     
     <div class="history-container">
       <div class="view-header">
-        <el-button @click="router.push('/resource-generator')" class="back-btn" link>
-          <el-icon><ArrowLeft /></el-icon> 返回引擎
-        </el-button>
+        <button @click="router.push('/resource-generator')" class="back-btn">
+          <ArrowLeft class="back-btn-icon" />
+          <span>返回引擎</span>
+        </button>
         <div class="header-titles">
           <h2>资源生成历史</h2>
           <p>查看并回顾您使用多智能体协同生成的所有专属学习资料</p>
@@ -18,7 +19,9 @@
       </div>
 
       <div class="history-list-wrapper" v-loading="loading">
-        <el-empty v-if="!loading && historyList.length === 0" description="暂无资源生成记录" />
+        <div v-if="!loading && historyList.length === 0" class="empty-state-container">
+          <p>暂无资源生成记录</p>
+        </div>
         
         <div v-else class="history-grid">
           <div
@@ -29,8 +32,8 @@
           >
             <div class="card-status-bar" :class="item.status"></div>
             <div class="card-header">
-              <span class="card-time"><el-icon><Clock /></el-icon> {{ formatTime(item.created_at) }}</span>
-              <el-tag size="small" :type="getStatusType(item.status)" effect="light" round>{{ getStatusText(item.status) }}</el-tag>
+              <span class="card-time"><Clock class="card-time-icon" /> {{ formatTime(item.created_at) }}</span>
+              <span class="tag-pill" :class="getStatusType(item.status)">{{ getStatusText(item.status) }}</span>
             </div>
             <div class="card-body">
               <h3 class="learning-need" :title="item.learning_need || '未提供学习需求'">
@@ -44,21 +47,38 @@
             </div>
             <div class="card-footer">
               <span>查看详情</span>
-              <el-icon><ArrowRight /></el-icon>
+              <ArrowRight class="footer-arrow-icon" />
             </div>
           </div>
         </div>
         <div class="pagination-wrapper" v-if="total > 0">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[12, 24, 48]"
-            layout="total, sizes, prev, pager, next"
-            :total="total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-            background
-          />
+          <div class="custom-pagination">
+            <span class="pagination-total">共 {{ total }} 条</span>
+            <div class="pagination-size">
+              <select v-model="pageSize" @change="handleSizeChange(pageSize)" class="pagination-select">
+                <option :value="12">12 条/页</option>
+                <option :value="24">24 条/页</option>
+                <option :value="48">48 条/页</option>
+              </select>
+            </div>
+            <div class="pagination-buttons">
+              <button 
+                class="btn-pager" 
+                :disabled="currentPage === 1" 
+                @click="handleCurrentChange(currentPage - 1)"
+              >
+                上一页
+              </button>
+              <span class="pagination-current">{{ currentPage }} / {{ Math.ceil(total / pageSize) }}</span>
+              <button 
+                class="btn-pager" 
+                :disabled="currentPage >= Math.ceil(total / pageSize)" 
+                @click="handleCurrentChange(currentPage + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -69,7 +89,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, Clock, ArrowRight } from '@element-plus/icons-vue'
+import { PhArrowLeft as ArrowLeft, PhClock as Clock, PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
 import { getGeneratedResources } from '@/features/resource/api/resource-history'
 import type { GeneratedResourceItem } from '@/features/resource/api/resource-history'
 import { getResourceTypeLabel } from '@/features/resource/model/ResourceGeneratorConstants'
@@ -142,18 +162,13 @@ onMounted(() => {
 
   min-height: calc(100vh - 64px);
   position: relative;
-  background: var(--color-bg);
+  background: #f4f7fb;
   overflow-x: hidden;
   font-family: var(--font-sans);
 }
 
 .omni-ambient-bg {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  overflow: hidden;
-  background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+  display: none;
 }
 
 .ambient-glow {
@@ -191,30 +206,43 @@ onMounted(() => {
 }
 
 .view-header {
-  margin-bottom: 40px;
+  margin-bottom: 28px;
 }
 
 .back-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 24px;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-secondary);
+  transition: color var(--transition-base);
 }
 
 .back-btn:hover {
   color: var(--color-primary);
 }
 
+.back-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .header-titles h2 {
-  font-size: 2.5rem;
+  font-size: 30px;
   font-weight: 800;
   color: var(--color-text-strong);
   margin: 0 0 12px 0;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .header-titles p {
-  font-size: 1.1rem;
+  font-size: 15px;
   color: var(--color-text-secondary);
   margin: 0;
   font-family: var(--agent-body-font);
@@ -223,19 +251,17 @@ onMounted(() => {
 .history-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .history-card {
   position: relative;
   background: var(--color-surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: 8px;
   padding: var(--space-6);
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
@@ -245,8 +271,8 @@ onMounted(() => {
 
 .history-card:hover {
   background: var(--color-surface);
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(23, 32, 51, 0.08);
   border-color: var(--color-border-strong);
 }
 
@@ -260,15 +286,15 @@ onMounted(() => {
 }
 
 .card-status-bar.success, .card-status-bar.completed {
-  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
+  background: #4f46e5;
 }
 
 .card-status-bar.running, .card-status-bar.processing {
-  background: linear-gradient(90deg, var(--cat-tutor), #60A5FA);
+  background: #0ea5e9;
 }
 
 .card-status-bar.failed, .card-status-bar.error {
-  background: linear-gradient(90deg, var(--color-danger), #F87171);
+  background: #ef4444;
 }
 
 .card-header {
@@ -285,6 +311,46 @@ onMounted(() => {
   align-items: center;
   gap: var(--space-1);
   font-family: var(--font-mono);
+}
+
+.card-time-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: var(--radius-pill);
+}
+
+.tag-pill.success {
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.tag-pill.danger {
+  background: rgba(239, 68, 68, 0.08);
+  color: #B91C1C;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.tag-pill.primary {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1D4ED8;
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.tag-pill.info {
+  background: rgba(100, 116, 139, 0.08);
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.15);
 }
 
 .card-body {
@@ -333,6 +399,21 @@ onMounted(() => {
   transition: opacity 0.2s;
 }
 
+.footer-arrow-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+
+.empty-state-container {
+  padding: 80px 40px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
 .history-card:hover .card-footer {
   opacity: 1;
 }
@@ -341,6 +422,63 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   margin-top: 40px;
+}
+
+.custom-pagination {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.pagination-select {
+  height: 32px;
+  padding: 0 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-pager {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.btn-pager:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-text);
+}
+
+.btn-pager:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-current {
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 @media (max-width: 768px) {

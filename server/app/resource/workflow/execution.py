@@ -74,7 +74,15 @@ async def execute_resource_agent(
     started = time.perf_counter()
 
     # 发送开始事件
-    await _observe(events.send(agent_id, "running", "开始生成...", 0))
+    await _observe(
+        events.send(
+            agent_id,
+            "running",
+            "开始生成...",
+            0,
+            data={"phase": "generation"},
+        )
+    )
 
     # 更新 run 状态为 running
     try:
@@ -166,7 +174,20 @@ async def execute_resource_agent(
         )
 
     # 发送成功事件
-    await _observe(events.send(agent_id, "completed", result.summary, 100))
+    await _observe(
+        events.send(
+            agent_id,
+            "completed",
+            result.summary,
+            100,
+            data={
+                "phase": "artifact_saved",
+                "artifact_id": str(item.id),
+                "elapsed_ms": elapsed_ms,
+                "metrics": result.metrics,
+            },
+        )
+    )
 
     return AgentOutcome(
         agent_id=agent_id,
@@ -216,7 +237,15 @@ async def _record_failure(
     except Exception as e:
         logger.error(f"Failed to record agent failure to database: {e}")
 
-    await _observe(events.send(agent_id, "failed", error_message, 0))
+    await _observe(
+        events.send(
+            agent_id,
+            "failed",
+            error_message,
+            0,
+            data={"phase": stage, "elapsed_ms": elapsed_ms},
+        )
+    )
 
     return AgentOutcome(
         agent_id=agent_id,

@@ -8,9 +8,10 @@
 
     <div class="history-container">
       <div class="view-header">
-        <el-button @click="router.push('/path-planner')" class="back-btn" link>
-          <el-icon><ArrowLeft /></el-icon> 返回路径规划
-        </el-button>
+        <button @click="router.push('/path-planner')" class="back-btn">
+          <ArrowLeft class="back-btn-icon" />
+          <span>返回路径规划</span>
+        </button>
         <div class="header-titles">
           <h2>路径资源记录</h2>
           <p>查看学习路径各节点生成过的资料记录，并回到对应节点继续学习。</p>
@@ -18,7 +19,9 @@
       </div>
 
       <div class="history-list-wrapper" v-loading="loading">
-        <el-empty v-if="!loading && historyList.length === 0" description="暂无路径资源记录" />
+        <div v-if="!loading && historyList.length === 0" class="empty-state-container">
+          <p>暂无路径资源记录</p>
+        </div>
 
         <div v-else class="history-grid">
           <div
@@ -29,8 +32,8 @@
           >
             <div class="card-status-bar" :class="item.status"></div>
             <div class="card-header">
-              <span class="card-time"><el-icon><Clock /></el-icon> {{ formatTime(item.created_at) }}</span>
-              <el-tag size="small" :type="getStatusType(item.status)" effect="light" round>{{ getStatusText(item.status) }}</el-tag>
+              <span class="card-time"><Clock class="card-time-icon" /> {{ formatTime(item.created_at) }}</span>
+              <span class="tag-pill" :class="getStatusType(item.status)">{{ getStatusText(item.status) }}</span>
             </div>
             <div class="card-body">
               <h3 class="learning-need" :title="item.title || item.node_title || item.learning_need || '未命名路径资源'">
@@ -45,22 +48,39 @@
             </div>
             <div class="card-footer">
               <span>查看路径资源</span>
-              <el-icon><ArrowRight /></el-icon>
+              <ArrowRight class="footer-arrow-icon" />
             </div>
           </div>
         </div>
 
         <div class="pagination-wrapper" v-if="total > 0">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[12, 24, 48]"
-            layout="total, sizes, prev, pager, next"
-            :total="total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-            background
-          />
+          <div class="custom-pagination">
+            <span class="pagination-total">共 {{ total }} 条</span>
+            <div class="pagination-size">
+              <select v-model="pageSize" @change="handleSizeChange(pageSize)" class="pagination-select">
+                <option :value="12">12 条/页</option>
+                <option :value="24">24 条/页</option>
+                <option :value="48">48 条/页</option>
+              </select>
+            </div>
+            <div class="pagination-buttons">
+              <button 
+                class="btn-pager" 
+                :disabled="currentPage === 1" 
+                @click="handleCurrentChange(currentPage - 1)"
+              >
+                上一页
+              </button>
+              <span class="pagination-current">{{ currentPage }} / {{ Math.ceil(total / pageSize) }}</span>
+              <button 
+                class="btn-pager" 
+                :disabled="currentPage >= Math.ceil(total / pageSize)" 
+                @click="handleCurrentChange(currentPage + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -70,7 +90,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, Clock, ArrowRight } from '@element-plus/icons-vue'
+import { PhArrowLeft as ArrowLeft, PhClock as Clock, PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
 import { getPathGeneratedResources } from '@/features/learning-path/api/path-resource'
 import type { PathGeneratedResourceItem } from '@/features/resource/api/resource-history'
 import { getResourceTypeLabel } from '@/features/resource/model/ResourceGeneratorConstants'
@@ -211,14 +231,27 @@ onMounted(() => {
 }
 
 .back-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 24px;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-secondary);
+  transition: color var(--transition-base);
 }
 
 .back-btn:hover {
   color: var(--color-primary);
+}
+
+.back-btn-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .header-titles h2 {
@@ -304,6 +337,46 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
+.card-time-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: var(--radius-pill);
+}
+
+.tag-pill.success {
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.tag-pill.danger {
+  background: rgba(239, 68, 68, 0.08);
+  color: #B91C1C;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.tag-pill.primary {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1D4ED8;
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.tag-pill.info {
+  background: rgba(100, 116, 139, 0.08);
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.15);
+}
+
 .card-body {
   flex: 1;
   margin: 20px 0;
@@ -345,10 +418,82 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.footer-arrow-icon {
+  width: 16px;
+  height: 16px;
+  color: #0369A1;
+}
+
+.empty-state-container {
+  padding: 80px 40px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+}
+
 .pagination-wrapper {
   display: flex;
   justify-content: center;
   margin-top: 32px;
+}
+
+.custom-pagination {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.pagination-select {
+  height: 32px;
+  padding: 0 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-pager {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.btn-pager:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-text);
+}
+
+.btn-pager:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-current {
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 @media (max-width: 768px) {

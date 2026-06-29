@@ -16,19 +16,16 @@
           </div>
         </div>
 
-        <!-- Cell Card (with tooltip if detail is present) -->
-        <el-tooltip
+        <!-- Cell Card (with title if detail is present) -->
+        <div 
           v-if="cell.detail"
-          :content="cell.detail"
-          placement="top"
-          effect="dark"
-          :show-after="100"
+          class="cell-card" 
+          :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]"
+          :title="cell.detail"
         >
-          <div class="cell-card" :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]">
-            <span class="cell-label">{{ cell.label }}</span>
-            <div class="detail-indicator"></div>
-          </div>
-        </el-tooltip>
+          <span class="cell-label">{{ cell.label }}</span>
+          <div class="detail-indicator"></div>
+        </div>
         <div v-else class="cell-card" :class="`cell-${cell.status}`">
           <span class="cell-label">{{ cell.label }}</span>
         </div>
@@ -53,20 +50,17 @@
           <span class="address-text">{{ cell.index }}</span>
         </div>
 
-        <!-- Center: Cell Card (with inline detail + tooltip if detail present) -->
+        <!-- Center: Cell Card (with inline detail + title if detail present) -->
         <div class="cell-col">
-          <el-tooltip
+          <div 
             v-if="cell.detail"
-            :content="cell.detail"
-            placement="top"
-            effect="dark"
-            :show-after="100"
+            class="cell-card-vertical" 
+            :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]"
+            :title="cell.detail"
           >
-            <div class="cell-card-vertical" :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]">
-              <span class="cell-label">{{ cell.label }}</span>
-              <span class="cell-detail-inline">— {{ cell.detail }}</span>
-            </div>
-          </el-tooltip>
+            <span class="cell-label">{{ cell.label }}</span>
+            <span class="cell-detail-inline">- {{ cell.detail }}</span>
+          </div>
           <div v-else class="cell-card-vertical" :class="`cell-${cell.status}`">
             <span class="cell-label">{{ cell.label }}</span>
           </div>
@@ -94,21 +88,18 @@
         class="matrix-cell-wrapper animate-cell"
         :style="{ '--idx': idx }"
       >
-        <el-tooltip
+        <div 
           v-if="cell.detail"
-          :content="cell.detail"
-          placement="top"
-          effect="dark"
-          :show-after="100"
+          class="cell-card-matrix" 
+          :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]"
+          :title="cell.detail"
         >
-          <div class="cell-card-matrix" :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]">
-            <span class="matrix-cell-index">{{ cell.index }}</span>
-            <span class="matrix-cell-label">{{ cell.label }}</span>
-            <div v-if="cell.pointer" class="matrix-cell-pointer-badge">
-              {{ cell.pointer }}
-            </div>
+          <span class="matrix-cell-index">{{ cell.index }}</span>
+          <span class="matrix-cell-label">{{ cell.label }}</span>
+          <div v-if="cell.pointer" class="matrix-cell-pointer-badge">
+            {{ cell.pointer }}
           </div>
-        </el-tooltip>
+        </div>
         <div v-else class="cell-card-matrix" :class="`cell-${cell.status}`">
           <span class="matrix-cell-index">{{ cell.index }}</span>
           <span class="matrix-cell-label">{{ cell.label }}</span>

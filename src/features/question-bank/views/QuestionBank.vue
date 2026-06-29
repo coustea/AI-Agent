@@ -441,7 +441,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { toast } from 'vue-sonner'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
 import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
 import {
@@ -859,7 +859,7 @@ async function loadQuestionBank() {
     difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
     types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
   } catch {
-    ElMessage.error('鍔犺浇棰樺簱澶辫触')
+    toast.error('鍔犺浇棰樺簱澶辫触')
   } finally {
     bankLoading.value = false
   }
@@ -899,7 +899,7 @@ async function loadWrongBook() {
     })
     archivedWrongTotal.value = archivedResult.total || 0
   } catch {
-    ElMessage.error('加载错题本失败')
+    toast.error('加载错题本失败')
   } finally {
     wrongLoading.value = false
   }
@@ -959,7 +959,7 @@ function startRecommendedPractice() {
   const pool = practicePool.value.filter((item) => !recommendedSubject.value || item.subject === recommendedSubject.value)
   const selected = shuffle(pool.length ? pool : practicePool.value).slice(0, recommendedCount.value)
   if (!selected.length) {
-    ElMessage.warning('暂无题目')
+    toast.warning('暂无题目')
     return
   }
   startExam(selected, '推荐练习')
@@ -967,7 +967,7 @@ function startRecommendedPractice() {
 
 function startSingleDailyQuestion() {
   if (!dailyQuestion.value) {
-    ElMessage.warning('暂无每日一题')
+    toast.warning('暂无每日一题')
     return
   }
   startExam([dailyQuestion.value], '每日一题')
@@ -989,12 +989,12 @@ async function startCustomPractice(config: typeof practiceForm) {
     })
     const selected = result.items || []
     if (!selected.length) {
-      ElMessage.warning('没有符合条件的题目')
+      toast.warning('没有符合条件的题目')
       return
     }
     startExam(selected, '自定义练习')
   } catch {
-    ElMessage.error('鐢熸垚缁冧範澶辫触')
+    toast.error('鐢熸垚缁冧範澶辫触')
   } finally {
     practiceLoading.value = false
   }
@@ -1077,7 +1077,7 @@ function resetPaperForm() {
 
 async function generatePaperPreview() {
   const targetCount = paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
-  if (targetCount <= 0) return ElMessage.warning('请至少选择 1 道题目')
+  if (targetCount <= 0) return toast.warning('请至少选择 1 道题目')
   paperLoading.value = true
   try {
     const result = await fetchQuizBankQuestions({
@@ -1093,10 +1093,10 @@ async function generatePaperPreview() {
       selected.push(...shuffle(sameType).slice(0, config.count))
     })
     paperPreview.value = selected
-    if (!selected.length) ElMessage.warning('暂无题目')
-    else ElMessage.success(`已生成 ${selected.length} 道题目`)
+    if (!selected.length) toast.warning('暂无题目')
+    else toast.success(`已生成 ${selected.length} 道题目`)
   } catch {
-    ElMessage.error('生成失败')
+    toast.error('生成失败')
   } finally {
     paperLoading.value = false
   }
@@ -1135,18 +1135,16 @@ function stopExamTimer() {
 }
 
 function quitExam() {
-  ElMessageBox.confirm('当前进度将丢失，确定退出吗？', '退出考试', { type: 'warning' })
-    .then(() => backWorkspace())
-    .catch(() => undefined)
+  if (window.confirm('当前进度将丢失，确定退出吗？')) {
+    backWorkspace()
+  }
 }
 
 async function submitExam() {
   if (examSubmitted.value) return
   const unAnswered = examPaper.value.length - examAnsweredCount.value
   if (unAnswered > 0) {
-    try {
-      await ElMessageBox.confirm(`还有 ${unAnswered} 道题未作答，确定交卷吗？`, '确认交卷', { type: 'warning' })
-    } catch {
+    if (!window.confirm(`还有 ${unAnswered} 道题未作答，确定交卷吗？`)) {
       return
     }
   }

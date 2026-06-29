@@ -20,10 +20,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user
+from app.auth.security import get_current_user, get_current_user_flexible
 from app.config import WORKPLACE_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
@@ -33,7 +34,12 @@ from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
-from app.resource.event import get_resource_channel, encode_resource_sse, RESOURCE_TERMINAL_EVENTS
+from app.resource.event import (
+    RESOURCE_TERMINAL_EVENTS,
+    ResourceEvents,
+    encode_resource_sse,
+    get_resource_channel,
+)
 
 STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
 
@@ -66,6 +72,20 @@ async def create_resource_task(
 
     profile_builder = get_profile_service()
     profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
+    initialized = await repo.initialize_run(
+        user_id=current_user.id,
+        resource_id=resource_id,
+        run_id=run_id,
+    )
+    if not initialized:
+        return HttpResponse.error(code=409, message="资源任务无法启动")
+
+    events = ResourceEvents(
+        user_id=current_user.id,
+        resource_id=resource_id,
+        run_id=run_id,
+    )
+    await events.open()
 
     background_tasks.add_task(
         run_multi_agent_generation,
@@ -107,6 +127,20 @@ async def create_single_resource_task(
     )
     resource_id = result["resource_id"]
     run_id = str(uuid.uuid4())
+    initialized = await repo.initialize_run(
+        user_id=current_user.id,
+        resource_id=resource_id,
+        run_id=run_id,
+    )
+    if not initialized:
+        return HttpResponse.error(code=409, message="资源任务无法启动")
+
+    events = ResourceEvents(
+        user_id=current_user.id,
+        resource_id=resource_id,
+        run_id=run_id,
+    )
+    await events.open()
 
     # 单智能体模式：通过多智能体流水线执行，只启用一个 agent
     background_tasks.add_task(
@@ -146,13 +180,19 @@ async def get_generation_status(
 async def get_resource_events(
     resource_id: int,
     run_id: str,
-    current_user: User = Depends(get_current_user),
+    after_sequence: int = Query(default=0, ge=0),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
     """SSE 推送任务事件。"""
     # 验证资源所有权
     service = ResourceService(session)
-    resource = await service.get_resource(current_user.id, resource_id)
+    resource = await service.get_resource(
+        current_user.id,
+        resource_id,
+        allowed_sources=STANDALONE_RESOURCE_SOURCES,
+    )
     if resource is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
 
@@ -161,12 +201,19 @@ async def get_resource_events(
     if events is None:
         return HttpResponse.error(code=410, message="事件流已过期或不存在")
 
+    resume_sequence = after_sequence
+    if last_event_id and last_event_id.isdigit():
+        resume_sequence = max(resume_sequence, int(last_event_id))
+
     async def event_generator():
+        queue: asyncio.Queue | None = None
         try:
-            queue, replay = await events.subscribe(after_sequence=0)
+            queue, replay = await events.subscribe(after_sequence=resume_sequence)
             # 先发送回放事件
             for event in replay:
                 yield encode_resource_sse(event)
+                if event.event in RESOURCE_TERMINAL_EVENTS:
+                    return
             # 然后监听新事件
             while True:
                 try:
@@ -180,7 +227,8 @@ async def get_resource_events(
         except Exception as e:
             logger.error("SSE event generator error: %s", e)
         finally:
-            await events.unsubscribe(queue)
+            if queue is not None:
+                await events.unsubscribe(queue)
 
     return StreamingResponse(
         event_generator(),

@@ -1,138 +1,145 @@
 <template>
-  <div class="split-auth-page">
-    <div class="visual-side">
-      <div class="visual-content">
-        <div class="brand-top">
-          <div class="logo-core emerald"></div>
-          <span class="brand-text">EDU_CORE</span>
-        </div>
-
-        <div class="hero-text-wrap">
-          <h1 class="main-title">建立<br/>学习档案</h1>
-          <p class="sub-title" style="text-indent: 2em">系统正在分配空间资源<br/>注册即可免费享受全天候 AI 学习对话辅导</p>
-        </div>
-
-        <div class="system-status">
-          <div class="status-item">
-            <span class="label">ACCOUNT</span>
-            <span class="value emerald-text">CREATOR</span>
-          </div>
-          <div class="status-item">
-            <span class="label">INSTANCE</span>
-            <span class="value val-text">ACTIVE</span>
-          </div>
-        </div>
+  <main class="auth-page">
+    <section class="visual-side" aria-label="学习档案介绍">
+      <div class="brand">
+        <span class="brand-mark"><AppLogo /></span>
+        <span>学枢智导</span>
       </div>
 
-      <div class="neural-bg">
-        <div class="orb orb-emerald-1"></div>
-        <div class="orb orb-emerald-2"></div>
-        <div class="grid-layer"></div>
+      <div class="visual-copy">
+        <span class="eyebrow">从你的目标开始</span>
+        <h1>建立一份会成长的<br>个人学习档案</h1>
+        <p>系统会根据学习行为持续调整画像，让路径、资源和辅导真正贴合你的进度。</p>
       </div>
-    </div>
 
-    <div class="form-side">
+      <div class="profile-preview" aria-hidden="true">
+        <div class="preview-card">
+          <span class="preview-index">01</span>
+          <div><strong>学习目标</strong><small>明确方向与节奏</small></div>
+        </div>
+        <div class="preview-card is-highlighted">
+          <span class="preview-index">02</span>
+          <div><strong>动态画像</strong><small>识别优势与薄弱点</small></div>
+        </div>
+        <div class="preview-card">
+          <span class="preview-index">03</span>
+          <div><strong>个性资源</strong><small>按需生成学习材料</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-side">
       <div class="form-container">
-        <div class="form-header">
-          <h2 class="emerald-text">注册账号</h2>
-          <p>NEW_REGISTRATION</p>
+        <div class="mobile-brand">
+          <span class="brand-mark"><AppLogo /></span>
+          <span>学枢智导</span>
         </div>
 
-        <el-form
-            ref="registerFormRef"
-            :model="form"
-            :rules="rules"
-            label-position="top"
-            class="custom-form"
-            hide-required-asterisk
-            @keyup.enter="handleRegister(registerFormRef)"
-        >
-          <el-form-item prop="username">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span>用户名（必填）</span>
-                <small>USERNAME</small>
-              </span>
-            </template>
-            <el-input v-model="form.username" placeholder="定义您的标识" :prefix-icon="User" size="large" clearable />
-          </el-form-item>
+        <div class="form-header">
+          <h2>创建学习账号</h2>
+          <p>几步完成，开启你的个性化学习空间</p>
+        </div>
 
-          <el-form-item prop="password">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span>原始密码（必填）</span>
-                <small>PASSWORD</small>
-              </span>
-            </template>
-            <el-input v-model="form.password" type="password" placeholder="设置访问密码" :prefix-icon="Lock" show-password size="large" />
-          </el-form-item>
+        <form class="custom-form" @submit.prevent="handleRegister">
+          <div class="form-group" :class="{ 'has-error': errors.username }">
+            <label class="field-label" for="register-username">用户名</label>
+            <div class="input-wrapper">
+              <User class="input-icon" />
+              <input
+                id="register-username"
+                v-model="form.username"
+                class="input-control"
+                type="text"
+                autocomplete="username"
+                placeholder="请输入用户名"
+                :disabled="isDeploying"
+              />
+            </div>
+            <span v-if="errors.username" class="form-error">{{ errors.username }}</span>
+          </div>
 
-          <el-form-item prop="confirmPassword">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span>确认密码（必填）</span>
-                <small>CONFIRM</small>
-              </span>
-            </template>
-            <el-input v-model="form.confirmPassword" type="password" placeholder="再次确认密码" :prefix-icon="Lock" show-password size="large" />
-          </el-form-item>
+          <div class="form-row">
+            <div class="form-group" :class="{ 'has-error': errors.password }">
+              <label class="field-label" for="register-password">密码</label>
+              <div class="input-wrapper">
+                <Lock class="input-icon" />
+                <input
+                  id="register-password"
+                  v-model="form.password"
+                  class="input-control"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="至少 6 个字符"
+                  :disabled="isDeploying"
+                />
+              </div>
+              <span v-if="errors.password" class="form-error">{{ errors.password }}</span>
+            </div>
 
-          <el-form-item prop="email">
-            <template #label>
-              <span class="field-label">
-                <span><span style="margin-right: var(--space-1)">*</span>电子邮箱（选填）</span>
-                <small>EMAIL</small>
-              </span>
-            </template>
-            <el-input v-model="form.email" placeholder="输入您的 Email" :prefix-icon="Message" size="large" clearable />
-          </el-form-item>
-
-          <div class="action-zone">
-            <el-button
-                type="primary"
-                class="connect-btn emerald-btn"
-                :loading="isDeploying"
-                @click="handleRegister(registerFormRef)"
-            >
-              完 成 注 册
-              <el-icon class="el-icon--right"><Check /></el-icon>
-            </el-button>
-
-            <div v-if="showLog" class="terminal-log">
-              > 校验数据格式... [OK]<br/>
-              > 分配用户空间... [OK]<br/>
-              > 画像系统初始化就绪。
+            <div class="form-group" :class="{ 'has-error': errors.confirmPassword }">
+              <label class="field-label" for="register-confirm-password">确认密码</label>
+              <div class="input-wrapper">
+                <Lock class="input-icon" />
+                <input
+                  id="register-confirm-password"
+                  v-model="form.confirmPassword"
+                  class="input-control"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="再次输入密码"
+                  :disabled="isDeploying"
+                />
+              </div>
+              <span v-if="errors.confirmPassword" class="form-error">{{ errors.confirmPassword }}</span>
             </div>
           </div>
 
-          <div class="form-nav">
-            <span>已经拥有账号？</span>
-            <el-link type="primary" :underline="false" @click="router.push('/login')">立即前往登录</el-link>
+          <div class="form-group" :class="{ 'has-error': errors.email }">
+            <label class="field-label" for="register-email">
+              电子邮箱
+              <span>选填</span>
+            </label>
+            <div class="input-wrapper">
+              <Message class="input-icon" />
+              <input
+                id="register-email"
+                v-model="form.email"
+                class="input-control"
+                type="email"
+                autocomplete="email"
+                placeholder="用于接收学习提醒"
+                :disabled="isDeploying"
+              />
+            </div>
+            <span v-if="errors.email" class="form-error">{{ errors.email }}</span>
           </div>
-        </el-form>
 
-        <div class="system-tag">
-          <el-icon><Connection /></el-icon>
-          <span>SECURE_CONNECTION</span>
-        </div>
+          <button type="submit" class="btn btn-primary auth-btn" :disabled="isDeploying">
+            <span>{{ isDeploying ? '正在创建' : '创建学习账号' }}</span>
+            <Check class="button-icon" />
+          </button>
+
+          <div class="form-footer">
+            <span>已经拥有账号？</span>
+            <button type="button" class="btn-link" @click="router.push('/login')">返回登录</button>
+          </div>
+        </form>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, Message, Lock, Check, Connection } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { PhUser as User, PhEnvelope as Message, PhLock as Lock, PhCheck as Check } from '@phosphor-icons/vue'
+import { toast } from 'vue-sonner'
 import { register } from '@/features/auth/api/auth'
 import { getErrorMessage } from '@/shared/api/http'
-import type { FormInstance } from 'element-plus'
+import AppLogo from '@/shared/ui/AppLogo.vue'
 
 const router = useRouter()
 const isDeploying = ref(false)
-const showLog = ref(false)
-const registerFormRef = ref()
 
 const form = reactive({
   username: '',
@@ -141,348 +148,383 @@ const form = reactive({
   confirmPassword: ''
 })
 
-const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
-  if (value !== form.password) {
-    callback(new Error('两次输入的密码不一致'))
-  } else {
-    callback()
+const errors = reactive({
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: ''
+})
+
+const validateForm = () => {
+  let isValid = true
+  errors.username = ''
+  errors.email = ''
+  errors.password = ''
+  errors.confirmPassword = ''
+
+  if (!form.username) {
+    errors.username = '请输入用户名'
+    isValid = false
+  } else if (form.username.length < 3 || form.username.length > 50) {
+    errors.username = '用户名长度需为 3-50 个字符'
+    isValid = false
   }
+
+  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    errors.email = '请输入有效的邮箱地址'
+    isValid = false
+  }
+
+  if (!form.password) {
+    errors.password = '请输入密码'
+    isValid = false
+  } else if (form.password.length < 6 || form.password.length > 50) {
+    errors.password = '密码长度需为 6-50 个字符'
+    isValid = false
+  }
+
+  if (!form.confirmPassword) {
+    errors.confirmPassword = '请确认密码'
+    isValid = false
+  } else if (form.confirmPassword !== form.password) {
+    errors.confirmPassword = '两次输入的密码不一致'
+    isValid = false
+  }
+
+  return isValid
 }
 
-const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'manual' },
-    { min: 3, max: 50, message: '用户名长度需为 3-50 个字符', trigger: 'manual' },
-  ],
-  email: [
-    { type: 'email' as const, message: '请输入有效的邮箱地址', trigger: 'manual' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'manual' },
-    { min: 6, max: 50, message: '密码长度需为 6-50 个字符', trigger: 'manual' },
-  ],
-  confirmPassword: [
-    { required: true, message: '请确认密码', trigger: 'manual' },
-    { validator: validateConfirmPassword, trigger: 'manual' },
-  ],
-}
-
-const handleRegister = async (formEl: FormInstance | undefined) => {
-  if (!formEl) return
-  await formEl.validate(async (valid: boolean) => {
-    if (valid) {
-      isDeploying.value = true
-      showLog.value = true
-      try {
-        await register({
-          username: form.username,
-          password: form.password,
-          email: form.email || undefined,
-        })
-        ElMessage.success('注册成功，欢迎加入！')
-        router.push('/login')
-      } catch (err: any) {
-        ElMessage.error(getErrorMessage(err, '注册失败，请稍后重试'))
-        showLog.value = false
-      } finally {
-        isDeploying.value = false
-      }
-    }
-  })
+const handleRegister = async () => {
+  if (!validateForm()) return
+  isDeploying.value = true
+  try {
+    await register({
+      username: form.username,
+      password: form.password,
+      email: form.email || undefined,
+    })
+    toast.success('注册成功，欢迎加入！')
+    router.push('/login')
+  } catch (err: any) {
+    toast.error(getErrorMessage(err, '注册失败，请稍后重试'))
+  } finally {
+    isDeploying.value = false
+  }
 }
 </script>
 
 <style scoped>
-.split-auth-page {
-  height: 100vh;
-  width: 100vw;
-  display: flex;
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(520px, 0.9fr);
   overflow: hidden;
-  background: var(--color-bg);
+  background: var(--color-surface);
 }
 
 .visual-side {
-  flex: 1.2;
   position: relative;
-  background: var(--color-bg);
-  color: var(--color-primary-text);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4rem;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(36px, 5.5vw, 80px);
+  background:
+    radial-gradient(circle at 16% 78%, rgba(98, 201, 197, 0.3), transparent 23rem),
+    linear-gradient(150deg, #F2F8F7 0%, #E8F6F5 54%, #D8F1F0 100%);
   overflow: hidden;
 }
 
-.visual-content {
+.visual-side::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(32, 95, 103, 0.11) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom left, rgba(0, 0, 0, 0.72), transparent 72%);
+}
+
+.brand,
+.mobile-brand {
   position: relative;
-  z-index: 10;
-  width: 100%;
-  max-width: 500px;
-  text-align: center;
-}
-
-.neural-bg {
-  position: absolute;
-  inset: 0;
   z-index: 1;
-}
-
-.grid-layer {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(rgba(16, 185, 129, 0.1) 1px, transparent 1px),
-  linear-gradient(90deg, rgba(16, 185, 129, 0.1) 1px, transparent 1px);
-  background-size: 50px 50px;
-}
-
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.15;
-  animation: orb-float 20s infinite alternate;
-}
-
-.orb-emerald-1 {
-  width: 500px;
-  height: 500px;
-  background: var(--color-success);
-  top: -100px;
-  left: -100px;
-}
-
-.orb-emerald-2 {
-  width: 400px;
-  height: 400px;
-  background: var(--tone-emerald);
-  bottom: -50px;
-  right: 10%;
-}
-
-@keyframes orb-float {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-  100% {
-    transform: translate(50px, 100px) scale(1.1);
-  }
-}
-
-.brand-top {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 4rem;
-  font-weight: var(--weight-extrabold);
-  font-family: var(--font-mono);
-  letter-spacing: 0.2em;
+  gap: 12px;
+  color: var(--color-primary-text);
+  font-size: 20px;
+  font-weight: 700;
 }
 
-.logo-core.emerald {
-  background: var(--color-success);
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  box-shadow: 0 0 10px var(--color-success);
-}
-
-.brand-text {
-  color: #022c22;
-}
-
-.hero-text-wrap {
-  margin-bottom: 4rem;
-}
-
-.main-title {
-  font-size: 4.5rem;
-  line-height: 1.1;
-  font-weight: var(--weight-extrabold);
-  margin-bottom: 2rem;
-  color: #064E3B;
-  letter-spacing: -0.02em;
-}
-
-.sub-title {
-  font-size: 1.15rem;
-  line-height: 1.8;
-  color: #0F766E;
-  max-width: 450px;
-  margin: 0 auto;
-}
-
-.system-status {
-  margin-top: 5rem;
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  padding: 7px;
   display: flex;
-  justify-content: center;
-  gap: 3rem;
+  color: var(--color-primary-text);
+  background: rgba(252, 255, 255, 0.74);
+  border: 1px solid rgba(70, 184, 180, 0.32);
+  border-radius: 13px;
+  box-shadow: var(--shadow-sm);
 }
 
-.status-item {
+.visual-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 650px;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 18px;
+  color: var(--color-primary-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.visual-copy h1 {
+  margin: 0 0 24px;
+  font-size: clamp(40px, 4.6vw, 64px);
+  line-height: 1.1;
+  letter-spacing: -0.055em;
+}
+
+.visual-copy p {
+  max-width: 540px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 17px;
+  line-height: 1.85;
+}
+
+.profile-preview {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 660px;
+}
+
+.preview-card {
+  min-height: 112px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-}
-
-.status-item .label {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-}
-
-.status-item .value {
-  font-weight: var(--weight-bold);
-  font-family: var(--font-mono);
-}
-
-.val-text {
+  justify-content: space-between;
   color: var(--color-text-secondary);
+  background: rgba(252, 255, 255, 0.58);
+  border: 1px solid rgba(200, 228, 227, 0.86);
+  border-radius: 14px;
 }
 
-.emerald-text {
-  color: var(--color-success) !important;
+.preview-card.is-highlighted {
+  color: var(--color-text-strong);
+  background: rgba(216, 241, 240, 0.9);
+  border-color: var(--color-primary);
+  transform: translateY(-10px);
+  box-shadow: var(--shadow-sm);
+}
+
+.preview-index {
+  color: var(--color-primary-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.preview-card strong,
+.preview-card small {
+  display: block;
+}
+
+.preview-card strong {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.preview-card small {
+  font-size: 11px;
 }
 
 .form-side {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 4rem;
+  padding: clamp(28px, 4vw, 56px);
   background: var(--color-surface);
-  box-shadow: var(--shadow-xl);
-  z-index: 5;
+  box-shadow: -20px 0 50px rgba(32, 95, 103, 0.07);
+  z-index: 2;
 }
 
 .form-container {
   width: 100%;
-  max-width: 400px;
+  max-width: 500px;
+}
+
+.mobile-brand {
+  display: none;
 }
 
 .form-header {
-  margin-bottom: 1.5rem;
-  text-align: center;
+  margin-bottom: 28px;
 }
 
 .form-header h2 {
-  font-size: 2.2rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-success);
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
+  font-size: 32px;
+  letter-spacing: -0.04em;
 }
 
 .form-header p {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--tone-emerald);
-  letter-spacing: 0.1em;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
 .field-label {
-  font-size: 0.9rem;
-  font-weight: var(--weight-bold);
-  color: #334155;
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.field-label small {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--color-text-faint);
-  font-weight: var(--weight-normal);
-}
-
-:deep(.el-form-item) {
-  margin-bottom: var(--space-4) !important;
-}
-
-:deep(.el-input__wrapper) {
-  background: var(--color-surface-hover) !important;
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid var(--color-border) !important;
-  box-shadow: none !important;
-  padding: 6px 14px !important;
-  transition: all var(--transition-slow) !important;
-}
-
-:deep(.el-input__inner) {
-  color: var(--color-text-strong) !important;
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  background: var(--color-surface) !important;
-  border-color: var(--color-success) !important;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1) !important;
-}
-
-.action-zone {
-  margin-top: 1.5rem;
-}
-
-.connect-btn.emerald-btn {
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-lg) !important;
-  background: var(--color-success) !important;
-  border: none !important;
-  font-weight: var(--weight-bold);
-  font-size: 1.05rem;
-  transition: all var(--transition-slow);
-}
-
-.connect-btn:hover {
-  background: #059669 !important;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
-}
-
-.terminal-log {
-  margin-top: 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: #047857;
-  background: var(--color-success-soft);
-  border: 1px solid #A7F3D0;
-  padding: 10px;
-  border-radius: var(--radius-md);
-  line-height: 1.6;
-}
-
-.form-nav {
-  margin-top: 1.25rem;
-  text-align: center;
-  font-size: 0.95rem;
-  color: var(--color-text-muted);
-}
-
-.form-nav .el-link {
-  font-weight: var(--weight-bold);
-  margin-left: 0.5rem;
-  color: var(--color-success);
-}
-
-.required-star {
-  color: var(--color-danger);
-  margin-right: var(--space-1);
-  font-family: var(--font-sans);
-}
-
-.system-tag {
-  margin-top: 2rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--color-text-faint);
-  letter-spacing: 0.05em;
+  justify-content: space-between;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-@media (max-width: 1024px) {
-  .visual-side { display: none; }
+.field-label span {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.input-control {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px 0 43px;
+  color: var(--color-text);
+  background: #F8FCFB;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.input-control:focus {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(70, 184, 180, 0.14);
+}
+
+.has-error .input-control {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(196, 61, 91, 0.08);
+}
+
+.form-error {
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.auth-btn {
+  width: 100%;
+  height: 50px;
+  margin-top: 2px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+
+.button-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.form-footer .btn-link {
+  height: auto;
+  padding: 0;
+  color: var(--color-primary-text);
+}
+
+@media (max-width: 960px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+    min-height: 100svh;
+    overflow: auto;
+  }
+
+  .visual-side {
+    display: none;
+  }
+
+  .form-side {
+    padding: 30px 22px;
+    background:
+      radial-gradient(circle at 82% 4%, rgba(98, 201, 197, 0.18), transparent 18rem),
+      var(--color-surface);
+    box-shadow: none;
+  }
+
+  .mobile-brand {
+    display: flex;
+    margin-bottom: 34px;
+  }
+}
+
+@media (max-width: 520px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input-control {
+    transition: none;
+  }
+
+  .preview-card.is-highlighted {
+    transform: none;
+  }
 }
 </style>

@@ -1,102 +1,88 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   Design Tokens — Modern Cognitive Clean (现代高效认知风)
-   Design Core: 白得透亮、蓝得专业、线条利落、留白呼吸
+   Design Tokens: Glacier Teal Learning Studio
    ============================================================ */
 :root {
-  /* ---- Element Plus Overrides ---- */
-  --el-color-primary: #2563EB;
-  --el-color-success: #10B981;
-  --el-color-warning: #F59E0B;
-  --el-color-danger: #EF4444;
-  --el-color-info: #2563EB;
-  --el-border-radius-base: 10px;
-  --el-border-radius-small: 6px;
-  --el-border-radius-round: 999px;
-  --el-text-color-primary: #0F172A;
-  --el-text-color-regular: #334155;
-  --el-text-color-secondary: #64748B;
-  --el-text-color-placeholder: #94A3B8;
-  --el-border-color: #E2E8F0;
-  --el-border-color-light: #F1F5F9;
-  --el-fill-color-blank: #FFFFFF;
-  --el-fill-color: #F8FAFC;
-  --el-fill-color-light: #F1F5F9;
-  --el-box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05), 0 1px 2px rgba(15, 23, 42, 0.02);
-  --el-box-shadow-light: 0 2px 4px rgba(15, 23, 42, 0.04);
+  /* ---- Brand Colors ---- */
+  --color-primary: #46B8B4;
+  --color-primary-hover: #35A8A5;
+  --color-primary-soft: #D8F1F0;
+  --color-primary-border: #B9DEDC;
+  --color-primary-text: #205F67;
+  --color-action: #62C9C5;
+  --color-action-hover: #72D4D0;
 
-  /* ---- Brand Colors (现代教育 & AI 智慧标准蓝) ---- */
-  --color-primary: #2563EB;          /* Royal Blue 600 — 高阶智慧主色 */
-  --color-primary-hover: #1D4ED8;    /* Blue 700 */
-  --color-primary-soft: #EFF6FF;     /* Blue 50 — AI 选中激活、高亮节点 */
-  --color-primary-border: #BFDBFE;   /* Blue 200 — 轻量聚焦外圈边框 */
-  --color-primary-text: #1E3A8A;     /* Blue 900 */
+  /* ---- Light glacier surfaces ---- */
+  --color-bg: #F2F8F7;
+  --color-surface: #FCFFFF;
+  --color-surface-hover: #EAF5F4;
+  --color-border: #C8E4E3;
+  --color-border-hover: #9FD2D0;
+  --color-border-light: #DDEDEC;
 
-  /* ---- Neutral Palette (极客中性色层级) ---- */
-  --color-bg: #FFFFFF;              /* 全局主背景：绝对纯白 */
-  --color-surface: #FFFFFF;         /* 面板/卡片：纯白，通过细线建立层级 */
-  --color-surface-hover: #F8FAFC;   /* Slate 50 — 悬停填充态：干净高透的冷淡灰 */
-  --color-border: #E2E8F0;          /* Slate 200 — 全局主描边线 */
-  --color-border-hover: #CBD5E1;    /* Slate 300 — 交互悬停线 */
-  --color-border-light: #F1F5F9;    /* Slate 100 — subtle divider */
-
-  --color-text: #0F172A;            /* Slate 900 — primary text */
-  --color-text-strong: #0F172A;     /* Slate 900 — 标题、加粗公式、强强调字 */
-  --color-text-secondary: #334155;  /* Slate 700 — 正文、多选题干、逻辑说明 */
-  --color-text-muted: #64748B;      /* Slate 500 — 辅助标签、辅助时间、次要占位 */
-  --color-text-faint: #94A3B8;      /* Slate 400 — 时间戳、禁用提示 */
-
+  --color-text: #173B42;
+  --color-text-strong: #173B42;
+  --color-text-secondary: #58747A;
+  --color-text-muted: #6B858A;
+  --color-text-faint: #8DA4A8;
   --color-text-light: var(--color-text-faint);
 
-  /* ---- Semantic Colors (扁平化无渐变语义色) ---- */
-  --color-success: #10B981;         /* 答题正确 / AI 生成完毕 */
-  --color-success-soft: #ECFDF5;    /* Emerald 50 */
-  --color-warning: #F59E0B;         /* Amber 500 */
-  --color-warning-soft: #FFFBEB;    /* Amber 50 */
-  --color-danger: #EF4444;          /* 错题归纳 / 异常中断 */
-  --color-danger-soft: #FEF2F2;     /* Red 50 */
-  --color-info: #2563EB;            /* Blue 600 */
-  --color-info-soft: #EFF6FF;       /* Blue 50 */
+  /* ---- Semantic Colors ---- */
+  --color-success: #329A82;
+  --color-success-soft: #E8F7F2;
+  --color-warning: #C7922A;
+  --color-warning-soft: #FFF8E6;
+  --color-danger: #C43D5B;
+  --color-danger-soft: #FFF1F4;
+  --color-info: #46B8B4;
+  --color-info-soft: #E5F5F4;
 
-  /* ---- Category Accents (扁平化分类色) ---- */
-  --cat-tutor: #2563EB;          /* Blue 600 */
-  --cat-tutor-soft: #EFF6FF;     /* Blue 50 */
-  --cat-tutor-glow: rgba(37, 99, 235, 0.15);
+  /* ---- Category Accents (保持学术分类的统一高级微光) ---- */
+  --cat-tutor: #1E40AF;
+  --cat-tutor-soft: #EFF6FF;
+  --cat-tutor-glow: rgba(30, 64, 175, 0.06);
 
-  --cat-resource: #2563EB;       /* Blue 600 */
-  --cat-resource-soft: #EFF6FF;  /* Blue 50 */
-  --cat-resource-glow: rgba(37, 99, 235, 0.15);
+  --cat-resource: #10B981;
+  --cat-resource-soft: #ECFDF5;
+  --cat-resource-glow: rgba(16, 185, 129, 0.06);
 
-  --cat-path: #F59E0B;           /* Amber 500 */
-  --cat-path-soft: #FFFBEB;      /* Amber 50 */
-  --cat-path-glow: rgba(245, 158, 11, 0.15);
+  --cat-path: #F59E0B;
+  --cat-path-soft: #FFFBEB;
+  --cat-path-glow: rgba(245, 158, 11, 0.06);
 
-  --cat-eval: #8B5CF6;           /* Violet 500 */
-  --cat-eval-soft: #F5F3FF;      /* Violet 50 */
-  --cat-eval-glow: rgba(139, 92, 246, 0.15);
+  --cat-eval: #8B5CF6;
+  --cat-eval-soft: #F5F3FF;
+  --cat-eval-glow: rgba(139, 92, 246, 0.06);
 
-  --cat-rose: #F43F5E;           /* Rose 500 */
-  --cat-rose-soft: #FFF1F2;      /* Rose 50 */
-  --cat-rose-glow: rgba(244, 63, 94, 0.15);
+  --cat-rose: #F43F5E;
+  --cat-rose-soft: #FFF1F2;
+  --cat-rose-glow: rgba(244, 63, 94, 0.06);
 
-  /* ---- Typography (屏幕阅读无衬线字体：全面告别宋体和书法楷体) ---- */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-body: var(--font-sans);    /* 全局统一正文 */
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace; /* 仅用于代码、学术统计指标 */
+  /* ---- Typography ---- */
+  --font-sans: 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-body: var(--font-sans);
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace;
   --font-ui: var(--font-sans);
   --font-note: var(--font-sans);
   --font-display: var(--font-sans);
 
-  /* Type scale — 1.200 ratio (Minor Third) with mobile-first base ≥16px */
-  --text-xs: 0.75rem;       /* 12px — captions, badges */
-  --text-sm: 0.8125rem;     /* 13px — secondary labels */
-  --text-base: 1rem;        /* 16px — body baseline (HIG minimum) */
-  --text-md: 1.125rem;      /* 18px — large body, subheadings */
-  --text-lg: 1.3125rem;     /* 21px — card titles */
-  --text-xl: 1.625rem;      /* 26px — section headings */
-  --text-2xl: 2.125rem;     /* 34px — page titles */
-  --text-3xl: 2.75rem;      /* 44px — hero / splash */
+  /* Type scale */
+  --text-xs: 0.75rem;       /* 12px */
+  --text-sm: 0.8125rem;     /* 13px */
+  --text-base: 0.9375rem;   /* 15px — 最佳长文学术阅读底线 */
+  --text-md: 1.0625rem;     /* 17px */
+  --text-lg: 1.25rem;       /* 20px */
+  --text-xl: 1.5rem;        /* 24px */
+  --text-2xl: 2rem;         /* 32px */
+  --text-3xl: 2.5rem;       /* 40px */
 
   --weight-normal: 400;
   --weight-medium: 500;
@@ -104,11 +90,11 @@
   --weight-bold: 700;
   --weight-extrabold: 800;
 
-  --leading-tight: 1.25;
-  --leading-normal: 1.6;
-  --leading-relaxed: 1.7;
+  --leading-tight: 1.2;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.65;
 
-  /* ---- Spacing (4px base, 8dp rhythm) ---- */
+  /* ---- Spacing (呼吸感间距) ---- */
   --space-0: 0px;
   --space-0\.5: 2px;
   --space-1: 4px;
@@ -128,39 +114,69 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---- Border Radius (Crisp Industrial Geometry — 精确工业几何) ---- */
-  --radius-sm: 6px;                 /* 标准按钮锐利切割 */
-  --radius-md: 8px;                 /* 输入框、中等元素 */
-  --radius-lg: 12px;                /* 大布局元素、大按钮 */
-  --radius-xl: 16px;                /* 全局卡片、路径节点、大对话框弹窗 */
-  --radius-2xl: 20px;
-  --radius-pill: 999px;             /* 仅用于特定badge，普通按钮禁用 */
+  /* ---- Border Radius ---- */
+  --radius-sm: 8px;                 /* 工业精密感切角 */
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;                /* 高奢外圈双层物理卡片大圆角 */
+  --radius-2xl: 32px;
+  --radius-pill: 999px;
 
-  --radius-base: var(--radius-sm);  /* 按钮默认使用锐利切割 */
+  --radius-base: var(--radius-sm);
 
-  /* ---- Button Transitions (Crisp & Fast — 120ms响应) ---- */
-  --btn-transition: background-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
-                    border-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
-                    box-shadow 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* ---- Button Transitions (极其顺滑的物理惯性阻尼 spring 过渡) ---- */
+  --btn-transition: all 400ms cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* ---- Shadows (扁平化微浮雕：开阔留白、精细线条、柔和微光) ---- */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.02);
-  --shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 8px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 10px 30px rgba(37, 99, 235, 0.05), 0 1px 2px rgba(15, 23, 42, 0.02);
-  --shadow-xl: 0 20px 40px rgba(37, 99, 235, 0.08), 0 2px 4px rgba(15, 23, 42, 0.02);
+  /* ---- Tinted Ambient Shadows ---- */
+  --shadow-xs: 0 1px 2px rgba(32, 95, 103, 0.04);
+  --shadow-sm: 0 8px 24px rgba(32, 95, 103, 0.06), 0 1px 2px rgba(32, 95, 103, 0.04);
+  --shadow-md: 0 16px 40px rgba(32, 95, 103, 0.08), 0 2px 6px rgba(32, 95, 103, 0.04);
+  --shadow-lg: 0 24px 56px rgba(32, 95, 103, 0.1);
+  --shadow-xl: 0 32px 72px rgba(32, 95, 103, 0.12);
 
-  /* ---- Transitions (现代利落过渡) ---- */
-  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-base: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* ---- Transitions (惯性缓动) ---- */
+  --transition-fast: 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  --transition-base: 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  --transition-slow: 0.6s cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---- Layout ---- */
   --page-max-width: 1680px;
   --content-max-width: 1120px;
-  --navbar-height: 64px;
-  --sidebar-width: 240px;
-  --sidebar-collapsed-width: 64px;
+  --navbar-height: 72px;            /* 提拉页面气口，宽阔通透 */
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 72px;
+  --background: #F2F8F7;
+  --foreground: #173B42;
+  --card: #FCFFFF;
+  --card-foreground: #173B42;
+  --popover: #FCFFFF;
+  --popover-foreground: #173B42;
+  --primary: #62C9C5;
+  --primary-foreground: #173B42;
+  --secondary: #E5F5F4;
+  --secondary-foreground: #205F67;
+  --muted: #EAF5F4;
+  --muted-foreground: #58747A;
+  --accent: #D8F1F0;
+  --accent-foreground: #205F67;
+  --destructive: #C43D5B;
+  --border: #C8E4E3;
+  --input: #C8E4E3;
+  --ring: #46B8B4;
+  --chart-1: #46B8B4;
+  --chart-2: #62C9C5;
+  --chart-3: #205F67;
+  --chart-4: #8AD9D5;
+  --chart-5: #B9E8E5;
+  --radius: 0.625rem;
+  --sidebar: #FCFFFF;
+  --sidebar-foreground: #173B42;
+  --sidebar-primary: #62C9C5;
+  --sidebar-primary-foreground: #173B42;
+  --sidebar-accent: #D8F1F0;
+  --sidebar-accent-foreground: #205F67;
+  --sidebar-border: #C8E4E3;
+  --sidebar-ring: #46B8B4;
 }
 
 /* ============================================================
@@ -249,12 +265,15 @@ button:focus-visible, .btn:focus-visible {
 
 /* Primary Button — High-contrast solid brand color */
 .btn-primary {
-  background: var(--color-primary);
-  color: #FFFFFF;
-  border: none;
+  background: var(--color-action);
+  color: var(--color-text-strong);
+  border: 1px solid rgba(32, 95, 103, 0.12);
+  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.18);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);  /* Solid color change, no gradient */
+  background: var(--color-action-hover);
+  border-color: rgba(32, 95, 103, 0.24);
+  transform: translateY(-1px);
 }
 .btn-primary:active:not(:disabled) {
   background: var(--color-primary-hover);
@@ -262,25 +281,25 @@ button:focus-visible, .btn:focus-visible {
 
 /* Secondary Button — Elegant Slate neutral */
 .btn-secondary {
-  background: #F1F5F9;                     /* Slate 100 中性背景 */
+  background: var(--color-primary-soft);
   color: var(--color-text-strong);
   border: none;
 }
 .btn-secondary:hover:not(:disabled) {
-  background: #E2E8F0;                     /* Slate 200 */
+  background: #CBEAE8;
 }
 .btn-secondary:active:not(:disabled) {
-  background: #CBD5E1;                     /* Slate 300 */
+  background: #B9DEDC;
 }
 
 /* Outline Button — Refined border, white surface */
 .btn-outline {
-  background: #FFFFFF;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text);
 }
 .btn-outline:hover:not(:disabled) {
-  border-color: #94A3B8;                   /* Slate 400 */
+  border-color: var(--color-primary);
   color: var(--color-text-strong);
 }
 
@@ -301,7 +320,7 @@ button:focus-visible, .btn:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #DC2626;
+  background: #A92F4A;
   box-shadow: var(--shadow-md);
 }
 
@@ -469,119 +488,6 @@ button:focus-visible, .btn:focus-visible {
 }
 
 /* ============================================================
-   Element Plus Overrides — Industrial Geometry Style
-   ============================================================ */
-
-/* Base Element Plus Button */
-.el-button {
-  border-radius: 6px !important;          /* 锐利工业切割 */
-  height: 40px !important;                /* 精确工业高度 */
-  font-weight: var(--weight-semibold) !important;
-  transition: var(--btn-transition) !important;
-}
-
-/* Primary Button */
-.el-button--primary {
-  --el-button-bg-color: var(--color-primary) !important;
-  --el-button-border-color: var(--color-primary) !important;
-  --el-button-hover-bg-color: var(--color-primary-hover) !important;
-  --el-button-hover-border-color: var(--color-primary-hover) !important;
-  --el-button-disabled-bg-color: var(--color-primary) !important;
-  --el-button-disabled-border-color: var(--color-primary) !important;
-}
-.el-button--primary:hover:not(:disabled) {
-  transform: translateY(0.5px);
-}
-.el-button--primary:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.el-button--primary:disabled {
-  opacity: 0.48 !important;
-}
-
-/* Default Button — Clear neutral background */
-.el-button--default {
-  --el-button-bg-color: #FFFFFF !important;
-  --el-button-border-color: var(--color-border) !important;
-  --el-button-hover-bg-color: #F8FAFC !important;
-  --el-button-hover-border-color: #94A3B8 !important;
-  --el-button-text-color: var(--color-text) !important;
-  --el-button-hover-text-color: var(--color-text-strong) !important;
-}
-
-/* Danger Button */
-.el-button--danger {
-  --el-button-bg-color: var(--color-danger) !important;
-  --el-button-border-color: var(--color-danger) !important;
-  --el-button-hover-bg-color: #DC2626 !important;
-  --el-button-hover-border-color: #DC2626 !important;
-}
-
-/* Success Button */
-.el-button--success {
-  --el-button-bg-color: var(--color-success) !important;
-  --el-button-border-color: var(--color-success) !important;
-  --el-button-hover-bg-color: #059669 !important;
-  --el-button-hover-border-color: #059669 !important;
-}
-
-/* Small size — 32px height, 4px radius */
-.el-button--small {
-  height: 32px !important;
-  padding: 0 12px !important;
-  font-size: var(--text-xs) !important;
-  border-radius: 4px !important;
-}
-
-/* Large size — 48px height, 8px radius */
-.el-button--large {
-  height: 48px !important;
-  padding: 0 24px !important;
-  font-size: var(--text-base) !important;
-  border-radius: 8px !important;
-}
-
-/* Card */
-.el-card {
-  border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-xl) !important;
-  box-shadow: var(--shadow-xs) !important;
-  background: var(--color-surface) !important;
-  color: var(--color-text) !important;
-}
-
-/* Dialog */
-.el-dialog {
-  background: var(--color-surface) !important;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-}
-
-/* Input */
-.el-input__wrapper,
-.el-select__wrapper {
-  background: var(--color-surface-hover) !important;
-  border: 1px solid var(--color-border) !important;
-  color: var(--color-text) !important;
-  box-shadow: none !important;
-  border-radius: var(--radius-md) !important;
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-.el-input__wrapper.is-focus,
-.el-select__wrapper.is-focus {
-  background: var(--color-surface) !important;
-  border: 1px solid var(--color-primary) !important;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1) !important;
-}
-
-.el-input__inner {
-  color: var(--color-text) !important;
-  font-size: var(--text-base) !important;
-}
-
-/* ============================================================
    Reusable Component Classes
    ============================================================ */
 
@@ -594,20 +500,41 @@ button:focus-visible, .btn:focus-visible {
 }
 
 /* Panel / Card — white rounded container */
+/* Panel / Card — white rounded container */
 .panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
-  box-shadow: var(--shadow-xs);
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+  transition: all 400ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .panel:hover {
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1.5px);
+}
+
+/* Doppelrand - Double-Bezel nested card structure */
+.bezel-card-outer {
+  background: rgba(30, 64, 175, 0.015);
+  border: 1px solid var(--color-border);
+  padding: 6px;
+  border-radius: var(--radius-xl);
+  transition: all 400ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.bezel-card-outer:hover {
+  background: rgba(30, 64, 175, 0.03);
+  border-color: var(--color-border-hover);
+  transform: translateY(-1px);
+}
+.bezel-card-inner {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius-xl) - 6px);
+  padding: var(--space-5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), var(--shadow-sm);
 }
 
 /* Glassmorphism Card — translucent with backdrop blur */
@@ -709,7 +636,7 @@ button:focus-visible, .btn:focus-visible {
   background: var(--color-primary-soft) !important;
   border-color: var(--color-primary) !important;
   transform: translateY(-1px);
-  box-shadow: 0 8px 18px -8px rgba(37, 99, 235, 0.2) !important;
+  box-shadow: 0 8px 18px -8px rgba(70, 184, 180, 0.2) !important;
 }
 
 /* Divider */
@@ -913,3 +840,154 @@ button:focus-visible, .btn:focus-visible {
   font-style: normal;
 }
 
+@theme inline {
+  --font-sans: 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    @apply font-sans;
+  }
+}
+
+/* Custom Teleport Modal Overlay */
+.custom-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.custom-modal-content {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  max-width: 660px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-6);
+  position: relative;
+  animation: scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.custom-modal-content.note-preview-modal {
+  max-width: 760px;
+}
+
+.modal-close-btn {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+.modal-close-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-text-strong);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}

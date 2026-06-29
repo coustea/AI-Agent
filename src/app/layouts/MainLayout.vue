@@ -3,7 +3,7 @@
     <header class="top-navbar">
       <div class="navbar-left">
         <div class="brand-logo">
-          <el-icon><Monitor /></el-icon>
+          <AppLogo class="app-logo" />
         </div>
         <span class="brand-name">学枢智导</span>
       </div>
@@ -17,52 +17,56 @@
               @click="navigateTo(item.path)"
               :title="item.label"
           >
-            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+            <component :is="item.icon" class="nav-icon w-4 h-4" />
             <span class="nav-label">{{ item.label }}</span>
           </div>
         </nav>
       </div>
 
       <div class="navbar-right">
-        <div class="system-status" title="Agent System Synced">
-          <span class="status-dot pulsing"></span>
-          <span class="status-text">System Synced</span>
-        </div>
-        
-        <div class="profile-trigger-btn" @click="isGlobalProfileVisible = true" title="查看动态特征画像">
-          <el-icon class="profile-icon"><DataBoard /></el-icon>
+        <button class="profile-trigger-btn" type="button" @click="isGlobalProfileVisible = true" title="查看动态特征画像">
+          <DataBoard class="profile-icon w-4 h-4" />
           <span class="profile-text">动态特征</span>
-        </div>
+        </button>
 
         <div class="time-display">
-          <el-icon class="time-icon"><Clock /></el-icon>
+          <Clock class="time-icon w-4 h-4" />
           <span class="time-text">{{ currentTime }}</span>
         </div>
 
-        <el-dropdown trigger="click" @command="handleCommand" popper-class="custom-user-dropdown">
-          <div class="user-profile">
-            <div class="user-avatar">
-              <el-icon><UserFilled /></el-icon>
-            </div>
-            <div class="user-info">
-              <span class="user-name">{{ userName }}</span>
-            </div>
-            <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
-          </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <div class="dropdown-header-block" @click="router.push('/profile')">
-                <el-icon><User /></el-icon>个人中心
-              </div>
-
-              <div class="dropdown-divider"></div>
-
-              <el-dropdown-item command="logout" class="logout-item">
-                <el-icon><SwitchButton /></el-icon>退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button class="user-profile" variant="ghost" aria-label="打开用户菜单">
+              <Avatar class="user-avatar">
+                <AvatarImage
+                  v-if="currentUser?.avatar"
+                  :src="currentUser.avatar"
+                  :alt="userName"
+                />
+                <AvatarFallback>{{ userInitial }}</AvatarFallback>
+              </Avatar>
+              <span class="user-info">
+                <span class="user-name">{{ userName }}</span>
+              </span>
+              <ChevronDownIcon class="dropdown-icon" data-icon="inline-end" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent class="w-44" align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem @select="navigateToProfile">
+                <UserIcon data-icon="inline-start" />
+                个人中心
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem variant="destructive" @select="handleLogout">
+                <LogOutIcon data-icon="inline-start" />
+                退出登录
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
 
@@ -76,11 +80,10 @@
       </router-view>
     </main>
 
-    <OnboardingDialog
-        v-model="onboardingDialogVisible"
-    />
+    <GlobalNoteFab />
     <GlobalProfileDialog />
-    <GlobalNoteFab v-if="currentUser" />
+
+    <OnboardingDialog v-model="onboardingDialogVisible" />
   </div>
 </template>
 
@@ -88,10 +91,17 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Menu, Connection, Cpu, ChatDotRound,
-  SwitchButton, Monitor, UserFilled, ArrowDown, Clock,
-  User, DataBoard, Collection
-} from '@element-plus/icons-vue'
+  ChevronDownIcon,
+  ClockIcon as Clock,
+  CompassIcon as Connection,
+  CpuIcon as Cpu,
+  GraduationCapIcon as DataBoard,
+  LayoutDashboardIcon as Menu,
+  LibraryBigIcon as Collection,
+  LogOutIcon,
+  MessageSquareTextIcon as ChatDotRound,
+  UserIcon,
+} from '@lucide/vue'
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
 import { clearCurrentUser, ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
@@ -100,12 +110,24 @@ import { isGlobalProfileVisible } from '@/features/profile/model/useGlobalProfil
 import { useAuthPolling } from '@/features/auth/model/useAuthPolling'
 import { clearAuthToken } from '@/shared/auth/token'
 import GlobalNoteFab from '@/shared/ui/GlobalNoteFab.vue'
+import AppLogo from '@/shared/ui/AppLogo.vue'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const route = useRoute()
 const router = useRouter()
 const { currentUser, userName } = useCurrentUser()
 const onboardingDialogVisible = ref(false)
 const pendingPath = ref<string | null>(null)
+const userInitial = computed(() => userName.value.trim().charAt(0).toUpperCase() || 'U')
 
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu, theme: 'nav-theme-dashboard' },
@@ -132,157 +154,62 @@ const activePath = computed(() => {
     return '/question-bank'
   }
   if (current.startsWith('/profile')) {
-    return ''
+    return '/profile'
   }
-  return '/dashboard'
+  return current
 })
 
 const currentTime = ref('')
-let timer: number
+let timerId: number | null = null
 
-const loadOnboardingStatus = () => {
-  // 从 URL 参数判断是否首次登录需要弹窗
+const updateTime = () => {
+  const now = new Date()
+  currentTime.value = now.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+onMounted(() => {
+  updateTime()
+  timerId = window.setInterval(updateTime, 1000)
+  ensureCurrentUser().catch(() => null)
   if (route.query.onboarding === 'true') {
     onboardingDialogVisible.value = true
   }
-}
+})
 
 watch(
   () => route.fullPath,
   () => {
     pendingPath.value = null
-    if (route.query.onboarding === 'true') {
-      onboardingDialogVisible.value = true
-    } else {
-      onboardingDialogVisible.value = false
-    }
-  }
+    onboardingDialogVisible.value = route.query.onboarding === 'true'
+  },
 )
 
+onUnmounted(() => {
+  if (timerId) {
+    clearInterval(timerId)
+  }
+})
+
 const navigateTo = (path: string) => {
-  if (route.path === path) return
-  pendingPath.value = path
-  router.push(path).catch(() => {
-    pendingPath.value = null
-  })
+  router.push(path)
 }
 
-onMounted(() => {
-  const updateTime = () => {
-    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
-  updateTime()
-  timer = window.setInterval(updateTime, 1000)
-  loadOnboardingStatus()
-  ensureCurrentUser().catch(() => null)
-})
+const navigateToProfile = () => {
+  void router.push('/profile')
+}
 
-onUnmounted(() => {
-  clearInterval(timer)
-})
-
-const handleCommand = async (command: string) => {
-  if (command === 'logout') {
-    try {
-      await logout()
-    } catch {
-    }
-    clearCurrentUser()
+const handleLogout = async () => {
+  try {
+    await logout()
+  } catch (e) {
+    console.error('Logout error API request', e)
+  } finally {
     clearAuthToken()
-    await router.push('/login')
-  } else if (command === 'profile' || command === 'history' || command === 'favorites' || command === 'settings') {
-    await router.push('/profile')
+    clearCurrentUser()
+    router.push('/login')
   }
 }
 </script>
-
-<style>
-/* 覆盖 ElDropdown 默认样式 (全局样式) */
-.custom-user-dropdown {
-  padding: 8px !important;
-  border-radius: 12px !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
-  border: 1px solid var(--color-border) !important;
-}
-
-.custom-user-dropdown .el-dropdown-menu {
-  padding: 0 !important;
-}
-
-/* 个人中心：默认普通样式 */
-.dropdown-header-block {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  margin: 2px 0 4px 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: normal;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.dropdown-header-block .el-icon {
-  font-size: 16px;
-  color: var(--color-text-muted);
-  transition: all 0.2s ease;
-}
-
-/* 个人中心：悬停高亮样式 */
-.dropdown-header-block:hover {
-  background: #F4F3FF;
-  color: #5A52FF;
-  font-weight: 600;
-}
-
-.dropdown-header-block:hover .el-icon {
-  color: #5A52FF;
-}
-
-/* 通用菜单项样式 */
-.custom-user-dropdown .el-dropdown-menu__item {
-  border-radius: 6px;
-  margin: 2px 0;
-  padding: 8px 16px;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.custom-user-dropdown .el-dropdown-menu__item:hover {
-  background-color: var(--color-bg) !important;
-  color: var(--color-text) !important;
-}
-
-.custom-user-dropdown .el-dropdown-menu__item i {
-  margin-right: 10px;
-  font-size: 16px;
-  color: var(--color-text-muted);
-}
-
-.dropdown-divider {
-  height: 1px;
-  background-color: var(--color-surface-hover);
-  margin: 8px 0;
-}
-
-/* 退出登录专属样式：使用组合选择器提高优先级，防止颜色被通用样式覆盖 */
-.custom-user-dropdown .el-dropdown-menu__item.logout-item {
-  color: var(--color-text-muted) !important;
-}
-
-.custom-user-dropdown .el-dropdown-menu__item.logout-item:hover {
-  color: #DF5B5B !important; /* 悬停变为图片所示的红色 */
-  background-color: var(--color-bg) !important;
-}
-
-.custom-user-dropdown .el-dropdown-menu__item.logout-item:hover i {
-  color: #DF5B5B !important;
-}
-</style>
 
 <style scoped>
 .app-layout {
@@ -290,7 +217,9 @@ const handleCommand = async (command: string) => {
   flex-direction: column;
   width: 100vw;
   height: 100vh;
-  background-color: var(--color-bg);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(98, 201, 197, 0.12), transparent 28rem),
+    var(--color-bg);
   font-family: var(--font-sans);
   overflow: hidden;
 }
@@ -299,14 +228,16 @@ const handleCommand = async (command: string) => {
 .top-navbar {
   position: relative;
   height: var(--navbar-height);
-  background: var(--color-surface);
+  background: rgba(252, 255, 255, 0.94);
+  backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-6);
+  padding: 0 clamp(16px, 2.8vw, 44px);
   flex-shrink: 0;
   z-index: 20;
+  box-shadow: 0 8px 24px rgba(32, 95, 103, 0.05);
 }
 
 .navbar-left {
@@ -317,11 +248,12 @@ const handleCommand = async (command: string) => {
 }
 
 .brand-logo {
-  width: 32px;
-  height: 32px;
-  background-color: var(--color-primary);
-  color: var(--color-surface);
-  border-radius: var(--radius-md);
+  width: 38px;
+  height: 38px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -331,7 +263,7 @@ const handleCommand = async (command: string) => {
 .brand-name {
   font-size: var(--text-lg);
   font-weight: var(--weight-bold);
-  color: var(--color-text-strong);
+  color: var(--color-primary-text);
   letter-spacing: -0.03em;
   transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -348,15 +280,15 @@ const handleCommand = async (command: string) => {
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 4px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2_5) var(--space-4);
-  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  border-radius: 11px;
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -367,36 +299,26 @@ const handleCommand = async (command: string) => {
 }
 
 .nav-item:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
+  background: rgba(216, 241, 240, 0.58);
+  color: var(--color-primary-text);
 }
 
-/* Base Active Style */
 .nav-item.active {
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-weight: var(--weight-semibold);
 }
 
-/* Dashboard Theme */
-.nav-item.nav-theme-dashboard:hover { color: var(--color-primary); }
-.nav-item.nav-theme-dashboard.active { background: var(--color-primary-soft); color: var(--color-primary); }
-
-/* Resource Engine Theme (Emerald) */
-.nav-item.nav-theme-resource:hover { color: var(--cat-resource); }
-.nav-item.nav-theme-resource.active { background: var(--cat-resource-soft); color: var(--cat-resource); }
-
-/* Path Planner Theme (Amber) */
-.nav-item.nav-theme-path:hover { color: var(--cat-path); }
-.nav-item.nav-theme-path.active { background: var(--cat-path-soft); color: var(--cat-path); }
-
-/* Tutor Theme (Blue) */
-.nav-item.nav-theme-tutor:hover { color: var(--cat-tutor); }
-.nav-item.nav-theme-tutor.active { background: var(--cat-tutor-soft); color: var(--cat-tutor); }
-
-/* Evaluation/Bank Theme (Violet) */
-.nav-item.nav-theme-eval:hover { color: var(--cat-eval); }
-.nav-item.nav-theme-eval.active { background: var(--cat-eval-soft); color: var(--cat-eval); }
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  bottom: -9px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
 
 .nav-icon {
   font-size: 1.15rem;
@@ -406,52 +328,21 @@ const handleCommand = async (command: string) => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--space-4);
+  gap: 10px;
   width: auto;
-  min-width: 320px;
+  min-width: 300px;
   justify-content: flex-end;
   flex-wrap: nowrap;
-}
-
-.system-status {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-3);
-  background: var(--color-bg);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  cursor: help;
-  white-space: nowrap;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--color-success);
-}
-
-.status-dot.pulsing {
-  animation: pulse-green 2s infinite;
-}
-
-.status-text {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  color: var(--color-success);
-  margin: 0;
 }
 
 .time-display {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background: var(--color-bg);
+  background: transparent;
   padding: 6px var(--space-3);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   white-space: nowrap;
 }
 
@@ -474,8 +365,9 @@ const handleCommand = async (command: string) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--color-primary-soft);
-  padding: 6px 14px;
+  background: rgba(216, 241, 240, 0.72);
+  padding: 0 14px;
+  min-height: 40px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-primary-border);
   color: var(--color-primary);
@@ -485,9 +377,10 @@ const handleCommand = async (command: string) => {
 }
 
 .profile-trigger-btn:hover {
-  background: #E0E7FF;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+  box-shadow: 0 8px 18px rgba(70, 184, 180, 0.14);
 }
 
 .profile-icon {
@@ -503,11 +396,11 @@ const handleCommand = async (command: string) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  cursor: pointer;
   padding: 4px 8px 4px 4px;
+  height: 40px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
-  transition: all var(--transition-base);
+  color: var(--color-text-strong);
 }
 
 .user-profile:hover {
@@ -518,14 +411,6 @@ const handleCommand = async (command: string) => {
 .user-avatar {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-  overflow: hidden;
 }
 
 .user-info {
@@ -558,12 +443,6 @@ const handleCommand = async (command: string) => {
   flex-direction: column;
 }
 
-@keyframes pulse-green {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
-
 .fade-slide-enter-active, .fade-slide-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
@@ -579,13 +458,6 @@ const handleCommand = async (command: string) => {
 }
 
 /* ================== 响应式媒体查询 ================== */
-
-/* 1350px 以下：隐藏系统同步状态 */
-@media (max-width: 1350px) {
-  .system-status {
-    display: none !important;
-  }
-}
 
 /* 1200px 以下：隐藏时间显示，微调导航菜单间距 */
 @media (max-width: 1200px) {
@@ -616,6 +488,7 @@ const handleCommand = async (command: string) => {
   }
   .navbar-right {
     gap: var(--space-3);
+    min-width: auto;
   }
 }
 
@@ -630,6 +503,36 @@ const handleCommand = async (command: string) => {
   }
   .top-navbar {
     padding: 0 var(--space-3);
+  }
+  .navbar-right {
+    min-width: auto;
+  }
+  .user-info {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-trigger-btn {
+    display: none;
+  }
+  .navbar-center {
+    padding: 0 var(--space-2);
+  }
+  .nav-menu {
+    gap: 2px;
+  }
+  .user-profile {
+    padding-right: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-slide-enter-active,
+  .fade-slide-leave-active,
+  .nav-item,
+  .profile-trigger-btn {
+    transition: none;
   }
 }
 </style>

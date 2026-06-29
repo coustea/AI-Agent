@@ -5,7 +5,7 @@
 
 设计原则：
 - ResourceEvents 是无状态代理，通过 channel key 获取/创建频道
-- 频道在首次 send/subscribe 时自动创建，无需显式 open()
+- 创建任务时显式 open()，发送端仍可按需自动创建
 """
 
 from __future__ import annotations
@@ -184,6 +184,10 @@ class ResourceEvents:
         self._run_id = run_id
         self._auto_create = auto_create
         self._key: ChannelKey = (user_id, resource_id, run_id)
+
+    async def open(self) -> None:
+        """在 API 返回 run_id 前显式创建频道，避免订阅端抢先连接。"""
+        await self._get_or_create_channel()
 
     async def _get_or_create_channel(self) -> _ResourceChannel:
         """获取或创建频道。根据 auto_create 决定是否自动创建。"""

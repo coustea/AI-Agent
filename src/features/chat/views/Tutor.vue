@@ -6,7 +6,7 @@
 
         <div class="sidebar-top-header">
           <div class="sidebar-brand" v-if="!sessionSidebarCollapsed">
-            <el-icon class="brand-icon"><ChatDotRound /></el-icon>
+            <AppLogo class="brand-icon" />
             <span class="brand-text">智能辅导</span>
           </div>
           <button
@@ -25,93 +25,94 @@
 
         <div class="standard-sidebar-nav">
           <div :class="['nav-item', 'new-chat-btn', { active: !currentSessionId }]" @click="newSession" title="新建对话">
-            <el-icon><EditPen /></el-icon> <span class="nav-text">新建对话</span>
+            <EditPen class="nav-icon" /> <span class="nav-text">新建对话</span>
           </div>
 
-          <el-popover
-              placement="right-start"
-              :width="280"
-              trigger="click"
-              v-model:visible="searchPopoverVisible"
-              popper-style="padding: 16px 12px 12px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);"
-              @after-leave="searchKeyword = ''"
-          >
-            <template #reference>
-              <div class="nav-item search-item" title="搜索历史">
-                <el-icon><Search /></el-icon> <span class="nav-text">搜索历史</span>
-              </div>
-            </template>
+          <PopoverRoot v-model:open="searchPopoverVisible">
+            <PopoverTrigger class="nav-item search-item" title="搜索历史" style="background: none; border: none; text-align: left; padding: 0; outline: none; width: 100%;">
+              <Search class="nav-icon" /> <span class="nav-text">搜索历史</span>
+            </PopoverTrigger>
 
-            <div class="popover-search-container">
-              <el-input
-                  v-model="searchKeyword"
-                  placeholder="输入关键词搜索记录..."
-                  clearable
-                  class="search-input"
+            <PopoverPortal>
+              <PopoverContent
+                class="popover-content-container search-popover-content"
+                side="right"
+                align="start"
+                :side-offset="8"
               >
-                <template #prefix>
-                  <el-icon><Search /></el-icon>
-                </template>
-              </el-input>
+                <div class="popover-search-container">
+                  <div class="search-input-wrapper">
+                    <Search class="search-input-icon" />
+                    <input
+                        v-model="searchKeyword"
+                        type="text"
+                        placeholder="输入关键词搜索记录..."
+                        class="input-control search-input"
+                    />
+                    <button v-if="searchKeyword" class="search-clear-btn" @click="searchKeyword = ''">×</button>
+                  </div>
 
-              <div class="popover-session-scroll search-results-scroll" v-show="searchKeyword.trim() !== ''">
-                <div
-                    v-for="s in filteredSessions"
-                    :key="s.id"
-                    :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
-                    @click="switchSession(s.id); searchPopoverVisible = false"
-                >
-                  <el-icon class="session-icon"><ChatLineSquare /></el-icon>
-                  <div class="session-info nav-text">
-                    <span class="session-title">{{ s.title || '新建对话' }}</span>
-                    <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+                  <div class="popover-session-scroll search-results-scroll" v-show="searchKeyword.trim() !== ''">
+                    <div
+                        v-for="s in filteredSessions"
+                        :key="s.id"
+                        :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+                        @click="switchSession(s.id); searchPopoverVisible = false"
+                    >
+                      <ChatLineSquare class="session-icon" />
+                      <div class="session-info nav-text">
+                        <span class="session-title">{{ s.title || '新建对话' }}</span>
+                        <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+                      </div>
+                    </div>
+
+                    <div v-if="filteredSessions.length === 0" class="session-empty nav-text">
+                      未找到相关记录
+                    </div>
                   </div>
                 </div>
+              </PopoverContent>
+            </PopoverPortal>
+          </PopoverRoot>
 
-                <div v-if="filteredSessions.length === 0" class="session-empty nav-text">
-                  未找到相关记录
-                </div>
-              </div>
-            </div>
-          </el-popover>
+          <PopoverRoot>
+            <PopoverTrigger v-if="sessionSidebarCollapsed" class="nav-item history-collapsed-btn" title="历史记录" style="background: none; border: none; text-align: left; padding: 0; outline: none; width: 100%;">
+              <Timer class="nav-icon" />
+            </PopoverTrigger>
 
-          <el-popover
-              v-if="sessionSidebarCollapsed"
-              placement="right-start"
-              :width="260"
-              trigger="click"
-              popper-style="padding: 12px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);"
-          >
-            <template #reference>
-              <div class="nav-item history-collapsed-btn" title="历史记录">
-                <el-icon><Timer /></el-icon>
-              </div>
-            </template>
-
-            <div class="popover-session-scroll">
-              <div class="popover-title">历史记录</div>
-              <div
-                  v-for="s in sessions"
-                  :key="s.id"
-                  :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
-                  @click="switchSession(s.id)"
+            <PopoverPortal>
+              <PopoverContent
+                class="popover-content-container history-popover-content"
+                side="right"
+                align="start"
+                :side-offset="8"
               >
-                <el-icon class="session-icon"><ChatLineSquare /></el-icon>
-                <div class="session-info nav-text">
-                  <span class="session-title">{{ s.title || '新建对话' }}</span>
-                  <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+                <div class="popover-session-scroll">
+                  <div class="popover-title">历史记录</div>
+                  <div
+                      v-for="s in sessions"
+                      :key="s.id"
+                      :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+                      @click="switchSession(s.id)"
+                  >
+                    <ChatLineSquare class="session-icon" />
+                    <div class="session-info nav-text">
+                      <span class="session-title">{{ s.title || '新建对话' }}</span>
+                      <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
+                    </div>
+                    <button class="btn-link del-btn nav-text" @click.stop="archiveSession(s.id)" title="删除对话">
+                      <Delete class="del-icon" />
+                    </button>
+                  </div>
+                  <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
                 </div>
-                <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </div>
-              <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
-            </div>
-          </el-popover>
+              </PopoverContent>
+            </PopoverPortal>
+          </PopoverRoot>
         </div>
 
         <div class="history-section-header" v-if="!sessionSidebarCollapsed">
-          <el-icon><Timer /></el-icon> <span>历史记录</span>
+          <Timer class="nav-icon" /> <span>历史记录</span>
         </div>
 
         <div class="session-list" v-show="!sessionSidebarCollapsed">
@@ -122,14 +123,14 @@
               @click="switchSession(s.id)"
               :title="s.title || '新建对话'"
           >
-            <el-icon class="session-icon"><ChatLineSquare /></el-icon>
+            <ChatLineSquare class="session-icon" />
             <div class="session-info nav-text">
               <span class="session-title">{{ s.title || '新建对话' }}</span>
               <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
             </div>
-            <el-button link class="del-btn nav-text" @click.stop="archiveSession(s.id)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
+            <button class="btn-link del-btn nav-text" @click.stop="archiveSession(s.id)" title="删除对话">
+              <Delete class="del-icon" />
+            </button>
           </div>
           <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
         </div>
@@ -166,7 +167,7 @@
             </div>
 
             <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
-              <div class="welcome-icon"><el-icon><Cpu /></el-icon></div>
+              <div class="welcome-icon"><Cpu /></div>
               <h3>进入您的专属认知书房</h3>
               <p class="cognitive-note">在这里，每一次对话都会成为塑形您学习画像的线索。<br>我支持跨媒介文献与视听分析，我们将共同构建您的个性化认知图谱。</p>
             </div>
@@ -177,7 +178,7 @@
               class="thinking-indicator-row"
             >
               <div class="thinking-avatar">
-                <div class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
+                <div class="avatar-circle ai-av"><Service /></div>
               </div>
               <div class="pre-answer-state" aria-live="polite">
                 <div class="pre-answer-head">
@@ -210,9 +211,10 @@
                 "
                 :class="['message-row', msg.role]"
               >
+
                 <div class="msg-avatar">
-                  <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><el-icon><Service /></el-icon></div>
-                  <div v-else class="avatar-circle user-av"><el-icon><UserFilled /></el-icon></div>
+                  <div v-if="msg.role === 'ai'" class="avatar-circle ai-av"><Service /></div>
+                  <div v-else class="avatar-circle user-av"><UserFilled /></div>
                 </div>
 
                 <div class="bubble-wrapper" @click="handleMessageClick">
@@ -227,26 +229,15 @@
                     class="message-image-gallery"
                     :class="getImageGalleryClass(msg.attachments)"
                   >
-                    <el-image
+                    <img
                       v-for="(att, imageIndex) in getImageAttachments(msg.attachments)"
                       :key="`${att.url}-${imageIndex}`"
                       :src="att.url"
                       :alt="att.name || `图片 ${imageIndex + 1}`"
-                      :preview-src-list="getImagePreviewUrls(msg.attachments)"
-                      :initial-index="imageIndex"
-                      fit="cover"
-                      preview-teleported
-                      hide-on-click-modal
                       class="message-image"
-                      @click.stop
-                    >
-                      <template #error>
-                        <div class="image-load-error">
-                          <el-icon><Document /></el-icon>
-                          <span>图片加载失败</span>
-                        </div>
-                      </template>
-                    </el-image>
+                      loading="lazy"
+                      @click.stop="triggerImagePreview(getImagePreviewUrls(msg.attachments), imageIndex)"
+                    />
                   </div>
 
                   <div
@@ -265,7 +256,7 @@
                         class="file-icon-box"
                         :style="{ backgroundColor: getDocumentIconColor(getDocumentType(att.name)) }"
                       >
-                        <el-icon aria-hidden="true"><Document /></el-icon>
+                        <Document class="file-icon" aria-hidden="true" />
                       </span>
                       <span class="file-copy">
                         <strong :title="att.name">{{ att.name || '文档附件' }}</strong>
@@ -383,10 +374,9 @@
                   :class="{ 'is-image': f.fileType === 'image', 'is-file': f.fileType !== 'image' }"
                 >
                   <template v-if="f.fileType === 'image'">
-                    <el-image
+                    <img
                       :src="f.localUrl || f.url"
                       :alt="f.name || '图片预览'"
-                      fit="cover"
                       class="composer-image"
                     />
                     <span class="composer-image-name" :title="f.name">{{ f.name }}</span>
@@ -396,7 +386,7 @@
                       class="file-icon-box"
                       :style="{ backgroundColor: getDocumentIconColor(getDocumentType(f.name)) }"
                     >
-                      <el-icon aria-hidden="true"><Document /></el-icon>
+                      <Document class="file-icon" aria-hidden="true" />
                     </span>
                     <span class="file-copy">
                       <strong :title="f.name">{{ f.name }}</strong>
@@ -409,7 +399,7 @@
                     @click="removeAttachment(idx)"
                     aria-label="移除附件"
                   >
-                    <el-icon aria-hidden="true"><Close /></el-icon>
+                    <Close class="close-icon" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -436,10 +426,8 @@
                     :aria-label="uploadingFile ? '正在上传附件' : '上传附件'"
                     :title="uploadingFile ? '正在上传附件' : '上传附件'"
                   >
-                    <el-icon aria-hidden="true">
-                      <Loading v-if="uploadingFile" />
-                      <Paperclip v-else />
-                    </el-icon>
+                    <Loading v-if="uploadingFile" class="btn-icon spinner" aria-hidden="true" />
+                    <Paperclip v-else class="btn-icon" aria-hidden="true" />
                     <span>{{ uploadingFile ? '上传中' : '附件' }}</span>
                   </button>
 
@@ -450,13 +438,11 @@
                     @click="enableWebSearch = !enableWebSearch"
                     :aria-pressed="enableWebSearch"
                   >
-                    <el-icon aria-hidden="true">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="9"></circle>
-                        <ellipse cx="12" cy="12" rx="4.5" ry="9"></ellipse>
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                      </svg>
-                    </el-icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"></circle>
+                      <ellipse cx="12" cy="12" rx="4.5" ry="9"></ellipse>
+                      <line x1="3" y1="12" x2="21" y2="12"></line>
+                    </svg>
                     <span>联网</span>
                   </button>
 
@@ -467,7 +453,7 @@
                     @click="handleTeachingDiagramToggle"
                     :aria-pressed="needTeachingDiagram"
                   >
-                    <el-icon aria-hidden="true"><DataLine /></el-icon>
+                    <DataLine class="btn-icon" aria-hidden="true" />
                     <span>图解</span>
                   </button>
                 </div>
@@ -475,54 +461,44 @@
                 <div class="action-right">
                   <div v-if="chatMode === 'digital_human'" class="minimal-speech-rate">
                     <span class="rate-label">语速</span>
-                    <el-slider
-                      v-model="avatarSpeechRate"
-                      :min="0.8"
-                      :max="1.5"
-                      :step="0.1"
+                    <input
+                      type="range"
+                      v-model.number="avatarSpeechRate"
+                      min="0.8"
+                      max="1.5"
+                      step="0.1"
                       :disabled="isAvatarSpeaking"
-                      :show-tooltip="false"
-                      @change="handleAvatarSpeechRateChange"
-                      class="rate-slider"
+                      @change="handleAvatarSpeechRateChange(avatarSpeechRate)"
+                      class="rate-slider-input"
                     />
                     <span class="rate-value">{{ avatarSpeechRate.toFixed(1) }}x</span>
                   </div>
 
-                  <el-tooltip
+                  <button
                       v-if="chatMode === 'digital_human'"
-                      :content="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
-                      placement="top"
-                      :show-after="500"
-                  >
-                    <button
-                        type="button"
-                        class="minimal-icon-btn voice-chat-btn"
-                        :class="{ 'is-active': isVoiceChatting }"
-                        @click="handleVoiceChatToggle"
-                        :aria-label="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
-                    >
-                      <div class="voice-bars-icon" aria-hidden="true">
-                        <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
-                      </div>
-                    </button>
-                  </el-tooltip>
-
-                  <el-tooltip
-                    v-if="chatMode === 'digital_human'"
-                    :content="isRecording ? '结束录音' : '语音提问'"
-                    placement="top"
-                    :show-after="500"
-                  >
-                    <button
                       type="button"
-                      class="minimal-icon-btn voice"
-                      :class="{ 'is-recording': isRecording }"
-                      @click="handleVoiceToggle"
-                      :aria-label="isRecording ? '结束录音' : '语音提问'"
-                    >
-                      <el-icon aria-hidden="true"><Microphone /></el-icon>
-                    </button>
-                  </el-tooltip>
+                      class="minimal-icon-btn voice-chat-btn"
+                      :class="{ 'is-active': isVoiceChatting }"
+                      @click="handleVoiceChatToggle"
+                      :aria-label="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
+                      :title="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
+                  >
+                    <div class="voice-bars-icon" aria-hidden="true">
+                      <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
+                    </div>
+                  </button>
+
+                  <button
+                    v-if="chatMode === 'digital_human'"
+                    type="button"
+                    class="minimal-icon-btn voice"
+                    :class="{ 'is-recording': isRecording }"
+                    @click="handleVoiceToggle"
+                    :aria-label="isRecording ? '结束录音' : '语音提问'"
+                    :title="isRecording ? '结束录音' : '语音提问'"
+                  >
+                    <Microphone class="btn-icon" aria-hidden="true" />
+                  </button>
 
                   <button
                     type="submit"
@@ -535,9 +511,7 @@
                     :aria-label="isResponding ? 'AI 正在回答' : '发送消息'"
                     :title="isResponding ? 'AI 正在回答，请稍候' : (canSendMessage ? '发送消息' : '请输入消息')"
                   >
-                    <el-icon v-if="isResponding" class="responding-spinner" aria-hidden="true">
-                      <Loading />
-                    </el-icon>
+                    <Loading v-if="isResponding" class="responding-spinner spinner" aria-hidden="true" />
                     <span v-else class="send-arrow-glyph" aria-hidden="true">↑</span>
                   </button>
                 </div>
@@ -576,14 +550,14 @@
               @click="setChatMode('standard')"
           >
             <div class="menu-icon-box">
-              <el-icon><ChatLineRound /></el-icon>
+              <ChatLineRound class="nav-icon" />
             </div>
             <div class="menu-text-content">
               <div class="menu-title">图文交互</div>
               <div class="menu-desc">文字、图片多模态交流</div>
             </div>
             <div class="check-icon" v-if="chatMode === 'standard'">
-              <el-icon><CircleCheckFilled /></el-icon>
+              <CircleCheckFilled class="check-icon-glyph" />
             </div>
           </div>
           <div
@@ -592,14 +566,14 @@
               @click="setChatMode('digital_human')"
           >
             <div class="menu-icon-box">
-              <el-icon><Avatar /></el-icon>
+              <Avatar class="nav-icon" />
             </div>
             <div class="menu-text-content">
               <div class="menu-title">数字人互动</div>
               <div class="menu-desc">与数字人进行语音对话</div>
             </div>
             <div class="check-icon" v-if="chatMode === 'digital_human'">
-              <el-icon><CircleCheckFilled /></el-icon>
+              <CircleCheckFilled class="check-icon-glyph" />
             </div>
           </div>
         </div>
@@ -607,60 +581,89 @@
     </div>
 
     <!-- 教学图解全屏预览 -->
-    <el-dialog
-      v-model="teachingDiagramPreviewVisible"
-      width="min(1180px, 94vw)"
-      top="3vh"
-      destroy-on-close
-      :show-close="false"
-      class="diagram-preview-dialog"
-    >
-      <template #header>
-        <div class="diagram-dialog-header">
-          <div>
-            <span>教学图解</span>
-            <strong>{{ teachingDiagramPreviewData?.title || '图解说明' }}</strong>
-          </div>
-          <button type="button" @click="teachingDiagramPreviewVisible = false" aria-label="关闭图解">
-            <el-icon><Close /></el-icon>
-          </button>
-        </div>
-      </template>
+    <Teleport to="body">
+      <transition name="modal-fade">
+        <div v-if="teachingDiagramPreviewVisible" class="custom-modal-overlay" @click.self="teachingDiagramPreviewVisible = false">
+          <div class="custom-modal-container diagram-preview-dialog">
+            <header class="custom-modal-header diagram-dialog-header">
+              <div>
+                <span class="diagram-kicker">教学图解</span>
+                <strong class="diagram-title">{{ teachingDiagramPreviewData?.title || '图解说明' }}</strong>
+              </div>
+              <button type="button" class="modal-close-btn" @click="teachingDiagramPreviewVisible = false" aria-label="关闭图解">
+                <Close class="close-icon" />
+              </button>
+            </header>
 
-      <div v-if="teachingDiagramPreviewData" class="diagram-preview-body">
-        <div class="preview-content">
-          <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
-        </div>
-        <div class="preview-footer">
-          <span>图解可保存为高清图片，便于复习和整理笔记。</span>
-          <div>
-            <el-button :loading="isCapturing" @click="handleDownloadDiagram">
-              <el-icon><Download /></el-icon>
-              保存图片
-            </el-button>
-            <el-button type="primary" @click="teachingDiagramPreviewVisible = false">完成</el-button>
+            <div v-if="teachingDiagramPreviewData" class="custom-modal-body diagram-preview-body">
+              <div class="preview-content">
+                <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
+              </div>
+              <div class="preview-footer">
+                <span>图解可保存为高清图片，便于复习和整理笔记。</span>
+                <div class="footer-actions">
+                  <button class="btn btn-outline" :disabled="isCapturing" @click="handleDownloadDiagram">
+                    <span v-if="isCapturing" class="spinner mr-2"></span>
+                    <Download class="btn-icon-left" />
+                    <span>保存图片</span>
+                  </button>
+                  <button class="btn btn-primary" @click="teachingDiagramPreviewVisible = false">完成</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </el-dialog>
+      </transition>
+    </Teleport>
+
+    <!-- 全局图片预览 -->
+    <Teleport to="body">
+      <transition name="modal-fade">
+        <div v-if="imgPreviewVisible" class="custom-modal-overlay img-preview-overlay" @click="imgPreviewVisible = false">
+          <div class="img-preview-container">
+            <img :src="imgPreviewUrl" class="img-preview-content" />
+            <button class="img-preview-close-btn" @click="imgPreviewVisible = false" aria-label="关闭预览">
+              <Close class="close-icon" />
+            </button>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, computed, watch } from 'vue'
 import {
-  ChatLineRound, Avatar, Cpu, Service, UserFilled,
-  Microphone, Document, ChatDotRound, ChatLineSquare,
-  Delete, Close, Paperclip,
-  EditPen, Search, Timer, DataLine,
-  CircleCheckFilled, Download, Loading
-} from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+  PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent
+} from 'radix-vue'
+import {
+  PhChatCenteredText as ChatLineRound,
+  PhUser as Avatar,
+  PhCpu as Cpu,
+  PhHeadset as Service,
+  PhUser as UserFilled,
+  PhMicrophone as Microphone,
+  PhFileText as Document,
+  PhChat as ChatLineSquare,
+  PhTrash as Delete,
+  PhX as Close,
+  PhPaperclip as Paperclip,
+  PhPencilSimple as EditPen,
+  PhMagnifyingGlass as Search,
+  PhClock as Timer,
+  PhGraph as DataLine,
+  PhCheckCircle as CircleCheckFilled,
+  PhDownload as Download,
+  PhSpinner as Loading
+} from '@phosphor-icons/vue'
+import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
+import AppLogo from '@/shared/ui/AppLogo.vue'
 
 import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
 
@@ -714,6 +717,16 @@ const isComposing = ref(false)
 
 const enableWebSearch = ref(false)
 const needTeachingDiagram = ref(false)
+
+const imgPreviewVisible = ref(false)
+const imgPreviewUrl = ref('')
+const triggerImagePreview = (urls: string[], index: number) => {
+  const url = urls[index]
+  if (url) {
+    imgPreviewUrl.value = url
+    imgPreviewVisible.value = true
+  }
+}
 
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
@@ -868,7 +881,7 @@ const {
       streamingMsgId.value = null
       streamingMsgRef.value = null
     }
-    ElMessage.error({ message: msg, plain: true })
+    toast.error({ message: msg, plain: true })
   },
   onAvatarReady: () => {
     nextTick(() => {
@@ -1108,7 +1121,7 @@ const startAvatarThinkingTimeout = () => {
     isAIThinking.value = false
     stopTeachingDiagramGeneratingForCurrentAi()
     streamingMsgId.value = null
-    ElMessage.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
+    toast.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
   }, 30000)
 }
 
@@ -1261,7 +1274,7 @@ const handleDownloadDiagram = async () => {
   
   if (dataUrl) {
     downloadImage(dataUrl, `${teachingDiagramPreviewData.value.title || '图解说明'}_高清截图`)
-    ElMessage.success('图解说明已保存至本地')
+    toast.success('图解说明已保存至本地')
   }
 }
 
@@ -1279,9 +1292,9 @@ const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '
 const copyToClipboard = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制到剪贴板')
+    toast.success('已复制到剪贴板')
   } catch (err) {
-    ElMessage.error('复制失败，请重试')
+    toast.error('复制失败，请重试')
   }
 }
 
@@ -1786,7 +1799,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
       )
     })
   } catch (err) {
-    ElMessage.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
+    toast.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
   }
 }
 
@@ -1898,23 +1911,7 @@ const archiveSession = async (sessionId: string) => {
   const targetSession = sessions.value.find(session => session.id === sessionId)
   const sessionTitle = targetSession?.title?.trim() || '新建对话'
 
-  try {
-    await ElMessageBox.confirm(
-      `确定删除“${sessionTitle}”吗？删除后无法恢复。`,
-      '删除会话',
-      {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        closeOnClickModal: false,
-        closeOnPressEscape: true,
-        showClose: false,
-        customClass: 'session-delete-confirm',
-        confirmButtonClass: 'session-delete-confirm-btn',
-        cancelButtonClass: 'session-delete-cancel-btn',
-      },
-    )
-  } catch {
-    // 用户取消或关闭确认框，不执行删除。
+  if (!window.confirm(`确定删除“${sessionTitle}”吗？删除后无法恢复。`)) {
     return
   }
 
@@ -1933,9 +1930,9 @@ const archiveSession = async (sessionId: string) => {
       }
     }
 
-    ElMessage.success('会话已删除')
+    toast.success('会话已删除')
   } catch (error) {
-    ElMessage.error(getErrorMessage(error) || '删除会话失败，请稍后重试')
+    toast.error(getErrorMessage(error) || '删除会话失败，请稍后重试')
   }
 }
 
@@ -1950,13 +1947,13 @@ const onCombinedFileSelected = (event: Event) => {
 
   const remaining = Math.max(0, MAX_COMPOSER_FILES - pendingFiles.value.length)
   if (remaining === 0) {
-    ElMessage.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件`)
+    toast.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件`)
     input.value = ''
     return
   }
 
   if (selectedFiles.length > remaining) {
-    ElMessage.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件，已保留前 ${remaining} 个`)
+    toast.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件，已保留前 ${remaining} 个`)
   }
 
   selectedFiles.slice(0, remaining).forEach((file) => {
@@ -2008,7 +2005,7 @@ const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standa
     sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
     return true
   } catch {
-    ElMessage.error({ message: '创建会话失败，请重试', plain: true })
+    toast.error({ message: '创建会话失败，请重试', plain: true })
     return false
   }
 }
@@ -2027,12 +2024,12 @@ const handleVoiceChatToggle = async () => {
     })
     await startVad(needTeachingDiagram.value, getAvatarCapabilities())
     isRecording.value = isVadListening.value
-    ElMessage.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
+    toast.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
     stopVad()
     isRecording.value = false
     isVoiceChatting.value = false
-    ElMessage.info({ message: '已关闭语音通话模式', plain: true })
+    toast.info({ message: '已关闭语音通话模式', plain: true })
   }
 }
 
@@ -2077,7 +2074,7 @@ const handleSend = async () => {
   const sessionMode = chatMode.value === 'digital_human' ? 'digital_human' : 'standard'
 
   if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
-    ElMessage.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
+    toast.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
     return
   }
 
@@ -2367,14 +2364,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 覆盖 ElPopover 的默认内边距 */
-:global(.el-popover.custom-plus-popover) {
-  padding: 0 !important;
-  border-radius: var(--radius-xl) !important;
-  border: none !important;
-  box-shadow: var(--shadow-lg) !important;
-}
-
 .tutor-dashboard {
   display: flex;
   flex-direction: column;
@@ -2516,27 +2505,9 @@ onBeforeUnmount(() => {
   letter-spacing: normal;
   user-select: none;
 }
-.history-section-header .el-icon {
-  font-size: 1.25rem;
-  color: var(--color-primary);
-}
-
 .popover-search-container {
   display: flex;
   flex-direction: column;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: var(--radius-md);
-  box-shadow: 0 0 0 1px var(--color-border) inset;
-}
-
-:deep(.el-input__wrapper:hover) {
-  box-shadow: 0 0 0 1px var(--color-border-hover) inset;
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #0891B2 inset !important;
 }
 
 .popover-session-scroll {
@@ -2708,11 +2679,6 @@ onBeforeUnmount(() => {
   transform: translateY(-2px);
   border-color: var(--color-surface-hover);
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
-}
-
-/* 预览对话框样式 */
-.diagram-preview-dialog :deep(.el-dialog__body) {
-  padding: 0;
 }
 
 .diagram-preview-body {
@@ -3543,7 +3509,7 @@ onBeforeUnmount(() => {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.minimal-speech-rate :deep(.el-slider) {
+.minimal-speech-rate .rate-slider-input {
   width: 60px;
 }
 
@@ -3690,11 +3656,6 @@ onBeforeUnmount(() => {
   color: var(--color-text-secondary);
   font-weight: var(--weight-semibold);
   border: 1px solid var(--color-surface-hover);
-}
-
-.hint-item .el-icon {
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
 }
 
 .long-term-memory-section {
@@ -4264,11 +4225,11 @@ onBeforeUnmount(() => {
   height: 180px;
 }
 
-.message-image :deep(.el-image__inner) {
+.message-image {
   transition: transform 180ms ease;
 }
 
-.message-image:hover :deep(.el-image__inner) {
+.message-image:hover {
   transform: scale(1.015);
 }
 
@@ -4783,12 +4744,6 @@ onBeforeUnmount(() => {
     border-color 140ms ease;
 }
 
-.input-tool-btn .el-icon {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-}
-
 .input-tool-btn:hover:not(:disabled) {
   color: #22272e;
   background: #f3f5f7;
@@ -4877,21 +4832,6 @@ onBeforeUnmount(() => {
   to {
     transform: rotate(360deg);
   }
-}
-
-.diagram-preview-dialog :deep(.el-dialog) {
-  overflow: hidden;
-  border-radius: 12px;
-}
-
-.diagram-preview-dialog :deep(.el-dialog__header) {
-  margin: 0;
-  padding: 0;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.diagram-preview-dialog :deep(.el-dialog__body) {
-  padding: 0;
 }
 
 .diagram-dialog-header {
@@ -5076,60 +5016,6 @@ onBeforeUnmount(() => {
   .diagram-generation-progress span {
     animation: none;
   }
-}
-
-
-/* 删除确认框会 Teleport 到 body，因此使用全局选择器。 */
-:global(.session-delete-confirm.el-message-box) {
-  width: min(420px, calc(100vw - 32px));
-  padding: 20px;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgb(15 23 42 / 18%);
-}
-
-:global(.session-delete-confirm .el-message-box__header) {
-  padding: 0 0 10px;
-}
-
-:global(.session-delete-confirm .el-message-box__title) {
-  color: #111827;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1.4;
-}
-
-:global(.session-delete-confirm .el-message-box__content) {
-  padding: 0;
-  color: #6b7280;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-:global(.session-delete-confirm .el-message-box__btns) {
-  gap: 10px;
-  padding: 20px 0 0;
-}
-
-:global(.session-delete-confirm-btn.el-button) {
-  min-width: 76px;
-  border-color: #dc2626;
-  background: #dc2626;
-  color: #fff;
-}
-
-:global(.session-delete-confirm-btn.el-button:hover),
-:global(.session-delete-confirm-btn.el-button:focus) {
-  border-color: #b91c1c;
-  background: #b91c1c;
-  color: #fff;
-}
-
-:global(.session-delete-cancel-btn.el-button) {
-  min-width: 76px;
-  border-color: #d1d5db;
-  background: #fff;
-  color: #374151;
 }
 
 </style>

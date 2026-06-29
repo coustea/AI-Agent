@@ -44,13 +44,8 @@
             ></div>
 
             <div v-if="showAnswers[index]" class="option-status-wrap">
-              <el-icon v-if="isCorrectOption(option, question)" class="status-icon correct"><Select /></el-icon>
-              <el-icon
-                v-if="isSelected(index, option, question) && !isCorrectOption(option, question)"
-                class="status-icon wrong"
-              >
-                <Close />
-              </el-icon>
+              <Select class='w-4 h-4 inline-block align-middle' />
+              <Close class='w-4 h-4 inline-block align-middle' />
             </div>
           </div>
         </div>
@@ -122,9 +117,9 @@
       </ResourceCardWrapper>
 
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
-        <el-button type="primary" link class="more-btn-hud">
-          查看全部题目 / VIEW_ALL ({{ questions.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
+        <button class="btn-link text-blue hover:underline more-btn-hud">
+          查看全部题目 / VIEW_ALL ({{ questions.length }}) <ArrowRight class='w-4 h-4 inline-block align-middle' />
+        </button>
       </div>
     </div>
 
@@ -139,7 +134,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Select, ArrowRight, Close } from '@element-plus/icons-vue'
+import {
+  PhCheck as Select,
+  PhArrowRight as ArrowRight,
+  PhX as Close
+} from '@phosphor-icons/vue'
 import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'

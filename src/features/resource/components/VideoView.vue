@@ -72,7 +72,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 const props = defineProps<{ resultData?: unknown }>()
 
@@ -389,7 +389,7 @@ const renderLoop = (timestamp: number) => {
 const startExportMP4 = async () => {
   if (!isWebCodecsSupported) {
     console.error('MP4 export stopped: WebCodecs is unavailable')
-    ElMessage.error('当前浏览器不支持 WebCodecs，无法导出 MP4')
+    toast.error('当前浏览器不支持 WebCodecs，无法导出 MP4')
     return
   }
 
@@ -460,7 +460,7 @@ const startExportMP4 = async () => {
 
   } catch (error) {
     console.error("MP4 Export failed:", error)
-    ElMessage.error("导出失败，请检查浏览器是否支持 WebCodecs API")
+    toast.error("导出失败，请检查浏览器是否支持 WebCodecs API")
   } finally {
     isExporting.value = false
     lastTimestamp = performance.now()

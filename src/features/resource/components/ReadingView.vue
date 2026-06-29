@@ -4,7 +4,7 @@
 
 
       <div v-if="!compact && readingData.summary" class="reading-summary">
-        <div class="summary-icon"><el-icon><Reading /></el-icon></div>
+        <div class="summary-icon"><Reading class='w-4 h-4 inline-block align-middle' /></div>
         <div class="summary-text">{{ readingData.summary }}</div>
       </div>
       
@@ -16,7 +16,7 @@
           </div>
           <div class="reading-meta" v-if="!compact">
             <span v-if="resource.authors && resource.authors.length">
-              <el-icon><User /></el-icon> {{ resource.authors.join(', ') }}
+              <User class='w-4 h-4 inline-block align-middle' /> {{ resource.authors.join(', ') }}
             </span>
             <span v-if="resource.source">
               来源 {{ resource.source }}
@@ -45,9 +45,9 @@
       </div>
 
       <div v-if="compact && resources.length > visibleResources.length" class="reading-more">
-        <el-button type="primary" link class="more-btn-hud">
-          查看全部资源 ({{ resources.length }}) <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
+        <button class="btn-link text-blue hover:underline more-btn-hud">
+          查看全部资源 ({{ resources.length }}) <ArrowRight class='w-4 h-4 inline-block align-middle' />
+        </button>
       </div>
 
       <div class="frame-footer">
@@ -67,7 +67,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { User, ArrowRight, Reading } from '@element-plus/icons-vue'
+import {
+  PhUser as User,
+  PhArrowRight as ArrowRight,
+  PhBookOpen as Reading
+} from '@phosphor-icons/vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { normalizeReadingArtifact, type ResourceArtifactLike } from './resourceViewUtils'
 

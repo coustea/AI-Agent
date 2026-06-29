@@ -80,15 +80,9 @@
                   '--active-color-rgb': getActiveColorRgb(block.status)
                 }"
               >
-                <el-tooltip 
-                  :content="`${block.label} | 开始: ${block.start}, 持续: ${block.duration} (${block.status})`" 
-                  placement="top" 
-                  effect="dark"
-                >
-                  <div class="block-content">
-                    <span class="block-label">{{ block.label }}</span>
-                  </div>
-                </el-tooltip>
+                <div class="block-content" :title="`${block.label} | 开始: ${block.start}, 持续: ${block.duration} (${block.status})`">
+                  <span class="block-label">{{ block.label }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -106,25 +100,21 @@
       </div>
 
       <div class="control-buttons">
-        <el-button 
-          type="info" 
-          plain 
-          circle
+        <button 
           @click="resetPlayback"
           title="重置 (Reset)"
-          class="control-btn"
+          class="btn-control reset-btn"
         >
           <svg class="control-icon" viewBox="0 0 24 24" width="16" height="16">
             <path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
           </svg>
-        </el-button>
+        </button>
 
-        <el-button 
-          :type="isPlaying ? 'warning' : 'primary'"
-          circle 
+        <button 
           @click="togglePlay"
           :title="isPlaying ? '暂停 (Pause)' : '播放 (Play)'"
-          class="control-btn play-btn"
+          class="btn-control play-btn"
+          :class="{ 'is-playing': isPlaying }"
         >
           <svg v-if="!isPlaying" class="control-icon" viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M8 5v14l11-7z"/>
@@ -132,21 +122,18 @@
           <svg v-else class="control-icon" viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
           </svg>
-        </el-button>
+        </button>
 
-        <el-button 
-          type="primary" 
-          plain 
-          circle
+        <button 
           @click="nextStep"
           :disabled="currentStep >= maxTime"
           title="下一步 (Next)"
-          class="control-btn"
+          class="btn-control next-btn"
         >
           <svg class="control-icon" viewBox="0 0 24 24" width="16" height="16">
             <path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
           </svg>
-        </el-button>
+        </button>
       </div>
 
       <div v-if="payload.axis_label" class="axis-label-display">

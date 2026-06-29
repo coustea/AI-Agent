@@ -105,7 +105,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 const router = useRouter()
 const goal = ref('')
@@ -135,7 +135,7 @@ const applySuggestion = (text: string) => {
 const handleSubmit = async () => {
   const value = goal.value.trim()
   if (!value) {
-    ElMessage.warning('请先输入终极学习目标')
+    toast.warning('请先输入终极学习目标')
     textareaRef.value?.focus()
     return
   }

@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { toPng } from 'html-to-image'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 interface CaptureOptions {
   pixelRatio?: number
@@ -14,7 +14,7 @@ export function useDiagramCapture() {
   const captureToDataUrl = async (elementId: string, options: CaptureOptions = {}) => {
     const el = document.getElementById(elementId)
     if (!el) {
-      ElMessage.error('无法找到要渲染的图表元素')
+      toast.error('无法找到要渲染的图表元素')
       return null
     }
 
@@ -36,7 +36,7 @@ export function useDiagramCapture() {
       return dataUrl
     } catch (err) {
       console.error('图表渲染失败:', err)
-      ElMessage.error('图表渲染失败，请稍后重试')
+      toast.error('图表渲染失败，请稍后重试')
       return null
     } finally {
       isCapturing.value = false

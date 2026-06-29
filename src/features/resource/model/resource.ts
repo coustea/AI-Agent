@@ -75,10 +75,14 @@ export interface ResourceGenerationRequest {
 
 export interface ResourceTaskStatus {
   resource_id: number
+  run_id?: string | null
+  learning_need?: string
   status: 'pending' | 'planning' | 'generating' | 'completed' | 'partial_completed' | 'failed'
   selected_agents?: string[]
   agent_snapshots?: Record<string, ResourceAgentSnapshot>
   overall_progress?: number
   current_message?: string
   resources?: any[]
+  started_at?: string | null
+  updated_at?: string | null
 }

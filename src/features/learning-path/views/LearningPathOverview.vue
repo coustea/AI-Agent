@@ -1,15 +1,13 @@
 <template>
   <main class="path-dashboard">
-    <el-card v-if="loading" class="state-card" shadow="never" :body-style="{ padding: '0' }">
+    <div v-if="loading" class="state-card">
       <div class="state-spinner"></div>
       <p>正在加载学习路径...</p>
-    </el-card>
+    </div>
 
-    <el-card
+    <div
       v-else-if="!path && !isGenerating"
       class="state-card empty-state"
-      shadow="never"
-      :body-style="{ padding: '0' }"
     >
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -18,8 +16,8 @@
       </div>
       <h2>还没有可用的学习路径</h2>
       <p>输入学习目标后，系统会根据你的画像生成阶段化学习路径。</p>
-      <el-button type="primary" @click="router.push('/path-planner')">创建学习路径</el-button>
-    </el-card>
+      <button class="btn btn-primary" @click="router.push('/path-planner')">创建学习路径</button>
+    </div>
 
     <section v-else-if="isGenerating" class="generating-view">
       <div class="generate-panel">
@@ -79,9 +77,9 @@
           </div>
 
           <div class="header-actions">
-            <el-button plain @click="router.push('/path-planner/history')">路径历史</el-button>
-            <el-button plain @click="router.push('/path-resource-history')">资源记录</el-button>
-            <el-button type="primary" @click="router.push('/path-planner')">重新规划</el-button>
+            <button class="btn btn-outline" @click="router.push('/path-planner/history')">路径历史</button>
+            <button class="btn btn-outline" @click="router.push('/path-resource-history')">资源记录</button>
+            <button class="btn btn-primary" @click="router.push('/path-planner')">重新规划</button>
           </div>
         </div>
       </header>
@@ -309,7 +307,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 import EvaluationBanner from '@/features/learning-path/components/EvaluationBanner.vue'
 
@@ -533,7 +531,7 @@ const handleNodeClick = (node: LearningPathNode) => {
   activeDetailNode.value = node
 
   if (!canEnterNode(node)) {
-    ElMessage.info('该节点尚未解锁，请先完成前置节点')
+    toast.info('该节点尚未解锁，请先完成前置节点')
     return
   }
 
@@ -571,7 +569,7 @@ const startSSE = (pathId: number, runId: string) => {
       }, 700)
     },
     onFailed: (error) => {
-      ElMessage.error(error.message || '路径规划失败')
+      toast.error(error.message || '路径规划失败')
       isGenerating.value = false
       loadPath()
     },
@@ -621,7 +619,7 @@ const loadPath = async () => {
         query: { run_id: newPath.run_id },
       })
     } catch (error) {
-      ElMessage.error(getErrorMessage(error, '路径规划任务创建失败'))
+      toast.error(getErrorMessage(error, '路径规划任务创建失败'))
       isGenerating.value = false
       router.replace('/path-planner')
     }
@@ -684,7 +682,7 @@ const loadPath = async () => {
       }
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '加载学习路径失败'))
+    toast.error(getErrorMessage(error, '加载学习路径失败'))
   } finally {
     loading.value = false
   }
@@ -780,7 +778,7 @@ onMounted(loadPath)
   font-size: 1.35rem;
 }
 
-.empty-state :deep(.el-button) {
+.empty-state .btn {
   margin-top: 22px;
 }
 

@@ -3,9 +3,7 @@
     <header class="result-header">
       <div class="result-heading">
         <span class="result-complete-mark" :class="{ warning }">
-          <el-icon aria-hidden="true">
-            <component :is="warning ? WarningFilled : CircleCheckFilled" />
-          </el-icon>
+          <component :is="warning ? WarningFilled : CircleCheckFilled"  class='w-4 h-4' />
         </span>
         <div>
           <h1>{{ bundleTitle }}</h1>
@@ -17,17 +15,15 @@
       <div class="result-header-actions">
         <span><strong>{{ resourceCards.length }}</strong> 项资源</span>
         <button v-if="actionLabel" type="button" class="bundle-action-button" @click="emit('action')">
-          <el-icon aria-hidden="true">
-            <ArrowLeft v-if="actionKind === 'back'" />
-            <RefreshLeft v-else />
-          </el-icon>
+          <ArrowLeft v-if="actionKind === 'back'" aria-hidden="true" />
+          <RefreshLeft v-else aria-hidden="true" />
           {{ actionLabel }}
         </button>
       </div>
     </header>
 
     <div v-if="warning" class="partial-result-notice" role="status">
-      <el-icon aria-hidden="true"><WarningFilled /></el-icon>
+      <WarningFilled class='w-4 h-4 inline-block align-middle' />
       <span>{{ warning }}</span>
       <em>已完成资源仍可正常使用</em>
     </div>
@@ -93,14 +89,14 @@
           <footer class="resource-card-footer">
             <span>查看完整内容</span>
             <button type="button" :aria-label="`打开${card.title}`" @click.stop="openPreview(card)">
-              <el-icon aria-hidden="true"><ArrowRight /></el-icon>
+              <ArrowRight class='w-4 h-4 inline-block align-middle' />
             </button>
           </footer>
         </article>
       </div>
 
       <div v-else class="empty-result-state">
-        <el-icon aria-hidden="true"><WarningFilled /></el-icon>
+        <WarningFilled class='w-4 h-4 inline-block align-middle' />
         <h2>当前分类暂无资源</h2>
         <p>选择其他类型，或返回查看全部生成结果。</p>
         <button type="button" @click="activeFilter = 'all'">查看全部</button>
@@ -116,12 +112,12 @@ import {
 } from 'vue'
 
 import {
-  ArrowLeft,
-  ArrowRight,
-  CircleCheckFilled,
-  RefreshLeft,
-  WarningFilled,
-} from '@element-plus/icons-vue'
+  PhArrowLeft as ArrowLeft,
+  PhArrowRight as ArrowRight,
+  PhCheckCircle as CircleCheckFilled,
+  PhArrowCounterClockwise as RefreshLeft,
+  PhWarningCircle as WarningFilled
+} from '@phosphor-icons/vue'
 
 import contentCover from '@/features/resource/assets/result-covers/online-learning.svg'
 import mindmapCover from '@/features/resource/assets/result-covers/visual-explanation.svg'
@@ -625,7 +621,7 @@ function isPlainObject(
   min-height: 100%;
   padding: 24px clamp(18px, 3vw, 42px) 36px;
   overflow-y: auto;
-  background: #f5f6f8;
+  background: #f4f7fb;
   color: #172033;
   font-family: var(--font-ui);
 }
@@ -659,7 +655,7 @@ function isPlainObject(
   flex: 0 0 36px;
   place-items: center;
   border: 1px solid #b8dcc9;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #168357;
   background: #eef9f3;
   font-size: 18px;
@@ -677,7 +673,7 @@ function isPlainObject(
   color: #172033;
   font-size: 19px;
   font-weight: 760;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -857,10 +853,10 @@ function isPlainObject(
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #dfe3e8;
-  border-radius: 14px;
+  border-radius: 8px;
   outline: none;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.04);
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.04);
   cursor: pointer;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
@@ -888,11 +884,7 @@ function isPlainObject(
 }
 
 .resource-card-cover::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(35, 76, 132, 0.04));
-  pointer-events: none;
+  display: none;
 }
 
 .resource-card-cover img {
@@ -936,7 +928,7 @@ function isPlainObject(
   color: #64748b;
   font-size: 8px;
   font-weight: 750;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 
 .resource-card-content {
@@ -970,7 +962,7 @@ function isPlainObject(
   color: #172033;
   font-size: 14px;
   font-weight: 750;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1042,13 +1034,13 @@ function isPlainObject(
   align-content: center;
   gap: 8px;
   border: 1px dashed #ccd3dd;
-  border-radius: 14px;
+  border-radius: 8px;
   color: #7a8494;
   background: #fff;
   text-align: center;
 }
 
-.empty-result-state > .el-icon {
+.empty-result-state > svg {
   font-size: 24px;
 }
 

@@ -9,7 +9,7 @@
         <p>等待数字人上线...</p>
       </template>
       <template v-else>
-        <el-icon class="placeholder-icon"><Avatar /></el-icon>
+        <Avatar class="placeholder-icon" />
         <p>数字人未连接</p>
         <button class="reconnect-btn" @click="$emit('reconnect')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,7 +51,7 @@
 
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from 'vue'
-import { Avatar } from '@element-plus/icons-vue'
+import { PhUser as Avatar } from '@phosphor-icons/vue'
 
 const props = defineProps<{
   isReady: boolean

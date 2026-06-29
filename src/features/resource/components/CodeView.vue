@@ -31,7 +31,7 @@
 
         <div class="extras-grid">
           <div v-if="hasComplexity" class="extra-item complexity-info">
-            <div class="extra-label"><el-icon><Timer /></el-icon> 复杂度分析</div>
+            <div class="extra-label"><Timer class='w-4 h-4 inline-block align-middle' /> 复杂度分析</div>
             <div class="extra-content">
               <span v-if="parsedData?.complexity?.time">时间: <code>{{ parsedData!.complexity!.time }}</code></span>
               <span v-if="parsedData?.complexity?.space" class="ml-4">空间: <code>{{ parsedData!.complexity!.space }}</code></span>
@@ -39,7 +39,7 @@
           </div>
 
           <div v-if="parsedData?.debug_tips?.length" class="extra-item tips-info">
-            <div class="extra-label"><el-icon><Warning /></el-icon> 调试建议</div>
+            <div class="extra-label"><Warning class='w-4 h-4 inline-block align-middle' /> 调试建议</div>
             <ul class="tips-list">
               <li v-for="(tip, idx) in parsedData!.debug_tips" :key="idx">{{ tip }}</li>
             </ul>
@@ -47,7 +47,7 @@
         </div>
 
         <div v-if="parsedData?.exercises?.length" class="extra-item exercises-info">
-          <div class="extra-label"><el-icon><EditPen /></el-icon> 练习序列</div>
+          <div class="extra-label"><EditPen class='w-4 h-4 inline-block align-middle' /> 练习序列</div>
           <div class="exercises-container">
             <div v-for="(ex, idx) in parsedData!.exercises" :key="idx" class="exercise-item">
               <span class="ex-num">{{ (Number(idx) + 1).toString().padStart(2, '0') }}</span>
@@ -74,10 +74,14 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { Timer, Warning, EditPen } from '@element-plus/icons-vue'
+import {
+  PhClock as Timer,
+  PhWarning as Warning,
+  PhNotePencil as EditPen
+} from '@phosphor-icons/vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 import MarkdownPreview from '@/shared/ui/MarkdownPreview.vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
@@ -320,9 +324,9 @@ const performHighlight = async () => {
 const copyToClipboard = async (text: string) => {
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success({ message: '代码已复制', plain: true })
+    toast.success({ message: '代码已复制', plain: true })
   } catch {
-    ElMessage.error({ message: '复制失败，请重试', plain: true })
+    toast.error({ message: '复制失败，请重试', plain: true })
   }
 }
 

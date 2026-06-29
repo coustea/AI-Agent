@@ -178,7 +178,7 @@
                 :disabled="!canSend"
                 @click="handleSend"
             >
-              <el-icon><Position /></el-icon>
+              <Position class="btn-icon" />
             </button>
           </div>
 
@@ -188,15 +188,14 @@
               <p>进入学习空间后，系统会根据这些信息生成路径、资源和题库。</p>
             </div>
 
-            <el-button
-                class="finish-btn"
-                type="primary"
-                :loading="submitting"
+            <button
+                class="btn btn-primary finish-btn"
+                :disabled="submitting"
                 @click="submitForm"
             >
-              进入学习空间
-              <el-icon class="el-icon--right"><Right /></el-icon>
-            </el-button>
+              <span>进入学习空间</span>
+              <Right class="btn-icon-right ml-2" />
+            </button>
           </div>
         </div>
       </section>
@@ -207,8 +206,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Position, Right } from '@element-plus/icons-vue'
+import { toast } from 'vue-sonner'
+import { PhPaperPlaneRight as Position, PhArrowRight as Right } from '@phosphor-icons/vue'
 
 import { updateMe } from '@/features/auth/api/auth'
 import { useCurrentUser } from '@/features/auth/model/currentUser'
@@ -983,7 +982,7 @@ const submitForm = async () => {
     await updateMe({ is_first_login: false }).catch(() => {})
     clearDraft()
 
-    ElMessage.success('学习画像构建成功')
+    toast.success('学习画像构建成功')
     visible.value = false
     emit('success')
 
@@ -992,7 +991,7 @@ const submitForm = async () => {
     }
   } catch (error) {
     console.error('Failed to submit onboarding', error)
-    ElMessage.error('提交失败，请重试')
+    toast.error('提交失败，请重试')
   } finally {
     submitting.value = false
   }
@@ -1079,8 +1078,8 @@ const handleNeverShow = async () => {
   inset: 0;
   pointer-events: none;
   background:
-      radial-gradient(circle at 18% 8%, rgba(79, 70, 229, 0.1), transparent 30%),
-      radial-gradient(circle at 86% 16%, rgba(37, 99, 235, 0.1), transparent 34%);
+      radial-gradient(circle at 18% 8%, rgba(70, 184, 180, 0.12), transparent 30%),
+      radial-gradient(circle at 86% 16%, rgba(98, 201, 197, 0.12), transparent 34%);
 }
 
 .conversation-header {
@@ -1121,7 +1120,7 @@ const handleNeverShow = async () => {
 }
 
 .progress-badge strong {
-  color: #4f46e5;
+  color: var(--color-primary-text);
   font-size: 17px;
   font-weight: 950;
   line-height: 1;
@@ -1179,8 +1178,8 @@ const handleNeverShow = async () => {
   width: 32px;
   height: 5px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #4f46e5, #60a5fa);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.22);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.2);
 }
 
 .title-mark span:last-child {
@@ -1237,7 +1236,7 @@ const handleNeverShow = async () => {
 .question-copy span {
   display: block;
   margin-bottom: 5px;
-  color: #4f46e5;
+  color: var(--color-primary-text);
   font-size: 12px;
   font-weight: 950;
 }
@@ -1313,16 +1312,16 @@ const handleNeverShow = async () => {
 }
 
 .avatar-icon {
-  color: #4f46e5;
+  color: var(--color-primary-text);
   background:
       linear-gradient(145deg, rgba(238, 242, 255, 0.95), rgba(219, 234, 254, 0.95));
   border: 1px solid rgba(199, 210, 254, 0.88);
-  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.12);
+  box-shadow: 0 12px 24px rgba(70, 184, 180, 0.12);
 }
 
 .user-avatar {
   color: #ffffff;
-  background: linear-gradient(145deg, #4f46e5, #3b82f6);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
   box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
 }
 
@@ -1418,12 +1417,12 @@ const handleNeverShow = async () => {
   border: 1px solid rgba(199, 210, 254, 0.9);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
-  color: #4f46e5;
+  color: var(--color-primary-text);
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
   backdrop-filter: blur(14px);
-  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.14);
+  box-shadow: 0 12px 28px rgba(70, 184, 180, 0.14);
   transition:
       box-shadow 0.18s ease,
       background 0.18s ease;
@@ -1431,7 +1430,7 @@ const handleNeverShow = async () => {
 
 .back-bottom-btn:hover {
   background: #ffffff;
-  box-shadow: 0 16px 34px rgba(79, 70, 229, 0.18);
+  box-shadow: 0 16px 34px rgba(70, 184, 180, 0.18);
 }
 
 .input-dock {
@@ -1591,14 +1590,14 @@ const handleNeverShow = async () => {
 .quick-reply-btn.is-selected {
   color: #ffffff;
   border-color: transparent;
-  background: linear-gradient(135deg, #4f46e5, #3b82f6);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
   box-shadow: none;
 }
 
 .quick-reply-btn.is-selected:hover {
   color: #ffffff;
   border-color: transparent;
-  background: linear-gradient(135deg, #4f46e5, #3b82f6);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
   box-shadow: none;
 }
 
@@ -1625,7 +1624,7 @@ const handleNeverShow = async () => {
   padding: 2px 7px;
   border-radius: 999px;
   background: #eef2ff;
-  color: #4f46e5;
+  color: var(--color-primary-text);
   font-size: 11px;
   font-weight: 900;
 }
@@ -1661,7 +1660,7 @@ const handleNeverShow = async () => {
   color: #4338ca;
   font-size: 12px;
   font-weight: 900;
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.08);
+  box-shadow: 0 6px 16px rgba(70, 184, 180, 0.08);
 }
 
 .composer-wrapper {
@@ -1706,8 +1705,8 @@ const handleNeverShow = async () => {
   display: grid;
   place-items: center;
   color: #ffffff;
-  background: linear-gradient(145deg, #4f46e5, #3b82f6);
-  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.28);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 14px 28px rgba(70, 184, 180, 0.24);
   cursor: pointer;
   transition:
       transform 0.16s ease,
@@ -1717,7 +1716,7 @@ const handleNeverShow = async () => {
 
 .send-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(79, 70, 229, 0.34);
+  box-shadow: 0 18px 34px rgba(70, 184, 180, 0.28);
 }
 
 .send-btn:disabled {
@@ -1758,8 +1757,8 @@ const handleNeverShow = async () => {
   border: none;
   border-radius: 15px;
   font-weight: 900;
-  background: linear-gradient(145deg, #4f46e5, #3b82f6);
-  box-shadow: 0 16px 32px rgba(79, 70, 229, 0.24);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 16px 32px rgba(70, 184, 180, 0.22);
 }
 
 .message-pop-enter-active,

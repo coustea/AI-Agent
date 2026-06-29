@@ -243,7 +243,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 import CodeView from '@/features/resource/components/CodeView.vue'
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
@@ -381,7 +381,7 @@ const loadDetail = async () => {
       }
     }
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '加载路径资源失败'))
+    toast.error(getErrorMessage(error, '加载路径资源失败'))
   } finally {
     loading.value = false
   }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
@@ -33,11 +33,23 @@ class QuizQuestion(BaseModel):
     id: int = Field(description="题目编号")
     type: str = Field(default="single_choice", description="题目类型")
     question: str = Field(description="题目内容")
-    options: list[QuizOption] = Field(min_length=2, description="选项列表，至少2个选项")
+    # 判断题（true_false）不需要选项，其他类型至少需要2个选项
+    options: list[QuizOption] = Field(default_factory=list, description="选项列表")
     answer: str | bool | list[str] = Field(description="正确答案")
     explanation: str = Field(default="", description="解析说明")
     difficulty: str = Field(default="medium", description="难度")
     knowledge_points: list[str] = Field(default_factory=list, description="考查知识点")
+
+    @model_validator(mode="after")
+    def validate_options_by_type(self):
+        """根据题型验证选项数量：选择题至少2个选项，判断题可为空。"""
+        if self.type == "true_false":
+            # 判断题不需要选项
+            return self
+        # 选择题（单选/多选）至少需要2个选项
+        if len(self.options) < 2:
+            raise ValueError(f"{self.type} 类型题目需要至少2个选项，当前只有 {len(self.options)} 个")
+        return self
 
 
 class QuizPayload(BaseModel):

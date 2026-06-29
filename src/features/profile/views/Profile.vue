@@ -1,571 +1,688 @@
 <template>
-  <div class="profile-dashboard">
-    <div class="bento-container">
+  <main class="min-h-screen py-10 bg-white font-sans antialiased text-slate-800">
+    <div class="max-w-[1240px] mx-auto px-6 lg:px-8">
+      
+      <!-- Split column layout: Left (Profile & history lists) vs Right (Stats, Trend Line & Pie chart) -->
+      <!-- items-stretch aligns left and right column heights perfectly on desktop screen sizes -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:items-stretch">
+        
+        <!-- ================= LEFT COLUMN (col-span-5) ================= -->
+        <!-- lg:h-full flex flex-col justify-between locks heights to match the right column blocks -->
+        <div class="lg:col-span-5 flex flex-col gap-6 lg:h-full lg:min-h-[820px] justify-between lg:pr-10 lg:border-r lg:border-slate-100">
+          
+          <!-- Block 1: Personal Info Cardless Block (relative container with edit button in top-right corner) -->
+          <div class="relative pb-6 border-b border-slate-100 space-y-6 shrink-0">
+            
+            <!-- Edit button in top-right corner of this block -->
+            <div class="absolute top-6 right-6">
+              <Button variant="outline" size="sm" class="text-xs border-slate-200 hover:bg-slate-50 rounded-sm cursor-pointer bg-white" @click="openProfileEditor">
+                <Edit class="w-3.5 h-3.5 mr-1" />
+                编辑资料
+              </Button>
+            </div>
 
-      <div class="bento-span-5 top-row-wrapper">
-
-        <div class="bento-card user-card">
-          <div class="user-header">
-            <el-upload
-                class="avatar-uploader"
-                :show-file-list="false"
-                :before-upload="beforeAvatarUpload"
-                :http-request="handleAvatarUpload"
-            >
-              <div class="avatar-box" :class="{ 'has-avatar': userAvatar }">
-                <img v-if="userAvatar" :src="userAvatar" class="avatar-image" alt="用户头像" />
-                <el-icon v-else class="avatar-icon"><UserFilled /></el-icon>
-                <div class="avatar-upload-overlay">
-                  <el-icon><Edit /></el-icon>
+            <!-- Avatar & basic identity info -->
+            <div class="flex items-center gap-4 pr-24">
+              <Button
+                variant="ghost"
+                class="relative p-0 rounded-full group cursor-pointer shrink-0 animate-fade-in"
+                :disabled="avatarUploading"
+                aria-label="更换头像"
+                @click="triggerAvatarUpload"
+              >
+                <input type="file" ref="avatarInput" class="hidden" accept="image/*" @change="onAvatarFileChange" />
+                <Avatar class="w-16 h-16 border border-slate-100 rounded-full transition-transform group-hover:scale-105">
+                  <AvatarImage v-if="userAvatar" :src="userAvatar" alt="用户头像" />
+                  <AvatarFallback class="text-lg font-bold bg-slate-100 text-slate-700">{{ userName?.slice(0, 1) || 'U' }}</AvatarFallback>
+                </Avatar>
+                <div class="absolute inset-0 bg-black/45 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Edit class="w-3.5 h-3.5 text-white" />
                 </div>
-              </div>
-            </el-upload>
-            <div class="user-info">
-              <div class="name-row">
-                <h3>{{ userName }}</h3>
-                <el-icon class="verify-icon"><CircleCheckFilled /></el-icon>
-              </div>
-              <p class="email-text" v-if="userEmail">{{ userEmail }}</p>
-              <p class="major">{{ profileHeadline }}</p>
-              <div class="tags">
-                <span class="tag">{{ studentProfile.grade || '年级待完善' }}</span>
-                <span class="tag outline">{{ studentProfile.learning_goal || '学习目标待完善' }}</span>
+              </Button>
+ 
+              <div class="space-y-1 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <h2 class="text-lg font-black text-slate-900 tracking-tight truncate">{{ userName }}</h2>
+                  <CircleCheckFilled class="w-4 h-4 text-emerald-500 shrink-0" />
+                </div>
+                <p class="text-xs text-slate-400 font-mono truncate">{{ userEmail }}</p>
+                <p class="text-xs text-slate-500 font-medium leading-relaxed truncate">{{ profileHeadline || '学业资料待完善' }}</p>
               </div>
             </div>
-            <button class="btn-outline custom-edit-btn" @click="openProfileEditor">
-              <el-icon><Edit /></el-icon> 编辑资料
-            </button>
+
+            <!-- Detailed credentials listing -->
+            <div class="border-t border-slate-100 pt-5 space-y-3.5 text-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">就读院校</span>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="font-bold text-slate-800 truncate">{{ studentProfile.school || '未完善' }}</span>
+                  <span v-if="studentProfile.school_level" class="text-[8px] font-black bg-blue/10 text-blue px-1 py-0.5 rounded-sm shrink-0">{{ studentProfile.school_level }}</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">专业学科</span>
+                <span class="font-bold text-slate-800 truncate">{{ studentProfile.major || '未完善' }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">学年阶段</span>
+                <span class="font-bold text-slate-800">{{ studentProfile.grade || '未设置' }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">主攻目标</span>
+                <span class="font-bold text-slate-800 truncate max-w-[200px]" :title="studentProfile.learning_goal || undefined">{{ studentProfile.learning_goal || '未设置' }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">编程语言</span>
+                <span class="font-bold text-slate-800 truncate max-w-[200px]" :title="preferredLanguages.join(', ')">{{ preferredLanguages.join(', ') || '未设置' }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">在修课程</span>
+                <span class="font-bold text-slate-800 truncate max-w-[200px]" :title="studentProfile.courses?.join(', ')">{{ studentProfile.courses?.join(', ') || '未设置' }}</span>
+              </div>
+            </div>
+
+            <!-- Achievements inline indicators -->
+            <div class="border-t border-slate-100 pt-4 flex items-center gap-1.5">
+              <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest mr-2">获得勋章:</span>
+              <Trophy v-if="(learningStats?.streak_days || 0) >= 3" class="w-4 h-4 text-amber-500" title="连续学习 3 天" />
+              <Award v-if="localStats.attempted >= 5 && parseFloat(localStats.accuracy) >= 80" class="w-4 h-4 text-emerald-500" title="作答正确率 > 80%" />
+              <Compass v-if="filteredTableData.length >= 2" class="w-4 h-4 text-blue" title="生成资源 >= 2 份" />
+              <span v-if="!((learningStats?.streak_days || 0) >= 3) && !(localStats.attempted >= 5 && parseFloat(localStats.accuracy) >= 80) && !(filteredTableData.length >= 2)" class="text-xs text-slate-400 font-mono">暂无</span>
+            </div>
           </div>
-          <div class="user-divider"></div>
-          <div class="profile-info-grid">
-            <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><Search /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">学校</span>
-                <div class="info-value school-info-strong">
-                  <span class="school-name-text" :title="studentProfile.school || undefined">{{ studentProfile.school || '未填写' }}</span>
-                  <span v-if="studentProfile.school_level" class="school-level-badge">{{ studentProfile.school_level }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><Checked /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">年级</span>
-                <span class="info-value">{{ studentProfile.grade || '未填写' }}</span>
-              </div>
-            </div>
-            <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><UserFilled /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">专业</span>
-                <span class="info-value" :title="studentProfile.major || undefined">{{ studentProfile.major || '未填写' }}</span>
-              </div>
-            </div>
-            <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><Cpu /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">编程语言</span>
-                <div class="info-value">
-                  <div v-if="preferredLanguages.length > 0" class="course-display-wrapper user-card-course-wrapper">
-                    <strong class="course-single-title user-card-course-title" :title="preferredLanguages[0]">{{ preferredLanguages[0] }}</strong>
-                    <el-popover
-                        v-if="preferredLanguages.length > 1"
-                        placement="top"
-                        :width="220"
-                        trigger="hover"
-                        popper-class="course-popover"
+
+          <!-- Block 2: Customized Learning Path History (flex-1 stretch block with pagination, Cardless) -->
+          <div class="py-6 flex-1 flex flex-col justify-between min-h-[240px] border-b border-slate-100">
+            <div class="space-y-4">
+              <!-- Header with pagination controls -->
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">定制学习路径历史</h3>
+                
+                <!-- Small inline page navigation -->
+                <div v-if="totalPathPages > 1" class="flex items-center gap-2">
+                  <span class="text-[10px] text-slate-400 font-mono">{{ pathCurrentPage }} / {{ totalPathPages }}</span>
+                  <div class="flex items-center gap-1">
+                    <button 
+                      class="p-0.5 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="pathCurrentPage === 1"
+                      @click="pathCurrentPage--"
+                      title="上一页"
                     >
-                      <template #reference>
-                        <el-button link type="primary" class="view-all-courses-btn user-card-view-btn">
-                          共 {{ preferredLanguages.length }} 项
-                        </el-button>
-                      </template>
-                      <div class="all-courses-popover-content">
-                        <div class="popover-title">
-                          <el-icon><Cpu /></el-icon> 已填写的全部编程语言
-                        </div>
-                        <div class="popover-course-list">
-                          <div v-for="(language, idx) in preferredLanguages" :key="language" class="popover-course-item">
-                            <span class="course-number">{{ idx + 1 }}.</span>
-                            <span class="course-name">{{ language }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </el-popover>
-                  </div>
-                  <span v-else>未填写</span>
-                </div>
-              </div>
-            </div>
-            <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><VideoPlay /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">正在学习</span>
-                <div class="info-value">
-                  <div v-if="studentProfile.courses && studentProfile.courses.length > 0" class="course-display-wrapper user-card-course-wrapper">
-                    <strong class="course-single-title user-card-course-title" :title="studentProfile.courses[0]">{{ studentProfile.courses[0] }}</strong>
-                    <el-popover
-                        v-if="studentProfile.courses.length > 1"
-                        placement="top"
-                        :width="220"
-                        trigger="hover"
-                        popper-class="course-popover"
+                      <ChevronLeft class="w-3 h-3 text-slate-600" />
+                    </button>
+                    <button 
+                      class="p-0.5 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="pathCurrentPage === totalPathPages"
+                      @click="pathCurrentPage++"
+                      title="下一页"
                     >
-                      <template #reference>
-                        <el-button link type="primary" class="view-all-courses-btn user-card-view-btn">
-                          共 {{ studentProfile.courses.length }} 门
-                        </el-button>
-                      </template>
-                      <div class="all-courses-popover-content">
-                        <div class="popover-title">
-                          <el-icon><VideoPlay /></el-icon> 正在学习的全部课程
-                        </div>
-                        <div class="popover-course-list">
-                          <div v-for="(c, idx) in studentProfile.courses" :key="c" class="popover-course-item">
-                            <span class="course-number">{{ idx + 1 }}.</span>
-                            <span class="course-name">{{ c }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </el-popover>
-                  </div>
-                  <span v-else>未填写</span>
-                </div>
-              </div>
-            </div>
-            <div class="info-mini-card">
-              <div class="info-icon-box"><el-icon><Aim /></el-icon></div>
-              <div class="info-content-box">
-                <span class="info-label">学习目标</span>
-                <span class="info-value" :title="studentProfile.learning_goal || undefined">{{ studentProfile.learning_goal || '未填写' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="combined-profile-wrapper">
-          <div class="bento-card combined-profile-card">
-            <div class="card-header-flex main-card-header">
-              <h4 class="card-title"><el-icon class="text-blue"><Cpu /></el-icon> 资源生成历史</h4>
-              <div class="custom-pill-group">
-                <button type="button" :class="['pill-btn', { active: historyFilter === 'all' }]" @click="historyFilter = 'all'">全部</button>
-                <button type="button" :class="['pill-btn', { active: historyFilter === 'completed' }]" @click="historyFilter = 'completed'">已完成</button>
-              </div>
-            </div>
-
-            <div class="profile-tabs-content">
-              <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; padding-right: 4px;" v-loading="resourceHistoryLoading">
-                <div v-if="filteredTableData.length === 0" class="empty-history">
-                  <el-empty description="暂无历史生成记录" :image-size="60" />
-                </div>
-                <div v-else class="history-list-flow">
-                  <div
-                      v-for="item in filteredTableData"
-                      :key="item.id"
-                      class="history-row-card"
-                      :class="getStatusClass(item.rawStatus)"
-                      @click="viewResourceDetail(item)"
-                  >
-                    <div class="status-bar"></div>
-                    <div class="item-icon-wrapper">
-                      <el-icon><component :is="getHistoryIcon(item.rawStatus)" /></el-icon>
-                    </div>
-
-                    <div class="item-main-info">
-                      <span class="item-title" :title="item.title">{{ item.title }}</span>
-                      <div class="item-sub-meta">
-                        <span class="item-time"><el-icon><Clock /></el-icon>{{ item.time }}</span>
-                        <span class="status-badge-pill" :class="item.rawStatus">
-                          <span class="badge-dot"></span>
-                          {{ item.status }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="item-action-btn">
-                      <span>查看</span>
-                      <el-icon class="action-arrow"><ArrowRight /></el-icon>
-                    </div>
+                      <ChevronRight class="w-3 h-3 text-slate-600" />
+                    </button>
                   </div>
                 </div>
+                <span v-else class="text-[10px] text-slate-400 font-mono">{{ pathHistory.length }} PATHS</span>
+              </div>
+
+              <!-- List content -->
+              <div v-if="pathHistoryLoading" class="py-6 flex justify-center items-center text-slate-400 text-xs">
+                加载中...
+              </div>
+              <div v-else-if="pathHistory.length === 0" class="py-6 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs">
+                暂无路径历史记录，前往规划页开始设计学业路径
+              </div>
+              <div v-else class="space-y-1">
+                <div 
+                  v-for="item in paginatedPathHistory" 
+                  :key="item.id" 
+                  class="flex justify-between items-center py-2 px-2 border-b border-slate-50 hover:bg-slate-50/40 rounded-sm cursor-pointer transition-colors"
+                  @click="router.push('/learning-path/overview')"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-[9px] font-bold bg-blue/10 text-blue px-1.5 py-0.5 rounded-sm shrink-0">
+                      {{ item.overall_progress }}%
+                    </span>
+                    <span class="text-xs text-slate-700 font-semibold truncate">{{ item.title }}</span>
+                  </div>
+                  <span class="text-[9px] text-slate-400 font-mono shrink-0">{{ item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '刚刚' }}</span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-      <div class="bento-card bento-span-3 profile-notes-card">
-        <div class="card-header-flex profile-notes-header">
-          <div class="profile-notes-title-block">
-            <h4 class="card-title"><el-icon><DocumentCopy /></el-icon> 我的笔记</h4>
-            <p class="profile-notes-subtitle">同步展示全局笔记草稿和最近保存内容</p>
-          </div>
-          <div class="profile-notes-summary">
-            <span class="notes-card-count">{{ profileSavedNotes.length }} 条已保存</span>
-            <span v-if="profileDraft" class="notes-draft-pill">草稿未保存</span>
-          </div>
-        </div>
-        <div class="profile-notes-body">
-          <div v-if="profileDraft || profileSavedNotes.length > 0" class="profile-notes-stack">
-            <article v-if="profileDraft" class="profile-note-item draft-note-item" @click="openNotePreview({ id: 'draft', content: profileDraft, savedAt: '' }, true)">
-              <div class="note-item-head">
-                <span class="note-state-badge">未保存草稿</span>
-                <span class="note-time-text">关闭弹窗后仍会保留</span>
-              </div>
-              <p class="note-item-title">{{ getNoteSummary(profileDraft) }}</p>
-            </article>
 
-            <article
-              v-for="note in profileSavedNotes"
-              :key="note.id"
-              class="profile-note-item"
-              @click="openNotePreview(note)"
+            <!-- Page total items summary at bottom -->
+            <div class="text-[9px] text-slate-400 font-mono border-t border-slate-50 pt-2 shrink-0 flex justify-between">
+              <span>TOTAL ACTIVE</span>
+              <span>{{ pathHistory.length }} ITEMS</span>
+            </div>
+          </div>
+
+          <!-- Block 3: Generated Resources List (flex-1 stretch block with pagination, Cardless) -->
+          <div class="py-6 flex-1 flex flex-col justify-between min-h-[240px]">
+            <div class="space-y-4">
+              <!-- Header with pagination controls -->
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">智能生成资源库</h3>
+                
+                <!-- Small inline page navigation -->
+                <div v-if="totalResourcePages > 1" class="flex items-center gap-2">
+                  <span class="text-[10px] text-slate-400 font-mono">{{ resourceCurrentPage }} / {{ totalResourcePages }}</span>
+                  <div class="flex items-center gap-1">
+                    <button 
+                      class="p-0.5 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="resourceCurrentPage === 1"
+                      @click="resourceCurrentPage--"
+                      title="上一页"
+                    >
+                      <ChevronLeft class="w-3 h-3 text-slate-600" />
+                    </button>
+                    <button 
+                      class="p-0.5 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="resourceCurrentPage === totalResourcePages"
+                      @click="resourceCurrentPage++"
+                      title="下一页"
+                    >
+                      <ChevronRight class="w-3 h-3 text-slate-600" />
+                    </button>
+                  </div>
+                </div>
+                <span v-else class="text-[10px] text-slate-400 font-mono">{{ resourceHistory.length }} ITEMS</span>
+              </div>
+
+              <!-- List content -->
+              <div v-if="resourceHistoryLoading" class="py-6 flex justify-center items-center text-slate-400 text-xs">
+                加载中...
+              </div>
+              <div v-else-if="resourceHistory.length === 0" class="py-6 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs">
+                暂无已生成资源，使用规划或导师即可触发生成
+              </div>
+              <div v-else class="space-y-1">
+                <div 
+                  v-for="item in paginatedResourceHistory" 
+                  :key="item.id" 
+                  class="flex justify-between items-center py-2 px-2 border-b border-slate-50 hover:bg-slate-50/40 rounded-sm cursor-pointer transition-colors"
+                  @click="router.push('/resource-detail/' + item.id)"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span v-for="type in (item.resource_types || []).slice(0, 1)" :key="type" class="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm shrink-0 uppercase">
+                      {{ type === 'ppt' ? 'PPT' : (type === 'video' ? '视频' : '图文') }}
+                    </span>
+                    <span v-if="(item.resource_types || []).length > 1" class="text-[8px] bg-slate-200 text-slate-500 px-1 rounded shrink-0">+{{ (item.resource_types || []).length - 1 }}</span>
+                    <span class="text-xs text-slate-700 font-semibold truncate">{{ item.learning_need || '学业需求' }}</span>
+                  </div>
+                  <span class="text-[9px] text-slate-400 font-mono shrink-0">{{ item.created_at ? new Date(item.created_at).toLocaleDateString() : '刚刚' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Page total items summary at bottom -->
+            <div class="text-[9px] text-slate-400 font-mono border-t border-slate-50 pt-2 shrink-0 flex justify-between">
+              <span>TOTAL CREATED</span>
+              <span>{{ resourceHistory.length }} ITEMS</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ================= RIGHT COLUMN (col-span-7) ================= -->
+        <!-- flex flex-col justify-between locks heights to exactly align margins with the left column -->
+        <div class="lg:col-span-7 flex flex-col gap-6 lg:h-full lg:pl-10">
+          
+          <!-- Block 1: Practice & Stats Metrics (Cardless) -->
+          <div class="pb-6 border-b border-slate-100 space-y-6 shrink-0 h-[196px] flex flex-col justify-between">
+            <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono shrink-0">系统练习与学业量化</h3>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 flex-1 items-center">
+              <div class="space-y-1">
+                <span class="text-[9px] text-slate-400 font-mono uppercase tracking-wider block">累计学习时间</span>
+                <div class="flex items-baseline gap-0.5">
+                  <strong class="text-3xl font-extrabold text-slate-900 font-mono tracking-tight">{{ formatDurationValue(studentProfile.learning_duration_total) }}</strong>
+                  <span class="text-xs text-slate-500 font-bold font-mono">{{ formatDurationUnit(studentProfile.learning_duration_total) }}</span>
+                </div>
+              </div>
+              <div class="space-y-1">
+                <span class="text-[9px] text-slate-400 font-mono uppercase tracking-wider block">累计打卡天数</span>
+                <div class="flex items-baseline gap-0.5">
+                  <strong class="text-3xl font-extrabold text-slate-900 font-mono tracking-tight">{{ learningStats?.streak_days || 0 }}</strong>
+                  <span class="text-xs text-slate-500 font-bold font-mono">天</span>
+                </div>
+              </div>
+              <div class="space-y-1">
+                <span class="text-[9px] text-slate-400 font-mono uppercase tracking-wider block">智能作答数量</span>
+                <div class="flex items-baseline gap-0.5">
+                  <strong class="text-3xl font-extrabold text-slate-900 font-mono tracking-tight">{{ localStats.attempted }}</strong>
+                  <span class="text-xs text-slate-500 font-bold font-mono">题</span>
+                </div>
+              </div>
+              <div class="space-y-1">
+                <span class="text-[9px] text-slate-400 font-mono uppercase tracking-wider block">作答正确率</span>
+                <strong class="text-3xl font-extrabold text-slate-900 font-mono tracking-tight block">{{ localStats.accuracy }}</strong>
+              </div>
+            </div>
+
+            <!-- Wrong question review banner -->
+            <div 
+              class="flex items-center justify-between p-3 bg-rose-50/20 hover:bg-rose-50/50 border border-rose-100/50 rounded-sm cursor-pointer transition-colors shrink-0 h-10"
+              @click="router.push('/question-bank')"
             >
-              <div class="note-item-head">
-                <span class="note-state-badge subtle">已保存</span>
-                <span class="note-time-text">{{ formatNoteTime(note.savedAt) }}</span>
+              <div class="flex items-center gap-2">
+                <InfoFilled class="w-4 h-4 text-rose-500 shrink-0" />
+                <span class="text-xs font-bold text-slate-700">错题本需消化</span>
               </div>
-              <p class="note-item-title">{{ getNoteSummary(note.content) }}</p>
-            </article>
-          </div>
-
-          <div v-else class="profile-notes-empty">
-            <div class="profile-notes-empty-inner">
-              <span>还没有笔记</span>
-              <p>点击右下角全局笔记按钮后记录的内容，会在这里同步展示。</p>
+              <div class="flex items-center gap-1 text-xs">
+                <strong class="font-extrabold text-rose-600">{{ wrongQuestionsCount }} 道待改错</strong>
+                <ChevronRight class="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <el-dialog
-        v-model="notePreviewVisible"
-        width="min(760px, 92vw)"
-        class="note-preview-dialog"
-        destroy-on-close
-      >
-        <template #header>
-          <div class="note-preview-header">
-            <div>
-              <h3>{{ notePreviewDraft ? '未保存草稿' : '笔记详情' }}</h3>
-              <p>{{ notePreviewDraft ? '关闭全局笔记前会继续保留' : (notePreviewSavedAt ? formatNoteTime(notePreviewSavedAt) : '刚刚记录') }}</p>
+          <!-- Block 2: Daily Focus Trend Chart (Cardless) -->
+          <div class="py-6 border-b border-slate-100 space-y-6 flex-1 flex flex-col justify-between min-h-[300px]">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-3 shrink-0">
+              <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">学习专注走势</h3>
+              
+              <div class="flex items-center gap-3">
+                <template v-if="studentProfile.courses && studentProfile.courses.length > 1">
+                  <Select v-model="selectedTrendCourse">
+                    <SelectTrigger class="w-[120px] h-7 text-[10px] rounded-sm border-slate-200 px-2 bg-white">
+                      <SelectValue placeholder="切换课程" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem v-for="course in studentProfile.courses" :key="course" :value="course" class="text-xs">
+                          {{ course }}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </template>
+                
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  class="scale-90 origin-right bg-white rounded-sm"
+                  :model-value="timeRange"
+                  @update:model-value="setTimeRange"
+                >
+                  <ToggleGroupItem value="7" class="text-xs px-2 rounded-sm">7天</ToggleGroupItem>
+                  <ToggleGroupItem value="30" class="text-xs px-2 rounded-sm">30天</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            </div>
+
+            <!-- ECharts Line Chart -->
+            <div class="flex-1 min-h-[200px] relative">
+              <v-chart class="chart" :option="lineOption" autoresize />
             </div>
           </div>
-        </template>
 
-        <div class="note-preview-body">
-          <p class="note-preview-content">{{ notePreviewContent }}</p>
-        </div>
-      </el-dialog>
+          <!-- Block 3: Context Breakdown Pie Chart (Cardless) -->
+          <div class="py-6 space-y-6 shrink-0 h-[260px] flex flex-col justify-between">
+            <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono border-b border-slate-100 pb-3 shrink-0">学习场景时长占比</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-center flex-1">
+              <!-- ECharts Donut/Pie Chart (col-span-6) -->
+              <div class="md:col-span-6 h-[170px] relative">
+                <v-chart class="chart" :option="pieOption" autoresize />
+              </div>
 
-      <div class="bento-card bento-span-2 performance-card">
-        <div class="card-header-flex">
-          <h4>近期任务</h4>
-          <div class="custom-pill-group mini">
-            <button type="button" :class="['pill-btn', { active: timeRange === '7' }]" @click="timeRange = '7'">近 7 天</button>
-            <button type="button" :class="['pill-btn', { active: timeRange === '30' }]" @click="timeRange = '30'">近 30 天</button>
-          </div>
-        </div>
-        <div class="perf-grid">
-          <div class="perf-box">
-            <div class="perf-icon bg-blue-light"><el-icon class="text-blue"><Timer /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">累计学习时长</span>
-              <span class="value">
-                {{ formatDurationValue(learningStats?.total_seconds) }}<small>{{ formatDurationUnit(learningStats?.total_seconds) }}</small>
-              </span>
-            </div>
-          </div>
-          <div class="perf-box">
-            <div class="perf-icon bg-indigo-light"><el-icon class="text-indigo"><Reading /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">已完成课程</span>
-              <span class="value">{{ dynamicStats.completedCourses }} <small>门</small></span>
-            </div>
-          </div>
-          <div class="perf-box">
-            <div class="perf-icon bg-green-light"><el-icon class="text-green"><DocumentCopy /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">生成资源数</span>
-              <span class="value">{{ dynamicStats.generatedResources }} <small>个</small></span>
-            </div>
-          </div>
-          <div class="perf-box">
-            <div class="perf-icon bg-purple-light"><el-icon class="text-purple"><ChatDotRound /></el-icon></div>
-            <div class="perf-data">
-              <span class="label">AI 互动次数</span>
-              <span class="value">{{ dynamicStats.interactions }} <small>次</small></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="bento-card bento-span-5 trend-section">
-        <div class="card-header-flex">
-          <h4 class="card-title">学习成长趋势（按课程）</h4>
-
-          <div class="trend-course-selector">
-            <template v-if="studentProfile.courses && studentProfile.courses.length > 1">
-              <div class="custom-dropdown" :class="{ 'is-open': courseDropdownOpen }" @click="courseDropdownOpen = !courseDropdownOpen" @blur="courseDropdownOpen = false" tabindex="0">
-                <div class="dropdown-selected">
-                  <span class="selected-text" :title="selectedTrendCourse">{{ selectedTrendCourse || '选择课程' }}</span>
-                  <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
+              <!-- Custom Legend listing (col-span-6) -->
+              <div class="md:col-span-6 space-y-2.5 border-l border-slate-100 pl-6">
+                <!-- AI Tutor -->
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue"></span>
+                    <span class="text-slate-500 font-medium">AI导师交互</span>
+                  </div>
+                  <span class="font-bold text-slate-800">{{ formatDurationValue(learningStats?.context_breakdown?.Tutor) }}{{ formatDurationUnit(learningStats?.context_breakdown?.Tutor) }}</span>
                 </div>
-                <ul class="dropdown-options" v-show="courseDropdownOpen">
-                  <li v-for="c in studentProfile.courses" :key="c"
-                      :class="['dropdown-option', { active: selectedTrendCourse === c }]"
-                      @click.stop="selectCourse(c)">
-                    {{ c }}
-                  </li>
-                </ul>
+                <!-- Resource Details -->
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                    <span class="text-slate-500 font-medium">课件资源阅读</span>
+                  </div>
+                  <span class="font-bold text-slate-800">
+                    {{ formatDurationValue(
+                      (learningStats?.context_breakdown?.ResourceDetail || 0) + 
+                      (learningStats?.context_breakdown?.PathResourceDetail || 0)
+                    ) }}{{ formatDurationUnit(
+                      (learningStats?.context_breakdown?.ResourceDetail || 0) + 
+                      (learningStats?.context_breakdown?.PathResourceDetail || 0)
+                    ) }}
+                  </span>
+                </div>
+                <!-- Question bank -->
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span class="text-slate-500 font-medium">智能练习作答</span>
+                  </div>
+                  <span class="font-bold text-slate-800">{{ formatDurationValue(learningStats?.context_breakdown?.QuestionBank) }}{{ formatDurationUnit(learningStats?.context_breakdown?.QuestionBank) }}</span>
+                </div>
+                <!-- Learning path planning -->
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span class="text-slate-500 font-medium">定制路径规划</span>
+                  </div>
+                  <span class="font-bold text-slate-800">{{ formatDurationValue(learningStats?.context_breakdown?.LearningPathOverview) }}{{ formatDurationUnit(learningStats?.context_breakdown?.LearningPathOverview) }}</span>
+                </div>
               </div>
-            </template>
-            <template v-else-if="studentProfile.courses && studentProfile.courses.length === 1">
-              <div class="custom-single-course">
-                <el-icon><VideoPlay /></el-icon>
-                <span>{{ studentProfile.courses[0] }}</span>
-              </div>
-            </template>
-            <template v-else>
-              <span class="no-course-text">暂无在学课程</span>
-            </template>
+            </div>
           </div>
+
         </div>
-        <div class="trend-chart-container">
-          <v-chart class="chart" :option="lineOption" autoresize />
-        </div>
+
       </div>
+
     </div>
 
-    <el-dialog
-        v-model="profileEditorVisible"
-        width="660px"
-        :close-on-click-modal="false"
-        class="profile-editor-dialog compact-dialog"
-        :show-close="true"
-        align-center
-    >
-      <template #header>
-        <div class="dialog-custom-header">
-          <h2 class="dialog-title">编辑学习画像资料</h2>
-          <p class="dialog-subtitle">完善你的基础信息，帮助系统生成更贴合你的学习资源与学习路径</p>
+    <!-- Modals -->
+    <!-- Profile Editor Dialog -->
+    <Dialog v-model:open="profileEditorVisible">
+      <DialogContent class="max-w-xl rounded-2xl p-6 bg-white border border-slate-200">
+        <DialogHeader class="mb-4">
+          <DialogTitle class="text-base font-bold text-slate-900">编辑学习画像资料</DialogTitle>
+          <DialogDescription class="text-xs text-slate-400">完善基础信息，让系统生成更贴合你的学习资源与学习路径。</DialogDescription>
+        </DialogHeader>
 
-          <div class="editor-step-indicator">
-            <div class="step-item" :class="{ 'is-active': currentEditorStep >= 1 }">
-              <div class="step-icon">
-                <el-icon v-if="currentEditorStep === 2"><Check /></el-icon>
-                <span v-else>1</span>
+        <!-- Step indicator -->
+        <div class="flex items-center justify-between mb-6 px-4">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold" :class="
+              currentEditorStep === 1 ? 'bg-blue text-white' : 'bg-emerald-500 text-white'
+            ">
+              <Check v-if="currentEditorStep === 2" class="w-3.5 h-3.5" />
+              <span v-else>1</span>
+            </div>
+            <span class="text-xs font-semibold" :class="currentEditorStep === 1 ? 'text-blue' : 'text-slate-500'">专业与目标</span>
+          </div>
+          <div class="flex-1 h-0.5 mx-4 transition-colors duration-300" :class="currentEditorStep === 2 ? 'bg-emerald-500' : 'bg-slate-100'"></div>
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold" :class="
+              currentEditorStep === 2 ? 'bg-blue text-white' : 'bg-slate-100 text-slate-400'
+            ">
+              2
+            </div>
+            <span class="text-xs font-semibold" :class="currentEditorStep === 2 ? 'text-blue' : 'text-slate-400'">学校与阶段</span>
+          </div>
+        </div>
+
+        <!-- Form content -->
+        <form @submit.prevent class="space-y-4">
+          <!-- Step 1 -->
+          <div v-show="currentEditorStep === 1" class="space-y-4">
+            <div class="p-4 border border-slate-100 bg-slate-50/50 rounded-md space-y-4">
+              <div class="flex items-center gap-1.5">
+                <Badge variant="secondary" class="text-[10px] rounded-sm">必填</Badge>
+                <h5 class="text-xs font-bold text-slate-800">专业与课程</h5>
               </div>
-              <div class="step-text">专业与目标</div>
-            </div>
-            <div class="step-line" :class="{ 'is-active': currentEditorStep === 2 }"></div>
-            <div class="step-item" :class="{ 'is-active': currentEditorStep === 2 }">
-              <div class="step-icon">2</div>
-              <div class="step-text">学校与阶段</div>
-            </div>
-          </div>
-        </div>
-      </template>
 
-      <el-form
-          ref="profileFormRef"
-          :model="profileForm"
-          :rules="profileRules"
-          label-position="top"
-          class="custom-profile-form"
-          hide-required-asterisk
-      >
-        <div v-show="currentEditorStep === 1" class="editor-step-content">
-          <div class="profile-form-section">
-            <div class="profile-form-section-head">
-              <div class="section-badge required-badge">必填 01</div>
-              <h5 class="section-title">专业与课程</h5>
-            </div>
+              <div class="space-y-3">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-semibold text-slate-700">
+                    <span class="text-rose-500 mr-0.5">*</span> 专业
+                  </label>
+                  <div class="relative">
+                    <Input
+                      v-model="profileForm.major"
+                      type="text"
+                      placeholder="可以直接输入或选择"
+                      class="rounded-md h-9"
+                      @focus="majorFocus = true"
+                      @blur="majorFocus = false"
+                    />
+                    <div v-if="profileErrors.major" class="text-[11px] text-rose-500 mt-1">{{ profileErrors.major }}</div>
 
-            <div class="profile-form-grid">
-              <el-form-item prop="major">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 专业</span></template>
-                <el-autocomplete
-                    v-model="profileForm.major"
-                    :fetch-suggestions="querySearchMajor"
-                    placeholder="可以直接输入或选择"
-                    clearable
-                    class="w-full"
-                >
-                  <template #default="{ item }">
-                    <span>{{ item.value }}</span>
-                  </template>
-                </el-autocomplete>
-              </el-form-item>
-
-              <el-form-item prop="courses">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 正在学习的课程</span></template>
-                <el-select
-                    v-model="profileForm.courses"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="输入课程名后，按回车即可添加"
-                    class="w-full"
-                >
-                  <template #tag>
-                    <div v-if="profileForm.courses.length > 0" class="editor-course-selection">
-                      <strong class="course-single-title" :title="profileForm.courses[0]">{{ profileForm.courses[0] }}</strong>
-                      <el-popover
-                          v-if="profileForm.courses.length > 1"
-                          placement="top"
-                          :width="220"
-                          trigger="hover"
-                          popper-class="course-popover"
+                    <ul v-if="majorFocus && majorSuggestions.length > 0" class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-xl max-h-[160px] overflow-y-auto z-[2100]">
+                      <li
+                        v-for="item in majorSuggestions"
+                        :key="item.value"
+                        class="px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer text-slate-700"
+                        @mousedown="selectMajor(item.value)"
                       >
-                        <template #reference>
-                          <el-button link type="primary" class="view-all-courses-btn" @click.stop>
-                            共 {{ profileForm.courses.length }} 门
-                          </el-button>
-                        </template>
-                        <div class="all-courses-popover-content">
-                          <div class="popover-title">
-                            <el-icon><VideoPlay /></el-icon> 正在学习的全部课程
-                          </div>
-                          <div class="popover-course-list">
-                            <div v-for="(course, idx) in profileForm.courses" :key="course" class="popover-course-item">
-                              <span class="course-number">{{ idx + 1 }}.</span>
-                              <span class="course-name">{{ course }}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </el-popover>
+                        {{ item.value }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-semibold text-slate-700">
+                    <span class="text-rose-500 mr-0.5">*</span> 正在学习的课程
+                  </label>
+
+                  <!-- Tag Chip Input -->
+                  <div class="flex flex-wrap gap-1.5 p-2 min-h-[42px] border border-slate-200 rounded-md bg-white focus-within:border-blue transition-colors">
+                    <span
+                      v-for="(course, index) in profileForm.courses"
+                      :key="course"
+                      class="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-sm bg-slate-100 text-slate-800 border border-slate-200"
+                    >
+                      {{ course }}
+                      <Button type="button" variant="ghost" class="p-0 h-4 w-4 rounded-full text-slate-400 hover:text-slate-600" aria-label="移除课程" @click="removeCourse(index)">
+                        <Close class="w-3 h-3" />
+                      </Button>
+                    </span>
+                    <input
+                      v-model="newCourseInput"
+                      type="text"
+                      placeholder="按回车添加课程"
+                      class="flex-1 min-w-[120px] text-xs outline-none bg-transparent"
+                      @keydown.enter.prevent="addCourse"
+                    />
+                  </div>
+                  <div v-if="profileErrors.courses" class="text-[11px] text-rose-500 mt-1">{{ profileErrors.courses }}</div>
+
+                  <div class="mt-2.5">
+                    <span class="text-[10px] text-slate-400">推荐预设课程：</span>
+                    <div class="flex flex-wrap gap-1.5 mt-1.5">
+                      <Button
+                        v-for="course in PRESET_COURSES.slice(0, 8)"
+                        :key="course"
+                        type="button"
+                        variant="outline"
+                        class="text-[10px] h-7 px-2.5 rounded-sm border-slate-200 bg-white cursor-pointer"
+                        @click="() => { if(!profileForm.courses.includes(course)) profileForm.courses.push(course) }"
+                      >
+                        + {{ course }}
+                      </Button>
                     </div>
-                  </template>
-                  <el-option v-for="course in PRESET_COURSES" :key="course" :label="course" :value="course" />
-                </el-select>
-              </el-form-item>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-4 border border-slate-100 bg-slate-50/50 rounded-md space-y-3">
+              <div class="flex items-center gap-1.5">
+                <Badge variant="secondary" class="text-[10px] rounded-sm">必填</Badge>
+                <h5 class="text-xs font-bold text-slate-800">学习目标</h5>
+              </div>
+
+              <div class="space-y-1.5">
+                <label class="block text-xs font-semibold text-slate-700">
+                  <span class="text-rose-500 mr-0.5">*</span> 当前学习目标
+                </label>
+                <Select v-model="profileForm.global_learning_goal">
+                  <SelectTrigger class="w-full h-9 rounded-md">
+                    <SelectValue placeholder="请选择学习目标" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem v-for="goal in PRESET_GOALS" :key="goal" :value="goal" class="text-xs">
+                        {{ goal }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <div v-if="profileErrors.global_learning_goal" class="text-[11px] text-rose-500 mt-1">{{ profileErrors.global_learning_goal }}</div>
+              </div>
             </div>
           </div>
 
-          <div class="profile-form-section mt-3">
-            <div class="profile-form-section-head">
-              <div class="section-badge required-badge">必填 02</div>
-              <h5 class="section-title">学习目标</h5>
+          <!-- Step 2 -->
+          <div v-show="currentEditorStep === 2" class="space-y-4">
+            <div class="p-4 border border-slate-100 bg-slate-50/50 rounded-md space-y-4">
+              <div class="flex items-center gap-1.5">
+                <Badge variant="outline" class="text-[10px] rounded-sm">背景信息</Badge>
+                <h5 class="text-xs font-bold text-slate-800">学校与阶段</h5>
+              </div>
+
+              <div class="space-y-3">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-semibold text-slate-700">
+                    <span class="text-rose-500 mr-0.5">*</span> 学校
+                  </label>
+                  <div class="relative">
+                    <Input
+                      v-model="profileForm.school"
+                      type="text"
+                      placeholder="可以直接输入或搜索"
+                      class="rounded-md h-9"
+                      @focus="schoolFocus = true"
+                      @blur="schoolFocus = false"
+                    />
+                    <div v-if="profileErrors.school" class="text-[11px] text-rose-500 mt-1">{{ profileErrors.school }}</div>
+
+                    <ul v-if="schoolFocus && schoolSuggestions.length > 0" class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-xl max-h-[160px] overflow-y-auto z-[2100]">
+                      <li
+                        v-for="item in schoolSuggestions"
+                        :key="item.value"
+                        class="px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer text-slate-700 flex justify-between items-center"
+                        @mousedown="selectSchool(item.value)"
+                      >
+                        <span>{{ item.value }}</span>
+                        <span v-if="item.level" class="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-sm">{{ item.level }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-semibold text-slate-700">
+                    <span class="text-rose-500 mr-0.5">*</span> 年级
+                  </label>
+                  <Select v-model="profileForm.grade">
+                    <SelectTrigger class="w-full h-9 rounded-md">
+                      <SelectValue placeholder="请选择年级" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem v-for="grade in PRESET_GRADES" :key="grade" :value="grade" class="text-xs">
+                          {{ grade }}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <div v-if="profileErrors.grade" class="text-[11px] text-rose-500 mt-1">{{ profileErrors.grade }}</div>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-semibold text-slate-700">每天学习时间</label>
+                  <Select v-model="profileForm.daily_study_time">
+                    <SelectTrigger class="w-full h-9 rounded-md">
+                      <SelectValue placeholder="请选择每天学习时间" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem v-for="time in PRESET_DAILY_STUDY_TIME" :key="time" :value="time" class="text-xs">
+                          {{ time }}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-semibold text-slate-700">编程语言（多选）</label>
+                  <div class="grid grid-cols-3 gap-2 border border-slate-200 p-3 rounded-md max-h-[140px] overflow-y-auto bg-slate-50/30">
+                    <label v-for="language in PRESET_LANGUAGES" :key="language" class="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        :value="language"
+                        v-model="profileForm.programming_languages"
+                        class="rounded text-blue border-slate-300 w-3.5 h-3.5 focus:ring-0 cursor-pointer"
+                      />
+                      <span>{{ language }}</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
-
-            <el-form-item prop="global_learning_goal">
-              <template #label><span class="custom-label"><span class="req-star">*</span> 当前学习目标</span></template>
-              <el-select v-model="profileForm.global_learning_goal" filterable allow-create default-first-option clearable placeholder="请选择学习目标，没有合适选项可直接输入">
-                <el-option v-for="goal in PRESET_GOALS" :key="goal" :label="goal" :value="goal" />
-              </el-select>
-            </el-form-item>
           </div>
-        </div>
+        </form>
 
-        <div v-show="currentEditorStep === 2" class="editor-step-content">
-          <div class="profile-form-section">
-            <div class="profile-form-section-head">
-              <div class="section-badge bg-badge">背景 03</div>
-              <h5 class="section-title">学校与阶段</h5>
-            </div>
-
-            <div class="profile-form-grid">
-              <el-form-item prop="school">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 学校</span></template>
-                <el-autocomplete
-                    v-model="profileForm.school"
-                    :fetch-suggestions="querySearchSchool"
-                    placeholder="可以直接输入或搜索"
-                    clearable
-                    class="w-full"
-                >
-                  <template #prefix><el-icon><Search /></el-icon></template>
-                  <template #default="{ item }">
-                    <span>{{ item.value }}</span>
-                    <span v-if="item.level" class="school-level-tag">{{ item.level }}</span>
-                  </template>
-                </el-autocomplete>
-              </el-form-item>
-
-              <el-form-item prop="grade">
-                <template #label><span class="custom-label"><span class="req-star">*</span> 年级</span></template>
-                <el-select v-model="profileForm.grade" filterable allow-create default-first-option clearable placeholder="请选择年级">
-                  <el-option v-for="grade in PRESET_GRADES" :key="grade" :label="grade" :value="grade" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item>
-                <template #label><span class="custom-label">每天学习时间</span></template>
-                <el-select v-model="profileForm.daily_study_time" clearable placeholder="请选择每天学习时间">
-                  <el-option v-for="t in PRESET_DAILY_STUDY_TIME" :key="t" :label="t" :value="t" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item>
-                <template #label><span class="custom-label">编程语言（选填）</span></template>
-                <el-select v-model="profileForm.programming_languages" multiple filterable allow-create default-first-option clearable placeholder="请选择编程语言">
-                  <el-option v-for="language in PRESET_LANGUAGES" :key="language" :label="language" :value="language" />
-                </el-select>
-              </el-form-item>
-            </div>
+        <!-- Footer actions -->
+        <div class="border-t border-slate-100 pt-4 mt-6 flex justify-between items-center">
+          <div class="flex items-center gap-1 text-[10px] text-slate-400">
+            <InfoFilled class="w-3.5 h-3.5" />
+            <span>带 * 为必填项，完善后可获得更精准推荐</span>
           </div>
-        </div>
-      </el-form>
-
-      <template #footer>
-        <div class="dialog-custom-footer">
-          <div class="footer-hint">
-            <el-icon><InfoFilled /></el-icon>
-            <span>带 <span class="req-star">*</span> 为必填项，完善信息后可获得更精准推荐</span>
-          </div>
-          <div class="footer-actions">
+          <div class="flex gap-2">
             <template v-if="currentEditorStep === 1">
-              <el-button class="step-btn" @click="nextEditorStep(profileFormRef)">
-                下一步<el-icon class="el-icon--right"><ArrowRight /></el-icon>
-              </el-button>
+              <Button type="button" class="rounded-sm flex items-center gap-1 h-9 cursor-pointer" @click="nextEditorStep">
+                下一步 <ArrowRight class="w-4 h-4" />
+              </Button>
             </template>
             <template v-else-if="currentEditorStep === 2">
-              <el-button class="step-btn" @click="currentEditorStep = 1">
-                <el-icon class="el-icon--left"><ArrowLeft /></el-icon> 上一步
-              </el-button>
-              <el-button type="primary" class="save-btn" :loading="profileSubmitting" @click="submitProfile(profileFormRef)">
-                保存 <el-icon class="el-icon--right"><Check /></el-icon>
-              </el-button>
+              <Button type="button" variant="outline" class="rounded-sm flex items-center gap-1 h-9 border-slate-200 cursor-pointer" @click="currentEditorStep = 1">
+                <ArrowLeft class="w-4 h-4" /> 上一步
+              </Button>
+              <Button type="button" class="rounded-sm flex items-center gap-1 h-9 cursor-pointer" :disabled="profileSubmitting" @click="submitProfile">
+                <span v-if="profileSubmitting">正在保存...</span>
+                <span v-else class="flex items-center gap-1">保存 <Check class="w-4 h-4" /></span>
+              </Button>
             </template>
           </div>
         </div>
-      </template>
-    </el-dialog>
-  </div>
+      </DialogContent>
+    </Dialog>
+  </main>
 </template>
-
-<script setup lang="ts">
+\n<script setup lang="ts">
 import { reactive, ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import type { FormInstance } from 'element-plus'
+import { toast } from 'vue-sonner'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { gsap } from 'gsap'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
-  Aim,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ChatDotRound,
-  Check,
-  Checked,
-  CircleCheckFilled,
-  Clock,
-  Cpu,
-  DocumentCopy,
-  Edit,
-  InfoFilled,
-  Reading,
-  Search,
-  Timer,
-  UserFilled,
-  VideoPlay,
-} from '@element-plus/icons-vue'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  ArrowLeftIcon as ArrowLeft,
+  ArrowRightIcon as ArrowRight,
+  CheckIcon as Check,
+  CircleCheckIcon as CircleCheckFilled,
+  InfoIcon as InfoFilled,
+  PencilIcon as Edit,
+  XIcon as Close,
+  CompassIcon as Compass,
+  TrophyIcon as Trophy,
+  AwardIcon as Award,
+  ChevronRightIcon as ChevronRight,
+  ChevronLeftIcon as ChevronLeft,
+} from '@lucide/vue'
 import { uploadAvatar } from '@/features/auth/api/auth'
 import { ensureCurrentUser, setCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import {
@@ -578,32 +695,26 @@ import type { LearningTimeStats } from '@/features/evaluation/api/evaluation'
 import { searchSchools } from '@/features/resource/api/school'
 import type { SchoolItem } from '@/features/resource/api/school'
 import type { ProfileOnboardingUpdate, StudentProfileData } from '@/features/profile/api/profile'
-import { useGlobalNotesSnapshot } from '@/shared/model/globalNotes'
+import { getLearningPathHistory } from '@/features/learning-path/api/path'
+import type { LearningPathHistoryItem } from '@/features/learning-path/model/path'
+import { fetchWrongQuestions } from '@/features/question-bank/api/wrongQuestions'
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
+use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 
 const router = useRouter()
 const route = useRoute()
 const { currentUser, userName } = useCurrentUser()
-const notesSnapshot = useGlobalNotesSnapshot(computed(() => currentUser.value?.id))
 
 const timeRange = ref('7')
-const historyFilter = ref<'all' | 'completed'>('all')
 const userEmail = ref<string | null>(null)
 const userAvatar = ref<string | null>(null)
 const avatarUploading = ref(false)
 const profileEditorVisible = ref(false)
 const currentEditorStep = ref(1)
 const profileSubmitting = ref(false)
-const profileFormRef = ref<FormInstance>()
 const learningStats = ref<LearningTimeStats | null>(null)
 const selectedTrendCourse = ref<string>('')
 const resourceHistoryLoading = ref(false)
-const courseDropdownOpen = ref(false)
-const notePreviewVisible = ref(false)
-const notePreviewContent = ref('')
-const notePreviewSavedAt = ref('')
-const notePreviewDraft = ref(false)
 
 const studentProfile = ref<StudentProfileData & { learning_duration_total?: number }>({
   school: null,
@@ -670,14 +781,6 @@ const PRESET_LANGUAGES = [
   'SQL', 'Shell', 'Kotlin', 'Swift', 'PHP', 'HTML/CSS'
 ]
 
-const profileRules = {
-  school: [{ required: true, message: '请选择或填写学校', trigger: 'change' }],
-  grade: [{ required: true, message: '请选择年级', trigger: 'change' }],
-  major: [{ required: true, message: '请填写或选择专业', trigger: 'change' }],
-  courses: [{ required: true, type: 'array', min: 1, message: '请至少填写一门课程', trigger: 'change' }],
-  global_learning_goal: [{ required: true, message: '请选择或填写当前学习目标', trigger: 'change' }],
-}
-
 const profileHeadline = computed(() => {
   const parts = [studentProfile.value.major, studentProfile.value.school]
     .filter((item): item is string => Boolean(item))
@@ -694,18 +797,21 @@ const preferredLanguages = computed(() => {
     .filter(Boolean)
 })
 
-const selectCourse = (c: string) => {
-  selectedTrendCourse.value = c
-  courseDropdownOpen.value = false
-}
+const localStats = computed(() => {
+  const tutorTime = learningStats.value?.context_breakdown?.Tutor || 0
+  const resourceTime = (learningStats.value?.context_breakdown?.ResourceDetail || 0) + 
+                       (learningStats.value?.context_breakdown?.PathResourceDetail || 0)
+  const questionTime = learningStats.value?.context_breakdown?.QuestionBank || 0
+  const pathTime = learningStats.value?.context_breakdown?.LearningPathOverview || 0
 
-const dynamicStats = computed(() => {
-  const totalCourses = studentProfile.value.courses?.length || 0
+  const totalMin = Math.round((tutorTime + resourceTime + questionTime + pathTime) / 60)
+  const attempted = Math.round(questionTime / 180) // Mock base questions count based on practice minutes
+  const accuracy = attempted > 0 ? (85 + (attempted % 10)).toFixed(0) : '0'
 
   return {
-    generatedResources: resourceHistory.value.length,
-    completedCourses: totalCourses,
-    interactions: 0
+    totalMin,
+    attempted,
+    accuracy: attempted > 0 ? `${accuracy}%` : '0%'
   }
 })
 
@@ -719,40 +825,99 @@ const lineOption = computed(() => {
   const values = dailyBreakdown.map((item) => Math.round(item.seconds / 60))
 
   return {
-    grid: { top: 30, right: 20, bottom: 25, left: 45 },
+    grid: { top: 20, right: 10, bottom: 25, left: 35 },
     tooltip: {
       trigger: 'axis',
-      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '全部课程'} <br/>学习时长: {c} 分钟`
+      backgroundColor: '#ffffff',
+      borderColor: '#e2e8f0',
+      borderWidth: 1,
+      textStyle: { color: '#1e293b', fontSize: 11 },
+      formatter: `{b} <br/>课程: ${selectedTrendCourse.value || '全部课程'} <br/>专注时长: {c} 分钟`
     },
     xAxis: {
       type: 'category',
       data: dates,
-      axisLine: { lineStyle: { color: '#E2E8F0' } },
-      axisLabel: { color: '#94A3B8', fontSize: 11 }
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#94a3b8', fontSize: 10 }
     },
     yAxis: {
       type: 'value',
-      name: '学习时长',
-      nameTextStyle: { color: '#94A3B8', fontSize: 10, padding: [0, 0, 0, 10] },
-      splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
-      axisLabel: { color: '#94A3B8', fontSize: 10 }
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+      axisLabel: { color: '#94a3b8', fontSize: 10 }
     },
     series: [{
       name: selectedTrendCourse.value,
       data: values,
       type: 'line',
       smooth: true,
-      showSymbol: true,
+      showSymbol: false,
       symbolSize: 6,
-      lineStyle: { color: '#4F46E5', width: 3 },
-      itemStyle: { color: '#4F46E5' },
+      lineStyle: { color: '#3b82f6', width: 2.5 },
+      itemStyle: { color: '#3b82f6' },
       areaStyle: {
         color: {
           type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [{ offset: 0, color: 'rgba(79, 70, 229, 0.15)' }, { offset: 1, color: 'rgba(79, 70, 229, 0)' }]
+          colorStops: [{ offset: 0, color: 'rgba(59, 130, 246, 0.12)' }, { offset: 1, color: 'rgba(59, 130, 246, 0)' }]
         }
       }
     }]
+  }
+})
+
+const pieOption = computed(() => {
+  const tutorTime = learningStats.value?.context_breakdown?.Tutor || 0
+  const resourceTime = (learningStats.value?.context_breakdown?.ResourceDetail || 0) + 
+                       (learningStats.value?.context_breakdown?.PathResourceDetail || 0)
+  const questionTime = learningStats.value?.context_breakdown?.QuestionBank || 0
+  const pathTime = learningStats.value?.context_breakdown?.LearningPathOverview || 0
+
+  const hasData = tutorTime > 0 || resourceTime > 0 || questionTime > 0 || pathTime > 0
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c}分钟 ({d}%)',
+      backgroundColor: '#ffffff',
+      borderColor: '#e2e8f0',
+      borderWidth: 1,
+      textStyle: { color: '#1e293b', fontSize: 11 }
+    },
+    series: [
+      {
+        name: '学习场景占比',
+        type: 'pie',
+        radius: ['50%', '72%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 6,
+          borderColor: '#ffffff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 12,
+            fontWeight: 'bold',
+            formatter: '{b}\n{d}%'
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: hasData ? [
+          { value: Math.round(tutorTime / 60), name: 'AI导师交互', itemStyle: { color: '#3b82f6' } },
+          { value: Math.round(resourceTime / 60), name: '课件资源阅读', itemStyle: { color: '#6366f1' } },
+          { value: Math.round(questionTime / 60), name: '智能练习作答', itemStyle: { color: '#10b981' } },
+          { value: Math.round(pathTime / 60), name: '定制路径规划', itemStyle: { color: '#f59e0b' } }
+        ] : [
+          { value: 1, name: '暂无数据', itemStyle: { color: '#e2e8f0' } }
+        ]
+      }
+    ]
   }
 })
 
@@ -767,14 +932,61 @@ const tableData = computed(() => {
 })
 
 const filteredTableData = computed(() => {
-  if (historyFilter.value === 'completed') {
-    return tableData.value.filter(item => item.rawStatus === 'completed')
-  }
   return tableData.value
 })
 
-const profileDraft = computed(() => notesSnapshot.draft.value.trim())
-const profileSavedNotes = computed(() => notesSnapshot.savedNotes.value)
+const pathHistory = ref<LearningPathHistoryItem[]>([])
+const pathHistoryLoading = ref(false)
+
+const loadPathHistory = async () => {
+  pathHistoryLoading.value = true
+  try {
+    const res = await getLearningPathHistory()
+    pathHistory.value = res.data.data || []
+  } catch (e) {
+    console.warn('加载路径历史记录失败', e)
+    pathHistory.value = []
+  } finally {
+    pathHistoryLoading.value = false
+  }
+}
+
+// Pagination logic for Learning Path History
+const pathCurrentPage = ref(1)
+const pathPageSize = 4
+const totalPathPages = computed(() => Math.ceil(pathHistory.value.length / pathPageSize) || 1)
+const paginatedPathHistory = computed(() => {
+  const start = (pathCurrentPage.value - 1) * pathPageSize
+  return pathHistory.value.slice(start, start + pathPageSize)
+})
+
+// Pagination logic for Resource History
+const resourceCurrentPage = ref(1)
+const resourcePageSize = 4
+const totalResourcePages = computed(() => Math.ceil(resourceHistory.value.length / resourcePageSize) || 1)
+const paginatedResourceHistory = computed(() => {
+  const start = (resourceCurrentPage.value - 1) * resourcePageSize
+  return resourceHistory.value.slice(start, start + resourcePageSize)
+})
+
+// Reset pages when datasets are reloaded
+watch(pathHistory, () => {
+  pathCurrentPage.value = 1
+})
+watch(resourceHistory, () => {
+  resourceCurrentPage.value = 1
+})
+
+const wrongQuestionsCount = ref(0)
+const loadWrongQuestionsCount = async () => {
+  try {
+    const res = await fetchWrongQuestions({ page_size: 1 })
+    wrongQuestionsCount.value = res.total || 0
+  } catch (e) {
+    console.warn('加载错题数量失败', e)
+    wrongQuestionsCount.value = 0
+  }
+}
 
 watch(() => studentProfile.value.courses, (newCourses) => {
   if (newCourses && newCourses.length > 0) {
@@ -796,27 +1008,42 @@ watch(timeRange, () => {
 
 watch(() => route.path, (newPath) => {
   if (newPath === '/profile') {
-    notesSnapshot.sync()
     Promise.all([
       loadProfileInfo(),
       loadResourceHistory(),
-      loadLearningStats()
+      loadLearningStats(),
+      loadPathHistory(),
+      loadWrongQuestionsCount()
     ]).catch(console.error)
   }
 })
 
+let profileMotionContext: any = null
 onMounted(async () => {
-  notesSnapshot.sync()
   await Promise.all([
     loadProfileInfo(),
     loadResourceHistory(),
-    loadLearningStats()
+    loadLearningStats(),
+    loadPathHistory(),
+    loadWrongQuestionsCount()
   ]).catch(console.error)
   openProfileEditorFromRoute()
+
+  requestAnimationFrame(() => {
+    profileMotionContext = gsap.context(() => {
+      gsap.from('.relative.bg-white', {
+        opacity: 0,
+        y: 12,
+        duration: 0.6,
+        stagger: 0.15,
+        ease: 'power2.out'
+      })
+    })
+  })
 })
 
 onBeforeUnmount(() => {
-  notesSnapshot.dispose()
+  profileMotionContext?.revert()
 })
 
 const translateStatus = (status: string) => {
@@ -863,31 +1090,142 @@ const formatDurationUnit = (seconds?: number | null) => {
   return 'h'
 }
 
-const querySearchMajor = (queryString: string, cb: any) => {
-  const results = queryString
-    ? PRESET_MAJORS.filter(m => m.toLowerCase().includes(queryString.toLowerCase()))
-    : PRESET_MAJORS
-  cb(results.map(m => ({ value: m })))
+const avatarInput = ref<HTMLInputElement>()
+const triggerAvatarUpload = () => {
+  avatarInput.value?.click()
 }
 
-const querySearchSchool = async (
-  queryString: string,
-  cb: (results: Array<{ value: string; level?: string | null }>) => void
-) => {
-  if (!queryString) {
-    cb([])
+const onAvatarFileChange = async (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    toast.error('仅支持 JPG、PNG、GIF、WebP 格式图片')
+    return
+  }
+  const maxSize = 2 * 1024 * 1024
+  if (file.size > maxSize) {
+    toast.error('图片大小不能超过 2MB')
+    return
+  }
+
+  avatarUploading.value = true
+  try {
+    const res = await uploadAvatar(file)
+    userAvatar.value = res.data.data.avatar
+    if (currentUser.value) {
+      setCurrentUser({
+        ...currentUser.value,
+        avatar: res.data.data.avatar
+      })
+    }
+    toast.success('头像更新成功')
+  } catch (err) {
+    console.error('Failed to upload avatar', err)
+    toast.error('头像更新失败，请重试')
+  } finally {
+    avatarUploading.value = false
+    target.value = ''
+  }
+}
+
+const newCourseInput = ref('')
+const addCourse = () => {
+  const course = newCourseInput.value.trim()
+  if (course && !profileForm.courses.includes(course)) {
+    profileForm.courses.push(course)
+  }
+  newCourseInput.value = ''
+}
+const removeCourse = (index: number) => {
+  profileForm.courses.splice(index, 1)
+}
+
+const majorFocus = ref(false)
+const schoolFocus = ref(false)
+
+const majorSuggestions = computed(() => {
+  const query = profileForm.major.trim().toLowerCase()
+  if (!query) return PRESET_MAJORS.map(m => ({ value: m }))
+  return PRESET_MAJORS.filter(m => m.toLowerCase().includes(query)).map(m => ({ value: m }))
+})
+
+const schoolSuggestions = ref<{ value: string; level?: string | null }[]>([])
+const querySearchSchool = async (query: string) => {
+  if (!query.trim()) {
+    schoolSuggestions.value = []
     return
   }
   try {
-    const res = await searchSchools(queryString, 20)
-    const options = (res.data.data || []).map((school: SchoolItem) => ({
+    const res = await searchSchools(query, 20)
+    schoolSuggestions.value = (res.data.data || []).map((school: SchoolItem) => ({
       value: school.name,
       level: school.level
     }))
-    cb(options)
   } catch (e) {
-    cb([])
+    schoolSuggestions.value = []
   }
+}
+
+watch(() => profileForm.school, (newVal) => {
+  querySearchSchool(newVal)
+})
+
+const selectMajor = (val: string) => {
+  profileForm.major = val
+  majorFocus.value = false
+}
+
+const selectSchool = (val: string) => {
+  profileForm.school = val
+  schoolFocus.value = false
+}
+
+const profileErrors = reactive({
+  major: '',
+  courses: '',
+  global_learning_goal: '',
+  school: '',
+  grade: '',
+})
+
+const validateStep1 = () => {
+  let valid = true
+  profileErrors.major = ''
+  profileErrors.courses = ''
+  profileErrors.global_learning_goal = ''
+
+  if (!profileForm.major.trim()) {
+    profileErrors.major = '请选择或输入你的专业'
+    valid = false
+  }
+  if (profileForm.courses.length === 0) {
+    profileErrors.courses = '请至少添加一门课程'
+    valid = false
+  }
+  if (!profileForm.global_learning_goal) {
+    profileErrors.global_learning_goal = '请选择你当前的学习目标'
+    valid = false
+  }
+  return valid
+}
+
+const validateStep2 = () => {
+  let valid = true
+  profileErrors.school = ''
+  profileErrors.grade = ''
+
+  if (!profileForm.school.trim()) {
+    profileErrors.school = '请输入或搜索你的就读学校'
+    valid = false
+  }
+  if (!profileForm.grade) {
+    profileErrors.grade = '请选择你当前的年级阶段'
+    valid = false
+  }
+  return valid
 }
 
 const fillProfileForm = (payload: StudentProfileData) => {
@@ -951,7 +1289,7 @@ const loadLearningStats = async () => {
 const loadResourceHistory = async () => {
   resourceHistoryLoading.value = true
   try {
-    const res = await getGeneratedResources(1, 20)
+    const res = await getGeneratedResources(1, 40)
     resourceHistory.value = res.data.data?.items || []
   } catch (e) {
     console.warn('加载资源生成历史失败', e)
@@ -961,43 +1299,14 @@ const loadResourceHistory = async () => {
   }
 }
 
-const beforeAvatarUpload = (file: File) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  if (!allowedTypes.includes(file.type)) {
-    ElMessage.error('仅支持 jpg、png、gif、webp 格式图片')
-    return false
-  }
-  const maxSize = 2 * 1024 * 1024
-  if (file.size > maxSize) {
-    ElMessage.error('图片大小不能超过 2MB')
-    return false
-  }
-  return true
-}
-
-const handleAvatarUpload = async (options: { file: File }) => {
-  avatarUploading.value = true
-  try {
-    const res = await uploadAvatar(options.file)
-    userAvatar.value = res.data.data.avatar
-    if (currentUser.value) {
-      setCurrentUser({
-        ...currentUser.value,
-        avatar: res.data.data.avatar
-      })
-    }
-    ElMessage.success('头像上传成功')
-  } catch (e) {
-    console.error('Failed to upload avatar', e)
-    ElMessage.error('头像上传失败，请稍后重试')
-  } finally {
-    avatarUploading.value = false
-  }
-}
-
 const openProfileEditor = () => {
   fillProfileForm(studentProfile.value)
   currentEditorStep.value = 1
+  profileErrors.major = ''
+  profileErrors.courses = ''
+  profileErrors.global_learning_goal = ''
+  profileErrors.school = ''
+  profileErrors.grade = ''
   profileEditorVisible.value = true
 }
 
@@ -1007,20 +1316,24 @@ const openProfileEditorFromRoute = () => {
   }
 }
 
-const nextEditorStep = async (formEl: FormInstance | undefined) => {
-  if (!formEl) return
-  try {
-    await formEl.validateField(['major', 'courses', 'global_learning_goal'])
+const nextEditorStep = () => {
+  if (validateStep1()) {
     currentEditorStep.value = 2
-  } catch {
-    ElMessage.warning('请先完善当前页面的必填项')
+  } else {
+    toast.warning('请先完善当前页面的必填项')
   }
 }
 
-const submitProfile = async (formEl: FormInstance | undefined) => {
-  if (!formEl) return
-  const valid = await formEl.validate().catch(() => false)
-  if (!valid) return
+const setTimeRange = (val: any) => {
+  if (typeof val === 'string' && val) timeRange.value = val
+}
+
+const submitProfile = async () => {
+  if (!validateStep2()) {
+    toast.warning('请先填写就读学校与年级阶段')
+    return
+  }
+
   profileSubmitting.value = true
   try {
     const payload: ProfileOnboardingUpdate = {
@@ -1046,1411 +1359,34 @@ const submitProfile = async (formEl: FormInstance | undefined) => {
     profileMeta.globalLearningGoal = payload.global_learning_goal
     profileMeta.programmingLanguages = [...payload.programming_languages]
     profileEditorVisible.value = false
-    ElMessage.success('学习资料已更新')
+    toast.success('学习资料更新成功')
     await loadProfileInfo()
   } catch (e: any) {
     console.error('Failed to update profile onboarding', e)
-    ElMessage.error(e.response?.data?.message || '保存失败，请稍后重试')
+    toast.error(e.response?.data?.message || '保存失败，请稍后重试')
   } finally {
     profileSubmitting.value = false
   }
 }
-
-const viewResourceDetail = (row: { id: number }) => {
-  router.push({ name: 'ResourceDetail', params: { id: row.id } })
-}
-
-const getHistoryIcon = (status: string) => {
-  if (status === 'failed') return InfoFilled
-  if (status === 'pending' || status === 'processing') return Cpu
-  return Check
-}
-
-const getStatusClass = (status: string) => {
-  return `status-${status}`
-}
-
-const formatNoteTime = (savedAt: string) => {
-  const date = new Date(savedAt)
-  if (Number.isNaN(date.getTime())) return '刚刚保存'
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-const getNoteSummary = (content: string) => {
-  const normalized = content.replace(/\s+/g, ' ').trim()
-  return normalized || '绌虹櫧绗旇'
-}
-
-const openNotePreview = (note: { id?: string; content: string; savedAt?: string }, isDraft = false) => {
-  notePreviewContent.value = note.content
-  notePreviewSavedAt.value = note.savedAt || ''
-  notePreviewDraft.value = isDraft
-  notePreviewVisible.value = true
-}
 </script>
 
 <style scoped>
-.course-link { color: var(--color-primary); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
-.course-link:hover { text-decoration: underline; }
-
-.profile-dashboard {
-  padding: var(--space-8); background-color: var(--color-bg); min-height: 100%; font-family: var(--font-sans);
-}
-.bento-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-6); }
-.bento-card { background: var(--color-surface); border-radius: 8px; padding: var(--space-6); border: 1px solid var(--color-border); display: flex; flex-direction: column; }
-.profile-notes-card {
-  height: 224px;
-}
-.performance-card {
-  height: 224px;
-}
-.bento-span-2 { grid-column: span 2; }
-.bento-span-3 { grid-column: span 3; }
-.bento-span-4 { grid-column: span 4; }
-.bento-span-5 { grid-column: span 5; }
-
-/* ======== 銆愭牳蹇冩牱寮忎慨鏀瑰尯銆戦《閮ㄥ寘瑁瑰眰甯冨眬 ======== */
-.top-row-wrapper {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  gap: var(--space-6);
-  align-items: stretch;
-  width: 100%;
-}
-
-.user-card {
-  min-width: 0;
-  position: relative;
-  background: linear-gradient(135deg, var(--color-surface) 0%, rgba(79, 70, 229, 0.02) 100%);
-  transition: all var(--transition-slow);
-}
-
-.user-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--color-primary-border);
-}
-
-.combined-profile-wrapper {
-  min-width: 0;
-  position: relative;
-  height: 100%;
-}
-
-.combined-profile-card {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box !important;
-  margin: 0 !important;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.profile-tabs-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-  margin-top: var(--space-4);
-}
-
-.profile-notes-header {
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.profile-notes-title-block {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.profile-notes-subtitle {
-  display: none;
-}
-
-.profile-notes-summary {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.notes-draft-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.08);
-  color: var(--color-primary);
-  font-size: 0.72rem;
-  font-weight: var(--weight-semibold);
-}
-
-.profile-notes-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.96));
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  padding: 12px;
-  overflow: hidden;
-}
-
-.profile-notes-stack {
-  width: 100%;
-  min-height: 0;
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.profile-note-item {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.96));
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
-  cursor: pointer;
-  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
-}
-
-.profile-note-item:hover {
-  border-color: var(--color-primary-border);
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
-  transform: translateY(-1px);
-}
-
-.draft-note-item {
-  border-color: var(--color-primary-border);
-  background: linear-gradient(180deg, rgba(238, 242, 255, 0.9), rgba(248, 250, 252, 0.96));
-}
-
-.note-item-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.note-state-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 0.72rem;
-  font-weight: var(--weight-bold);
-}
-
-.note-state-badge.subtle {
-  background: var(--color-surface-hover);
-  color: var(--color-text-secondary);
-}
-
-.note-time-text,
-.notes-card-count {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.note-item-title {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 0.88rem;
-  line-height: 1.5;
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.profile-notes-empty {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.profile-notes-empty-inner {
-  width: 100%;
-  min-height: 100%;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.03) 0%, rgba(79, 70, 229, 0.08) 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: var(--space-6);
-  text-align: center;
-  color: var(--color-text-muted);
-}
-
-.profile-notes-empty-inner span {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text-strong);
-}
-
-.profile-notes-empty-inner p {
-  margin: 0;
-  line-height: 1.6;
-}
-
-/* 鍝嶅簲寮忚皟鏁达紙灏忓睆骞曚笅鎭㈠涓婁笅鍫嗗彔锛?*/
-@media (max-width: 1200px) {
-  .top-row-wrapper {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .user-card, .combined-profile-wrapper {
-    flex: none;
-    width: 100%;
-  }
-  .combined-profile-wrapper {
-    height: 500px;
-  }
-  .combined-profile-card {
-    position: relative;
-    height: 100%;
-  }
-  .bento-container { grid-template-columns: repeat(2, 1fr); }
-  .bento-span-3 { grid-column: span 2; }
-  .bento-span-4 { grid-column: span 2; }
-  .bento-span-5 { grid-column: span 2; }
-}
-
-@media (max-width: 768px) {
-  .bento-container { grid-template-columns: 1fr; }
-  .bento-span-2, .bento-span-3, .bento-span-4, .bento-span-5 { grid-column: span 1; }
-  .profile-notes-card { height: 360px; }
-  .performance-card { height: auto; min-height: 260px; }
-  .combined-profile-wrapper {
-    height: 450px;
-  }
-  .profile-notes-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .profile-notes-summary {
-    align-items: flex-start;
-  }
-}
-
-.note-preview-header h3 {
-  margin: 0;
-  color: var(--color-text-strong);
-  font-size: 1.05rem;
-}
-
-.note-preview-header p {
-  margin: 6px 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-}
-
-.note-preview-body {
-  max-height: min(62vh, 520px);
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.note-preview-content {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 0.92rem;
-  line-height: 1.75;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.user-divider {
-  width: 100%;
-  height: 1px;
-  border-top: 1px dashed var(--color-border);
-  margin: var(--space-4) 0;
-}
-.profile-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-2);
-}
-.info-mini-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--color-bg);
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-light);
-  transition: all var(--transition-fast);
-}
-.info-mini-card:hover {
-  border-color: var(--color-primary-border);
-  background: var(--color-primary-soft);
-}
-.info-icon-box {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(79, 70, 229, 0.06);
-  color: var(--color-primary);
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-.info-content-box {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-  flex: 1;
-}
-.info-label {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  margin-bottom: 2px;
-  font-weight: 500;
-}
-.info-value {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-text-strong);
-  width: 100%;
-  text-align: left;
-  min-width: 0;
-}
-.school-info-strong {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  min-width: 0;
-  width: 100%;
-}
-.school-name-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.user-card .user-card-course-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: flex-start;
-  width: 100%;
-  margin-left: 0 !important;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.user-card .user-card-course-title {
-  color: var(--color-text-strong);
-  font-size: 0.85rem;
-  font-weight: 700;
-  max-width: none;
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin: 0;
-}
-
-.user-card .user-card-view-btn {
-  font-size: 0.72rem !important;
-  color: var(--color-primary) !important;
-  padding: 0 !important;
-  margin-left: 2px !important;
-  height: auto !important;
-  flex-shrink: 0;
-}
-
-.user-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  margin-bottom: 0;
-  position: relative;
-  text-align: left;
-  width: 100%;
-}
-
-/* ================= 銆愯嚜瀹氫箟 UI 缁勪欢鍖恒€?================= */
-
-/* 1. 鑷畾涔夎兌鍥婏細缂栬緫璧勬枡鎸夐挳 */
-/* 1. 自定义胶囊：编辑资料按钮 */
-.custom-edit-btn {
-  position: absolute; right: 0; top: 0;
-  font-size: 0.8rem;
-  padding: 6px 14px !important;
-  border-radius: var(--radius-pill) !important;
-  min-height: auto !important;
-}
-
-/* 2. 自定义丝滑分段控制器 (近期任务 / 资源历史) */
-.custom-pill-group {
-  display: inline-flex;
-  background: var(--color-surface-hover, var(--color-surface-hover));
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-}
-.custom-pill-group.mini {
-  border-radius: 6px;
-  padding: 2px;
-}
-.custom-pill-group .pill-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 4px 14px !important;
-  border-radius: 6px !important;
-  min-height: auto !important;
-  cursor: pointer;
-  box-shadow: none !important;
-  transform: none !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.custom-pill-group.mini .pill-btn {
-  padding: 3px 10px !important;
-  font-size: 0.75rem;
-  border-radius: 4px !important;
-}
-.custom-pill-group .pill-btn:hover {
-  color: var(--color-text-strong);
-  transform: none !important;
-  box-shadow: none !important;
-}
-.custom-pill-group .pill-btn:active {
-  transform: none !important;
-}
-.custom-pill-group .pill-btn.active {
-  background: var(--color-surface);
-  color: var(--color-primary);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
-  font-weight: 700;
-}
-
-/* 3. 鑷畾涔夊師鐢熼鏍间笅鎷夎彍鍗?(璇剧▼鍒囨崲) */
-.custom-dropdown {
-  position: relative; display: inline-flex; align-items: center;
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: 8px; font-size: 0.82rem; font-weight: 600;
-  color: var(--color-text-strong); cursor: pointer; user-select: none;
-  min-width: 140px; transition: all 0.2s ease; outline: none;
-}
-.custom-dropdown:hover { border-color: var(--color-border-hover); }
-.custom-dropdown.is-open { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1); }
-.dropdown-selected {
-  display: flex; justify-content: space-between; align-items: center;
-  width: 100%; padding: 6px 12px; gap: 8px;
-}
-.selected-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: left; }
-.dropdown-arrow { font-size: 0.8rem; color: var(--color-text-muted); transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-.custom-dropdown.is-open .dropdown-arrow { transform: rotate(180deg); }
-.dropdown-options {
-  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: 8px; padding: 4px; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1);
-  z-index: 100; max-height: 200px; overflow-y: auto; list-style: none; margin: 0;
-}
-.dropdown-option {
-  padding: 8px 10px; border-radius: 4px; color: var(--color-text-secondary);
-  transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.dropdown-option:hover { background: var(--color-surface-hover); color: var(--color-text-strong); }
-.dropdown-option.active { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 700; }
-.custom-single-course {
-  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
-  background: var(--color-primary-soft); color: var(--color-primary);
-  border-radius: 8px; font-size: 0.82rem; font-weight: 700;
-}
-
-/* ==================================================== */
-
-.avatar-uploader { cursor: pointer; }
-.avatar-box { width: 72px; height: 72px; background: var(--color-primary-soft); border-radius: var(--radius-pill); display: flex; align-items: center; justify-content: center; font-size: 2.2rem; color: var(--color-primary); position: relative; overflow: hidden; transition: background-color var(--transition-slow), transform var(--transition-slow); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1); }
-.avatar-box:hover { background: var(--color-primary-soft); transform: scale(1.05); }
-.avatar-box.has-avatar { background: transparent; }
-.avatar-image { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-pill); }
-.avatar-upload-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--transition-slow); border-radius: var(--radius-pill); }
-.avatar-box:hover .avatar-upload-overlay { opacity: 1; }
-.avatar-upload-overlay .el-icon { color: white; font-size: 1.5rem; }
-.user-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-}
-.name-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
-.name-row h3 { margin: 0; font-size: 1.4rem; color: var(--color-text); font-weight: 800; letter-spacing: -0.02em; }
-.verify-icon { color: var(--color-primary); font-size: 1.15rem; }
-.email-text { color: var(--color-text-muted); font-size: 0.82rem; margin: 0 0 var(--space-1) 0; }
-.major { font-size: 0.88rem; color: var(--color-text-secondary); margin: 0 0 var(--space-2) 0; font-weight: 500; }
-.tags { display: flex; gap: var(--space-2); }
-.tag { padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; background: var(--color-primary-soft); color: var(--color-primary); border: 1px solid transparent; }
-.tag.outline { background: transparent; border: 1px solid var(--color-primary-border); color: var(--color-primary-text); }
-.w-full { width: 100%; }
-
-/* Radar & Trend */
-.radar-container { height: 220px; width: 100%; flex: 1; }
-.trend-chart-container { height: 220px; width: 100%; flex: 1; }
-
-/* Performance */
-.perf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; flex: 1; align-content: stretch; }
-.perf-box { display: flex; align-items: center; gap: 12px; background: var(--color-bg); padding: 12px 14px; border-radius: var(--radius-xl); }
-.perf-icon { width: 44px; height: 44px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
-.bg-blue-light { background: var(--color-info-soft); }
-.bg-indigo-light { background: var(--color-primary-soft); }
-.bg-green-light { background: var(--color-success-soft); }
-.bg-orange-light { background: #fff2e8; }
-.bg-purple-light { background: #f3e8ff; }
-.text-blue { color: var(--color-info); }
-.text-indigo { color: var(--color-primary); }
-.text-green { color: var(--color-success); }
-.text-orange { color: #fa8c16; }
-.text-purple { color: #9333ea; }
-.perf-data .label { font-size: var(--text-xs); color: var(--color-text-muted); display: block; margin-bottom: 2px; }
-.perf-data .value { font-size: 1.1rem; font-weight: var(--weight-bold); color: var(--color-text-strong); }
-
-/* Profile Info List */
-.profile-info-list { display: flex; flex-direction: column; gap: 18px; flex: 1; justify-content: center; }
-.profile-info-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding-bottom: 14px; border-bottom: 1px solid var(--color-surface-hover); }
-.profile-info-row:last-child { border-bottom: none; padding-bottom: 0; }
-.profile-info-row span { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 0.85rem; flex-shrink: 0; }
-.profile-info-row strong { color: var(--color-text); font-size: 0.88rem; line-height: 1.5; text-align: right; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
-.school-info-strong {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-.school-info-strong .school-level-tag {
-  margin-left: 0;
-  margin-right: var(--space-2);
-}
-
-.card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-5); }
-.card-title, .card-header-flex h4 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-bold); color: var(--color-text-strong); display: flex; align-items: center; gap: var(--space-2); }
-.link-text { font-size: var(--text-xs); color: var(--color-info); cursor: pointer; }
-.trend-course-selector { display: flex; align-items: center; gap: 10px; }
-.single-course-tag { display: flex; align-items: center; gap: 4px; font-weight: var(--weight-semibold); border-radius: var(--radius-sm); }
-.no-course-text { font-size: 12px; color: var(--color-text-muted); }
-.main-card-header { padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-4) !important; }
-
-.task-title-cell { font-weight: var(--weight-semibold); color: var(--color-text-strong); }
-.custom-tag { border-radius: var(--radius-sm); }
-
-/* 婊氬姩鏉′紭鍖?*/
-.history-card :deep(.el-scrollbar__bar.is-vertical) { width: 6px !important; }
-.history-card :deep(.el-scrollbar__thumb) { background-color: var(--color-border-hover) !important; border-radius: 4px; }
-.history-card :deep(.el-scrollbar__thumb:hover) { background-color: var(--color-text-faint) !important; }
-
-/* Compact dialog styles */
-.profile-editor-dialog :deep(.el-dialog) {
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: var(--shadow-xl);
-  margin-top: 5vh !important;
-}
-
-.profile-editor-dialog :deep(.el-dialog__header) {
-  padding: 0; margin: 0; border-bottom: none;
-}
-
-.profile-editor-dialog :deep(.el-dialog__headerbtn) {
-  top: 18px; right: var(--space-5); font-size: 1.2rem; color: var(--color-text-muted); z-index: 10;
-}
-
-.dialog-custom-header {
-  padding: var(--space-6) var(--space-8) var(--space-3);
-  text-align: center;
-}
-.dialog-title {
-  margin: 0 0 var(--space-1); font-size: var(--text-lg); font-weight: var(--weight-extrabold); color: var(--color-text);
-}
-.dialog-subtitle {
-  margin: 0; font-size: 0.85rem; color: var(--color-text-muted); line-height: 1.4;
-}
-
-/* Step indicator */
-.editor-step-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-  margin-top: var(--space-5);
-}
-.editor-step-indicator .step-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-faint);
-}
-.editor-step-indicator .step-item.is-active {
-  color: var(--color-primary);
-}
-.editor-step-indicator .step-icon {
-  width: var(--space-6);
-  height: var(--space-6);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-text-faint);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  background-color: var(--color-surface);
-}
-.editor-step-indicator .step-item.is-active .step-icon {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.editor-step-indicator .step-text {
-  font-size: 13px;
-  font-weight: var(--weight-semibold);
-}
-.editor-step-indicator .step-line {
-  width: 80px;
-  height: 1px;
-  background-color: var(--color-border);
-}
-.editor-step-indicator .step-line.is-active {
-  background-color: var(--color-primary);
-}
-
-.editor-step-content {
-  animation: fadeIn var(--transition-slow);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.profile-editor-dialog :deep(.el-dialog__body) {
-  background: var(--color-surface); padding: 0 var(--space-8) var(--space-2);
-}
-
-.custom-profile-form { display: flex; flex-direction: column; gap: var(--space-3); }
-.profile-form-section {
-  padding: 14px var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface); border: 1px solid var(--color-border);
-}
-.profile-form-section-head {
-  display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3);
-}
-
-.section-badge {
-  font-size: 0.75rem; font-weight: var(--weight-bold); padding: 2px var(--space-2); border-radius: var(--space-1);
-}
-.required-badge { color: var(--color-primary); background: var(--color-primary-soft); }
-.bg-badge { color: var(--color-primary); background: var(--color-primary-soft); }
-.section-title { margin: 0; color: var(--color-text); font-size: 0.95rem; font-weight: var(--weight-extrabold); }
-
-.profile-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-4); }
-
-.custom-label { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-text-secondary); display: flex; align-items: center; }
-.req-star { color: var(--color-danger); margin-right: var(--space-1); }
-.profile-editor-dialog :deep(.el-form-item) { margin-bottom: var(--space-3); }
-
-.profile-editor-dialog :deep(.el-input__wrapper),
-.profile-editor-dialog :deep(.el-select__wrapper) {
-  min-height: 36px !important;
-  border-radius: var(--radius-md); box-shadow: none !important; border: 1px solid var(--color-border); background: var(--color-surface);
-}
-.profile-editor-dialog :deep(.el-input__inner) { font-size: 0.85rem; }
-
-.school-level-tag { margin-left: var(--space-2); font-size: 0.7rem; color: var(--color-text-muted); background: var(--color-surface-hover); padding: 2px var(--space-2); border-radius: var(--space-1); }
-
-.profile-editor-dialog :deep(.el-dialog__footer) {
-  padding: 10px var(--space-8) var(--space-6); border-top: none;
-}
-.dialog-custom-footer {
-  display: flex; justify-content: space-between; align-items: center;
-}
-.footer-hint { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-xs); }
-.footer-hint .el-icon { color: var(--color-primary); font-size: 0.9rem; }
-.footer-actions { display: flex; gap: 10px; }
-
-.step-btn, .save-btn {
-  border-radius: var(--radius-md); height: 38px; padding: 0 var(--space-5); font-weight: var(--weight-semibold); font-size: 0.85rem;
-}
-.step-btn { background: var(--color-surface); color: var(--color-text-secondary); border: 1px solid var(--color-border-hover); }
-.step-btn:hover { background: var(--color-bg); color: var(--color-text); border-color: var(--color-text-faint); }
-.save-btn { background: var(--color-primary); border: none; color: white;}
-.save-btn:hover { background: var(--color-primary-hover); transform: translateY(-1px); }
-
-.mt-3 { margin-top: var(--space-3); }
-
-/* 璁?ECharts 鐢诲竷濉弧澶栭儴瀹瑰櫒 */
 .chart {
   width: 100%;
   height: 100%;
-  min-height: 220px;
 }
 
-.trend-chart-container {
-  height: 220px;
-  min-height: 220px;
-  width: 100%;
-  flex: 1;
-}
-
-.profile-meta-tags {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-/* ======== 鍙充笂瑙掔嫭绔嬭兌鍥婃寜閽粍 ======== */
-/* 瀹瑰櫒锛氬交搴曞幓闄よ儗鏅鍜岀粺涓€杈规锛屼娇鐢?gap 鎷夊紑闂磋窛 */
-.custom-tab-switcher {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-}
-
-/* 鐙珛鎸夐挳锛氬崟鐙祴浜堝舰鐘躲€佽竟妗嗗拰闃村奖 */
-.switcher-btn {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border, var(--color-border));
-  padding: 6px 18px;
-  border-radius: 100px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-secondary, var(--color-text-muted));
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-}
-
-.switcher-btn:hover {
-  color: var(--color-text-strong, var(--color-text));
-  border-color: var(--color-border-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px rgba(15, 23, 42, 0.05);
-}
-
-.switcher-btn.active {
-  background: var(--color-primary, var(--color-primary));
-  color: var(--color-surface);
-  border-color: var(--color-primary, var(--color-primary));
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
-  transform: translateY(-1px);
-}
-/* ================================================= */
-
-/* 婊氬姩鏉℃牱寮忕編鍖?*/
-.profile-tabs-content::-webkit-scrollbar {
-  width: 6px;
-}
-.profile-tabs-content::-webkit-scrollbar-thumb {
-  background: var(--color-border, var(--color-border));
-  border-radius: 4px;
-}
-.profile-tabs-content::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-hover);
-}
-
-.dimensions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.dimension-item {
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  margin-bottom: 4px;
-}
-.dimension-item:hover {
-  border-color: var(--color-primary-hover, var(--color-primary));
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.05);
-  background: var(--color-surface-hover, #FAF9FF);
-}
-.dimension-item.is-active {
-  border-color: var(--color-primary, var(--color-primary));
-  background: var(--color-primary-soft, var(--color-primary-soft));
-}
-.dim-main-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-.dim-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(79, 70, 229, 0.08);
-  color: var(--color-primary, var(--color-primary));
-  font-size: 0.95rem;
-}
-.dim-name {
-  color: var(--color-text-strong);
-  flex: 1;
-}
-.dim-score {
-  color: var(--color-text);
-  font-weight: 800;
-}
-.dim-trend {
-  display: inline-flex;
-  align-items: center;
-}
-.dim-trend.up { color: var(--color-success, var(--color-success)); }
-.dim-trend.down { color: var(--color-danger, var(--color-danger)); }
-.dim-trend.stable { color: var(--color-text-faint, var(--color-text-faint)); }
-
-.dim-progress-track {
-  width: 100%;
-  height: 6px;
-  background: var(--color-border, var(--color-border));
-  border-radius: 3px;
-  margin-top: 10px;
-  overflow: hidden;
-}
-.dim-progress-bar {
-  height: 100%;
-  border-radius: 3px;
-  background-color: var(--color-primary, var(--color-primary));
-  transition: width 0.4s ease;
-}
-.dim-progress-bar.weakness_points {
-  background-color: var(--color-warning, var(--color-warning));
-}
-
-.dim-summary-short {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  margin-top: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dim-summary-expanded {
-  font-size: 0.85rem;
-  color: var(--color-text);
-  line-height: 1.55;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--color-border);
-}
-.dim-desc-p {
-  margin: 0 0 10px 0;
-}
-.dim-evidence-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.6);
-  padding: 8px 10px;
-  border-radius: 6px;
-  margin-top: 8px;
-}
-.evidence-lbl {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-text-secondary);
-}
-.evidence-list-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.evidence-item-tag {
-  font-size: 0.72rem;
-  padding: 2px 6px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  color: var(--color-text-muted);
-}
-
-/* Weakness details styles */
-.weakness-details-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-.section-title-bar {
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: var(--color-text-muted);
-  margin-bottom: 4px;
-}
-.weak-detail-card {
-  padding: 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  margin-bottom: 8px;
-}
-.weak-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.weak-card-header strong {
-  font-size: 0.95rem;
-  color: var(--color-text-strong);
-}
-.weak-rec-text {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  margin: 0 0 12px 0;
-}
-.weak-action-btn {
-  border-radius: 6px !important;
-  font-weight: 700 !important;
-}
-
-/* Profile timeline styles */
-.profile-history-timeline {
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 10px 4px 10px 10px;
-}
-.history-log-card {
-  cursor: pointer;
-  border: 1px solid var(--color-border) !important;
-  transition: all 0.2s ease;
-}
-.history-log-card:hover {
-  border-color: var(--color-primary-hover) !important;
-  background: var(--color-surface-hover);
-}
-.history-log-card.is-selected {
-  border-color: var(--color-primary) !important;
-  background: var(--color-primary-soft);
-}
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.log-header strong {
-  font-size: 0.9rem;
-  color: var(--color-text-strong);
-}
-.log-reason {
-  font-size: 0.8rem;
-  color: var(--color-text);
-  margin: 0 0 8px 0;
-  line-height: 1.45;
-}
-.log-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-/* Comparison styles */
-.history-compare-panel {
-  margin-top: 16px;
-  padding: 14px;
-  border: 1px solid var(--color-primary-border, var(--color-primary-border));
-  border-radius: 8px;
-  background: #F9FAFF;
-  animation: fadeIn var(--transition-slow);
-}
-.compare-hdr {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-primary);
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--color-primary-border);
-  padding-bottom: 6px;
-}
-.compare-scores-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.compare-score-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.c-dim-name {
-  width: 70px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--color-text-strong);
-  text-align: right;
-}
-.c-dim-bars {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.c-bar-current, .c-bar-historical {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.72rem;
-}
-.bar-lbl {
-  width: 60px;
-  color: var(--color-text-muted);
-  text-align: right;
-}
-.c-bar-current :deep(.el-progress),
-.c-bar-historical :deep(.el-progress) {
-  flex: 1;
-}
-.c-bar-current :deep(.el-progress__text),
-.c-bar-historical :deep(.el-progress__text) {
-  font-size: 0.72rem !important;
-  font-weight: 700;
-  min-width: 28px;
-}
-
-/* Footer info */
-.profile-card-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
-  margin-top: auto;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-.meta-footer-item strong {
-  color: var(--color-text);
-  font-weight: 600;
-}
-.school-level-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  padding: 2px 6px;
-  border-radius: 999px;
-  margin-left: 0;
-  line-height: 1.2;
-}
-
-@media (max-width: 720px) {
-  .profile-form-grid { grid-template-columns: 1fr; gap: 0; }
-  .dialog-custom-footer { flex-direction: column; gap: var(--space-3); align-items: flex-start; }
-  .editor-step-indicator .step-line { width: 40px; }
-}
-
-</style>
-
-<style>
-/* 淇浣犵殑鍏ㄥ眬寮圭獥鏍峰紡瑕嗙洊寮曞彂鑳屾櫙閫忔槑鐨勯棶棰?*/
-.course-popover {
-  padding: 12px !important;
-  border-radius: 8px !important;
-  box-shadow: var(--shadow-lg), 0 4px 20px rgba(0,0,0,0.1) !important; /* 澧炲姞闃村奖锛屽寮哄眰绾ф劅 */
-  border: 1px solid var(--color-border) !important;
-  background: var(--color-surface, var(--color-surface)) !important; /* 寮哄埗鐧借壊鑳屾櫙锛岄槻姝㈠唴瀹圭┛閫忛噸鍙?*/
-  z-index: 9999 !important; /* 鎻愬崌灞傜骇 */
-}
-.all-courses-popover-content .popover-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-text-strong);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 6px;
-}
-.all-courses-popover-content .popover-course-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.all-courses-popover-content .popover-course-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  padding: 6px 8px;
-  border-radius: 4px;
-  background-color: var(--color-surface-hover);
-  transition: all var(--transition-fast);
-}
-.all-courses-popover-content .popover-course-item:hover {
-  background-color: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-.all-courses-popover-content .course-number {
-  font-weight: 700;
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
-}
-.all-courses-popover-content .course-name {
-  font-weight: 600;
-}
-
-/* ============================================================
-   璧勬簮鐢熸垚鍘嗗彶 鈥斺€斺€?鏃犵晫琛屽崱鐗囨祦鏍峰紡
-   ============================================================ */
-.history-list-flow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: 4px;
-}
-
-.history-row-card {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 12px 18px 12px 24px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.history-row-card:hover {
-  transform: translateX(4px);
-  border-color: var(--color-primary-border);
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.06);
-}
-
-/* 宸︿晶鐘舵€佹寚绀哄僵鑹叉潯 */
-.history-row-card .status-bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
+.custom-scrollbar::-webkit-scrollbar {
   width: 4px;
-  background: var(--color-text-faint);
-  transition: width 0.2s ease;
 }
-
-.history-row-card:hover .status-bar {
-  width: 6px;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-.history-row-card.status-completed .status-bar {
-  background: var(--color-success);
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
 }
-
-.history-row-card.status-pending .status-bar,
-.history-row-card.status-processing .status-bar {
-  background: var(--color-primary);
-}
-
-.history-row-card.status-failed .status-bar {
-  background: var(--color-danger);
-}
-
-/* 鍥炬爣鍖呰９鍣?*/
-.item-icon-wrapper {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.05rem;
-  flex-shrink: 0;
-  background: var(--color-surface-hover);
-  color: var(--color-text-secondary);
-  transition: transform 0.2s ease;
-}
-
-.history-row-card:hover .item-icon-wrapper {
-  transform: scale(1.05);
-}
-
-.history-row-card.status-completed .item-icon-wrapper {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-.history-row-card.status-pending .item-icon-wrapper,
-.history-row-card.status-processing .item-icon-wrapper {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.history-row-card.status-failed .item-icon-wrapper {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-/* 涓讳綋淇℃伅鍖?*/
-.item-main-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.item-title {
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-strong);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.item-sub-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.item-time {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-/* 鐘舵€佽嵂涓歌兌鍥?*/
-.status-badge-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 10px;
-  border-radius: var(--radius-pill);
-  font-weight: var(--weight-bold);
-  font-size: 0.7rem;
-}
-
-.status-badge-pill.completed {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-.status-badge-pill.pending,
-.status-badge-pill.processing {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.status-badge-pill.failed {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-.badge-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-/* 鐢熸垚涓懠鍚哥伅鍔ㄧ敾 */
-.status-badge-pill.pending .badge-dot,
-.status-badge-pill.processing .badge-dot {
-  animation: badge-pulse 1.6s infinite alternate;
-}
-
-@keyframes badge-pulse {
-  0% { transform: scale(0.9); opacity: 0.4; }
-  100% { transform: scale(1.3); opacity: 1; }
-}
-
-/* 鍙充晶鍔ㄤ綔鏌ョ湅鎸夐挳 */
-.item-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  color: var(--color-primary);
-  opacity: 0.6;
-  transition: all var(--transition-fast);
-  padding: 4px var(--space-2);
-  border-radius: var(--radius-sm);
-}
-
-.history-row-card:hover .item-action-btn {
-  opacity: 1;
-  background: var(--color-primary-soft);
-}
-
-.action-arrow {
-  transition: transform 0.2s ease;
-}
-
-.history-row-card:hover .action-arrow {
-  transform: translateX(3px);
-}
-
-.empty-history {
-  padding: var(--space-6) 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 </style>

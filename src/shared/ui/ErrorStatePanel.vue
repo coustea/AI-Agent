@@ -18,10 +18,10 @@
       <p class="error-message">{{ isLoading ? loadingMessage : (errorMessage || defaultMessage) }}</p>
 
       <div class="error-actions" v-if="!isLoading && showRetry">
-        <el-button type="primary" class="error-retry-btn" @click="handleRetry">
-          <el-icon><RefreshRight /></el-icon>
+        <button class="btn btn-primary error-retry-btn" @click="handleRetry">
+          <RefreshRight class='w-4 h-4 inline-block align-middle' />
           重新加载
-        </el-button>
+        </button>
       </div>
 
       <div class="error-meta" v-if="!isLoading">
@@ -40,7 +40,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RefreshRight } from '@element-plus/icons-vue'
+import {
+  PhArrowsCounterClockwise as RefreshRight
+} from '@phosphor-icons/vue'
 
 const props = withDefaults(defineProps<{
   isLoading?: boolean

@@ -1,460 +1,457 @@
 <template>
-  <div class="split-auth-page">
-    <div class="visual-side">
-      <div class="visual-content">
-        <div class="brand-top">
-          <div class="logo-orb">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a2 2 0 0 1-.019 1.838L12.8 21.896a2 2 0 0 1-3.484 0l-8.598-9.136a2 2 0 0 1-.019-1.838L9.316 1.762a2 2 0 0 1 3.368 0Z"/><path d="M14 11a2 2 0 1 1-4 0 4 4 0 0 1 4 0Z"/></svg>
-          </div>
-          <span class="logo-name">EduAgent</span>
-        </div>
-
-        <div class="hero-text-wrap">
-          <h1 class="hero-title">开启<br/>智慧学习</h1>
-          <p class="hero-desc">
-            基于多智能体协同架构<br/>
-            为你打造实时进化的个性化学习引擎
-          </p>
-        </div>
-
-        <div class="tech-stats">
-          <div class="stat-item">
-            <span class="val">AI_ASSIST</span>
-            <span class="lab">对话辅导</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="val">DYNAMIC</span>
-            <span class="lab">学习画像</span>
-          </div>
-        </div>
+  <main class="auth-page">
+    <section class="visual-side" aria-label="平台能力介绍">
+      <div class="brand">
+        <span class="brand-mark"><AppLogo /></span>
+        <span>学枢智导</span>
       </div>
-      <div class="visual-bg">
-        <div class="blob b1"></div>
-        <div class="blob b2"></div>
-        <div class="grid-overlay"></div>
-      </div>
-    </div>
 
-    <div class="form-side">
+      <div class="visual-copy">
+        <span class="eyebrow">你的智能学习工作台</span>
+        <h1>让每一次学习<br>都有清晰的下一步</h1>
+        <p>从学习画像到路径规划，再到多智能体资源生成，把零散的努力组织成持续进步。</p>
+      </div>
+
+      <div class="learning-map" aria-hidden="true">
+        <div class="map-line"></div>
+        <div class="map-step is-done"><span>01</span><strong>理解现状</strong></div>
+        <div class="map-step is-current"><span>02</span><strong>规划路径</strong></div>
+        <div class="map-step"><span>03</span><strong>生成资源</strong></div>
+      </div>
+    </section>
+
+    <section class="form-side">
       <div class="form-container">
-        <div class="mobile-logo">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path
-                d="M21.42 10.922a2 2 0 0 1-.019 1.838L12.8 21.896a2 2 0 0 1-3.484 0l-8.598-9.136a2 2 0 0 1-.019-1.838L9.316 1.762a2 2 0 0 1 3.368 0Z"/>
-            <path d="M14 11a2 2 0 1 1-4 0 4 4 0 0 1 4 0Z"/>
-          </svg>
+        <div class="mobile-brand">
+          <span class="brand-mark"><AppLogo /></span>
+          <span>学枢智导</span>
         </div>
+
         <div class="form-header">
           <h2>欢迎回来</h2>
-          <p>登录以继续学习旅程</p>
+          <p>继续今天的学习节奏</p>
         </div>
 
-        <el-form
-            ref="loginFormRef"
-            :model="form"
-            :rules="rules"
-            label-position="top"
-            class="custom-form"
-            hide-required-asterisk
-            @keyup.enter="handleLogin(loginFormRef)"
-        >
-          <el-form-item prop="username">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span> 用户名</span>
-                <small>USERNAME</small>
-              </span>
-            </template>
-            <el-input
+        <form class="custom-form" @submit.prevent="handleLogin">
+          <div class="form-group" :class="{ 'has-error': errors.username }">
+            <label class="field-label" for="login-username">用户名</label>
+            <div class="input-wrapper">
+              <User class="input-icon" />
+              <input
+                id="login-username"
                 v-model="form.username"
+                class="input-control"
+                type="text"
+                autocomplete="username"
                 placeholder="请输入用户名"
-                :prefix-icon="User"
-                size="large"
-                clearable
-            />
-          </el-form-item>
-
-          <el-form-item prop="password">
-            <template #label>
-              <span class="field-label">
-                <span><span class="required-star">*</span> 密码</span>
-                <small>PASSWORD</small>
-              </span>
-            </template>
-            <el-input
-                v-model="form.password"
-                type="password"
-                placeholder="请输入密码"
-                :prefix-icon="Lock"
-                show-password
-                size="large"
-            />
-          </el-form-item>
-
-          <div class="form-actions">
-            <el-button
-                type="primary"
-                class="auth-btn"
-                :loading="isLoading"
-                @click="handleLogin(loginFormRef)"
-            >
-              登 录 空 间 <el-icon class="ml-2"><ArrowRight /></el-icon>
-            </el-button>
+                :disabled="isLoading"
+              />
+            </div>
+            <span v-if="errors.username" class="form-error">{{ errors.username }}</span>
           </div>
+
+          <div class="form-group" :class="{ 'has-error': errors.password }">
+            <label class="field-label" for="login-password">密码</label>
+            <div class="input-wrapper">
+              <Lock class="input-icon" />
+              <input
+                id="login-password"
+                v-model="form.password"
+                class="input-control"
+                type="password"
+                autocomplete="current-password"
+                placeholder="请输入密码"
+                :disabled="isLoading"
+              />
+            </div>
+            <span v-if="errors.password" class="form-error">{{ errors.password }}</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary auth-btn" :disabled="isLoading">
+            <span>{{ isLoading ? '正在登录' : '进入学习空间' }}</span>
+            <ArrowRight class="button-arrow" />
+          </button>
 
           <div class="form-footer">
             <span>还没有账户？</span>
-            <el-link type="primary" :underline="false" @click="router.push('/register')">立即注册</el-link>
+            <button type="button" class="btn-link" @click="router.push('/register')">立即注册</button>
           </div>
-        </el-form>
-
-        <div class="system-tag">
-          <el-icon><Connection /></el-icon>
-          <span>SECURE_CONNECTION</span>
-        </div>
+        </form>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, Lock, ArrowRight, Connection } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { PhUser as User, PhLock as Lock, PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
+import { toast } from 'vue-sonner'
 import { login } from '@/features/auth/api/auth'
 import { setCurrentUser } from '@/features/auth/model/currentUser'
 import { getErrorMessage } from '@/shared/api/http'
 import { setAuthToken } from '@/shared/auth/token'
+import AppLogo from '@/shared/ui/AppLogo.vue'
 
 const router = useRouter()
 const isLoading = ref(false)
-const loginFormRef = ref()
 
 const form = reactive({
   username: '',
   password: ''
 })
 
-const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'manual' },
-    { min: 3, max: 50, message: '用户名长度需为 3-50 个字符', trigger: 'manual' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'manual' },
-    { min: 6, max: 50, message: '密码长度需为 6-50 个字符', trigger: 'manual' },
-  ]
+const errors = reactive({
+  username: '',
+  password: ''
+})
+
+const validateForm = () => {
+  let isValid = true
+  errors.username = ''
+  errors.password = ''
+
+  if (!form.username) {
+    errors.username = '请输入用户名'
+    isValid = false
+  } else if (form.username.length < 3 || form.username.length > 50) {
+    errors.username = '用户名长度需为 3-50 个字符'
+    isValid = false
+  }
+
+  if (!form.password) {
+    errors.password = '请输入密码'
+    isValid = false
+  } else if (form.password.length < 6 || form.password.length > 50) {
+    errors.password = '密码长度需为 6-50 个字符'
+    isValid = false
+  }
+
+  return isValid
 }
 
-const handleLogin = async (formEl: any) => {
-  if (!formEl) return
-  await formEl.validate(async (valid: boolean) => {
-    if (valid) {
-      isLoading.value = true
-      try {
-        const res = await login({ username: form.username, password: form.password })
-        const { data } = res.data
-        if (data.token) {
-          setAuthToken(data.token)
-          setCurrentUser(data.user ?? null)
-          ElMessage.success({ message: '登录成功！', duration: 2000, offset: 20 })
-          if (!data.user?.is_first_login) {
-            router.push('/dashboard?onboarding=true')
-          } else {
-            router.push('/dashboard')
-          }
-        }
-      } catch (err: any) {
-        ElMessage.error({ message: getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误'), duration: 2000, offset: 20 })
-      } finally {
-        isLoading.value = false
+const handleLogin = async () => {
+  if (!validateForm()) return
+  isLoading.value = true
+  try {
+    const res = await login({ username: form.username, password: form.password })
+    const { data } = res.data
+    if (data.token) {
+      setAuthToken(data.token)
+      setCurrentUser(data.user ?? null)
+      toast.success({ message: '登录成功！', duration: 2000, offset: 20 })
+      if (!data.user?.is_first_login) {
+        router.push('/dashboard?onboarding=true')
+      } else {
+        router.push('/dashboard')
       }
     }
-  })
+  } catch (err: any) {
+    toast.error({ message: getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误'), duration: 2000, offset: 20 })
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
 <style scoped>
-.split-auth-page {
-  height: 100vh;
-  width: 100vw;
-  display: flex;
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(420px, 0.82fr);
   overflow: hidden;
-  background: var(--color-bg);
+  background: var(--color-surface);
 }
 
 .visual-side {
-  flex: 1.2;
   position: relative;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4rem;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(36px, 6vw, 88px);
+  background:
+    radial-gradient(circle at 78% 16%, rgba(98, 201, 197, 0.34), transparent 24rem),
+    linear-gradient(145deg, #E6F5F4 0%, #F2F8F7 62%, #D8F1F0 100%);
   overflow: hidden;
 }
 
-.visual-content {
+.visual-side::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(32, 95, 103, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 95, 103, 0.055) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom right, rgba(0, 0, 0, 0.78), transparent 72%);
+}
+
+.brand,
+.mobile-brand {
   position: relative;
-  z-index: 10;
-  width: 100%;
-  max-width: 500px;
-  text-align: center;
-}
-
-.brand-top {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-  margin-bottom: 6rem;
-}
-
-.logo-orb {
-  width: 44px;
-  height: 44px;
-  background: var(--color-primary);
-  color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.logo-name {
-  font-family: var(--font-sans);
-  font-weight: var(--weight-extrabold);
-  font-size: 1.35rem;
-  letter-spacing: -0.05em;
-  color: var(--color-primary);
-}
-
-.hero-title {
-  font-size: 4rem;
-  line-height: 1.1;
-  font-weight: var(--weight-extrabold);
-  margin-bottom: 2rem;
-  letter-spacing: -0.03em;
-  color: var(--color-primary-text);
-}
-
-.hero-desc {
-  font-size: 1.15rem;
-  line-height: 1.8;
-  color: var(--color-text-secondary);
-  margin-bottom: 4rem;
-}
-
-.tech-stats {
-  display: flex;
-  justify-content: center;
-  gap: 3rem;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.stat-item .val {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: var(--weight-bold);
-  color: var(--color-primary);
-}
-
-.stat-item .lab {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  letter-spacing: 0.05em;
-}
-
-.stat-divider {
-  width: 1px;
-  height: 40px;
-  background: rgba(79, 70, 229, 0.2);
-}
-
-.visual-bg {
-  position: absolute;
-  inset: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-primary-text);
+  font-size: 20px;
+  font-weight: 700;
 }
 
-.grid-overlay {
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  padding: 7px;
+  display: flex;
+  color: var(--color-primary-text);
+  background: rgba(252, 255, 255, 0.72);
+  border: 1px solid rgba(70, 184, 180, 0.32);
+  border-radius: 13px;
+  box-shadow: var(--shadow-sm);
+}
+
+.visual-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 18px;
+  color: var(--color-primary-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.visual-copy h1 {
+  max-width: 620px;
+  margin: 0 0 24px;
+  font-size: clamp(42px, 5vw, 68px);
+  line-height: 1.08;
+  letter-spacing: -0.055em;
+  color: var(--color-text-strong);
+}
+
+.visual-copy p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 17px;
+  line-height: 1.85;
+}
+
+.learning-map {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 620px;
+}
+
+.map-line {
   position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(79, 70, 229, 0.1) 1px, transparent 1px);
-  background-size: 30px 30px;
-}
-
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
-}
-
-.b1 {
-  width: 400px;
-  height: 400px;
-  top: -100px;
-  right: -100px;
-  background: #A5B4FC;
-}
-
-.b2 {
-  width: 300px;
-  height: 300px;
-  bottom: -50px;
-  left: -50px;
+  top: 19px;
+  left: 9%;
+  right: 9%;
+  height: 1px;
   background: var(--color-primary-border);
 }
 
-.form-side {
-  flex: 1;
+.map-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--color-text-muted);
+}
+
+.map-step span {
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: rgba(252, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.map-step strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.map-step.is-done,
+.map-step.is-current {
+  color: var(--color-primary-text);
+}
+
+.map-step.is-current span {
+  color: var(--color-text-strong);
+  background: var(--color-action);
+  border-color: var(--color-primary);
+}
+
+.form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(32px, 5vw, 72px);
   background: var(--color-surface);
-  box-shadow: var(--shadow-xl);
-  z-index: 5;
+  box-shadow: -20px 0 50px rgba(32, 95, 103, 0.07);
+  z-index: 2;
 }
 
 .form-container {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
 }
 
-.mobile-logo {
+.mobile-brand {
   display: none;
-  width: 44px;
-  height: 44px;
-  background: var(--color-primary);
-  color: var(--color-surface);
-  border-radius: var(--radius-lg);
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2rem;
 }
 
 .form-header {
-  margin-bottom: 3rem;
-  text-align: center;
+  margin-bottom: 34px;
 }
 
 .form-header h2 {
-  font-size: 2.2rem;
-  font-weight: var(--weight-extrabold);
-  margin-bottom: 0.5rem;
-  color: var(--color-text-strong);
+  margin-bottom: 10px;
+  font-size: 34px;
+  letter-spacing: -0.04em;
 }
 
 .form-header p {
-  color: var(--color-text-muted);
-  font-size: 1.05rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .field-label {
-  font-size: 0.9rem;
-  font-weight: var(--weight-bold);
-  color: var(--color-text-secondary);
-  display: flex;
-  justify-content: space-between;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  width: 19px;
+  height: 19px;
+  color: var(--color-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.input-control {
   width: 100%;
+  height: 50px;
+  padding: 0 16px 0 46px;
+  color: var(--color-text);
+  background: #F8FCFB;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
-.field-label small {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--color-text-faint);
-  font-weight: var(--weight-normal);
+.input-control:focus {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(70, 184, 180, 0.14);
 }
 
-:deep(.el-input__wrapper) {
-  background: var(--color-bg) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: none !important;
-  border: 1px solid var(--color-border) !important;
-  padding: var(--space-1) 15px !important;
-  transition: all var(--transition-slow) !important;
+.has-error .input-control {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(196, 61, 91, 0.08);
 }
 
-:deep(.el-input__wrapper.is-focus) {
-  border-color: var(--color-primary) !important;
-  background: var(--color-surface) !important;
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1) !important;
-}
-
-.form-actions {
-  margin-top: 2.5rem;
+.form-error {
+  color: var(--color-danger);
+  font-size: 12px;
 }
 
 .auth-btn {
   width: 100%;
-  height: 56px;
-  border-radius: 14px !important;
-  font-size: 1.1rem;
-  font-weight: var(--weight-bold);
-  background: var(--color-primary) !important;
-  border: none !important;
-  transition: all var(--transition-slow);
+  height: 50px;
+  margin-top: 4px;
+  border-radius: 12px;
+  font-size: 15px;
 }
 
-.auth-btn:hover {
-  background: var(--color-primary-hover) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(79, 70, 229, 0.2);
+.button-arrow {
+  width: 18px;
+  height: 18px;
+  transition: transform var(--transition-fast);
+}
+
+.auth-btn:hover .button-arrow {
+  transform: translateX(3px);
 }
 
 .form-footer {
-  margin-top: 2rem;
-  text-align: center;
-  font-size: 0.95rem;
-  color: var(--color-text-muted);
-}
-
-.form-footer .el-link {
-  font-weight: var(--weight-bold);
-  margin-left: 0.5rem;
-  color: var(--color-primary);
-}
-
-.system-tag {
-  margin-top: 4rem;
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--color-text-faint);
-  letter-spacing: 0.05em;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 14px;
 }
 
-@media (max-width: 1024px) {
+.form-footer .btn-link {
+  height: auto;
+  padding: 0;
+  color: var(--color-primary-text);
+}
+
+@media (max-width: 900px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+    min-height: 100svh;
+  }
+
   .visual-side {
     display: none;
   }
 
-  .mobile-logo {
+  .form-side {
+    padding: 32px 22px;
+    background:
+      radial-gradient(circle at 85% 5%, rgba(98, 201, 197, 0.18), transparent 18rem),
+      var(--color-surface);
+    box-shadow: none;
+  }
+
+  .mobile-brand {
     display: flex;
+    margin-bottom: 54px;
   }
 }
 
-.ml-2 {
-  margin-left: 0.5rem;
-}
-
-.required-star {
-  color: var(--color-danger);
-  margin-right: var(--space-1);
-  font-family: var(--font-sans);
+@media (prefers-reduced-motion: reduce) {
+  .input-control,
+  .button-arrow {
+    transition: none;
+  }
 }
 </style>

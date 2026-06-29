@@ -134,7 +134,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from 'vue-sonner'
 
 import { activateLearningPath, getLearningPathHistory } from '@/features/learning-path/api/path'
 import type { LearningPathHistoryItem } from '@/features/learning-path/model/path'
@@ -181,7 +181,7 @@ const loadHistory = async () => {
     const res = await getLearningPathHistory()
     items.value = res.data.data || []
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '加载路径历史失败'))
+    toast.error(getErrorMessage(error, '加载路径历史失败'))
   } finally {
     loading.value = false
   }
@@ -192,7 +192,7 @@ const activate = async (pathId: number) => {
     const res = await activateLearningPath(pathId)
     router.push(`/path-planner/overview/${res.data.data.id}`)
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, '恢复历史路径失败'))
+    toast.error(getErrorMessage(error, '恢复历史路径失败'))
   }
 }
 

@@ -4,7 +4,7 @@
     <div class="panes-container">
       <div class="pane cause-pane ppt-card">
         <div class="pane-label">CAUSE / TRIGGER</div>
-        <div v-for="el in slide.slots.cause || []" :key="el.content || ''" class="el-item">
+        <div v-for="el in slide.slots.cause || []" :key="el.content || ''" class="cause-effect-item">
           {{ el.content }}
         </div>
       </div>
@@ -15,7 +15,7 @@
       </div>
       <div class="pane effect-pane ppt-card">
         <div class="pane-label">EFFECT / RESULT</div>
-        <div v-for="el in slide.slots.effect || []" :key="el.content || ''" class="el-item">
+        <div v-for="el in slide.slots.effect || []" :key="el.content || ''" class="cause-effect-item">
           {{ el.content }}
         </div>
       </div>
@@ -66,7 +66,7 @@ defineProps<{ slide: ResolvedSlide }>()
   letter-spacing: 0.1em;
   margin-bottom: 8px;
 }
-.el-item {
+.cause-effect-item {
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1.4;

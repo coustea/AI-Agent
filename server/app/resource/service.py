@@ -113,7 +113,7 @@ class ResourceService:
 
     窄持久化 API：
     - create_task: 创建任务并保存 request/profile 快照
-    - save_teaching_plan: 保存计划并创建 pending agent runs
+    - save_teaching_plan: 保存计划并完成 planning run
     - start_agent_run: 将 run 从 pending 改为 running
     - save_agent_result: 插入成功 item
     - complete_agent_run: 将 run 改为 completed
@@ -162,8 +162,57 @@ class ResourceService:
         await self._commit(resource)
         return {"resource_id": resource_id, "status": "pending", "source": source}
 
+    async def initialize_run(
+        self,
+        *,
+        user_id: int,
+        resource_id: int,
+        run_id: str,
+    ) -> bool:
+        """认领任务并初始化可恢复的工作流运行节点。"""
+        resource = await self.session.get(GeneratedResource, resource_id)
+        if (
+            resource is None
+            or resource.user_id != user_id
+            or resource.status != "pending"
+        ):
+            return False
+
+        now = datetime.now(timezone.utc)
+        resource.status = "generating"
+        resource.run_id = run_id
+        resource.started_at = now
+        resource.heartbeat_at = now
+
+        selected_agents = list(dict.fromkeys(resource.selected_agents or []))
+        workflow_nodes = [
+            ("planning", "planning"),
+            (COORDINATOR_AGENT_ID, "coordination"),
+            *[
+                (
+                    agent_id,
+                    "aggregation" if agent_id in AGGREGATION_AGENT_IDS else "generation",
+                )
+                for agent_id in selected_agents
+            ],
+            (BUNDLE_AGENT_ID, "aggregation"),
+        ]
+        for agent_id, stage in workflow_nodes:
+            self.session.add(
+                GeneratedResourceAgentRun(
+                    resource_id=resource_id,
+                    run_id=run_id,
+                    agent_id=agent_id,
+                    stage=stage,
+                    status="pending",
+                )
+            )
+
+        await self.session.commit()
+        return True
+
     async def claim_task(self, resource_id: int, run_id: str) -> bool:
-        """原子认领：将父任务从 pending 改为 generating 并设置 run_id。"""
+        """兼容旧调用：认领任务但不创建工作流节点。"""
         resource = await self.session.get(GeneratedResource, resource_id)
         if resource is None or resource.status != "pending":
             return False
@@ -186,7 +235,7 @@ class ResourceService:
         run_id: str,
         teaching_plan: TeachingPlan,
     ) -> None:
-        """校验 owner 后保存计划、完成 planning run，并为每个所选 Agent 创建 pending run。"""
+        """校验 owner 后保存计划，并完成初始化阶段创建的 planning run。"""
         resource = await self.session.get(GeneratedResource, resource_id)
         if resource is None or resource.user_id != user_id:
             raise ValueError("资源不存在或无权限")
@@ -197,6 +246,7 @@ class ResourceService:
         planning_run = await self.session.exec(
             select(GeneratedResourceAgentRun).where(
                 GeneratedResourceAgentRun.resource_id == resource_id,
+                GeneratedResourceAgentRun.run_id == run_id,
                 GeneratedResourceAgentRun.agent_id == "planning",
             )
         )
@@ -205,21 +255,6 @@ class ResourceService:
             planning_run_obj.status = "completed"
             planning_run_obj.finished_at = datetime.now(timezone.utc)
             await self._commit(planning_run_obj)
-
-        # 为每个非 Planning Agent 创建 pending run
-        selected = resource.selected_agents or []
-        for agent_id in selected:
-            if agent_id == "planning":
-                continue
-            run = GeneratedResourceAgentRun(
-                resource_id=resource_id,
-                run_id=run_id,
-                agent_id=agent_id,
-                stage="pending",
-                status="pending",
-            )
-            self.session.add(run)
-        await self.session.commit()
 
     # =========================================================================
     # Agent Run 生命周期
@@ -237,6 +272,7 @@ class ResourceService:
         run = await self.session.exec(
             select(GeneratedResourceAgentRun).where(
                 GeneratedResourceAgentRun.resource_id == resource_id,
+                GeneratedResourceAgentRun.run_id == run_id,
                 GeneratedResourceAgentRun.agent_id == agent_id,
             )
         )
@@ -312,6 +348,29 @@ class ResourceService:
             )
             self.session.add(new_run)
             await self._commit(new_run)
+
+    async def interrupt_unfinished_runs(
+        self,
+        *,
+        resource_id: int,
+        run_id: str,
+        error_message: str,
+    ) -> None:
+        """工作流整体退出时，将未完成节点落为 interrupted。"""
+        result = await self.session.exec(
+            select(GeneratedResourceAgentRun).where(
+                GeneratedResourceAgentRun.resource_id == resource_id,
+                GeneratedResourceAgentRun.run_id == run_id,
+                GeneratedResourceAgentRun.status.in_(["pending", "running"]),
+            )
+        )
+        finished_at = datetime.now(timezone.utc)
+        for run in result.all():
+            run.status = "interrupted"
+            run.error_type = "WorkflowInterrupted"
+            run.error_message = error_message[:500]
+            run.finished_at = finished_at
+        await self.session.commit()
 
     # =========================================================================
     # Agent Result 持久化
@@ -443,7 +502,7 @@ class ResourceService:
         # 从数据库查询成功 item
         successful = set(await self.get_completed_agent_ids(resource_id))
         # 从数据库查询失败/中断 run
-        failed = set(await self.get_failed_agent_ids(resource_id))
+        failed = set(await self.get_failed_agent_ids(resource_id)) & expected_agent_ids
 
         unresolved = expected_agent_ids - successful - failed
         overlap = successful & failed
@@ -475,11 +534,21 @@ class ResourceService:
         await self._commit(resource)
         return status
 
-    async def update_resource_status(self, resource_id: int, status: str) -> None:
+    async def update_resource_status(
+        self,
+        resource_id: int,
+        status: str,
+        *,
+        error_message: str | None = None,
+    ) -> None:
         """更新资源任务状态。"""
         resource = await self.session.get(GeneratedResource, resource_id)
         if resource:
             resource.status = status
+            if error_message:
+                resource.error_message = error_message[:1000]
+            if status in {"completed", "partial_completed", "failed"}:
+                resource.finished_at = datetime.now(timezone.utc)
             resource.updated_at = datetime.now(timezone.utc)
             await self._commit(resource)
 
@@ -546,11 +615,12 @@ class ResourceService:
         runs_result = await self.session.exec(runs_stmt)
         runs_by_agent = {run.agent_id: run for run in runs_result.all()}
 
-        # 构建 agent_snapshots：数据库状态优先
+        # 构建 agent_snapshots：数据库状态优先，包含系统工作流节点。
         merged: dict[str, dict[str, Any]] = {}
         selected_agents = list(resource.selected_agents or [])
+        current_message = ""
 
-        for agent_id in selected_agents:
+        for agent_id, run in runs_by_agent.items():
             # 成功 item 优先
             if agent_id in items_by_agent:
                 item = items_by_agent[agent_id]
@@ -562,26 +632,60 @@ class ResourceService:
                     "progress": 100,
                     "phase": "artifact_saved",
                     "artifact_id": str(item.id),
+                    "elapsed_ms": run.elapsed_ms,
+                    "metrics": run.metrics or item.metrics or {},
+                    "timestamp": (
+                        run.finished_at.timestamp()
+                        if run.finished_at
+                        else None
+                    ),
                 }
-            # 否则查看 run 状态
-            elif agent_id in runs_by_agent:
-                run = runs_by_agent[agent_id]
+            else:
+                message = run.error_message or f"{agent_id} {run.status}"
                 merged[agent_id] = {
                     "event_type": f"agent.{run.status}",
                     "agent_id": agent_id,
                     "status": run.status,
-                    "message": run.error_message or f"{agent_id} {run.status}",
+                    "message": message,
                     "progress": 100 if run.status == "completed" else 0,
                     "phase": run.stage,
+                    "elapsed_ms": run.elapsed_ms,
+                    "metrics": run.metrics or {},
+                    "timestamp": (
+                        (run.finished_at or run.started_at).timestamp()
+                        if run.finished_at or run.started_at
+                        else None
+                    ),
                 }
+                if run.status == "running":
+                    current_message = message
+
+        # 兼容已有成功资源但缺少 AgentRun 的历史数据。
+        for agent_id, item in items_by_agent.items():
+            if agent_id in merged:
+                continue
+            merged[agent_id] = {
+                "event_type": "agent.artifact_ready",
+                "agent_id": agent_id,
+                "status": "finished",
+                "message": f"{agent_id} 资源已保存",
+                "progress": 100,
+                "phase": "artifact_saved",
+                "artifact_id": str(item.id),
+                "metrics": item.metrics or {},
+            }
 
         return ResourceStatusSnapshot(
             resource_id=resource_id,
+            run_id=resource.run_id,
+            learning_need=resource.learning_need or "",
             status=resource.status,
             selected_agents=selected_agents,
             agent_snapshots=merged,
-            current_message="",
+            current_message=current_message,
             resources=[_db_item_to_summary_dto(item) for item in db_items],
+            started_at=resource.started_at.isoformat() if resource.started_at else None,
+            updated_at=resource.updated_at.isoformat() if resource.updated_at else None,
         )
 
     async def get_resource_bundle(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> ResourceBundle | None:

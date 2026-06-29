@@ -1,5 +1,6 @@
 import { readonly, ref, shallowRef } from 'vue'
 import type { ResourceEvent, ResourceEventName } from '@/features/resource/model/resourceEvent'
+import { getAuthToken } from '@/shared/auth/token'
 
 export type ResourceConnectionStatus =
   | 'idle'
@@ -63,12 +64,26 @@ export function useResourceEvents() {
   }
 
   const connect = (nextResourceId: number, nextRunId: string, handlers: ResourceEventHandlers = {}) => {
-    reset()
+    const reconnectingSameRun = (
+      resourceId.value === nextResourceId
+      && runId.value === nextRunId
+    )
+    close()
+    if (!reconnectingSameRun) {
+      events.value = []
+      lastSequence.value = 0
+    }
     runId.value = nextRunId
     resourceId.value = nextResourceId
     connectionStatus.value = 'connecting'
+    error.value = null
 
-    const url = `${API_BASE}/resources/${nextResourceId}/runs/${nextRunId}/events`
+    const params = new URLSearchParams()
+    const token = getAuthToken()
+    if (token) params.set('token', token)
+    if (lastSequence.value > 0) params.set('after_sequence', String(lastSequence.value))
+    const query = params.toString()
+    const url = `${API_BASE}/resources/${nextResourceId}/runs/${nextRunId}/events${query ? `?${query}` : ''}`
     const eventSource = new EventSource(url)
 
     eventSource.addEventListener('resource.event', (raw: MessageEvent) => {
