@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,7 +18,8 @@ from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import outline_coverage_summary
 from app.resource.ppt_contract import PPTDocument, PptSlide, ThemeType
-from app.resource.schemas import AgentResult, DownstreamContext, NodeInput, ResourceInput
+from app.resource.html_generator.generator import HTMLSlideGenerator
+from app.resource.schemas import AgentResult, DownstreamContext, NodeInput, ResourceInput, ReusableAssets
 
 logger = get_logger(__name__)
 
@@ -137,6 +139,14 @@ class PPTAgent(BaseResourceAgent):
         super().__init__(emitter=emitter)
         self.llm = get_llm()
 
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        """路径节点资源生成入口 — 生成 PPTX 课件。
+
+        由路径规划模块调用，为学习路径节点生成辅助 PPT 资源。
+        """
+        # 复用 generate_resource 的逻辑，传入 NodeInput
+        return await self.generate_resource(input_data)
+
     async def generate_resource(self, input_data: ResourceInput | NodeInput) -> AgentResult:
         """生成 PPT 课件"""
         # 构建源材料
@@ -160,53 +170,96 @@ class PPTAgent(BaseResourceAgent):
 
         # 调用 LLM 生成
         try:
-            await self.emitter.send(self.agent_id, "running", "正在调用AI大模型研制课件大纲与幻灯片页面结构...", 45)
-            response = await self.llm.ainvoke(
-                prompt_template.format(
-                    source_pack=json.dumps(source_pack.model_dump(mode="json"), ensure_ascii=False, indent=2),
-                    outline_coverage=outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs),
-                )
+            # 从 agent_config 读取 PPT 配置约束
+            ppt_config = input_data.agent_config or {}
+            theme_id = ppt_config.get("theme_id", "neon-cyber")
+            explanation_style = ppt_config.get("explanation_style", "conceptual")
+            visual_emphasis = ppt_config.get("visual_emphasis", "balanced")
+
+            # 构建配置约束提示，确保 LLM 遵守用户选择
+            config_hint = (
+                f"\n\n## 用户配置约束（必须严格遵守）\n"
+                f"- theme_id 必须为 \"{theme_id}\"，不得使用其他主题\n"
+                f"- 讲解路线 (explanation_style): {explanation_style} "
+                f"({'概念阐述优先' if explanation_style == 'conceptual' else '过程推演优先' if explanation_style == 'procedural' else '对比分析优先'})\n"
+                f"- 视觉元素密度 (visual_emphasis): {visual_emphasis} "
+                f"({'文字极简' if visual_emphasis == 'minimal' else '图文并茂' if visual_emphasis == 'balanced' else '图解加持'})\n"
             )
+
+            await self.emitter.send(self.agent_id, "running", "正在调用AI大模型研制课件大纲与幻灯片页面结构...", 45)
+            prompt = prompts.get("resource").render(
+                "ppt_chapter",
+                source_pack=json.dumps(source_pack.model_dump(mode="json"), ensure_ascii=False, indent=2),
+                outline_coverage=outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs),
+            ) + config_hint
+            response = await self.llm.ainvoke(prompt)
             raw_content = response.content
 
             # 解析和验证 JSON
             try:
-                ppt_data = json.loads(raw_content)
+                from app.infra.utils import parse_first_json_object
+                ppt_data = parse_first_json_object(raw_content)
                 # 验证是否符合 PPTDocument schema
                 await self.emitter.send(self.agent_id, "running", "正在校验 PPT 页面布局与排版结构...", 85)
                 ppt_doc = PPTDocument.model_validate(ppt_data)
+
+                # 【新增】生成 HTML 文件
+                await self.emitter.send(self.agent_id, "running", "正在生成 HTML 幻灯片...", 90)
                 
+                # 安全获取 resource_id，兼容 NodeInput 场景
+                res_id = getattr(input_data, "resource_id", None)
+                if res_id is None:
+                    node_id = getattr(input_data, "node_id", None)
+                    if node_id is not None:
+                        res_id = f"node_{node_id}"
+                    else:
+                        import uuid
+                        res_id = str(uuid.uuid4())
+
+                generator = HTMLSlideGenerator()
+                html_path = generator.generate(
+                    ppt_doc.model_dump(mode="json"),
+                    file_id=str(res_id)
+                )
+
                 logger.info(
                     "PPT 生成成功",
                     extra={
-                        "resource_id": input_data.resource_id,
+                        "resource_id": res_id,
                         "slides_count": len(ppt_doc.slides),
                         "theme": ppt_doc.theme_id,
+                        "html_path": html_path,
                     },
                 )
 
                 return AgentResult(
                     success=True,
                     title=f"{ppt_doc.title} - 教学课件",
-                    file_type="json",
-                    content=json.dumps(ppt_doc.model_dump(mode="json"), ensure_ascii=False, indent=2),
-                    summary=f"生成 {len(ppt_doc.slides)} 页教学课件",
+                    file_type="html",  # 【修改】从 "pptx" 改为 "html"
+                    content="",  # HTML 文件不存储内容在 content 中
+                    summary=f"生成 {len(ppt_doc.slides)} 页 HTML 教学课件",
+                    metrics={
+                        "slide_count": len(ppt_doc.slides),
+                    },
                     metadata={
                         "agent_id": "ppt",
                         "slides_count": len(ppt_doc.slides),
                         "theme_id": ppt_doc.theme_id,
                         "template_id": ppt_doc.template_id,
+                        "html_file_path": html_path,
+                        "html_url": f"/static/html_slides/{res_id}.html",
+                        "file_size": os.path.getsize(html_path),
                     },
                     downstream_context=DownstreamContext(
+                        source_agent="ppt",
                         title=ppt_doc.title,
                         one_sentence_summary=f"{ppt_doc.title} - {len(ppt_doc.slides)} 页教学课件",
-                        reusable_assets={"examples": [], "visual_ideas": []},
+                        reusable_assets=ReusableAssets(examples=[], visual_ideas=[]),
                         covered_outline_ids=[],
-                        quality_score=0.85,
                     ),
                 )
             except json.JSONDecodeError as e:
-                logger.error(f"PPT JSON 解析失败: {e}")
+                logger.error(f"PPT JSON 解析失败: {e}. Raw content excerpt: {raw_content[:1000]!r}")
                 return AgentResult(
                     success=False,
                     title="PPT 生成失败",

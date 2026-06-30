@@ -3,18 +3,21 @@
 :root {
   /* Default fallbacks */
   --primary: #2563eb;
-  --accent: #8b5cf6;
+  --accent: #2563eb;
   --danger: #ef4444;
   --success: #10b981;
-  --text-main: #1e293b;
-  --text-muted: #64748b;
+  --subtitle-active: #93c5fd;
+  --ink: #172033;
+  --canvas: #f4f7f5;
+  --text-main: #172033;
+  --text-muted: #526071;
   --bg-gradient-start: #f8fafc;
   --bg-gradient-end: #f1f5f9;
   --bg-grid-color: rgba(148, 163, 184, 0.08);
   --card-bg: rgba(255, 255, 255, 0.85);
   --card-border: rgba(226, 232, 240, 0.8);
   --card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
-  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family: 'Outfit', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .theme-clean_tech_education {
@@ -22,15 +25,17 @@
   --accent: #3b82f6;        /* Bright Blue */
   --danger: #ef4444;        /* Soft Coral Red */
   --success: #10b981;       /* Mint Green */
-  --text-main: #0f172a;
-  --text-muted: #475569;
+  --ink: #172033;
+  --canvas: #f4f7f5;
+  --text-main: #172033;
+  --text-muted: #526071;
   --bg-gradient-start: #f8fafc;
   --bg-gradient-end: #f0fdf4; /* Pale Mint/Blue Tint */
-  --bg-grid-color: rgba(37, 99, 235, 0.05);
+  --bg-grid-color: rgba(37, 99, 235, 0.075);
   --card-bg: rgba(255, 255, 255, 0.9);
   --card-border: rgba(219, 234, 254, 0.7);
   --card-shadow: 0 12px 40px -15px rgba(37, 99, 235, 0.08);
-  --font-family: 'Inter', system-ui, sans-serif;
+  --font-family: 'Outfit', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .theme-blueprint_academic {
@@ -38,7 +43,9 @@
   --accent: #0ea5e9;       /* Cyan Accent */
   --danger: #f43f5e;
   --success: #0d9488;
-  --text-main: #0f172a;
+  --ink: #102a43;
+  --canvas: #eff7fb;
+  --text-main: #102a43;
   --text-muted: #475569;
   --bg-gradient-start: #f0f9ff;
   --bg-gradient-end: #e0f2fe;
@@ -46,21 +53,23 @@
   --card-bg: rgba(255, 255, 255, 0.95);
   --card-border: rgba(186, 230, 253, 0.8);
   --card-shadow: 0 15px 45px -20px rgba(2, 132, 199, 0.12);
-  --font-family: 'Courier New', Monaco, Consolas, monospace;
+  --font-family: 'Outfit', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .theme-soft_future_classroom {
-  --primary: #7c3aed;       /* Tech Violet */
-  --accent: #ec4899;        /* Neon Pink */
+  --primary: #2563eb;
+  --accent: #2563eb;
   --danger: #f43f5e;
   --success: #10b981;
-  --text-main: #1e1b4b;
-  --text-muted: #4f46e5;
-  --bg-gradient-start: #faf5ff;
-  --bg-gradient-end: #fdf2f8; /* Lilac/Pink gradient */
-  --bg-grid-color: rgba(124, 58, 237, 0.06);
+  --ink: #172033;
+  --canvas: #f4f7f5;
+  --text-main: #172033;
+  --text-muted: #526071;
+  --bg-gradient-start: #f4f7f5;
+  --bg-gradient-end: #f4f7f5;
+  --bg-grid-color: rgba(37, 99, 235, 0.075);
   --card-bg: rgba(255, 255, 255, 0.88);
   --card-border: rgba(243, 232, 255, 0.9);
   --card-shadow: 0 12px 36px -12px rgba(124, 58, 237, 0.09);
-  --font-family: 'Outfit', 'Quicksand', system-ui, sans-serif;
+  --font-family: 'Outfit', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }

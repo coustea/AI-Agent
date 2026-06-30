@@ -86,6 +86,7 @@ type VideoSceneView = {
   captions: string[]
   imageUrl: string
   animation: 'static' | 'zoom-in' | 'pan-right'
+  audioSrc: string
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -142,7 +143,8 @@ const activeScenes = computed<VideoSceneView[]>(() => {
         visualType: scene.visual_type,
         captions: scene.captions,
         imageUrl: typeof scene.visual.image_url === 'string' ? scene.visual.image_url : '',
-        animation: scene.visual_type === 'timeline' ? 'pan-right' : scene.visual_type === 'card' || scene.visual_type === 'code' ? 'static' : 'zoom-in'
+        animation: scene.visual_type === 'timeline' ? 'pan-right' : scene.visual_type === 'card' || scene.visual_type === 'code' ? 'static' : 'zoom-in',
+        audioSrc: typeof scene.audio_src === 'string' ? scene.audio_src : ''
       }))
     : []
 })
@@ -173,6 +175,65 @@ const exportProgress = ref(0)
 let imageCache = new Map<string, HTMLImageElement>()
 let rafId: number | null = null
 let lastTimestamp = 0
+
+// 音频同步预览机制
+let previewAudio: HTMLAudioElement | null = null
+let currentAudioSrc = ''
+
+const syncAudioPlayback = (forceSyncPaused = false) => {
+  if (!hasScenes.value) return
+
+  // 1. 查找当前所在的分镜
+  let currentIdx = 0
+  for (let i = activeScenes.value.length - 1; i >= 0; i--) {
+    if (currentTime.value >= (sceneTimepoints.value[i] ?? 0)) {
+      currentIdx = i
+      break
+    }
+  }
+
+  const scene = activeScenes.value[currentIdx]
+  if (!scene || !scene.audioSrc) {
+    pauseAudioPlayback()
+    return
+  }
+
+  const sceneStart = sceneTimepoints.value[currentIdx] ?? 0
+  const expectedAudioTimeSec = (currentTime.value - sceneStart) / 1000
+
+  // 2. 初始化或切换音频
+  if (!previewAudio) {
+    previewAudio = new Audio()
+  }
+
+  const fullAudioUrl = window.location.origin + scene.audioSrc
+  if (currentAudioSrc !== fullAudioUrl) {
+    currentAudioSrc = fullAudioUrl
+    previewAudio.src = fullAudioUrl
+    previewAudio.load()
+  }
+
+  // 3. 播放与对齐同步
+  if (isPlaying.value) {
+    if (previewAudio.paused) {
+      previewAudio.play().catch(err => {
+        console.warn('Preview audio play error:', err)
+      })
+    }
+    const drift = Math.abs(previewAudio.currentTime - expectedAudioTimeSec)
+    if (drift > 0.25) {
+      previewAudio.currentTime = expectedAudioTimeSec
+    }
+  } else if (forceSyncPaused) {
+    previewAudio.currentTime = expectedAudioTimeSec
+  }
+}
+
+const pauseAudioPlayback = () => {
+  if (previewAudio && !previewAudio.paused) {
+    previewAudio.pause()
+  }
+}
 
 // --- 3. 图片资源预加载防跨域污染 ---
 const preloadImages = async () => {
@@ -373,13 +434,23 @@ const renderLoop = (timestamp: number) => {
   const deltaTime = timestamp - lastTimestamp
   lastTimestamp = timestamp
 
-  if (isPlaying.value && hasScenes.value && !isExporting.value) {
-    currentTime.value += deltaTime
-    if (currentTime.value >= totalDuration.value) currentTime.value = 0
+  if (hasScenes.value && !isExporting.value) {
+    if (isPlaying.value) {
+      currentTime.value += deltaTime
+      if (currentTime.value >= totalDuration.value) {
+        currentTime.value = 0
+      }
+    }
 
     if (previewCanvas.value) {
       const ctx = previewCanvas.value.getContext('2d')
       if (ctx) drawFrameAtTime(ctx, currentTime.value, 1920, 1080)
+    }
+
+    if (isPlaying.value) {
+      syncAudioPlayback()
+    } else {
+      pauseAudioPlayback()
     }
   }
   rafId = requestAnimationFrame(renderLoop)
@@ -486,6 +557,7 @@ const seekTimeline = (e: MouseEvent) => {
   if (!hasScenes.value || isExporting.value) return
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   currentTime.value = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * totalDuration.value
+  syncAudioPlayback(true)
 }
 const toggleFullscreen = () => {
   const el = document.querySelector('.frontend-video-engine')
@@ -499,7 +571,13 @@ const formatTime = (ms: number) => {
 }
 
 onMounted(() => { rafId = requestAnimationFrame(renderLoop) })
-onUnmounted(() => { if (rafId) cancelAnimationFrame(rafId) })
+onUnmounted(() => {
+  if (rafId) cancelAnimationFrame(rafId)
+  if (previewAudio) {
+    previewAudio.pause()
+    previewAudio = null
+  }
+})
 </script>
 
 <style scoped>

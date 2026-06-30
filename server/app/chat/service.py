@@ -15,7 +15,7 @@ from typing import Any, AsyncIterator
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
-from app.chat.emitter import ChatEvents, ChatEventName, ChatRuntimeEventMapper, SSE_EVENT_MAP, runtime_status
+from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.streaming import safety_filter
@@ -88,7 +88,10 @@ async def chat(
         "event": "status",
         "data": {
             "stage": "preparing_context",
-            "message": "正在分析附件并准备本轮对话..." if merged_attachments else "正在准备本轮对话...",
+            "activity_id": "workflow:current",
+            "title": "正在理解问题",
+            "summary": "包含附件" if merged_attachments else "",
+            "message": "正在读取附件和问题" if merged_attachments else "正在读取你的问题",
         },
     }
 
@@ -268,7 +271,13 @@ async def run_chat_agent(
     """
     events = ChatEvents(user_id=user_id, session_id=session_id, run_id=run_id)
     await events.open()
-    await events.send(event="run.started", message="智能辅导已开始", data={})
+    started = build_workflow_activity_payload(
+        stage="run_started",
+        activity_id="workflow:current",
+        title="正在思考",
+        message="正在准备回答",
+    )
+    await events.send(event="run.started", message=started["message"], data=started)
     failed = False
     try:
         async for event in chat(

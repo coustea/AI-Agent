@@ -57,7 +57,7 @@ def test_resource_generation_request_accepts_current_frontend_payload():
                     "language_preference": "both",
                 },
                 "ppt": {
-                    "theme_id": "paper-light",
+                    "theme_id": "neon-cyber",
                     "explanation_style": "conceptual",
                     "visual_emphasis": "balanced",
                 },
@@ -70,7 +70,7 @@ def test_resource_generation_request_accepts_current_frontend_payload():
     assert request.agent_configs.quiz.difficulty_mode == "basic"
     assert request.agent_configs.quiz.question_types == ["single", "multiple", "judge", "fill"]
     assert request.agent_configs.reading.language_preference == "both"
-    assert request.agent_configs.ppt.theme_id == "paper-light"
+    assert request.agent_configs.ppt.theme_id == "neon-cyber"
 
 
 def test_resource_generation_request_normalizes_frontend_bilingual_alias():

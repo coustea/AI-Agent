@@ -394,7 +394,7 @@ async def _execute_non_planning_agent(
                 .where(GeneratedResourceItem.agent_type.in_(depends_on_agents))
             )
             result = await session.exec(stmt)
-            source_item_ids = list(result.all())
+            source_item_ids = list(result.scalars().all())
 
     outcome = await execute_resource_agent(
         user_id=user_id,

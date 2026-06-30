@@ -5,13 +5,13 @@
   >
     <main class="onboarding-container">
       <header class="conversation-header">
-        <div class="progress-badge" aria-label="画像完成度">
+        <div class="progress-badge" aria-label="基础资料进度">
           <strong>{{ profileProgress }}%</strong>
-          <span>画像完成度</span>
+          <span>资料进度</span>
         </div>
 
-        <button class="skip-btn" type="button" @click="handleNeverShow">
-          跳过
+        <button class="skip-btn" type="button" @click="handleCompleteLater">
+          稍后完善
         </button>
 
         <div class="header-center">
@@ -20,185 +20,259 @@
             <span></span>
           </div>
 
-          <h1>学枢智导</h1>
-          <p>通过对话完成基础信息收集，为你初始化更合适的学习路径。</p>
+          <h1>对话式构建基础资料</h1>
+          <p>每次只确认一个主题，填写完成后可在个人中心继续修改。</p>
         </div>
       </header>
 
-      <section class="chat-card">
-        <div class="current-question">
-          <div class="question-copy">
-            <span>当前问题 · {{ currentStepMeta.short }}</span>
-            <strong>{{ currentStepMeta.title }}</strong>
-            <p>{{ currentStepMeta.description }}</p>
+      <section class="onboarding-workspace">
+        <aside class="step-rail" aria-label="填写步骤">
+          <div class="step-rail-title">
+            <span>{{ currentStepLabel }}</span>
+            <strong>{{ currentStepMeta.short }}</strong>
           </div>
-        </div>
 
-        <div
-            ref="messageListRef"
-            class="message-list"
-            @scroll="handleMessageListScroll"
-        >
-          <transition-group name="message-pop" tag="div" class="message-inner">
-            <div
-                v-for="msg in messages"
-                :key="msg.id"
-                :class="['message-row', msg.role, { 'is-streaming': msg.streaming }]"
+          <ol class="step-list">
+            <li
+                v-for="step in stepTimeline"
+                :key="step.key"
+                :class="['step-item', step.state]"
             >
-              <div v-if="msg.role === 'assistant'" class="avatar-icon">
-                AI
+              <span class="step-index">{{ step.key }}</span>
+              <div>
+                <strong>{{ step.short }}</strong>
+                <small>{{ step.title }}</small>
               </div>
+            </li>
+          </ol>
+        </aside>
+
+        <section class="chat-card">
+          <div class="current-question">
+            <div class="question-copy">
+              <span>当前问题</span>
+              <strong>{{ currentQuestionTitle }}</strong>
+              <p>{{ currentStepMeta.description }}</p>
+            </div>
+          </div>
+
+          <div
+              ref="messageListRef"
+              class="message-list"
+              @scroll="handleMessageListScroll"
+          >
+            <transition-group name="message-pop" tag="div" class="message-inner">
+              <div
+                  v-for="msg in messages"
+                  :key="msg.id"
+                  :class="['message-row', msg.role, { 'is-streaming': msg.streaming }]"
+              >
+                <div v-if="msg.role === 'assistant'" class="avatar-icon">
+                  AI
+                </div>
+
+                <div class="message-main">
+                  <div class="message-meta">
+                    <span>{{ msg.role === 'assistant' ? '学枢智导' : '你' }}</span>
+                    <span>{{ msg.time }}</span>
+                  </div>
+
+                  <div class="message-bubble">
+                    <p class="message-text">{{ msg.content }}</p>
+                  </div>
+                </div>
+
+                <div v-if="msg.role === 'user'" class="user-avatar">
+                  你
+                </div>
+              </div>
+            </transition-group>
+
+            <transition name="fade-up">
+              <div
+                  v-if="showAssistantActions"
+                  class="message-row assistant action-row"
+              >
+                <div class="avatar-icon">AI</div>
+
+                <div class="message-main">
+                  <div class="message-meta">
+                    <span>学枢智导</span>
+                    <span>{{ currentTimeLabel }}</span>
+                  </div>
+
+                  <div class="message-bubble action-bubble">
+                    <div class="action-copy">
+                      <strong>{{ activeActionTitle }}</strong>
+                      <p>{{ activeActionHint }}</p>
+                    </div>
+
+                    <div
+                        v-if="currentQuickReplies.length > 0"
+                        :class="['quick-replies-grid', { 'is-card-mode': shouldShowReplyHint, 'is-grade-mode': isGradeStep }]"
+                    >
+                      <button
+                          v-for="reply in currentQuickReplies"
+                          :key="reply"
+                          class="quick-reply-btn"
+                          :class="{ 'is-selected': isReplySelected(reply) }"
+                          type="button"
+                          :disabled="isAssistantStreaming"
+                          @click="handleQuickReply(reply)"
+                      >
+                        <span>{{ reply }}</span>
+                        <small v-if="getReplyHint(reply)">{{ getReplyHint(reply) }}</small>
+                      </button>
+                    </div>
+
+                    <div
+                        v-if="currentStep === 4 && schoolSuggestions.length > 0"
+                        class="school-suggestions-grid"
+                    >
+                      <button
+                          v-for="school in schoolSuggestions"
+                          :key="school.name"
+                          class="school-suggestion-btn"
+                          type="button"
+                          @click="selectSchool(school)"
+                      >
+                        <span class="school-name">{{ school.name }}</span>
+                        <span v-if="school.level" class="school-level-tag">
+                          {{ school.level }}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div v-if="isMultiSelectStep" class="action-footer">
+                      <span>{{ selectionSummaryText }}</span>
+                      <button
+                          class="confirm-selection-btn"
+                          type="button"
+                          :disabled="!canSend"
+                          @click="handleSend"
+                      >
+                        确认选择
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </transition>
+
+            <div v-if="isThinking" class="message-row assistant thinking-row">
+              <div class="avatar-icon">AI</div>
 
               <div class="message-main">
                 <div class="message-meta">
-                  <span>{{ msg.role === 'assistant' ? '学枢智导' : '你' }}</span>
-                  <span>{{ msg.time }}</span>
+                  <span>学枢智导</span>
+                  <span>{{ currentTimeLabel }}</span>
                 </div>
 
-                <div class="message-bubble">
-                  <p class="message-text">{{ msg.content }}</p>
+                <div class="message-bubble thinking-bubble" aria-label="正在输入">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
                 </div>
               </div>
-
-              <div v-if="msg.role === 'user'" class="user-avatar">
-                你
-              </div>
             </div>
-          </transition-group>
-
-          <div v-if="isThinking" class="message-row assistant thinking-row">
-            <div class="avatar-icon">AI</div>
-
-            <div class="message-main">
-              <div class="message-meta">
-                <span>学枢智导</span>
-                <span>{{ currentTimeLabel }}</span>
-              </div>
-
-              <div class="message-bubble thinking-bubble" aria-label="正在输入">
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-              </div>
-            </div>
-          </div>
-
-          <button
-              v-if="isUserReadingHistory"
-              class="back-bottom-btn"
-              type="button"
-              @click="scrollToBottom({ force: true })"
-          >
-            回到底部
-          </button>
-        </div>
-
-        <div class="input-dock">
-          <transition name="fade-up">
-            <div
-                v-if="currentStep <= 7 && currentQuickReplies.length > 0"
-                class="quick-replies-wrapper"
-            >
-              <div class="quick-head">
-                <span>{{ currentStepMeta.quickTitle }}</span>
-                <em v-if="isCourseFormStep">可多选，选完后点击发送</em>
-                <em v-else-if="isMultiSelectStep">可多选，选完后点击发送</em>
-                <em v-else>点击后自动进入下一步</em>
-              </div>
-
-              <div :class="['quick-replies-grid', { 'is-grade-mode': isCompactReplyStep }]">
-                <button
-                    v-for="reply in currentQuickReplies"
-                    :key="reply"
-                    class="quick-reply-btn"
-                    :class="{ 'is-selected': isReplySelected(reply) }"
-                    type="button"
-                    :disabled="isAssistantStreaming"
-                    @click="handleQuickReply(reply)"
-                >
-                  <span>{{ reply }}</span>
-                  <small v-if="shouldShowReplyHint && getReplyHint(reply)">{{ getReplyHint(reply) }}</small>
-                </button>
-              </div>
-            </div>
-          </transition>
-
-          <transition name="fade-up">
-            <div
-                v-if="currentStep === 4 && schoolSuggestions.length > 0"
-                class="school-suggestions-wrapper"
-            >
-              <div class="quick-head">
-                <span>学校搜索结果</span>
-                <em>选择一个匹配的学校</em>
-              </div>
-
-              <div class="school-suggestions-grid">
-                <button
-                    v-for="school in schoolSuggestions"
-                    :key="school.name"
-                    class="school-suggestion-btn"
-                    type="button"
-                    @click="selectSchool(school)"
-                >
-                  <span class="school-name">{{ school.name }}</span>
-                  <span v-if="school.level" class="school-level-tag">
-                    {{ school.level }}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </transition>
-
-          <transition name="fade-up">
-            <div v-if="isMultiSelectStep && selectionItems.length > 0" class="selection-preview">
-              <span>当前选择</span>
-              <div>
-                <strong v-for="item in selectionItems" :key="item">
-                  {{ item }}
-                </strong>
-              </div>
-            </div>
-          </transition>
-
-          <div v-if="currentStep <= 7" class="composer-wrapper">
-            <textarea
-                ref="inputRef"
-                v-model="userInput"
-                class="chat-composer"
-                rows="1"
-                :placeholder="composerPlaceholder"
-                :disabled="isAssistantStreaming || submitting"
-                @keydown="handleComposerKeydown"
-                @input="handleInputChange"
-            ></textarea>
 
             <button
-                class="send-btn"
+                v-if="isUserReadingHistory"
+                class="back-bottom-btn"
                 type="button"
-                :disabled="!canSend"
-                @click="handleSend"
+                @click="scrollToBottom({ force: true })"
             >
-              <Position class="btn-icon" />
+              回到底部
             </button>
           </div>
 
-          <div v-else class="profile-footer">
-            <div>
-              <strong>学习画像已经完成</strong>
-              <p>进入学习空间后，系统会根据这些信息生成路径、资源和题库。</p>
+          <div class="input-dock">
+            <div v-if="currentStep <= 7" class="composer-wrapper">
+              <textarea
+                  id="onboarding-chat-input"
+                  ref="inputRef"
+                  v-model="userInput"
+                  class="chat-composer"
+                  name="onboarding_reply"
+                  rows="1"
+                  :placeholder="composerPlaceholder"
+                  :disabled="isAssistantStreaming || submitting"
+                  @keydown="handleComposerKeydown"
+                  @input="handleInputChange"
+              ></textarea>
+
+              <button
+                  class="send-btn"
+                  type="button"
+                  :disabled="!canSend"
+                  @click="handleSend"
+              >
+                <Position class="btn-icon" />
+              </button>
             </div>
 
-            <button
-                class="btn btn-primary finish-btn"
-                :disabled="submitting"
-                @click="submitForm"
-            >
-              <span>进入学习空间</span>
-              <Right class="btn-icon-right ml-2" />
-            </button>
+            <div v-else class="profile-footer">
+              <div>
+                <strong>基础资料已经完成</strong>
+                <p>这些内容会同步到个人中心，后续可继续修改。</p>
+              </div>
+
+              <button
+                  class="btn btn-primary finish-btn"
+                  :disabled="submitting"
+                  @click="submitForm"
+              >
+                <span>确认进入</span>
+                <Right class="btn-icon-right ml-2" />
+              </button>
+            </div>
           </div>
-        </div>
+        </section>
+
+        <aside class="profile-panel" aria-label="基础资料确认">
+          <div class="profile-panel-head">
+            <span>正在生成基础资料</span>
+            <strong>{{ profileProgress }}%</strong>
+          </div>
+
+          <div class="progress-ring" :style="{ '--progress': profileProgress }">
+            <span>{{ profileProgress }}%</span>
+          </div>
+
+          <div class="info-block">
+            <h2>已确认</h2>
+            <div v-if="confirmedFields.length > 0" class="info-list">
+              <div
+                  v-for="item in confirmedFields"
+                  :key="item.key"
+                  class="info-row confirmed"
+              >
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
+            </div>
+            <p v-else class="empty-copy">先从当前问题开始填写。</p>
+          </div>
+
+          <div class="info-block">
+            <h2>待确认</h2>
+            <div class="info-list">
+              <div
+                  v-for="item in pendingFields"
+                  :key="item.key"
+                  class="info-row pending"
+              >
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-note">
+            <strong>填写后可在个人中心修改</strong>
+            <p>点击稍后完善不会标记完成，下次进入系统仍会继续引导。</p>
+          </div>
+        </aside>
       </section>
     </main>
   </section>
@@ -251,6 +325,16 @@ type StepMeta = {
   title: string
   description: string
   quickTitle: string
+}
+
+type StepTimelineItem = StepMeta & {
+  state: 'done' | 'active' | 'pending'
+}
+
+type InfoField = {
+  key: string
+  label: string
+  value: string
 }
 
 type ProfileOnboardingDraftState = {
@@ -372,7 +456,16 @@ const ONBOARDING_STEPS: StepMeta[] = [
   },
 ]
 
-const currentTimeLabel = computed(() => formatTime())
+const currentTimeLabel = computed(() => {
+  void currentStep.value
+  void messages.value.length
+  return formatTime()
+})
+
+const currentStepLabel = computed(() => {
+  const safeStep = Math.min(currentStep.value, 7)
+  return `${safeStep}/7`
+})
 
 const coursesValue = computed<string[]>(() => {
   return Array.isArray(form.courses) ? (form.courses as string[]).map(String) : []
@@ -409,26 +502,65 @@ const canSend = computed(() => {
   return userInput.value.trim().length > 0 && !isAssistantStreaming.value && !submitting.value
 })
 
-const isMultiSelectStep = computed(() => currentStep.value === 6)
-const isCourseFormStep = computed(() => currentStep.value === 7)
-const shouldShowReplyHint = computed(() => false)
-const isCompactReplyStep = computed(() => [2, 7].includes(currentStep.value))
+const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
+const shouldShowReplyHint = computed(() => [7].includes(currentStep.value))
+const isGradeStep = computed(() => currentStep.value === 2)
 
 const currentStepMeta = computed<StepMeta>(() => {
   return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
 })
 
+const currentQuestionTitle = computed(() => {
+  switch (currentStep.value) {
+    case 1:
+      return '你的专业是什么？'
+    case 2:
+      return '你目前处于哪个年级？'
+    case 3:
+      return '你的主要学习目标是什么？'
+    case 4:
+      return '你的学校是哪一所？'
+    case 5:
+      return '每天大约能学习多久？'
+    case 6:
+      return '常用哪些编程语言？'
+    case 7:
+      return '本学期重点课程有哪些？'
+    default:
+      return '基础资料已确认'
+  }
+})
+
+const stepTimeline = computed<StepTimelineItem[]>(() => {
+  return ONBOARDING_STEPS.map(step => {
+    let state: StepTimelineItem['state'] = 'pending'
+
+    if (step.key < currentStep.value) state = 'done'
+    if (step.key === Math.min(currentStep.value, 7)) state = 'active'
+
+    return {
+      ...step,
+      state,
+    }
+  })
+})
+
 const composerPlaceholder = computed(() => {
   if (isAssistantStreaming.value) return '学枢智导正在输入...'
-  if (currentStep.value === 2) return '选择年级或输入你的学习阶段...'
+  if (currentStep.value === 1) return '输入专业名称，或点击 AI 推荐标签...'
+  if (currentStep.value === 2) return '输入年级，或点击 AI 推荐标签...'
   if (currentStep.value === 4) return '输入学校名称，支持搜索选择...'
-  if (currentStep.value === 7) return '选择课程或输入多门课程，用逗号、空格或顿号分隔...'
-  if (isMultiSelectStep.value) return '可以输入多个内容，用逗号、空格或顿号分隔...'
+  if (currentStep.value === 7) return '输入多门课程，用逗号、空格或顿号分隔...'
+  if (isMultiSelectStep.value) return '输入多个内容，用逗号、空格或顿号分隔...'
   return '输入回复，Enter 发送，Shift + Enter 换行...'
 })
 
 const selectionItems = computed(() => {
   return userInput.value.split(/[,，、\s]+/).filter(Boolean)
+})
+
+const selectionSummaryText = computed(() => {
+  return selectionItems.value.length > 0 ? `已选择 ${selectionItems.value.length} 项` : '可多选后发送'
 })
 
 const currentQuickReplies = computed(() => {
@@ -448,6 +580,72 @@ const currentQuickReplies = computed(() => {
     default:
       return []
   }
+})
+
+const confirmedFields = computed<InfoField[]>(() => {
+  const fields: InfoField[] = [
+    { key: 'major', label: '专业', value: form.major || '' },
+    { key: 'grade', label: '年级', value: form.grade || '' },
+    { key: 'goal', label: '学习目标', value: form.global_learning_goal || '' },
+    { key: 'school', label: '学校', value: form.school || '' },
+    { key: 'time', label: '每日时长', value: form.daily_study_time || '' },
+    {
+      key: 'languages',
+      label: '常用语言',
+      value: Array.isArray(form.programming_languages) ? form.programming_languages.join('，') : '',
+    },
+    {
+      key: 'courses',
+      label: '核心课程',
+      value: coursesValue.value.join('，'),
+    },
+  ]
+
+  return fields.filter(item => item.value)
+})
+
+const pendingFields = computed<InfoField[]>(() => {
+  const fields: InfoField[] = [
+    { key: 'major', label: '专业', value: '待填写' },
+    { key: 'grade', label: '年级', value: '待填写' },
+    { key: 'goal', label: '学习目标', value: '待填写' },
+    { key: 'school', label: '学校', value: '待填写' },
+    { key: 'time', label: '每日时长', value: '待填写' },
+    { key: 'languages', label: '常用语言', value: '可选' },
+    { key: 'courses', label: '核心课程', value: '待填写' },
+  ]
+
+  const confirmedKeys = new Set(confirmedFields.value.map(item => item.key))
+  return fields.filter(item => !confirmedKeys.has(item.key))
+})
+
+const showAssistantActions = computed(() => {
+  if (currentStep.value > 7 || isAssistantStreaming.value || isThinking.value) return false
+
+  if (currentQuickReplies.value.length > 0) return true
+  return currentStep.value === 4 && schoolSuggestions.value.length > 0
+})
+
+const activeActionTitle = computed(() => {
+  if (currentStep.value === 4 && schoolSuggestions.value.length > 0) {
+    return '我找到了这些学校'
+  }
+
+  return currentStepMeta.value.quickTitle
+})
+
+const activeActionHint = computed(() => {
+  if (currentStep.value === 4) {
+    return schoolSuggestions.value.length > 0
+        ? '选择一个学校后，我会把它作为你的回答继续记录。'
+        : '输入学校名称后，我会从学校库里返回匹配项。'
+  }
+
+  if (isMultiSelectStep.value) {
+    return '这些标签会写入当前回答，可多选后再确认。'
+  }
+
+  return '点击任一标签，我会把它作为你的当前回答。'
 })
 
 const lockPageScroll = () => {
@@ -571,7 +769,7 @@ const initializeDialog = async () => {
     return
   }
 
-  await streamAssistantMessage('你好，我是学枢智导。我们会用聊天方式完成画像初始化。先告诉我：你目前是什么专业？')
+  await streamAssistantMessage('你好，我是学枢智导。我们会用聊天方式完成基础资料。先只确认一个问题：你的专业是什么？')
 }
 
 const resetState = () => {
@@ -791,10 +989,6 @@ const selectSchool = (school: SchoolItem) => {
 }
 
 const isReplySelected = (reply: string) => {
-  if (currentStep.value === 7) {
-    return coursesValue.value.includes(reply)
-  }
-
   if (!userInput.value) return false
 
   const parts = userInput.value.split(/[,，、\s]+/).filter(Boolean)
@@ -807,19 +1001,6 @@ const handleQuickReply = (reply: string) => {
   if (reply === '暂不选择') {
     userInput.value = reply
     handleSend()
-    return
-  }
-
-  if (currentStep.value === 7) {
-    if (coursesValue.value.includes(reply)) {
-      form.courses = coursesValue.value.filter(item => item !== reply)
-    } else {
-      form.courses = [...coursesValue.value, reply]
-    }
-
-    userInput.value = form.courses.join('，')
-    persistDraft()
-    nextTick(autoResizeComposer)
     return
   }
 
@@ -889,15 +1070,6 @@ const getReplyHint = (reply: string) => {
   return ''
 }
 
-const completeCourseStep = async (courses: string[]) => {
-  form.courses = courses
-  currentStep.value = 8
-  userInput.value = ''
-  persistDraft()
-  await nextTick(autoResizeComposer)
-  await streamAssistantMessage('学习画像已经完成。这些信息会用于初始化学习路径、资源推荐和题库偏好。')
-}
-
 const handleSend = async () => {
   if (!canSend.value) return
 
@@ -917,7 +1089,7 @@ const handleSend = async () => {
     const foundMajor = PRESET_MAJORS.find(major => text.includes(major))
     form.major = foundMajor || text
     currentStep.value = 2
-    await streamAssistantMessage(`已记录专业：${form.major}。接下来确认年级，我会据此调整讲解深度。`)
+    await streamAssistantMessage(`已记录专业：${form.major}。接下来只确认年级，我会据此调整讲解深度。`)
     return
   }
 
@@ -925,7 +1097,7 @@ const handleSend = async () => {
     const foundGrade = PRESET_GRADES.find(grade => text.includes(grade))
     form.grade = foundGrade || text
     currentStep.value = 3
-    await streamAssistantMessage(`已记录年级：${form.grade}。现在告诉我你的主要学习目标。`)
+    await streamAssistantMessage(`已记录年级：${form.grade}。现在只聊学习目标。`)
     return
   }
 
@@ -933,14 +1105,14 @@ const handleSend = async () => {
     const foundGoal = PRESET_GOALS.find(goal => text.includes(goal))
     form.global_learning_goal = foundGoal || text
     currentStep.value = 4
-    await streamAssistantMessage(`目标已记录：${form.global_learning_goal}。接下来输入学校名称，我会给出搜索建议。`)
+    await streamAssistantMessage(`目标已记录：${form.global_learning_goal}。接下来确认学校，输入学校名称后我会给出搜索建议。`)
     return
   }
 
   if (currentStep.value === 4) {
     form.school = text
     currentStep.value = 5
-    await streamAssistantMessage(`学校已记录：${form.school}。现在设置每天大约能学习多久。`)
+    await streamAssistantMessage(`学校已记录：${form.school}。现在只确认每天大约能学习多久。`)
     return
   }
 
@@ -948,7 +1120,7 @@ const handleSend = async () => {
     const foundStudyTime = PRESET_DAILY_STUDY_TIME.find(time => text.includes(time))
     form.daily_study_time = foundStudyTime || text
     currentStep.value = 6
-    await streamAssistantMessage(`学习时间已记录：${form.daily_study_time}。可以选择常用编程语言，也可以暂不选择。`)
+    await streamAssistantMessage(`学习时间已记录：${form.daily_study_time}。现在选择常用编程语言，也可以暂不选择。`)
     return
   }
 
@@ -959,13 +1131,16 @@ const handleSend = async () => {
     }
 
     currentStep.value = 7
-    await streamAssistantMessage('技术栈信息已记录。最后选择本学期核心课程，可以多选。')
+    await streamAssistantMessage('技术栈信息已记录。最后只确认本学期核心课程，可以多选。')
     return
   }
 
   if (currentStep.value === 7) {
     const courses = extractMultiple(text, PRESET_COURSES)
-    await completeCourseStep(courses.length > 0 ? courses : [text])
+    form.courses = courses.length > 0 ? courses : [text]
+    currentStep.value = 8
+    persistDraft()
+    await streamAssistantMessage('基础资料已经完成。这些信息会展示到个人中心，也会用于初始化学习路径、资源推荐和题库偏好。')
   }
 }
 
@@ -1004,10 +1179,10 @@ const submitForm = async () => {
       courses: form.courses as any,
     })
 
-    await updateMe({ is_first_login: false }).catch(() => {})
+    await updateMe({ is_first_login: true }).catch(() => {})
     clearDraft()
 
-    toast.success('学习画像构建成功')
+    toast.success('基础资料已完成')
     visible.value = false
     emit('success')
 
@@ -1022,16 +1197,15 @@ const submitForm = async () => {
   }
 }
 
-const handleNeverShow = async () => {
+const handleCompleteLater = async () => {
   try {
-    await updateMe({ is_first_login: false })
+    await updateMe({ is_first_login: false }).catch(() => {})
   } catch (error) {
-    console.error('Failed to update first login state', error)
+    console.error('Failed to keep onboarding pending', error)
   }
 
-  clearDraft()
+  persistDraft()
   visible.value = false
-  emit('success')
 
   if (route.query.onboarding) {
     router.replace({ path: route.path, query: {} })
@@ -1071,29 +1245,29 @@ const handleNeverShow = async () => {
   max-height: 100dvh;
   overflow: hidden;
   background:
-      radial-gradient(circle at 14% 12%, rgba(99, 102, 241, 0.12), transparent 30%),
-      radial-gradient(circle at 86% 10%, rgba(59, 130, 246, 0.12), transparent 28%),
-      linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%);
+      radial-gradient(circle at 14% 12%, rgba(20, 184, 166, 0.13), transparent 30%),
+      radial-gradient(circle at 86% 10%, rgba(103, 232, 249, 0.15), transparent 28%),
+      linear-gradient(180deg, #f8fcfb 0%, #eef8f8 100%);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 .onboarding-container {
   position: relative;
-  width: min(1120px, calc(100vw - 40px));
-  height: min(720px, calc(100dvh - 72px));
+  width: min(1240px, calc(100vw - 40px));
+  height: min(760px, calc(100dvh - 72px));
   max-height: calc(100dvh - 72px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgba(219, 228, 242, 0.6);
-  border-radius: 30px;
+  border: 1px solid rgba(159, 220, 218, 0.58);
+  border-radius: 26px;
   background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 255, 0.98)),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 253, 252, 0.98)),
       #ffffff;
   box-shadow:
-      0 40px 100px rgba(10, 15, 35, 0.35),
-      0 8px 32px rgba(99, 102, 241, 0.12),
+      0 40px 100px rgba(10, 15, 35, 0.26),
+      0 8px 32px rgba(20, 184, 166, 0.12),
       0 1px 0 rgba(255, 255, 255, 0.95) inset;
 }
 
@@ -1110,10 +1284,10 @@ const handleNeverShow = async () => {
 .conversation-header {
   position: relative;
   z-index: 1;
-  min-height: 138px;
-  padding: 16px 132px 12px;
+  min-height: 112px;
+  padding: 18px 132px 14px;
   text-align: center;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
+  border-bottom: 1px solid rgba(190, 230, 229, 0.74);
 }
 
 .header-center {
@@ -1125,7 +1299,7 @@ const handleNeverShow = async () => {
 
 .progress-badge {
   position: absolute;
-  top: 42px;
+  top: 32px;
   left: 24px;
   z-index: 4;
   min-width: 96px;
@@ -1135,7 +1309,7 @@ const handleNeverShow = async () => {
   align-items: flex-start;
   justify-content: center;
   padding: 7px 12px;
-  border: 1px solid rgba(203, 213, 225, 0.76);
+  border: 1px solid rgba(158, 218, 216, 0.78);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(14px);
@@ -1161,15 +1335,15 @@ const handleNeverShow = async () => {
 
 .skip-btn {
   position: absolute;
-  top: 50px;
+  top: 40px;
   right: 24px;
   z-index: 5;
   height: 32px;
   padding: 0 15px;
-  border: 1px solid rgba(203, 213, 225, 0.72);
+  border: 1px solid rgba(158, 218, 216, 0.76);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.66);
-  color: #64748b;
+  color: #41676d;
   font-size: 12px;
   font-weight: 850;
   cursor: pointer;
@@ -1183,8 +1357,8 @@ const handleNeverShow = async () => {
 }
 
 .skip-btn:hover {
-  color: #334155;
-  border-color: rgba(148, 163, 184, 0.96);
+  color: var(--color-primary-text);
+  border-color: rgba(20, 160, 157, 0.86);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   transform: translateY(-1px);
@@ -1217,19 +1391,135 @@ const handleNeverShow = async () => {
 .conversation-header h1 {
   margin: 0;
   color: #0f172a;
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 950;
-  line-height: 1.1;
-  letter-spacing: -0.05em;
+  line-height: 1.15;
+  letter-spacing: 0;
 }
 
 .conversation-header p {
   margin: 8px auto 0;
   max-width: 520px;
-  color: #64748b;
+  color: #5f7780;
   font-size: 14px;
   font-weight: 650;
   line-height: 1.55;
+}
+
+.onboarding-workspace {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 214px minmax(0, 1fr) 300px;
+  gap: 16px;
+  margin: 0 20px 20px;
+}
+
+.step-rail,
+.profile-panel {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(183, 226, 224, 0.9);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+      0 16px 42px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.94) inset;
+  backdrop-filter: blur(18px);
+}
+
+.step-rail {
+  padding: 16px;
+}
+
+.step-rail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
+  color: var(--color-primary-text);
+}
+
+.step-rail-title span {
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.step-rail-title strong {
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.step-list {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: #6b7f87;
+}
+
+.step-item.active {
+  border-color: rgba(20, 160, 157, 0.34);
+  background: rgba(231, 250, 248, 0.8);
+  color: var(--color-primary-text);
+}
+
+.step-item.done {
+  color: #315f66;
+  background: rgba(248, 253, 252, 0.88);
+}
+
+.step-index {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #78919a;
+  background: rgba(236, 248, 247, 0.9);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.step-item.active .step-index,
+.step-item.done .step-index {
+  color: #ffffff;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+}
+
+.step-item strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.step-item small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8aa0a8;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-card {
@@ -1238,10 +1528,10 @@ const handleNeverShow = async () => {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  margin: 0 24px 24px;
+  margin: 0;
   overflow: hidden;
-  border: 1px solid rgba(219, 228, 242, 0.92);
-  border-radius: 26px;
+  border: 1px solid rgba(183, 226, 224, 0.96);
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.86);
   box-shadow:
       0 18px 48px rgba(15, 23, 42, 0.08),
@@ -1251,10 +1541,10 @@ const handleNeverShow = async () => {
 
 .current-question {
   display: block;
-  padding: 18px 26px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  padding: 16px 22px;
+  border-bottom: 1px solid rgba(203, 235, 233, 0.82);
   background:
-      linear-gradient(120deg, rgba(238, 242, 255, 0.92), rgba(255, 255, 255, 0.92) 52%, rgba(239, 246, 255, 0.86)),
+      linear-gradient(120deg, rgba(232, 250, 248, 0.92), rgba(255, 255, 255, 0.94) 54%, rgba(240, 253, 250, 0.88)),
       #ffffff;
 }
 
@@ -1269,7 +1559,7 @@ const handleNeverShow = async () => {
 .question-copy strong {
   display: block;
   color: #0f172a;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 950;
   line-height: 1.3;
 }
@@ -1288,7 +1578,7 @@ const handleNeverShow = async () => {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 22px 26px;
+  padding: 20px 22px;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -1310,7 +1600,7 @@ const handleNeverShow = async () => {
 .message-inner {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   min-height: min-content;
 }
 
@@ -1339,8 +1629,8 @@ const handleNeverShow = async () => {
 .avatar-icon {
   color: var(--color-primary-text);
   background:
-      linear-gradient(145deg, rgba(238, 242, 255, 0.95), rgba(219, 234, 254, 0.95));
-  border: 1px solid rgba(199, 210, 254, 0.88);
+      linear-gradient(145deg, rgba(235, 251, 249, 0.95), rgba(213, 246, 243, 0.95));
+  border: 1px solid rgba(158, 218, 216, 0.88);
   box-shadow: 0 12px 24px rgba(70, 184, 180, 0.12);
 }
 
@@ -1351,7 +1641,7 @@ const handleNeverShow = async () => {
 }
 
 .message-main {
-  max-width: min(660px, 74%);
+  max-width: min(640px, 84%);
 }
 
 .message-row.user .message-main {
@@ -1372,7 +1662,7 @@ const handleNeverShow = async () => {
 
 .message-bubble {
   position: relative;
-  border: 1px solid rgba(226, 232, 240, 0.98);
+  border: 1px solid rgba(203, 235, 233, 0.98);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow:
@@ -1385,9 +1675,10 @@ const handleNeverShow = async () => {
 }
 
 .message-row.user .message-bubble {
-  border-color: rgba(191, 219, 254, 0.92);
+  border-color: transparent;
   border-top-right-radius: 8px;
-  background: linear-gradient(145deg, #eef4ff, #e0e7ff);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 14px 28px rgba(20, 160, 157, 0.2);
 }
 
 .message-text {
@@ -1402,8 +1693,71 @@ const handleNeverShow = async () => {
 }
 
 .message-row.user .message-text {
-  color: #1e3a8a;
+  color: #ffffff;
   font-weight: 750;
+}
+
+.action-row {
+  margin-top: 2px;
+}
+
+.action-bubble {
+  width: min(100%, 620px);
+  padding: 14px;
+  background:
+      linear-gradient(145deg, rgba(246, 254, 253, 0.98), rgba(255, 255, 255, 0.98));
+}
+
+.action-copy {
+  margin-bottom: 12px;
+}
+
+.action-copy strong {
+  display: block;
+  color: #123f48;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.action-copy p {
+  margin: 5px 0 0;
+  color: #68818a;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.action-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(203, 235, 233, 0.86);
+}
+
+.action-footer span {
+  color: #68818a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.confirm-selection-btn {
+  height: 34px;
+  padding: 0 13px;
+  border: none;
+  border-radius: 12px;
+  color: #ffffff;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.confirm-selection-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .thinking-bubble {
@@ -1416,7 +1770,7 @@ const handleNeverShow = async () => {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #818cf8;
+  background: var(--color-primary);
   animation: typing-bounce 1s infinite ease-in-out;
 }
 
@@ -1439,7 +1793,7 @@ const handleNeverShow = async () => {
   height: 32px;
   margin: 10px auto 0;
   padding: 0 14px;
-  border: 1px solid rgba(199, 210, 254, 0.9);
+  border: 1px solid rgba(158, 218, 216, 0.9);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-primary-text);
@@ -1459,38 +1813,10 @@ const handleNeverShow = async () => {
 }
 
 .input-dock {
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  border-top: 1px solid rgba(203, 235, 233, 0.9);
   background:
       linear-gradient(180deg, rgba(248, 250, 252, 0.86), rgba(255, 255, 255, 0.98));
-  padding: 14px 20px 16px;
-}
-
-.quick-replies-wrapper,
-.school-suggestions-wrapper,
-.selection-preview {
-  margin-bottom: 12px;
-}
-
-.quick-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 9px;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.quick-head span {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.quick-head em {
-  color: #94a3b8;
-  font-style: normal;
-  font-weight: 800;
+  padding: 14px 16px 16px;
 }
 
 .quick-replies-grid,
@@ -1498,7 +1824,7 @@ const handleNeverShow = async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 9px;
-  max-height: 128px;
+  max-height: 132px;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -1521,14 +1847,19 @@ const handleNeverShow = async () => {
   background: transparent;
 }
 
+.quick-replies-grid.is-card-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .quick-reply-btn,
 .school-suggestion-btn {
   position: relative;
   min-height: 36px;
-  border: 1px solid rgba(203, 213, 225, 0.96);
+  border: 1px solid rgba(183, 226, 224, 0.96);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
-  color: #334155;
+  color: #24545b;
   font-size: 13px;
   font-weight: 850;
   cursor: pointer;
@@ -1544,6 +1875,12 @@ const handleNeverShow = async () => {
   padding: 0 15px;
 }
 
+.quick-replies-grid.is-card-mode .quick-reply-btn {
+  min-height: 54px;
+  padding: 9px 13px;
+  border-radius: 16px;
+  text-align: left;
+}
 
 /* 年级专属：紧凑胶囊 pill，稍宽以容纳副标题 */
 .quick-replies-grid.is-grade-mode {
@@ -1555,7 +1892,7 @@ const handleNeverShow = async () => {
 }
 
 .quick-replies-grid.is-grade-mode .quick-reply-btn {
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 16px;
   border-radius: 999px;
   display: inline-flex;
@@ -1595,10 +1932,10 @@ const handleNeverShow = async () => {
 .school-suggestion-btn:hover {
   transform: none;
   z-index: auto;
-  border-color: rgba(129, 140, 248, 0.9);
-  color: #4338ca;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.12);
+  border-color: rgba(20, 160, 157, 0.82);
+  color: var(--color-primary-text);
+  background: linear-gradient(180deg, #ffffff 0%, #f4fcfb 100%);
+  box-shadow: inset 0 0 0 1px rgba(20, 160, 157, 0.12);
 }
 
 .quick-reply-btn.is-selected {
@@ -1637,44 +1974,10 @@ const handleNeverShow = async () => {
 .school-level-tag {
   padding: 2px 7px;
   border-radius: 999px;
-  background: #eef2ff;
+  background: #e6f8f6;
   color: var(--color-primary-text);
   font-size: 11px;
   font-weight: 900;
-}
-
-.selection-preview {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid rgba(199, 210, 254, 0.78);
-  border-radius: 18px;
-  background: rgba(238, 242, 255, 0.62);
-}
-
-.selection-preview > span {
-  flex: 0 0 auto;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 25px;
-}
-
-.selection-preview div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.selection-preview strong {
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #4338ca;
-  font-size: 12px;
-  font-weight: 900;
-  box-shadow: 0 6px 16px rgba(70, 184, 180, 0.08);
 }
 
 .composer-wrapper {
@@ -1683,11 +1986,11 @@ const handleNeverShow = async () => {
   gap: 10px;
   align-items: end;
   padding: 8px;
-  border: 1px solid rgba(129, 140, 248, 0.82);
+  border: 1px solid rgba(20, 160, 157, 0.5);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow:
-      0 0 0 5px rgba(99, 102, 241, 0.08),
+      0 0 0 5px rgba(20, 184, 166, 0.08),
       0 16px 34px rgba(15, 23, 42, 0.08);
 }
 
@@ -1775,6 +2078,154 @@ const handleNeverShow = async () => {
   box-shadow: 0 16px 32px rgba(70, 184, 180, 0.22);
 }
 
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.profile-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.profile-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(158, 218, 216, 0.82);
+}
+
+.profile-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-panel-head span {
+  color: #315f66;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.profile-panel-head strong {
+  color: var(--color-primary-text);
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.progress-ring {
+  --progress: 0;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  border-radius: 999px;
+  background:
+      radial-gradient(circle closest-side, #ffffff 72%, transparent 73%),
+      conic-gradient(var(--color-primary) calc(var(--progress) * 1%), rgba(219, 239, 238, 0.95) 0);
+  box-shadow:
+      0 16px 36px rgba(20, 160, 157, 0.14),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.92);
+}
+
+.progress-ring span {
+  color: var(--color-primary-text);
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.info-block {
+  min-height: 0;
+}
+
+.info-block h2 {
+  margin: 0 0 9px;
+  color: #123f48;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.info-list {
+  display: grid;
+  gap: 6px;
+}
+
+.info-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+}
+
+.info-row span {
+  color: #6f8790;
+  font-weight: 850;
+}
+
+.info-row strong {
+  overflow: hidden;
+  color: #123f48;
+  font-weight: 950;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-row.confirmed {
+  border: 1px solid rgba(183, 226, 224, 0.88);
+  background: rgba(246, 254, 253, 0.9);
+}
+
+.info-row.pending {
+  border: 1px dashed rgba(183, 226, 224, 0.9);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.info-row.pending strong {
+  color: #8aa0a8;
+}
+
+.empty-copy {
+  margin: 0;
+  padding: 13px;
+  border-radius: 14px;
+  background: rgba(246, 254, 253, 0.86);
+  color: #6f8790;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-note {
+  margin-top: auto;
+  align-self: stretch;
+  padding: 13px;
+  border: 1px solid rgba(20, 160, 157, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #e9fbf9, #ffffff);
+  box-shadow: 0 -8px 24px rgba(255, 255, 255, 0.82);
+}
+
+.profile-note strong {
+  display: block;
+  color: var(--color-primary-text);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.profile-note p {
+  margin: 6px 0 0;
+  color: #68818a;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.6;
+}
+
 .message-pop-enter-active,
 .message-pop-leave-active,
 .fade-up-enter-active,
@@ -1823,8 +2274,8 @@ const handleNeverShow = async () => {
   }
 
   .conversation-header {
-    min-height: 150px;
-    padding: 76px 20px 14px;
+    min-height: 134px;
+    padding: 70px 20px 14px;
     text-align: left;
   }
 
@@ -1857,9 +2308,37 @@ const handleNeverShow = async () => {
     justify-content: flex-start;
   }
 
-  .chat-card {
+  .onboarding-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 10px;
     margin: 0 12px 12px;
+    overflow-y: auto;
+  }
+
+  .step-rail {
+    padding: 10px;
+  }
+
+  .step-rail-title {
+    margin-bottom: 10px;
+  }
+
+  .step-list {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .step-item {
+    width: 138px;
+    flex: 0 0 auto;
+  }
+
+  .chat-card {
     border-radius: 22px;
+    min-height: 560px;
   }
 
   .current-question {
@@ -1874,6 +2353,14 @@ const handleNeverShow = async () => {
     max-width: 82%;
   }
 
+  .action-bubble {
+    width: 100%;
+  }
+
+  .quick-replies-grid.is-card-mode {
+    grid-template-columns: 1fr;
+  }
+
   .quick-replies-grid,
   .school-suggestions-grid {
     max-height: 112px;
@@ -1882,6 +2369,15 @@ const handleNeverShow = async () => {
   .profile-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .profile-panel {
+    max-height: none;
+  }
+
+  .progress-ring {
+    width: 96px;
+    height: 96px;
   }
 }
 </style>

@@ -132,9 +132,7 @@ import {
   getResourceTypeLabel,
 } from '@/features/resource/model/ResourceGeneratorConstants'
 
-import {
-  parsePptDocument,
-} from '@/features/resource/components/ppt-engine/types/ppt'
+
 
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
@@ -184,6 +182,7 @@ const emit = defineEmits<{
       agentId: string
       resultData: any
       title: string
+      resource?: any
     },
   ]
 }>()
@@ -322,7 +321,7 @@ function normalizeResource(
     return null
   }
 
-  if (!hasContent(resource.content)) {
+  if (!hasContent(resource.content, type)) {
     console.warn(
         '[ResourceResult] 忽略空资源',
         {
@@ -335,27 +334,13 @@ function normalizeResource(
     return null
   }
 
-  if (type === 'ppt') {
-    const parsed = parsePptDocument(
-        resource.content,
-    )
 
-    if (!parsed.ok) {
-      console.warn(
-          '[ResourceResult] 忽略无效 PPT 资源',
-          {
-            resourceId: resource.id,
-            reason: parsed.reason,
-          },
-      )
 
-      return null
-    }
-  }
-
-  const metadata = isPlainObject(resource.metadata)
-      ? resource.metadata
-      : {}
+  const metadata = isPlainObject(resource.metadata_json)
+      ? resource.metadata_json
+      : (isPlainObject(resource.metadata)
+          ? resource.metadata
+          : {})
 
   const metrics = isPlainObject(resource.metrics)
       ? resource.metrics
@@ -385,6 +370,7 @@ function normalizeResource(
         ? `${estimatedMinutes} 分钟`
         : '',
     metadata,
+    metadata_json: metadata,
     metrics,
   }
 }
@@ -493,6 +479,7 @@ function openPreview(card: ResourceCard) {
     agentId: card.type,
     resultData: card.content,
     title: card.title,
+    resource: card,
   })
 }
 
@@ -586,7 +573,12 @@ function getResourceHighlights(card: ResourceCard) {
   ].slice(0, 3)
 }
 
-function hasContent(value: unknown): boolean {
+function hasContent(value: unknown, type?: string): boolean {
+  // PPTX 类型不依赖 content 字段判断，通过 metadata 中的文件路径判断
+  if (type === 'ppt') {
+    return true
+  }
+
   if (typeof value === 'string') {
     return value.trim().length > 0
   }

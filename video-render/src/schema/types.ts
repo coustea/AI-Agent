@@ -30,16 +30,45 @@ export interface CaptionWord {
   end_ms: number;
 }
 
+export interface CaptionChunk {
+  text: string;
+  start_ms: number;
+  end_ms: number;
+}
+
+export type VisualCueKind =
+  | "define"
+  | "example"
+  | "trace_step"
+  | "compare"
+  | "misconception"
+  | "checkpoint"
+  | "recap";
+
+export interface VisualCue {
+  id: string;
+  kind: VisualCueKind;
+  target: string;
+  summary: string;
+  start_ms: number;
+  end_ms: number;
+  caption_text?: string | null;
+}
+
 export interface RichVideoScene {
   id: string;
   type: SceneType;
+  duration_ms: number;
   duration_seconds: number;
+  audio_duration_ms: number;
   title: string;
   narration: string;
   visual: Record<string, unknown>;
   audio_src?: string;
   transition: "fade" | "slide_left" | "slide_up" | "zoom" | "none";
   caption_words?: CaptionWord[];
+  caption_chunks?: CaptionChunk[];
+  visual_cues?: VisualCue[];
 }
 
 export interface VideoMeta {

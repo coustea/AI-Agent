@@ -111,13 +111,31 @@ from app.resource.schemas import ResourceInput, TeachingPlan
 
 @pytest.mark.asyncio
 async def test_planning_agent_returns_teaching_plan_without_agent_instructions(monkeypatch):
+    from app.resource.schemas.plan import AgentAssignment
+
+    call_count = 0
+
     class FakeLlm:
         async def ainvoke_json(self, model, message, **kwargs):
+            nonlocal call_count
+            call_count += 1
             assert model is TeachingPlan
             assert "为每个启用的资源 Agent" not in message
+            # 首次返回空 assignments 触发重试，重试返回完整 assignments
+            if call_count == 1:
+                return TeachingPlan(
+                    teaching_strategy="先直观类比，再协议细节",
+                    outline=[],
+                )
             return TeachingPlan(
                 teaching_strategy="先直观类比，再协议细节",
                 outline=[],
+                agent_assignments=[
+                    AgentAssignment(agent_id="content", assigned_outline_ids=[]),
+                    AgentAssignment(agent_id="mindmap", assigned_outline_ids=[]),
+                    AgentAssignment(agent_id="ppt", assigned_outline_ids=[]),
+                    AgentAssignment(agent_id="video", assigned_outline_ids=[]),
+                ],
             )
 
     agent = PlanningAgent()
@@ -138,4 +156,5 @@ async def test_planning_agent_returns_teaching_plan_without_agent_instructions(m
     assert result.metadata["agent_id"] == "planning"
     assert result.metadata["teaching_plan"]["teaching_strategy"] != ""
     assert "agent_instructions" not in payload
+    assert call_count == 2  # 首次空 assignments 触发了一次重试
 

@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.resource.ppt_contract import ThemeType
 from app.resource.schemas.meta import AGENT_DEFAULT_ENABLED, AGENT_DEFAULT_ORDER
 
 
@@ -106,7 +107,7 @@ class PptConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    theme_id: Literal["logic-blue", "paper-light", "lab-light"] = "logic-blue"
+    theme_id: ThemeType = "neon-cyber"
     explanation_style: Literal["conceptual", "procedural", "comparative"] = "conceptual"
     visual_emphasis: Literal["minimal", "balanced", "rich"] = "balanced"
 

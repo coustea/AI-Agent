@@ -22,7 +22,7 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-_PLACEHOLDER_RE = re.compile(r"(?<!\\{)\\{([a-zA-Z_][a-zA-Z0-9_]*)\\}(?!\\})")
+_PLACEHOLDER_RE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
 
 _APP_DIR = Path(__file__).resolve().parent.parent  # app/
 

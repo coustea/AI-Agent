@@ -52,6 +52,9 @@ def split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | Non
         if not isinstance(value, (dict, list)):
             raise ValueError("JSON resource content must be an object or array")
         return value, None
+    if result.file_type == "html":
+        # HTML 文件不存储内容，只存储文件路径
+        return None, None
     if result.file_type in {"markdown", "mermaid", "text", "code"}:
         if not isinstance(result.content, str) or not result.content.strip():
             raise ValueError("Text resource content must be non-empty")
@@ -74,8 +77,9 @@ def _db_item_to_dto(item: ItemModel) -> GeneratedResourceItem:
         if not item.content_text:
             raise ValueError(f"资源项 {item.id} 文本格式但 content_text 为空")
         content = item.content_text
-    else:
-        raise ValueError(f"资源项 {item.id} 不支持的格式: {item.content_format}")
+    elif item.content_format == "html":
+        # HTML 文件不存储内容在 content_json/content_text 中
+        content = item.metadata_json or {}
     return GeneratedResourceItem(
         id=str(item.id), type=item.agent_type,
         title=item.title,

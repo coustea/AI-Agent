@@ -1156,12 +1156,23 @@ const loadProfileInfo = async () => {
     if (onboardingRes.status === 'fulfilled') {
       const onboardingData = onboardingRes.value.data?.data
       const baseInfo = onboardingData?.base_info
-      studentProfile.value = onboardingData?.student_profile ?? studentProfile.value
-      profileMeta.dailyStudyTime = baseInfo?.daily_study_time || ''
-      profileMeta.globalLearningGoal = baseInfo?.global_learning_goal || onboardingData?.student_profile?.learning_goal || ''
-      profileMeta.programmingLanguages = Array.isArray(baseInfo?.programming_languages)
-        ? [...baseInfo.programming_languages]
-        : []
+      // 统一从 base_info 中获取所有基本信息，确保数据正确展示
+      if (baseInfo) {
+        studentProfile.value = {
+          school: baseInfo.school || null,
+          school_level: baseInfo.school_level || null,
+          major: baseInfo.major || null,
+          grade: baseInfo.grade || null,
+          courses: baseInfo.courses || [],
+          learning_goal: baseInfo.global_learning_goal || null,
+          preferred_language: (baseInfo.programming_languages || []).join(', '),
+        }
+        profileMeta.dailyStudyTime = baseInfo.daily_study_time || ''
+        profileMeta.globalLearningGoal = baseInfo.global_learning_goal || ''
+        profileMeta.programmingLanguages = Array.isArray(baseInfo.programming_languages)
+          ? [...baseInfo.programming_languages]
+          : []
+      }
     }
   } catch (e) {
     console.warn('加载个人中心数据失败', e)

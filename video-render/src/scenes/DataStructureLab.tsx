@@ -8,6 +8,7 @@ import { InfoPanel } from '../components/InfoPanel';
 import { DiagramNode } from '../components/DiagramNode';
 import { AnimatedArrow } from '../components/AnimatedArrow';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 interface DataNode {
   id: string;
@@ -46,8 +47,8 @@ export const DataStructureLab: React.FC<DataStructureLabProps> = ({
   const invariant = (scene.visual.invariant as string) || '';
 
   // Determine current operation based on frame timing
-  const opDuration = durationInFrames / (operations.length || 1);
-  const activeOpIdx = Math.min(Math.floor(frame / opDuration), operations.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeOpIdx = timing.getActiveIndex(operations.length, ['trace_step']);
   const currentOp = operations[activeOpIdx];
 
   // Derive current nodes list and edge lists based on the current operation
@@ -79,7 +80,13 @@ export const DataStructureLab: React.FC<DataStructureLabProps> = ({
 
   // Anim values
   const sideEntrance = getSpringProgress(frame, fps, 10, 25);
-  const opEntrance = getSpringProgress(frame % opDuration, fps, 0, 15);
+  const opEntrance = getSlideInterpolation(
+    timing.getStepProgress(operations.length, ['trace_step']),
+    0,
+    0.2,
+    0,
+    1,
+  );
 
   return (
     <AbsoluteFill className="p-24 pt-32 overflow-hidden">
@@ -186,7 +193,7 @@ export const DataStructureLab: React.FC<DataStructureLabProps> = ({
             {/* Current Operation Description */}
             {currentOp && (
               <div 
-                className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl transition-all duration-300"
+                className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl"
                 style={{ opacity: opEntrance }}
               >
                 <span className="text-[10px] font-bold text-[var(--primary)] uppercase">当前操作描述</span>

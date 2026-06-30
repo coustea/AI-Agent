@@ -10,7 +10,7 @@
 ```json
 {
   "template_id": "teaching-lesson",
-  "theme_id": "logic-blue",
+  "theme_id": "neon-cyber", // 必须是以下12种预设之一：bold-signal (自信现代), electric-studio (高对比专业), creative-voltage (创意活力), dark-botanical (精致优雅), notebook-tabs (精美画册), pastel-geometry (友好几何), split-pastel (活泼创意), vintage-editorial (复古社论), neon-cyber (未来科技), terminal-green (黑客极客), swiss-modern (极简网格), paper-ink (文学学术)
   "title": "课件标题",
   "audience": "目标受众",
   "slides": [
@@ -184,18 +184,20 @@ direction: `LR`(左到右), `TB`(上到下), `RL`, `BT`
 
 ## 内容组织原则
 
-1. **每个槽位 1-3 个块**: 不要塞太多内容
-2. **块 ID 唯一**: 使用 `block-N` 格式
-3. **内容具体**: 包含实际的输入输出示例
-4. **代码可运行**: 确保代码片段可以实际执行
-5. **关系明确**: Diagram 和 FlowChart 要有清晰的节点关系
+1. **每页内容应详实充实**：拒绝空洞简单的幻灯片。每页应当包含具体的关键知识细节、场景解释或公式推导，确保排版信息量充足。
+2. **多槽位多块组合**：积极利用双栏（`left` 与 `right` 等）或三栏布局。单页可合理放置 2-4 个块。例如，左侧放文字说明（`Text` 或 `KeyPoint`），右侧放配套的 `CodeSnippet`、`Diagram`、`FlowChart` 或 `Table`，使版面左右平衡、图文互补。
+3. **拒绝占位符与空话**：凡是涉及代码、算法流程或概念对比时，必须包含可阅读的实际参数、输入输出示例或代码细节，不要使用无实质内容的敷衍词汇。
+4. **块 ID 唯一**：使用 `block-N` 格式，且同一页内的 ID 不能重复。
+5. **关系明确**：`Diagram` 和 `FlowChart` 要有清晰的节点及逻辑对应，反映出具体的关系流或流程顺序。
 
 ## 页数和结构要求
 
-- **总页数**: 6-16 页
-- **首页**: 必须是 `cover` 角色
-- **末页**: 最好是 `summary` 角色
-- **内容页**: 根据教学大纲组织，每页聚焦一个核心概念
+- **总页数**：一般 8-16 页（确保内容能够被充分、透彻地拆解）
+- **首页**：必须是 `cover` 角色，使用合适的封面标题和副标题
+- **末页**：必须是 `summary` 角色，对全篇知识进行提炼总结
+- **过渡页**：在进入新的大版块前（例如前置知识 `prerequisite`、路线图 `roadmap`），使用单独的幻灯片页，这会有特定的过渡排版效果
+- **内容页**：每页聚焦一个核心子概念，交替使用不同的页面布局（如 DualPane、DiagramFocus）防止排版审美疲劳
+
 
 ## 教学参数引导
 
@@ -224,7 +226,7 @@ direction: `LR`(左到右), `TB`(上到下), `RL`, `BT`
 ```json
 {
   "template_id": "teaching-lesson",
-  "theme_id": "logic-blue",
+  "theme_id": "neon-cyber",
   "title": "链表基础",
   "audience": "计算机本科生",
   "slides": [

@@ -198,6 +198,11 @@ SPARK_API_KEY = get("spark.api_key", "")
 # 星火大模型 API 密钥签名
 SPARK_API_SECRET = get("spark.api_secret", "")
 
+# 星火 TTS 配置（回退到通用 Spark 配置）
+SPARK_TTS_APP_ID = get("spark_tts.app_id", SPARK_APP_ID)
+SPARK_TTS_API_KEY = get("spark_tts.api_key", SPARK_API_KEY)
+SPARK_TTS_API_SECRET = get("spark_tts.api_secret", SPARK_API_SECRET)
+
 # ============ 聊天附件与保护机制 ============
 # 单个文件内容最大读取字符数（防止超大文件撑爆上下文）
 MAX_FILE_CONTENT_CHARS = get("chat.max_file_content_chars", 15000)

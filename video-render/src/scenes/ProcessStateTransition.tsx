@@ -11,6 +11,7 @@ import { EduBackground } from "../components/EduBackground";
 import { SceneHeader } from "../components/SceneHeader";
 import { SubtitleBar } from "../components/SubtitleBar";
 import { getSpringProgress, getSlideInterpolation } from "../utils/animation";
+import { useSceneTiming } from "../hooks/useSceneTiming";
 
 interface ProcessState {
   name: string;
@@ -56,10 +57,10 @@ export const ProcessStateTransition: React.FC<ProcessStateTransitionProps> = ({
     (scene.visual.transitions as ProcessTransition[]) || [];
 
   // Calculate current transition
-  const transitionDuration = durationInFrames / Math.max(transitions.length, 1);
-  const currentTransitionIdx = Math.min(
-    Math.floor(frame / transitionDuration),
-    transitions.length - 1,
+  const timing = useSceneTiming(scene);
+  const currentTransitionIdx = timing.getActiveIndex(
+    transitions.length,
+    ["trace_step"],
   );
   const currentTransition = transitions[currentTransitionIdx];
 
@@ -120,7 +121,8 @@ export const ProcessStateTransition: React.FC<ProcessStateTransitionProps> = ({
     // Arrow progress animation
     const arrowProgress = isActive
       ? spring({
-          frame: frame % transitionDuration,
+          frame:
+            timing.getStepProgress(transitions.length, ["trace_step"]) * fps,
           fps,
           config: { damping: 12, stiffness: 80 },
         })

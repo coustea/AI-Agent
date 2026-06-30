@@ -83,7 +83,7 @@
     <GlobalNoteFab />
     <GlobalProfileDialog />
 
-    <OnboardingDialog v-model="onboardingDialogVisible" />
+    <OnboardingDialog v-model="onboardingDialogVisible" @success="handleOnboardingSuccess" />
   </div>
 </template>
 
@@ -196,6 +196,11 @@ const navigateTo = (path: string) => {
 
 const navigateToProfile = () => {
   void router.push('/profile')
+}
+
+const handleOnboardingSuccess = async () => {
+  // 刷新用户数据以确保个人信息正确展示
+  await ensureCurrentUser(true)
 }
 
 const handleLogout = async () => {

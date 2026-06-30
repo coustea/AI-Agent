@@ -1,5 +1,6 @@
 import React from "react";
 import { RichVideoScene, VideoMeta, GlobalStyle } from "./schema/types";
+import { SceneDataProvider } from "./components/SceneDataContext";
 
 // Import all scene templates
 import { UnknownSceneFallback } from "./scenes/UnknownSceneFallback";
@@ -56,12 +57,14 @@ export const SceneRouter: React.FC<SceneRouterProps> = (props) => {
   const SceneComponent = sceneMap[props.scene.type] || UnknownSceneFallback;
 
   return (
-    <SceneComponent
-      scene={props.scene}
-      meta={props.meta}
-      globalStyle={props.globalStyle}
-      currentSceneIndex={props.currentSceneIndex}
-      totalScenes={props.totalScenes}
-    />
+    <SceneDataProvider scene={props.scene}>
+      <SceneComponent
+        scene={props.scene}
+        meta={props.meta}
+        globalStyle={props.globalStyle}
+        currentSceneIndex={props.currentSceneIndex}
+        totalScenes={props.totalScenes}
+      />
+    </SceneDataProvider>
   );
 };

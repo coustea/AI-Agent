@@ -4,6 +4,7 @@ import { richVideoPlanSchema } from './schema/videoPlanSchema';
 import { SceneRouter } from './SceneRouter';
 import { SceneTransition } from './components/SceneTransition';
 import { normalizePlan } from './utils/normalizePlan';
+import { buildSceneFrameRanges } from './utils/timeline';
 import defaultPlan from '../input/rich_video_plan.json';
 
 // Helper to resolve asset source dynamically (local vs remote)
@@ -12,8 +13,15 @@ const getAudioSrc = (src: string) => {
   if (src.startsWith('http://') || src.startsWith('https://')) {
     return src;
   }
-  // Remove leading slash if present for staticFile matching
-  const cleanPath = src.startsWith('/') ? src.substring(1) : src;
+  // Strip "/static/" prefix since Remotion's public folder maps to server/static
+  let cleanPath = src;
+  if (cleanPath.startsWith('/static/')) {
+    cleanPath = cleanPath.substring(8);
+  } else if (cleanPath.startsWith('static/')) {
+    cleanPath = cleanPath.substring(7);
+  } else if (cleanPath.startsWith('/')) {
+    cleanPath = cleanPath.substring(1);
+  }
   return staticFile(cleanPath);
 };
 
@@ -43,11 +51,28 @@ export const MainVideo: React.FC = () => {
   // Normalize the plan (handles both V2 and backend JSON schemas gracefully)
   const videoPlan = normalizePlan(result.data);
   const { scenes, global_style: globalStyle, meta, audio: bgmConfig } = videoPlan;
+  const resolvedFontFamily = globalStyle.font_family
+    .toLowerCase()
+    .includes("inter")
+    ? '"Outfit", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    : globalStyle.font_family;
 
-  let accumulatedFrames = 0;
+  const frameRanges = buildSceneFrameRanges(
+    scenes.map((scene) => scene.duration_ms),
+    fps,
+  );
 
   return (
-    <div className={`w-full h-full theme-${globalStyle.theme} font-sans overflow-hidden bg-gradient-to-br from-[var(--bg-gradient-start)] to-[var(--bg-gradient-end)] relative`}>
+    <div
+      className={`relative h-full w-full overflow-hidden bg-[var(--canvas)] font-sans theme-${globalStyle.theme}`}
+      style={{
+        "--primary": globalStyle.primary_color,
+        "--accent": globalStyle.primary_color,
+        "--danger": globalStyle.danger_color,
+        "--success": globalStyle.success_color,
+        fontFamily: resolvedFontFamily,
+      } as React.CSSProperties}
+    >
       
       {/* Global Background Music */}
       {bgmConfig?.bgm_src && (
@@ -59,9 +84,10 @@ export const MainVideo: React.FC = () => {
       )}
 
       {scenes.map((scene, idx) => {
-        const sceneDurationFrames = Math.round(scene.duration_seconds * fps);
-        const startFrame = accumulatedFrames;
-        accumulatedFrames += sceneDurationFrames;
+        const {
+          from: startFrame,
+          durationInFrames: sceneDurationFrames,
+        } = frameRanges[idx];
 
         const transitionType = scene.transition || 'fade';
 

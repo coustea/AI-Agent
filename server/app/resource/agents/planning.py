@@ -1,15 +1,22 @@
 """规划智能体 — 分析学习需求，生成总体教学大纲（TeachingPlan）。
 
 PlanningAgent 是多智能体模式的入口，它的唯一输出是 TeachingPlan，定义了全局教学方向与大纲。
+当 LLM 返回空 agent_assignments 时自动重试一次。
 """
 
 from __future__ import annotations
 
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput, TeachingPlan
+
+logger = get_logger(__name__)
+
+# 当 agent_assignments 为空时的最大重试次数
+_MAX_EMPTY_ASSIGNMENTS_RETRIES = 1
 
 
 @register_agent
@@ -29,18 +36,39 @@ class PlanningAgent(BaseResourceAgent):
 
         prompt = prompts.get("resource").get("planning")
         input_text = self._build_planning_input(input_data)
+        full_prompt = f"{prompt}\n\n{input_text}"
 
         await self.emitter.send(self.agent_id, "running", "正在调用大模型生成教学方向与大纲", 25)
 
         plan = await self.llm.ainvoke_json(
             TeachingPlan,
-            f"{prompt}\n\n{input_text}",
+            full_prompt,
             temperature=INFERENCE_TEMPERATURE,
+            max_attempts=2,
         )
 
-        if plan.agent_assignments:
-            expected_agents = set(input_data.agent_config.get("enabled_agents", []))
-            assigned_agents = {assignment.get("agent_id") for assignment in plan.agent_assignments}
+        expected_agents = set(input_data.agent_config.get("enabled_agents", []))
+
+        # LLM 返回空 agent_assignments 时重试一次
+        if not plan.agent_assignments and expected_agents:
+            logger.warning(
+                "Agent[planning] agent_assignments 为空，正在重试 (expected=%s)",
+                sorted(expected_agents),
+            )
+            await self.emitter.send(
+                self.agent_id, "running",
+                "首次生成指派为空，正在重试...", 50,
+            )
+            plan = await self.llm.ainvoke_json(
+                TeachingPlan,
+                full_prompt,
+                temperature=INFERENCE_TEMPERATURE,
+                max_attempts=2,
+            )
+
+        # 校验 assignments 与 enabled_agents 一致
+        if expected_agents:
+            assigned_agents = {a.agent_id for a in plan.agent_assignments}
             if assigned_agents != expected_agents:
                 raise ValueError(
                     "TeachingPlan assignments do not match selected base Agents: "

@@ -9,6 +9,7 @@ import { CodeBlock } from '../components/CodeBlock';
 import { CallStackPanel } from '../components/CallStackPanel';
 import { VariableTable } from '../components/VariableTable';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 interface MemoryAction {
   type: 'push_frame' | 'pop_frame' | 'create_variable';
@@ -50,8 +51,8 @@ export const MemoryLayoutLab: React.FC<MemoryLayoutLabProps> = ({
   const explanation = (scene.visual.explanation as string) || '';
 
   // Determine active action
-  const actionDuration = durationInFrames / (actions.length || 1);
-  const activeActionIdx = Math.min(Math.floor(frame / actionDuration), actions.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeActionIdx = timing.getActiveIndex(actions.length, ['trace_step']);
   const currentAction = actions[activeActionIdx];
 
   // Dynamically compute the stack and variable tables based on timeline actions

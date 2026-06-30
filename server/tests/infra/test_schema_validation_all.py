@@ -102,9 +102,7 @@ AGENT_QUESTION_SET_JSON = {
 
 PPT_DOCUMENT_JSON = {
     "template_id": "teaching-lesson",
-    "theme_id": "technical-blueprint",
-    "explanation_style": "conceptual",
-    "visual_emphasis": "balanced",
+    "theme_id": "neon-cyber",
     "title": "Python 爬虫入门",
     "audience": "初学者",
     "slides": [
@@ -112,31 +110,102 @@ PPT_DOCUMENT_JSON = {
             "id": "slide-01",
             "role": "cover",
             "title": "Python 爬虫入门",
-            "key_message": "了解爬虫概念",
-            "density": "light",
-            "elements": [
-                {
-                    "type": "concept",
-                    "content": "网络爬虫",
-                    "label": "爬虫"
-                }
-            ],
-            "relations": []
+            "subtitle": "从零开始学习网络爬虫",
+            "slots": {
+                "main": [
+                    {
+                        "block_id": "block-01",
+                        "type": "Text",
+                        "content": "欢迎学习 Python 爬虫",
+                        "format": "plain"
+                    }
+                ]
+            },
+            "takeaway": "了解本课程的学习目标"
         },
         {
             "id": "slide-02",
-            "role": "ending",
-            "title": "总结",
-            "key_message": "核心知识点回顾",
-            "density": "light",
-            "elements": [
-                {
-                    "type": "concept",
-                    "content": "爬虫开发",
-                    "label": "开发"
-                }
-            ],
-            "relations": []
+            "role": "objectives",
+            "title": "学习目标",
+            "slots": {
+                "main": [
+                    {
+                        "block_id": "block-02",
+                        "type": "Text",
+                        "content": "掌握 Python 爬虫基础",
+                        "format": "plain"
+                    }
+                ]
+            },
+            "takeaway": "明确学习路径"
+        },
+        {
+            "id": "slide-03",
+            "role": "concept",
+            "title": "什么是爬虫",
+            "slots": {
+                "main": [
+                    {
+                        "block_id": "block-03",
+                        "type": "KeyPoint",
+                        "label": "核心概念",
+                        "content": "网络爬虫是自动化获取网页数据的程序"
+                    }
+                ]
+            },
+            "takeaway": "理解爬虫的基本概念"
+        },
+        {
+            "id": "slide-04",
+            "role": "process_demo",
+            "title": "爬虫工作流程",
+            "slots": {
+                "main": [
+                    {
+                        "block_id": "block-04",
+                        "type": "FlowChart",
+                        "steps": [
+                            {"step_id": "s1", "title": "发送请求", "description": "向目标网站发送 HTTP 请求"},
+                            {"step_id": "s2", "title": "获取响应", "description": "接收网页内容"},
+                            {"step_id": "s3", "title": "解析数据", "description": "提取所需信息"}
+                        ]
+                    }
+                ]
+            },
+            "takeaway": "了解爬虫的基本流程"
+        },
+        {
+            "id": "slide-05",
+            "role": "summary",
+            "title": "本节总结",
+            "slots": {
+                "main": [
+                    {
+                        "block_id": "block-05",
+                        "type": "Callout",
+                        "intent": "success",
+                        "icon": "check",
+                        "content": "爬虫是数据采集的利器"
+                    }
+                ]
+            },
+            "takeaway": "回顾本节要点"
+        },
+        {
+            "id": "slide-06",
+            "role": "next_steps",
+            "title": "下一步",
+            "slots": {
+                "main": [
+                    {
+                        "block_id": "block-06",
+                        "type": "Text",
+                        "content": "实践：编写第一个爬虫程序",
+                        "format": "plain"
+                    }
+                ]
+            },
+            "takeaway": "准备动手实践"
         }
     ]
 }
@@ -344,7 +413,7 @@ class TestPptDocumentSchema:
     def test_parses_valid_json(self) -> None:
         result = PptDocument.model_validate(PPT_DOCUMENT_JSON)
         assert result.title == "Python 爬虫入门"
-        assert len(result.slides) == 2
+        assert len(result.slides) == 6
         assert result.slides[0].role == "cover"
 
     def test_rejects_invalid_theme(self) -> None:

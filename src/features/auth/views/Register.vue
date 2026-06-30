@@ -58,40 +58,38 @@
             <span v-if="errors.username" class="form-error">{{ errors.username }}</span>
           </div>
 
-          <div class="form-row">
-            <div class="form-group" :class="{ 'has-error': errors.password }">
-              <label class="field-label" for="register-password">密码</label>
-              <div class="input-wrapper">
-                <Lock class="input-icon" />
-                <input
-                  id="register-password"
-                  v-model="form.password"
-                  class="input-control"
-                  type="password"
-                  autocomplete="new-password"
-                  placeholder="至少 6 个字符"
-                  :disabled="isDeploying"
-                />
-              </div>
-              <span v-if="errors.password" class="form-error">{{ errors.password }}</span>
+          <div class="form-group" :class="{ 'has-error': errors.password }">
+            <label class="field-label" for="register-password">密码</label>
+            <div class="input-wrapper">
+              <Lock class="input-icon" />
+              <input
+                id="register-password"
+                v-model="form.password"
+                class="input-control"
+                type="password"
+                autocomplete="new-password"
+                placeholder="至少 6 个字符"
+                :disabled="isDeploying"
+              />
             </div>
+            <span v-if="errors.password" class="form-error">{{ errors.password }}</span>
+          </div>
 
-            <div class="form-group" :class="{ 'has-error': errors.confirmPassword }">
-              <label class="field-label" for="register-confirm-password">确认密码</label>
-              <div class="input-wrapper">
-                <Lock class="input-icon" />
-                <input
-                  id="register-confirm-password"
-                  v-model="form.confirmPassword"
-                  class="input-control"
-                  type="password"
-                  autocomplete="new-password"
-                  placeholder="再次输入密码"
-                  :disabled="isDeploying"
-                />
-              </div>
-              <span v-if="errors.confirmPassword" class="form-error">{{ errors.confirmPassword }}</span>
+          <div class="form-group" :class="{ 'has-error': errors.confirmPassword }">
+            <label class="field-label" for="register-confirm-password">确认密码</label>
+            <div class="input-wrapper">
+              <Lock class="input-icon" />
+              <input
+                id="register-confirm-password"
+                v-model="form.confirmPassword"
+                class="input-control"
+                type="password"
+                autocomplete="new-password"
+                placeholder="再次输入密码"
+                :disabled="isDeploying"
+              />
             </div>
+            <span v-if="errors.confirmPassword" class="form-error">{{ errors.confirmPassword }}</span>
           </div>
 
           <div class="form-group" :class="{ 'has-error': errors.email }">
@@ -358,7 +356,7 @@ const handleRegister = async () => {
 
 .form-container {
   width: 100%;
-  max-width: 500px;
+  max-width: 380px;
 }
 
 .mobile-brand {
@@ -387,11 +385,6 @@ const handleRegister = async () => {
   gap: 18px;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
 
 .form-group {
   min-width: 0;
@@ -511,12 +504,6 @@ const handleRegister = async () => {
   }
 }
 
-@media (max-width: 520px) {
-  .form-row {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .input-control {

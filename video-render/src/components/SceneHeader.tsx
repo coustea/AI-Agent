@@ -1,4 +1,7 @@
-import React from 'react';
+import React from "react";
+import { useCurrentFrame, useVideoConfig } from "remotion";
+import { getActiveVisualCue } from "../utils/timeline";
+import { useSceneData } from "./SceneDataContext";
 
 interface SceneHeaderProps {
   course: string;
@@ -6,7 +9,7 @@ interface SceneHeaderProps {
   sceneTitle: string;
   currentSceneIndex: number;
   totalScenes: number;
-  progress: number; // 0 to 1 progress of current scene
+  progress: number;
 }
 
 export const SceneHeader: React.FC<SceneHeaderProps> = ({
@@ -17,34 +20,49 @@ export const SceneHeader: React.FC<SceneHeaderProps> = ({
   totalScenes,
   progress,
 }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const scene = useSceneData();
+  const activeCue = getActiveVisualCue(
+    scene?.visual_cues ?? [],
+    (frame / fps) * 1000,
+  );
+
   return (
-    <div className="absolute top-0 left-0 right-0 h-24 px-10 flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--card-bg)] backdrop-blur-md z-20">
-      {/* Top progress bar indicator */}
-      <div 
-        className="absolute top-0 left-0 h-1 bg-[var(--primary)] transition-all duration-75"
-        style={{ width: `${progress * 100}%` }}
-      />
-
-      {/* Course & Topic info */}
-      <div className="flex items-center space-x-4">
-        <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md bg-[var(--primary)] text-white">
-          {course}
-        </span>
-        <span className="text-[var(--text-muted)] font-semibold text-sm">
-          {topic}
-        </span>
-        <span className="text-[var(--text-muted)] text-sm">/</span>
-        <span className="text-[var(--text-main)] font-bold text-lg">
-          {sceneTitle}
-        </span>
+    <header className="absolute left-16 right-16 top-10 z-20 flex h-14 items-start justify-between">
+      <div className="flex min-w-0 items-start gap-5">
+        <span className="mt-1 h-9 w-[5px] shrink-0 bg-[var(--primary)]" />
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-3 text-[18px] font-semibold text-[var(--text-muted)]">
+            <span className="font-bold text-[var(--primary)]">{course}</span>
+            <span>{topic}</span>
+          </div>
+          <div className="mt-1 flex items-baseline gap-5">
+            <span className="text-[26px] font-bold leading-none text-[var(--text-main)]">
+              {sceneTitle}
+            </span>
+            {activeCue?.summary && (
+              <span className="max-w-[620px] truncate text-[19px] font-medium text-[var(--primary)]">
+                {activeCue.summary}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Page / Scene Counter */}
-      <div className="flex items-center space-x-2 font-mono text-sm">
-        <span className="text-[var(--primary)] font-bold">{String(currentSceneIndex).padStart(2, '0')}</span>
-        <span className="text-[var(--text-muted)]">/</span>
-        <span className="text-[var(--text-muted)]">{String(totalScenes).padStart(2, '0')}</span>
+      <div className="flex w-[330px] shrink-0 flex-col items-end gap-3">
+        <div className="font-mono text-[17px] font-semibold text-[var(--text-muted)]">
+          <span className="text-[var(--text-main)]">{currentSceneIndex}</span>
+          <span className="px-2">/</span>
+          <span>{totalScenes}</span>
+        </div>
+        <div className="h-[3px] w-full overflow-hidden bg-[var(--card-border)]">
+          <div
+            className="h-full bg-[var(--primary)]"
+            style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }}
+          />
+        </div>
       </div>
-    </div>
+    </header>
   );
 };

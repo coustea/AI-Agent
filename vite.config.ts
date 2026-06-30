@@ -27,6 +27,10 @@ export default defineConfig(({ mode }) => {
           ws: true,
           changeOrigin: true,
         },
+        '/static': {
+          target: apiProxyTarget,
+          changeOrigin: true,
+        },
       },
       watch: {
         ignored: ['**/server/**'],

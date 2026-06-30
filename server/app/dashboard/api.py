@@ -23,7 +23,6 @@ from app.infra.models import (
     LearningPath,
     LearningSession,
     PathNode,
-    QuizQuestion,
     User,
 )
 from app.infra.response import HttpResponse
@@ -587,59 +586,7 @@ async def get_recent_resources(
 
 
 # ---------------------------------------------------------------------------
-# 6. 获取每日挑战
-# ---------------------------------------------------------------------------
-
-_DIFFICULTY_MINUTES = {"简单": 5, "中等": 12, "困难": 20, "easy": 5, "medium": 12, "hard": 20}
-"""题目难度对应的预估时间（分钟）。"""
-
-
-@router.get("/daily-challenge")
-async def get_daily_challenge(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """获取每日挑战题目 — 根据薄弱知识点推荐。"""
-    profile_json = await _get_profile_json(session, current_user.id)
-    score_json = await _get_profile_score_json(session, current_user.id)
-    weak_topics = _score_evidence(score_json, "weak_knowledge_points")
-    courses = profile_json.get("base_info", {}).get("courses", [])
-    current_course = courses[0] if courses else None
-
-    target_topic = weak_topics[0] if weak_topics else current_course
-
-    recommended_question = None
-    if target_topic:
-        stmt = select(QuizQuestion).where(
-            QuizQuestion.content.ilike(f"%{target_topic}%") |
-            QuizQuestion.subject.ilike(f"%{target_topic}%")
-        ).order_by(func.random()).limit(1)
-        recommended_question = (await session.exec(stmt)).first()
-
-    if not recommended_question:
-        stmt = select(QuizQuestion).order_by(func.random()).limit(1)
-        recommended_question = (await session.exec(stmt)).first()
-
-    if recommended_question:
-        estimated_minutes = _DIFFICULTY_MINUTES.get(
-            recommended_question.difficulty or "", 12,
-        )
-        return HttpResponse.success(data={
-            "id": recommended_question.question_id,
-            "subject": recommended_question.subject,
-            "content": recommended_question.content,
-            "difficulty": recommended_question.difficulty,
-            "type": recommended_question.question_type,
-            "estimated_minutes": estimated_minutes,
-            "source": "题库推荐",
-            "reason": f"推荐你从「{recommended_question.subject}」切入，保持每日练习节奏。",
-        })
-
-    return HttpResponse.success(data=None)
-
-
-# ---------------------------------------------------------------------------
-# 7. 获取学习统计
+# 6. 获取学习统计
 # ---------------------------------------------------------------------------
 
 @router.get("/study-stats")

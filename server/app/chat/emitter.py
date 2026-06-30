@@ -22,13 +22,9 @@ logger = get_logger(__name__)
 
 ChatEventName = Literal[
     "run.started",
-    "thinking",
-    "tool.running",
-    "tool.completed",
-    "tool.failed",
-    "attachment.running",
-    "attachment.completed",
-    "attachment.failed",
+    "activity.running",
+    "activity.completed",
+    "activity.failed",
     "content.delta",
     "content.replace",
     "diagram.ready",
@@ -315,6 +311,7 @@ async def get_chat_channel(
 
 SSE_EVENT_MAP: dict[str, str] = {
     "message_start": "start",
+    "workflow_status": "status",
     "classify_done": "status",
     "file_analysis_start": "status",
     "file_analysis_done": "attachment",
@@ -344,6 +341,33 @@ def runtime_status(value: Any) -> str:
 class ChatRuntimeEventMapper:
     """统一转换器：内部字典事件 → ChatEvent → SSE。"""
 
+    def _activity_event_name(self, status: Any) -> ChatEventName:
+        normalized = runtime_status(status)
+        if normalized == "failed":
+            return "activity.failed"
+        if normalized in {"completed", "skipped"}:
+            return "activity.completed"
+        return "activity.running"
+
+    def _activity_data(self, payload: Mapping[str, Any], *, kind: str) -> dict[str, Any]:
+        stage = str(payload.get("stage") or "").strip()
+        title = str(payload.get("title") or payload.get("message") or "").strip()
+        message = str(payload.get("message") or title).strip()
+        activity_id = str(payload.get("activity_id") or "").strip()
+        if not activity_id:
+            activity_id = f"{kind}:{stage or title or 'running'}"
+        return {
+            "activity_id": activity_id,
+            "kind": payload.get("kind") or kind,
+            "stage": stage,
+            "status": payload.get("status") or "running",
+            "tool_name": payload.get("tool_name"),
+            "title": title or "正在处理",
+            "summary": payload.get("summary") or "",
+            "message": message or title or "正在处理",
+            "detail": payload.get("detail") if isinstance(payload.get("detail"), Mapping) else {},
+        }
+
     async def publish(
         self,
         events: ChatEvents,
@@ -367,39 +391,20 @@ class ChatRuntimeEventMapper:
             return False
 
         if event_name == "agent_status":
-            status = runtime_status(payload.get("status"))
-            if status == "running":
-                chat_event: ChatEventName = "tool.running"
-            elif status == "failed":
-                chat_event = "tool.failed"
-            else:
-                chat_event = "tool.completed"
+            activity = self._activity_data(payload, kind="tool")
             await events.send(
-                event=chat_event,
-                message=str(payload.get("message") or payload.get("title") or ""),
-                data={
-                    "activity_id": payload.get("activity_id"),
-                    "tool_name": payload.get("tool_name"),
-                    "detail": payload.get("detail"),
-                },
+                event=self._activity_event_name(payload.get("status")),
+                message=activity["message"],
+                data=activity,
             )
             return False
 
         if event_name == "attachment_status":
-            status = runtime_status(payload.get("status"))
-            if status == "running":
-                chat_event = "attachment.running"
-            elif status == "failed":
-                chat_event = "attachment.failed"
-            else:
-                chat_event = "attachment.completed"
+            activity = self._activity_data(payload, kind="attachment")
             await events.send(
-                event=chat_event,
-                message=str(payload.get("message") or payload.get("title") or ""),
-                data={
-                    "activity_id": payload.get("activity_id"),
-                    "detail": payload.get("detail"),
-                },
+                event=self._activity_event_name(payload.get("status")),
+                message=activity["message"],
+                data=activity,
             )
             return False
 
@@ -415,10 +420,19 @@ class ChatRuntimeEventMapper:
             return True
 
         if event_name == "status":
+            if str(payload.get("stage") or "") == "answer_done":
+                return False
+            activity = build_workflow_activity_payload(
+                stage=str(payload.get("stage") or "processing"),
+                title=str(payload.get("title") or payload.get("message") or "正在处理"),
+                message=str(payload.get("message") or payload.get("title") or "正在处理"),
+                summary=str(payload.get("summary") or ""),
+                status=str(payload.get("status") or "running"),
+            )
             await events.send(
-                event="thinking",
-                message=str(payload.get("message") or "正在处理"),
-                data={k: v for k, v in payload.items() if k != "message"},
+                event=self._activity_event_name(activity["status"]),
+                message=activity["message"],
+                data=activity,
             )
 
         return False
@@ -436,6 +450,30 @@ class ChatRuntimeEventMapper:
 
 
 # ===================== 工具状态构建 =====================
+
+def build_workflow_activity_payload(
+    *,
+    stage: str,
+    title: str,
+    message: str | None = None,
+    summary: str = "",
+    status: str = "running",
+    activity_id: str | None = None,
+) -> dict[str, Any]:
+    """构建回答前流程状态，前端只展示后端发送的真实步骤。"""
+    safe_stage = str(stage or "processing").strip()
+    safe_title = str(title or "正在处理").strip()
+    safe_message = str(message or safe_title).strip()
+    return {
+        "activity_id": activity_id or f"workflow:{safe_stage}",
+        "kind": "workflow",
+        "stage": safe_stage,
+        "status": status,
+        "title": safe_title,
+        "summary": _preview(summary, limit=120),
+        "message": safe_message,
+        "detail": {},
+    }
 
 def _preview(value: Any, *, limit: int = 50) -> str:
     text = str(value or "").strip()
@@ -562,5 +600,3 @@ def build_attachment_status_payload(
             "duration_ms": None,
         },
     }
-
-

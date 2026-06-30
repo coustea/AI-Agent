@@ -37,6 +37,7 @@ class TutorAgentInput(BaseModel):
 
 class ClassificationResult(BaseModel):
     """classify 节点的输出 — 意图分类和路由决策。"""
+    thought: str = Field(default="", description="对学生问题、附件及上下文分类路由的思考与分析过程")
     intent: str = "general_qa"
     subject: str = ""
     difficulty: str = "intermediate"
@@ -50,8 +51,10 @@ class ClassificationResult(BaseModel):
     answer_style: str = "explain"
 
 
+
 TutorRuntimeEventType = Literal[
     "message_start", "classify_done",
+    "workflow_status",
     "file_analysis_start", "file_analysis_done",
     "agent_status",
     "attachment_status",

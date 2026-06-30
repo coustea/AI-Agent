@@ -1,5 +1,18 @@
 {
-  "themes": ["logic-blue", "paper-light", "lab-light"],
+  "themes": [
+    "bold-signal",
+    "electric-studio",
+    "creative-voltage",
+    "dark-botanical",
+    "notebook-tabs",
+    "pastel-geometry",
+    "split-pastel",
+    "vintage-editorial",
+    "neon-cyber",
+    "terminal-green",
+    "swiss-modern",
+    "paper-ink"
+  ],
   "layouts": {
     "HeroCover": {"slots": ["main"]},
     "DualPane": {"slots": ["left", "right"]},

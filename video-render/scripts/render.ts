@@ -67,6 +67,21 @@ function parseArgs(): {
   return result;
 }
 
+function getDirectoryMaxMtime(dir: string): number {
+  let maxMtime = 0;
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      maxMtime = Math.max(maxMtime, getDirectoryMaxMtime(fullPath));
+    } else {
+      maxMtime = Math.max(maxMtime, stat.mtimeMs);
+    }
+  }
+  return maxMtime;
+}
+
 async function main() {
   const config = parseArgs();
 
@@ -86,10 +101,62 @@ async function main() {
   console.log("\n[1/3] Bundling Remotion project...");
   const entryPoint = path.resolve(process.cwd(), "src/index.ts");
   const bundleStart = Date.now();
-  const bundleLocation = await bundle(entryPoint, () => undefined);
-  console.log(
-    `Bundle created in ${((Date.now() - bundleStart) / 1000).toFixed(1)}s at ${bundleLocation}`,
-  );
+  
+  const cacheBundleDir = path.resolve(process.cwd(), "build/cached_bundle");
+  const cacheIndexHtml = path.join(cacheBundleDir, "index.html");
+  
+  let bundleLocation: string;
+  let useCache = false;
+  
+  if (fs.existsSync(cacheIndexHtml)) {
+    const srcMaxMtime = Math.max(
+      getDirectoryMaxMtime(path.resolve(process.cwd(), "src")),
+      fs.statSync(path.resolve(process.cwd(), "package.json")).mtimeMs,
+      fs.existsSync(path.resolve(process.cwd(), "remotion.config.ts")) 
+        ? fs.statSync(path.resolve(process.cwd(), "remotion.config.ts")).mtimeMs 
+        : 0
+    );
+    const bundleMtime = fs.statSync(cacheIndexHtml).mtimeMs;
+    if (bundleMtime > srcMaxMtime) {
+      useCache = true;
+    }
+  }
+  
+  if (useCache) {
+    bundleLocation = cacheBundleDir;
+    console.log(`Reused cached bundle at ${bundleLocation} (saved bundle compilation time)`);
+  } else {
+    // Ensure clean directory
+    if (fs.existsSync(cacheBundleDir)) {
+      fs.rmSync(cacheBundleDir, { recursive: true, force: true });
+    }
+    
+    // Bundle to temp first, then copy to cache
+    const tempBundleLocation = await bundle(entryPoint, () => undefined);
+    
+    // Copy temp bundle to cached_bundle directory
+    fs.mkdirSync(cacheBundleDir, { recursive: true });
+    
+    const copyDir = (src: string, dest: string) => {
+      fs.mkdirSync(dest, { recursive: true });
+      const entries = fs.readdirSync(src, { withFileTypes: true });
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+          copyDir(srcPath, destPath);
+        } else {
+          fs.copyFileSync(srcPath, destPath);
+        }
+      }
+    };
+    
+    copyDir(tempBundleLocation, cacheBundleDir);
+    bundleLocation = cacheBundleDir;
+    console.log(
+      `Bundle created in ${((Date.now() - bundleStart) / 1000).toFixed(1)}s and cached at ${bundleLocation}`,
+    );
+  }
 
   // Step 2: Select the composition
   console.log("\n[2/3] Selecting composition...");

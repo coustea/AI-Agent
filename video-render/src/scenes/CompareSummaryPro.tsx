@@ -134,7 +134,7 @@ export const CompareSummaryPro: React.FC<CompareSummaryProProps> = ({
                     return (
                       <tr 
                         key={idx} 
-                        className="hover:bg-slate-50/55 transition-colors"
+                        className="hover:bg-slate-50/55"
                         style={{
                           opacity: rowSpring,
                           transform: `translateY(${getSlideInterpolation(rowSpring, 0, 1, 10, 0)}px)`,

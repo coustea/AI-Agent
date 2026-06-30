@@ -45,7 +45,28 @@ const normalizeComparisonTables = (text: string): string => {
 
 const renderContentHtml = () => {
   const normalized = normalizeComparisonTables(props.content || '')
-  streamingHtml.value = renderStreamingMarkdownHtml(normalized, props.isStreaming)
+  const html = renderStreamingMarkdownHtml(normalized, props.isStreaming)
+  streamingHtml.value = props.isStreaming ? appendStreamingCaret(html) : html
+}
+
+const appendStreamingCaret = (html: string): string => {
+  if (!html.trim()) return html
+
+  const template = document.createElement('template')
+  template.innerHTML = html
+
+  const candidates = Array.from(template.content.querySelectorAll<HTMLElement>(
+    'p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote, pre code',
+  )).filter((element) => !element.closest('.code-block-header'))
+  const target = candidates[candidates.length - 1]
+  if (!target) return `${html}<span class="stream-caret" aria-hidden="true"></span>`
+
+  const caret = document.createElement('span')
+  caret.className = 'stream-caret'
+  caret.setAttribute('aria-hidden', 'true')
+  target.appendChild(caret)
+
+  return template.innerHTML
 }
 
 const handleContentClick = async (event: MouseEvent) => {
@@ -145,7 +166,7 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
-.stream-markdown.is-streaming::after {
+.stream-markdown :deep(.stream-caret) {
   display: inline-block;
   width: 2px;
   height: 1.05em;
@@ -357,7 +378,7 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-markdown.is-streaming::after {
+  .stream-markdown :deep(.stream-caret) {
     animation: none;
   }
 }
