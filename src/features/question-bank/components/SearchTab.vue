@@ -26,7 +26,12 @@
     <div v-if="loading" class="state-block">正在加载题目...</div>
 
     <div v-else class="question-list">
-      <article v-for="question in questions" :key="question.id" class="question-item">
+      <article
+        v-for="question in questions"
+        :id="`bank-question-${question.id}`"
+        :key="question.id"
+        :class="['question-item', { highlighted: question.id === highlightQuestionId }]"
+      >
         <div class="question-head">
           <span class="question-no">#{{ question.id.split('-')[0] }}</span>
           <div class="head-tags">
@@ -128,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
@@ -148,6 +153,8 @@ const props = defineProps<{
   reviewing: Record<string, boolean>
   review: Record<string, any>
   openedAnalysis: Set<string>
+  highlightQuestionId?: string | null
+  highlightVersion?: number
 }>()
 
 const emit = defineEmits<{
@@ -159,6 +166,22 @@ const emit = defineEmits<{
 }>()
 
 const openedVisualizer = ref<Set<string>>(new Set())
+
+watch(
+  () => [props.highlightQuestionId, props.highlightVersion, props.questions.length],
+  async () => {
+    if (!props.highlightQuestionId) return
+    const matched = props.questions.some((question) => question.id === props.highlightQuestionId)
+    if (!matched) return
+
+    await nextTick()
+    const target = document.getElementById(`bank-question-${props.highlightQuestionId}`)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  },
+  { immediate: true },
+)
 
 function handleSearch() {
   emit('search')
@@ -303,10 +326,20 @@ function renderInline(text: string) {
   width: 100%;
   padding: 18px 0;
   border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  scroll-margin-top: 120px;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
 }
 
 .question-item:first-child {
   border-top: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.question-item.highlighted {
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.92), rgba(239, 246, 255, 0.84));
+  box-shadow: inset 0 0 0 1px rgba(66, 201, 154, 0.18);
 }
 
 .question-head,

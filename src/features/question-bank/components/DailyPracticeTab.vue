@@ -7,16 +7,30 @@
           <div class="meta-tags">
             <span class="meta-tag">{{ dailyQuestion.subject }}</span>
             <span class="meta-tag muted">{{ dailyQuestion.type }}</span>
+            <span v-if="dailyQuestion.difficulty" class="meta-tag">{{ dailyQuestion.difficulty }}</span>
           </div>
         </div>
 
         <div class="action-row">
           <button class="action-btn secondary" type="button" @click="$emit('refresh-daily')">换一题</button>
+          <button
+            v-if="canVisualize"
+            class="action-btn secondary"
+            type="button"
+            @click="toggleVisualizer"
+          >
+            {{ visualizerOpen ? '收起可视化' : '算法可视化' }}
+          </button>
           <button class="action-btn primary" type="button" @click="$emit('start-daily')">开始作答</button>
         </div>
       </div>
 
       <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
+
+      <AlgorithmVisualizer
+        v-if="visualizerOpen && canVisualize"
+        :question="dailyQuestion"
+      />
     </section>
 
     <section v-else class="daily-empty">
@@ -30,13 +44,22 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
+import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
+
 interface DailyQuestion {
   subject: string
   type: string
   content: string
+  difficulty?: string | null
+  answer?: string
+  analysis?: string
+  knowledge_points?: string[]
+  tags?: string[]
 }
 
-defineProps<{
+const props = defineProps<{
   dailyQuestion: DailyQuestion | null
 }>()
 
@@ -44,6 +67,23 @@ defineEmits<{
   (e: 'start-daily'): void
   (e: 'refresh-daily'): void
 }>()
+
+const visualizerOpen = ref(false)
+
+const canVisualize = computed(() => {
+  return props.dailyQuestion ? supportsAlgorithmVisualization(props.dailyQuestion) : false
+})
+
+watch(
+  () => props.dailyQuestion,
+  () => {
+    visualizerOpen.value = false
+  },
+)
+
+function toggleVisualizer() {
+  visualizerOpen.value = !visualizerOpen.value
+}
 
 function renderInline(text: string) {
   if (!text) return ''
@@ -68,7 +108,7 @@ function renderInline(text: string) {
 .daily-question-block {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   padding-top: 4px;
 }
 
@@ -118,12 +158,9 @@ function renderInline(text: string) {
 }
 
 .question-content {
-  max-height: 160px;
-  overflow-y: auto;
   color: #1e293b;
   font-size: 14px;
-  line-height: 1.65;
-  padding-right: 4px;
+  line-height: 1.7;
 }
 
 .action-row {
@@ -131,6 +168,7 @@ function renderInline(text: string) {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .action-btn {
@@ -193,7 +231,6 @@ function renderInline(text: string) {
 
   .action-row {
     justify-content: flex-start;
-    flex-wrap: wrap;
   }
 }
 </style>

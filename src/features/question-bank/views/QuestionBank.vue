@@ -152,9 +152,10 @@
                   </div>
 
                   <div class="question-card-actions">
+                    <button type="button" class="strong" @click="startSingleDailyQuestion">开始作答</button>
                     <button type="button" @click="switchModule('search')">进入全部题目</button>
                     <button type="button" @click="switchModule('wrong')">查看错题本</button>
-                    <button type="button" class="strong" @click="startSingleDailyQuestion">进入练习</button>
+                    <button type="button" @click="switchModule('daily')">进入练习</button>
                   </div>
                 </template>
 
@@ -271,6 +272,8 @@
                     :reviewing="bankReviewing"
                     :review="bankReview"
                     :openedAnalysis="openedAnalysis"
+                    :highlightQuestionId="highlightQuestionId"
+                    :highlightVersion="highlightVersion"
                     @search="searchBank"
                     @page-change="handleBankPageChange"
                     @select-option="selectBankOption"
@@ -362,22 +365,22 @@
 
           <section class="right-card daily-preview-card">
             <div class="right-card-header">
-              <strong>今日一题</strong>
-              <button type="button" class="text-link-btn" @click="pickDailyQuestion">换一题</button>
+              <strong>每日挑战</strong>
+              <button type="button" class="text-link-btn" @click="pickDailyChallengeQuestion">换一题</button>
             </div>
 
-            <template v-if="dailyQuestion">
+            <template v-if="dailyChallengeQuestion">
               <div class="daily-preview-tags">
-                <span class="mini-tag">{{ dailyQuestion.subject }}</span>
-                <span class="mini-tag">{{ dailyQuestion.type }}</span>
-                <span class="mini-tag">{{ dailyQuestion.difficulty || '中等' }}</span>
+                <span class="mini-tag">{{ dailyChallengeQuestion.subject }}</span>
+                <span class="mini-tag">{{ dailyChallengeQuestion.type }}</span>
+                <span class="mini-tag">{{ dailyChallengeQuestion.difficulty || '中等' }}</span>
               </div>
-              <div class="daily-preview-content" v-html="renderInline(dailyQuestion.content)"></div>
-              <button type="button" class="get-question-btn" @click="startSingleDailyQuestion">开始作答</button>
+              <div class="daily-preview-content" v-html="renderInline(dailyChallengeQuestion.content)"></div>
+              <button type="button" class="get-question-btn" @click="jumpToChallengeQuestion">作答</button>
             </template>
 
             <template v-else>
-              <p class="daily-preview-empty">当前暂无可用的每日一题。</p>
+              <p class="daily-preview-empty">当前暂无可用的每日挑战。</p>
             </template>
           </section>
 
@@ -604,6 +607,7 @@ const practicePool = shallowRef<Question[]>([])
 const practiceLoading = ref(false)
 const practiceForm = reactive({ subject: '', difficulty: '', type: '', count: 10 })
 const dailyQuestion = ref<Question | null>(null)
+const dailyChallengeQuestion = ref<Question | null>(null)
 
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
@@ -625,6 +629,8 @@ const bankCorrect = ref<Record<string, boolean>>({})
 const bankReviewing = ref<Record<string, boolean>>({})
 const bankReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedAnalysis = ref<Set<string>>(new Set())
+const highlightQuestionId = ref<string | null>(null)
+const highlightVersion = ref(0)
 
 const wrongAnswers = ref<Record<string, AnswerValue>>({})
 const wrongSubmitted = ref<Record<string, boolean>>({})
@@ -877,7 +883,7 @@ async function bootstrap() {
   await loadPracticePool()
   await loadQuestionBank()
   await loadWrongBook()
-  pickDailyQuestion()
+  refreshDailySelections()
 }
 
 function switchModule(key: string) {
@@ -888,6 +894,7 @@ function switchModule(key: string) {
     void pickWrongQuestion()
   } else if (key === 'search') {
     resetQuestionBankFilters()
+    clearQuestionHighlight()
     void loadQuestionBank()
   } else if (key === 'daily') {
     pickDailyQuestion()
@@ -953,6 +960,7 @@ async function loadQuestionBank() {
 
 function searchBank() {
   bankPage.value = 1
+  clearQuestionHighlight()
   openedAnalysis.value = new Set()
   void loadQuestionBank()
 }
@@ -1019,12 +1027,56 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
 }
 
 function pickDailyQuestion() {
+  const nextQuestion = pickQuestionExcluding(dailyChallengeQuestion.value ? [dailyChallengeQuestion.value.id] : [])
+  dailyQuestion.value = nextQuestion
+}
+
+function pickDailyChallengeQuestion() {
+  dailyChallengeQuestion.value = pickQuestionExcluding(dailyQuestion.value ? [dailyQuestion.value.id] : [])
+}
+
+function refreshDailySelections() {
+  dailyQuestion.value = pickQuestionExcluding([])
+  dailyChallengeQuestion.value = pickQuestionExcluding(dailyQuestion.value ? [dailyQuestion.value.id] : [])
+}
+
+function pickQuestionExcluding(excludedIds: string[]) {
   const source = practicePool.value.length ? practicePool.value : questions.value
-  if (!source.length) {
-    dailyQuestion.value = null
+  if (!source.length) return null
+
+  const excluded = new Set(excludedIds)
+  const available = source.filter((item) => !excluded.has(item.id))
+  const pool = available.length ? available : source
+  return pool[Math.floor(Math.random() * pool.length)] || null
+}
+
+function clearQuestionHighlight() {
+  highlightQuestionId.value = null
+}
+
+async function jumpToChallengeQuestion() {
+  if (!dailyChallengeQuestion.value) {
+    toast.warning('暂无可跳转的每日挑战')
     return
   }
-  dailyQuestion.value = source[Math.floor(Math.random() * source.length)] || null
+
+  const targetId = dailyChallengeQuestion.value.id
+  const source = practicePool.value.length ? practicePool.value : questions.value
+  const sourceIndex = source.findIndex((item) => item.id === targetId)
+
+  activeModule.value = 'search'
+  resetQuestionBankFilters()
+  bankPage.value = sourceIndex >= 0 ? Math.floor(sourceIndex / bankPageSize.value) + 1 : 1
+  highlightQuestionId.value = targetId
+  highlightVersion.value += 1
+  openedAnalysis.value = new Set()
+
+  await loadQuestionBank()
+
+  if (!questions.value.some((item) => item.id === targetId)) {
+    highlightQuestionId.value = null
+    toast.warning('未在当前题库分页中定位到该题目')
+  }
 }
 
 async function pickWrongQuestion() {
@@ -1060,7 +1112,7 @@ function startSingleDailyQuestion() {
     return
   }
 
-  startExam([dailyQuestion.value], '每日一题')
+  activeModule.value = 'daily'
 }
 
 function startSpecialPracticeProxy(config: typeof practiceForm) {
@@ -1334,7 +1386,7 @@ function backWorkspace() {
   viewMode.value = 'workspace'
   activeModule.value = 'daily'
   triggerChartAnimations()
-  pickDailyQuestion()
+  refreshDailySelections()
   void loadQuestionBank()
   void loadWrongBook()
 }
