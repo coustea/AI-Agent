@@ -1,16 +1,8 @@
-"""数据导入服务 - 编程题爬虫。
+"""数据导入服务。
 
-只包含 LeetCode 爬虫和数据。
+只包含 LeetCode 编程题爬虫和数据。
 """
 
-from app.importers.programming import (
-    BaseCrawler,
-    ProgrammingProblem,
-    LeetCodeCrawler,
-)
+from app.importers.programming import LeetCodeCrawler, ProgrammingProblem
 
-__all__ = [
-    "BaseCrawler",
-    "ProgrammingProblem",
-    "LeetCodeCrawler",
-]
+__all__ = ["LeetCodeCrawler", "ProgrammingProblem"]

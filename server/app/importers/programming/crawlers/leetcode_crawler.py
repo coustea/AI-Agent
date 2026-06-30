@@ -1,65 +1,100 @@
-"""LeetCode 中文站编程题爬虫。
-
-LeetCode 中文站提供公开 API 获取题目数据。
-"""
+"""LeetCode 编程题爬虫。"""
 
 from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import requests
 
-from app.importers.programming.crawlers.base import BaseCrawler, ProgrammingProblem
+
+@dataclass
+class ProgrammingProblem:
+    """统一的编程题数据模型。"""
+
+    question_id: str
+    source: str
+    platform_question_id: str
+    title: str
+    title_en: str | None = None
+    content: str = ""
+    difficulty: str | None = None
+    subject: str | None = None
+    code_templates: dict[str, str] = field(default_factory=dict)
+    supported_languages: list[str] = field(default_factory=list)
+    example_test_cases: list[dict[str, Any]] = field(default_factory=list)
+    test_cases: list[dict[str, Any]] = field(default_factory=list)
+    time_limit: int | None = None
+    memory_limit: int | None = None
+    tags: list[str] = field(default_factory=list)
+    knowledge_points: list[str] = field(default_factory=list)
+    acceptance_rate: float | None = None
+    total_submissions: int | None = None
+    total_accepted: int | None = None
+    url: str | None = None
+    raw_record: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "question_id": self.question_id,
+            "source": self.source,
+            "platform_question_id": self.platform_question_id,
+            "title": self.title,
+            "title_en": self.title_en,
+            "content": self.content,
+            "difficulty": self.difficulty,
+            "subject": self.subject,
+            "code_templates": self.code_templates,
+            "supported_languages": self.supported_languages,
+            "example_test_cases": self.example_test_cases,
+            "test_cases": self.test_cases,
+            "time_limit": self.time_limit,
+            "memory_limit": self.memory_limit,
+            "tags": self.tags,
+            "knowledge_points": self.knowledge_points,
+            "acceptance_rate": self.acceptance_rate,
+            "total_submissions": self.total_submissions,
+            "total_accepted": self.total_accepted,
+            "url": self.url,
+            "raw_record": self.raw_record,
+        }
 
 
-class LeetCodeCrawler(BaseCrawler):
+class LeetCodeCrawler:
     """LeetCode 中文站爬虫。"""
 
     BASE_URL = "https://leetcode.cn"
 
-    def __init__(self, output_dir: str = "./leetcode", delay: float = 2.0):
-        super().__init__(output_dir, delay)
+    def __init__(self, output_dir: str | Path = "./leetcode", delay: float = 2.0):
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.delay = delay
+        self.session = requests.Session()
         self.session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "Referer": "https://leetcode.cn/problemset/",
             "Origin": "https://leetcode.cn",
         })
 
-    @property
-    def source_name(self) -> str:
-        return "leetcode"
-
-    def _get_problem_list(self, skip: int = 0, limit: int = 100) -> list[dict[str, Any]]:
-        """获取题目列表。
-
-        使用 LeetCode 公开 API 获取题目列表。
-        """
-        # LeetCode 题目列表 API
-        url = f"{self.BASE_URL}/api/problems/all/"
-        resp = self.session.get(url, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        # 返回题目列表
-        problems = data.get("stat_status_pairs", [])
-        return problems[skip:skip + limit]
-
-    def _get_problem_detail(self, title_slug: str) -> dict[str, Any]:
-        """获取题目详情。
-
-        使用 LeetCode 公开 API 获取题目详情。
-        """
-        url = f"{self.BASE_URL}/problems/{title_slug}/"
-        resp = self.session.get(url, timeout=30)
-        resp.raise_for_status()
-        # 从页面中提取题目数据
-        html = resp.text
-        # 查找题目数据
-        import re
-        match = re.search(r'var pageData\s*=\s*({.*?});', html, re.DOTALL)
-        if match:
-            return json.loads(match.group(1))
-        return {}
+    def save(self, problems: list[ProgrammingProblem], filename: str | None = None) -> Path:
+        """保存爬取的题目到 JSON 文件。"""
+        if filename is None:
+            filename = f"leetcode_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        filepath = self.output_dir / filename
+        data = [p.to_dict() for p in problems]
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"[Crawler] 已保存 {len(problems)} 道题到 {filepath}")
+        return filepath
 
     def _get_problem_data(self, title_slug: str) -> dict[str, Any]:
         """获取题目详细数据（包含官方题解）。"""
@@ -178,7 +213,6 @@ class LeetCodeCrawler(BaseCrawler):
             stat = item.get("stat", {})
             frontend_id = stat.get("frontend_question_id", "")
             title_slug = stat.get("question__title_slug", "")
-            title = stat.get("question__title", "")
 
             if not title_slug:
                 continue
@@ -222,50 +256,7 @@ class LeetCodeCrawler(BaseCrawler):
                     tags.append(tag_name)
                     knowledge_points.append(tag_name)
 
-            # 解析官方题解
-            solution_data = detail.get("solution", {})
-            solution = {}
-            if solution_data:
-                solution = {
-                    "id": solution_data.get("id"),
-                    "title": solution_data.get("title"),
-                    "content": solution_data.get("content"),
-                    "url": solution_data.get("url"),
-                }
-
-            # 难度映射
-            difficulty_map = {
-                "Easy": "简单",
-                "Medium": "中等",
-                "Hard": "困难",
-            }
-            # item["difficulty"] 可能是 dict
-            raw_difficulty = item.get("difficulty", {})
-            if isinstance(raw_difficulty, dict):
-                difficulty_level = raw_difficulty.get("level", "")
-            else:
-                difficulty_level = raw_difficulty
-            difficulty = difficulty_map.get(difficulty_level, difficulty_level)
-            # 难度映射
-            difficulty_map = {
-                "Easy": "简单",
-                "Medium": "中等",
-                "Hard": "困难",
-            }
-            # item["difficulty"] 可能是 dict
-            raw_difficulty = item.get("difficulty", {})
-            if isinstance(raw_difficulty, dict):
-                difficulty_level = raw_difficulty.get("level", "")
-            else:
-                difficulty_level = raw_difficulty
-            difficulty = difficulty_map.get(difficulty_level, difficulty_level)
-            # 难度映射
-            difficulty_map = {
-                "Easy": "简单",
-                "Medium": "中等",
-                "Hard": "困难",
-            }
-            # item["difficulty"] 可能是 dict
+            difficulty_map = {"Easy": "简单", "Medium": "中等", "Hard": "困难"}
             raw_difficulty = item.get("difficulty", {})
             if isinstance(raw_difficulty, dict):
                 difficulty_level = raw_difficulty.get("level", "")
@@ -294,10 +285,10 @@ class LeetCodeCrawler(BaseCrawler):
                 total_submissions=total,
                 total_accepted=accepted,
                 url=f"https://leetcode.cn/problems/{title_slug}/",
-                solution=solution,
                 raw_record={"detail": detail, "list_item": item},
             )
-            has_solution = "✓题解" if solution else ""
+            solution_count = 1 if detail.get("solution") else 0
+            has_solution = "✓题解" if solution_count else ""
             print(f"  [OK] {frontend_id}. {title} ({difficulty}) {has_solution} - 标签: {', '.join(tags[:3])}")
 
         print(f"[LeetCode] 爬取完成，共 {len(problems)} 道题")

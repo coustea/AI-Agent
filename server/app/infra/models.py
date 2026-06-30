@@ -537,7 +537,7 @@ class ProgrammingQuestion(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     question_id: str = Field(max_length=255, index=True, description="唯一标识")
-    source: str = Field(max_length=100, index=True, description="来源平台: leetcode/luogu/nowcoder")
+    source: str = Field(max_length=100, index=True, description="来源平台")
     platform_question_id: str | None = Field(default=None, max_length=255, index=True, description="平台原题ID")
     title: str = Field(max_length=500, description="题目标题")
     title_en: str | None = Field(default=None, max_length=500, description="英文标题")

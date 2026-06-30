@@ -1,13 +1,5 @@
 """编程题爬虫模块。"""
 
-from app.importers.programming.crawlers import (
-    BaseCrawler,
-    ProgrammingProblem,
-    LeetCodeCrawler,
-)
+from app.importers.programming.crawlers import LeetCodeCrawler, ProgrammingProblem
 
-__all__ = [
-    "BaseCrawler",
-    "ProgrammingProblem",
-    "LeetCodeCrawler",
-]
+__all__ = ["LeetCodeCrawler", "ProgrammingProblem"]
