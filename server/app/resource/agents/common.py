@@ -131,27 +131,6 @@ def outline_coverage_summary(
     }
 
 
-def clip_text(value: str, limit: int) -> str:
-    """截断文本到指定字符数，超出部分用省略号替代。"""
-    text = " ".join(str(value or "").split())
-    if len(text) <= limit:
-        return text
-    return text[:limit].rstrip() + "..."
-
-
-def first_content_excerpt(content: str, limit: int = 180) -> str:
-    """提取内容的第一个非标题/非空行作为摘要。"""
-    for line in str(content or "").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped == "---" or stripped == "***":
-            continue
-        if stripped.startswith("- ") or stripped.startswith("* "):
-            stripped = stripped[2:].strip()
-        if stripped:
-            return clip_text(stripped, limit)
-    return ""
-
-
 def build_basic_handoff(
     *,
     source_agent: str,
@@ -179,8 +158,8 @@ def build_basic_handoff(
         )
     return DownstreamContext(
         source_agent=source_agent,
-        title=clip_text(title, 120),
-        one_sentence_summary=clip_text(summary, 180),
+        title=title,
+        one_sentence_summary=summary,
         covered_outline_ids=provided_outline_ids,
         reusable_assets=ReusableAssets(
             examples=(examples or [])[:6],

@@ -217,9 +217,7 @@ const handleLogout = async () => {
   flex-direction: column;
   width: 100vw;
   height: 100vh;
-  background:
-    radial-gradient(circle at 12% 8%, rgba(98, 201, 197, 0.12), transparent 28rem),
-    var(--color-bg);
+  background: var(--color-page-bg);
   font-family: var(--font-sans);
   overflow: hidden;
 }
@@ -436,6 +434,7 @@ const handleLogout = async () => {
 /* ================== 页面内容区 ================== */
 .page-content {
   flex: 1;
+  background: var(--color-page-bg);
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;

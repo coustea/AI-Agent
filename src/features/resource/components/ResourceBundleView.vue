@@ -802,32 +802,41 @@ function isPlainObject(
 }
 
 .resource-filters button {
-  height: 28px;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  color: #687386;
-  background: transparent;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 99px;
+  color: #475569;
+  background: #ffffff;
   font-family: inherit;
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .resource-filters button:hover {
-  background: #eceff3;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 
 .resource-filters button.active {
-  border-color: #cbd9ee;
-  color: #24589d;
-  background: #edf4ff;
+  border-color: var(--color-primary);
+  color: #ffffff;
+  background: var(--color-primary);
+  box-shadow: 0 4px 12px var(--color-primary-glow, rgba(99, 102, 241, 0.25));
 }
 
 .resource-filters button span {
-  margin-left: 3px;
-  color: #98a2b3;
+  margin-left: 4px;
+  color: #94a3b8;
   font-size: 9px;
+}
+
+.resource-filters button.active span {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .resources-gallery {
@@ -843,44 +852,44 @@ function isPlainObject(
 .resource-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 20px;
 }
 
 .resource-result-card {
   display: flex;
   min-width: 0;
-  min-height: 350px;
+  min-height: 360px;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #dfe3e8;
-  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
   outline: none;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.04);
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.01);
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .resource-result-card:hover,
 .resource-result-card:focus-visible {
-  border-color: #9ab6da;
-  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.09);
-  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.08);
+  transform: translateY(-4px);
 }
 
 .resource-result-card:focus-visible {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), 0 10px 24px rgba(23, 32, 51, 0.09);
+  box-shadow: 0 0 0 3px var(--color-primary-glow, rgba(99, 102, 241, 0.15)), 0 12px 30px rgba(99, 102, 241, 0.08);
 }
 
 .resource-card-cover {
   position: relative;
   display: grid;
-  height: 136px;
-  flex: 0 0 136px;
+  height: 140px;
+  flex: 0 0 140px;
   place-items: center;
   overflow: hidden;
-  border-bottom: 1px solid #e5e9ef;
-  background: #f3f6fa;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
 }
 
 .resource-card-cover::after {
@@ -888,47 +897,48 @@ function isPlainObject(
 }
 
 .resource-card-cover img {
-  width: 78%;
+  width: 65%;
   height: 110px;
   object-fit: contain;
   object-position: center;
-  transition: transform 0.25s ease;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .resource-result-card:hover .resource-card-cover img {
-  transform: scale(1.025);
+  transform: scale(1.05);
 }
 
 .resource-type-label,
 .resource-format-label {
   position: absolute;
   z-index: 1;
-  top: 10px;
+  top: 12px;
   display: inline-flex;
   height: 24px;
   align-items: center;
-  border: 1px solid rgba(205, 214, 226, 0.9);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .resource-type-label {
-  left: 10px;
-  gap: 4px;
-  padding: 0 7px;
+  left: 12px;
+  gap: 6px;
+  padding: 0 9px;
   color: #344054;
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .resource-format-label {
-  right: 10px;
-  padding: 0 6px;
+  right: 12px;
+  padding: 0 8px;
   color: #64748b;
-  font-size: 8px;
-  font-weight: 750;
-  letter-spacing: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .resource-card-content {
@@ -936,15 +946,15 @@ function isPlainObject(
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  padding: 13px 14px 12px;
+  padding: 18px 20px;
 }
 
 .resource-card-status {
   display: flex;
   align-items: center;
-  gap: 5px;
-  color: #398060;
-  font-size: 9px;
+  gap: 6px;
+  color: #10b981;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -952,17 +962,18 @@ function isPlainObject(
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #35a06f;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
 }
 
 .resource-card-content h2 {
   display: -webkit-box;
-  margin: 7px 0 0;
+  margin: 10px 0 0;
   overflow: hidden;
-  color: #172033;
-  font-size: 14px;
-  font-weight: 750;
-  letter-spacing: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -970,12 +981,12 @@ function isPlainObject(
 
 .resource-card-content > p {
   display: -webkit-box;
-  margin: 7px 0 0;
+  margin: 8px 0 0;
   overflow: hidden;
-  color: #707a8a;
+  color: #475569;
   font-family: var(--agent-body-font);
-  font-size: 10px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.6;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
@@ -983,31 +994,34 @@ function isPlainObject(
 .resource-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
   margin-top: auto;
-  padding-top: 11px;
+  padding-top: 14px;
 }
 
 .resource-card-meta span {
-  padding: 3px 6px;
-  border: 1px solid #e1e6ed;
-  border-radius: 5px;
-  color: #667085;
-  background: #f8f9fb;
-  font-size: 8px;
-  font-weight: 650;
+  padding: 3px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.04);
+  border-radius: 6px;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .resource-card-footer {
   display: flex;
-  min-height: 42px;
+  min-height: 46px;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px 8px 14px;
-  border-top: 1px solid #edf0f3;
-  color: #596579;
-  font-size: 9px;
+  padding: 8px 12px 8px 20px;
+  border-top: 1px solid rgba(15, 23, 42, 0.04);
+  color: #64748b;
+  font-size: 11px;
   font-weight: 700;
+  background: #fafafb;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
 }
 
 .resource-card-footer button {

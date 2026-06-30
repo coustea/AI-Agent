@@ -3848,4 +3848,71 @@ function getMetricChips(node: DagNodeState) {
   }
 }
 
+/* 微调多智能体动画页面样式 - 保持原有布局，仅增强高级感 */
+.agent-flow-canvas {
+  background: 
+    radial-gradient(circle at 50% 25%, rgba(99, 102, 241, 0.08), transparent 45%),
+    radial-gradient(circle at 20% 75%, rgba(14, 165, 233, 0.05), transparent 35%),
+    radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.05), transparent 35%),
+    #fafbfd !important;
+  border-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+.agent-station-card-v4 {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(15, 23, 42, 0.06) !important;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.02) !important;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.agent-station-card-v4:hover,
+.agent-station-card-v4.is-selected {
+  transform: translateY(-4px) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.08) !important;
+}
+
+/* 运行中的呼吸光晕 */
+.agent-station-card.status-running {
+  border-color: var(--color-primary) !important;
+  animation: card-premium-glow 2.5s infinite ease-in-out !important;
+}
+
+@keyframes card-premium-glow {
+  0%, 100% {
+    box-shadow: 0 4px 18px rgba(99, 102, 241, 0.03), 0 0 0 1px rgba(99, 102, 241, 0.1);
+    border-color: rgba(99, 102, 241, 0.3) !important;
+  }
+  50% {
+    box-shadow: 0 12px 30px rgba(99, 102, 241, 0.08), 0 0 0 2px rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.7) !important;
+  }
+}
+
+/* 成功状态 */
+.agent-station-card.status-success,
+.agent-station-card.has-artifact {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(16, 185, 129, 0.24) !important;
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.02) !important;
+}
+
+/* 连接线微妙光晕 */
+.agent-link-path {
+  stroke-width: 2;
+  transition: all 0.3s ease;
+}
+
+.agent-link-path.status-running {
+  stroke-width: 2.5;
+  stroke: var(--color-primary);
+  opacity: 0.8;
+}
+
+.agent-link-path.status-success {
+  stroke: #10B981 !important;
+  opacity: 0.6;
+}
 </style>

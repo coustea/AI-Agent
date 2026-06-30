@@ -24,6 +24,7 @@ from app.chat.agent.nodes import (
     search_node,
     answer_node,
     diagram_node,
+    build_evidence_context,
 )
 from app.chat.agent.state import TutorAgentState
 from app.chat.memory.service import get_chat_memory_service

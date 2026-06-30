@@ -44,4 +44,31 @@ defineProps<{
 .resource-card-wrapper.is-compact:hover {
   box-shadow: none;
 }
+
+/* 自动消除在模态弹窗、详情区域内的嵌套框线 */
+:global(.preview-dialog-body) .resource-card-wrapper,
+:global(.custom-modal-body) .resource-card-wrapper,
+:global(.note-preview-modal) .resource-card-wrapper,
+:global(.custom-modal-content) .resource-card-wrapper,
+:global(.custom-modal-container) .resource-card-wrapper,
+:global(.resource-view) .resource-card-wrapper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:global(.preview-dialog-body) .resource-card-wrapper:hover,
+:global(.custom-modal-body) .resource-card-wrapper:hover,
+:global(.note-preview-modal) .resource-card-wrapper:hover,
+:global(.custom-modal-content) .resource-card-wrapper:hover,
+:global(.custom-modal-container) .resource-card-wrapper:hover,
+:global(.resource-view) .resource-card-wrapper:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
 </style>

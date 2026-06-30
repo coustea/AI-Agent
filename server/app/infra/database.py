@@ -157,30 +157,6 @@ async def init_db() -> None:
     logger.info("[Database] 数据库连接验证通过: url=%s debug=%s",
                 engine.url.render_as_string(hide_password=True), DEBUG)
 
-    # 按需导入学校数据（表为空时才导入）
-    try:
-        from app.auth.school_import import import_schools
-        async with AsyncSession(engine, expire_on_commit=False) as session:
-            count = await import_schools(session)
-            if count > 0:
-                logger.info("[Database] 学校数据导入完成: count=%d", count)
-            else:
-                logger.info("[Database] 学校数据已存在，跳过导入")
-    except Exception as exc:
-        logger.warning("[Database] 学校数据导入失败（非致命）: %s", exc)
-
-    # 按需导入题库数据（表为空时才导入）
-    try:
-        from app.quiz.import_quiz import import_quiz_bank
-        async with AsyncSession(engine, expire_on_commit=False) as session:
-            count = await import_quiz_bank(session)
-            if count > 0:
-                logger.info("[Database] 题库数据导入完成: count=%d", count)
-            else:
-                logger.info("[Database] 题库数据已存在，跳过导入")
-    except Exception as exc:
-        logger.warning("[Database] 题库数据导入失败（非致命）: %s", exc)
-
 
 
 # ============ Session factories ============

@@ -71,10 +71,10 @@ const content = computed(() => getMarkdownContent(props.resultData))
 /* Markdown 主体 */
 .markdown-shell {
   color: var(--fg);
-  line-height: 1.75;
+  line-height: 1.78;
   overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
+  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 0.98rem;
   background: transparent;
 }
 
@@ -82,29 +82,34 @@ const content = computed(() => getMarkdownContent(props.resultData))
 .markdown-shell :deep(h1),
 .markdown-shell :deep(h2),
 .markdown-shell :deep(h3) {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   color: var(--color-text-strong);
-  border-bottom: 1px dashed var(--border);
-  padding-bottom: 0.5em;
-  margin-top: 2em;
-  margin-bottom: 1em;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin-top: 1.8em;
+  margin-bottom: 0.8em;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
-.markdown-shell :deep(h1)::before,
-.markdown-shell :deep(h2)::before {
-  content: '>';
-  color: var(--accent);
-  font-weight: bold;
+.markdown-shell :deep(h1) {
+  font-size: 1.5rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding-bottom: 0.4em;
+}
+
+.markdown-shell :deep(h2) {
+  font-size: 1.25rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+  padding-bottom: 0.3em;
+}
+
+.markdown-shell :deep(h3) {
+  font-size: 1.1rem;
 }
 
 /* 段落 */
 .markdown-shell :deep(p) {
-  color: var(--fg);
-  margin: 1em 0;
+  color: var(--color-text-secondary, #334155);
+  margin: 1em 0 1.2em;
 }
 
 /* 列表 */
@@ -112,20 +117,22 @@ const content = computed(() => getMarkdownContent(props.resultData))
 .markdown-shell :deep(ol) {
   padding-left: 1.5em;
   margin: 1em 0;
+  color: var(--color-text-secondary, #334155);
 }
 
 .markdown-shell :deep(li) {
   margin-bottom: 0.5em;
 }
 
-/* 引用块：无边界风格 */
+/* 引用块：优雅左侧标识风格 */
 .markdown-shell :deep(blockquote) {
-  border-left: 3px solid rgba(0, 0, 0, 0.1);
-  background: transparent;
-  padding: 8px 16px;
+  border-left: 4px solid var(--color-primary);
+  background: rgba(99, 102, 241, 0.03);
+  padding: 14px 20px;
   margin: 1.5em 0;
   color: var(--color-text-secondary);
-  font-style: italic;
+  border-radius: 0 10px 10px 0;
+  font-style: normal;
 }
 
 /* 表格：无感斑马纹 */

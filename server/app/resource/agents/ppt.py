@@ -135,7 +135,7 @@ class PPTAgent(BaseResourceAgent):
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
-        self.llm = get_llm(temperature=INFERENCE_TEMPERATURE)
+        self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput | NodeInput) -> AgentResult:
         """生成 PPT 课件"""

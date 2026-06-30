@@ -1,12 +1,14 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
 import type {
+  EvaluationSummary,
   LearningEventCreate,
   LearningSessionCreate,
   LearningTimeStats,
 } from '@/features/evaluation/model/evaluation'
 
 export type {
+  EvaluationSummary,
   LearningEventCreate,
   LearningSessionCreate,
   LearningTimeStats,
@@ -24,3 +26,6 @@ export function getLearningTimeStats(days = 30) {
   return http.get<ApiResponse<LearningTimeStats>>('/ai/evaluation/time-stats', { params: { days } })
 }
 
+export function getEvaluationSummary(limit = 100) {
+  return http.get<ApiResponse<EvaluationSummary>>('/ai/evaluation/summary', { params: { limit } })
+}

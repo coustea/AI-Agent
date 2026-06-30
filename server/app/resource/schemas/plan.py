@@ -119,6 +119,6 @@ class DownstreamContext(BaseModel):
 
     source_agent: str
     title: str = ""
-    one_sentence_summary: str = Field(default="", max_length=180)
+    one_sentence_summary: str = ""
     covered_outline_ids: list[str] = Field(default_factory=list)
     reusable_assets: ReusableAssets = Field(default_factory=ReusableAssets)

@@ -53,12 +53,14 @@
         @open-resource="openResourceByType"
       />
 
-      <ResourceResult
+      <ResourceBundleView
         v-else-if="currentPhase === 'result'"
         key="result"
-        :final-bundle="finalBundle"
-        :result-warning="resultWarning"
-        @reset="resetGenerator"
+        :bundle="finalBundle"
+        :warning="resultWarning"
+        action-label="新建任务"
+        action-kind="reset"
+        @action="resetGenerator"
         @preview="handlePreview"
       />
 
@@ -89,7 +91,7 @@ import {
 import ResourceInput from '@/features/resource/views/ResourceInput.vue'
 import ResourcePersonalize from '@/features/resource/views/ResourcePersonalize.vue'
 import ResourceGenerating from '@/features/resource/views/ResourceGenerating.vue'
-import ResourceResult from '@/features/resource/views/ResourceResult.vue'
+import ResourceBundleView from '@/features/resource/components/ResourceBundleView.vue'
 import './resource-generator.css'
 
 import MindmapView from '@/features/resource/components/MindmapView.vue'

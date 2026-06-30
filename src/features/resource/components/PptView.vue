@@ -8,7 +8,7 @@
         </button>
       </div>
       <div class="player-wrapper">
-        <PptPreview :documentData="documentData" />
+        <PptPlayer :documentData="documentData" />
       </div>
     </ResourceCardWrapper>
   </div>
@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import PptPreview from './ppt-engine/pptxgenjs-renderer/preview/PptPreview.vue'
+import PptPlayer from './ppt-engine/PptPlayer.vue'
 import type { PPTDocument } from './ppt-engine/types/ppt'
 import { renderPPT, downloadPPTX } from './ppt-engine/pptxgenjs-renderer'
 import { toast } from 'vue-sonner'

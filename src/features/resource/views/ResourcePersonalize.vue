@@ -593,4 +593,98 @@ const setVideoVoice = (val: any) => {
 .sw-info { display: flex; flex-direction: column; gap: 2px; }
 .sw-label { font-size: 0.9rem; font-weight: var(--weight-semibold); color: var(--color-text-strong); }
 .sw-desc { font-family: var(--agent-body-font); font-size: 0.75rem; color: var(--color-text-faint); line-height: 1.4; }
+
+/* 精致表单控件样式优化 */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 36px !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-radius: 12px !important;
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+select:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px var(--color-primary-glow, rgba(99, 102, 241, 0.12));
+}
+
+/* 滑块样式优化 */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 99px;
+  height: 6px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.15s, background-color 0.15s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  background: var(--color-primary-soft, #f5f3ff);
+}
+
+/* 开关样式优化 */
+.peer-checked\:bg-blue {
+  background-color: var(--color-primary) !important;
+}
+
+/* 智能体卡片微动效与玻璃拟态 */
+.config-card-v2 {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(15, 23, 42, 0.06) !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.01) !important;
+}
+.config-card-v2:hover {
+  border-color: rgba(99, 102, 241, 0.25) !important;
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.06) !important;
+}
+.config-card-v2.agent-off {
+  background: rgba(248, 250, 252, 0.5) !important;
+  border-color: rgba(15, 23, 42, 0.04) !important;
+  box-shadow: none !important;
+}
+
+/* 按钮组与页脚优化 */
+.launch-btn-v2 {
+  background: var(--color-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px var(--color-primary-glow, rgba(99, 102, 241, 0.3)) !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.launch-btn-v2:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--color-primary-glow, rgba(99, 102, 241, 0.45)) !important;
+}
+.launch-btn-v2:active {
+  transform: translateY(0) scale(0.98);
+}
+.footer-back-btn {
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  background: #ffffff !important;
+  color: var(--color-text-secondary) !important;
+  transition: all 0.2s !important;
+}
+.footer-back-btn:hover {
+  border-color: var(--color-text-muted) !important;
+  color: var(--color-text-strong) !important;
+  background: var(--color-bg) !important;
+}
 </style>

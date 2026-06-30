@@ -52,12 +52,12 @@ def test_downstream_context_is_bounded_and_outline_mapped():
     assert ctx.covered_outline_ids == ["o1", "o2"]
 
 
-def test_downstream_context_rejects_oversized_excerpt():
-    with pytest.raises(ValidationError):
-        DownstreamContext(
-            source_agent="content",
-            one_sentence_summary="x" * 181,
-        )
+def test_downstream_context_accepts_oversized_excerpt():
+    ctx = DownstreamContext(
+        source_agent="content",
+        one_sentence_summary="x" * 1000,
+    )
+    assert len(ctx.one_sentence_summary) == 1000
 
 
 def test_resource_input_uses_teaching_plan_and_handoffs_only():

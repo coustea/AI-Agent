@@ -226,11 +226,11 @@ class PptSlide(BaseModel):
     id: str | None = None  # 可选，前端自动生成
     index: int | None = None  # 可选，前端自动计算
     role: SlideRole
-    title: str = Field(min_length=1, max_length=100)
+    title: str
     subtitle: str | None = None
     layout: LayoutId | None = None  # 可选，前端根据 role 推断
     slots: dict[str, list[dict[str, Any]]]  # 槽位映射到 block 列表
-    takeaway: str = Field(min_length=1, max_length=200)
+    takeaway: str
     speaker_notes: str | None = None
 
     @field_validator("slots")
@@ -253,8 +253,8 @@ class PPTDocument(BaseModel):
 
     template_id: Literal["teaching-lesson"] = "teaching-lesson"
     theme_id: ThemeType = "logic-blue"
-    title: str = Field(min_length=2, max_length=100)
-    audience: str = Field(min_length=2, max_length=100)
+    title: str
+    audience: str
     slides: list[PptSlide] = Field(min_length=6, max_length=16)
 
     @field_validator("slides")

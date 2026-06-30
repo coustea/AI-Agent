@@ -21,6 +21,7 @@
   --color-action-hover: #72D4D0;
 
   /* ---- Light glacier surfaces ---- */
+  --color-page-bg: #FFFFFF;
   --color-bg: #F2F8F7;
   --color-surface: #FCFFFF;
   --color-surface-hover: #EAF5F4;
@@ -145,7 +146,7 @@
   --navbar-height: 72px;            /* 提拉页面气口，宽阔通透 */
   --sidebar-width: 260px;
   --sidebar-collapsed-width: 72px;
-  --background: #F2F8F7;
+  --background: #FFFFFF;
   --foreground: #173B42;
   --card: #FCFFFF;
   --card-foreground: #173B42;
@@ -184,7 +185,7 @@
    ============================================================ */
 body {
   margin: 0;
-  background-color: var(--color-bg);
+  background-color: var(--color-page-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-base);

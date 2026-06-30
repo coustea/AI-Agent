@@ -1,294 +1,288 @@
 <template>
-  <main class="home-page min-h-screen font-sans antialiased">
-    <div class="home-shell">
+  <main class="home-page min-h-screen font-sans antialiased pb-16 bg-slate-50/30">
+    <div class="home-shell max-w-7xl mx-auto px-6 py-8">
       
-      <div class="dashboard-grid" v-if="recommendationData && profileRadarData">
+      <div class="dashboard-content space-y-10" v-if="recommendationData && profileRadarData">
         
-        <!-- ================= LEFT COLUMN (col-span-8) ================= -->
-        <div class="primary-column">
+        <!-- Top Visual Row: Carousel + Radar (Cardless) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
           
-          <!-- Block 1: Welcome & Today Header (Cardless) -->
-          <section class="recommendation-panel">
-            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-              <div class="space-y-1">
-                <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-bold bg-blue/10 text-blue px-2 py-0.5 rounded-sm">
-                  <span class="w-1.5 h-1.5 rounded-sm bg-blue animate-pulse"></span>
-                  {{ recommendationData.recommendation.label || '智能推荐' }}
-                </span>
-                <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">今天，从哪里继续？</h1>
-                <p class="text-xs text-slate-500 leading-relaxed max-w-[600px]">
-                  根据你的画像分数、学习路径进度和最近练习表现，系统已整理好下一步学习建议。
-                </p>
-              </div>
+          <!-- Carousel Banner (Left 2 columns on desktop) -->
+          <div class="lg:col-span-2 relative rounded-3xl overflow-hidden bg-slate-900 group min-h-[380px] flex flex-col justify-end border border-slate-200/10">
+            <!-- Slides -->
+            <div class="absolute inset-0 select-none">
+              <Transition name="slide-fade" mode="out-in">
+                <div :key="activeSlide" class="absolute inset-0">
+                  <img :src="carouselSlides[activeSlide]?.image" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" alt="Banner" />
+                  <!-- Gradient overlay for text readability -->
+                  <div class="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/35 to-transparent"></div>
+                </div>
+              </Transition>
+            </div>
 
-              <!-- Today Date Display -->
-              <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-sm shrink-0 font-mono text-xs">
-                <Calendar class="w-3.5 h-3.5 text-slate-400" />
-                <span class="text-slate-500">{{ todayText }}</span>
-                <span class="text-slate-300">|</span>
-                <span class="font-bold text-slate-800">{{ todayWeekday }}</span>
+            <!-- Slide Content Overlay -->
+            <div class="relative z-10 p-8 sm:p-10 space-y-4 max-w-xl text-left">
+              <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+                {{ carouselSlides[activeSlide]?.title }}
+              </h2>
+              <p class="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-medium">
+                {{ carouselSlides[activeSlide]?.description }}
+              </p>
+              <div class="pt-2">
+                <Button 
+                  @click="goTo(carouselSlides[activeSlide]?.path || '')" 
+                  class="bg-teal-500 hover:bg-teal-400 text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-lg shadow-teal-500/25 border-none transition-all duration-300 cursor-pointer"
+                >
+                  {{ carouselSlides[activeSlide]?.actionText }}
+                </Button>
               </div>
             </div>
 
-            <!-- Recommended Action (Editorial Banner, Cardless) -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6 py-6 px-1 border-t border-b border-slate-100">
-              <div class="space-y-1 min-w-0">
-                <span class="text-[9px] font-mono text-blue font-black uppercase tracking-wider block">推荐学习项目</span>
-                <h2 class="text-sm font-bold text-slate-900 truncate">{{ recommendationData.recommendation.title }}</h2>
-                <p class="text-xs text-slate-500 leading-relaxed truncate">{{ recommendationData.recommendation.text }}</p>
-              </div>
-              <Button class="shrink-0 h-9 px-4 rounded-sm text-xs font-semibold cursor-pointer border border-blue text-blue hover:bg-blue/5 bg-transparent shadow-none" @click="goTo(recommendationData.recommendation.path)">
-                <component :is="getIconComponent(recommendationData.recommendation.icon)" class="w-3.5 h-3.5 mr-2" />
-                <span>{{ recommendationData.recommendation.action }}</span>
+            <!-- Carousel Controls -->
+            <!-- Previous Button -->
+            <button 
+              @click="prevSlide" 
+              class="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 cursor-pointer border border-white/10"
+            >
+              <ChevronLeft class="w-5 h-5" />
+            </button>
+            <!-- Next Button -->
+            <button 
+              @click="nextSlide" 
+              class="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 cursor-pointer border border-white/10"
+            >
+              <ChevronRight class="w-5 h-5" />
+            </button>
+
+            <!-- Indicators -->
+            <div class="absolute bottom-6 right-10 z-10 flex gap-2">
+              <button 
+                v-for="(_, index) in carouselSlides" 
+                :key="index"
+                @click="setSlide(index)"
+                class="w-2 h-2 rounded-full transition-all duration-300 cursor-pointer border-none"
+                :class="activeSlide === index ? 'bg-teal-400 w-6' : 'bg-white/40 hover:bg-white/60'"
+              ></button>
+            </div>
+          </div>
+
+          <!-- Radar Chart Snapshot (Right column on desktop, Cardless) -->
+          <div class="lg:col-span-1 flex flex-col justify-between py-2 relative overflow-hidden">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
+              <h2 class="text-xs font-black text-slate-800 uppercase tracking-wider font-mono">能力画像诊断</h2>
+              <Button variant="ghost" class="text-xs font-bold text-teal-655 hover:text-teal-700 p-0 cursor-pointer h-7 hover:bg-transparent" @click="goTo(profilePath)">
+                完整报告
               </Button>
             </div>
 
-            <!-- Stats Quantitative Indicators (Cardless Grid) -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-2">
-              <div class="space-y-1" v-for="item in overviewStats" :key="item.label">
-                <span class="text-[9px] text-slate-400 font-mono uppercase tracking-wider block">{{ item.label }}</span>
-                <strong class="text-xl font-extrabold text-slate-950 font-mono tracking-tight block mt-0.5">{{ item.value }}</strong>
+            <!-- Score KPI & Radar Content -->
+            <div class="flex items-center gap-4 my-4">
+              <!-- KPI (Cardless) -->
+              <div class="score-badge flex flex-col items-center justify-center text-center shrink-0 min-w-[90px] border-r border-slate-200/60 pr-6">
+                <span class="text-[9px] text-teal-600 font-bold uppercase tracking-wider">画像评分</span>
+                <strong class="text-4xl font-black text-slate-800 mt-1 leading-none">{{ profileScore }}</strong>
+                <span class="text-[9px] font-mono text-teal-700 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100/40 mt-3">S-Tier</span>
+              </div>
+              <!-- Radar Chart -->
+              <div class="flex-1 h-[150px] relative min-w-0">
+                <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs">
+                  <div class="w-4 h-4 rounded-full border border-teal-500 border-t-transparent animate-spin"></div>
+                </div>
+                <v-chart v-else class="chart" :option="radarOption" autoresize />
               </div>
             </div>
-          </section>
 
-          <!-- Block 2: Continue Learning Section (Cardless List) -->
-          <section class="learning-panel">
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">PROGRESS TRACKING</span>
-                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">继续学习进度</h2>
-              </div>
-              <Button variant="ghost" class="text-xs font-bold text-blue hover:text-blue/80 p-0 cursor-pointer h-7" @click="goTo('/path-planner')" v-if="continueItems.length">
-                查看全部
-              </Button>
+            <!-- Diagnostics (Cardless) -->
+            <div class="diagnostic-advice pt-4 border-t border-slate-200/60">
+              <div class="text-[10px] font-bold text-teal-800 uppercase tracking-wider mb-1">建议</div>
+              <p class="text-xs text-slate-655 leading-relaxed text-left">
+                {{ profileRadarData.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
+              </p>
             </div>
+          </div>
+          
+        </div>
 
-            <!-- Learning Items List -->
-            <div v-if="continueItems.length" class="divide-y divide-slate-100">
-              <div 
-                v-for="item in continueItems" 
-                :key="item.title" 
-                class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 first:pt-0 last:pb-0 hover:bg-slate-50/40 rounded-sm px-2 transition-colors"
-              >
-                <!-- Title & info -->
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-8 h-8 rounded-sm flex items-center justify-center shrink-0" :class="item.tone === 'tone-emerald' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue'">
-                    <component :is="getIconComponent(item.icon)" class="w-4 h-4" />
-                  </div>
-                  <div class="min-w-0">
-                    <strong class="text-xs font-bold text-slate-800 block truncate">{{ item.title }}</strong>
-                    <span class="text-[10px] text-slate-400 block mt-0.5">{{ item.category }}</span>
+        <!-- Middle Row: Quick Action Dock (Cardless) -->
+        <section class="dock-section py-6 border-y border-slate-200/60">
+          <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-12">
+            <button 
+              v-for="action in quickActions" 
+              :key="action.label" 
+              class="dock-button flex items-center gap-4 hover:bg-slate-100/45 px-4 py-2.5 rounded-2xl transition-all duration-300 cursor-pointer text-left"
+              @click="goTo(action.path)"
+            >
+              <div class="dock-icon-circle w-11 h-11 rounded-2xl flex items-center justify-center bg-teal-50/70 text-teal-655 hover:bg-teal-500 hover:text-white transition-colors duration-300 shrink-0">
+                <component :is="getIconComponent(action.icon)" class="w-5 h-5" />
+              </div>
+              <div class="min-w-0">
+                <span class="block text-sm font-black text-slate-800 leading-tight">{{ action.label }}</span>
+                <span class="block text-[10px] text-slate-400 mt-1 max-w-[140px] truncate">{{ action.description }}</span>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <!-- Bottom Row: Dual History Board (Cardless & Equal Height) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-stretch">
+          
+          <!-- Left Column: Resource History (Cardless) -->
+          <section class="history-section flex flex-col justify-between py-2 min-h-[360px]">
+            <div class="space-y-4 flex-1">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                <div class="flex items-center gap-2">
+                  <Files class="w-4.5 h-4.5 text-teal-600" />
+                  <h3 class="text-sm font-black text-slate-800 font-mono tracking-wider uppercase">多智能体资源生成历史</h3>
+                </div>
+                <Button variant="ghost" class="text-xs font-bold text-teal-600 hover:text-teal-700 p-0 cursor-pointer h-7 hover:bg-transparent" @click="goTo('/resource-generator')">
+                  生成新资源
+                </Button>
+              </div>
+
+              <!-- Fixed Height List Container to guarantee alignment -->
+              <div class="history-list-container h-[260px] flex flex-col justify-start">
+                <div v-if="paginatedResources.length" class="divide-y divide-slate-100/50">
+                  <div 
+                    v-for="resource in paginatedResources" 
+                    :key="resource.id"
+                    class="history-item flex items-center justify-between py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200 cursor-pointer"
+                    @click="goTo(resource.path)"
+                  >
+                    <div class="space-y-1.5 text-left min-w-0 pr-4 flex-1">
+                      <strong class="block text-xs font-bold text-slate-800 truncate">{{ resource.title }}</strong>
+                      <div class="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                        <span class="font-bold text-teal-700 bg-teal-50/70 px-1.5 py-0.5 rounded border border-teal-100/20">{{ resource.agent }}</span>
+                        <span>•</span>
+                        <span>{{ resource.timeStr }}</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <span class="inline-flex items-center px-2.5 py-0.5 text-[9px] font-bold rounded bg-teal-50 text-teal-700 border border-teal-100/30">
+                        {{ resource.type }}
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                <!-- Progress & action -->
-                <div class="flex items-center gap-6 justify-between sm:justify-end">
-                  <div class="flex items-center gap-2">
-                    <div class="w-24 h-1 bg-slate-100 rounded-sm overflow-hidden shrink-0">
-                      <div class="h-full bg-emerald-500 rounded-sm" :style="{ width: item.progress + '%' }"></div>
-                    </div>
-                    <span class="text-[10px] font-mono font-bold text-slate-700 min-w-[28px] text-right">{{ item.progress }}%</span>
-                  </div>
-                  <span class="text-[10px] text-slate-400 font-mono hidden md:inline">{{ item.lastTime }}</span>
-                  <Button variant="outline" size="sm" class="text-[10px] h-7 px-3 border-slate-200 hover:bg-slate-50 rounded-sm shrink-0 cursor-pointer bg-white" @click="goTo(item.path)">
-                    继续
+                
+                <div v-else class="h-full border border-dashed border-slate-200/80 rounded-2xl flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
+                  <p>暂无资源生成记录</p>
+                  <Button size="sm" class="rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white cursor-pointer border-none" @click="goTo('/resource-generator')">
+                    一键生成资源
                   </Button>
                 </div>
               </div>
             </div>
 
-            <!-- Empty State -->
-            <div v-else class="py-10 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
-              <p>还没有学习路径，开始规划你的学习计划吧</p>
-              <Button size="sm" class="rounded-sm text-xs font-semibold cursor-pointer" @click="goTo('/path-planner')">
-                开始规划
-              </Button>
+            <!-- Pagination footer -->
+            <div class="flex items-center justify-between border-t border-slate-200/60 pt-3 mt-4 text-[10px] font-mono text-slate-400">
+              <span>共 {{ recentResources.length }} 项</span>
+              <div class="flex items-center gap-3" v-if="totalResourcePages > 1">
+                <span>{{ resourcePage }} / {{ totalResourcePages }} 页</span>
+                <div class="flex gap-1.5">
+                  <button 
+                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                    :disabled="resourcePage === 1"
+                    @click="resourcePage--"
+                  >
+                    <ChevronLeft class="w-3 h-3 text-slate-655" />
+                  </button>
+                  <button 
+                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                    :disabled="resourcePage === totalResourcePages"
+                    @click="resourcePage++"
+                  >
+                    <ChevronRight class="w-3 h-3 text-slate-655" />
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
-          <!-- Block 3: Recently Generated Resources (Cardless List) -->
-          <section class="resource-panel">
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">GENERATED ARTIFACTS</span>
-                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">最近生成资源</h2>
+          <!-- Right Column: Path History (Cardless) -->
+          <section class="history-section flex flex-col justify-between py-2 min-h-[360px]">
+            <div class="space-y-4 flex-1">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
+                <div class="flex items-center gap-2">
+                  <Guide class="w-4.5 h-4.5 text-teal-600" />
+                  <h3 class="text-sm font-black text-slate-800 font-mono tracking-wider uppercase">路径规划历史</h3>
+                </div>
+                <Button variant="ghost" class="text-xs font-bold text-teal-600 hover:text-teal-700 p-0 cursor-pointer h-7 hover:bg-transparent" @click="goTo('/path-planner')">
+                  规划新路径
+                </Button>
               </div>
-              <Button variant="ghost" class="text-xs font-bold text-blue hover:text-blue/80 p-0 cursor-pointer h-7" @click="goTo('/resource-generator')" v-if="recentGeneratedItems.length">
-                进入资源工坊
-              </Button>
-            </div>
 
-            <!-- Generated resources list -->
-            <div v-if="recentGeneratedItems.length" class="divide-y divide-slate-100">
-              <div 
-                v-for="item in recentGeneratedItems" 
-                :key="item.title" 
-                class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 first:pt-0 last:pb-0 hover:bg-slate-50/40 rounded-sm px-2 transition-colors"
-              >
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-8 h-8 rounded-sm bg-slate-50 flex items-center justify-center shrink-0">
-                    <FileText class="w-4 h-4 text-slate-400" />
-                  </div>
-                  <div class="min-w-0">
-                    <strong class="text-xs font-bold text-slate-800 block truncate">{{ item.title }}</strong>
-                    <div class="flex items-center gap-2 mt-0.5">
-                      <span class="text-[9px] font-mono text-slate-400 uppercase">{{ item.type }}</span>
-                      <span class="text-slate-200 text-[10px]">|</span>
-                      <span class="text-[9px] text-slate-400 truncate">{{ item.agent }}</span>
+              <!-- Fixed Height List Container to guarantee alignment -->
+              <div class="history-list-container h-[260px] flex flex-col justify-start">
+                <div v-if="paginatedPaths.length" class="divide-y divide-slate-100/50">
+                  <div 
+                    v-for="path in paginatedPaths" 
+                    :key="path.id"
+                    class="history-item flex flex-col py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200"
+                  >
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="space-y-1.5 text-left min-w-0 flex-1">
+                        <strong class="block text-xs font-black text-slate-800 truncate">{{ path.title }}</strong>
+                        <div class="text-[10px] text-slate-400 font-mono">
+                          当前节点：<span class="font-bold text-slate-650">{{ path.currentNodeTitle }}</span>
+                        </div>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        class="text-[10px] h-7 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl border-none cursor-pointer" 
+                        @click="goTo(path.path)"
+                      >
+                        继续学习
+                      </Button>
+                    </div>
+                    
+                    <!-- Progress bar -->
+                    <div class="mt-2.5">
+                      <div class="flex items-center justify-between text-[9px] text-slate-450 font-mono mb-1">
+                        <span>总体进度</span>
+                        <span>{{ path.progress }}%</span>
+                      </div>
+                      <div class="w-full h-1 bg-slate-200/70 rounded-full overflow-hidden">
+                        <div class="h-full bg-teal-500 rounded-full transition-all duration-500" :style="{ width: path.progress + '%' }"></div>
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <div class="flex items-center gap-4 justify-between sm:justify-end shrink-0">
-                  <span class="text-[9px] text-slate-400 font-mono">{{ item.time }}</span>
-                  <Button variant="outline" size="sm" class="text-[10px] h-7 px-3 border-slate-200 hover:bg-slate-50 rounded-sm cursor-pointer bg-white" @click="goTo(item.path)">
-                    打开
+                
+                <div v-else class="h-full border border-dashed border-slate-200/80 rounded-2xl flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
+                  <p>暂无活跃路径记录</p>
+                  <Button size="sm" class="rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white cursor-pointer border-none" @click="goTo('/path-planner')">
+                    开始规划
                   </Button>
                 </div>
               </div>
             </div>
 
-            <!-- Empty State -->
-            <div v-else class="py-10 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
-              <p>还没有生成过资源，开始创建你的第一个学习资源吧</p>
-              <Button size="sm" class="rounded-sm text-xs font-semibold cursor-pointer" @click="goTo('/resource-generator')">
-                生成资源
-              </Button>
+            <!-- Pagination footer -->
+            <div class="flex items-center justify-between border-t border-slate-200/60 pt-3 mt-4 text-[10px] font-mono text-slate-400">
+              <span>共 {{ activePaths.length }} 项</span>
+              <div class="flex items-center gap-3" v-if="totalPathPages > 1">
+                <span>{{ pathPage }} / {{ totalPathPages }} 页</span>
+                <div class="flex gap-1.5">
+                  <button 
+                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                    :disabled="pathPage === 1"
+                    @click="pathPage--"
+                  >
+                    <ChevronLeft class="w-3 h-3 text-slate-655" />
+                  </button>
+                  <button 
+                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                    :disabled="pathPage === totalPathPages"
+                    @click="pathPage++"
+                  >
+                    <ChevronRight class="w-3 h-3 text-slate-655" />
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
         </div>
-
-        <!-- ================= RIGHT COLUMN (col-span-4) ================= -->
-        <aside class="insight-column">
-          
-          <!-- Block 1: Radar Chart (Cardless) -->
-          <section class="radar-panel">
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">CAPABILITY PROFILE</span>
-                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">画像雷达能力图</h2>
-              </div>
-              <Button variant="ghost" class="text-xs font-bold text-blue hover:text-blue/80 p-0 cursor-pointer h-7" @click="goTo(profilePath)">
-                完整画像
-              </Button>
-            </div>
-
-            <!-- Radar chart ECharts container -->
-            <div class="radar-canvas h-[248px] relative overflow-hidden">
-              <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs space-y-2">
-                <div class="w-5 h-5 rounded-sm border border-blue border-t-transparent animate-spin"></div>
-                <span>读取能力维度...</span>
-              </div>
-              <v-chart v-else class="chart" :option="radarOption" autoresize />
-            </div>
-
-            <!-- Headline Score note -->
-            <div class="p-3 bg-slate-50 border border-slate-100/80 rounded-sm text-xs text-slate-500 leading-relaxed font-medium">
-              {{ profileRadarData.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
-            </div>
-          </section>
-
-          <!-- Block 2: Today Suggestions (Cardless) -->
-          <section class="suggestion-panel">
-            <div class="space-y-0.5">
-              <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">PERSONALIZED RECOMMENDATION</span>
-              <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">今日能力画像建议</h2>
-            </div>
-
-            <!-- Suggestion items list -->
-            <div v-if="todaySuggestions.length" class="space-y-2">
-              <div 
-                v-for="item in todaySuggestions" 
-                :key="item.title" 
-                class="flex items-start gap-3 p-3 hover:bg-slate-50/40 rounded-sm transition-all cursor-pointer border-b border-slate-50"
-                @click="goTo(item.path)"
-              >
-                <span class="w-2.5 h-2.5 rounded-sm mt-1 shrink-0" :class="{
-                  'bg-blue': item.tone === 'blue',
-                  'bg-amber-500': item.tone === 'amber',
-                  'bg-emerald-500': item.tone === 'green'
-                }"></span>
-                <div class="space-y-0.5 min-w-0">
-                  <strong class="text-xs font-bold text-slate-800 block truncate">{{ item.title }}</strong>
-                  <p class="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{{ item.reason }}</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Empty State -->
-            <div v-else class="py-6 border border-dashed border-slate-200/60 rounded-sm flex flex-col items-center justify-center text-slate-400 text-xs">
-              完善学习画像后可获得个性化建议
-            </div>
-          </section>
-
-          <!-- Block 3: Daily Challenge (Cardless) -->
-          <section class="challenge-panel" v-if="dailyChallenge">
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">DAILY CHALLENGE</span>
-                <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">每日专项挑战</h2>
-              </div>
-              <Badge variant="secondary" class="text-[9px] font-bold px-2 py-0.5 rounded-sm">
-                {{ dailyChallenge.difficulty }}
-              </Badge>
-            </div>
-
-            <div class="space-y-3.5">
-              <div class="space-y-1">
-                <h3 class="text-xs font-bold text-slate-800">{{ dailyChallenge.title }}</h3>
-                <p class="text-[11px] text-slate-500 leading-relaxed">{{ dailyChallenge.reason }}</p>
-              </div>
-
-              <!-- Meta estimates -->
-              <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono border-t border-b border-slate-100 py-2">
-                <span>EST. TIME: {{ dailyChallenge.minutes }} MINS</span>
-                <span>{{ dailyChallenge.source }}</span>
-              </div>
-
-              <Button class="w-full h-9 rounded-sm text-xs font-semibold cursor-pointer" @click="goTo('/question-bank')">
-                开始挑战
-              </Button>
-            </div>
-          </section>
-
-          <!-- Block 4: Quick Start Links (Cardless) -->
-          <section class="quick-panel" v-if="quickActions.length">
-            <div class="space-y-0.5">
-              <span class="text-[9px] font-mono text-slate-400 uppercase tracking-widest block">QUICK ACCESS LINKS</span>
-              <h2 class="text-xs font-black text-slate-900 uppercase tracking-wider font-mono">导航快速开始</h2>
-            </div>
-
-            <!-- Grid links -->
-            <div class="grid grid-cols-1 gap-2">
-              <div 
-                v-for="action in quickActions" 
-                :key="action.label" 
-                class="flex items-center justify-between py-2 border-b border-slate-50 hover:border-slate-200 hover:bg-slate-50/40 px-2 rounded-sm transition-all cursor-pointer group"
-                @click="goTo(action.path)"
-              >
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-7 h-7 rounded-sm flex items-center justify-center shrink-0" :class="{
-                    'bg-blue/5 text-blue': action.icon === 'chat',
-                    'bg-indigo-500/5 text-indigo-500': action.icon === 'resource',
-                    'bg-emerald-500/5 text-emerald-500': action.icon === 'path',
-                    'bg-amber-500/5 text-amber-500': action.icon === 'practice',
-                    'bg-purple-500/5 text-purple-500': action.icon === 'monitor'
-                  }">
-                    <component :is="getIconComponent(action.icon)" class="w-4 h-4" />
-                  </div>
-                  <div class="min-w-0">
-                    <strong class="text-xs font-bold text-slate-800 block truncate group-hover:text-blue transition-colors">{{ action.label }}</strong>
-                    <p class="text-[10px] text-slate-400 truncate">{{ action.description }}</p>
-                  </div>
-                </div>
-                <ChevronRight class="w-3.5 h-3.5 text-slate-300 group-hover:text-blue group-hover:translate-x-0.5 transition-all shrink-0" />
-              </div>
-            </div>
-          </section>
-
-        </aside>
 
       </div>
 
@@ -306,11 +300,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ErrorStatePanel from '@/shared/ui/ErrorStatePanel.vue'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 
 import {
   getRecommendation,
@@ -324,10 +317,10 @@ import {
   type ProfileRadarData,
   type ContinueLearningData,
   type QuickActionsData,
-  type RecentResourceItem,
   type DailyChallengeData,
   type StudyStatsData,
   type HomeActionItem,
+  type RecentResourceItem,
 } from '@/features/dashboard/api/home'
 import { getRadarChartData } from '@/features/profile/model/profileViewModel'
 
@@ -338,43 +331,18 @@ import { TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 
 import {
-  CalendarIcon as Calendar,
   MessageSquareIcon as ChatDotRound,
   FilesIcon as DocumentCopy,
   PencilIcon as EditPen,
   CompassIcon as Guide,
   MonitorIcon as Monitor,
   BookOpenIcon as Reading,
+  ChevronLeftIcon as ChevronLeft,
   ChevronRightIcon as ChevronRight,
-  FileTextIcon as FileText,
+  FilesIcon as Files,
 } from '@lucide/vue'
 
 use([CanvasRenderer, RadarChart, TooltipComponent])
-
-interface ContinueItem {
-  title: string
-  category: string
-  progress: number
-  lastTime: string
-  path: string
-  icon: string
-  tone: string
-}
-
-interface SuggestionItem {
-  title: string
-  reason: string
-  path: string
-  tone: string
-}
-
-interface ResourceItem {
-  title: string
-  type: string
-  agent: string
-  time: string
-  path: string
-}
 
 const router = useRouter()
 const route = useRoute()
@@ -388,6 +356,63 @@ const dailyChallengeData = ref<DailyChallengeData | null>(null)
 const studyStatsData = ref<StudyStatsData | null>(null)
 const loading = ref(false)
 const loadError = ref('')
+
+// Carousel slides definition
+const activeSlide = ref(0)
+const carouselSlides = [
+  {
+    title: 'AI 智能导师',
+    description: '书案旁微微散发微光的智能书本，为您的自主探索提供全天候深度答疑与循循善诱的辅导。',
+    image: '/ai-tutor.jpg',
+    path: '/tutor',
+    actionText: '进入智能辅导'
+  },
+  {
+    title: '多智能体资源引擎',
+    description: '知识图书馆中轻盈起舞的智慧卡片，针对您的薄弱能力指标，并行生成丰富完备的专研学习包。',
+    image: '/resource-engine.jpg',
+    path: '/resource-generator',
+    actionText: '一键生成资源'
+  },
+  {
+    title: '个性化路径规划',
+    description: '指引探索方向的星座灯塔，为您理清通往终点的每一步台阶，点亮专属的知识成长阶梯。',
+    image: '/path-planner.jpg',
+    path: '/path-planner',
+    actionText: '开启路径规划'
+  }
+]
+
+let carouselInterval: ReturnType<typeof setInterval> | null = null
+
+const nextSlide = () => {
+  activeSlide.value = (activeSlide.value + 1) % carouselSlides.length
+}
+
+const prevSlide = () => {
+  activeSlide.value = (activeSlide.value - 1 + carouselSlides.length) % carouselSlides.length
+}
+
+const setSlide = (index: number) => {
+  activeSlide.value = index
+  resetAutoplay()
+}
+
+const startAutoplay = () => {
+  carouselInterval = setInterval(nextSlide, 6000)
+}
+
+const stopAutoplay = () => {
+  if (carouselInterval) {
+    clearInterval(carouselInterval)
+    carouselInterval = null
+  }
+}
+
+const resetAutoplay = () => {
+  stopAutoplay()
+  startAutoplay()
+}
 
 const goTo = (path: string) => {
   if (path) router.push(path)
@@ -447,27 +472,6 @@ const formatDateTime = (value?: string | null) => {
   return `${formatDate(value)} ${time}`
 }
 
-const resourceStatusLabel = (status?: string | null) => {
-  switch (status) {
-    case 'pending': return '待处理'
-    case 'generating': return '生成中'
-    case 'processing': return '处理中'
-    case 'completed': return '已完成'
-    case 'failed': return '生成失败'
-    default: return '可查看'
-  }
-}
-
-const todayText = computed(() => new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-}).format(new Date()))
-
-const todayWeekday = computed(() => new Intl.DateTimeFormat('zh-CN', {
-  weekday: 'long'
-}).format(new Date()))
-
 const profilePath = computed(() => profileRadarData.value?.radar?.path || '/profile')
 
 const radarSource = computed<any>(() => {
@@ -499,7 +503,7 @@ const radarOption = computed(() => {
       radius: '68%',
       center: ['50%', '50%'],
       splitNumber: 4,
-      splitLine: { lineStyle: { color: '#C8E4E3', width: 1 } },
+      splitLine: { lineStyle: { color: '#B9DEDC', width: 1 } },
       splitArea: {
         show: true,
         areaStyle: {
@@ -508,7 +512,7 @@ const radarOption = computed(() => {
       },
       axisLine: { lineStyle: { color: '#B9DEDC' } },
       axisLabel: { show: false },
-      axisName: { color: '#58747A', fontSize: 10, fontWeight: 'bold', fontFamily: 'Geist, sans-serif' }
+      axisName: { color: '#58747A', fontSize: 9, fontWeight: 'bold', fontFamily: 'Geist, sans-serif' }
     },
     series: [{
       type: 'radar',
@@ -516,8 +520,8 @@ const radarOption = computed(() => {
         value: rawData.series?.[0]?.data?.[0]?.value || [],
         name: '能力得分',
         areaStyle: { color: 'rgba(70, 184, 180, 0.2)' },
-        lineStyle: { color: '#205F67', width: 1.8 },
-        itemStyle: { color: '#46B8B4', borderColor: '#FCFFFF', borderWidth: 2 },
+        lineStyle: { color: '#0d9488', width: 1.8 }, // Teal-600 equivalent
+        itemStyle: { color: '#0d9488', borderColor: '#FCFFFF', borderWidth: 2 },
         symbolSize: 4
       }]
     }]
@@ -564,79 +568,76 @@ const weakAreas = computed(() => {
 
 const weakAreaText = computed(() => weakAreas.value.join(' / '))
 
-const overviewStats = computed(() => {
-  const stats = studyStatsData.value
-  return [
-    { label: '本周学习', value: `${stats?.weekly_days ?? 0} 天` },
-    { label: '累计学习', value: `${stats?.total_hours ?? 0} 小时` },
-    { label: '待完成节点', value: `${stats?.pending_nodes ?? 0} 个` },
-    { label: '今日建议', value: `${stats?.today_suggestions ?? 0} 条` }
-  ]
-})
-
-const continueItems = computed<ContinueItem[]>(() => {
-  const data = continueLearningData.value
-  const activePaths = data?.active_paths || []
-
-  if (!activePaths.length) {
-    return []
-  }
-
-  return activePaths.map(path => ({
-    title: path.current_node_title || path.title || '继续当前学习路径',
-    category: path.title || '学习路径',
-    progress: clampPercent(path.overall_progress, 0),
-    lastTime: formatDateTime(path.last_learned_at || path.updated_at),
-    path: path.current_node_id ? `/path-planner/node/${path.current_node_id}` : `/path-planner/overview/${path.id}`,
-    icon: 'path',
-    tone: 'tone-emerald'
-  }))
-})
-
-const todaySuggestions = computed<SuggestionItem[]>(() => {
-  const backendSuggestions = quickActionsData.value?.today_suggestions
-  if (Array.isArray(backendSuggestions) && backendSuggestions.length) {
-    return backendSuggestions.slice(0, 3).map((item: any, index: number) => ({
-      title: item.title || item.label || '学习建议',
-      reason: item.reason || item.description || '根据当前画像自动推荐',
-      path: item.path || '/path-planner',
-      tone: ['blue', 'amber', 'green'][index] || 'blue'
-    }))
-  }
-  return []
-})
-
-const dailyChallenge = computed(() => {
-  const challenge = dailyChallengeData.value
-  if (challenge) {
+const recentResources = computed(() => {
+  const list = [...(recentResourcesData.value || [])]
+  // Sort by created_at descending (time sort)
+  list.sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
+    return timeB - timeA
+  })
+  return list.map(item => {
     return {
-      title: challenge.subject || '今日挑战',
-      difficulty: challenge.difficulty || '中等',
-      minutes: challenge.estimated_minutes || 12,
-      source: challenge.source || '题库推荐',
-      reason: challenge.reason || `推荐你从「${challenge.subject}」切入，保持每日练习节奏。`
+      id: item.id,
+      title: item.title || '未命名资源',
+      type: item.type || '文档',
+      agent: item.agent || '资源生成智能体',
+      timeStr: formatDateTime(item.created_at),
+      path: item.id ? `/resource-detail/${item.id}` : '/resource-generator'
     }
-  }
-  return null
+  })
+})
+
+const activePaths = computed(() => {
+  const paths = [...(continueLearningData.value?.active_paths || [])]
+  // Sort by last_learned_at or updated_at descending (time sort)
+  paths.sort((a, b) => {
+    const timeA = new Date(a.last_learned_at || a.updated_at || 0).getTime()
+    const timeB = new Date(b.last_learned_at || b.updated_at || 0).getTime()
+    return timeB - timeA
+  })
+  return paths.map(path => {
+    const rawDate = path.last_learned_at || path.updated_at
+    return {
+      id: path.id,
+      title: path.title || '继续当前学习路径',
+      currentNodeTitle: path.current_node_title || '未开始节点',
+      currentNodeId: path.current_node_id,
+      progress: clampPercent(path.overall_progress, 0),
+      timeStr: formatDateTime(rawDate),
+      path: path.current_node_id ? `/path-planner/node/${path.current_node_id}` : `/path-planner/overview/${path.id}`
+    }
+  })
+})
+
+// Pagination logic
+const ITEMS_PER_PAGE = 4
+const resourcePage = ref(1)
+const pathPage = ref(1)
+
+const totalResourcePages = computed(() => Math.ceil(recentResources.value.length / ITEMS_PER_PAGE) || 1)
+const totalPathPages = computed(() => Math.ceil(activePaths.value.length / ITEMS_PER_PAGE) || 1)
+
+const paginatedResources = computed(() => {
+  const start = (resourcePage.value - 1) * ITEMS_PER_PAGE
+  return recentResources.value.slice(start, start + ITEMS_PER_PAGE)
+})
+
+const paginatedPaths = computed(() => {
+  const start = (pathPage.value - 1) * ITEMS_PER_PAGE
+  return activePaths.value.slice(start, start + ITEMS_PER_PAGE)
+})
+
+watch(recentResources, () => {
+  resourcePage.value = 1
+})
+watch(activePaths, () => {
+  pathPage.value = 1
 })
 
 const quickActions = computed<HomeActionItem[]>(() => {
   const actions = quickActionsData.value?.actions || []
   return actions.slice(0, 6)
-})
-
-const recentGeneratedItems = computed<ResourceItem[]>(() => {
-  const list = recentResourcesData.value
-  if (list.length) {
-    return list.slice(0, 4).map((item: any) => ({
-      title: item.title || item.name || '未命名资源',
-      type: item.type || item.resource_type || resourceStatusLabel(item.status),
-      agent: item.agent || item.source_agent || '资源生成智能体',
-      time: formatDateTime(item.created_at || item.updated_at),
-      path: item.id ? `/resource-detail/${item.id}` : '/resource-generator'
-    }))
-  }
-  return []
 })
 
 const loadAllData = async () => {
@@ -678,7 +679,14 @@ const loadAllData = async () => {
   }
 }
 
-onMounted(loadAllData)
+onMounted(() => {
+  loadAllData()
+  startAutoplay()
+})
+
+onUnmounted(() => {
+  stopAutoplay()
+})
 
 watch(
   () => route.path,
@@ -692,172 +700,20 @@ watch(
 
 <style scoped>
 .home-page {
-  padding: clamp(24px, 3vw, 46px) 0 56px;
   color: var(--color-text);
   background:
-    radial-gradient(circle at 84% 2%, rgba(98, 201, 197, 0.14), transparent 30rem),
-    var(--color-bg);
+    radial-gradient(circle at 84% 2%, rgba(13, 148, 136, 0.03), transparent 30rem),
+    #fafafa; /* Flat soft off-white background */
 }
 
 .home-shell {
-  width: min(1420px, calc(100% - 48px));
+  width: min(1360px, calc(100% - 48px));
   margin: 0 auto;
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 8fr) minmax(340px, 4fr);
-  gap: 22px;
-  align-items: start;
-}
-
-.primary-column,
-.insight-column {
+.dashboard-content {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  min-width: 0;
-}
-
-.recommendation-panel,
-.radar-panel,
-.learning-panel,
-.resource-panel,
-.suggestion-panel,
-.challenge-panel,
-.quick-panel {
-  position: relative;
-  background: rgba(252, 255, 255, 0.92);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-}
-
-.recommendation-panel {
-  min-height: 356px;
-  padding: clamp(24px, 3vw, 38px);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.recommendation-panel::after {
-  content: '';
-  position: absolute;
-  width: 260px;
-  height: 260px;
-  right: -120px;
-  top: -130px;
-  border: 40px solid rgba(98, 201, 197, 0.14);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.radar-panel {
-  min-height: 356px;
-  padding: 22px;
-  background:
-    linear-gradient(150deg, rgba(216, 241, 240, 0.58), rgba(252, 255, 255, 0.95) 48%);
-  box-shadow: var(--shadow-sm);
-}
-
-.radar-canvas {
-  background: rgba(252, 255, 255, 0.64);
-  border: 1px solid rgba(200, 228, 227, 0.86);
-  border-radius: 13px;
-}
-
-.learning-panel,
-.resource-panel,
-.suggestion-panel,
-.challenge-panel,
-.quick-panel {
-  padding: 22px;
-}
-
-.recommendation-panel :deep(.text-blue),
-.recommendation-panel :deep(.text-slate-900),
-.primary-column :deep(.hover\:text-blue:hover),
-.insight-column :deep(.text-blue),
-.insight-column :deep(.hover\:text-blue:hover) {
-  color: var(--color-primary-text) !important;
-}
-
-.recommendation-panel :deep(.bg-blue),
-.suggestion-panel :deep(.bg-blue) {
-  background-color: var(--color-primary) !important;
-}
-
-.recommendation-panel :deep(.border-blue) {
-  border-color: var(--color-primary) !important;
-}
-
-.recommendation-panel :deep(h1) {
-  margin-top: 10px;
-  font-size: clamp(28px, 3vw, 42px);
-  letter-spacing: -0.045em;
-}
-
-.recommendation-panel :deep(.font-mono),
-.primary-column :deep(.font-mono),
-.insight-column :deep(.font-mono) {
-  font-family: var(--font-sans);
-  letter-spacing: 0.02em;
-}
-
-.recommendation-panel :deep(button),
-.challenge-panel :deep(button) {
-  border-radius: 10px;
-}
-
-.learning-panel :deep(.divide-y > *),
-.resource-panel :deep(.divide-y > *) {
-  border-color: var(--color-border-light);
-}
-
-.learning-panel :deep(.bg-emerald-500) {
-  background: var(--color-primary);
-}
-
-.learning-panel :deep(.bg-emerald-50) {
-  background: var(--color-primary-soft);
-}
-
-.learning-panel :deep(.text-emerald-600) {
-  color: var(--color-primary-text);
-}
-
-.learning-panel :deep(.hover\:bg-slate-50\/40:hover),
-.resource-panel :deep(.hover\:bg-slate-50\/40:hover),
-.suggestion-panel :deep(.hover\:bg-slate-50\/40:hover),
-.quick-panel :deep(.hover\:bg-slate-50\/40:hover) {
-  background: rgba(216, 241, 240, 0.34);
-}
-
-.resource-panel :deep(.bg-slate-50) {
-  background: var(--color-primary-soft);
-}
-
-.resource-panel :deep(.text-slate-400) {
-  color: var(--color-text-muted);
-}
-
-.suggestion-panel,
-.challenge-panel,
-.quick-panel {
-  box-shadow: none;
-}
-
-.challenge-panel {
-  background: linear-gradient(145deg, #FFFDF6, #FCFFFF);
-  border-color: #E9DDBB;
-}
-
-.quick-panel :deep(.grid) {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 14px;
-}
-
-.quick-panel :deep(.border-b) {
-  border-bottom-color: var(--color-border-light);
 }
 
 .chart {
@@ -865,73 +721,48 @@ watch(
   height: 100%;
 }
 
-@media (max-width: 1100px) {
-  .dashboard-grid {
-    grid-template-columns: minmax(0, 7fr) minmax(310px, 5fr);
-  }
-
-  .home-shell {
-    width: min(100% - 32px, 1120px);
-  }
+/* Custom dock button effects without white card borders */
+.dock-button {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (max-width: 767px) {
-  .home-page {
-    padding-top: 18px;
-  }
-
-  .home-shell {
-    width: min(100% - 24px, 680px);
-  }
-
-  .dashboard-grid {
-    display: contents;
-  }
-
-  .home-shell {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .primary-column,
-  .insight-column {
-    display: contents;
-  }
-
-  .recommendation-panel { order: 1; }
-  .radar-panel { order: 2; margin-top: 16px; }
-  .learning-panel { order: 3; margin-top: 16px; }
-  .resource-panel { order: 4; margin-top: 16px; }
-  .suggestion-panel { order: 5; margin-top: 16px; }
-  .challenge-panel { order: 6; margin-top: 16px; }
-  .quick-panel { order: 7; margin-top: 16px; }
-
-  .recommendation-panel,
-  .radar-panel {
-    min-height: auto;
-  }
-
-  .recommendation-panel,
-  .radar-panel,
-  .learning-panel,
-  .resource-panel,
-  .suggestion-panel,
-  .challenge-panel,
-  .quick-panel {
-    border-radius: 14px;
-  }
-
-  .quick-panel :deep(.grid) {
-    grid-template-columns: 1fr;
-  }
+.dock-button:hover {
+  transform: translateY(-1px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .home-page *,
-  .home-page *::before,
-  .home-page *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+.dock-button:hover .dock-icon-circle {
+  background: #0d9488;
+  color: #ffffff;
+}
+
+/* History lists custom minimal styles */
+.history-item {
+  transition: all 0.2s ease;
+}
+
+.history-item:hover {
+  background-color: rgba(241, 245, 249, 0.6);
+}
+
+/* Carousel slide transitions */
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-fade-enter-from {
+  opacity: 0;
+  transform: scale(1.01);
+}
+
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.99);
+}
+
+@media (max-width: 1024px) {
+  .home-shell {
+    width: calc(100% - 32px);
   }
 }
 </style>

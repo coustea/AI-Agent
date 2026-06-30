@@ -333,20 +333,24 @@ const getQuestionTypeText = (questionType?: string) => {
   align-items: center;
   gap: 16px;
   padding: 14px 20px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.01);
 }
 
 .quiz-option-item:not(.is-readonly):hover {
-  background: rgba(0, 0, 0, 0.03);
-  transform: translateX(4px);
+  background: var(--color-primary-soft, rgba(99, 102, 241, 0.03)) !important;
+  border-color: var(--color-primary) !important;
+  transform: translateY(-1px);
 }
 
 .quiz-option-item.is-selected {
-  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--color-primary) !important;
+  background: var(--color-primary-soft, rgba(99, 102, 241, 0.05)) !important;
+  box-shadow: 0 4px 14px var(--color-primary-glow, rgba(99, 102, 241, 0.08));
 }
 
 .option-check {
@@ -356,28 +360,28 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .check-box {
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--border);
-  border-radius: 2px;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
   transition: all 0.2s;
 }
 
 .is-selected .check-box {
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: none;
+  box-shadow: 0 2px 6px var(--color-primary-glow, rgba(99, 102, 241, 0.25));
 }
 
 .option-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--primary);
 }
 
 .option-content {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.95rem;
   color: var(--fg);
   flex: 1;
@@ -385,7 +389,8 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-option-item.is-correct {
-  background: rgba(16, 185, 129, 0.08);
+  border-color: var(--success) !important;
+  background: rgba(16, 185, 129, 0.06) !important;
 }
 
 .is-correct .check-box {
@@ -394,7 +399,8 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .quiz-option-item.is-wrong {
-  background: rgba(239, 68, 68, 0.08);
+  border-color: var(--error) !important;
+  background: rgba(239, 68, 68, 0.06) !important;
 }
 
 .is-wrong .check-box {

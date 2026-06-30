@@ -224,21 +224,21 @@ const getDifficultyText = (difficulty?: string) => {
 
 .reading-item {
   padding: 24px;
-  border: none;
-  border-left: 3px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  background: transparent;
-  transition: all 0.3s ease;
-  box-shadow: none;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  border-left: 4px solid var(--color-primary);
+  border-radius: 12px;
+  background: #ffffff;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.01);
   display: flex;
   flex-direction: column;
 }
 
 .reading-item:hover {
-  background: rgba(0, 0, 0, 0.03);
-  border-left-color: var(--primary);
-  box-shadow: none;
-  transform: translateX(4px);
+  background: #ffffff;
+  border-color: rgba(99, 102, 241, 0.16);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  transform: translateY(-2px);
 }
 
 .reading-header {
@@ -249,20 +249,20 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-type {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
   padding: 2px 8px;
-  background: var(--primary);
-  color: white;
-  border-radius: 2px;
-  letter-spacing: 1px;
+  background: var(--color-primary-soft, rgba(99, 102, 241, 0.06));
+  color: var(--color-primary);
+  border-radius: 6px;
+  font-weight: 700;
 }
 
 .reading-title {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--fg);
+  font-weight: 800;
+  color: var(--color-text-strong, #0f172a);
   line-height: 1.4;
 }
 
@@ -270,7 +270,7 @@ const getDifficultyText = (difficulty?: string) => {
   display: flex;
   align-items: center;
   gap: 20px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.8rem;
   color: var(--color-text-muted);
   margin-bottom: 16px;
@@ -284,40 +284,43 @@ const getDifficultyText = (difficulty?: string) => {
 
 .difficulty-tag {
   font-size: 0.7rem;
-  padding: 1px 8px;
-  border: 1px solid var(--color-border-hover);
-  border-radius: 2px;
+  padding: 2px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 6px;
   color: var(--color-text-muted);
+  font-weight: 600;
 }
 
-.difficulty-tag.basic { color: var(--accent); border-color: var(--accent); }
-.difficulty-tag.medium { color: var(--color-warning); border-color: var(--color-warning); } /* Amber 500 */
-.difficulty-tag.advanced { color: var(--color-danger); border-color: var(--color-danger); } /* Red 500 */
+.difficulty-tag.basic { color: var(--color-primary); border-color: rgba(99, 102, 241, 0.2); background: rgba(99, 102, 241, 0.03); }
+.difficulty-tag.medium { color: #d97706; border-color: rgba(217, 119, 6, 0.2); background: rgba(217, 119, 6, 0.03); }
+.difficulty-tag.advanced { color: #dc2626; border-color: rgba(220, 38, 38, 0.2); background: rgba(220, 38, 38, 0.03); }
 
 .reading-reason {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.9rem;
-  color: var(--fg);
-  background: rgba(0, 0, 0, 0.02);
+  color: var(--color-text-secondary, #334155);
+  background: rgba(99, 102, 241, 0.03);
   padding: 16px;
+  border-left: 3px solid var(--color-primary);
   border-radius: 8px;
   margin-bottom: 16px;
   line-height: 1.6;
-  border: none;
 }
 
 .reason-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.75rem;
-  font-weight: bold;
-  color: var(--primary);
-  margin-bottom: 8px;
+  font-weight: 800;
+  color: var(--color-primary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .reading-desc {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.9rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text-secondary, #475569);
   line-height: 1.6;
 }
 
@@ -326,20 +329,21 @@ const getDifficultyText = (difficulty?: string) => {
   align-items: center;
   width: fit-content;
   margin-top: 14px;
-  padding: 7px 12px;
-  border: 1px solid var(--primary);
-  border-radius: 4px;
-  color: var(--primary);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.6px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: 99px;
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 700;
   text-decoration: none;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .reading-link:hover {
-  background: var(--primary);
+  background: var(--color-primary);
   color: #fff;
+  box-shadow: 0 4px 12px var(--color-primary-glow, rgba(99, 102, 241, 0.2));
 }
 
 .reading-more {

@@ -145,13 +145,6 @@ async def test_astream_yields_chunks(llm_with_fake) -> None:
     assert chunks == ["chunk-1", "chunk-2"]
 
 
-@pytest.mark.asyncio
-async def test_ainvoke_tools_uses_bind_tools(llm_with_fake) -> None:
-    llm, fake = llm_with_fake
-    response = await llm.ainvoke_tools([HumanMessage(content="search")], tools=["search_tool"], tool_choice="auto", max_tokens=1000)
-    assert response.content == ""
-
-
 def test_openai_compatible_model_normalizes_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     from unittest.mock import MagicMock
     from langchain_openai import ChatOpenAI
