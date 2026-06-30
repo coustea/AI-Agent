@@ -2406,15 +2406,23 @@ onBeforeUnmount(() => {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   color: var(--color-text);
   font-weight: var(--weight-bold);
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 .brand-icon {
   color: var(--color-primary);
-  font-size: 1.25rem;
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+:deep(.brand-icon svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .collapse-toggle-btn {

@@ -164,7 +164,7 @@ class PPTAgent(BaseResourceAgent):
             response = await self.llm.ainvoke(
                 prompt_template.format(
                     source_pack=json.dumps(source_pack.model_dump(mode="json"), ensure_ascii=False, indent=2),
-                    outline_coverage=outline_coverage_summary(input_data),
+                    outline_coverage=outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs),
                 )
             )
             raw_content = response.content

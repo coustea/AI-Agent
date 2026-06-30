@@ -83,7 +83,7 @@ export function useResourceEvents() {
     if (token) params.set('token', token)
     if (lastSequence.value > 0) params.set('after_sequence', String(lastSequence.value))
     const query = params.toString()
-    const url = `${API_BASE}/resources/${nextResourceId}/runs/${nextRunId}/events${query ? `?${query}` : ''}`
+    const url = `${API_BASE}/resources/${nextResourceId}/events${query ? `?${query}` : ''}`
     const eventSource = new EventSource(url)
 
     eventSource.addEventListener('resource.event', (raw: MessageEvent) => {

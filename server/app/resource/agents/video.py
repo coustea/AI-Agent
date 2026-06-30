@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Annotated, Literal, Union, TypedDict
+from typing import Any, Annotated, Literal, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 from langgraph.graph import END, START, StateGraph

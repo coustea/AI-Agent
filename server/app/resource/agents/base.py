@@ -13,7 +13,7 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from app.infra.tool_excute import Tool, ToolExcute
+    from app.infra.tool_excute import Tool
     from app.resource.event import ResourceEvents
     from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 

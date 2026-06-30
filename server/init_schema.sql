@@ -466,10 +466,8 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
     question_id         VARCHAR(255)    NOT NULL UNIQUE,
     source              VARCHAR(255),
     subject             VARCHAR(255)    NOT NULL,
-    subject_en          VARCHAR(255),
     question_type       VARCHAR(100)    NOT NULL,
     difficulty          VARCHAR(100),
-    bloom_level         VARCHAR(100),
     content             TEXT            NOT NULL,
     options_json        JSONB,
     answer              TEXT,
@@ -478,8 +476,6 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
     tags                JSONB,
     language            VARCHAR(32),
     split               VARCHAR(64),
-    source_file         VARCHAR(500),
-    raw_record          JSONB,
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     DEFAULT NOW()
 );
@@ -487,26 +483,21 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_question_id ON quiz_questions (question_id);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_source ON quiz_questions (source);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject ON quiz_questions (subject);
-CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_en ON quiz_questions (subject_en);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_question_type ON quiz_questions (question_type);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_difficulty ON quiz_questions (difficulty);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_language ON quiz_questions (language);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_split ON quiz_questions (split);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_type
     ON quiz_questions (subject, question_type);
-CREATE INDEX IF NOT EXISTS ix_quiz_questions_subject_en_type
-    ON quiz_questions (subject_en, question_type);
 CREATE INDEX IF NOT EXISTS ix_quiz_questions_tags
     ON quiz_questions USING GIN (tags);
 
 COMMENT ON TABLE quiz_questions IS '题库题目表，存储所有学科的题目';
 COMMENT ON COLUMN quiz_questions.question_id IS '题目唯一标识，外部来源ID';
 COMMENT ON COLUMN quiz_questions.source IS '题目来源，如导入文件/手动录入';
-COMMENT ON COLUMN quiz_questions.subject IS '学科名称（中文）';
-COMMENT ON COLUMN quiz_questions.subject_en IS '学科名称（英文），用于路由';
+COMMENT ON COLUMN quiz_questions.subject IS '学科名称';
 COMMENT ON COLUMN quiz_questions.question_type IS '题型：single_choice/multi_choice/fill_blank/short_answer等';
 COMMENT ON COLUMN quiz_questions.difficulty IS '难度等级';
-COMMENT ON COLUMN quiz_questions.bloom_level IS 'Bloom认知层级';
 COMMENT ON COLUMN quiz_questions.content IS '题目内容';
 COMMENT ON COLUMN quiz_questions.options_json IS '选项JSON数组';
 COMMENT ON COLUMN quiz_questions.answer IS '标准答案';
@@ -514,6 +505,73 @@ COMMENT ON COLUMN quiz_questions.analysis IS '答案解析';
 COMMENT ON COLUMN quiz_questions.knowledge_points IS '关联知识点JSON';
 COMMENT ON COLUMN quiz_questions.tags IS '标签JSON数组';
 COMMENT ON COLUMN quiz_questions.language IS '题目语言';
+
+-- ============================================================
+-- 12b. programming_questions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS programming_questions (
+    id                      SERIAL          PRIMARY KEY,
+    question_id             VARCHAR(255)    NOT NULL UNIQUE,
+    source                  VARCHAR(100)    NOT NULL,
+    platform_question_id    VARCHAR(255),
+    title                   VARCHAR(500)    NOT NULL,
+    title_en                VARCHAR(500),
+    content                 TEXT            NOT NULL,
+    difficulty              VARCHAR(100),
+    subject                 VARCHAR(255),
+    code_templates          JSONB,
+    supported_languages     JSONB,
+    example_test_cases      JSONB,
+    test_cases              JSONB,
+    time_limit              INTEGER,
+    memory_limit            INTEGER,
+    tags                    JSONB,
+    knowledge_points        JSONB,
+    acceptance_rate         FLOAT,
+    total_submissions       INTEGER,
+    total_accepted          INTEGER,
+    url                     VARCHAR(1000),
+    raw_record              JSONB,
+    created_at              TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_programming_questions_question_id ON programming_questions (question_id);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_source ON programming_questions (source);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_platform_question_id ON programming_questions (platform_question_id);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_difficulty ON programming_questions (difficulty);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_subject ON programming_questions (subject);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_subject_type
+    ON programming_questions (subject, difficulty);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_platform
+    ON programming_questions (source, platform_question_id);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_tags
+    ON programming_questions USING GIN (tags);
+CREATE INDEX IF NOT EXISTS ix_programming_questions_knowledge_points
+    ON programming_questions USING GIN (knowledge_points);
+
+COMMENT ON TABLE programming_questions IS '编程题题库表，存储从各平台爬取的编程题目';
+COMMENT ON COLUMN programming_questions.question_id IS '题目唯一标识';
+COMMENT ON COLUMN programming_questions.source IS '来源平台';
+COMMENT ON COLUMN programming_questions.platform_question_id IS '平台原题ID';
+COMMENT ON COLUMN programming_questions.title IS '题目标题';
+COMMENT ON COLUMN programming_questions.title_en IS '英文标题';
+COMMENT ON COLUMN programming_questions.content IS '题目描述（HTML/Markdown）';
+COMMENT ON COLUMN programming_questions.difficulty IS '难度等级';
+COMMENT ON COLUMN programming_questions.subject IS '所属科目/分类';
+COMMENT ON COLUMN programming_questions.code_templates IS '各语言代码模板 JSON';
+COMMENT ON COLUMN programming_questions.supported_languages IS '支持的编程语言 JSON';
+COMMENT ON COLUMN programming_questions.example_test_cases IS '示例测试用例 JSON';
+COMMENT ON COLUMN programming_questions.test_cases IS '隐藏测试用例 JSON';
+COMMENT ON COLUMN programming_questions.time_limit IS '时间限制（ms）';
+COMMENT ON COLUMN programming_questions.memory_limit IS '内存限制（MB）';
+COMMENT ON COLUMN programming_questions.tags IS '标签 JSON';
+COMMENT ON COLUMN programming_questions.knowledge_points IS '知识点 JSON';
+COMMENT ON COLUMN programming_questions.acceptance_rate IS '通过率';
+COMMENT ON COLUMN programming_questions.total_submissions IS '总提交数';
+COMMENT ON COLUMN programming_questions.total_accepted IS '总通过数';
+COMMENT ON COLUMN programming_questions.url IS '原题链接';
+COMMENT ON COLUMN programming_questions.raw_record IS '原始数据 JSON';
 
 -- ============================================================
 -- 13. learning_events

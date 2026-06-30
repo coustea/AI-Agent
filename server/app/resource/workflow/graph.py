@@ -43,13 +43,11 @@ def build_parent_graph() -> Any:
     workflow.add_conditional_edges(
         "planning",
         route_workers_or_merge,
-        ["worker_node", "merge_workers"],
     )
     workflow.add_edge("worker_node", "merge_workers")
     workflow.add_conditional_edges(
         "merge_workers",
         route_after_merge,
-        ["ppt_node", "video_node", "save_node"],
     )
     workflow.add_edge("ppt_node", "merge_aggregation")
     workflow.add_edge("video_node", "merge_aggregation")
