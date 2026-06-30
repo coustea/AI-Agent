@@ -28,12 +28,19 @@ export async function fetchQuizBankQuestions(params?: {
   page?: number
   page_size?: number
 }): Promise<QuizBankQuestionListResponse> {
-  const response = await http.get('/ai/quiz-bank/questions', { params })
+  const requestParams = {
+    subject: params?.subject,
+    difficulty: params?.difficulty,
+    type: params?.type,
+    page: params?.page,
+    page_size: params?.page_size,
+  }
+  const response = await http.get('/ai/quiz', { params: requestParams })
   return response.data.data as QuizBankQuestionListResponse
 }
 
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
-  const response = await http.post('/ai/quiz-bank/review-subjective', request)
+  const response = await http.post('/ai/quiz/review', request)
   return response.data as QuizReviewResult
 }
 
@@ -59,6 +66,6 @@ export interface ObjectiveSubmitResponse {
 }
 
 export async function submitObjectiveResults(request: ObjectiveSubmitRequest): Promise<ObjectiveSubmitResponse> {
-  const response = await http.post('/ai/quiz-bank/submit-objective', request)
+  const response = await http.post('/ai/quiz/submit', request)
   return response.data.data as ObjectiveSubmitResponse
 }

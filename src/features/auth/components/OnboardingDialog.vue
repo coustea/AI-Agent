@@ -101,11 +101,12 @@
             >
               <div class="quick-head">
                 <span>{{ currentStepMeta.quickTitle }}</span>
-                <em v-if="isMultiSelectStep">可多选，选完后点击发送</em>
+                <em v-if="isCourseFormStep">可多选，选完后点击发送</em>
+                <em v-else-if="isMultiSelectStep">可多选，选完后点击发送</em>
                 <em v-else>点击后自动进入下一步</em>
               </div>
 
-              <div :class="['quick-replies-grid', { 'is-card-mode': shouldShowReplyHint, 'is-grade-mode': isGradeStep }]">
+              <div :class="['quick-replies-grid', { 'is-grade-mode': isCompactReplyStep }]">
                 <button
                     v-for="reply in currentQuickReplies"
                     :key="reply"
@@ -116,7 +117,7 @@
                     @click="handleQuickReply(reply)"
                 >
                   <span>{{ reply }}</span>
-                  <small v-if="getReplyHint(reply)">{{ getReplyHint(reply) }}</small>
+                  <small v-if="shouldShowReplyHint && getReplyHint(reply)">{{ getReplyHint(reply) }}</small>
                 </button>
               </div>
             </div>
@@ -408,9 +409,10 @@ const canSend = computed(() => {
   return userInput.value.trim().length > 0 && !isAssistantStreaming.value && !submitting.value
 })
 
-const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
-const shouldShowReplyHint = computed(() => [7].includes(currentStep.value))
-const isGradeStep = computed(() => currentStep.value === 2)
+const isMultiSelectStep = computed(() => currentStep.value === 6)
+const isCourseFormStep = computed(() => currentStep.value === 7)
+const shouldShowReplyHint = computed(() => false)
+const isCompactReplyStep = computed(() => [2, 7].includes(currentStep.value))
 
 const currentStepMeta = computed<StepMeta>(() => {
   return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
@@ -789,6 +791,10 @@ const selectSchool = (school: SchoolItem) => {
 }
 
 const isReplySelected = (reply: string) => {
+  if (currentStep.value === 7) {
+    return coursesValue.value.includes(reply)
+  }
+
   if (!userInput.value) return false
 
   const parts = userInput.value.split(/[,，、\s]+/).filter(Boolean)
@@ -801,6 +807,19 @@ const handleQuickReply = (reply: string) => {
   if (reply === '暂不选择') {
     userInput.value = reply
     handleSend()
+    return
+  }
+
+  if (currentStep.value === 7) {
+    if (coursesValue.value.includes(reply)) {
+      form.courses = coursesValue.value.filter(item => item !== reply)
+    } else {
+      form.courses = [...coursesValue.value, reply]
+    }
+
+    userInput.value = form.courses.join('，')
+    persistDraft()
+    nextTick(autoResizeComposer)
     return
   }
 
@@ -870,6 +889,15 @@ const getReplyHint = (reply: string) => {
   return ''
 }
 
+const completeCourseStep = async (courses: string[]) => {
+  form.courses = courses
+  currentStep.value = 8
+  userInput.value = ''
+  persistDraft()
+  await nextTick(autoResizeComposer)
+  await streamAssistantMessage('学习画像已经完成。这些信息会用于初始化学习路径、资源推荐和题库偏好。')
+}
+
 const handleSend = async () => {
   if (!canSend.value) return
 
@@ -937,10 +965,7 @@ const handleSend = async () => {
 
   if (currentStep.value === 7) {
     const courses = extractMultiple(text, PRESET_COURSES)
-    form.courses = courses.length > 0 ? courses : [text]
-    currentStep.value = 8
-    persistDraft()
-    await streamAssistantMessage('学习画像已经完成。这些信息会用于初始化学习路径、资源推荐和题库偏好。')
+    await completeCourseStep(courses.length > 0 ? courses : [text])
   }
 }
 
@@ -1496,11 +1521,6 @@ const handleNeverShow = async () => {
   background: transparent;
 }
 
-.quick-replies-grid.is-card-mode {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .quick-reply-btn,
 .school-suggestion-btn {
   position: relative;
@@ -1524,12 +1544,6 @@ const handleNeverShow = async () => {
   padding: 0 15px;
 }
 
-.quick-replies-grid.is-card-mode .quick-reply-btn {
-  min-height: 54px;
-  padding: 9px 13px;
-  border-radius: 16px;
-  text-align: left;
-}
 
 /* 年级专属：紧凑胶囊 pill，稍宽以容纳副标题 */
 .quick-replies-grid.is-grade-mode {
@@ -1541,7 +1555,7 @@ const handleNeverShow = async () => {
 }
 
 .quick-replies-grid.is-grade-mode .quick-reply-btn {
-  min-height: 44px;
+  min-height: 40px;
   padding: 6px 16px;
   border-radius: 999px;
   display: inline-flex;
@@ -1858,10 +1872,6 @@ const handleNeverShow = async () => {
 
   .message-main {
     max-width: 82%;
-  }
-
-  .quick-replies-grid.is-card-mode {
-    grid-template-columns: 1fr;
   }
 
   .quick-replies-grid,

@@ -33,22 +33,29 @@ export async function fetchWrongQuestions(params?: {
   page?: number
   page_size?: number
 }): Promise<WrongQuestionListResponse> {
-  const response = await http.get('/ai/wrong-questions', { params })
+  const requestParams = {
+    subject: params?.subject,
+    type: params?.question_type,
+    archived: params?.is_archived,
+    page: params?.page,
+    page_size: params?.page_size,
+  }
+  const response = await http.get('/ai/wrong', { params: requestParams })
   return response.data as WrongQuestionListResponse
 }
 
 
 export async function removeWrongQuestion(wrongId: number): Promise<void> {
-  await http.delete(`/ai/wrong-questions/${wrongId}`)
+  await http.delete(`/ai/wrong/${wrongId}`)
 }
 
 export async function archiveWrongQuestion(wrongId: number): Promise<void> {
-  await http.post(`/ai/wrong-questions/${wrongId}/archive`)
+  await http.post(`/ai/wrong/${wrongId}/archive`)
 }
 
 
 export async function fetchRandomWrongQuestion(subject?: string): Promise<WrongQuestion | null> {
-  const response = await http.get('/ai/wrong-questions/random', {
+  const response = await http.get('/ai/wrong/random', {
     params: subject ? { subject } : undefined,
   })
   return response.data.data as WrongQuestion | null
