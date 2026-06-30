@@ -486,7 +486,6 @@ class QuizQuestion(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("question_id", name="uq_quiz_questions_question_id"),
         Index("ix_quiz_questions_subject_type", "subject", "question_type"),
-        Index("ix_quiz_questions_subject_en_type", "subject_en", "question_type"),
         Index("ix_quiz_questions_difficulty", "difficulty"),
         Index("ix_quiz_questions_tags", "tags", postgresql_using="gin"),
     )
@@ -495,10 +494,8 @@ class QuizQuestion(SQLModel, table=True):
     question_id: str = Field(max_length=255, index=True)
     source: str | None = Field(default=None, max_length=255, index=True)
     subject: str = Field(max_length=255, index=True)
-    subject_en: str | None = Field(default=None, max_length=255, index=True)
     question_type: str = Field(max_length=100, index=True)
     difficulty: str | None = Field(default=None, max_length=100, index=True)
-    bloom_level: str | None = Field(default=None, max_length=100)
     content: str = Field(sa_column=Column(Text))
     options_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     answer: str | None = Field(default=None, sa_column=Column(Text))
@@ -507,8 +504,6 @@ class QuizQuestion(SQLModel, table=True):
     tags: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     language: str | None = Field(default=None, max_length=32, index=True)
     split: str | None = Field(default=None, max_length=64, index=True)
-    source_file: str | None = Field(default=None, max_length=500)
-    raw_record: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -557,7 +552,6 @@ class ProgrammingQuestion(SQLModel, table=True):
     total_accepted: int | None = Field(default=None, description="总通过数")
     url: str | None = Field(default=None, max_length=1000, description="原题链接")
     raw_record: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="原始数据")
-    source_file: str | None = Field(default=None, max_length=500, description="来源文件路径")
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

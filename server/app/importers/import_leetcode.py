@@ -1,99 +1,86 @@
-"""导入 LeetCode 编程题到数据库。
+"""导入 LeetCode 编程题。
 
-运行方式：
-    cd server
-    uv run python app/importers/import_leetcode.py
+数据: data/leetcode_problems.json
 """
 
-import json
 import asyncio
+import json
 from pathlib import Path
 
+from sqlalchemy import func
 from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.database import engine, init_db, session_scope
-from app.infra.models import ProgrammingQuestion
+from app.infra.database import init_db, session_scope
 from app.infra.logging import get_logger
+from app.infra.models import ProgrammingQuestion
 
 logger = get_logger(__name__)
 
-DATA_FILE = Path(__file__).parent / "programming/crawlers/leetcode/leetcode_problems.json"
+DATA_FILE = Path(__file__).parent / "data/leetcode_problems.json"
 
 
-async def import_leetcode_questions():
-    """导入 LeetCode 题目到数据库。"""
-    await init_db()
+async def import_leetcode() -> int:
+    """导入编程题。有数据跳过，无数据导入。
 
-    # 创建表（如果不存在）
-    from sqlmodel import SQLModel
-    from app.infra.database import engine
-    from sqlalchemy.ext.asyncio import AsyncSession
+    注意：此函数由 init_db() 的 _seed_initial_data() 调用，
+    数据库已初始化，无需再次调用 init_db()。
+    """
 
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-
-    with open(DATA_FILE, encoding="utf-8") as f:
-        questions = json.load(f)
-
-    logger.info("[Import] 共 %d 道题目", len(questions))
+    if not DATA_FILE.exists():
+        logger.warning("[LeetCode] 文件不存在: %s", DATA_FILE)
+        return 0
 
     async with session_scope() as session:
-        existing = await session.exec(select(ProgrammingQuestion))
-        existing_ids = {q.question_id for q in existing.all()}
+        cnt = (await session.exec(
+            select(func.count()).select_from(ProgrammingQuestion)
+        )).one() or 0
 
-        new_questions = []
-        for item in questions:
-            question_id = item.get("question_id")
-            if not question_id or question_id in existing_ids:
-                continue
-
-            # 难度转换
-            difficulty = item.get("difficulty")
-            if isinstance(difficulty, int):
-                difficulty_map = {1: "简单", 2: "中等", 3: "困难"}
-                difficulty = difficulty_map.get(difficulty, "中等")
-
-            question = ProgrammingQuestion(
-                question_id=question_id,
-                source=item.get("source", "leetcode"),
-                platform_question_id=str(item.get("platform_question_id") or ""),
-                title=item.get("title", ""),
-                title_en=item.get("title_en"),
-                content=item.get("content", ""),
-                difficulty=difficulty,
-                subject=item.get("subject", "算法"),
-                code_templates=item.get("code_templates"),
-                supported_languages=item.get("supported_languages"),
-                example_test_cases=item.get("example_test_cases"),
-                test_cases=item.get("test_cases"),
-                time_limit=item.get("time_limit"),
-                memory_limit=item.get("memory_limit"),
-                tags=item.get("tags"),
-                knowledge_points=item.get("knowledge_points"),
-                acceptance_rate=item.get("acceptance_rate"),
-                total_submissions=item.get("total_submissions"),
-                total_accepted=item.get("total_accepted"),
-                url=item.get("url"),
-            )
-            new_questions.append(question)
-
-        if not new_questions:
-            logger.info("[Import] 无新题目需要导入")
+        if cnt > 0:
+            logger.info("[LeetCode] 已存在 %d 条，跳过", cnt)
             return 0
 
-        batch_size = 50
-        imported = 0
-        for i in range(0, len(new_questions), batch_size):
-            batch = new_questions[i:i + batch_size]
-            session.add_all(batch)
-            await session.commit()
-            imported += len(batch)
+        return _load_json(session)
 
-        logger.info("[Import] 导入完成，新增 %d 道题目", imported)
-        return imported
+
+def _load_json(session) -> int:
+    """从 JSON 加载。"""
+    data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        logger.warning("[LeetCode] 格式错误")
+        return 0
+
+    logger.info("[LeetCode] 共 %d 题", len(data))
+    qs = []
+    for item in data:
+        qid = item.get("question_id")
+        if not qid:
+            continue
+        diff = item.get("difficulty")
+        if isinstance(diff, int):
+            diff = {1: "简单", 2: "中等", 3: "困难"}.get(diff, "中等")
+        qs.append(ProgrammingQuestion(
+            question_id=qid, source=item.get("source", "leetcode"),
+            platform_question_id=str(item.get("platform_question_id") or ""),
+            title=item.get("title", ""), title_en=item.get("title_en"),
+            content=item.get("content", ""), difficulty=diff,
+            subject=item.get("subject", "算法"),
+            code_templates=item.get("code_templates"),
+            supported_languages=item.get("supported_languages"),
+            example_test_cases=item.get("example_test_cases"),
+            test_cases=item.get("test_cases"), time_limit=item.get("time_limit"),
+            memory_limit=item.get("memory_limit"), tags=item.get("tags"),
+            knowledge_points=item.get("knowledge_points"),
+            acceptance_rate=item.get("acceptance_rate"),
+            total_submissions=item.get("total_submissions"),
+            total_accepted=item.get("total_accepted"), url=item.get("url"),
+            raw_record=item.get("raw_record"),
+        ))
+
+    session.add_all(qs)
+    logger.info("[LeetCode] 导入 %d 题", len(qs))
+    return len(qs)
 
 
 if __name__ == "__main__":
-    imported = asyncio.run(import_leetcode_questions())
-    print(f"导入完成：新增 {imported} 道题目")
+    imported = asyncio.run(import_leetcode())
+    print(f"导入 {imported} 道编程题")
