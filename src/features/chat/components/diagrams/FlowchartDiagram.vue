@@ -3,7 +3,7 @@
     <!-- Decorative Grid Background -->
     <div class="flow-bg-grid"></div>
 
-    <svg class="edge-layer" :viewBox="`0 0 ${svgWidth} ${svgHeight}`" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <svg class="edge-layer" :width="svgWidth" :height="svgHeight" :viewBox="`0 0 ${svgWidth} ${svgHeight}`" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
       <defs>
         <marker id="flow-arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse">
           <path d="M0,1 L8,5 L0,9 Z" fill="#3b82f6" />
@@ -71,14 +71,33 @@ const NODE_W = 160
 const NODE_H = 64
 const GAP_X = 200
 const GAP_Y = 110
+const PADDING = 40
+
+const svgWidth = computed(() => {
+  const nodes = props.payload.nodes
+  const isVertical = props.payload.direction === 'vertical'
+  if (isVertical) {
+    return NODE_W + PADDING * 2
+  }
+  return Math.max(200, (nodes.length - 1) * GAP_X + NODE_W + PADDING * 2)
+})
+
+const svgHeight = computed(() => {
+  const nodes = props.payload.nodes
+  const isVertical = props.payload.direction === 'vertical'
+  if (isVertical) {
+    return Math.max(100, (nodes.length - 1) * GAP_Y + NODE_H + PADDING * 2)
+  }
+  return NODE_H + PADDING * 2
+})
 
 const layoutNodes = computed(() => {
   const nodes = props.payload.nodes
   const isVertical = props.payload.direction === 'vertical'
   return nodes.map((node, i) => ({
     ...node,
-    x: isVertical ? 0 : i * GAP_X,
-    y: isVertical ? i * GAP_Y : 0,
+    x: isVertical ? (NODE_W / 2 + PADDING) : (i * GAP_X + NODE_W / 2 + PADDING),
+    y: isVertical ? (i * GAP_Y + PADDING) : PADDING,
   }))
 })
 
@@ -86,16 +105,6 @@ const nodeMap = computed(() => {
   const map = new Map<string, { x: number; y: number }>()
   layoutNodes.value.forEach((n) => map.set(n.id, { x: n.x, y: n.y }))
   return map
-})
-
-const svgWidth = computed(() => {
-  const xs = layoutNodes.value.map((n) => n.x + NODE_W)
-  return Math.max(200, ...xs) + 40
-})
-
-const svgHeight = computed(() => {
-  const ys = layoutNodes.value.map((n) => n.y + NODE_H)
-  return Math.max(100, ...ys) + 40
 })
 
 const layoutEdges = computed(() => {
@@ -110,18 +119,18 @@ const layoutEdges = computed(() => {
     let labelY: number
 
     if (isVertical) {
-      const sx = src.x + NODE_W / 2
+      const sx = src.x
       const sy = src.y + NODE_H
-      const tx = tgt.x + NODE_W / 2
+      const tx = tgt.x
       const ty = tgt.y
       const midY = (sy + ty) / 2
       path = `M${sx},${sy} C${sx},${midY} ${tx},${midY} ${tx},${ty}`
       labelX = (sx + tx) / 2
       labelY = midY
     } else {
-      const sx = src.x + NODE_W
+      const sx = src.x + NODE_W / 2
       const sy = src.y + NODE_H / 2
-      const tx = tgt.x
+      const tx = tgt.x - NODE_W / 2
       const ty = tgt.y + NODE_H / 2
       const midX = (sx + tx) / 2
       path = `M${sx},${sy} C${midX},${sy} ${midX},${ty} ${tx},${ty}`
@@ -157,8 +166,8 @@ const layoutEdges = computed(() => {
 
 .edge-layer {
   position: absolute;
-  top: 20px;
-  left: 20px;
+  top: 0;
+  left: 0;
   pointer-events: none;
   z-index: 1;
 }
@@ -167,6 +176,7 @@ const layoutEdges = computed(() => {
   stroke-width: 3px;
   stroke-linecap: round;
   transition: all 0.3s ease;
+  will-change: transform, opacity;
 }
 
 .flow-edge.animated {
@@ -205,6 +215,8 @@ const layoutEdges = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 .flow-node:hover {

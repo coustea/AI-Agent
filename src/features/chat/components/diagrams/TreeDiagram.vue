@@ -55,6 +55,7 @@
             :x2="edge.x2" 
             :y2="edge.y2"
             :data-level="edge.level"
+            :style="{ strokeDasharray: edge.length, strokeDashoffset: edge.length }"
             stroke="url(#line-grad)"
             stroke-width="2.5"
           />
@@ -139,6 +140,7 @@ interface LayoutEdge {
   x2: number
   y2: number
   level: number
+  length: number
 }
 
 // Map node IDs to nodes for fast lookup
@@ -202,26 +204,34 @@ const layoutEdges = computed(() => {
     if (parent.left_id) {
       const child = map.get(parent.left_id)
       if (child) {
+        const dx = child.x - parent.x
+        const dy = child.y - parent.y
+        const length = Math.sqrt(dx * dx + dy * dy)
         edges.push({
           id: `${parent.id}-${child.id}`,
           x1: parent.x,
           y1: parent.y,
           x2: child.x,
           y2: child.y,
-          level: child.level
+          level: child.level,
+          length
         })
       }
     }
     if (parent.right_id) {
       const child = map.get(parent.right_id)
       if (child) {
+        const dx = child.x - parent.x
+        const dy = child.y - parent.y
+        const length = Math.sqrt(dx * dx + dy * dy)
         edges.push({
           id: `${parent.id}-${child.id}`,
           x1: parent.x,
           y1: parent.y,
           x2: child.x,
           y2: child.y,
-          level: child.level
+          level: child.level,
+          length
         })
       }
     }
@@ -297,6 +307,7 @@ const getNodeFill = (type: string | null | undefined) => {
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
   animation: draw-edge 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
 }
 
 @keyframes draw-edge {
@@ -318,6 +329,8 @@ const getNodeFill = (type: string | null | undefined) => {
   transform-box: fill-box;
   transform-origin: center;
   animation: fade-in-node 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 @keyframes fade-in-node {
@@ -343,6 +356,8 @@ const getNodeFill = (type: string | null | undefined) => {
 .node-circle {
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .node-group:hover .node-circle {

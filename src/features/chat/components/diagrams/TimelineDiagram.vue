@@ -371,6 +371,8 @@ onUnmounted(() => {
   transform: translateX(-50%);
   z-index: 10;
   transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: transform, left;
+  backface-visibility: hidden;
 }
 
 .playhead-line {
@@ -520,6 +522,8 @@ onUnmounted(() => {
   transform: scale(1.03);
   z-index: 2;
   animation: pulse-glow 1.5s infinite alternate ease-in-out;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
 }
 
 @keyframes pulse-glow {
