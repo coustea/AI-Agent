@@ -308,7 +308,7 @@ const handleLogin = async () => {
 
 .form-container {
   width: 100%;
-  max-width: 420px;
+  max-width: 380px;
 }
 
 .mobile-brand {

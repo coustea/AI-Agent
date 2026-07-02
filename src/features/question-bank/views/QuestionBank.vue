@@ -142,12 +142,12 @@
                     <span class="tag level">{{ dailyQuestion.difficulty || '中等' }}</span>
                   </div>
 
-                  <div class="recommend-question-content" v-html="renderInline(dailyQuestion.content)"></div>
+                  <MarkdownRenderer class="recommend-question-content" :content="String(dailyQuestion.content || '')" />
 
                   <div v-if="isOptionQuestion(dailyQuestion)" class="recommend-options">
                     <div v-for="(text, key) in getOptions(dailyQuestion)" :key="key" class="recommend-option">
                       <span>{{ key }}</span>
-                      <p v-html="renderInline(text)"></p>
+                      <MarkdownRenderer :content="String(text || '')" />
                     </div>
                   </div>
 
@@ -375,7 +375,7 @@
                 <span class="mini-tag">{{ dailyChallengeQuestion.type }}</span>
                 <span class="mini-tag">{{ dailyChallengeQuestion.difficulty || '中等' }}</span>
               </div>
-              <div class="daily-preview-content" v-html="renderInline(dailyChallengeQuestion.content)"></div>
+              <MarkdownRenderer class="daily-preview-content" :content="String(dailyChallengeQuestion.content || '')" />
               <button type="button" class="get-question-btn" @click="jumpToChallengeQuestion">作答</button>
             </template>
 
@@ -445,7 +445,7 @@
               </div>
             </div>
 
-            <div class="question-text" v-html="renderInline(question.content)"></div>
+            <MarkdownRenderer class="question-text" :content="String(question.content || '')" />
 
             <div v-if="isOptionQuestion(question)" class="options-list">
               <button
@@ -464,7 +464,7 @@
                   @click="selectExamOption(question, key)"
               >
                 <span class="opt-key">{{ key }}</span>
-                <span class="opt-text" v-html="renderInline(text)"></span>
+                <MarkdownRenderer class="opt-text" :content="String(text || '')" />
               </button>
             </div>
 
@@ -478,8 +478,9 @@
             ></textarea>
 
             <div v-if="examSubmitted" :class="['analysis-panel', isExamCorrect(question) ? 'success' : 'danger']">
-              <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
-              <div class="analysis-text" v-html="renderInline(question.analysis || '暂无解析。')"></div>
+              <strong>参考答案：</strong>
+              <MarkdownRenderer :content="String(question.answer || '')" />
+              <MarkdownRenderer class="analysis-text" :content="String(question.analysis || '暂无解析。')" />
             </div>
           </article>
         </div>
@@ -549,6 +550,7 @@ import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
 import { getErrorMessage } from '@/shared/api/http'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 type ViewMode = 'workspace' | 'exam'
 type ModuleKey = 'portal' | 'daily' | 'practice' | 'search' | 'paper' | 'wrong'
@@ -1542,10 +1544,6 @@ function hasAnswerData(ans: AnswerValue) {
   return normalizeAnswer(ans).length > 0
 }
 
-function formatAnswer(ans: string) {
-  return String(ans || '').replace(/,/g, '、')
-}
-
 function formatUserAnswer(ans: AnswerValue) {
   return Array.isArray(ans) ? ans.join(',') : String(ans || '')
 }
@@ -1629,19 +1627,6 @@ function markDailyCompleted(date: Date) {
 
 function formatDuration(sec: number) {
   return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
-}
-
-function renderInline(text: string) {
-  if (!text) return ''
-  return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>')
 }
 
 function formatDateKey(date: Date) {

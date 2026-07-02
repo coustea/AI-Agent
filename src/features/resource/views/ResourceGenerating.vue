@@ -89,7 +89,13 @@
                 <em>{{ getNodeStatusLabel(getStageNode('planning')) }}</em>
               </div>
               <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]">
-                <div class="station-live-current message-only-layout">
+                <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
+                  <div v-for="(msg, i) in getNodeMessages(getStageNode('planning'))" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(getStageNode('planning')).length > 1 }">
+                    <span class="station-live-dot" :class="i === 0 && getNodeMessages(getStageNode('planning')).length > 1 ? 'muted' : getStageNode('planning').status"></span>
+                    <p class="live-message-only">{{ msg }}</p>
+                  </div>
+                </TransitionGroup>
+                <div v-if="!getNodeMessages(getStageNode('planning')).length" class="station-live-current message-only-layout">
                   <span class="station-live-dot" :class="getStageNode('planning').status"></span>
                   <p class="live-message-only">{{ getNodeDisplayMessage(getStageNode('planning')) }}</p>
                 </div>
@@ -156,7 +162,13 @@
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
               <div class="station-live-log" :class="[`is-${node.status}`]">
-                <div class="station-live-current message-only-layout">
+                <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
+                  <div v-for="(msg, i) in getNodeMessages(node)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(node).length > 1 }">
+                    <span class="station-live-dot" :class="i === 0 && getNodeMessages(node).length > 1 ? 'muted' : node.status"></span>
+                    <p class="live-message-only">{{ msg }}</p>
+                  </div>
+                </TransitionGroup>
+                <div v-if="!getNodeMessages(node).length" class="station-live-current message-only-layout">
                   <span class="station-live-dot" :class="node.status"></span>
                   <p class="live-message-only">{{ getNodeDisplayMessage(node) }}</p>
                 </div>
@@ -191,11 +203,21 @@
                 <em>{{ showPptNode ? getNodeStatusLabel(pptNode) : '未选择' }}</em>
               </div>
               <div class="station-live-log" :class="[`is-${pptNode.status}`]">
-                <div class="station-live-current message-only-layout">
-                  <span class="station-live-dot" :class="showPptNode ? pptNode.status : 'waiting'"></span>
-                  <p class="live-message-only">
-                    {{ showPptNode ? getNodeDisplayMessage(pptNode) : '当前任务未选择 PPT Agent' }}
-                  </p>
+                <template v-if="showPptNode">
+                  <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
+                    <div v-for="(msg, i) in getNodeMessages(pptNode)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(pptNode).length > 1 }">
+                      <span class="station-live-dot" :class="i === 0 && getNodeMessages(pptNode).length > 1 ? 'muted' : pptNode.status"></span>
+                      <p class="live-message-only">{{ msg }}</p>
+                    </div>
+                  </TransitionGroup>
+                  <div v-if="!getNodeMessages(pptNode).length" class="station-live-current message-only-layout">
+                    <span class="station-live-dot" :class="pptNode.status"></span>
+                    <p class="live-message-only">{{ getNodeDisplayMessage(pptNode) }}</p>
+                  </div>
+                </template>
+                <div v-else class="station-live-current message-only-layout">
+                  <span class="station-live-dot waiting"></span>
+                  <p class="live-message-only">当前任务未选择 PPT Agent</p>
                 </div>
               </div>
               <div class="station-footer">
@@ -222,11 +244,21 @@
                 <em>{{ showVideoNode ? getNodeStatusLabel(videoNode) : '未选择' }}</em>
               </div>
               <div class="station-live-log" :class="[`is-${videoNode.status}`]">
-                <div class="station-live-current message-only-layout">
-                  <span class="station-live-dot" :class="showVideoNode ? videoNode.status : 'waiting'"></span>
-                  <p class="live-message-only">
-                    {{ showVideoNode ? getNodeDisplayMessage(videoNode) : '当前任务未选择 Video Agent' }}
-                  </p>
+                <template v-if="showVideoNode">
+                  <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
+                    <div v-for="(msg, i) in getNodeMessages(videoNode)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(videoNode).length > 1 }">
+                      <span class="station-live-dot" :class="i === 0 && getNodeMessages(videoNode).length > 1 ? 'muted' : videoNode.status"></span>
+                      <p class="live-message-only">{{ msg }}</p>
+                    </div>
+                  </TransitionGroup>
+                  <div v-if="!getNodeMessages(videoNode).length" class="station-live-current message-only-layout">
+                    <span class="station-live-dot" :class="videoNode.status"></span>
+                    <p class="live-message-only">{{ getNodeDisplayMessage(videoNode) }}</p>
+                  </div>
+                </template>
+                <div v-else class="station-live-current message-only-layout">
+                  <span class="station-live-dot waiting"></span>
+                  <p class="live-message-only">当前任务未选择 Video Agent</p>
                 </div>
               </div>
               <div class="station-footer">
@@ -472,8 +504,8 @@ const workflowIconMap: Record<string, Component> = {
 const workflowTitleMap: Record<string, string> = {
   planning: '教学计划',
   coordinator: '结果汇总',
-  content: '讲义精解',
-  mindmap: '知识导图',
+  content: '课程讲解',
+  mindmap: '思维导图',
   quiz: '练习题',
   code: '代码示例',
   reading: '拓展阅读',
@@ -918,6 +950,12 @@ function getNodePhaseLabel(node: DagNodeState) {
   if (node.status === 'success') return '已完成'
   if (node.status === 'failed') return '受阻'
   return '工位状态'
+}
+
+function getNodeMessages(node: DagNodeState): string[] {
+  const history = node.stepHistory || []
+  if (history.length === 0) return []
+  return history.slice(-2)
 }
 
 function getNodeDisplayMessage(node: DagNodeState) {
@@ -3767,6 +3805,59 @@ function getMetricChips(node: DagNodeState) {
 }
 
 /* Custom Styles for Simplified Cards & Neon Breathing Glow */
+.msg-queue-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.message-queue-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 0 !important;
+  grid-template-columns: none !important;
+}
+
+.message-queue-item.is-head {
+  opacity: 0.5;
+}
+
+.message-queue-item.is-head .live-message-only {
+  font-size: 0.7rem !important;
+  font-weight: var(--weight-bold) !important;
+  -webkit-line-clamp: 1 !important;
+}
+
+/* Broadcast queue animation:
+   - New message (tail): slides up from below + fades in
+   - Old head leaving: slides up + fades out
+   - Tail becoming head: smoothly transitions opacity/size via is-head class */
+.msg-queue-enter-active {
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.msg-queue-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.4, 0, 1, 1);
+  position: absolute;
+  width: 100%;
+}
+
+.msg-queue-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.msg-queue-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.msg-queue-move {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .message-only-layout {
   display: flex !important;
   align-items: center !important;

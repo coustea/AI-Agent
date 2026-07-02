@@ -30,7 +30,7 @@
       </span>
 
       <span class="process-toggle">
-        {{ expanded ? '收起详情' : '查看详情' }}
+        {{ expanded ? '收起' : '详情' }}
         <svg viewBox="0 0 20 20" aria-hidden="true" :class="{ expanded }">
           <path d="m6 8 4 4 4-4" />
         </svg>
@@ -156,28 +156,28 @@ const hasDetail = (item: AgentActivity) => Boolean(
   width: min(680px, 100%);
   overflow: hidden;
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-surface) 96%, var(--color-bg));
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.045);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 .process-panel.is-running {
-  border-color: color-mix(in srgb, #2563eb 26%, var(--color-border));
+  color: var(--color-text-secondary);
 }
 
 .process-panel.has-failure {
-  border-color: color-mix(in srgb, var(--color-danger) 28%, var(--color-border));
+  color: var(--color-danger);
 }
 
 .process-summary {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  min-height: 70px;
-  padding: 12px 14px;
+  min-height: 42px;
+  padding: 4px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -186,40 +186,40 @@ const hasDetail = (item: AgentActivity) => Boolean(
 }
 
 .process-summary:hover {
-  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  color: var(--color-text);
 }
 
 .process-symbol {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   color: #2563eb;
-  background: color-mix(in srgb, #2563eb 8%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, #2563eb 18%, var(--color-border));
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
 }
 
 .process-orbit {
   position: relative;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
 }
 
 .process-orbit i {
   position: absolute;
-  inset: 2px;
-  border: 1.5px solid transparent;
-  border-top-color: currentColor;
+  inset: 4px;
+  background: currentColor;
   border-radius: 50%;
-  animation: process-spin 1s linear infinite;
+  animation: process-breathe 1.08s ease-in-out infinite;
 }
 
 .process-orbit i:last-child {
-  inset: 5px;
-  border-top-color: color-mix(in srgb, currentColor 55%, transparent);
-  animation-duration: 0.65s;
-  animation-direction: reverse;
+  inset: 1px;
+  background: transparent;
+  border: 1px solid currentColor;
+  opacity: 0.28;
+  animation-duration: 1.08s;
 }
 
 .process-result {
@@ -235,7 +235,7 @@ const hasDetail = (item: AgentActivity) => Boolean(
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
 }
 
 .process-eyebrow {
@@ -243,10 +243,10 @@ const hasDetail = (item: AgentActivity) => Boolean(
   align-items: center;
   gap: 8px;
   color: var(--color-text-faint);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .process-count {
@@ -257,8 +257,8 @@ const hasDetail = (item: AgentActivity) => Boolean(
 .process-copy strong {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 13.5px;
+  font-weight: 520;
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -298,9 +298,7 @@ const hasDetail = (item: AgentActivity) => Boolean(
 }
 
 .process-progress {
-  height: 2px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--color-border) 72%, transparent);
+  display: none;
 }
 
 .process-progress span {
@@ -312,8 +310,9 @@ const hasDetail = (item: AgentActivity) => Boolean(
 }
 
 .activity-list {
-  padding: 6px 14px 14px 58px;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  margin-left: 9px;
+  padding: 4px 0 8px 19px;
+  border-left: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
 }
 
 .activity-item {
@@ -469,6 +468,17 @@ const hasDetail = (item: AgentActivity) => Boolean(
   to { transform: rotate(360deg); }
 }
 
+@keyframes process-breathe {
+  0%, 100% {
+    opacity: 0.42;
+    transform: scale(0.72);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes process-scan {
   from { transform: translateX(-120%); }
   to { transform: translateX(340%); }
@@ -476,7 +486,7 @@ const hasDetail = (item: AgentActivity) => Boolean(
 
 @media (max-width: 720px) {
   .process-panel { width: 100%; }
-  .process-summary { grid-template-columns: 32px minmax(0, 1fr) 18px; }
+  .process-summary { grid-template-columns: 24px minmax(0, 1fr) 18px; }
   .process-toggle { font-size: 0; }
   .process-toggle svg { width: 17px; height: 17px; }
   .activity-list { padding-left: 14px; }

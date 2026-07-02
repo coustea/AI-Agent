@@ -72,7 +72,7 @@
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
         <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
-        <PptView v-else-if="previewData.agentId === 'ppt'" :document-data="previewData.resultData" />
+        <PptView v-else-if="previewData.agentId === 'ppt'" :resource="previewData.resource" />
         <VideoView v-else-if="previewData.agentId === 'video'" :result-data="previewData.resultData" />
         <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
@@ -100,7 +100,6 @@ import QuizView from '@/features/resource/components/QuizView.vue'
 import CodeView from '@/features/resource/components/CodeView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
-import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
 import VideoView from '@/features/resource/components/VideoView.vue'
 
 import {
@@ -145,12 +144,12 @@ const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'q
 
 const agentConfigs = ref<AnyAgentConfigs>({
   content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'standard' },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive', exam_style: 'school', include_analysis: true },
+  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge'] },
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-  ppt: { theme_id: 'logic-blue', explanation_style: 'conceptual', visual_emphasis: 'balanced' },
-  video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' },
+  ppt: {},
+  video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9', include_captions: true, output_format: 'preview' },
 })
 
 const goToPersonalize = () => {
@@ -177,7 +176,6 @@ const latestArtifactAgentId = ref<string | null>(null)
 const isGenerating = ref(false)
 const generationFinalized = ref(false)
 const activeResourceId = ref<number | null>(null)
-const activeRunId = ref<string | null>(null)
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const resourceEvents = useResourceEvents()
 
@@ -245,16 +243,43 @@ function getStageNode(id: string) {
 }
 
 function hasGeneratedResource(type: string) {
-  return generatedResources.value.some(resource => resource.type === type)
+  const isReadyInResources = generatedResources.value.some(resource => resource.type === type)
+  const isReadyInDag = dagNodeStates.value[type]?.status === 'success'
+  return isReadyInResources || isReadyInDag
 }
 
-function openResourceByType(type: string) {
-  const resource = generatedResources.value.find(item => item.type === type)
-  if (resource) previewGeneratedResource(resource)
+async function openResourceByType(type: string) {
+  let resource = generatedResources.value.find(item => item.type === type)
+
+  // content 缺失说明从未获取过完整数据，从 bundle 补全
+  if (resource && !resource.content && activeResourceId.value) {
+    try {
+      const bundle = (await getResourceBundle(activeResourceId.value)).data?.data
+      const full = bundle?.resources?.find((item: any) => item.type === type)
+      if (full) {
+        const updated = [...generatedResources.value]
+        updated[updated.findIndex(item => item.type === type)] = full
+        generatedResources.value = updated
+        resource = full
+      }
+    } catch (err) {
+      console.error('Failed to fetch resource content for preview:', err)
+    }
+  }
+
+  // 仅当有实际内容时才打开预览，避免展示空白
+  if (resource?.content) {
+    previewGeneratedResource(resource)
+  }
 }
 
 const previewGeneratedResource = (resource: any) => {
-  handlePreview({ agentId: resource.type, resultData: resource.content, title: resource.title || getResourceTypeLabel(resource.type) })
+  handlePreview({
+    agentId: resource.type || resource.agent_type,
+    resultData: resource.content,
+    title: resource.title || getResourceTypeLabel(resource.type || resource.agent_type),
+    resource: resource,
+  })
 }
 
 function updateOverallProgressFromDag() {
@@ -404,12 +429,25 @@ function applyResourceEvent(event: ResourceEvent) {
 }
 
 function applyTaskStatus(taskStatus: ResourceTaskStatus) {
-  if (taskStatus.run_id) activeRunId.value = taskStatus.run_id
   if (taskStatus.learning_need) naturalInput.value = taskStatus.learning_need
   if (Array.isArray(taskStatus.selected_agents) && taskStatus.selected_agents.length) {
     enabledAgentIds.value = taskStatus.selected_agents.filter(id => AGENT_DISPLAY[id]) as ResourceAgentId[]
   }
-  if (Array.isArray(taskStatus.resources)) generatedResources.value = taskStatus.resources
+  if (Array.isArray(taskStatus.resources)) {
+    // 合并 summary 数据与已有完整数据：
+    // summary（轮询返回）没有 content，不应覆盖已有的 content
+    const existingMap = new Map(
+      generatedResources.value.map(r => [r.type, r] as [string, any])
+    )
+    generatedResources.value = taskStatus.resources.map((summary: any) => {
+      const existing = existingMap.get(summary.type)
+      if (existing && existing.content) {
+        // 保留已有 content，仅更新 summary 层面的字段
+        return { ...existing, ...summary, content: existing.content }
+      }
+      return summary
+    })
+  }
   if (taskStatus.current_message) latestWorkflowMessage.value = taskStatus.current_message
   if (taskStatus.agent_snapshots) {
     Object.values(taskStatus.agent_snapshots).forEach((snapshot) => {
@@ -423,7 +461,6 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
 
         applyResourceEvent({
           sequence: 0,
-          run_id: '',
           resource_id: taskStatus.resource_id,
           event: 'agent.status',
           agent_id: snapshot.agent_id,
@@ -453,15 +490,32 @@ async function completeGeneration(resourceId: number, taskStatus: ResourceTaskSt
   generationFinalized.value = true
   stopPolling()
   stopResourceStream()
-  if (taskStatus.status === 'completed' || taskStatus.status === 'partial_completed') {
-    const bundle = (await getResourceBundle(resourceId)).data.data
+
+  // 尝试获取资源包，无论成功/部分成功/失败
+  let bundle: any = null
+  try {
+    bundle = (await getResourceBundle(resourceId)).data?.data
+  } catch {
+    // bundle 获取失败不影响后续流程
+  }
+
+  const hasResources = Array.isArray(bundle?.resources) && bundle.resources.length > 0
+
+  if (hasResources) {
+    // 有可展示的资源 → 跳转到卡片展示页面
     finalBundle.value = bundle
-    generatedResources.value = Array.isArray(bundle.resources) ? bundle.resources : []
-    resultWarning.value = taskStatus.status === 'partial_completed' ? '部分资源生成失败，以下已完成内容仍可查看。' : ''
+    generatedResources.value = bundle.resources
+    resultWarning.value = taskStatus.status === 'partial_completed'
+      ? '部分资源生成失败，以下已完成内容仍可查看。'
+      : taskStatus.status === 'failed'
+        ? '资源生成未完全成功，以下已完成内容仍可查看。'
+        : ''
     isGenerating.value = false
     currentPhase.value = 'result'
     return
   }
+
+  // 无任何可展示资源 → 显示错误
   generationError.value = '资源生成失败，暂无可展示内容'
   isGenerating.value = false
   toast.error(generationError.value || '资源生成失败，暂无可展示内容')
@@ -492,10 +546,10 @@ function syncStatusSoon(resourceId: number) {
   void checkStatusOnce(resourceId).catch((err: any) => { console.warn('[ResourceGenerator] 状态同步失败:', err) })
 }
 
-function startResourceStream(runId: string, resourceId: number) {
+function startResourceStream(resourceId: number) {
   stopResourceStream()
   startPollingFallback(resourceId)
-  resourceEvents.connect(resourceId, runId, {
+  resourceEvents.connect(resourceId, {
     onEvent: (event) => {
       applyResourceEvent(event)
       if (event.message) latestWorkflowMessage.value = event.message
@@ -527,16 +581,15 @@ const startGeneration = async () => {
       selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })).filter(a => a.enabled),
       agent_configs: agentConfigs.value,
     }
-    const { resource_id, run_id } = (await startResourceGeneration(requestParams)).data.data
+    const { resource_id } = (await startResourceGeneration(requestParams)).data.data
     activeResourceId.value = resource_id
-    activeRunId.value = run_id
     await router.replace({
       query: {
         ...route.query,
         resourceId: String(resource_id),
       },
     })
-    startResourceStream(run_id, resource_id)
+    startResourceStream(resource_id)
   } catch (err: any) {
     generationError.value = err.message || '生成请求失败'
     isGenerating.value = false
@@ -554,7 +607,6 @@ const resetGenerationState = () => {
   isGenerating.value = false
   generationFinalized.value = false
   activeResourceId.value = null
-  activeRunId.value = null
   dagNodeStates.value = {}
   selectedDagNodeId.value = null
   planReady.value = false
@@ -585,11 +637,7 @@ const restoreGeneration = async (resourceId: number) => {
       await completeGeneration(resourceId, taskStatus)
       return
     }
-    if (taskStatus.run_id) {
-      startResourceStream(taskStatus.run_id, resourceId)
-    } else {
-      startPollingFallback(resourceId)
-    }
+    startResourceStream(resourceId)
   } catch (err: any) {
     generationError.value = err.message || '无法恢复资源生成任务'
     isGenerating.value = false
@@ -603,28 +651,15 @@ const restoreGeneration = async (resourceId: number) => {
 
 const resumeLiveGenerationUpdates = async () => {
   const resourceId = activeResourceId.value
-  const runId = activeRunId.value
-  if (!resourceId || !runId || !isGenerating.value || generationFinalized.value) return
+  if (!resourceId || !isGenerating.value || generationFinalized.value) return
   try { await checkStatusOnce(resourceId) } catch { latestWorkflowMessage.value = '状态同步失败，正在重试实时连接' }
-  if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(runId, resourceId)
+  if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(resourceId)
 }
 
 const previewVisible = ref(false)
 const previewData = ref<any>(null)
 const handlePreview = (data: any) => {
-  if (data?.agentId === 'ppt') {
-    const parsed = parsePptDocument(data.resultData)
-    if (!parsed.ok) {
-      console.error('Invalid persisted PPT artifact omitted', {
-        reason: parsed.reason,
-        details: parsed.details,
-      })
-      return
-    }
-    previewData.value = { ...data, resultData: parsed.document }
-  } else {
-    previewData.value = data
-  }
+  previewData.value = data
   previewVisible.value = true
 }
 

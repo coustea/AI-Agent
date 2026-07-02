@@ -1,26 +1,15 @@
 <template>
-  <div class="code-resource" :class="{ compact }" @click="handleMessageClick" ref="rootRef">
-    <ResourceCardWrapper v-if="parsedData || markdownContent" :compact="compact" class="code-card-content">
+  <div class="code-resource" :class="{ compact }">
+    <ResourceCardWrapper v-if="rendererContent" :compact="compact" class="code-card-content">
       <div v-if="!compact && parsedData?.explanation" class="code-header-meta">
         <span class="code-summary-text">{{ parsedData.explanation }}</span>
       </div>
 
       <div class="code-main-body">
-        <div v-if="displayMarkdown" class="markdown-shell code-markdown-shell">
-          <MarkdownPreview :content="displayMarkdown" />
-        </div>
-
-        <div v-else-if="pureCode" class="code-block-wrapper pure-code-block">
-          <div class="code-block-header">
-            <span class="lang-label">{{ pureLanguage.toUpperCase() }}</span>
-            <button class="code-copy-btn" type="button">复制</button>
-          </div>
-          <pre><code :class="`language-${pureLanguage}`">{{ pureCode }}</code></pre>
-        </div>
-
-        <div v-else-if="markdownContent" class="markdown-shell code-markdown-shell">
-          <MarkdownPreview :content="markdownContent" />
-        </div>
+        <MarkdownRenderer
+          class="markdown-shell code-markdown-shell"
+          :content="rendererContent"
+        />
       </div>
 
       <div v-if="!compact && hasExtraInfo" class="code-footer-extras">
@@ -73,16 +62,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed } from 'vue'
 import {
   PhClock as Timer,
   PhWarning as Warning,
   PhNotePencil as EditPen
 } from '@phosphor-icons/vue'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
-import { toast } from 'vue-sonner'
-import MarkdownPreview from '@/shared/ui/MarkdownPreview.vue'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
 
@@ -91,49 +77,10 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
-const rootRef = ref<HTMLElement | null>(null)
-
-type FenceResult = {
-  code: string
-  language: string
-}
-
-const languageAlias: Record<string, string> = {
-  py: 'python',
-  js: 'javascript',
-  ts: 'typescript',
-  sh: 'bash',
-  shell: 'bash',
-  yml: 'yaml',
-  md: 'markdown',
-  cplusplus: 'cpp',
-  'c++': 'cpp',
-}
-
-const knownLanguages = [
-  'python', 'javascript', 'typescript', 'java', 'cpp', 'c', 'csharp', 'go', 'rust',
-  'html', 'css', 'scss', 'vue', 'json', 'yaml', 'markdown', 'bash', 'shell', 'sql', 'xml', 'text'
-]
-
 function toText(value: unknown): string {
   if (typeof value === 'string') return value
   if (value == null) return ''
   return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
-}
-
-function normalizeLanguage(language: unknown, defaultLanguage = 'text'): string {
-  const raw = toText(language || defaultLanguage).trim().toLowerCase()
-  return languageAlias[raw] || raw || defaultLanguage
-}
-
-function unwrapFencedCode(text: string, defaultLanguage = 'text'): FenceResult {
-  const trimmed = text.trim()
-  const match = trimmed.match(/^```([\w#+.-]*)\s*\n([\s\S]*?)\n```$/)
-  if (!match) return { code: text, language: normalizeLanguage(defaultLanguage) }
-  return {
-    language: normalizeLanguage(match[1]!, defaultLanguage),
-    code: match[2]!.trimEnd(),
-  }
 }
 
 function looksLikeMarkdownDocument(text: string): boolean {
@@ -147,6 +94,13 @@ function looksLikeMarkdownDocument(text: string): boolean {
   const hasCodeSignals = /(^|\n)\s*(import|from|def|class|#include|public\s+class|function|const|let|var)\b/.test(text)
 
   return hasMarkdownTitle && hasMarkdownList && !hasCodeSignals
+}
+
+function toFencedMarkdown(code: string, language: unknown): string {
+  const longestFence = Math.max(0, ...Array.from(code.matchAll(/`+/g), (match) => match[0].length))
+  const fence = '`'.repeat(Math.max(3, longestFence + 1))
+  const languageName = toText(language || 'text').trim().toLowerCase().replace(/\s+/g, '-')
+  return `${fence}${languageName}\n${code.trimEnd()}\n${fence}`
 }
 
 const parsedData = computed(() => {
@@ -179,36 +133,16 @@ const parsedData = computed(() => {
   return null
 })
 
-const displayMarkdown = computed(() => {
+const rendererContent = computed(() => {
   const data = parsedData.value
-  if (!data) return ''
+  if (!data) return typeof props.resultData === 'string' ? props.resultData : ''
 
   const explicitMarkdown = data.markdown || data.markdown_content || data.document || data.content_markdown
   if (typeof explicitMarkdown === 'string' && explicitMarkdown.trim()) return explicitMarkdown
 
   const codeContent = toText(data.code || data.full_code || '')
-  return looksLikeMarkdownDocument(codeContent) ? codeContent : ''
-})
-
-const pureCodeInfo = computed(() => {
-  if (displayMarkdown.value) return { code: '', language: 'text' }
-
-  const data = parsedData.value
-  if (!data) return { code: '', language: 'text' }
-
-  const defaultLanguage = normalizeLanguage(data.language || data.lang || 'text')
-  const codeContent = toText(data.code || data.full_code || '')
-  if (!codeContent.trim()) return { code: '', language: defaultLanguage }
-
-  return unwrapFencedCode(codeContent, defaultLanguage)
-})
-
-const pureCode = computed(() => pureCodeInfo.value.code)
-const pureLanguage = computed(() => pureCodeInfo.value.language || 'text')
-
-const markdownContent = computed(() => {
-  if (parsedData.value) return ''
-  return typeof props.resultData === 'string' ? props.resultData : ''
+  if (!codeContent.trim() || looksLikeMarkdownDocument(codeContent)) return codeContent
+  return toFencedMarkdown(codeContent, data.language || data.lang || 'text')
 })
 
 const hasExtraInfo = computed(() => {
@@ -221,139 +155,6 @@ const hasComplexity = computed(() => {
   return !!(complexity?.time || complexity?.space)
 })
 
-function resolveLanguage(code: HTMLElement): string {
-  const className = code.className || ''
-  const match = className.match(/language-([\w#+.-]+)/)
-  return normalizeLanguage(match?.[1] || pureLanguage.value || 'text').toUpperCase()
-}
-
-function looksLikeDetachedCodeToolbar(element: HTMLElement): boolean {
-  const text = element.innerText.replace(/\s+/g, '').toLowerCase()
-  if (!text || text.length > 28) return false
-
-  const copyWords = ['复制', 'copy', 'copied', '已复制']
-  const variants = knownLanguages.flatMap((lang) => [
-    lang,
-    `${lang}复制`,
-    `${lang}copy`,
-    `${lang}copied`,
-    `${lang}已复制`,
-  ])
-
-  return variants.includes(text) || copyWords.includes(text)
-}
-
-function hideDetachedCodeToolbar(pre: HTMLElement) {
-  const previous = pre.previousElementSibling as HTMLElement | null
-  if (previous && looksLikeDetachedCodeToolbar(previous)) {
-    previous.dataset.hiddenByCodeView = 'true'
-    previous.style.display = 'none'
-  }
-
-  const parent = pre.parentElement as HTMLElement | null
-  if (!parent) return
-
-  Array.from(parent.children).forEach((child) => {
-    if (child === pre || !(child instanceof HTMLElement)) return
-    if (child.dataset.hiddenByCodeView === 'true') return
-    if (looksLikeDetachedCodeToolbar(child)) {
-      child.dataset.hiddenByCodeView = 'true'
-      child.style.display = 'none'
-    }
-  })
-}
-
-// 核心优化：结构化渲染与高亮
-const performHighlight = async () => {
-  await nextTick()
-  if (!rootRef.value) return
-
-  const preBlocks = rootRef.value.querySelectorAll<HTMLElement>('pre')
-  preBlocks.forEach((pre) => {
-    const code = pre.querySelector<HTMLElement>('code')
-    if (!code) return
-
-    hideDetachedCodeToolbar(pre)
-
-    // 对当前 Markdown 协议中的代码块执行高亮
-    if (!code.dataset.highlighted && !code.classList.contains('hljs')) {
-      try {
-        hljs.highlightElement(code)
-      } catch {}
-    }
-
-    const langText = resolveLanguage(code)
-
-    // 如果已经被包裹（例如纯代码模式或已处理过的Markdown），只需更新语言标签
-    if (pre.parentElement?.classList.contains('code-block-wrapper')) {
-      const langLabel = pre.parentElement.querySelector('.lang-label')
-      if (langLabel) (langLabel as HTMLElement).innerText = langText
-      return
-    }
-
-    // --- 对未经包裹的 Markdown 生成的 <pre> 进行结构重组 ---
-    const wrapper = document.createElement('div')
-    wrapper.className = 'code-block-wrapper'
-
-    const header = document.createElement('div')
-    header.className = 'code-block-header'
-
-    const langLabel = document.createElement('span')
-    langLabel.className = 'lang-label'
-    langLabel.innerText = langText
-
-    const btn = document.createElement('button')
-    btn.className = 'code-copy-btn'
-    btn.innerText = '复制'
-    btn.type = 'button'
-
-    header.appendChild(langLabel)
-    header.appendChild(btn)
-
-    // 将新建的容器插入原先 <pre> 的位置，并把 <pre> 移入容器中
-    pre.parentNode?.insertBefore(wrapper, pre)
-    wrapper.appendChild(header)
-    wrapper.appendChild(pre)
-
-    // 移除 markdown 解析器可能自带的旧复制按钮
-    const oldBtns = pre.querySelectorAll('button')
-    oldBtns.forEach(b => b.remove())
-  })
-}
-
-const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.success({ message: '代码已复制', plain: true })
-  } catch {
-    toast.error({ message: '复制失败，请重试', plain: true })
-  }
-}
-
-const handleMessageClick = (event: MouseEvent) => {
-  const target = event.target as HTMLElement
-  if (!target?.classList.contains('code-copy-btn')) return
-
-  // 从顶层卡片向下寻找 code 内容，避免将数千行代码写入 data 属性
-  const wrapper = target.closest('.code-block-wrapper')
-  const codeNode = wrapper?.querySelector('code')
-  const codeContent = codeNode?.innerText || codeNode?.textContent || ''
-
-  if (!codeContent) return
-
-  copyToClipboard(codeContent)
-  const originalText = target.innerText
-  target.innerText = '已复制'
-  target.classList.add('copied')
-
-  window.setTimeout(() => {
-    target.innerText = originalText
-    target.classList.remove('copied')
-  }, 1400)
-}
-
-onMounted(performHighlight)
-watch([parsedData, displayMarkdown, pureCode, markdownContent], performHighlight, { flush: 'post' })
 </script>
 
 <style scoped>
@@ -468,34 +269,6 @@ watch([parsedData, displayMarkdown, pureCode, markdownContent], performHighlight
   text-transform: uppercase;
 }
 
-.code-resource :deep(.code-copy-btn) {
-  font-size: 0.75rem;
-  color: #64748b;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  padding: 4px 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: var(--font-sans, system-ui, sans-serif);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  outline: none;
-}
-
-.code-resource :deep(.code-copy-btn:hover) {
-  background: #f1f5f9;
-  color: #334155;
-  border-color: #94a3b8;
-}
-
-.code-resource :deep(.code-copy-btn.copied) {
-  color: #059669;
-  border-color: #34d399;
-  background: #ecfdf5;
-}
-
 /* 内部代码区域完全撑开显示 */
 .code-resource :deep(.code-block-wrapper pre) {
   margin: 0 !important;
@@ -520,11 +293,6 @@ watch([parsedData, displayMarkdown, pureCode, markdownContent], performHighlight
   line-height: 1.76;
   white-space: pre;
   tab-size: 4;
-}
-
-.code-resource :deep(.hljs) {
-  background: transparent !important;
-  color: var(--code-text) !important;
 }
 
 .code-resource :deep(pre::-webkit-scrollbar) {
@@ -557,54 +325,6 @@ watch([parsedData, displayMarkdown, pureCode, markdownContent], performHighlight
   font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
   font-size: 0.86em;
   font-weight: 600;
-}
-
-/* --- 隐藏兜底工具栏 --- */
-.code-resource :deep([data-hidden-by-code-view="true"]) {
-  display: none !important;
-}
-
-/* --- hljs 浅色主题配色调优 --- */
-.code-resource :deep(.hljs-comment),
-.code-resource :deep(.hljs-quote) {
-  color: #6a737d !important;
-  font-style: italic;
-}
-
-.code-resource :deep(.hljs-keyword),
-.code-resource :deep(.hljs-selector-tag) {
-  color: #d73a49 !important;
-  font-weight: 700;
-}
-
-.code-resource :deep(.hljs-string),
-.code-resource :deep(.hljs-attr),
-.code-resource :deep(.hljs-symbol) {
-  color: #22863a !important;
-}
-
-.code-resource :deep(.hljs-title),
-.code-resource :deep(.hljs-title.function_),
-.code-resource :deep(.hljs-section) {
-  color: #6f42c1 !important;
-  font-weight: 700;
-}
-
-.code-resource :deep(.hljs-number),
-.code-resource :deep(.hljs-literal),
-.code-resource :deep(.hljs-boolean) {
-  color: #005cc5 !important;
-}
-
-.code-resource :deep(.hljs-built_in),
-.code-resource :deep(.hljs-type),
-.code-resource :deep(.hljs-class .hljs-title) {
-  color: #e36209 !important;
-}
-
-.code-resource :deep(.hljs-variable),
-.code-resource :deep(.hljs-template-variable) {
-  color: #24292f !important;
 }
 
 /* --- 底部执行标签栏 --- */

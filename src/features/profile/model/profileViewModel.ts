@@ -2,16 +2,13 @@ export function getRadarChartData(scoreData: any) {
   const scores = scoreData?.metrics?.dimension_scores || {}
   const backendDimensions = Array.isArray(scoreData?.dimensions) ? scoreData.dimensions : []
   const dimensionMapping: Array<{ key: string; label: string }> = [
-    { key: 'major_background', label: '专业背景' },
-    { key: 'student_stage', label: '学习阶段' },
-    { key: 'course_context', label: '课程上下文' },
     { key: 'knowledge_level', label: '知识基础' },
-    { key: 'learning_goal_type', label: '学习目标' },
-    { key: 'weak_knowledge_points', label: '薄弱知识点' },
     { key: 'cognitive_style', label: '认知风格' },
-    { key: 'resource_preference_weight', label: '资源偏好' },
-    { key: 'learning_pace', label: '学习节奏' },
-    { key: 'practice_profile', label: '实践能力' }
+    { key: 'weak_knowledge_points', label: '易错点偏好' },
+    { key: 'knowledge_gap_pattern', label: '知识缺口模式' },
+    { key: 'learning_goal_type', label: '学习目标导向' },
+    { key: 'difficulty_tolerance', label: '难度耐受度' },
+    { key: 'self_correction_ability', label: '自纠能力水平' },
   ]
 
   const dimensions = backendDimensions.length > 0

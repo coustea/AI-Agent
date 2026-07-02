@@ -279,64 +279,9 @@
 
               <!-- PPT Agent -->
               <template v-if="agent.id === 'ppt'">
-                <div class="ctrl-group flex flex-col gap-1.5">
-                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">视觉主题模板</label>
-                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
-                    <button
-                      v-for="opt in [
-                        { label: '科技蓝', value: 'logic-blue' },
-                        { label: '纸墨白', value: 'paper-light' },
-                        { label: '实验室', value: 'lab-light' }
-                      ]"
-                      :key="opt.value"
-                      type="button"
-                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
-                      :class="localConfigs.ppt.theme_id === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
-                      @click="setPptThemeId(opt.value)"
-                    >
-                      {{ opt.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div class="ctrl-group flex flex-col gap-1.5">
-                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">讲解路线</label>
-                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
-                    <button
-                      v-for="opt in [
-                        { label: '概念阐述', value: 'conceptual' },
-                        { label: '过程推演', value: 'procedural' }
-                      ]"
-                      :key="opt.value"
-                      type="button"
-                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
-                      :class="localConfigs.ppt.explanation_style === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
-                      @click="setPptExplanationStyle(opt.value)"
-                    >
-                      {{ opt.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div class="ctrl-group flex flex-col gap-1.5">
-                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">视觉元素占比</label>
-                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
-                    <button
-                      v-for="opt in [
-                        { label: '文字极简', value: 'minimal' },
-                        { label: '图文并茂', value: 'balanced' },
-                        { label: '图解加持', value: 'rich' }
-                      ]"
-                      :key="opt.value"
-                      type="button"
-                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
-                      :class="localConfigs.ppt.visual_emphasis === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
-                      @click="setPptVisualEmphasis(opt.value)"
-                    >
-                      {{ opt.label }}
-                    </button>
-                  </div>
-                </div>
+                <p class="m-0 text-sm leading-6 text-slate-500">
+                  系统将根据内容、受众与演示密度自动选择视觉方向。
+                </p>
               </template>
 
               <!-- Video Agent -->
@@ -525,15 +470,6 @@ const setQuizDifficultyMode = (val: any) => {
 }
 const setReadingLanguagePreference = (val: any) => {
   if (localConfigs.value.reading) localConfigs.value.reading.language_preference = val
-}
-const setPptThemeId = (val: any) => {
-  if (localConfigs.value.ppt) localConfigs.value.ppt.theme_id = val
-}
-const setPptExplanationStyle = (val: any) => {
-  if (localConfigs.value.ppt) localConfigs.value.ppt.explanation_style = val
-}
-const setPptVisualEmphasis = (val: any) => {
-  if (localConfigs.value.ppt) localConfigs.value.ppt.visual_emphasis = val
 }
 const setVideoStyle = (val: any) => {
   if (localConfigs.value.video) localConfigs.value.video.style = val

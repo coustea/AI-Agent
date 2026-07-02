@@ -93,7 +93,7 @@
             </div>
 
             <div class="preview-main">
-              <div class="preview-text" v-html="renderInline(question.content)"></div>
+              <MarkdownRenderer class="preview-text" :content="String(question.content || '')" />
             </div>
           </article>
         </div>
@@ -109,6 +109,8 @@
 </template>
 
 <script setup lang="ts">
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
+
 defineProps<{
   form: { title: string; subject: string; difficulty: string; duration: number }
   typeCounts: { type: string; label: string; count: number }[]
@@ -131,18 +133,6 @@ function difficultyClass(diff: string) {
   return 'text-danger'
 }
 
-function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-}
 </script>
 
 <style scoped>

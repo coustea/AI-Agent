@@ -17,7 +17,7 @@ export type ChatConnectionStatus =
 export interface ChatEventHandlers {
   onEvent?: (event: ChatEvent) => void
   onContentDelta?: (delta: string, event: ChatEvent) => void
-  onToolStatus?: (event: ChatEvent) => void
+  onActivity?: (event: ChatEvent) => void
   onDiagramReady?: (event: ChatEvent) => void
   onCompleted?: (event: ChatEvent) => void
   onFailed?: (error: Error, event: ChatEvent) => void
@@ -101,13 +101,17 @@ export function useChatEvents() {
         handlers.onContentDelta?.(delta, event)
       }
 
-      // 工具状态
+      if (event.event === 'content.replace') {
+        content.value = String(event.data.content ?? '')
+      }
+
+      // 后端语义活动状态
       if (
-        event.event === 'tool.running' ||
-        event.event === 'tool.completed' ||
-        event.event === 'tool.failed'
+        event.event === 'activity.running' ||
+        event.event === 'activity.completed' ||
+        event.event === 'activity.failed'
       ) {
-        handlers.onToolStatus?.(event)
+        handlers.onActivity?.(event)
       }
 
       // 图解就绪

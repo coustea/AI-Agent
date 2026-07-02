@@ -27,10 +27,17 @@ export default defineConfig(({ mode }) => {
           ws: true,
           changeOrigin: true,
         },
+        '/static': {
+          target: apiProxyTarget,
+          changeOrigin: true,
+        },
       },
       watch: {
         ignored: ['**/server/**'],
       },
+    },
+    worker: {
+      format: 'es',
     },
     build: {
       rollupOptions: {
@@ -44,9 +51,12 @@ export default defineConfig(({ mode }) => {
 
             if (
               id.includes('markmap') ||
+              id.includes('shiki') ||
+              id.includes('@shikijs') ||
               id.includes('katex') ||
-              id.includes('markdown-it') ||
-              id.includes('highlight.js')
+              id.includes('remark-') ||
+              id.includes('rehype-') ||
+              id.includes('unified')
             ) {
               return 'vendor-renderers'
             }

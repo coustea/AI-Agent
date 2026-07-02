@@ -286,15 +286,27 @@
 
       </div>
 
-      <ErrorStatePanel
-        v-else
-        :is-loading="loading"
-        :loading-title="'正在同步学习控制台'"
-        :loading-message="'正在读取画像、路径、资源和学习事件...'"
-        :error-title="'首页数据加载失败'"
-        :error-message="loadError || '暂时无法获取数据'"
-        @retry="loadAllData"
-      />
+      <!-- Loading State -->
+      <div v-if="loading" class="loading-state">
+        <div class="loading-pulse-dots">
+          <span class="pulse-dot"></span>
+          <span class="pulse-dot"></span>
+          <span class="pulse-dot"></span>
+        </div>
+        <p class="loading-label">正在同步学习控制台</p>
+        <p class="loading-hint">读取画像、路径、资源与学习事件</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="loadError" class="loading-state">
+        <div class="error-mark">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </div>
+        <p class="error-label">{{ loadError }}</p>
+        <button class="error-retry" @click="loadAllData">重新加载</button>
+      </div>
     </div>
   </main>
 </template>
@@ -302,7 +314,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import ErrorStatePanel from '@/shared/ui/ErrorStatePanel.vue'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -311,14 +322,10 @@ import {
   getContinueLearning,
   getQuickActions,
   getRecentResources,
-  getDailyChallenge,
-  getStudyStats,
   type RecommendationData,
   type ProfileRadarData,
   type ContinueLearningData,
   type QuickActionsData,
-  type DailyChallengeData,
-  type StudyStatsData,
   type HomeActionItem,
   type RecentResourceItem,
 } from '@/features/dashboard/api/home'
@@ -352,8 +359,6 @@ const profileRadarData = ref<ProfileRadarData | null>(null)
 const continueLearningData = ref<ContinueLearningData | null>(null)
 const quickActionsData = ref<QuickActionsData | null>(null)
 const recentResourcesData = ref<RecentResourceItem[]>([])
-const dailyChallengeData = ref<DailyChallengeData | null>(null)
-const studyStatsData = ref<StudyStatsData | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 
@@ -650,16 +655,12 @@ const loadAllData = async () => {
       continueRes,
       actionsRes,
       resourcesRes,
-      challengeRes,
-      statsRes,
     ] = await Promise.all([
       getRecommendation(),
       getProfileRadar(),
       getContinueLearning(),
       getQuickActions(),
       getRecentResources(),
-      getDailyChallenge(),
-      getStudyStats(),
     ])
 
     recommendationData.value = recRes.data.data
@@ -667,8 +668,6 @@ const loadAllData = async () => {
     continueLearningData.value = continueRes.data.data
     quickActionsData.value = actionsRes.data.data
     recentResourcesData.value = resourcesRes.data.data ?? []
-    dailyChallengeData.value = challengeRes.data.data ?? null
-    studyStatsData.value = statsRes.data.data
   } catch (error) {
     console.error('Failed to load dashboard data', error)
     recommendationData.value = null
@@ -758,6 +757,135 @@ watch(
 .slide-fade-leave-to {
   opacity: 0;
   transform: scale(0.99);
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 52vh;
+  gap: 0;
+  animation: load-enter 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.loading-pulse-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-action);
+  animation: dot-breathe 1.6s ease-in-out infinite;
+}
+
+.pulse-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.pulse-dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.pulse-dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes dot-breathe {
+  0%, 80%, 100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes load-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loading-label {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
+  letter-spacing: -0.01em;
+}
+
+.loading-hint {
+  margin: 6px 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  letter-spacing: 0.01em;
+}
+
+/* Error State */
+.error-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.error-label {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+  max-width: 320px;
+}
+
+.error-retry {
+  margin-top: 12px;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  background: var(--color-action);
+  color: var(--color-text-strong);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  border: none;
+  cursor: pointer;
+  transition: var(--btn-transition);
+  letter-spacing: 0.01em;
+}
+
+.error-retry:hover {
+  background: var(--color-action-hover);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot {
+    animation: none;
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  .loading-state {
+    animation: none;
+  }
 }
 
 @media (max-width: 1024px) {

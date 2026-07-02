@@ -43,7 +43,7 @@
           </div>
         </div>
 
-        <div class="question-stem" v-html="renderInline(question.content)"></div>
+        <MarkdownRenderer class="question-stem" :content="String(question.content || '')" />
 
         <div v-if="isOptionQuestion(question)" class="option-list">
           <button
@@ -62,7 +62,7 @@
             @click="selectOption(question, String(key))"
           >
             <span class="option-key">{{ key }}</span>
-            <span class="option-text" v-html="renderInline(text as string)"></span>
+            <MarkdownRenderer class="option-text" :content="String(text || '')" />
           </button>
         </div>
 
@@ -109,10 +109,11 @@
 
         <div v-if="openedAnalysis.has(question.id)" class="analysis-box">
           <div class="analysis-head">
-            <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
+            <strong>参考答案：</strong>
+            <MarkdownRenderer :content="String(question.answer || '')" />
             <span v-if="review[question.id]?.feedback">{{ review[question.id].feedback }}</span>
           </div>
-          <div class="analysis-body" v-html="renderInline(question.analysis || '暂无解析')"></div>
+          <MarkdownRenderer class="analysis-body" :content="String(question.analysis || '暂无解析')" />
           <div v-if="question.knowledge_points?.length" class="knowledge-points">
             <span v-for="point in question.knowledge_points" :key="point">{{ point }}</span>
           </div>
@@ -136,6 +137,7 @@
 import { nextTick, ref, watch } from 'vue'
 import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 const props = defineProps<{
   questions: any[]
@@ -243,10 +245,6 @@ function hasAnswer(question: any) {
   return !!ans && String(ans).trim().length > 0
 }
 
-function formatAnswer(ans: string) {
-  return String(ans || '').replace(/,/g, '、')
-}
-
 function difficultyClass(diff: string) {
   if (diff === '简单') return 'success-text'
   if (diff === '中等') return 'warning-text'
@@ -254,18 +252,6 @@ function difficultyClass(diff: string) {
   return 'danger-text'
 }
 
-function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-}
 </script>
 
 <style scoped>

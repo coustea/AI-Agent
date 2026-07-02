@@ -25,7 +25,7 @@
         </div>
       </div>
 
-      <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
+      <MarkdownRenderer class="question-content" :content="String(dailyQuestion.content || '')" />
 
       <AlgorithmVisualizer
         v-if="visualizerOpen && canVisualize"
@@ -47,6 +47,7 @@
 import { computed, ref, watch } from 'vue'
 import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 interface DailyQuestion {
   subject: string
@@ -85,18 +86,6 @@ function toggleVisualizer() {
   visualizerOpen.value = !visualizerOpen.value
 }
 
-function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-}
 </script>
 
 <style scoped>

@@ -1,131 +1,21 @@
 <template>
   <div class="tutor-message-content">
-    <div
+    <MarkdownRenderer
       class="stream-markdown markdown-body tutor-markdown-block"
       :class="{ 'is-streaming': props.isStreaming }"
-      v-html="streamingHtml"
-      @click="handleContentClick"
-    ></div>
+      :content="props.content"
+      :streaming="props.isStreaming"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
-import { toast } from 'vue-sonner'
-import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 const props = defineProps<{
   content: string
   isStreaming?: boolean
 }>()
-
-const streamingHtml = ref('')
-let renderTimer: ReturnType<typeof setTimeout> | null = null
-
-const normalizeComparisonTables = (text: string): string => {
-  if (!text || !text.includes('对比项')) return text
-
-  return text
-    .split('\n')
-    .map((line) => {
-      if (!line.trim()) return line
-      if (line.includes('对比项') && !line.includes('|')) {
-        return line.replace(/\s{2,}/g, ' | ').replace(/^/, '| ').replace(/$/, ' |')
-      }
-      if (/^-{3,}\s+-{3,}/.test(line.trim()) && !line.includes('|')) {
-        return line.replace(/\s{2,}/g, ' | ').replace(/^/, '| ').replace(/$/, ' |')
-      }
-      if (/^\S+\s{2,}\S+/.test(line) && !line.includes('|')) {
-        return line.replace(/\s{2,}/g, ' | ').replace(/^/, '| ').replace(/$/, ' |')
-      }
-      return line
-    })
-    .join('\n')
-}
-
-const renderContentHtml = () => {
-  const normalized = normalizeComparisonTables(props.content || '')
-  streamingHtml.value = renderStreamingMarkdownHtml(normalized, props.isStreaming)
-}
-
-const handleContentClick = async (event: MouseEvent) => {
-  const target = event.target as HTMLElement
-  if (!target.classList.contains('code-block-copy-btn')) return
-
-  const wrapper = target.closest('.code-block-wrapper')
-  const code = wrapper?.querySelector('code')
-  if (!code) return
-
-  try {
-    await navigator.clipboard.writeText(code.textContent || '')
-    const originalText = target.innerText
-    target.innerText = '已复制'
-    target.classList.add('copied')
-    toast.success('代码已复制到剪贴板')
-
-    setTimeout(() => {
-      target.innerText = originalText
-      target.classList.remove('copied')
-    }, 1600)
-  } catch (error) {
-    console.error('Copy failed:', error)
-    toast.error('复制失败，请重试')
-  }
-}
-
-const shouldRenderMarkdownNow = (text: string): boolean => {
-  if (!text) return true
-  return /(\n\n|\r\n\r\n|\n[-*]\s|\n\d+\.\s|\n#{1,6}\s|[。！？?!?]\s*$|`{3,}\s*$)/.test(text)
-}
-
-const commitStreamingHtml = () => {
-  renderTimer = null
-  renderContentHtml()
-}
-
-watch(
-  () => props.content,
-  () => {
-    if (!props.isStreaming) {
-      if (renderTimer) {
-        clearTimeout(renderTimer)
-        renderTimer = null
-      }
-      commitStreamingHtml()
-      return
-    }
-
-    if (shouldRenderMarkdownNow(props.content || '')) {
-      if (renderTimer) {
-        clearTimeout(renderTimer)
-        renderTimer = null
-      }
-      commitStreamingHtml()
-      return
-    }
-
-    if (renderTimer) return
-    renderTimer = setTimeout(commitStreamingHtml, 75)
-  },
-  { immediate: true },
-)
-
-watch(
-  () => props.isStreaming,
-  (isStreaming) => {
-    if (!isStreaming) {
-      if (renderTimer) {
-        clearTimeout(renderTimer)
-        renderTimer = null
-      }
-      commitStreamingHtml()
-    }
-  },
-)
-
-onBeforeUnmount(() => {
-  if (renderTimer) clearTimeout(renderTimer)
-})
 </script>
 
 <style scoped>
@@ -145,7 +35,7 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
-.stream-markdown.is-streaming::after {
+.stream-markdown :deep(.stream-caret) {
   display: inline-block;
   width: 2px;
   height: 1.05em;
@@ -357,7 +247,7 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-markdown.is-streaming::after {
+  .stream-markdown :deep(.stream-caret) {
     animation: none;
   }
 }

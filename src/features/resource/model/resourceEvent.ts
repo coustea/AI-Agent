@@ -27,7 +27,6 @@ export const RESOURCE_TERMINAL_EVENTS: Set<ResourceEventName> = new Set([
 
 export interface ResourceEvent {
   sequence: number
-  run_id: string
   resource_id: number
   event: ResourceEventName
   agent_id: string | null

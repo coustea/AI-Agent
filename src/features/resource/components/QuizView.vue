@@ -11,10 +11,10 @@
                 {{ getDifficultyText(question.difficulty) }}
               </span>
             </div>
-            <div
+            <MarkdownRenderer
               class="quiz-text quiz-rich-text"
-              v-html="renderQuizHtml(question.stem || question.question || '题目内容')"
-            ></div>
+              :content="String(question.stem || question.question || '题目内容')"
+            />
           </div>
         </div>
 
@@ -38,10 +38,10 @@
               <div class="check-box"></div>
               <span v-if="option.label" class="option-label">{{ option.label }}</span>
             </div>
-            <div
+            <MarkdownRenderer
               class="option-content quiz-rich-text"
-              v-html="renderQuizHtml(typeof option === 'string' ? option : option.content)"
-            ></div>
+              :content="String(typeof option === 'string' ? option : option.content || '')"
+            />
 
             <div v-if="showAnswers[index]" class="option-status-wrap">
               <Select class='w-4 h-4 inline-block align-middle' />
@@ -84,10 +84,10 @@
               <span class="header-text">正确答案</span>
             </div>
             <div class="answer-content">
-              <div
+              <MarkdownRenderer
                 class="quiz-rich-text"
-                v-html="renderQuizHtml(Array.isArray(question.answer) ? question.answer.join(', ') : question.answer)"
-              ></div>
+                :content="String(Array.isArray(question.answer) ? question.answer.join(', ') : question.answer)"
+              />
             </div>
           </div>
 
@@ -102,15 +102,15 @@
             <div class="explanation-content">
               <div v-if="question.reference_answer" class="ref-answer">
                 <div class="ref-label">参考内容 / REFERENCE:</div>
-                <div
+                <MarkdownRenderer
                   class="quiz-rich-text reference-answer-render"
-                  v-html="renderQuizHtml(question.reference_answer)"
-                ></div>
+                  :content="String(question.reference_answer)"
+                />
               </div>
-              <div
+              <MarkdownRenderer
                 class="analysis-text quiz-rich-text"
-                v-html="renderQuizHtml(question.explanation || question.analysis)"
-              ></div>
+                :content="String(question.explanation || question.analysis || '')"
+              />
             </div>
           </div>
         </template>
@@ -139,7 +139,7 @@ import {
   PhArrowRight as ArrowRight,
   PhX as Close
 } from '@phosphor-icons/vue'
-import { renderStreamingMarkdownHtml } from '@/shared/utils/markdown'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'
 
@@ -153,12 +153,6 @@ const visibleQuestions = computed(() => (props.compact ? questions.value.slice(0
 
 const userAnswers = ref<Record<number, any>>({})
 const showAnswers = ref<Record<number, boolean>>({})
-
-const renderQuizHtml = (content?: string) => {
-  const text = String(content || '').trim()
-  if (!text) return ''
-  return renderStreamingMarkdownHtml(text)
-}
 
 const isChoiceType = (q: any) => {
   const type = (q.type || q.question_type)?.toLowerCase() || ''

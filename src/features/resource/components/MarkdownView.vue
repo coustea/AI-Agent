@@ -3,7 +3,7 @@
     <ResourceCardWrapper v-if="content" :compact="compact">
 
 
-      <MarkdownPreview class="markdown-shell" :content="content" />
+      <MarkdownRenderer class="markdown-shell" :content="content" />
 
       <div class="frame-footer">
         <span class="mono-tag">EOF_READY</span>
@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import MarkdownPreview from '@/shared/ui/MarkdownPreview.vue'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
 import { getMarkdownContent, type ResourceArtifactLike } from './resourceViewUtils'
 
@@ -177,46 +177,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 
-/* highlight.js 浅色语法高亮覆盖 */
-.markdown-shell :deep(.hljs) {
-  background: transparent !important;
-  color: #334155 !important;
-}
-
-.markdown-shell :deep(.hljs-keyword),
-.markdown-shell :deep(.hljs-selector-tag),
-.markdown-shell :deep(.hljs-title.function_) {
-  color: #7c3aed;
-}
-
-.markdown-shell :deep(.hljs-string),
-.markdown-shell :deep(.hljs-attr),
-.markdown-shell :deep(.hljs-symbol) {
-  color: #059669;
-}
-
-.markdown-shell :deep(.hljs-number),
-.markdown-shell :deep(.hljs-literal),
-.markdown-shell :deep(.hljs-boolean) {
-  color: #ea580c;
-}
-
-.markdown-shell :deep(.hljs-comment) {
-  color: var(--color-text-faint);
-  font-style: italic;
-}
-
-.markdown-shell :deep(.hljs-built_in),
-.markdown-shell :deep(.hljs-type),
-.markdown-shell :deep(.hljs-class .hljs-title) {
-  color: var(--color-info);
-}
-
-.markdown-shell :deep(.hljs-variable),
-.markdown-shell :deep(.hljs-template-variable) {
-  color: #be123c;
-}
-
 /* Shiki 浅色主题兜底 */
 .markdown-shell :deep(.shiki) {
   background: var(--color-bg) !important;
@@ -230,7 +190,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
 /* 防止第三方 Markdown 样式带入黑色背景 */
 .markdown-shell :deep(pre),
 .markdown-shell :deep(code),
-.markdown-shell :deep(.hljs),
 .markdown-shell :deep(.shiki) {
   text-shadow: none !important;
 }

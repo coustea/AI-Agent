@@ -78,7 +78,7 @@ export interface ProfileOnboardingUpdate {
 }
 
 export interface ProfileOnboardingUpdateResult {
-  profile: ProfileData
+  inference_scheduled: boolean
 }
 
 

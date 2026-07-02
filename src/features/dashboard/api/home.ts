@@ -104,26 +104,7 @@ export function getRecentResources() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Daily Challenge
-// ---------------------------------------------------------------------------
-
-export interface DailyChallengeData {
-  id: string
-  subject: string
-  content: string
-  difficulty: string | null
-  type: string
-  estimated_minutes: number
-  source: string
-  reason: string
-}
-
-export function getDailyChallenge() {
-  return http.get<ApiResponse<DailyChallengeData | null>>('/ai/dashboard/daily-challenge')
-}
-
-// ---------------------------------------------------------------------------
-// 7. Study Stats
+// 6. Study Stats
 // ---------------------------------------------------------------------------
 
 export interface StudyStatsData {

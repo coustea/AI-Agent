@@ -15,7 +15,7 @@
           <span>{{ drillQuestion.type }}</span>
         </div>
 
-        <div class="drill-stem" v-html="renderInline(drillQuestion.content)"></div>
+        <MarkdownRenderer class="drill-stem" :content="String(drillQuestion.content || '')" />
 
         <div v-if="isOptionQuestion(drillQuestion)" class="drill-options">
           <button
@@ -34,7 +34,7 @@
             @click="$emit('select-drill-option', String(key))"
           >
             <span class="drill-option-key">{{ key }}</span>
-            <span class="drill-option-text" v-html="renderInline(text as string)"></span>
+            <MarkdownRenderer class="drill-option-text" :content="String(text || '')" />
           </button>
         </div>
 
@@ -63,7 +63,10 @@
 
         <div v-if="drillSubmitted" class="drill-result">
           <strong>{{ drillCorrect ? '已掌握' : '仍需复习' }}</strong>
-          <p>参考答案：{{ formatAnswer(drillQuestion.answer) }}</p>
+          <div>
+            <span>参考答案：</span>
+            <MarkdownRenderer :content="String(drillQuestion.answer || '')" />
+          </div>
           <p v-if="drillReview?.feedback">{{ drillReview.feedback }}</p>
         </div>
       </div>
@@ -113,8 +116,9 @@
           <div class="wrong-summary">{{ summarizeText(question.content) }}</div>
 
           <div v-if="openedAnalysis.has(question.id)" class="wrong-analysis">
-            <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
-            <div v-html="renderInline(question.analysis || '暂无解析')"></div>
+            <strong>参考答案：</strong>
+            <MarkdownRenderer :content="String(question.answer || '')" />
+            <MarkdownRenderer :content="String(question.analysis || '暂无解析')" />
           </div>
 
           <AlgorithmVisualizer v-if="openedVisualizer.has(question.id)" :question="question" />
@@ -157,6 +161,7 @@
 import { computed, ref } from 'vue'
 import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
+import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 const props = defineProps<{
   questions: any[]
@@ -241,10 +246,6 @@ function isCorrectOption(question: any, key: string) {
   return correctKeys.includes(key)
 }
 
-function formatAnswer(ans: string) {
-  return String(ans || '').replace(/,/g, '、')
-}
-
 function summarizeText(text: string) {
   const plain = String(text || '')
     .replace(/\s+/g, ' ')
@@ -253,18 +254,6 @@ function summarizeText(text: string) {
   return plain.length > 120 ? `${plain.slice(0, 120)}...` : plain
 }
 
-function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-}
 </script>
 
 <style scoped>

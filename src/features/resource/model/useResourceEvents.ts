@@ -25,7 +25,6 @@ function parseResourceEvent(raw: MessageEvent): ResourceEvent | null {
     const data = JSON.parse(raw.data)
     return {
       sequence: data.sequence,
-      run_id: data.run_id,
       resource_id: data.resource_id,
       event: data.event as ResourceEventName,
       agent_id: data.agent_id,
@@ -40,7 +39,6 @@ function parseResourceEvent(raw: MessageEvent): ResourceEvent | null {
 }
 
 export function useResourceEvents() {
-  const runId = ref<string | null>(null)
   const resourceId = ref<number | null>(null)
   const connectionStatus = ref<ResourceConnectionStatus>('idle')
   const events = ref<ResourceEvent[]>([])
@@ -55,7 +53,6 @@ export function useResourceEvents() {
 
   const reset = () => {
     close()
-    runId.value = null
     resourceId.value = null
     connectionStatus.value = 'idle'
     events.value = []
@@ -63,17 +60,13 @@ export function useResourceEvents() {
     lastSequence.value = 0
   }
 
-  const connect = (nextResourceId: number, nextRunId: string, handlers: ResourceEventHandlers = {}) => {
-    const reconnectingSameRun = (
-      resourceId.value === nextResourceId
-      && runId.value === nextRunId
-    )
+  const connect = (nextResourceId: number, handlers: ResourceEventHandlers = {}) => {
+    const reconnectingSameResource = resourceId.value === nextResourceId
     close()
-    if (!reconnectingSameRun) {
+    if (!reconnectingSameResource) {
       events.value = []
       lastSequence.value = 0
     }
-    runId.value = nextRunId
     resourceId.value = nextResourceId
     connectionStatus.value = 'connecting'
     error.value = null
@@ -123,7 +116,6 @@ export function useResourceEvents() {
   }
 
   return {
-    runId: readonly(runId),
     resourceId: readonly(resourceId),
     connectionStatus: readonly(connectionStatus),
     events: readonly(events),

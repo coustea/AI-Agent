@@ -3,14 +3,11 @@
 
 export type ChatEventName =
   | 'run.started'
-  | 'thinking'
-  | 'tool.running'
-  | 'tool.completed'
-  | 'tool.failed'
-  | 'attachment.running'
-  | 'attachment.completed'
-  | 'attachment.failed'
+  | 'activity.running'
+  | 'activity.completed'
+  | 'activity.failed'
   | 'content.delta'
+  | 'content.replace'
   | 'diagram.ready'
   | 'run.completed'
   | 'run.failed'
