@@ -100,6 +100,7 @@ import {
   LibraryBigIcon as Collection,
   LogOutIcon,
   MessageSquareTextIcon as ChatDotRound,
+  WorkflowIcon,
   UserIcon,
 } from '@lucide/vue'
 import { logout } from '@/features/auth/api/auth'
@@ -135,6 +136,7 @@ const navItems = [
   { path: '/path-planner', label: '路径规划', icon: Connection, theme: 'nav-theme-path' },
   { path: '/tutor', label: '智能辅导', icon: ChatDotRound, theme: 'nav-theme-tutor' },
   { path: '/question-bank', label: '学习题库', icon: Collection, theme: 'nav-theme-eval' },
+  { path: '/algorithm-visualization', label: '算法可视化', icon: WorkflowIcon, theme: 'nav-theme-eval' },
 ]
 
 useAuthPolling(60000)
@@ -152,6 +154,9 @@ const activePath = computed(() => {
   }
   if (current.startsWith('/question-bank')) {
     return '/question-bank'
+  }
+  if (current.startsWith('/algorithm-visualization')) {
+    return '/algorithm-visualization'
   }
   if (current.startsWith('/profile')) {
     return '/profile'
