@@ -30,7 +30,7 @@ export const CallStackPanel: React.FC<CallStackPanelProps> = ({ stack, title = '
               return (
                 <div
                   key={idx}
-                  className={`py-2 px-4 rounded-lg font-mono text-xs font-bold text-center border transition-all duration-300 ${
+                  className={`py-2 px-4 rounded-lg font-mono text-xs font-bold text-center border ${
                     isTop
                       ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-md scale-[1.02] glow-primary'
                       : 'bg-white text-[var(--text-main)] border-[var(--card-border)]'

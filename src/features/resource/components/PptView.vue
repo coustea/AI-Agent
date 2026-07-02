@@ -2,50 +2,101 @@
   <div class="ppt-resource" :class="{ compact }">
     <ResourceCardWrapper :compact="compact" class="ppt-item">
       <div class="header-actions" v-if="!compact">
-        <button class='btn btn-primary btn-sm' :disabled="isExporting" @click="handleExport">
-          <Download class='w-4 h-4 inline-block align-middle' />
-          导出 PPTX
+        <a v-if="downloadUrl" :href="downloadUrl" target="_blank" class="btn btn-primary btn-sm">
+          <Download class="w-4 h-4 inline-block align-middle mr-1" />
+          打开 HTML 课件
+        </a>
+        <button v-if="htmlUrl" class="btn btn-outline btn-sm" @click="toggleFullscreen">
+          <Expand class="w-4 h-4 inline-block align-middle mr-1" />
+          全屏预览
         </button>
       </div>
       <div class="player-wrapper">
-        <PptPlayer :documentData="documentData" />
+        <iframe
+          v-if="htmlUrl"
+          :src="htmlUrl"
+          class="slides-iframe"
+          frameborder="0"
+          allowfullscreen
+        ></iframe>
+        <div v-else class="no-preview">
+          暂无幻灯片课件预览
+        </div>
       </div>
     </ResourceCardWrapper>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import PptPlayer from './ppt-engine/PptPlayer.vue'
-import type { PPTDocument } from './ppt-engine/types/ppt'
-import { renderPPT, downloadPPTX } from './ppt-engine/pptxgenjs-renderer'
-import { toast } from 'vue-sonner'
-import {
-  PhDownload as Download
-} from '@phosphor-icons/vue'
+import { PhDownload as Download, PhArrowsOut as Expand } from '@phosphor-icons/vue'
 
 const props = defineProps<{
-  documentData: PPTDocument
+  resource?: any
+  documentData?: any
   compact?: boolean
 }>()
 
-const isExporting = ref(false)
+function toggleFullscreen() {
+  const iframe = document.querySelector('.slides-iframe') as HTMLIFrameElement | null
+  if (!iframe) return
 
-const handleExport = async () => {
-  isExporting.value = true
-  try {
-    const pptx = renderPPT(props.documentData)
-    const filename = `${props.documentData.title || 'presentation'}.pptx`
-    await downloadPPTX(pptx, filename)
-    toast.success('PPTX 导出成功')
-  } catch (e) {
-    console.error('Export error:', e)
-    toast.error('导出失败，请重试')
-  } finally {
-    isExporting.value = false
+  if (!document.fullscreenElement) {
+    iframe.requestFullscreen?.()
+  } else {
+    document.exitFullscreen?.()
   }
 }
+
+const htmlUrl = computed(() => {
+  let fileId = ''
+  
+  if (props.resource) {
+    const res = props.resource
+    const meta = res.metadata_json || res.metadata
+    let parsedMeta = null
+    if (meta) {
+      try {
+        parsedMeta = typeof meta === 'string' ? JSON.parse(meta) : meta
+      } catch (e) {
+        console.error('Error parsing metadata', e)
+      }
+    }
+    
+    const htmlUrlVal = parsedMeta?.html_url
+    if (htmlUrlVal) {
+      const match = htmlUrlVal.match(/\/html_slides\/([^/]+)\.html/)
+      if (match && match[1]) {
+        fileId = match[1]
+      } else {
+        // Fallback to basename
+        const parts = htmlUrlVal.split('/')
+        const last = parts[parts.length - 1]
+        fileId = last.replace('.html', '')
+      }
+    }
+  }
+  
+  if (!fileId && props.documentData?.resource_id) {
+    fileId = String(props.documentData.resource_id)
+  }
+  
+  if (!fileId && props.resource?.id) {
+    fileId = String(props.resource.id)
+  }
+  
+  if (fileId) {
+    return `/api/v1/ai/resources/public/${fileId}/html`
+  }
+  
+  return ''
+})
+
+const downloadUrl = computed(() => {
+  // Reuse htmlUrl for the "open in new tab" action (public endpoint, no auth needed)
+  return htmlUrl.value || ''
+})
 </script>
 
 <style scoped>
@@ -79,7 +130,23 @@ const handleExport = async () => {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--ppt-border, #e2e8f0);
+  background: #000; /* 幻灯片一般是黑色或暗色底，保证 iframe 加载前不变白 */
+}
+
+.slides-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
   background: transparent;
+}
+
+.no-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #a0aec0;
+  font-size: 16px;
 }
 
 .compact .player-wrapper {

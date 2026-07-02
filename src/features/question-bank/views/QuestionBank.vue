@@ -1,352 +1,438 @@
 <template>
   <div class="question-bank-layout">
     <div v-if="viewMode === 'workspace'" class="question-bank-workspace">
-      <transition name="fade-scale" mode="out-in">
-        <!-- 1. Portal Home Page -->
-        <div v-if="activeModule === 'portal'" key="portal" class="portal-workspace-view">
-          <section class="question-bank-hero glass-panel">
-            <div class="hero-left">
-              <span class="hero-kicker">Question Bank Portal</span>
-              <h1>刷题控制台</h1>
-              <p class="quote">“{{ randomQuote }}”</p>
-              
-              <div class="hero-stats-row">
-                <!-- SVG Progress Circle -->
-                <div class="accuracy-circle-container">
-                  <svg class="progress-ring" width="76" height="76" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="42" class="circle-bg" />
-                    <circle cx="50" cy="50" r="42" class="circle-progress" :style="circleProgressStyle" />
-                  </svg>
-                  <div class="circle-content">
-                    <span class="pct">{{ practiceAccuracy }}</span>
-                    <span class="lbl">正确率</span>
-                  </div>
-                </div>
-                
-                <div class="stats-text-block">
-                  <div class="stat-item">
-                    <span class="lbl">已练题数</span>
-                    <strong class="val">{{ stats.totalAttempted }}</strong>
-                  </div>
-                  <div class="stat-item">
-                    <span class="lbl">待复习错题</span>
-                    <strong class="val danger-color">{{ wrongTotal }}</strong>
-                  </div>
-                  <div class="stat-item">
-                    <span class="lbl">持续打卡</span>
-                    <strong class="val warning-color">{{ localStreak }} 天</strong>
-                  </div>
-                </div>
-              </div>
+      <section class="bank-shell">
+        <!-- 左侧题单侧栏 -->
+        <aside class="bank-left-rail">
+          <div class="rail-brand">
+            <div class="rail-brand-icon"></div>
+            <div>
+              <strong>题库</strong>
+              <span>Question Bank</span>
             </div>
-            
-            <div class="hero-right">
-              <div class="radar-chart-wrapper">
-                <svg width="170" height="170" viewBox="0 0 200 200">
-                  <defs>
-                    <radialGradient id="radarGrad" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stop-color="rgba(139, 92, 246, 0.1)" />
-                      <stop offset="100%" stop-color="rgba(139, 92, 246, 0.45)" />
-                    </radialGradient>
-                  </defs>
-                  <!-- Grid Background Polygons -->
-                  <polygon v-for="(points, idx) in gridPolygons" :key="idx" :points="points" class="radar-grid-poly" />
-                  
-                  <!-- Axis Lines -->
-                  <line v-for="(line, idx) in axisLines" :key="idx" :x1="center" :y1="center" :x2="line.x2" :y2="line.y2" class="radar-axis-line" />
-                  
-                  <!-- Data Area Polygon -->
-                  <polygon :points="polygonPointsString" class="radar-data-poly" fill="url(#radarGrad)" />
-                  
-                  <!-- Data Points Dots -->
-                  <circle v-for="(p, idx) in radarPoints" :key="idx" :cx="p.x" :cy="p.y" r="4.5" class="radar-data-dot" />
-                  
-                  <!-- Labels -->
-                  <text v-for="(lbl, idx) in labelPositions" :key="idx" :x="lbl.x" :y="lbl.y" :text-anchor="lbl.anchor" class="radar-label">{{ lbl.text }}</text>
-                </svg>
-              </div>
-            </div>
-          </section>
+          </div>
 
-          <section class="portal-grid">
-            <!-- Card 1: 每日练习 -->
-            <div class="portal-card glow-border" @click="switchModule('daily')">
-              <div class="card-glow-bg"></div>
-              <div class="card-header-icon">
-                <div class="icon-box violet">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                </div>
-                <span :class="['card-badge', isDailyCompleted ? 'success' : 'pulsing-warning']">
-                  {{ isDailyCompleted ? '已达标' : '今日待做' }}
-                </span>
-              </div>
-              <h3>每日练习</h3>
-              <p>先完成今天这一题，保持稳定的每日训练频率。</p>
-            </div>
-            
-            <!-- Card 2: 智能练习 -->
-            <div class="portal-card glow-border" @click="switchModule('practice')">
-              <div class="card-glow-bg"></div>
-              <div class="card-header-icon">
-                <div class="icon-box blue">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/><path d="M10 8.5a2.5 2.5 0 1 1 5 0c0 1.5-2.5 2.5-2.5 2.5h-.5"/><path d="M12 16h.01"/></svg>
-                </div>
-                <span class="card-badge info">智能推荐</span>
-              </div>
-              <h3>智能练习</h3>
-              <p>个性化推荐练习，自动设定题型和学科，巩固巩固薄弱点。</p>
-            </div>
-            
-            <!-- Card 3: 全部题目 -->
-            <div class="portal-card glow-border" @click="switchModule('search')">
-              <div class="card-glow-bg"></div>
-              <div class="card-header-icon">
-                <div class="icon-box green">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                </div>
-                <span class="card-badge secondary">{{ totalQuestions }} 题可用</span>
-              </div>
-              <h3>全部题目</h3>
-              <p>按学科、难度和题型快速检索并作答，支持即时AI评阅。</p>
-            </div>
-            
-            <!-- Card 4: 模拟组卷 -->
-            <div class="portal-card glow-border" @click="switchModule('paper')">
-              <div class="card-glow-bg"></div>
-              <div class="card-header-icon">
-                <div class="icon-box orange">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                </div>
-                <span class="card-badge secondary">全真模拟</span>
-              </div>
-              <h3>模拟组卷</h3>
-              <p>配置题量、学科、题型与考试时长，在模拟环境下进行测试。</p>
-            </div>
-            
-            <!-- Card 5: 错题本 -->
-            <div class="portal-card glow-border" @click="switchModule('wrong')">
-              <div class="card-glow-bg"></div>
-              <div class="card-header-icon">
-                <div class="icon-box red">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                </div>
-                <span v-if="wrongTotal > 0" class="card-badge danger pulsing">{{ wrongTotal }} 道待巩固</span>
-                <span v-else class="card-badge success">无待复习错题</span>
-              </div>
-              <h3>错题本</h3>
-              <p>重点攻克练习中做错的难题，提供快速再练与归档管理。</p>
-            </div>
-          </section>
-        </div>
-
-        <!-- 2. Focused Workspace Page -->
-        <div v-else :key="activeModule" class="focused-workspace-view" :class="'theme-' + activeModule">
-          <header class="workspace-nav-header glass-panel">
-            <button class="btn-back" @click="backToPortal">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-              返回控制台
+          <nav class="rail-menu">
+            <button
+                v-for="item in moduleNavItems"
+                :key="item.key"
+                type="button"
+                :class="['rail-menu-item', { active: activeModule === item.key }]"
+                @click="switchModule(item.key)"
+            >
+              <span class="rail-menu-mark">{{ item.mark }}</span>
+              <span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.desc }}</small>
+              </span>
             </button>
-            <div class="breadcrumb">
-              <span class="crumb-parent">刷题中心</span>
-              <span class="crumb-divider">/</span>
-              <span class="crumb-active">{{ moduleTitles[activeModule] }}</span>
-            </div>
-          </header>
+          </nav>
 
-          <section class="workspace-panel-shell">
-            <div class="workspace-panel-header">
-              <div class="header-left-side">
-                <div class="theme-accent-strip"></div>
-                <div class="header-info">
-                  <span class="workspace-panel-label">Current Module</span>
-                  <h2>{{ moduleTitles[activeModule] }}</h2>
-                  <p class="workspace-panel-desc">{{ moduleDescriptions[activeModule] }}</p>
+          <div class="rail-card">
+            <div class="rail-card-title">
+              <span>我的题单</span>
+              <button type="button" @click="switchModule('wrong')">+</button>
+            </div>
+
+            <div v-if="visibleWrongSnippets.length" class="rail-question-list">
+              <button
+                  v-for="item in visibleWrongSnippets"
+                  :key="item.id"
+                  type="button"
+                  class="rail-question"
+                  @click="switchModule('wrong')"
+              >
+                <span>{{ item.subject || '综合' }}</span>
+                <p>{{ item.content }}</p>
+              </button>
+            </div>
+
+            <div v-else class="rail-empty">
+              暂无错题，完成练习后会自动沉淀到这里。
+            </div>
+          </div>
+        </aside>
+
+        <!-- 中间主区域 -->
+        <main class="bank-main">
+          <transition name="fade-scale" mode="out-in">
+            <!-- 首页控制台 -->
+            <div v-if="activeModule === 'portal'" key="portal" class="portal-board">
+<!--              <section class="portal-hero">-->
+<!--                <div class="portal-hero-left">-->
+<!--                  <span class="hero-kicker">Personalized Practice</span>-->
+<!--                  <h1>个性化练习题库</h1>-->
+<!--                  <p>基于你的课程、错题和练习记录，组织每日练习、智能刷题、模拟组卷与错题复习。</p>-->
+<!--                </div>-->
+
+<!--                <div class="portal-hero-metrics">-->
+<!--                  <div class="accuracy-circle-container">-->
+<!--                    <svg class="progress-ring" width="74" height="74" viewBox="0 0 100 100">-->
+<!--                      <circle cx="50" cy="50" r="42" class="circle-bg" />-->
+<!--                      <circle cx="50" cy="50" r="42" class="circle-progress" :style="circleProgressStyle" />-->
+<!--                    </svg>-->
+<!--                    <div class="circle-content">-->
+<!--                      <span class="pct">{{ practiceAccuracy }}</span>-->
+<!--                      <span class="lbl">正确率</span>-->
+<!--                    </div>-->
+<!--                  </div>-->
+
+<!--                  <div class="hero-stat">-->
+<!--                    <span>已练题数</span>-->
+<!--                    <strong>{{ stats.totalAttempted }}</strong>-->
+<!--                  </div>-->
+<!--                  <div class="hero-stat">-->
+<!--                    <span>待复习</span>-->
+<!--                    <strong class="danger">{{ wrongTotal }}</strong>-->
+<!--                  </div>-->
+<!--                  <div class="hero-stat">-->
+<!--                    <span>连续打卡</span>-->
+<!--                    <strong>{{ localStreak }} 天</strong>-->
+<!--                  </div>-->
+<!--                </div>-->
+<!--              </section>-->
+
+              <section class="feature-card-row">
+                <button
+                    v-for="card in portalCards"
+                    :key="card.key"
+                    type="button"
+                    :class="['feature-card', card.accent]"
+                    @click="switchModule(card.key)"
+                >
+                  <span class="feature-card-kicker">{{ card.kicker }}</span>
+                  <strong>{{ card.title }}</strong>
+                  <small>{{ card.subtitle }}</small>
+                  <i></i>
+                </button>
+              </section>
+
+              <section v-if="topSubjects.length" class="subject-strip">
+                <strong>学科</strong>
+                <button
+                    v-for="subject in topSubjects"
+                    :key="subject"
+                    type="button"
+                    :class="['subject-chip', { active: bankFilters.subject === subject }]"
+                    @click="selectSubject(subject)"
+                >
+                  {{ subject }}
+                </button>
+                <button type="button" class="subject-chip muted" @click="switchModule('search')">更多</button>
+              </section>
+
+              <section class="section-toolbar">
+                <div>
+                  <h2>今日推荐题目</h2>
+                  <p>先完成一题，系统会根据答题结果更新统计与错题沉淀。</p>
                 </div>
-              </div>
 
-              <div class="header-right-stats">
-                <!-- Daily Practice Stats -->
-                <template v-if="activeModule === 'daily'">
-                  <div class="stat-badge">
-                    <span class="badge-label">今日完成</span>
-                    <span :class="['badge-value', isDailyCompleted ? 'text-success' : 'text-warning']">
-                      {{ isDailyCompleted ? '已达标' : '未达标' }}
-                    </span>
+                <div class="toolbar-actions">
+                  <button type="button" class="soft-action" @click="pickDailyQuestion">换一题</button>
+                  <button type="button" class="primary-action" @click="startSingleDailyQuestion">开始作答</button>
+                </div>
+              </section>
+
+              <section class="recommend-question-card">
+                <template v-if="dailyQuestion">
+                  <div class="question-card-top">
+                    <span class="question-index">1.</span>
+                    <span class="tag">{{ dailyQuestion.subject }}</span>
+                    <span class="tag soft">{{ dailyQuestion.type }}</span>
+                    <span class="tag level">{{ dailyQuestion.difficulty || '中等' }}</span>
                   </div>
-                  <div class="stat-badge">
-                    <span class="badge-label">连续打卡</span>
-                    <span class="badge-value theme-text">{{ localStreak }} 天</span>
+
+                  <div class="recommend-question-content" v-html="renderInline(dailyQuestion.content)"></div>
+
+                  <div v-if="isOptionQuestion(dailyQuestion)" class="recommend-options">
+                    <div v-for="(text, key) in getOptions(dailyQuestion)" :key="key" class="recommend-option">
+                      <span>{{ key }}</span>
+                      <p v-html="renderInline(text)"></p>
+                    </div>
+                  </div>
+
+                  <div class="question-card-actions">
+                    <button type="button" class="strong" @click="startSingleDailyQuestion">开始作答</button>
+                    <button type="button" @click="switchModule('search')">进入全部题目</button>
+                    <button type="button" @click="switchModule('wrong')">查看错题本</button>
+                    <button type="button" @click="switchModule('daily')">进入练习</button>
                   </div>
                 </template>
 
-                <!-- Smart Practice Stats -->
-                <template v-else-if="activeModule === 'practice'">
-                  <div class="stat-badge">
-                    <span class="badge-label">智能已练</span>
-                    <span class="badge-value theme-text">{{ stats.totalAttempted }} 题</span>
-                  </div>
-                  <div class="stat-badge">
-                    <span class="badge-label">正确率</span>
-                    <span class="badge-value theme-text">{{ practiceAccuracy }}</span>
+                <template v-else>
+                  <div class="empty-state">
+                    <strong>暂无可推荐题目</strong>
+                    <p>题库接口返回为空时会显示此状态，请先导入题库数据或调整课程筛选。</p>
+                    <button type="button" class="primary-action" @click="loadQuestionBank">重新加载题库</button>
                   </div>
                 </template>
-
-                <!-- All Search Stats -->
-                <template v-else-if="activeModule === 'search'">
-                  <div class="stat-badge">
-                    <span class="badge-label">题库总量</span>
-                    <span class="badge-value theme-text">{{ totalQuestions }} 题</span>
-                  </div>
-                </template>
-
-                <!-- Mock Paper Stats -->
-                <template v-else-if="activeModule === 'paper'">
-                  <div class="stat-badge">
-                    <span class="badge-label">已完模考</span>
-                    <span class="badge-value theme-text">{{ mockExamsCount }} 次</span>
-                  </div>
-                </template>
-
-                <!-- Wrong Book Stats -->
-                <template v-else-if="activeModule === 'wrong'">
-                  <div class="stat-badge">
-                    <span class="badge-label">待巩固错题</span>
-                    <span class="badge-value text-danger">{{ wrongTotal }} 题</span>
-                  </div>
-                  <div class="stat-badge">
-                    <span class="badge-label">已归档错题</span>
-                    <span class="badge-value text-success">{{ archivedWrongTotal }} 题</span>
-                  </div>
-                </template>
-              </div>
+              </section>
             </div>
 
-            <main class="workspace-panel-content">
-              <DailyPracticeTab
-                v-if="activeModule === 'daily'"
-                :dailyQuestion="dailyQuestion"
-                @start-daily="startSingleDailyQuestion"
-                @refresh-daily="pickDailyQuestion"
-              />
+            <!-- 子模块工作区 -->
+            <div v-else :key="activeModule" :class="['module-board', 'theme-' + activeModule]">
+              <header class="module-header">
+                <div class="module-header-left">
+                  <div>
+                    <span class="module-kicker">Current Module</span>
+                    <h2>{{ moduleTitles[activeModule] }}</h2>
+                    <p>{{ moduleDescriptions[activeModule] }}</p>
+                  </div>
+                </div>
 
-              <PracticeTab
-                v-else-if="activeModule === 'practice'"
-                :stats="stats"
-                :wrongTotal="wrongTotal"
-                :recommendedSubject="recommendedSubject"
-                :recommendedCount="recommendedCount"
-                :practiceLoading="practiceLoading"
-                :subjects="subjects"
-                :difficulties="difficulties"
-                :types="types"
-                @switch-tab="switchModule"
-                @start-recommended="startRecommendedPractice"
-                @start-custom="startSpecialPracticeProxy"
-              />
+                <div class="module-stats">
+                  <template v-if="activeModule === 'daily'">
+                    <div class="module-stat">
+                      <span>今日完成</span>
+                      <strong :class="isDailyCompleted ? 'success' : 'warning'">
+                        {{ isDailyCompleted ? '已达标' : '未达标' }}
+                      </strong>
+                    </div>
+                    <div class="module-stat">
+                      <span>连续打卡</span>
+                      <strong>{{ localStreak }} 天</strong>
+                    </div>
+                  </template>
 
-              <SearchTab
-                v-else-if="activeModule === 'search'"
-                :questions="questions"
-                :total="totalQuestions"
-                :loading="bankLoading"
-                :currentPage="bankPage"
-                :pageSize="bankPageSize"
-                :filters="bankFilters"
-                :subjects="subjects"
-                :difficulties="difficulties"
-                :types="types"
-                :answers="bankAnswers"
-                :submitted="bankSubmitted"
-                :correct="bankCorrect"
-                :reviewing="bankReviewing"
-                :review="bankReview"
-                :openedAnalysis="openedAnalysis"
-                @search="searchBank"
-                @page-change="handleBankPageChange"
-                @select-option="selectBankOption"
-                @submit="submitBankAnswer"
-                @toggle-analysis="toggleBankAnalysis"
-              />
+                  <template v-else-if="activeModule === 'practice'">
+                    <div class="module-stat">
+                      <span>智能已练</span>
+                      <strong>{{ stats.totalAttempted }} 题</strong>
+                    </div>
+                    <div class="module-stat">
+                      <span>正确率</span>
+                      <strong>{{ practiceAccuracy }}</strong>
+                    </div>
+                  </template>
 
-              <ExamTab
-                v-else-if="activeModule === 'paper'"
-                :form="paperForm"
-                :typeCounts="paperTypeCounts"
-                :preview="paperPreview"
-                :loading="paperLoading"
-                :subjects="subjects"
-                :difficulties="difficulties"
-                @reset-form="resetPaperForm"
-                @generate-preview="generatePaperPreview"
-                @start-exam="startPreviewExam"
-              />
+                  <template v-else-if="activeModule === 'search'">
+                    <div class="module-stat">
+                      <span>题库总量</span>
+                      <strong>{{ totalQuestions }} 题</strong>
+                    </div>
+                  </template>
 
-              <WrongBookTab
-                v-else-if="activeModule === 'wrong'"
-                :questions="filteredWrongQuestions"
-                :total="wrongTotal"
-                :loading="wrongLoading"
-                :page="wrongPage"
-                :pageSize="wrongPageSize"
-                :filters="wrongFilters"
-                :subjects="subjects"
-                :types="types"
-                :answers="wrongAnswers"
-                :submitted="wrongSubmitted"
-                :correct="wrongCorrect"
-                :reviewing="wrongReviewing"
-                :review="wrongReview"
-                :openedAnalysis="openedWrongAnalysis"
-                :drillQuestion="wrongDrillQuestion"
-                :drillAnswer="wrongDrillAnswer"
-                :drillSubmitted="wrongDrillSubmitted"
-                :drillCorrect="wrongDrillCorrect"
-                :drillReviewing="wrongDrillReviewing"
-                :drillReview="wrongDrillReview"
-                @search-wrong="searchWrong"
-                @page-change="handleWrongPageChange"
-                @pick-drill="pickWrongQuestion"
-                @select-drill-option="selectWrongDrillOption"
-                @update:drillAnswer="wrongDrillAnswer = $event"
-                @submit-drill="submitWrongDrill"
-                @select-wrong-option="selectWrongOption"
-                @submit-wrong="submitWrongAnswer"
-                @toggle-wrong-analysis="toggleWrongAnalysis"
-                @archive-wrong="archiveWrong"
-                @remove-wrong="removeWrong"
-              />
-            </main>
+                  <template v-else-if="activeModule === 'paper'">
+                    <div class="module-stat">
+                      <span>已完模考</span>
+                      <strong>{{ mockExamsCount }} 次</strong>
+                    </div>
+                  </template>
+
+                  <template v-else-if="activeModule === 'wrong'">
+                    <div class="module-stat">
+                      <span>待巩固</span>
+                      <strong class="danger">{{ wrongTotal }} 题</strong>
+                    </div>
+                    <div class="module-stat">
+                      <span>已归档</span>
+                      <strong class="success">{{ archivedWrongTotal }} 题</strong>
+                    </div>
+                  </template>
+                </div>
+              </header>
+
+              <section class="module-content-card">
+                <DailyPracticeTab
+                    v-if="activeModule === 'daily'"
+                    :dailyQuestion="dailyQuestion"
+                    @start-daily="startSingleDailyQuestion"
+                    @refresh-daily="pickDailyQuestion"
+                />
+
+                <PracticeTab
+                    v-else-if="activeModule === 'practice'"
+                    :stats="stats"
+                    :wrongTotal="wrongTotal"
+                    :recommendedSubject="recommendedSubject"
+                    :recommendedCount="recommendedCount"
+                    :practiceLoading="practiceLoading"
+                    :subjects="subjects"
+                    :difficulties="difficulties"
+                    :types="types"
+                    @switch-tab="switchModule"
+                    @start-recommended="startRecommendedPractice"
+                    @start-custom="startSpecialPracticeProxy"
+                />
+
+                <SearchTab
+                    v-else-if="activeModule === 'search'"
+                    :questions="questions"
+                    :total="totalQuestions"
+                    :loading="bankLoading"
+                    :currentPage="bankPage"
+                    :pageSize="bankPageSize"
+                    :filters="bankFilters"
+                    :subjects="subjects"
+                    :difficulties="difficulties"
+                    :types="types"
+                    :answers="bankAnswers"
+                    :submitted="bankSubmitted"
+                    :correct="bankCorrect"
+                    :reviewing="bankReviewing"
+                    :review="bankReview"
+                    :openedAnalysis="openedAnalysis"
+                    :highlightQuestionId="highlightQuestionId"
+                    :highlightVersion="highlightVersion"
+                    @search="searchBank"
+                    @page-change="handleBankPageChange"
+                    @select-option="selectBankOption"
+                    @submit="submitBankAnswer"
+                    @toggle-analysis="toggleBankAnalysis"
+                />
+
+                <ExamTab
+                    v-else-if="activeModule === 'paper'"
+                    :form="paperForm"
+                    :typeCounts="paperTypeCounts"
+                    :preview="paperPreview"
+                    :loading="paperLoading"
+                    :subjects="subjects"
+                    :difficulties="difficulties"
+                    @reset-form="resetPaperForm"
+                    @generate-preview="generatePaperPreview"
+                    @start-exam="startPreviewExam"
+                />
+
+                <WrongBookTab
+                    v-else-if="activeModule === 'wrong'"
+                    :questions="filteredWrongQuestions"
+                    :total="wrongTotal"
+                    :loading="wrongLoading"
+                    :page="wrongPage"
+                    :pageSize="wrongPageSize"
+                    :filters="wrongFilters"
+                    :subjects="subjects"
+                    :types="types"
+                    :answers="wrongAnswers"
+                    :submitted="wrongSubmitted"
+                    :correct="wrongCorrect"
+                    :reviewing="wrongReviewing"
+                    :review="wrongReview"
+                    :openedAnalysis="openedWrongAnalysis"
+                    :drillQuestion="wrongDrillQuestion"
+                    :drillAnswer="wrongDrillAnswer"
+                    :drillSubmitted="wrongDrillSubmitted"
+                    :drillCorrect="wrongDrillCorrect"
+                    :drillReviewing="wrongDrillReviewing"
+                    :drillReview="wrongDrillReview"
+                    @search-wrong="searchWrong"
+                    @page-change="handleWrongPageChange"
+                    @pick-drill="pickWrongQuestion"
+                    @select-drill-option="selectWrongDrillOption"
+                    @update:drillAnswer="wrongDrillAnswer = $event"
+                    @submit-drill="submitWrongDrill"
+                    @select-wrong-option="selectWrongOption"
+                    @submit-wrong="submitWrongAnswer"
+                    @toggle-wrong-analysis="toggleWrongAnalysis"
+                    @archive-wrong="archiveWrong"
+                    @remove-wrong="removeWrong"
+                />
+              </section>
+            </div>
+          </transition>
+        </main>
+
+        <!-- 右侧信息面板 -->
+        <aside class="bank-right-panel">
+          <section class="right-card calendar-card">
+            <div class="right-card-header">
+              <strong>每日 1 题</strong>
+              <span>{{ calendarMonthLabel }}</span>
+            </div>
+
+            <div class="calendar-week">
+              <span v-for="day in weekLabels" :key="day">{{ day }}</span>
+            </div>
+
+            <div class="calendar-grid">
+              <span
+                  v-for="day in calendarDays"
+                  :key="day.key"
+                  :class="[
+                  'calendar-day',
+                  {
+                    muted: !day.isCurrentMonth,
+                    today: day.isToday,
+                    completed: day.isCompleted,
+                  },
+                ]"
+              >
+                {{ day.label }}
+              </span>
+            </div>
           </section>
-        </div>
-      </transition>
+
+          <section class="right-card daily-preview-card">
+            <div class="right-card-header">
+              <strong>每日挑战</strong>
+              <button type="button" class="text-link-btn" @click="pickDailyChallengeQuestion">换一题</button>
+            </div>
+
+            <template v-if="dailyChallengeQuestion">
+              <div class="daily-preview-tags">
+                <span class="mini-tag">{{ dailyChallengeQuestion.subject }}</span>
+                <span class="mini-tag">{{ dailyChallengeQuestion.type }}</span>
+                <span class="mini-tag">{{ dailyChallengeQuestion.difficulty || '中等' }}</span>
+              </div>
+              <div class="daily-preview-content" v-html="renderInline(dailyChallengeQuestion.content)"></div>
+              <button type="button" class="get-question-btn" @click="jumpToChallengeQuestion">作答</button>
+            </template>
+
+            <template v-else>
+              <p class="daily-preview-empty">当前暂无可用的每日挑战。</p>
+            </template>
+          </section>
+
+          <section class="right-card summary-card">
+            <div>
+              <span>当前题库</span>
+              <strong>{{ totalQuestions }}</strong>
+            </div>
+            <div>
+              <span>错题待复习</span>
+              <strong>{{ wrongTotal }}</strong>
+            </div>
+          </section>
+        </aside>
+      </section>
     </div>
 
+    <!-- 考试模式 -->
     <div v-else class="exam-workspace">
       <header class="exam-topbar">
         <div class="exam-topbar-left">
-          <button class="btn-text" @click="quitExam">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          <button class="btn-text" type="button" @click="quitExam">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
             退出考试
           </button>
           <h1 class="exam-title">{{ examTitle }}</h1>
         </div>
+
         <div class="exam-actions">
           <div class="timer-badge">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
             <span>{{ formattedExamTime }}</span>
           </div>
-          <button v-if="!examSubmitted" class="btn-primary" @click="submitExam">交卷</button>
-          <button v-else class="btn-secondary" @click="backWorkspace">返回首页</button>
+          <button v-if="!examSubmitted" class="btn-primary" type="button" @click="submitExam">交卷</button>
+          <button v-else class="btn-secondary" type="button" @click="backWorkspace">返回题库</button>
         </div>
       </header>
 
       <main class="exam-main">
         <div class="exam-content">
           <article
-            v-for="(question, index) in examPaper"
-            :key="question.id"
-            :id="'exam-q-' + index"
-            :class="['exam-question', { active: currentExamIndex === index }]"
+              v-for="(question, index) in examPaper"
+              :key="question.id"
+              :id="'exam-q-' + index"
+              :class="['exam-question', { active: currentExamIndex === index }]"
           >
             <div class="question-header">
               <span class="q-number">第 {{ index + 1 }} 题 / 共 {{ examPaper.length }} 题</span>
@@ -363,10 +449,10 @@
 
             <div v-if="isOptionQuestion(question)" class="options-list">
               <button
-                v-for="(text, key) in getOptions(question)"
-                :key="key"
-                type="button"
-                :class="[
+                  v-for="(text, key) in getOptions(question)"
+                  :key="key"
+                  type="button"
+                  :class="[
                   'option-btn',
                   {
                     selected: isSelected(examAnswers[question.id], key),
@@ -374,20 +460,21 @@
                     wrong: examSubmitted && isSelected(examAnswers[question.id], key) && !isCorrectOption(question, key),
                   },
                 ]"
-                :disabled="examSubmitted"
-                @click="selectExamOption(question, key)"
+                  :disabled="examSubmitted"
+                  @click="selectExamOption(question, key)"
               >
                 <span class="opt-key">{{ key }}</span>
                 <span class="opt-text" v-html="renderInline(text)"></span>
               </button>
             </div>
+
             <textarea
-              v-else
-              v-model="examAnswers[question.id]"
-              class="text-area-input"
-              rows="4"
-              :disabled="examSubmitted"
-              placeholder="请输入你的答案..."
+                v-else
+                v-model="examAnswers[question.id]"
+                class="text-area-input"
+                rows="4"
+                :disabled="examSubmitted"
+                placeholder="请输入你的答案..."
             ></textarea>
 
             <div v-if="examSubmitted" :class="['analysis-panel', isExamCorrect(question) ? 'success' : 'danger']">
@@ -412,9 +499,10 @@
 
             <div class="grid-sheet">
               <button
-                v-for="(question, index) in examPaper"
-                :key="question.id"
-                :class="[
+                  v-for="(question, index) in examPaper"
+                  :key="question.id"
+                  type="button"
+                  :class="[
                   'sheet-btn',
                   {
                     active: currentExamIndex === index,
@@ -423,14 +511,18 @@
                     wrong: examSubmitted && !isExamCorrect(question),
                   },
                 ]"
-                @click="scrollToQuestion(index)"
+                  @click="scrollToQuestion(index)"
               >
                 {{ index + 1 }}
               </button>
             </div>
 
-            <button v-if="!examSubmitted" class="btn-primary full-width sidebar-submit" @click="submitExam">交卷</button>
-            <button v-else class="btn-secondary full-width sidebar-submit" @click="backWorkspace">完成查看</button>
+            <button v-if="!examSubmitted" class="btn-primary full-width sidebar-submit" type="button" @click="submitExam">
+              交卷
+            </button>
+            <button v-else class="btn-secondary full-width sidebar-submit" type="button" @click="backWorkspace">
+              完成查看
+            </button>
           </div>
         </aside>
       </main>
@@ -456,7 +548,7 @@ import PracticeTab from '@/features/question-bank/components/PracticeTab.vue'
 import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
-
+import { getErrorMessage } from '@/shared/api/http'
 
 type ViewMode = 'workspace' | 'exam'
 type ModuleKey = 'portal' | 'daily' | 'practice' | 'search' | 'paper' | 'wrong'
@@ -494,6 +586,14 @@ interface WrongQuestionDTO {
   is_archived?: boolean
 }
 
+interface CalendarCell {
+  key: string
+  label: number
+  isCurrentMonth: boolean
+  isToday: boolean
+  isCompleted: boolean
+}
+
 const viewMode = ref<ViewMode>('workspace')
 const activeModule = ref<ModuleKey>('portal')
 const route = useRoute()
@@ -507,6 +607,7 @@ const practicePool = shallowRef<Question[]>([])
 const practiceLoading = ref(false)
 const practiceForm = reactive({ subject: '', difficulty: '', type: '', count: 10 })
 const dailyQuestion = ref<Question | null>(null)
+const dailyChallengeQuestion = ref<Question | null>(null)
 
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
@@ -528,6 +629,8 @@ const bankCorrect = ref<Record<string, boolean>>({})
 const bankReviewing = ref<Record<string, boolean>>({})
 const bankReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedAnalysis = ref<Set<string>>(new Set())
+const highlightQuestionId = ref<string | null>(null)
+const highlightVersion = ref(0)
 
 const wrongAnswers = ref<Record<string, AnswerValue>>({})
 const wrongSubmitted = ref<Record<string, boolean>>({})
@@ -544,6 +647,8 @@ const wrongDrillReviewing = ref(false)
 const wrongDrillReview = ref<QuizReviewResult | null>(null)
 
 const stats = reactive({ totalAttempted: 0, totalCorrect: 0 })
+const localStatsSeed = ref(0)
+const dailyStateSeed = ref(0)
 
 const mockExamsCount = ref(Number(localStorage.getItem('question_hub_mock_exams_count') || '0'))
 const archivedWrongTotal = ref(0)
@@ -573,7 +678,61 @@ const examTime = ref(0)
 const examCorrectCount = ref(0)
 let examTimer: number | null = null
 
+const weekLabels = ['日', '一', '二', '三', '四', '五', '六']
+
+const moduleTitles: Record<ModuleKey, string> = {
+  portal: '刷题控制台',
+  daily: '每日练习',
+  practice: '智能练习',
+  search: '全部题目',
+  paper: '模拟组卷',
+  wrong: '错题本',
+}
+
+const moduleDescriptions: Record<ModuleKey, string> = {
+  portal: '个人刷题进度仪表盘与能力画像。',
+  daily: '先完成今天这一题，再进入更完整的练习节奏。',
+  practice: '按推荐练习、错题复习、模拟组卷和自定义练习组织你的训练。',
+  search: '按学科、难度和题型检索题库并直接作答。',
+  paper: '配置你的模拟试卷，并在预览后进入考试模式。',
+  wrong: '集中复习错题、管理薄弱点并进行再练。',
+}
+
+const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark: string }> = [
+  { key: 'portal', label: '控制台', desc: '刷题总览', mark: '01' },
+  { key: 'daily', label: '每日练习', desc: '每日 1 题', mark: '02' },
+  { key: 'practice', label: '智能练习', desc: '推荐训练', mark: '03' },
+  { key: 'search', label: '全部题目', desc: '筛选检索', mark: '04' },
+  { key: 'paper', label: '模拟组卷', desc: '考试模式', mark: '05' },
+  { key: 'wrong', label: '错题本', desc: '薄弱复习', mark: '06' },
+]
+
+const portalCards = computed(() => [
+  {
+    key: 'daily' as ModuleKey,
+    kicker: isDailyCompleted.value ? 'Completed' : 'Daily',
+    title: '每日一题',
+    subtitle: isDailyCompleted.value ? '今日训练已完成' : '完成今天的基础训练',
+    accent: 'black',
+  },
+  {
+    key: 'practice' as ModuleKey,
+    kicker: 'Smart',
+    title: `${recommendedSubject.value || '智能'}练习`,
+    subtitle: '按薄弱点自动推荐练习',
+    accent: 'green',
+  },
+  {
+    key: 'paper' as ModuleKey,
+    kicker: 'Exam',
+    title: '模拟组卷',
+    subtitle: '配置题量并进入考试模式',
+    accent: 'blue',
+  },
+])
+
 const recommendedSubject = computed(() => wrongQuestions.value[0]?.subject || learnerCourses.value[0] || subjects.value[0] || 'General')
+
 const recommendedCount = computed(() => {
   const available = practicePool.value.length || questions.value.length
   return available ? Math.min(10, Math.max(5, available)) : 10
@@ -584,143 +743,75 @@ const filteredWrongQuestions = computed(() => {
   if (!keyword) return wrongQuestions.value
   return wrongQuestions.value.filter((item) => {
     return [item.content, item.analysis, item.answer, ...(item.knowledge_points || [])]
-      .join(' ')
-      .toLowerCase()
-      .includes(keyword)
+        .join(' ')
+        .toLowerCase()
+        .includes(keyword)
   })
+})
+
+const visibleWrongSnippets = computed(() => wrongQuestions.value.slice(0, 3))
+
+const topSubjects = computed(() => {
+  return learnerCourses.value
+    .filter((course) => typeof course === 'string' && course.trim().length > 0)
+    .slice(0, 5)
 })
 
 const formattedExamTime = computed(() => formatDuration(examTime.value))
 
 const examAnsweredCount = computed(() => examPaper.value.filter((item) => hasAnswerData(examAnswers.value[item.id])).length)
+
 const examScore = computed(() => {
   if (!examPaper.value.length) return 0
   return Math.round((examCorrectCount.value / examPaper.value.length) * 100)
 })
+
 const practiceAccuracy = computed(() => {
   if (!stats.totalAttempted) return '0%'
   return `${Math.round((stats.totalCorrect / stats.totalAttempted) * 100)}%`
 })
 
-// === SVG 环形进度与雷达图计算 ===
 const animatedAccuracy = ref(0)
 const radarAnimationScale = ref(0.1)
 
-const circleProgressStyle = computed(() => {
-  const perimeter = 2 * Math.PI * 42 // radius = 42 -> ~263.89
-  const offset = perimeter - (perimeter * animatedAccuracy.value) / 100
-  return {
-    strokeDasharray: `${perimeter}`,
-    strokeDashoffset: `${offset}`,
-    transition: 'stroke-dashoffset 1.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+const calendarMonthLabel = computed(() => {
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(new Date())
+})
+
+const calendarDays = computed<CalendarCell[]>(() => {
+  dailyStateSeed.value
+  const completionMap = readDailyCompletionMap()
+
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = today.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const start = new Date(year, month, 1 - firstDay.getDay())
+  const result: CalendarCell[] = []
+
+  for (let i = 0; i < 42; i += 1) {
+    const date = new Date(start)
+    date.setDate(start.getDate() + i)
+
+    const isToday =
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate()
+
+    result.push({
+      key: formatDateKey(date),
+      label: date.getDate(),
+      isCurrentMonth: date.getMonth() === month,
+      isToday,
+      isCompleted: completionMap[formatDateKey(date)] === true,
+    })
   }
-})
 
-const radarMetrics = computed(() => {
-  const attempted = stats.totalAttempted
-  const correct = stats.totalCorrect
-  const activeWrong = wrongTotal.value
-  
-  // 1. 练习量 (Volume): 50道题及以上为100%
-  const volume = Math.min(100, Math.max(30, attempted > 0 ? (attempted / 50) * 100 : 30))
-  
-  // 2. 准确度 (Accuracy)
-  const accuracyVal = attempted > 0 ? Math.round((correct / attempted) * 100) : 0
-  const accuracy = Math.min(100, Math.max(30, accuracyVal))
-  
-  // 3. 错题消灭率 (Consolidation)
-  const consolidation = Math.min(100, Math.max(30, 100 - (activeWrong * 10)))
-  
-  // 4. 每日坚持度 (Consistency)
-  const streak = Number(localStorage.getItem('question_hub_streak') || '3')
-  const consistency = Math.min(100, Math.max(30, 30 + streak * 10))
-  
-  // 5. 模考应试力 (Mock Score)
-  const lastMock = Number(localStorage.getItem('question_hub_last_mock') || '75')
-  const mockScore = Math.min(100, Math.max(30, lastMock))
-  
-  return { volume, accuracy, consolidation, consistency, mockScore }
-})
-
-const center = 100
-const radius = 64
-const angles = [
-  -Math.PI / 2,                     // 0: Volume (Top)
-  -Math.PI / 2 + (2 * Math.PI) / 5, // 1: Accuracy (Right Top)
-  -Math.PI / 2 + (4 * Math.PI) / 5, // 2: Consolidation (Right Bottom)
-  -Math.PI / 2 + (6 * Math.PI) / 5, // 3: Consistency (Left Bottom)
-  -Math.PI / 2 + (8 * Math.PI) / 5  // 4: Mock Score (Left Top)
-]
-
-const radarPoints = computed(() => {
-  const metrics = radarMetrics.value
-  const vals = [
-    metrics.volume,
-    metrics.accuracy,
-    metrics.consolidation,
-    metrics.consistency,
-    metrics.mockScore
-  ]
-  return vals.map((val, i) => {
-    const angle = angles[i]!
-    const r = radius * (val / 100) * radarAnimationScale.value
-    const x = center + r * Math.cos(angle)
-    const y = center + r * Math.sin(angle)
-    return { x, y }
-  })
-})
-
-const polygonPointsString = computed(() => {
-  return radarPoints.value.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-})
-
-const gridPolygons = computed(() => {
-  const levels = [0.33, 0.66, 1.0]
-  return levels.map(level => {
-    return angles.map(angle => {
-      const x = center + radius * level * Math.cos(angle)
-      const y = center + radius * level * Math.sin(angle)
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    }).join(' ')
-  })
-})
-
-const axisLines = computed(() => {
-  return angles.map(angle => {
-    const x = center + radius * Math.cos(angle)
-    const y = center + radius * Math.sin(angle)
-    return { x2: x, y2: y }
-  })
-})
-
-const labelPositions = computed(() => {
-  const labelNames = ['练习量', '准确度', '错题消灭', '每日坚持', '模考能力']
-  const offset = 16
-  return angles.map((angle, i) => {
-    const x = center + (radius + offset) * Math.cos(angle)
-    const y = center + (radius + offset) * Math.sin(angle)
-    let anchor = 'middle'
-    if (Math.cos(angle) > 0.3) anchor = 'start'
-    else if (Math.cos(angle) < -0.3) anchor = 'end'
-    return { text: labelNames[i], x, y: y + 4, anchor }
-  })
-})
-
-const quotes = [
-  '勤学如春起之苗，不见其增，日有所长。',
-  '学如逆水行舟，不进则退。',
-  '不积跬步，无以至千里；不积小流，无以成江海。',
-  '温故而知新，可以为师矣。',
-  '博学之，审问之，慎思之，明辨之，笃行之。',
-  '独学而无友，则孤陋而寡闻。'
-]
-
-const randomQuote = computed(() => {
-  const index = (stats.totalAttempted + new Date().getDay()) % quotes.length
-  return quotes[index]
+  return result
 })
 
 const localStreak = computed(() => {
+  localStatsSeed.value
   const streak = localStorage.getItem('question_hub_streak')
   if (!streak) {
     localStorage.setItem('question_hub_streak', '3')
@@ -730,7 +821,10 @@ const localStreak = computed(() => {
 })
 
 const isDailyCompleted = computed(() => {
-  return localStorage.getItem('daily_completed_' + new Date().toDateString()) === 'true'
+  dailyStateSeed.value
+  const todayKey = formatDateKey(new Date())
+  const completionMap = readDailyCompletionMap()
+  return completionMap[todayKey] === true
 })
 
 function triggerChartAnimations() {
@@ -744,39 +838,15 @@ function triggerChartAnimations() {
   }, 100)
 }
 
-function backToPortal() {
-  activeModule.value = 'portal'
-  triggerChartAnimations()
-}
-
-// === 原模块定义扩展 ===
-const moduleTitles: Record<ModuleKey, string> = {
-  portal: '刷题控制台',
-  daily: '每日练习',
-  practice: '智能练习',
-  search: '全部题目',
-  paper: '模拟组卷',
-  wrong: '错题本',
-}
-const moduleDescriptions: Record<ModuleKey, string> = {
-  portal: '个人刷题进度仪表盘与能力画像。',
-  daily: '先完成今天这一题，再进入更完整的练习节奏。',
-  practice: '按推荐练习、错题复习、模拟组卷和自定义练习组织你的训练。',
-  search: '按学科、难度和题型检索题库并直接作答。',
-  paper: '配置你的模拟试卷，并在预览后进入考试模式。',
-  wrong: '集中复习错题、管理薄弱点并进行再练。',
-}
-
 onMounted(() => {
   readLocalStats()
 
-  // 支持 URL query 参数切换 Tab (e.g., ?tab=wrong)
   const tabParam = route.query.tab as string
   if (tabParam && ['daily', 'practice', 'search', 'paper', 'wrong', 'portal'].includes(tabParam)) {
     activeModule.value = tabParam as ModuleKey
   }
-  triggerChartAnimations()
 
+  triggerChartAnimations()
   void bootstrap()
 })
 
@@ -804,40 +874,63 @@ function scrollToQuestion(index: number) {
 async function bootstrap() {
   try {
     const profile = await getProfileOnboarding()
-    learnerCourses.value = profile.data?.data?.student_profile?.courses || []
+    const profileCourses = profile.data?.data?.student_profile?.courses
+    learnerCourses.value = Array.isArray(profileCourses) ? profileCourses.map(String) : []
   } catch {
     learnerCourses.value = []
   }
+
   await loadPracticePool()
   await loadQuestionBank()
   await loadWrongBook()
-  pickDailyQuestion()
+  refreshDailySelections()
 }
 
 function switchModule(key: string) {
   activeModule.value = key as ModuleKey
+
   if (key === 'wrong') {
     void loadWrongBook()
     void pickWrongQuestion()
   } else if (key === 'search') {
+    resetQuestionBankFilters()
+    clearQuestionHighlight()
     void loadQuestionBank()
+  } else if (key === 'daily') {
+    pickDailyQuestion()
   }
+}
+
+function resetQuestionBankFilters() {
+  bankFilters.query = ''
+  bankFilters.subject = ''
+  bankFilters.difficulty = ''
+  bankFilters.type = ''
+  bankPage.value = 1
+}
+
+function selectSubject(subject: string) {
+  bankFilters.subject = bankFilters.subject === subject ? '' : subject
+  activeModule.value = 'search'
+  bankPage.value = 1
+  void loadQuestionBank()
 }
 
 async function loadPracticePool() {
   try {
     const result = await fetchQuizBankQuestions({
-      subjects: learnerCourses.value.length ? learnerCourses.value : undefined,
       page: 1,
       page_size: 100,
     })
+
     practicePool.value = result.items || []
     totalQuestions.value = result.total || totalQuestions.value
     subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
     difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
     types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
-  } catch {
+  } catch (error) {
     practicePool.value = []
+    toast.error(getErrorMessage(error, '加载练习池失败'))
   }
 }
 
@@ -847,19 +940,19 @@ async function loadQuestionBank() {
     const result = await fetchQuizBankQuestions({
       query: bankFilters.query || undefined,
       subject: bankFilters.subject || undefined,
-      subjects: !bankFilters.subject && learnerCourses.value.length ? learnerCourses.value : undefined,
       difficulty: bankFilters.difficulty || undefined,
       type: bankFilters.type || undefined,
       page: bankPage.value,
       page_size: bankPageSize.value,
     })
+
     questions.value = result.items || []
     totalQuestions.value = result.total || 0
     subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
     difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
     types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
-  } catch {
-    toast.error('鍔犺浇棰樺簱澶辫触')
+  } catch (error) {
+    toast.error(getErrorMessage(error, '加载题库失败'))
   } finally {
     bankLoading.value = false
   }
@@ -867,6 +960,7 @@ async function loadQuestionBank() {
 
 function searchBank() {
   bankPage.value = 1
+  clearQuestionHighlight()
   openedAnalysis.value = new Set()
   void loadQuestionBank()
 }
@@ -886,10 +980,10 @@ async function loadWrongBook() {
       page: wrongPage.value,
       page_size: wrongPageSize.value,
     })
+
     wrongQuestions.value = (result.items || []).map(normalizeWrongQuestion)
     wrongTotal.value = result.total || 0
 
-    // Fetch archived wrong questions count
     const archivedResult = await fetchWrongQuestions({
       subject: wrongFilters.subject || undefined,
       question_type: wrongFilters.type || undefined,
@@ -933,12 +1027,56 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
 }
 
 function pickDailyQuestion() {
+  const nextQuestion = pickQuestionExcluding(dailyChallengeQuestion.value ? [dailyChallengeQuestion.value.id] : [])
+  dailyQuestion.value = nextQuestion
+}
+
+function pickDailyChallengeQuestion() {
+  dailyChallengeQuestion.value = pickQuestionExcluding(dailyQuestion.value ? [dailyQuestion.value.id] : [])
+}
+
+function refreshDailySelections() {
+  dailyQuestion.value = pickQuestionExcluding([])
+  dailyChallengeQuestion.value = pickQuestionExcluding(dailyQuestion.value ? [dailyQuestion.value.id] : [])
+}
+
+function pickQuestionExcluding(excludedIds: string[]) {
   const source = practicePool.value.length ? practicePool.value : questions.value
-  if (!source.length) {
-    dailyQuestion.value = null
+  if (!source.length) return null
+
+  const excluded = new Set(excludedIds)
+  const available = source.filter((item) => !excluded.has(item.id))
+  const pool = available.length ? available : source
+  return pool[Math.floor(Math.random() * pool.length)] || null
+}
+
+function clearQuestionHighlight() {
+  highlightQuestionId.value = null
+}
+
+async function jumpToChallengeQuestion() {
+  if (!dailyChallengeQuestion.value) {
+    toast.warning('暂无可跳转的每日挑战')
     return
   }
-  dailyQuestion.value = source[Math.floor(Math.random() * source.length)] || null
+
+  const targetId = dailyChallengeQuestion.value.id
+  const source = practicePool.value.length ? practicePool.value : questions.value
+  const sourceIndex = source.findIndex((item) => item.id === targetId)
+
+  activeModule.value = 'search'
+  resetQuestionBankFilters()
+  bankPage.value = sourceIndex >= 0 ? Math.floor(sourceIndex / bankPageSize.value) + 1 : 1
+  highlightQuestionId.value = targetId
+  highlightVersion.value += 1
+  openedAnalysis.value = new Set()
+
+  await loadQuestionBank()
+
+  if (!questions.value.some((item) => item.id === targetId)) {
+    highlightQuestionId.value = null
+    toast.warning('未在当前题库分页中定位到该题目')
+  }
 }
 
 async function pickWrongQuestion() {
@@ -948,6 +1086,7 @@ async function pickWrongQuestion() {
   } catch {
     wrongDrillQuestion.value = wrongQuestions.value[0] || null
   }
+
   wrongDrillAnswer.value = ''
   wrongDrillSubmitted.value = false
   wrongDrillCorrect.value = false
@@ -958,10 +1097,12 @@ async function pickWrongQuestion() {
 function startRecommendedPractice() {
   const pool = practicePool.value.filter((item) => !recommendedSubject.value || item.subject === recommendedSubject.value)
   const selected = shuffle(pool.length ? pool : practicePool.value).slice(0, recommendedCount.value)
+
   if (!selected.length) {
     toast.warning('暂无题目')
     return
   }
+
   startExam(selected, '推荐练习')
 }
 
@@ -970,7 +1111,8 @@ function startSingleDailyQuestion() {
     toast.warning('暂无每日一题')
     return
   }
-  startExam([dailyQuestion.value], '每日一题')
+
+  activeModule.value = 'daily'
 }
 
 function startSpecialPracticeProxy(config: typeof practiceForm) {
@@ -987,14 +1129,16 @@ async function startCustomPractice(config: typeof practiceForm) {
       page: 1,
       page_size: Math.min(30, Math.max(1, Number(config.count || 10))),
     })
+
     const selected = result.items || []
     if (!selected.length) {
       toast.warning('没有符合条件的题目')
       return
     }
+
     startExam(selected, '自定义练习')
   } catch {
-    toast.error('鐢熸垚缁冧範澶辫触')
+    toast.error('生成练习失败')
   } finally {
     practiceLoading.value = false
   }
@@ -1007,6 +1151,7 @@ function selectBankOption(question: Question, key: string) {
 
 async function submitBankAnswer(question: Question) {
   if (bankSubmitted.value[question.id]) return
+
   bankReviewing.value[question.id] = true
   const result = await gradeQuestion(question, bankAnswers.value[question.id])
   bankSubmitted.value[question.id] = true
@@ -1014,7 +1159,9 @@ async function submitBankAnswer(question: Question) {
   bankReview.value[question.id] = result.review
   openedAnalysis.value = new Set(openedAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
+
   if (!result.correct) await saveWrongQuestion(question, bankAnswers.value[question.id])
+
   bankReviewing.value[question.id] = false
 }
 
@@ -1025,6 +1172,7 @@ function selectWrongOption(question: Question, key: string) {
 
 async function submitWrongAnswer(question: Question) {
   if (wrongSubmitted.value[question.id]) return
+
   wrongReviewing.value[question.id] = true
   const result = await gradeQuestion(question, wrongAnswers.value[question.id])
   wrongSubmitted.value[question.id] = true
@@ -1037,6 +1185,7 @@ async function submitWrongAnswer(question: Question) {
 
 async function submitWrongDrill() {
   if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
+
   wrongDrillReviewing.value = true
   const result = await gradeQuestion(wrongDrillQuestion.value, wrongDrillAnswer.value)
   wrongDrillSubmitted.value = true
@@ -1064,20 +1213,23 @@ function toggleWrongAnalysis(id: string) {
 }
 
 function resetPaperForm() {
-  paperForm.title = '妯℃嫙璇曞嵎'
+  paperForm.title = '模拟试卷'
   paperForm.subject = subjects.value[0] || ''
   paperForm.difficulty = '混合'
   paperForm.duration = 45
+
   if (paperTypeCounts[0]) paperTypeCounts[0].count = 5
   if (paperTypeCounts[1]) paperTypeCounts[1].count = 3
   if (paperTypeCounts[2]) paperTypeCounts[2].count = 2
   if (paperTypeCounts[3]) paperTypeCounts[3].count = 1
+
   paperPreview.value = []
 }
 
 async function generatePaperPreview() {
   const targetCount = paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
   if (targetCount <= 0) return toast.warning('请至少选择 1 道题目')
+
   paperLoading.value = true
   try {
     const result = await fetchQuizBankQuestions({
@@ -1086,13 +1238,17 @@ async function generatePaperPreview() {
       page: 1,
       page_size: 100,
     })
+
     const pool = result.items || []
     const selected: Question[] = []
+
     paperTypeCounts.forEach((config) => {
       const sameType = pool.filter((item) => item.type === config.type)
       selected.push(...shuffle(sameType).slice(0, config.count))
     })
+
     paperPreview.value = selected
+
     if (!selected.length) toast.warning('暂无题目')
     else toast.success(`已生成 ${selected.length} 道题目`)
   } catch {
@@ -1111,7 +1267,9 @@ function startExam(paper: Question[], title: string) {
   examTitle.value = title
   examPaper.value = paper
   examAnswers.value = {}
-    paper.forEach((q) => (examAnswers.value[q.id] = q.type === '多选题' ? [] : ''))
+  paper.forEach((q) => {
+    examAnswers.value[q.id] = q.type === '多选题' ? [] : ''
+  })
   examSubmitted.value = false
   examCorrectCount.value = 0
   currentExamIndex.value = 0
@@ -1142,21 +1300,23 @@ function quitExam() {
 
 async function submitExam() {
   if (examSubmitted.value) return
+
   const unAnswered = examPaper.value.length - examAnsweredCount.value
   if (unAnswered > 0) {
     if (!window.confirm(`还有 ${unAnswered} 道题未作答，确定交卷吗？`)) {
       return
     }
   }
+
   stopExamTimer()
   let correctCount = 0
-
   const batchResults: Array<Record<string, unknown>> = []
 
   examPaper.value.forEach((q) => {
     if (isObjectiveQuestion(q)) {
       const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
       if (isCorrect) correctCount += 1
+
       batchResults.push({
         question_id: q.id,
         user_answer: formatUserAnswer(examAnswers.value[q.id]),
@@ -1172,22 +1332,23 @@ async function submitExam() {
   })
 
   const subjectiveTasks = examPaper.value
-    .filter((q) => !isObjectiveQuestion(q))
-    .map(async (q) => {
-      const { correct } = await gradeQuestion(q, examAnswers.value[q.id])
-      if (correct) correctCount += 1
-      batchResults.push({
-        question_id: q.id,
-        user_answer: formatUserAnswer(examAnswers.value[q.id]),
-        is_correct: correct,
-        subject: q.subject,
-        question_type: q.type,
-        content: q.content,
-        options: q.options || {},
-        answer: q.answer,
-        analysis: q.analysis,
+      .filter((q) => !isObjectiveQuestion(q))
+      .map(async (q) => {
+        const { correct } = await gradeQuestion(q, examAnswers.value[q.id])
+        if (correct) correctCount += 1
+
+        batchResults.push({
+          question_id: q.id,
+          user_answer: formatUserAnswer(examAnswers.value[q.id]),
+          is_correct: correct,
+          subject: q.subject,
+          question_type: q.type,
+          content: q.content,
+          options: q.options || {},
+          answer: q.answer,
+          analysis: q.analysis,
+        })
       })
-    })
 
   await Promise.all(subjectiveTasks)
 
@@ -1199,16 +1360,18 @@ async function submitExam() {
   examSubmitted.value = true
   saveAttempt(examPaper.value.length, correctCount)
 
-  // Save metrics for radar display
   if (examTitle.value === '每日一题') {
-    localStorage.setItem('daily_completed_' + new Date().toDateString(), 'true')
+    markDailyCompleted(new Date())
+
     const lastStreak = Number(localStorage.getItem('question_hub_streak') || '3')
     localStorage.setItem('question_hub_streak', String(lastStreak + 1))
+
+    dailyStateSeed.value += 1
+    localStatsSeed.value += 1
   } else if (examPaper.value.length > 0) {
     const pct = Math.round((correctCount / examPaper.value.length) * 100)
     localStorage.setItem('question_hub_last_mock', String(pct))
 
-    // Increment mock exams count
     if (activeModule.value === 'paper') {
       const prevCount = Number(localStorage.getItem('question_hub_mock_exams_count') || '0')
       const newCount = prevCount + 1
@@ -1221,8 +1384,9 @@ async function submitExam() {
 function backWorkspace() {
   stopExamTimer()
   viewMode.value = 'workspace'
-  activeModule.value = 'portal'
+  activeModule.value = 'daily'
   triggerChartAnimations()
+  refreshDailySelections()
   void loadQuestionBank()
   void loadWrongBook()
 }
@@ -1238,6 +1402,7 @@ function isExamCorrect(q: Question) {
 
 async function gradeQuestion(question: Question, answer: AnswerValue) {
   if (isObjectiveQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
+
   try {
     const review = await fetchQuizReview({
       question_id: question.id,
@@ -1247,31 +1412,43 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
       user_answer: formatUserAnswer(answer),
       knowledge_points: question.knowledge_points || [],
     })
+
     return { correct: review.is_correct, review }
   } catch {
     const correct = evaluateAnswer(question, answer)
-    return { correct, review: { score: correct ? 100 : 0, is_correct: correct, feedback: correct ? 'Correct' : 'Review needed', improvement_hints: [] } }
+    return {
+      correct,
+      review: {
+        score: correct ? 100 : 0,
+        is_correct: correct,
+        feedback: correct ? 'Correct' : 'Review needed',
+        improvement_hints: [],
+      },
+    }
   }
 }
 
 async function saveWrongQuestion(question: Question, answer: AnswerValue) {
   try {
     await submitObjectiveResults({
-      results: [{
-        question_id: question.id,
-        user_answer: formatUserAnswer(answer),
-        is_correct: false,
-        subject: question.subject,
-        question_type: question.type,
-        content: question.content,
-        options: question.options || {},
-        answer: question.answer,
-        analysis: question.analysis,
-      }],
+      results: [
+        {
+          question_id: question.id,
+          user_answer: formatUserAnswer(answer),
+          is_correct: false,
+          subject: question.subject,
+          question_type: question.type,
+          content: question.content,
+          options: question.options || {},
+          answer: question.answer,
+          analysis: question.analysis,
+        },
+      ],
     })
+
     wrongTotal.value += 1
   } catch {
-    // ignore duplicates
+    // 忽略重复错题
   }
 }
 
@@ -1293,58 +1470,102 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
     const std = correctKeys(question).sort()
     return user.length > 0 && user.length === std.length && user.every((item, i) => item === std[i])
   }
+
   const userText = formatUserAnswer(answer).trim().toLowerCase()
   const stdText = String(question.answer || '').trim().toLowerCase()
+
   if (!userText) return false
   if (!stdText) return userText.length > 4
 
   if (question.type === '填空题') {
     return userText === stdText
   }
+
   return userText.includes(stdText) || stdText.includes(userText)
 }
 
-function isObjectiveQuestion(q: Question) { return ['选择题', '判断题', '填空题', '分析题'].includes(q.type) }
-function isOptionQuestion(q: Question) { return ['选择题', '判断题'].includes(q.type) }
-function getOptions(q: Question) { return q.type === '判断题' ? { A: '正确', B: '错误' } : (q.options || {}) }
+function isObjectiveQuestion(q: Question) {
+  return ['选择题', '判断题', '填空题', '分析题'].includes(q.type)
+}
+
+function isOptionQuestion(q: Question) {
+  return ['选择题', '判断题'].includes(q.type)
+}
+
+function getOptions(q: Question) {
+  return q.type === '判断题' ? { A: '正确', B: '错误' } : q.options || {}
+}
+
 function isSelected(ans: AnswerValue, key: string) {
   if (!ans) return false
   return Array.isArray(ans) ? ans.includes(key) : ans === key
 }
+
 function updateOptionAnswer(q: Question, ans: AnswerValue, key: string) {
   if (q.type !== '多选题') return key
+
   const selected = normalizeAnswer(ans)
   return selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]
 }
+
 function correctKeys(q: Question) {
   let ansText = String(q.answer || '').trim()
+
   if (q.type === '判断题') {
     const upper = ansText.toUpperCase()
     if (upper === 'A' || ['TRUE', 'T', '正确'].some((item) => upper.includes(item))) ansText = 'A'
     else if (upper === 'B' || ['FALSE', 'F', '错误'].some((item) => upper.includes(item))) ansText = 'B'
   }
-  return ansText.split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
+
+  return ansText
+      .split(/[、,，\s]+/)
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean)
 }
-function isCorrectOption(q: Question, key: string) { return correctKeys(q).includes(key) }
+
+function isCorrectOption(q: Question, key: string) {
+  return correctKeys(q).includes(key)
+}
+
 function normalizeAnswer(ans: AnswerValue): string[] {
-  if (Array.isArray(ans)) return ans.map((item) => String(item).trim().toUpperCase()).filter(Boolean)
-  return String(ans || '').split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
+  if (Array.isArray(ans)) {
+    return ans.map((item) => String(item).trim().toUpperCase()).filter(Boolean)
+  }
+
+  return String(ans || '')
+      .split(/[、,，\s]+/)
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean)
 }
-function hasAnswerData(ans: AnswerValue) { return normalizeAnswer(ans).length > 0 }
-function formatAnswer(ans: string) { return String(ans || '').replace(/,/g, '、') }
-function formatUserAnswer(ans: AnswerValue) { return Array.isArray(ans) ? ans.join(',') : String(ans || '') }
+
+function hasAnswerData(ans: AnswerValue) {
+  return normalizeAnswer(ans).length > 0
+}
+
+function formatAnswer(ans: string) {
+  return String(ans || '').replace(/,/g, '、')
+}
+
+function formatUserAnswer(ans: AnswerValue) {
+  return Array.isArray(ans) ? ans.join(',') : String(ans || '')
+}
 
 function shuffle<T>(array: T[]): T[] {
   const result = [...array]
-  for (let i = result.length - 1; i > 0; i--) {
+
+  for (let i = result.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
     const temp = result[i] as T
     result[i] = result[j] as T
     result[j] = temp
   }
+
   return result
 }
-function uniqueKeepOrder(items: string[]) { return Array.from(new Set(items.filter(Boolean))) }
+
+function uniqueKeepOrder(items: string[]) {
+  return Array.from(new Set(items.filter(Boolean)))
+}
 
 function readLocalStats() {
   try {
@@ -1356,157 +1577,378 @@ function readLocalStats() {
     stats.totalCorrect = 0
   }
 }
+
 function saveAttempt(attempted: number, correct: number) {
   stats.totalAttempted += attempted
   stats.totalCorrect += correct
-  localStorage.setItem('question_hub_stats', JSON.stringify({ totalAttempted: stats.totalAttempted, totalCorrect: stats.totalCorrect }))
+  localStorage.setItem(
+      'question_hub_stats',
+      JSON.stringify({
+        totalAttempted: stats.totalAttempted,
+        totalCorrect: stats.totalCorrect,
+      }),
+  )
+  localStatsSeed.value += 1
+  triggerChartAnimations()
 }
+
+function readDailyCompletionMap(): Record<string, boolean> {
+  const next: Record<string, boolean> = {}
+
+  try {
+    const raw = localStorage.getItem('question_hub_daily_completion_map')
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      Object.entries(parsed).forEach(([key, value]) => {
+        if (value === true) next[key] = true
+      })
+    }
+  } catch {
+    // ignore invalid local cache
+  }
+
+  const legacyKey = 'daily_completed_' + new Date().toDateString()
+  if (localStorage.getItem(legacyKey) === 'true') {
+    next[formatDateKey(new Date())] = true
+  }
+
+  return next
+}
+
+function writeDailyCompletionMap(map: Record<string, boolean>) {
+  localStorage.setItem('question_hub_daily_completion_map', JSON.stringify(map))
+}
+
+function markDailyCompleted(date: Date) {
+  const key = formatDateKey(date)
+  const map = readDailyCompletionMap()
+  map[key] = true
+  writeDailyCompletionMap(map)
+  localStorage.setItem('daily_completed_' + date.toDateString(), 'true')
+}
+
 function formatDuration(sec: number) {
   return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
 }
+
 function renderInline(text: string) {
   if (!text) return ''
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>')
+}
+
+function formatDateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 .question-bank-layout {
   min-height: calc(100vh - var(--navbar-height, 64px));
-  padding: 16px 24px;
-  background: var(--color-bg, #f8fafc);
-  color: var(--color-text, #0f172a);
-  font-family: 'Inter', 'Segoe UI', sans-serif;
+  padding: 28px 28px 36px;
   box-sizing: border-box;
+  color: #172033;
+  background:
+      radial-gradient(circle at 28% 8%, rgba(94, 234, 212, 0.16), transparent 28%),
+      radial-gradient(circle at 70% 18%, rgba(147, 197, 253, 0.18), transparent 30%),
+      linear-gradient(180deg, #f8fbff 0%, #f7f8fc 52%, #fbfcff 100%);
+  font-family:
+      Inter,
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      "Microsoft YaHei",
+      sans-serif;
 }
 
 .question-bank-workspace,
 .exam-workspace {
-  max-width: 1400px;
+  width: min(1480px, 100%);
   margin: 0 auto;
 }
 
-.question-bank-workspace {
+.bank-shell {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) 300px;
+  gap: 22px;
+  min-height: calc(100vh - var(--navbar-height, 64px) - 64px);
+  border: 1px solid rgba(226, 232, 240, 0.84);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+  overflow: visible;
+}
+
+.bank-left-rail {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - var(--navbar-height, 64px) - 32px);
+  overflow-y: auto;
+  padding: 22px 14px;
+  border-right: 1px solid rgba(226, 232, 240, 0.8);
+  background: rgba(255, 255, 255, 0.54);
+  scrollbar-width: thin;
+}
+
+.rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 26px;
+}
+
+.rail-brand-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background:
+      linear-gradient(135deg, #67e8f9, #8bdbb6),
+      #8bdbb6;
+  box-shadow: none;
+}
+
+.rail-brand strong {
+  display: block;
+  color: #172033;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.rail-brand span {
+  display: block;
+  margin-top: 2px;
+  color: #8a94a7;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rail-menu {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 4px;
 }
 
-/* ================== 新增：玻璃材质材质与全局效果 ================== */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.72) !important;
-  backdrop-filter: blur(16px) saturate(120%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 10px 30px 0 rgba(15, 23, 42, 0.05) !important;
-}
-
-.glow-border {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.glow-border:hover {
-  border-color: rgba(139, 92, 246, 0.4) !important;
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.16) !important;
-}
-
-/* ================== 题库控制台主页 & 仪表盘 ================== */
-.portal-workspace-view,
-.focused-workspace-view {
+.rail-menu-item {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  gap: 10px;
   width: 100%;
+  min-height: 50px;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #5f6b7c;
+  text-align: left;
+  cursor: pointer;
+  transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      transform 160ms ease,
+      color 160ms ease;
 }
 
-.question-bank-hero,
-.exam-question,
-.exam-sidebar .panel {
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 24px;
-  background: #fff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+.rail-menu-item:hover {
+  background: rgba(248, 250, 252, 0.86);
+  transform: none;
 }
 
-.question-bank-hero {
+.rail-menu-item.active {
+  border-color: rgba(82, 211, 173, 0.34);
+  background: rgba(209, 250, 229, 0.48);
+  color: #136f60;
+}
+
+.rail-menu-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(241, 245, 249, 0.8);
+  color: #8a94a7;
+  font-size: 11px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.rail-menu-item.active .rail-menu-mark {
+  background: #42c99a;
+  color: #fff;
+}
+
+.rail-menu-item strong,
+.rail-menu-item small {
+  display: block;
+}
+
+.rail-menu-item strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rail-menu-item small {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa4b5;
+}
+
+.rail-menu-item.active small {
+  color: rgba(19, 111, 96, 0.72);
+}
+
+.rail-card {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.rail-card-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 20px 32px;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 800;
 }
 
-@media (max-width: 900px) {
-  .question-bank-hero {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 24px;
-    padding: 24px 28px;
-  }
+.rail-card-title button {
+  border: none;
+  background: transparent;
+  color: #5f6b7c;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.hero-left {
+.rail-question-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  flex: 1;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.rail-question {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-question span {
+  display: block;
+  margin-bottom: 4px;
+  color: #8a94a7;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rail-question p {
+  display: -webkit-box;
+  margin: 0;
+  color: #3d4656;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rail-empty {
+  margin-top: 14px;
+  color: #9aa4b5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.bank-main {
+  min-width: 0;
+  padding: 24px 0 28px;
+}
+
+.portal-board,
+.module-board {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.portal-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  min-height: 126px;
+  padding: 26px 30px;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 26px;
+  background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 253, 249, 0.88)),
+      #fff;
+  box-shadow: 0 18px 45px rgba(27, 42, 78, 0.07);
 }
 
 .hero-kicker,
-.workspace-panel-label {
-  color: var(--cat-eval, #8b5cf6);
+.module-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: #42b892;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.hero-left h1,
-.workspace-panel-header h2,
-.exam-title {
+.portal-hero h1 {
   margin: 0;
-  color: #0f172a;
-  line-height: 1.15;
+  color: #172033;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1.14;
 }
 
-.hero-left h1 {
-  font-size: 1.85rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+.portal-hero p {
+  width: min(680px, 100%);
+  margin: 10px 0 0;
+  color: #6d7687;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
-.hero-left .quote {
-  margin: 4px 0 10px 0;
-  color: var(--color-text-muted, #64748b);
-  font-style: italic;
-  font-size: 0.9rem;
-}
-
-.hero-stats-row {
+.portal-hero-metrics {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 18px;
+  flex-shrink: 0;
 }
 
-/* 环形进度条 */
 .accuracy-circle-container {
   position: relative;
-  width: 76px;
-  height: 76px;
+  width: 74px;
+  height: 74px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
 .progress-ring {
@@ -1515,13 +1957,13 @@ function renderInline(text: string) {
 
 .circle-bg {
   fill: none;
-  stroke: rgba(226, 232, 240, 0.8);
+  stroke: #e8edf3;
   stroke-width: 8px;
 }
 
 .circle-progress {
   fill: none;
-  stroke: var(--cat-eval, #8b5cf6);
+  stroke: #42c99a;
   stroke-width: 8px;
   stroke-linecap: round;
 }
@@ -1531,554 +1973,972 @@ function renderInline(text: string) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
 }
 
 .circle-content .pct {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: var(--color-text-strong, #0f172a);
+  color: #172033;
+  font-size: 16px;
+  font-weight: 900;
   line-height: 1;
 }
 
 .circle-content .lbl {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--color-text-muted, #64748b);
-  margin-top: 1px;
+  margin-top: 2px;
+  color: #8a94a7;
+  font-size: 10px;
+  font-weight: 800;
 }
 
-/* 右侧文本指标 */
-.stats-text-block {
-  display: flex;
-  align-items: center;
-  gap: 28px;
+.hero-stat {
+  min-width: 72px;
 }
 
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stat-item .lbl {
-  color: var(--color-text-muted, #64748b);
+.hero-stat span {
+  display: block;
+  margin-bottom: 4px;
+  color: #8a94a7;
   font-size: 12px;
   font-weight: 700;
 }
 
-.stat-item .val {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: var(--color-text-strong, #0f172a);
+.hero-stat strong {
+  color: #172033;
+  font-size: 24px;
+  font-weight: 900;
 }
 
-.stat-item .danger-color {
-  color: var(--color-danger, #ef4444);
+.hero-stat strong.danger {
+  color: #e05252;
 }
 
-.stat-item .warning-color {
-  color: var(--color-warning, #f59e0b);
-}
-
-/* 雷达图 */
-.hero-right {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.radar-chart-wrapper {
-  background: rgba(255, 255, 255, 0.4);
-  border-radius: 20px;
-  padding: 8px;
-  border: 1px solid rgba(226, 232, 240, 0.5);
-}
-
-.radar-grid-poly {
-  fill: none;
-  stroke: rgba(226, 232, 240, 0.9);
-  stroke-width: 1px;
-}
-
-.radar-axis-line {
-  stroke: rgba(226, 232, 240, 0.9);
-  stroke-width: 1px;
-  stroke-dasharray: 2 2;
-}
-
-.radar-data-poly {
-  stroke: var(--cat-eval, #8b5cf6);
-  stroke-width: 2px;
-  stroke-linejoin: round;
-  transition: points 1s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.radar-data-dot {
-  fill: #fff;
-  stroke: var(--cat-eval, #8b5cf6);
-  stroke-width: 2px;
-  transition: cx 1s cubic-bezier(0.34, 1.56, 0.64, 1), cy 1s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.radar-label {
-  fill: var(--color-text-muted, #64748b);
-  font-size: 11px;
-  font-weight: 700;
-  font-family: inherit;
-}
-
-/* ================== 功能入口卡片网格 ================== */
-.portal-grid {
+.feature-card-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+  border-top: none;
 }
 
-@media (max-width: 1024px) {
-  .portal-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .portal-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.portal-card {
+.feature-card {
   position: relative;
-  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 132px;
+  padding: 18px 18px 20px;
+  border: none;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03);
-  cursor: pointer;
+  background: #fff;
+  color: #172033;
+  text-align: left;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(27, 42, 78, 0.06);
+  transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      color 180ms ease;
 }
 
-.portal-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(139, 92, 246, 0.4) !important;
-  box-shadow: 0 10px 24px rgba(139, 92, 246, 0.12) !important;
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(27, 42, 78, 0.08);
 }
 
-.card-glow-bg {
+.feature-card.black {
+  background: radial-gradient(circle at 88% 15%, rgba(255, 255, 255, 0.16), transparent 22%), #111;
+  color: #fff;
+}
+
+.feature-card.green {
+  background: linear-gradient(135deg, #dcff9f 0%, #91ebc6 100%);
+  color: #153b2d;
+}
+
+.feature-card.blue {
+  background: linear-gradient(135deg, #9ef1c9 0%, #96d6f8 100%);
+  color: #14364a;
+}
+
+.feature-card-kicker {
+  display: block;
+  color: currentColor;
+  opacity: 0.78;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.feature-card strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.feature-card small {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.7;
+  color: currentColor;
+}
+
+.feature-card i {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle at 10% 10%, rgba(139, 92, 246, 0.03) 0%, transparent 70%);
-  pointer-events: none;
+  right: 18px;
+  bottom: 18px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
 }
 
-.card-header-icon {
+.feature-card i::before {
+  content: "";
+  position: absolute;
+  inset: 15px 13px 13px 16px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.75;
+}
+
+.subject-strip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 10px;
+  min-height: 54px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
+  overflow-x: auto;
 }
 
-.icon-box {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+.subject-strip strong {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: #172033;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.subject-chip {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: #f1f3f5;
+  color: #5f6b7c;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+      background 160ms ease,
+      color 160ms ease,
+      transform 160ms ease;
+}
+
+.subject-chip:hover {
+  transform: translateY(-1px);
+  background: #e7f7f1;
+  color: #17856d;
+}
+
+.subject-chip.active {
+  background: #42c99a;
+  color: #fff;
+}
+
+.subject-chip.muted {
+  background: transparent;
+}
+
+.section-toolbar {
   display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 4px 0 2px;
+}
+
+.section-toolbar h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.section-toolbar p {
+  margin: 6px 0 0;
+  color: #7c8798;
+  font-size: 13px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.primary-action,
+.soft-action,
+.btn-primary,
+.btn-secondary,
+.btn-text {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+      transform 150ms ease,
+      box-shadow 150ms ease,
+      border-color 150ms ease,
+      background 150ms ease,
+      color 150ms ease;
 }
 
-.icon-box.violet { background: rgba(139, 92, 246, 0.08); color: #8b5cf6; }
-.icon-box.blue { background: rgba(59, 130, 246, 0.08); color: #3b82f6; }
-.icon-box.green { background: rgba(16, 185, 129, 0.08); color: #10b981; }
-.icon-box.orange { background: rgba(245, 158, 11, 0.08); color: #f59e0b; }
-.icon-box.red { background: rgba(239, 68, 68, 0.08); color: #ef4444; }
-
-.card-badge {
-  font-size: 11px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 99px;
-  text-transform: uppercase;
+.primary-action,
+.btn-primary {
+  border: 1px solid #42c99a;
+  background: #42c99a;
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(66, 201, 154, 0.2);
 }
 
-.card-badge.success { background: rgba(236, 253, 245, 0.9); color: #059669; }
-.card-badge.info { background: rgba(239, 246, 255, 0.9); color: #2563eb; }
-.card-badge.secondary { background: rgba(241, 245, 249, 0.9); color: #475569; }
-.card-badge.danger { background: rgba(254, 242, 242, 0.9); color: #dc2626; }
-
-/* 呼吸灯动画 */
-@keyframes pulseGlow {
-  0%, 100% { transform: scale(1); opacity: 0.9; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-  50% { transform: scale(1.03); opacity: 1; box-shadow: 0 0 10px 4px rgba(245, 158, 11, 0.15); }
+.primary-action:hover,
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(66, 201, 154, 0.26);
 }
 
-@keyframes pulseRed {
-  0%, 100% { transform: scale(1); opacity: 0.9; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  50% { transform: scale(1.04); opacity: 1; box-shadow: 0 0 10px 4px rgba(239, 68, 68, 0.2); }
+.soft-action,
+.btn-secondary,
+.btn-text {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: #fff;
+  color: #4f5b6d;
 }
 
-.pulsing-warning {
-  background: rgba(254, 243, 199, 0.9) !important;
-  color: #d97706 !important;
-  animation: pulseGlow 2s infinite ease-in-out;
+.soft-action:hover,
+.btn-secondary:hover,
+.btn-text:hover {
+  border-color: rgba(66, 201, 154, 0.36);
+  color: #17856d;
 }
 
-.pulsing {
-  animation: pulseRed 2.5s infinite ease-in-out;
+.recommend-question-card {
+  padding: 8px 0 0;
+  border-top: 1px solid rgba(226, 232, 240, 0.86);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.portal-card h3 {
-  margin: 0 0 4px 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.portal-card p {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: #64748b;
-}
-
-/* ================== Themes and Accents ================== */
-.focused-workspace-view.theme-daily {
-  --theme-color: #8b5cf6;
-  --theme-color-glow: rgba(139, 92, 246, 0.25);
-  --theme-color-soft: rgba(139, 92, 246, 0.08);
-}
-.focused-workspace-view.theme-practice {
-  --theme-color: #3b82f6;
-  --theme-color-glow: rgba(59, 130, 246, 0.25);
-  --theme-color-soft: rgba(59, 130, 246, 0.08);
-}
-.focused-workspace-view.theme-search {
-  --theme-color: #10b981;
-  --theme-color-glow: rgba(16, 185, 129, 0.25);
-  --theme-color-soft: rgba(16, 185, 129, 0.08);
-}
-.focused-workspace-view.theme-paper {
-  --theme-color: #f59e0b;
-  --theme-color-glow: rgba(245, 158, 11, 0.25);
-  --theme-color-soft: rgba(245, 158, 11, 0.08);
-}
-.focused-workspace-view.theme-wrong {
-  --theme-color: #ef4444;
-  --theme-color-glow: rgba(239, 68, 68, 0.25);
-  --theme-color-soft: rgba(239, 68, 68, 0.08);
-}
-
-/* Accent strip pulsing glow animation */
-@keyframes pulseThemeGlow {
-  0%, 100% {
-    opacity: 0.6;
-    box-shadow: 0 0 6px var(--theme-color);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 14px var(--theme-color);
-  }
-}
-
-.header-left-side {
+.question-card-top {
   display: flex;
-  align-items: stretch;
-  gap: 14px;
-  max-width: 65%;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
 }
 
-.theme-accent-strip {
-  width: 4px;
-  border-radius: 4px;
-  background: var(--theme-color);
-  box-shadow: 0 0 10px var(--theme-color);
-  animation: pulseThemeGlow 2.5s infinite ease-in-out;
+.question-index {
+  margin-right: 6px;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #3d78b5;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tag.soft {
+  background: #eff6f2;
+  color: #288a6e;
+}
+
+.tag.level {
+  background: #dff2ff;
+  color: #3487c7;
+}
+
+.recommend-question-content {
+  color: #273142;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.82;
+}
+
+.recommend-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.recommend-option {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.recommend-option span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #e7f7f1;
+  color: #17856d;
+  font-size: 12px;
+  font-weight: 900;
   flex-shrink: 0;
 }
 
-.header-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.workspace-panel-desc {
-  margin: 4px 0 0 0;
-  font-size: 0.88rem;
-  color: var(--color-text-muted, #64748b);
-  line-height: 1.45;
-}
-
-/* Header Statistics Badges */
-.header-right-stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.stat-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  padding: 6px 12px;
-  border-radius: 12px;
-  min-width: 80px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
-}
-
-.badge-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.badge-value {
+.recommend-option p {
+  margin: 0;
+  color: #4f5b6d;
   font-size: 14px;
-  font-weight: 800;
-  margin-top: 2px;
+  line-height: 1.55;
 }
 
-.badge-value.theme-text {
-  color: var(--theme-color);
-}
-
-.badge-value.text-success {
-  color: #10b981;
-}
-
-.badge-value.text-warning {
-  color: #f59e0b;
-}
-
-.badge-value.text-danger {
-  color: #ef4444;
-}
-
-/* Deep component styling overrides based on active theme */
-.focused-workspace-view .crumb-active {
-  color: var(--theme-color);
-}
-
-.focused-workspace-view .btn-back:hover {
-  border-color: var(--theme-color-glow);
-  color: var(--theme-color);
-}
-
-.focused-workspace-view :deep(.btn-primary) {
-  background: var(--theme-color) !important;
-  border-color: var(--theme-color) !important;
-}
-
-.focused-workspace-view :deep(.btn-primary:hover:not(:disabled)) {
-  background: var(--theme-color) !important;
-  filter: brightness(0.95);
-  box-shadow: 0 0 12px var(--theme-color-glow) !important;
-}
-
-.focused-workspace-view :deep(.btn-secondary:hover:not(:disabled)) {
-  border-color: var(--theme-color) !important;
-  color: var(--theme-color) !important;
-  background: var(--theme-color-soft) !important;
-}
-
-.focused-workspace-view :deep(.btn-link) {
-  color: var(--theme-color) !important;
-}
-
-.focused-workspace-view :deep(.btn-link:hover) {
-  color: var(--theme-color) !important;
-  opacity: 0.8;
-}
-
-.focused-workspace-view :deep(.btn-ghost:hover) {
-  color: var(--theme-color) !important;
-}
-
-.focused-workspace-view :deep(.option-btn.selected) {
-  border-color: var(--theme-color) !important;
-  background: var(--theme-color-soft) !important;
-}
-
-.focused-workspace-view :deep(.option-btn.selected .opt-key) {
-  background: var(--theme-color) !important;
-  border-color: var(--theme-color) !important;
-  box-shadow: 0 4px 10px var(--theme-color-glow) !important;
-}
-
-.focused-workspace-view :deep(.opt-key) {
-  color: var(--theme-color) !important;
-}
-
-.focused-workspace-view :deep(.text-area-input:focus) {
-  border-color: var(--theme-color) !important;
-  box-shadow: 0 0 0 4px var(--theme-color-soft) !important;
-}
-
-.focused-workspace-view :deep(.page-btn:hover:not(:disabled)) {
-  border-color: var(--theme-color) !important;
-  color: var(--theme-color) !important;
-}
-
-.focused-workspace-view :deep(.page-btn.active) {
-  background: var(--theme-color) !important;
-  border-color: var(--theme-color) !important;
-  color: #fff !important;
-}
-
-.focused-workspace-view :deep(.tag.type) {
-  border-color: var(--theme-color-soft) !important;
-  background: var(--theme-color-soft) !important;
-  color: var(--theme-color) !important;
-}
-
-/* ================== 子工作区玻璃粘性返回栏 ================== */
-.workspace-nav-header {
+.question-card-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 24px;
+  flex-wrap: wrap;
+  gap: 26px;
+  margin-top: 24px;
+  padding: 18px 0 8px;
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.question-card-actions button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #3d4656;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.question-card-actions button.strong {
+  color: #17856d;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 20px;
+  border: 1px dashed rgba(148, 163, 184, 0.46);
   border-radius: 18px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  background: #f8fafc;
+}
+
+.empty-state strong {
+  color: #172033;
+  font-size: 16px;
+}
+
+.empty-state p {
+  margin: 0 0 10px;
+  color: #6d7687;
+  font-size: 13px;
+}
+
+.module-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 0 18px;
+  border: none;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.module-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
 }
 
 .btn-back {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 999px;
   background: #fff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 10px;
-  padding: 8px 14px;
-  color: #0f172a;
+  color: #5f6b7c;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 900;
   cursor: pointer;
-  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.btn-back svg {
-  transition: transform 0.2s ease;
+.module-header h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
 }
 
-.btn-back:hover {
-  background: rgba(248, 250, 252, 0.95);
-  border-color: rgba(139, 92, 246, 0.3);
-  color: var(--cat-eval, #8b5cf6);
+.module-header p {
+  margin: 7px 0 0;
+  color: #7c8798;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
-.btn-back:hover svg {
-  transform: translateX(-3px);
-}
-
-.breadcrumb {
+.module-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.module-stat {
+  min-width: 92px;
+  padding: 0 0 0 14px;
+  border: none;
+  border-left: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 0;
+  background: transparent;
+  text-align: right;
+}
+
+.module-stat span {
+  display: block;
+  color: #8a94a7;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.module-stat strong {
+  display: block;
+  margin-top: 3px;
+  color: #172033;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.module-stat strong.success {
+  color: #18a77c;
+}
+
+.module-stat strong.warning {
+  color: #e09b2d;
+}
+
+.module-stat strong.danger {
+  color: #e05252;
+}
+
+.module-content-card {
+  min-width: 0;
+  padding: 6px 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.module-board.theme-daily {
+  --module-color: #42c99a;
+  --module-soft: rgba(66, 201, 154, 0.1);
+}
+
+.module-board.theme-practice {
+  --module-color: #4b8ef7;
+  --module-soft: rgba(75, 142, 247, 0.1);
+}
+
+.module-board.theme-search {
+  --module-color: #42c99a;
+  --module-soft: rgba(66, 201, 154, 0.1);
+}
+
+.module-board.theme-paper {
+  --module-color: #efae45;
+  --module-soft: rgba(239, 174, 69, 0.12);
+}
+
+.module-board.theme-wrong {
+  --module-color: #e05252;
+  --module-soft: rgba(224, 82, 82, 0.1);
+}
+
+.module-board .btn-back:hover {
+  border-color: color-mix(in srgb, var(--module-color), transparent 60%);
+  color: var(--module-color);
+}
+
+.module-board :deep(.btn-primary) {
+  border-color: var(--module-color) !important;
+  background: var(--module-color) !important;
+  color: #fff !important;
+}
+
+.module-board :deep(.btn-secondary:hover),
+.module-board :deep(.btn-ghost:hover),
+.module-board :deep(.btn-link) {
+  color: var(--module-color) !important;
+  border-color: color-mix(in srgb, var(--module-color), transparent 62%) !important;
+}
+
+.module-board :deep(input),
+.module-board :deep(select),
+.module-board :deep(textarea) {
+  border-radius: 10px !important;
+}
+
+.module-board :deep(input:focus),
+.module-board :deep(select:focus),
+.module-board :deep(textarea:focus) {
+  border-color: var(--module-color) !important;
+  box-shadow: 0 0 0 4px var(--module-soft) !important;
+}
+
+.module-board :deep(.option-btn.selected) {
+  border-color: var(--module-color) !important;
+  background: var(--module-soft) !important;
+}
+
+.module-board :deep(.tag.type),
+.module-board :deep(.page-btn.active) {
+  border-color: var(--module-color) !important;
+  background: var(--module-color) !important;
+  color: #fff !important;
+}
+
+.module-content-card :deep(.section-card),
+.module-content-card :deep(.question-card),
+.module-content-card :deep(.tab-card),
+.module-content-card :deep(.practice-card),
+.module-content-card :deep(.filter-panel),
+.module-content-card :deep(.preview-card),
+.module-content-card :deep(.wrong-card),
+.module-content-card :deep(.daily-question-block),
+.module-content-card :deep(.daily-empty),
+.module-content-card :deep(.practice-section),
+.module-content-card :deep(.question-item),
+.module-content-card :deep(.workspace-pane),
+.module-content-card :deep(.preview-item),
+.module-content-card :deep(.drill-card),
+.module-content-card :deep(.wrong-item) {
+  border: none !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.module-content-card :deep(.question-text),
+.module-content-card :deep(.question-content) {
+  color: #273142 !important;
+  font-size: 16px !important;
+  line-height: 1.75 !important;
+}
+
+.module-content-card :deep(.daily-tab-shell),
+.module-content-card :deep(.practice-shell),
+.module-content-card :deep(.search-shell),
+.module-content-card :deep(.exam-shell),
+.module-content-card :deep(.wrong-shell) {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.module-content-card :deep(.question-item),
+.module-content-card :deep(.preview-item),
+.module-content-card :deep(.wrong-item),
+.module-content-card :deep(.daily-question-block),
+.module-content-card :deep(.drill-card) {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.module-content-card :deep(.practice-section),
+.module-content-card :deep(.workspace-pane),
+.module-content-card :deep(.list-section),
+.module-content-card :deep(.drill-section) {
+  padding: 0 0 20px !important;
+}
+
+.module-content-card :deep(.practice-section + .practice-section),
+.module-content-card :deep(.workspace-pane + .workspace-pane),
+.module-content-card :deep(.drill-section + .list-section) {
+  margin-top: 22px !important;
+}
+
+.module-content-card :deep(.toolbar),
+.module-content-card :deep(.filter-row),
+.module-content-card :deep(.custom-form),
+.module-content-card :deep(.config-form),
+.module-content-card :deep(.counts-section) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.module-content-card :deep(.summary-item),
+.module-content-card :deep(.count-row),
+.module-content-card :deep(.wrong-analysis),
+.module-content-card :deep(.analysis-box),
+.module-content-card :deep(.drill-result),
+.module-content-card :deep(.preview-empty),
+.module-content-card :deep(.simple-empty),
+.module-content-card :deep(.state-block) {
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+.module-content-card :deep(.question-list),
+.module-content-card :deep(.wrong-list),
+.module-content-card :deep(.preview-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 0 !important;
+}
+
+.module-content-card :deep(.question-item + .question-item),
+.module-content-card :deep(.wrong-item + .wrong-item),
+.module-content-card :deep(.preview-item + .preview-item) {
+  margin-top: 0 !important;
+}
+
+.module-content-card :deep(.daily-question-block .action-row),
+.module-content-card :deep(.question-foot),
+.module-content-card :deep(.wrong-actions),
+.module-content-card :deep(.action-row) {
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+  padding-top: 16px;
+}
+
+.bank-right-panel {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - var(--navbar-height, 64px) - 32px);
+  overflow-y: auto;
+  padding: 24px 18px 28px;
+  border-left: 1px solid rgba(226, 232, 240, 0.82);
+  background: rgba(255, 255, 255, 0.7);
+  scrollbar-width: thin;
+}
+
+.right-card {
+  padding: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+      0 12px 28px rgba(27, 42, 78, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.right-card + .right-card {
+  margin-top: 18px;
+}
+
+.right-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.right-card-header strong {
+  color: #172033;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.right-card-header span {
+  color: #5f6b7c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.calendar-week,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-grid {
+  row-gap: 4px;
+}
+
+.calendar-week span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  color: #8a94a7;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.calendar-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border-radius: 999px;
+  color: #4f5b6d;
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.calendar-day.muted {
+  color: #c7cdd8;
+  background: transparent;
+}
+
+.calendar-day.today {
+  background: #42c99a;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(66, 201, 154, 0.22);
+}
+
+.calendar-day.completed::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.right-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #172033;
   font-size: 13px;
+  font-weight: 900;
+}
+
+.right-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 12px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+}
+
+.right-input:focus {
+  border-color: rgba(66, 201, 154, 0.56);
+  box-shadow: 0 0 0 4px rgba(66, 201, 154, 0.1);
+}
+
+.difficulty-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.difficulty-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
+  background: #fff;
+  color: #3d4656;
+  text-align: left;
+  cursor: pointer;
+  transition:
+      border-color 150ms ease,
+      background 150ms ease,
+      color 150ms ease;
+}
+
+.difficulty-row span {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #d7eef1;
+  box-shadow: inset 0 0 0 4px #eefafa;
+}
+
+.difficulty-row:nth-child(2) span {
+  background: #8ed0ff;
+}
+
+.difficulty-row:nth-child(3) span {
+  background: #ffc36a;
+}
+
+.difficulty-row strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.difficulty-row.active {
+  border-color: rgba(66, 201, 154, 0.42);
+  background: linear-gradient(135deg, rgba(209, 250, 229, 0.72), rgba(239, 246, 255, 0.78));
+  color: #136f60;
+}
+
+.summary-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.summary-card div {
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.78);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.summary-card span {
+  display: block;
+  color: #8a94a7;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.summary-card strong {
+  display: block;
+  margin-top: 4px;
+  color: #172033;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.get-question-btn {
+  width: 100%;
+  height: 48px;
+  margin-top: 18px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ff9f9f, #ffd6b1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(255, 159, 159, 0.2);
+  transition:
+      transform 160ms ease,
+      box-shadow 160ms ease;
+}
+
+.get-question-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(255, 159, 159, 0.24);
+}
+
+.text-link-btn {
+  border: none;
+  background: transparent;
+  color: #5f6b7c;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.daily-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.daily-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mini-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #475569;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.crumb-parent {
-  color: #64748b;
+.daily-preview-content {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 2px 0 4px;
 }
 
-.crumb-divider {
-  color: rgba(203, 213, 225, 0.8);
+.daily-preview-empty {
+  margin: 0;
+  color: #7c8798;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
-.crumb-active {
-  color: var(--cat-eval, #8b5cf6);
-}
-
-/* ================== 过渡动画 fade-scale ================== */
 .fade-scale-enter-active,
 .fade-scale-leave-active {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.22s ease;
 }
 
 .fade-scale-enter-from {
   opacity: 0;
-  transform: scale(0.97) translateY(8px);
+  transform: translateY(8px);
 }
 
 .fade-scale-leave-to {
   opacity: 0;
-  transform: scale(0.97) translateY(-8px);
-}
-
-.workspace-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
-  width: fit-content;
-}
-
-.workspace-tab {
-  min-height: 42px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
-}
-
-.workspace-tab:hover {
-  background: rgba(238, 242, 255, 0.9);
-  color: #6d28d9;
-}
-
-.workspace-tab.active {
-  background: var(--cat-eval, #8b5cf6);
-  color: #fff;
-  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.24);
-}
-
-.workspace-panel-shell {
-  padding: 24px;
-}
-
-.workspace-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 18px;
-  margin-bottom: 22px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
-}
-
-.workspace-panel-header h2 {
-  margin-top: 6px;
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-.workspace-panel-content {
-  min-width: 0;
+  transform: translateY(-8px);
 }
 
 .exam-workspace {
@@ -2091,12 +2951,13 @@ function renderInline(text: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 20px 24px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 24px;
-  background: linear-gradient(135deg, #ffffff 0%, var(--cat-eval-soft, #f5f3ff) 100%);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  gap: 18px;
+  padding: 0 0 18px;
+  border: none;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .exam-topbar-left,
@@ -2111,55 +2972,71 @@ function renderInline(text: string) {
 .exam-topbar-left,
 .exam-actions,
 .question-header {
-  gap: 16px;
+  gap: 14px;
 }
 
 .exam-title {
-  font-size: 1.15rem;
-  font-weight: 700;
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 900;
 }
 
 .timer-badge {
   gap: 8px;
-  min-height: 42px;
+  min-height: 40px;
   padding: 0 14px;
-  border-radius: 14px;
-  background: var(--cat-eval, #8b5cf6);
+  border-radius: 999px;
+  background: #42c99a;
   color: #fff;
-  font-weight: 700;
-  box-shadow: 0 10px 20px rgba(79, 70, 229, 0.18);
+  font-weight: 900;
+  box-shadow: 0 10px 20px rgba(66, 201, 154, 0.2);
 }
 
 .exam-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 20px;
 }
 
 .exam-content {
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
+  min-width: 0;
+}
+
+.exam-question,
+.exam-sidebar .panel {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: none;
 }
 
 .exam-question {
-  padding: 28px;
+  padding: 24px 26px;
+}
+
+.exam-question.active {
+  border-color: rgba(66, 201, 154, 0.36);
 }
 
 .exam-sidebar .panel {
-  padding: 24px;
+  position: sticky;
+  top: 20px;
+  padding: 18px;
 }
 
 .question-header {
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .q-number {
-  font-size: 1.55rem;
-  font-weight: 800;
-  color: #0f172a;
+  color: #172033;
+  font-size: 20px;
+  font-weight: 900;
 }
 
 .tags {
@@ -2167,30 +3044,17 @@ function renderInline(text: string) {
   flex-wrap: wrap;
 }
 
-.tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(203, 213, 225, 0.92);
+.tag.outline {
   background: #fff;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tag.type {
-  border-color: rgba(99, 102, 241, 0.18);
-  background: rgba(238, 242, 255, 0.9);
-  color: #6d28d9;
+  color: #5f6b7c;
+  border: 1px solid rgba(203, 213, 225, 0.92);
 }
 
 .question-text {
-  margin-bottom: 28px;
-  color: #0f172a;
-  font-size: 1.05rem;
-  line-height: 1.8;
+  margin-bottom: 26px;
+  color: #273142;
+  font-size: 18px;
+  line-height: 1.85;
 }
 
 .options-list {
@@ -2206,45 +3070,55 @@ function renderInline(text: string) {
   width: 100%;
   padding: 16px 18px;
   border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 18px;
+  border-radius: 10px;
   background: #fff;
-  color: #0f172a;
+  color: #172033;
   cursor: pointer;
   text-align: left;
-  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  transition:
+      border-color 150ms ease,
+      background 150ms ease,
+      box-shadow 150ms ease;
 }
 
 .option-btn:hover:not(:disabled) {
-  border-color: rgba(99, 102, 241, 0.32);
-  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(66, 201, 154, 0.34);
+  background: #fbfefd;
 }
 
 .option-btn.selected {
-  border-color: rgba(79, 70, 229, 0.36);
-  background: rgba(238, 242, 255, 0.95);
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.08);
+  border-color: rgba(66, 201, 154, 0.44);
+  background: rgba(209, 250, 229, 0.38);
+  box-shadow: none;
 }
 
 .option-btn.correct {
-  border-color: rgba(16, 185, 129, 0.28);
+  border-color: rgba(16, 185, 129, 0.32);
   background: rgba(236, 253, 245, 0.92);
 }
 
 .option-btn.wrong {
-  border-color: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.28);
   background: rgba(254, 242, 242, 0.94);
 }
 
 .opt-key {
-  min-width: 24px;
-  color: #6d28d9;
-  font-size: 15px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e7f7f1;
+  color: #17856d;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .opt-text {
+  color: #273142;
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .text-area-input {
@@ -2252,63 +3126,54 @@ function renderInline(text: string) {
   min-height: 144px;
   padding: 16px 18px;
   border: 1px solid rgba(203, 213, 225, 0.96);
-  border-radius: 18px;
+  border-radius: 10px;
   background: #fff;
+  color: #172033;
   font-family: inherit;
   font-size: 15px;
-  color: #0f172a;
   resize: vertical;
   outline: none;
   box-sizing: border-box;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
 }
 
 .text-area-input:focus {
-  border-color: rgba(79, 70, 229, 0.45);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
-}
-
-.nav-controls {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  border-color: rgba(66, 201, 154, 0.48);
+  box-shadow: 0 0 0 4px rgba(66, 201, 154, 0.1);
 }
 
 .panel h3 {
   margin: 0 0 18px;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .score-display,
 .progress-display {
-  margin-bottom: 24px;
-  padding: 24px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, var(--cat-eval-soft, #f5f3ff) 0%, #ffffff 100%);
-  border: 1px solid rgba(165, 180, 252, 0.28);
+  margin-bottom: 22px;
+  padding: 18px 16px;
+  border-radius: 10px;
+  background: rgba(209, 250, 229, 0.26);
+  border: 1px solid rgba(66, 201, 154, 0.2);
   text-align: center;
 }
 
 .score-value,
 .progress-value {
   margin-bottom: 8px;
-  color: #6d28d9;
-  font-size: 2.25rem;
-  font-weight: 800;
+  color: #17856d;
+  font-size: 34px;
+  font-weight: 900;
 }
 
 .score-label,
 .progress-label {
-  color: #64748b;
+  color: #7c8798;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .grid-sheet {
@@ -2321,58 +3186,42 @@ function renderInline(text: string) {
   aspect-ratio: 1;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.8);
-  color: #475569;
+  background: #fff;
+  color: #5f6b7c;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 900;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  transition: all 0.16s ease;
 }
 
 .sheet-btn:hover {
-  border-color: rgba(139, 92, 246, 0.4);
-  background: #fff;
+  border-color: rgba(66, 201, 154, 0.4);
   transform: scale(1.05);
 }
 
 .sheet-btn.answered {
-  border-color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.1);
-  color: #7c3aed;
+  border-color: #42c99a;
+  background: rgba(66, 201, 154, 0.12);
+  color: #17856d;
 }
 
 .sheet-btn.active {
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.35), inset 0 0 0 2px #fff;
-  background: var(--cat-eval, #8b5cf6);
-  border-color: var(--cat-eval, #8b5cf6);
+  background: #42c99a;
+  border-color: #42c99a;
   color: #fff;
+  box-shadow: 0 0 0 4px rgba(66, 201, 154, 0.14);
 }
 
 .sheet-btn.correct {
-  background: rgba(16, 185, 129, 0.15);
   border-color: #10b981;
-  color: #10b981;
-}
-
-.sheet-btn.correct.active {
-  background: #10b981;
-  border-color: #10b981;
-  color: #fff;
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
 }
 
 .sheet-btn.wrong {
-  background: rgba(239, 68, 68, 0.15);
   border-color: #ef4444;
-  color: #ef4444;
-}
-
-.sheet-btn.wrong.active {
-  background: #ef4444;
-  border-color: #ef4444;
-  color: #fff;
+  background: rgba(239, 68, 68, 0.13);
+  color: #dc2626;
 }
 
 .full-width {
@@ -2380,7 +3229,7 @@ function renderInline(text: string) {
 }
 
 .sidebar-submit {
-  margin-top: 24px;
+  margin-top: 22px;
 }
 
 .result-badge {
@@ -2390,7 +3239,7 @@ function renderInline(text: string) {
   padding: 0 12px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .result-badge.success {
@@ -2406,87 +3255,152 @@ function renderInline(text: string) {
 .analysis-panel {
   margin-top: 24px;
   padding: 18px;
-  border-radius: 18px;
+  border-radius: 10px;
   border: 1px solid rgba(226, 232, 240, 0.92);
   background: #f8fafc;
   font-size: 15px;
 }
 
 .analysis-panel.success {
-  border-color: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.2);
 }
 
 .analysis-panel.danger {
-  border-color: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 .analysis-text {
   margin-top: 10px;
-  color: #475569;
+  color: #4f5b6d;
   line-height: 1.7;
 }
 
-@media (max-width: 1100px) {
-  .exam-main {
-    grid-template-columns: 1fr;
+:deep(code) {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #0f766e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+@media (max-width: 1240px) {
+  .bank-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+
+  .bank-right-panel {
+    display: none;
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .question-bank-layout {
     padding: 16px;
   }
 
-  .question-bank-hero,
-  .workspace-panel-header,
+  .bank-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .bank-left-rail {
+    position: static;
+    top: auto;
+    align-self: stretch;
+    max-height: none;
+    overflow: visible;
+    border-right: none;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+  }
+
+  .bank-right-panel {
+    position: static;
+    top: auto;
+    align-self: stretch;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .rail-menu {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bank-main {
+    padding: 0 18px 22px;
+  }
+
+  .module-header,
+  .section-toolbar,
   .exam-topbar {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .hero-stats {
-    grid-template-columns: 1fr;
+  .portal-hero-metrics {
     width: 100%;
-    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .feature-card-row {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-card {
+    min-height: 120px;
+  }
+
+  .recommend-options {
+    grid-template-columns: 1fr;
+  }
+
+  .exam-main {
+    grid-template-columns: 1fr;
+  }
+
+  .exam-sidebar .panel {
+    position: static;
   }
 }
 
 @media (max-width: 640px) {
-  .question-bank-layout {
-    padding: 12px;
+  .rail-menu {
+    grid-template-columns: 1fr;
   }
 
-  .question-bank-hero,
-  .workspace-panel-shell,
+  .recommend-question-card,
+  .module-content-card,
   .exam-question,
   .exam-sidebar .panel {
-    border-radius: 20px;
-    padding: 18px;
+    padding: 20px;
+    border-radius: 10px;
   }
 
-  .workspace-tabs {
-    width: 100%;
-    border-radius: 24px;
-  }
-
-  .workspace-tab {
-    flex: 1 1 calc(50% - 8px);
-  }
-
-  .nav-controls,
+  .toolbar-actions,
+  .question-card-actions,
   .exam-actions {
     width: 100%;
     flex-wrap: wrap;
   }
 
+  .primary-action,
+  .soft-action,
   .btn-primary,
   .btn-secondary {
     width: 100%;
-    justify-content: center;
+  }
+
+  .module-stat {
+    min-width: 0;
+    width: 100%;
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid rgba(226, 232, 240, 0.86);
+    padding-top: 10px;
+    text-align: left;
   }
 }
 
-/* ================== Zen Mode (Exam Mode) Global Overrides ================== */
 :global(body.zen-mode-exam) .top-navbar {
   display: none !important;
 }
@@ -2500,4 +3414,3 @@ function renderInline(text: string) {
   height: 100vh !important;
 }
 </style>
-

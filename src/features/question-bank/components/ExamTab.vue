@@ -1,98 +1,115 @@
 <template>
-  <div class="exam-tab">
-
-    <div class="builder-grid">
-      <section class="config-panel">
-        <div class="panel-header">
+  <div class="exam-shell">
+    <div class="workspace-grid">
+      <section class="workspace-pane config-workspace">
+        <div class="section-head">
           <div>
-            <span class="section-label">Config</span>
-            <h3>试卷配置</h3>
+            <span class="section-kicker">组卷配置</span>
+            <h3>考试参数配置区</h3>
           </div>
-          <button class="btn-link" @click="$emit('reset-form')">重置</button>
+          <button class="text-btn" type="button" @click="$emit('reset-form')">重置</button>
         </div>
 
         <form class="config-form" @submit.prevent>
-          <div class="form-row">
-            <div class="form-group">
-              <label>试卷标题</label>
-              <input v-model="form.title" type="text" class="field" placeholder="例如：数据结构期末模拟" />
+          <div class="field-block">
+            <div class="block-title">
+              <h4>基础信息</h4>
+              <p>设置考试标题、学科、难度和作答时长，用于生成本次试卷。</p>
             </div>
-            <div class="form-group">
-              <label>学科</label>
-              <select v-model="form.subject" class="field">
-                <option value="">全部学科</option>
-                <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
-              </select>
+
+            <div class="field-row">
+              <div class="field-group span-two">
+                <label>标题</label>
+                <input v-model="form.title" type="text" class="field" placeholder="例如：数据结构期末模拟" />
+              </div>
+              <div class="field-group">
+                <label>学科</label>
+                <select v-model="form.subject" class="field">
+                  <option value="">全部学科</option>
+                  <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>难度</label>
+                <select v-model="form.difficulty" class="field">
+                  <option value="混合">混合</option>
+                  <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>时长（分钟）</label>
+                <input v-model="form.duration" type="number" min="5" max="180" class="field" />
+              </div>
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label>难度</label>
-              <select v-model="form.difficulty" class="field">
-                <option value="混合">混合（随机）</option>
-                <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
-              </select>
+          <div class="field-block counts-section">
+            <div class="block-title">
+              <h4>题型分布</h4>
+              <p>配置每种题型的出题数量，系统会按当前参数生成试卷预览。</p>
             </div>
-            <div class="form-group">
-              <label>时长（分钟）</label>
-              <input v-model="form.duration" type="number" min="5" max="180" class="field" />
-            </div>
-          </div>
 
-          <div class="type-counts">
-            <span class="section-label">Question Mix</span>
-            <h4>题型分布</h4>
-            <div class="count-grid">
-              <div v-for="item in typeCounts" :key="item.type" class="count-box">
-                <span class="type-label">{{ item.label }}</span>
+            <div class="count-table">
+              <div class="count-table-head">
+                <span>题型</span>
+                <span>数量</span>
+              </div>
+              <div v-for="item in typeCounts" :key="item.type" class="count-row">
+                <span>{{ item.label }}</span>
                 <input v-model="item.count" type="number" min="0" max="30" class="count-input" />
               </div>
             </div>
           </div>
 
-          <div class="form-actions">
-            <button class="btn-secondary" :disabled="loading" @click="$emit('generate-preview')">
+          <div class="action-row">
+            <button class="secondary-btn" type="button" :disabled="loading" @click="$emit('generate-preview')">
               {{ loading ? '生成中...' : '生成预览' }}
             </button>
-            <button class="btn-primary" :disabled="preview.length === 0" @click="$emit('start-exam')">开始考试</button>
+            <button class="primary-btn" type="button" :disabled="preview.length === 0" @click="$emit('start-exam')">
+              开始考试
+            </button>
           </div>
         </form>
       </section>
 
-      <section class="preview-panel">
-        <div class="panel-header">
+      <section class="workspace-pane preview-workspace">
+        <div class="section-head">
           <div>
-            <span class="section-label">Preview</span>
-            <h3>试卷预览</h3>
+            <span class="section-kicker">试卷预览</span>
+            <h3>试卷预览区</h3>
           </div>
-          <span v-if="preview.length > 0" class="badge">{{ preview.length }} 题</span>
+          <span class="preview-count">{{ preview.length }} 题</span>
         </div>
 
-        <div v-if="preview.length > 0" class="preview-list">
-          <div v-for="(question, index) in preview" :key="question.id" class="preview-item">
-            <div class="item-number">{{ index + 1 }}</div>
-            <div class="item-content">
-              <div class="item-meta">
-                <strong>{{ question.type }}</strong>
-                <span class="meta-dot">·</span>
+        <div v-if="preview.length" class="preview-list">
+          <article v-for="(question, index) in preview" :key="question.id" class="preview-item">
+            <div class="preview-side">
+              <span class="preview-no">第 {{ index + 1 }} 题</span>
+              <div class="preview-tags">
                 <span>{{ question.subject }}</span>
-                <span class="meta-dot">·</span>
-                <span :class="['diff', difficultyClass(question.difficulty)]">{{ question.difficulty || '未评级' }}</span>
+                <span>{{ question.type }}</span>
+                <span :class="difficultyClass(question.difficulty)">{{ question.difficulty || '未评级' }}</span>
               </div>
-              <div class="item-text" v-html="renderInline(question.content)"></div>
             </div>
-          </div>
+
+            <div class="preview-main">
+              <div class="preview-text" v-html="renderInline(question.content)"></div>
+            </div>
+          </article>
         </div>
 
-        <div v-else class="empty-preview">配置试卷参数后，点击“生成预览”查看题目。</div>
+        <div v-else class="preview-empty">
+          <strong>暂无试卷预览</strong>
+          <p>请先在左侧完成考试参数和题型数量配置。</p>
+          <p>点击“生成预览”后，这里会展示即将进入考试的题目列表。</p>
+        </div>
       </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
+defineProps<{
   form: { title: string; subject: string; difficulty: string; duration: number }
   typeCounts: { type: string; label: string; count: number }[]
   preview: any[]
@@ -129,293 +146,342 @@ function renderInline(text: string) {
 </script>
 
 <style scoped>
-.exam-tab {
+.exam-shell {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  min-width: 0;
 }
 
-.module-header,
-.config-panel,
-.preview-panel,
-.empty-preview {
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 22px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-}
-
-.module-header {
-  padding: 22px 24px;
-}
-
-.section-label {
-  color: var(--cat-eval, #8b5cf6);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.module-header h2,
-.panel-header h3,
-.type-counts h4 {
-  margin: 6px 0 0;
-  color: #0f172a;
-}
-
-.module-header h2 {
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-.subtitle {
-  margin: 8px 0 0;
-  color: #64748b;
-  line-height: 1.65;
-}
-
-.builder-grid {
+.workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  align-items: start;
 }
 
-.panel-header {
+.workspace-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.config-workspace {
+  padding-right: 0;
+  padding-bottom: 16px;
+  border-right: none;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.preview-workspace {
+  padding-left: 0;
+}
+
+.section-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 22px 24px 0;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.btn-link {
+.section-kicker {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.section-head h3 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.text-btn {
   border: none;
   background: transparent;
-  color: #6366f1;
-  font-size: 14px;
-  font-weight: 700;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-}
-
-.btn-link:hover {
-  color: #6d28d9;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(238, 242, 255, 0.92);
-  color: #6d28d9;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .config-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 20px 24px 24px;
+  gap: 14px;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.form-group {
+.field-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.form-group label,
-.type-label {
-  color: #475569;
-  font-size: 13px;
+.block-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.block-title h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
   font-weight: 700;
 }
 
-.field,
-.count-input,
-.btn-primary,
-.btn-secondary {
-  min-height: 44px;
-  border-radius: 14px;
-  font-size: 14px;
-  font-family: inherit;
+.block-title p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-group.span-two {
+  grid-column: span 2;
+}
+
+.field-group label {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .field,
 .count-input {
   width: 100%;
-  padding: 0 14px;
+  min-height: 34px;
+  padding: 0 10px;
   border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 10px;
   background: #fff;
   color: #0f172a;
-  outline: none;
+  font: inherit;
   box-sizing: border-box;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  outline: none;
 }
 
 .field:focus,
 .count-input:focus {
-  border-color: rgba(79, 70, 229, 0.42);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+  border-color: rgba(148, 163, 184, 0.96);
 }
 
-.type-counts {
+.counts-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.count-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.count-box {
+.count-table {
   display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.count-table-head,
+.count-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 12px;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: #f8fafc;
-  border: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.count-table-head {
+  padding: 0 0 6px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.count-table-head span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.count-row {
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.count-row span {
+  color: #334155;
+  font-size: 14px;
 }
 
 .count-input {
-  width: 64px;
-  padding: 0 8px;
   text-align: center;
 }
 
-.form-actions {
+.action-row {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.primary-btn,
+.secondary-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-btn {
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #fff;
+}
+
+.secondary-btn {
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  background: #fff;
+  color: #334155;
+}
+
+.preview-count {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .preview-list {
   display: flex;
   flex-direction: column;
-  max-height: 680px;
-  overflow-y: auto;
-  padding: 8px 24px 24px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  max-height: 280px;
+  overflow: auto;
 }
 
 .preview-item {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.preview-side {
   display: flex;
-  gap: 16px;
-  padding: 16px 0;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
-.preview-item:last-child {
-  border-bottom: none;
+.preview-no {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
-.item-number {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: rgba(238, 242, 255, 0.92);
-  color: #6d28d9;
+.preview-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preview-tags span {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 800;
-  flex-shrink: 0;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #475569;
+  font-size: 11px;
 }
 
-.item-content {
+.preview-main {
   min-width: 0;
 }
 
-.item-meta {
-  color: #64748b;
+.preview-text {
+  color: #1e293b;
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.meta-dot {
-  margin: 0 6px;
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.item-text {
-  margin-top: 8px;
+.preview-empty strong {
   color: #0f172a;
-  line-height: 1.65;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.preview-empty p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.7;
 }
 
 .text-success {
-  color: #059669;
+  color: #047857;
 }
 
 .text-warning {
-  color: #d97706;
+  color: #b45309;
 }
 
 .text-danger {
-  color: #dc2626;
+  color: #b91c1c;
 }
 
 .text-neutral {
-  color: #64748b;
+  color: #475569;
 }
 
-.empty-preview {
-  margin: 0 24px 24px;
-  padding: 40px 24px;
-  border-radius: 18px;
-  background: #f8fafc;
-  border: 1px dashed rgba(203, 213, 225, 0.96);
-  color: #64748b;
-  text-align: center;
-}
+@media (max-width: 980px) {
+  .config-workspace {
+    padding-bottom: 14px;
+  }
 
-@media (max-width: 960px) {
-  .builder-grid {
-    grid-template-columns: 1fr;
+  .preview-workspace {
+    padding-left: 0;
   }
 }
 
 @media (max-width: 720px) {
-  .module-header,
-  .panel-header,
-  .config-form,
-  .preview-list {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-
-  .form-row,
-  .count-grid {
+  .field-row {
     grid-template-columns: 1fr;
   }
 
-  .form-actions {
+  .field-group.span-two {
+    grid-column: auto;
+  }
+
+  .action-row {
     flex-direction: column;
   }
 
-  .btn-primary,
-  .btn-secondary {
-    width: 100%;
-  }
-
-  .empty-preview {
-    margin: 0 18px 18px;
+  .preview-item {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 }
 </style>

@@ -284,9 +284,9 @@
                   <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
                     <button
                       v-for="opt in [
-                        { label: '科技蓝', value: 'logic-blue' },
-                        { label: '纸墨白', value: 'paper-light' },
-                        { label: '实验室', value: 'lab-light' }
+                        { label: '霓虹赛博', value: 'neon-cyber' },
+                        { label: '瑞士现代', value: 'swiss-modern' },
+                        { label: '纸墨风格', value: 'paper-ink' }
                       ]"
                       :key="opt.value"
                       type="button"

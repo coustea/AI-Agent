@@ -8,6 +8,7 @@ import { InfoPanel } from '../components/InfoPanel';
 import { CodeBlock } from '../components/CodeBlock';
 import { VariableTable } from '../components/VariableTable';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 interface TraceStep {
   step_index: number;
@@ -47,8 +48,8 @@ export const AlgorithmTraceBoard: React.FC<AlgorithmTraceBoardProps> = ({
   const result = (scene.visual.result as string) || '';
 
   // Determine current step index
-  const stepDuration = durationInFrames / (steps.length || 1);
-  const activeStepIdx = Math.min(Math.floor(frame / stepDuration), steps.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeStepIdx = timing.getActiveIndex(steps.length, ['trace_step']);
   const currentStep = steps[activeStepIdx];
 
   // Derive variables for VariableTable
@@ -133,7 +134,7 @@ export const AlgorithmTraceBoard: React.FC<AlgorithmTraceBoardProps> = ({
                     <div key={idx} className="flex flex-col items-center relative">
                       {/* Array Cell */}
                       <div
-                        className={`w-12 h-12 flex items-center justify-center font-mono font-black text-sm rounded-lg border transition-all duration-300 ${borderStyle} ${bgStyle} ${glowStyle} ${
+                        className={`w-12 h-12 flex items-center justify-center font-mono font-black text-sm rounded-lg border ${borderStyle} ${bgStyle} ${glowStyle} ${
                           isOutRange ? 'opacity-35 scale-95' : 'opacity-100'
                         }`}
                       >

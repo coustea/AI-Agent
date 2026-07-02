@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -32,7 +33,6 @@ from app.infra.models import User
 from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
-from app.profile.service import get_profile_service
 from app.infra.response import HttpResponse
 from app.resource.event import (
     RESOURCE_TERMINAL_EVENTS,
@@ -61,42 +61,29 @@ async def create_resource_task(
         current_user.id,
         req.enabled_agent_ids(),
     )
-    repo = ResourceService(session)
-    result = await repo.create_task(
+    service = ResourceService(session)
+    result = await service.create_task(
         user_id=current_user.id,
         request=req,
         source="standalone",
     )
     resource_id = result["resource_id"]
-    run_id = str(uuid.uuid4())
 
-    profile_builder = get_profile_service()
-    profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
-    initialized = await repo.initialize_run(
-        user_id=current_user.id,
-        resource_id=resource_id,
-        run_id=run_id,
-    )
-    if not initialized:
-        return HttpResponse.error(code=409, message="资源任务无法启动")
-
+    # 创建事件频道
     events = ResourceEvents(
         user_id=current_user.id,
         resource_id=resource_id,
-        run_id=run_id,
     )
     await events.open()
 
+    # 启动后台生成
     background_tasks.add_task(
         run_multi_agent_generation,
         user_id=current_user.id,
-        request=req,
-        profile=profile_markdown,
         resource_id=resource_id,
-        run_id=run_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run_id, "status": "pending"}, status_code=201)
+    return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
 
 
 @router.post("/resources/single")
@@ -113,11 +100,8 @@ async def create_single_resource_task(
         req.agent_id.value,
     )
 
-    profile_builder = get_profile_service()
-    profile_markdown = await profile_builder.get_profile_for_agents(user_id=current_user.id)
-
-    repo = ResourceService(session)
-    result = await repo.create_task(
+    service = ResourceService(session)
+    result = await service.create_task(
         user_id=current_user.id,
         request=ResourceGenerationRequest(
             learning_need=req.learning_need,
@@ -126,36 +110,22 @@ async def create_single_resource_task(
         source="single_agent",
     )
     resource_id = result["resource_id"]
-    run_id = str(uuid.uuid4())
-    initialized = await repo.initialize_run(
-        user_id=current_user.id,
-        resource_id=resource_id,
-        run_id=run_id,
-    )
-    if not initialized:
-        return HttpResponse.error(code=409, message="资源任务无法启动")
 
+    # 创建事件频道
     events = ResourceEvents(
         user_id=current_user.id,
         resource_id=resource_id,
-        run_id=run_id,
     )
     await events.open()
 
-    # 单智能体模式：通过多智能体流水线执行，只启用一个 agent
+    # 启动后台生成
     background_tasks.add_task(
         run_multi_agent_generation,
         user_id=current_user.id,
-        request=ResourceGenerationRequest(
-            learning_need=req.learning_need,
-            selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
-        ),
-        profile=profile_markdown,
         resource_id=resource_id,
-        run_id=run_id,
     )
 
-    return HttpResponse.success(data={"resource_id": resource_id, "run_id": run_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
+    return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
 
 
 @router.get("/resources/{resource_id}/status")
@@ -176,10 +146,9 @@ async def get_generation_status(
     return HttpResponse.success(data=status_data)
 
 
-@router.get("/resources/{resource_id}/runs/{run_id}/events")
+@router.get("/resources/{resource_id}/events")
 async def get_resource_events(
     resource_id: int,
-    run_id: str,
     after_sequence: int = Query(default=0, ge=0),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     current_user: User = Depends(get_current_user_flexible),
@@ -197,7 +166,7 @@ async def get_resource_events(
         return HttpResponse.error(code=404, message="资源不存在或无权限")
 
     # 获取已存在的频道
-    events = await get_resource_channel(current_user.id, resource_id, run_id)
+    events = await get_resource_channel(current_user.id, resource_id)
     if events is None:
         return HttpResponse.error(code=410, message="事件流已过期或不存在")
 
@@ -311,6 +280,149 @@ async def get_resource(
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在")
     return HttpResponse.success(data=bundle.model_dump(mode="json"))
+
+
+@router.get("/resources/public/{resource_id}/html")
+async def get_public_html(
+    resource_id: str,
+):
+    """公开获取 HTML 幻灯片内容，支持 iframe 直接加载。"""
+    file_path = WORKPLACE_DIR / "html_slides" / f"{resource_id}.html"
+    if not file_path.exists():
+        return HttpResponse.error(code=404, message="HTML 幻灯片不存在")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="text/html",
+    )
+
+
+@router.put("/resources/public/{resource_id}/html")
+async def save_public_html(
+    resource_id: str,
+    request: Request,
+):
+    """公开保存 HTML 幻灯片内容（供 iframe 内编辑器使用）。
+
+    安全措施：
+    - 仅允许写入 html_slides 目录下已存在的文件（不创建新文件）
+    - 路径规范化检查防止目录遍历
+    - 文件大小限制 5MB
+    """
+    # 检查文件是否存在（只允许覆盖已有文件）
+    file_path = (WORKPLACE_DIR / "html_slides" / f"{resource_id}.html").resolve()
+    base_dir = (WORKPLACE_DIR / "html_slides").resolve()
+
+    if not str(file_path).startswith(str(base_dir)):
+        return HttpResponse.error(code=400, message="非法路径")
+
+    if not file_path.exists():
+        return HttpResponse.error(code=404, message="HTML 幻灯片不存在，无法保存")
+
+    body_bytes = await request.body()
+    html_content = body_bytes.decode("utf-8")
+
+    if not html_content.strip():
+        return HttpResponse.error(code=400, message="内容不能为空")
+
+    # 限制文件大小：5MB
+    if len(body_bytes) > 5 * 1024 * 1024:
+        return HttpResponse.error(code=413, message="文件过大，最大 5MB")
+
+    try:
+        file_path.write_text(html_content, encoding="utf-8")
+        return HttpResponse.success(message="同步成功")
+    except Exception as e:
+        logger.error("Error saving public html slides: %s", e)
+        return HttpResponse.error(code=500, message=f"保存失败: {e}")
+
+
+@router.get("/resources/{resource_id}/html")
+async def download_html(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """下载 HTML 幻灯片文件。"""
+    service = ResourceService(session)
+
+    # 获取资源项
+    items = await service.list_resource_items(current_user.id, resource_id)
+    ppt_item = None
+    for item in items:
+        if item.agent_type == "ppt":
+            ppt_item = item
+            break
+
+    if not ppt_item:
+        return HttpResponse.error(code=404, message="PPT 资源不存在")
+
+    # 从 metadata 获取 HTML 文件路径
+    html_path = None
+    if ppt_item.metadata_json:
+        html_path = ppt_item.metadata_json.get("html_file_path") or ppt_item.metadata_json.get("html_path")
+
+    if not html_path or not os.path.exists(html_path):
+        return HttpResponse.error(code=404, message="HTML 文件未找到")
+
+    return FileResponse(
+        path=html_path,
+        filename=f"{ppt_item.title}.html",
+        media_type="text/html",
+    )
+
+
+@router.put("/resources/{resource_id}/html")
+async def save_html(
+    resource_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """保存/同步修改后的 HTML 幻灯片内容。"""
+    service = ResourceService(session)
+    # 获取资源项
+    items = await service.list_resource_items(current_user.id, resource_id)
+    ppt_item = None
+    for item in items:
+        if item.agent_type == "ppt":
+            ppt_item = item
+            break
+
+    if not ppt_item:
+        return HttpResponse.error(code=404, message="PPT 资源不存在")
+
+    html_path = None
+    if ppt_item.metadata_json:
+        html_path = ppt_item.metadata_json.get("html_file_path") or ppt_item.metadata_json.get("html_path")
+
+    if not html_path:
+        return HttpResponse.error(code=404, message="HTML 路径未配置")
+
+    # 读取请求的 raw body 字节，解码为 utf-8
+    body_bytes = await request.body()
+    html_content = body_bytes.decode("utf-8")
+
+    if not html_content.strip():
+        return HttpResponse.error(code=400, message="内容不能为空")
+
+    # 写入文件
+    try:
+        path_obj = Path(html_path)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        path_obj.write_text(html_content, encoding="utf-8")
+        
+        # 同时更新 database metadata 中的 file_size
+        metadata = dict(ppt_item.metadata_json or {})
+        metadata["file_size"] = path_obj.stat().st_size
+        ppt_item.metadata_json = metadata
+        session.add(ppt_item)
+        await session.commit()
+        
+        return HttpResponse.success(message="同步成功")
+    except Exception as e:
+        logger.error("Error saving updated html slides: %s", e)
+        return HttpResponse.error(code=500, message=f"保存失败: {e}")
 
 
 @router.get("/video/audio/{filename:path}")

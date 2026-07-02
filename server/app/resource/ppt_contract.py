@@ -15,7 +15,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # === 对齐前端的类型定义 ===
 
-ThemeType = Literal["logic-blue", "paper-light", "lab-light"]
+ThemeType = Literal[
+    "bold-signal",
+    "electric-studio",
+    "creative-voltage",
+    "dark-botanical",
+    "notebook-tabs",
+    "pastel-geometry",
+    "split-pastel",
+    "vintage-editorial",
+    "neon-cyber",
+    "terminal-green",
+    "swiss-modern",
+    "paper-ink",
+]
 
 LayoutId = Literal[
     "HeroCover",
@@ -252,7 +265,7 @@ class PPTDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     template_id: Literal["teaching-lesson"] = "teaching-lesson"
-    theme_id: ThemeType = "logic-blue"
+    theme_id: ThemeType = "neon-cyber"
     title: str
     audience: str
     slides: list[PptSlide] = Field(min_length=6, max_length=16)

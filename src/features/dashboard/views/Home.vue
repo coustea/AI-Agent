@@ -311,14 +311,10 @@ import {
   getContinueLearning,
   getQuickActions,
   getRecentResources,
-  getDailyChallenge,
-  getStudyStats,
   type RecommendationData,
   type ProfileRadarData,
   type ContinueLearningData,
   type QuickActionsData,
-  type DailyChallengeData,
-  type StudyStatsData,
   type HomeActionItem,
   type RecentResourceItem,
 } from '@/features/dashboard/api/home'
@@ -352,8 +348,6 @@ const profileRadarData = ref<ProfileRadarData | null>(null)
 const continueLearningData = ref<ContinueLearningData | null>(null)
 const quickActionsData = ref<QuickActionsData | null>(null)
 const recentResourcesData = ref<RecentResourceItem[]>([])
-const dailyChallengeData = ref<DailyChallengeData | null>(null)
-const studyStatsData = ref<StudyStatsData | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 
@@ -650,16 +644,12 @@ const loadAllData = async () => {
       continueRes,
       actionsRes,
       resourcesRes,
-      challengeRes,
-      statsRes,
     ] = await Promise.all([
       getRecommendation(),
       getProfileRadar(),
       getContinueLearning(),
       getQuickActions(),
       getRecentResources(),
-      getDailyChallenge(),
-      getStudyStats(),
     ])
 
     recommendationData.value = recRes.data.data
@@ -667,8 +657,6 @@ const loadAllData = async () => {
     continueLearningData.value = continueRes.data.data
     quickActionsData.value = actionsRes.data.data
     recentResourcesData.value = resourcesRes.data.data ?? []
-    dailyChallengeData.value = challengeRes.data.data ?? null
-    studyStatsData.value = statsRes.data.data
   } catch (error) {
     console.error('Failed to load dashboard data', error)
     recommendationData.value = null

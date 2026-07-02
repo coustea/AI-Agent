@@ -330,7 +330,7 @@ async def search_schools(
     else:
         stmt = select(School).order_by(School.id.desc()).limit(limit)
 
-    schools = (await db.exec(stmt)).scalars().all()
+    schools = list((await db.exec(stmt)).all())
 
     return HttpResponse.success(data=[
         {

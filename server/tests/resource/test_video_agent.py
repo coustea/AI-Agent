@@ -1,5 +1,6 @@
 import json
 import os
+import ssl
 import sys
 from pathlib import Path
 
@@ -101,6 +102,113 @@ def test_video_payload_rejects_non_contiguous_timings():
         VideoPayload.model_validate(payload)
 
 
+def test_video_payload_rejects_caption_word_after_audio_end():
+    from app.resource.agents.video import VideoPayload
+
+    payload = _valid_payload_dict()
+    payload["scenes"][0]["audio_duration_ms"] = 29_000
+    payload["scenes"][0]["caption_words"] = [
+        {"text": "尾部字幕", "start_ms": 28_500, "end_ms": 29_500}
+    ]
+
+    with pytest.raises(ValidationError, match="caption word timing exceeds audio duration"):
+        VideoPayload.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "timed_item", "message"),
+    [
+        (
+            "caption_chunks",
+            {"text": "尾部字幕", "start_ms": 28_500, "end_ms": 29_500},
+            "caption chunk timing exceeds audio duration",
+        ),
+        (
+            "visual_cues",
+            {
+                "id": "late-cue",
+                "kind": "recap",
+                "start_ms": 28_500,
+                "end_ms": 29_500,
+            },
+            "visual cue timing exceeds audio duration",
+        ),
+    ],
+)
+def test_video_payload_rejects_timed_content_after_audio_end(
+    field, timed_item, message
+):
+    from app.resource.agents.video import VideoPayload
+
+    payload = _valid_payload_dict()
+    payload["scenes"][0]["audio_duration_ms"] = 29_000
+    payload["scenes"][0][field] = [timed_item]
+
+    with pytest.raises(ValidationError, match=message):
+        VideoPayload.model_validate(payload)
+
+
+def test_align_visual_cues_preserves_matched_anchor_when_another_anchor_fails():
+    from app.resource.agents.video import (
+        CaptionChunk,
+        CaptionWord,
+        VisualBeatDraft,
+        align_visual_cues,
+    )
+
+    words = [
+        CaptionWord(text="进程", start_ms=1_000, end_ms=1_500),
+        CaptionWord(text="是", start_ms=1_500, end_ms=1_700),
+        CaptionWord(text="程序", start_ms=1_700, end_ms=2_200),
+    ]
+    chunks = [CaptionChunk(text="进程是程序", start_ms=1_000, end_ms=2_200)]
+    beats = [
+        VisualBeatDraft(
+            id="definition",
+            kind="define",
+            target="main_concept",
+            text_anchor="进程是程序",
+        ),
+        VisualBeatDraft(
+            id="example",
+            kind="example",
+            target="example",
+            text_anchor="这个锚点不存在",
+        ),
+    ]
+
+    cues = align_visual_cues(beats, words, chunks, audio_duration_ms=10_000)
+
+    assert cues[0].id == "definition"
+    assert cues[0].start_ms == 1_000
+    assert cues[1].id == "example"
+    assert cues[1].start_ms > cues[0].start_ms
+    assert cues[-1].end_ms == 10_000
+
+
+def test_spark_tts_ssl_context_verifies_server_certificate():
+    from app.resource.infra.spark_tts import create_ssl_context
+
+    context = create_ssl_context()
+
+    assert context.check_hostname is True
+    assert context.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_spark_tts_estimated_captions_preserve_sentence_punctuation():
+    from app.resource.infra.spark_tts import SparkTtsService
+
+    captions = SparkTtsService._estimate_captions("进程开始。然后等待！", duration=8.0)
+
+    assert "".join(caption.text for caption in captions) == "进程开始。然后等待！"
+    assert captions[0].start_ms == 0
+    assert captions[-1].end_ms == 8_000
+    assert all(
+        current.end_ms == following.start_ms
+        for current, following in zip(captions, captions[1:])
+    )
+
+
 @pytest.mark.asyncio
 async def test_video_agent_generates_json_from_previous_results(monkeypatch):
     from app.resource.agents import AGENT_REGISTRY
@@ -160,11 +268,19 @@ async def test_video_agent_generates_json_from_previous_results(monkeypatch):
             source_agents=contract.required_sources,
         )
 
-    # Mock TtsService.synthesize_with_captions to return 20.0s duration without network calls
-    from app.resource.infra.tts import TtsService, TtsResult
-    async def fake_tts_synthesize_with_captions(text, file_path, voice="xiaoyan"):
-        return TtsResult(duration=20.0, captions=[])
+    # Mock TtsService and SparkTtsService to return 19.6s duration
+    from app.resource.infra.tts import TtsResult
+    from app.resource.infra.spark_tts import SparkTtsService
+    from app.resource.infra.tts import TtsService
+
+    async def fake_tts_synthesize_with_captions(text, file_path, voice=None):
+        return TtsResult(duration=19.6, captions=[])
+
     monkeypatch.setattr(TtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
+    monkeypatch.setattr(SparkTtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
+
+    # Mock get_audio_duration_ms to return 19600ms
+    monkeypatch.setattr("app.resource.agents.video.get_audio_duration_ms", lambda file_path: 19600)
 
     monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
     monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)
@@ -273,11 +389,19 @@ async def test_video_agent_generate_node_path_learning(monkeypatch):
             source_agents=contract.required_sources,
         )
 
-    # Mock TtsService.synthesize_with_captions to return 20.0s duration without network calls
-    from app.resource.infra.tts import TtsService, TtsResult
-    async def fake_tts_synthesize_with_captions(text, file_path, voice="xiaoyan"):
-        return TtsResult(duration=20.0, captions=[])
+    # Mock TtsService and SparkTtsService to return 19.6s duration
+    from app.resource.infra.tts import TtsResult
+    from app.resource.infra.spark_tts import SparkTtsService
+    from app.resource.infra.tts import TtsService
+
+    async def fake_tts_synthesize_with_captions(text, file_path, voice=None):
+        return TtsResult(duration=19.6, captions=[])
+
     monkeypatch.setattr(TtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
+    monkeypatch.setattr(SparkTtsService, "synthesize_with_captions", fake_tts_synthesize_with_captions)
+
+    # Mock get_audio_duration_ms to return 19600ms
+    monkeypatch.setattr("app.resource.agents.video.get_audio_duration_ms", lambda file_path: 19600)
 
     monkeypatch.setattr(VideoMaterialAgent, "run", fake_material_run)
     monkeypatch.setattr(VideoOutlineAgent, "run", fake_outline_run)

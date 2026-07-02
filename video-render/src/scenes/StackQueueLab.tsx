@@ -11,6 +11,7 @@ import { EduBackground } from "../components/EduBackground";
 import { SceneHeader } from "../components/SceneHeader";
 import { SubtitleBar } from "../components/SubtitleBar";
 import { getSpringProgress, getSlideInterpolation } from "../utils/animation";
+import { useSceneTiming } from "../hooks/useSceneTiming";
 
 interface StackQueueItem {
   value: string | number;
@@ -48,16 +49,13 @@ export const StackQueueLab: React.FC<StackQueueLabProps> = ({
     (scene.visual.items as StackQueueItem[]) || [];
   const operations: StackQueueOperation[] =
     (scene.visual.operations as StackQueueOperation[]) || [];
+  const timing = useSceneTiming(scene);
 
 
   // Build dynamic item list based on operations
   const getItemsAtFrame = () => {
-    const opDuration = durationInFrames / Math.max(operations.length, 1);
-    const currentOpIdx = Math.min(
-      Math.floor(frame / opDuration),
-      operations.length - 1,
-    );
-    const opProgress = (frame % opDuration) / opDuration;
+    const currentOpIdx = timing.getActiveIndex(operations.length, ["trace_step"]);
+    const opProgress = timing.getStepProgress(operations.length, ["trace_step"]);
 
     const items = [...initialItems];
     for (let i = 0; i <= currentOpIdx; i++) {

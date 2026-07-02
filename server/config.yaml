@@ -57,6 +57,12 @@ spark:
   api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
   api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
 
+# 星火 TTS 配置
+spark_tts:
+  app_id: "97c2a0c6"
+  api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
+  api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
+
 # Avatar 数字人
 avatar:
   app_id: "5ec3e8ba"

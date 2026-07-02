@@ -174,7 +174,7 @@ export const StateMachineLab: React.FC<StateMachineLabProps> = ({
                       label={s.label}
                       shape="circle"
                       status={isActive ? 'active' : 'normal'}
-                      className={`w-20 h-20 text-xs font-extrabold flex items-center justify-center border-2 shadow-md transition-all duration-300 ${
+                      className={`w-20 h-20 text-xs font-extrabold flex items-center justify-center border-2 shadow-md ${
                         isActive ? 'ring-4 ring-[var(--primary)]/20 glow-primary border-[var(--primary)]' : ''
                       }`}
                     />

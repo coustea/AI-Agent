@@ -172,9 +172,9 @@
               <p class="cognitive-note">在这里，每一次对话都会成为塑形您学习画像的线索。<br>我支持跨媒介文献与视听分析，我们将共同构建您的个性化认知图谱。</p>
             </div>
 
-            <!-- AI 尚未输出首个字符时的准备状态 -->
+            <!-- 本地附件上传状态。回答前的 agent 状态由后端 SSE activity 事件驱动。 -->
             <div
-              v-if="chatMode === 'standard' && isAIThinking && !streamingMsgId"
+              v-if="chatMode === 'standard' && uploadingFile && !streamingMsgId"
               class="thinking-indicator-row"
             >
               <div class="thinking-avatar">
@@ -186,14 +186,9 @@
                     <i></i><i></i><i></i>
                   </span>
                   <div>
-                    <strong>{{ preparationTitle }}</strong>
-                    <span>{{ preparationDescription }}</span>
+                    <strong>正在上传附件</strong>
+                    <span>上传完成后，将继续等待后端实时处理状态。</span>
                   </div>
-                </div>
-                <div class="pre-answer-lines" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
                 </div>
               </div>
             </div>
@@ -207,7 +202,6 @@
                   || msg.agentActivities?.length
                   || msg.teachingDiagramGenerating
                   || msg.teachingDiagram
-                  || isWaitingForFirstToken(msg)
                 "
                 :class="['message-row', msg.role]"
               >
@@ -266,27 +260,6 @@
                         <path d="M7 5h8v8M14.5 5.5 6 14" />
                       </svg>
                     </a>
-                  </div>
-
-                  <div
-                    v-if="msg.role === 'ai' && isWaitingForFirstToken(msg) && !msg.agentActivities?.length"
-                    class="pre-answer-state is-inline"
-                    aria-live="polite"
-                  >
-                    <div class="pre-answer-head">
-                      <span class="thinking-core" aria-hidden="true">
-                        <i></i><i></i><i></i>
-                      </span>
-                      <div>
-                        <strong>{{ getMessageThinkingTitle(msg) }}</strong>
-                        <span>{{ getMessageThinkingDescription(msg) }}</span>
-                      </div>
-                    </div>
-                    <div class="pre-answer-lines" aria-hidden="true">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
                   </div>
 
                   <AgentActivityCard
@@ -774,6 +747,7 @@ const {
       isAIThinking.value = true
     }
     if (streamingMsgId.value !== null) {
+      clearAgentStatus(messages.value.find(message => message.id === streamingMsgId.value && message.role === 'ai'))
       enqueueStreamChunk(streamingMsgId.value, chunk)
     }
   },
@@ -954,6 +928,16 @@ type AgentStatusPayload = {
   detail?: AgentActivity['detail']
 }
 
+const getCurrentAiTextStarted = (aiMsg?: ChatMsg) => Boolean(
+  aiMsg
+  && (
+    aiMsg.content
+    || streamDisplayText.value
+    || pendingRenderQueue.length > pendingRenderQueueStart
+    || streamRenderedChunks.length
+  )
+)
+
 const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayload) => {
   if (!aiMsg) return
   const activity: AgentActivity = {
@@ -978,6 +962,27 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
 
   const data = (event.data || {}) as Record<string, unknown>
 
+  if (event.event === 'content.delta') {
+    clearAgentStatus(aiMsg)
+    return
+  }
+
+  if (event.event === 'content.replace') {
+    const content = typeof data.content === 'string' ? data.content : ''
+    if (content) {
+      stopStreamFlushLoop()
+      pendingRenderQueue.length = 0
+      pendingRenderQueueStart = 0
+      pendingRenderOffset = 0
+      pendingRenderChars = 0
+      streamRenderedChunks.length = 0
+      aiMsg.content = content
+      streamDisplayText.value = content
+    }
+    clearAgentStatus(aiMsg)
+    return
+  }
+
   if (event.event === 'diagram.ready') {
     const diagram = normalizeTeachingDiagram(data as unknown as TeachingDiagram)
     if (diagram) {
@@ -987,70 +992,70 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
     return
   }
 
-  if (event.event === 'thinking') {
-    const stage = data.stage as string | undefined
-    if (['teaching_diagram_generate', 'diagram_start', 'diagram_generate'].includes(stage || '')) {
-      aiMsg.teachingDiagramGenerating = true
-    }
+  if (event.event === 'run.started') {
+    if (getCurrentAiTextStarted(aiMsg)) return
+    const title = typeof data.title === 'string' && data.title.trim()
+      ? data.title.trim()
+      : event.message.trim() || '正在思考'
+    applyAgentStatus(aiMsg, {
+      activity_id: typeof data.activity_id === 'string' && data.activity_id.trim()
+        ? data.activity_id.trim()
+        : 'workflow:current',
+      kind: 'workflow',
+      stage: typeof data.stage === 'string' ? data.stage : 'run_started',
+      status: 'running',
+      title,
+      message: typeof data.message === 'string' && data.message.trim()
+        ? data.message.trim()
+        : title,
+      summary: typeof data.summary === 'string' ? data.summary : undefined,
+    })
     return
   }
 
   if (
-    event.event === 'tool.running'
-    || event.event === 'tool.completed'
-    || event.event === 'tool.failed'
+    event.event === 'activity.running'
+    || event.event === 'activity.completed'
+    || event.event === 'activity.failed'
   ) {
+    const stage = data.stage as string | undefined
+    if (getCurrentAiTextStarted(aiMsg)) {
+      clearAgentStatus(aiMsg)
+      return
+    }
+    if (['teaching_diagram_generate', 'diagram_start', 'diagram_generate'].includes(stage || '')) {
+      aiMsg.teachingDiagramGenerating = true
+    }
     const activityId = String(data.activity_id || '').trim()
+    const kind = data.kind === 'tool' || data.kind === 'attachment' || data.kind === 'workflow'
+      ? data.kind
+      : 'workflow'
     const toolName = typeof data.tool_name === 'string' ? data.tool_name : undefined
     const detail = (
       data.detail && typeof data.detail === 'object'
         ? data.detail
         : {}
     ) as AgentActivity['detail']
-    const isAttachmentActivity = Boolean(detail?.analysis_type || detail?.files?.length)
-    const title = event.message.trim()
-      || (isAttachmentActivity ? '正在分析附件' : '正在调用学习工具')
+    const title = typeof data.title === 'string' && data.title.trim()
+      ? data.title.trim()
+      : event.message.trim() || '正在处理'
     if (!activityId) return
 
     applyAgentStatus(aiMsg, {
       activity_id: activityId,
-      kind: isAttachmentActivity ? 'attachment' : 'tool',
+      kind,
       stage: typeof data.stage === 'string' ? data.stage : undefined,
-      status: event.event === 'tool.completed' ? 'done' : event.event === 'tool.failed' ? 'failed' : 'running',
+      status: event.event === 'activity.completed' ? 'done' : event.event === 'activity.failed' ? 'failed' : 'running',
       tool_name: toolName || detail?.tool_name,
       title,
-      summary: detail?.files?.length
-        ? detail.files.join('、')
-        : detail?.input || (typeof data.summary === 'string' ? data.summary : undefined),
-      message: event.message,
-      detail,
-    })
-    return
-  }
-
-  if (
-    event.event === 'attachment.running'
-    || event.event === 'attachment.completed'
-    || event.event === 'attachment.failed'
-  ) {
-    const activityId = String(data.activity_id || '').trim()
-    const detail = (
-      data.detail && typeof data.detail === 'object'
-        ? data.detail
-        : {}
-    ) as AgentActivity['detail']
-    if (!activityId) return
-
-    applyAgentStatus(aiMsg, {
-      activity_id: activityId,
-      kind: 'attachment',
-      stage: typeof data.stage === 'string' ? data.stage : 'attachment_analysis',
-      status: event.event === 'attachment.completed' ? 'done' : event.event === 'attachment.failed' ? 'failed' : 'running',
-      title: event.message.trim() || '附件分析',
-      summary: detail?.files?.length
-        ? detail.files.join('、')
-        : typeof data.summary === 'string' ? data.summary : undefined,
-      message: event.message,
+      summary: typeof data.summary === 'string' && data.summary
+        ? data.summary
+        : detail?.files?.length
+          ? detail.files.join('、')
+          : detail?.input,
+      message: typeof data.message === 'string' && data.message.trim()
+        ? data.message.trim()
+        : event.message,
       detail,
     })
   }
@@ -1058,6 +1063,9 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
 
 const clearAgentStatus = (aiMsg?: ChatMsg) => {
   if (!aiMsg) return
+  if (aiMsg.agentActivities?.length) {
+    aiMsg.agentActivities = []
+  }
 }
 
 const clearAvatarThinkingTimeout = () => {
@@ -1168,38 +1176,6 @@ const getDisplayContent = (msg: ChatMsg) => {
     return streamDisplayText.value
   }
   return msg.content
-}
-
-const preparationTitle = computed(() => {
-  if (uploadingFile.value) return '正在上传并读取附件'
-  if (enableWebSearch.value) return '正在理解问题并准备检索'
-  return '正在理解你的问题'
-})
-
-const preparationDescription = computed(() => {
-  if (uploadingFile.value) return '图片或文档上传完成后，将继续提取关键信息。'
-  if (needTeachingDiagram.value) return '先组织文字回答，随后生成配套教学图解。'
-  return '正在判断问题重点并组织清晰的回答结构。'
-})
-
-const isWaitingForFirstToken = (msg: ChatMsg) => (
-  msg.role === 'ai'
-  && msg.id === streamingMsgId.value
-  && isAIThinking.value
-  && !getDisplayContent(msg)
-  && !msg.teachingDiagram
-)
-
-const getMessageThinkingTitle = (_msg: ChatMsg) => {
-  if (digitalHumanBackendStatus.value) return digitalHumanBackendStatus.value
-  if (enableWebSearch.value) return '正在分析问题与检索方向'
-  return '正在组织回答'
-}
-
-const getMessageThinkingDescription = (_msg: ChatMsg) => {
-  if (needTeachingDiagram.value) return '回答完成后会继续生成一张结构化教学图解。'
-  if (enableWebSearch.value) return '会根据问题时效性选择可靠资料，并整理为可读答案。'
-  return '正在提取关键概念、推导步骤和容易混淆的部分。'
 }
 
 const getImageAttachments = (attachments?: Attachment[] | null) => (
@@ -1553,6 +1529,15 @@ const finishStream = (messageId: number) => {
   triggerGlobalProfileRefresh()
 }
 
+const completeStreamingMessage = (messageId: number) => {
+  isStreamDone = true
+  stopStreamFlushLoop()
+  const aiMsg = messages.value.find(message => message.id === messageId)
+  clearAgentStatus(aiMsg)
+  if (aiMsg) aiMsg.teachingDiagramGenerating = false
+  finishStream(messageId)
+}
+
 const commitStreamTextToMessage = (messageId: number) => {
   const aiMsg = streamingMsgRef.value && streamingMsgRef.value.id === messageId
     ? streamingMsgRef.value
@@ -1569,7 +1554,7 @@ const commitStreamTextToMessage = (messageId: number) => {
   drainPendingStreamText()
   if (streamRenderedChunks.length > 0) {
     aiMsg.content += streamRenderedChunks.join('')
-  } else if (streamDisplayText.value) {
+  } else if (streamDisplayText.value && aiMsg.content !== streamDisplayText.value) {
     aiMsg.content += streamDisplayText.value
   }
   pendingRenderQueue.length = 0
@@ -1843,16 +1828,7 @@ const switchSession = async (sessionId: string) => {
         enqueueStreamChunk(aiMsgId, chunk)
       },
       onDone: () => {
-        isStreamDone = true
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        clearAgentStatus(aiMsg)
-        if (aiMsg) {
-          aiMsg.teachingDiagramGenerating = false
-        }
-        if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-          stopStreamFlushLoop()
-          finishStream(aiMsgId)
-        }
+        completeStreamingMessage(aiMsgId)
         void refreshSessionTitleWithRetry(sessionId)
       },
       onError: (_err) => {
@@ -2227,20 +2203,14 @@ const handleSend = async () => {
     {
       onChunk: (chunk) => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        clearAgentStatus(aiMsg)
         if (aiMsg && shouldGenerateTeachingDiagram && !aiMsg.teachingDiagram) {
           aiMsg.teachingDiagramGenerating = true
         }
         enqueueStreamChunk(aiMsgId, chunk)
       },
       onDone: () => {
-        isStreamDone = true
-        const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        if (aiMsg) aiMsg.teachingDiagramGenerating = false
-
-        if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-          stopStreamFlushLoop()
-          finishStream(aiMsgId)
-        }
+        completeStreamingMessage(aiMsgId)
         void refreshSessionTitleWithRetry(activeSessionId)
       },
       onError: (_err) => {
@@ -2406,15 +2376,23 @@ onBeforeUnmount(() => {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   color: var(--color-text);
   font-weight: var(--weight-bold);
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 .brand-icon {
   color: var(--color-primary);
-  font-size: 1.25rem;
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+:deep(.brand-icon svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .collapse-toggle-btn {
@@ -4351,12 +4329,14 @@ onBeforeUnmount(() => {
 
 .pre-answer-state {
   width: min(620px, calc(100vw - 150px));
-  padding: 14px 15px;
+  padding: 14px 15px 13px;
   overflow: hidden;
-  background: #fbfcfd;
-  border: 1px solid #e1e5ea;
-  border-radius: 10px;
-  box-shadow: 0 5px 20px rgba(15, 23, 42, 0.035);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 250, 252, .94)),
+    radial-gradient(circle at 18% 0%, rgba(37, 99, 235, .08), transparent 42%);
+  border: 1px solid #dfe6ef;
+  border-radius: 12px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.045);
 }
 
 .pre-answer-state.is-inline {
@@ -4365,9 +4345,9 @@ onBeforeUnmount(() => {
 
 .pre-answer-head {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
-  gap: 11px;
+  gap: 12px;
 }
 
 .pre-answer-head > div {
@@ -4393,55 +4373,36 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   color: #2563eb;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
+  background: #f8fbff;
+  border: 1px solid #d8e5f8;
+  border-radius: 10px;
+}
+
+.thinking-core::before {
+  position: absolute;
+  inset: 6px;
+  border: 2px solid rgba(37, 99, 235, .15);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  content: '';
+  animation: thinking-ring-turn 1.15s linear infinite;
 }
 
 .thinking-core i {
   position: absolute;
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
   background: currentColor;
   border-radius: 50%;
-  animation: thinking-core-pulse 1.2s ease-in-out infinite;
+  animation: thinking-core-pulse 1.35s ease-in-out infinite;
 }
 
-.thinking-core i:nth-child(1) { transform: translateX(-7px); animation-delay: 0s; }
+.thinking-core i:nth-child(1) { transform: translateX(-6px); animation-delay: 0s; }
 .thinking-core i:nth-child(2) { animation-delay: 0.16s; }
-.thinking-core i:nth-child(3) { transform: translateX(7px); animation-delay: 0.32s; }
-
-.pre-answer-lines {
-  display: grid;
-  gap: 6px;
-  margin-top: 13px;
-  padding-left: 43px;
-}
-
-.pre-answer-lines span {
-  position: relative;
-  display: block;
-  height: 6px;
-  overflow: hidden;
-  background: #edf0f3;
-  border-radius: 2px;
-}
-
-.pre-answer-lines span:nth-child(1) { width: 88%; }
-.pre-answer-lines span:nth-child(2) { width: 70%; }
-.pre-answer-lines span:nth-child(3) { width: 48%; }
-
-.pre-answer-lines span::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent);
-  content: '';
-  transform: translateX(-100%);
-  animation: answer-skeleton-scan 1.45s ease-in-out infinite;
-}
+.thinking-core i:nth-child(3) { transform: translateX(6px); animation-delay: 0.32s; }
 
 .diagram-generation-panel {
   display: grid;
@@ -4932,8 +4893,8 @@ onBeforeUnmount(() => {
 .thinking-core i:nth-child(2) { --tx: 0px; }
 .thinking-core i:nth-child(3) { --tx: 7px; }
 
-@keyframes answer-skeleton-scan {
-  to { transform: translateX(100%); }
+@keyframes thinking-ring-turn {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes blueprint-node-pulse {
@@ -5011,7 +4972,7 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .thinking-core i,
-  .pre-answer-lines span::after,
+  .thinking-core::before,
   .blueprint-node,
   .diagram-generation-progress span {
     animation: none;

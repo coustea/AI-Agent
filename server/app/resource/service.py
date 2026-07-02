@@ -52,6 +52,9 @@ def split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | Non
         if not isinstance(value, (dict, list)):
             raise ValueError("JSON resource content must be an object or array")
         return value, None
+    if result.file_type == "html":
+        # HTML 文件不存储内容，只存储文件路径
+        return None, None
     if result.file_type in {"markdown", "mermaid", "text", "code"}:
         if not isinstance(result.content, str) or not result.content.strip():
             raise ValueError("Text resource content must be non-empty")
@@ -74,8 +77,9 @@ def _db_item_to_dto(item: ItemModel) -> GeneratedResourceItem:
         if not item.content_text:
             raise ValueError(f"资源项 {item.id} 文本格式但 content_text 为空")
         content = item.content_text
-    else:
-        raise ValueError(f"资源项 {item.id} 不支持的格式: {item.content_format}")
+    elif item.content_format == "html":
+        # HTML 文件不存储内容在 content_json/content_text 中
+        content = item.metadata_json or {}
     return GeneratedResourceItem(
         id=str(item.id), type=item.agent_type,
         title=item.title,
@@ -232,7 +236,6 @@ class ResourceService:
         *,
         user_id: int,
         resource_id: int,
-        run_id: str,
         teaching_plan: TeachingPlan,
     ) -> None:
         """校验 owner 后保存计划，并完成初始化阶段创建的 planning run。"""
@@ -246,7 +249,6 @@ class ResourceService:
         planning_run = await self.session.exec(
             select(GeneratedResourceAgentRun).where(
                 GeneratedResourceAgentRun.resource_id == resource_id,
-                GeneratedResourceAgentRun.run_id == run_id,
                 GeneratedResourceAgentRun.agent_id == "planning",
             )
         )
@@ -264,7 +266,6 @@ class ResourceService:
         self,
         *,
         resource_id: int,
-        run_id: str,
         agent_id: str,
         stage: str,
     ) -> None:
@@ -272,7 +273,6 @@ class ResourceService:
         run = await self.session.exec(
             select(GeneratedResourceAgentRun).where(
                 GeneratedResourceAgentRun.resource_id == resource_id,
-                GeneratedResourceAgentRun.run_id == run_id,
                 GeneratedResourceAgentRun.agent_id == agent_id,
             )
         )
@@ -310,7 +310,6 @@ class ResourceService:
         self,
         *,
         resource_id: int,
-        run_id: str,
         agent_id: str,
         stage: str,
         error_type: str,
@@ -337,7 +336,7 @@ class ResourceService:
             # 创建新的 failed run
             new_run = GeneratedResourceAgentRun(
                 resource_id=resource_id,
-                run_id=run_id,
+                run_id=f"fail-{resource_id}-{agent_id}",
                 agent_id=agent_id,
                 stage=stage,
                 status="failed",
@@ -353,14 +352,12 @@ class ResourceService:
         self,
         *,
         resource_id: int,
-        run_id: str,
         error_message: str,
     ) -> None:
         """工作流整体退出时，将未完成节点落为 interrupted。"""
         result = await self.session.exec(
             select(GeneratedResourceAgentRun).where(
                 GeneratedResourceAgentRun.resource_id == resource_id,
-                GeneratedResourceAgentRun.run_id == run_id,
                 GeneratedResourceAgentRun.status.in_(["pending", "running"]),
             )
         )

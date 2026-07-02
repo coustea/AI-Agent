@@ -11,6 +11,7 @@ import { EduBackground } from "../components/EduBackground";
 import { SceneHeader } from "../components/SceneHeader";
 import { SubtitleBar } from "../components/SubtitleBar";
 import { getSpringProgress, getSlideInterpolation } from "../utils/animation";
+import { useSceneTiming } from "../hooks/useSceneTiming";
 
 interface ArrayNode {
   value: string | number;
@@ -52,15 +53,12 @@ export const ArrayLinkedListLab: React.FC<ArrayLinkedListLabProps> = ({
   const spaceComplexity = (scene.visual.space_complexity as string) || "";
 
   // Calculate current operation based on time
-  const operationDuration = durationInFrames / Math.max(operations.length, 1);
-  const currentOpIndex = Math.min(
-    Math.floor(frame / operationDuration),
-    operations.length - 1,
-  );
+  const timing = useSceneTiming(scene);
+  const currentOpIndex = timing.getActiveIndex(operations.length, ["trace_step"]);
   const currentOp = operations[currentOpIndex];
 
   // Animation progress within current operation
-  const opProgress = (frame % operationDuration) / operationDuration;
+  const opProgress = timing.getStepProgress(operations.length, ["trace_step"]);
 
   // Entrance animations
   const arrayEntrance = getSpringProgress(frame, fps, 15, 25);
@@ -93,7 +91,7 @@ export const ArrayLinkedListLab: React.FC<ArrayLinkedListLabProps> = ({
     if (status === "swapping" && currentOp) {
       // Swap animation
       const swapProgress = spring({
-        frame: frame % operationDuration,
+        frame: opProgress * fps,
         fps,
         config: { damping: 12, stiffness: 100 },
       });

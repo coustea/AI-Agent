@@ -47,7 +47,7 @@ def validate_common_result(
     if result.success is not True:
         raise ValidationError(result.error or "Agent returned success=False")
 
-    if not isinstance(result.content, str) or not result.content.strip():
+    if result.file_type != "html" and (not isinstance(result.content, str) or not result.content.strip()):
         raise ValidationError("Agent returned empty content")
 
     if not result.title.strip() or not result.file_type.strip():
@@ -181,21 +181,19 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """PPT 资源校验：调用 ppt_contract.py 严格校验。"""
-    if result.file_type != "json":
-        raise ValidationError("PPT must be JSON")
+    """PPT 资源校验：严格校验 HTML 幻灯片文件生成。"""
+    if result.file_type != "html":
+        raise ValidationError("PPT resource must be HTML format")
 
-    try:
-        data = json.loads(result.content) if isinstance(result.content, str) else result.content
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"PPT JSON parse error: {e}")
+    metadata = result.metadata or {}
+    html_path = metadata.get("html_file_path")
+    html_url = metadata.get("html_url")
+    if not html_path or not html_url:
+        raise ValidationError("HTML PPT must have html_file_path and html_url in metadata")
 
-    if not isinstance(data, dict):
-        raise ValidationError("PPT must be object")
-
-    # 检查基本结构
-    if "slides" not in data and "chapters" not in data:
-        raise ValidationError("PPT must have slides or chapters")
+    import os
+    if not os.path.exists(html_path):
+        raise ValidationError(f"Generated HTML slide file does not exist: {html_path}")
 
 
 def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:

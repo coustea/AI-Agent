@@ -1,11 +1,9 @@
 """后台编排入口 — 独立资源生成的 LangGraph 全局编排。
 
 负责：
-1. 创建 run_id 和事件发射器
-2. 更新资源状态为 generating
-3. 构建并执行 LangGraph 全局编排图
-4. 处理成功/失败结果，发送完成事件
-5. 释放写锁
+1. 更新资源状态为 generating
+2. 构建并执行 LangGraph 全局编排图
+3. 处理成功/失败结果，发送完成事件
 """
 
 from __future__ import annotations
@@ -16,7 +14,6 @@ from typing import Any
 from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
 from app.resource.event import ResourceEvents
-from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceService
 from app.resource.workflow import build_parent_graph
 from app.resource.workflow.state import ParentState
@@ -26,26 +23,21 @@ logger = get_module_logger("resource", sub="orchestrator")
 
 async def run_multi_agent_generation(
     user_id: int,
-    request: ResourceGenerationRequest,
-    profile: dict[str, Any],
     resource_id: int,
-    run_id: str,
 ) -> None:
     """后台资源生成编排入口。
 
-    ResourceEvents 在此函数内部创建，采用无状态代理模式：
-    - send() 时自动创建内存频道
-    - 频道在终态后保留 30 分钟供 SSE 断线重连
+    只传 user_id 和 resource_id，其他数据内部获取。
     """
-    events = ResourceEvents(user_id=user_id, resource_id=resource_id, run_id=run_id)
+    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     start_time = time.perf_counter()
     success = False
 
     try:
         await events.send("global", "running", "资源生成已开始")
         logger.info(
-            "启动 LangGraph 全局编排图资源生成: run_id=%s user_id=%s, resource_id=%s, agents=%s",
-            run_id, user_id, resource_id, request.enabled_agent_ids(),
+            "启动 LangGraph 全局编排图资源生成: user_id=%s, resource_id=%s",
+            user_id, resource_id,
         )
 
         async with session_scope() as session:
@@ -56,12 +48,6 @@ async def run_multi_agent_generation(
         initial_state = ParentState(
             user_id=user_id,
             resource_id=resource_id,
-            request=request,
-            profile=profile,
-            run_id=run_id,
-            events=events,
-            results={},
-            failures={},
         )
         final_state = await graph.ainvoke(initial_state)
         success = bool(final_state.get("success", False))
@@ -72,12 +58,11 @@ async def run_multi_agent_generation(
                 service = ResourceService(session)
                 resource = await service.get_resource(user_id, resource_id)
                 if resource is not None and resource.status == "generating":
-                    await service.interrupt_unfinished_runs(
-                        resource_id=resource_id,
-                        run_id=run_id,
+                    await service.update_resource_status(
+                        resource_id,
+                        "failed",
                         error_message="工作流未产生成功终态",
                     )
-                    await service.update_resource_status(resource_id, "failed")
 
         if success:
             await events.send("global", "completed", "资源生成完成")
@@ -90,11 +75,6 @@ async def run_multi_agent_generation(
         logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.interrupt_unfinished_runs(
-                resource_id=resource_id,
-                run_id=run_id,
-                error_message=str(exc) or type(exc).__name__,
-            )
             await service.update_resource_status(
                 resource_id,
                 "failed",

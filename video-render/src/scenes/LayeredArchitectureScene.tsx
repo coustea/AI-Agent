@@ -73,7 +73,7 @@ export const LayeredArchitectureScene: React.FC<LayeredArchitectureSceneProps> =
                 return (
                   <div
                     key={layer.id}
-                    className={`p-4 rounded-xl border flex justify-between items-center bg-white transition-all duration-300 ${
+                    className={`p-4 rounded-xl border flex justify-between items-center bg-white ${
                       isFocus
                         ? 'border-[var(--primary)] glow-primary shadow-md'
                         : 'border-[var(--card-border)] opacity-60'

@@ -42,9 +42,9 @@ class QuizQuestion(BaseModel):
 
     @model_validator(mode="after")
     def validate_options_by_type(self):
-        """根据题型验证选项数量：选择题至少2个选项，判断题可为空。"""
-        if self.type == "true_false":
-            # 判断题不需要选项
+        """根据题型验证选项数量：选择题至少2个选项，判断题/填空题可为空。"""
+        # 判断题和填空题不需要选项
+        if self.type in ("true_false", "fill_blank", "fill"):
             return self
         # 选择题（单选/多选）至少需要2个选项
         if len(self.options) < 2:
@@ -135,6 +135,13 @@ class QuizAgent(BaseResourceAgent):
             cfg.append(f"- 难度模式: {config.get('difficulty_mode', 'basic')}")
             cfg.append(f"- 考试风格: {config.get('exam_style', 'school')}")
             cfg.append("- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析")
+            question_types = config.get("question_types", ["single", "multiple", "judge"])
+            if question_types:
+                type_labels = {"single": "单选", "multiple": "多选", "judge": "判断", "fill": "填空"}
+                cfg.append(f"- 题型分布: {', '.join(type_labels.get(t, t) for t in question_types)}")
+            weak_point_weight = config.get("weak_point_weight")
+            if weak_point_weight:
+                cfg.append(f"- 薄弱点侧重权重: {weak_point_weight}%")
             input_text += f"\n\n{chr(10).join(cfg)}"
 
         prompt = prompts.get("resource").get("quiz")

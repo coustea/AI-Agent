@@ -37,7 +37,6 @@ class ResourceEvent(BaseModel):
     """Resource 模块的 SSE 数据结构。"""
 
     sequence: int = 0
-    run_id: str
     resource_id: int
     event: ResourceEventName
     agent_id: str | None = None
@@ -64,7 +63,7 @@ class ResourceEventExpiredError(RuntimeError):
 
 # ===================== 频道键 =====================
 
-ChannelKey = tuple[int, int, str]  # (user_id, resource_id, run_id)
+ChannelKey = tuple[int, int]  # (user_id, resource_id)
 
 
 # ===================== 模块私有注册表 =====================
@@ -74,21 +73,19 @@ _resource_lock = asyncio.Lock()
 
 
 class _ResourceChannel:
-    """单个 Resource run 的内存频道。"""
+    """单个 Resource 的内存频道。"""
 
     def __init__(
         self,
         *,
         user_id: int,
         resource_id: int,
-        run_id: str,
         queue_size: int = 256,
         replay_size: int = 256,
         terminal_retention_seconds: float = 1800.0,
     ) -> None:
         self.user_id = user_id
         self.resource_id = resource_id
-        self.run_id = run_id
         self.queue_size = queue_size
         self.replay_size = replay_size
         self.terminal_retention_seconds = terminal_retention_seconds
@@ -107,12 +104,11 @@ class _ResourceChannel:
     ) -> ResourceEvent:
         if self._is_terminal:
             raise ResourceEventClosedError(
-                f"Resource channel closed for run_id={self.run_id}"
+                f"Resource channel closed for resource_id={self.resource_id}"
             )
         self._sequence += 1
         resource_event = ResourceEvent(
             sequence=self._sequence,
-            run_id=self.run_id,
             resource_id=self.resource_id,
             event=event,
             agent_id=agent_id,
@@ -129,8 +125,8 @@ class _ResourceChannel:
                 except asyncio.QueueEmpty:
                     pass
                 logger.warning(
-                    "resource_event_queue_oldest_dropped: run_id=%s",
-                    self.run_id,
+                    "resource_event_queue_oldest_dropped: resource_id=%s",
+                    self.resource_id,
                 )
             queue.put_nowait(resource_event)
 
@@ -157,7 +153,7 @@ class _ResourceChannel:
     async def _cleanup(self) -> None:
         if self._subscribers:
             return
-        key = (self.user_id, self.resource_id, self.run_id)
+        key = (self.user_id, self.resource_id)
         async with _resource_lock:
             _resource_channels.pop(key, None)
 
@@ -176,17 +172,15 @@ class ResourceEvents:
         *,
         user_id: int,
         resource_id: int,
-        run_id: str,
         auto_create: bool = True,
     ) -> None:
         self._user_id = user_id
         self._resource_id = resource_id
-        self._run_id = run_id
         self._auto_create = auto_create
-        self._key: ChannelKey = (user_id, resource_id, run_id)
+        self._key: ChannelKey = (user_id, resource_id)
 
     async def open(self) -> None:
-        """在 API 返回 run_id 前显式创建频道，避免订阅端抢先连接。"""
+        """在 API 返回前显式创建频道，避免订阅端抢先连接。"""
         await self._get_or_create_channel()
 
     async def _get_or_create_channel(self) -> _ResourceChannel:
@@ -197,12 +191,11 @@ class ResourceEvents:
                 return channel
             if not self._auto_create:
                 raise ResourceEventExpiredError(
-                    f"Resource channel not found for run_id={self._run_id}"
+                    f"Resource channel not found for resource_id={self._resource_id}"
                 )
             channel = _ResourceChannel(
                 user_id=self._user_id,
                 resource_id=self._resource_id,
-                run_id=self._run_id,
             )
             _resource_channels[self._key] = channel
             return channel
@@ -262,7 +255,7 @@ class ResourceEvents:
             channel = _resource_channels.get(self._key)
             if channel is None:
                 raise ResourceEventExpiredError(
-                    f"Resource channel not found for run_id={self._run_id}"
+                    f"Resource channel not found for resource_id={self._resource_id}"
                 )
             return await channel.subscribe(after_sequence)
 
@@ -270,10 +263,6 @@ class ResourceEvents:
         channel = await self._get_channel()
         if channel is not None:
             await channel.unsubscribe(queue)
-
-    @property
-    def run_id(self) -> str:
-        return self._run_id
 
     @property
     def resource_id(self) -> int:
@@ -300,10 +289,10 @@ def encode_resource_sse(event: ResourceEvent) -> str:
 
 
 async def get_resource_channel(
-    user_id: int, resource_id: int, run_id: str
+    user_id: int, resource_id: int
 ) -> ResourceEvents | None:
     """获取已存在的频道（不创建新频道）。用于 SSE 订阅端点。"""
-    key = (user_id, resource_id, run_id)
+    key = (user_id, resource_id)
     async with _resource_lock:
         channel = _resource_channels.get(key)
         if channel is None:
@@ -311,7 +300,6 @@ async def get_resource_channel(
         events = ResourceEvents(
             user_id=user_id,
             resource_id=resource_id,
-            run_id=run_id,
             auto_create=False,
         )
         return events

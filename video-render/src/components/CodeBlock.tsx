@@ -28,7 +28,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, activeLine
             return (
               <div
                 key={idx}
-                className={`flex -mx-4 px-4 py-0.5 transition-all duration-300 ${
+                className={`flex -mx-4 px-4 py-0.5 ${
                   isActive
                     ? 'bg-blue-500/20 border-l-[4px] border-blue-500 pl-[12px]'
                     : 'border-l-[4px] border-transparent'

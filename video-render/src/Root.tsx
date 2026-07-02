@@ -4,13 +4,20 @@ import { loadFont as loadInterFont } from "@remotion/google-fonts/Inter";
 import { loadFont as loadOutfitFont } from "@remotion/google-fonts/Outfit";
 import { MainVideo } from "./MainVideo";
 import { normalizePlan } from "./utils/normalizePlan";
+import { buildSceneFrameRanges } from "./utils/timeline";
 import defaultPlan from "../input/rich_video_plan.json";
 
 // Load Google Fonts synchronously at module load time
 // Remotion will handle font loading during the render phase
-loadInterFont();
+loadInterFont("normal", {
+  weights: ["400", "500", "600", "700", "800"],
+  subsets: ["latin"],
+});
 
-loadOutfitFont();
+loadOutfitFont("normal", {
+  weights: ["400", "500", "600", "700", "800"],
+  subsets: ["latin"],
+});
 
 const calculateMetadata: CalculateMetadataFunction<Record<string, unknown>> = ({ props }) => {
   try {
@@ -24,11 +31,14 @@ const calculateMetadata: CalculateMetadataFunction<Record<string, unknown>> = ({
     const height = renderConfig.height;
 
     // Calculate total duration in frames
-    const totalDurationSeconds = scenes.reduce(
-      (acc: number, scene) => acc + (scene.duration_seconds || 0),
-      0,
+    const frameRanges = buildSceneFrameRanges(
+      scenes.map((scene) => scene.duration_ms),
+      fps,
     );
-    const durationInFrames = Math.round(totalDurationSeconds * fps);
+    const lastRange = frameRanges[frameRanges.length - 1];
+    const durationInFrames = lastRange
+      ? lastRange.from + lastRange.durationInFrames
+      : 1;
 
     return {
       durationInFrames,
@@ -54,11 +64,14 @@ export const RemotionRoot: React.FC = () => {
   const defaultHeight = normalizedDefault.render_config.height;
 
   // Initial duration estimate for bootstrap
-  const totalDurationSeconds = normalizedDefault.scenes.reduce(
-    (acc: number, scene) => acc + scene.duration_seconds,
-    0,
+  const frameRanges = buildSceneFrameRanges(
+    normalizedDefault.scenes.map((scene) => scene.duration_ms),
+    defaultFps,
   );
-  const initialDurationInFrames = Math.round(totalDurationSeconds * defaultFps);
+  const lastRange = frameRanges[frameRanges.length - 1];
+  const initialDurationInFrames = lastRange
+    ? lastRange.from + lastRange.durationInFrames
+    : 1;
 
   return (
     <>

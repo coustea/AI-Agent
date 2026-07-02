@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Annotated, Literal, Union, TypedDict
+from typing import Any, Annotated, Literal, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 from langgraph.graph import END, START, StateGraph
@@ -33,7 +33,7 @@ VideoVoice = Literal["teacher", "coach", "concise"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
 SceneRole = Literal["hook", "concept", "example", "process", "misconception", "practice", "recap"]
 VisualType = Literal["title_intro", "concept_explain", "process_flow", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "code_execution", "compare_summary", "knowledge_check", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"]
-VideoSourceAgentId = Literal["content", "mindmap", "quiz", "code", "reading"]
+VideoSourceAgentId = Literal["content", "mindmap", "quiz", "code", "reading", "planning", "teaching_plan"]
 
 
 # =============================================================================
@@ -406,6 +406,42 @@ class CaptionWord(BaseModel):
         return self
 
 
+class CaptionChunk(BaseModel):
+    text: str = Field(min_length=1)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_timing(self) -> "CaptionChunk":
+        if self.end_ms <= self.start_ms:
+            raise ValueError("caption chunk end_ms must be greater than start_ms")
+        return self
+
+
+class VisualBeatDraft(BaseModel):
+    id: str = Field(min_length=1)
+    kind: Literal["define", "example", "trace_step", "compare", "misconception", "checkpoint", "recap"]
+    target: str = Field(default="")
+    text_anchor: str = Field(min_length=1)
+    summary: str = Field(default="")
+
+
+class VisualCue(BaseModel):
+    id: str = Field(min_length=1)
+    kind: Literal["define", "example", "trace_step", "compare", "misconception", "checkpoint", "recap"]
+    target: str = Field(default="")
+    summary: str = Field(default="")
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    caption_text: str | None = None
+
+    @model_validator(mode="after")
+    def validate_timing(self) -> "VisualCue":
+        if self.end_ms <= self.start_ms:
+            raise ValueError("visual cue end_ms must be greater than start_ms")
+        return self
+
+
 class SceneDraft(BaseModel):
     scene_id: str
     index: int = Field(ge=1)
@@ -414,20 +450,23 @@ class SceneDraft(BaseModel):
     captions: list[str] = Field(default_factory=list)
     on_screen_text: list[str] = Field(default_factory=list)
     visual_prompt: str = Field(min_length=1)
-    visual_type: VisualType = "concept_explain"
+    visual_type: str = "concept_explain"
     interaction_prompt: str = ""
     visual: dict[str, Any] = Field(min_length=1)
-    source_agents: list[VideoSourceAgentId] = Field(min_length=1)
+    source_agents: list[str] = Field(min_length=1)
     audio_src: str | None = None
     duration_ms: int = 0
     caption_words: list[CaptionWord] = Field(default_factory=list)
+    visual_beats: list[VisualBeatDraft] = Field(default_factory=list)
+    audio_duration_ms: int = Field(default=0)
+    caption_chunks: list[CaptionChunk] = Field(default_factory=list)
+    visual_cues: list[VisualCue] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_sources(self) -> "SceneDraft":
         if len(self.source_agents) != len(set(self.source_agents)):
             raise ValueError("scene draft source_agents must be unique")
         return self
-
 
 
 class VideoAsset(BaseModel):
@@ -454,14 +493,16 @@ class VideoScene(BaseModel):
     source_agents: list[VideoSourceAgentId] = Field(min_length=1)
     audio_src: str = Field(min_length=1)
     caption_words: list[CaptionWord] = Field(default_factory=list)
-
+    audio_duration_ms: int = Field(default=0)
+    caption_chunks: list[CaptionChunk] = Field(default_factory=list)
+    visual_cues: list[VisualCue] = Field(default_factory=list)
 
 
 class VideoPayload(BaseModel):
     schema_version: Literal["video/v1"] = "video/v1"
     title: str = Field(min_length=1)
     topic: str = Field(min_length=1)
-    duration_seconds: float = Field(ge=60)
+    duration_seconds: float = Field(ge=0)
     aspect_ratio: AspectRatio = "16:9"
     style: VideoStyle = "explainer"
     voice: VideoVoice = "teacher"
@@ -479,10 +520,18 @@ class VideoPayload(BaseModel):
         for scene in self.scenes:
             if scene.start_ms != expected_start:
                 raise ValueError("scene timings must be contiguous")
-            if any(word.end_ms > scene.duration_ms for word in scene.caption_words):
-                raise ValueError(f"caption timing exceeds scene duration: {scene.scene_id}")
+            if scene.audio_duration_ms > scene.duration_ms:
+                raise ValueError(f"audio duration exceeds scene duration: {scene.scene_id}")
+            if scene.caption_words and scene.audio_duration_ms <= 0:
+                raise ValueError(f"caption words require audio duration: {scene.scene_id}")
+            if any(word.end_ms > scene.audio_duration_ms for word in scene.caption_words):
+                raise ValueError(f"caption word timing exceeds audio duration: {scene.scene_id}")
+            if any(chunk.end_ms > scene.audio_duration_ms for chunk in scene.caption_chunks):
+                raise ValueError(f"caption chunk timing exceeds audio duration: {scene.scene_id}")
+            if any(cue.end_ms > scene.audio_duration_ms for cue in scene.visual_cues):
+                raise ValueError(f"visual cue timing exceeds audio duration: {scene.scene_id}")
             expected_start += scene.duration_ms
-        if expected_start != round(self.duration_seconds * 1000):
+        if abs(expected_start - round(self.duration_seconds * 1000)) > 10:
             raise ValueError("scene timings must equal video duration_seconds")
         return self
 
@@ -569,7 +618,13 @@ class SceneWriterAgent:
         message = f"{prompt}\n\n输入 JSON:\n{_safe_json(payload)}"
 
         llm = get_llm()
-        return await llm.ainvoke_json(SceneDraft, message)
+        draft = await llm.ainvoke_json(SceneDraft, message)
+        # 强制对齐合约的关键字段，防止 LLM 幻觉产生的不一致
+        draft.scene_id = contract.scene_id
+        draft.index = contract.index
+        draft.visual_type = contract.visual_type
+        draft.source_agents = contract.required_sources
+        return draft
 
 
 
@@ -624,6 +679,9 @@ class VideoPayloadBuilder:
                     audio_src=draft.audio_src,
                     source_agents=draft.source_agents,
                     caption_words=draft.caption_words,
+                    audio_duration_ms=draft.audio_duration_ms,
+                    caption_chunks=draft.caption_chunks,
+                    visual_cues=draft.visual_cues,
                 )
             )
             cursor_ms += draft.duration_ms
@@ -781,7 +839,7 @@ class VideoAgent(BaseResourceAgent):
             raise ValueError("视频大纲风格与配置不一致")
         if outline.aspect_ratio != state["constraints"].aspect_ratio:
             raise ValueError("视频大纲画幅与配置不一致")
-        available_sources = set(state["input_data"].upstream_handoffs)
+        available_sources = set(state["input_data"].upstream_handoffs) | {"planning", "teaching_plan"}
         for scene in outline.scenes:
             unknown_sources = set(scene.required_sources) - available_sources
             if unknown_sources:
@@ -818,9 +876,8 @@ class VideoAgent(BaseResourceAgent):
             writer = SceneWriterAgent()
             draft = await writer.run(state["contract"], state["digest"], state["constraints"])
 
-            # Synthesize TTS with word-level captions (edge-tts)
-            from app.resource.infra.tts import TtsService
-            from app.config import WORKPLACE_DIR
+            # Synthesize TTS with word-level captions (Spark TTS or edge-tts)
+            from app.config import SPARK_TTS_APP_ID, WORKPLACE_DIR
 
             res_id = state.get("resource_id")
             # 统一保存到 videos/res_{id}/ 目录
@@ -830,17 +887,51 @@ class VideoAgent(BaseResourceAgent):
             filename = f"scene_{draft.scene_id}.mp3"
             file_path = video_dir / filename
 
-            tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
-            duration_ms = round(tts_result.duration * 1000)
-            if duration_ms <= 0:
+            if SPARK_TTS_APP_ID and SPARK_TTS_APP_ID.strip():
+                from app.resource.infra.spark_tts import SparkTtsService
+                logger.info("Using SparkTtsService for scene %s", draft.scene_id)
+                voice_name = "x4_yezi"
+                tts_result = await SparkTtsService.synthesize_with_captions(draft.narration, file_path, voice=voice_name)
+            else:
+                from app.resource.infra.tts import TtsService
+                logger.info("Using default edge-tts TtsService for scene %s", draft.scene_id)
+                tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
+
+            # 1. Determine accurate audio duration
+            audio_duration_ms = get_audio_duration_ms(file_path)
+            tts_duration_ms = round(tts_result.duration * 1000)
+
+            # Compare actual vs TTS duration, warn if difference > 200ms
+            if audio_duration_ms > 0 and abs(audio_duration_ms - tts_duration_ms) > 200:
+                logger.warning(
+                    "Scene %s: actual audio duration (%dms) differs from TTS duration (%dms) by >200ms. Using actual duration.",
+                    draft.scene_id, audio_duration_ms, tts_duration_ms
+                )
+
+            if audio_duration_ms <= 0:
+                audio_duration_ms = tts_duration_ms
+
+            if audio_duration_ms <= 0:
                 raise ValueError(f"TTS returned invalid duration for scene {draft.scene_id}")
-            draft.duration_ms = duration_ms
+
+            draft.audio_duration_ms = audio_duration_ms
+
+            # 2. Add tail padding to prevent abrupt cuts
+            tail_pad_ms = 400
+            draft.duration_ms = audio_duration_ms + tail_pad_ms
+
             # 音频文件相对路径（用于前端访问）
             draft.audio_src = f"/static/videos/res_{res_id}/{filename}"
             draft.caption_words = [
                 CaptionWord.model_validate(caption.to_dict())
                 for caption in tts_result.captions
             ]
+
+            # 3. Build caption chunks from words
+            draft.caption_chunks = build_caption_chunks(draft.narration, draft.caption_words, audio_duration_ms)
+
+            # 4. Align visual beats to timeline
+            draft.visual_cues = align_visual_cues(draft.visual_beats, draft.caption_words, draft.caption_chunks, audio_duration_ms)
 
             return {"drafts": [draft]}
 
@@ -889,6 +980,7 @@ class VideoAgent(BaseResourceAgent):
 
         # 保存 JSON 文件到 static/videos/res_{id}/ 目录
         resource_id = input_data.resource_id
+        from app.config import WORKPLACE_DIR
         video_dir = WORKPLACE_DIR / "videos" / f"res_{resource_id}"
         video_dir.mkdir(parents=True, exist_ok=True)
 
@@ -969,3 +1061,288 @@ class VideoAgent(BaseResourceAgent):
                 upstream_handoffs=normalized_handoffs,
             )
         )
+
+
+def normalize_text(t: str) -> str:
+    import re
+    t = t.lower()
+    # Remove whitespace and common punctuation
+    t = re.sub(r'[\s，。？！、；：,\.\?!;:"\'\-\(\)（）]', '', t)
+    return t
+
+
+def get_audio_duration_ms(file_path: Path) -> int:
+    """Get the exact audio duration in milliseconds.
+
+    Uses ffprobe if available, and falls back to mutagen.
+    """
+    import subprocess
+    # 1. Try ffprobe
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(file_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=2.0)
+        duration_sec = float(result.stdout.strip())
+        return round(duration_sec * 1000)
+    except Exception as e:
+        logger.warning("ffprobe failed to read audio duration for %s: %s", file_path, e)
+
+    # 2. Try mutagen
+    try:
+        from mutagen.mp3 import MP3
+        audio = MP3(str(file_path))
+        return round(audio.info.length * 1000)
+    except Exception as e:
+        logger.warning("mutagen failed to read audio duration for %s: %s", file_path, e)
+
+    return 0
+
+
+def _estimate_caption_chunks_from_narration(narration: str, audio_duration_ms: int) -> list[CaptionChunk]:
+    import re
+    # Split by punctuation
+    clauses = re.split(r'([，。？！、；：,\.\?!;:])', narration)
+
+    # Recombine clauses with their trailing punctuation
+    recombined = []
+    temp = ""
+    for part in clauses:
+        if not part:
+            continue
+        if part in {"，", "。", "？", "！", "、", "；", "：", ",", ".", "?", "!", ";", ":"}:
+            temp += part
+            recombined.append(temp)
+            temp = ""
+        else:
+            if temp:
+                recombined.append(temp)
+            temp = part
+    if temp:
+        recombined.append(temp)
+
+    # Filter empty or whitespace-only clauses
+    recombined = [c.strip() for c in recombined if c.strip()]
+    if not recombined:
+        recombined = [narration.strip()] if narration.strip() else ["..."]
+
+    total_chars = sum(len(c) for c in recombined)
+    chunks: list[CaptionChunk] = []
+    curr_ms = 0
+
+    for i, clause in enumerate(recombined):
+        ratio = len(clause) / total_chars
+        duration = round(audio_duration_ms * ratio)
+        end_ms = curr_ms + duration
+        if end_ms <= curr_ms:
+            end_ms = curr_ms + 200
+
+        chunks.append(CaptionChunk(
+            text=clause,
+            start_ms=curr_ms,
+            end_ms=end_ms
+        ))
+        curr_ms = end_ms
+
+    if chunks:
+        chunks[-1].end_ms = audio_duration_ms
+
+    return chunks
+
+
+def build_caption_chunks(narration: str, caption_words: list[CaptionWord], audio_duration_ms: int) -> list[CaptionChunk]:
+    if not caption_words:
+        return _estimate_caption_chunks_from_narration(narration, audio_duration_ms)
+
+    chunks: list[CaptionChunk] = []
+    curr_words: list[CaptionWord] = []
+    curr_text_len = 0
+
+    # Punctuation indicators for clause boundaries
+    boundaries = {"，", "。", "？", "！", "、", "；", "：", ",", ".", "?", "!", ";", ":"}
+
+    for word in caption_words:
+        if not curr_words:
+            curr_words.append(word)
+            curr_text_len = len(word.text)
+            continue
+
+        start_ms = curr_words[0].start_ms
+        proposed_duration = word.end_ms - start_ms
+
+        should_split = False
+        if proposed_duration > 2800:
+            should_split = True
+        elif curr_text_len + len(word.text) > 22:
+            should_split = True
+        elif any(b in curr_words[-1].text for b in boundaries):
+            should_split = True
+
+        if should_split:
+            chunk_text = "".join(w.text for w in curr_words).strip()
+            chunks.append(CaptionChunk(
+                text=chunk_text,
+                start_ms=curr_words[0].start_ms,
+                end_ms=curr_words[-1].end_ms
+            ))
+            curr_words = [word]
+            curr_text_len = len(word.text)
+        else:
+            curr_words.append(word)
+            curr_text_len += len(word.text)
+
+    if curr_words:
+        chunk_text = "".join(w.text for w in curr_words).strip()
+        chunks.append(CaptionChunk(
+            text=chunk_text,
+            start_ms=curr_words[0].start_ms,
+            end_ms=curr_words[-1].end_ms
+        ))
+
+    for c in chunks:
+        if c.end_ms > audio_duration_ms:
+            c.end_ms = audio_duration_ms
+            if c.start_ms >= c.end_ms:
+                c.start_ms = max(0, c.end_ms - 100)
+
+    return chunks
+
+
+def align_visual_cues(
+    visual_beats: list[VisualBeatDraft],
+    caption_words: list[CaptionWord],
+    caption_chunks: list[CaptionChunk],
+    audio_duration_ms: int
+) -> list[VisualCue]:
+    if not visual_beats or audio_duration_ms <= 0:
+        return []
+
+    matched_cues: list[tuple[VisualBeatDraft, int | None, int | None]] = []
+    for beat in visual_beats:
+        norm_anchor = normalize_text(beat.text_anchor)
+        if not norm_anchor:
+            matched_cues.append((beat, None, None))
+            continue
+
+        # First try word-level precision match with the shortest matching sequence.
+        start_ms: int | None = None
+        end_ms: int | None = None
+        best_match: tuple[int, int, int] | None = None
+        for i in range(len(caption_words)):
+            if not normalize_text(caption_words[i].text):
+                continue
+            temp_text = ""
+            for j in range(i, len(caption_words)):
+                temp_text += caption_words[j].text
+                norm_temp = normalize_text(temp_text)
+                if norm_anchor in norm_temp:
+                    match_len = len(norm_temp)
+                    if best_match is None or match_len < best_match[2]:
+                        best_match = (
+                            caption_words[i].start_ms,
+                            caption_words[j].end_ms,
+                            match_len,
+                        )
+                    break
+        if best_match:
+            start_ms, end_ms = best_match[0], best_match[1]
+
+        if start_ms is not None:
+            matched_cues.append((beat, start_ms, end_ms))
+        else:
+            # Fall back to chunk-level matching.
+            matched_chunk: CaptionChunk | None = None
+            for chunk in caption_chunks:
+                norm_chunk = normalize_text(chunk.text)
+                if norm_chunk and (
+                    norm_anchor in norm_chunk or norm_chunk in norm_anchor
+                ):
+                    matched_chunk = chunk
+                    break
+            if matched_chunk:
+                matched_cues.append(
+                    (beat, matched_chunk.start_ms, matched_chunk.end_ms)
+                )
+            else:
+                matched_cues.append((beat, None, None))
+
+    intervals: list[tuple[int, int] | None] = [
+        (start, end)
+        if start is not None and end is not None and start < end
+        else None
+        for _, start, end in matched_cues
+    ]
+
+    previous_end = 0
+    for index, interval in enumerate(intervals):
+        if interval is None:
+            continue
+        start, end = interval
+        if start < previous_end or start >= audio_duration_ms:
+            intervals[index] = None
+            continue
+        intervals[index] = (start, min(end, audio_duration_ms))
+        previous_end = intervals[index][1]
+
+    index = 0
+    while index < len(intervals):
+        if intervals[index] is not None:
+            index += 1
+            continue
+
+        run_start = index
+        while index < len(intervals) and intervals[index] is None:
+            index += 1
+        run_end = index
+
+        left_boundary = (
+            intervals[run_start - 1][1]
+            if run_start > 0 and intervals[run_start - 1] is not None
+            else 0
+        )
+        right_boundary = (
+            intervals[run_end][0]
+            if run_end < len(intervals) and intervals[run_end] is not None
+            else audio_duration_ms
+        )
+        count = run_end - run_start
+        if right_boundary <= left_boundary:
+            left_boundary = 0
+            right_boundary = audio_duration_ms
+
+        for offset in range(count):
+            start = round(
+                left_boundary
+                + (right_boundary - left_boundary) * offset / count
+            )
+            end = round(
+                left_boundary
+                + (right_boundary - left_boundary) * (offset + 1) / count
+            )
+            intervals[run_start + offset] = (
+                min(start, audio_duration_ms - 1),
+                max(start + 1, min(end, audio_duration_ms)),
+            )
+
+    cues: list[VisualCue] = []
+    for beat_index, (beat, _, _) in enumerate(matched_cues):
+        interval = intervals[beat_index]
+        assert interval is not None
+        start, end = interval
+        cues.append(
+            VisualCue(
+                id=beat.id,
+                kind=beat.kind,
+                target=beat.target,
+                summary=beat.summary,
+                start_ms=start,
+                end_ms=end,
+                caption_text=beat.text_anchor,
+            )
+        )
+
+    return cues

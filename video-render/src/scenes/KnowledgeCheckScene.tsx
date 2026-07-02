@@ -108,7 +108,7 @@ export const KnowledgeCheckScene: React.FC<KnowledgeCheckSceneProps> = ({
               return (
                 <div
                   key={opt.id}
-                  className={`p-4 rounded-xl border flex items-center space-x-4 transition-all duration-300 ${cardStyle} ${glowStyle}`}
+                  className={`p-4 rounded-xl border flex items-center space-x-4 ${cardStyle} ${glowStyle}`}
                   style={{
                     opacity: optionEntrance * (isDimmed ? 0.4 : 1),
                     transform: `translateX(${getSlideInterpolation(optionEntrance, 0, 1, 25, 0)}px)`,
@@ -116,7 +116,7 @@ export const KnowledgeCheckScene: React.FC<KnowledgeCheckSceneProps> = ({
                 >
                   {/* Option letter bubble */}
                   <span
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs font-mono border-2 transition-all ${
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs font-mono border-2 ${
                       isSelected
                         ? 'bg-[var(--success)] text-white border-[var(--success)] border-transparent'
                         : 'bg-slate-100 text-[var(--text-muted)] border-[var(--card-border)]'

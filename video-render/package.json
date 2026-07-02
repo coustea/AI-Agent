@@ -24,11 +24,13 @@
     "@types/web": "0.0.166",
     "eslint": "9.19.0",
     "prettier": "3.8.1",
+    "tsx": "^4.22.4",
     "typescript": "5.9.3"
   },
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion bundle",
+    "test": "tsx --test src/**/*.test.ts",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
     "generate-tts": "node scripts/generate-tts.js",

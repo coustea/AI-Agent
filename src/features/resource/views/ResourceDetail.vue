@@ -49,8 +49,8 @@
                 <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem.content" />
                 <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem.content" />
                 <PptView
-                  v-else-if="previewItem.type === 'ppt' && previewPptDocument"
-                  :document-data="previewPptDocument"
+                  v-else-if="previewItem.type === 'ppt'"
+                  :resource="previewItem.resource"
                 />
                 <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem.content" />
                 <MarkdownView v-else :result-data="previewItem.content" />
@@ -76,7 +76,6 @@ import CodeView from '@/features/resource/components/CodeView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
 import VideoView from '@/features/resource/components/VideoView.vue'
-import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
 import { getGeneratedResourceDetail } from '@/features/resource/api/resource-history'
 import type { GeneratedResourceBundle } from '@/features/resource/api/resource-history'
 
@@ -84,12 +83,14 @@ type PreviewPayload = {
   agentId: string
   resultData: any
   title: string
+  resource?: any
 }
 
 type PreviewItem = {
   type: string
   content: any
   title: string
+  resource?: any
 }
 
 const route = useRoute()
@@ -109,12 +110,6 @@ const resourceWarning = computed(() => {
 })
 
 const createdAtLabel = computed(() => formatTime(resource.value?.created_at || null))
-
-const previewPptDocument = computed(() => {
-  if (previewItem.value?.type !== 'ppt') return null
-  const parsed = parsePptDocument(previewItem.value.content)
-  return parsed.ok ? parsed.document : null
-})
 
 onMounted(loadResource)
 
@@ -147,6 +142,7 @@ function openResourcePreview(payload: PreviewPayload) {
     type: payload.agentId,
     content: payload.resultData,
     title: payload.title,
+    resource: payload.resource,
   }
   previewVisible.value = true
 }

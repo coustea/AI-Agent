@@ -10,6 +10,7 @@ import { EduBackground } from "../components/EduBackground";
 import { SceneHeader } from "../components/SceneHeader";
 import { SubtitleBar } from "../components/SubtitleBar";
 import { getSpringProgress, getSlideInterpolation } from "../utils/animation";
+import { useSceneTiming } from "../hooks/useSceneTiming";
 
 interface StorageLevel {
   name: string;
@@ -110,10 +111,10 @@ export const StorageHierarchy: React.FC<StorageHierarchyProps> = ({
   const highlightLevel = (scene.visual.highlight_level as string) || "";
 
   // Calculate current transfer
-  const transferDuration = durationInFrames / Math.max(transfers.length, 1);
-  const currentTransferIdx = Math.min(
-    Math.floor(frame / transferDuration),
-    transfers.length - 1,
+  const timing = useSceneTiming(scene);
+  const currentTransferIdx = timing.getActiveIndex(
+    transfers.length,
+    ["trace_step"],
   );
   const currentTransfer = transfers[currentTransferIdx];
 
@@ -172,7 +173,7 @@ export const StorageHierarchy: React.FC<StorageHierarchyProps> = ({
     const arrowX = 600;
 
     const arrowProgress = spring({
-      frame: frame % transferDuration,
+      frame: timing.getStepProgress(transfers.length, ["trace_step"]) * fps,
       fps,
       config: { damping: 12, stiffness: 80 },
     });

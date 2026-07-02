@@ -29,6 +29,7 @@
     "markmap-view": "^0.18.12",
     "mp4-muxer": "^5.2.2",
     "pptist": "^0.0.1",
+    "pptxgenjs": "^4.0.1",
     "radix-vue": "^1.9.17",
     "reka-ui": "^2.10.1",
     "reveal.js": "^5.1.0",

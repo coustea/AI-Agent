@@ -1,16 +1,9 @@
-"""数据导入服务 - 编程题爬虫。
+"""数据导入服务。
 
-只包含 LeetCode 爬虫和数据。
+导入脚本:
+- import_leetcode: LeetCode 编程题导入
+- import_quiz: 408 题库导入
+- import_schools: 学校数据导入
 """
 
-from app.importers.programming import (
-    BaseCrawler,
-    ProgrammingProblem,
-    LeetCodeCrawler,
-)
-
-__all__ = [
-    "BaseCrawler",
-    "ProgrammingProblem",
-    "LeetCodeCrawler",
-]
+__all__ = []

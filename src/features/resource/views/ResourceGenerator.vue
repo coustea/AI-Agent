@@ -72,7 +72,7 @@
         <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
         <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
         <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
-        <PptView v-else-if="previewData.agentId === 'ppt'" :document-data="previewData.resultData" />
+        <PptView v-else-if="previewData.agentId === 'ppt'" :resource="previewData.resource" />
         <VideoView v-else-if="previewData.agentId === 'video'" :result-data="previewData.resultData" />
         <MarkdownView v-else :result-data="previewData.resultData" />
       </div>
@@ -100,7 +100,6 @@ import QuizView from '@/features/resource/components/QuizView.vue'
 import CodeView from '@/features/resource/components/CodeView.vue'
 import ReadingView from '@/features/resource/components/ReadingView.vue'
 import PptView from '@/features/resource/components/PptView.vue'
-import { parsePptDocument } from '@/features/resource/components/ppt-engine/types/ppt'
 import VideoView from '@/features/resource/components/VideoView.vue'
 
 import {
@@ -145,12 +144,12 @@ const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'q
 
 const agentConfigs = ref<AnyAgentConfigs>({
   content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'standard' },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive', exam_style: 'school', include_analysis: true },
+  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge'] },
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-  ppt: { theme_id: 'logic-blue', explanation_style: 'conceptual', visual_emphasis: 'balanced' },
-  video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9' },
+  ppt: { theme_id: 'neon-cyber', explanation_style: 'conceptual', visual_emphasis: 'balanced' },
+  video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9', include_captions: true, output_format: 'preview' },
 })
 
 const goToPersonalize = () => {
@@ -245,16 +244,42 @@ function getStageNode(id: string) {
 }
 
 function hasGeneratedResource(type: string) {
-  return generatedResources.value.some(resource => resource.type === type)
+  const isReadyInResources = generatedResources.value.some(resource => resource.type === type)
+  const isReadyInDag = dagNodeStates.value[type]?.status === 'success'
+  return isReadyInResources || isReadyInDag
 }
 
-function openResourceByType(type: string) {
-  const resource = generatedResources.value.find(item => item.type === type)
-  if (resource) previewGeneratedResource(resource)
+async function openResourceByType(type: string) {
+  let resource = generatedResources.value.find(item => item.type === type)
+
+  // content 缺失说明从未获取过完整数据，从 bundle 补全
+  if (resource && !resource.content && activeResourceId.value) {
+    try {
+      const bundle = (await getResourceBundle(activeResourceId.value)).data?.data
+      const full = bundle?.resources?.find((item: any) => item.type === type)
+      if (full) {
+        const updated = [...generatedResources.value]
+        updated[updated.findIndex(item => item.type === type)] = full
+        generatedResources.value = updated
+        resource = full
+      }
+    } catch (err) {
+      console.error('Failed to fetch resource content for preview:', err)
+    }
+  }
+
+  if (resource) {
+    previewGeneratedResource(resource)
+  }
 }
 
 const previewGeneratedResource = (resource: any) => {
-  handlePreview({ agentId: resource.type, resultData: resource.content, title: resource.title || getResourceTypeLabel(resource.type) })
+  handlePreview({
+    agentId: resource.type || resource.agent_type,
+    resultData: resource.content,
+    title: resource.title || getResourceTypeLabel(resource.type || resource.agent_type),
+    resource: resource,
+  })
 }
 
 function updateOverallProgressFromDag() {
@@ -409,7 +434,21 @@ function applyTaskStatus(taskStatus: ResourceTaskStatus) {
   if (Array.isArray(taskStatus.selected_agents) && taskStatus.selected_agents.length) {
     enabledAgentIds.value = taskStatus.selected_agents.filter(id => AGENT_DISPLAY[id]) as ResourceAgentId[]
   }
-  if (Array.isArray(taskStatus.resources)) generatedResources.value = taskStatus.resources
+  if (Array.isArray(taskStatus.resources)) {
+    // 合并 summary 数据与已有完整数据：
+    // summary（轮询返回）没有 content，不应覆盖已有的 content
+    const existingMap = new Map(
+      generatedResources.value.map(r => [r.type, r] as [string, any])
+    )
+    generatedResources.value = taskStatus.resources.map((summary: any) => {
+      const existing = existingMap.get(summary.type)
+      if (existing && existing.content) {
+        // 保留已有 content，仅更新 summary 层面的字段
+        return { ...existing, ...summary, content: existing.content }
+      }
+      return summary
+    })
+  }
   if (taskStatus.current_message) latestWorkflowMessage.value = taskStatus.current_message
   if (taskStatus.agent_snapshots) {
     Object.values(taskStatus.agent_snapshots).forEach((snapshot) => {
@@ -612,19 +651,7 @@ const resumeLiveGenerationUpdates = async () => {
 const previewVisible = ref(false)
 const previewData = ref<any>(null)
 const handlePreview = (data: any) => {
-  if (data?.agentId === 'ppt') {
-    const parsed = parsePptDocument(data.resultData)
-    if (!parsed.ok) {
-      console.error('Invalid persisted PPT artifact omitted', {
-        reason: parsed.reason,
-        details: parsed.details,
-      })
-      return
-    }
-    previewData.value = { ...data, resultData: parsed.document }
-  } else {
-    previewData.value = data
-  }
+  previewData.value = data
   previewVisible.value = true
 }
 

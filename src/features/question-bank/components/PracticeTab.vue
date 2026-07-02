@@ -1,98 +1,86 @@
 <template>
-  <div class="practice-tab">
+  <div class="practice-shell">
+    <section class="practice-section recommendation-section">
+      <div class="section-head">
+        <div>
+          <span class="section-kicker">智能推荐</span>
+          <h3>推荐练习</h3>
+        </div>
+        <button class="primary-btn" type="button" :disabled="practiceLoading" @click="$emit('start-recommended')">
+          {{ practiceLoading ? '生成中...' : '开始推荐练习' }}
+        </button>
+      </div>
 
-    <div class="main-grid">
-      <section class="tasks-column">
-        <div class="section-title-row">
-          <span class="section-label">Today</span>
-          <h3>今日任务</h3>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span>推荐学科</span>
+          <strong>{{ recommendedSubject || '未指定' }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>推荐数量</span>
+          <strong>{{ recommendedCount }} 题</strong>
+        </div>
+        <div class="summary-item">
+          <span>正确率</span>
+          <strong>{{ accuracyText }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>错题数量</span>
+          <strong>{{ wrongTotal }} 题</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="practice-section custom-section">
+      <div class="section-head compact-head">
+        <div class="compact-title">
+          <span class="section-kicker">自定义练习</span>
+          <p>按学科、难度和题型快速开始一组练习</p>
+        </div>
+      </div>
+
+      <form class="custom-form" @submit.prevent="handleCustomStart">
+        <div class="field-group">
+          <label>学科</label>
+          <select v-model="form.subject" class="field">
+            <option value="">全部学科</option>
+            <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
+          </select>
         </div>
 
-        <div class="section-card emphasized">
-          <div class="task-info">
-            <h4>推荐练习</h4>
-            <p>根据你当前课程和错题情况，优先安排更适合今天完成的训练任务。</p>
-            <div class="tags">
-              <span class="tag">{{ recommendedSubject }}</span>
-              <span class="tag">{{ recommendedCount }} 题</span>
-            </div>
-          </div>
-          <button class="btn-primary" :disabled="practiceLoading" @click="$emit('start-recommended')">
-            {{ practiceLoading ? '加载中...' : '开始练习' }}
+        <div class="field-group">
+          <label>难度</label>
+          <select v-model="form.difficulty" class="field">
+            <option value="">不限难度</option>
+            <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label>题型</label>
+          <select v-model="form.type" class="field">
+            <option value="">全部题型</option>
+            <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label>题量</label>
+          <input v-model="form.count" type="number" min="1" max="30" class="field count-field" />
+        </div>
+
+        <div class="field-group action-cell">
+          <button class="primary-btn" type="submit" :disabled="practiceLoading">
+            {{ practiceLoading ? '生成中...' : '开始自定义练习' }}
           </button>
         </div>
-
-        <div class="section-card warning-card">
-          <div class="task-info">
-            <h4>错题复习</h4>
-            <p>你目前有 {{ wrongTotal }} 道题需要重点回看，优先巩固薄弱点会更快提升整体正确率。</p>
-          </div>
-          <button class="btn-ghost danger" @click="$emit('switch-tab', 'wrong')">立即复习</button>
-        </div>
-
-        <div class="section-card">
-          <div class="task-info">
-            <h4>模拟组卷</h4>
-            <p>按学科、难度和题型组合试卷，用更接近真实考试的节奏检验当前掌握情况。</p>
-          </div>
-          <button class="btn-secondary" @click="$emit('switch-tab', 'paper')">开始组卷</button>
-        </div>
-      </section>
-
-      <aside class="sidebar-column">
-        <div class="section-card custom-card">
-          <div class="panel-head stacked">
-            <div>
-              <span class="section-label">Custom</span>
-              <h4>自定义练习</h4>
-            </div>
-            <p>按你的节奏设定学科、难度、题型和题量，生成一组更贴近当前目标的训练。</p>
-          </div>
-
-          <form class="custom-form" @submit.prevent="handleCustomStart">
-            <div class="form-group">
-              <label>学科</label>
-              <select v-model="form.subject" class="field">
-                <option value="">全部学科</option>
-                <option v-for="item in subjects" :key="item" :value="item">{{ item }}</option>
-              </select>
-            </div>
-
-            <div class="form-grid">
-              <div class="form-group">
-                <label>难度</label>
-                <select v-model="form.difficulty" class="field">
-                  <option value="">不限难度</option>
-                  <option v-for="item in difficulties" :key="item" :value="item">{{ item }}</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>题型</label>
-                <select v-model="form.type" class="field">
-                  <option value="">全部题型</option>
-                  <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>题数</label>
-              <input v-model="form.count" type="number" min="1" max="30" class="field" />
-            </div>
-
-            <button type="submit" class="btn-primary full-width" :disabled="practiceLoading">
-              {{ practiceLoading ? '加载中...' : '生成练习' }}
-            </button>
-          </form>
-        </div>
-      </aside>
-    </div>
+      </form>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
 
 const props = defineProps<{
   stats: { totalAttempted: number; totalCorrect: number }
@@ -118,366 +106,197 @@ const form = reactive({
   count: 10,
 })
 
+const accuracyText = computed(() => {
+  if (!props.stats.totalAttempted) return '0%'
+  return `${Math.round((props.stats.totalCorrect / props.stats.totalAttempted) * 100)}%`
+})
+
 function handleCustomStart() {
   emit('start-custom', { ...form })
 }
 </script>
 
 <style scoped>
-.practice-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* ================== Layout & Shells ================== */
-.main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.95fr);
-  gap: 24px;
-}
-
-@media (max-width: 960px) {
-  .main-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.module-header,
-.section-card {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(16px) saturate(120%);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.module-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 28px 32px;
-}
-
-@media (max-width: 900px) {
-  .module-header {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 24px;
-  }
-}
-
-.section-card {
-  padding: 28px;
-}
-
-.section-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
-}
-
-.tasks-column,
-.sidebar-column {
+.practice-shell {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-.sidebar-column {
-  align-self: start;
-}
-
-/* ================== Typography & Headers ================== */
-.section-label {
-  color: #8b5cf6;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.header-copy h2 {
-  margin: 4px 0 0;
-  color: #0f172a;
-  font-size: 1.45rem;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-
-.subtitle {
-  margin: 8px 0 0;
-  color: #64748b;
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.section-title-row {
+.practice-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.section-title-row h3 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 1.35rem;
-  font-weight: 800;
-}
-
-/* ================== Metric Stats Cards ================== */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
   gap: 12px;
 }
 
-.metric-card {
-  padding: 14px 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+.recommendation-section {
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.metric-label {
-  display: block;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.metric-value {
-  display: block;
-  margin-top: 6px;
-  color: #0f172a;
-  font-size: 1.4rem;
-  font-weight: 800;
-}
-
-.metric-card.warning .metric-value {
-  color: #dc2626;
-}
-
-/* ================== Emphasized Task Cards ================== */
-.section-card.emphasized {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(245, 243, 255, 0.85) 100%);
-  border-color: rgba(139, 92, 246, 0.25);
-  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.06);
-}
-
-.section-card.emphasized:hover {
-  border-color: rgba(139, 92, 246, 0.35);
-  box-shadow: 0 14px 32px rgba(139, 92, 246, 0.1);
-}
-
-.section-card.warning-card {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.section-card.warning-card:hover {
-  border-color: rgba(239, 68, 68, 0.3);
-  box-shadow: 0 14px 32px rgba(239, 68, 68, 0.05);
-}
-
-.task-info {
+.section-head {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.task-info h4,
-.panel-head h4 {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.task-info p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-.tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 99px;
-  background: rgba(139, 92, 246, 0.06);
-  color: #7c3aed;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid rgba(139, 92, 246, 0.12);
-}
-
-/* ================== Floating Custom Form Card ================== */
-.section-card.custom-card {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(24px) saturate(130%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
-}
-
-.section-card.custom-card:hover {
-  box-shadow: 0 20px 48px rgba(139, 92, 246, 0.12), 0 4px 12px rgba(0, 0, 0, 0.01);
-  border-color: rgba(139, 92, 246, 0.25);
-}
-
-.panel-head.stacked {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 18px;
-}
-
-.panel-head.stacked p {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.custom-form {
-  display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.compact-head {
+  align-items: center;
+  justify-content: flex-start;
 }
 
-.form-group {
+.section-kicker {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compact-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-title p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.section-head h3 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.92);
 }
 
-.form-group label {
+.summary-item span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.summary-item strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.custom-section {
+  gap: 10px;
+}
+
+.custom-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr)) 104px auto;
+  align-items: end;
+  gap: 10px 12px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-group.action-cell {
+  justify-content: flex-end;
+}
+
+.field-group label {
   color: #475569;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .field {
-  height: 40px;
-  border-radius: 12px;
-  font-size: 13.5px;
-  font-family: inherit;
   width: 100%;
+  min-height: 38px;
   padding: 0 12px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 12px;
+  background: #fff;
   color: #0f172a;
+  font: inherit;
   outline: none;
   box-sizing: border-box;
-  transition: all 0.2s ease;
 }
 
-.field:focus {
-  border-color: rgba(139, 92, 246, 0.4);
-  background: #fff;
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.08);
+.count-field {
+  text-align: center;
 }
 
-/* ================== Actions & Buttons ================== */
-.btn-primary,
-.btn-secondary,
-.btn-ghost {
-  height: 42px;
+.primary-btn {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid #0f172a;
   border-radius: 12px;
+  background: #0f172a;
+  color: #fff;
   font-size: 14px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-  padding: 0 20px;
 }
 
-.btn-primary {
-  background: #8b5cf6;
-  color: #fff;
-  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.15);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #7c3aed;
-  box-shadow: 0 6px 14px rgba(139, 92, 246, 0.25);
-  transform: translateY(-1px);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
+.primary-btn:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
-  box-shadow: none;
 }
 
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  color: #475569;
+@media (max-width: 900px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .custom-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-group.action-cell {
+    grid-column: span 2;
+  }
 }
 
-.btn-secondary:hover {
-  background: #f8fafc;
-  color: #1e293b;
-  transform: translateY(-1px);
-}
-
-.btn-ghost {
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.04);
-  color: #ef4444;
-}
-
-.btn-ghost:hover {
-  background: #ef4444;
-  color: #fff;
-  border-color: #ef4444;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
-}
-
-.full-width {
-  width: 100%;
-}
-
-/* ================== Responsive Styles ================== */
 @media (max-width: 640px) {
-  .metrics-grid,
-  .form-grid {
+  .section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 
-  .section-card,
-  .module-header {
-    padding: 20px;
+  .compact-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .btn-primary,
-  .btn-secondary,
-  .btn-ghost {
-    width: 100%;
-    justify-content: center;
+  .custom-form {
+    grid-template-columns: 1fr;
+  }
+
+  .field-group.action-cell {
+    grid-column: auto;
   }
 }
 </style>

@@ -62,7 +62,6 @@ async def execute_resource_agent(
     *,
     user_id: int,
     resource_id: int,
-    run_id: str,
     agent_id: str,
     agent: "BaseResourceAgent",
     input_data: "ResourceInput",
@@ -90,14 +89,12 @@ async def execute_resource_agent(
             service = ResourceService(session)
             await service.start_agent_run(
                 resource_id=resource_id,
-                run_id=run_id,
                 agent_id=agent_id,
                 stage="generation",
             )
     except Exception as exc:
         return await _record_failure(
             resource_id=resource_id,
-            run_id=run_id,
             agent_id=agent_id,
             stage="persistence",
             exception=exc,
@@ -112,7 +109,6 @@ async def execute_resource_agent(
     except TimeoutError as exc:
         return await _record_failure(
             resource_id=resource_id,
-            run_id=run_id,
             agent_id=agent_id,
             stage="timeout",
             exception=exc,
@@ -122,7 +118,6 @@ async def execute_resource_agent(
     except Exception as exc:
         return await _record_failure(
             resource_id=resource_id,
-            run_id=run_id,
             agent_id=agent_id,
             stage="generation",
             exception=exc,
@@ -136,7 +131,6 @@ async def execute_resource_agent(
     except Exception as exc:
         return await _record_failure(
             resource_id=resource_id,
-            run_id=run_id,
             agent_id=agent_id,
             stage="validation",
             exception=exc,
@@ -165,7 +159,6 @@ async def execute_resource_agent(
     except Exception as exc:
         return await _record_failure(
             resource_id=resource_id,
-            run_id=run_id,
             agent_id=agent_id,
             stage="persistence",
             exception=exc,
@@ -199,7 +192,6 @@ async def execute_resource_agent(
 async def _record_failure(
     *,
     resource_id: int,
-    run_id: str,
     agent_id: str,
     stage: str,
     exception: Exception,
@@ -227,7 +219,6 @@ async def _record_failure(
             service = ResourceService(session)
             await service.mark_agent_failed(
                 resource_id=resource_id,
-                run_id=run_id,
                 agent_id=agent_id,
                 stage=stage,
                 error_type=error_type,

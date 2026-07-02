@@ -9,6 +9,7 @@ import { CodeBlock } from '../components/CodeBlock';
 import { CallStackPanel } from '../components/CallStackPanel';
 import { VariableTable } from '../components/VariableTable';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 interface ExecutionStep {
   step_index: number;
@@ -44,8 +45,8 @@ export const CodeExecutionLab: React.FC<CodeExecutionLabProps> = ({
   const errorOrMisconception = (scene.visual.error_or_misconception as string) || '';
 
   // Determine current step index
-  const stepDuration = durationInFrames / (steps.length || 1);
-  const activeStepIdx = Math.min(Math.floor(frame / stepDuration), steps.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeStepIdx = timing.getActiveIndex(steps.length, ['trace_step']);
   const currentStep = steps[activeStepIdx];
 
   // Staggered entrance spring animations

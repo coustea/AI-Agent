@@ -43,9 +43,9 @@ class AgentAssignment(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     agent_id: str = Field(min_length=1, description="Agent 标识，如 content, quiz")
-    assigned_outline_ids: list[str] = Field(min_length=1, description="该 Agent 必须覆盖的大纲 ID 列表")
-    focus_instruction: str = Field(min_length=1, description="聚焦指令：该 Agent 应重点做什么")
-    style_constraint: str = Field(min_length=1, description="风格约束：如 '案例驱动，先直觉后形式化'")
+    assigned_outline_ids: list[str] = Field(default_factory=list, description="该 Agent 必须覆盖的大纲 ID 列表")
+    focus_instruction: str = Field(default="", description="聚焦指令：该 Agent 应重点做什么")
+    style_constraint: str = Field(default="", description="风格约束：如 '案例驱动，先直觉后形式化'")
     boundary_notes: list[str] = Field(default_factory=list, max_length=6, description="该 Agent 的边界提醒")
     key_points_emphasis: list[str] = Field(default_factory=list, max_length=8, description="该 Agent 应强调的知识点")
     avoid_overlap_with: list[str] = Field(default_factory=list, description="应避免内容重复的 Agent ID 列表")

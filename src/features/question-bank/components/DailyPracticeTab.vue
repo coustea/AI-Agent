@@ -1,51 +1,65 @@
 <template>
-  <div class="daily-practice-tab">
-    <section class="daily-card glass-panel">
-      <div class="card-copy">
-        <span class="eyebrow">Today's Challenge</span>
-        <h3>每日一题</h3>
-        <p class="card-description">系统会从当前题库中为你精选量身定制的练习，温故而知新，今日挑战，即刻开始！</p>
-      </div>
+  <div class="daily-tab-shell">
+    <section v-if="dailyQuestion" class="daily-question-block">
+      <div class="question-meta">
+        <div class="meta-left">
+          <span class="meta-title">今日一题</span>
+          <div class="meta-tags">
+            <span class="meta-tag">{{ dailyQuestion.subject }}</span>
+            <span class="meta-tag muted">{{ dailyQuestion.type }}</span>
+            <span v-if="dailyQuestion.difficulty" class="meta-tag">{{ dailyQuestion.difficulty }}</span>
+          </div>
+        </div>
 
-      <div v-if="dailyQuestion" class="question-panel">
-        <div class="tags">
-          <span class="tag subject">{{ dailyQuestion.subject }}</span>
-          <span class="tag type">{{ dailyQuestion.type }}</span>
-        </div>
-        <div class="question-content-box">
-          <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
-        </div>
-        <div class="actions">
-          <button class="btn-primary glow-button" @click="$emit('start-daily')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-            开始今日练习
+        <div class="action-row">
+          <button class="action-btn secondary" type="button" @click="$emit('refresh-daily')">换一题</button>
+          <button
+            v-if="canVisualize"
+            class="action-btn secondary"
+            type="button"
+            @click="toggleVisualizer"
+          >
+            {{ visualizerOpen ? '收起可视化' : '算法可视化' }}
           </button>
-          <button class="btn-secondary" @click="$emit('refresh-daily')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M16 3h5v5"/></svg>
-            重新换一题
-          </button>
+          <button class="action-btn primary" type="button" @click="$emit('start-daily')">开始作答</button>
         </div>
       </div>
 
-      <div v-else class="empty-state">
-        <div class="empty-copy">
-          <h4>暂无可用题目</h4>
-          <p>当前还没有可用的每日一题，你可以重新推荐一次。</p>
-        </div>
-        <button class="btn-secondary" @click="$emit('refresh-daily')">重新推荐</button>
+      <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
+
+      <AlgorithmVisualizer
+        v-if="visualizerOpen && canVisualize"
+        :question="dailyQuestion"
+      />
+    </section>
+
+    <section v-else class="daily-empty">
+      <div class="empty-copy">
+        <strong>今日一题暂未生成</strong>
+        <p>当前没有可用题目，可重新获取一题。</p>
       </div>
+      <button class="action-btn secondary" type="button" @click="$emit('refresh-daily')">换一题</button>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
+import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
+
 interface DailyQuestion {
   subject: string
   type: string
   content: string
+  difficulty?: string | null
+  answer?: string
+  analysis?: string
+  knowledge_points?: string[]
+  tags?: string[]
 }
 
-defineProps<{
+const props = defineProps<{
   dailyQuestion: DailyQuestion | null
 }>()
 
@@ -53,6 +67,23 @@ defineEmits<{
   (e: 'start-daily'): void
   (e: 'refresh-daily'): void
 }>()
+
+const visualizerOpen = ref(false)
+
+const canVisualize = computed(() => {
+  return props.dailyQuestion ? supportsAlgorithmVisualization(props.dailyQuestion) : false
+})
+
+watch(
+  () => props.dailyQuestion,
+  () => {
+    visualizerOpen.value = false
+  },
+)
+
+function toggleVisualizer() {
+  visualizerOpen.value = !visualizerOpen.value
+}
 
 function renderInline(text: string) {
   if (!text) return ''
@@ -69,154 +100,137 @@ function renderInline(text: string) {
 </script>
 
 <style scoped>
-.daily-practice-tab {
+.daily-tab-shell {
   display: flex;
   flex-direction: column;
-  gap: 24px;
 }
 
-.daily-card {
+.daily-question-block {
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 36px;
-  border-radius: 24px;
+  gap: 14px;
+  padding-top: 4px;
 }
 
-.card-copy {
-  max-width: 760px;
+.question-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.card-copy h3,
-.empty-copy h4 {
-  margin: 6px 0 0;
+.meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.meta-title {
   color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
-.card-copy h3 {
-  font-size: 1.8rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.eyebrow {
-  color: var(--cat-eval, #8b5cf6);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.card-description,
-.empty-copy p {
-  margin: 10px 0 0;
-  color: #64748b;
-  line-height: 1.7;
-}
-
-.question-panel,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 28px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.02);
-}
-
-.tags {
+.meta-tags {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.tag {
+.meta-tag {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: 99px;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #334155;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.tag.subject {
-  background: rgba(139, 92, 246, 0.08);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.16);
-}
-
-.tag.type {
-  border: 1px solid rgba(226, 232, 240, 0.9);
+.meta-tag.muted {
   background: #fff;
-  color: #475569;
-}
-
-.question-content-box {
-  background: #f8fafc;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .question-content {
   color: #1e293b;
-  font-size: 1.05rem;
-  line-height: 1.85;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
-.actions {
+.action-row {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
   flex-wrap: wrap;
 }
 
-.btn-primary,
-.btn-secondary {
-  min-height: 44px;
-  border-radius: 14px;
-  font-size: 14px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.action-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.btn-primary {
-  min-width: 150px;
+.action-btn.secondary {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 12px;
 }
 
-.btn-secondary {
-  min-width: 130px;
+.action-btn.primary {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #fff;
 }
 
-.empty-state {
-  align-items: flex-start;
+.daily-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 88px;
+  padding-top: 4px;
 }
 
-.empty-copy h4 {
-  font-size: 1.15rem;
-  font-weight: 700;
+.empty-copy {
+  min-width: 0;
+}
+
+.daily-empty strong {
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.daily-empty p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 @media (max-width: 640px) {
-  .daily-card,
-  .question-panel,
-  .empty-state {
-    padding: 20px;
-  }
-
-  .actions {
+  .question-meta,
+  .daily-empty {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .btn-primary,
-  .btn-secondary {
-    width: 100%;
+  .action-row {
+    justify-content: flex-start;
   }
 }
 </style>

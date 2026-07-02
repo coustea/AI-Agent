@@ -26,7 +26,7 @@ export const TimelineBar: React.FC<TimelineBarProps> = ({ steps, activeStepId })
             <div key={step.id} className="flex flex-col items-center relative z-10 px-2">
               {/* Step indicator dot */}
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border-2 transition-all duration-300 ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border-2 ${
                   isActive
                     ? 'bg-[var(--primary)] text-white border-[var(--primary)] scale-110 shadow-lg'
                     : 'bg-white text-[var(--text-muted)] border-[var(--card-border)]'

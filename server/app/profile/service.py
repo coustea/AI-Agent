@@ -21,7 +21,6 @@ from app.infra.models import (
     ChatLongTermMemory,
     CourseProfile,
     GlobalProfile,
-    School,
 )
 from app.profile.types import (
     ALL_DIMENSIONS,
@@ -339,11 +338,10 @@ class ProfileService:
         logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
         try:
             async with session_scope() as db:
-                base_info = payload.copy()
-                school_name = base_info.get("school")
-                if school_name:
-                    school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
-                    base_info["school_level"] = school.level if school and school.level else None
+                profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
+                # 复用已保存的 base_info（包含 school_level）
+                profile_json = profile.profile_json or make_default_profile_json()
+                base_info = profile_json.get("base_info", {})
 
                 # LLM 推理增量
                 logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
@@ -366,7 +364,6 @@ class ProfileService:
                 profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
 
                 profile_json = profile.profile_json or make_default_profile_json()
-                profile_json["base_info"] = base_info
                 profile_json = merge_global_dimensions(profile_json, resp.dimensions_patch)
                 profile.profile_json = profile_json
                 profile.updated_at = datetime.now(timezone.utc)

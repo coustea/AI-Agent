@@ -233,6 +233,7 @@ class TeachingDiagram(BaseModel):
     """一次答疑对应的一张结构化教学图解。"""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
+    thought: Optional[str] = Field(default=None, description="分析图解设计思路与教学目标匹配的过程")
     graph_type: TeachingDiagramType
     title: str = Field(min_length=1, max_length=80, description="主标题")
     subtitle: Optional[str] = Field(default=None, max_length=60, description="副标题")
