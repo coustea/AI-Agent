@@ -11,7 +11,7 @@ import { useChatEvents } from '@/features/chat/composables/useChatEvents'
 export interface StreamCallbacks {
   onChunk?: (text: string) => void
   onEvent?: (event: ChatEvent) => void
-  onDone?: () => void
+  onDone?: (data: Record<string, unknown>) => void  // 修改：传递事件 data
   onError?: (error: Error) => void
 }
 
@@ -69,10 +69,10 @@ export function useChatStreamManager() {
         onEvent: (event) => {
           state.callbacks.onEvent?.(event)
         },
-        onCompleted: () => {
+        onCompleted: (event) => {
           state.status = 'done'
           state.completedAt = Date.now()
-          state.callbacks.onDone?.()
+          state.callbacks.onDone?.(event.data || {})  // 传递事件 data
           scheduleCleanup(sessionId)
         },
         onFailed: (error) => {

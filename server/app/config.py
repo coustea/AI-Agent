@@ -155,6 +155,19 @@ KB_RRF_K: int = get("knowledge.retrieval.rrf_k", 60)
 KB_SNIPPET_MIN: int = get("knowledge.retrieval.snippet_min", 500)
 KB_SNIPPET_MAX: int = get("knowledge.retrieval.snippet_max", 900)
 
+# Retrieval profile multipliers
+KB_PROFILE_MIN_TOP_K: int = get("knowledge.retrieval.profile.min_top_k", 4)
+KB_PROFILE_BALANCED_MULTIPLIER: int = get("knowledge.retrieval.profile.balanced_multiplier", 2)
+KB_PROFILE_CONCEPTUAL_DENSE_MULTIPLIER: int = get("knowledge.retrieval.profile.conceptual_dense_multiplier", 3)
+KB_PROFILE_EXACT_SPARSE_MULTIPLIER: int = get("knowledge.retrieval.profile.exact_sparse_multiplier", 3)
+
+# Rerank configuration
+KB_RERANK_ENABLED: bool = get("knowledge.rerank.enabled", False)
+
+# Global fallback configuration
+KB_GLOBAL_CANDIDATE_MULTIPLIER: int = get("knowledge.retrieval.global_candidate_multiplier", 2)
+KB_ROUTING_FALLBACK_TO_GLOBAL: bool = get("knowledge.routing.fallback_to_global", True)
+
 # ============ 日志配置 ============
 # 日志级别（DEBUG / INFO / WARNING / ERROR）
 LOG_LEVEL = get("logging.level", "INFO")

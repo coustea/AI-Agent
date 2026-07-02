@@ -4,6 +4,7 @@ import type {
   DigitalHumanCapabilities,
   StreamExtend,
   DigitalHumanCallbacks,
+  DigitalHumanStateType,
 } from '@/features/chat/digital-human/model/digital-human'
 import { getAuthToken } from '@/shared/auth/token'
 import { isCjkCharacter } from '@/features/chat/views/tutorUtils'
@@ -13,6 +14,7 @@ export type {
   DigitalHumanCapabilities,
   StreamExtend,
   DigitalHumanCallbacks,
+  DigitalHumanStateType,
 }
 
 // ==========================================
@@ -32,6 +34,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     const error = ref<string | null>(null)
     const audioEnabled = ref(false)
     const speechRate = ref(1.0)
+    const digitalHumanState = ref<DigitalHumanStateType>('idle')
+
+    // --- Turn ID tracking ---
+    let activeTurnId: string | null = null
 
     // --- 实时生成缓存 (应对不可抗力断开) ---
     const CACHE_KEY = 'dh_current_generation_cache'
@@ -228,7 +234,40 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function handleMessage(data: Record<string, any>): void {
-        const { type } = data
+        const { type, turn_id } = data
+
+        // Handle turn_start - sets new active turn
+        if (type === 'turn_start') {
+            activeTurnId = turn_id
+            // Clear previous turn's buffered text
+            bufferedAssistantText = ''
+            pendingAssistantComplete = false
+            clearAssistantFlushFallbackTimer()
+            clearAssistantRevealTimer()
+            return
+        }
+
+        // Handle digital_human_state events
+        if (type === 'digital_human_state') {
+            const state = data.state as DigitalHumanStateType
+            digitalHumanState.value = state
+            callbacks?.onDigitalHumanStateChange?.(state, turn_id)
+            callbacks?.onStatus?.({ stage: state, message: data.message })
+            return
+        }
+
+        // Filter stale events (skip if turn_id mismatch)
+        const turnDependentTypes = [
+            'assistant_chunk', 'assistant_complete',
+            'avatar_speaking', 'avatar_stopped', 'diagram', 'status'
+        ]
+        if (turnDependentTypes.includes(type)) {
+            if (turn_id && activeTurnId && turn_id !== activeTurnId) {
+                // Stale event from previous turn - ignore
+                console.warn('[DH] Ignoring stale turn event:', type, turn_id, 'current:', activeTurnId)
+                return
+            }
+        }
 
         if (type === 'stream_info') {
             handleStreamInfo(data)
@@ -268,7 +307,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             targetRevealCharsPerSecond = Math.max(2.2, Math.min(7.5, estimatedCost / estimatedDurationSec))
             startAssistantReveal()
         } else if (type === 'diagram') {
-            callbacks?.onDiagram?.(data.data)
+            callbacks?.onDiagram?.(data.data, turn_id)
         } else if (type === 'avatar_stopped') {
             isSpeaking.value = false
             if (currentSpeechStartedAt > 0 && currentSpeechReleasedCost > 0) {
@@ -470,7 +509,18 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     function sendText(params: TextMessageParams): void {
         if (!ws || ws.readyState !== WebSocket.OPEN) return
 
+        // Send stop_speaking if avatar is speaking (interrupt)
+        if (isSpeaking.value) {
+            ws.send(JSON.stringify({ type: 'stop_speaking' }))
+        }
+
+        // Clear all turn state
         updateCache('', false) // 开始新的提问，清空旧缓存
+        bufferedAssistantText = ''
+        pendingAssistantComplete = false
+        activeTurnId = null
+        clearAssistantFlushFallbackTimer()
+        clearAssistantRevealTimer()
 
         const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
         if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
@@ -499,6 +549,18 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onError?.(error.value)
             return
         }
+
+        // If already speaking, stop first (interrupt)
+        if (isSpeaking.value) {
+            ws.send(JSON.stringify({ type: 'stop_speaking' }))
+        }
+
+        // Clear turn state
+        activeTurnId = null
+        bufferedAssistantText = ''
+        pendingAssistantComplete = false
+        clearAssistantFlushFallbackTimer()
+        clearAssistantRevealTimer()
 
         try {
             // Tell backend to prepare VAD/ASR queue and carry diagram preference atomically.
@@ -733,7 +795,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             revealingAssistantText = false
             if (pendingAssistantComplete && !isSpeaking.value) {
                 pendingAssistantComplete = false
-                callbacks?.onAssistantComplete?.()
+                callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
                 updateCache('', false)
             }
             return
@@ -765,7 +827,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
 
         if (emitted) {
-            callbacks?.onAssistantChunk?.(emitted)
+            callbacks?.onAssistantChunk?.(emitted, activeTurnId ?? undefined)
         }
 
         if (bufferedAssistantText) {
@@ -779,7 +841,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         assistantRevealLastTickAt = 0
         if (pendingAssistantComplete && !isSpeaking.value) {
             pendingAssistantComplete = false
-            callbacks?.onAssistantComplete?.()
+            callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
             updateCache('', false)
         }
     }
@@ -794,7 +856,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     function flushBufferedAssistantTextImmediately(): void {
         if (!bufferedAssistantText) return
-        callbacks?.onAssistantChunk?.(bufferedAssistantText)
+        callbacks?.onAssistantChunk?.(bufferedAssistantText, activeTurnId ?? undefined)
         bufferedAssistantText = ''
     }
 
@@ -809,7 +871,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         if (pendingAssistantComplete) {
             pendingAssistantComplete = false
-            callbacks?.onAssistantComplete?.()
+            callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
             updateCache('', false)
         }
         clearAssistantFlushFallbackTimer()
@@ -840,6 +902,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         speechRate,
         idleCountdown,
         generationCache, // 导出生成的缓存状态，UI层如果重新渲染可以获取它
+        digitalHumanState, // 统一数字人状态
 
         // Methods
         connect,

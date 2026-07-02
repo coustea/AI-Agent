@@ -15,7 +15,7 @@
           <span>{{ drillQuestion.type }}</span>
         </div>
 
-        <MarkdownRenderer class="drill-stem" :content="String(drillQuestion.content || '')" />
+        <div class="drill-stem" v-html="renderInline(drillQuestion.content)"></div>
 
         <div v-if="isOptionQuestion(drillQuestion)" class="drill-options">
           <button
@@ -34,7 +34,7 @@
             @click="$emit('select-drill-option', String(key))"
           >
             <span class="drill-option-key">{{ key }}</span>
-            <MarkdownRenderer class="drill-option-text" :content="String(text || '')" />
+            <span class="drill-option-text" v-html="renderInline(text as string)"></span>
           </button>
         </div>
 
@@ -63,10 +63,7 @@
 
         <div v-if="drillSubmitted" class="drill-result">
           <strong>{{ drillCorrect ? '已掌握' : '仍需复习' }}</strong>
-          <div>
-            <span>参考答案：</span>
-            <MarkdownRenderer :content="String(drillQuestion.answer || '')" />
-          </div>
+          <p>参考答案：{{ formatAnswer(drillQuestion.answer) }}</p>
           <p v-if="drillReview?.feedback">{{ drillReview.feedback }}</p>
         </div>
       </div>
@@ -110,31 +107,22 @@
               <span>{{ question.type }}</span>
               <span>错 {{ question.wrong_count || 1 }} 次</span>
             </div>
-            <span class="wrong-no">#{{ String(question.id).split('-')[0] }}</span>
           </div>
 
           <div class="wrong-summary">{{ summarizeText(question.content) }}</div>
 
           <div v-if="openedAnalysis.has(question.id)" class="wrong-analysis">
-            <strong>参考答案：</strong>
-            <MarkdownRenderer :content="String(question.answer || '')" />
-            <MarkdownRenderer :content="String(question.analysis || '暂无解析')" />
+            <p class="wrong-user-answer">
+              <strong>你当时的答案：</strong>{{ formatUserAnswer(question) }}
+            </p>
+            <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
+            <div v-html="renderInline(question.analysis || '暂无解析')"></div>
           </div>
-
-          <AlgorithmVisualizer v-if="openedVisualizer.has(question.id)" :question="question" />
 
           <div class="wrong-actions">
             <div class="left-actions">
               <button class="action-link" type="button" @click="$emit('toggle-wrong-analysis', question.id)">
                 {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
-              </button>
-              <button
-                v-if="canVisualize(question)"
-                class="action-link"
-                type="button"
-                @click="toggleVisualizer(question.id)"
-              >
-                {{ openedVisualizer.has(question.id) ? '收起可视化' : '算法可视化' }}
               </button>
             </div>
 
@@ -158,10 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
-import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
-import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
+import { computed } from 'vue'
 
 const props = defineProps<{
   questions: any[]
@@ -200,24 +185,11 @@ defineEmits<{
   (e: 'remove-wrong', question: any): void
 }>()
 
-const openedVisualizer = ref<Set<string>>(new Set())
-
 const hasDrillAnswer = computed(() => {
   const ans = props.drillAnswer
   if (Array.isArray(ans)) return ans.length > 0
   return !!ans && String(ans).trim().length > 0
 })
-
-function toggleVisualizer(id: string) {
-  const next = new Set(openedVisualizer.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  openedVisualizer.value = next
-}
-
-function canVisualize(question: any) {
-  return supportsAlgorithmVisualization(question)
-}
 
 function isDrillSelected(key: string) {
   const ans = props.drillAnswer
@@ -246,6 +218,27 @@ function isCorrectOption(question: any, key: string) {
   return correctKeys.includes(key)
 }
 
+function formatAnswer(ans: string) {
+  return String(ans || '').replace(/,/g, '、')
+}
+
+function formatUserAnswer(question: any) {
+  const raw = String(question.user_answer || '').trim()
+  if (!raw) return '你未作答'
+
+  if (isOptionQuestion(question)) {
+    const optionMap = getOptions(question)
+    return raw
+      .split(/[、,，\s]+/)
+      .map((key) => key.trim().toUpperCase())
+      .filter(Boolean)
+      .map((key) => `${key}. ${optionMap[key] || key}`)
+      .join('；')
+  }
+
+  return raw
+}
+
 function summarizeText(text: string) {
   const plain = String(text || '')
     .replace(/\s+/g, ' ')
@@ -254,6 +247,18 @@ function summarizeText(text: string) {
   return plain.length > 120 ? `${plain.slice(0, 120)}...` : plain
 }
 
+function renderInline(text: string) {
+  if (!text) return ''
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>')
+}
 </script>
 
 <style scoped>
@@ -335,6 +340,16 @@ function summarizeText(text: string) {
   line-height: 1.7;
 }
 
+.wrong-user-answer {
+  margin: 0 0 8px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.wrong-user-answer strong {
+  color: #0f172a;
+}
+
 .drill-options {
   display: flex;
   flex-direction: column;
@@ -368,7 +383,7 @@ function summarizeText(text: string) {
 
 .drill-option-key {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   width: 24px;
   height: 24px;
@@ -377,6 +392,12 @@ function summarizeText(text: string) {
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+.drill-option-text {
+  flex: 1;
+  text-align: left;
+  line-height: 1.7;
 }
 
 .drill-answer,
@@ -457,7 +478,6 @@ function summarizeText(text: string) {
   flex-wrap: wrap;
 }
 
-.wrong-no,
 .page-info {
   color: #64748b;
   font-size: 12px;
