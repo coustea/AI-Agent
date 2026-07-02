@@ -28,6 +28,7 @@ from app.ws import router as websocket_router
 # 测验与错题本路由
 from app.profile.api import router as profile_router
 from app.quiz.api import router as quiz_router
+from app.shared.cartoon.api import router as cartoon_router
 
 
 def install_routes(app: FastAPI) -> None:
@@ -56,5 +57,7 @@ def install_routes(app: FastAPI) -> None:
     # 测验与错题本模块：/api/v1/ai/quiz-bank/*, /api/v1/ai/wrong-questions/*
     app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
     app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
+    # 动画卡通视频生成模块：/api/v1/ai/cartoon/*
+    app.include_router(cartoon_router, prefix="/api/v1/ai/cartoon", tags=["cartoon"])
     # WebSocket 模块：/ws/*
     app.include_router(websocket_router)

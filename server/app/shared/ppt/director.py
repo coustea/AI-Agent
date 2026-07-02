@@ -4,10 +4,11 @@ import json
 
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
-from app.resource.agents.ppt_pipeline.assets import load_frontend_slides_assets
-from app.resource.agents.ppt_pipeline.schemas import (
+from app.shared.ppt.assets import load_frontend_slides_assets
+from app.shared.ppt.schemas import (
     DeckBrief,
-    SourcePack,
+    ResourcePPTRequest,
+    PathPPTRequest,
     StyleDecision,
 )
 
@@ -20,13 +21,14 @@ class StyleDirector:
         self,
         *,
         brief: DeckBrief,
-        source_pack: SourcePack,
+        request: ResourcePPTRequest | PathPPTRequest,
+        prompt_prefix: str,
     ) -> StyleDecision:
         assets = load_frontend_slides_assets()
-        prompt = prompts.get("resource").render(
-            "ppt_style",
+        prompt = prompts.get("ppt").render(
+            f"{prompt_prefix}_style",
             brief=brief.model_dump_json(indent=2),
-            source_pack=source_pack.model_dump_json(indent=2),
+            request=request.model_dump_json(indent=2),
             safe_presets=json.dumps(
                 assets.safe_presets, ensure_ascii=False, indent=2
             ),

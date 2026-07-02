@@ -68,12 +68,37 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
 }
 ```
 
-### 题目类型
+### 题目类型与 JSON 格式（严格遵守）
 
-- `single_choice`：单选题，4 个选项，answer 为选项 label 字符串
-- `multiple_choice`：多选题，4-5 个选项，answer 为 label 数组
-- `true_false`：判断题，无 options，answer 为 true/false
-- `fill_blank`：填空题，无 options，answer 为答案字符串
+每种题型的 JSON 结构不同，必须严格按以下格式输出：
+
+#### single_choice — 单选题
+```json
+{"id": 1, "type": "single_choice", "question": "以下哪个是 Python 的不可变类型？", "options": [{"label": "A", "content": "list"}, {"label": "B", "content": "dict"}, {"label": "C", "content": "tuple"}, {"label": "D", "content": "set"}], "answer": "C", "explanation": "tuple 是 Python 中唯一的不可变序列容器类型", "difficulty": "basic", "knowledge_points": ["Python 数据类型"]}
+```
+- 必须有恰好 4 个 options，每个含 label 和 content
+- answer 为单个 label 字符串（如 "A"），不是数组
+
+#### multiple_choice — 多选题
+```json
+{"id": 2, "type": "multiple_choice", "question": "以下哪些是面向对象编程的特征？", "options": [{"label": "A", "content": "封装"}, {"label": "B", "content": "递归"}, {"label": "C", "content": "继承"}, {"label": "D", "content": "多态"}], "answer": ["A", "C", "D"], "explanation": "封装、继承、多态是 OOP 三大特征，递归是算法策略", "difficulty": "medium", "knowledge_points": ["面向对象编程"]}
+```
+- 必须有 4-5 个 options
+- answer 为 label 数组（如 ["A", "C", "D"]），至少 2 个正确选项
+
+#### true_false — 判断题
+```json
+{"id": 3, "type": "true_false", "question": "TCP 协议是无连接的传输协议", "options": [], "answer": false, "explanation": "TCP 是面向连接的协议，UDP 才是无连接的", "difficulty": "basic", "knowledge_points": ["网络协议"]}
+```
+- options 必须为空数组 `[]`，不要填任何选项
+- answer 必须为布尔值 `true` 或 `false`，不是字符串 `"true"`
+
+#### fill_blank — 填空题
+```json
+{"id": 4, "type": "fill_blank", "question": "HTTP 状态码 404 表示____", "options": [], "answer": "资源未找到", "explanation": "404 Not Found 表示服务器无法找到请求的资源", "difficulty": "basic", "knowledge_points": ["HTTP 协议"]}
+```
+- options 必须为空数组 `[]`，不要填任何选项
+- answer 为字符串
 
 ### 题型分布
 

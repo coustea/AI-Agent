@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from app.infra.database import session_scope
@@ -82,25 +81,6 @@ async def execute_resource_agent(
         )
     )
 
-    # 更新 run 状态为 running
-    try:
-        async with session_scope() as session:
-            service = ResourceService(session)
-            await service.start_agent_run(
-                resource_id=resource_id,
-                agent_id=agent_id,
-                stage="generation",
-            )
-    except Exception as exc:
-        return await _record_failure(
-            resource_id=resource_id,
-            agent_id=agent_id,
-            stage="persistence",
-            exception=exc,
-            started_at=started,
-            events=events,
-        )
-
     # 执行 Agent（带超时）
     try:
         async with asyncio.timeout(timeout_seconds):
@@ -148,11 +128,11 @@ async def execute_resource_agent(
                 result=result,
             )
             elapsed_ms = int((time.perf_counter() - started) * 1000)
-            await service.complete_agent_run(
+            await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id=agent_id,
+                status="completed",
                 elapsed_ms=elapsed_ms,
-                metrics=result.metrics,
             )
     except Exception as exc:
         return await _record_failure(
@@ -169,13 +149,12 @@ async def execute_resource_agent(
         events.send(
             agent_id,
             "completed",
-            result.summary,
+            result.title,
             100,
             data={
                 "phase": "artifact_saved",
                 "artifact_id": str(item.id),
                 "elapsed_ms": elapsed_ms,
-                "metrics": result.metrics,
             },
         )
     )
@@ -215,10 +194,10 @@ async def _record_failure(
     try:
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.mark_agent_failed(
+            await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id=agent_id,
-                stage=stage,
+                status="failed",
                 error_message=f"[{error_type}] {error_message}",
                 elapsed_ms=elapsed_ms,
             )

@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from app.config import WORKPLACE_DIR
 
-from app.resource.html_generator.assets import (
+from app.shared.ppt.html_generator.assets import (
     THEMES,
     THEME_FONTS,
     VIEWPORT_BASE_CSS,

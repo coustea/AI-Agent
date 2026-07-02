@@ -306,27 +306,18 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
-    failed_agents       JSONB,
-    source              VARCHAR(255),
     status              VARCHAR(50)     DEFAULT 'pending',
-    error_message       TEXT,
-    finished_at         TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS ix_generated_resources_user_id
     ON generated_resources (user_id);
-CREATE INDEX IF NOT EXISTS ix_generated_resources_source
-    ON generated_resources (source);
 
 COMMENT ON TABLE generated_resources IS '多智能体资源生成任务主表';
 COMMENT ON COLUMN generated_resources.user_id IS '用户ID';
 COMMENT ON COLUMN generated_resources.learning_need IS '学习需求描述';
-COMMENT ON COLUMN generated_resources.failed_agents IS '执行失败的Agent列表JSON';
-COMMENT ON COLUMN generated_resources.source IS '资源来源：standalone/single_agent';
 COMMENT ON COLUMN generated_resources.status IS '任务状态：pending/generating/completed/partial_completed/failed';
-COMMENT ON COLUMN generated_resources.finished_at IS '完成时间';
 
 -- ============================================================
 -- 11. generated_resource_items
@@ -334,19 +325,12 @@ COMMENT ON COLUMN generated_resources.finished_at IS '完成时间';
 CREATE TABLE IF NOT EXISTS generated_resource_items (
     id                              SERIAL          PRIMARY KEY,
     resource_id                     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
-    user_id                         INTEGER         NOT NULL,
     agent_type                      VARCHAR(50)     NOT NULL,
-    content_format                  VARCHAR(50)     DEFAULT 'json',
     title                           VARCHAR(200),
-    summary                         TEXT,
     content_json                    JSONB,
     content_text                    TEXT,
     metadata_json                   JSONB,
-    metrics                         JSONB,
-    status                          VARCHAR(50)     DEFAULT 'pending',
-    error_message                   TEXT,
     created_at                      TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at                      TIMESTAMPTZ     DEFAULT NOW(),
 
     CONSTRAINT uq_generated_resource_items_resource_agent
         UNIQUE (resource_id, agent_type)
@@ -354,34 +338,22 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
 
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_resource_id
     ON generated_resource_items (resource_id);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_user_id
-    ON generated_resource_items (user_id);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_agent_type
     ON generated_resource_items (agent_type);
-
--- Composite indexes
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_user_created_at
-    ON generated_resource_items (user_id, created_at);
 
 -- GIN indexes for JSONB
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_content_json
     ON generated_resource_items USING GIN (content_json);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_metadata_json
     ON generated_resource_items USING GIN (metadata_json);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_metrics
-    ON generated_resource_items USING GIN (metrics);
 
 COMMENT ON TABLE generated_resource_items IS '资源产出表，每个Agent生成一条';
 COMMENT ON COLUMN generated_resource_items.resource_id IS '关联任务ID，级联删除';
 COMMENT ON COLUMN generated_resource_items.agent_type IS 'Agent类型：content/mindmap/quiz/code/reading/ppt/video';
-COMMENT ON COLUMN generated_resource_items.content_format IS '内容格式：markdown/json/html/mp4';
 COMMENT ON COLUMN generated_resource_items.title IS '资源标题';
-COMMENT ON COLUMN generated_resource_items.summary IS '资源摘要';
 COMMENT ON COLUMN generated_resource_items.content_json IS 'JSON内容（quiz/reading）';
 COMMENT ON COLUMN generated_resource_items.content_text IS 'Markdown内容（content/mindmap/code）';
 COMMENT ON COLUMN generated_resource_items.metadata_json IS '元数据：PPT的html路径、video的public_url等';
-COMMENT ON COLUMN generated_resource_items.metrics IS '指标：字数、题目数等';
-COMMENT ON COLUMN generated_resource_items.status IS '状态：pending/completed/failed';
 
 -- ============================================================
 -- 11b. generated_resource_agent_runs
@@ -390,13 +362,9 @@ CREATE TABLE IF NOT EXISTS generated_resource_agent_runs (
     id              SERIAL          PRIMARY KEY,
     resource_id     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
     agent_id        VARCHAR(32)     NOT NULL,
-    stage           VARCHAR(32)     NOT NULL,
     status          VARCHAR(16)     NOT NULL DEFAULT 'pending',
     error_message   TEXT,
-    started_at      TIMESTAMPTZ,
-    finished_at     TIMESTAMPTZ,
     elapsed_ms      INTEGER,
-    metrics         JSONB,
 
     CONSTRAINT uq_resource_agent_run UNIQUE (resource_id, agent_id),
     CONSTRAINT ck_resource_agent_run_status
@@ -409,13 +377,9 @@ CREATE INDEX IF NOT EXISTS ix_generated_resource_agent_runs_resource_id
 COMMENT ON TABLE generated_resource_agent_runs IS 'Agent运行状态表，记录每个Agent的生命周期状态';
 COMMENT ON COLUMN generated_resource_agent_runs.resource_id IS '关联资源ID，级联删除';
 COMMENT ON COLUMN generated_resource_agent_runs.agent_id IS 'Agent类型标识';
-COMMENT ON COLUMN generated_resource_agent_runs.stage IS '运行阶段：generation/validation/persistence/timeout/interrupted';
 COMMENT ON COLUMN generated_resource_agent_runs.status IS '运行状态：pending/running/completed/failed/interrupted';
 COMMENT ON COLUMN generated_resource_agent_runs.error_message IS '错误信息';
-COMMENT ON COLUMN generated_resource_agent_runs.started_at IS '开始时间';
-COMMENT ON COLUMN generated_resource_agent_runs.finished_at IS '完成时间';
 COMMENT ON COLUMN generated_resource_agent_runs.elapsed_ms IS '执行耗时（毫秒）';
-COMMENT ON COLUMN generated_resource_agent_runs.metrics IS '执行指标JSON';
 
 -- ============================================================
 -- 12. quiz_questions

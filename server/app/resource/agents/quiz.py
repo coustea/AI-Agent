@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.infra.utils import parse_first_json_object
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
     build_node_context,
@@ -131,11 +132,9 @@ class QuizAgent(BaseResourceAgent):
 
         logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
         await self.emitter.send(self.agent_id, "running", "正在生成测试题与解析...", 60)
-        payload = await self.llm.ainvoke_json(
-            QuizPayload,
-            full_prompt,
-            temperature=INFERENCE_TEMPERATURE,
-        )
+        resp = await self.llm.ainvoke(full_prompt, temperature=INFERENCE_TEMPERATURE)
+        content = getattr(resp, "content", "") or ""
+        payload = QuizPayload.model_validate(parse_first_json_object(content))
         questions = payload.questions
 
         # LLM 返回空数组时重试一次（注入错误反馈）
@@ -154,11 +153,12 @@ class QuizAgent(BaseResourceAgent):
                 f"你必须生成至少 {question_count} 道题目。\n"
                 "数组绝不能为空。"
             )
-            retry_payload = await self.llm.ainvoke_json(
-                QuizPayload,
+            retry_resp = await self.llm.ainvoke(
                 retry_prompt,
                 temperature=INFERENCE_TEMPERATURE,
             )
+            retry_content = getattr(retry_resp, "content", "") or ""
+            retry_payload = QuizPayload.model_validate(parse_first_json_object(retry_content))
             questions = retry_payload.questions
 
         # 序列化为 JSON

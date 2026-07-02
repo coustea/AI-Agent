@@ -2,7 +2,8 @@
 
 兼容性目标：
 - 代码侧仍然可以继续使用 `logger = get_logger(__name__)` 与 logging 风格的 `%s` 占位符
-- 底层输出统一由 Loguru 负责（文件 + 控制台），并启用 `enqueue=True` 异步写入
+- 底层输出统一由 Loguru 负责（文件 + 控制台）
+- macOS spawn 模式下 multiprocessing SemLock 数量受限，因此不启用 enqueue
 - 捕获 `logging` 标准库日志、uvicorn/fastapi/sqlalchemy 等第三方日志，统一导入 Loguru
 """
 
@@ -284,7 +285,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
             filter=_console_filter,
             backtrace=True,
             diagnose=False,
-            enqueue=True,
+            enqueue=False,
         )
     else:
         # 生产模式：终端只看 WARNING+，app.log 写 INFO+
@@ -294,7 +295,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
             format=_LOGURU_FORMAT,
             backtrace=True,
             diagnose=False,
-            enqueue=True,
+            enqueue=False,
         )
         _loguru_logger.add(
             str(LOG_DIR / "app.log"),
@@ -305,7 +306,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
             encoding="utf-8",
             backtrace=True,
             diagnose=False,
-            enqueue=True,
+            enqueue=False,
         )
 
     # error.log：两种模式都写
@@ -318,7 +319,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         encoding="utf-8",
         backtrace=True,
         diagnose=False,
-        enqueue=True,
+        enqueue=False,
     )
 
     # 2) 拦截标准 logging：所有旧代码 logger.info("x=%s", x) 都会被转发到 loguru

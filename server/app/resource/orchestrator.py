@@ -69,7 +69,6 @@ async def run_multi_agent_generation(
                     await service.update_resource_status(
                         resource_id,
                         "failed",
-                        error_message="工作流未产生成功终态",
                     )
 
         if success:
@@ -86,6 +85,5 @@ async def run_multi_agent_generation(
             await service.update_resource_status(
                 resource_id,
                 "failed",
-                error_message=str(exc) or type(exc).__name__,
             )
         await events.send("global", "failed", "资源生成过程中发生异常")

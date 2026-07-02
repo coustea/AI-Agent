@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
-from app.resource.agents.ppt_pipeline.schemas import DeckBrief, StaticAudit
+from app.shared.ppt.schemas import DeckBrief, StaticAudit
 
 
 _LOCAL_PATH = re.compile(r"(?:file://|/(?:Users|home|tmp)/|[A-Za-z]:\\)", re.IGNORECASE)

@@ -14,17 +14,15 @@ API 端点：
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import re
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user, get_current_user_flexible
-from app.config import WORKPLACE_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
@@ -39,8 +37,6 @@ from app.resource.event import (
     get_resource_channel,
 )
 
-STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
-
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -49,7 +45,6 @@ logger = get_logger(__name__)
 @router.post("/resources")
 async def create_resource_task(
     req: ResourceGenerationRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -63,7 +58,6 @@ async def create_resource_task(
     result = await service.create_task(
         user_id=current_user.id,
         request=req,
-        source="standalone",
     )
     resource_id = result["resource_id"]
 
@@ -74,17 +68,18 @@ async def create_resource_task(
     )
     await events.open()
 
-    # 启动后台生成
-    background_tasks.add_task(
-        run_multi_agent_generation,
-        user_id=current_user.id,
-        resource_id=resource_id,
-        selected_agents=req.enabled_agent_ids(),
-        request_data={
-            "learning_need": req.learning_need,
-            "learning_scenario": req.learning_scenario,
-            "agent_configs": req.agent_configs.model_dump(mode="json"),
-        },
+    # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
+    asyncio.create_task(
+        run_multi_agent_generation(
+            user_id=current_user.id,
+            resource_id=resource_id,
+            selected_agents=req.enabled_agent_ids(),
+            request_data={
+                "learning_need": req.learning_need,
+                "learning_scenario": req.learning_scenario,
+                "agent_configs": req.agent_configs.model_dump(mode="json"),
+            },
+        )
     )
 
     return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
@@ -93,7 +88,6 @@ async def create_resource_task(
 @router.post("/resources/single")
 async def create_single_resource_task(
     req: SingleResourceRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -111,7 +105,6 @@ async def create_single_resource_task(
             learning_need=req.learning_need,
             selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
         ),
-        source="single_agent",
     )
     resource_id = result["resource_id"]
 
@@ -122,17 +115,18 @@ async def create_single_resource_task(
     )
     await events.open()
 
-    # 启动后台生成
-    background_tasks.add_task(
-        run_multi_agent_generation,
-        user_id=current_user.id,
-        resource_id=resource_id,
-        selected_agents=[req.agent_id.value],
-        request_data={
-            "learning_need": req.learning_need,
-            "learning_scenario": "self_study",
-            "agent_configs": {},
-        },
+    # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
+    asyncio.create_task(
+        run_multi_agent_generation(
+            user_id=current_user.id,
+            resource_id=resource_id,
+            selected_agents=[req.agent_id.value],
+            request_data={
+                "learning_need": req.learning_need,
+                "learning_scenario": "self_study",
+                "agent_configs": {},
+            },
+        )
     )
 
     return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
@@ -149,7 +143,6 @@ async def get_generation_status(
     status_data = await service.get_generation_status(
         user_id=current_user.id,
         resource_id=resource_id,
-        allowed_sources=STANDALONE_RESOURCE_SOURCES,
     )
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
@@ -170,7 +163,6 @@ async def get_resource_events(
     resource = await service.get_resource(
         current_user.id,
         resource_id,
-        allowed_sources=STANDALONE_RESOURCE_SOURCES,
     )
     if resource is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
@@ -250,9 +242,8 @@ async def list_resources(
         current_user.id,
         limit,
         offset,
-        sources=STANDALONE_RESOURCE_SOURCES,
     )
-    total = await service.count_resources(current_user.id, sources=STANDALONE_RESOURCE_SOURCES)
+    total = await service.count_resources(current_user.id)
     type_summary = await service.list_resource_type_summary(
         user_id=current_user.id,
         resource_ids=[value.id for value in resources if value.id is not None],
@@ -273,7 +264,6 @@ async def list_resources(
     return HttpResponse.success(data={"items": items, "total": total})
 
 
-
 @router.get("/resources/{resource_id}")
 async def get_resource(
     resource_id: int,
@@ -285,7 +275,6 @@ async def get_resource(
     bundle = await service.get_resource_bundle(
         current_user.id,
         resource_id,
-        allowed_sources=STANDALONE_RESOURCE_SOURCES,
     )
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在")
@@ -295,18 +284,35 @@ async def get_resource(
 @router.get("/resources/public/{resource_id}/html")
 async def get_public_html(
     resource_id: str,
+    session: AsyncSession = Depends(get_session),
 ):
     """公开获取 HTML 幻灯片内容，支持 iframe 直接加载。"""
     if not re.fullmatch(r"[A-Za-z0-9_-]+", resource_id):
         return HttpResponse.error(code=400, message="非法幻灯片 ID")
-    file_path = WORKPLACE_DIR / "html_slides" / f"{resource_id}.html"
-    if not file_path.exists():
-        return HttpResponse.error(code=404, message="HTML 幻灯片不存在")
 
-    return FileResponse(
-        path=str(file_path),
-        media_type="text/html",
-    )
+    # 从数据库查找 PPT item 的 metadata 获取文件路径
+    from sqlmodel import select, col
+    from app.infra.models import GeneratedResourceItem as ItemModel
+    try:
+        rid = int(resource_id)
+    except ValueError:
+        rid = None
+
+    if rid is not None:
+        stmt = select(ItemModel).where(
+            ItemModel.resource_id == rid,
+            ItemModel.agent_type == "ppt",
+        )
+        item = (await session.exec(stmt)).one_or_none()
+        if item and item.metadata_json:
+            html_path = item.metadata_json.get("html_file_path")
+            if html_path and os.path.exists(html_path):
+                return FileResponse(
+                    path=html_path,
+                    media_type="text/html",
+                )
+
+    return HttpResponse.error(code=404, message="HTML 幻灯片不存在")
 
 
 @router.get("/resources/{resource_id}/html")

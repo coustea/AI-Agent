@@ -31,14 +31,29 @@ class SourceArtifact(StrictModel):
     materials: list[str] = Field(default_factory=list, max_length=12)
 
 
-class SourcePack(StrictModel):
+class ResourcePPTRequest(StrictModel):
     learning_need: str = Field(min_length=1)
     learning_scenario: str = Field(min_length=1)
     profile: dict[str, Any] | str
     teaching_plan: dict[str, Any] | None
-    source_type: Literal["resource", "node"]
     artifacts: list[SourceArtifact] = Field(default_factory=list)
-    node_context: dict[str, Any] | None = None
+
+
+class PathPPTRequest(StrictModel):
+    learning_need: str = Field(min_length=1)
+    profile: dict[str, Any] | str
+    artifacts: list[SourceArtifact] = Field(default_factory=list)
+    path_title: str = Field(min_length=1)
+    path_goal: str = Field(min_length=1)
+    node_title: str = Field(min_length=1)
+    node_key: str = Field(min_length=1)
+    difficulty: str = Field(min_length=1)
+    knowledge_points: list[str] = Field(default_factory=list)
+    weak_knowledge_points: list[str] = Field(default_factory=list)
+    generation_focus: list[str] = Field(default_factory=list)
+    tutorial_title: str = Field(min_length=1)
+    tutorial_summary: str = Field(min_length=1)
+    tutorial_markdown: str = Field(min_length=1)
 
 
 class StyleCandidate(StrictModel):

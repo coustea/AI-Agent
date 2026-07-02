@@ -30,8 +30,6 @@ from app.profile.service import get_profile_service
 from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
 
 # 资源源类型常量
-STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
-
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
@@ -214,7 +212,6 @@ async def get_recommendation(
         select(GeneratedResource)
         .where(
             GeneratedResource.user_id == current_user.id,
-            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
         )
         .order_by(col(GeneratedResource.updated_at).desc())
         .limit(3)
@@ -437,7 +434,6 @@ async def get_quick_actions(
         select(GeneratedResource)
         .where(
             GeneratedResource.user_id == current_user.id,
-            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
         )
         .order_by(col(GeneratedResource.updated_at).desc())
         .limit(5)
@@ -564,7 +560,6 @@ async def get_recent_resources(
         select(GeneratedResource)
         .where(
             GeneratedResource.user_id == current_user.id,
-            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
         )
         .order_by(col(GeneratedResource.updated_at).desc())
         .limit(5)
@@ -636,7 +631,6 @@ async def get_study_stats(
         .select_from(GeneratedResource)
         .where(
             GeneratedResource.user_id == current_user.id,
-            col(GeneratedResource.source).in_(STANDALONE_RESOURCE_SOURCES),
         )
     )).one() or 0
     today_suggestion_count = sum([

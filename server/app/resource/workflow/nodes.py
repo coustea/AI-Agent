@@ -35,6 +35,7 @@ from app.resource.service import (
     COORDINATOR_AGENT_ID,
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
+    _infer_content_format,
 )
 from app.resource.event import ResourceEvents
 
@@ -46,6 +47,7 @@ BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
 def build_agent_resource_input(
     *,
     resource_id: int,
+    user_id: int,
     agent_id: str,
     learning_need: str,
     learning_scenario: str,
@@ -79,6 +81,7 @@ def build_agent_resource_input(
     agent_config["agent_id"] = agent_id
     return ResourceInput(
         resource_id=resource_id,
+        user_id=user_id,
         learning_need=learning_need,
         learning_scenario=learning_scenario,
         agent_name=agent_id,
@@ -105,12 +108,11 @@ async def get_handoffs(
     for item in items:
         if item.agent_type not in BASE_RESOURCE_AGENT_IDS:
             continue
-        if item.status != "completed":
-            continue
+        # item 表只有成功记录，无需检查 status
         handoffs[item.agent_type] = DownstreamContext(
             source_agent=item.agent_type,
             title=item.title or "",
-            one_sentence_summary=item.summary or "",
+            one_sentence_summary=item.title or "",
         )
     return handoffs
 
@@ -175,14 +177,6 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     started = time.perf_counter()
     try:
-        async with session_scope() as session:
-            service = ResourceService(session)
-            await service.start_agent_run(
-                resource_id=resource_id,
-                agent_id="planning",
-                stage="planning",
-            )
-
         await events.send(
             "planning",
             "running",
@@ -215,9 +209,10 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.complete_agent_run(
+            await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id="planning",
+                status="completed",
                 elapsed_ms=elapsed_ms,
             )
         await events.send(
@@ -237,10 +232,10 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         logger.error("规划阶段失败: resource_id=%s error=%s", resource_id, exc)
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.mark_agent_failed(
+            await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id="planning",
-                stage="planning",
+                status="failed",
                 error_message=str(exc)[:500],
                 elapsed_ms=elapsed_ms,
             )
@@ -370,6 +365,7 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
+        user_id=user_id,
         agent_id=agent_id,
         learning_need=learning_need,
         learning_scenario=learning_scenario,
@@ -399,13 +395,6 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
 
     started = time.perf_counter()
-    async with session_scope() as session:
-        service = ResourceService(session)
-        await service.start_agent_run(
-            resource_id=resource_id,
-            agent_id=COORDINATOR_AGENT_ID,
-            stage="coordination",
-        )
     await events.send(
         COORDINATOR_AGENT_ID,
         "running",
@@ -443,9 +432,10 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
 
         existing_results: dict[str, AgentResult] = {}
         for item in items:
-            if item.agent_type in BASE_RESOURCE_AGENT_IDS and item.status == "completed":
-                # 根据 content_format 选择正确的内容字段
-                if item.content_format == "json" and item.content_json:
+            if item.agent_type in BASE_RESOURCE_AGENT_IDS:
+                # item 表只有成功记录，无需检查 status
+                content_format = _infer_content_format(item.agent_type)
+                if content_format == "json" and item.content_json:
                     content = str(item.content_json)
                 elif item.content_text:
                     content = item.content_text
@@ -456,7 +446,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
                     success=True,
                     content=content,
                     title=item.title or "",
-                    file_type=item.content_format or "markdown",
+                    file_type=content_format,
                 )
 
         # 检查每个成功 Agent 的内容重叠
@@ -474,20 +464,13 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     async with session_scope() as session:
         service = ResourceService(session)
-        if stat == "completed":
-            await service.complete_agent_run(
-                resource_id=resource_id,
-                agent_id=COORDINATOR_AGENT_ID,
-                elapsed_ms=elapsed_ms,
-            )
-        else:
-            await service.mark_agent_failed(
-                resource_id=resource_id,
-                agent_id=COORDINATOR_AGENT_ID,
-                stage="coordination",
-                error_message=message,
-                elapsed_ms=elapsed_ms,
-            )
+        await service.upsert_agent_run(
+            resource_id=resource_id,
+            agent_id=COORDINATOR_AGENT_ID,
+            status=stat,
+            error_message=message if stat == "failed" else None,
+            elapsed_ms=elapsed_ms,
+        )
     await events.send(
         COORDINATOR_AGENT_ID,
         stat,
@@ -562,6 +545,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
+        user_id=user_id,
         agent_id=PPT_AGENT_ID,
         learning_need=learning_need,
         learning_scenario=learning_scenario,
@@ -624,6 +608,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
+        user_id=user_id,
         agent_id=VIDEO_AGENT_ID,
         learning_need=learning_need,
         learning_scenario=learning_scenario,
@@ -685,13 +670,6 @@ async def save_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
 
     started = time.perf_counter()
-    async with session_scope() as session:
-        service = ResourceService(session)
-        await service.start_agent_run(
-            resource_id=resource_id,
-            agent_id=BUNDLE_AGENT_ID,
-            stage="aggregation",
-        )
     await events.send(
         BUNDLE_AGENT_ID,
         "running",
@@ -714,20 +692,13 @@ async def save_node(state: ParentState) -> dict[str, Any]:
             )
             success = status in ("completed", "partial_completed")
             elapsed_ms = int((time.perf_counter() - started) * 1000)
-            if success:
-                await service.complete_agent_run(
-                    resource_id=resource_id,
-                    agent_id=BUNDLE_AGENT_ID,
-                    elapsed_ms=elapsed_ms,
-                )
-            else:
-                await service.mark_agent_failed(
-                    resource_id=resource_id,
-                    agent_id=BUNDLE_AGENT_ID,
-                    stage="aggregation",
-                    error_message="资源包组装失败",
-                    elapsed_ms=elapsed_ms,
-                )
+            await service.upsert_agent_run(
+                resource_id=resource_id,
+                agent_id=BUNDLE_AGENT_ID,
+                status="completed" if success else "failed",
+                error_message="资源包组装失败" if not success else None,
+                elapsed_ms=elapsed_ms,
+            )
 
             await events.send(
                 BUNDLE_AGENT_ID,
@@ -741,10 +712,10 @@ async def save_node(state: ParentState) -> dict[str, Any]:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.mark_agent_failed(
+            await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id=BUNDLE_AGENT_ID,
-                stage="aggregation",
+                status="failed",
                 error_message=str(exc)[:500],
                 elapsed_ms=elapsed_ms,
             )

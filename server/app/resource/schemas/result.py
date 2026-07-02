@@ -34,6 +34,7 @@ class ResourceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     resource_id: int | None = None
+    user_id: int | None = None
     learning_need: str
     learning_scenario: LearningScenario = "self_study"
     agent_name: str = ""

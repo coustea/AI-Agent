@@ -5,12 +5,18 @@ from __future__ import annotations
 import uuid
 
 from app.infra.logging import get_logger
+from app.config import WORKPLACE_DIR
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.ppt_pipeline import (
+from app.shared.ppt import (
     PresentationGenerationError,
     PresentationPipeline,
 )
-from app.resource.agents.ppt_pipeline.schemas import SourceArtifact, SourcePack
+from app.shared.ppt.storage import PresentationPublisher
+from app.shared.ppt.schemas import (
+    SourceArtifact,
+    ResourcePPTRequest,
+    PathPPTRequest,
+)
 from app.resource.schemas import (
     AgentResult,
     DownstreamContext,
@@ -59,8 +65,8 @@ def _result_artifacts(results: dict[str, AgentResult]) -> list[SourceArtifact]:
     ]
 
 
-def build_resource_source_pack(input_data: ResourceInput) -> SourcePack:
-    return SourcePack(
+def build_resource_ppt_request(input_data: ResourceInput) -> ResourcePPTRequest:
+    return ResourcePPTRequest(
         learning_need=input_data.learning_need,
         learning_scenario=input_data.learning_scenario,
         profile=input_data.profile or {},
@@ -69,32 +75,26 @@ def build_resource_source_pack(input_data: ResourceInput) -> SourcePack:
             if input_data.teaching_plan
             else None
         ),
-        source_type="resource",
         artifacts=_source_artifacts(input_data.upstream_handoffs),
     )
 
 
-def build_node_source_pack(input_data: NodeInput) -> SourcePack:
-    return SourcePack(
+def build_path_ppt_request(input_data: NodeInput) -> PathPPTRequest:
+    return PathPPTRequest(
         learning_need=input_data.learning_need,
-        learning_scenario="self_study",
         profile=input_data.profile or {},
-        teaching_plan=None,
-        source_type="node",
         artifacts=_result_artifacts(input_data.existing_resources),
-        node_context={
-            "path_title": input_data.path_title,
-            "path_goal": input_data.path_goal,
-            "node_title": input_data.node_title,
-            "node_key": input_data.node_key,
-            "difficulty": input_data.difficulty,
-            "knowledge_points": input_data.knowledge_points,
-            "weak_knowledge_points": input_data.weak_knowledge_points,
-            "generation_focus": input_data.generation_focus,
-            "tutorial_title": input_data.tutorial_title,
-            "tutorial_summary": input_data.tutorial_summary,
-            "tutorial_markdown": input_data.tutorial_markdown,
-        },
+        path_title=input_data.path_title,
+        path_goal=input_data.path_goal,
+        node_title=input_data.node_title,
+        node_key=input_data.node_id,
+        difficulty=input_data.difficulty,
+        knowledge_points=list(input_data.knowledge_points or []),
+        weak_knowledge_points=list(input_data.weak_knowledge_points or []),
+        generation_focus=list(input_data.generation_focus or []),
+        tutorial_title=input_data.tutorial_title,
+        tutorial_summary=input_data.tutorial_summary,
+        tutorial_markdown=input_data.tutorial_markdown,
     )
 
 
@@ -109,8 +109,9 @@ class PPTAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         return await self._generate(
-            build_node_source_pack(input_data),
+            build_path_ppt_request(input_data),
             file_id=f"node_{input_data.node_id}",
+            prompt_prefix="path",
         )
 
     async def generate_resource(
@@ -124,24 +125,34 @@ class PPTAgent(BaseResourceAgent):
             if input_data.resource_id is not None
             else uuid.uuid4().hex
         )
+        # 动态构建 publisher，使用统一路径 resource/{userId}/{resourceId}/
+        user_id = input_data.user_id or 0
+        output_dir = WORKPLACE_DIR / "resource" / str(user_id) / str(input_data.resource_id or file_id)
+        publisher = PresentationPublisher(output_dir)
+        pipeline = PresentationPipeline(publisher=publisher)
         return await self._generate(
-            build_resource_source_pack(input_data),
+            build_resource_ppt_request(input_data),
             file_id=file_id,
+            prompt_prefix="resource",
+            pipeline=pipeline,
         )
 
     async def _generate(
         self,
-        source_pack: SourcePack,
+        request: ResourcePPTRequest | PathPPTRequest,
         *,
         file_id: str,
+        prompt_prefix: str,
+        pipeline: PresentationPipeline | None = None,
     ) -> AgentResult:
         async def progress(message: str, percent: int) -> None:
             await self.emitter.send(self.agent_id, "running", message, percent)
 
         try:
-            artifact = await self.pipeline.generate(
-                source_pack,
+            artifact = await (pipeline or self.pipeline).generate(
+                request,
                 file_id=file_id,
+                prompt_prefix=prompt_prefix,
                 progress=progress,
             )
         except PresentationGenerationError as exc:

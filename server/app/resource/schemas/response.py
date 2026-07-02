@@ -15,20 +15,16 @@ from app.resource.schemas.result import AgentResult
 class GeneratedResourceItem(BaseModel):
     """生成的资源项，作为后端存储和前端 SSE 的统一资源契约。
 
-    content 为 None 时表示轻量摘要（不含正文），用于状态轮询等场景。
+    content 为 None 时表示轻量摘要（不含正文），用于状态轮询等轻量场景。
+    format 由 agent_type 推导，不再从数据库存储字段读取。
     """
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: ResourceAgentId
     title: str
     format: str
     content: Any = None
-    summary: str = ""
-    metrics: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    status: str = "completed"
-    error_message: str | None = None
     created_at: str | None = None
-    updated_at: str | None = None
 
 
 class ResourceStatusSnapshot(BaseModel):

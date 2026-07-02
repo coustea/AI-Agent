@@ -6,20 +6,21 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from app.config import WORKPLACE_DIR
-from app.resource.agents.ppt_pipeline.author import HTMLAuthor
-from app.resource.agents.ppt_pipeline.director import StyleDirector
-from app.resource.agents.ppt_pipeline.planner import BriefPlanner
-from app.resource.agents.ppt_pipeline.repair import RepairAgent
-from app.resource.agents.ppt_pipeline.schemas import (
+from app.shared.ppt.author import HTMLAuthor
+from app.shared.ppt.director import StyleDirector
+from app.shared.ppt.planner import BriefPlanner
+from app.shared.ppt.repair import RepairAgent
+from app.shared.ppt.schemas import (
     DeckBrief,
-    SourcePack,
+    ResourcePPTRequest,
+    PathPPTRequest,
     StaticAudit,
     StyleDecision,
     VisualAudit,
 )
-from app.resource.agents.ppt_pipeline.storage import PresentationPublisher
-from app.resource.agents.ppt_pipeline.validator import StaticValidator
-from app.resource.agents.ppt_pipeline.visual_qa import BrowserVisualQA
+from app.shared.ppt.storage import PresentationPublisher
+from app.shared.ppt.validator import StaticValidator
+from app.shared.ppt.visual_qa import BrowserVisualQA
 
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
@@ -72,22 +73,26 @@ class PresentationPipeline:
 
     async def generate(
         self,
-        source_pack: SourcePack,
+        request: ResourcePPTRequest | PathPPTRequest,
         *,
         file_id: str,
+        prompt_prefix: str,
         progress: ProgressCallback | None = None,
     ) -> PresentationArtifact:
         await self._progress(progress, "正在规划演示叙事与内容密度...", 20)
-        brief = await self.planner.plan(source_pack)
+        brief = await self.planner.plan(request, prompt_prefix)
 
         await self._progress(progress, "正在比较三种视觉方向并选择风格...", 35)
-        style = await self.director.direct(brief=brief, source_pack=source_pack)
+        style = await self.director.direct(
+            brief=brief, request=request, prompt_prefix=prompt_prefix
+        )
 
         await self._progress(progress, "正在创作完整的单文件 HTML 演示文稿...", 55)
         html = await self.author.author(
-            source_pack=source_pack,
+            request=request,
             brief=brief,
             style=style,
+            prompt_prefix=prompt_prefix,
         )
 
         await self._progress(progress, "正在执行结构与浏览器视觉验收...", 72)
@@ -102,6 +107,7 @@ class PresentationPipeline:
                 style=style,
                 static_audit=static_audit,
                 visual_audit=visual_audit,
+                prompt_prefix=prompt_prefix,
             )
             static_audit, visual_audit = await self._audit(html, brief)
 

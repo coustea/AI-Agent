@@ -109,12 +109,14 @@ class VideoAgent(BaseResourceAgent):
             if input_data.resource_id is not None
             else f"res_{uuid.uuid4().hex}"
         )
+        user_id = input_data.user_id or 0
+        output_dir = WORKPLACE_DIR / "resource" / str(user_id) / str(input_data.resource_id or uuid.uuid4().hex)
         request = VideoRequest(
             topic=input_data.learning_need,
             audience=_profile_text(input_data.profile),
             learning_goal=input_data.learning_need,
             materials=_resource_materials(input_data),
-            output_dir=WORKPLACE_DIR / "videos" / resource_key,
+            output_dir=output_dir,
             metadata={
                 "origin": "resource",
                 "resource_id": input_data.resource_id,
@@ -132,7 +134,8 @@ class VideoAgent(BaseResourceAgent):
             materials=_node_materials(input_data),
             output_dir=(
                 WORKPLACE_DIR
-                / "videos"
+                / "resource"
+                / str(input_data.user_id if hasattr(input_data, 'user_id') else 0)
                 / f"path_{input_data.path_id}_node_{input_data.node_id}"
             ),
             metadata={

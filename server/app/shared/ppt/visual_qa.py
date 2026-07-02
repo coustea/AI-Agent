@@ -11,7 +11,7 @@ from typing import Iterator, Literal
 from playwright.async_api import Browser, Error as PlaywrightError, async_playwright
 
 from app.infra.logging import get_logger
-from app.resource.agents.ppt_pipeline.schemas import (
+from app.shared.ppt.schemas import (
     DeckBrief,
     VisualAudit,
     VisualQAProblem,
