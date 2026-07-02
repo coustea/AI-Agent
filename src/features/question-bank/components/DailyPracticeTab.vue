@@ -1,88 +1,205 @@
 <template>
   <div class="daily-tab-shell">
-    <section v-if="dailyQuestion" class="daily-question-block">
-      <div class="question-meta">
-        <div class="meta-left">
-          <span class="meta-title">今日一题</span>
-          <div class="meta-tags">
-            <span class="meta-tag">{{ dailyQuestion.subject }}</span>
-            <span class="meta-tag muted">{{ dailyQuestion.type }}</span>
-            <span v-if="dailyQuestion.difficulty" class="meta-tag">{{ dailyQuestion.difficulty }}</span>
-          </div>
-        </div>
-
-        <div class="action-row">
-          <button class="action-btn secondary" type="button" @click="$emit('refresh-daily')">换一题</button>
-          <button
-            v-if="canVisualize"
-            class="action-btn secondary"
-            type="button"
-            @click="toggleVisualizer"
-          >
-            {{ visualizerOpen ? '收起可视化' : '算法可视化' }}
-          </button>
-          <button class="action-btn primary" type="button" @click="$emit('start-daily')">开始作答</button>
+    <section v-if="questions.length" class="daily-list-section">
+      <div class="daily-summary">
+        <div class="summary-copy">
+          <strong>每日 10 题</strong>
+          <p>已提交 {{ submittedCount }} / {{ questions.length }}，答对 {{ correctCount }} 题</p>
         </div>
       </div>
 
-      <div class="question-content" v-html="renderInline(dailyQuestion.content)"></div>
+      <article v-for="(question, index) in questions" :key="question.id" class="daily-question-block">
+        <div class="question-meta">
+          <div class="meta-left">
+            <span class="meta-title">第 {{ index + 1 }} 题</span>
+            <div class="meta-tags">
+              <span class="meta-tag subject-tag">{{ question.subject }}</span>
+              <span class="meta-tag type-tag">{{ question.type }}</span>
+              <span v-if="question.difficulty" class="meta-tag difficulty-tag">{{ question.difficulty }}</span>
+            </div>
+          </div>
+        </div>
 
-      <AlgorithmVisualizer
-        v-if="visualizerOpen && canVisualize"
-        :question="dailyQuestion"
-      />
+        <div class="question-content" v-html="renderInline(question.content)"></div>
+
+        <div v-if="isOptionQuestion(question)" class="option-list">
+          <button
+            v-for="(text, key) in getOptions(question)"
+            :key="key"
+            type="button"
+            :class="[
+              'option-item',
+              {
+                selected: isSelected(question, String(key)),
+                correct: submitted[question.id] && isCorrectOption(question, String(key)),
+                wrong: submitted[question.id] && isSelected(question, String(key)) && !isCorrectOption(question, String(key)),
+              },
+            ]"
+            :disabled="submitted[question.id]"
+            @click="$emit('select-daily-option', question, String(key))"
+          >
+            <span class="option-key">{{ key }}</span>
+            <span class="option-text" v-html="renderInline(text as string)"></span>
+          </button>
+        </div>
+
+        <textarea
+          v-else
+          v-model="answers[question.id]"
+          :disabled="submitted[question.id]"
+          class="answer-box"
+          rows="4"
+          placeholder="请输入你的答案"
+        ></textarea>
+
+        <div class="question-foot">
+          <div class="foot-status">
+            <span v-if="submitted[question.id]" :class="['status-pill', correct[question.id] ? 'success' : 'danger']">
+              {{ correct[question.id] ? '回答正确' : '回答错误，已加入错题本' }}
+            </span>
+          </div>
+
+          <div class="foot-actions">
+            <button
+              class="action-link submit"
+              type="button"
+              :disabled="submitted[question.id] || !hasAnswer(question)"
+              @click="$emit('submit-daily', question)"
+            >
+              {{ reviewing[question.id] ? '评阅中...' : '提交答案' }}
+            </button>
+            <button
+              v-if="submitted[question.id]"
+              class="action-link"
+              type="button"
+              @click="$emit('toggle-daily-analysis', question.id)"
+            >
+              {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
+            </button>
+            <button
+              v-if="canVisualize(question)"
+              class="action-link"
+              type="button"
+              @click="toggleVisualizer(question.id)"
+            >
+              {{ openedVisualizer.has(question.id) ? '收起可视化' : '算法可视化' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="submitted[question.id] && openedAnalysis.has(question.id)" class="analysis-box">
+          <div class="analysis-head">
+            <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
+            <span v-if="review[question.id]?.feedback">{{ review[question.id].feedback }}</span>
+          </div>
+          <div class="analysis-body" v-html="renderInline(question.analysis || '暂无解析')"></div>
+        </div>
+
+        <AlgorithmVisualizer v-if="openedVisualizer.has(question.id)" :question="question" />
+      </article>
     </section>
 
     <section v-else class="daily-empty">
       <div class="empty-copy">
-        <strong>今日一题暂未生成</strong>
-        <p>当前没有可用题目，可重新获取一题。</p>
+        <strong>今日题目暂未生成</strong>
+        <p>当前没有可用题目，可重新获取今日练习。</p>
       </div>
-      <button class="action-btn secondary" type="button" @click="$emit('refresh-daily')">换一题</button>
+      <button class="action-link" type="button" @click="$emit('refresh-daily')">换一组</button>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 interface DailyQuestion {
+  id: string
   subject: string
   type: string
   content: string
   difficulty?: string | null
-  answer?: string
-  analysis?: string
-  knowledge_points?: string[]
-  tags?: string[]
+  options?: Record<string, string> | null
+  answer: string
+  analysis: string
+  knowledge_points: string[]
 }
 
 const props = defineProps<{
-  dailyQuestion: DailyQuestion | null
+  questions: DailyQuestion[]
+  answers: Record<string, any>
+  submitted: Record<string, boolean>
+  correct: Record<string, boolean>
+  reviewing: Record<string, boolean>
+  review: Record<string, any>
+  openedAnalysis: Set<string>
+  submittedCount: number
+  correctCount: number
 }>()
 
 defineEmits<{
-  (e: 'start-daily'): void
   (e: 'refresh-daily'): void
+  (e: 'select-daily-option', question: DailyQuestion, key: string): void
+  (e: 'submit-daily', question: DailyQuestion): void
+  (e: 'toggle-daily-analysis', id: string): void
 }>()
 
-const visualizerOpen = ref(false)
-
-const canVisualize = computed(() => {
-  return props.dailyQuestion ? supportsAlgorithmVisualization(props.dailyQuestion) : false
-})
+const openedVisualizer = ref<Set<string>>(new Set())
 
 watch(
-  () => props.dailyQuestion,
+  () => props.questions,
   () => {
-    visualizerOpen.value = false
+    openedVisualizer.value = new Set()
   },
 )
 
-function toggleVisualizer() {
-  visualizerOpen.value = !visualizerOpen.value
+function toggleVisualizer(id: string) {
+  const next = new Set(openedVisualizer.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  openedVisualizer.value = next
+}
+
+function canVisualize(question: DailyQuestion) {
+  return supportsAlgorithmVisualization(question)
+}
+
+function isOptionQuestion(question: DailyQuestion) {
+  return ['选择题', '单选题', '多选题', '判断题'].includes(question.type)
+}
+
+function getOptions(question: DailyQuestion) {
+  if (question.type === '判断题') return { A: '正确', B: '错误' }
+  return question.options || {}
+}
+
+function isSelected(question: DailyQuestion, key: string) {
+  const ans = props.answers[question.id]
+  if (!ans) return false
+  if (Array.isArray(ans)) return ans.includes(key)
+  return ans === key
+}
+
+function isCorrectOption(question: DailyQuestion, key: string) {
+  let ansText = String(question.answer || '').trim()
+  if (question.type === '判断题') {
+    const upper = ansText.toUpperCase()
+    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some((item) => upper.includes(item))) ansText = 'A'
+    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some((item) => upper.includes(item))) ansText = 'B'
+  }
+  const correctKeys = ansText.split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
+  return correctKeys.includes(key)
+}
+
+function hasAnswer(question: DailyQuestion) {
+  const ans = props.answers[question.id]
+  if (Array.isArray(ans)) return ans.length > 0
+  return !!ans && String(ans).trim().length > 0
+}
+
+function formatAnswer(ans: string | undefined) {
+  return String(ans || '').replace(/,/g, '、')
 }
 
 function renderInline(text: string) {
@@ -105,18 +222,48 @@ function renderInline(text: string) {
   flex-direction: column;
 }
 
+.daily-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.daily-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 18px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.summary-copy strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.summary-copy p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .daily-question-block {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-top: 4px;
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.question-meta {
+.question-meta,
+.question-foot {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .meta-left {
@@ -134,7 +281,8 @@ function renderInline(text: string) {
   line-height: 1.3;
 }
 
-.meta-tags {
+.meta-tags,
+.foot-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -143,18 +291,27 @@ function renderInline(text: string) {
 .meta-tag {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 9px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: rgba(248, 250, 252, 0.92);
-  color: #334155;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
-.meta-tag.muted {
-  background: #fff;
+.subject-tag {
+  background: #eef6ff;
+  color: #3d78b5;
+}
+
+.type-tag {
+  background: #eff6f2;
+  color: #288a6e;
+}
+
+.difficulty-tag {
+  background: #dff2ff;
+  color: #3487c7;
 }
 
 .question-content {
@@ -163,18 +320,97 @@ function renderInline(text: string) {
   line-height: 1.7;
 }
 
-.action-row {
+.option-list {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.action-btn {
-  min-height: 34px;
-  padding: 0 12px;
+.option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 12px;
+  background: #fff;
+  color: #1e293b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option-item.selected {
+  border-color: rgba(15, 23, 42, 0.35);
+}
+
+.option-item.correct {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(236, 253, 245, 0.7);
+}
+
+.option-item.wrong {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(254, 242, 242, 0.7);
+}
+
+.option-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.06);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.option-text {
+  line-height: 1.7;
+}
+
+.answer-box {
+  width: 100%;
+  padding: 12px 14px;
   border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.foot-status {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.status-pill.success {
+  background: rgba(220, 252, 231, 0.8);
+  color: #047857;
+}
+
+.status-pill.danger {
+  background: rgba(254, 226, 226, 0.8);
+  color: #b91c1c;
+}
+
+.action-link {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(226, 232, 240, 0.96);
   border-radius: 10px;
   background: #fff;
   color: #334155;
@@ -183,17 +419,31 @@ function renderInline(text: string) {
   cursor: pointer;
 }
 
-.action-btn.secondary {
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 9px;
-  font-size: 12px;
-}
-
-.action-btn.primary {
+.action-link.submit {
   border-color: #0f172a;
   background: #0f172a;
   color: #fff;
+}
+
+.analysis-box {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(226, 232, 240, 0.92);
+}
+
+.analysis-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #475569;
+  font-size: 13px;
+}
+
+.analysis-body {
+  margin-top: 10px;
+  color: #475569;
+  line-height: 1.7;
 }
 
 .daily-empty {
@@ -224,12 +474,13 @@ function renderInline(text: string) {
 
 @media (max-width: 640px) {
   .question-meta,
+  .question-foot,
   .daily-empty {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .action-row {
+  .foot-actions {
     justify-content: flex-start;
   }
 }

@@ -128,34 +128,89 @@
                 </div>
 
                 <div class="toolbar-actions">
-                  <button type="button" class="soft-action" @click="pickDailyQuestion">换一题</button>
-                  <button type="button" class="primary-action" @click="startSingleDailyQuestion">开始作答</button>
+                  <button type="button" class="soft-action" @click="pickPortalQuestion">换一题</button>
+                  <button type="button" class="primary-action" @click="switchModule('search')">全部题库</button>
                 </div>
               </section>
 
               <section class="recommend-question-card">
-                <template v-if="dailyQuestion">
+                <template v-if="portalQuestion">
                   <div class="question-card-top">
                     <span class="question-index">1.</span>
-                    <span class="tag">{{ dailyQuestion.subject }}</span>
-                    <span class="tag soft">{{ dailyQuestion.type }}</span>
-                    <span class="tag level">{{ dailyQuestion.difficulty || '中等' }}</span>
+                    <span class="tag subject-tag">{{ portalQuestion.subject }}</span>
+                    <span class="tag type-tag">{{ portalQuestion.type }}</span>
+                    <span class="tag difficulty-tag">{{ portalQuestion.difficulty || '中等' }}</span>
                   </div>
 
-                  <div class="recommend-question-content" v-html="renderInline(dailyQuestion.content)"></div>
+                  <div class="recommend-question-content" v-html="renderInline(portalQuestion.content)"></div>
 
-                  <div v-if="isOptionQuestion(dailyQuestion)" class="recommend-options">
-                    <div v-for="(text, key) in getOptions(dailyQuestion)" :key="key" class="recommend-option">
+                  <div v-if="isOptionQuestion(portalQuestion)" class="recommend-options">
+                    <button
+                      v-for="(text, key) in getOptions(portalQuestion)"
+                      :key="key"
+                      type="button"
+                      :class="[
+                        'recommend-option',
+                        {
+                          selected: isSelected(portalAnswers[portalQuestion.id], String(key)),
+                          correct: portalSubmitted[portalQuestion.id] && isCorrectOption(portalQuestion, String(key)),
+                          wrong:
+                            portalSubmitted[portalQuestion.id] &&
+                            isSelected(portalAnswers[portalQuestion.id], String(key)) &&
+                            !isCorrectOption(portalQuestion, String(key)),
+                        },
+                      ]"
+                      :disabled="portalSubmitted[portalQuestion.id]"
+                      @click="selectPortalOption(portalQuestion, String(key))"
+                    >
                       <span>{{ key }}</span>
                       <p v-html="renderInline(text)"></p>
+                    </button>
+                  </div>
+                  <textarea
+                    v-else
+                    v-model="portalAnswers[portalQuestion.id]"
+                    :disabled="portalSubmitted[portalQuestion.id]"
+                    class="portal-answer-box"
+                    rows="4"
+                    placeholder="请输入你的答案"
+                  ></textarea>
+
+                  <div class="portal-question-foot">
+                    <div class="foot-status">
+                      <span
+                        v-if="portalSubmitted[portalQuestion.id]"
+                        :class="['status-pill', portalCorrect[portalQuestion.id] ? 'success' : 'danger']"
+                      >
+                        {{ portalCorrect[portalQuestion.id] ? '回答正确' : '回答错误，已加入错题本' }}
+                      </span>
+                    </div>
+
+                    <div class="question-card-actions">
+                      <button
+                        type="button"
+                        class="primary-action inline"
+                        :disabled="portalSubmitted[portalQuestion.id] || !hasAnswerData(portalAnswers[portalQuestion.id])"
+                        @click="submitPortalAnswer(portalQuestion)"
+                      >
+                        {{ portalReviewing[portalQuestion.id] ? '评阅中...' : '提交答案' }}
+                      </button>
+                      <button type="button" class="soft-action inline" @click="pickPortalQuestion">换一题</button>
+                      <button type="button" class="soft-action inline" @click="switchModule('search')">全部题库</button>
                     </div>
                   </div>
 
-                  <div class="question-card-actions">
-                    <button type="button" class="strong" @click="startSingleDailyQuestion">开始作答</button>
-                    <button type="button" @click="switchModule('search')">进入全部题目</button>
-                    <button type="button" @click="switchModule('wrong')">查看错题本</button>
-                    <button type="button" @click="switchModule('daily')">进入练习</button>
+                  <div
+                    v-if="portalSubmitted[portalQuestion.id] && openedPortalAnalysis.has(portalQuestion.id)"
+                    class="portal-analysis-box"
+                  >
+                    <div class="analysis-head">
+                      <strong>参考答案：{{ formatAnswer(portalQuestion.answer) }}</strong>
+                      <span v-if="portalReview[portalQuestion.id]?.feedback">
+                        {{ portalReview[portalQuestion.id]?.feedback }}
+                      </span>
+                    </div>
+                    <div class="analysis-body" v-html="renderInline(portalQuestion.analysis || '暂无解析')"></div>
                   </div>
                 </template>
 
@@ -235,9 +290,19 @@
               <section class="module-content-card">
                 <DailyPracticeTab
                     v-if="activeModule === 'daily'"
-                    :dailyQuestion="dailyQuestion"
-                    @start-daily="startSingleDailyQuestion"
-                    @refresh-daily="pickDailyQuestion"
+                    :questions="dailyQuestions"
+                    :answers="dailyAnswers"
+                    :submitted="dailySubmitted"
+                    :correct="dailyCorrect"
+                    :reviewing="dailyReviewing"
+                    :review="dailyReview"
+                    :openedAnalysis="openedDailyAnalysis"
+                    :submittedCount="dailySubmittedCount"
+                    :correctCount="dailyCorrectCount"
+                    @refresh-daily="refreshDailyQuestions"
+                    @select-daily-option="selectDailyOption"
+                    @submit-daily="submitDailyAnswer"
+                    @toggle-daily-analysis="toggleDailyAnalysis"
                 />
 
                 <PracticeTab
@@ -337,7 +402,7 @@
         <aside class="bank-right-panel">
           <section class="right-card calendar-card">
             <div class="right-card-header">
-              <strong>每日 1 题</strong>
+              <strong>每日 10 题</strong>
               <span>{{ calendarMonthLabel }}</span>
             </div>
 
@@ -366,14 +431,14 @@
           <section class="right-card daily-preview-card">
             <div class="right-card-header">
               <strong>每日挑战</strong>
-              <button type="button" class="text-link-btn" @click="pickDailyChallengeQuestion">换一题</button>
+              <button type="button" class="soft-action" @click="pickDailyChallengeQuestion">换一题</button>
             </div>
 
             <template v-if="dailyChallengeQuestion">
               <div class="daily-preview-tags">
-                <span class="mini-tag">{{ dailyChallengeQuestion.subject }}</span>
-                <span class="mini-tag">{{ dailyChallengeQuestion.type }}</span>
-                <span class="mini-tag">{{ dailyChallengeQuestion.difficulty || '中等' }}</span>
+                <span class="tag subject-tag">{{ dailyChallengeQuestion.subject }}</span>
+                <span class="tag type-tag">{{ dailyChallengeQuestion.type }}</span>
+                <span class="tag difficulty-tag">{{ dailyChallengeQuestion.difficulty || '中等' }}</span>
               </div>
               <div class="daily-preview-content" v-html="renderInline(dailyChallengeQuestion.content)"></div>
               <button type="button" class="get-question-btn" @click="jumpToChallengeQuestion">作答</button>
@@ -594,6 +659,8 @@ interface CalendarCell {
   isCompleted: boolean
 }
 
+const DAILY_QUESTION_COUNT = 10
+
 const viewMode = ref<ViewMode>('workspace')
 const activeModule = ref<ModuleKey>('portal')
 const route = useRoute()
@@ -603,10 +670,12 @@ const difficulties = ref<string[]>([])
 const types = ref<string[]>([])
 const learnerCourses = ref<string[]>([])
 const practicePool = shallowRef<Question[]>([])
+const allQuestionPool = shallowRef<Question[]>([])
 
 const practiceLoading = ref(false)
 const practiceForm = reactive({ subject: '', difficulty: '', type: '', count: 10 })
-const dailyQuestion = ref<Question | null>(null)
+const portalQuestion = ref<Question | null>(null)
+const dailyQuestions = shallowRef<Question[]>([])
 const dailyChallengeQuestion = ref<Question | null>(null)
 
 const questions = shallowRef<Question[]>([])
@@ -645,6 +714,20 @@ const wrongDrillSubmitted = ref(false)
 const wrongDrillCorrect = ref(false)
 const wrongDrillReviewing = ref(false)
 const wrongDrillReview = ref<QuizReviewResult | null>(null)
+
+const portalAnswers = ref<Record<string, AnswerValue>>({})
+const portalSubmitted = ref<Record<string, boolean>>({})
+const portalCorrect = ref<Record<string, boolean>>({})
+const portalReviewing = ref<Record<string, boolean>>({})
+const portalReview = ref<Record<string, QuizReviewResult | null>>({})
+const openedPortalAnalysis = ref<Set<string>>(new Set())
+
+const dailyAnswers = ref<Record<string, AnswerValue>>({})
+const dailySubmitted = ref<Record<string, boolean>>({})
+const dailyCorrect = ref<Record<string, boolean>>({})
+const dailyReviewing = ref<Record<string, boolean>>({})
+const dailyReview = ref<Record<string, QuizReviewResult | null>>({})
+const openedDailyAnalysis = ref<Set<string>>(new Set())
 
 const stats = reactive({ totalAttempted: 0, totalCorrect: 0 })
 const localStatsSeed = ref(0)
@@ -700,7 +783,7 @@ const moduleDescriptions: Record<ModuleKey, string> = {
 
 const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark: string }> = [
   { key: 'portal', label: '控制台', desc: '刷题总览', mark: '01' },
-  { key: 'daily', label: '每日练习', desc: '每日 1 题', mark: '02' },
+  { key: 'daily', label: '每日练习', desc: '每日 10 题', mark: '02' },
   { key: 'practice', label: '智能练习', desc: '推荐训练', mark: '03' },
   { key: 'search', label: '全部题目', desc: '筛选检索', mark: '04' },
   { key: 'paper', label: '模拟组卷', desc: '考试模式', mark: '05' },
@@ -711,7 +794,7 @@ const portalCards = computed(() => [
   {
     key: 'daily' as ModuleKey,
     kicker: isDailyCompleted.value ? 'Completed' : 'Daily',
-    title: '每日一题',
+    title: '每日 10 题',
     subtitle: isDailyCompleted.value ? '今日训练已完成' : '完成今天的基础训练',
     accent: 'black',
   },
@@ -734,8 +817,16 @@ const portalCards = computed(() => [
 const recommendedSubject = computed(() => wrongQuestions.value[0]?.subject || learnerCourses.value[0] || subjects.value[0] || 'General')
 
 const recommendedCount = computed(() => {
-  const available = practicePool.value.length || questions.value.length
+  const available = allQuestionPool.value.length || questions.value.length
   return available ? Math.min(10, Math.max(5, available)) : 10
+})
+
+const dailySubmittedCount = computed(() => {
+  return dailyQuestions.value.filter((question) => dailySubmitted.value[question.id]).length
+})
+
+const dailyCorrectCount = computed(() => {
+  return dailyQuestions.value.filter((question) => dailyCorrect.value[question.id]).length
 })
 
 const filteredWrongQuestions = computed(() => {
@@ -897,7 +988,7 @@ function switchModule(key: string) {
     clearQuestionHighlight()
     void loadQuestionBank()
   } else if (key === 'daily') {
-    pickDailyQuestion()
+    refreshDailyQuestions()
   }
 }
 
@@ -918,17 +1009,41 @@ function selectSubject(subject: string) {
 
 async function loadPracticePool() {
   try {
-    const result = await fetchQuizBankQuestions({
-      page: 1,
-      page_size: 100,
-    })
+    const pageSize = 100
+    const allItems: Question[] = []
+    const seen = new Set<string>()
+    let page = 1
+    let total = 0
 
-    practicePool.value = result.items || []
-    totalQuestions.value = result.total || totalQuestions.value
-    subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
-    difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
-    types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
+    while (true) {
+      const result = await fetchQuizBankQuestions({
+        page,
+        page_size: pageSize,
+      })
+
+      const items = result.items || []
+      total = result.total || total
+
+      items.forEach((item) => {
+        if (item?.id && !seen.has(item.id)) {
+          seen.add(item.id)
+          allItems.push(item)
+        }
+      })
+
+      subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
+      difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
+      types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
+
+      if (!items.length || items.length < pageSize || (total > 0 && allItems.length >= total)) break
+      page += 1
+    }
+
+    allQuestionPool.value = allItems
+    practicePool.value = allItems
+    totalQuestions.value = total || allItems.length || totalQuestions.value
   } catch (error) {
+    allQuestionPool.value = []
     practicePool.value = []
     toast.error(getErrorMessage(error, '加载练习池失败'))
   }
@@ -1026,22 +1141,48 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
   }
 }
 
-function pickDailyQuestion() {
-  const nextQuestion = pickQuestionExcluding(dailyChallengeQuestion.value ? [dailyChallengeQuestion.value.id] : [])
-  dailyQuestion.value = nextQuestion
+function pickPortalQuestion() {
+  const excluded = [
+    ...dailyQuestions.value.map((item) => item.id),
+    ...(dailyChallengeQuestion.value ? [dailyChallengeQuestion.value.id] : []),
+  ]
+  const nextQuestion = pickQuestionExcluding(excluded)
+  portalQuestion.value = nextQuestion
+  resetPortalState(nextQuestion)
 }
 
 function pickDailyChallengeQuestion() {
-  dailyChallengeQuestion.value = pickQuestionExcluding(dailyQuestion.value ? [dailyQuestion.value.id] : [])
+  const excluded = [
+    ...(portalQuestion.value ? [portalQuestion.value.id] : []),
+    ...dailyQuestions.value.map((item) => item.id),
+  ]
+  dailyChallengeQuestion.value = pickQuestionExcluding(excluded)
+}
+
+function refreshDailyQuestions() {
+  const excluded = new Set<string>([
+    ...(portalQuestion.value ? [portalQuestion.value.id] : []),
+    ...(dailyChallengeQuestion.value ? [dailyChallengeQuestion.value.id] : []),
+  ])
+  const source = allQuestionPool.value.length ? allQuestionPool.value : questions.value
+  const pool = source.filter((item) => !excluded.has(item.id))
+  const selected = shuffle(pool.length ? pool : source).slice(0, Math.min(DAILY_QUESTION_COUNT, source.length))
+
+  dailyQuestions.value = selected
+  resetDailyState(selected)
 }
 
 function refreshDailySelections() {
-  dailyQuestion.value = pickQuestionExcluding([])
-  dailyChallengeQuestion.value = pickQuestionExcluding(dailyQuestion.value ? [dailyQuestion.value.id] : [])
+  portalQuestion.value = null
+  dailyQuestions.value = []
+  dailyChallengeQuestion.value = null
+  pickPortalQuestion()
+  refreshDailyQuestions()
+  pickDailyChallengeQuestion()
 }
 
 function pickQuestionExcluding(excludedIds: string[]) {
-  const source = practicePool.value.length ? practicePool.value : questions.value
+  const source = allQuestionPool.value.length ? allQuestionPool.value : practicePool.value.length ? practicePool.value : questions.value
   if (!source.length) return null
 
   const excluded = new Set(excludedIds)
@@ -1054,6 +1195,41 @@ function clearQuestionHighlight() {
   highlightQuestionId.value = null
 }
 
+function resetPortalState(question: Question | null) {
+  portalAnswers.value = {}
+  portalSubmitted.value = {}
+  portalCorrect.value = {}
+  portalReviewing.value = {}
+  portalReview.value = {}
+  openedPortalAnalysis.value = new Set()
+
+  if (!question) return
+  portalAnswers.value[question.id] = question.type === '多选题' ? [] : ''
+}
+
+function resetDailyState(selected: Question[]) {
+  const nextAnswers: Record<string, AnswerValue> = {}
+  const nextSubmitted: Record<string, boolean> = {}
+  const nextCorrect: Record<string, boolean> = {}
+  const nextReviewing: Record<string, boolean> = {}
+  const nextReview: Record<string, QuizReviewResult | null> = {}
+
+  selected.forEach((question) => {
+    nextAnswers[question.id] = question.type === '多选题' ? [] : ''
+    nextSubmitted[question.id] = false
+    nextCorrect[question.id] = false
+    nextReviewing[question.id] = false
+    nextReview[question.id] = null
+  })
+
+  dailyAnswers.value = nextAnswers
+  dailySubmitted.value = nextSubmitted
+  dailyCorrect.value = nextCorrect
+  dailyReviewing.value = nextReviewing
+  dailyReview.value = nextReview
+  openedDailyAnalysis.value = new Set()
+}
+
 async function jumpToChallengeQuestion() {
   if (!dailyChallengeQuestion.value) {
     toast.warning('暂无可跳转的每日挑战')
@@ -1061,7 +1237,7 @@ async function jumpToChallengeQuestion() {
   }
 
   const targetId = dailyChallengeQuestion.value.id
-  const source = practicePool.value.length ? practicePool.value : questions.value
+  const source = allQuestionPool.value.length ? allQuestionPool.value : practicePool.value.length ? practicePool.value : questions.value
   const sourceIndex = source.findIndex((item) => item.id === targetId)
 
   activeModule.value = 'search'
@@ -1095,8 +1271,9 @@ async function pickWrongQuestion() {
 }
 
 function startRecommendedPractice() {
-  const pool = practicePool.value.filter((item) => !recommendedSubject.value || item.subject === recommendedSubject.value)
-  const selected = shuffle(pool.length ? pool : practicePool.value).slice(0, recommendedCount.value)
+  const source = allQuestionPool.value.length ? allQuestionPool.value : practicePool.value
+  const pool = source.filter((item) => !recommendedSubject.value || item.subject === recommendedSubject.value)
+  const selected = shuffle(pool.length ? pool : source).slice(0, recommendedCount.value)
 
   if (!selected.length) {
     toast.warning('暂无题目')
@@ -1104,15 +1281,6 @@ function startRecommendedPractice() {
   }
 
   startExam(selected, '推荐练习')
-}
-
-function startSingleDailyQuestion() {
-  if (!dailyQuestion.value) {
-    toast.warning('暂无每日一题')
-    return
-  }
-
-  activeModule.value = 'daily'
 }
 
 function startSpecialPracticeProxy(config: typeof practiceForm) {
@@ -1149,6 +1317,27 @@ function selectBankOption(question: Question, key: string) {
   bankAnswers.value[question.id] = updateOptionAnswer(question, bankAnswers.value[question.id], key)
 }
 
+function selectPortalOption(question: Question, key: string) {
+  if (portalSubmitted.value[question.id]) return
+  portalAnswers.value[question.id] = updateOptionAnswer(question, portalAnswers.value[question.id], key)
+}
+
+async function submitPortalAnswer(question: Question) {
+  if (portalSubmitted.value[question.id]) return
+
+  portalReviewing.value[question.id] = true
+  const result = await gradeQuestion(question, portalAnswers.value[question.id])
+  portalSubmitted.value[question.id] = true
+  portalCorrect.value[question.id] = result.correct
+  portalReview.value[question.id] = result.review
+  openedPortalAnalysis.value = new Set(openedPortalAnalysis.value).add(question.id)
+  saveAttempt(1, result.correct ? 1 : 0)
+
+  if (!result.correct) await saveWrongQuestion(question, portalAnswers.value[question.id])
+
+  portalReviewing.value[question.id] = false
+}
+
 async function submitBankAnswer(question: Question) {
   if (bankSubmitted.value[question.id]) return
 
@@ -1163,6 +1352,37 @@ async function submitBankAnswer(question: Question) {
   if (!result.correct) await saveWrongQuestion(question, bankAnswers.value[question.id])
 
   bankReviewing.value[question.id] = false
+}
+
+function selectDailyOption(question: Question, key: string) {
+  if (dailySubmitted.value[question.id]) return
+  dailyAnswers.value[question.id] = updateOptionAnswer(question, dailyAnswers.value[question.id], key)
+}
+
+async function submitDailyAnswer(question: Question) {
+  if (dailySubmitted.value[question.id]) return
+
+  dailyReviewing.value[question.id] = true
+  const result = await gradeQuestion(question, dailyAnswers.value[question.id])
+  dailySubmitted.value[question.id] = true
+  dailyCorrect.value[question.id] = result.correct
+  dailyReview.value[question.id] = result.review
+  openedDailyAnalysis.value = new Set(openedDailyAnalysis.value).add(question.id)
+  saveAttempt(1, result.correct ? 1 : 0)
+
+  if (!result.correct) await saveWrongQuestion(question, dailyAnswers.value[question.id])
+
+  dailyReviewing.value[question.id] = false
+
+  if (dailySubmittedCount.value === dailyQuestions.value.length && dailyQuestions.value.length > 0 && !isDailyCompleted.value) {
+    markDailyCompleted(new Date())
+
+    const lastStreak = Number(localStorage.getItem('question_hub_streak') || '3')
+    localStorage.setItem('question_hub_streak', String(lastStreak + 1))
+
+    dailyStateSeed.value += 1
+    localStatsSeed.value += 1
+  }
 }
 
 function selectWrongOption(question: Question, key: string) {
@@ -1204,6 +1424,12 @@ function toggleBankAnalysis(id: string) {
   const next = new Set(openedAnalysis.value)
   next.has(id) ? next.delete(id) : next.add(id)
   openedAnalysis.value = next
+}
+
+function toggleDailyAnalysis(id: string) {
+  const next = new Set(openedDailyAnalysis.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  openedDailyAnalysis.value = next
 }
 
 function toggleWrongAnalysis(id: string) {
@@ -2272,12 +2498,17 @@ function formatDateKey(date: Date) {
   font-weight: 800;
 }
 
-.tag.soft {
+.subject-tag {
+  background: #eef6ff;
+  color: #3d78b5;
+}
+
+.type-tag {
   background: #eff6f2;
   color: #288a6e;
 }
 
-.tag.level {
+.difficulty-tag {
   background: #dff2ff;
   color: #3487c7;
 }
@@ -2299,11 +2530,14 @@ function formatDateKey(date: Date) {
 .recommend-option {
   display: flex;
   gap: 12px;
+  width: 100%;
   padding: 14px 0;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-width: 0 0 1px;
   border-radius: 0;
   background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .recommend-option span {
@@ -2327,28 +2561,63 @@ function formatDateKey(date: Date) {
   line-height: 1.55;
 }
 
+.recommend-option.selected {
+  border-color: rgba(15, 23, 42, 0.35);
+}
+
+.recommend-option.correct {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(236, 253, 245, 0.7);
+}
+
+.recommend-option.wrong {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(254, 242, 242, 0.7);
+}
+
+.portal-answer-box {
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.portal-question-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
 .question-card-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 26px;
-  margin-top: 24px;
-  padding: 18px 0 8px;
-  border-top: 1px solid rgba(226, 232, 240, 0.72);
-}
-
-.question-card-actions button {
+  gap: 10px;
+  margin-top: 0;
   padding: 0;
-  border: none;
-  background: transparent;
-  color: #3d4656;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
+  border-top: none;
 }
 
-.question-card-actions button.strong {
-  color: #17856d;
+.question-card-actions .inline {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.portal-analysis-box {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .empty-state {
@@ -2879,15 +3148,6 @@ function formatDateKey(date: Date) {
   box-shadow: 0 14px 26px rgba(255, 159, 159, 0.24);
 }
 
-.text-link-btn {
-  border: none;
-  background: transparent;
-  color: #5f6b7c;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
 .daily-preview-card {
   display: flex;
   flex-direction: column;
@@ -2898,18 +3158,6 @@ function formatDateKey(date: Date) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.mini-tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: rgba(248, 250, 252, 0.92);
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .daily-preview-content {
