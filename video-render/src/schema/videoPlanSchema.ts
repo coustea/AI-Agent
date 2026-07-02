@@ -33,7 +33,28 @@ export const richVideoSceneSchema = z.object({
   narration: z.string().optional(),
   visual: z.record(z.string(), z.unknown()).optional(),
   audio_src: z.string().optional(),
+  // eslint-disable-next-line @remotion/non-pure-animation
   transition: z.string().optional(),
+  audio_duration_ms: z.number().optional(),
+  caption_words: z.array(z.object({
+    text: z.string(),
+    start_ms: z.number(),
+    end_ms: z.number(),
+  })).optional(),
+  caption_chunks: z.array(z.object({
+    text: z.string(),
+    start_ms: z.number(),
+    end_ms: z.number(),
+  })).optional(),
+  visual_cues: z.array(z.object({
+    id: z.string(),
+    kind: z.string(),
+    target: z.string().optional(),
+    summary: z.string().optional(),
+    start_ms: z.number(),
+    end_ms: z.number(),
+    caption_text: z.string().nullable().optional(),
+  })).optional(),
 }).catchall(z.any());
 
 // Video Meta Schema

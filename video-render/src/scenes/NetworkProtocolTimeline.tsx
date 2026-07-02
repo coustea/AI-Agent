@@ -6,6 +6,7 @@ import { SceneHeader } from '../components/SceneHeader';
 import { SubtitleBar } from '../components/SubtitleBar';
 import { InfoPanel } from '../components/InfoPanel';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 
 
@@ -55,13 +56,12 @@ export const NetworkProtocolTimeline: React.FC<NetworkProtocolTimelineProps> = (
   const keyPoint = (scene.visual.key_point as string) || '';
 
   // Determine active message index
-  const msgDuration = durationInFrames / (messages.length || 1);
-  const activeMsgIdx = Math.min(Math.floor(frame / msgDuration), messages.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeMsgIdx = timing.getActiveIndex(messages.length, ['trace_step']);
   const currentMsg = messages[activeMsgIdx];
 
   // Timing inside current step
-  const frameInStep = frame % msgDuration;
-  const progress = frameInStep / msgDuration;
+  const progress = timing.getStepProgress(messages.length, ['trace_step']);
 
   // Let's compute current states of participants
   const clientState = stateChanges

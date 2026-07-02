@@ -45,7 +45,7 @@ export const DiagramNode: React.FC<DiagramNodeProps> = ({
   return (
     <div
       style={style}
-      className={`border-2 flex flex-col justify-center items-center px-4 py-3 text-center font-bold text-sm shadow-sm select-none transition-all duration-300 ${getStatusClasses()} ${getShapeClasses()} ${className}`}
+      className={`border-2 flex flex-col justify-center items-center px-4 py-3 text-center font-bold text-sm shadow-sm select-none ${getStatusClasses()} ${getShapeClasses()} ${className}`}
     >
       <div className={shape === 'diamond' ? '-rotate-45' : ''}>
         {label}

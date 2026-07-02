@@ -174,14 +174,19 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
         : default_scene_transition;
 
       // Calculate duration in seconds
-      let duration_seconds = 8;
-      if (typeof scene.duration_seconds === "number") {
-        duration_seconds = scene.duration_seconds;
-      } else if (typeof scene.duration_ms === "number") {
-        duration_seconds = scene.duration_ms / 1000;
-      } else if (typeof scene.duration === "number") {
-        duration_seconds = scene.duration / 1000;
-      }
+      const duration_ms =
+        typeof scene.duration_ms === "number"
+          ? scene.duration_ms
+          : typeof scene.duration_seconds === "number"
+            ? Math.round(scene.duration_seconds * 1000)
+            : typeof scene.duration === "number"
+              ? scene.duration
+              : 8000;
+      const duration_seconds = duration_ms / 1000;
+      const audio_duration_ms =
+        typeof scene.audio_duration_ms === "number"
+          ? scene.audio_duration_ms
+          : Math.max(0, duration_ms);
 
       // Determine scene type using the new unified logic
       const isLastScene = idx === rawScenes.length - 1;
@@ -196,15 +201,24 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
         start_ms: number;
         end_ms: number;
       }> = Array.isArray(scene.caption_words) ? scene.caption_words : [];
+      const caption_chunks = Array.isArray(scene.caption_chunks)
+        ? scene.caption_chunks
+        : [];
+      const visual_cues = Array.isArray(scene.visual_cues)
+        ? scene.visual_cues
+        : [];
 
       return {
         id,
         type,
+        duration_ms,
         duration_seconds,
+        audio_duration_ms,
         title,
         narration,
         visual,
         audio_src,
+        // eslint-disable-next-line @remotion/non-pure-animation
         transition: transition as
           | "fade"
           | "slide_left"
@@ -212,6 +226,8 @@ export function normalizePlan(rawPlan: any): RichVideoPlan {
           | "zoom"
           | "none",
         caption_words,
+        caption_chunks,
+        visual_cues,
       };
     },
   );

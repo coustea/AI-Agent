@@ -7,6 +7,7 @@ import { SubtitleBar } from '../components/SubtitleBar';
 import { InfoPanel } from '../components/InfoPanel';
 import { DiagramNode } from '../components/DiagramNode';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 interface ProcessFlowProProps {
   scene: RichVideoScene;
@@ -34,8 +35,9 @@ export const ProcessFlowPro: React.FC<ProcessFlowProProps> = ({
   const failurePoints = (scene.visual.failure_points as { step_id: string; reason: string }[]) || [];
 
   // Determine active step based on timeline progress
-  const stepDuration = durationInFrames / (steps.length || 1);
-  const activeIdx = Math.min(Math.floor(frame / stepDuration), steps.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeIdx = timing.getActiveIndex(steps.length, ['trace_step']);
+  const stepProgress = timing.getStepProgress(steps.length, ['trace_step']);
   const activeStep = steps[activeIdx];
 
   // Visual failure point for the active step (if any)
@@ -98,7 +100,7 @@ export const ProcessFlowPro: React.FC<ProcessFlowProProps> = ({
                         id={step.id}
                         label={step.label}
                         status={status}
-                        className={`w-32 py-4 h-20 text-xs shadow-md transition-all duration-300 ${
+                        className={`w-32 py-4 h-20 text-xs shadow-md ${
                           isActive ? 'scale-105 border-[var(--primary)] ring-2 ring-[var(--primary)]/20' : ''
                         }`}
                       />
@@ -112,8 +114,7 @@ export const ProcessFlowPro: React.FC<ProcessFlowProProps> = ({
                           <div 
                             className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[var(--primary)] shadow-sm shadow-[var(--primary)]/50"
                             style={{
-                              left: isPassed ? '100%' : `${(frame % Math.round(stepDuration)) / stepDuration * 100}%`,
-                              transition: 'left 0.1s linear',
+                              left: isPassed ? '100%' : `${stepProgress * 100}%`,
                             }}
                           />
                         )}
@@ -127,10 +128,10 @@ export const ProcessFlowPro: React.FC<ProcessFlowProProps> = ({
             {/* Step Description */}
             {activeStep && (
               <div 
-                className="p-4 rounded-xl border border-blue-100 bg-blue-50/50 transition-all duration-300"
+                className="p-4 rounded-xl border border-blue-100 bg-blue-50/50"
                 style={{
-                  transform: `translateY(${getSlideInterpolation(frame % stepDuration, 0, 8, 10, 0)}px)`,
-                  opacity: getSlideInterpolation(frame % stepDuration, 0, 8, 0, 1),
+                  transform: `translateY(${getSlideInterpolation(stepProgress, 0, 0.2, 10, 0)}px)`,
+                  opacity: getSlideInterpolation(stepProgress, 0, 0.2, 0, 1),
                 }}
               >
                 <span className="text-xs font-bold text-[var(--primary)] uppercase">当前步骤描述</span>

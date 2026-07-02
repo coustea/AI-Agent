@@ -26,7 +26,7 @@ export const VariableTable: React.FC<VariableTableProps> = ({ variables, title =
           {variables.map((v, idx) => (
             <div
               key={idx}
-              className={`p-3 rounded-lg border flex flex-col bg-white transition-all duration-300 ${
+              className={`p-3 rounded-lg border flex flex-col bg-white ${
                 v.isChanged
                   ? 'border-[var(--primary)] glow-primary'
                   : 'border-[var(--card-border)]'

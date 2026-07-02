@@ -8,6 +8,7 @@ import { InfoPanel } from '../components/InfoPanel';
 import { DiagramNode } from '../components/DiagramNode';
 import { AnimatedArrow } from '../components/AnimatedArrow';
 import { getSpringProgress, getSlideInterpolation } from '../utils/animation';
+import { useSceneTiming } from '../hooks/useSceneTiming';
 
 interface CpuModule {
   id: string;
@@ -60,8 +61,8 @@ export const CpuArchitectureLab: React.FC<CpuArchitectureLabProps> = ({
   const explanation = (scene.visual.explanation as string) || '';
 
   // Determine current executing step
-  const stepDuration = durationInFrames / (steps.length || 1);
-  const activeStepIdx = Math.min(Math.floor(frame / stepDuration), steps.length - 1);
+  const timing = useSceneTiming(scene);
+  const activeStepIdx = timing.getActiveIndex(steps.length, ['trace_step']);
   const currentStep = steps[activeStepIdx];
 
   // Pre-defined layout grid coordinates for module blocks inside diagram box

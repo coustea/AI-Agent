@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame, interpolate } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 
 interface EduBackgroundProps {
   backgroundType:
@@ -13,126 +13,50 @@ export const EduBackground: React.FC<EduBackgroundProps> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  // Remotion-native animated dash offset for circuit lines
   const dashOffset = interpolate(frame, [0, 900], [0, -1000]);
 
   return (
-    <AbsoluteFill className="overflow-hidden select-none -z-10 bg-gradient-to-br from-[var(--bg-gradient-start)] to-[var(--bg-gradient-end)]">
-      {/* Grid Overlay */}
+    <AbsoluteFill className="z-0 select-none overflow-hidden bg-[var(--canvas)]">
       {backgroundType === "soft_grid_gradient" && (
-        <AbsoluteFill className="tech-grid opacity-75">
-          {/* Glowing background shapes */}
-          <div
-            className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[160px] opacity-15"
-            style={{
-              backgroundColor: "var(--primary)",
-              transform: `translate(${Math.sin(frame / 60) * 40}px, ${Math.cos(frame / 60) * 40}px)`,
-            }}
-          />
-          <div
-            className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[140px] opacity-10"
-            style={{
-              backgroundColor: "var(--accent)",
-              transform: `translate(${Math.cos(frame / 50) * 30}px, ${Math.sin(frame / 50) * 30}px)`,
-            }}
-          />
-        </AbsoluteFill>
+        <>
+          <AbsoluteFill className="paper-dots opacity-60" />
+          <div className="absolute left-0 top-0 h-2 w-full bg-[var(--primary)]" />
+          <div className="absolute bottom-0 left-0 h-2 w-full bg-[var(--ink)]" />
+        </>
       )}
 
       {backgroundType === "circuit_board_light" && (
-        <AbsoluteFill className="tech-dots opacity-50">
+        <AbsoluteFill className="paper-dots opacity-70">
           <svg
-            className="w-full h-full opacity-20"
+            className="h-full w-full opacity-15"
             xmlns="http://www.w3.org/2000/svg"
           >
-            {/* Circuit paths with Remotion-native animation */}
             <path
-              d="M 100,100 L 400,100 L 500,200 L 900,200"
+              d="M 0,210 L 420,210 L 520,310 L 1050,310"
               fill="none"
               stroke="var(--primary)"
-              strokeWidth="2"
-              strokeDasharray="8 4"
+              strokeWidth="3"
+              strokeDasharray="12 8"
               strokeDashoffset={dashOffset}
             />
             <path
-              d="M 1500,900 L 1200,900 L 1100,800 L 700,800"
+              d="M 1920,810 L 1500,810 L 1400,710 L 930,710"
               fill="none"
-              stroke="var(--accent)"
-              strokeWidth="2"
-              strokeDasharray="8 4"
+              stroke="var(--primary)"
+              strokeWidth="3"
+              strokeDasharray="12 8"
               strokeDashoffset={dashOffset}
             />
-            <circle cx="100" cy="100" r="4" fill="var(--primary)" />
-            <circle cx="900" cy="200" r="4" fill="var(--primary)" />
-            <circle cx="1500" cy="900" r="4" fill="var(--accent)" />
-            <circle cx="700" cy="800" r="4" fill="var(--accent)" />
           </svg>
         </AbsoluteFill>
       )}
 
       {backgroundType === "minimal_blueprint" && (
-        <AbsoluteFill className="opacity-80">
-          {/* Blueprint style fine lines */}
-          <div className="absolute inset-0 border-[3px] border-[var(--primary)] opacity-10 m-10" />
-          <svg
-            className="w-full h-full opacity-10"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <line
-              x1="0"
-              y1="200"
-              x2="1920"
-              y2="200"
-              stroke="var(--primary)"
-              strokeWidth="1"
-            />
-            <line
-              x1="0"
-              y1="880"
-              x2="1920"
-              y2="880"
-              stroke="var(--primary)"
-              strokeWidth="1"
-            />
-            <line
-              x1="300"
-              y1="0"
-              x2="300"
-              y2="1080"
-              stroke="var(--primary)"
-              strokeWidth="1"
-            />
-            <line
-              x1="1620"
-              y1="0"
-              x2="1620"
-              y2="1080"
-              stroke="var(--primary)"
-              strokeWidth="1"
-            />
-            {/* Fine grids */}
-            <pattern
-              id="blueprint-grid"
-              width="20"
-              height="20"
-              patternUnits="userSpaceOnUse"
-            >
-              <rect
-                width="20"
-                height="20"
-                fill="none"
-                stroke="var(--primary)"
-                strokeWidth="0.5"
-              />
-            </pattern>
-            <rect
-              width="100%"
-              height="100%"
-              fill="url(#blueprint-grid)"
-              opacity="0.4"
-            />
-          </svg>
-        </AbsoluteFill>
+        <>
+          <AbsoluteFill className="blueprint-grid opacity-55" />
+          <div className="absolute inset-x-16 top-14 h-px bg-[var(--primary)] opacity-20" />
+          <div className="absolute inset-x-16 bottom-14 h-px bg-[var(--primary)] opacity-20" />
+        </>
       )}
     </AbsoluteFill>
   );
