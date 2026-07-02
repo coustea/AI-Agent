@@ -107,7 +107,6 @@
               <span>{{ question.type }}</span>
               <span>错 {{ question.wrong_count || 1 }} 次</span>
             </div>
-            <span class="wrong-no">#{{ String(question.id).split('-')[0] }}</span>
           </div>
 
           <div class="wrong-summary">{{ summarizeText(question.content) }}</div>
@@ -468,7 +467,6 @@ function renderInline(text: string) {
   flex-wrap: wrap;
 }
 
-.wrong-no,
 .page-info {
   color: #64748b;
   font-size: 12px;

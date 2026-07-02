@@ -33,11 +33,10 @@
         :class="['question-item', { highlighted: question.id === highlightQuestionId }]"
       >
         <div class="question-head">
-          <span class="question-no">#{{ question.id.split('-')[0] }}</span>
           <div class="head-tags">
-            <span class="head-tag">{{ question.subject }}</span>
-            <span class="head-tag">{{ question.type }}</span>
-            <span :class="['head-tag', difficultyClass(question.difficulty)]">
+            <span class="head-tag subject-tag">{{ question.subject }}</span>
+            <span class="head-tag type-tag">{{ question.type }}</span>
+            <span class="head-tag difficulty-tag">
               {{ question.difficulty || '未评级' }}
             </span>
           </div>
@@ -92,10 +91,14 @@
             >
               {{ reviewing[question.id] ? '评阅中...' : '提交答案' }}
             </button>
-            <button class="action-link" type="button" @click="$emit('toggle-analysis', question.id)">
+            <button
+              v-if="submitted[question.id]"
+              class="action-link"
+              type="button"
+              @click="$emit('toggle-analysis', question.id)"
+            >
               {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
             </button>
-            <button class="action-link muted" type="button" disabled>加入错题</button>
             <button
               v-if="canVisualize(question)"
               class="action-link"
@@ -247,13 +250,6 @@ function formatAnswer(ans: string) {
   return String(ans || '').replace(/,/g, '、')
 }
 
-function difficultyClass(diff: string) {
-  if (diff === '简单') return 'success-text'
-  if (diff === '中等') return 'warning-text'
-  if (!diff) return 'neutral-text'
-  return 'danger-text'
-}
-
 function renderInline(text: string) {
   if (!text) return ''
   return text
@@ -351,12 +347,6 @@ function renderInline(text: string) {
   flex-wrap: wrap;
 }
 
-.question-no {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .head-tags,
 .foot-actions,
 .knowledge-points {
@@ -377,25 +367,29 @@ function renderInline(text: string) {
 }
 
 .head-tag {
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: rgba(248, 250, 252, 0.92);
-  color: #334155;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: none;
+  background: #eef6ff;
+  color: #3d78b5;
+  font-weight: 800;
 }
 
-.success-text {
-  color: #047857;
+.subject-tag {
+  background: #eef6ff;
+  color: #3d78b5;
 }
 
-.warning-text {
-  color: #b45309;
+.type-tag {
+  background: #eff6f2;
+  color: #288a6e;
 }
 
-.danger-text {
-  color: #b91c1c;
-}
-
-.neutral-text {
-  color: #475569;
+.difficulty-tag {
+  background: #dff2ff;
+  color: #3487c7;
+  font-weight: 700;
 }
 
 .question-stem {
