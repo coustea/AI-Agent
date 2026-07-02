@@ -106,14 +106,19 @@ logging:
 # Memory 压缩与长期记忆
 memory:
   recent_raw_messages: 8
+  # 会话压缩阈值
   compress_keep_recent_messages: 4
-  compress_min_messages: 14
-  compress_min_tokens: 3500
+  compress_min_messages: 16
+  compress_min_tokens: 4000
   summary_context_blocks: 3
-  ltm_min_messages: 12
-  ltm_min_tokens: 3500
+  # 画像更新阈值（中等）
+  profile_min_messages: 12
+  profile_min_tokens: 6000
+  # 长期记忆阈值（最高，需要更多累积才触发）
+  ltm_min_messages: 20
+  ltm_min_tokens: 8000
   ltm_min_confidence: 0.75
-  ltm_cooldown_minutes: 30
+  ltm_cooldown_minutes: 0
 
 # Chat 附件与保护机制
 chat:
@@ -173,6 +178,12 @@ paths_config:
 resource:
   # 审核时单个资源内容截断上限（字符数）
   review_content_limit: 12000
+
+# Remotion 讲解视频渲染
+video:
+  render_timeout_seconds: 900
+  concurrency: 4
+  chromium_gl: angle
 
 # 题库导入配置
 quiz:

@@ -5,8 +5,8 @@
     → [ppt_node, video_node] (并行) → merge_aggregation → save_node
 
 核心设计：
-- 只传递 user_id 和 resource_id
-- 所有数据（request, profile, teaching_plan）从数据库获取
+- 传递 user_id, resource_id, selected_agents, request_data, profile, teaching_plan
+- 所有数据从 LangGraph state 获取，不再从数据库读取快照
 - 事件发送通过 ResourceEvents(user_id, resource_id) 创建
 """
 
@@ -22,15 +22,13 @@ from app.resource.agents import AGENT_REGISTRY
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
 from app.resource.workflow.validation import check_content_overlap
-from sqlalchemy import select
-from app.infra.models import GeneratedResource, GeneratedResourceItem
 from app.resource.schemas import (
     AgentResult,
     DownstreamContext,
     ResourceInput,
     TeachingPlan,
 )
-from app.resource.workflow.state import ParentState, WorkerInputState, CoverageReport, AgentFailure
+from app.resource.workflow.state import ParentState, WorkerInputState, AgentFailure
 from app.resource.service import (
     AGGREGATION_AGENT_IDS,
     BUNDLE_AGENT_ID,
@@ -45,33 +43,6 @@ logger = logging.getLogger(__name__)
 BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
 
 
-async def _get_resource_snapshot(user_id: int, resource_id: int) -> dict[str, Any]:
-    """从数据库获取资源快照（request, profile, selected_agents, agent_configs）。"""
-    async with session_scope() as session:
-        service = ResourceService(session)
-        resource = await service.get_resource(user_id, resource_id)
-        if resource is None:
-            raise ValueError(f"Resource {resource_id} not found")
-        return {
-            "learning_need": resource.learning_need or "",
-            "selected_agents": resource.selected_agents or [],
-            "agent_configs": resource.agent_configs or {},
-            "request_snapshot": resource.request_snapshot or {},
-            "profile_snapshot": resource.profile_snapshot or {},
-        }
-
-
-async def _get_teaching_plan(resource_id: int) -> TeachingPlan | None:
-    """从数据库获取教学计划。"""
-    async with session_scope() as session:
-        stmt = select(GeneratedResource).where(GeneratedResource.id == resource_id)
-        result = await session.exec(stmt)
-        resource = result.scalar_one_or_none()
-        if resource and resource.teaching_plan:
-            return TeachingPlan.model_validate(resource.teaching_plan)
-        return None
-
-
 def build_agent_resource_input(
     *,
     resource_id: int,
@@ -84,7 +55,6 @@ def build_agent_resource_input(
     profile: dict[str, Any],
     upstream_handoffs: dict[str, DownstreamContext],
     agent_config_extra: dict[str, Any] | None = None,
-    covered_outline_ids: list[str] | None = None,
 ) -> ResourceInput:
     """为指定 agent 构建 ResourceInput 输入。
 
@@ -99,22 +69,12 @@ def build_agent_resource_input(
         profile: 学习者画像
         upstream_handoffs: 上游 Agent 交接数据
         agent_config_extra: 额外配置
-        covered_outline_ids: 已覆盖的大纲 ID（动态追踪）
-
     Returns:
         ResourceInput 实例
     """
-    agent_config = agent_configs.get(agent_id, {})
+    agent_config = dict(agent_configs.get(agent_id, {}))
     if agent_config_extra:
         agent_config = {**agent_config, **agent_config_extra}
-
-    # 策略传递：从 teaching_plan 提取 teaching_strategy
-    if teaching_plan and teaching_plan.teaching_strategy:
-        agent_config["teaching_strategy"] = teaching_plan.teaching_strategy
-
-    # 动态覆盖追踪：传递已覆盖的大纲项
-    if covered_outline_ids:
-        agent_config["already_covered_outline_ids"] = covered_outline_ids
 
     agent_config["agent_id"] = agent_id
     return ResourceInput(
@@ -133,7 +93,10 @@ async def get_handoffs(
     resource_id: int,
     user_id: int,
 ) -> dict[str, DownstreamContext]:
-    """获取成功持久化的基础 Agent handoffs。"""
+    """获取成功持久化的基础 Agent handoffs。
+
+    从 Item 行的 title/summary 直接构建，不再依赖 downstream_context 列。
+    """
     async with session_scope() as session:
         service = ResourceService(session)
         items = await service.list_resource_items(user_id, resource_id)
@@ -144,81 +107,32 @@ async def get_handoffs(
             continue
         if item.status != "completed":
             continue
-        if item.downstream_context and isinstance(item.downstream_context, dict):
-            handoffs[item.agent_type] = DownstreamContext.model_validate(item.downstream_context)
+        handoffs[item.agent_type] = DownstreamContext(
+            source_agent=item.agent_type,
+            title=item.title or "",
+            one_sentence_summary=item.summary or "",
+        )
     return handoffs
 
 
-async def get_covered_outline_ids(
-    resource_id: int,
-) -> list[str]:
-    """获取已覆盖的大纲 ID（用于动态追踪）。
+def _extract_state_data(state: ParentState) -> tuple[str, dict[str, Any], dict[str, Any], TeachingPlan | None]:
+    """从 state 提取通用数据：learning_need, agent_configs, profile, teaching_plan。"""
+    request_data: dict[str, Any] = state.get("request_data") or {}
+    profile: dict[str, Any] = state.get("profile") or {}
+    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
 
-    从数据库读取已完成 Agent 的 downstream_context，
-   提取 covered_outline_ids 并合并。
-    """
-    async with session_scope() as session:
-        stmt = (
-            select(GeneratedResourceItem.downstream_context)
-            .where(GeneratedResourceItem.resource_id == resource_id)
-            .where(GeneratedResourceItem.status == "completed")
-            .where(GeneratedResourceItem.agent_type.in_(BASE_RESOURCE_AGENT_IDS))
-        )
-        result = await session.exec(stmt)
-        rows = result.all()
+    # 从 resource_id 对应的 GeneratedResource 获取 learning_need
+    # 注意：learning_need 仍需从 DB 读取，因为它在 GeneratedResource 表上
+    # 但我们也可以在 request_data 中传递它
+    learning_need = request_data.get("learning_need", "")
+    agent_configs = request_data.get("agent_configs", {})
+    learning_scenario = request_data.get("learning_scenario", "self_study")
 
-    covered: set[str] = set()
-    for row in rows:
-        if row and isinstance(row, dict):
-            for oid in row.get("covered_outline_ids", []):
-                covered.add(oid)
+    teaching_plan = None
+    if teaching_plan_raw:
+        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
 
-    return sorted(covered)
-
-
-async def get_coverage(
-    resource_id: int,
-    teaching_plan: TeachingPlan | None,
-) -> CoverageReport:
-    """获取 Agent 覆盖情况。"""
-    if not teaching_plan or not teaching_plan.outline:
-        return CoverageReport(
-            covered_outline_ids=[],
-            missing_outline_ids=[],
-            critical_missing_ids=[],
-        )
-
-    async with session_scope() as session:
-        service = ResourceService(session)
-        # 使用 user_id=0 因为我们只需要 resource_id 级别的数据
-        # 实际上 list_resource_items 需要 user_id，这里用子查询
-        stmt = (
-            select(GeneratedResourceItem.downstream_context)
-            .where(GeneratedResourceItem.resource_id == resource_id)
-            .where(GeneratedResourceItem.status == "completed")
-            .where(GeneratedResourceItem.agent_type.in_(BASE_RESOURCE_AGENT_IDS))
-        )
-        result = await session.exec(stmt)
-        rows = result.all()
-
-    all_outline_ids = {item.get("id") for item in teaching_plan.outline}
-    must_not_miss_ids = {item.get("id") for item in teaching_plan.outline if item.get("must_not_miss")}
-
-    covered: set[str] = set()
-    for row in rows:
-        if row and isinstance(row, dict):
-            for oid in row.get("covered_outline_ids", []):
-                if oid in all_outline_ids:
-                    covered.add(oid)
-
-    missing = sorted(all_outline_ids - covered)
-    critical_missing = sorted(must_not_miss_ids - covered)
-
-    return CoverageReport(
-        covered_outline_ids=sorted(covered),
-        missing_outline_ids=missing,
-        critical_missing_ids=critical_missing,
-    )
+    return learning_need, agent_configs, profile, teaching_plan
 
 
 # ── Planning node ──────────────────────────────────────────────────────
@@ -228,19 +142,20 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     """规划节点 — 调用 PlanningAgent 生成教学方向与大纲（TeachingPlan）。
 
     Planning 是唯一致命节点：失败直接抛出异常，不调度任何普通 Agent。
-    成功后立即将 TeachingPlan 写入数据库。
+    成功后将 TeachingPlan 写入 state（不再写数据库）。
     返回 selected_agents 供路由函数使用。
     """
     user_id = state["user_id"]
     resource_id = state["resource_id"]
 
-    # 从数据库获取快照数据
-    snapshot = await _get_resource_snapshot(user_id, resource_id)
-    learning_need = snapshot["learning_need"]
-    selected_agents = snapshot["selected_agents"]
-    agent_configs = snapshot["agent_configs"]
-    profile = snapshot["profile_snapshot"]
-    request_snapshot = snapshot["request_snapshot"]
+    # 从 state 获取数据
+    request_data: dict[str, Any] = state.get("request_data") or {}
+    profile: dict[str, Any] = state.get("profile") or {}
+    selected_agents: list[str] = state.get("selected_agents") or []
+
+    learning_need = request_data.get("learning_need", "")
+    agent_configs = request_data.get("agent_configs", {})
+    learning_scenario = request_data.get("learning_scenario", "self_study")
 
     # 提取基础 Agent IDs
     enabled_base_agents = [
@@ -252,7 +167,7 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     planning_input = ResourceInput(
         resource_id=resource_id,
         learning_need=learning_need,
-        learning_scenario=request_snapshot.get("learning_scenario"),
+        learning_scenario=learning_scenario,
         profile=profile,
         agent_config={"enabled_agents": enabled_base_agents},
     )
@@ -288,14 +203,11 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         if teaching_plan is None:
             raise ValueError("规划阶段未返回教学计划")
 
-        assigned_agents = {
-            assignment.get("agent_id")
-            for assignment in teaching_plan.agent_assignments
-        }
+        assigned_agents = set(teaching_plan.worker_tasks)
         expected_agents = set(enabled_base_agents)
         if assigned_agents != expected_agents:
             raise ValueError(
-                "TeachingPlan assignments do not match selected base Agents: "
+                "TeachingPlan worker tasks do not match selected base Agents: "
                 f"missing={sorted(expected_agents - assigned_agents)} "
                 f"unexpected={sorted(assigned_agents - expected_agents)}"
             )
@@ -303,10 +215,10 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.save_teaching_plan(
-                user_id=user_id,
+            await service.complete_agent_run(
                 resource_id=resource_id,
-                teaching_plan=teaching_plan,
+                agent_id="planning",
+                elapsed_ms=elapsed_ms,
             )
         await events.send(
             "planning",
@@ -315,8 +227,11 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
             100,
             data={"phase": "planning", "elapsed_ms": elapsed_ms},
         )
-        # 返回 selected_agents 供同步路由函数使用
-        return {"selected_agents": selected_agents}
+        # 返回 selected_agents 和 teaching_plan 到 state
+        return {
+            "selected_agents": selected_agents,
+            "teaching_plan": teaching_plan.model_dump(mode="json"),
+        }
     except Exception as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         logger.error("规划阶段失败: resource_id=%s error=%s", resource_id, exc)
@@ -326,7 +241,6 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
                 resource_id=resource_id,
                 agent_id="planning",
                 stage="planning",
-                error_type=type(exc).__name__,
                 error_message=str(exc)[:500],
                 elapsed_ms=elapsed_ms,
             )
@@ -361,8 +275,6 @@ async def _execute_non_planning_agent(
     user_id: int,
     resource_id: int,
     resource_input: ResourceInput,
-    _require_downstream_context: bool = False,
-    depends_on_agents: list[str] | None = None,
 ) -> dict[str, Any]:
     """统一执行非 Planning Agent 的生命周期。
 
@@ -374,8 +286,6 @@ async def _execute_non_planning_agent(
         user_id: 用户 ID
         resource_id: 资源任务 ID
         resource_input: Agent 输入参数
-        require_downstream_context: 基础 Agent 必须有 downstream_context（用于验证）
-        depends_on_agents: 依赖的 Agent ID 列表（用于聚合 Agent 的 source_item_ids）
 
     Returns:
         包含 results 或 failures 的字典
@@ -383,20 +293,6 @@ async def _execute_non_planning_agent(
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     agent = AGENT_REGISTRY[agent_id](events)
     timeout_seconds = AGENT_TIMEOUTS.get(agent_id, 300.0)
-
-    # 从数据库查询依赖 Agent 的成功 item IDs
-    source_item_ids: list[int] | None = None
-    if depends_on_agents:
-        async with session_scope() as session:
-
-            stmt = (
-                select(GeneratedResourceItem.id)
-                .where(GeneratedResourceItem.resource_id == resource_id)
-                .where(GeneratedResourceItem.status == "completed")
-                .where(GeneratedResourceItem.agent_type.in_(depends_on_agents))
-            )
-            result = await session.exec(stmt)
-            source_item_ids = list(result.scalars().all())
 
     outcome = await execute_resource_agent(
         user_id=user_id,
@@ -406,7 +302,6 @@ async def _execute_non_planning_agent(
         input_data=resource_input,
         events=events,
         timeout_seconds=timeout_seconds,
-        source_item_ids=source_item_ids,
     )
 
     if outcome.status == "completed":
@@ -428,13 +323,6 @@ async def _execute_non_planning_agent(
 
 
 # ── Worker nodes ───────────────────────────────────────────────────────
-
-
-async def base_worker_ids(user_id: int, resource_id: int) -> list[str]:
-    """获取启用的基础 worker agent IDs（从数据库读取）。"""
-    snapshot = await _get_resource_snapshot(user_id, resource_id)
-    selected = snapshot["selected_agents"]
-    return [aid for aid in selected if aid in BASE_RESOURCE_AGENT_IDS]
 
 
 def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
@@ -466,30 +354,30 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
     user_id = state["user_id"]
     resource_id = state["resource_id"]
 
-    # 从数据库获取快照数据
-    snapshot = await _get_resource_snapshot(user_id, resource_id)
-    learning_need = snapshot["learning_need"]
-    agent_configs = snapshot["agent_configs"]
-    profile = snapshot["profile_snapshot"]
-    request_snapshot = snapshot["request_snapshot"]
+    # 从 state 获取数据
+    request_data: dict[str, Any] = state.get("request_data") or {}
+    profile: dict[str, Any] = state.get("profile") or {}
+    selected_agents: list[str] = state.get("selected_agents") or []
+    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
 
-    # 从数据库获取教学计划
-    teaching_plan = await _get_teaching_plan(resource_id)
+    learning_need = request_data.get("learning_need", "")
+    agent_configs = request_data.get("agent_configs", {})
+    learning_scenario = request_data.get("learning_scenario", "self_study")
 
-    # 动态覆盖追踪：获取已覆盖的大纲 ID
-    covered_ids = await get_covered_outline_ids(resource_id)
+    teaching_plan = None
+    if teaching_plan_raw:
+        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
         agent_id=agent_id,
         learning_need=learning_need,
-        learning_scenario=request_snapshot.get("learning_scenario") or "self_study",
-        selected_agents=snapshot["selected_agents"],
+        learning_scenario=learning_scenario,
+        selected_agents=selected_agents,
         agent_configs=agent_configs,
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs={},
-        covered_outline_ids=covered_ids if covered_ids else None,
     )
 
     return await _execute_non_planning_agent(
@@ -497,7 +385,6 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
         user_id=user_id,
         resource_id=resource_id,
         resource_input=resource_input,
-        _require_downstream_context=True,
     )
 
 
@@ -531,7 +418,8 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     failures = state.get("failures") or {}
     success_count = len(results)
     fail_count = len(failures)
-    worker_agents = await base_worker_ids(user_id, resource_id)
+    selected_agents: list[str] = state.get("selected_agents") or []
+    worker_agents = [aid for aid in selected_agents if aid in BASE_RESOURCE_AGENT_IDS]
 
     coordinator_status = "failed" if worker_agents and success_count == 0 else "finished"
     message = (
@@ -541,8 +429,11 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     )
     stat = "completed" if coordinator_status == "finished" else "failed"
 
-    # 从数据库获取教学计划
-    teaching_plan = await _get_teaching_plan(resource_id)
+    # 从 state 获取教学计划
+    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
+    teaching_plan = None
+    if teaching_plan_raw:
+        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
 
     # 内容去重检查：读取已完成 Agent 的内容并检查相似度
     if results and teaching_plan:
@@ -580,35 +471,6 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
                 for warning in warnings:
                     await events.send(agent_id, "running", f"⚠️ {warning}", 70)
 
-    # 从数据库读取覆盖情况
-    coverage_report = await get_coverage(
-        resource_id=resource_id,
-        teaching_plan=teaching_plan,
-    )
-
-    if coverage_report.get("critical_missing_ids"):
-        critical_titles = []
-        if teaching_plan:
-            for item in teaching_plan.outline:
-                if item.get("id") in coverage_report["critical_missing_ids"]:
-                    critical_titles.append(item.get("title", ""))
-        await events.send(
-            COORDINATOR_AGENT_ID,
-            "running",
-            f"大纲覆盖警告：核心大纲项未覆盖 — {', '.join(critical_titles)}",
-            70,
-        )
-    elif coverage_report.get("missing_outline_ids"):
-        missing_ids = coverage_report["missing_outline_ids"]
-        if teaching_plan:
-            missing_titles = [item.get("title", "") for item in teaching_plan.outline if item.get("id") in missing_ids]
-            await events.send(
-                COORDINATOR_AGENT_ID,
-                "running",
-                f"非核心大纲项未覆盖：{', '.join(missing_titles)}",
-                70,
-            )
-
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     async with session_scope() as session:
         service = ResourceService(session)
@@ -623,7 +485,6 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
                 resource_id=resource_id,
                 agent_id=COORDINATOR_AGENT_ID,
                 stage="coordination",
-                error_type="WorkerPoolFailed",
                 error_message=message,
                 elapsed_ms=elapsed_ms,
             )
@@ -660,7 +521,7 @@ def route_after_merge(state: ParentState) -> list[str]:
 async def ppt_node(state: ParentState) -> dict[str, Any]:
     """PPT 聚合节点 — 运行两阶段教学课件生成。
 
-    从数据库读取成功的基础 Agent handoffs，委托给 _execute_non_planning_agent。
+    从 state 读取数据，从数据库读取成功的基础 Agent handoffs。
     聚合 Agent 不需要 downstream_context。
     """
     user_id = state["user_id"]
@@ -674,15 +535,19 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         80,
     )
 
-    # 从数据库读取快照数据
-    snapshot = await _get_resource_snapshot(user_id, resource_id)
-    learning_need = snapshot["learning_need"]
-    agent_configs = snapshot["agent_configs"]
-    profile = snapshot["profile_snapshot"]
-    request_snapshot = snapshot["request_snapshot"]
+    # 从 state 获取数据
+    request_data: dict[str, Any] = state.get("request_data") or {}
+    profile: dict[str, Any] = state.get("profile") or {}
+    selected_agents: list[str] = state.get("selected_agents") or []
+    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
 
-    # 从数据库获取教学计划
-    teaching_plan = await _get_teaching_plan(resource_id)
+    learning_need = request_data.get("learning_need", "")
+    agent_configs = request_data.get("agent_configs", {})
+    learning_scenario = request_data.get("learning_scenario", "self_study")
+
+    teaching_plan = None
+    if teaching_plan_raw:
+        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
 
     # 从数据库读取成功持久化的基础 Agent handoffs
     base_handoffs = await get_handoffs(
@@ -692,15 +557,15 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
 
     agent_config_extra: dict[str, Any] = {
         "upstream_handoff_agent_ids": list(base_handoffs.keys()),
-        "programming_language": request_snapshot.get("agent_configs", {}).get("code", {}).get("programming_language"),
+        "programming_language": agent_configs.get("code", {}).get("programming_language"),
     }
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
         agent_id=PPT_AGENT_ID,
         learning_need=learning_need,
-        learning_scenario=request_snapshot.get("learning_scenario") or "self_study",
-        selected_agents=snapshot["selected_agents"],
+        learning_scenario=learning_scenario,
+        selected_agents=selected_agents,
         agent_configs=agent_configs,
         teaching_plan=teaching_plan,
         profile=profile,
@@ -713,15 +578,13 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         user_id=user_id,
         resource_id=resource_id,
         resource_input=resource_input,
-        _require_downstream_context=False,
-        depends_on_agents=list(base_handoffs.keys()),
     )
 
 
 async def video_node(state: ParentState) -> dict[str, Any]:
     """Video 聚合节点 — 运行 VideoAgent 内部流水线生成视频脚本。
 
-    从数据库读取成功的基础 Agent handoffs，委托给 _execute_non_planning_agent。
+    从 state 读取数据，从数据库读取成功的基础 Agent handoffs。
     聚合 Agent 不需要 downstream_context。
     """
     user_id = state["user_id"]
@@ -735,15 +598,19 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         80,
     )
 
-    # 从数据库读取快照数据
-    snapshot = await _get_resource_snapshot(user_id, resource_id)
-    learning_need = snapshot["learning_need"]
-    agent_configs = snapshot["agent_configs"]
-    profile = snapshot["profile_snapshot"]
-    request_snapshot = snapshot["request_snapshot"]
+    # 从 state 获取数据
+    request_data: dict[str, Any] = state.get("request_data") or {}
+    profile: dict[str, Any] = state.get("profile") or {}
+    selected_agents: list[str] = state.get("selected_agents") or []
+    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
 
-    # 从数据库获取教学计划
-    teaching_plan = await _get_teaching_plan(resource_id)
+    learning_need = request_data.get("learning_need", "")
+    agent_configs = request_data.get("agent_configs", {})
+    learning_scenario = request_data.get("learning_scenario", "self_study")
+
+    teaching_plan = None
+    if teaching_plan_raw:
+        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
 
     # 从数据库读取成功持久化的基础 Agent handoffs
     base_handoffs = await get_handoffs(
@@ -759,8 +626,8 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         resource_id=resource_id,
         agent_id=VIDEO_AGENT_ID,
         learning_need=learning_need,
-        learning_scenario=request_snapshot.get("learning_scenario") or "self_study",
-        selected_agents=snapshot["selected_agents"],
+        learning_scenario=learning_scenario,
+        selected_agents=selected_agents,
         agent_configs=agent_configs,
         teaching_plan=teaching_plan,
         profile=profile,
@@ -773,8 +640,6 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         user_id=user_id,
         resource_id=resource_id,
         resource_input=resource_input,
-        _require_downstream_context=False,
-        depends_on_agents=list(base_handoffs.keys()),
     )
 
 
@@ -835,9 +700,9 @@ async def save_node(state: ParentState) -> dict[str, Any]:
         data={"phase": "aggregation"},
     )
 
-    # 从数据库获取选中的 agent IDs
-    snapshot = await _get_resource_snapshot(user_id, resource_id)
-    selected_agent_ids = set(snapshot["selected_agents"])
+    # 从 state 获取选中的 agent IDs
+    selected_agents: list[str] = state.get("selected_agents") or []
+    selected_agent_ids = set(selected_agents)
 
     try:
         async with session_scope() as session:
@@ -860,7 +725,6 @@ async def save_node(state: ParentState) -> dict[str, Any]:
                     resource_id=resource_id,
                     agent_id=BUNDLE_AGENT_ID,
                     stage="aggregation",
-                    error_type="BundleFailed",
                     error_message="资源包组装失败",
                     elapsed_ms=elapsed_ms,
                 )
@@ -881,7 +745,6 @@ async def save_node(state: ParentState) -> dict[str, Any]:
                 resource_id=resource_id,
                 agent_id=BUNDLE_AGENT_ID,
                 stage="aggregation",
-                error_type=type(exc).__name__,
                 error_message=str(exc)[:500],
                 elapsed_ms=elapsed_ms,
             )

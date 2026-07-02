@@ -132,6 +132,7 @@ watch(isActive, active => {
 })
 
 const kindLabel = (kind: AgentActivity['kind']) => ({
+  agent: 'Agent',
   tool: '工具',
   attachment: '附件',
   workflow: '流程',

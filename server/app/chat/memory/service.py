@@ -43,6 +43,8 @@ from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
+    ChatActivity,
+    ChatAttachmentAnalysis,
     ChatLongTermMemory,
     ChatMessage,
     ChatSession,
@@ -215,7 +217,7 @@ class ChatMemoryService:
         return title
 
     # -------------------------------------------------------------------
-    # save_message: 持久化单条聊天消息
+    # save_message: 持久化单条聊天消息，并更新 token 计数器
     # -------------------------------------------------------------------
     async def save_message(
         self,
@@ -224,6 +226,7 @@ class ChatMemoryService:
         session_id: str,
         role: str,
         content: list[dict[str, Any]],
+        user_message_id: int | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
         usage_metadata: dict[str, Any] | None = None,
@@ -237,17 +240,51 @@ class ChatMemoryService:
             else:
                 chat_session = ChatSession(id=session_id, user_id=user_id)
             db.add(chat_session)
+            if user_message_id is not None:
+                root_message = (
+                    await db.exec(
+                        select(ChatMessage).where(
+                            ChatMessage.id == user_message_id,
+                            ChatMessage.session_id == session_id,
+                            ChatMessage.role == "user",
+                        )
+                    )
+                ).first()
+                if root_message is None:
+                    raise ValueError("关联的用户消息不存在")
+
+            normalized_content = content
+            if not isinstance(normalized_content, list):
+                normalized_content = [{"type": "text", "text": str(content or "")}]
             message = ChatMessage(
-                user_id=user_id,
                 session_id=session_id,
+                user_message_id=user_message_id,
                 role=role,
-                content=content,
+                content=normalized_content,
                 tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
                 usage_metadata=usage_metadata,
             )
             db.add(message)
+            await db.flush()
+
+            # 更新 token 计数器（用于触发压缩、长期记忆和画像更新）
+            from app.chat.memory.types import estimate_token_count, extract_content_text
+            text_content = extract_content_text(normalized_content)
+            token_count = estimate_token_count(text_content)
+
+            # 递增 summary_token_count（会话压缩触发）
+            chat_session.summary_token_count = int(chat_session.summary_token_count or 0) + token_count
+            # 递增 ltm_token_count 和 ltm_message_count（长期记忆触发）
+            chat_session.ltm_token_count = int(chat_session.ltm_token_count or 0) + token_count
+            chat_session.ltm_message_count = int(chat_session.ltm_message_count or 0) + 1
+            # 递增 profile_token_count 和 profile_message_count（画像更新触发）
+            chat_session.profile_token_count = int(chat_session.profile_token_count or 0) + token_count
+            chat_session.profile_message_count = int(chat_session.profile_message_count or 0) + 1
+            db.add(chat_session)
+
             await db.commit()
+            await db.refresh(message)
             return message
 
     async def list_messages(
@@ -260,40 +297,200 @@ class ChatMemoryService:
         async with session_scope() as db:
             stmt = (
                 select(ChatMessage)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
                 .where(
-                    ChatMessage.user_id == user_id,
+                    ChatSession.user_id == user_id,
                     ChatMessage.session_id == session_id,
                 )
-                .order_by(ChatMessage.created_at.asc())
+                .order_by(ChatMessage.id.desc())
                 .limit(limit)
             )
-            return list((await db.exec(stmt)).all())
+            return list(reversed((await db.exec(stmt)).all()))
 
     async def count_messages(self, *, user_id: int, session_id: str) -> int:
         async with session_scope() as db:
             result = (
                 await db.exec(
-                    select(func.count()).where(
-                        ChatMessage.user_id == user_id,
+                    select(func.count())
+                    .select_from(ChatMessage)
+                    .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                    .where(
+                        ChatSession.user_id == user_id,
                         ChatMessage.session_id == session_id,
                     )
                 )
             ).one()
             return int(result)
 
-    async def save_uploaded_file(
+    async def create_attachment_analysis(
         self,
         *,
         user_id: int,
         session_id: str,
-        payload: dict[str, Any],
-    ) -> Any:
-        from types import SimpleNamespace
+        user_message_id: int,
+        analysis_type: str,
+    ) -> ChatAttachmentAnalysis:
+        async with session_scope() as db:
+            user_message = (
+                await db.exec(
+                    select(ChatMessage).where(
+                        ChatMessage.id == user_message_id,
+                        ChatMessage.session_id == session_id,
+                        ChatMessage.session_id.in_(
+                            select(ChatSession.id).where(ChatSession.user_id == user_id)
+                        ),
+                        ChatMessage.role == "user",
+                    )
+                )
+            ).first()
+            if user_message is None:
+                raise ValueError("用户消息不存在")
+            analysis = ChatAttachmentAnalysis(
+                user_message_id=user_message_id,
+                analysis_type=analysis_type,
+                status="running",
+            )
+            db.add(analysis)
+            await db.commit()
+            await db.refresh(analysis)
+            return analysis
 
-        return SimpleNamespace(
-            id=abs(hash(payload.get("url", ""))),
-            **payload,
-        )
+    async def finish_attachment_analysis(
+        self,
+        *,
+        analysis_id: str,
+        content: str,
+        error_message: str | None = None,
+    ) -> None:
+        async with session_scope() as db:
+            analysis = (
+                await db.exec(
+                    select(ChatAttachmentAnalysis).where(
+                        ChatAttachmentAnalysis.id == analysis_id,
+                    )
+                )
+            ).first()
+            if analysis is None:
+                return
+            analysis.content = content
+            analysis.error_message = error_message
+            analysis.status = "failed" if error_message else "completed"
+            analysis.completed_at = now()
+            db.add(analysis)
+            await db.commit()
+
+    async def list_attachment_analyses(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        completed_only: bool = False,
+    ) -> list[ChatAttachmentAnalysis]:
+        async with session_scope() as db:
+            stmt = (
+                select(ChatAttachmentAnalysis)
+                .join(
+                    ChatMessage,
+                    ChatMessage.id == ChatAttachmentAnalysis.user_message_id,
+                )
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatMessage.session_id == session_id,
+                )
+            )
+            if completed_only:
+                stmt = stmt.where(ChatAttachmentAnalysis.status == "completed")
+            stmt = stmt.order_by(ChatAttachmentAnalysis.created_at.asc())
+            return list((await db.exec(stmt)).all())
+
+    async def upsert_activity(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message_id: int,
+        payload: dict[str, Any],
+    ) -> ChatActivity | None:
+        """保存公开状态摘要；同一 activity_id 的生命周期原位更新。"""
+        activity_id = str(payload.get("activity_id") or "").strip()
+        if not activity_id:
+            return None
+        status = str(payload.get("status") or "running")
+        if status in {"completed", "finished"}:
+            status = "done"
+        elif status == "error":
+            status = "failed"
+        if status not in {"running", "done", "failed"}:
+            status = "running"
+
+        async with session_scope() as db:
+            activity = (
+                await db.exec(
+                    select(ChatActivity)
+                    .join(ChatMessage, ChatMessage.id == ChatActivity.user_message_id)
+                    .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                    .where(
+                        ChatSession.user_id == user_id,
+                        ChatMessage.session_id == session_id,
+                        ChatActivity.user_message_id == user_message_id,
+                        ChatActivity.activity_id == activity_id,
+                    )
+                )
+            ).first()
+            if activity is None:
+                user_message = (
+                    await db.exec(
+                        select(ChatMessage).where(
+                            ChatMessage.id == user_message_id,
+                            ChatMessage.session_id == session_id,
+                            ChatMessage.session_id.in_(
+                                select(ChatSession.id).where(ChatSession.user_id == user_id)
+                            ),
+                            ChatMessage.role == "user",
+                        )
+                    )
+                ).first()
+                if user_message is None:
+                    return None
+                activity = ChatActivity(
+                    user_message_id=user_message_id,
+                    activity_id=activity_id,
+                )
+
+            activity.kind = str(payload.get("kind") or activity.kind or "workflow")
+            activity.stage = str(payload.get("stage") or "") or None
+            activity.status = status
+            activity.title = str(payload.get("title") or activity.title or "")
+            activity.summary = str(payload.get("summary") or "")
+            activity.message = str(payload.get("message") or "")
+            detail = payload.get("detail")
+            activity.detail = detail if isinstance(detail, dict) else None
+            if status in {"done", "failed"}:
+                activity.completed_at = now()
+            db.add(activity)
+            await db.commit()
+            await db.refresh(activity)
+            return activity
+
+    async def list_activities(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+    ) -> list[ChatActivity]:
+        async with session_scope() as db:
+            stmt = (
+                select(ChatActivity)
+                .join(ChatMessage, ChatMessage.id == ChatActivity.user_message_id)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatMessage.session_id == session_id,
+                )
+                .order_by(ChatActivity.started_at.asc(), ChatActivity.id.asc())
+            )
+            return list((await db.exec(stmt)).all())
 
     async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:
         async with session_scope() as db:
@@ -301,8 +498,10 @@ class ChatMemoryService:
                 (
                     await db.exec(
                         select(ChatMessage).where(
-                            ChatMessage.user_id == user_id,
                             ChatMessage.session_id == session_id,
+                            ChatMessage.session_id.in_(
+                                select(ChatSession.id).where(ChatSession.user_id == user_id)
+                            ),
                         )
                     )
                 ).all()
@@ -344,8 +543,9 @@ class ChatMemoryService:
         async with session_scope() as db:
             stmt = (
                 select(ChatSessionSummaryBlock)
+                .join(ChatSession, ChatSession.id == ChatSessionSummaryBlock.session_id)
                 .where(
-                    ChatSessionSummaryBlock.user_id == user_id,
+                    ChatSession.user_id == user_id,
                     ChatSessionSummaryBlock.session_id == session_id,
                 )
                 .order_by(ChatSessionSummaryBlock.created_at.desc())
@@ -453,9 +653,13 @@ class ChatMemoryService:
         user_message: str,
         assistant_reply: str,
     ) -> dict[str, Any]:
-        """Combined LTM + compression + profile signal check in a single DB session."""
+        """Combined LTM + compression + profile token threshold check in a single DB session."""
+        from app.config import PROFILE_MIN_TOKENS, PROFILE_MIN_MESSAGES
+
         signals = classify_turn_signals(user_message, assistant_reply)
-        signal_detected = signals["ltm"]
+        ltm_signal = signals["ltm"]
+        profile_signal = signals["global_profile"] or signals["course_profile"]
+
         try:
             async with session_scope() as db:
                 chat_session = (
@@ -468,28 +672,51 @@ class ChatMemoryService:
                 ).first()
 
                 if not chat_session:
-                    should_ltm = signal_detected
+                    should_ltm = ltm_signal
+                    should_profile = profile_signal
                     ltm_schedule: dict[str, Any] = {
-                        "signal_detected": signal_detected,
+                        "signal_detected": ltm_signal,
                         "ltm_token_count": 0,
                         "ltm_message_count": 0,
                     }
+                    profile_schedule: dict[str, Any] = {
+                        "signal_detected": profile_signal,
+                        "profile_token_count": 0,
+                        "profile_message_count": 0,
+                    }
                 else:
+                    # LTM 阈值判断（token >= 8000 或消息 >= 20 或信号触发）
                     ltm_token = int(chat_session.ltm_token_count or 0)
                     ltm_msg = int(chat_session.ltm_message_count or 0)
-                    threshold_due = ltm_token >= LTM_MIN_TOKENS or ltm_msg >= LTM_MIN_MESSAGES
-                    cooldown_ok = (
-                        chat_session.last_ltm_updated_at is None
-                        or (now() - chat_session.last_ltm_updated_at).total_seconds() >= LTM_COOLDOWN_MINUTES * 60
-                    )
-                    should_ltm = (signal_detected or threshold_due) and cooldown_ok and ltm_msg > 0
+                    ltm_threshold_due = ltm_token >= LTM_MIN_TOKENS or ltm_msg >= LTM_MIN_MESSAGES
+                    # 冷却时间为 0 时不检查冷却
+                    if LTM_COOLDOWN_MINUTES > 0:
+                        cooldown_ok = (
+                            chat_session.last_ltm_updated_at is None
+                            or (now() - chat_session.last_ltm_updated_at).total_seconds() >= LTM_COOLDOWN_MINUTES * 60
+                        )
+                    else:
+                        cooldown_ok = True
+                    should_ltm = (ltm_signal or ltm_threshold_due) and cooldown_ok and ltm_msg > 0
                     ltm_schedule = {
-                        "signal_detected": signal_detected,
-                        "threshold_due": threshold_due,
+                        "signal_detected": ltm_signal,
+                        "threshold_due": ltm_threshold_due,
                         "cooldown_ok": cooldown_ok,
                         "ltm_token_count": ltm_token,
                         "ltm_message_count": ltm_msg,
                         "last_ltm_message_id": int(chat_session.last_ltm_message_id or 0),
+                    }
+
+                    # 画像阈值判断（token >= 6000 或消息 >= 12 或信号触发）
+                    profile_token = int(chat_session.profile_token_count or 0)
+                    profile_msg = int(chat_session.profile_message_count or 0)
+                    profile_threshold_due = profile_token >= PROFILE_MIN_TOKENS or profile_msg >= PROFILE_MIN_MESSAGES
+                    should_profile = profile_signal or profile_threshold_due
+                    profile_schedule = {
+                        "signal_detected": profile_signal,
+                        "threshold_due": profile_threshold_due,
+                        "profile_token_count": profile_token,
+                        "profile_message_count": profile_msg,
                     }
 
                 should_compress = await self.compressor.needs_compression(
@@ -499,12 +726,14 @@ class ChatMemoryService:
                 )
 
                 logger.info(
-                    "[ChatMemoryService] evaluate_post_turn_jobs: should_ltm=%s should_compress=%s signals=%s",
-                    should_ltm, should_compress, signals,
+                    "[ChatMemoryService] evaluate_post_turn_jobs: should_ltm=%s should_profile=%s should_compress=%s",
+                    should_ltm, should_profile, should_compress,
                 )
                 return {
                     "should_ltm": should_ltm,
                     "ltm_schedule": ltm_schedule,
+                    "should_profile": should_profile,
+                    "profile_schedule": profile_schedule,
                     "should_compress": should_compress,
                     "signals": signals,
                 }
@@ -615,6 +844,42 @@ class ChatMemoryService:
             logger.error("[ChatMemoryService] long-term update failed: %s", exc)
             return {"updated": False, "analyzed": False, "error": str(exc)}
 
+    # -------------------------------------------------------------------
+    # reset_profile_counters: 重置画像更新计数器
+    # -------------------------------------------------------------------
+    async def reset_profile_counters(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+    ) -> bool:
+        """画像更新完成后重置 profile_token_count 和 profile_message_count。"""
+        try:
+            async with session_scope() as db:
+                chat_session = (
+                    await db.exec(
+                        select(ChatSession).where(
+                            ChatSession.id == session_id,
+                            ChatSession.user_id == user_id,
+                        )
+                    )
+                ).first()
+                if chat_session:
+                    chat_session.profile_token_count = 0
+                    chat_session.profile_message_count = 0
+                    chat_session.last_profile_updated_at = now()
+                    chat_session.updated_at = now()
+                    db.add(chat_session)
+                    logger.info(
+                        "[ChatMemoryService] 画像计数器已重置: user_id=%s session_id=%s",
+                        user_id, session_id,
+                    )
+                    return True
+                return False
+        except Exception as exc:
+            logger.error("[ChatMemoryService] reset_profile_counters failed: %s", exc)
+            return False
+
     async def _build_dialogue_since(
         self,
         *,
@@ -626,8 +891,9 @@ class ChatMemoryService:
     ) -> tuple[str, int, int]:
         stmt = (
             select(ChatMessage)
+            .join(ChatSession, ChatSession.id == ChatMessage.session_id)
             .where(
-                ChatMessage.user_id == user_id,
+                ChatSession.user_id == user_id,
                 ChatMessage.session_id == session_id,
                 ChatMessage.role.in_(["user", "assistant"]),
                 ChatMessage.id > after_message_id,

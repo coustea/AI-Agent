@@ -25,7 +25,6 @@ class AgentResult(BaseModel):
     title: str = ""
     summary: str = ""
     metrics: dict[str, Any] = Field(default_factory=dict)
-    downstream_context: DownstreamContext | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str = ""
 

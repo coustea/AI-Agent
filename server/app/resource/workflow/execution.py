@@ -67,7 +67,6 @@ async def execute_resource_agent(
     input_data: "ResourceInput",
     events: "ResourceEvents",
     timeout_seconds: float,
-    source_item_ids: list[int] | None = None,
 ) -> AgentOutcome:
     """执行单个资源 Agent，包含完整的生命周期管理。"""
     started = time.perf_counter()
@@ -147,7 +146,6 @@ async def execute_resource_agent(
                 user_id=user_id,
                 agent_id=agent_id,
                 result=result,
-                source_item_ids=source_item_ids,
             )
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             await service.complete_agent_run(
@@ -221,8 +219,7 @@ async def _record_failure(
                 resource_id=resource_id,
                 agent_id=agent_id,
                 stage=stage,
-                error_type=error_type,
-                error_message=error_message,
+                error_message=f"[{error_type}] {error_message}",
                 elapsed_ms=elapsed_ms,
             )
     except Exception as e:

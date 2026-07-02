@@ -16,7 +16,7 @@ from app.infra.logging import get_logger
 from app.infra.prompts import prompts
 
 if TYPE_CHECKING:
-    from app.chat.schemas.agent import TutorTurnContext
+    from app.chat.schemas.agent import TutorRequestContext
     from app.chat.schemas.evidence import EvidenceSet
 
 logger = get_logger(__name__)
@@ -278,7 +278,7 @@ class TeachingDiagramGenerator:
 
     async def generate(
         self,
-        request: "TutorTurnContext",
+        request: "TutorRequestContext",
         answer: str,
         evidence_set: "EvidenceSet",
     ) -> dict:

@@ -17,7 +17,6 @@ import asyncio
 import json
 import os
 import re
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
@@ -80,6 +79,12 @@ async def create_resource_task(
         run_multi_agent_generation,
         user_id=current_user.id,
         resource_id=resource_id,
+        selected_agents=req.enabled_agent_ids(),
+        request_data={
+            "learning_need": req.learning_need,
+            "learning_scenario": req.learning_scenario,
+            "agent_configs": req.agent_configs.model_dump(mode="json"),
+        },
     )
 
     return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
@@ -122,6 +127,12 @@ async def create_single_resource_task(
         run_multi_agent_generation,
         user_id=current_user.id,
         resource_id=resource_id,
+        selected_agents=[req.agent_id.value],
+        request_data={
+            "learning_need": req.learning_need,
+            "learning_scenario": "self_study",
+            "agent_configs": {},
+        },
     )
 
     return HttpResponse.success(data={"resource_id": resource_id, "status": "generating", "agent_id": req.agent_id.value}, status_code=201)
@@ -331,126 +342,3 @@ async def download_html(
         filename=f"{ppt_item.title}.html",
         media_type="text/html",
     )
-
-
-@router.get("/video/audio/{filename:path}")
-async def get_video_audio(
-    filename: str,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """提供生成的视频音频文件。
-
-    安全措施：
-    - 用户认证
-    - 目录遍历防护
-    - 路径规范化检查
-    """
-    # 目录遍历安全检查
-    if ".." in filename or filename.startswith("/") or filename.startswith("\\"):
-        return HttpResponse.error(code=400, message="Illegal filename")
-
-    # 只允许安全字符（字母、数字、下划线、横线、点）
-    if not re.match(r'^[\w\-\.]+\.mp3$', filename):
-        return HttpResponse.error(code=400, message="Invalid filename format")
-
-    file_path = WORKPLACE_DIR / "video_audio" / filename
-
-    # 路径规范化检查
-    try:
-        file_path = file_path.resolve()
-        base_dir = (WORKPLACE_DIR / "video_audio").resolve()
-        if not str(file_path).startswith(str(base_dir)):
-            return HttpResponse.error(code=400, message="Path traversal detected")
-    except Exception:
-        return HttpResponse.error(code=400, message="Invalid path")
-
-    if not file_path.exists():
-        return HttpResponse.error(code=404, message="Audio file not found")
-
-    return FileResponse(path=str(file_path), media_type="audio/mpeg")
-
-
-@router.post("/video/render")
-async def render_video(
-    request: dict[str, Any],
-    current_user: User = Depends(get_current_user),
-):
-    """从 VideoPayload JSON 触发 GPU 加速视频渲染。
-
-    安全措施：
-    - 用户认证
-    - 参数白名单验证
-    - 使用 subprocess 列表参数避免 shell 注入
-    - 超时限制
-
-    请求体：
-        payload: VideoPayload JSON 对象
-        gl: 可选 GPU 后端 — "angle"（默认）, "swiftshader", "egl"
-    """
-    payload = request.get("payload")
-    if not payload or not isinstance(payload, dict):
-        return HttpResponse.error(code=400, message="Missing 'payload' in request body")
-
-    # gl 参数白名单
-    gl = request.get("gl", "angle")
-    if gl not in ("angle", "swiftshader", "egl"):
-        return HttpResponse.error(code=400, message="Invalid gl parameter, must be one of: angle, swiftshader, egl")
-
-    job_id = str(uuid.uuid4())[:8]
-
-    # Paths
-    video_render_dir = Path(__file__).resolve().parent.parent.parent.parent / "video-render"
-    if not (video_render_dir / "package.json").exists():
-        return HttpResponse.error(code=500, message="video-render project not found")
-
-    work_dir = WORKPLACE_DIR / "video_render_jobs" / job_id
-    work_dir.mkdir(parents=True, exist_ok=True)
-
-    plan_path = work_dir / "plan.json"
-    output_path = work_dir / "output.mp4"
-
-    # 写入 payload JSON 文件
-    plan_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # 使用列表参数避免 shell 注入
-    render_script = video_render_dir / "scripts" / "render.ts"
-
-    logger.info("Starting video render job %s with gl=%s", job_id, gl)
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "npx", "tsx", str(render_script),
-            "--input", str(plan_path),
-            "--output", str(output_path),
-            "--gl", gl,
-            "--concurrency", "4",
-            cwd=str(video_render_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)  # 10min max
-
-        if proc.returncode != 0:
-            err_msg = stderr.decode("utf-8", errors="replace")[-500:]
-            logger.error("Render job %s failed: %s", job_id, err_msg)
-            return HttpResponse.error(code=500, message=f"Render failed: {err_msg}")
-
-        if not output_path.exists():
-            return HttpResponse.error(code=500, message="Render output file not found")
-
-        file_size_mb = output_path.stat().st_size / 1024 / 1024
-        logger.info("Render job %s complete: %.1f MB", job_id, file_size_mb)
-
-        return FileResponse(
-            path=str(output_path),
-            media_type="video/mp4",
-            filename=f"{payload.get('title', 'video')}_{job_id}.mp4",
-        )
-
-    except asyncio.TimeoutError:
-        logger.error("Render job %s timed out", job_id)
-        return HttpResponse.error(code=504, message="Render timed out (10min limit)")
-    except Exception as e:
-        logger.error("Render job %s error: %s", job_id, e)
-        return HttpResponse.error(code=500, message=f"Render error: {e}")

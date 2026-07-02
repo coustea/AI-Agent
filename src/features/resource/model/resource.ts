@@ -37,8 +37,8 @@ export interface ResourceGenerationRequest {
       map_type: 'knowledge_tree' | 'exam_map' | 'comparison_map'
       max_depth: number
       highlight_weak: boolean
-      expand_weak_points: boolean
-      include_prerequisites: boolean
+      leaf_detail: 'keyword' | 'brief_note' | 'annotated'
+      show_relations: boolean
     }
     quiz: {
       question_count: number
@@ -62,11 +62,9 @@ export interface ResourceGenerationRequest {
     video: {
       duration_seconds: number
       scene_count: number
-      style: 'explainer' | 'lecture' | 'screencast' | 'case_walkthrough'
       voice: 'teacher' | 'coach' | 'concise'
       aspect_ratio: '16:9' | '9:16' | '1:1'
       include_captions: boolean
-      output_format: 'preview'
     }
   }
 }

@@ -6,6 +6,7 @@ import type {
   DigitalHumanCallbacks,
 } from '@/features/chat/digital-human/model/digital-human'
 import { getAuthToken } from '@/shared/auth/token'
+import { isCjkCharacter } from '@/features/chat/views/tutorUtils'
 
 export type {
   TextMessageParams,
@@ -660,10 +661,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         assistantRevealLastTickAt = 0
         currentSpeechReleasedCost = 0
         targetRevealCharsPerSecond = 0
-    }
-
-    function isCjkCharacter(char: string): boolean {
-        return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(char)
     }
 
     function takeNextRevealUnit(text: string): string {

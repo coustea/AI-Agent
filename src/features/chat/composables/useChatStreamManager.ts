@@ -1,7 +1,7 @@
 // src/composables/useChatStreamManager.ts
 
 import { readonly, shallowRef } from 'vue'
-import { createChatRun } from '@/features/chat/api/chat'
+import { createChatMessage } from '@/features/chat/api/chat'
 import type { StreamChatParams } from '@/features/chat/types/chat'
 import type { ChatEvent } from '@/features/chat/types/chatEvent'
 import { useChatEvents } from '@/features/chat/composables/useChatEvents'
@@ -17,6 +17,7 @@ export interface StreamCallbacks {
 
 export interface StreamState {
   sessionId: string
+  userMessageId?: number
   status: 'streaming' | 'done' | 'error'
   error?: Error
   chatEvents: ReturnType<typeof useChatEvents>
@@ -58,9 +59,10 @@ export function useChatStreamManager() {
 
     activeStreams.value.set(sessionId, state)
     try {
-      const response = await createChatRun(params)
-      const runId = response.data.data.run_id
-      state.chatEvents.connect(sessionId, runId, {
+      const response = await createChatMessage(params)
+      const userMessageId = response.data.data.message_id
+      state.userMessageId = userMessageId
+      state.chatEvents.connect(sessionId, userMessageId, {
         onContentDelta: (chunk) => {
           state.callbacks.onChunk?.(chunk)
         },
@@ -130,16 +132,6 @@ export function useChatStreamManager() {
     state.callbacks = callbacks
   }
 
-  const clearStream = (sessionId: string) => {
-    stopStream(sessionId)
-  }
-
-  const clearAllStreams = () => {
-    for (const [sid] of activeStreams.value) {
-      stopStream(sid)
-    }
-  }
-
   return {
     activeStreams: readonly(activeStreams),
     startStream,
@@ -148,7 +140,5 @@ export function useChatStreamManager() {
     isStreamActive,
     getBuffer,
     resubscribe,
-    clearStream,
-    clearAllStreams,
   }
 }

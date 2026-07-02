@@ -16,24 +16,42 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemM
 
 from app.chat.memory.types import extract_content_text
 from app.chat.memory.service import get_chat_memory_service
-from app.config import CHAT_HISTORY_LIMIT, IMAGE_EXTENSIONS
+from app.config import CHAT_HISTORY_LIMIT
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 
-def build_user_content(text: str, attachments: list[str]) -> list[dict[str, Any]]:
-    """构建 OpenAI 格式的用户消息 content"""
+def build_user_content(text: str, attachments: list[Any]) -> list[dict[str, Any]]:
+    """构建用户消息；原始附件展示信息直接保存在 content 中。"""
     content: list[dict[str, Any]] = []
     if text.strip():
         content.append({"type": "text", "text": text.strip()})
-    for url in attachments:
-        ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
-        if ext in IMAGE_EXTENSIONS:
-            content.append({"type": "image_url", "image_url": {"url": url}})
+    for attachment in attachments:
+        def value(name: str, default: Any = None) -> Any:
+            if isinstance(attachment, dict):
+                return attachment.get(name, default)
+            return getattr(attachment, name, default)
+
+        url = str(value("url", "") or "")
+        file_type = str(value("file_type", "") or "")
+        item = {
+            "type": "image_url" if file_type == "image" else "file",
+            "url": url,
+            "file_type": file_type,
+            "original_name": str(value("original_name", "") or url.rsplit("/", 1)[-1]),
+            "mime_type": value("mime_type"),
+            "size_bytes": int(value("size_bytes", 0) or 0),
+        }
+        if file_type == "image":
+            item["image_url"] = {"url": url}
         else:
-            content.append({"type": "file", "file": {"filename": url.split("/")[-1], "file_id": url}})
+            item["file"] = {
+                "filename": item["original_name"],
+                "file_id": url,
+            }
+        content.append(item)
     return content
 
 
@@ -64,7 +82,18 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
 
     if role == "user":
         if isinstance(raw_content, list) and raw_content:
-            return HumanMessage(content=raw_content)
+            model_content: list[dict[str, Any]] = []
+            for part in raw_content:
+                if not isinstance(part, dict):
+                    continue
+                part_type = part.get("type")
+                if part_type == "text":
+                    model_content.append({"type": "text", "text": str(part.get("text") or "")})
+                elif part_type == "image_url" and isinstance(part.get("image_url"), dict):
+                    model_content.append({"type": "image_url", "image_url": part["image_url"]})
+                elif part_type == "file" and isinstance(part.get("file"), dict):
+                    model_content.append({"type": "file", "file": part["file"]})
+            return HumanMessage(content=model_content) if model_content else None
         text = str(raw_content or "").strip()
         return HumanMessage(content=text) if text else None
     if role in {"assistant", "ai"}:
@@ -132,9 +161,34 @@ class ChatContextBuilder:
         raw_messages = await svc.list_messages(
             user_id=user_id, session_id=session_id, limit=CHAT_HISTORY_LIMIT,
         )
+        summary_blocks = await svc.list_summary_blocks(
+            user_id=user_id,
+            session_id=session_id,
+        )
+        summarized_through_id = max(
+            (int(block.end_message_id or 0) for block in summary_blocks),
+            default=0,
+        )
+        if summarized_through_id:
+            raw_messages = [
+                message
+                for message in raw_messages
+                if int(getattr(message, "id", 0) or 0) > summarized_through_id
+            ]
+        analyses = await svc.list_attachment_analyses(
+            user_id=user_id,
+            session_id=session_id,
+            completed_only=True,
+        )
+        analyses_by_message_id: dict[int, list[Any]] = {}
+        for analysis in analyses:
+            if int(analysis.user_message_id or 0) <= summarized_through_id:
+                continue
+            analyses_by_message_id.setdefault(analysis.user_message_id, []).append(analysis)
 
         if exclude_message_id is not None:
             raw_messages = [m for m in raw_messages if getattr(m, "id", None) != exclude_message_id]
+            analyses_by_message_id.pop(exclude_message_id, None)
 
         if raw_messages and getattr(raw_messages[0], "role", "") != "user":
             first_user_index = next(
@@ -148,8 +202,24 @@ class ChatContextBuilder:
             converted = convert_stored_message(msg)
             if converted is not None:
                 messages.append(converted)
+            if getattr(msg, "role", "") == "user" and getattr(msg, "id", None) in analyses_by_message_id:
+                analysis_parts = [
+                    f"[{item.analysis_type}] {item.content}".strip()
+                    for item in analyses_by_message_id[int(msg.id)]
+                    if str(item.content or "").strip()
+                ]
+                if analysis_parts:
+                    messages.append(
+                        SystemMessage(
+                            content=(
+                                "以下是该用户消息所附文件的持久化分析结果，仅作为上下文，"
+                                "不要把它误认为用户原话：\n"
+                                + "\n".join(analysis_parts)
+                            )
+                        )
+                    )
 
-        return messages
+        return sanitize_tool_message_chain(messages)
 
     async def build_session_context(self, user_id: int, session_id: str) -> str:
         """获取会话摘要上下文。"""

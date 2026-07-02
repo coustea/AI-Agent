@@ -1,6 +1,6 @@
 """TutorAgent — LangGraph 驱动的辅导智能体编排器。
 
-图结构: START → classify → [analysis_files] → [search_node] → answer_node → [diagram_node] → END
+图结构（重构后）: START → preprocess → react_node → END
 
 职责边界:
   - TutorAgent: 推理编排、流式输出、节点级持久化
@@ -19,12 +19,8 @@ from typing import Any, AsyncIterator
 from langgraph.graph import END, START, StateGraph
 
 from app.chat.agent.nodes import (
-    classify_node,
-    analysis_files_node,
-    search_node,
-    answer_node,
-    diagram_node,
-    build_evidence_context,
+    preprocess_node,
+    react_node,
 )
 from app.chat.agent.state import TutorAgentState
 from app.chat.memory.service import get_chat_memory_service
@@ -36,46 +32,8 @@ from app.infra.prompts import prompts
 logger = get_logger(__name__)
 
 
-# ── 图路由函数 ──
-
-
-def route_after_classify(state: TutorAgentState) -> str:
-    cls = state.get("classification")
-    if cls is None:
-        return "answer_node"
-    if cls.needs_file_analysis and state.get("attachments"):
-        return "analysis_files"
-    if cls.needs_knowledge_search or cls.needs_web_search or cls.needs_profile or cls.needs_long_term_memory:
-        return "search_node"
-    return "answer_node"
-
-
-def route_after_analysis(state: TutorAgentState) -> str:
-    cls = state.get("classification")
-    if cls and (
-        cls.needs_knowledge_search
-        or cls.needs_web_search
-        or cls.needs_profile
-        or cls.needs_long_term_memory
-    ):
-        return "search_node"
-    return "answer_node"
-
-
-def route_after_answer(state: TutorAgentState) -> str:
-    cls = state.get("classification")
-
-    if cls and cls.needs_diagram:
-        return "diagram_node"
-
-    if state.get("need_teaching_diagram") and state.get("final_answer"):
-        return "diagram_node"
-
-    return END
-
-
 class TutorAgent:
-    """LangGraph 驱动的辅导智能体 — 单次对话 turn 的运行时。"""
+    """LangGraph 驱动的辅导智能体 — 处理一条用户消息。"""
 
     def __init__(self, memory_service: Any | None = None) -> None:
         self.llm = get_llm()
@@ -91,6 +49,7 @@ class TutorAgent:
         initial_state: TutorAgentState = {
             "user_id": input.user_id,
             "session_id": input.session_id,
+            "user_message_id": input.user_message_id,
             "question": input.question,
             "attachments": input.attachments,
             "enable_web_search": input.enable_web_search,
@@ -98,16 +57,14 @@ class TutorAgent:
             "history_messages": input.history_messages,
             "session_summary": input.session_summary,
             "attachment_context": "",
-            "attachment_analyses": [],
-            "evidence": [],
-            "sources": [],
-            "tool_invocations": [],
-            "stream_events": [],
+            "messages": [],
             "event_queue": event_queue,
+            "stream_events": [],
+            "tool_invocations": [],
+            "sources": [],
             "errors": [],
             "final_answer": "",
             "diagram_result": None,
-            "_search_attempted": False,
         }
 
         yield TutorRuntimeEvent(type="message_start", payload={}, sequence=0, timestamp=time.time())
@@ -140,7 +97,6 @@ class TutorAgent:
                     "diagram_result": final_state.get("diagram_result"),
                     "sources": final_state.get("sources", []),
                     "tool_invocations": final_state.get("tool_invocations", []),
-                    "attachment_analyses": final_state.get("attachment_analyses", []),
                     "errors": final_state.get("errors", []),
                 },
                 sequence=9999,
@@ -177,6 +133,16 @@ class TutorAgent:
         to return as ``{"stream_events": [event]}`` — the operator.add reducer
         on stream_events will automatically append it to the accumulated list.
         """
+        if persist and event.type == "agent_status":
+            try:
+                await self.memory_service.upsert_activity(
+                    user_id=state.get("user_id", 0),
+                    session_id=state.get("session_id", ""),
+                    user_message_id=state.get("user_message_id", 0),
+                    payload=event.payload,
+                )
+            except Exception as exc:
+                logger.warning("[TutorAgent] persist activity failed: %s", exc)
         queue = state.get("event_queue")
         if queue is not None:
             await queue.put(event)
@@ -189,18 +155,12 @@ class TutorAgent:
     def _build_graph(self) -> Any:
         workflow = StateGraph(TutorAgentState)
 
-        # 使用 partial 绑定节点函数的额外参数，避免重复定义 lambda
-        workflow.add_node("classify",       partial(classify_node,       self, llm=self.llm, prompts=prompts))
-        workflow.add_node("analysis_files", partial(analysis_files_node, self))
-        workflow.add_node("search_node",    partial(search_node,         self, llm=self.llm, prompts=prompts, memory_service=self.memory_service))
-        workflow.add_node("answer_node",    partial(answer_node,         self, llm=self.llm, prompts=prompts))
-        workflow.add_node("diagram_node",   partial(diagram_node,        self))
+        # 使用 partial 绑定节点函数的额外参数
+        workflow.add_node("preprocess", partial(preprocess_node, self))
+        workflow.add_node("react_node", partial(react_node, self, llm=self.llm, prompts=prompts, memory_service=self.memory_service))
 
-        workflow.add_edge(START, "classify")
-        workflow.add_conditional_edges("classify",       route_after_classify)
-        workflow.add_conditional_edges("analysis_files", route_after_analysis)
-        workflow.add_edge("search_node", "answer_node")
-        workflow.add_conditional_edges("answer_node",    route_after_answer)
-        workflow.add_edge("diagram_node", END)
+        workflow.add_edge(START, "preprocess")
+        workflow.add_edge("preprocess", "react_node")
+        workflow.add_edge("react_node", END)
 
         return workflow.compile()

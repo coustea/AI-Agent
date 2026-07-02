@@ -30,9 +30,7 @@ def register_agent(cls: type[BaseResourceAgent]) -> type[BaseResourceAgent]:
 class BaseResourceAgent:
     """资源 Agent 基类。子类必须显式实现 resource 和 node 两个入口。
 
-    集成 ToolExcute，支持统一工具调用：
-    - invoke_with_tools() 带工具调用的 LLM 调用
-    - search() 统一网页搜索功能
+    集成 ToolExcute，统一把网页研究委托给 ResearchAgent。
     """
 
     agent_id: str
@@ -53,47 +51,38 @@ class BaseResourceAgent:
 
             self.emitter = NoopEvents()
 
-        # 如果没有传入 tools，直接内置默认的搜索工具
-        if tools is None:
-            from app.chat.tools.search import SearchQueryArgs, duckduckgo_search, tavily_search, spark_search
-            from app.infra.tool_excute import Tool
-
-            async def wrap_ddg(query: str) -> str:
-                res = await duckduckgo_search(query)
-                return "" if res is None else str(res)
-
-            async def wrap_tavily(query: str) -> str:
-                res = await tavily_search(query)
-                return "" if res is None else str(res)
-
-            async def wrap_spark(query: str) -> str:
-                res = await spark_search(query)
-                return "" if res is None else str(res)
-
-            self.tools = [
-                Tool(
-                    "duckduckgo_search",
-                    "General web search for articles, tutorials, blogs, and web content.",
-                    SearchQueryArgs,
-                    wrap_ddg,
-                ),
-                Tool(
-                    "tavily_search",
-                    "AI-optimized search with structured, relevance-ranked results.",
-                    SearchQueryArgs,
-                    wrap_tavily,
-                ),
-                Tool(
-                    "spark_search",
-                    "Chinese semantic search with reranking support.",
-                    SearchQueryArgs,
-                    wrap_spark,
-                ),
-            ]
-        else:
-            self.tools = list(tools)
-
         from app.infra.llm import get_llm
+        from app.infra.tool_excute import ToolExcute
+        from app.shared.research import build_research_tool
+
+        llm = get_llm()
+
+        async def handle_research_event(event: dict[str, Any]) -> None:
+            status = str(event.get("status") or "running")
+            action = str(event.get("action") or "核验网页资料")
+            duration = event.get("duration_ms")
+            if status == "done":
+                message = f"ResearchAgent：{action}已完成"
+                tool_status = "completed"
+            elif status == "failed":
+                message = f"ResearchAgent：{action}未完成"
+                tool_status = "failed"
+            else:
+                message = f"ResearchAgent：正在{action}..."
+                tool_status = "running"
+            await self.emitter.send(
+                getattr(self, "agent_id", "base_resource"),
+                "running",
+                message,
+                data={
+                    "phase": "research",
+                    "sub_agent": "research",
+                    "action": action,
+                    "tool_name": event.get("tool_name"),
+                    "tool_status": tool_status,
+                    "elapsed_ms": duration,
+                },
+            )
 
         async def handle_tool_event(event: dict[str, Any]) -> None:
             status = event.get("status")
@@ -103,9 +92,10 @@ class BaseResourceAgent:
                 await self.emitter.send(
                     agent_id,
                     "running",
-                    f"正在调用工具 {tool_name}...",
+                    "正在委托 ResearchAgent 研究资料...",
                     data={
-                        "phase": "tool_call",
+                        "phase": "research_delegate",
+                        "sub_agent": "research",
                         "tool_name": tool_name,
                         "tool_status": "running",
                     },
@@ -115,9 +105,10 @@ class BaseResourceAgent:
                 await self.emitter.send(
                     agent_id,
                     "running",
-                    f"工具 {tool_name} 执行成功 (耗时 {duration}ms)",
+                    f"ResearchAgent 已完成资料研究（耗时 {duration}ms）",
                     data={
-                        "phase": "tool_call",
+                        "phase": "research_delegate",
+                        "sub_agent": "research",
                         "tool_name": tool_name,
                         "tool_status": "completed",
                         "elapsed_ms": duration,
@@ -128,43 +119,39 @@ class BaseResourceAgent:
                 await self.emitter.send(
                     agent_id,
                     "running",
-                    f"工具 {tool_name} 执行失败: {error}",
+                    f"ResearchAgent 研究失败: {error}",
                     data={
-                        "phase": "tool_call",
+                        "phase": "research_delegate",
+                        "sub_agent": "research",
                         "tool_name": tool_name,
                         "tool_status": "failed",
                     },
                 )
 
-        self.tool_excute = get_llm().create_tool_excute(self.tools, event_handler=handle_tool_event)
+        research_tool = build_research_tool(
+            model=llm.model,
+            event_handler=handle_research_event,
+        )
+        custom_tools = [tool for tool in (tools or []) if tool.name != "research"]
+        self.tools = [research_tool, *custom_tools]
+        self.tool_excute = ToolExcute(self.tools, event_handler=handle_tool_event)
 
     async def search(self, query: str) -> str:
-        """内置搜索工具调用：优先使用讯飞星火搜索，其次使用 Tavily，最后回退到 DuckDuckGo。
-
-        通过 ToolExcute 执行以保证生命周期事件被正常触发与监听。
-        """
-        # 1. 优先调用 spark_search (讯飞星火搜索)
+        """通过共享 research 工具把网页研究委托给 ResearchAgent。"""
         try:
-            res = await self.tool_excute.execute({"name": "spark_search", "args": {"query": query}})
-            if "讯飞搜索不可用" not in str(res) and "讯飞搜索失败" not in str(res):
-                return str(res)
+            result = await self.tool_excute.execute({
+                "name": "research",
+                "args": {
+                    "query": query,
+                    "objective": "为资源生成提供准确、可引用的网页资料",
+                    "depth": "standard",
+                },
+            })
+            if isinstance(result, dict):
+                return str(result.get("text") or "")
+            return str(result or "")
         except Exception as exc:
-            logger.warning("[BaseResourceAgent] spark_search failed: %s", exc)
-
-        # 2. 次选调用 tavily_search
-        try:
-            res = await self.tool_excute.execute({"name": "tavily_search", "args": {"query": query}})
-            if "Tavily 搜索不可用" not in str(res) and "Tavily 搜索失败" not in str(res):
-                return str(res)
-        except Exception as exc:
-            logger.warning("[BaseResourceAgent] tavily_search failed: %s", exc)
-
-        # 3. 兜底调用 duckduckgo_search
-        try:
-            res = await self.tool_excute.execute({"name": "duckduckgo_search", "args": {"query": query}})
-            return str(res)
-        except Exception as exc:
-            logger.error("[BaseResourceAgent] duckduckgo_search fallback failed: %s", exc)
+            logger.error("[BaseResourceAgent] ResearchAgent failed: %s", exc)
             return f"搜索失败: {exc}"
 
     # -- ToolExcute 集成 -----------------------------------------------------

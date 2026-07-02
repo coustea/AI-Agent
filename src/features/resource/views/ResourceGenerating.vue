@@ -873,6 +873,8 @@ function getLogPhaseLabel(phase?: string) {
     ppt_generating: 'PPT',
     ppt_waiting_sources: '等待',
     artifact_saved: '保存',
+    research: '资料研究',
+    research_delegate: '研究委托',
     bundling: '打包',
     finished: '完成',
     failed: '失败',
@@ -916,6 +918,7 @@ function getNodeStageLabel(node: DagNodeState) {
     if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
     if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '生成中'
     if (node.phase === 'llm_generating') return '核心推演中'
+    if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
     if (node.phase === 'validating') return '一致性校验中'
     if (node.phase === 'artifact_saved') return '资源已保存'
     if (node.phase === 'bundling') return '资源整合中'
@@ -936,6 +939,8 @@ function getNodePhaseLabel(node: DagNodeState) {
     video_generating: '视频聚合',
     ppt_waiting_sources: '等待讲义要义',
     artifact_saved: '成果移交',
+    research: '资料研究',
+    research_delegate: '研究委托',
     aggregation_done: '聚合完成',
     bundling: '资源打包',
     finished: '已完成',

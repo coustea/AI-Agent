@@ -185,13 +185,4 @@ class PPTAgent(BaseResourceAgent):
                 "density": artifact.brief.density,
                 "file_size": path.stat().st_size,
             },
-            downstream_context=DownstreamContext(
-                source_agent=self.agent_id,
-                title=title,
-                one_sentence_summary=(
-                    f"{title} - {artifact.slide_count} 页 HTML 教学课件"
-                ),
-                reusable_assets=ReusableAssets(),
-                covered_outline_ids=[],
-            ),
         )

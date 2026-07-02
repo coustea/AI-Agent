@@ -747,7 +747,6 @@ const {
       isAIThinking.value = true
     }
     if (streamingMsgId.value !== null) {
-      clearAgentStatus(messages.value.find(message => message.id === streamingMsgId.value && message.role === 'ai'))
       enqueueStreamChunk(streamingMsgId.value, chunk)
     }
   },
@@ -963,7 +962,6 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   const data = (event.data || {}) as Record<string, unknown>
 
   if (event.event === 'content.delta') {
-    clearAgentStatus(aiMsg)
     return
   }
 
@@ -979,7 +977,6 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
       aiMsg.content = content
       streamDisplayText.value = content
     }
-    clearAgentStatus(aiMsg)
     return
   }
 
@@ -992,7 +989,7 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
     return
   }
 
-  if (event.event === 'run.started') {
+  if (event.event === 'message.started') {
     if (getCurrentAiTextStarted(aiMsg)) return
     const title = typeof data.title === 'string' && data.title.trim()
       ? data.title.trim()
@@ -1019,18 +1016,15 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
     || event.event === 'activity.failed'
   ) {
     const stage = data.stage as string | undefined
-    if (getCurrentAiTextStarted(aiMsg)) {
-      clearAgentStatus(aiMsg)
-      return
-    }
-    if (['teaching_diagram_generate', 'diagram_start', 'diagram_generate'].includes(stage || '')) {
+    const toolName = typeof data.tool_name === 'string' ? data.tool_name : undefined
+    // 图解生成通过 generate_teaching_diagram 工具调用
+    if (toolName === 'generate_teaching_diagram' || stage === 'teaching_diagram_generate') {
       aiMsg.teachingDiagramGenerating = true
     }
     const activityId = String(data.activity_id || '').trim()
-    const kind = data.kind === 'tool' || data.kind === 'attachment' || data.kind === 'workflow'
+    const kind = data.kind === 'agent' || data.kind === 'tool' || data.kind === 'attachment' || data.kind === 'workflow'
       ? data.kind
       : 'workflow'
-    const toolName = typeof data.tool_name === 'string' ? data.tool_name : undefined
     const detail = (
       data.detail && typeof data.detail === 'object'
         ? data.detail
@@ -1058,13 +1052,6 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
         : event.message,
       detail,
     })
-  }
-}
-
-const clearAgentStatus = (aiMsg?: ChatMsg) => {
-  if (!aiMsg) return
-  if (aiMsg.agentActivities?.length) {
-    aiMsg.agentActivities = []
   }
 }
 
@@ -1533,7 +1520,6 @@ const completeStreamingMessage = (messageId: number) => {
   isStreamDone = true
   stopStreamFlushLoop()
   const aiMsg = messages.value.find(message => message.id === messageId)
-  clearAgentStatus(aiMsg)
   if (aiMsg) aiMsg.teachingDiagramGenerating = false
   finishStream(messageId)
 }
@@ -1743,7 +1729,13 @@ const loadHistoryFromAPI = async (sessionId: string) => {
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
-    const visibleHistory = history.filter(msg => msg.role === 'user' || msg.role === 'assistant')
+    const visibleHistory = history.filter(msg => (
+      msg.role === 'user'
+      || (
+        msg.role === 'assistant'
+        && (!(msg.tool_calls?.length) || Boolean(msg.activities?.length))
+      )
+    ))
     const mapped = visibleHistory.map((msg, i) => {
       // 从 ContentPart[] 中提取文本和附件
       const contentParts = msg.content || []
@@ -1752,22 +1744,38 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         .map(part => part.text)
         .join('')
       const imageAttachments = contentParts
-        .filter((part): part is { type: 'image_url'; image_url: { url: string } } => part.type === 'image_url')
-        .map(part => ({ url: part.image_url.url, type: 'image', name: '' }))
+        .filter(part => part.type === 'image_url')
+        .map(part => ({
+          url: part.url || part.image_url.url,
+          type: 'image',
+          name: part.original_name || '',
+          size: part.size_bytes,
+          mimeType: part.mime_type || undefined,
+        }))
       const fileAttachments = contentParts
-        .filter((part): part is { type: 'file'; file: { file_id?: string; file_data?: string; filename?: string } } => part.type === 'file')
-        .map(part => ({ url: part.file.file_id || part.file.file_data || '', type: 'document', name: part.file.filename || '' }))
-      const attachments = [...imageAttachments, ...fileAttachments].length > 0
-        ? [...imageAttachments, ...fileAttachments]
-        : null
+        .filter(part => part.type === 'file')
+        .map(part => ({
+          url: part.url || part.file.file_id || part.file.file_data || '',
+          type: 'document',
+          name: part.original_name || part.file.filename || '',
+          size: part.size_bytes,
+          mimeType: part.mime_type || undefined,
+        }))
+      const contentAttachments = [...imageAttachments, ...fileAttachments]
+      const attachments = contentAttachments.length > 0 ? contentAttachments : null
+      const diagram = normalizeTeachingDiagram(
+        msg.usage_metadata?.diagram as TeachingDiagram | null | undefined,
+      )
 
       return {
         id: msg.id || Date.now() + i,
+        userMessageId: msg.user_message_id || undefined,
         role: msg.role === 'user' ? 'user' as const : 'ai' as const,
         content: textContent,
         time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
         attachments,
-        agentActivities: [],
+        agentActivities: (msg.activities || []) as AgentActivity[],
+        teachingDiagram: diagram,
       }
     })
     // 防止刷新后历史中相邻重复消息导致双排显示
@@ -1802,15 +1810,25 @@ const switchSession = async (sessionId: string) => {
 
     // Show the accumulated AI response from the stream buffer
     const { text, events } = streamManager.getBuffer(sessionId)
-    const aiMsgId = Date.now() + 10000
-    messages.value.push({
-      id: aiMsgId,
-      role: 'ai',
-      content: text,
-      time: now(),
-    })
+    const restoredInProgress = messages.value.find(message => (
+      message.role === 'ai'
+      && !message.content
+      && (!streamState.userMessageId || message.userMessageId === streamState.userMessageId)
+    ))
+    const aiMsgId = restoredInProgress?.id ?? Date.now() + 10000
+    if (restoredInProgress) {
+      restoredInProgress.content = text
+    } else {
+      messages.value.push({
+        id: aiMsgId,
+        userMessageId: streamState.userMessageId,
+        role: 'ai',
+        content: text,
+        time: now(),
+      })
+    }
     streamingMsgId.value = aiMsgId
-    streamingMsgRef.value = messages.value[messages.value.length - 1] ?? null
+    streamingMsgRef.value = messages.value.find(message => message.id === aiMsgId) ?? null
     isAIThinking.value = true
     isStreamDone = false
     streamRenderedChunks.length = 0
@@ -1824,7 +1842,6 @@ const switchSession = async (sessionId: string) => {
     // Resubscribe callbacks so new chunks flow to this component
     streamManager.resubscribe(sessionId, {
       onChunk: (chunk) => {
-        clearAgentStatus(messages.value.find(m => m.id === aiMsgId))
         enqueueStreamChunk(aiMsgId, chunk)
       },
       onDone: () => {
@@ -1837,7 +1854,6 @@ const switchSession = async (sessionId: string) => {
         stopStreamFlushLoop()
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        clearAgentStatus(aiMsg)
         if (aiMsg) {
           aiMsg.teachingDiagramGenerating = false
           if (!aiMsg.content) {
@@ -1861,12 +1877,12 @@ const switchSession = async (sessionId: string) => {
   } else if (streamState?.status === 'done') {
     // ── Branch 2: Stream completed in background ──
     // Backend has persisted the AI message. Load from API only.
-    streamManager.clearStream(sessionId)
+    streamManager.stopStream(sessionId)
     await loadHistoryFromAPI(sessionId)
 
   } else if (streamState?.status === 'error') {
     // ── Branch 3: Stream errored in background ──
-    streamManager.clearStream(sessionId)
+    streamManager.stopStream(sessionId)
     await loadHistoryFromAPI(sessionId)
     messages.value.push({
       id: Date.now() + 99999,
@@ -1893,7 +1909,7 @@ const archiveSession = async (sessionId: string) => {
 
   try {
     // 只有确认后才清理流状态并调用删除接口。
-    streamManager.clearStream(sessionId)
+    streamManager.stopStream(sessionId)
     await deleteSession(sessionId)
     sessions.value = sessions.value.filter(session => session.id !== sessionId)
 
@@ -2122,7 +2138,7 @@ const handleSend = async () => {
           url: data.url,
           fileType: pending.fileType === 'image' || data.file_type === 'image' ? 'image' : 'document',
           name: data.original_name || pending.name,
-          size: data.size || pending.size,
+          size: data.size_bytes || pending.size,
           mimeType: data.mime_type || pending.mimeType,
         }
       }),
@@ -2162,6 +2178,13 @@ const handleSend = async () => {
   }
 
   const attachmentUrls = uploadedAttachments.map(file => file.url).filter(Boolean)
+  const messageAttachments = uploadedAttachments.map(file => ({
+    url: file.url,
+    file_type: file.type,
+    original_name: file.name,
+    size_bytes: file.size,
+    mime_type: file.mimeType,
+  }))
   const aiMsgId = Date.now() + 1
   messages.value.push({
     id: aiMsgId,
@@ -2196,14 +2219,13 @@ const handleSend = async () => {
     {
       message: text || '请分析这些附件',
       session_id: activeSessionId,
-      attachments: attachmentUrls.length ? attachmentUrls : undefined,
+      attachments: messageAttachments.length ? messageAttachments : undefined,
       need_teaching_diagram: shouldGenerateTeachingDiagram,
       enable_web_search: enableWebSearch.value,
     },
     {
       onChunk: (chunk) => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        clearAgentStatus(aiMsg)
         if (aiMsg && shouldGenerateTeachingDiagram && !aiMsg.teachingDiagram) {
           aiMsg.teachingDiagramGenerating = true
         }
@@ -4130,14 +4152,14 @@ onBeforeUnmount(() => {
 .message-row.ai .bubble,
 .message-row.ai .bubble:hover {
   color: var(--color-text);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.035);
 }
 
 .message-row.ai .assistant-answer {
-  padding: 3px 2px 0;
+  padding: 14px 16px;
 }
 
 .message-row.user .bubble {

@@ -121,7 +121,6 @@ def test_resource_generation_request_accepts_video_agent_config():
                     "voice": "teacher",
                     "aspect_ratio": "16:9",
                     "include_captions": True,
-                    "output_format": "preview",
                 }
             },
         }
@@ -130,7 +129,6 @@ def test_resource_generation_request_accepts_video_agent_config():
     assert request.enabled_agent_ids() == ["content", "video"]
     assert request.agent_configs.video.duration_seconds == 180
     assert request.agent_configs.video.scene_count == 6
-    assert request.agent_configs.video.output_format == "preview"
 
 
 def test_resource_generation_request_video_is_not_default_enabled():

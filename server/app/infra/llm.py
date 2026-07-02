@@ -299,7 +299,7 @@ class Llm:
     ) -> ToolExcute:
         from app.infra.tool_excute import ToolExcute
 
-        return ToolExcute(self.model, tools, event_handler=event_handler)
+        return ToolExcute(tools, event_handler=event_handler)
 
     async def ainvoke_json(
         self,

@@ -1,10 +1,18 @@
 // src/types/chat.ts — 聊天相关类型定义
 
 // OpenAI 格式的内容部分类型
+interface AttachmentContentMeta {
+  url?: string
+  file_type?: string
+  original_name?: string
+  mime_type?: string | null
+  size_bytes?: number
+}
+
 export type ContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
-  | { type: "file"; file: { file_id?: string; file_data?: string; filename?: string } }
+  | ({ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } & AttachmentContentMeta)
+  | ({ type: "file"; file: { file_id?: string; file_data?: string; filename?: string } } & AttachmentContentMeta)
 
 export type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy' | 'tree' | 'grid' | 'protocol' | 'timeline'
 type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -199,10 +207,29 @@ export interface TeachingDiagram {
 
 export interface ChatMessageItem {
   id?: number
+  user_message_id?: number | null
   role: string
   content: ContentPart[]
   tool_calls?: Array<{ id: string; name: string; args?: Record<string, unknown> }> | null
   tool_call_id?: string | null
+  attachment_analyses: Array<{
+    id: string
+    analysis_type: string
+    status: string
+    content: string
+    error?: string | null
+  }>
+  activities: Array<{
+    activity_id: string
+    kind: 'agent' | 'tool' | 'attachment' | 'workflow'
+    stage?: string | null
+    status: 'running' | 'done' | 'failed'
+    title: string
+    summary?: string
+    message?: string
+    detail?: Record<string, unknown>
+  }>
+  usage_metadata?: Record<string, unknown> | null
   created_at: string | null
 }
 
@@ -216,14 +243,22 @@ export interface UploadResult {
   url: string
   file_type: string
   original_name: string
-  size?: number
+  size_bytes?: number
+  mime_type?: string
+}
+
+export interface MessageAttachmentInput {
+  url: string
+  file_type: string
+  original_name: string
+  size_bytes?: number
   mime_type?: string
 }
 
 export interface StreamChatParams {
   message?: string
   session_id?: string
-  attachments?: string[]
+  attachments?: MessageAttachmentInput[]
   need_teaching_diagram?: boolean
   enable_web_search?: boolean
 }

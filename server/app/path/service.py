@@ -626,7 +626,7 @@ class PathService:
         self, user_id: int
     ) -> dict[str, Any]:
         try:
-            profile = await self.profile_builder.get_or_create_global_profile(
+            profile = await self.profile_builder.get_profile(
                 user_id=user_id
             )
             return (
@@ -645,7 +645,7 @@ class PathService:
 
     async def get_user_learning_profile(self, user_id: int) -> str:
         try:
-            return await self.profile_builder.get_profile_for_agents(user_id=user_id)
+            return await self.profile_builder.build_profile_markdown(user_id=user_id)
         except ProgrammingError as exc:
             logger.warning(
                 "[PathService] 画像文本暂不可用，教程生成降级无画像: "

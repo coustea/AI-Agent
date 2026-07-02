@@ -21,25 +21,25 @@ logger = get_logger(__name__)
 # ===================== 事件类型定义 =====================
 
 ChatEventName = Literal[
-    "run.started",
+    "message.started",
     "activity.running",
     "activity.completed",
     "activity.failed",
     "content.delta",
     "content.replace",
     "diagram.ready",
-    "run.completed",
-    "run.failed",
+    "message.completed",
+    "message.failed",
 ]
 
-CHAT_TERMINAL_EVENTS: set[ChatEventName] = {"run.completed", "run.failed"}
+CHAT_TERMINAL_EVENTS: set[ChatEventName] = {"message.completed", "message.failed"}
 
 
 class ChatEvent(BaseModel):
     """Chat 模块的 SSE 数据结构。"""
 
     sequence: int = 0
-    run_id: str
+    user_message_id: int
     session_id: str
     event: ChatEventName
     message: str
@@ -64,7 +64,7 @@ class ChatEventClosedError(RuntimeError):
 
 # ===================== 频道键 =====================
 
-ChannelKey = tuple[int, str, str]  # (user_id, session_id, run_id)
+ChannelKey = tuple[int, str, int]  # (user_id, session_id, user_message_id)
 
 
 # ===================== 模块私有注册表 =====================
@@ -74,21 +74,21 @@ _chat_lock = asyncio.Lock()
 
 
 class _ChatChannel:
-    """单个 Chat run 的内存频道。"""
+    """单条 UserMessage 的内存事件频道。"""
 
     def __init__(
         self,
         *,
         user_id: int,
         session_id: str,
-        run_id: str,
+        user_message_id: int,
         queue_size: int = 256,
         replay_size: int = 256,
         terminal_retention_seconds: float = 1800.0,
     ) -> None:
         self.user_id = user_id
         self.session_id = session_id
-        self.run_id = run_id
+        self.user_message_id = user_message_id
         self.queue_size = queue_size
         self.replay_size = replay_size
         self.terminal_retention_seconds = terminal_retention_seconds
@@ -103,12 +103,12 @@ class _ChatChannel:
     ) -> ChatEvent:
         if self._is_terminal:
             raise ChatEventClosedError(
-                f"Chat channel closed for run_id={self.run_id}"
+                f"Chat channel closed for user_message_id={self.user_message_id}"
             )
         self._sequence += 1
         chat_event = ChatEvent(
             sequence=self._sequence,
-            run_id=self.run_id,
+            user_message_id=self.user_message_id,
             session_id=self.session_id,
             event=event,
             message=message,
@@ -124,8 +124,8 @@ class _ChatChannel:
                 except asyncio.QueueEmpty:
                     pass
                 logger.warning(
-                    "chat_event_queue_oldest_dropped: run_id=%s",
-                    self.run_id,
+                    "chat_event_queue_oldest_dropped: user_message_id=%s",
+                    self.user_message_id,
                 )
             queue.put_nowait(chat_event)
 
@@ -158,7 +158,7 @@ class _ChatChannel:
         if self._subscribers:
             # 还有订阅者，不清理
             return
-        key = (self.user_id, self.session_id, self.run_id)
+        key = (self.user_id, self.session_id, self.user_message_id)
         async with _chat_lock:
             _chat_channels.pop(key, None)
 
@@ -178,19 +178,19 @@ class ChatEvents:
         *,
         user_id: int,
         session_id: str,
-        run_id: str,
+        user_message_id: int,
         queue_size: int = 256,
         replay_size: int = 256,
         terminal_retention_seconds: float = 1800.0,
     ) -> None:
         self._user_id = user_id
         self._session_id = session_id
-        self._run_id = run_id
+        self._user_message_id = user_message_id
         self._queue_size = queue_size
         self._replay_size = replay_size
         self._terminal_retention_seconds = terminal_retention_seconds
         self._channel: _ChatChannel | None = None
-        self._key: ChannelKey = (user_id, session_id, run_id)
+        self._key: ChannelKey = (user_id, session_id, user_message_id)
 
     async def open(self) -> None:
         """注册频道，必须在调度后台任务之前调用。"""
@@ -202,7 +202,7 @@ class ChatEvents:
                 self._channel = _ChatChannel(
                     user_id=self._user_id,
                     session_id=self._session_id,
-                    run_id=self._run_id,
+                    user_message_id=self._user_message_id,
                     queue_size=self._queue_size,
                     replay_size=self._replay_size,
                     terminal_retention_seconds=self._terminal_retention_seconds,
@@ -224,7 +224,7 @@ class ChatEvents:
         """
         if self._channel is None:
             raise ChatEventNotOpenError(
-                f"Chat channel not opened for run_id={self._run_id}"
+                f"Chat channel not opened for user_message_id={self._user_message_id}"
             )
         return await self._channel.send(event, message, data)
 
@@ -237,7 +237,7 @@ class ChatEvents:
                 self._channel = _chat_channels.get(self._key)
         if self._channel is None:
             raise ChatEventNotOpenError(
-                f"Chat channel not found for run_id={self._run_id}"
+                f"Chat channel not found for user_message_id={self._user_message_id}"
             )
         return await self._channel.subscribe(after_sequence)
 
@@ -255,8 +255,8 @@ class ChatEvents:
         await self._channel._cleanup()
 
     @property
-    def run_id(self) -> str:
-        return self._run_id
+    def user_message_id(self) -> int:
+        return self._user_message_id
 
     @property
     def session_id(self) -> str:
@@ -290,10 +290,10 @@ def encode_chat_sse(event: ChatEvent) -> str:
 
 
 async def get_chat_channel(
-    user_id: int, session_id: str, run_id: str
+    user_id: int, session_id: str, user_message_id: int
 ) -> ChatEvents | None:
     """获取已存在的 Chat 频道。"""
-    key = (user_id, session_id, run_id)
+    key = (user_id, session_id, user_message_id)
     async with _chat_lock:
         channel = _chat_channels.get(key)
         if channel is None:
@@ -301,29 +301,32 @@ async def get_chat_channel(
         events = ChatEvents(
             user_id=user_id,
             session_id=session_id,
-            run_id=run_id,
+            user_message_id=user_message_id,
         )
         events._channel = channel
         return events
 
 
-# ===================== 运行时事件映射 =====================
+async def has_active_chat_channel(user_id: int, session_id: str) -> bool:
+    """同一会话只允许处理一条用户消息。"""
+    async with _chat_lock:
+        return any(
+            key_user_id == user_id
+            and key_session_id == session_id
+            and not channel._is_terminal
+            for (key_user_id, key_session_id, _), channel in _chat_channels.items()
+        )
+
+
+# ===================== 运行时事件映射（简化后）=====================
 
 SSE_EVENT_MAP: dict[str, str] = {
     "message_start": "start",
-    "workflow_status": "status",
-    "classify_done": "status",
-    "file_analysis_start": "status",
-    "file_analysis_done": "attachment",
     "agent_status": "agent_status",
-    "attachment_status": "attachment_status",
     "answer_token": "token",
     "answer_done": "status",
     "content_replace": "content_replace",
-    "diagram_start": "status",
-    "diagram_done": "diagram",
-    "memory_update_start": "status",
-    "memory_update_done": "status",
+    "diagram": "diagram",
     "final": "done",
     "error": "error",
 }
@@ -391,16 +394,9 @@ class ChatRuntimeEventMapper:
             return False
 
         if event_name == "agent_status":
-            activity = self._activity_data(payload, kind="tool")
-            await events.send(
-                event=self._activity_event_name(payload.get("status")),
-                message=activity["message"],
-                data=activity,
-            )
-            return False
-
-        if event_name == "attachment_status":
-            activity = self._activity_data(payload, kind="attachment")
+            # agent_status 包含所有工具调用状态（包括附件分析）
+            kind = payload.get("kind", "tool")
+            activity = self._activity_data(payload, kind=kind)
             await events.send(
                 event=self._activity_event_name(payload.get("status")),
                 message=activity["message"],
@@ -493,14 +489,7 @@ _TOOL_CONTEXT_KEYS: dict[str, tuple[str, ...]] = {
     "get_learner_profile": ("dimension", "course_name"),
     "get_long_term_memory": ("category",),
     "search_knowledge_base": ("query", "course_name"),
-    "duckduckgo_search": ("query",),
-    "duckduckgo_instant_answer": ("query",),
-    "tavily_search": ("query",),
-    "spark_search": ("query",),
-    "open_web_page": ("url",),
-    "find_in_web_page": ("pattern", "page_id"),
-    "extract_web_links": ("page_id",),
-    "read_web_pdf": ("url",),
+    "research": ("query", "objective"),
 }
 
 # 工具动作描述：工具名 -> "正在{动作}" 格式
@@ -508,16 +497,8 @@ _TOOL_ACTIONS: dict[str, str] = {
     "get_learner_profile": "正在了解你的学习情况",
     "get_long_term_memory": "正在回顾学习记录",
     "search_knowledge_base": "正在检索课程知识库",
-    "duckduckgo_search": "正在搜索相关资料",
-    "duckduckgo_instant_answer": "正在查询即时答案",
-    "tavily_search": "正在搜索相关资料",
-    "spark_search": "正在搜索相关资料",
-    "open_web_page": "正在阅读网页",
-    "find_in_web_page": "正在网页中查找内容",
-    "extract_web_links": "正在提取网页链接",
-    "read_web_pdf": "正在阅读 PDF",
+    "research": "正在研究资料",
 }
-
 
 def _tool_context(tool_name: str, arguments: Mapping[str, Any]) -> str:
     """从工具参数中提取关键信息用于展示。"""
@@ -560,6 +541,41 @@ def build_agent_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
             "tool_name": tool_name,
             "input": context.strip("「」"),
             "output": output,
+            "error": error,
+            "duration_ms": event.get("duration_ms"),
+        },
+    }
+
+
+def build_research_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
+    """把共享 ResearchAgent 的内部动作转换为 Chat 活动事件。"""
+    status = str(event.get("status") or "running")
+    tool_name = str(event.get("tool_name") or "").strip()
+    raw_arguments = event.get("arguments")
+    arguments = raw_arguments if isinstance(raw_arguments, Mapping) else {}
+    query = _preview(arguments.get("query"), limit=80)
+    action = str(event.get("action") or "核验研究资料").strip()
+    error = _preview(event.get("error"), limit=200)
+
+    if status == "done":
+        message = f"{action}已完成"
+    elif status == "failed":
+        message = f"{action}未完成"
+    else:
+        message = f"正在{action}{f'「{query}」' if query else ''}..."
+
+    return {
+        "activity_id": f"research:{event.get('activity_id') or tool_name}",
+        "kind": "agent",
+        "stage": "research",
+        "status": status,
+        "tool_name": tool_name,
+        "title": action,
+        "summary": query,
+        "message": message,
+        "detail": {
+            "agent": "research",
+            "action": action,
             "error": error,
             "duration_ms": event.get("duration_ms"),
         },

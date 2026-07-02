@@ -17,7 +17,7 @@ class DeckBrief(StrictModel):
     purpose: str = Field(min_length=1)
     audience: str = Field(min_length=1)
     density: DensityMode
-    target_slide_count: int = Field(ge=3)
+    target_slide_count: int = Field(ge=3, le=40)
     narrative: str = Field(min_length=1)
     required_points: list[str] = Field(default_factory=list)
     language: str = "zh-CN"

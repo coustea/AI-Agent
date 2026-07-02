@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -18,7 +17,6 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 ToolHandler = Callable[..., Awaitable[Any]]
-ToolCall = dict[str, Any]
 ToolRuntimeEvent = dict[str, Any]
 ToolEventHandler = Callable[[ToolRuntimeEvent], Awaitable[None]]
 
@@ -50,15 +48,13 @@ class Tool:
 
 
 class ToolExcute:
-    """注册工具，并直接使用 ChatOpenAI 的原生 tools 参数完成调用。"""
+    """注册、查询并执行工具，不负责调用模型或解析模型响应。"""
 
     def __init__(
         self,
-        model: Any,
         tools: Sequence[Tool] | None = None,
         event_handler: ToolEventHandler | None = None,
     ) -> None:
-        self.model = model
         self._event_handler = event_handler
         self._tools: dict[str, Tool] = {}
         if tools:
@@ -87,25 +83,11 @@ class ToolExcute:
         return [tool.description_schema() for tool in self._tools.values()]
 
     def subset(self, names: Sequence[str]) -> ToolExcute:
-        """创建保留当前模型与事件回调的工具子集。"""
+        """创建保留当前事件回调的工具子集。"""
         return ToolExcute(
-            self.model,
-            [self.get_tool(name) for name in names],
+            tools=[self.get_tool(name) for name in names],
             event_handler=self._event_handler,
         )
-
-    async def invoke(
-        self,
-        messages: Any,
-        *,
-        tool_choice: Any | None = None,
-        **model_kwargs: Any,
-    ) -> tuple[Any, list[ToolCall]]:
-        kwargs = {**model_kwargs, "tools": self.get_tools_description()}
-        if tool_choice is not None:
-            kwargs["tool_choice"] = tool_choice
-        response = await self.model.ainvoke(messages, **kwargs)
-        return response, self._normalize_response_calls(response)
 
     async def execute(self, tool_call: Mapping[str, Any]) -> Any:
         name = str(tool_call.get("name") or "").strip()
@@ -182,42 +164,3 @@ class ToolExcute:
                 status,
                 exc,
             )
-
-    @classmethod
-    def _normalize_response_calls(cls, response: Any) -> list[ToolCall]:
-        normalized = getattr(response, "tool_calls", None)
-        if normalized:
-            raw_calls = normalized if isinstance(normalized, list) else [normalized]
-            return [cls._normalize_call(call) for call in raw_calls]
-
-        additional = getattr(response, "additional_kwargs", None) or {}
-        raw = additional.get("tool_calls") if isinstance(additional, Mapping) else None
-        if not raw:
-            return []
-        raw_calls = raw if isinstance(raw, list) else [raw]
-        return [cls._normalize_call(call) for call in raw_calls]
-
-    @staticmethod
-    def _normalize_call(raw_call: Any) -> ToolCall:
-        if not isinstance(raw_call, Mapping):
-            raise ValueError("Tool call must be an object")
-        function = raw_call.get("function")
-        source = function if isinstance(function, Mapping) else raw_call
-        name = str(source.get("name") or "").strip()
-        if not name:
-            raise ValueError("Tool call name cannot be empty")
-        arguments = source.get("arguments", source.get("args", {}))
-        if arguments in (None, ""):
-            arguments = {}
-        elif isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid JSON arguments for tool {name}") from exc
-        if not isinstance(arguments, Mapping):
-            raise ValueError(f"Tool arguments must be an object: {name}")
-        return {
-            "id": str(raw_call.get("id") or f"call-{uuid4().hex}"),
-            "name": name,
-            "args": dict(arguments),
-        }

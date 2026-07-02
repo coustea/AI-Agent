@@ -120,9 +120,7 @@ class UploadResponse(BaseModel):
     file_type: str = Field(default="document", description="image / document")
     original_name: str = Field(default="", description="原始文件名")
     size_bytes: int = Field(default=0, ge=0, description="文件大小")
-    storage_key: str | None = Field(default=None, description="存储键")
     mime_type: str | None = Field(default=None, description="MIME 类型")
-    extension: str | None = Field(default=None, description="文件扩展名")
 
 
 # ── 消息数据模型 ──
@@ -144,29 +142,42 @@ class ChatMessageItem:
         self,
         *,
         id: int,
+        user_message_id: int | None,
         role: str,
         content: list[dict[str, Any]],
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
+        attachment_analyses: list[dict[str, Any]] | None = None,
+        activities: list[dict[str, Any]] | None = None,
+        usage_metadata: dict[str, Any] | None = None,
         created_at: Any = None,
     ) -> None:
         self.id = id
+        self.user_message_id = user_message_id
         self.role = role
         self.content = content
         self.tool_calls = tool_calls
         self.tool_call_id = tool_call_id
+        self.attachment_analyses = attachment_analyses or []
+        self.activities = activities or []
+        self.usage_metadata = usage_metadata
         self.created_at = created_at
 
     def model_dump(self) -> dict[str, Any]:
         """序列化为字典，用于 JSON API 响应。"""
         data: dict[str, Any] = {
             "id": self.id,
+            "user_message_id": self.user_message_id,
             "role": self.role,
             "content": self.content,
+            "attachment_analyses": self.attachment_analyses,
+            "activities": self.activities,
             "created_at": self.created_at,
         }
         if self.tool_calls:
             data["tool_calls"] = self.tool_calls
         if self.tool_call_id:
             data["tool_call_id"] = self.tool_call_id
+        if self.usage_metadata:
+            data["usage_metadata"] = self.usage_metadata
         return data

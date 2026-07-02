@@ -107,9 +107,8 @@ class ChatSession(SQLModel, table=True):
     __tablename__ = "chat_sessions"
     __table_args__ = (
         Index(
-            "ix_chat_sessions_user_module_archived_updated",
+            "ix_chat_sessions_user_archived_updated",
             "user_id",
-            "module",
             "is_archived",
             text("updated_at DESC"),
         ),
@@ -121,8 +120,6 @@ class ChatSession(SQLModel, table=True):
     )
     # UUID 原生类型主键
     user_id: int = Field(index=True)
-    # 所属功能模块（如 "mentor"）
-    module: str = Field(default="mentor", index=True)
     # 会话标题（取首条消息前 20 字符）
     title: str = Field(default="新对话", max_length=100)
     # 软删除标记
@@ -154,15 +151,34 @@ class ChatSession(SQLModel, table=True):
 
 
 class ChatMessage(SQLModel, table=True):
-    """聊天消息表 — OpenAI messages 格式"""
+    """模型可见消息；本轮派生消息直接关联发起请求的 UserMessage。"""
     __tablename__ = "chat_messages"
     __table_args__ = (
-        Index("ix_chat_messages_user_session_created_at", "user_id", "session_id", "created_at"),
+        Index("ix_chat_messages_session_created_at", "session_id", "created_at"),
+        Index("ix_chat_messages_session_user_message", "session_id", "user_message_id"),
+        CheckConstraint(
+            "role IN ('user', 'assistant', 'tool', 'system')",
+            name="ck_chat_messages_role",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
-    session_id: str = Field(sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True))
+    session_id: str = Field(
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+            index=True,
+        ),
+    )
+    user_message_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("chat_messages.id", ondelete="CASCADE"),
+            nullable=True,
+            index=True,
+        ),
+    )
 
     role: str  # "user" | "assistant" | "tool" | "system"
     content: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSONB))
@@ -171,6 +187,88 @@ class ChatMessage(SQLModel, table=True):
     usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(TIMESTAMP(timezone=True), index=True))
+
+
+class ChatAttachmentAnalysis(SQLModel, table=True):
+    """附件分析派生产物，不改写用户原始消息。"""
+    __tablename__ = "chat_attachment_analyses"
+    __table_args__ = (
+        Index("ix_chat_attachment_analyses_user_message_created_at", "user_message_id", "created_at"),
+        CheckConstraint(
+            "analysis_type IN ('image', 'document')",
+            name="ck_chat_attachment_analyses_type",
+        ),
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed')",
+            name="ck_chat_attachment_analyses_status",
+        ),
+    )
+
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
+    )
+    user_message_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("chat_messages.id", ondelete="CASCADE"),
+            index=True,
+        ),
+    )
+    analysis_type: str = Field(max_length=20)
+    status: str = Field(default="running", max_length=20)
+    content: str = Field(default="", sa_column=Column(Text))
+    error_message: str | None = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
+
+
+class ChatActivity(SQLModel, table=True):
+    """可公开、可回放的 Agent 生命周期摘要。"""
+    __tablename__ = "chat_activities"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_message_id",
+            "activity_id",
+            name="uq_chat_activities_user_message_activity",
+        ),
+        Index("ix_chat_activities_user_message_started_at", "user_message_id", "started_at"),
+        CheckConstraint(
+            "status IN ('running', 'done', 'failed')",
+            name="ck_chat_activities_status",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_message_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("chat_messages.id", ondelete="CASCADE"),
+            index=True,
+        ),
+    )
+    activity_id: str = Field(max_length=160)
+    kind: str = Field(default="workflow", max_length=30)
+    stage: str | None = Field(default=None, max_length=80)
+    status: str = Field(default="running", max_length=20)
+    title: str = Field(default="", max_length=255)
+    summary: str = Field(default="", sa_column=Column(Text))
+    message: str = Field(default="", sa_column=Column(Text))
+    detail: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    started_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -183,56 +281,28 @@ class ChatSessionSummaryBlock(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint(
             "session_id",
-            "module",
             "block_index",
-            name="uq_chat_session_summary_blocks_session_module_block",
+            name="uq_chat_session_summary_blocks_session_block",
         ),
-        Index(
-            "ix_chat_session_summary_blocks_user_session_module_created_at",
-            "user_id",
-            "session_id",
-            "module",
-            text("created_at DESC"),
-        ),
-        Index(
-            "ix_chat_session_summary_blocks_user_session_module_block",
-            "user_id",
-            "session_id",
-            "module",
-            text("block_index DESC"),
-        ),
-        Index("ix_chat_session_summary_blocks_topics", "topics", postgresql_using="gin"),
-        Index("ix_chat_session_summary_blocks_keywords", "keywords", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
     session_id: str = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+            index=True,
+        ),
     )
-    # 关联 ChatSession（UUID 类型，与 ChatSession.id 一致）
-    # 所属功能模块
-    module: str = Field(default="mentor", index=True)
 
     block_index: int = Field(default=1, index=True)
     summary_markdown: str = Field(sa_column=Column(Text))
-    summary_type: str = Field(default="incremental", max_length=50)
-    version: int = Field(default=1)
     start_message_id: int | None = Field(default=None)
     end_message_id: int | None = Field(default=None)
-    start_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    end_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    summarized_message_count: int = Field(default=0)
-    topics: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    keywords: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -241,7 +311,7 @@ class ChatSessionSummaryBlock(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class ChatLongTermMemory(SQLModel, table=True):
-    """Chat 长期记忆表 — 一个用户在一个 chat module 下只有一条长期记忆
+    """Chat 长期记忆表 — 每个用户一条 Markdown 记忆。
 
     设计原则：
     - 只保存长期稳定、未来可复用的信息
@@ -250,26 +320,13 @@ class ChatLongTermMemory(SQLModel, table=True):
     """
     __tablename__ = "chat_long_term_memories"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", name="uq_chat_long_term_memory_user_module"),
-        Index("ix_chat_long_term_memories_source_session_ids", "source_session_ids", postgresql_using="gin"),
-        Index("ix_chat_long_term_memories_source_message_ids", "source_message_ids", postgresql_using="gin"),
-        Index("ix_chat_long_term_memories_source_summary_block_ids", "source_summary_block_ids", postgresql_using="gin"),
+        UniqueConstraint("user_id", name="uq_chat_long_term_memory_user"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)  # 所属功能模块
 
     memory_markdown: str = Field(sa_column=Column(Text))  # 记忆主体 Markdown（唯一权威来源）
-    category: str = Field(default="general", max_length=50, index=True)  # 记忆分类
-
-    version: int = Field(default=1)  # 记忆版本号
-    confidence: float = Field(default=0.7)  # 记忆置信度
-
-    source_session_ids: list[str] | None = Field(default=None, sa_column=Column(JSONB))  # 来源会话 ID 列表
-    source_message_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))  # 来源消息 ID 列表
-    source_summary_block_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
-    updated_reason: str | None = Field(default=None, sa_column=Column(Text))  # 更新原因
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -337,34 +394,13 @@ class CourseProfile(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class GeneratedResource(SQLModel, table=True):
-    """生成资源主表 — 记录每次多智能体资源生成的输入参数。"""
+    """生成资源主表 — 记录每次多智能体资源生成任务。"""
     __tablename__ = "generated_resources"
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-
-    # 输入信息 — 用户自然语言描述
     learning_need: str | None = Field(default=None, sa_column=Column(Text))
-
-    # 配置信息
-    teaching_plan: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    failed_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    workflow_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    selected_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    agent_configs: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    source: str | None = Field(default=None, max_length=255, index=True)
-
-    # 状态
     status: str = Field(default="pending", max_length=50)
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
-
-    # 运行快照字段 — 用于持久化和恢复
-    run_id: str | None = Field(default=None, max_length=96)
-    request_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    profile_snapshot: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    finished_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    heartbeat_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -388,9 +424,6 @@ class GeneratedResourceItem(SQLModel, table=True):
         Index("ix_generated_resource_items_content_json", "content_json", postgresql_using="gin"),
         Index("ix_generated_resource_items_metadata_json", "metadata_json", postgresql_using="gin"),
         Index("ix_generated_resource_items_metrics", "metrics", postgresql_using="gin"),
-        Index("ix_generated_resource_items_downstream_context", "downstream_context", postgresql_using="gin"),
-        Index("ix_generated_resource_items_covered_knowledge_points", "covered_knowledge_points", postgresql_using="gin"),
-        Index("ix_generated_resource_items_weak_points_covered", "weak_points_covered", postgresql_using="gin"),
         Index("ix_generated_resource_items_user_created_at", "user_id", "created_at"),
     )
 
@@ -407,35 +440,14 @@ class GeneratedResourceItem(SQLModel, table=True):
     # 展示与契约信息
     title: str | None = Field(default=None, max_length=200)
     summary: str | None = Field(default=None, sa_column=Column(Text))
-    generated_by: str | None = Field(default=None, max_length=50, index=True)
 
     # 内容主体（根据 content_format 选择存储位置）
-    content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    content_json: dict[str, Any] | list[Any] | None = Field(default=None, sa_column=Column(JSONB))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     metrics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    downstream_context: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     status: str = Field(default="pending", max_length=50)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
-
-    # 输出文件路径（用于视频、PPT 等需要额外文件的资源）
-    # 存储相对于 static 目录的路径，如 "videos/res_123/video.mp4"
-    output_file_path: str | None = Field(default=None, max_length=500)
-    # JSON 文件路径（存储生成的 JSON 配置文件）
-    json_file_path: str | None = Field(default=None, max_length=500)
-    # 音频文件路径列表（存储 TTS 生成的音频文件）
-    audio_file_paths: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # Agent 协作与路径规划检索字段
-    depends_on_agents: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    source_resource_item_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
-    source_item_ids: list[int] | None = Field(default=None, sa_column=Column(JSONB))
-    covered_knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    weak_points_covered: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    recommended_next_resource_types: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # Agent 执行报告
-    execution_report: str | None = Field(default=None, sa_column=Column(Text))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -464,11 +476,9 @@ class GeneratedResourceAgentRun(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
-    run_id: str = Field(max_length=96, index=True)
     agent_id: str = Field(max_length=32)
     stage: str = Field(max_length=32)
     status: str = Field(default="pending", max_length=16)
-    error_type: str | None = Field(default=None, max_length=128)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
     started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     finished_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
@@ -917,6 +927,8 @@ REGISTERED_MODELS = (
     ActiveToken,
     ChatSession,
     ChatMessage,
+    ChatAttachmentAnalysis,
+    ChatActivity,
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
     ChatDiagram,

@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from app.chat.schemas import UploadResponse
 from app.config import CHAT_DIR
@@ -62,6 +63,9 @@ class LocalFileStore:
             safe_name = f"{timestamp}{suffix}"
 
         file_path = session_dir / safe_name
+        if file_path.exists():
+            file_path = session_dir / f"{file_path.stem}-{uuid4().hex[:8]}{file_path.suffix}"
+            safe_name = file_path.name
         file_path.write_bytes(content)
 
         return UploadResponse(
@@ -69,9 +73,7 @@ class LocalFileStore:
             file_type=file_type,
             original_name=filename,
             size_bytes=len(content),
-            storage_key=f"{user_id}/{session_id}/{safe_name}",
             mime_type=_guess_mime_type(suffix),
-            extension=suffix,
         ).model_dump()
 
     def _safe_filename(self, filename: str) -> str:

@@ -80,7 +80,6 @@ COMMENT ON COLUMN schools.tier IS '学校等级';
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id                      UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id                 INTEGER          NOT NULL,
-    module                  VARCHAR          NOT NULL DEFAULT 'mentor',
     title                   VARCHAR(100)     NOT NULL DEFAULT '新对话',
     is_archived             BOOLEAN          DEFAULT FALSE,
     created_at              TIMESTAMPTZ      DEFAULT NOW(),
@@ -97,14 +96,12 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 );
 
 CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_id ON chat_sessions (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_sessions_module ON chat_sessions (module);
-CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_module_archived_updated
-    ON chat_sessions (user_id, module, is_archived, updated_at DESC);
+CREATE INDEX IF NOT EXISTS ix_chat_sessions_user_archived_updated
+    ON chat_sessions (user_id, is_archived, updated_at DESC);
 
 COMMENT ON TABLE chat_sessions IS '对话会话表，每次对话创建一个会话';
 COMMENT ON COLUMN chat_sessions.id IS '会话UUID主键';
 COMMENT ON COLUMN chat_sessions.user_id IS '用户ID';
-COMMENT ON COLUMN chat_sessions.module IS '模块标识，如mentor/resource/path';
 COMMENT ON COLUMN chat_sessions.title IS '会话标题，默认"新对话"';
 COMMENT ON COLUMN chat_sessions.is_archived IS '是否已归档';
 COMMENT ON COLUMN chat_sessions.summary_token_count IS '会话摘要占用的Token数';
@@ -115,31 +112,34 @@ COMMENT ON COLUMN chat_sessions.last_ltm_message_id IS '最后更新长期记忆
 
 
 -- ============================================================
--- 5. chat_messages (OpenAI format)
+-- 5. chat_messages (model-visible items)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_messages (
     id                  SERIAL          PRIMARY KEY,
-    user_id             INTEGER         NOT NULL,
-    session_id          UUID            REFERENCES chat_sessions(id),
+    session_id          UUID            NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    user_message_id     INTEGER         REFERENCES chat_messages(id) ON DELETE CASCADE,
     role                VARCHAR         NOT NULL,
     content             JSONB           NOT NULL DEFAULT '[]'::jsonb,
     tool_calls          JSONB,
     tool_call_id        VARCHAR(120),
     usage_metadata      JSONB,
-    created_at          TIMESTAMPTZ     DEFAULT NOW()
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_chat_messages_role
+        CHECK (role IN ('user', 'assistant', 'tool', 'system'))
 );
 
-CREATE INDEX IF NOT EXISTS ix_chat_messages_user_id ON chat_messages (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_session_id ON chat_messages (session_id);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_user_message_id ON chat_messages (user_message_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_tool_call_id ON chat_messages (tool_call_id);
 CREATE INDEX IF NOT EXISTS ix_chat_messages_created_at ON chat_messages (created_at);
 
--- Composite index for common query pattern
-CREATE INDEX IF NOT EXISTS ix_chat_messages_user_session_created_at
-    ON chat_messages (user_id, session_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_session_created_at
+    ON chat_messages (session_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_chat_messages_session_user_message
+    ON chat_messages (session_id, user_message_id);
 
-COMMENT ON TABLE chat_messages IS '聊天消息表 — OpenAI messages 格式';
-COMMENT ON COLUMN chat_messages.session_id IS '关联会话ID';
+COMMENT ON TABLE chat_messages IS '按创建顺序保存的模型可见消息项';
+COMMENT ON COLUMN chat_messages.user_message_id IS '派生消息所属的用户消息；用户消息自身为空';
 COMMENT ON COLUMN chat_messages.role IS '消息角色：user/assistant/tool/system';
 COMMENT ON COLUMN chat_messages.content IS '消息内容JSONB数组 [{type, text}]';
 COMMENT ON COLUMN chat_messages.tool_calls IS '工具调用请求JSONB数组';
@@ -147,57 +147,81 @@ COMMENT ON COLUMN chat_messages.tool_call_id IS '工具调用ID，用于关联�
 COMMENT ON COLUMN chat_messages.usage_metadata IS 'LLM用量元数据，含token消耗等';
 
 -- ============================================================
--- 6. chat_session_summary_blocks
+-- 6. chat_attachment_analyses
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_attachment_analyses (
+    id                      UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_message_id         INTEGER         NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    analysis_type           VARCHAR(20)     NOT NULL,
+    status                  VARCHAR(20)     NOT NULL DEFAULT 'running',
+    content                 TEXT            NOT NULL DEFAULT '',
+    error_message           TEXT,
+    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    completed_at            TIMESTAMPTZ,
+    CONSTRAINT ck_chat_attachment_analyses_type
+        CHECK (analysis_type IN ('image', 'document')),
+    CONSTRAINT ck_chat_attachment_analyses_status
+        CHECK (status IN ('running', 'completed', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_user_message_id
+    ON chat_attachment_analyses (user_message_id);
+CREATE INDEX IF NOT EXISTS ix_chat_attachment_analyses_user_message_created_at
+    ON chat_attachment_analyses (user_message_id, created_at);
+
+COMMENT ON TABLE chat_attachment_analyses IS '附件分析派生产物，与用户原始消息分离';
+
+-- ============================================================
+-- 7. chat_activities
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_activities (
+    id              SERIAL          PRIMARY KEY,
+    user_message_id INTEGER         NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    activity_id     VARCHAR(160)    NOT NULL,
+    kind            VARCHAR(30)     NOT NULL DEFAULT 'workflow',
+    stage           VARCHAR(80),
+    status          VARCHAR(20)     NOT NULL DEFAULT 'running',
+    title           VARCHAR(255)    NOT NULL DEFAULT '',
+    summary         TEXT            NOT NULL DEFAULT '',
+    message         TEXT            NOT NULL DEFAULT '',
+    detail          JSONB,
+    started_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ,
+    CONSTRAINT uq_chat_activities_user_message_activity UNIQUE (user_message_id, activity_id),
+    CONSTRAINT ck_chat_activities_status CHECK (status IN ('running', 'done', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_chat_activities_user_message_id ON chat_activities (user_message_id);
+CREATE INDEX IF NOT EXISTS ix_chat_activities_user_message_started_at
+    ON chat_activities (user_message_id, started_at);
+
+COMMENT ON TABLE chat_activities IS '可公开、可回放的Agent运行状态摘要';
+
+-- ============================================================
+-- 8. chat_session_summary_blocks
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_session_summary_blocks (
     id                          SERIAL          PRIMARY KEY,
-    user_id                     INTEGER         NOT NULL,
-    session_id                  UUID            REFERENCES chat_sessions(id),
-    module                      VARCHAR         NOT NULL DEFAULT 'mentor',
+    session_id                  UUID            NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
     block_index                 INTEGER         DEFAULT 1,
     summary_markdown            TEXT            NOT NULL,
-    summary_type                VARCHAR(50)     DEFAULT 'incremental',
-    version                     INTEGER         DEFAULT 1,
     start_message_id            INTEGER,
     end_message_id              INTEGER,
-    start_at                    TIMESTAMPTZ,
-    end_at                      TIMESTAMPTZ,
-    summarized_message_count    INTEGER         DEFAULT 0,
-    topics                      JSONB,
-    keywords                    JSONB,
     created_at                  TIMESTAMPTZ     DEFAULT NOW(),
-    updated_at                  TIMESTAMPTZ     DEFAULT NOW(),
-    CONSTRAINT uq_chat_session_summary_blocks_session_module_block
-        UNIQUE (session_id, module, block_index)
+    CONSTRAINT uq_chat_session_summary_blocks_session_block
+        UNIQUE (session_id, block_index)
 );
 
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_id
-    ON chat_session_summary_blocks (user_id);
 CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_session_id
     ON chat_session_summary_blocks (session_id);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_module
-    ON chat_session_summary_blocks (module);
 CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_block_index
     ON chat_session_summary_blocks (block_index);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_session_module_created_at
-    ON chat_session_summary_blocks (user_id, session_id, module, created_at DESC);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_user_session_module_block
-    ON chat_session_summary_blocks (user_id, session_id, module, block_index DESC);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_topics
-    ON chat_session_summary_blocks USING GIN (topics);
-CREATE INDEX IF NOT EXISTS ix_chat_session_summary_blocks_keywords
-    ON chat_session_summary_blocks USING GIN (keywords);
 
 COMMENT ON TABLE chat_session_summary_blocks IS '会话摘要块表，分块存储对话的增量摘要';
 COMMENT ON COLUMN chat_session_summary_blocks.block_index IS '块序号，同一会话内递增';
 COMMENT ON COLUMN chat_session_summary_blocks.summary_markdown IS '摘要Markdown内容';
-COMMENT ON COLUMN chat_session_summary_blocks.summary_type IS '摘要类型：incremental/full';
-COMMENT ON COLUMN chat_session_summary_blocks.version IS '摘要版本号';
 COMMENT ON COLUMN chat_session_summary_blocks.start_message_id IS '摘要起始消息ID';
 COMMENT ON COLUMN chat_session_summary_blocks.end_message_id IS '摘要结束消息ID';
-COMMENT ON COLUMN chat_session_summary_blocks.summarized_message_count IS '被摘要的消息数量';
-COMMENT ON COLUMN chat_session_summary_blocks.topics IS '涉及话题JSON数组';
-COMMENT ON COLUMN chat_session_summary_blocks.keywords IS '关键词JSON数组';
 
 -- ============================================================
 -- 7. chat_long_term_memories
@@ -205,42 +229,17 @@ COMMENT ON COLUMN chat_session_summary_blocks.keywords IS '关键词JSON数组';
 CREATE TABLE IF NOT EXISTS chat_long_term_memories (
     id                      SERIAL          PRIMARY KEY,
     user_id                 INTEGER         NOT NULL,
-    module                  VARCHAR         NOT NULL DEFAULT 'mentor',
     memory_markdown         TEXT            NOT NULL,
-    category                VARCHAR(50)     NOT NULL DEFAULT 'general',
-    version                 INTEGER         DEFAULT 1,
-    confidence              FLOAT           DEFAULT 0.7,
-    source_session_ids      JSONB,
-    source_message_ids      JSONB,
-    source_summary_block_ids JSONB,
-    updated_reason          TEXT,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
-    UNIQUE (user_id, module)
+    CONSTRAINT uq_chat_long_term_memory_user UNIQUE (user_id)
 );
 
 CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_user_id
     ON chat_long_term_memories (user_id);
-CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_module
-    ON chat_long_term_memories (module);
-CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_category
-    ON chat_long_term_memories (category);
 
-COMMENT ON TABLE chat_long_term_memories IS '长期记忆表，每个用户每个模块一条，存储从对话中提炼的长期知识';
+COMMENT ON TABLE chat_long_term_memories IS '长期记忆表，每个用户一条 Markdown 记忆';
 COMMENT ON COLUMN chat_long_term_memories.memory_markdown IS '记忆内容Markdown';
-COMMENT ON COLUMN chat_long_term_memories.category IS '记忆分类：general/preference/weakness等';
-COMMENT ON COLUMN chat_long_term_memories.version IS '版本号，每次更新递增';
-COMMENT ON COLUMN chat_long_term_memories.confidence IS '置信度，0-1之间';
-COMMENT ON COLUMN chat_long_term_memories.source_session_ids IS '来源会话ID列表JSON';
-COMMENT ON COLUMN chat_long_term_memories.updated_reason IS '本次更新原因说明';
-
--- GIN indexes for JSONB
-CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_session_ids
-    ON chat_long_term_memories USING GIN (source_session_ids);
-CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_message_ids
-    ON chat_long_term_memories USING GIN (source_message_ids);
-CREATE INDEX IF NOT EXISTS ix_chat_long_term_memories_source_summary_block_ids
-    ON chat_long_term_memories USING GIN (source_summary_block_ids);
 
 -- ============================================================
 -- 8. global_profiles
@@ -307,20 +306,11 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
-    teaching_plan       JSONB,
     failed_agents       JSONB,
-    workflow_metadata   JSONB,
-    selected_agents     JSONB,
-    agent_configs       JSONB,
     source              VARCHAR(255),
     status              VARCHAR(50)     DEFAULT 'pending',
     error_message       TEXT,
-    run_id              VARCHAR(96),
-    request_snapshot    JSONB,
-    profile_snapshot    JSONB,
-    started_at          TIMESTAMPTZ,
     finished_at         TIMESTAMPTZ,
-    heartbeat_at        TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     DEFAULT NOW()
 );
@@ -330,15 +320,13 @@ CREATE INDEX IF NOT EXISTS ix_generated_resources_user_id
 CREATE INDEX IF NOT EXISTS ix_generated_resources_source
     ON generated_resources (source);
 
-COMMENT ON TABLE generated_resources IS 'AI生成资源的主表，记录一次资源生成任务';
+COMMENT ON TABLE generated_resources IS '多智能体资源生成任务主表';
 COMMENT ON COLUMN generated_resources.user_id IS '用户ID';
 COMMENT ON COLUMN generated_resources.learning_need IS '学习需求描述';
-COMMENT ON COLUMN generated_resources.teaching_plan IS '教学计划JSON';
 COMMENT ON COLUMN generated_resources.failed_agents IS '执行失败的Agent列表JSON';
-COMMENT ON COLUMN generated_resources.workflow_metadata IS '工作流执行元数据JSON';
-COMMENT ON COLUMN generated_resources.selected_agents IS '选用的Agent列表JSON';
-COMMENT ON COLUMN generated_resources.source IS '资源来源标识';
-COMMENT ON COLUMN generated_resources.status IS '任务状态：pending/running/completed/failed';
+COMMENT ON COLUMN generated_resources.source IS '资源来源：standalone/single_agent';
+COMMENT ON COLUMN generated_resources.status IS '任务状态：pending/generating/completed/partial_completed/failed';
+COMMENT ON COLUMN generated_resources.finished_at IS '完成时间';
 
 -- ============================================================
 -- 11. generated_resource_items
@@ -351,22 +339,10 @@ CREATE TABLE IF NOT EXISTS generated_resource_items (
     content_format                  VARCHAR(50)     DEFAULT 'json',
     title                           VARCHAR(200),
     summary                         TEXT,
-    generated_by                    VARCHAR(50),
     content_json                    JSONB,
     content_text                    TEXT,
     metadata_json                   JSONB,
     metrics                         JSONB,
-    downstream_context              JSONB,
-    output_file_path                VARCHAR(500),
-    json_file_path                  VARCHAR(500),
-    audio_file_paths                JSONB,
-    depends_on_agents               JSONB,
-    source_resource_item_ids        JSONB,
-    source_item_ids                 JSONB,
-    covered_knowledge_points        JSONB,
-    weak_points_covered             JSONB,
-    recommended_next_resource_types JSONB,
-    execution_report                TEXT,
     status                          VARCHAR(50)     DEFAULT 'pending',
     error_message                   TEXT,
     created_at                      TIMESTAMPTZ     DEFAULT NOW(),
@@ -382,8 +358,6 @@ CREATE INDEX IF NOT EXISTS ix_generated_resource_items_user_id
     ON generated_resource_items (user_id);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_agent_type
     ON generated_resource_items (agent_type);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_generated_by
-    ON generated_resource_items (generated_by);
 
 -- Composite indexes
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_user_created_at
@@ -396,27 +370,18 @@ CREATE INDEX IF NOT EXISTS ix_generated_resource_items_metadata_json
     ON generated_resource_items USING GIN (metadata_json);
 CREATE INDEX IF NOT EXISTS ix_generated_resource_items_metrics
     ON generated_resource_items USING GIN (metrics);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_downstream_context
-    ON generated_resource_items USING GIN (downstream_context);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_covered_knowledge_points
-    ON generated_resource_items USING GIN (covered_knowledge_points);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_items_weak_points_covered
-    ON generated_resource_items USING GIN (weak_points_covered);
 
-COMMENT ON TABLE generated_resource_items IS 'AI生成资源子项表，每个Agent生成一个子项';
-COMMENT ON COLUMN generated_resource_items.resource_id IS '关联资源ID，级联删除';
-COMMENT ON COLUMN generated_resource_items.agent_type IS 'Agent类型，如tutorial/quiz/exercise';
-COMMENT ON COLUMN generated_resource_items.title IS '子项标题';
-COMMENT ON COLUMN generated_resource_items.summary IS '子项摘要';
-COMMENT ON COLUMN generated_resource_items.generated_by IS '生成该子项的Agent标识';
-COMMENT ON COLUMN generated_resource_items.content_json IS '生成内容JSON';
-COMMENT ON COLUMN generated_resource_items.content_text IS '生成内容文本';
-COMMENT ON COLUMN generated_resource_items.metrics IS '生成质量指标JSON';
-COMMENT ON COLUMN generated_resource_items.downstream_context IS '下游Agent所需的上下文JSON';
-COMMENT ON COLUMN generated_resource_items.depends_on_agents IS '依赖的Agent列表JSON';
-COMMENT ON COLUMN generated_resource_items.covered_knowledge_points IS '覆盖的知识点JSON';
-COMMENT ON COLUMN generated_resource_items.weak_points_covered IS '覆盖的薄弱点JSON';
-COMMENT ON COLUMN generated_resource_items.status IS '子项状态：pending/running/completed/failed';
+COMMENT ON TABLE generated_resource_items IS '资源产出表，每个Agent生成一条';
+COMMENT ON COLUMN generated_resource_items.resource_id IS '关联任务ID，级联删除';
+COMMENT ON COLUMN generated_resource_items.agent_type IS 'Agent类型：content/mindmap/quiz/code/reading/ppt/video';
+COMMENT ON COLUMN generated_resource_items.content_format IS '内容格式：markdown/json/html/mp4';
+COMMENT ON COLUMN generated_resource_items.title IS '资源标题';
+COMMENT ON COLUMN generated_resource_items.summary IS '资源摘要';
+COMMENT ON COLUMN generated_resource_items.content_json IS 'JSON内容（quiz/reading）';
+COMMENT ON COLUMN generated_resource_items.content_text IS 'Markdown内容（content/mindmap/code）';
+COMMENT ON COLUMN generated_resource_items.metadata_json IS '元数据：PPT的html路径、video的public_url等';
+COMMENT ON COLUMN generated_resource_items.metrics IS '指标：字数、题目数等';
+COMMENT ON COLUMN generated_resource_items.status IS '状态：pending/completed/failed';
 
 -- ============================================================
 -- 11b. generated_resource_agent_runs
@@ -424,11 +389,9 @@ COMMENT ON COLUMN generated_resource_items.status IS '子项状态：pending/run
 CREATE TABLE IF NOT EXISTS generated_resource_agent_runs (
     id              SERIAL          PRIMARY KEY,
     resource_id     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
-    run_id          VARCHAR(96)     NOT NULL,
     agent_id        VARCHAR(32)     NOT NULL,
     stage           VARCHAR(32)     NOT NULL,
     status          VARCHAR(16)     NOT NULL DEFAULT 'pending',
-    error_type      VARCHAR(128),
     error_message   TEXT,
     started_at      TIMESTAMPTZ,
     finished_at     TIMESTAMPTZ,
@@ -442,16 +405,12 @@ CREATE TABLE IF NOT EXISTS generated_resource_agent_runs (
 
 CREATE INDEX IF NOT EXISTS ix_generated_resource_agent_runs_resource_id
     ON generated_resource_agent_runs (resource_id);
-CREATE INDEX IF NOT EXISTS ix_generated_resource_agent_runs_run_id
-    ON generated_resource_agent_runs (run_id);
 
 COMMENT ON TABLE generated_resource_agent_runs IS 'Agent运行状态表，记录每个Agent的生命周期状态';
 COMMENT ON COLUMN generated_resource_agent_runs.resource_id IS '关联资源ID，级联删除';
-COMMENT ON COLUMN generated_resource_agent_runs.run_id IS '运行唯一标识';
 COMMENT ON COLUMN generated_resource_agent_runs.agent_id IS 'Agent类型标识';
 COMMENT ON COLUMN generated_resource_agent_runs.stage IS '运行阶段：generation/validation/persistence/timeout/interrupted';
 COMMENT ON COLUMN generated_resource_agent_runs.status IS '运行状态：pending/running/completed/failed/interrupted';
-COMMENT ON COLUMN generated_resource_agent_runs.error_type IS '错误类型';
 COMMENT ON COLUMN generated_resource_agent_runs.error_message IS '错误信息';
 COMMENT ON COLUMN generated_resource_agent_runs.started_at IS '开始时间';
 COMMENT ON COLUMN generated_resource_agent_runs.finished_at IS '完成时间';

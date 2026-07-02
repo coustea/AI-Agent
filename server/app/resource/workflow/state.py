@@ -42,18 +42,18 @@ class AgentFailure(TypedDict):
     message: str
 
 
-class CoverageReport(TypedDict):
-    """大纲覆盖报告。"""
-    covered_outline_ids: list[str]
-    missing_outline_ids: list[str]
-    critical_missing_ids: list[str]
-
-
 class ParentState(TypedDict, total=False):
-    """全局编排状态。"""
+    """全局编排状态。
+
+    orchestrator 写入: user_id, resource_id, selected_agents, request_data, profile
+    planning_node 写入: selected_agents, teaching_plan
+    """
     user_id: int
     resource_id: int
     selected_agents: list[str]  # planning_node 写入，路由函数读取
+    request_data: dict[str, Any]  # {agent_configs, learning_scenario} from request
+    profile: dict[str, Any]  # learner profile
+    teaching_plan: dict[str, Any]  # planning_node writes, workers read
     results: Annotated[dict[str, Any], merge_results_dict]  # worker 返回 {agent_id: True}
     failures: Annotated[dict[str, AgentFailure], merge_failures_dict]
     success: bool

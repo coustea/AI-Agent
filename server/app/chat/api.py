@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from uuid import uuid4
+import json
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -14,10 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.auth.security import get_current_user_flexible
-from app.chat.emitter import ChatEvents, encode_chat_sse, get_chat_channel
+from app.chat.emitter import (
+    ChatEvents,
+    encode_chat_sse,
+    get_chat_channel,
+    has_active_chat_channel,
+)
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import get_chat_usecases, run_chat_agent
-from app.config import CHAT_DIR
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import ChatSession, School, User
@@ -33,8 +37,8 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
-@router.post("/chat/runs")
-async def create_mentor_chat_run(
+@router.post("/chat/messages")
+async def create_mentor_chat_message(
     background_tasks: BackgroundTasks,
     user_input: str = Form(default=""),
     session_id: str | None = Form(default=None),
@@ -44,7 +48,14 @@ async def create_mentor_chat_run(
     current_user: User = Depends(get_current_user_flexible),
 ):
     uc = get_chat_usecases()
-    parsed_attachments = [u.strip() for u in attachments.split(",") if u.strip()] if attachments else []
+    try:
+        parsed_attachments = json.loads(attachments) if attachments else []
+    except json.JSONDecodeError:
+        return HttpResponse.error(code=400, message="附件参数格式错误")
+    if not isinstance(parsed_attachments, list) or not all(
+        isinstance(item, dict) for item in parsed_attachments
+    ):
+        return HttpResponse.error(code=400, message="附件参数格式错误")
     effective_session = session_id or uc.default_session_id(current_user.id)
     effective_message = (user_input or "").strip()
 
@@ -54,6 +65,9 @@ async def create_mentor_chat_run(
 
     if not effective_message and parsed_attachments:
         effective_message = "请分析我上传的附件，并解答其中的问题。"
+
+    if await has_active_chat_channel(current_user.id, effective_session):
+        return HttpResponse.error(code=409, message="当前回答尚未完成，请稍候")
 
     # 确保会话已存在，避免 SSE 订阅 404
     memory_svc = get_chat_memory_service()
@@ -65,28 +79,47 @@ async def create_mentor_chat_run(
     except Exception as exc:
         logger.warning("[ChatAPI] 确保会话存在失败: %s", exc)
 
-    run_id = str(uuid4())
-    events = ChatEvents(user_id=current_user.id, session_id=effective_session, run_id=run_id)
+    try:
+        user_message = await uc.create_user_message(
+            user_id=current_user.id,
+            session_id=effective_session,
+            text=effective_message,
+            attachments=parsed_attachments,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    except Exception as exc:
+        logger.exception("[ChatAPI] 保存用户消息失败")
+        return HttpResponse.error(code=500, message=f"保存用户消息失败: {exc}")
+    user_message_id = user_message.id
+    if user_message_id is None:
+        return HttpResponse.error(code=500, message="保存用户消息失败")
+
+    events = ChatEvents(
+        user_id=current_user.id,
+        session_id=effective_session,
+        user_message_id=user_message_id,
+    )
     await events.open()
 
     background_tasks.add_task(
         run_chat_agent,
-        run_id=run_id,
+        user_message_id=user_message_id,
         user_id=current_user.id,
         session_id=effective_session,
         user_input=effective_message,
-        attachments=parsed_attachments,
+        attachments=[str(item.get("url") or "") for item in parsed_attachments],
         enable_web_search=enable_web_search,
         need_teaching_diagram=need_teaching_diagram,
     )
 
     logger.info(
-        "[ChatAPI] 创建辅导运行: run_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
-        run_id,
+        "[ChatAPI] 开始处理用户消息: user_message_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
+        user_message_id,
         current_user.id, effective_session, len(effective_message), len(parsed_attachments),
     )
     return HttpResponse.success(
-        data={"run_id": run_id, "session_id": effective_session, "status": "pending"},
+        data={"message_id": user_message_id, "session_id": effective_session},
         status_code=202,
     )
 
@@ -169,14 +202,20 @@ async def get_chat_file(
     filename: str,
     current_user: User = Depends(get_current_user_flexible),
 ):
-    if current_user.id != owner_id:
-        return HttpResponse.error(code=403, message="无权访问此文件")
-    file_path = (CHAT_DIR / str(owner_id) / str(session_id) / filename).resolve()
-    base_dir = (CHAT_DIR / str(owner_id) / str(session_id)).resolve()
-    if not str(file_path).startswith(str(base_dir)):
-        return HttpResponse.error(code=400, message="非法文件路径")
-    if not file_path.exists():
-        return HttpResponse.error(code=404, message="文件不存在")
+    uc = get_chat_usecases()
+    try:
+        file_path = uc.resolve_uploaded_file(
+            current_user_id=current_user.id,
+            owner_id=owner_id,
+            session_id=session_id,
+            filename=filename,
+        )
+    except PermissionError as exc:
+        return HttpResponse.error(code=403, message=str(exc))
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    except FileNotFoundError as exc:
+        return HttpResponse.error(code=404, message=str(exc))
     return FileResponse(path=str(file_path), filename=filename)
 
 
@@ -187,15 +226,15 @@ SSE_HEADERS = {
 }
 
 
-@router.get("/chat/sessions/{session_id}/runs/{run_id}/events")
-async def stream_chat_run_events(
+@router.get("/chat/sessions/{session_id}/messages/{user_message_id}/events")
+async def stream_chat_message_events(
     session_id: str,
-    run_id: str,
+    user_message_id: int,
     after_sequence: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
-    """订阅 Chat run 的实时事件流。"""
+    """订阅某条 UserMessage 的实时处理事件。"""
     result = await session.exec(
         select(ChatSession).where(
             ChatSession.id == session_id,
@@ -206,7 +245,7 @@ async def stream_chat_run_events(
     if chat_session is None:
         return HttpResponse.error(code=404, message="会话不存在或无权限")
 
-    events = await get_chat_channel(current_user.id, session_id, run_id)
+    events = await get_chat_channel(current_user.id, session_id, user_message_id)
     if events is None:
         return HttpResponse.error(code=410, message="事件流已过期或不存在")
 
@@ -215,7 +254,7 @@ async def stream_chat_run_events(
         try:
             for event in replay:
                 yield encode_chat_sse(event)
-            if replay and replay[-1].event in {"run.completed", "run.failed"}:
+            if replay and replay[-1].event in {"message.completed", "message.failed"}:
                 return
 
             while True:
@@ -225,7 +264,7 @@ async def stream_chat_run_events(
                     yield ": heartbeat\n\n"
                     continue
                 yield encode_chat_sse(event)
-                if event.event in {"run.completed", "run.failed"}:
+                if event.event in {"message.completed", "message.failed"}:
                     return
         finally:
             await events.unsubscribe(queue)

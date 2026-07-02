@@ -14,10 +14,8 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
-    build_basic_handoff,
     build_node_context,
     build_resource_context,
-    assigned_outline_ids,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -47,22 +45,10 @@ class ReadingResource(BaseModel):
     note: str = ""
 
 
-class ReadingPathStep(BaseModel):
-    """阅读路径中的一个步骤。"""
-    step: int
-    title: str
-    description: str = ""
-    resource_ids: list[str] = Field(default_factory=list)
-    goal: str = ""
-
-
+# LLM 输出包装类（ainvoke_json 要求 BaseModel 子类）
 class ReadingPayload(BaseModel):
-    """LLM 结构化输出模型：完整拓展阅读推荐。"""
-    title: str = "拓展阅读推荐"
-    summary: str = ""
-    resources: list[ReadingResource] = Field(default_factory=list)
-    learning_path: list[ReadingPathStep] = Field(default_factory=list)
-    follow_up_suggestions: list[str] = Field(default_factory=list)
+    """阅读资源列表 — LLM 结构化输出容器。"""
+    resources: list[ReadingResource] = Field(description="推荐的阅读资源列表")
 
 
 @register_agent
@@ -88,25 +74,6 @@ class ReadingAgent(BaseResourceAgent):
             title_prefix=input_data.learning_need[:32],
             config=config,
         )
-        try:
-            reading_data = json.loads(result.content)
-            resource_titles = [
-                item.get("title")
-                for item in reading_data.get("resources", [])
-                if isinstance(item, dict) and item.get("title")
-            ]
-        except Exception:
-            resource_titles = []
-        outline_ids = assigned_outline_ids(input_data.teaching_plan, "reading")
-        handoff = build_basic_handoff(
-            source_agent="reading",
-            title=result.title,
-            summary=result.summary,
-            teaching_plan=input_data.teaching_plan,
-            covered_outline_ids=outline_ids,
-            examples=resource_titles[:6],
-        )
-        result.downstream_context = handoff
         await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
@@ -138,9 +105,9 @@ class ReadingAgent(BaseResourceAgent):
         3. 基于搜索结果生成阅读推荐
         4. 资源不足时自动重试一次，合并两次结果
         """
-        reading_depth = config.get("reading_depth") or config.get("reading_type") or "course_extended"
-        min_items = max(2, config.get("min_items", 3))  # 至少 2-3 条
+        reading_depth = config.get("reading_depth") or "course_extended"
         max_items = config.get("max_items", 5)
+        min_items = max(2, max_items // 2)  # 至少生成 max_items 的一半
         language_preference = config.get("language_preference") or "chinese"
 
         await self.emitter.send(self.agent_id, "running", "正在搜索相关阅读资源...", 25)
@@ -156,7 +123,7 @@ class ReadingAgent(BaseResourceAgent):
         search_results = await self._search_resources(search_queries, min_items)
 
         # 步骤 3: 带重试的 LLM 生成阅读推荐
-        best_data: dict | None = None
+        best_resources: list[ReadingResource] | None = None
         for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
             is_retry = attempt > 1
             if is_retry:
@@ -210,16 +177,15 @@ class ReadingAgent(BaseResourceAgent):
                 f"{prompt}\n\n{enhanced_input}",
                 temperature=INFERENCE_TEMPERATURE,
             )
-            attempt_data = result.model_dump(mode="json")
-            attempt_resources = attempt_data.get("resources", [])
+            attempt_resources = result.resources
 
-            if best_data is None:
-                best_data = attempt_data
+            if best_resources is None:
+                best_resources = list(attempt_resources)
             else:
                 # 合并两次结果：去重并追加新资源
-                best_data = _merge_reading_results(best_data, attempt_data)
+                best_resources = _merge_reading_resources(best_resources, list(attempt_resources))
 
-            merged_count = len(best_data.get("resources", []))
+            merged_count = len(best_resources)
             logger.info(
                 "Agent[reading] attempt=%d resources=%d merged_total=%d",
                 attempt, len(attempt_resources), merged_count,
@@ -229,7 +195,7 @@ class ReadingAgent(BaseResourceAgent):
             if merged_count >= min_items:
                 break
 
-        if best_data is None:
+        if best_resources is None:
             return AgentResult(
                 success=False,
                 error="阅读资源生成失败：多次尝试均未产出结果",
@@ -240,8 +206,7 @@ class ReadingAgent(BaseResourceAgent):
             )
 
         # 最终校验：合并后仍不足则返回失败
-        resources = best_data.get("resources", [])
-        if not resources:
+        if not best_resources:
             return AgentResult(
                 success=False,
                 error="阅读资源生成失败：合并后仍无有效资源",
@@ -251,21 +216,25 @@ class ReadingAgent(BaseResourceAgent):
                 metadata={"agent_id": "reading", "error_type": "no_resources_after_merge"},
             )
 
-        content = json.dumps(best_data, ensure_ascii=False, indent=2)
+        # 序列化为 JSON
+        content = json.dumps(
+            [r.model_dump(mode="json") for r in best_resources],
+            ensure_ascii=False,
+            indent=2,
+        )
         logger.info(
-            "Agent[reading] 步骤: 阅读资源生成完成, resources=%d path_steps=%d",
-            len(resources),
-            len(best_data.get("learning_path", [])),
+            "Agent[reading] 步骤: 阅读资源生成完成, resources=%d",
+            len(best_resources),
         )
 
         return AgentResult(
             success=True,
             content=content,
             file_type="json",
-            title=best_data.get("title") or f"{title_prefix} - 拓展阅读",
-            summary=best_data.get("summary") or f"生成 {len(resources)} 条拓展阅读材料",
+            title=f"{title_prefix} - 拓展阅读",
+            summary=f"生成 {len(best_resources)} 条拓展阅读材料",
             metrics={
-                "resource_count": len(resources),
+                "resource_count": len(best_resources),
                 "search_results_used": len(search_results),
                 "reading_depth": reading_depth,
                 "language_preference": language_preference,
@@ -425,7 +394,8 @@ class ReadingAgent(BaseResourceAgent):
             parts.append("")
 
         # 添加明确要求
-        min_items = max(2, config.get("min_items", 3))
+        max_items = config.get("max_items", 5)
+        min_items = max(2, max_items // 2)
         parts.append(f"\n**重要要求**：")
         parts.append(f"1. 必须生成至少 {min_items} 条阅读资源")
         parts.append(f"2. 每条资源的 URL 必须来自上面的搜索结果（真实 URL）")
@@ -445,7 +415,10 @@ class ReadingAgent(BaseResourceAgent):
         return "\n".join(parts)
 
 
-def _merge_reading_results(primary: dict, secondary: dict) -> dict:
+def _merge_reading_resources(
+    primary: list[ReadingResource],
+    secondary: list[ReadingResource],
+) -> list[ReadingResource]:
     """合并两次阅读生成结果，去重并保留完整资源。
 
     Args:
@@ -453,70 +426,59 @@ def _merge_reading_results(primary: dict, secondary: dict) -> dict:
         secondary: 重试生成结果（追加到 primary）
 
     Returns:
-        合并后的结果字典
+        合并后的资源列表
     """
-    # 合并 resources：按 URL 去重
-    primary_resources = primary.get("resources", [])
-    secondary_resources = secondary.get("resources", [])
-
-    existing_urls = {r.get("url", "").strip().lower() for r in primary_resources if r.get("url")}
-    existing_titles = {r.get("title", "").strip().lower() for r in primary_resources if r.get("title")}
+    # 按 URL 和 title 去重
+    existing_urls = {r.url.strip().lower() for r in primary if r.url}
+    existing_titles = {r.title.strip().lower() for r in primary if r.title}
 
     # 重新编号追加的资源
-    max_id = 0
-    for r in primary_resources:
-        rid = r.get("id", "R0")
-        try:
-            num = int(rid.replace("R", ""))
-            max_id = max(max_id, num)
-        except (ValueError, AttributeError):
-            pass
+    max_id_num = 0
+    for r in primary:
+        if r.id.startswith("R"):
+            try:
+                num = int(r.id[1:])
+                max_id_num = max(max_id_num, num)
+            except ValueError:
+                pass
 
-    for r in secondary_resources:
-        url = r.get("url", "").strip().lower()
-        title = r.get("title", "").strip().lower()
-        # URL 或标题重复则跳过
-        if url and url in existing_urls:
+    merged = list(primary)
+    for r in secondary:
+        url_lower = r.url.strip().lower() if r.url else ""
+        title_lower = r.title.strip().lower() if r.title else ""
+
+        # 去重检查
+        if url_lower and url_lower in existing_urls:
             continue
-        if title and title in existing_titles:
+        if title_lower and title_lower in existing_titles:
             continue
+
         # 重新编号
-        max_id += 1
-        r["id"] = f"R{max_id}"
-        primary_resources.append(r)
-        if url:
-            existing_urls.add(url)
-        if title:
-            existing_titles.add(title)
+        max_id_num += 1
+        new_id = f"R{max_id_num}"
 
-    primary["resources"] = primary_resources
+        # 创建新的资源对象（更新 id）
+        merged_resource = ReadingResource(
+            id=new_id,
+            type=r.type,
+            title=r.title,
+            authors=r.authors,
+            url=r.url,
+            language=r.language,
+            difficulty=r.difficulty,
+            suitable_for=r.suitable_for,
+            related_knowledge_points=r.related_knowledge_points,
+            description=r.description,
+            recommend_reason=r.recommend_reason,
+            how_to_use=r.how_to_use,
+            estimated_time=r.estimated_time,
+            note=r.note,
+        )
+        merged.append(merged_resource)
 
-    # 合并 learning_path：追加新步骤
-    primary_path = primary.get("learning_path", [])
-    secondary_path = secondary.get("learning_path", [])
-    if secondary_path:
-        max_step = max((s.get("step", 0) for s in primary_path), default=0)
-        for step in secondary_path:
-            max_step += 1
-            step["step"] = max_step
-            primary_path.append(step)
-        primary["learning_path"] = primary_path
+        if url_lower:
+            existing_urls.add(url_lower)
+        if title_lower:
+            existing_titles.add(title_lower)
 
-    # 合并 follow_up_suggestions：去重追加
-    primary_suggestions = primary.get("follow_up_suggestions", [])
-    secondary_suggestions = secondary.get("follow_up_suggestions", [])
-    existing_suggestions = set(primary_suggestions)
-    for s in secondary_suggestions:
-        if s not in existing_suggestions:
-            primary_suggestions.append(s)
-            existing_suggestions.add(s)
-    primary["follow_up_suggestions"] = primary_suggestions
-
-    # 更新 summary
-    primary["summary"] = (
-        primary.get("summary", "")
-        or secondary.get("summary", "")
-        or f"生成 {len(primary_resources)} 条拓展阅读材料"
-    )
-
-    return primary
+    return merged

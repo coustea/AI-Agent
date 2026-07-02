@@ -3,9 +3,9 @@ import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 
 interface EduBackgroundProps {
   backgroundType:
-    | "soft_grid_gradient"
-    | "circuit_board_light"
-    | "minimal_blueprint";
+    | "technical_grid"
+    | "system_console"
+    | "editorial_board";
 }
 
 export const EduBackground: React.FC<EduBackgroundProps> = ({
@@ -17,7 +17,7 @@ export const EduBackground: React.FC<EduBackgroundProps> = ({
 
   return (
     <AbsoluteFill className="z-0 select-none overflow-hidden bg-[var(--canvas)]">
-      {backgroundType === "soft_grid_gradient" && (
+      {backgroundType === "technical_grid" && (
         <>
           <AbsoluteFill className="paper-dots opacity-60" />
           <div className="absolute left-0 top-0 h-2 w-full bg-[var(--primary)]" />
@@ -25,7 +25,7 @@ export const EduBackground: React.FC<EduBackgroundProps> = ({
         </>
       )}
 
-      {backgroundType === "circuit_board_light" && (
+      {backgroundType === "system_console" && (
         <AbsoluteFill className="paper-dots opacity-70">
           <svg
             className="h-full w-full opacity-15"
@@ -51,7 +51,7 @@ export const EduBackground: React.FC<EduBackgroundProps> = ({
         </AbsoluteFill>
       )}
 
-      {backgroundType === "minimal_blueprint" && (
+      {backgroundType === "editorial_board" && (
         <>
           <AbsoluteFill className="blueprint-grid opacity-55" />
           <div className="absolute inset-x-16 top-14 h-px bg-[var(--primary)] opacity-20" />

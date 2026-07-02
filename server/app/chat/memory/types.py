@@ -85,16 +85,7 @@ def estimate_token_count(text: str) -> int:
     return int(chinese_chars * 1.5) + non_chinese_words
 
 
-def truncate_text(text: str, char_budget: int, suffix: str = "...") -> str:
-    """按字符预算截断文本 — 超出部分用后缀替代。
-
-    用于限制输入到 LLM 或存储的文本长度，避免超出 token 限制。
-    """
-
-    if len(text) <= char_budget:
-        return text
-    # 截断时预留后缀空间，并移除尾部空白避免截断在单词中间
-    return text[: max(char_budget - len(suffix), 0)].rstrip() + suffix
+from app.chat.utils import compact_text
 
 
 def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_budget: int = 1200) -> str:
@@ -111,12 +102,12 @@ def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_b
 
     # 取前 max_lines 行，每行截断为140字符
     selected = normalized_lines[:max_lines]
-    bullets = [f"- {truncate_text(line, 140)}" for line in selected]
+    bullets = [f"- {compact_text(line, limit=140)}" for line in selected]
     # 如果有更多行，添加省略提示
     if len(normalized_lines) > max_lines:
         bullets.append(f"- 其余 {len(normalized_lines) - max_lines} 条对话已省略。")
     body = "\n".join(bullets)
-    return truncate_text(f"# 会话摘要\n\n{body}", char_budget)
+    return compact_text(f"# 会话摘要\n\n{body}", limit=char_budget)
 
 
 def make_default_memory_markdown() -> str:

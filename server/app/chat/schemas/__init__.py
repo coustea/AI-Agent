@@ -19,9 +19,8 @@ from app.chat.schemas.evidence import (
 
 from app.chat.schemas.agent import (
     TutorToolCall,
-    TutorTurnContext,
+    TutorRequestContext,
     TutorAgentInput,
-    ClassificationResult,
     TutorRuntimeEventType,
     TutorRuntimeEvent,
 )
@@ -62,8 +61,8 @@ __all__ = [
     "EvidenceType", "Evidence", "EvidenceSet", "UploadResponse",
     "SourceItem", "AgentError", "ToolInvocation", "AttachmentAnalysis",
     "NormalizedToolResult", "normalize_tool_result", "ChatMessageItem",
-    "TutorToolCall", "TutorTurnContext", "TutorAgentInput",
-    "ClassificationResult", "TutorRuntimeEventType", "TutorRuntimeEvent",
+    "TutorToolCall", "TutorRequestContext", "TutorAgentInput",
+    "TutorRuntimeEventType", "TutorRuntimeEvent",
     "TeachingDiagramType", "TeachingContent", "TeachingDiagramGenerator",
     "ComparisonEntity", "ComparisonDimension", "VisualSummary", "ComparisonPayload",
     "FlowchartNodeType", "FlowchartNode", "FlowchartEdge", "FlowchartPayload",

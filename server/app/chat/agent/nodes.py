@@ -1,202 +1,102 @@
 """TutorAgent 节点实现 — LangGraph 图的各个处理节点。
 
-节点列表：
-  - classify_node: 意图分类
-  - analysis_files_node: 附件分析（图片OCR、文档解析）
-  - search_node: 工具调用和联网搜索
-  - answer_node: 流式回答生成
-  - diagram_node: 教学图解生成
+节点列表（重构后）：
+  - preprocess_node: 附件预处理（确定性步骤）
+  - react_node: ReAct Agent 循环（自主决策工具调用和回答）
 """
 
 from __future__ import annotations
 
-import asyncio
+import re
 import time
 from datetime import datetime
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 
 from app.chat.agent.state import TutorAgentState
 from app.chat.emitter import (
     build_agent_status_payload,
     build_attachment_status_payload,
+    build_research_status_payload,
     build_workflow_activity_payload,
 )
-from app.chat.agent.tool_runner import (
-    ToolExecutionContext,
-    TutorToolRunner,
-)
-from app.chat.schemas import (
-    TutorRuntimeEvent,
-    ClassificationResult,
-    Evidence,
-    EvidenceSet,
-    TutorTurnContext,
-)
-from app.chat.schemas.diagram import TeachingDiagramGenerator
-from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer
-from app.chat.agent.tools import (
-    WEB_RESEARCH_TOOL_NAMES,
-    build_tutor_tools,
-)
+from app.chat.agent.tool_runner import ToolExecutionContext, TutorToolRunner
+from app.chat.schemas import TutorRequestContext, TutorRuntimeEvent
+from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer, safety_filter
+from app.chat.agent.tools import build_tutor_tools
 from app.chat.utils import normalize_message_content
 from app.chat.utils.files import analyze_documents
 from app.chat.utils.vision import VisionService
 from app.config import IMAGE_EXTENSIONS
 from app.infra.logging import get_logger
-from app.infra.markdown_output import with_markdown_output_contract
 from app.infra.tool_excute import ToolExcute, ToolRuntimeEvent
 
 logger = get_logger(__name__)
-
-
 
 
 def _current_date_text() -> str:
     return datetime.now().date().isoformat()
 
 
-def build_evidence_context(evidence_list: list[dict[str, Any]]) -> str:
-    """Format answer-usable evidence, preserving precise web source identity."""
-    parts: list[str] = []
-    seen_urls: set[str] = set()
-    source_number = 0
-    for evidence in evidence_list:
-        if not isinstance(evidence, dict) or evidence.get("usable_for_answer", True) is False:
-            continue
-        summary = str(evidence.get("summary") or "").strip()
-        if not summary:
-            continue
-        evidence_type = str(evidence.get("evidence_type") or "unknown")
-        details = evidence.get("details") if isinstance(evidence.get("details"), dict) else {}
-        url = str(details.get("url") or "").strip()
-        if evidence_type == "web_search" and url:
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-            source_number += 1
-            title = str(details.get("title") or url).strip()
-            parts.append(
-                f"[来源 {source_number}] {title}\n"
-                f"URL: {url}\n"
-                f"摘录: {summary[:3000]}"
-            )
-        else:
-            parts.append(f"[{evidence_type}] {summary[:3000]}")
-    return "\n\n".join(parts) if parts else "无额外证据。"
+_ANSWER_BLOCK_RE = re.compile(
+    r"^\s*(?P<reasoning>.*?)\s*"
+    r"<answer>\s*(?P<answer>.*?)\s*</answer>\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
-async def classify_node(
-    agent: Any,
-    state: TutorAgentState,
-    llm: Any,
-    prompts: Any,
-) -> dict:
-    """分类节点：判断需要哪些工具和后续流程。"""
-    question = state.get("question", "")
-    attachments = state.get("attachments", [])
-    summary = state.get("session_summary", "")
+def _normalize_reasoning_summary(text: str) -> str:
+    summary = re.sub(r"</?[^>]+>", " ", text)
+    summary = re.sub(r"\*\*([^*]+)\*\*", r"\1", summary)
+    summary = re.sub(r"\*([^*]+)\*", r"\1", summary)
+    return re.sub(r"\s+", " ", summary).strip()[:200]
 
-    has_attachments = bool(attachments)
-    has_web_search = state.get("enable_web_search", False)
-    has_diagram = state.get("need_teaching_diagram", False)
-    events: list[TutorRuntimeEvent] = []
 
-    start_event = TutorRuntimeEvent(
-        type="workflow_status",
-        payload=build_workflow_activity_payload(
-            stage="classifying",
-            activity_id="workflow:current",
-            title="正在判断回答方式",
-            message="正在判断是否需要查资料或分析附件",
-            summary="",
-        ),
-        sequence=len(state.get("stream_events", [])) + 1,
-        timestamp=time.time(),
-    )
-    events.extend(await agent._emit_event(state, start_event, turn_event_type="classify.start"))
-
-    prompt = (
-        f"学生问题: {question}\n"
-        f"附件数量: {len(attachments)}\n"
-        f"会话摘要: {summary[:200] if summary else '无'}\n"
-        f"当前日期: {_current_date_text()}\n"
-        f"用户请求联网搜索: {has_web_search}\n"
-        f"用户请求教学图解: {has_diagram}\n\n"
-        "请先判断该问题是否能仅凭稳定的通用知识可靠回答。"
-        "如果问题依赖最新、实时、未来、官方发布、具体试题、具体来源、具体数据，"
-        "或者你不能确信答案在当前日期仍然准确，应将 needs_web_search 设为 true。"
-    )
-
-    try:
-        classify_system_prompt = prompts.get("chat").get("classify_system") or "你是辅导分类器。"
-        classification = await llm.ainvoke_json(
-            ClassificationResult,
-            [
-                SystemMessage(content=classify_system_prompt),
-                HumanMessage(content=prompt),
-            ],
-            temperature=0.1,
-        )
-    except Exception as exc:
-        logger.warning("[classify_node] LLM failed, using defaults: %s", exc)
-        classification = ClassificationResult(
-            needs_file_analysis=has_attachments,
-            needs_knowledge_search=False,
-            needs_web_search=has_web_search,
-            needs_diagram=has_diagram,
+def split_reasoning_and_answer(text: str) -> tuple[str, str]:
+    """拆分可公开的进度摘要与严格包裹的正式回答。"""
+    match = _ANSWER_BLOCK_RE.match(text)
+    if match:
+        return (
+            _normalize_reasoning_summary(match.group("reasoning")),
+            match.group("answer").strip(),
         )
 
-    if has_web_search and not classification.needs_web_search:
-        classification = classification.model_copy(update={"needs_web_search": True})
+    # 出现半截 answer 标签时，整段内容都不可信，不能进入思考卡片或正式回答。
+    if re.search(r"</?answer\b", text, re.IGNORECASE):
+        return "", ""
 
-    # 确保用户显式请求图解时，needs_diagram 被正确设置
-    if has_diagram and not classification.needs_diagram:
-        classification = classification.model_copy(update={"needs_diagram": True})
+    return _normalize_reasoning_summary(text), ""
 
-    route_parts: list[str] = []
-    if classification.needs_file_analysis:
-        route_parts.append("附件分析")
-    if classification.needs_knowledge_search:
-        route_parts.append("课程知识库")
-    if classification.needs_web_search:
-        route_parts.append("联网检索")
-    if classification.needs_diagram:
-        route_parts.append("教学图解")
-    route_summary = "、".join(route_parts) if route_parts else "直接回答"
 
-    event = TutorRuntimeEvent(
-        type="classify_done",
-        payload={
-            **classification.model_dump(),
-            **build_workflow_activity_payload(
-                stage="route_ready",
-                activity_id="workflow:current",
-                title="正在选择信息来源",
-                message=f"回答方式：{route_summary}",
-                summary=route_summary,
-            ),
-        },
-        sequence=len(state.get("stream_events", [])) + len(events) + 1,
-        timestamp=time.time(),
+def _thinking_summary(reasoning: str, iteration: int, decision_text: str = "") -> str:
+    return (
+        reasoning
+        or _normalize_reasoning_summary(decision_text)
+        or f"第 {iteration} 次推理：分析问题 → 规划回答策略"
     )
-    events.extend(await agent._emit_event(state, event, turn_event_type="classify.done"))
-
-    return {
-        "classification": classification,
-        "stream_events": events,
-    }
 
 
-async def analysis_files_node(
+# -----------------------------------------------------------------------
+# 节点 1: preprocess_node（附件预处理）
+# -----------------------------------------------------------------------
+
+
+async def preprocess_node(
     agent: Any,
     state: TutorAgentState,
 ) -> dict:
-    """附件分析节点：图片OCR和文档解析。"""
+    """预处理节点：分析附件（图片 OCR、文档解析），填充 attachment_context。
+
+    这是确定性步骤，无条件执行。无附件时返回空结果。
+    """
     attachments = state.get("attachments", [])
     user_id = state.get("user_id", 0)
     session_id = state.get("session_id", "")
+    user_message_id = state.get("user_message_id", 0)
+
+    if not attachments:
+        return {"attachment_context": ""}
 
     image_urls, file_urls = [], []
     for url in attachments:
@@ -207,12 +107,19 @@ async def analysis_files_node(
             file_urls.append(url)
 
     events: list[TutorRuntimeEvent] = []
+    analysis_records: dict[str, Any] = {}
     activity_groups = (("image", image_urls), ("document", file_urls))
     for index, (analysis_type, urls) in enumerate(activity_groups):
         if not urls:
             continue
+        analysis_records[analysis_type] = await agent.memory_service.create_attachment_analysis(
+            user_id=user_id,
+            session_id=session_id,
+            user_message_id=user_message_id,
+            analysis_type=analysis_type,
+        )
         event = TutorRuntimeEvent(
-            type="attachment_status",
+            type="agent_status",
             payload=build_attachment_status_payload(
                 activity_id=f"attachment-{analysis_type}-{index}",
                 status="running",
@@ -222,9 +129,9 @@ async def analysis_files_node(
             sequence=len(state.get("stream_events", [])) + 1 + index,
             timestamp=time.time(),
         )
-        events.extend(await agent._emit_event(state, event, turn_event_type="file.analysis.start"))
+        events.extend(await agent._emit_event(state, event))
 
-    parts: list[str] = []
+    analysis_results: dict[str, str] = {}
     analysis_errors: dict[str, str] = {}
 
     if image_urls:
@@ -235,10 +142,22 @@ async def analysis_files_node(
             )
             analysis_text = str(vision_result.get("analysis_text") or "").strip()
             if analysis_text:
-                parts.append(f"[图片] {analysis_text}")
+                analysis_results["image"] = analysis_text
+                await agent.memory_service.finish_attachment_analysis(
+                    analysis_id=str(analysis_records["image"].id),
+                    content=analysis_text,
+                )
+            else:
+                analysis_errors["image"] = "未提取到可用内容"
         except Exception as exc:
-            logger.warning("[analysis_files_node] image analysis failed: %s", exc)
+            logger.warning("[preprocess_node] image analysis failed: %s", exc)
             analysis_errors["image"] = str(exc)
+        if "image" in analysis_errors:
+            await agent.memory_service.finish_attachment_analysis(
+                analysis_id=str(analysis_records["image"].id),
+                content="",
+                error_message=analysis_errors["image"],
+            )
 
     if file_urls:
         try:
@@ -249,543 +168,368 @@ async def analysis_files_node(
             )
             summary = str(analysis.get("analysis_text") or "").strip()
             if summary:
-                parts.append(f"[文档] {summary}")
+                analysis_results["document"] = summary
+                await agent.memory_service.finish_attachment_analysis(
+                    analysis_id=str(analysis_records["document"].id),
+                    content=summary,
+                )
+            else:
+                analysis_errors["document"] = "未提取到可用内容"
         except Exception as exc:
-            logger.warning("[analysis_files_node] document analysis failed: %s", exc)
+            logger.warning("[preprocess_node] document analysis failed: %s", exc)
             analysis_errors["document"] = str(exc)
-
-    attachment_context = "\n".join(parts)
-    attachment_analyses: list[dict[str, Any]] = []
-
-    if image_urls and any(part.startswith("[图片]") for part in parts):
-        image_summary = "\n".join(
-            part.removeprefix("[图片] ").strip()
-            for part in parts if part.startswith("[图片]")
-        )
-        attachment_analyses.append({
-            "file_url": image_urls[0],
-            "file_name": image_urls[0].split("/")[-1],
-            "analysis_type": "image",
-            "summary_text": image_summary,
-            "structured_json": {"file_urls": image_urls},
-        })
-
-    if file_urls and any(part.startswith("[文档]") for part in parts):
-        document_summary = "\n".join(
-            part.removeprefix("[文档] ").strip()
-            for part in parts if part.startswith("[文档]")
-        )
-        attachment_analyses.append({
-            "file_url": file_urls[0],
-            "file_name": file_urls[0].split("/")[-1],
-            "analysis_type": "document",
-            "summary_text": document_summary,
-            "structured_json": {"file_urls": file_urls},
-        })
-
-    # 为每个附件分析创建 Evidence，供回答节点和图解生成器使用
-    attachment_evidence: list[dict[str, Any]] = []
-    for analysis in attachment_analyses:
-        analysis_type = analysis.get("analysis_type", "image")
-        summary_text = analysis.get("summary_text", "")
-        file_urls = []
-        file_names = []
-        if analysis_type == "image":
-            structured = analysis.get("structured_json", {}) if isinstance(analysis.get("structured_json"), dict) else {}
-            file_urls = image_urls if analysis_type == "image" else file_urls
-            file_names = [url.split("/")[-1] for url in file_urls]
-        if summary_text:
-            attachment_evidence.append(
-                Evidence(
-                    evidence_type="attachment",
-                    summary=summary_text[:3000],
-                    details={
-                        "analysis_type": analysis_type,
-                        "file_urls": image_urls if analysis_type == "image" else file_urls,
-                        "file_names": [url.split("/")[-1] for url in (image_urls if analysis_type == "image" else file_urls)],
-                    },
-                ).model_dump()
+        if "document" in analysis_errors:
+            await agent.memory_service.finish_attachment_analysis(
+                analysis_id=str(analysis_records["document"].id),
+                content="",
+                error_message=analysis_errors["document"],
             )
 
+    attachment_context = "\n".join(
+        f"[{'图片' if analysis_type == 'image' else '文档'}] {content}"
+        for analysis_type, content in analysis_results.items()
+    )
+
     done_events: list[TutorRuntimeEvent] = []
-    analyses_by_type = {
-        str(item.get("analysis_type") or "document"): item
-        for item in attachment_analyses
-    }
     for index, (analysis_type, urls) in enumerate(activity_groups):
         if not urls:
             continue
-        analysis = analyses_by_type.get(analysis_type, {})
-        status = "done" if analysis else "failed"
+        status = "done" if analysis_results.get(analysis_type) else "failed"
         event = TutorRuntimeEvent(
-            type="attachment_status",
+            type="agent_status",
             payload=build_attachment_status_payload(
                 activity_id=f"attachment-{analysis_type}-{index}",
                 status=status,
                 file_names=[str(url).split("/")[-1] for url in urls],
                 analysis_type=analysis_type,
-                summary=str(analysis.get("summary_text") or ""),
+                summary=analysis_results.get(analysis_type, "") if status == "done" else "",
                 error=analysis_errors.get(analysis_type, "未提取到可用内容") if status == "failed" else "",
             ),
             sequence=len(state.get("stream_events", [])) + len(events) + 1 + index,
             timestamp=time.time(),
         )
-        done_events.extend(await agent._emit_event(state, event, turn_event_type="file.analysis.done"))
+        done_events.extend(await agent._emit_event(state, event))
 
     return {
         "attachment_context": attachment_context,
-        "attachment_analyses": attachment_analyses,
-        "evidence": attachment_evidence,
         "stream_events": events + done_events,
     }
 
 
-async def search_node(
+# -----------------------------------------------------------------------
+# 节点 2: react_node（ReAct Agent 循环）
+# -----------------------------------------------------------------------
+
+
+async def react_node(
     agent: Any,
     state: TutorAgentState,
     llm: Any,
     prompts: Any,
     memory_service: Any,
 ) -> dict:
-    """搜索节点：工具调用和联网搜索。"""
-    from app.chat.tools.web_research import ResearchToolStep, WebResearchRunner
+    """ReAct 节点：LLM 自主决策工具调用，流式输出回答。
 
-    cls = state.get("classification")
+    流程：
+    1. 构建工具集（per-request binding）
+    2. 构建 system prompt（统一 tutor_agent.md）
+    3. ReAct loop: LLM → tool_call → tool_result → LLM → ... → 最终回答
+    4. 流式输出 answer_token（进入 SafetyBuffer）
+    """
     question = state.get("question", "")
+    history = state.get("history_messages", [])
+    session_summary = state.get("session_summary", "")
+    attachment_context = state.get("attachment_context", "")
+    attachments = state.get("attachments", [])
     user_id = state.get("user_id", 0)
     session_id = state.get("session_id", "")
-    attachments = state.get("attachments", [])
+    user_message_id = state.get("user_message_id", 0)
     enable_web_search = state.get("enable_web_search", False)
-    need_diagram = state.get("need_teaching_diagram", False)
+    need_teaching_diagram = state.get("need_teaching_diagram", False)
 
-    turn_context = TutorTurnContext(
+    node_events: list[TutorRuntimeEvent] = []
+    node_tool_invocations: list[dict[str, Any]] = []
+    node_sources: list[dict[str, Any]] = []
+    node_errors: list[str] = []
+    full_answer = ""
+    base_seq = len(state.get("stream_events", [])) + 1
+
+    async def emit_research_status(event: Any) -> None:
+        nonlocal base_seq
+        base_seq += 1
+        emitted = await agent._emit_event(
+            state,
+            TutorRuntimeEvent(
+                type="agent_status",
+                payload=build_research_status_payload(event),
+                sequence=base_seq,
+                timestamp=time.time(),
+            ),
+        )
+        node_events.extend(emitted)
+
+    # ── 1. 构建工具集 ──
+    request_context = TutorRequestContext(
         user_id=user_id,
         session_id=session_id,
         user_input=question,
         attachments=attachments,
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_diagram,
+        need_teaching_diagram=need_teaching_diagram,
+    )
+    tools = build_tutor_tools(
+        request_context,
+        research_model=llm.model,
+        research_event_handler=emit_research_status,
     )
 
-    # 创建事件收集列表和 emit_event 回调
-    node_events: list[TutorRuntimeEvent] = []
-    base_seq = len(state.get("stream_events", [])) + 1
-
-    async def emit_event_callback(event: TutorRuntimeEvent) -> None:
-        """事件发送回调：收集工具发送的事件并发送给前端。"""
-        node_events.append(event)
-        # 同时通过 agent._emit_event 发送（用于 SSE 和持久化）
-        await agent._emit_event(state, event)
-
-    event_sequence = base_seq
-
-    async def emit_tool_status(event: ToolRuntimeEvent) -> None:
-        nonlocal event_sequence
-        event_sequence += 1
-        await emit_event_callback(
-            TutorRuntimeEvent(
-                type="agent_status",
-                payload=build_agent_status_payload(event),
-                sequence=event_sequence,
-            )
-        )
-
-    tool_excute = ToolExcute(
-        llm.model,
-        build_tutor_tools(turn_context),
-        event_handler=emit_tool_status,
-    )
-
-    tools_to_call: list[str] = []
-    needs_web_research = bool(enable_web_search or (cls and cls.needs_web_search))
-
-    if cls:
-        if cls.needs_profile:
-            tools_to_call.append("get_learner_profile")
-        if cls.needs_long_term_memory:
-            tools_to_call.append("get_long_term_memory")
-        if cls.needs_knowledge_search:
-            tools_to_call.append("search_knowledge_base")
-
-    if not tools_to_call and not needs_web_research:
-        return {
-            "evidence": [],
-            "tool_invocations": [],
-            "stream_events": [],
-            "sources": [],
-            "errors": [],
-            "_search_attempted": True,
-        }
-
-    node_evidence: list[dict[str, Any]] = []
-    node_sources: list[dict[str, Any]] = []
-    node_tool_invocations: list[dict[str, Any]] = []
-    node_errors: list[str] = []
-
-    plan_parts = []
-    if tools_to_call:
-        plan_parts.append("学习记录")
-    if needs_web_research:
-        plan_parts.append("网页资料")
-    if plan_parts:
-        plan_event = TutorRuntimeEvent(
-            type="workflow_status",
-            payload=build_workflow_activity_payload(
-                stage="collecting_context",
-                activity_id="workflow:current",
-                title="正在查找相关信息",
-                message=f"正在读取{'和'.join(plan_parts)}",
-                summary="、".join(plan_parts),
-            ),
-            sequence=base_seq,
-            timestamp=time.time(),
-        )
-        await emit_event_callback(plan_event)
-
-    def collect_result(result: Any) -> None:
-        if isinstance(result, Exception):
-            node_errors.append(f"parallel_tool_call: {result}")
-            return
-        events, invocation, evidence, sources, errors = result
-        # 事件已通过 emit_event_callback 收集，这里不需要再添加
-        if invocation:
-            node_tool_invocations.append(invocation)
-        node_evidence.extend(evidence)
-        node_sources.extend(sources)
-        node_errors.extend(errors)
-
-    if tools_to_call:
-        coros = [
-            _execute_single_tool(
-                agent, state, tool_excute, name,
-                {"query": question, "reason": "classify routed"},
-                base_seq + i * 2,
-                memory_service=memory_service,
-            )
-            for i, name in enumerate(tools_to_call)
-        ]
-        results = await asyncio.gather(*coros, return_exceptions=True)
-        for result in results:
-            collect_result(result)
-
-    if needs_web_research:
-        web_tool_excute = tool_excute.subset(WEB_RESEARCH_TOOL_NAMES)
-        research_prompt = prompts.get("chat").render(
-            "search_instruction",
-            attachment_context_section=(
-                f"\n附件预分析：\n{state.get('attachment_context', '')}"
-                if state.get("attachment_context")
-                else ""
-            ),
-        )
-        runner = WebResearchRunner(
-            tool_excute=web_tool_excute,
-            system_prompt=research_prompt,
-        )
-        next_seq = base_seq + len(tools_to_call) * 2
-
-        async def execute_research_tool(
-            tool_name: str,
-            payload: dict[str, Any],
-            call_id: str,
-        ) -> ResearchToolStep:
-            nonlocal next_seq
-            result = await _execute_single_tool(
-                agent, state, tool_excute, tool_name, payload, next_seq,
-                tool_call_id=call_id, memory_service=memory_service
-            )
-            next_seq += 2
-            events, invocation, evidence, sources, errors = result
-            return ResearchToolStep(
-                tool_call_id=call_id,
-                tool_name=tool_name,
-                payload=payload,
-                status=str((invocation or {}).get("status") or "failed"),
-                result_text=str((invocation or {}).get("result_text") or ""),
-                evidence=evidence,
-                events=events,
-                invocation=invocation,
-                sources=sources,
-                errors=errors,
-            )
-
-        research_steps = await runner.run(question, execute=execute_research_tool)
-        for step in research_steps:
-            if step.invocation is None:
-                node_errors.extend(step.errors)
-                continue
-            collect_result((step.events, step.invocation, step.evidence, step.sources, step.errors))
-
-    return {
-        "evidence": node_evidence,
-        "tool_invocations": node_tool_invocations,
-        "stream_events": node_events,
-        "sources": node_sources,
-        "errors": node_errors,
-        "_search_attempted": True,
-    }
-
-
-async def answer_node(
-    agent: Any,
-    state: TutorAgentState,
-    llm: Any,
-    prompts: Any,
-) -> dict:
-    """回答节点：流式生成回答。"""
-    from app.chat.streaming import safety_filter
-
-    question = state.get("question", "")
-    history = state.get("history_messages", [])
-    session_summary = state.get("session_summary", "")
-    attachment_context = state.get("attachment_context", "")
-    evidence_list = state.get("evidence", [])
-    attachments = state.get("attachments", [])
-
-    evidence_context = build_evidence_context(evidence_list)
-
+    # ── 2. 构建 system prompt ──
     system_prompt = prompts.get("chat").render(
-        "tutor_system",
+        "tutor_agent",
         session_summary_context=session_summary,
         file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
         attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
-    )
-    system_prompt = with_markdown_output_contract(system_prompt)
-    system_prompt += (
-        f"\n\n# 当前日期\n{_current_date_text()}\n"
-        "涉及年份、最新、考试真题、政策、版本或其他时效信息时，必须以本轮工具证据为准；"
-        "如果没有可用证据，不要编造当前时间、发布时间、真题内容或来源。"
+        current_date=_current_date_text(),
     )
 
-    extra_parts: list[str] = []
-    if evidence_context and evidence_context != "无额外证据。":
-        extra_parts.append(f"[检索证据]\n{evidence_context}")
-        extra_parts.append(
-            "引用外部事实时使用对应来源 URL；不要引用未出现在证据中的网页。"
-            "如果证据不足或互相冲突，请明确说明不确定性。"
-        )
-    if extra_parts:
-        system_prompt += "\n\n" + "\n\n".join(extra_parts)
-
+    # ── 3. 初始化消息和事件收集 ──
     human_content = question
     if attachment_context:
         human_content = f"{question}\n\n[附件分析结果]\n{attachment_context}"
 
-    history_without_system = [msg for msg in history if not isinstance(msg, SystemMessage)]
-    messages = [SystemMessage(content=system_prompt), *history_without_system, HumanMessage(content=human_content)]
+    messages: list[AnyMessage] = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
 
-    node_events: list[TutorRuntimeEvent] = []
-    full_answer = ""
-    raw_answer = ""
-    seq = len(state.get("stream_events", [])) + 1
-    stream_started = False
+    # ── 4. ReAct 循环 ──
+    max_iterations = 8
+    iteration = 0
 
-    compose_event = TutorRuntimeEvent(
-        type="workflow_status",
-        payload=build_workflow_activity_payload(
-            stage="composing_answer",
-            activity_id="workflow:current",
-            title="正在组织回答",
-            message="正在把上下文整理成回答",
-            summary="",
-        ),
-        sequence=seq,
-        timestamp=time.time(),
-    )
-    node_events.extend(await agent._emit_event(state, compose_event, turn_event_type="answer.compose"))
-    seq += 1
-
-    try:
-        stream_buffer = SafetyBufferedResponseStreamer(
-            response_streamer=ResponseStreamer(),
-            safety_check=safety_filter.check,
-            guard_chars=safety_filter.stream_guard_chars,
+    # 创建 ToolExcute 用于工具调用
+    async def emit_tool_status(event: ToolRuntimeEvent) -> None:
+        nonlocal base_seq
+        base_seq += 1
+        emitted = await agent._emit_event(
+            state,
+            TutorRuntimeEvent(
+                type="agent_status",
+                payload=build_agent_status_payload(event),
+                sequence=base_seq,
+                timestamp=time.time(),
+            ),
         )
+        node_events.extend(emitted)
 
-        stream = llm.astream(messages, temperature=0.25)
-        async for chunk in stream:
-            content = getattr(chunk, "content", "")
-            if isinstance(content, list) and content:
-                content = content[0].get("text", "") if isinstance(content[0], dict) else str(content[0])
-            chunk_str = normalize_message_content(content)
-            if not chunk_str:
-                continue
-            raw_answer += chunk_str
-            async for safe_event in stream_buffer.push(chunk_str):
-                token = safe_event.get("data", "")
-                if not token:
-                    continue
-                stream_started = True
-                full_answer += token
-                event = TutorRuntimeEvent(
-                    type="answer_token",
-                    payload={"token": token},
-                    sequence=seq,
-                    timestamp=time.time()
-                )
-                node_events.extend(await agent._emit_event(state, event, persist=False))
-                seq += 1
+    tool_excute = ToolExcute(tools=tools, event_handler=emit_tool_status)
+    tool_model = (
+        llm.model.bind_tools(tool_excute.get_tools_description())
+        if tools
+        else llm.model
+    )
+    format_repair_used = False
 
-        async for safe_event in stream_buffer.flush():
-            token = safe_event.get("data", "")
-            if not token:
-                continue
-            stream_started = True
-            full_answer += token
-            event = TutorRuntimeEvent(
-                type="answer_token",
-                payload={"token": token},
-                sequence=seq,
-                timestamp=time.time()
-            )
-            node_events.extend(await agent._emit_event(state, event, persist=False))
-            seq += 1
+    while iteration < max_iterations:
+        iteration += 1
 
-        if not full_answer:
-            full_answer = raw_answer
+        # ── 4.1 发送"正在思考"状态 ──
+        thinking_event = TutorRuntimeEvent(
+            type="agent_status",
+            payload=build_workflow_activity_payload(
+                stage="thinking",
+                activity_id=f"thinking-iteration-{iteration}",
+                title="分析思考过程",
+                message=f"第 {iteration} 次推理：正在分析问题并规划回答策略...",
+                status="running",
+            ),
+            sequence=base_seq + iteration * 10 - 1,
+            timestamp=time.time(),
+        )
+        await agent._emit_event(state, thinking_event)
 
-    except Exception as exc:
-        logger.exception("[answer_node] streaming failed")
+        # ── 4.2 流式调用 LLM（支持工具调用）──
         try:
-            response = await llm.ainvoke(messages, temperature=0.25)
-            fallback_answer = normalize_message_content(getattr(response, "content", ""))
-            if fallback_answer:
-                safety_result = await safety_filter.check(fallback_answer)
-                fallback_answer = safety_result.sanitized_text
-            if stream_started and fallback_answer:
-                # 流式已输出部分内容，发送 content_replace 让前端替换
-                replace_event = TutorRuntimeEvent(
-                    type="content_replace",
-                    payload={"content": fallback_answer},
+            # 先收集完整一轮。只有流结束后才能可靠判断该轮是工具决策还是最终回答，
+            # 因此不能在这里提前把文本作为 answer_token 发给前端。
+            answer_text = ""
+            seq = base_seq + iteration * 10
+            accumulated_response = None  # 用于累积工具调用
+
+            async for chunk in llm.astream(
+                messages,
+                model=tool_model,
+                temperature=0.25,
+            ):
+                # 累积响应（用于最终获取完整的 tool_calls）
+                accumulated_response = chunk if accumulated_response is None else accumulated_response + chunk
+
+                # 文本可能是思考摘要、工具决策说明或最终回答，暂不对外发送。
+                token = normalize_message_content(getattr(chunk, "content", ""))
+                if token:
+                    answer_text += token
+
+                # 处理工具调用 chunks（流式累积）
+                # tool_call_chunks 在流式过程中逐步到达
+                tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+                if tool_call_chunks:
+                    # 工具调用正在生成，可以在这里发送状态
+                    # 但完整的工具调用信息需要在流式结束后从 accumulated_response 获取
+                    pass
+
+            # ── 4.3 从累积的响应中获取完整的 tool_calls ──
+            tool_calls = getattr(accumulated_response, "tool_calls", None) if accumulated_response else None
+            reasoning_summary, answer_body = split_reasoning_and_answer(answer_text)
+
+            has_final_answer = bool(answer_body)
+            needs_format_repair = not tool_calls and not has_final_answer
+
+            # 每轮 thinking 都必须收口；工具轮使用其决策文本作为降级摘要。
+            thinking_done_event = TutorRuntimeEvent(
+                type="agent_status",
+                payload=build_workflow_activity_payload(
+                    stage="thinking",
+                    activity_id=f"thinking-iteration-{iteration}",
+                    title="思考完成",
+                    message=(
+                        f"第 {iteration} 次推理完成，准备调用工具"
+                        if tool_calls
+                        else "回答边界校验未通过，正在重新整理"
+                        if needs_format_repair
+                        else f"第 {iteration} 次推理完成，开始生成回答"
+                    ),
+                    summary=_thinking_summary(
+                        reasoning_summary,
+                        iteration,
+                        answer_text if tool_calls else "",
+                    ),
+                    status="failed" if needs_format_repair and format_repair_used else "done",
+                ),
+                sequence=base_seq + iteration * 10,
+                timestamp=time.time(),
+            )
+            await agent._emit_event(state, thinking_done_event)
+
+            if not tool_calls:
+                if needs_format_repair:
+                    if format_repair_used:
+                        error_message = "模型未按 <answer>...</answer> 协议返回正式回答"
+                        node_errors.append(error_message)
+                        await agent._emit_event(
+                            state,
+                            TutorRuntimeEvent(
+                                type="error",
+                                payload={"error": error_message},
+                                sequence=seq,
+                                timestamp=time.time(),
+                            ),
+                        )
+                        break
+
+                    format_repair_used = True
+                    if accumulated_response is not None:
+                        messages.append(accumulated_response)
+                    messages.append(HumanMessage(content=(
+                        "[FORMAT REPAIR]\n"
+                        "上一条响应缺少完整的最终回答边界。不要调用工具，不要重复内部推理。"
+                        "请仅输出一条简短、可公开的进度摘要，随后把面向学生的完整回答严格放入 "
+                        "<answer>...</answer> 中。"
+                    )))
+                    continue
+
+                # 无工具调用 → 这是最终回答。思考 activity 完成后才发送纯正文。
+                stream_buffer = SafetyBufferedResponseStreamer(
+                    response_streamer=ResponseStreamer(),
+                    safety_check=safety_filter.check,
+                    guard_chars=safety_filter.stream_guard_chars,
+                )
+                async for safe_event in stream_buffer.push(answer_body):
+                    safe_token = safe_event.get("data", "")
+                    if safe_token:
+                        full_answer += safe_token
+                        event = TutorRuntimeEvent(
+                            type="answer_token",
+                            payload={"token": safe_token},
+                            sequence=seq,
+                            timestamp=time.time(),
+                        )
+                        await agent._emit_event(state, event, persist=False)
+                        seq += 1
+                async for safe_event in stream_buffer.flush():
+                    safe_token = safe_event.get("data", "")
+                    if safe_token:
+                        full_answer += safe_token
+                        event = TutorRuntimeEvent(
+                            type="answer_token",
+                            payload={"token": safe_token},
+                            sequence=seq,
+                            timestamp=time.time(),
+                        )
+                        await agent._emit_event(state, event, persist=False)
+                        seq += 1
+
+                # 回答完成事件
+                answer_done_event = TutorRuntimeEvent(
+                    type="answer_done",
+                    payload={"answer_length": len(full_answer)},
                     sequence=seq,
                     timestamp=time.time(),
                 )
-                node_events.extend(await agent._emit_event(state, replace_event))
-                seq += 1
-            full_answer = fallback_answer
-        except Exception as fallback_exc:
-            logger.exception("[answer_node] fallback also failed")
+                await agent._emit_event(state, answer_done_event)
+
+                break  # 跳出循环
+
+            # ── 4.4 有 tool_calls → 执行工具 ──
+            messages.append(accumulated_response)  # 添加完整的 AIMessage（含 tool_calls）
+
+        except Exception as exc:
+            logger.exception("[react_node] LLM streaming failed")
             return {
                 "final_answer": "",
                 "stream_events": node_events,
-                "errors": [f"answer_node: {exc}"]
+                "errors": [f"LLM streaming failed: {exc}"],
             }
 
-    answer_done_event = TutorRuntimeEvent(
-        type="answer_done",
-        payload={"answer_length": len(full_answer)},
-        sequence=seq,
-        timestamp=time.time(),
-    )
-    node_events.extend(await agent._emit_event(state, answer_done_event, turn_event_type="answer.done"))
+        for tool_call in tool_calls:
+            tool_call_id = str(tool_call.get("id", ""))
+            tool_name = str(tool_call.get("name", ""))
+            tool_args = tool_call.get("args", {}) if isinstance(tool_call.get("args"), dict) else {}
 
-    return {"final_answer": full_answer, "stream_events": node_events}
-
-
-async def diagram_node(
-    agent: Any,
-    state: TutorAgentState,
-) -> dict:
-    """图解节点：生成教学图解。"""
-    question = state.get("question", "")
-    final_answer = state.get("final_answer", "")
-    user_id = state.get("user_id", 0)
-    session_id = state.get("session_id", "")
-    attachments = state.get("attachments", [])
-    enable_web_search = state.get("enable_web_search", False)
-    need_diagram = state.get("need_teaching_diagram", False)
-
-    node_events: list[TutorRuntimeEvent] = []
-    diagram_result: dict[str, Any] | None = None
-
-    start_event = TutorRuntimeEvent(
-        type="diagram_start",
-        payload={},
-        sequence=len(state.get("stream_events", [])) + 1,
-        timestamp=time.time()
-    )
-    node_events.extend(await agent._emit_event(state, start_event, turn_event_type="diagram.start"))
-
-    try:
-        evidence_set = EvidenceSet(
-            items=[Evidence.model_validate(e) for e in state.get("evidence", []) if isinstance(e, dict)]
-        )
-        diagram_result = await TeachingDiagramGenerator().generate(
-            TutorTurnContext(
+            # 执行工具
+            runner = TutorToolRunner()
+            context = ToolExecutionContext(
                 user_id=user_id,
                 session_id=session_id,
-                user_input=question,
-                attachments=attachments,
-                enable_web_search=enable_web_search,
-                need_teaching_diagram=need_diagram,
-            ),
-            final_answer,
-            evidence_set,
-        )
-    except Exception as exc:
-        logger.warning("[diagram_node] generation failed: %s", exc)
-        done_event = TutorRuntimeEvent(
-            type="diagram_done",
-            payload={"has_diagram": False},
-            sequence=len(state.get("stream_events", [])) + len(node_events) + 1,
-            timestamp=time.time()
-        )
-        node_events.extend(await agent._emit_event(state, done_event, turn_event_type="diagram.done"))
-        return {
-            "diagram_result": None,
-            "stream_events": node_events,
-            "errors": [f"diagram_node: {exc}"]
-        }
+                user_message_id=user_message_id,
+                memory_service=memory_service,
+            )
 
-    done_event = TutorRuntimeEvent(
-        type="diagram_done",
-        payload={"has_diagram": diagram_result is not None},
-        sequence=len(state.get("stream_events", [])) + len(node_events) + 1,
-        timestamp=time.time(),
-    )
-    node_events.extend(await agent._emit_event(state, done_event, turn_event_type="diagram.done"))
+            try:
+                result = await runner.execute(
+                    tool_name=tool_name,
+                    arguments=tool_args,
+                    tool_call_id=tool_call_id,
+                    context=context,
+                    tool_excute=tool_excute,
+                )
 
-    return {"diagram_result": diagram_result, "stream_events": node_events}
+                # 收集结果
+                if result.invocation:
+                    node_tool_invocations.append(result.invocation)
+                node_sources.extend(result.sources)
+                node_errors.extend(result.errors)
 
+                # 添加 ToolMessage
+                tool_result_text = str((result.invocation or {}).get("result_text", "") or "")
+                messages.append(ToolMessage(content=tool_result_text, tool_call_id=tool_call_id))
 
-# -----------------------------------------------------------------------
-# Helper functions
-# -----------------------------------------------------------------------
+            except Exception as exc:
+                logger.warning("[react_node] tool %s failed: %s", tool_name, exc)
+                node_errors.append(f"{tool_name}: {exc}")
+                messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
 
-
-async def _execute_single_tool(
-    agent: Any,
-    state: TutorAgentState,
-    tool_excute: ToolExcute,
-    tool_name: str,
-    payload: dict[str, Any],
-    seq: int,
-    tool_call_id: str | None = None,
-    memory_service: Any | None = None,
-) -> tuple[list[TutorRuntimeEvent], dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """执行单个工具调用并返回结果（委托给 TutorToolRunner）。
-
-    注意：ToolExcute 已通过请求级回调发送 agent_status 事件。
-
-    Returns:
-        (events, invocation_entry, evidence, sources, errors)
-    """
-    user_id = state.get("user_id", 0)
-    session_id = state.get("session_id", "")
-
-    runner = TutorToolRunner()
-    context = ToolExecutionContext(
-        user_id=user_id,
-        session_id=session_id,
-        memory_service=memory_service,
-    )
-
-    result = await runner.execute(
-        tool_name=tool_name,
-        arguments=payload,
-        tool_call_id=tool_call_id,
-        context=context,
-        tool_excute=tool_excute,
-    )
-
-    return [], result.invocation, result.evidence, result.sources, result.errors
+    # ── 5. 返回 state 更新 ──
+    return {
+        "final_answer": full_answer,
+        "messages": messages,
+        "stream_events": node_events,
+        "tool_invocations": node_tool_invocations,
+        "sources": node_sources,
+        "errors": node_errors,
+    }

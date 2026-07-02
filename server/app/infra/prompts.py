@@ -173,12 +173,12 @@ class PromptRegistry:
 
 # 全局单例 — 自动注册所有已知模块
 prompts = PromptRegistry()
-prompts.register("shared", _APP_DIR / "infra" / "prompt_contracts")
 prompts.register("chat", _APP_DIR / "chat" / "prompts")
 prompts.register("chat_memory", _APP_DIR / "chat" / "memory" / "prompts")
 prompts.register("resource", _APP_DIR / "resource" / "prompts")
 prompts.register("path", _APP_DIR / "path" / "prompts")
 prompts.register("profile", _APP_DIR / "profile" / "prompts")
 prompts.register("quiz", _APP_DIR / "quiz" / "prompts")
+prompts.register("research", _APP_DIR / "shared" / "research" / "prompts")
 
 __all__ = ["prompts", "PromptRegistry", "ModulePromptLoader", "PromptNotFoundError"]

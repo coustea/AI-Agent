@@ -144,12 +144,12 @@ const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'q
 
 const agentConfigs = ref<AnyAgentConfigs>({
   content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'standard' },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, expand_weak_points: false, include_prerequisites: false },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge'] },
+  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, leaf_detail: 'brief_note', show_relations: true },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge', 'fill'] },
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
   ppt: {},
-  video: { duration_seconds: 180, scene_count: 6, style: 'explainer', voice: 'teacher', aspect_ratio: '16:9', include_captions: true, output_format: 'preview' },
+  video: { duration_seconds: 180, scene_count: 6, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
 })
 
 const goToPersonalize = () => {

@@ -26,11 +26,15 @@ from app.resource.schemas.request import (
 
 # ── Plan ──────────────────────────────────────────────────────────────────
 from app.resource.schemas.plan import (
-    AgentAssignment,
     DownstreamContext,
+    GlobalTeachingPlan,
     ReusableAssets,
     TeachingOutlineItem,
     TeachingPlan,
+    AssignedSection,
+    WorkerDeliverable,
+    WorkerTask,
+    create_planning_output_model,
 )
 
 # ── Result ────────────────────────────────────────────────────────────────
@@ -59,7 +63,11 @@ __all__ = [
     # Learning blueprint & planning
     "TeachingPlan",
     "TeachingOutlineItem",
-    "AgentAssignment",
+    "GlobalTeachingPlan",
+    "AssignedSection",
+    "WorkerDeliverable",
+    "WorkerTask",
+    "create_planning_output_model",
     "ReusableAssets",
     "DownstreamContext",
     # Runtime input/output

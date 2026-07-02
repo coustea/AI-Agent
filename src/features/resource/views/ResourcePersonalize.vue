@@ -105,8 +105,8 @@
               <template v-if="agent.id === 'mindmap'">
                 <div class="ctrl-group flex flex-col gap-1.5">
                   <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">导图生成策略</label>
-                  <select 
-                    v-model="localConfigs.mindmap.map_type" 
+                  <select
+                    v-model="localConfigs.mindmap.map_type"
                     class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
                   >
                     <option value="knowledge_tree">核心知识树 (Knowledge Tree)</option>
@@ -114,20 +114,55 @@
                     <option value="comparison_map">对比复习图 (Comparison)</option>
                   </select>
                 </div>
-                
+
                 <div class="ctrl-group flex flex-col gap-1.5">
                   <div class="slider-label-row flex justify-between items-center mb-1">
                     <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">节点发散层级</label>
                     <span class="text-xs font-bold text-blue"><b>{{ localConfigs.mindmap.max_depth }}</b> 层</span>
                   </div>
-                  <input 
-                    type="range" 
-                    v-model.number="localConfigs.mindmap.max_depth" 
-                    :min="2" 
-                    :max="5" 
+                  <input
+                    type="range"
+                    v-model.number="localConfigs.mindmap.max_depth"
+                    :min="2"
+                    :max="5"
                     :step="1"
                     class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
                   />
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">叶节点粒度</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '关键词', value: 'keyword' },
+                        { label: '简要', value: 'brief_note' },
+                        { label: '详注', value: 'annotated' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.mindmap.leaf_detail === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="localConfigs.mindmap.leaf_detail = opt.value as 'keyword' | 'brief_note' | 'annotated'"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="ctrl-switch-v2 flex justify-between items-start">
+                  <div class="sw-info flex flex-col">
+                    <span class="sw-label text-sm font-semibold text-slate-800">标注概念关系</span>
+                    <span class="sw-desc text-xs text-slate-400">在节点旁标注因果、对比、依赖等关系</span>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      v-model="localConfigs.mindmap.show_relations"
+                      class="sr-only peer"
+                    />
+                    <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue"></div>
+                  </label>
                 </div>
               </template>
 
@@ -286,25 +321,9 @@
 
               <!-- Video Agent -->
               <template v-if="agent.id === 'video'">
-                <div class="ctrl-group flex flex-col gap-1.5">
-                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">微课镜头风格</label>
-                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
-                    <button
-                      v-for="opt in [
-                        { label: '概念解析', value: 'explainer' },
-                        { label: '讲授微课', value: 'lecture' },
-                        { label: '实战录屏', value: 'screencast' }
-                      ]"
-                      :key="opt.value"
-                      type="button"
-                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
-                      :class="localConfigs.video.style === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
-                      @click="setVideoStyle(opt.value)"
-                    >
-                      {{ opt.label }}
-                    </button>
-                  </div>
-                </div>
+                <p class="m-0 text-sm leading-6 text-slate-500">
+                  系统会根据知识类型自动选择精密图解、系统实验室或编辑课堂风格。
+                </p>
 
                 <div class="ctrl-group flex flex-col gap-1.5">
                   <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">虚拟主播声线</label>
@@ -470,9 +489,6 @@ const setQuizDifficultyMode = (val: any) => {
 }
 const setReadingLanguagePreference = (val: any) => {
   if (localConfigs.value.reading) localConfigs.value.reading.language_preference = val
-}
-const setVideoStyle = (val: any) => {
-  if (localConfigs.value.video) localConfigs.value.video.style = val
 }
 const setVideoVoice = (val: any) => {
   if (localConfigs.value.video) localConfigs.value.video.voice = val

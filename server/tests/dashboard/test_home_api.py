@@ -124,13 +124,13 @@ def test_profile_radar_dimensions_match_all_dimensions(monkeypatch):
         updated_at=datetime.now(timezone.utc),
     )
 
-    async def get_or_create_global_profile(user_id: int, db=None) -> Any:
+    async def get_profile(user_id: int, db=None) -> Any:
         return profile
 
     monkeypatch.setattr(
         dashboard_api,
         "get_profile_service",
-        lambda: SimpleNamespace(get_or_create_global_profile=get_or_create_global_profile),
+        lambda: SimpleNamespace(get_profile=get_profile),
     )
 
     import asyncio
@@ -188,13 +188,13 @@ def test_profile_radar_weak_areas_from_low_scores(monkeypatch):
         updated_at=datetime.now(timezone.utc),
     )
 
-    async def get_or_create_global_profile(user_id: int, db=None) -> Any:
+    async def get_profile(user_id: int, db=None) -> Any:
         return profile
 
     monkeypatch.setattr(
         dashboard_api,
         "get_profile_service",
-        lambda: SimpleNamespace(get_or_create_global_profile=get_or_create_global_profile),
+        lambda: SimpleNamespace(get_profile=get_profile),
     )
 
     import asyncio

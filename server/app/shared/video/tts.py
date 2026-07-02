@@ -11,6 +11,7 @@ from pathlib import Path
 import edge_tts
 from mutagen.mp3 import MP3
 from app.infra.logging import get_logger
+from app.shared.video.schemas import AudioSynthesis, CaptionWord as SchemaCaptionWord
 
 logger = get_logger(__name__)
 
@@ -213,3 +214,50 @@ class TtsService:
             logger.warning("Failed to save TTS cache: %s", e)
 
         return TtsResult(duration=duration, captions=word_captions)
+
+
+class VideoTtsService:
+    """Select the configured provider and return the shared audio contract."""
+
+    async def synthesize(
+        self,
+        text: str,
+        output_path: Path,
+        voice: str,
+    ) -> AudioSynthesis:
+        from app.config import SPARK_TTS_APP_ID
+
+        if SPARK_TTS_APP_ID and SPARK_TTS_APP_ID.strip():
+            from app.shared.video.spark_tts import SparkTtsService
+
+            result = await SparkTtsService.synthesize_with_captions(
+                text,
+                output_path,
+                voice="x4_yezi",
+            )
+        else:
+            edge_voice = (
+                voice
+                if voice.startswith("zh-")
+                else "zh-CN-XiaoxiaoNeural"
+            )
+            result = await TtsService.synthesize_with_captions(
+                text,
+                output_path,
+                voice=edge_voice,
+            )
+
+        audio = MP3(str(output_path))
+        duration_ms = round(audio.info.length * 1000)
+        if duration_ms <= 0:
+            raise ValueError("TTS produced an audio file with invalid duration")
+        words = [
+            SchemaCaptionWord.model_validate(caption.to_dict())
+            for caption in result.captions
+            if caption.end_ms <= duration_ms
+        ]
+        return AudioSynthesis(
+            path=output_path,
+            duration_ms=duration_ms,
+            words=words,
+        )

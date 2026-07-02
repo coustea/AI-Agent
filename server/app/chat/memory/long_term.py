@@ -21,7 +21,7 @@ from app.chat.memory.types import (
 )
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.models import ChatLongTermMemory, ChatSessionSummaryBlock
+from app.infra.models import ChatLongTermMemory, ChatSession, ChatSessionSummaryBlock
 
 logger = get_logger(__name__)
 
@@ -129,7 +129,6 @@ class ChatLongTermMemoryService:
             old_memory = ChatLongTermMemory(
                 user_id=user_id,
                 memory_markdown=make_default_memory_markdown(),
-                category="general",
             )
             db.add(old_memory)
             await db.flush()
@@ -153,8 +152,9 @@ class ChatLongTermMemoryService:
         latest_summary_block = (
             await db.exec(
                 select(ChatSessionSummaryBlock)
+                .join(ChatSession, ChatSession.id == ChatSessionSummaryBlock.session_id)
                 .where(
-                    ChatSessionSummaryBlock.user_id == user_id,
+                    ChatSession.user_id == user_id,
                     ChatSessionSummaryBlock.session_id == session_id,
                 )
                 .order_by(ChatSessionSummaryBlock.created_at.desc())
@@ -194,19 +194,14 @@ class ChatLongTermMemoryService:
             )
             return {"updated": False, "analyzed": True}
 
-        # 写入更新后的长期记忆 — 版本号递增（仅已有记录时递增）
+        # 写入更新后的长期记忆
         memory = existing or old_memory
-        memory.version = (memory.version or 1) + (1 if existing else 0)
         memory.memory_markdown = resp.memory_markdown
-        memory.category = "general"
-        # 记录更新原因 — 用于追踪是信号触发还是周期触发
-        memory.updated_reason = "signal" if signal_detected else "periodic"
-        memory.source_session_ids = [session_id]
-        memory.source_summary_block_ids = [latest_summary_block.id] if latest_summary_block and latest_summary_block.id else None
         memory.updated_at = now()
         db.add(memory)
         logger.info(
-            "[ChatLongTermMemoryService.maybe_update] 长期记忆更新成功: user_id=%s version=%s reason=%s",
-            user_id, memory.version, memory.updated_reason,
+            "[ChatLongTermMemoryService.maybe_update] 长期记忆更新成功: user_id=%s trigger=%s",
+            user_id,
+            "signal" if signal_detected else "periodic",
         )
         return {"updated": True, "analyzed": True}

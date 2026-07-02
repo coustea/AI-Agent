@@ -8,7 +8,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from uuid import uuid4
 
-from app.resource.schemas.plan import DownstreamContext
 from app.resource.schemas.request import ResourceAgentId
 from app.resource.schemas.result import AgentResult
 
@@ -25,8 +24,6 @@ class GeneratedResourceItem(BaseModel):
     content: Any = None
     summary: str = ""
     metrics: dict[str, Any] = Field(default_factory=dict)
-    downstream_context: DownstreamContext | None = None
-    execution_report: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     status: str = "completed"
     error_message: str | None = None
@@ -43,7 +40,6 @@ class ResourceStatusSnapshot(BaseModel):
     agent_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
     current_message: str = ""
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    started_at: str | None = None
     updated_at: str | None = None
 
 

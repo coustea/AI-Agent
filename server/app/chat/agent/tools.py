@@ -4,57 +4,47 @@
   - 导入各工具模块的 as_tool() 函数
   - 组装为统一的 Tool 列表
   - 定义工具名称到证据类型的映射
+  - 新增 generate_teaching_diagram 工具（图解生成）
+  - 新增 research 工具（调用 ResearchAgent 子 Agent 进行网页研究）
 
-各工具的具体实现在 app/chat/tools/ 下：
-  - user_context.py: 画像 + 长期记忆
-  - knowledge.py: 知识库搜索
-  - search.py: 网络搜索
-  - web_research.py: 网页研究
+Chat 保留本地课程知识库工具；普通网页搜索与抓取统一委托给
+app/shared/research/ResearchAgent。
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from app.chat.tools.knowledge import as_tool as _knowledge_tool
 from app.chat.tools.user_context import as_tool as _user_context_tools
-from app.chat.tools.search import (
-    SearchQueryArgs,
-    duckduckgo_instant_answer,
-    duckduckgo_search,
-    spark_search,
-    tavily_search,
-)
-from app.chat.tools.web_research import (
-    ExtractWebLinksArgs,
-    FindInWebPageArgs,
-    OpenWebPageArgs,
-    ReadWebPdfArgs,
-    WebResearchSession,
-)
-from app.chat.schemas import TutorTurnContext
+from app.chat.schemas import EvidenceSet, TutorRequestContext
+from app.chat.schemas.diagram import TeachingDiagramGenerator
 from app.infra.tool_excute import Tool
 from app.infra.logging import get_logger
+from app.shared.research import (
+    ResearchEvent,
+    build_research_tool,
+)
 
 logger = get_logger(__name__)
-
-WEB_RESEARCH_TOOL_NAMES = (
-    "duckduckgo_search",
-    "duckduckgo_instant_answer",
-    "tavily_search",
-    "spark_search",
-    "open_web_page",
-    "find_in_web_page",
-    "extract_web_links",
-    "read_web_pdf",
-)
 
 TOOL_EVIDENCE_TYPES: dict[str, str] = {
     "get_learner_profile": "learner_profile",
     "get_long_term_memory": "long_term_memory",
     "search_knowledge_base": "knowledge_base",
-    **{name: "web_search" for name in WEB_RESEARCH_TOOL_NAMES},
+    "research": "web_search",
 }
+
+ResearchEventHandler = Callable[[ResearchEvent], Awaitable[None]]
+
+
+class GenerateDiagramArgs(BaseModel):
+    """教学图解生成参数。"""
+    question: str = Field(description="学生问题，用于确定图解主题")
+    answer_summary: str = Field(description="回答摘要，用于提取图解核心内容")
 
 
 def _result_handler(handler, tool_name: str):
@@ -68,62 +58,44 @@ def _result_handler(handler, tool_name: str):
     return _wrapped
 
 
-def build_tutor_tools(request: TutorTurnContext) -> list[Tool]:
+def build_tutor_tools(
+    request: TutorRequestContext,
+    *,
+    research_model: Any | None = None,
+    research_event_handler: ResearchEventHandler | None = None,
+) -> list[Tool]:
     """装配当前辅导请求可用的业务工具。"""
-    web_session = WebResearchSession()
     return [
         # 用户上下文工具（画像 + 长期记忆）
         *_user_context_tools(request),
-        # 知识库搜索
+        # 本地课程知识库仍属于 Chat。
         _knowledge_tool(),
-        # 网络搜索
-        Tool(
-            "duckduckgo_search",
-            "General web search for articles, tutorials, blogs, and web content.",
-            SearchQueryArgs,
-            _result_handler(duckduckgo_search, "duckduckgo_search"),
+        # 普通网页搜索与抓取统一委托给共享 ResearchAgent。
+        build_research_tool(
+            model=research_model,
+            event_handler=research_event_handler,
+            enabled=request.enable_web_search,
         ),
+        # 教学图解生成
         Tool(
-            "duckduckgo_instant_answer",
-            "Get instant answers, definitions, and encyclopedia summaries.",
-            SearchQueryArgs,
-            _result_handler(duckduckgo_instant_answer, "duckduckgo_instant_answer"),
-        ),
-        Tool(
-            "tavily_search",
-            "AI-optimized search with structured, relevance-ranked results.",
-            SearchQueryArgs,
-            _result_handler(tavily_search, "tavily_search"),
-        ),
-        Tool(
-            "spark_search",
-            "Chinese semantic search with reranking support.",
-            SearchQueryArgs,
-            _result_handler(spark_search, "spark_search"),
-        ),
-        # 网页研究
-        Tool(
-            "open_web_page",
-            "Open and read a public web page selected from search results.",
-            OpenWebPageArgs,
-            _result_handler(web_session.open_page, "open_web_page"),
-        ),
-        Tool(
-            "find_in_web_page",
-            "Find an exact word or phrase inside an opened page.",
-            FindInWebPageArgs,
-            _result_handler(web_session.find_in_page, "find_in_web_page"),
-        ),
-        Tool(
-            "extract_web_links",
-            "List relevant links from an opened page.",
-            ExtractWebLinksArgs,
-            _result_handler(web_session.extract_links, "extract_web_links"),
-        ),
-        Tool(
-            "read_web_pdf",
-            "Read a public PDF and return page-aware excerpts.",
-            ReadWebPdfArgs,
-            _result_handler(web_session.read_pdf, "read_web_pdf"),
+            "generate_teaching_diagram",
+            "Generate a teaching diagram (JSON format) for complex processes, architectures, or protocols. Use when the question involves visualizable concepts.",
+            GenerateDiagramArgs,
+            _result_handler(_generate_diagram_handler(request), "generate_teaching_diagram"),
         ),
     ]
+
+
+def _generate_diagram_handler(request: TutorRequestContext) -> Any:
+    """创建图解生成处理器（闭包捕获 request 上下文）。"""
+    async def _handler(question: str, answer_summary: str) -> dict[str, Any]:
+        try:
+            generator = TeachingDiagramGenerator()
+            # 构造空的 EvidenceSet（图解生成器需要）
+            evidence_set = EvidenceSet(items=[])
+            result = await generator.generate(request, answer_summary, evidence_set)
+            return result or {"error": "图解生成失败"}
+        except Exception as exc:
+            logger.warning("[generate_teaching_diagram] failed: %s", exc)
+            return {"error": str(exc)}
+    return _handler

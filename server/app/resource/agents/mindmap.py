@@ -5,13 +5,10 @@ from __future__ import annotations
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.markdown_output import with_markdown_output_contract
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
-    build_basic_handoff,
     build_node_context,
     build_resource_context,
-    assigned_outline_ids,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -40,17 +37,6 @@ class MindmapAgent(BaseResourceAgent):
             title_prefix=input_data.learning_need[:32],
             config=config,
         )
-        branches = result.metrics.get("branches", [])
-        outline_ids = assigned_outline_ids(input_data.teaching_plan, "mindmap")
-        handoff = build_basic_handoff(
-            source_agent="mindmap",
-            title=result.title,
-            summary=result.summary,
-            teaching_plan=input_data.teaching_plan,
-            covered_outline_ids=outline_ids,
-            visual_ideas=branches,
-        )
-        result.downstream_context = handoff
         await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
@@ -72,13 +58,11 @@ class MindmapAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
-        """内部方法 — 调用 LLM 生成 Markmap 思维导图 Markdown。"""
-        if config:
-            cfg = ["## 思维导图配置"]
-            cfg.append(f"- 导图类型: {config.get('map_type', 'knowledge_tree')}")
-            cfg.append(f"- 最大深度: {config.get('max_depth', 4)}")
-            cfg.append("- 用粗体高亮标注薄弱知识点" if config.get("highlight_weak", True) else "- 不高亮薄弱知识点")
-            input_text += f"\n\n{chr(10).join(cfg)}"
+        """内部方法 — 调用 LLM 生成 Markmap 思维导图 Markdown。
+
+        agent_config 已由 build_resource_context / build_node_context 统一注入，
+        此处仅提取运行时需要的参数。
+        """
         input_text += (
             "\n\n请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题 and 列表文本。"
@@ -94,7 +78,6 @@ class MindmapAgent(BaseResourceAgent):
 
         await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)
         prompt = prompts.get("resource").get("mindmap")
-        prompt = with_markdown_output_contract(prompt)
         await self.emitter.send(self.agent_id, "running", "正在生成知识图谱结构...", 60)
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)

@@ -116,6 +116,11 @@ CHAT_DIR = WORKPLACE_DIR / "chat"
 # 数字人头像数据目录：server/workplace/avatars/
 AVATAR_DIR = WORKPLACE_DIR / "avatars"
 
+# ============ 讲解视频渲染配置 ============
+VIDEO_RENDER_TIMEOUT_SECONDS = get("video.render_timeout_seconds", 900)
+VIDEO_RENDER_CONCURRENCY = get("video.concurrency", 4)
+VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
+
 # ============ 知识库配置 ============
 # 是否启用知识库功能
 KB_ENABLED = get("knowledge.enabled", True)
@@ -230,14 +235,18 @@ COMPRESS_MIN_MESSAGES = get("memory.compress_min_messages", 14)
 COMPRESS_MIN_TOKENS = get("memory.compress_min_tokens", 3500)
 # 压缩摘要时保留的上下文块数
 SUMMARY_CONTEXT_BLOCKS = get("memory.summary_context_blocks", 3)
+# 触发画像更新的最少消息数
+PROFILE_MIN_MESSAGES = get("memory.profile_min_messages", 12)
+# 触发画像更新的最少 Token 数
+PROFILE_MIN_TOKENS = get("memory.profile_min_tokens", 6000)
 # 写入长期记忆的最少消息数
 LTM_MIN_MESSAGES = get("memory.ltm_min_messages", 12)
 # 写入长期记忆的最少 Token 数
 LTM_MIN_TOKENS = get("memory.ltm_min_tokens", 3500)
 # 写入长期记忆的最低置信度阈值
 LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
-# 长期记忆写入冷却时间（分钟），避免频繁写入
-LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 30)
+# 长期记忆写入冷却时间（分钟），0 表示不限制
+LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 0)
 
 # ============ 模型推理参数 ============
 # 通用模型温度参数（控制输出随机性，0=确定性，1=高随机性）

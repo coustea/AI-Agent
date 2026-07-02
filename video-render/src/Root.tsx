@@ -20,40 +20,27 @@ loadOutfitFont("normal", {
 });
 
 const calculateMetadata: CalculateMetadataFunction<Record<string, unknown>> = ({ props }) => {
-  try {
-    const hasProps =
-      props && Object.keys(props).length > 0 && Array.isArray(props.scenes);
-    const normalized = normalizePlan(hasProps ? props : defaultPlan);
-    const { scenes, render_config: renderConfig } = normalized;
+  const normalized = normalizePlan(props);
+  const { scenes, render_config: renderConfig } = normalized;
 
-    const fps = renderConfig.fps;
-    const width = renderConfig.width;
-    const height = renderConfig.height;
+  const fps = renderConfig.fps;
+  const width = renderConfig.width;
+  const height = renderConfig.height;
 
-    // Calculate total duration in frames
-    const frameRanges = buildSceneFrameRanges(
-      scenes.map((scene) => scene.duration_ms),
-      fps,
-    );
-    const lastRange = frameRanges[frameRanges.length - 1];
-    const durationInFrames = lastRange
-      ? lastRange.from + lastRange.durationInFrames
-      : 1;
+  const frameRanges = buildSceneFrameRanges(
+    scenes.map((scene) => scene.duration_ms),
+    fps,
+  );
+  const lastRange = frameRanges[frameRanges.length - 1];
+  const durationInFrames = lastRange
+    ? lastRange.from + lastRange.durationInFrames
+    : 1;
 
-    return {
-      durationInFrames,
-      fps,
-      width,
-      height,
-    };
-  } catch (error) {
-    console.error("calculateMetadata failed:", error);
-    return {
-      durationInFrames: 300,
-      fps: 30,
-      width: 1920,
-      height: 1080,
-    };
+  return {
+    durationInFrames,
+    fps,
+    width,
+    height,
   }
 };
 

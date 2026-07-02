@@ -10,7 +10,6 @@ import type {
   CaptionChunk,
   CaptionWord,
 } from "../schema/types";
-import { generateSubtitles } from "../utils/autoSubtitle";
 import { getActiveCaptionChunk } from "../utils/timeline";
 import { useSceneData } from "./SceneDataContext";
 
@@ -29,6 +28,7 @@ export const SubtitleBar: React.FC<SubtitleBarProps> = ({
   captionWords = [],
   captionChunks = [],
 }) => {
+  void narration;
   const scene = useSceneData();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -55,20 +55,11 @@ export const SubtitleBar: React.FC<SubtitleBarProps> = ({
     [captionWords, scene?.caption_words],
   );
 
-  const fallbackChunks = useMemo<CaptionChunk[]>(
-    () =>
-      generateSubtitles(narration, spokenDurationMs / 1000).map((chunk) => ({
-        text: chunk.text,
-        start_ms: chunk.start * 1000,
-        end_ms: chunk.end * 1000,
-      })),
-    [narration, spokenDurationMs],
-  );
-
   if (currentMs >= spokenDurationMs) return null;
+  if (resolvedChunks.length === 0) return null;
 
   const activeChunk = getActiveCaptionChunk(
-    resolvedChunks.length > 0 ? resolvedChunks : fallbackChunks,
+    resolvedChunks,
     currentMs,
   );
   if (!activeChunk) return null;
@@ -91,10 +82,10 @@ export const SubtitleBar: React.FC<SubtitleBarProps> = ({
 
   return (
     <div
-      className="absolute bottom-8 left-1/2 z-30 flex min-h-[74px] max-w-[1320px] -translate-x-1/2 items-center justify-center rounded-lg bg-[rgba(23,32,51,0.94)] px-10 py-4 shadow-[0_16px_42px_rgba(23,32,51,0.18)]"
+      className="absolute bottom-9 left-20 right-20 z-30 mx-auto flex min-h-[82px] max-w-[1420px] items-center justify-center rounded-lg bg-[rgba(14,22,37,0.94)] px-12 py-4 shadow-[0_16px_42px_rgba(23,32,51,0.18)]"
       style={{ opacity: enterOpacity }}
     >
-      <p className="m-0 text-center text-[36px] font-semibold leading-[1.3] text-[#f8fafc]">
+      <p className="m-0 text-center text-[42px] font-semibold leading-[1.28] text-[#f8fafc]">
         {chunkTokens.length > 0
           ? chunkTokens.map((token, index) => {
               const isActive =

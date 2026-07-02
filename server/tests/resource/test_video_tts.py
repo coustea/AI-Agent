@@ -2,7 +2,7 @@ import os
 import pytest
 from pathlib import Path
 from app.config import WORKPLACE_DIR
-from app.resource.infra.tts import TtsService
+from app.shared.video.tts import TtsService
 
 @pytest.mark.asyncio
 async def test_tts_synthesis_and_duration():

@@ -1,5 +1,5 @@
 // Chat 模块独立实时事件订阅 composable
-// 连接到 /api/v1/ai/chat/sessions/{sessionId}/runs/{runId}/events
+// 连接到 /api/v1/ai/chat/sessions/{sessionId}/messages/{userMessageId}/events
 
 import { readonly, ref, shallowRef } from 'vue'
 
@@ -31,7 +31,7 @@ function parseChatEvent(raw: MessageEvent): ChatEvent | null {
     const data = JSON.parse(raw.data)
     return {
       sequence: data.sequence,
-      run_id: data.run_id,
+      user_message_id: data.user_message_id,
       session_id: data.session_id,
       event: data.event as ChatEventName,
       message: data.message,
@@ -44,7 +44,7 @@ function parseChatEvent(raw: MessageEvent): ChatEvent | null {
 }
 
 export function useChatEvents() {
-  const runId = ref<string | null>(null)
+  const userMessageId = ref<number | null>(null)
   const sessionId = ref<string | null>(null)
   const connectionStatus = ref<ChatConnectionStatus>('idle')
   const events = ref<ChatEvent[]>([])
@@ -60,7 +60,7 @@ export function useChatEvents() {
 
   const reset = () => {
     close()
-    runId.value = null
+    userMessageId.value = null
     sessionId.value = null
     connectionStatus.value = 'idle'
     events.value = []
@@ -71,17 +71,17 @@ export function useChatEvents() {
 
   const connect = (
     nextSessionId: string,
-    nextRunId: string,
+    nextUserMessageId: number,
     handlers: ChatEventHandlers = {},
   ) => {
     reset()
-    runId.value = nextRunId
+    userMessageId.value = nextUserMessageId
     sessionId.value = nextSessionId
     connectionStatus.value = 'connecting'
 
     const token = getAuthToken()
     const query = token ? `?token=${encodeURIComponent(token)}` : ''
-    const url = `${API_BASE}/chat/sessions/${nextSessionId}/runs/${nextRunId}/events${query}`
+    const url = `${API_BASE}/chat/sessions/${nextSessionId}/messages/${nextUserMessageId}/events${query}`
     const eventSource = new EventSource(url)
 
     eventSource.addEventListener('chat.event', (raw: MessageEvent) => {
@@ -120,11 +120,11 @@ export function useChatEvents() {
       }
 
       // 终态
-      if (event.event === 'run.completed') {
+      if (event.event === 'message.completed') {
         connectionStatus.value = 'completed'
         handlers.onCompleted?.(event)
         close()
-      } else if (event.event === 'run.failed') {
+      } else if (event.event === 'message.failed') {
         connectionStatus.value = 'failed'
         error.value = new Error(event.message || '智能辅导运行失败')
         handlers.onFailed?.(error.value, event)
@@ -155,7 +155,7 @@ export function useChatEvents() {
   }
 
   return {
-    runId: readonly(runId),
+    userMessageId: readonly(userMessageId),
     sessionId: readonly(sessionId),
     connectionStatus: readonly(connectionStatus),
     events: readonly(events),

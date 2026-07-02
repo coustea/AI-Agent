@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 from uuid import uuid4
 
-from app.chat.agent.tools import (
-    TOOL_EVIDENCE_TYPES,
-    WEB_RESEARCH_TOOL_NAMES,
-)
+from app.chat.agent.tools import TOOL_EVIDENCE_TYPES
 from app.chat.tools.user_context import LONG_TERM_MEMORY_CATEGORY_ALIASES
 from app.chat.schemas import Evidence, normalize_tool_result
 from app.infra.logging import get_logger
@@ -21,6 +19,7 @@ logger = get_logger(__name__)
 class ToolExecutionContext:
     user_id: int
     session_id: str
+    user_message_id: int
     memory_service: Any | None = None
 
 
@@ -68,8 +67,9 @@ class TutorToolRunner:
                 assistant_message = await memory_service.save_message(
                     user_id=user_id,
                     session_id=session_id,
+                    user_message_id=context.user_message_id,
                     role="assistant",
-                    content=[{"type": "text", "text": f"正在调用工具：{tool_name}"}],
+                    content=[],
                     tool_calls=[{"id": tool_call_id, "name": tool_name, "args": normalized_payload}],
                 )
                 assistant_message_id = getattr(assistant_message, "id", None)
@@ -95,25 +95,7 @@ class TutorToolRunner:
                 node_evidence.append(evidence_entry)
 
             if evidence_type and result_text:
-                if tool_name == "search_knowledge_base":
-                    raw_sources = normalized.metadata.get("sources", [])
-                    if isinstance(raw_sources, list):
-                        node_sources.extend(s for s in raw_sources if isinstance(s, dict))
-                elif tool_name in WEB_RESEARCH_TOOL_NAMES:
-                    url = normalized.metadata.get("url")
-                    if url:
-                        node_sources.append({
-                            "source": tool_name,
-                            "url": str(url),
-                            "title": str(normalized.metadata.get("title", url)),
-                            "summary": result_text[:500],
-                        })
-                    elif tool_name in ("duckduckgo_search", "tavily_search", "spark_search"):
-                        node_sources.append({
-                            "source": tool_name,
-                            "query": str(normalized.metadata.get("query", "")),
-                            "summary": result_text[:500],
-                        })
+                node_sources.extend(source.model_dump() for source in normalized.sources)
 
         except Exception as exc:
             logger.warning("[TutorToolRunner] tool %s failed: %s", tool_name, exc)
@@ -126,6 +108,7 @@ class TutorToolRunner:
                 tool_message = await memory_service.save_message(
                     user_id=user_id,
                     session_id=session_id,
+                    user_message_id=context.user_message_id,
                     role="tool",
                     content=[{"type": "text", "text": result_text}],
                     tool_call_id=tool_call_id,

@@ -3,20 +3,19 @@
 触发条件：token 数 ≥ min_tokens 或消息数 ≥ min_messages（满足其一即可）。
 压缩策略：保留最近 keep_recent 条原始消息，其余通过 LLM 生成 Markdown 摘要。
 LLM 失败时降级为 extract_fallback_summary_markdown（取前 N 行拼接）。
-压缩后物理删除已摘要的旧消息，重置 summary_token_count 计数器。
+压缩后保留完整原始历史，仅记录摘要覆盖边界并重置计数器。
 """
 
 from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from sqlmodel import delete, func, select
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.prompts import prompts
 from app.chat.memory.types import extract_content_text, extract_fallback_summary_markdown
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.markdown_output import with_markdown_output_contract
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
 
 logger = get_logger(__name__)
@@ -31,7 +30,7 @@ class ChatSessionCompressor:
       3. 通过 LLM 生成 Markdown 格式的会话摘要
       4. LLM 失败时降级为行拼接的简易摘要
       5. 将摘要保存为 ChatSessionSummaryBlock 记录
-      6. 物理删除已被摘要的旧消息
+      6. 保留原始消息，以摘要块 end_message_id 标记上下文覆盖边界
       7. 重置 summary_token_count 计数器
     """
 
@@ -109,12 +108,30 @@ class ChatSessionCompressor:
             logger.info("[ChatSessionCompressor._should_compress] token_count >= min_tokens, 触发压缩")
             return True
 
-        # 统计当前会话的消息条数
+        latest_block = (
+            await db.exec(
+                select(ChatSessionSummaryBlock)
+                .join(ChatSession, ChatSession.id == ChatSessionSummaryBlock.session_id)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatSessionSummaryBlock.session_id == session_id,
+                )
+                .order_by(ChatSessionSummaryBlock.block_index.desc())
+                .limit(1)
+            )
+        ).first()
+        last_summarized_id = int(latest_block.end_message_id or 0) if latest_block else 0
+
+        # 仅统计上一个摘要边界之后的新消息，避免保留历史后反复压缩同一批记录。
         count_result = (
             await db.exec(
-                select(func.count()).where(
-                    ChatMessage.user_id == user_id,
+                select(func.count())
+                .select_from(ChatMessage)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatSession.user_id == user_id,
                     ChatMessage.session_id == session_id,
+                    ChatMessage.id > last_summarized_id,
                 )
             )
         ).one()
@@ -140,15 +157,38 @@ class ChatSessionCompressor:
           3. 将目标消息格式化为带时间戳的文本
           4. 调用 LLM 生成摘要（失败时降级为行拼接）
           5. 创建新的 summary_block 记录
-          6. 物理删除已被摘要的旧消息
+          6. 保留原始消息，供历史回放和审计
           7. 重置 token 计数器
         """
+        latest_block = (
+            await db.exec(
+                select(ChatSessionSummaryBlock)
+                .join(ChatSession, ChatSession.id == ChatSessionSummaryBlock.session_id)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatSessionSummaryBlock.session_id == session_id,
+                )
+                .order_by(ChatSessionSummaryBlock.block_index.desc())
+                .limit(1)
+            )
+        ).first()
+        last_summarized_id = int(latest_block.end_message_id or 0) if latest_block else 0
         filters = [
-            ChatMessage.user_id == user_id,
+            ChatSession.user_id == user_id,
             ChatMessage.session_id == session_id,
             ChatMessage.role.in_(["user", "assistant"]),
+            ChatMessage.id > last_summarized_id,
         ]
-        messages = list((await db.exec(select(ChatMessage).where(*filters).order_by(ChatMessage.created_at.asc()))).all())
+        messages = list(
+            (
+                await db.exec(
+                    select(ChatMessage)
+                    .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                    .where(*filters)
+                    .order_by(ChatMessage.id.asc())
+                )
+            ).all()
+        )
         dialogue = [msg for msg in messages if extract_content_text(msg.content)]
         logger.info(
             "[ChatSessionCompressor._compress] user_id=%s session_id=%s total_messages=%s dialogue_count=%s target_count=%s keep_recent=%s",
@@ -173,7 +213,7 @@ class ChatSessionCompressor:
         summary_markdown = None
         try:
             prompt = prompts.get("chat_memory").render("compression", dialogue_text=chat_text[:5000])
-            prompt = with_markdown_output_contract(prompt)
+            prompt = prompt
 
             resp = await self.llm.ainvoke(
                 [
@@ -198,31 +238,14 @@ class ChatSessionCompressor:
                 user_id, session_id, len(summary_markdown),
             )
 
-        latest_block = (
-            await db.exec(
-                select(ChatSessionSummaryBlock)
-                .where(
-                    ChatSessionSummaryBlock.user_id == user_id,
-                    ChatSessionSummaryBlock.session_id == session_id,
-                )
-                .order_by(ChatSessionSummaryBlock.block_index.desc())
-                .limit(1)
-            )
-        ).first()
         next_block_index = (latest_block.block_index if latest_block else 0) + 1
 
         summary_block = ChatSessionSummaryBlock(
-            user_id=user_id,
             session_id=session_id,
             block_index=next_block_index,
             summary_markdown=summary_markdown,
             start_message_id=target[0].id,
             end_message_id=target[-1].id,
-            start_at=target[0].created_at,
-            end_at=target[-1].created_at,
-            summarized_message_count=len(target),
-            topics=[],
-            keywords=[],
         )
         db.add(summary_block)
         await db.flush()
@@ -231,39 +254,9 @@ class ChatSessionCompressor:
             user_id, session_id, next_block_index, len(target),
         )
 
-        # 物理删除已被摘要覆盖的旧消息
-        if self.keep_recent > 0:
-            first_kept = dialogue[-self.keep_recent].id
-            stale_messages = list(
-                (
-                    await db.exec(
-                        select(ChatMessage).where(
-                            ChatMessage.user_id == user_id,
-                            ChatMessage.session_id == session_id,
-                            ChatMessage.id < first_kept,
-                        )
-                    )
-                ).all()
-            )
-        else:
-            stale_messages = list(
-                (
-                    await db.exec(
-                        select(ChatMessage).where(
-                            ChatMessage.user_id == user_id,
-                            ChatMessage.session_id == session_id,
-                            ChatMessage.id.in_([msg.id for msg in target if msg.id is not None]),
-                        )
-                    )
-                ).all()
-            )
-        deleted_count = len(stale_messages)
-        stale_ids = [msg.id for msg in stale_messages if msg.id is not None]
-        if stale_ids:
-            await db.exec(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))
         logger.info(
-            "[ChatSessionCompressor._compress] 删除旧消息: user_id=%s session_id=%s deleted_count=%s",
-            user_id, session_id, deleted_count,
+            "[ChatSessionCompressor._compress] 保留原始消息并更新摘要边界: user_id=%s session_id=%s end_message_id=%s",
+            user_id, session_id, target[-1].id,
         )
 
         # 重置 token 计数器 — 压缩后重新开始累积

@@ -88,7 +88,7 @@ def validate_course_markdown(markdown_text: str, course_name: str) -> str:
 
 def merge_dimensions(profile_json: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     """合并画像维度增量更新。只更新支持的七个维度。"""
-    merged = deepcopy(profile_json) if profile_json else default_profile_json()
+    merged = deepcopy(profile_json) if profile_json else deepcopy(default_profile_json)
     dimensions = merged.setdefault("dimensions", {})
     for key, val in patch.items():
         if key in ALL_DIMENSIONS:
@@ -170,8 +170,8 @@ class ProfileService:
             stmt = pg_insert(GlobalProfile).values(
                 user_id=user_id,
                 module=self.module,
-                profile_json=default_profile_json(),
-                profile_score_json=default_score_json(),
+                profile_json=deepcopy(default_profile_json),
+                profile_score_json=deepcopy(default_score_json),
                 created_at=now,
                 updated_at=now,
             ).on_conflict_do_nothing(
@@ -193,8 +193,8 @@ class ProfileService:
                 profile = GlobalProfile(
                     user_id=user_id,
                     module=self.module,
-                    profile_json=default_profile_json(),
-                    profile_score_json=default_score_json(),
+                    profile_json=deepcopy(default_profile_json),
+                    profile_score_json=deepcopy(default_score_json),
                 )
                 db.add(profile)
                 await db.flush()
@@ -228,7 +228,7 @@ class ProfileService:
             - 认知层维度（认知风格、学习目标导向、难度耐受度、自纠能力水平）
         """
         profile = await self.get_profile(user_id=user_id)
-        profile_json = profile.profile_json or default_profile_json()
+        profile_json = profile.profile_json or deepcopy(default_profile_json)
 
         lines: list[str] = ["# 学习者画像"]
 
@@ -309,7 +309,7 @@ class ProfileService:
 
             profile = await self.get_profile(user_id=user_id, db=db)
 
-            profile_json = profile.profile_json or default_profile_json()
+            profile_json = profile.profile_json or deepcopy(default_profile_json)
             profile_json["base_info"] = base_info
             profile.profile_json = profile_json
             profile.updated_at = datetime.now(timezone.utc)
@@ -333,7 +333,7 @@ class ProfileService:
         try:
             async with session_scope() as db:
                 profile = await self.get_profile(user_id=user_id, db=db)
-                profile_json = profile.profile_json or default_profile_json()
+                profile_json = profile.profile_json or deepcopy(default_profile_json)
                 base_info = profile_json.get("base_info", {})
 
                 logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
@@ -354,7 +354,7 @@ class ProfileService:
 
                 profile = await self.get_profile(user_id=user_id, db=db)
 
-                profile_json = profile.profile_json or default_profile_json()
+                profile_json = profile.profile_json or deepcopy(default_profile_json)
                 profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
                 profile.profile_json = profile_json
                 profile.updated_at = datetime.now(timezone.utc)
@@ -396,7 +396,6 @@ class ProfileService:
                 await db.exec(
                     select(ChatLongTermMemory).where(
                         ChatLongTermMemory.user_id == user_id,
-                        ChatLongTermMemory.module == self.module,
                     )
                 )
             ).first()
@@ -518,7 +517,6 @@ class ProfileService:
                 await db.exec(
                     select(ChatLongTermMemory).where(
                         ChatLongTermMemory.user_id == user_id,
-                        ChatLongTermMemory.module == self.module,
                     )
                 )
             ).first()

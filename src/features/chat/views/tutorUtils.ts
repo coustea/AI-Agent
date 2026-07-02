@@ -19,6 +19,8 @@ export interface Attachment {
 }
 
 export interface AgentActivityDetail {
+  agent?: string
+  action?: string
   tool_name?: string
   input?: string
   output?: string
@@ -30,7 +32,7 @@ export interface AgentActivityDetail {
 
 export interface AgentActivity {
   activity_id: string
-  kind: 'tool' | 'attachment' | 'workflow'
+  kind: 'agent' | 'tool' | 'attachment' | 'workflow'
   stage?: string
   status: 'running' | 'done' | 'failed'
   tool_name?: string
@@ -42,6 +44,7 @@ export interface AgentActivity {
 
 export interface ChatMsg {
   id: number
+  userMessageId?: number
   role: 'user' | 'ai'
   content: string
   time: string
@@ -110,7 +113,7 @@ export const formatRelativeTime = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString()
 }
 
-const isCjkCharacter = (char: string): boolean => {
+export const isCjkCharacter = (char: string): boolean => {
   return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(char)
 }
 

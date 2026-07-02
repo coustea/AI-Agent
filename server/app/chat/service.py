@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any, AsyncIterator
+from uuid import uuid4
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
@@ -50,6 +51,7 @@ async def build_messages(
 
 async def chat(
     *,
+    user_message_id: int,
     user_id: int,
     session_id: str,
     user_input: str,
@@ -57,15 +59,7 @@ async def chat(
     enable_web_search: bool = False,
     need_teaching_diagram: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
-    """执行一次辅导对话，流式返回 SSE 事件。
-
-    简化流程（不再创建 turn）：
-    1. 保存用户消息
-    2. 构建上下文
-    3. 调用 TutorAgent
-    4. 保存助手回复
-    5. 后台记忆任务
-    """
+    """执行一次辅导对话，所有派生记录关联当前 UserMessage。"""
     uc = get_chat_usecases()
     effective_session = session_id or uc.default_session_id(user_id)
     merged_attachments = list(dict.fromkeys(attachments or []))
@@ -84,28 +78,23 @@ async def chat(
         user_id, effective_session, len(current_message), len(merged_attachments),
     )
 
-    yield {
-        "event": "status",
-        "data": {
-            "stage": "preparing_context",
-            "activity_id": "workflow:current",
-            "title": "正在理解问题",
-            "summary": "包含附件" if merged_attachments else "",
-            "message": "正在读取附件和问题" if merged_attachments else "正在读取你的问题",
-        },
-    }
-
     # ── 1. 持久化用户消息 ──
     memory_svc = get_chat_memory_service()
-    content_parts = build_user_content(current_message, merged_attachments)
-
-    user_message = await memory_svc.save_message(
+    preparing_payload = build_workflow_activity_payload(
+        stage="preparing_context",
+        activity_id="workflow:current",
+        title="正在理解问题",
+        summary="包含附件" if merged_attachments else "",
+        message="正在读取附件和问题" if merged_attachments else "正在读取你的问题",
+        status="running",
+    )
+    await memory_svc.upsert_activity(
         user_id=user_id,
         session_id=effective_session,
-        role="user",
-        content=content_parts,
+        user_message_id=user_message_id,
+        payload=preparing_payload,
     )
-    user_message_id: int | None = getattr(user_message, "id", None)
+    yield {"event": "status", "data": preparing_payload}
 
     # 如果是第一条消息，后台生成标题
     if await memory_svc.count_messages(user_id=user_id, session_id=effective_session) <= 1:
@@ -129,6 +118,7 @@ async def chat(
     agent_input = TutorAgentInput(
         user_id=user_id,
         session_id=effective_session,
+        user_message_id=user_message_id,
         question=current_message,
         attachments=merged_attachments,
         history_messages=history_messages,
@@ -207,10 +197,16 @@ async def chat(
         await memory_svc.save_message(
             user_id=user_id,
             session_id=effective_session,
+            user_message_id=user_message_id,
             role="assistant",
-            content=full_answer,
+            content=[{"type": "text", "text": full_answer}],
             usage_metadata=usage_meta or None,
         )
+    elif not has_error:
+        has_error = True
+        yield {"event": "error", "data": "模型未生成可用回答"}
+        yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+        return
 
     # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
     if not has_error and full_answer:
@@ -257,7 +253,7 @@ async def _publish_chat_runtime_event(
 
 async def run_chat_agent(
     *,
-    run_id: str,
+    user_message_id: int,
     user_id: int,
     session_id: str,
     user_input: str,
@@ -269,7 +265,12 @@ async def run_chat_agent(
 
     频道已在 router 中通过 ChatEvents.open() 注册。
     """
-    events = ChatEvents(user_id=user_id, session_id=session_id, run_id=run_id)
+    events = ChatEvents(
+        user_id=user_id,
+        session_id=session_id,
+        user_message_id=user_message_id,
+    )
+    memory_svc = get_chat_memory_service()
     await events.open()
     started = build_workflow_activity_payload(
         stage="run_started",
@@ -277,10 +278,17 @@ async def run_chat_agent(
         title="正在思考",
         message="正在准备回答",
     )
-    await events.send(event="run.started", message=started["message"], data=started)
+    await memory_svc.upsert_activity(
+        user_id=user_id,
+        session_id=session_id,
+        user_message_id=user_message_id,
+        payload=started,
+    )
+    await events.send(event="message.started", message=started["message"], data=started)
     failed = False
     try:
         async for event in chat(
+            user_message_id=user_message_id,
             user_id=user_id,
             session_id=session_id,
             user_input=user_input,
@@ -290,12 +298,48 @@ async def run_chat_agent(
         ):
             failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:
-            await events.send(event="run.failed", message="回答失败", data={"error": "智能辅导暂时无法完成本次回答"})
+            await memory_svc.upsert_activity(
+                user_id=user_id,
+                session_id=session_id,
+                user_message_id=user_message_id,
+                payload=build_workflow_activity_payload(
+                    stage="failed",
+                    activity_id="workflow:current",
+                    title="回答未完成",
+                    message="智能辅导暂时无法完成本次回答",
+                    status="failed",
+                ),
+            )
+            await events.send(event="message.failed", message="回答失败", data={"error": "智能辅导暂时无法完成本次回答"})
         else:
-            await events.send(event="run.completed", message="回答完成", data={})
+            await memory_svc.upsert_activity(
+                user_id=user_id,
+                session_id=session_id,
+                user_message_id=user_message_id,
+                payload=build_workflow_activity_payload(
+                    stage="answer_done",
+                    activity_id="workflow:current",
+                    title="回答已完成",
+                    message="回答已生成并保存",
+                    status="done",
+                ),
+            )
+            await events.send(event="message.completed", message="回答完成", data={})
     except Exception as e:
-        logger.exception("chat_agent_run_failed: run_id=%s", run_id)
-        await events.send(event="run.failed", message="回答失败", data={"error": str(e)})
+        logger.exception("chat_agent_failed: user_message_id=%s", user_message_id)
+        await memory_svc.upsert_activity(
+            user_id=user_id,
+            session_id=session_id,
+            user_message_id=user_message_id,
+            payload=build_workflow_activity_payload(
+                stage="failed",
+                activity_id="workflow:current",
+                title="回答未完成",
+                message=str(e),
+                status="failed",
+            ),
+        )
+        await events.send(event="message.failed", message="回答失败", data={"error": str(e)})
 
 
 
@@ -323,12 +367,48 @@ class ChatUseCases:
         self._memory_service = get_chat_memory_service()
 
     def default_session_id(self, user_id: int) -> str:
-        """生成默认会话 ID — 格式: user-{user_id}-default-mentor。"""
-        return f"user-{user_id}-default-mentor"
+        """生成与 PostgreSQL UUID 列一致的新会话 ID。"""
+        return str(uuid4())
 
-
-
-
+    async def create_user_message(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        text: str,
+        attachments: list[dict[str, Any]],
+    ) -> Any:
+        """把文字和原始附件快照直接写入 UserMessage。"""
+        normalized_attachments: list[dict[str, Any]] = []
+        prefix = f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/"
+        seen_urls: set[str] = set()
+        for attachment in attachments:
+            url = str(attachment.get("url") or "").strip()
+            if not url.startswith(prefix) or url in seen_urls:
+                raise ValueError("附件地址无效或不属于当前会话")
+            filename = url.removeprefix(prefix)
+            path = self.file_store.resolve_user_file(
+                current_user_id=user_id,
+                owner_id=user_id,
+                session_id=session_id,
+                filename=filename,
+            )
+            suffix = path.suffix.lower()
+            file_type = "image" if suffix in self.file_store.allowed_image_ext else "document"
+            normalized_attachments.append({
+                "url": url,
+                "file_type": file_type,
+                "original_name": str(attachment.get("original_name") or filename),
+                "mime_type": str(attachment.get("mime_type") or "") or None,
+                "size_bytes": path.stat().st_size,
+            })
+            seen_urls.add(url)
+        return await self._memory_service.save_message(
+            user_id=user_id,
+            session_id=session_id,
+            role="user",
+            content=build_user_content(text, normalized_attachments),
+        )
 
     async def get_history(
         self,
@@ -346,21 +426,80 @@ class ChatUseCases:
             session_id = sessions[0].id
 
         raw_messages = await memory_svc.list_messages(user_id=user_id, session_id=session_id, limit=limit)
+        analyses = await memory_svc.list_attachment_analyses(user_id=user_id, session_id=session_id)
+        activities = await memory_svc.list_activities(user_id=user_id, session_id=session_id)
+
+        analyses_by_message: dict[int, list[dict[str, Any]]] = {}
+        for analysis in analyses:
+            analyses_by_message.setdefault(analysis.user_message_id, []).append({
+                "id": str(analysis.id),
+                "analysis_type": analysis.analysis_type,
+                "status": analysis.status,
+                "content": analysis.content,
+                "error": analysis.error_message,
+            })
+
+        activities_by_message: dict[int, list[dict[str, Any]]] = {}
+        for activity in activities:
+            activities_by_message.setdefault(activity.user_message_id, []).append({
+                "activity_id": activity.activity_id,
+                "kind": activity.kind,
+                "stage": activity.stage,
+                "status": activity.status,
+                "title": activity.title,
+                "summary": activity.summary,
+                "message": activity.message,
+                "detail": activity.detail or {},
+            })
 
         result: list[ChatMessageItem] = []
+        final_answer_roots = {
+            message.user_message_id
+            for message in raw_messages
+            if message.role == "assistant" and not message.tool_calls
+        }
         for message in raw_messages:
             msg_content: list[dict[str, Any]] = list(message.content) if isinstance(message.content, list) else [{"type": "text", "text": str(message.content)}]
+            root_message_id = message.id if message.role == "user" else message.user_message_id
+            is_final_assistant = message.role == "assistant" and not message.tool_calls
 
             result.append(
                 ChatMessageItem(
                     id=message.id,
+                    user_message_id=root_message_id,
                     role=message.role,
                     content=msg_content,
                     tool_calls=message.tool_calls if isinstance(message.tool_calls, list) else None,
                     tool_call_id=getattr(message, "tool_call_id", None),
+                    attachment_analyses=analyses_by_message.get(root_message_id, []) if is_final_assistant else [],
+                    activities=activities_by_message.get(root_message_id, []) if is_final_assistant else [],
+                    usage_metadata=message.usage_metadata if isinstance(message.usage_metadata, dict) else None,
                     created_at=message.created_at,
                 )
             )
+
+        for message in raw_messages:
+            if message.role != "user" or message.id in final_answer_roots:
+                continue
+            message_activities = activities_by_message.get(message.id, [])
+            if not message_activities:
+                continue
+            result.append(
+                ChatMessageItem(
+                    id=-message.id,
+                    user_message_id=message.id,
+                    role="assistant",
+                    content=[],
+                    attachment_analyses=analyses_by_message.get(message.id, []),
+                    activities=message_activities,
+                    created_at=message.created_at,
+                )
+            )
+        result.sort(key=lambda item: (
+            item.created_at,
+            0 if item.role == "user" else 1,
+            item.id,
+        ))
         return result
 
 
@@ -374,14 +513,13 @@ class ChatUseCases:
         user_id: int,
         session_id: str,
     ) -> dict[str, Any]:
-        """保存用户上传的文件：磁盘存储 + 数据库记录。
+        """保存用户上传的文件。
 
         流程：
         1. 校验文件名非空
         2. 检查单次上传文件数是否超限
         3. 调用 LocalFileStore 写入磁盘
-        4. 在数据库中保存文件记录
-        5. 维护 URL→数据库 ID 映射，供附件分析器引用
+        4. 返回附件快照，随 UserMessage 一起提交
         """
         if not filename:
             raise ValueError("文件名不能为空")
@@ -396,8 +534,6 @@ class ChatUseCases:
             user_id=user_id,
             session_id=session_id,
         )
-        # 保存文件记录到数据库
-        await self._memory_service.save_uploaded_file(user_id=user_id, session_id=session_id, payload=payload)
         return payload
 
     def resolve_uploaded_file(

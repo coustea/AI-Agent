@@ -2,7 +2,6 @@
 
 持久化 API：
 - create_task: 创建资源生成任务
-- save_teaching_plan: 保存教学计划
 - start_agent_run / complete_agent_run / mark_agent_failed: Agent 运行生命周期
 - save_agent_result: 保存 Agent 生成内容
 - finalize_generation: 从数据库计算终态
@@ -28,7 +27,6 @@ from app.infra.logging import get_module_logger
 from app.infra.models import GeneratedResource, GeneratedResourceAgentRun, GeneratedResourceItem as ItemModel
 from app.resource.schemas import (
     AgentResult,
-    DownstreamContext,
     GeneratedResourceItem,
     ResourceBundle,
     ResourceGenerationRequest,
@@ -57,8 +55,8 @@ def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | No
         if not isinstance(value, (dict, list)):
             raise ValueError("JSON resource content must be an object or array")
         return value, None
-    if result.file_type == "html":
-        # HTML 文件不存储内容，只存储文件路径
+    if result.file_type in {"html", "mp4"}:
+        # Binary artifacts are persisted by path in metadata.
         return None, None
     if result.file_type in {"markdown", "mermaid", "text", "code"}:
         if not isinstance(result.content, str) or not result.content.strip():
@@ -84,7 +82,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
             if not item.content_text:
                 raise ValueError(f"资源项 {item.id} 文本格式但 content_text 为空")
             content = item.content_text
-        elif item.content_format == "html":
+        elif item.content_format in {"html", "mp4"}:
             content = item.metadata_json or {}
         else:
             content = None
@@ -96,8 +94,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
         title=item.title,
         format=item.content_format, content=content,
         summary=item.summary or "", metrics=item.metrics or {},
-        downstream_context=DownstreamContext.model_validate(item.downstream_context) if isinstance(item.downstream_context, dict) else None,
-        execution_report=item.execution_report, metadata=item.metadata_json or {},
+        metadata=item.metadata_json or {},
         status=item.status, error_message=item.error_message,
         created_at=item.created_at.isoformat() if item.created_at else None,
         updated_at=item.updated_at.isoformat() if item.updated_at else None,
@@ -109,7 +106,6 @@ class ResourceService:
 
     窄持久化 API：
     - create_task: 创建任务并保存 request/profile 快照
-    - save_teaching_plan: 保存计划并完成 planning run
     - start_agent_run: 将 run 从 pending 改为 running
     - save_agent_result: 插入成功 item
     - complete_agent_run: 将 run 改为 completed
@@ -138,17 +134,12 @@ class ResourceService:
         *,
         user_id: int,
         request: ResourceGenerationRequest,
-        profile_snapshot: dict[str, Any] | None = None,
         source: str = "standalone",
     ) -> dict[str, Any]:
-        """创建任务并保存 request/profile 快照。"""
+        """创建任务。"""
         resource = GeneratedResource(
             user_id=user_id,
             learning_need=request.learning_need,
-            selected_agents=request.enabled_agent_ids(),
-            agent_configs=request.agent_configs.model_dump(mode="json"),
-            request_snapshot=request.model_dump(mode="json"),
-            profile_snapshot=profile_snapshot,
             source=source,
             status="pending",
         )
@@ -157,37 +148,6 @@ class ResourceService:
         resource_id = int(getattr(resource, "id", 0) or 0)
         await self._commit(resource)
         return {"resource_id": resource_id, "status": "pending", "source": source}
-
-    # =========================================================================
-    # Teaching Plan 持久化
-    # =========================================================================
-
-    async def save_teaching_plan(
-        self,
-        *,
-        user_id: int,
-        resource_id: int,
-        teaching_plan: TeachingPlan,
-    ) -> None:
-        """校验 owner 后保存计划，并完成初始化阶段创建的 planning run。"""
-        resource = await self.session.get(GeneratedResource, resource_id)
-        if resource is None or resource.user_id != user_id:
-            raise ValueError("资源不存在或无权限")
-        resource.teaching_plan = teaching_plan.model_dump(mode="json")
-        await self._commit(resource)
-
-        # 完成 planning run
-        planning_run = await self.session.exec(
-            select(GeneratedResourceAgentRun).where(
-                GeneratedResourceAgentRun.resource_id == resource_id,
-                GeneratedResourceAgentRun.agent_id == "planning",
-            )
-        )
-        planning_run_obj = planning_run.one_or_none()
-        if planning_run_obj:
-            planning_run_obj.status = "completed"
-            planning_run_obj.finished_at = datetime.now(timezone.utc)
-            await self._commit(planning_run_obj)
 
     # =========================================================================
     # Agent Run 生命周期
@@ -243,7 +203,6 @@ class ResourceService:
         resource_id: int,
         agent_id: str,
         stage: str,
-        error_type: str,
         error_message: str,
         elapsed_ms: int | None = None,
     ) -> None:
@@ -258,7 +217,6 @@ class ResourceService:
         if run_obj:
             run_obj.status = "failed"
             run_obj.stage = stage
-            run_obj.error_type = error_type
             run_obj.error_message = error_message
             run_obj.finished_at = datetime.now(timezone.utc)
             run_obj.elapsed_ms = elapsed_ms
@@ -267,11 +225,9 @@ class ResourceService:
             # 创建新的 failed run
             new_run = GeneratedResourceAgentRun(
                 resource_id=resource_id,
-                run_id=f"fail-{resource_id}-{agent_id}",
                 agent_id=agent_id,
                 stage=stage,
                 status="failed",
-                error_type=error_type,
                 error_message=error_message,
                 finished_at=datetime.now(timezone.utc),
                 elapsed_ms=elapsed_ms,
@@ -290,10 +246,8 @@ class ResourceService:
         user_id: int,
         agent_id: str,
         result: AgentResult,
-        source_item_ids: list[int] | None = None,
-        depends_on_agents: list[str] | None = None,
     ) -> ItemModel:
-        """保存成功 Agent 的结果。先校验，再插入 item。"""
+        """保存成功 Agent 的结果。"""
         if not result.success:
             raise ValueError("仅能保存成功的结果")
         if not result.title.strip() or not result.file_type.strip():
@@ -302,51 +256,8 @@ class ResourceService:
         resource = await self.session.get(GeneratedResource, resource_id)
         if resource is None or resource.user_id != user_id:
             raise ValueError("资源不存在或无权限")
-        if agent_id not in (resource.selected_agents or []):
-            raise ValueError(f"Agent {agent_id} 不在已选择的 Agent 列表中")
-
-        # 身份校验
-        metadata_agent_id = result.metadata.get("agent_id") if result.metadata else None
-        if metadata_agent_id != agent_id:
-            raise ValueError(
-                f"Agent 结果身份不匹配: scheduled={agent_id!r} metadata={metadata_agent_id!r}"
-            )
-
-        # 校验 source_item_ids
-        if source_item_ids:
-            valid_ids = set()
-            for sid in source_item_ids:
-                item = await self.session.get(ItemModel, sid)
-                if item and item.resource_id == resource_id:
-                    valid_ids.add(sid)
-            if len(valid_ids) != len(source_item_ids):
-                raise ValueError(f"source_item_ids 包含无效或不属于当前资源的 ID")
-
-        # 校验依赖
-        dependencies = list(dict.fromkeys(depends_on_agents or []))
-        if agent_id in dependencies:
-            raise ValueError(f"Agent {agent_id} 不能依赖自身")
-        if dependencies:
-            stmt = (
-                select(ItemModel.agent_type)
-                .where(ItemModel.resource_id == resource_id)
-                .where(ItemModel.user_id == user_id)
-                .where(ItemModel.status == "completed")
-                .where(col(ItemModel.agent_type).in_(dependencies))
-            )
-            persisted = set((await self.session.exec(stmt)).all())
-            missing = set(dependencies) - persisted
-            if missing:
-                raise ValueError(
-                    f"Agent 依赖尚未成功持久化: agent_id={agent_id!r} missing={sorted(missing)}"
-                )
 
         content_json, content_text = _split_content(result)
-
-        # 从 metadata 提取文件路径
-        output_file_path = result.metadata.get("output_file_path") if result.metadata else None
-        json_file_path = result.metadata.get("json_file_path") if result.metadata else None
-        audio_file_paths = result.metadata.get("audio_file_paths") if result.metadata else None
 
         item = ItemModel(
             resource_id=resource_id,
@@ -355,17 +266,10 @@ class ResourceService:
             content_format=result.file_type,
             title=result.title,
             summary=result.summary,
-            generated_by=agent_id,
             content_json=content_json,
             content_text=content_text,
             metadata_json=result.metadata,
             metrics=result.metrics,
-            downstream_context=result.downstream_context.model_dump(mode="json") if result.downstream_context else None,
-            output_file_path=output_file_path,
-            json_file_path=json_file_path,
-            audio_file_paths=audio_file_paths,
-            depends_on_agents=dependencies or None,
-            source_item_ids=source_item_ids,
             status="completed",
             updated_at=datetime.now(timezone.utc),
         )
@@ -516,9 +420,13 @@ class ResourceService:
         runs_result = await self.session.exec(runs_stmt)
         runs_by_agent = {run.agent_id: run for run in runs_result.all()}
 
+        # 从 items 和 runs 推导 selected_agents（不再从 resource.selected_agents 读取）
+        agent_ids_from_items = {item.agent_type for item in db_items}
+        agent_ids_from_runs = {run.agent_id for run in runs_by_agent.values()}
+        selected_agents = sorted(agent_ids_from_items | agent_ids_from_runs)
+
         # 构建 agent_snapshots：数据库状态优先，包含系统工作流节点。
         merged: dict[str, dict[str, Any]] = {}
-        selected_agents = list(resource.selected_agents or [])
         current_message = ""
 
         for agent_id, run in runs_by_agent.items():
@@ -584,7 +492,6 @@ class ResourceService:
             agent_snapshots=merged,
             current_message=current_message,
             resources=[_item_to_dto(item, include_content=False) for item in db_items],
-            started_at=resource.started_at.isoformat() if resource.started_at else None,
             updated_at=resource.updated_at.isoformat() if resource.updated_at else None,
         )
 
@@ -593,13 +500,15 @@ class ResourceService:
         if resource is None:
             return None
         db_items = await self.list_resource_items(user_id, resource_id)
+        # 从 items 推导 selected_agents（不再从 resource.selected_agents 读取）
+        selected_agents = [item.agent_type for item in db_items]
         return ResourceBundle(
             id=str(resource.id), task_id=str(resource.id), title="个性化学习资源包",
-            learning_need=resource.learning_need or "", selected_agents=resource.selected_agents or [],
+            learning_need=resource.learning_need or "", selected_agents=selected_agents,
             resources=[_item_to_dto(item) for item in db_items], status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",
             updated_at=resource.updated_at.isoformat() if resource.updated_at else "",
-            metadata={"source": "database", "failed_agents": resource.failed_agents or [], "teaching_plan": resource.teaching_plan or {}},
+            metadata={"source": "database", "failed_agents": resource.failed_agents or []},
         )
 
 

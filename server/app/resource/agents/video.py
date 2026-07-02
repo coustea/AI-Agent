@@ -1,1348 +1,222 @@
-"""视频智能体 — 结构化讲解视频脚本生成（JSON 输出，不渲染二进制视频）。
-
-内部多智能体流水线：
-  1. VideoMaterialAgent  — 从上游资源提取视频素材
-  2. VideoOutlineAgent   — 规划场景合约
-  3. SceneWriterAgent    — 并发写场景（含 TTS 合成）
-  4. VideoPayloadBuilder — 确定性构建预览 JSON 载荷
-"""
+"""Resource-domain adapter for the shared teaching-video capability."""
 
 from __future__ import annotations
 
-import asyncio
 import json
-from pathlib import Path
-from typing import Any, Annotated, Literal, TypedDict
-
-from pydantic import BaseModel, Field, model_validator
-from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
+import uuid
+from typing import Any
 
 from app.config import WORKPLACE_DIR
-from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import outline_coverage_summary
-from app.resource.schemas import AgentResult, DownstreamContext, NodeInput, ReusableAssets, ResourceInput
+from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.shared.video.agent import VideoAgent as SharedVideoAgent
+from app.shared.video.schemas import SourceMaterial, VideoRequest
 
 logger = get_logger(__name__)
 
-VideoStyle = Literal["explainer", "lecture", "screencast", "case_walkthrough"]
-VideoVoice = Literal["teacher", "coach", "concise"]
-AspectRatio = Literal["16:9", "9:16", "1:1"]
-SceneRole = Literal["hook", "concept", "example", "process", "misconception", "practice", "recap"]
-VisualType = Literal["title_intro", "concept_explain", "process_flow", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "code_execution", "compare_summary", "knowledge_check", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"]
-VideoSourceAgentId = Literal["content", "mindmap", "quiz", "code", "reading", "planning", "teaching_plan"]
 
-
-# =============================================================================
-# Visual Schema Definitions — 前端 Remotion 模板与后端的数据契约
-# =============================================================================
-
-class TitleIntroVisual(BaseModel):
-    """title_intro 场景的 visual 字段结构。
-
-    前端模板 TitleIntroPro.tsx 需要的字段。
-    """
-    course: str = Field(default="", description="课程名称")
-    chapter: str = Field(default="", description="章节名称")
-    subtitle: str = Field(default="", description="副标题")
-    tags: list[str] = Field(default_factory=list, description="标签列表")
-    hero_keywords: list[str] = Field(default_factory=list, description="核心关键词")
-
-
-class ConceptExplainVisual(BaseModel):
-    """concept_explain 场景的 visual 字段结构。
-
-    前端模板 ConceptExplainPro.tsx 需要的字段。
-    """
-    main_concept: str = Field(default="", description="核心概念名称")
-    definition: str = Field(default="", description="概念定义")
-    keywords: list[str] = Field(default_factory=list, description="关键词标签")
-    why_it_matters: list[str] = Field(default_factory=list, description="重要性要点")
-    related_concepts: list[dict[str, str]] = Field(
-        default_factory=list,
-        description="相关概念，每项包含 name 和 relation"
-    )
-    common_misconception: str = Field(default="", description="常见误解")
-
-
-class ProcessFlowVisual(BaseModel):
-    """process_flow 场景的 visual 字段结构。
-
-    前端模板 ProcessFlowPro.tsx 需要的字段。
-    """
-    process_name: str = Field(default="", description="流程名称")
-    inputs: list[str] = Field(default_factory=list, description="输入要求")
-    outputs: list[str] = Field(default_factory=list, description="输出结果")
-    steps: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="流程步骤，每项包含 id, label, description, icon"
-    )
-    failure_points: list[dict[str, str]] = Field(
-        default_factory=list,
-        description="故障点，每项包含 step_id 和 reason"
-    )
-
-
-class StateMachineVisual(BaseModel):
-    """state_machine 场景的 visual 字段结构。
-
-    前端模板 StateMachineLab.tsx 需要的字段。
-    """
-    machine_name: str = Field(default="", description="状态机名称")
-    states: list[str] = Field(default_factory=list, description="状态列表")
-    transitions: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="状态转换，每项包含 from, to, trigger, description"
-    )
-    initial_state: str = Field(default="", description="初始状态")
-    current_state: str = Field(default="", description="当前状态")
-
-
-class DataStructureVisual(BaseModel):
-    """data_structure 场景的 visual 字段结构。
-
-    前端模板 DataStructureLab.tsx 需要的字段。
-    """
-    structure_name: str = Field(default="", description="数据结构名称")
-    structure_type: str = Field(default="", description="类型如 array, linked_list, tree")
-    nodes: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="节点数据，每项包含 id, value, connections"
-    )
-    operations: list[str] = Field(default_factory=list, description="支持的操作")
-    complexity: dict[str, str] = Field(default_factory=dict, description="时间复杂度")
-
-
-class AlgorithmTraceVisual(BaseModel):
-    """algorithm_trace 场景的 visual 字段结构。
-
-    前端模板 AlgorithmTraceBoard.tsx 需要的字段。
-    """
-    algorithm_name: str = Field(default="", description="算法名称")
-    input_data: list[Any] = Field(default_factory=list, description="输入数据")
-    steps: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="算法步骤，每项包含 step_index, state, description, highlight_indices"
-    )
-    complexity: str = Field(default="", description="复杂度说明")
-
-
-class MemoryLayoutVisual(BaseModel):
-    """memory_layout 场景的 visual 字段结构。
-
-    前端模板 MemoryLayoutLab.tsx 需要的字段。
-    """
-    layout_name: str = Field(default="", description="内存布局名称")
-    segments: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="内存段，每项包含 name, start, end, content, active"
-    )
-    address_range: str = Field(default="", description="地址范围")
-    active_segment: str = Field(default="", description="当前活跃段")
-
-
-class CpuArchitectureVisual(BaseModel):
-    """cpu_architecture 场景的 visual 字段结构。
-
-    前端模板 CpuArchitectureLab.tsx 需要的字段。
-    """
-    architecture_name: str = Field(default="", description="架构名称")
-    components: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="组件，每项包含 name, type, description, active"
-    )
-    data_flow: list[dict[str, str]] = Field(
-        default_factory=list,
-        description="数据流，每项包含 from, to, label"
-    )
-    active_component: str = Field(default="", description="当前活跃组件")
-
-
-class NetworkProtocolVisual(BaseModel):
-    """network_protocol 场景的 visual 字段结构。
-
-    前端模板 NetworkProtocolTimeline.tsx 需要的字段。
-    """
-    protocol_name: str = Field(default="", description="协议名称")
-    participants: list[str] = Field(default_factory=list, description="参与方")
-    messages: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="消息，每项包含 seq, from, to, content, type"
-    )
-    current_step: int = Field(default=0, description="当前步骤")
-
-
-class LayeredArchitectureVisual(BaseModel):
-    """layered_architecture 场景的 visual 字段结构。
-
-    前端模板 LayeredArchitectureScene.tsx 需要的字段。
-    """
-    system_name: str = Field(default="", description="系统名称")
-    layers: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="层级，每项包含 name, responsibility, components, active"
-    )
-    data_flow_direction: str = Field(default="down", description="数据流方向")
-
-
-class CodeExecutionVisual(BaseModel):
-    """code_execution 场景的 visual 字段结构。
-
-    前端模板 CodeExecutionLab.tsx 需要的字段。
-    """
-    language: str = Field(default="python", description="编程语言")
-    code: str = Field(default="", description="代码内容")
-    steps: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="执行步骤，每项包含 step_index, active_line, description, variables, call_stack"
-    )
-    output: str = Field(default="", description="输出结果")
-    error_or_misconception: str = Field(default="", description="错误或误解说明")
-
-
-class CompareSummaryVisual(BaseModel):
-    """compare_summary 场景的 visual 字段结构。
-
-    前端模板 CompareSummaryPro.tsx 需要的字段。
-    """
-    comparison_title: str = Field(default="", description="对比标题")
-    items: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="对比项，每项包含 name, attributes"
-    )
-    dimensions: list[str] = Field(default_factory=list, description="对比维度")
-    conclusion: str = Field(default="", description="总结结论")
-
-
-class KnowledgeCheckVisual(BaseModel):
-    """knowledge_check 场景的 visual 字段结构。
-
-    前端模板 KnowledgeCheckScene.tsx 需要的字段。
-    """
-    question: str = Field(default="", description="问题")
-    options: list[str] = Field(default_factory=list, description="选项")
-    correct_answer: str = Field(default="", description="正确答案")
-    explanation: str = Field(default="", description="解释说明")
-    difficulty: str = Field(default="medium", description="难度")
-
-
-class ArrayLinkedListVisual(BaseModel):
-    """array_linked_list 场景的 visual 字段结构。
-
-    前端模板 ArrayLinkedListLab.tsx 需要的字段。
-    """
-    structure_type: str = Field(default="array", description="结构类型: array 或 linked_list")
-    nodes: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="节点数据，每项包含 value, index, highlight, status"
-    )
-    operations: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="操作序列，每项包含 type, indices, description"
-    )
-    pointer_name: str = Field(default="", description="指针名称")
-    time_complexity: str = Field(default="", description="时间复杂度")
-    space_complexity: str = Field(default="", description="空间复杂度")
-
-
-class StackQueueVisual(BaseModel):
-    """stack_queue 场景的 visual 字段结构。
-
-    前端模板 StackQueueLab.tsx 需要的字段。
-    """
-    structure_type: str = Field(default="stack", description="结构类型: stack 或 queue")
-    items: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="数据项，每项包含 value, status"
-    )
-    operations: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="操作序列，每项包含 type, value, description"
-    )
-    peek_value: str = Field(default="", description="栈顶/队头值")
-    time_complexity: str = Field(default="", description="时间复杂度")
-
-
-class ProcessStateVisual(BaseModel):
-    """process_state 场景的 visual 字段结构。
-
-    前端模板 ProcessStateTransition.tsx 需要的字段。
-    """
-    states: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="进程状态，每项包含 name, label, description"
-    )
-    transitions: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="状态转换，每项包含 from, to, trigger, description"
-    )
-    current_process: str = Field(default="", description="当前进程名")
-    highlight_path: list[str] = Field(default_factory=list, description="高亮路径")
-
-
-class StorageHierarchyVisual(BaseModel):
-    """storage_hierarchy 场景的 visual 字段结构。
-
-    前端模板 StorageHierarchy.tsx 需要的字段。
-    """
-    levels: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="存储层级，每项包含 name, label, capacity, access_time, cost_per_gb, level"
-    )
-    transfers: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="数据传输，每项包含 from, to, data_size, description"
-    )
-    highlight_level: str = Field(default="", description="高亮层级")
-
-
-# VisualType 到 Schema 的映射
-VISUAL_SCHEMAS: dict[str, type[BaseModel]] = {
-    "title_intro": TitleIntroVisual,
-    "concept_explain": ConceptExplainVisual,
-    "process_flow": ProcessFlowVisual,
-    "state_machine": StateMachineVisual,
-    "data_structure": DataStructureVisual,
-    "algorithm_trace": AlgorithmTraceVisual,
-    "memory_layout": MemoryLayoutVisual,
-    "cpu_architecture": CpuArchitectureVisual,
-    "network_protocol": NetworkProtocolVisual,
-    "layered_architecture": LayeredArchitectureVisual,
-    "code_execution": CodeExecutionVisual,
-    "compare_summary": CompareSummaryVisual,
-    "knowledge_check": KnowledgeCheckVisual,
-    # CS Theory templates
-    "array_linked_list": ArrayLinkedListVisual,
-    "stack_queue": StackQueueVisual,
-    "process_state": ProcessStateVisual,
-    "storage_hierarchy": StorageHierarchyVisual,
-}
-
-
-class VideoConstraints(BaseModel):
-    """视频约束参数 — 时长、场景数、风格、配音等。"""
-    duration_seconds: int = Field(default=180, ge=60, le=600)
-    scene_count: int = Field(default=6, ge=3, le=12)
-    style: VideoStyle = "explainer"
-    voice: VideoVoice = "teacher"
-    aspect_ratio: AspectRatio = "16:9"
-    include_captions: bool = True
-    output_format: Literal["preview"] = "preview"
-
-
-class VideoMaterialDigest(BaseModel):
-    """视频素材摘要 — 从上游资源提取的主题、概念、事实、示例等。"""
-    topic: str = Field(min_length=1)
-    audience: str = ""
-    learning_goal: str = ""
-    core_concepts: list[str] = Field(default_factory=list)
-    facts: list[str] = Field(default_factory=list)
-    examples: list[str] = Field(default_factory=list)
-    process_steps: list[str] = Field(default_factory=list)
-    misconceptions: list[str] = Field(default_factory=list)
-    practice_prompts: list[str] = Field(default_factory=list)
-    visual_opportunities: list[str] = Field(default_factory=list)
-    source_map: dict[str, list[str]] = Field(default_factory=dict)
-
-
-class SceneContract(BaseModel):
-    """场景合约 — 每个视频场景的结构化定义（角色、时长、学习目标等）。"""
-    scene_id: str
-    index: int = Field(ge=1)
-    role: SceneRole
-    title: str = Field(min_length=1)
-    duration_seconds: int = Field(ge=10)
-    learning_objective: str = Field(min_length=1)
-    visual_type: VisualType = "concept_explain"
-    content_hint: str = Field(min_length=1)
-    required_sources: list[VideoSourceAgentId] = Field(min_length=1)
-
-
-class VideoOutline(BaseModel):
-    """视频大纲 — 包含所有场景合约，校验场景连续性和时长一致性。"""
-    title: str = Field(min_length=1)
-    topic: str = Field(min_length=1)
-    duration_seconds: int = Field(ge=60)
-    style: VideoStyle = "explainer"
-    aspect_ratio: AspectRatio = "16:9"
-    narrative: str = ""
-    scenes: list[SceneContract]
-
-    @model_validator(mode="after")
-    def validate_outline(self) -> "VideoOutline":
-        if not self.scenes:
-            raise ValueError("video outline must contain scenes")
-        indexes = [scene.index for scene in self.scenes]
-        if indexes != list(range(1, len(self.scenes) + 1)):
-            raise ValueError("scene indexes must be contiguous from 1")
-        scene_ids = [scene.scene_id for scene in self.scenes]
-        if len(scene_ids) != len(set(scene_ids)):
-            raise ValueError("scene IDs must be unique")
-        for scene in self.scenes:
-            if len(scene.required_sources) != len(set(scene.required_sources)):
-                raise ValueError(f"scene required_sources must be unique: {scene.scene_id}")
-        if self.scenes[0].role != "hook":
-            raise ValueError("first scene role must be hook")
-        if self.scenes[-1].role != "recap":
-            raise ValueError("last scene role must be recap")
-        total = sum(scene.duration_seconds for scene in self.scenes)
-        if total != self.duration_seconds:
-            raise ValueError("scene durations must equal video duration_seconds")
-        return self
-
-
-class CaptionWord(BaseModel):
-    text: str = Field(min_length=1)
-    start_ms: int = Field(ge=0)
-    end_ms: int = Field(gt=0)
-
-    @model_validator(mode="after")
-    def validate_timing(self) -> "CaptionWord":
-        if self.end_ms <= self.start_ms:
-            raise ValueError("caption word end_ms must be greater than start_ms")
-        return self
-
-
-class CaptionChunk(BaseModel):
-    text: str = Field(min_length=1)
-    start_ms: int = Field(ge=0)
-    end_ms: int = Field(gt=0)
-
-    @model_validator(mode="after")
-    def validate_timing(self) -> "CaptionChunk":
-        if self.end_ms <= self.start_ms:
-            raise ValueError("caption chunk end_ms must be greater than start_ms")
-        return self
-
-
-class VisualBeatDraft(BaseModel):
-    id: str = Field(min_length=1)
-    kind: Literal["define", "example", "trace_step", "compare", "misconception", "checkpoint", "recap"]
-    target: str = Field(default="")
-    text_anchor: str = Field(min_length=1)
-    summary: str = Field(default="")
-
-
-class VisualCue(BaseModel):
-    id: str = Field(min_length=1)
-    kind: Literal["define", "example", "trace_step", "compare", "misconception", "checkpoint", "recap"]
-    target: str = Field(default="")
-    summary: str = Field(default="")
-    start_ms: int = Field(ge=0)
-    end_ms: int = Field(gt=0)
-    caption_text: str | None = None
-
-    @model_validator(mode="after")
-    def validate_timing(self) -> "VisualCue":
-        if self.end_ms <= self.start_ms:
-            raise ValueError("visual cue end_ms must be greater than start_ms")
-        return self
-
-
-class SceneDraft(BaseModel):
-    scene_id: str
-    index: int = Field(ge=1)
-    title: str = Field(min_length=1)
-    narration: str = Field(min_length=1)
-    captions: list[str] = Field(default_factory=list)
-    on_screen_text: list[str] = Field(default_factory=list)
-    visual_prompt: str = Field(min_length=1)
-    visual_type: str = "concept_explain"
-    interaction_prompt: str = ""
-    visual: dict[str, Any] = Field(min_length=1)
-    source_agents: list[str] = Field(min_length=1)
-    audio_src: str | None = None
-    duration_ms: int = 0
-    caption_words: list[CaptionWord] = Field(default_factory=list)
-    visual_beats: list[VisualBeatDraft] = Field(default_factory=list)
-    audio_duration_ms: int = Field(default=0)
-    caption_chunks: list[CaptionChunk] = Field(default_factory=list)
-    visual_cues: list[VisualCue] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_sources(self) -> "SceneDraft":
-        if len(self.source_agents) != len(set(self.source_agents)):
-            raise ValueError("scene draft source_agents must be unique")
-        return self
-
-
-class VideoAsset(BaseModel):
-    asset_id: str
-    type: Literal["image_prompt", "diagram_prompt", "code", "text"]
-    description: str
-    source_scene_id: str
-
-
-class VideoScene(BaseModel):
-    scene_id: str
-    index: int = Field(ge=1)
-    role: SceneRole
-    title: str = Field(min_length=1)
-    start_ms: int = Field(ge=0)
-    duration_ms: int = Field(gt=0)
-    visual_type: VisualType = "concept_explain"
-    narration: str = Field(min_length=1)
-    captions: list[str] = Field(default_factory=list)
-    on_screen_text: list[str] = Field(default_factory=list)
-    visual_prompt: str = Field(min_length=1)
-    interaction_prompt: str = ""
-    visual: dict[str, Any] = Field(min_length=1)
-    source_agents: list[VideoSourceAgentId] = Field(min_length=1)
-    audio_src: str = Field(min_length=1)
-    caption_words: list[CaptionWord] = Field(default_factory=list)
-    audio_duration_ms: int = Field(default=0)
-    caption_chunks: list[CaptionChunk] = Field(default_factory=list)
-    visual_cues: list[VisualCue] = Field(default_factory=list)
-
-
-class VideoPayload(BaseModel):
-    schema_version: Literal["video/v1"] = "video/v1"
-    title: str = Field(min_length=1)
-    topic: str = Field(min_length=1)
-    duration_seconds: float = Field(ge=0)
-    aspect_ratio: AspectRatio = "16:9"
-    style: VideoStyle = "explainer"
-    voice: VideoVoice = "teacher"
-    language: str = "zh-CN"
-    scenes: list[VideoScene]
-    assets: list[VideoAsset] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def validate_payload(self) -> "VideoPayload":
-        indexes = [scene.index for scene in self.scenes]
-        if indexes != list(range(1, len(self.scenes) + 1)):
-            raise ValueError("scene indexes must be contiguous from 1")
-        expected_start = 0
-        for scene in self.scenes:
-            if scene.start_ms != expected_start:
-                raise ValueError("scene timings must be contiguous")
-            if scene.audio_duration_ms > scene.duration_ms:
-                raise ValueError(f"audio duration exceeds scene duration: {scene.scene_id}")
-            if scene.caption_words and scene.audio_duration_ms <= 0:
-                raise ValueError(f"caption words require audio duration: {scene.scene_id}")
-            if any(word.end_ms > scene.audio_duration_ms for word in scene.caption_words):
-                raise ValueError(f"caption word timing exceeds audio duration: {scene.scene_id}")
-            if any(chunk.end_ms > scene.audio_duration_ms for chunk in scene.caption_chunks):
-                raise ValueError(f"caption chunk timing exceeds audio duration: {scene.scene_id}")
-            if any(cue.end_ms > scene.audio_duration_ms for cue in scene.visual_cues):
-                raise ValueError(f"visual cue timing exceeds audio duration: {scene.scene_id}")
-            expected_start += scene.duration_ms
-        if abs(expected_start - round(self.duration_seconds * 1000)) > 10:
-            raise ValueError("scene timings must equal video duration_seconds")
-        return self
-
-
-def _safe_json(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False, indent=2)
-
-
-def _result_excerpt(result: AgentResult, limit: int = 4000) -> dict[str, Any]:
-    content = result.content or ""
-    if len(content) > limit:
-        content = f"{content[:limit]}\n\n[内容已截断]"
-    return {
-        "title": result.title,
-        "summary": result.summary,
-        "file_type": result.file_type,
-        "content": content,
-        "metadata": result.metadata,
-    }
-
-
-VIDEO_SOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
-
-
-def _input_context(input_data: ResourceInput, config: dict[str, Any]) -> dict[str, Any]:
-    handoffs = {
-        agent_id: handoff.model_dump(mode="json")
-        for agent_id, handoff in input_data.upstream_handoffs.items()
-        if agent_id in VIDEO_SOURCE_AGENT_IDS
-    }
-    return {
-        "learning_need": input_data.learning_need,
-        "learning_scenario": input_data.learning_scenario,
-        "profile": input_data.profile,
-        "teaching_plan": input_data.teaching_plan.model_dump(mode="json") if input_data.teaching_plan else {},
-        "upstream_handoffs": handoffs,
-        "config": config,
-    }
-
-
-class VideoMaterialAgent:
-    """视频素材提取 Agent — 从上游 handoff 中提取视频可用的教学素材。
-
-    上游 handoff 为空或提取失败时直接抛出异常。
-    """
-    async def run(self, input_data: ResourceInput, config: dict[str, Any]) -> VideoMaterialDigest:
-        context = _input_context(input_data, config)
-        if not context["upstream_handoffs"]:
-            raise ValueError("VideoMaterialAgent requires upstream handoffs from base agents")
-
-        prompt = prompts.get("resource").get("video_material")
-        message = f"{prompt}\n\n输入 JSON:\n{_safe_json(context)}"
-
-        llm = get_llm()
-        return await llm.ainvoke_json(VideoMaterialDigest, message)
-
-
-class VideoOutlineAgent:
-    """视频大纲规划 Agent — 生成场景合约列表。
-
-    素材不足时直接抛出异常。
-    """
-    async def run(self, digest: VideoMaterialDigest, constraints: VideoConstraints) -> VideoOutline:
-        if not digest.core_concepts and not digest.facts:
-            raise ValueError("VideoOutlineAgent requires digest with core_concepts or facts")
-
-        prompt = prompts.get("resource").get("video_outline")
-        payload = {"digest": digest.model_dump(mode="json"), "constraints": constraints.model_dump(mode="json")}
-        message = f"{prompt}\n\n输入 JSON:\n{_safe_json(payload)}"
-
-        llm = get_llm()
-        return await llm.ainvoke_json(VideoOutline, message)
-
-
-class SceneWriterAgent:
-    """场景写作 Agent — 根据合约和素材生成单个场景的内容。"""
-    async def run(self, contract: SceneContract, digest: VideoMaterialDigest, constraints: VideoConstraints) -> SceneDraft:
-        prompt = prompts.get("resource").get("video_scene")
-        payload = {
-            "digest": digest.model_dump(mode="json"),
-            "scene_contract": contract.model_dump(mode="json"),
-            "constraints": constraints.model_dump(mode="json"),
-        }
-        message = f"{prompt}\n\n输入 JSON:\n{_safe_json(payload)}"
-
-        llm = get_llm()
-        draft = await llm.ainvoke_json(SceneDraft, message)
-        # 强制对齐合约的关键字段，防止 LLM 幻觉产生的不一致
-        draft.scene_id = contract.scene_id
-        draft.index = contract.index
-        draft.visual_type = contract.visual_type
-        draft.source_agents = contract.required_sources
-        return draft
-
-
-
-
-class VideoPayloadBuilder:
-    """严格地将完整 outline 和 TTS 分镜转换为 VideoPayload。"""
-    def build(
-        self,
-        outline: VideoOutline,
-        drafts: list[SceneDraft],
-        constraints: VideoConstraints,
-    ) -> VideoPayload:
-        draft_ids = [draft.scene_id for draft in drafts]
-        if len(draft_ids) != len(set(draft_ids)):
-            raise ValueError("video drafts contain duplicate scene IDs")
-        expected_scene_ids = {contract.scene_id for contract in outline.scenes}
-        if set(draft_ids) != expected_scene_ids:
-            raise ValueError(
-                "video drafts do not match outline scenes: "
-                f"missing={sorted(expected_scene_ids - set(draft_ids))} "
-                f"unexpected={sorted(set(draft_ids) - expected_scene_ids)}"
+def _profile_text(profile: str | dict[str, Any]) -> str:
+    if isinstance(profile, str):
+        return profile.strip()
+    return json.dumps(profile, ensure_ascii=False) if profile else ""
+
+
+def _resource_materials(input_data: ResourceInput) -> list[SourceMaterial]:
+    materials = [
+        SourceMaterial(
+            source_id=agent_id,
+            source_type="resource_handoff",
+            title=context.title,
+            content=context.model_dump_json(),
+            metadata={"source_agent": context.source_agent},
+        )
+        for agent_id, context in input_data.upstream_handoffs.items()
+    ]
+    if input_data.teaching_plan is not None:
+        materials.append(
+            SourceMaterial(
+                source_id="teaching_plan",
+                source_type="teaching_plan",
+                title=input_data.learning_need,
+                content=input_data.teaching_plan.model_dump_json(),
             )
-
-        draft_by_id = {draft.scene_id: draft for draft in drafts}
-        scenes: list[VideoScene] = []
-        cursor_ms = 0
-        for contract in outline.scenes:
-            draft = draft_by_id[contract.scene_id]
-            if draft.index != contract.index:
-                raise ValueError(f"video draft index mismatch for scene {contract.scene_id}")
-            if draft.visual_type != contract.visual_type:
-                raise ValueError(f"video draft visual type mismatch for scene {contract.scene_id}")
-            if draft.duration_ms <= 0 or not draft.audio_src:
-                raise ValueError(f"video draft missing synthesized audio for scene {contract.scene_id}")
-            if set(draft.source_agents) != set(contract.required_sources):
-                raise ValueError(f"video draft source agents mismatch for scene {contract.scene_id}")
-            scenes.append(
-                VideoScene(
-                    scene_id=contract.scene_id,
-                    index=contract.index,
-                    role=contract.role,
-                    title=draft.title,
-                    start_ms=cursor_ms,
-                    duration_ms=draft.duration_ms,
-                    visual_type=draft.visual_type,
-                    narration=draft.narration,
-                    captions=draft.captions if constraints.include_captions else [],
-                    on_screen_text=draft.on_screen_text,
-                    visual_prompt=draft.visual_prompt,
-                    interaction_prompt=draft.interaction_prompt,
-                    visual=draft.visual,
-                    audio_src=draft.audio_src,
-                    source_agents=draft.source_agents,
-                    caption_words=draft.caption_words,
-                    audio_duration_ms=draft.audio_duration_ms,
-                    caption_chunks=draft.caption_chunks,
-                    visual_cues=draft.visual_cues,
-                )
+        )
+    if not materials:
+        materials.append(
+            SourceMaterial(
+                source_id="learning_need",
+                source_type="user_request",
+                title=input_data.learning_need,
+                content=input_data.learning_need,
             )
-            cursor_ms += draft.duration_ms
+        )
+    return materials
 
-        source_agent_ids = sorted({agent for scene in scenes for agent in scene.source_agents})
-        return VideoPayload(
-            title=outline.title,
-            topic=outline.topic,
-            duration_seconds=cursor_ms / 1000,
-            aspect_ratio=constraints.aspect_ratio,
-            style=constraints.style,
-            voice=constraints.voice,
-            scenes=scenes,
-            assets=[
-                VideoAsset(
-                    asset_id=f"asset-{scene.index}",
-                    type="diagram_prompt" if scene.visual_type in {"concept_explain", "process_flow", "compare_summary", "state_machine", "data_structure", "algorithm_trace", "memory_layout", "cpu_architecture", "network_protocol", "layered_architecture", "array_linked_list", "stack_queue", "process_state", "storage_hierarchy"} else "image_prompt",
-                    description=scene.visual_prompt,
-                    source_scene_id=scene.scene_id,
-                )
-                for scene in scenes
-            ],
+
+def _node_materials(input_data: NodeInput) -> list[SourceMaterial]:
+    materials = [
+        SourceMaterial(
+            source_id="tutorial",
+            source_type="path_tutorial",
+            title=input_data.tutorial_title,
+            content=input_data.tutorial_markdown,
             metadata={
-                "source_agent_ids": source_agent_ids,
-                "internal_pipeline": "material/outline/scenes/payload",
-                "delivery_mode": "preview",
+                "path_id": input_data.path_id,
+                "node_id": input_data.node_id,
+                "knowledge_points": input_data.knowledge_points,
             },
         )
+    ]
+    for agent_id, result in input_data.existing_resources.items():
+        if result.success and result.content:
+            materials.append(
+                SourceMaterial(
+                    source_id=f"resource:{agent_id}",
+                    source_type="generated_resource",
+                    title=result.title or agent_id,
+                    content=result.content,
+                    metadata={"source_agent": agent_id},
+                )
+            )
+    return materials
 
 
-class VideoSceneWriteState(TypedDict):
-    contract: SceneContract
-    digest: VideoMaterialDigest
-    constraints: VideoConstraints
-    resource_id: int | None
-
-
-def _add_scene_drafts(left: list[SceneDraft] | None, right: list[SceneDraft] | None) -> list[SceneDraft]:
-    if left is None:
-        left = []
-    if right is None:
-        right = []
-    return left + right
-
-
-class VideoGraphState(TypedDict, total=False):
-    # Inputs
-    input_data: ResourceInput
-    config: dict[str, Any]
-    constraints: VideoConstraints
-
-    # Intermediate artifacts
-    digest: VideoMaterialDigest
-    outline: VideoOutline
-    drafts: Annotated[list[SceneDraft], _add_scene_drafts]
-
-    # Final outputs
-    payload: VideoPayload
-    error: str
+def _request_options(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "duration_seconds": int(config.get("duration_seconds", 180)),
+        "scene_count": int(config.get("scene_count", 6)),
+        "aspect_ratio": config.get("aspect_ratio", "16:9"),
+        "voice": config.get("voice", "teacher"),
+        "include_captions": bool(config.get("include_captions", True)),
+    }
 
 
 @register_agent
 class VideoAgent(BaseResourceAgent):
-    """Video 生成 Agent。输出结构化预览 JSON，不渲染二进制视频。"""
+    """Translate resource inputs into the shared source-neutral video contract."""
 
     agent_id = "video"
     agent_name = "讲解视频"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter=None, *, video_agent: SharedVideoAgent | None = None):
         super().__init__(emitter=emitter)
-        self._scene_semaphore = asyncio.Semaphore(4)
+        self.video_agent = video_agent or SharedVideoAgent()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        config = input_data.agent_config or {}
-        title_prefix = input_data.learning_need[:32]
-        result = await self._run_pipeline(
-            input_data=input_data,
-            config=config,
-            title_prefix=title_prefix,
+        resource_key = (
+            f"res_{input_data.resource_id}"
+            if input_data.resource_id is not None
+            else f"res_{uuid.uuid4().hex}"
         )
-        if result.success:
-            coverage = outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs)
-            result.metadata["teaching_plan_outline_ids"] = coverage["teaching_plan_outline_ids"]
-            result.metadata["covered_source_outline_ids"] = coverage["covered_source_outline_ids"]
-            result.metadata["missing_source_outline_ids"] = coverage["missing_source_outline_ids"]
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
-        return result
+        request = VideoRequest(
+            topic=input_data.learning_need,
+            audience=_profile_text(input_data.profile),
+            learning_goal=input_data.learning_need,
+            materials=_resource_materials(input_data),
+            output_dir=WORKPLACE_DIR / "videos" / resource_key,
+            metadata={
+                "origin": "resource",
+                "resource_id": input_data.resource_id,
+                "learning_scenario": input_data.learning_scenario,
+            },
+            **_request_options(input_data.agent_config),
+        )
+        return await self._generate(request)
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        """路径节点场景：从 NodeInput 构建素材并执行嵌套子图。"""
-        mock_handoffs = {
-            "content": DownstreamContext(
-                source_agent="content",
-                title=input_data.node_title,
-                one_sentence_summary=input_data.tutorial_summary or f"关于 {input_data.node_title} 的学习教程",
-                reusable_assets=ReusableAssets(
-                    examples=[f"学习侧重点：{focus}" for focus in input_data.generation_focus] if input_data.generation_focus else [],
-                    visual_ideas=input_data.knowledge_points or [],
-                ),
-            )
-        }
-
-        resource_input = ResourceInput(
-            learning_need=input_data.node_title,
-            learning_scenario="path_learning",
-            profile=input_data.profile or {},
-            agent_name="video",
-            agent_config=input_data.agent_config or {},
-            upstream_handoffs=mock_handoffs,
+        request = VideoRequest(
+            topic=input_data.node_title,
+            audience=_profile_text(input_data.profile),
+            learning_goal=input_data.mastery_target or input_data.path_goal,
+            materials=_node_materials(input_data),
+            output_dir=(
+                WORKPLACE_DIR
+                / "videos"
+                / f"path_{input_data.path_id}_node_{input_data.node_id}"
+            ),
+            metadata={
+                "origin": "path",
+                "path_id": input_data.path_id,
+                "node_id": input_data.node_id,
+                "node_key": input_data.node_key,
+            },
+            **_request_options(input_data.agent_config),
         )
+        return await self._generate(request)
 
-        result = await self._run_pipeline(
-            input_data=resource_input,
-            config=resource_input.agent_config,
-            title_prefix=input_data.node_title,
+    async def _generate(self, request: VideoRequest) -> AgentResult:
+        await self.emitter.send(
+            self.agent_id,
+            "running",
+            "正在规划讲解节奏、生成配音并渲染视频...",
+            15,
         )
-        result.metadata["path_id"] = input_data.path_id
-        result.metadata["node_id"] = input_data.node_id
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
-        return result
-
-    def _build_graph(self) -> Any:
-        if not hasattr(self, "_cached_graph"):
-            workflow = StateGraph(VideoGraphState)
-
-            workflow.add_node("extract_material", self._material_node)
-            workflow.add_node("plan_outline", self._outline_node)
-            workflow.add_node("write_scene", self._write_scene_node)
-            workflow.add_node("build_payload", self._payload_node)
-
-            workflow.add_edge(START, "extract_material")
-            workflow.add_edge("extract_material", "plan_outline")
-            workflow.add_conditional_edges("plan_outline", self._route_scenes, ["write_scene"])
-            workflow.add_edge("write_scene", "build_payload")
-            workflow.add_edge("build_payload", END)
-
-            self._cached_graph = workflow.compile()
-        return self._cached_graph
-
-    async def _material_node(self, state: VideoGraphState) -> dict[str, Any]:
-        await self.emitter.send(self.agent_id, "running", "正在提取讲解视频参考素材...", 20)
-        digest = await VideoMaterialAgent().run(state["input_data"], state["config"])
-        return {"digest": digest}
-
-    async def _outline_node(self, state: VideoGraphState) -> dict[str, Any]:
-        await self.emitter.send(self.agent_id, "running", "正在规划讲解视频分镜大纲...", 35)
-        outline = await VideoOutlineAgent().run(state["digest"], state["constraints"])
-        if len(outline.scenes) != state["constraints"].scene_count:
-            raise ValueError(
-                f"视频场景数与预期不符：期望 {state['constraints'].scene_count}，实际 {len(outline.scenes)}"
-            )
-        if outline.duration_seconds != state["constraints"].duration_seconds:
-            raise ValueError("视频大纲时长与配置不一致")
-        if outline.style != state["constraints"].style:
-            raise ValueError("视频大纲风格与配置不一致")
-        if outline.aspect_ratio != state["constraints"].aspect_ratio:
-            raise ValueError("视频大纲画幅与配置不一致")
-        available_sources = set(state["input_data"].upstream_handoffs) | {"planning", "teaching_plan"}
-        for scene in outline.scenes:
-            unknown_sources = set(scene.required_sources) - available_sources
-            if unknown_sources:
-                raise ValueError(
-                    f"视频场景引用未成功的来源 Agent: scene={scene.scene_id!r} "
-                    f"sources={sorted(unknown_sources)}"
-                )
-        return {"outline": outline}
-
-    def _route_scenes(self, state: VideoGraphState) -> list[Send]:
-        outline: VideoOutline = state["outline"]
-        digest: VideoMaterialDigest = state["digest"]
-        constraints: VideoConstraints = state["constraints"]
-        resource_id = state["input_data"].resource_id if "input_data" in state and hasattr(state["input_data"], "resource_id") else None
-        return [
-            Send("write_scene", {
-                "contract": scene,
-                "digest": digest,
-                "constraints": constraints,
-                "resource_id": resource_id,
-            })
-            for scene in outline.scenes
-        ]
-
-    async def _write_scene_node(self, state: VideoSceneWriteState) -> dict[str, Any]:
-        scene_id = state["contract"].scene_id
-        idx = getattr(state["contract"], "index", 1)
         try:
-            idx = int(idx)
-        except (ValueError, TypeError):
-            idx = 1
-        await self.emitter.send(self.agent_id, "running", f"正在撰写第 {scene_id} 个分镜脚本并合成语音...", min(80, 40 + idx * 5))
-        async with self._scene_semaphore:
-            writer = SceneWriterAgent()
-            draft = await writer.run(state["contract"], state["digest"], state["constraints"])
-
-            # Synthesize TTS with word-level captions (Spark TTS or edge-tts)
-            from app.config import SPARK_TTS_APP_ID, WORKPLACE_DIR
-
-            res_id = state.get("resource_id")
-            # 统一保存到 videos/res_{id}/ 目录
-            video_dir = WORKPLACE_DIR / "videos" / f"res_{res_id}"
-            video_dir.mkdir(parents=True, exist_ok=True)
-
-            filename = f"scene_{draft.scene_id}.mp3"
-            file_path = video_dir / filename
-
-            if SPARK_TTS_APP_ID and SPARK_TTS_APP_ID.strip():
-                from app.resource.infra.spark_tts import SparkTtsService
-                logger.info("Using SparkTtsService for scene %s", draft.scene_id)
-                voice_name = "x4_yezi"
-                tts_result = await SparkTtsService.synthesize_with_captions(draft.narration, file_path, voice=voice_name)
-            else:
-                from app.resource.infra.tts import TtsService
-                logger.info("Using default edge-tts TtsService for scene %s", draft.scene_id)
-                tts_result = await TtsService.synthesize_with_captions(draft.narration, file_path)
-
-            # 1. Determine accurate audio duration
-            audio_duration_ms = get_audio_duration_ms(file_path)
-            tts_duration_ms = round(tts_result.duration * 1000)
-
-            # Compare actual vs TTS duration, warn if difference > 200ms
-            if audio_duration_ms > 0 and abs(audio_duration_ms - tts_duration_ms) > 200:
-                logger.warning(
-                    "Scene %s: actual audio duration (%dms) differs from TTS duration (%dms) by >200ms. Using actual duration.",
-                    draft.scene_id, audio_duration_ms, tts_duration_ms
-                )
-
-            if audio_duration_ms <= 0:
-                audio_duration_ms = tts_duration_ms
-
-            if audio_duration_ms <= 0:
-                raise ValueError(f"TTS returned invalid duration for scene {draft.scene_id}")
-
-            draft.audio_duration_ms = audio_duration_ms
-
-            # 2. Add tail padding to prevent abrupt cuts
-            tail_pad_ms = 400
-            draft.duration_ms = audio_duration_ms + tail_pad_ms
-
-            # 音频文件相对路径（用于前端访问）
-            draft.audio_src = f"/static/videos/res_{res_id}/{filename}"
-            draft.caption_words = [
-                CaptionWord.model_validate(caption.to_dict())
-                for caption in tts_result.captions
-            ]
-
-            # 3. Build caption chunks from words
-            draft.caption_chunks = build_caption_chunks(draft.narration, draft.caption_words, audio_duration_ms)
-
-            # 4. Align visual beats to timeline
-            draft.visual_cues = align_visual_cues(draft.visual_beats, draft.caption_words, draft.caption_chunks, audio_duration_ms)
-
-            return {"drafts": [draft]}
-
-    async def _payload_node(self, state: VideoGraphState) -> dict[str, Any]:
-        await self.emitter.send(self.agent_id, "running", "正在构建最终视频播放预览载荷...", 85)
-        payload = VideoPayloadBuilder().build(
-            state["outline"], state["drafts"], state["constraints"]
-        )
-        return {"payload": payload}
-
-    async def _run_pipeline(
-        self,
-        *,
-        input_data: ResourceInput,
-        config: dict,
-        title_prefix: str,
-    ) -> AgentResult:
-        constraints = VideoConstraints.model_validate(config)
-        try:
-            graph = self._build_graph()
-            initial_state = VideoGraphState(
-                input_data=input_data,
-                config=config,
-                constraints=constraints,
-                drafts=[],
-            )
-            final_state = await graph.ainvoke(initial_state)
-            payload = final_state.get("payload")
-            if not payload:
-                raise ValueError("Video generation graph failed to build final payload")
+            artifact = await self.video_agent.generate(request)
         except Exception as exc:
-            logger.error("VideoAgent 生成异常: %s", exc, exc_info=True)
+            logger.error("VideoAgent generation failed: %s", exc, exc_info=True)
+            await self.emitter.send(
+                self.agent_id,
+                "failed",
+                f"讲解视频生成失败: {exc}",
+                0,
+            )
             return AgentResult(
                 success=False,
+                title=f"{request.topic} - 视频",
+                summary="讲解视频生成失败",
                 error=str(exc),
-                title=f"{title_prefix} - 视频",
-                summary=f"视频生成异常: {exc}",
                 metadata={
-                    "engine": "video_json",
-                    "agent_id": "video",
-                    "schema_version": "video/v1",
-                    "delivery_mode": "preview",
-                    "internal_pipeline": "material/outline/scenes/payload",
+                    "agent_id": self.agent_id,
+                    "schema_version": "video/v2",
                 },
             )
 
-        # 保存 JSON 文件到 static/videos/res_{id}/ 目录
-        resource_id = input_data.resource_id
-        from app.config import WORKPLACE_DIR
-        video_dir = WORKPLACE_DIR / "videos" / f"res_{resource_id}"
-        video_dir.mkdir(parents=True, exist_ok=True)
-
-        json_filename = "video_payload.json"
-        json_path = video_dir / json_filename
-        json_path.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
-
-        # 记录音频文件路径（相对于 static 目录）
-        audio_files = []
-        for scene in payload.scenes:
-            if scene.audio_src:
-                # 提取相对路径，如 "videos/res_123/scene_s1.mp3"
-                audio_rel_path = scene.audio_src.replace("/static/", "")
-                audio_files.append(audio_rel_path)
-
-        # 相对于 static 目录的路径
-        json_file_rel_path = f"videos/res_{resource_id}/{json_filename}"
-
-        content = payload.model_dump_json(indent=2)
-        source_handoff_agent_ids = sorted(input_data.upstream_handoffs.keys()) if input_data.upstream_handoffs else sorted({agent for scene in payload.scenes for agent in scene.source_agents})
+        content = json.dumps(
+            {
+                "schema_version": artifact.plan.schema_version,
+                "title": artifact.plan.title,
+                "public_url": artifact.public_url,
+                "duration_ms": artifact.duration_ms,
+                "width": artifact.width,
+                "height": artifact.height,
+                "size_bytes": artifact.size_bytes,
+                "style": artifact.plan.style.id,
+            },
+            ensure_ascii=False,
+        )
+        await self.emitter.send(
+            self.agent_id,
+            "completed",
+            "讲解视频已完成",
+            100,
+        )
         return AgentResult(
             success=True,
             content=content,
-            file_type="json",
-            title=f"{title_prefix} - 视频",
-            summary=f"生成 {len(payload.scenes)} 段结构化讲解视频脚本",
+            file_type="mp4",
+            title=artifact.plan.title,
+            summary=f"生成 {len(artifact.plan.scenes)} 个场景的讲解视频",
             metrics={
-                "scene_count": len(payload.scenes),
-                "duration_seconds": payload.duration_seconds,
+                "scene_count": len(artifact.plan.scenes),
+                "duration_seconds": round(artifact.duration_ms / 1000, 2),
             },
             metadata={
-                "engine": "video_json",
-                "agent_id": "video",
-                "schema_version": "video/v1",
-                "delivery_mode": "preview",
-                "duration_seconds": payload.duration_seconds,
-                "scene_count": len(payload.scenes),
-                "aspect_ratio": payload.aspect_ratio,
-                "style": payload.style,
-                "source_handoff_agent_ids": source_handoff_agent_ids,
-                "audio_file_paths": audio_files,
-                "json_file_path": json_file_rel_path,
-                "internal_pipeline": "material/outline/scenes/payload",
+                "engine": "remotion",
+                "agent_id": self.agent_id,
+                "schema_version": artifact.plan.schema_version,
+                "delivery_mode": "mp4",
+                "public_url": artifact.public_url,
+                "file_path": str(artifact.mp4_path),
+                "title": artifact.plan.title,
+                "duration_ms": artifact.duration_ms,
+                "width": artifact.width,
+                "height": artifact.height,
+                "size_bytes": artifact.size_bytes,
+                "style": artifact.plan.style.id,
+                "aspect_ratio": artifact.plan.aspect_ratio,
+                "has_audio": True,
+                "has_captions": request.include_captions,
             },
         )
-
-    async def generate_from_tutor_context(self, tutor_context: dict[str, Any]) -> AgentResult:
-        """Reserved tutor-facing adapter. Not wired to chat or tutor routes yet."""
-        learning_need = str(
-            tutor_context.get("learning_need")
-            or tutor_context.get("question")
-            or tutor_context.get("topic")
-            or ""
-        ).strip()
-        if not learning_need:
-            return AgentResult(
-                success=False,
-                error="tutor_context 缺少 learning_need/question/topic",
-                metadata={"agent_id": "video", "reserved_for_tutor": True},
-            )
-        raw_handoffs = tutor_context.get("upstream_handoffs") or {}
-        normalized_handoffs: dict[str, DownstreamContext] = {}
-        for agent_id, value in raw_handoffs.items():
-            if isinstance(value, DownstreamContext):
-                normalized_handoffs[agent_id] = value
-            elif isinstance(value, dict):
-                try:
-                    normalized_handoffs[agent_id] = DownstreamContext.model_validate(value)
-                except Exception:
-                    pass
-        return await self.generate_resource(
-            ResourceInput(
-                learning_need=learning_need,
-                learning_scenario=tutor_context.get("learning_scenario") or "self_study",
-                agent_name="video",
-                agent_config=tutor_context.get("agent_config") if isinstance(tutor_context.get("agent_config"), dict) else {},
-                profile=tutor_context.get("profile") if isinstance(tutor_context.get("profile"), dict) else {},
-                upstream_handoffs=normalized_handoffs,
-            )
-        )
-
-
-def normalize_text(t: str) -> str:
-    import re
-    t = t.lower()
-    # Remove whitespace and common punctuation
-    t = re.sub(r'[\s，。？！、；：,\.\?!;:"\'\-\(\)（）]', '', t)
-    return t
-
-
-def get_audio_duration_ms(file_path: Path) -> int:
-    """Get the exact audio duration in milliseconds.
-
-    Uses ffprobe if available, and falls back to mutagen.
-    """
-    import subprocess
-    # 1. Try ffprobe
-    try:
-        cmd = [
-            "ffprobe",
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            str(file_path)
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=2.0)
-        duration_sec = float(result.stdout.strip())
-        return round(duration_sec * 1000)
-    except Exception as e:
-        logger.warning("ffprobe failed to read audio duration for %s: %s", file_path, e)
-
-    # 2. Try mutagen
-    try:
-        from mutagen.mp3 import MP3
-        audio = MP3(str(file_path))
-        return round(audio.info.length * 1000)
-    except Exception as e:
-        logger.warning("mutagen failed to read audio duration for %s: %s", file_path, e)
-
-    return 0
-
-
-def _estimate_caption_chunks_from_narration(narration: str, audio_duration_ms: int) -> list[CaptionChunk]:
-    import re
-    # Split by punctuation
-    clauses = re.split(r'([，。？！、；：,\.\?!;:])', narration)
-
-    # Recombine clauses with their trailing punctuation
-    recombined = []
-    temp = ""
-    for part in clauses:
-        if not part:
-            continue
-        if part in {"，", "。", "？", "！", "、", "；", "：", ",", ".", "?", "!", ";", ":"}:
-            temp += part
-            recombined.append(temp)
-            temp = ""
-        else:
-            if temp:
-                recombined.append(temp)
-            temp = part
-    if temp:
-        recombined.append(temp)
-
-    # Filter empty or whitespace-only clauses
-    recombined = [c.strip() for c in recombined if c.strip()]
-    if not recombined:
-        recombined = [narration.strip()] if narration.strip() else ["..."]
-
-    total_chars = sum(len(c) for c in recombined)
-    chunks: list[CaptionChunk] = []
-    curr_ms = 0
-
-    for i, clause in enumerate(recombined):
-        ratio = len(clause) / total_chars
-        duration = round(audio_duration_ms * ratio)
-        end_ms = curr_ms + duration
-        if end_ms <= curr_ms:
-            end_ms = curr_ms + 200
-
-        chunks.append(CaptionChunk(
-            text=clause,
-            start_ms=curr_ms,
-            end_ms=end_ms
-        ))
-        curr_ms = end_ms
-
-    if chunks:
-        chunks[-1].end_ms = audio_duration_ms
-
-    return chunks
-
-
-def build_caption_chunks(narration: str, caption_words: list[CaptionWord], audio_duration_ms: int) -> list[CaptionChunk]:
-    if not caption_words:
-        return _estimate_caption_chunks_from_narration(narration, audio_duration_ms)
-
-    chunks: list[CaptionChunk] = []
-    curr_words: list[CaptionWord] = []
-    curr_text_len = 0
-
-    # Punctuation indicators for clause boundaries
-    boundaries = {"，", "。", "？", "！", "、", "；", "：", ",", ".", "?", "!", ";", ":"}
-
-    for word in caption_words:
-        if not curr_words:
-            curr_words.append(word)
-            curr_text_len = len(word.text)
-            continue
-
-        start_ms = curr_words[0].start_ms
-        proposed_duration = word.end_ms - start_ms
-
-        should_split = False
-        if proposed_duration > 2800:
-            should_split = True
-        elif curr_text_len + len(word.text) > 22:
-            should_split = True
-        elif any(b in curr_words[-1].text for b in boundaries):
-            should_split = True
-
-        if should_split:
-            chunk_text = "".join(w.text for w in curr_words).strip()
-            chunks.append(CaptionChunk(
-                text=chunk_text,
-                start_ms=curr_words[0].start_ms,
-                end_ms=curr_words[-1].end_ms
-            ))
-            curr_words = [word]
-            curr_text_len = len(word.text)
-        else:
-            curr_words.append(word)
-            curr_text_len += len(word.text)
-
-    if curr_words:
-        chunk_text = "".join(w.text for w in curr_words).strip()
-        chunks.append(CaptionChunk(
-            text=chunk_text,
-            start_ms=curr_words[0].start_ms,
-            end_ms=curr_words[-1].end_ms
-        ))
-
-    for c in chunks:
-        if c.end_ms > audio_duration_ms:
-            c.end_ms = audio_duration_ms
-            if c.start_ms >= c.end_ms:
-                c.start_ms = max(0, c.end_ms - 100)
-
-    return chunks
-
-
-def align_visual_cues(
-    visual_beats: list[VisualBeatDraft],
-    caption_words: list[CaptionWord],
-    caption_chunks: list[CaptionChunk],
-    audio_duration_ms: int
-) -> list[VisualCue]:
-    if not visual_beats or audio_duration_ms <= 0:
-        return []
-
-    matched_cues: list[tuple[VisualBeatDraft, int | None, int | None]] = []
-    for beat in visual_beats:
-        norm_anchor = normalize_text(beat.text_anchor)
-        if not norm_anchor:
-            matched_cues.append((beat, None, None))
-            continue
-
-        # First try word-level precision match with the shortest matching sequence.
-        start_ms: int | None = None
-        end_ms: int | None = None
-        best_match: tuple[int, int, int] | None = None
-        for i in range(len(caption_words)):
-            if not normalize_text(caption_words[i].text):
-                continue
-            temp_text = ""
-            for j in range(i, len(caption_words)):
-                temp_text += caption_words[j].text
-                norm_temp = normalize_text(temp_text)
-                if norm_anchor in norm_temp:
-                    match_len = len(norm_temp)
-                    if best_match is None or match_len < best_match[2]:
-                        best_match = (
-                            caption_words[i].start_ms,
-                            caption_words[j].end_ms,
-                            match_len,
-                        )
-                    break
-        if best_match:
-            start_ms, end_ms = best_match[0], best_match[1]
-
-        if start_ms is not None:
-            matched_cues.append((beat, start_ms, end_ms))
-        else:
-            # Fall back to chunk-level matching.
-            matched_chunk: CaptionChunk | None = None
-            for chunk in caption_chunks:
-                norm_chunk = normalize_text(chunk.text)
-                if norm_chunk and (
-                    norm_anchor in norm_chunk or norm_chunk in norm_anchor
-                ):
-                    matched_chunk = chunk
-                    break
-            if matched_chunk:
-                matched_cues.append(
-                    (beat, matched_chunk.start_ms, matched_chunk.end_ms)
-                )
-            else:
-                matched_cues.append((beat, None, None))
-
-    intervals: list[tuple[int, int] | None] = [
-        (start, end)
-        if start is not None and end is not None and start < end
-        else None
-        for _, start, end in matched_cues
-    ]
-
-    previous_end = 0
-    for index, interval in enumerate(intervals):
-        if interval is None:
-            continue
-        start, end = interval
-        if start < previous_end or start >= audio_duration_ms:
-            intervals[index] = None
-            continue
-        intervals[index] = (start, min(end, audio_duration_ms))
-        previous_end = intervals[index][1]
-
-    index = 0
-    while index < len(intervals):
-        if intervals[index] is not None:
-            index += 1
-            continue
-
-        run_start = index
-        while index < len(intervals) and intervals[index] is None:
-            index += 1
-        run_end = index
-
-        left_boundary = (
-            intervals[run_start - 1][1]
-            if run_start > 0 and intervals[run_start - 1] is not None
-            else 0
-        )
-        right_boundary = (
-            intervals[run_end][0]
-            if run_end < len(intervals) and intervals[run_end] is not None
-            else audio_duration_ms
-        )
-        count = run_end - run_start
-        if right_boundary <= left_boundary:
-            left_boundary = 0
-            right_boundary = audio_duration_ms
-
-        for offset in range(count):
-            start = round(
-                left_boundary
-                + (right_boundary - left_boundary) * offset / count
-            )
-            end = round(
-                left_boundary
-                + (right_boundary - left_boundary) * (offset + 1) / count
-            )
-            intervals[run_start + offset] = (
-                min(start, audio_duration_ms - 1),
-                max(start + 1, min(end, audio_duration_ms)),
-            )
-
-    cues: list[VisualCue] = []
-    for beat_index, (beat, _, _) in enumerate(matched_cues):
-        interval = intervals[beat_index]
-        assert interval is not None
-        start, end = interval
-        cues.append(
-            VisualCue(
-                id=beat.id,
-                kind=beat.kind,
-                target=beat.target,
-                summary=beat.summary,
-                start_ms=start,
-                end_ms=end,
-                caption_text=beat.text_anchor,
-            )
-        )
-
-    return cues

@@ -24,10 +24,15 @@ logger = get_module_logger("resource", sub="orchestrator")
 async def run_multi_agent_generation(
     user_id: int,
     resource_id: int,
+    *,
+    selected_agents: list[str] | None = None,
+    request_data: dict[str, Any] | None = None,
+    profile: dict[str, Any] | None = None,
 ) -> None:
     """后台资源生成编排入口。
 
-    只传 user_id 和 resource_id，其他数据内部获取。
+    通过参数传入 selected_agents, request_data, profile，
+    不再从数据库读取快照列。
     """
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     start_time = time.perf_counter()
@@ -48,6 +53,9 @@ async def run_multi_agent_generation(
         initial_state = ParentState(
             user_id=user_id,
             resource_id=resource_id,
+            selected_agents=selected_agents or [],
+            request_data=request_data or {},
+            profile=profile or {},
         )
         final_state = await graph.ainvoke(initial_state)
         success = bool(final_state.get("success", False))

@@ -1,0 +1,28 @@
+{
+  "safe_presets": [
+    {"name": "Bold Signal", "source": "preset", "mood": ["confident", "modern"], "formality": "medium", "density": "low", "scheme": "dark", "recipe": "Archivo Black and Space Grotesk; charcoal canvas; fire-orange focal block; numbered editorial grid."},
+    {"name": "Electric Studio", "source": "preset", "mood": ["professional", "high-contrast"], "formality": "high", "density": "medium", "scheme": "mixed", "recipe": "Manrope; black, white, and cobalt split panels; precise accent bars; restrained motion."},
+    {"name": "Creative Voltage", "source": "preset", "mood": ["energetic", "creative"], "formality": "low", "density": "medium", "scheme": "dark", "recipe": "Syne and Space Mono; electric blue, deep navy, and acid yellow; halftone details."},
+    {"name": "Dark Botanical", "source": "preset", "mood": ["elegant", "premium"], "formality": "high", "density": "low", "scheme": "dark", "recipe": "Cormorant and IBM Plex Sans; near-black canvas; warm gold and dusty pink abstract shapes."},
+    {"name": "Notebook Tabs", "source": "preset", "mood": ["editorial", "organized"], "formality": "medium", "density": "high", "scheme": "light", "recipe": "Bodoni Moda and DM Sans; cream paper; dark outer field; colored section tabs."},
+    {"name": "Pastel Geometry", "source": "preset", "mood": ["friendly", "approachable"], "formality": "medium", "density": "medium", "scheme": "light", "recipe": "Plus Jakarta Sans; white canvas; blue, mint, pink, and violet geometry."},
+    {"name": "Split Pastel", "source": "preset", "mood": ["playful", "creative"], "formality": "low", "density": "medium", "scheme": "light", "recipe": "Outfit; peach and lavender split canvas; compact badges and grid texture."},
+    {"name": "Vintage Editorial", "source": "preset", "mood": ["witty", "editorial"], "formality": "medium", "density": "low", "scheme": "light", "recipe": "Fraunces and Work Sans; cream paper; black typography; sparse warm geometry."},
+    {"name": "Neon Cyber", "source": "preset", "mood": ["futuristic", "tech"], "formality": "medium", "density": "medium", "scheme": "dark", "recipe": "Clash Display and Satoshi; deep navy; cyan and magenta signals; subtle grid."},
+    {"name": "Terminal Green", "source": "preset", "mood": ["developer", "technical"], "formality": "low", "density": "high", "scheme": "dark", "recipe": "JetBrains Mono; GitHub-dark canvas; terminal green; scan-line accents."},
+    {"name": "Swiss Modern", "source": "preset", "mood": ["precise", "calm"], "formality": "high", "density": "high", "scheme": "light", "recipe": "Archivo and Nunito; white canvas; black visible grid; single red accent."},
+    {"name": "Paper & Ink", "source": "preset", "mood": ["scholarly", "thoughtful"], "formality": "high", "density": "high", "scheme": "light", "recipe": "Cormorant Garamond and Source Serif 4; warm paper; charcoal ink; crimson rules."}
+  ],
+  "bold_templates": [
+    {"name": "8-Bit Orbit", "source": "bold_template", "mood": ["retro-tech", "playful"], "formality": "low", "density": "medium", "scheme": "dark", "recipe": "Pixel-art neon arcade language on a deep navy void."},
+    {"name": "Biennale Yellow", "source": "bold_template", "mood": ["editorial", "atmospheric"], "formality": "high", "density": "medium", "scheme": "light", "recipe": "Solar yellow, warm parchment, deep indigo serif, museum-poster rhythm."},
+    {"name": "BlockFrame", "source": "bold_template", "mood": ["bold", "graphic"], "formality": "medium-low", "density": "high", "scheme": "light", "recipe": "Pastel-neon blocks, chunky black borders, neobrutalist structure."},
+    {"name": "Blue Professional", "source": "bold_template", "mood": ["professional", "trustworthy"], "formality": "medium-high", "density": "medium", "scheme": "light", "recipe": "Cream paper, electric cobalt accents, considered B2B editorial hierarchy."},
+    {"name": "Bold Poster", "source": "bold_template", "mood": ["loud", "confident"], "formality": "medium", "density": "low", "scheme": "light", "recipe": "Magazine-cover scale, expressive serif display, one fire-red accent."},
+    {"name": "Broadside", "source": "bold_template", "mood": ["dramatic", "newspaper"], "formality": "medium-high", "density": "medium", "scheme": "dark", "recipe": "Dark editorial canvas, fire orange accent, bilingual headline system."},
+    {"name": "Monochrome", "source": "bold_template", "mood": ["restrained", "archival"], "formality": "high", "density": "high", "scheme": "light", "recipe": "Ivory ledger paper, all-black type, literary report structure."},
+    {"name": "Neo-Grid Bold", "source": "bold_template", "mood": ["punchy", "editorial"], "formality": "medium", "density": "high", "scheme": "light", "recipe": "Off-white paper, visible grid, black typography, neon-yellow accent."},
+    {"name": "Signal", "source": "bold_template", "mood": ["institutional", "weighty"], "formality": "high", "density": "high", "scheme": "mixed", "recipe": "Deep navy, bone paper panels, muted gold, quiet institutional authority."},
+    {"name": "Vellum", "source": "bold_template", "mood": ["scholarly", "quiet"], "formality": "high", "density": "low", "scheme": "dark", "recipe": "Deep navy, warm-yellow Cormorant serif, dusty teal scholarly accents."}
+  ]
+}

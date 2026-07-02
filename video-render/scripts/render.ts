@@ -177,6 +177,7 @@ async function main() {
     composition,
     serveUrl: bundleLocation,
     codec: "h264",
+    audioCodec: "aac",
     outputLocation: config.output,
     inputProps: planJson,
     concurrency: config.concurrency,

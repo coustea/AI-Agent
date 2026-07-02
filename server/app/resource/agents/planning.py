@@ -1,22 +1,25 @@
-"""规划智能体 — 分析学习需求，生成总体教学大纲（TeachingPlan）。
-
-PlanningAgent 是多智能体模式的入口，它的唯一输出是 TeachingPlan，定义了全局教学方向与大纲。
-当 LLM 返回空 agent_assignments 时自动重试一次。
-"""
+"""规划智能体 — 生成全局教学计划和可直接派发的 Worker 任务。"""
 
 from __future__ import annotations
+
+import json
 
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput, TeachingPlan
+from app.resource.schemas import (
+    AgentResult,
+    NodeInput,
+    ResourceInput,
+    TeachingPlan,
+    create_planning_output_model,
+)
 
 logger = get_logger(__name__)
 
-# 当 agent_assignments 为空时的最大重试次数
-_MAX_EMPTY_ASSIGNMENTS_RETRIES = 1
+_MAX_PLAN_ATTEMPTS = 2
 
 
 @register_agent
@@ -40,47 +43,43 @@ class PlanningAgent(BaseResourceAgent):
 
         await self.emitter.send(self.agent_id, "running", "正在生成教学方向与大纲", 25)
 
-        plan = await self.llm.ainvoke_json(
-            TeachingPlan,
-            full_prompt,
-            temperature=INFERENCE_TEMPERATURE,
-            max_attempts=2,
-        )
+        enabled_agents = tuple(input_data.agent_config.get("enabled_agents", []))
+        output_model = create_planning_output_model(enabled_agents)
+        attempt_prompt = full_prompt
+        plan: TeachingPlan | None = None
 
-        expected_agents = set(input_data.agent_config.get("enabled_agents", []))
-
-        # LLM 返回空 agent_assignments 时重试一次（注入错误反馈）
-        if not plan.agent_assignments and expected_agents:
-            logger.warning(
-                "Agent[planning] agent_assignments 为空，正在重试 (expected=%s)",
-                sorted(expected_agents),
-            )
-            await self.emitter.send(
-                self.agent_id, "running",
-                "首次生成指派为空，正在重试...", 50,
-            )
-            retry_prompt = (
-                f"{full_prompt}\n\n"
-                "【错误反馈】你上一次返回了 agent_assignments: []（空数组），这是严重错误。\n"
-                f"你必须为以下 Agent 各生成一条 assignment：{sorted(expected_agents)}。\n"
-                "agent_assignments 绝不能为空数组 []。"
-            )
-            plan = await self.llm.ainvoke_json(
-                TeachingPlan,
-                retry_prompt,
+        for attempt in range(_MAX_PLAN_ATTEMPTS):
+            raw_plan = await self.llm.ainvoke_json(
+                output_model,
+                attempt_prompt,
                 temperature=INFERENCE_TEMPERATURE,
                 max_attempts=2,
             )
-
-        # 校验 assignments 与 enabled_agents 一致
-        if expected_agents:
-            assigned_agents = {a.agent_id for a in plan.agent_assignments}
-            if assigned_agents != expected_agents:
-                raise ValueError(
-                    "TeachingPlan assignments do not match selected base Agents: "
-                    f"missing={sorted(expected_agents - assigned_agents)} "
-                    f"unexpected={sorted(assigned_agents - expected_agents)}"
+            try:
+                plan = TeachingPlan.model_validate(raw_plan.model_dump(mode="json"))
+                break
+            except ValueError as exc:
+                if attempt + 1 >= _MAX_PLAN_ATTEMPTS:
+                    raise
+                logger.warning(
+                    "Agent[planning] 计划契约校验失败，正在重试: %s",
+                    exc,
                 )
+                await self.emitter.send(
+                    self.agent_id,
+                    "running",
+                    "计划任务契约未通过校验，正在重新规划...",
+                    50,
+                )
+                attempt_prompt = (
+                    f"{full_prompt}\n\n"
+                    "## 上次输出的校验错误\n"
+                    f"{str(exc)[:1200]}\n\n"
+                    "请重新生成完整计划，修正上述错误。不要省略或猜测任何 Worker 键。"
+                )
+
+        if plan is None:
+            raise ValueError("PlanningAgent did not produce a valid TeachingPlan")
 
         await self.emitter.send(self.agent_id, "running", "教学方向与大纲已生成", 85)
 
@@ -90,7 +89,10 @@ class PlanningAgent(BaseResourceAgent):
             file_type="json",
             title="教学方向与大纲",
             summary="PlanningAgent 生成了总体教学方向、概要和大纲",
-            metrics={"outline_count": len(plan.outline)},
+            metrics={
+                "outline_count": len(plan.outline),
+                "worker_task_count": len(plan.worker_tasks),
+            },
             metadata={
                 "agent_id": "planning",
                 "teaching_plan": plan.model_dump(mode="json"),
@@ -117,29 +119,33 @@ class PlanningAgent(BaseResourceAgent):
             f"## 学习场景\n{input_data.learning_scenario}",
         ]
         if input_data.profile:
-            parts.append(input_data.profile)
+            profile_text = (
+                json.dumps(input_data.profile, ensure_ascii=False, indent=2)
+                if isinstance(input_data.profile, dict)
+                else input_data.profile
+            )
+            parts.append(f"## 学习者画像\n{profile_text}")
         agents = list(input_data.agent_config.get("enabled_agents", [])) if input_data.agent_config else []
         if agents:
-            agent_lines = ["## 必须生成的 Agent 指派（硬性约束）"]
+            agent_lines = ["## 本次必须生成的 Worker Tasks（硬性约束）"]
             agent_lines.append("")
-            agent_lines.append("你必须且只能为以下 Agent 生成 agent_assignments，不多不少：")
+            agent_lines.append("`worker_tasks` 必须且只能包含以下键，不多不少：")
             agent_role_map = {
-                "content": "讲解 Agent — 生成结构化教学讲解",
-                "mindmap": "思维导图 Agent — 生成知识结构可视化",
-                "quiz": "题目 Agent — 生成练习题和测试题",
-                "code": "代码示例 Agent — 生成代码示例和编程练习",
-                "reading": "阅读材料 Agent — 生成延伸阅读材料",
+                "content": ("讲解 Agent — 生成结构化教学讲解", "markdown"),
+                "mindmap": ("思维导图 Agent — 生成知识结构可视化", "markdown"),
+                "quiz": ("题目 Agent — 生成练习题和测试题", "json"),
+                "code": ("代码示例 Agent — 生成代码示例和编程练习", "markdown"),
+                "reading": ("阅读材料 Agent — 生成延伸阅读材料", "json"),
             }
             for agent_id in agents:
-                role = agent_role_map.get(agent_id, agent_id)
-                agent_lines.append(f"- `{agent_id}`（{role}）")
-            agent_lines.append("")
-            agent_lines.append("每个 Agent 必须有且仅有一条 assignment，agent_id 必须与上述列表完全一致。")
+                role, output_format = agent_role_map[agent_id]
+                agent_lines.append(
+                    f"- `{agent_id}`：{role}；`deliverable.format` 必须为 `{output_format}`"
+                )
             agent_lines.append("")
             agent_lines.append(
-                "【严禁】agent_assignments 为空数组 []。"
-                f"你必须为上述 {len(agents)} 个 Agent 各生成一条 assignment，"
-                "缺少任何一个都是错误。"
+                f"你必须为上述 {len(agents)} 个 Agent 各生成一个完整 WorkerTask 对象；"
+                "`worker_tasks` 是对象映射，不是数组，不要输出 agent_id 字段。"
             )
             parts.append("\n".join(agent_lines))
         return "\n\n".join(parts)

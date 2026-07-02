@@ -59,8 +59,8 @@ class MindmapConfig(BaseModel):
     map_type: Literal["knowledge_tree", "exam_map", "comparison_map"] = "knowledge_tree"
     max_depth: int = Field(default=3, ge=2, le=5)
     highlight_weak: bool = True
-    expand_weak_points: bool = False
-    include_prerequisites: bool = False
+    leaf_detail: Literal["keyword", "brief_note", "annotated"] = "brief_note"
+    show_relations: bool = True
 
 
 class QuizConfig(BaseModel):
@@ -71,7 +71,7 @@ class QuizConfig(BaseModel):
     exam_style: Literal["school", "考研", "考证", "interview"] = "school"
     include_analysis: bool = True
     question_types: list[Literal["single", "multiple", "judge", "fill"]] = Field(
-        default_factory=lambda: ["single", "multiple", "judge"]
+        default_factory=lambda: ["single", "multiple", "judge", "fill"]
     )
 
 
@@ -103,15 +103,13 @@ class PptConfig(BaseModel):
 
 
 class VideoConfig(BaseModel):
-    """Video Agent 配置。生成结构化预览 JSON，不渲染二进制视频。"""
+    """Shared VideoAgent runtime preferences."""
 
     duration_seconds: int = Field(default=180, ge=60, le=600)
     scene_count: int = Field(default=6, ge=3, le=12)
-    style: Literal["explainer", "lecture", "screencast", "case_walkthrough"] = "explainer"
     voice: Literal["teacher", "coach", "concise"] = "teacher"
     aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
     include_captions: bool = True
-    output_format: Literal["preview"] = "preview"
 
 
 class AgentConfigs(BaseModel):

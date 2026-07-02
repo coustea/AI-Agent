@@ -227,7 +227,8 @@ async def get_recommendation(
     user_message_count = (await session.exec(
         select(func.count())
         .select_from(ChatMessage)
-        .where(ChatMessage.user_id == current_user.id, ChatMessage.role == "user")
+        .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+        .where(ChatSession.user_id == current_user.id, ChatMessage.role == "user")
     )).one()
 
     has_activity = any((chat_session_count, user_message_count, recent_resources, active_path, recent_events))
@@ -319,7 +320,7 @@ async def get_profile_radar(
     session: AsyncSession = Depends(get_session),
 ):
     """获取用户画像雷达图数据 — 各维度得分和证据。"""
-    profile = await get_profile_service().get_or_create_global_profile(user_id=current_user.id, db=session)
+    profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
     score_json = profile.profile_score_json or {}
 
     scores = score_json.get("dimension_scores") or {}
@@ -429,7 +430,8 @@ async def get_quick_actions(
     user_message_count = (await session.exec(
         select(func.count())
         .select_from(ChatMessage)
-        .where(ChatMessage.user_id == current_user.id, ChatMessage.role == "user")
+        .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+        .where(ChatSession.user_id == current_user.id, ChatMessage.role == "user")
     )).one()
     recent_resources = list((await session.exec(
         select(GeneratedResource)
@@ -579,7 +581,7 @@ async def get_recent_resources(
             "id": r.id,
             "title": _resource_title(r),
             "type": first_item.agent_type if first_item else _status_label(r.status),
-            "agent": first_item.generated_by or "资源生成智能体" if first_item else "资源生成智能体",
+            "agent": first_item.agent_type or "资源生成智能体" if first_item else "资源生成智能体",
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
     return HttpResponse.success(data=result)

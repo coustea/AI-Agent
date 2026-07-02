@@ -1,110 +1,99 @@
-import { z } from 'zod';
+import {z} from "zod";
 
-// Scene Type Enum Schema
 export const sceneTypeSchema = z.enum([
-  'title_intro',
-  'concept_explain',
-  'process_flow',
-  'state_machine',
-  'data_structure',
-  'algorithm_trace',
-  'memory_layout',
-  'cpu_architecture',
-  'network_protocol',
-  'layered_architecture',
-  'code_execution',
-  'compare_summary',
-  'knowledge_check',
-  'array_linked_list',
-  'stack_queue',
-  'process_state',
-  'storage_hierarchy',
+  "title_intro",
+  "concept_explain",
+  "process_flow",
+  "state_machine",
+  "data_structure",
+  "algorithm_trace",
+  "memory_layout",
+  "cpu_architecture",
+  "network_protocol",
+  "layered_architecture",
+  "code_execution",
+  "compare_summary",
+  "knowledge_check",
+  "array_linked_list",
+  "stack_queue",
+  "process_state",
+  "storage_hierarchy",
 ]);
 
-// Rich Video Scene Schema
-export const richVideoSceneSchema = z.object({
-  id: z.string().optional(),
-  scene_id: z.string().optional(),
-  type: z.string().optional(),
-  visual_type: z.string().optional(),
-  duration_seconds: z.number().optional(),
-  duration_ms: z.number().optional(),
-  title: z.string().optional(),
-  narration: z.string().optional(),
-  visual: z.record(z.string(), z.unknown()).optional(),
-  audio_src: z.string().optional(),
-  // eslint-disable-next-line @remotion/non-pure-animation
-  transition: z.string().optional(),
-  audio_duration_ms: z.number().optional(),
-  caption_words: z.array(z.object({
-    text: z.string(),
-    start_ms: z.number(),
-    end_ms: z.number(),
-  })).optional(),
-  caption_chunks: z.array(z.object({
-    text: z.string(),
-    start_ms: z.number(),
-    end_ms: z.number(),
-  })).optional(),
-  visual_cues: z.array(z.object({
-    id: z.string(),
-    kind: z.string(),
-    target: z.string().optional(),
-    summary: z.string().optional(),
-    start_ms: z.number(),
-    end_ms: z.number(),
-    caption_text: z.string().nullable().optional(),
-  })).optional(),
-}).catchall(z.any());
+const timedTextSchema = z.object({
+  text: z.string().min(1),
+  start_ms: z.number().int().nonnegative(),
+  end_ms: z.number().int().positive(),
+}).strict();
 
-// Video Meta Schema
-export const videoMetaSchema = z.object({
-  video_id: z.string().optional(),
-  title: z.string().optional(),
-  subject: z.string().optional(),
-  topic: z.string().optional(),
-  difficulty: z.string().optional(),
-  target_audience: z.string().optional(),
-  estimated_duration_seconds: z.number().optional(),
-  language: z.string().optional(),
-}).catchall(z.any());
+const visualCueSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum([
+    "define",
+    "example",
+    "trace_step",
+    "compare",
+    "misconception",
+    "checkpoint",
+    "recap",
+  ]),
+  target: z.string(),
+  summary: z.string(),
+  start_ms: z.number().int().nonnegative(),
+  end_ms: z.number().int().positive(),
+  caption_text: z.string().nullable().optional(),
+}).strict();
 
-// Global Style Schema
-export const globalStyleSchema = z.object({
-  theme: z.string().optional(),
-  background: z.string().optional(),
-  primary_color: z.string().optional(),
-  accent_color: z.string().optional(),
-  danger_color: z.string().optional(),
-  success_color: z.string().optional(),
-  font_family: z.string().optional(),
-  visual_density: z.string().optional(),
-  layout_style: z.string().optional(),
-  motion_style: z.string().optional(),
-}).catchall(z.any());
+export const videoSceneSchema = z.object({
+  scene_id: z.string().min(1),
+  index: z.number().int().positive(),
+  role: z.enum([
+    "hook",
+    "concept",
+    "example",
+    "process",
+    "misconception",
+    "practice",
+    "recap",
+  ]),
+  title: z.string().min(1),
+  learning_objective: z.string().min(1),
+  visual_type: sceneTypeSchema,
+  visual: z.record(z.string(), z.unknown()),
+  narration: z.string().min(1),
+  audio_src: z.string().min(1),
+  start_ms: z.number().int().nonnegative(),
+  duration_ms: z.number().int().positive(),
+  audio_duration_ms: z.number().int().positive(),
+  caption_words: z.array(timedTextSchema),
+  captions: z.array(timedTextSchema),
+  visual_cues: z.array(visualCueSchema),
+}).strict();
 
-// Render Config Schema
-export const renderConfigSchema = z.object({
-  width: z.number().optional(),
-  height: z.number().optional(),
-  fps: z.number().optional(),
-  format: z.string().optional(),
-  default_scene_transition: z.string().optional(),
-  subtitle_enabled: z.boolean().optional(),
-  voiceover_enabled: z.boolean().optional(),
-}).catchall(z.any());
+export const videoPlanSchema = z.object({
+  schema_version: z.literal("video/v2"),
+  title: z.string().min(1),
+  topic: z.string().min(1),
+  language: z.string().min(1),
+  aspect_ratio: z.enum(["16:9", "9:16", "1:1"]),
+  style: z.object({
+    id: z.enum([
+      "precision_light",
+      "systems_dark",
+      "editorial_classroom",
+    ]),
+    rationale: z.string().min(1),
+  }).strict(),
+  render: z.object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    fps: z.number().int().min(24).max(60),
+    video_codec: z.literal("h264"),
+    audio_codec: z.literal("aac"),
+    format: z.literal("mp4"),
+  }).strict(),
+  scenes: z.array(videoSceneSchema).min(1),
+  metadata: z.record(z.string(), z.unknown()),
+}).strict();
 
-// BGM Config Schema
-export const bgmConfigSchema = z.object({
-  bgm_src: z.string().optional(),
-  bgm_volume: z.number().optional(),
-}).catchall(z.any());
-
-// Rich Video Plan Schema (Root)
-export const richVideoPlanSchema = z.object({
-  meta: videoMetaSchema.optional(),
-  global_style: globalStyleSchema.optional(),
-  render_config: renderConfigSchema.optional(),
-  audio: bgmConfigSchema.optional(),
-  scenes: z.array(richVideoSceneSchema),
-}).catchall(z.any());
+export type VideoPlanV2 = z.infer<typeof videoPlanSchema>;

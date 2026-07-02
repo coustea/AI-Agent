@@ -54,10 +54,10 @@ export function uploadFile(file: File, sessionId: string) {
 }
 
 // ==========================================
-// 创建智能辅导运行
+// 保存用户消息并开始生成回答
 // ==========================================
 
-export function createChatRun(params: StreamChatParams) {
+export function createChatMessage(params: StreamChatParams) {
   const formData = new FormData()
   if (params.message) {
     formData.append('user_input', params.message)
@@ -66,7 +66,7 @@ export function createChatRun(params: StreamChatParams) {
     formData.append('session_id', params.session_id)
   }
   if (params.attachments && params.attachments.length > 0) {
-    formData.append('attachments', params.attachments.join(','))
+    formData.append('attachments', JSON.stringify(params.attachments))
   }
   if (params.need_teaching_diagram != null) {
     formData.append('need_teaching_diagram', String(Boolean(params.need_teaching_diagram)))
@@ -75,8 +75,8 @@ export function createChatRun(params: StreamChatParams) {
     formData.append('enable_web_search', String(Boolean(params.enable_web_search)))
   }
 
-  return http.post<ApiResponse<{ run_id: string; session_id: string; status: string }>>(
-    '/ai/chat/runs',
+  return http.post<ApiResponse<{ message_id: number; session_id: string }>>(
+    '/ai/chat/messages',
     formData,
     {
       headers: { 'Content-Type': 'multipart/form-data' },

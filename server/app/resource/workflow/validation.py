@@ -57,19 +57,16 @@ def validate_common_result(
     if result.metadata.get("agent_id") != scheduled_agent_id:
         raise ValidationError("Agent result identity mismatch")
 
-    # Base Agent 需要 downstream_context
+    # Base Agent 校验
     if scheduled_agent_id in BASE_RESOURCE_AGENT_IDS:
-        handoff = result.downstream_context
-        if handoff is None or handoff.source_agent != scheduled_agent_id:
-            raise ValidationError("Base Agent requires truthful downstream_context")
-
-        plan_ids = {
-            entry.get("id", "")
-            for entry in (input_data.teaching_plan.outline if input_data.teaching_plan else [])
-        }
-        covered = handoff.covered_outline_ids
-        if not covered or len(covered) != len(set(covered)) or not set(covered) <= plan_ids:
-            raise ValidationError("Invalid covered_outline_ids")
+        if input_data.teaching_plan is None:
+            raise ValidationError("Base Agent requires a TeachingPlan")
+        task = input_data.teaching_plan.task_for(scheduled_agent_id)
+        if result.file_type != task.deliverable.format:
+            raise ValidationError(
+                f"Agent result format does not match Worker Task: "
+                f"expected={task.deliverable.format} actual={result.file_type}"
+            )
 
 
 # =============================================================================
@@ -224,9 +221,9 @@ def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
 
 
 def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Video 资源校验：scene 数、唯一 ID、总时长、音频、caption 时间边界。"""
-    if result.file_type != "json":
-        raise ValidationError("Video must be JSON")
+    """Video resources must be final, playable MP4 artifacts."""
+    if result.file_type != "mp4":
+        raise ValidationError("Video must be MP4")
 
     try:
         data = json.loads(result.content) if isinstance(result.content, str) else result.content
@@ -236,9 +233,14 @@ def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:
     if not isinstance(data, dict):
         raise ValidationError("Video must be object")
 
-    # 检查基本结构
-    if "scenes" not in data:
-        raise ValidationError("Video must have scenes")
+    if data.get("schema_version") != "video/v2":
+        raise ValidationError("Video must use the video/v2 schema")
+    if not str(data.get("public_url", "")).endswith(".mp4"):
+        raise ValidationError("Video must expose an MP4 public_url")
+    if data.get("duration_ms", 0) <= 0 or data.get("size_bytes", 0) <= 0:
+        raise ValidationError("Video artifact metadata is invalid")
+    if result.metadata.get("has_audio") is not True:
+        raise ValidationError("Video must contain an audio stream")
 
 
 # =============================================================================
@@ -312,20 +314,14 @@ def check_content_overlap(
     """
     warnings = []
 
-    # 查找当前 Agent 的 assignment
-    assignment = None
-    for a in teaching_plan.agent_assignments:
-        if a.agent_id == agent_id:
-            assignment = a
-            break
-
-    if not assignment or not assignment.avoid_overlap_with:
+    task = teaching_plan.worker_tasks.get(agent_id)
+    if not task or not task.avoid_overlap_with:
         return warnings
 
     # 提取当前内容的关键词
     current_keywords = extract_keywords(result.content)
 
-    for other_agent_id in assignment.avoid_overlap_with:
+    for other_agent_id in task.avoid_overlap_with:
         if other_agent_id not in existing_results:
             continue
 

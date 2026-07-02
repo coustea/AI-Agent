@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.utils import compact_text
 from app.chat.memory.types import LTM_CATEGORIES
-from app.chat.schemas import TutorTurnContext
+from app.chat.schemas import TutorRequestContext
 from app.infra.logging import get_logger
 from app.infra.tool_excute import Tool
 from app.profile.service import get_profile_service
@@ -27,7 +27,7 @@ class GetLearnerProfileArgs(BaseModel):
 
 
 def make_get_learner_profile(
-    request: TutorTurnContext,
+    request: TutorRequestContext,
     profile_service: Any | None = None,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的画像查询工具。"""
@@ -73,7 +73,7 @@ LONG_TERM_MEMORY_CATEGORY_ALIASES: dict[str, str] = {
 
 
 def make_get_long_term_memory(
-    request: TutorTurnContext,
+    request: TutorRequestContext,
     memory_service: Any | None = None,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的长期记忆查询工具。"""
@@ -96,7 +96,7 @@ def make_get_long_term_memory(
     return _impl
 
 
-def as_tool(request: TutorTurnContext) -> list[Tool]:
+def as_tool(request: TutorRequestContext) -> list[Tool]:
     """返回画像和长期记忆工具的 Tool 对象列表。"""
     return [
         Tool(
