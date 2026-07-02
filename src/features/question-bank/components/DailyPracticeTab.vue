@@ -80,9 +80,9 @@
               v-if="canVisualize(question)"
               class="action-link"
               type="button"
-              @click="toggleVisualizer(question.id)"
+              @click="$emit('open-visualizer', question)"
             >
-              {{ openedVisualizer.has(question.id) ? '收起可视化' : '算法可视化' }}
+              算法可视化
             </button>
           </div>
         </div>
@@ -95,7 +95,6 @@
           <div class="analysis-body" v-html="renderInline(question.analysis || '暂无解析')"></div>
         </div>
 
-        <AlgorithmVisualizer v-if="openedVisualizer.has(question.id)" :question="question" />
       </article>
     </section>
 
@@ -110,8 +109,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 interface DailyQuestion {
@@ -143,23 +140,8 @@ defineEmits<{
   (e: 'select-daily-option', question: DailyQuestion, key: string): void
   (e: 'submit-daily', question: DailyQuestion): void
   (e: 'toggle-daily-analysis', id: string): void
+  (e: 'open-visualizer', question: DailyQuestion): void
 }>()
-
-const openedVisualizer = ref<Set<string>>(new Set())
-
-watch(
-  () => props.questions,
-  () => {
-    openedVisualizer.value = new Set()
-  },
-)
-
-function toggleVisualizer(id: string) {
-  const next = new Set(openedVisualizer.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  openedVisualizer.value = next
-}
 
 function canVisualize(question: DailyQuestion) {
   return supportsAlgorithmVisualization(question)
@@ -355,7 +337,7 @@ function renderInline(text: string) {
 
 .option-key {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   width: 28px;
   height: 28px;
@@ -368,6 +350,8 @@ function renderInline(text: string) {
 
 .option-text {
   line-height: 1.7;
+  flex: 1;
+  text-align: left;
 }
 
 .answer-box {

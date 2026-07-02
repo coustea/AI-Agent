@@ -1,34 +1,31 @@
 <template>
-  <section v-if="plan && currentStep" class="algorithm-visualizer">
+  <section v-if="trace && currentStep" class="algorithm-visualizer">
     <header class="visualizer-header">
       <div>
         <span class="visualizer-kicker">Algorithm Playback</span>
-        <h4>{{ plan.title }}</h4>
-        <p>{{ plan.description }}</p>
+        <h4>{{ trace.title }}</h4>
+        <p>{{ trace.description }}</p>
       </div>
       <span class="visualizer-chip">{{ currentStepIndex + 1 }} / {{ steps.length }}</span>
     </header>
 
     <div class="visualizer-layout">
       <div class="visualizer-stage">
-        <div v-if="arrayStep" class="array-stage">
+        <div v-if="currentStep.state.kind === 'array'" class="array-stage">
           <div class="array-bars">
             <TransitionGroup name="algo-bar">
               <div
-                v-for="(item, index) in arrayStep.items"
+                v-for="(item, index) in currentStep.state.items"
                 :key="item.id"
                 :class="['array-bar-card', item.tone || 'default']"
               >
                 <div class="array-bar-shell">
-                  <div
-                    class="array-bar-fill"
-                    :style="{ height: `${Math.max(20, Math.abs(item.value) * 12)}px` }"
-                  ></div>
+                  <div class="array-bar-fill" :style="{ height: `${Math.max(20, Math.abs(item.value) * 12)}px` }"></div>
                 </div>
                 <strong>{{ item.value }}</strong>
                 <div class="pointer-stack">
                   <span
-                    v-for="pointer in getPointersForIndex(arrayStep.pointers || [], index)"
+                    v-for="pointer in getPointersForIndex(currentStep.state.pointers || [], index)"
                     :key="pointer.label"
                     :class="['pointer-pill', pointer.tone || 'accent']"
                   >
@@ -40,7 +37,7 @@
           </div>
         </div>
 
-        <div v-else-if="treeStep" class="tree-stage">
+        <div v-else-if="currentStep.state.kind === 'tree'" class="tree-stage">
           <svg class="tree-links" viewBox="0 0 440 260" preserveAspectRatio="xMidYMid meet">
             <line
               v-for="edge in treeEdges"
@@ -55,7 +52,7 @@
 
           <div class="tree-node-layer">
             <div
-              v-for="node in treeStep.nodes"
+              v-for="node in currentStep.state.nodes"
               :key="node.id"
               :class="['tree-node-card', node.tone || 'default']"
               :style="{ left: `${node.x}px`, top: `${node.y}px` }"
@@ -64,18 +61,97 @@
             </div>
           </div>
         </div>
+
+        <div v-else-if="currentStep.state.kind === 'graph'" class="graph-stage">
+          <svg class="graph-svg" viewBox="0 0 440 280" preserveAspectRatio="xMidYMid meet">
+            <line
+              v-for="edge in currentStep.state.edges"
+              :key="`${edge.from}-${edge.to}`"
+              :x1="graphNodeMap[edge.from]?.x || 0"
+              :y1="graphNodeMap[edge.from]?.y || 0"
+              :x2="graphNodeMap[edge.to]?.x || 0"
+              :y2="graphNodeMap[edge.to]?.y || 0"
+              :class="['graph-edge', edge.tone || 'default']"
+            />
+            <g v-for="node in currentStep.state.nodes" :key="node.id">
+              <circle :cx="node.x" :cy="node.y" r="26" :class="['graph-node', node.tone || 'default']" />
+              <text :x="node.x" :y="node.y + 5" class="graph-label">{{ node.label }}</text>
+            </g>
+          </svg>
+        </div>
+
+        <div v-else-if="currentStep.state.kind === 'dp'" class="dp-stage">
+          <div class="dp-grid">
+            <div v-if="currentStep.state.headers?.length" class="dp-row header">
+              <span v-for="(header, index) in currentStep.state.headers" :key="`h-${index}`" class="dp-cell header">
+                {{ header }}
+              </span>
+            </div>
+            <div v-for="(row, rowIndex) in currentStep.state.values" :key="`r-${rowIndex}`" class="dp-row">
+              <span
+                v-for="(value, colIndex) in row"
+                :key="`c-${rowIndex}-${colIndex}`"
+                :class="['dp-cell', getDpCellTone(rowIndex, colIndex)]"
+              >
+                {{ value }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="currentStep.state.kind === 'linked-list'" class="linear-stage">
+          <div class="linear-strip">
+            <div
+              v-for="(node, index) in currentStep.state.nodes"
+              :key="node.id"
+              :class="['linear-node', node.tone || 'default']"
+            >
+              <span>{{ node.label }}</span>
+              <div class="pointer-stack">
+                <span
+                  v-for="pointer in getLinearPointers(currentStep.state.pointers || [], index)"
+                  :key="pointer.label"
+                  :class="['pointer-pill', pointer.tone || 'accent']"
+                >
+                  {{ pointer.label }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="currentStep.state.kind === 'stack-queue'" class="linear-stage">
+          <div class="linear-strip" :class="currentStep.state.mode">
+            <div
+              v-for="(item, index) in currentStep.state.items"
+              :key="item.id"
+              :class="['linear-node', item.tone || 'default']"
+            >
+              <span>{{ item.label }}</span>
+              <div class="pointer-stack">
+                <span
+                  v-for="pointer in getLinearPointers(currentStep.state.pointers || [], index)"
+                  :key="pointer.label"
+                  :class="['pointer-pill', pointer.tone || 'accent']"
+                >
+                  {{ pointer.label }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <aside class="code-panel">
         <div class="code-panel-head">
           <span class="code-kicker">Code</span>
-          <span class="code-line-indicator">Line {{ currentActiveLine }}</span>
+          <span class="code-line-indicator">Line {{ currentStep.activeLine || 1 }}</span>
         </div>
         <div class="code-lines">
           <div
-            v-for="(line, index) in plan.codeLines"
+            v-for="(line, index) in trace.codeLines"
             :key="`${index}-${line}`"
-            :class="['code-line', { active: index + 1 === currentActiveLine }]"
+            :class="['code-line', { active: index + 1 === (currentStep.activeLine || 1) }]"
           >
             <span class="line-no">{{ index + 1 }}</span>
             <code>{{ line }}</code>
@@ -86,16 +162,14 @@
 
     <transition name="message-fade" mode="out-in">
       <div :key="currentStepIndex" class="step-message">
-        <span class="step-caption">{{ currentCaption }}</span>
-        <p>{{ currentMessage }}</p>
+        <span class="step-caption">{{ currentStep.caption }}</span>
+        <p>{{ currentStep.message }}</p>
       </div>
     </transition>
 
     <div class="controls">
       <button class="control-btn" :disabled="currentStepIndex === 0" @click="stepBackward">上一步</button>
-      <button class="control-btn primary" @click="togglePlay">
-        {{ isPlaying ? '暂停' : '播放' }}
-      </button>
+      <button class="control-btn primary" @click="togglePlay">{{ isPlaying ? '暂停' : '播放' }}</button>
       <button class="control-btn" :disabled="currentStepIndex >= steps.length - 1" @click="stepForward">下一步</button>
       <button class="control-btn ghost" @click="resetPlayback">重置</button>
       <label class="speed-select">
@@ -121,16 +195,11 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import {
-  type ArraySnapshot,
-  getAlgorithmVisualizationPlan,
-  type AlgorithmQuestionLike,
-  type PointerMark,
-  type TreeSnapshot,
-} from '@/features/question-bank/utils/algorithmVisualization'
+import type { AlgorithmTrace, AlgorithmTraceStep, TracePointer } from '@/features/question-bank/utils/algorithmTrace'
 
 const props = defineProps<{
-  question: AlgorithmQuestionLike
+  question: any
+  trace: AlgorithmTrace | null
 }>()
 
 const playbackMs = ref(900)
@@ -139,37 +208,30 @@ const isPlaying = ref(false)
 
 let playbackTimer: number | null = null
 
-const plan = computed(() => getAlgorithmVisualizationPlan(props.question))
-const steps = computed(() => plan.value?.steps || [])
-const currentStep = computed(() => steps.value[currentStepIndex.value] ?? steps.value[0] ?? null)
-const arrayStep = computed<ArraySnapshot | null>(() => {
-  const step = currentStep.value
-  return step?.kind === 'array' ? step : null
-})
-const treeStep = computed<TreeSnapshot | null>(() => {
-  const step = currentStep.value
-  return step?.kind === 'tree' ? step : null
-})
-const currentActiveLine = computed(() => currentStep.value?.activeLine ?? 1)
-const currentCaption = computed(() => currentStep.value?.caption ?? '')
-const currentMessage = computed(() => currentStep.value?.message ?? '')
+const steps = computed(() => props.trace?.steps || [])
+const currentStep = computed<AlgorithmTraceStep | null>(() => steps.value[currentStepIndex.value] ?? steps.value[0] ?? null)
 
 const treeEdges = computed(() => {
-  const step = treeStep.value
-  if (!step) return []
-
-  return step.edges
+  const state = currentStep.value?.state
+  if (!state || state.kind !== 'tree') return []
+  return state.edges
     .map((edge) => {
-      const fromNode = step.nodes.find((node) => node.id === edge.from)
-      const toNode = step.nodes.find((node) => node.id === edge.to)
+      const fromNode = state.nodes.find((node) => node.id === edge.from)
+      const toNode = state.nodes.find((node) => node.id === edge.to)
       if (!fromNode || !toNode) return null
       return { ...edge, fromNode, toNode }
     })
     .filter((edge): edge is NonNullable<typeof edge> => Boolean(edge))
 })
 
+const graphNodeMap = computed(() => {
+  const state = currentStep.value?.state
+  if (!state || state.kind !== 'graph') return {}
+  return Object.fromEntries(state.nodes.map((node) => [node.id, node]))
+})
+
 watch(
-  steps,
+  () => props.trace,
   () => {
     stopPlayback()
     currentStepIndex.value = 0
@@ -186,13 +248,26 @@ onUnmounted(() => {
   stopPlayback()
 })
 
-function getPointersForIndex(pointers: PointerMark[], index: number): PointerMark[] {
-  return pointers.filter(pointer => pointer.index === index)
+function getPointersForIndex(pointers: TracePointer[], index: number) {
+  return pointers.filter((pointer) => pointer.index === index)
+}
+
+function getLinearPointers(
+  pointers: Array<{ nodeIndex?: number; itemIndex?: number; label: string; tone?: 'accent' | 'success' | 'warning' }>,
+  index: number,
+) {
+  return pointers.filter((pointer) => pointer.nodeIndex === index || pointer.itemIndex === index)
+}
+
+function getDpCellTone(row: number, col: number) {
+  const state = currentStep.value?.state
+  if (!state || state.kind !== 'dp') return ''
+  const matched = state.highlighted?.find((item) => item.row === row && item.col === col)
+  return matched?.tone || ''
 }
 
 function syncPlayback() {
   stopPlayback()
-
   if (!isPlaying.value || steps.value.length <= 1) return
 
   playbackTimer = window.setInterval(() => {
@@ -214,9 +289,7 @@ function stopPlayback() {
 
 function togglePlay() {
   if (!steps.value.length) return
-  if (currentStepIndex.value >= steps.value.length - 1) {
-    currentStepIndex.value = 0
-  }
+  if (currentStepIndex.value >= steps.value.length - 1) currentStepIndex.value = 0
   isPlaying.value = !isPlaying.value
 }
 
@@ -241,12 +314,13 @@ function resetPlayback() {
 
 <style scoped>
 .algorithm-visualizer {
-  margin-top: 18px;
+  height: 100%;
+  min-height: 520px;
   padding: 20px;
-  border-radius: 22px;
+  border-radius: 24px;
   background:
     radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(248, 250, 255, 0.96), rgba(255, 255, 255, 0.96));
+    linear-gradient(180deg, rgba(248, 250, 255, 0.98), rgba(255, 255, 255, 0.98));
   border: 1px solid rgba(191, 219, 254, 0.75);
   box-shadow: 0 16px 34px rgba(37, 99, 235, 0.08);
 }
@@ -299,7 +373,7 @@ function resetPlayback() {
 
 .visualizer-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.9fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
   gap: 16px;
   margin-top: 18px;
 }
@@ -313,14 +387,17 @@ function resetPlayback() {
   overflow: hidden;
 }
 
-.array-stage {
-  min-height: 240px;
+.array-stage,
+.graph-stage,
+.linear-stage {
+  min-height: 260px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
 }
 
-.array-bars {
+.array-bars,
+.linear-strip {
   width: 100%;
   display: flex;
   align-items: flex-end;
@@ -329,8 +406,14 @@ function resetPlayback() {
   min-height: 200px;
 }
 
-.array-bar-card {
-  width: 72px;
+.linear-strip {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.array-bar-card,
+.linear-node {
+  min-width: 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -339,7 +422,6 @@ function resetPlayback() {
   border-radius: 18px;
   background: rgba(248, 250, 252, 0.92);
   border: 1px solid rgba(226, 232, 240, 0.95);
-  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .array-bar-shell {
@@ -354,16 +436,10 @@ function resetPlayback() {
   width: 44px;
   border-radius: 14px 14px 10px 10px;
   background: linear-gradient(180deg, #60a5fa, #2563eb);
-  transition: height 0.55s cubic-bezier(0.25, 1, 0.5, 1), background 0.3s ease;
-}
-
-.array-bar-card strong {
-  color: #0f172a;
-  font-size: 15px;
 }
 
 .pointer-stack {
-  min-height: 38px;
+  min-height: 28px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -396,58 +472,50 @@ function resetPlayback() {
 }
 
 .array-bar-card.active,
-.tree-node-card.active {
+.linear-node.active {
   border-color: rgba(37, 99, 235, 0.45);
   box-shadow: 0 12px 28px rgba(37, 99, 235, 0.12);
 }
 
-.array-bar-card.swap,
-.tree-node-card.pivot {
+.array-bar-card.swap {
   border-color: rgba(245, 158, 11, 0.42);
   background: rgba(255, 251, 235, 0.95);
 }
 
-.array-bar-card.swap .array-bar-fill {
-  background: linear-gradient(180deg, #fbbf24, #f59e0b);
-}
-
 .array-bar-card.sorted,
-.tree-node-card.sorted {
+.linear-node.visited {
   border-color: rgba(16, 185, 129, 0.35);
   background: rgba(236, 253, 245, 0.95);
 }
 
-.array-bar-card.sorted .array-bar-fill {
-  background: linear-gradient(180deg, #34d399, #10b981);
+.array-bar-card.left {
+  border-color: rgba(37, 99, 235, 0.35);
 }
 
-.array-bar-card.left .array-bar-fill {
-  background: linear-gradient(180deg, #60a5fa, #2563eb);
-}
-
-.array-bar-card.right .array-bar-fill {
-  background: linear-gradient(180deg, #fbbf24, #ea580c);
-}
-
-.algo-bar-move {
-  transition: transform 0.55s cubic-bezier(0.25, 1, 0.5, 1);
+.array-bar-card.right {
+  border-color: rgba(249, 115, 22, 0.35);
 }
 
 .tree-stage {
   position: relative;
-  min-height: 240px;
+  min-height: 260px;
 }
 
-.tree-links {
+.tree-links,
+.graph-svg {
   width: 100%;
-  height: 240px;
+  height: 260px;
 }
 
-.tree-link {
+.tree-link,
+.graph-edge {
   stroke: rgba(100, 116, 139, 0.75);
   stroke-width: 3;
   stroke-linecap: round;
-  transition: all 0.55s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.graph-edge.visited {
+  stroke: #2563eb;
 }
 
 .tree-node-layer {
@@ -470,12 +538,63 @@ function resetPlayback() {
   font-size: 16px;
   font-weight: 800;
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
-  transition: left 0.55s cubic-bezier(0.25, 1, 0.5, 1), top 0.55s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s ease, border-color 0.3s ease;
 }
 
-.tree-node-card.pivot {
-  background: rgba(255, 251, 235, 0.96);
-  color: #b45309;
+.tree-node-card.active,
+.graph-node.active {
+  border-color: rgba(37, 99, 235, 0.45);
+}
+
+.graph-node {
+  fill: rgba(248, 250, 252, 0.96);
+  stroke: rgba(226, 232, 240, 0.95);
+  stroke-width: 2px;
+}
+
+.graph-node.visited,
+.graph-node.start {
+  fill: rgba(219, 234, 254, 0.95);
+  stroke: #2563eb;
+}
+
+.graph-label {
+  font-size: 14px;
+  font-weight: 800;
+  fill: #0f172a;
+  text-anchor: middle;
+}
+
+.dp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dp-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+  gap: 8px;
+}
+
+.dp-cell {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.dp-cell.active {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(219, 234, 254, 0.9);
+}
+
+.dp-cell.success {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(220, 252, 231, 0.92);
 }
 
 .code-panel {
@@ -506,7 +625,6 @@ function resetPlayback() {
   border-radius: 14px;
   background: rgba(15, 23, 42, 0.04);
   border: 1px solid transparent;
-  transition: all 0.2s ease;
 }
 
 .code-line.active {
@@ -572,12 +690,6 @@ function resetPlayback() {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.control-btn:hover:not(:disabled) {
-  border-color: rgba(37, 99, 235, 0.3);
-  color: #2563eb;
 }
 
 .control-btn:disabled {
@@ -589,11 +701,6 @@ function resetPlayback() {
   background: #2563eb;
   border-color: #2563eb;
   color: #fff;
-}
-
-.control-btn.primary:hover:not(:disabled) {
-  color: #fff;
-  background: #1d4ed8;
 }
 
 .control-btn.ghost {
@@ -642,27 +749,6 @@ function resetPlayback() {
 @media (max-width: 980px) {
   .visualizer-layout {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .algorithm-visualizer,
-  .visualizer-stage,
-  .code-panel {
-    padding: 16px;
-  }
-
-  .array-bars {
-    gap: 10px;
-  }
-
-  .array-bar-card {
-    width: 58px;
-    padding: 10px 6px;
-  }
-
-  .array-bar-fill {
-    width: 36px;
   }
 }
 </style>

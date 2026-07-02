@@ -1,7 +1,7 @@
 <template>
   <div class="question-bank-layout">
-    <div v-if="viewMode === 'workspace'" class="question-bank-workspace">
-      <section class="bank-shell">
+    <div class="question-bank-workspace">
+      <section v-if="viewMode === 'workspace'" class="bank-shell">
         <!-- 左侧题单侧栏 -->
         <aside class="bank-left-rail">
           <div class="rail-brand">
@@ -34,23 +34,54 @@
               <button type="button" @click="switchModule('wrong')">+</button>
             </div>
 
-            <div v-if="visibleWrongSnippets.length" class="rail-question-list">
-              <button
-                  v-for="item in visibleWrongSnippets"
-                  :key="item.id"
-                  type="button"
-                  class="rail-question"
-                  @click="switchModule('wrong')"
-              >
-                <span>{{ item.subject || '综合' }}</span>
-                <p>{{ item.content }}</p>
-              </button>
-            </div>
+            <div class="wrong-summary-panel">
+              <div class="wrong-overview-card">
+                <div>
+                  <span>错题总数</span>
+                  <strong>{{ wrongSummary.total }}</strong>
+                </div>
+                <div>
+                  <span>最近沉淀</span>
+                  <strong>{{ wrongSummary.recent }}</strong>
+                </div>
+              </div>
 
-            <div v-else class="rail-empty">
-              暂无错题，完成练习后会自动沉淀到这里。
+              <div class="wrong-summary-section">
+                <div class="rail-block-head">
+                  <span>最近错题</span>
+                </div>
+                <div class="wrong-latest">
+                  {{ wrongSummary.latestTitle || '最近暂无新增错题' }}
+                </div>
+              </div>
+
+              <div class="wrong-summary-section">
+                <div class="rail-block-head">
+                  <span>薄弱科目</span>
+                </div>
+                <div class="wrong-subject-list">
+                  <div v-for="item in wrongSubjectGroups" :key="item.name" class="wrong-subject-item">
+                    <div class="subject-bar">
+                      <span>{{ item.name }}</span>
+                      <strong>{{ item.count }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="wrong-summary-section">
+                <div class="rail-block-head">
+                  <span>高频问题</span>
+                </div>
+                <div class="wrong-point-list">
+                  <span v-for="point in wrongKnowledgePoints" :key="point.name" class="wrong-point-chip">
+                    {{ point.name }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
+
         </aside>
 
         <!-- 中间主区域 -->
@@ -58,39 +89,6 @@
           <transition name="fade-scale" mode="out-in">
             <!-- 首页控制台 -->
             <div v-if="activeModule === 'portal'" key="portal" class="portal-board">
-<!--              <section class="portal-hero">-->
-<!--                <div class="portal-hero-left">-->
-<!--                  <span class="hero-kicker">Personalized Practice</span>-->
-<!--                  <h1>个性化练习题库</h1>-->
-<!--                  <p>基于你的课程、错题和练习记录，组织每日练习、智能刷题、模拟组卷与错题复习。</p>-->
-<!--                </div>-->
-
-<!--                <div class="portal-hero-metrics">-->
-<!--                  <div class="accuracy-circle-container">-->
-<!--                    <svg class="progress-ring" width="74" height="74" viewBox="0 0 100 100">-->
-<!--                      <circle cx="50" cy="50" r="42" class="circle-bg" />-->
-<!--                      <circle cx="50" cy="50" r="42" class="circle-progress" :style="circleProgressStyle" />-->
-<!--                    </svg>-->
-<!--                    <div class="circle-content">-->
-<!--                      <span class="pct">{{ practiceAccuracy }}</span>-->
-<!--                      <span class="lbl">正确率</span>-->
-<!--                    </div>-->
-<!--                  </div>-->
-
-<!--                  <div class="hero-stat">-->
-<!--                    <span>已练题数</span>-->
-<!--                    <strong>{{ stats.totalAttempted }}</strong>-->
-<!--                  </div>-->
-<!--                  <div class="hero-stat">-->
-<!--                    <span>待复习</span>-->
-<!--                    <strong class="danger">{{ wrongTotal }}</strong>-->
-<!--                  </div>-->
-<!--                  <div class="hero-stat">-->
-<!--                    <span>连续打卡</span>-->
-<!--                    <strong>{{ localStreak }} 天</strong>-->
-<!--                  </div>-->
-<!--                </div>-->
-<!--              </section>-->
 
               <section class="feature-card-row">
                 <button
@@ -136,7 +134,6 @@
               <section class="recommend-question-card">
                 <template v-if="portalQuestion">
                   <div class="question-card-top">
-                    <span class="question-index">1.</span>
                     <span class="tag subject-tag">{{ portalQuestion.subject }}</span>
                     <span class="tag type-tag">{{ portalQuestion.type }}</span>
                     <span class="tag difficulty-tag">{{ portalQuestion.difficulty || '中等' }}</span>
@@ -303,6 +300,7 @@
                     @select-daily-option="selectDailyOption"
                     @submit-daily="submitDailyAnswer"
                     @toggle-daily-analysis="toggleDailyAnalysis"
+                    @open-visualizer="openAlgorithmVisualizer"
                 />
 
                 <PracticeTab
@@ -344,16 +342,34 @@
                     @select-option="selectBankOption"
                     @submit="submitBankAnswer"
                     @toggle-analysis="toggleBankAnalysis"
+                    @open-visualizer="openAlgorithmVisualizer"
                 />
 
                 <ExamTab
                     v-else-if="activeModule === 'paper'"
+                    mode="config"
                     :form="paperForm"
                     :typeCounts="paperTypeCounts"
                     :preview="paperPreview"
                     :loading="paperLoading"
                     :subjects="subjects"
                     :difficulties="difficulties"
+                    :expectedCount="paperExpectedCount"
+                    :canStartExam="canStartPaperExam"
+                    :examTitle="examTitle"
+                    :examPaper="examPaper"
+                    :examAnswers="examAnswers"
+                    :examReview="examReview"
+                    :examSubmitted="examSubmitted"
+                    :examSubmitNoticeVisible="examSubmitNoticeVisible"
+                    :currentExamIndex="currentExamIndex"
+                    :formattedExamTime="formattedExamTime"
+                    :examAnsweredCount="examAnsweredCount"
+                    :examUnansweredCount="examUnansweredCount"
+                    :examCorrectCount="examCorrectCount"
+                    :examWrongCount="examWrongCount"
+                    :examScore="examScore"
+                    :examResultLevel="examResultLevel"
                     @reset-form="resetPaperForm"
                     @generate-preview="generatePaperPreview"
                     @start-exam="startPreviewExam"
@@ -390,6 +406,7 @@
                     @select-wrong-option="selectWrongOption"
                     @submit-wrong="submitWrongAnswer"
                     @toggle-wrong-analysis="toggleWrongAnalysis"
+                    @open-visualizer="openAlgorithmVisualizer"
                     @archive-wrong="archiveWrong"
                     @remove-wrong="removeWrong"
                 />
@@ -461,142 +478,51 @@
           </section>
         </aside>
       </section>
-    </div>
-
-    <!-- 考试模式 -->
-    <div v-else class="exam-workspace">
-      <header class="exam-topbar">
-        <div class="exam-topbar-left">
-          <button class="btn-text" type="button" @click="quitExam">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            退出考试
-          </button>
-          <h1 class="exam-title">{{ examTitle }}</h1>
-        </div>
-
-        <div class="exam-actions">
-          <div class="timer-badge">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            <span>{{ formattedExamTime }}</span>
-          </div>
-          <button v-if="!examSubmitted" class="btn-primary" type="button" @click="submitExam">交卷</button>
-          <button v-else class="btn-secondary" type="button" @click="backWorkspace">返回题库</button>
-        </div>
-      </header>
-
-      <main class="exam-main">
-        <div class="exam-content">
-          <article
-              v-for="(question, index) in examPaper"
-              :key="question.id"
-              :id="'exam-q-' + index"
-              :class="['exam-question', { active: currentExamIndex === index }]"
-          >
-            <div class="question-header">
-              <span class="q-number">第 {{ index + 1 }} 题 / 共 {{ examPaper.length }} 题</span>
-              <div class="tags">
-                <span class="tag outline">{{ question.subject }}</span>
-                <span class="tag type">{{ question.type }}</span>
-              </div>
-              <div v-if="examSubmitted" :class="['result-badge', isExamCorrect(question) ? 'success' : 'danger']">
-                {{ isExamCorrect(question) ? '正确' : '错误' }}
-              </div>
-            </div>
-
-            <div class="question-text" v-html="renderInline(question.content)"></div>
-
-            <div v-if="isOptionQuestion(question)" class="options-list">
-              <button
-                  v-for="(text, key) in getOptions(question)"
-                  :key="key"
-                  type="button"
-                  :class="[
-                  'option-btn',
-                  {
-                    selected: isSelected(examAnswers[question.id], key),
-                    correct: examSubmitted && isCorrectOption(question, key),
-                    wrong: examSubmitted && isSelected(examAnswers[question.id], key) && !isCorrectOption(question, key),
-                  },
-                ]"
-                  :disabled="examSubmitted"
-                  @click="selectExamOption(question, key)"
-              >
-                <span class="opt-key">{{ key }}</span>
-                <span class="opt-text" v-html="renderInline(text)"></span>
-              </button>
-            </div>
-
-            <textarea
-                v-else
-                v-model="examAnswers[question.id]"
-                class="text-area-input"
-                rows="4"
-                :disabled="examSubmitted"
-                placeholder="请输入你的答案..."
-            ></textarea>
-
-            <div v-if="examSubmitted" :class="['analysis-panel', isExamCorrect(question) ? 'success' : 'danger']">
-              <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
-              <div class="analysis-text" v-html="renderInline(question.analysis || '暂无解析。')"></div>
-            </div>
-          </article>
-        </div>
-
-        <aside class="exam-sidebar">
-          <div class="panel">
-            <h3>{{ examSubmitted ? '考试报告' : '答题卡' }}</h3>
-
-            <div v-if="examSubmitted" class="score-display">
-              <div class="score-value">{{ examScore }}%</div>
-              <div class="score-label">最终得分</div>
-            </div>
-            <div v-else class="progress-display">
-              <div class="progress-value">{{ examAnsweredCount }} / {{ examPaper.length }}</div>
-              <div class="progress-label">已作答</div>
-            </div>
-
-            <div class="grid-sheet">
-              <button
-                  v-for="(question, index) in examPaper"
-                  :key="question.id"
-                  type="button"
-                  :class="[
-                  'sheet-btn',
-                  {
-                    active: currentExamIndex === index,
-                    answered: !examSubmitted && hasAnswerData(examAnswers[question.id]),
-                    correct: examSubmitted && isExamCorrect(question),
-                    wrong: examSubmitted && !isExamCorrect(question),
-                  },
-                ]"
-                  @click="scrollToQuestion(index)"
-              >
-                {{ index + 1 }}
-              </button>
-            </div>
-
-            <button v-if="!examSubmitted" class="btn-primary full-width sidebar-submit" type="button" @click="submitExam">
-              交卷
-            </button>
-            <button v-else class="btn-secondary full-width sidebar-submit" type="button" @click="backWorkspace">
-              完成查看
-            </button>
-          </div>
-        </aside>
-      </main>
+      <ExamTab
+        v-else-if="viewMode === 'exam'"
+        mode="exam"
+        :form="paperForm"
+        :typeCounts="paperTypeCounts"
+        :preview="paperPreview"
+        :loading="paperLoading"
+        :subjects="subjects"
+        :difficulties="difficulties"
+        :expectedCount="paperExpectedCount"
+        :canStartExam="canStartPaperExam"
+        :examTitle="examTitle"
+        :examPaper="examPaper"
+        :examAnswers="examAnswers"
+        :examReview="examReview"
+        :examSubmitted="examSubmitted"
+        :examSubmitNoticeVisible="examSubmitNoticeVisible"
+        :currentExamIndex="currentExamIndex"
+        :formattedExamTime="formattedExamTime"
+        :examAnsweredCount="examAnsweredCount"
+        :examUnansweredCount="examUnansweredCount"
+        :examCorrectCount="examCorrectCount"
+        :examWrongCount="examWrongCount"
+        :examScore="examScore"
+        :examResultLevel="examResultLevel"
+        @select-exam-option="selectExamOption"
+        @update-exam-answer="updateExamAnswer"
+        @request-submit-exam="requestSubmitExam"
+        @cancel-submit-exam="cancelSubmitExam"
+        @scroll-to-question="scrollToQuestion"
+        @exit-exam="handleExamExit"
+        @back-workspace="backWorkspace"
+        @open-visualizer="openAlgorithmVisualizer"
+      />
+      <AlgorithmWorkspace
+        v-else-if="viewMode === 'algorithm' && algorithmQuestion"
+        :question="algorithmQuestion"
+        @back="backFromAlgorithmVisualizer"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
@@ -613,9 +539,10 @@ import PracticeTab from '@/features/question-bank/components/PracticeTab.vue'
 import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
+import AlgorithmWorkspace from '@/features/question-bank/components/AlgorithmWorkspace.vue'
 import { getErrorMessage } from '@/shared/api/http'
 
-type ViewMode = 'workspace' | 'exam'
+type ViewMode = 'workspace' | 'exam' | 'algorithm'
 type ModuleKey = 'portal' | 'daily' | 'practice' | 'search' | 'paper' | 'wrong'
 type AnswerValue = string | string[] | undefined
 
@@ -636,6 +563,7 @@ interface Question {
   wrong_id?: number
   wrong_count?: number
   is_archived?: boolean
+  user_answer?: string | null
 }
 
 interface WrongQuestionDTO {
@@ -647,6 +575,7 @@ interface WrongQuestionDTO {
   options?: Record<string, string> | null
   standard_answer?: string | null
   analysis?: string | null
+  user_answer?: string | null
   wrong_count?: number
   is_archived?: boolean
 }
@@ -677,6 +606,7 @@ const practiceForm = reactive({ subject: '', difficulty: '', type: '', count: 10
 const portalQuestion = ref<Question | null>(null)
 const dailyQuestions = shallowRef<Question[]>([])
 const dailyChallengeQuestion = ref<Question | null>(null)
+const algorithmQuestion = ref<Question | null>(null)
 
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
@@ -755,7 +685,9 @@ const paperLoading = ref(false)
 const examTitle = ref('')
 const examPaper = shallowRef<Question[]>([])
 const examAnswers = ref<Record<string, AnswerValue>>({})
+const examReview = ref<Record<string, QuizReviewResult | null>>({})
 const examSubmitted = ref(false)
+const examSubmitNoticeVisible = ref(false)
 const currentExamIndex = ref(0)
 const examTime = ref(0)
 const examCorrectCount = ref(0)
@@ -821,12 +753,64 @@ const recommendedCount = computed(() => {
   return available ? Math.min(10, Math.max(5, available)) : 10
 })
 
+const paperExpectedCount = computed(() => {
+  return paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
+})
+
+const canStartPaperExam = computed(() => {
+  return paperExpectedCount.value > 0 && paperPreview.value.length === paperExpectedCount.value
+})
+
 const dailySubmittedCount = computed(() => {
   return dailyQuestions.value.filter((question) => dailySubmitted.value[question.id]).length
 })
 
 const dailyCorrectCount = computed(() => {
   return dailyQuestions.value.filter((question) => dailyCorrect.value[question.id]).length
+})
+
+const wrongSummary = computed(() => {
+  return {
+    total: wrongQuestions.value.length,
+    recent: Math.min(wrongQuestions.value.length, 3),
+    latestTitle: wrongQuestions.value[0] ? getShortWrongTitle(wrongQuestions.value[0].content) : '',
+  }
+})
+
+const wrongSubjectGroups = computed(() => {
+  const grouped = new Map<string, number>()
+
+  wrongQuestions.value.forEach((item) => {
+    const key = item.subject || '综合'
+    grouped.set(key, (grouped.get(key) || 0) + 1)
+  })
+
+  return Array.from(grouped.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4)
+})
+
+const wrongKnowledgePoints = computed(() => {
+  const grouped = new Map<string, number>()
+
+  wrongQuestions.value.forEach((item) => {
+    const points = [
+      ...(item.knowledge_points || []),
+      ...(item.tags || []),
+    ]
+
+    points.forEach((point) => {
+      const key = String(point || '').trim()
+      if (!key) return
+      grouped.set(key, (grouped.get(key) || 0) + 1)
+    })
+  })
+
+  return Array.from(grouped.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6)
 })
 
 const filteredWrongQuestions = computed(() => {
@@ -840,8 +824,6 @@ const filteredWrongQuestions = computed(() => {
   })
 })
 
-const visibleWrongSnippets = computed(() => wrongQuestions.value.slice(0, 3))
-
 const topSubjects = computed(() => {
   return learnerCourses.value
     .filter((course) => typeof course === 'string' && course.trim().length > 0)
@@ -852,9 +834,20 @@ const formattedExamTime = computed(() => formatDuration(examTime.value))
 
 const examAnsweredCount = computed(() => examPaper.value.filter((item) => hasAnswerData(examAnswers.value[item.id])).length)
 
+const examUnansweredCount = computed(() => examPaper.value.length - examAnsweredCount.value)
+
+const examWrongCount = computed(() => Math.max(examPaper.value.length - examCorrectCount.value - examUnansweredCount.value, 0))
+
 const examScore = computed(() => {
   if (!examPaper.value.length) return 0
   return Math.round((examCorrectCount.value / examPaper.value.length) * 100)
+})
+
+const examResultLevel = computed(() => {
+  if (examScore.value >= 90) return '优秀'
+  if (examScore.value >= 75) return '良好'
+  if (examScore.value >= 60) return '合格'
+  return '待加强'
 })
 
 const practiceAccuracy = computed(() => {
@@ -941,17 +934,21 @@ onMounted(() => {
   void bootstrap()
 })
 
-watch(viewMode, (newVal) => {
-  if (newVal === 'exam') {
-    document.body.classList.add('zen-mode-exam')
-  } else {
-    document.body.classList.remove('zen-mode-exam')
-  }
-})
+watch(
+  () => [
+    paperForm.subject,
+    paperForm.difficulty,
+    paperForm.duration,
+    paperForm.title,
+    ...paperTypeCounts.map((item) => Number(item.count || 0)),
+  ],
+  () => {
+    paperPreview.value = []
+  },
+)
 
 onUnmounted(() => {
   stopExamTimer()
-  document.body.classList.remove('zen-mode-exam')
 })
 
 function scrollToQuestion(index: number) {
@@ -971,6 +968,7 @@ async function bootstrap() {
     learnerCourses.value = []
   }
 
+  syncBankSubmissionStateForToday()
   await loadPracticePool()
   await loadQuestionBank()
   await loadWrongBook()
@@ -1005,6 +1003,22 @@ function selectSubject(subject: string) {
   activeModule.value = 'search'
   bankPage.value = 1
   void loadQuestionBank()
+}
+
+function openAlgorithmVisualizer(question: Question) {
+  algorithmQuestion.value = question
+  viewMode.value = 'algorithm'
+  void nextTick(() => {
+    scrollQuestionBankViewportToTop()
+  })
+}
+
+function backFromAlgorithmVisualizer() {
+  algorithmQuestion.value = null
+  viewMode.value = 'workspace'
+  void nextTick(() => {
+    scrollQuestionBankViewportToTop()
+  })
 }
 
 async function loadPracticePool() {
@@ -1052,20 +1066,38 @@ async function loadPracticePool() {
 async function loadQuestionBank() {
   bankLoading.value = true
   try {
-    const result = await fetchQuizBankQuestions({
-      query: bankFilters.query || undefined,
-      subject: bankFilters.subject || undefined,
-      difficulty: bankFilters.difficulty || undefined,
-      type: bankFilters.type || undefined,
-      page: bankPage.value,
-      page_size: bankPageSize.value,
+    const source = allQuestionPool.value.length ? allQuestionPool.value : await fetchAllQuestionPoolForSearch()
+    const filtered = source.filter((question) => {
+      if (bankFilters.subject && question.subject !== bankFilters.subject) return false
+      if (bankFilters.difficulty && question.difficulty !== bankFilters.difficulty) return false
+      if (bankFilters.type && question.type !== bankFilters.type) return false
+
+      const query = bankFilters.query.trim().toLowerCase()
+      if (!query) return true
+
+      return [
+        question.subject,
+        question.type,
+        question.difficulty,
+        question.content,
+        question.analysis,
+        question.answer,
+        ...(question.knowledge_points || []),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
     })
 
-    questions.value = result.items || []
-    totalQuestions.value = result.total || 0
-    subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
-    difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
-    types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
+    const dailyOrdered = shuffleBySeed(filtered, `bank:${formatDateKey(new Date())}`)
+    const start = (bankPage.value - 1) * bankPageSize.value
+    const end = start + bankPageSize.value
+
+    questions.value = dailyOrdered.slice(start, end)
+    totalQuestions.value = filtered.length
+    subjects.value = uniqueKeepOrder(source.map((item) => item.subject).filter(Boolean))
+    difficulties.value = uniqueKeepOrder(source.map((item) => item.difficulty || '').filter(Boolean))
+    types.value = uniqueKeepOrder(source.map((item) => item.type).filter(Boolean))
   } catch (error) {
     toast.error(getErrorMessage(error, '加载题库失败'))
   } finally {
@@ -1135,10 +1167,18 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
     options: item.options,
     answer: item.standard_answer || '',
     analysis: item.analysis || '',
+    user_answer: item.user_answer || '',
     knowledge_points: [],
     wrong_count: item.wrong_count,
     is_archived: item.is_archived,
   }
+}
+
+function getShortWrongTitle(content: string) {
+  return String(content || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[#*_`>-]/g, '')
+    .trim()
 }
 
 function pickPortalQuestion() {
@@ -1347,6 +1387,7 @@ async function submitBankAnswer(question: Question) {
   bankCorrect.value[question.id] = result.correct
   bankReview.value[question.id] = result.review
   openedAnalysis.value = new Set(openedAnalysis.value).add(question.id)
+  markBankQuestionSubmittedToday(question.id, result.correct)
   saveAttempt(1, result.correct ? 1 : 0)
 
   if (!result.correct) await saveWrongQuestion(question, bankAnswers.value[question.id])
@@ -1452,31 +1493,74 @@ function resetPaperForm() {
   paperPreview.value = []
 }
 
+async function fetchPaperQuestionPool() {
+  const pageSize = 100
+  const allItems: Question[] = []
+  const seen = new Set<string>()
+  let page = 1
+  let total = 0
+
+  while (true) {
+    const result = await fetchQuizBankQuestions({
+      subject: paperForm.subject || undefined,
+      difficulty: paperForm.difficulty === '混合' ? undefined : paperForm.difficulty,
+      page,
+      page_size: pageSize,
+    })
+
+    const items = result.items || []
+    total = result.total || total
+
+    items.forEach((item) => {
+      if (item?.id && !seen.has(item.id)) {
+        seen.add(item.id)
+        allItems.push(item)
+      }
+    })
+
+    if (!items.length || items.length < pageSize || (total > 0 && allItems.length >= total)) break
+    page += 1
+  }
+
+  return allItems
+}
+
 async function generatePaperPreview() {
-  const targetCount = paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
+  const targetCount = paperExpectedCount.value
   if (targetCount <= 0) return toast.warning('请至少选择 1 道题目')
 
   paperLoading.value = true
   try {
-    const result = await fetchQuizBankQuestions({
-      subject: paperForm.subject || undefined,
-      difficulty: paperForm.difficulty === '混合' ? undefined : paperForm.difficulty,
-      page: 1,
-      page_size: 100,
-    })
-
-    const pool = result.items || []
+    const pool = await fetchPaperQuestionPool()
     const selected: Question[] = []
+    const shortages: string[] = []
 
     paperTypeCounts.forEach((config) => {
+      const needed = Number(config.count || 0)
+      if (needed <= 0) return
+
       const sameType = pool.filter((item) => item.type === config.type)
-      selected.push(...shuffle(sameType).slice(0, config.count))
+      const picked = shuffle(sameType).slice(0, needed)
+      selected.push(...picked)
+
+      if (picked.length < needed) {
+        shortages.push(`${config.label}缺少 ${needed - picked.length} 道`)
+      }
     })
 
     paperPreview.value = selected
 
-    if (!selected.length) toast.warning('暂无题目')
-    else toast.success(`已生成 ${selected.length} 道题目`)
+    if (!selected.length) {
+      toast.warning('暂无题目')
+      return
+    }
+
+    if (shortages.length > 0 || selected.length !== targetCount) {
+      toast.warning(`题量不足：${shortages.join('，') || '请重新调整题型数量'}`)
+      return
+    }
+
+    toast.success(`已生成 ${selected.length} 道题目`)
   } catch {
     toast.error('生成失败')
   } finally {
@@ -1485,7 +1569,10 @@ async function generatePaperPreview() {
 }
 
 function startPreviewExam() {
-  if (!paperPreview.value.length) return
+  if (!canStartPaperExam.value) {
+    toast.warning('试卷题量与配置不一致，请重新生成或调整题型数量')
+    return
+  }
   startExam(paperPreview.value, paperForm.title)
 }
 
@@ -1493,15 +1580,21 @@ function startExam(paper: Question[], title: string) {
   examTitle.value = title
   examPaper.value = paper
   examAnswers.value = {}
+  examReview.value = {}
   paper.forEach((q) => {
     examAnswers.value[q.id] = q.type === '多选题' ? [] : ''
+    examReview.value[q.id] = null
   })
   examSubmitted.value = false
+  examSubmitNoticeVisible.value = false
   examCorrectCount.value = 0
   currentExamIndex.value = 0
   examTime.value = 0
   viewMode.value = 'exam'
   startExamTimer()
+  void nextTick(() => {
+    scrollQuestionBankViewportToTop()
+  })
 }
 
 function startExamTimer() {
@@ -1518,22 +1611,36 @@ function stopExamTimer() {
   }
 }
 
-function quitExam() {
-  if (window.confirm('当前进度将丢失，确定退出吗？')) {
+function handleExamExit() {
+  if (examSubmitted.value) {
+    backWorkspace()
+    return
+  }
+
+  if (window.confirm('当前试卷尚未提交，退出考试会丢失本次作答进度，确定退出吗？')) {
     backWorkspace()
   }
+}
+
+function requestSubmitExam() {
+  if (examSubmitted.value) return
+
+  if (examUnansweredCount.value > 0 && !examSubmitNoticeVisible.value) {
+    examSubmitNoticeVisible.value = true
+    return
+  }
+
+  void submitExam()
+}
+
+function cancelSubmitExam() {
+  examSubmitNoticeVisible.value = false
 }
 
 async function submitExam() {
   if (examSubmitted.value) return
 
-  const unAnswered = examPaper.value.length - examAnsweredCount.value
-  if (unAnswered > 0) {
-    if (!window.confirm(`还有 ${unAnswered} 道题未作答，确定交卷吗？`)) {
-      return
-    }
-  }
-
+  examSubmitNoticeVisible.value = false
   stopExamTimer()
   let correctCount = 0
   const batchResults: Array<Record<string, unknown>> = []
@@ -1560,7 +1667,9 @@ async function submitExam() {
   const subjectiveTasks = examPaper.value
       .filter((q) => !isObjectiveQuestion(q))
       .map(async (q) => {
-        const { correct } = await gradeQuestion(q, examAnswers.value[q.id])
+        const result = await gradeQuestion(q, examAnswers.value[q.id])
+        examReview.value[q.id] = result.review
+        const correct = result.correct
         if (correct) correctCount += 1
 
         batchResults.push({
@@ -1615,6 +1724,9 @@ function backWorkspace() {
   refreshDailySelections()
   void loadQuestionBank()
   void loadWrongBook()
+  void nextTick(() => {
+    scrollQuestionBankViewportToTop()
+  })
 }
 
 function selectExamOption(q: Question, key: string) {
@@ -1622,8 +1734,9 @@ function selectExamOption(q: Question, key: string) {
   examAnswers.value[q.id] = updateOptionAnswer(q, examAnswers.value[q.id], key)
 }
 
-function isExamCorrect(q: Question) {
-  return evaluateAnswer(q, examAnswers.value[q.id])
+function updateExamAnswer(id: string, value: string) {
+  if (examSubmitted.value) return
+  examAnswers.value[id] = value
 }
 
 async function gradeQuestion(question: Question, answer: AnswerValue) {
@@ -1776,11 +1889,61 @@ function formatUserAnswer(ans: AnswerValue) {
   return Array.isArray(ans) ? ans.join(',') : String(ans || '')
 }
 
+async function fetchAllQuestionPoolForSearch() {
+  const pageSize = 100
+  const allItems: Question[] = []
+  const seen = new Set<string>()
+  let page = 1
+  let total = 0
+
+  while (true) {
+    const result = await fetchQuizBankQuestions({
+      page,
+      page_size: pageSize,
+    })
+
+    const items = result.items || []
+    total = result.total || total
+
+    items.forEach((item) => {
+      if (item?.id && !seen.has(item.id)) {
+        seen.add(item.id)
+        allItems.push(item)
+      }
+    })
+
+    subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
+    difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
+    types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
+
+    if (!items.length || items.length < pageSize || (total > 0 && allItems.length >= total)) break
+    page += 1
+  }
+
+  allQuestionPool.value = allItems
+  return allItems
+}
+
 function shuffle<T>(array: T[]): T[] {
   const result = [...array]
 
   for (let i = result.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
+    const temp = result[i] as T
+    result[i] = result[j] as T
+    result[j] = temp
+  }
+
+  return result
+}
+
+function shuffleBySeed<T>(array: T[], seedText: string) {
+  const result = [...array]
+  let seed = seedText.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) || 1
+
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    seed = (seed * 9301 + 49297) % 233280
+    const j = Math.floor((seed / 233280) * (i + 1))
     const temp = result[i] as T
     result[i] = result[j] as T
     result[j] = temp
@@ -1853,6 +2016,38 @@ function markDailyCompleted(date: Date) {
   localStorage.setItem('daily_completed_' + date.toDateString(), 'true')
 }
 
+function readBankSubmissionMap(): Record<string, { correct: boolean }> {
+  try {
+    return JSON.parse(localStorage.getItem(`question_hub_bank_submitted_${formatDateKey(new Date())}`) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function writeBankSubmissionMap(map: Record<string, { correct: boolean }>) {
+  localStorage.setItem(`question_hub_bank_submitted_${formatDateKey(new Date())}`, JSON.stringify(map))
+}
+
+function syncBankSubmissionStateForToday() {
+  const saved = readBankSubmissionMap()
+  const nextSubmitted: Record<string, boolean> = {}
+  const nextCorrect: Record<string, boolean> = {}
+
+  Object.entries(saved).forEach(([id, value]) => {
+    nextSubmitted[id] = true
+    nextCorrect[id] = value.correct === true
+  })
+
+  bankSubmitted.value = nextSubmitted
+  bankCorrect.value = nextCorrect
+}
+
+function markBankQuestionSubmittedToday(id: string, correct: boolean) {
+  const saved = readBankSubmissionMap()
+  saved[id] = { correct }
+  writeBankSubmissionMap(saved)
+}
+
 function formatDuration(sec: number) {
   return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
 }
@@ -1875,6 +2070,15 @@ function formatDateKey(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function scrollQuestionBankViewportToTop() {
+  window.scrollTo({ top: 0, behavior: 'auto' })
+
+  const pageContent = document.querySelector('.page-content')
+  if (pageContent instanceof HTMLElement) {
+    pageContent.scrollTo({ top: 0, behavior: 'auto' })
+  }
 }
 </script>
 
@@ -1907,7 +2111,7 @@ function formatDateKey(date: Date) {
 
 .bank-shell {
   display: grid;
-  grid-template-columns: 210px minmax(0, 1fr) 300px;
+  grid-template-columns: 236px minmax(0, 1fr) 300px;
   gap: 22px;
   min-height: calc(100vh - var(--navbar-height, 64px) - 64px);
   border: 1px solid rgba(226, 232, 240, 0.84);
@@ -2064,39 +2268,119 @@ function formatDateKey(date: Date) {
   cursor: pointer;
 }
 
-.rail-question-list {
+.wrong-summary-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   margin-top: 14px;
 }
 
-.rail-question {
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
+.wrong-overview-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.82);
 }
 
-.rail-question span {
+.wrong-overview-card span {
   display: block;
-  margin-bottom: 4px;
   color: #8a94a7;
   font-size: 11px;
   font-weight: 700;
 }
 
-.rail-question p {
-  display: -webkit-box;
-  margin: 0;
-  color: #3d4656;
-  font-size: 13px;
-  line-height: 1.45;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.wrong-overview-card strong {
+  display: block;
+  margin-top: 4px;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.wrong-summary-section {
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.rail-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.wrong-latest {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wrong-subject-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wrong-subject-item {
+  min-width: 0;
+}
+
+.subject-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.subject-bar span {
+  min-width: 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subject-bar strong {
+  color: #172033;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.wrong-point-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wrong-point-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #3d78b5;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rail-empty {
@@ -2522,13 +2806,14 @@ function formatDateKey(date: Date) {
 
 .recommend-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
   margin-top: 18px;
 }
 
 .recommend-option {
   display: flex;
+  align-items: flex-start;
   gap: 12px;
   width: 100%;
   padding: 14px 0;
@@ -2542,7 +2827,7 @@ function formatDateKey(date: Date) {
 
 .recommend-option span {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   width: 26px;
   height: 26px;
@@ -2559,6 +2844,8 @@ function formatDateKey(date: Date) {
   color: #4f5b6d;
   font-size: 14px;
   line-height: 1.55;
+  flex: 1;
+  text-align: left;
 }
 
 .recommend-option.selected {
@@ -2863,6 +3150,11 @@ function formatDateKey(date: Date) {
   padding-right: 0 !important;
 }
 
+.module-content-card :deep(.search-shell .question-item) {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+
 .module-content-card :deep(.practice-section),
 .module-content-card :deep(.workspace-pane),
 .module-content-card :deep(.list-section),
@@ -2917,6 +3209,23 @@ function formatDateKey(date: Date) {
 .module-content-card :deep(.action-row) {
   border-top: 1px solid rgba(226, 232, 240, 0.72);
   padding-top: 16px;
+}
+
+.module-content-card :deep(.search-shell) {
+  gap: 16px !important;
+}
+
+.module-content-card :deep(.search-shell .question-foot) {
+  border-top: none !important;
+  padding-top: 0 !important;
+}
+
+.module-content-card :deep(.search-shell .toolbar) {
+  gap: 12px !important;
+}
+
+.module-content-card :deep(.search-shell .pagination-row) {
+  margin-top: 28px !important;
 }
 
 .bank-right-panel {
@@ -3189,340 +3498,6 @@ function formatDateKey(date: Date) {
   transform: translateY(-8px);
 }
 
-.exam-workspace {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.exam-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 0 0 18px;
-  border: none;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.exam-topbar-left,
-.exam-actions,
-.timer-badge,
-.tags,
-.question-header {
-  display: flex;
-  align-items: center;
-}
-
-.exam-topbar-left,
-.exam-actions,
-.question-header {
-  gap: 14px;
-}
-
-.exam-title {
-  margin: 0;
-  color: #172033;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.timer-badge {
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: #42c99a;
-  color: #fff;
-  font-weight: 900;
-  box-shadow: 0 10px 20px rgba(66, 201, 154, 0.2);
-}
-
-.exam-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 20px;
-}
-
-.exam-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-
-.exam-question,
-.exam-sidebar .panel {
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: none;
-}
-
-.exam-question {
-  padding: 24px 26px;
-}
-
-.exam-question.active {
-  border-color: rgba(66, 201, 154, 0.36);
-}
-
-.exam-sidebar .panel {
-  position: sticky;
-  top: 20px;
-  padding: 18px;
-}
-
-.question-header {
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
-.q-number {
-  color: #172033;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.tags {
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tag.outline {
-  background: #fff;
-  color: #5f6b7c;
-  border: 1px solid rgba(203, 213, 225, 0.92);
-}
-
-.question-text {
-  margin-bottom: 26px;
-  color: #273142;
-  font-size: 18px;
-  line-height: 1.85;
-}
-
-.options-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.option-btn {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  width: 100%;
-  padding: 16px 18px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 10px;
-  background: #fff;
-  color: #172033;
-  cursor: pointer;
-  text-align: left;
-  transition:
-      border-color 150ms ease,
-      background 150ms ease,
-      box-shadow 150ms ease;
-}
-
-.option-btn:hover:not(:disabled) {
-  border-color: rgba(66, 201, 154, 0.34);
-  background: #fbfefd;
-}
-
-.option-btn.selected {
-  border-color: rgba(66, 201, 154, 0.44);
-  background: rgba(209, 250, 229, 0.38);
-  box-shadow: none;
-}
-
-.option-btn.correct {
-  border-color: rgba(16, 185, 129, 0.32);
-  background: rgba(236, 253, 245, 0.92);
-}
-
-.option-btn.wrong {
-  border-color: rgba(239, 68, 68, 0.28);
-  background: rgba(254, 242, 242, 0.94);
-}
-
-.opt-key {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: #e7f7f1;
-  color: #17856d;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.opt-text {
-  color: #273142;
-  font-size: 15px;
-  line-height: 1.65;
-}
-
-.text-area-input {
-  width: 100%;
-  min-height: 144px;
-  padding: 16px 18px;
-  border: 1px solid rgba(203, 213, 225, 0.96);
-  border-radius: 10px;
-  background: #fff;
-  color: #172033;
-  font-family: inherit;
-  font-size: 15px;
-  resize: vertical;
-  outline: none;
-  box-sizing: border-box;
-  transition:
-      border-color 150ms ease,
-      box-shadow 150ms ease;
-}
-
-.text-area-input:focus {
-  border-color: rgba(66, 201, 154, 0.48);
-  box-shadow: 0 0 0 4px rgba(66, 201, 154, 0.1);
-}
-
-.panel h3 {
-  margin: 0 0 18px;
-  color: #172033;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.score-display,
-.progress-display {
-  margin-bottom: 22px;
-  padding: 18px 16px;
-  border-radius: 10px;
-  background: rgba(209, 250, 229, 0.26);
-  border: 1px solid rgba(66, 201, 154, 0.2);
-  text-align: center;
-}
-
-.score-value,
-.progress-value {
-  margin-bottom: 8px;
-  color: #17856d;
-  font-size: 34px;
-  font-weight: 900;
-}
-
-.score-label,
-.progress-label {
-  color: #7c8798;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.grid-sheet {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.sheet-btn {
-  aspect-ratio: 1;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 50%;
-  background: #fff;
-  color: #5f6b7c;
-  font-size: 14px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.16s ease;
-}
-
-.sheet-btn:hover {
-  border-color: rgba(66, 201, 154, 0.4);
-  transform: scale(1.05);
-}
-
-.sheet-btn.answered {
-  border-color: #42c99a;
-  background: rgba(66, 201, 154, 0.12);
-  color: #17856d;
-}
-
-.sheet-btn.active {
-  background: #42c99a;
-  border-color: #42c99a;
-  color: #fff;
-  box-shadow: 0 0 0 4px rgba(66, 201, 154, 0.14);
-}
-
-.sheet-btn.correct {
-  border-color: #10b981;
-  background: rgba(16, 185, 129, 0.14);
-  color: #059669;
-}
-
-.sheet-btn.wrong {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.13);
-  color: #dc2626;
-}
-
-.full-width {
-  width: 100%;
-}
-
-.sidebar-submit {
-  margin-top: 22px;
-}
-
-.result-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.result-badge.success {
-  background: rgba(236, 253, 245, 0.92);
-  color: #059669;
-}
-
-.result-badge.danger {
-  background: rgba(254, 242, 242, 0.94);
-  color: #dc2626;
-}
-
-.analysis-panel {
-  margin-top: 24px;
-  padding: 18px;
-  border-radius: 10px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: #f8fafc;
-  font-size: 15px;
-}
-
-.analysis-panel.success {
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.analysis-panel.danger {
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.analysis-text {
-  margin-top: 10px;
-  color: #4f5b6d;
-  line-height: 1.7;
-}
-
 :deep(code) {
   padding: 2px 6px;
   border-radius: 6px;
@@ -3579,8 +3554,7 @@ function formatDateKey(date: Date) {
   }
 
   .module-header,
-  .section-toolbar,
-  .exam-topbar {
+  .section-toolbar {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -3601,14 +3575,6 @@ function formatDateKey(date: Date) {
   .recommend-options {
     grid-template-columns: 1fr;
   }
-
-  .exam-main {
-    grid-template-columns: 1fr;
-  }
-
-  .exam-sidebar .panel {
-    position: static;
-  }
 }
 
 @media (max-width: 640px) {
@@ -3617,16 +3583,13 @@ function formatDateKey(date: Date) {
   }
 
   .recommend-question-card,
-  .module-content-card,
-  .exam-question,
-  .exam-sidebar .panel {
+  .module-content-card {
     padding: 20px;
     border-radius: 10px;
   }
 
   .toolbar-actions,
-  .question-card-actions,
-  .exam-actions {
+  .question-card-actions {
     width: 100%;
     flex-wrap: wrap;
   }
@@ -3649,16 +3612,4 @@ function formatDateKey(date: Date) {
   }
 }
 
-:global(body.zen-mode-exam) .top-navbar {
-  display: none !important;
-}
-
-:global(body.zen-mode-exam) .page-content {
-  padding-top: 0 !important;
-  height: 100vh !important;
-}
-
-:global(body.zen-mode-exam) .app-layout {
-  height: 100vh !important;
-}
 </style>
