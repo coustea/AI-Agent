@@ -65,16 +65,16 @@ spark_tts:
 
 # Avatar 数字人
 avatar:
-  app_id: "5ec3e8ba"
-  api_key: "f3acd6dac65bcb50003111992868f700"
-  api_secret: "Nzk5ZmJlNTMwNTA0ZDJlOTM2OWY4MDM4"
+  app_id: "d6d5f921"
+  api_key: "25aff2481573fc7d6a807616facc2090"
+  api_secret: "YzZlYzg5MjRjZWYwNGM0M2FmNTc4YTEz"
   url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
   anchor_id: "111204004"
   vcn: "x5_lingxiaoyue_flow"
   iat_url: "wss://iat-api.xfyun.cn/v2/iat"
-  asr_app_id: "5ec3e8ba"
-  asr_api_key: "f3acd6dac65bcb50003111992868f700"
-  asr_api_secret: "Nzk5ZmJlNTMwNTA0ZDJlOTM2OWY4MDM4"
+  asr_app_id: "d6d5f921"
+  asr_api_key: "25aff2481573fc7d6a807616facc2090"
+  asr_api_secret: "YzZlYzg5MjRjZWYwNGM0M2FmNTc4YTEz"
 
 # 搜索服务
 search:

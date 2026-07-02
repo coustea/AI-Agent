@@ -18,6 +18,16 @@ export interface Attachment {
   mimeType?: string
 }
 
+// 知识库来源条目
+export interface KnowledgeSource {
+  source: string       // 来源类型（如 "knowledge_base"）
+  title: string        // 书名/章节标题
+  heading?: string     // 章节/位置
+  summary: string      // 内容摘要
+  url?: string         // URL（如果有）
+  score?: number       // 相关性分数
+}
+
 export interface AgentActivityDetail {
   tool_name?: string
   input?: string
@@ -49,6 +59,7 @@ export interface ChatMsg {
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
   agentActivities?: AgentActivity[]
+  sources?: KnowledgeSource[]  // 知识库来源
 }
 
 const SUPPORTED_DIAGRAM_TYPES = new Set([

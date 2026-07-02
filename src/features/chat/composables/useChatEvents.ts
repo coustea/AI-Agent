@@ -121,6 +121,7 @@ export function useChatEvents() {
 
       // 终态
       if (event.event === 'run.completed') {
+        console.log('[useChatEvents] run.completed event:', event)
         connectionStatus.value = 'completed'
         handlers.onCompleted?.(event)
         close()
