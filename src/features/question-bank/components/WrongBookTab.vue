@@ -124,14 +124,6 @@
               <button class="action-link" type="button" @click="$emit('toggle-wrong-analysis', question.id)">
                 {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
               </button>
-              <button
-                v-if="canVisualize(question)"
-                class="action-link"
-                type="button"
-                @click="$emit('open-visualizer', question)"
-              >
-                算法可视化
-              </button>
             </div>
 
             <div class="right-actions">
@@ -155,7 +147,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 const props = defineProps<{
   questions: any[]
@@ -190,7 +181,6 @@ defineEmits<{
   (e: 'select-wrong-option', question: any, key: string): void
   (e: 'submit-wrong', question: any): void
   (e: 'toggle-wrong-analysis', id: string): void
-  (e: 'open-visualizer', question: any): void
   (e: 'archive-wrong', question: any): void
   (e: 'remove-wrong', question: any): void
 }>()
@@ -200,10 +190,6 @@ const hasDrillAnswer = computed(() => {
   if (Array.isArray(ans)) return ans.length > 0
   return !!ans && String(ans).trim().length > 0
 })
-
-function canVisualize(question: any) {
-  return supportsAlgorithmVisualization(question)
-}
 
 function isDrillSelected(key: string) {
   const ans = props.drillAnswer

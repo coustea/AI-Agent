@@ -28,60 +28,6 @@
             </button>
           </nav>
 
-          <div class="rail-card">
-            <div class="rail-card-title">
-              <span>我的题单</span>
-              <button type="button" @click="switchModule('wrong')">+</button>
-            </div>
-
-            <div class="wrong-summary-panel">
-              <div class="wrong-overview-card">
-                <div>
-                  <span>错题总数</span>
-                  <strong>{{ wrongSummary.total }}</strong>
-                </div>
-                <div>
-                  <span>最近沉淀</span>
-                  <strong>{{ wrongSummary.recent }}</strong>
-                </div>
-              </div>
-
-              <div class="wrong-summary-section">
-                <div class="rail-block-head">
-                  <span>最近错题</span>
-                </div>
-                <div class="wrong-latest">
-                  {{ wrongSummary.latestTitle || '最近暂无新增错题' }}
-                </div>
-              </div>
-
-              <div class="wrong-summary-section">
-                <div class="rail-block-head">
-                  <span>薄弱科目</span>
-                </div>
-                <div class="wrong-subject-list">
-                  <div v-for="item in wrongSubjectGroups" :key="item.name" class="wrong-subject-item">
-                    <div class="subject-bar">
-                      <span>{{ item.name }}</span>
-                      <strong>{{ item.count }}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="wrong-summary-section">
-                <div class="rail-block-head">
-                  <span>高频问题</span>
-                </div>
-                <div class="wrong-point-list">
-                  <span v-for="point in wrongKnowledgePoints" :key="point.name" class="wrong-point-chip">
-                    {{ point.name }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
         </aside>
 
         <!-- 中间主区域 -->
@@ -246,17 +192,6 @@
                     </div>
                   </template>
 
-                  <template v-else-if="activeModule === 'practice'">
-                    <div class="module-stat">
-                      <span>智能已练</span>
-                      <strong>{{ stats.totalAttempted }} 题</strong>
-                    </div>
-                    <div class="module-stat">
-                      <span>正确率</span>
-                      <strong>{{ practiceAccuracy }}</strong>
-                    </div>
-                  </template>
-
                   <template v-else-if="activeModule === 'search'">
                     <div class="module-stat">
                       <span>题库总量</span>
@@ -300,22 +235,6 @@
                     @select-daily-option="selectDailyOption"
                     @submit-daily="submitDailyAnswer"
                     @toggle-daily-analysis="toggleDailyAnalysis"
-                    @open-visualizer="openAlgorithmVisualizer"
-                />
-
-                <PracticeTab
-                    v-else-if="activeModule === 'practice'"
-                    :stats="stats"
-                    :wrongTotal="wrongTotal"
-                    :recommendedSubject="recommendedSubject"
-                    :recommendedCount="recommendedCount"
-                    :practiceLoading="practiceLoading"
-                    :subjects="subjects"
-                    :difficulties="difficulties"
-                    :types="types"
-                    @switch-tab="switchModule"
-                    @start-recommended="startRecommendedPractice"
-                    @start-custom="startSpecialPracticeProxy"
                 />
 
                 <SearchTab
@@ -342,7 +261,6 @@
                     @select-option="selectBankOption"
                     @submit="submitBankAnswer"
                     @toggle-analysis="toggleBankAnalysis"
-                    @open-visualizer="openAlgorithmVisualizer"
                 />
 
                 <ExamTab
@@ -406,7 +324,6 @@
                     @select-wrong-option="selectWrongOption"
                     @submit-wrong="submitWrongAnswer"
                     @toggle-wrong-analysis="toggleWrongAnalysis"
-                    @open-visualizer="openAlgorithmVisualizer"
                     @archive-wrong="archiveWrong"
                     @remove-wrong="removeWrong"
                 />
@@ -458,7 +375,10 @@
                 <span class="tag difficulty-tag">{{ dailyChallengeQuestion.difficulty || '中等' }}</span>
               </div>
               <div class="daily-preview-content" v-html="renderInline(dailyChallengeQuestion.content)"></div>
-              <button type="button" class="get-question-btn" @click="jumpToChallengeQuestion">作答</button>
+              <button type="button" class="get-question-btn" @click="jumpToChallengeQuestion">
+                <span>立即作答</span>
+                <i></i>
+              </button>
             </template>
 
             <template v-else>
@@ -510,12 +430,6 @@
         @scroll-to-question="scrollToQuestion"
         @exit-exam="handleExamExit"
         @back-workspace="backWorkspace"
-        @open-visualizer="openAlgorithmVisualizer"
-      />
-      <AlgorithmWorkspace
-        v-else-if="viewMode === 'algorithm' && algorithmQuestion"
-        :question="algorithmQuestion"
-        @back="backFromAlgorithmVisualizer"
       />
     </div>
   </div>
@@ -535,15 +449,13 @@ import {
 } from '@/features/question-bank/api/wrongQuestions'
 
 import DailyPracticeTab from '@/features/question-bank/components/DailyPracticeTab.vue'
-import PracticeTab from '@/features/question-bank/components/PracticeTab.vue'
 import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
-import AlgorithmWorkspace from '@/features/question-bank/components/AlgorithmWorkspace.vue'
 import { getErrorMessage } from '@/shared/api/http'
 
-type ViewMode = 'workspace' | 'exam' | 'algorithm'
-type ModuleKey = 'portal' | 'daily' | 'practice' | 'search' | 'paper' | 'wrong'
+type ViewMode = 'workspace' | 'exam'
+type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong'
 type AnswerValue = string | string[] | undefined
 
 interface Question {
@@ -601,12 +513,9 @@ const learnerCourses = ref<string[]>([])
 const practicePool = shallowRef<Question[]>([])
 const allQuestionPool = shallowRef<Question[]>([])
 
-const practiceLoading = ref(false)
-const practiceForm = reactive({ subject: '', difficulty: '', type: '', count: 10 })
 const portalQuestion = ref<Question | null>(null)
 const dailyQuestions = shallowRef<Question[]>([])
 const dailyChallengeQuestion = ref<Question | null>(null)
-const algorithmQuestion = ref<Question | null>(null)
 
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
@@ -698,7 +607,6 @@ const weekLabels = ['日', '一', '二', '三', '四', '五', '六']
 const moduleTitles: Record<ModuleKey, string> = {
   portal: '刷题控制台',
   daily: '每日练习',
-  practice: '智能练习',
   search: '全部题目',
   paper: '模拟组卷',
   wrong: '错题本',
@@ -707,7 +615,6 @@ const moduleTitles: Record<ModuleKey, string> = {
 const moduleDescriptions: Record<ModuleKey, string> = {
   portal: '个人刷题进度仪表盘与能力画像。',
   daily: '先完成今天这一题，再进入更完整的练习节奏。',
-  practice: '按推荐练习、错题复习、模拟组卷和自定义练习组织你的训练。',
   search: '按学科、难度和题型检索题库并直接作答。',
   paper: '配置你的模拟试卷，并在预览后进入考试模式。',
   wrong: '集中复习错题、管理薄弱点并进行再练。',
@@ -716,10 +623,9 @@ const moduleDescriptions: Record<ModuleKey, string> = {
 const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark: string }> = [
   { key: 'portal', label: '控制台', desc: '刷题总览', mark: '01' },
   { key: 'daily', label: '每日练习', desc: '每日 10 题', mark: '02' },
-  { key: 'practice', label: '智能练习', desc: '推荐训练', mark: '03' },
-  { key: 'search', label: '全部题目', desc: '筛选检索', mark: '04' },
-  { key: 'paper', label: '模拟组卷', desc: '考试模式', mark: '05' },
-  { key: 'wrong', label: '错题本', desc: '薄弱复习', mark: '06' },
+  { key: 'search', label: '全部题目', desc: '筛选检索', mark: '03' },
+  { key: 'paper', label: '模拟组卷', desc: '考试模式', mark: '04' },
+  { key: 'wrong', label: '错题本', desc: '薄弱复习', mark: '05' },
 ]
 
 const portalCards = computed(() => [
@@ -731,10 +637,10 @@ const portalCards = computed(() => [
     accent: 'black',
   },
   {
-    key: 'practice' as ModuleKey,
-    kicker: 'Smart',
-    title: `${recommendedSubject.value || '智能'}练习`,
-    subtitle: '按薄弱点自动推荐练习',
+    key: 'wrong' as ModuleKey,
+    kicker: 'Review',
+    title: `错题本 ${wrongTotal.value || wrongQuestions.value.length}`,
+    subtitle: wrongTotal.value ? '集中复盘薄弱错题' : '暂无错题，保持正确率',
     accent: 'green',
   },
   {
@@ -745,13 +651,6 @@ const portalCards = computed(() => [
     accent: 'blue',
   },
 ])
-
-const recommendedSubject = computed(() => wrongQuestions.value[0]?.subject || learnerCourses.value[0] || subjects.value[0] || 'General')
-
-const recommendedCount = computed(() => {
-  const available = allQuestionPool.value.length || questions.value.length
-  return available ? Math.min(10, Math.max(5, available)) : 10
-})
 
 const paperExpectedCount = computed(() => {
   return paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
@@ -767,50 +666,6 @@ const dailySubmittedCount = computed(() => {
 
 const dailyCorrectCount = computed(() => {
   return dailyQuestions.value.filter((question) => dailyCorrect.value[question.id]).length
-})
-
-const wrongSummary = computed(() => {
-  return {
-    total: wrongQuestions.value.length,
-    recent: Math.min(wrongQuestions.value.length, 3),
-    latestTitle: wrongQuestions.value[0] ? getShortWrongTitle(wrongQuestions.value[0].content) : '',
-  }
-})
-
-const wrongSubjectGroups = computed(() => {
-  const grouped = new Map<string, number>()
-
-  wrongQuestions.value.forEach((item) => {
-    const key = item.subject || '综合'
-    grouped.set(key, (grouped.get(key) || 0) + 1)
-  })
-
-  return Array.from(grouped.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4)
-})
-
-const wrongKnowledgePoints = computed(() => {
-  const grouped = new Map<string, number>()
-
-  wrongQuestions.value.forEach((item) => {
-    const points = [
-      ...(item.knowledge_points || []),
-      ...(item.tags || []),
-    ]
-
-    points.forEach((point) => {
-      const key = String(point || '').trim()
-      if (!key) return
-      grouped.set(key, (grouped.get(key) || 0) + 1)
-    })
-  })
-
-  return Array.from(grouped.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6)
 })
 
 const filteredWrongQuestions = computed(() => {
@@ -848,11 +703,6 @@ const examResultLevel = computed(() => {
   if (examScore.value >= 75) return '良好'
   if (examScore.value >= 60) return '合格'
   return '待加强'
-})
-
-const practiceAccuracy = computed(() => {
-  if (!stats.totalAttempted) return '0%'
-  return `${Math.round((stats.totalCorrect / stats.totalAttempted) * 100)}%`
 })
 
 const animatedAccuracy = ref(0)
@@ -926,7 +776,7 @@ onMounted(() => {
   readLocalStats()
 
   const tabParam = route.query.tab as string
-  if (tabParam && ['daily', 'practice', 'search', 'paper', 'wrong', 'portal'].includes(tabParam)) {
+  if (tabParam && ['daily', 'search', 'paper', 'wrong', 'portal'].includes(tabParam)) {
     activeModule.value = tabParam as ModuleKey
   }
 
@@ -1003,22 +853,6 @@ function selectSubject(subject: string) {
   activeModule.value = 'search'
   bankPage.value = 1
   void loadQuestionBank()
-}
-
-function openAlgorithmVisualizer(question: Question) {
-  algorithmQuestion.value = question
-  viewMode.value = 'algorithm'
-  void nextTick(() => {
-    scrollQuestionBankViewportToTop()
-  })
-}
-
-function backFromAlgorithmVisualizer() {
-  algorithmQuestion.value = null
-  viewMode.value = 'workspace'
-  void nextTick(() => {
-    scrollQuestionBankViewportToTop()
-  })
 }
 
 async function loadPracticePool() {
@@ -1174,13 +1008,6 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
   }
 }
 
-function getShortWrongTitle(content: string) {
-  return String(content || '')
-    .replace(/\s+/g, ' ')
-    .replace(/[#*_`>-]/g, '')
-    .trim()
-}
-
 function pickPortalQuestion() {
   const excluded = [
     ...dailyQuestions.value.map((item) => item.id),
@@ -1308,48 +1135,6 @@ async function pickWrongQuestion() {
   wrongDrillCorrect.value = false
   wrongDrillReviewing.value = false
   wrongDrillReview.value = null
-}
-
-function startRecommendedPractice() {
-  const source = allQuestionPool.value.length ? allQuestionPool.value : practicePool.value
-  const pool = source.filter((item) => !recommendedSubject.value || item.subject === recommendedSubject.value)
-  const selected = shuffle(pool.length ? pool : source).slice(0, recommendedCount.value)
-
-  if (!selected.length) {
-    toast.warning('暂无题目')
-    return
-  }
-
-  startExam(selected, '推荐练习')
-}
-
-function startSpecialPracticeProxy(config: typeof practiceForm) {
-  void startCustomPractice(config)
-}
-
-async function startCustomPractice(config: typeof practiceForm) {
-  practiceLoading.value = true
-  try {
-    const result = await fetchQuizBankQuestions({
-      subject: config.subject || undefined,
-      difficulty: config.difficulty || undefined,
-      type: config.type || undefined,
-      page: 1,
-      page_size: Math.min(30, Math.max(1, Number(config.count || 10))),
-    })
-
-    const selected = result.items || []
-    if (!selected.length) {
-      toast.warning('没有符合条件的题目')
-      return
-    }
-
-    startExam(selected, '自定义练习')
-  } catch {
-    toast.error('生成练习失败')
-  } finally {
-    practiceLoading.value = false
-  }
 }
 
 function selectBankOption(question: Question, key: string) {
@@ -2242,145 +2027,6 @@ function scrollQuestionBankViewportToTop() {
 
 .rail-menu-item.active small {
   color: rgba(19, 111, 96, 0.72);
-}
-
-.rail-card {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(226, 232, 240, 0.86);
-}
-
-.rail-card-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #172033;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.rail-card-title button {
-  border: none;
-  background: transparent;
-  color: #5f6b7c;
-  font-size: 17px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.wrong-summary-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.wrong-overview-card {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.82);
-}
-
-.wrong-overview-card span {
-  display: block;
-  color: #8a94a7;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.wrong-overview-card strong {
-  display: block;
-  margin-top: 4px;
-  color: #172033;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.wrong-summary-section {
-  padding: 10px 12px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.72);
-}
-
-.rail-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.wrong-latest {
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wrong-subject-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.wrong-subject-item {
-  min-width: 0;
-}
-
-.subject-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.subject-bar span {
-  min-width: 0;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.subject-bar strong {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-
-.wrong-point-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.wrong-point-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: #eef6ff;
-  color: #3d78b5;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .rail-empty {
@@ -3437,24 +3083,62 @@ function scrollQuestionBankViewportToTop() {
 
 .get-question-btn {
   width: 100%;
-  height: 48px;
+  height: 54px;
   margin-top: 18px;
-  border: none;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #ff9f9f, #ffd6b1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #0f172a;
+  border-radius: 12px;
+  background: #0f172a;
   color: #fff;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(255, 159, 159, 0.2);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
   transition:
       transform 160ms ease,
-      box-shadow 160ms ease;
+      box-shadow 160ms ease,
+      background 160ms ease,
+      border-color 160ms ease;
+}
+
+.get-question-btn span {
+  line-height: 1;
+}
+
+.get-question-btn i {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.get-question-btn i::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-top: 2px solid #ffffff;
+  border-right: 2px solid #ffffff;
+  transform: rotate(45deg);
 }
 
 .get-question-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(255, 159, 159, 0.24);
+  transform: translateY(-2px);
+  background: #1e293b;
+  border-color: #1e293b;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.24);
+}
+
+.get-question-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
 }
 
 .daily-preview-card {

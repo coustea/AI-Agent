@@ -76,14 +76,6 @@
             >
               {{ openedAnalysis.has(question.id) ? '收起解析' : '查看解析' }}
             </button>
-            <button
-              v-if="canVisualize(question)"
-              class="action-link"
-              type="button"
-              @click="$emit('open-visualizer', question)"
-            >
-              算法可视化
-            </button>
           </div>
         </div>
 
@@ -109,7 +101,6 @@
 </template>
 
 <script setup lang="ts">
-import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 interface DailyQuestion {
   id: string
@@ -140,12 +131,7 @@ defineEmits<{
   (e: 'select-daily-option', question: DailyQuestion, key: string): void
   (e: 'submit-daily', question: DailyQuestion): void
   (e: 'toggle-daily-analysis', id: string): void
-  (e: 'open-visualizer', question: DailyQuestion): void
 }>()
-
-function canVisualize(question: DailyQuestion) {
-  return supportsAlgorithmVisualization(question)
-}
 
 function isOptionQuestion(question: DailyQuestion) {
   return ['选择题', '单选题', '多选题', '判断题'].includes(question.type)

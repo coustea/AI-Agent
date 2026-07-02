@@ -67,14 +67,6 @@
             <button class="action-link" type="button" @click="toggleQuestion(question.id)">
               {{ activeQuestionId === question.id ? '收起' : '开始作答' }}
             </button>
-            <button
-              v-if="canVisualize(question)"
-              class="action-link"
-              type="button"
-              @click="$emit('open-visualizer', question)"
-            >
-              算法可视化
-            </button>
           </div>
         </div>
 
@@ -173,7 +165,6 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 const props = defineProps<{
   questions: any[]
@@ -201,7 +192,6 @@ const emit = defineEmits<{
   (e: 'select-option', question: any, key: string): void
   (e: 'submit', question: any): void
   (e: 'toggle-analysis', id: string): void
-  (e: 'open-visualizer', question: any): void
 }>()
 
 const activeQuestionId = ref<string | null>(null)
@@ -256,10 +246,6 @@ function selectOption(question: any, key: string) {
 
 function submitAnswer(question: any) {
   emit('submit', question)
-}
-
-function canVisualize(question: any) {
-  return supportsAlgorithmVisualization(question)
 }
 
 function isOptionQuestion(question: any) {

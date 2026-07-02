@@ -181,14 +181,6 @@
               <span v-if="examReview[question.id]?.feedback" class="review-feedback">
                 {{ examReview[question.id]?.feedback }}
               </span>
-              <button
-                v-if="examSubmitted && canVisualize(question)"
-                class="inline-visualizer-btn"
-                type="button"
-                @click="$emit('open-visualizer', question)"
-              >
-                算法可视化
-              </button>
             </div>
 
             <div
@@ -283,7 +275,6 @@
 </template>
 
 <script setup lang="ts">
-import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 type AnswerValue = string | string[] | undefined
 
@@ -341,7 +332,6 @@ defineEmits<{
   (e: 'scroll-to-question', index: number): void
   (e: 'exit-exam'): void
   (e: 'back-workspace'): void
-  (e: 'open-visualizer', question: ExamQuestion): void
 }>()
 
 function difficultyClass(diff: string | null | undefined) {
@@ -470,9 +460,6 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   return formatAnswer(question.answer)
 }
 
-function canVisualize(question: ExamQuestion) {
-  return supportsAlgorithmVisualization(question)
-}
 </script>
 
 <style scoped>
@@ -1143,18 +1130,6 @@ function canVisualize(question: ExamQuestion) {
   color: #475569;
   font-size: 13px;
   font-weight: 600;
-}
-
-.inline-visualizer-btn {
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(203, 213, 225, 0.96);
-  background: #fff;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 .review-hints {

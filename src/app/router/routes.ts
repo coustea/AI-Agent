@@ -17,6 +17,7 @@ const Tutor = () => import('@/features/chat/views/Tutor.vue')
 const Profile = () => import('@/features/profile/views/Profile.vue')
 const ResourceDetail = () => import('@/features/resource/views/ResourceDetail.vue')
 const QuestionBank = () => import('@/features/question-bank/views/QuestionBank.vue')
+const AlgorithmVisualization = () => import('@/features/algorithm-visualization/views/AlgorithmVisualization.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
 
 export const routes: RouteRecordRaw[] = [
@@ -41,6 +42,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
       { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },
+      { path: 'algorithm-visualization', name: 'AlgorithmVisualization', component: AlgorithmVisualization },
     ],
   },
 ]
