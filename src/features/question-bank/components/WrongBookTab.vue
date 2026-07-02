@@ -112,11 +112,12 @@
           <div class="wrong-summary">{{ summarizeText(question.content) }}</div>
 
           <div v-if="openedAnalysis.has(question.id)" class="wrong-analysis">
+            <p class="wrong-user-answer">
+              <strong>你当时的答案：</strong>{{ formatUserAnswer(question) }}
+            </p>
             <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
             <div v-html="renderInline(question.analysis || '暂无解析')"></div>
           </div>
-
-          <AlgorithmVisualizer v-if="openedVisualizer.has(question.id)" :question="question" />
 
           <div class="wrong-actions">
             <div class="left-actions">
@@ -127,9 +128,9 @@
                 v-if="canVisualize(question)"
                 class="action-link"
                 type="button"
-                @click="toggleVisualizer(question.id)"
+                @click="$emit('open-visualizer', question)"
               >
-                {{ openedVisualizer.has(question.id) ? '收起可视化' : '算法可视化' }}
+                算法可视化
               </button>
             </div>
 
@@ -153,8 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import AlgorithmVisualizer from '@/features/question-bank/components/AlgorithmVisualizer.vue'
+import { computed } from 'vue'
 import { supportsAlgorithmVisualization } from '@/features/question-bank/utils/algorithmVisualization'
 
 const props = defineProps<{
@@ -190,24 +190,16 @@ defineEmits<{
   (e: 'select-wrong-option', question: any, key: string): void
   (e: 'submit-wrong', question: any): void
   (e: 'toggle-wrong-analysis', id: string): void
+  (e: 'open-visualizer', question: any): void
   (e: 'archive-wrong', question: any): void
   (e: 'remove-wrong', question: any): void
 }>()
-
-const openedVisualizer = ref<Set<string>>(new Set())
 
 const hasDrillAnswer = computed(() => {
   const ans = props.drillAnswer
   if (Array.isArray(ans)) return ans.length > 0
   return !!ans && String(ans).trim().length > 0
 })
-
-function toggleVisualizer(id: string) {
-  const next = new Set(openedVisualizer.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  openedVisualizer.value = next
-}
 
 function canVisualize(question: any) {
   return supportsAlgorithmVisualization(question)
@@ -242,6 +234,23 @@ function isCorrectOption(question: any, key: string) {
 
 function formatAnswer(ans: string) {
   return String(ans || '').replace(/,/g, '、')
+}
+
+function formatUserAnswer(question: any) {
+  const raw = String(question.user_answer || '').trim()
+  if (!raw) return '你未作答'
+
+  if (isOptionQuestion(question)) {
+    const optionMap = getOptions(question)
+    return raw
+      .split(/[、,，\s]+/)
+      .map((key) => key.trim().toUpperCase())
+      .filter(Boolean)
+      .map((key) => `${key}. ${optionMap[key] || key}`)
+      .join('；')
+  }
+
+  return raw
 }
 
 function summarizeText(text: string) {
@@ -345,6 +354,16 @@ function renderInline(text: string) {
   line-height: 1.7;
 }
 
+.wrong-user-answer {
+  margin: 0 0 8px;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.wrong-user-answer strong {
+  color: #0f172a;
+}
+
 .drill-options {
   display: flex;
   flex-direction: column;
@@ -378,7 +397,7 @@ function renderInline(text: string) {
 
 .drill-option-key {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   width: 24px;
   height: 24px;
@@ -387,6 +406,12 @@ function renderInline(text: string) {
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+.drill-option-text {
+  flex: 1;
+  text-align: left;
+  line-height: 1.7;
 }
 
 .drill-answer,
