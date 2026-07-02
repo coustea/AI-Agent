@@ -10,8 +10,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.config import DEBUG
+from app.config import DEBUG, WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging
@@ -54,7 +55,7 @@ def create_app() -> FastAPI:
     4. 安装全局异常处理器
     5. 注册所有 API 路由
     """
-    # 配置日志输出格式和级别
+    # 配置日志输出格式 and 级别
     configure_logging(debug=DEBUG)
 
     # 创建 FastAPI 实例，绑定 lifespan 生命周期管理器
@@ -72,6 +73,10 @@ def create_app() -> FastAPI:
     # 注册全局异常处理器（AuthError、HTTPException 等）
     install_exception_handlers(app)
 
+    # 确保 workplace 目录存在，并挂载静态文件目录
+    WORKPLACE_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(WORKPLACE_DIR)), name="static")
+
     # 注册所有业务路由（auth、chat、resource、path 等）
     install_routes(app)
 
@@ -80,3 +85,4 @@ def create_app() -> FastAPI:
 
 # 创建 FastAPI 应用实例（供 uvicorn / gunicorn 等 ASGI 服务器加载）
 app = create_app()
+

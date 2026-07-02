@@ -42,9 +42,9 @@ class QuizQuestion(BaseModel):
 
     @model_validator(mode="after")
     def validate_options_by_type(self):
-        """根据题型验证选项数量：选择题至少2个选项，判断题可为空。"""
-        if self.type == "true_false":
-            # 判断题不需要选项
+        """根据题型验证选项数量：选择题至少2个选项，判断题/填空题可为空。"""
+        # 判断题和填空题不需要选项
+        if self.type in ("true_false", "fill_blank", "fill"):
             return self
         # 选择题（单选/多选）至少需要2个选项
         if len(self.options) < 2:
@@ -128,14 +128,31 @@ class QuizAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
-        """内部方法 — 调用 LLM 生成结构化习题集。"""
+        """内部方法 — 调用 LLM 生成结构化习题集。
+
+        LLM 返回空 questions 时自动重试一次（json_mode 下常见问题）。
+        """
         if config:
             cfg = ["## 习题配置"]
             cfg.append(f"- 题目数量: {config.get('question_count', 5)}")
             cfg.append(f"- 难度模式: {config.get('difficulty_mode', 'basic')}")
             cfg.append(f"- 考试风格: {config.get('exam_style', 'school')}")
             cfg.append("- 每题包含详细解析" if config.get("include_analysis", True) else "- 不包含解析")
+            question_types = config.get("question_types", ["single", "multiple", "judge"])
+            if question_types:
+                type_labels = {"single": "单选", "multiple": "多选", "judge": "判断", "fill": "填空"}
+                cfg.append(f"- 题型分布: {', '.join(type_labels.get(t, t) for t in question_types)}")
+            weak_point_weight = config.get("weak_point_weight")
+            if weak_point_weight:
+                cfg.append(f"- 薄弱点侧重权重: {weak_point_weight}%")
             input_text += f"\n\n{chr(10).join(cfg)}"
+
+        # 禁止空数组的硬性约束（json_mode 下 LLM 倾向返回空数组）
+        question_count = config.get("question_count", 5) if config else 5
+        input_text += (
+            f"\n\n【严禁】questions 为空数组 []。"
+            f"你必须生成至少 {question_count} 道题目，缺少任何题目都是错误。"
+        )
 
         prompt = prompts.get("resource").get("quiz")
         # 执行搜索以获取相关的习题出题参考信息
@@ -151,21 +168,44 @@ class QuizAgent(BaseResourceAgent):
         await self.emitter.send(self.agent_id, "running", "正在构建习题集提示词...", 45)
 
         logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
-        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型生成测试题与解析...", 60)
+        await self.emitter.send(self.agent_id, "running", "正在生成测试题与解析...", 60)
         result = await self.llm.ainvoke_json(
             QuizPayload,
             full_prompt,
             temperature=INFERENCE_TEMPERATURE,
         )
 
+        # LLM 返回空 questions 时重试一次（注入错误反馈）
+        questions = result.questions
+        if not questions:
+            logger.warning(
+                "Agent[quiz] questions 为空，正在重试 (expected_count=%d)",
+                question_count,
+            )
+            await self.emitter.send(
+                self.agent_id, "running",
+                "首次生成题目为空，正在重试...", 70,
+            )
+            retry_prompt = (
+                f"{full_prompt}\n\n"
+                "【错误反馈】你上一次返回了 questions: []（空数组），这是严重错误。\n"
+                f"你必须生成至少 {question_count} 道题目。\n"
+                "questions 绝不能为空数组 []。"
+            )
+            result = await self.llm.ainvoke_json(
+                QuizPayload,
+                retry_prompt,
+                temperature=INFERENCE_TEMPERATURE,
+            )
+            questions = result.questions
+
         quiz_data = result.model_dump(mode="json")
         content = json.dumps(quiz_data, ensure_ascii=False, indent=2)
 
-        questions = quiz_data.get("questions", [])
         logger.info("Agent[quiz] 步骤: 习题解析完成, questions=%d", len(questions))
         difficulty_dist: dict[str, int] = {}
         for q in questions:
-            d = q.get("difficulty", "medium")
+            d = q.get("difficulty", "medium") if isinstance(q, dict) else getattr(q, "difficulty", "medium")
             difficulty_dist[d] = difficulty_dist.get(d, 0) + 1
 
         return AgentResult(

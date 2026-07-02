@@ -47,7 +47,7 @@ def validate_common_result(
     if result.success is not True:
         raise ValidationError(result.error or "Agent returned success=False")
 
-    if not isinstance(result.content, str) or not result.content.strip():
+    if result.file_type != "html" and (not isinstance(result.content, str) or not result.content.strip()):
         raise ValidationError("Agent returned empty content")
 
     if not result.title.strip() or not result.file_type.strip():
@@ -181,21 +181,46 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """PPT 资源校验：调用 ppt_contract.py 严格校验。"""
-    if result.file_type != "json":
-        raise ValidationError("PPT must be JSON")
+    """PPT 资源校验：严格校验 HTML 幻灯片文件生成。"""
+    if result.file_type != "html":
+        raise ValidationError("PPT resource must be HTML format")
 
-    try:
-        data = json.loads(result.content) if isinstance(result.content, str) else result.content
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"PPT JSON parse error: {e}")
+    metadata = result.metadata or {}
+    required_fields = {
+        "agent_id",
+        "html_file_path",
+        "html_url",
+        "slide_count",
+        "style_name",
+        "density",
+        "file_size",
+    }
+    if not required_fields <= metadata.keys():
+        missing = sorted(required_fields - metadata.keys())
+        raise ValidationError(f"HTML PPT metadata is missing: {', '.join(missing)}")
 
-    if not isinstance(data, dict):
-        raise ValidationError("PPT must be object")
+    unexpected_fields = sorted(metadata.keys() - required_fields)
+    if unexpected_fields:
+        raise ValidationError(
+            f"HTML PPT metadata contains unsupported fields: "
+            f"{', '.join(unexpected_fields)}"
+        )
 
-    # 检查基本结构
-    if "slides" not in data and "chapters" not in data:
-        raise ValidationError("PPT must have slides or chapters")
+    html_path = metadata["html_file_path"]
+    html_url = metadata["html_url"]
+    if not re.fullmatch(
+        r"/api/v1/ai/resources/public/[A-Za-z0-9_-]+/html",
+        str(html_url),
+    ):
+        raise ValidationError("HTML PPT has an invalid public html_url")
+    if not isinstance(metadata["slide_count"], int) or metadata["slide_count"] < 1:
+        raise ValidationError("HTML PPT slide_count must be a positive integer")
+    if metadata["density"] not in {"speaker_led", "reading_first"}:
+        raise ValidationError("HTML PPT density is invalid")
+
+    import os
+    if not os.path.exists(html_path):
+        raise ValidationError(f"Generated HTML slide file does not exist: {html_path}")
 
 
 def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:

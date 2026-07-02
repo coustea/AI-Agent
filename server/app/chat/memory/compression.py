@@ -16,6 +16,7 @@ from app.infra.prompts import prompts
 from app.chat.memory.types import extract_content_text, extract_fallback_summary_markdown
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.infra.markdown_output import with_markdown_output_contract
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
 
 logger = get_logger(__name__)
@@ -172,6 +173,7 @@ class ChatSessionCompressor:
         summary_markdown = None
         try:
             prompt = prompts.get("chat_memory").render("compression", dialogue_text=chat_text[:5000])
+            prompt = with_markdown_output_contract(prompt)
 
             resp = await self.llm.ainvoke(
                 [

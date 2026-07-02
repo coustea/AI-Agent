@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
@@ -24,9 +23,6 @@ from app.infra.logging import get_logger
 from app.infra.models import ChatSession, School, User
 from app.infra.response import HttpResponse
 
-if TYPE_CHECKING:
-    from app.chat.memory.service import ChatMemoryService
-
 logger = get_logger(__name__)
 
 router = APIRouter()
@@ -35,9 +31,6 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Chat routes
 # ---------------------------------------------------------------------------
-
-def _get_chat_memory_service() -> "ChatMemoryService":
-    return get_chat_usecases()._memory_service
 
 
 @router.post("/chat/runs")
@@ -330,7 +323,7 @@ async def search_schools(
     else:
         stmt = select(School).order_by(School.id.desc()).limit(limit)
 
-    schools = (await db.exec(stmt)).scalars().all()
+    schools = list((await db.exec(stmt)).all())
 
     return HttpResponse.success(data=[
         {

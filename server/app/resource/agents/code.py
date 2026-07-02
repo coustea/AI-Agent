@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.infra.markdown_output import with_markdown_output_contract
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
     build_basic_handoff,
@@ -100,7 +101,8 @@ class CodeAgent(BaseResourceAgent):
 
         await self.emitter.send(self.agent_id, "running", "正在构建代码示例提示词...", 45)
         prompt = prompts.get("resource").get("code")
-        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型编写教学示例代码...", 60)
+        prompt = with_markdown_output_contract(prompt)
+        await self.emitter.send(self.agent_id, "running", "正在编写教学示例代码...", 60)
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
 

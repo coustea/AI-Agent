@@ -6,7 +6,6 @@ from app.profile.response import (
     OnboardingResponse,
     StudentProfileData,
     GlobalProfileResponse,
-    GlobalScoreResponse,
 )
 from app.profile.service import ProfileService, get_profile_service
 from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
@@ -20,7 +19,6 @@ __all__ = [
     "GlobalTutoringProfileUpdate",
     "CourseTutoringProfileUpdate",
     "GlobalProfileResponse",
-    "GlobalScoreResponse",
     "ProfileService",
     "StudentProfileData",
     "get_profile_service",

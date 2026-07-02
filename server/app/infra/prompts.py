@@ -22,7 +22,7 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-_PLACEHOLDER_RE = re.compile(r"(?<!\\{)\\{([a-zA-Z_][a-zA-Z0-9_]*)\\}(?!\\})")
+_PLACEHOLDER_RE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
 
 _APP_DIR = Path(__file__).resolve().parent.parent  # app/
 
@@ -173,6 +173,7 @@ class PromptRegistry:
 
 # 全局单例 — 自动注册所有已知模块
 prompts = PromptRegistry()
+prompts.register("shared", _APP_DIR / "infra" / "prompt_contracts")
 prompts.register("chat", _APP_DIR / "chat" / "prompts")
 prompts.register("chat_memory", _APP_DIR / "chat" / "memory" / "prompts")
 prompts.register("resource", _APP_DIR / "resource" / "prompts")

@@ -22,7 +22,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from app.config import INFERENCE_TEMPERATURE, VISION_TEMPERATURE, get
+from app.config import INFERENCE_TEMPERATURE, STRUCTURED_OUTPUT_STRATEGY, VISION_TEMPERATURE, get
 from app.infra.logging import get_logger
 from app.infra.utils import ServiceError, parse_first_json_object
 
@@ -266,10 +266,10 @@ def _inject_json_instruction(input_data: Any, schema: type[BaseModel]) -> list[B
 class Llm:
     """统一异步 LLM 网关。
 
-    结构化输出策略：
-    1. json_schema（strict=True）：API 服务端强制执行完整 schema 约束
-    2. json_mode 回退：只保证返回 JSON，Pydantic 校验
-    3. prompt 回退：最后手段
+    结构化输出策略由 config.yaml 的 models.structured_output_strategy 控制：
+    - json_schema_first：优先 json_schema strict，失败后降级 json_mode → prompt
+    - json_mode_first：跳过 json_schema，直接 json_mode，失败后降级 prompt
+    - prompt_first：仅 prompt 注入 + 手动解析
     """
 
     def __init__(self) -> None:
@@ -277,6 +277,7 @@ class Llm:
         self.vision_config = _load_config("models.vision")
         self._text_model = _create_model(self.text_config) if self.text_config else None
         self._vision_model = _create_model(self.vision_config) if self.vision_config else None
+        self._strategy = STRUCTURED_OUTPUT_STRATEGY
 
     @property
     def model(self) -> Any:
@@ -310,7 +311,12 @@ class Llm:
         max_attempts: int = 1,
         prompt_fallback: bool = True,
     ) -> BaseModel:
-        """结构化 JSON 输出，优先使用 API 服务端的 strict schema 强制。
+        """结构化 JSON 输出，根据配置策略选择调用层级。
+
+        策略由 config.yaml 的 models.structured_output_strategy 决定：
+        - json_schema_first：Tier 1 (json_schema) → Tier 2 (json_mode) → Tier 3 (prompt)
+        - json_mode_first：跳过 Tier 1，直接 Tier 2 (json_mode) → Tier 3 (prompt)
+        - prompt_first：跳过 Tier 1/2，直接 Tier 3 (prompt)
 
         Args:
             schema: Pydantic 模型类，定义输出结构
@@ -341,58 +347,59 @@ class Llm:
 
         model = _bind(self.model, temperature=temperature, max_tokens=max_tokens)
         errors: list[str] = []
+        strategy = self._strategy
 
         # Tier 1: json_schema strict mode - API 服务端强制 schema
-        for attempt in range(max_attempts):
+        if strategy == "json_schema_first":
+            for attempt in range(max_attempts):
+                t0 = time.perf_counter()
+                try:
+                    runnable = model.with_structured_output(schema, method="json_schema", strict=True)
+                    result = await runnable.ainvoke(messages)
+                    if not isinstance(result, schema):
+                        raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
+                    logger.info(
+                        "[LLM] ainvoke_json ok schema=%s tier=json_schema strict=True attempt=%d %dms",
+                        schema.__name__,
+                        attempt + 1,
+                        round((time.perf_counter() - t0) * 1000),
+                    )
+                    return result
+                except Exception as exc:
+                    errors.append(f"json_schema(attempt={attempt + 1})={type(exc).__name__}: {exc}")
+                    logger.warning(
+                        "[LLM] ainvoke_json fail schema=%s tier=json_schema attempt=%d error=%s",
+                        schema.__name__,
+                        attempt + 1,
+                        exc,
+                    )
+
+        # Tier 2: json_mode - 只保证返回 JSON，Pydantic 校验
+        if strategy in ("json_schema_first", "json_mode_first"):
             t0 = time.perf_counter()
             try:
-                runnable = model.with_structured_output(schema, method="json_schema", strict=True)
+                runnable = model.with_structured_output(schema, method="json_mode")
                 result = await runnable.ainvoke(messages)
-                # with_structured_output 直接返回 Pydantic 实例，无需手动解析
                 if not isinstance(result, schema):
                     raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
                 logger.info(
-                    "[LLM] ainvoke_json ok schema=%s tier=json_schema strict=True attempt=%d %dms",
+                    "[LLM] ainvoke_json ok schema=%s tier=json_mode %dms",
                     schema.__name__,
-                    attempt + 1,
                     round((time.perf_counter() - t0) * 1000),
                 )
                 return result
             except Exception as exc:
-                errors.append(f"json_schema(attempt={attempt + 1})={type(exc).__name__}: {exc}")
+                errors.append(f"json_mode={type(exc).__name__}: {exc}")
                 logger.warning(
-                    "[LLM] ainvoke_json fail schema=%s tier=json_schema attempt=%d error=%s",
+                    "[LLM] ainvoke_json fail schema=%s tier=json_mode error=%s",
                     schema.__name__,
-                    attempt + 1,
                     exc,
                 )
-
-        # Tier 2: json_mode - 只保证返回 JSON，Pydantic 校验
-        t0 = time.perf_counter()
-        try:
-            runnable = model.with_structured_output(schema, method="json_mode")
-            result = await runnable.ainvoke(messages)
-            if not isinstance(result, schema):
-                raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
-            logger.info(
-                "[LLM] ainvoke_json ok schema=%s tier=json_mode %dms",
-                schema.__name__,
-                round((time.perf_counter() - t0) * 1000),
-            )
-            return result
-        except Exception as exc:
-            errors.append(f"json_mode={type(exc).__name__}: {exc}")
-            logger.warning(
-                "[LLM] ainvoke_json fail schema=%s tier=json_mode error=%s",
-                schema.__name__,
-                exc,
-            )
 
         # Tier 3: prompt fallback - 最后手段
         if prompt_fallback:
             t0 = time.perf_counter()
             try:
-                # 注入 schema 描述到 prompt
                 injected_messages = _inject_json_instruction(messages, schema)
                 resp = await model.ainvoke(injected_messages)
                 content = getattr(resp, "content", "") or ""

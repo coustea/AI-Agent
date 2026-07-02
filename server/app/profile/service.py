@@ -1,4 +1,4 @@
-"""共享学习者画像服务 — 全局画像 CRUD、课程画像管理、LLM 推理与评分。"""
+"""学习者画像服务 — 全局画像 CRUD、课程画像管理、LLM 推理与评分。"""
 
 from __future__ import annotations
 
@@ -29,11 +29,11 @@ from app.profile.types import (
     KNOWLEDGE_DIMENSIONS,
     COGNITIVE_DIMENSIONS,
     DimensionValue,
-    OnboardingGlobalInferenceOutput,
+    ProfileDimensionsPatch,
     GlobalTutoringInferenceOutput,
     ProfileScoreOutput,
-    make_default_profile_json,
-    make_default_score_json,
+    default_profile_json,
+    default_score_json,
 )
 from app.infra.prompts import prompts
 
@@ -47,29 +47,26 @@ def normalize_course_key(course_name: str) -> str:
     return re.sub(r"\s+", "", course_name.strip().lower())
 
 
-def make_default_course_markdown(course_name: str) -> str:
-    """生成默认空白课程画像 Markdown 文本。"""
-    return (
-        f"# {course_name}\n\n"
-        "## 课程范围\n"
-        "暂无明确画像。\n\n"
-        "## 当前学习状态\n"
-        "暂无明确画像。\n\n"
-        "## 薄弱点\n"
-        "暂无明确画像。\n\n"
-        "## 知识掌握线索\n"
-        "暂无明确画像。\n\n"
-        "## 辅导建议\n"
-        "暂无明确画像。"
-    )
-
-
-REQUIRED_COURSE_MARKDOWN_SECTIONS = (
+_REQUIRED_COURSE_MARKDOWN_SECTIONS = (
     "## 课程范围",
     "## 当前学习状态",
     "## 薄弱点",
     "## 知识掌握线索",
     "## 辅导建议",
+)
+
+_DEFAULT_COURSE_MARKDOWN_TEMPLATE = (
+    "# {course_name}\n\n"
+    "## 课程范围\n"
+    "暂无明确画像。\n\n"
+    "## 当前学习状态\n"
+    "暂无明确画像。\n\n"
+    "## 薄弱点\n"
+    "暂无明确画像。\n\n"
+    "## 知识掌握线索\n"
+    "暂无明确画像。\n\n"
+    "## 辅导建议\n"
+    "暂无明确画像。"
 )
 
 
@@ -83,15 +80,15 @@ def validate_course_markdown(markdown_text: str, course_name: str) -> str:
     first_line = text.splitlines()[0].strip() if text.splitlines() else ""
     if first_line != f"# {course_name}":
         raise ValueError(f"课程画像 Markdown 必须以 '# {course_name}' 开头")
-    for section in REQUIRED_COURSE_MARKDOWN_SECTIONS:
+    for section in _REQUIRED_COURSE_MARKDOWN_SECTIONS:
         if section not in text:
             raise ValueError(f"课程画像 Markdown 缺少必要章节: {section.replace('## ', '')}")
     return text
 
 
-def merge_global_dimensions(profile_json: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    """合并全局画像维度增量更新。只更新支持的七个维度。"""
-    merged = deepcopy(profile_json) if profile_json else make_default_profile_json()
+def merge_dimensions(profile_json: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """合并画像维度增量更新。只更新支持的七个维度。"""
+    merged = deepcopy(profile_json) if profile_json else default_profile_json()
     dimensions = merged.setdefault("dimensions", {})
     for key, val in patch.items():
         if key in ALL_DIMENSIONS:
@@ -108,21 +105,20 @@ def merge_global_dimensions(profile_json: dict[str, Any], patch: dict[str, Any])
     return merged
 
 
-def validate_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
-    """对打分输出进行后置验证与清洗：
+def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
+    """对打分输出进行后置验证与清洗。
+
     1. 限制分数在 0..100 之间；
-    2. 如果某维度无任何证据记录（为空列表），强制给该维度评分置为 0；
+    2. 如果某维度无任何证据记录，强制给该维度评分置为 0；
     3. 总体评分为 7 个维度洗净后分数的算术平均值（四舍五入到整数）；
     4. 自动记录评分时间。
     """
     scores = {}
     evidence = {}
     for key in ALL_DIMENSIONS:
-        # 提取并清洗证据
         items = [str(item).strip() for item in raw.dimension_evidence.get(key, []) if str(item).strip()]
         evidence[key] = items
 
-        # 无证据强制 0 分
         if not items:
             scores[key] = 0
             continue
@@ -155,13 +151,13 @@ class ProfileService:
         self.module = module
         self.llm = get_llm()
 
-    async def get_or_create_global_profile(
+    async def get_profile(
         self,
         *,
         user_id: int,
         db: AsyncSession | None = None,
     ) -> GlobalProfile:
-        """获取或创建用户的全局画像。
+        """获取用户全局画像，不存在则创建。
 
         使用 INSERT ... ON CONFLICT DO NOTHING 保证并发安全。
 
@@ -174,8 +170,8 @@ class ProfileService:
             stmt = pg_insert(GlobalProfile).values(
                 user_id=user_id,
                 module=self.module,
-                profile_json=make_default_profile_json(),
-                profile_score_json=make_default_score_json(),
+                profile_json=default_profile_json(),
+                profile_score_json=default_score_json(),
                 created_at=now,
                 updated_at=now,
             ).on_conflict_do_nothing(
@@ -197,8 +193,8 @@ class ProfileService:
                 profile = GlobalProfile(
                     user_id=user_id,
                     module=self.module,
-                    profile_json=make_default_profile_json(),
-                    profile_score_json=make_default_score_json(),
+                    profile_json=default_profile_json(),
+                    profile_score_json=default_score_json(),
                 )
                 db.add(profile)
                 await db.flush()
@@ -219,11 +215,8 @@ class ProfileService:
             )
             return list((await db.exec(stmt)).all())
 
-    async def get_profile_for_agents(self, *, user_id: int) -> str:
-        """获取用户画像 Markdown，供多智能体资源生成、路径规划和智能辅导使用。
-
-        将 profile_json 中的 base_info 和 7 个维度转换为结构化 Markdown 文本，
-        便于 LLM 理解和下游智能体使用。
+    async def build_profile_markdown(self, *, user_id: int) -> str:
+        """将 7 维度画像 JSON 转为结构化 Markdown，供 LLM 和智能体使用。
 
         Args:
             user_id: 用户 ID
@@ -234,8 +227,8 @@ class ProfileService:
             - 知识层维度（知识基础、易错点偏好、知识缺口模式）
             - 认知层维度（认知风格、学习目标导向、难度耐受度、自纠能力水平）
         """
-        global_profile = await self.get_or_create_global_profile(user_id=user_id)
-        profile_json = global_profile.profile_json or make_default_profile_json()
+        profile = await self.get_profile(user_id=user_id)
+        profile_json = profile.profile_json or default_profile_json()
 
         lines: list[str] = ["# 学习者画像"]
 
@@ -298,13 +291,13 @@ class ProfileService:
 
         return "\n".join(lines)
 
-    async def update_from_onboarding(
+    async def save_onboarding_info(
         self,
         *,
         user_id: int,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """更新 onboarding 基本信息（仅数据库层写入，不执行 LLM）。"""
+        """保存 onboarding 基本信息（仅数据库层写入，不执行 LLM）。"""
         logger.info("[ProfileService] onboarding 写入开始: user_id=%s school=%s major=%s",
                      user_id, payload.get("school"), payload.get("major"))
         async with session_scope() as db:
@@ -314,9 +307,9 @@ class ProfileService:
                 school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
                 base_info["school_level"] = school.level if school and school.level else None
 
-            profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
+            profile = await self.get_profile(user_id=user_id, db=db)
 
-            profile_json = profile.profile_json or make_default_profile_json()
+            profile_json = profile.profile_json or default_profile_json()
             profile_json["base_info"] = base_info
             profile.profile_json = profile_json
             profile.updated_at = datetime.now(timezone.utc)
@@ -334,68 +327,61 @@ class ProfileService:
                          profile.user_id, profile.updated_at)
             return result
 
-    async def run_onboarding_inference(self, *, user_id: int, payload: dict[str, Any]) -> None:
-        """后台任务：onboarding 推理和首次评分。"""
+    async def infer_profile_from_onboarding(self, *, user_id: int, payload: dict[str, Any]) -> None:
+        """从 onboarding 信息推理 7 维度画像并评分。"""
         logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
         try:
             async with session_scope() as db:
-                base_info = payload.copy()
-                school_name = base_info.get("school")
-                if school_name:
-                    school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
-                    base_info["school_level"] = school.level if school and school.level else None
+                profile = await self.get_profile(user_id=user_id, db=db)
+                profile_json = profile.profile_json or default_profile_json()
+                base_info = profile_json.get("base_info", {})
 
-                # LLM 推理增量
                 logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
                 prompt = prompts.get("profile").render(
                     "onboarding",
                     onboarding_data=json.dumps(base_info, ensure_ascii=False),
                 )
                 resp = await self.llm.ainvoke_json(
-                    OnboardingGlobalInferenceOutput,
+                    ProfileDimensionsPatch,
                     [HumanMessage(content=prompt)],
                     temperature=0.1,
                 )
 
-                # 精简输出维度推理结果
                 dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
                                 for k, v in resp.dimensions_patch.items()}
                 logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
                             user_id, dims_summary)
 
-                profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
+                profile = await self.get_profile(user_id=user_id, db=db)
 
-                profile_json = profile.profile_json or make_default_profile_json()
-                profile_json["base_info"] = base_info
-                profile_json = merge_global_dimensions(profile_json, resp.dimensions_patch)
+                profile_json = profile.profile_json or default_profile_json()
+                profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
                 profile.profile_json = profile_json
                 profile.updated_at = datetime.now(timezone.utc)
 
                 db.add(profile)
                 await db.flush()
 
-            # 刷新全局评分
-            score_result = await self.refresh_global_profile_score(user_id=user_id)
+            score_result = await self.score_profile(user_id=user_id)
             logger.info("[ProfileService] onboarding 推理+评分完成: user_id=%s dimensions_updated=%s overall_score=%s",
                          user_id, list(dims_summary.keys()), score_result.get("overall_score"))
         except Exception as exc:
             logger.error("[ProfileService] background onboarding inference failed: user_id=%s err=%s", user_id, exc)
 
-    async def update_global_from_tutoring(self, *, user_id: int, session_id: str) -> dict[str, Any]:
-        """从会话中推理更新全局稳定画像特征。"""
+    async def infer_profile_from_tutoring(self, *, user_id: int, session_id: str) -> dict[str, Any]:
+        """从辅导对话推理更新全局画像。"""
         logger.info("[ProfileService] 全局画像更新开始: user_id=%s session_id=%s", user_id, session_id)
         async with session_scope() as db:
-            global_profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
+            global_profile = await self.get_profile(user_id=user_id, db=db)
             profile_json = global_profile.profile_json or {}
 
-            recent_dialogue = ""
-            recent_dialogue, _ = await self._build_recent_dialogue(
-                db=db,
-                user_id=user_id,
-                session_id=session_id,
+            # 获取最近对话
+            from app.chat.memory.service import get_chat_memory_service
+            memory_service = get_chat_memory_service()
+            recent_dialogue, _, _ = await memory_service._build_dialogue_since(
+                db=db, user_id=user_id, session_id=session_id, after_message_id=0, limit=20,
             )
 
-            # 无对话内容时跳过更新
             if not recent_dialogue or not recent_dialogue.strip():
                 logger.info("[ProfileService] 全局画像: 无对话内容可提取，跳过更新")
                 return {
@@ -405,7 +391,17 @@ class ProfileService:
                     "reason": "no_dialogue",
                 }
 
-            long_term_memory = await self._get_long_term_memory_text(user_id=user_id)
+            # 获取长期记忆
+            ltm = (
+                await db.exec(
+                    select(ChatLongTermMemory).where(
+                        ChatLongTermMemory.user_id == user_id,
+                        ChatLongTermMemory.module == self.module,
+                    )
+                )
+            ).first()
+            long_term_memory = ltm.memory_markdown if ltm and ltm.memory_markdown else ""
+
             logger.info("[ProfileService] 全局画像: recent_dialogue长度=%s long_term_memory长度=%s",
                          len(recent_dialogue), len(long_term_memory))
 
@@ -421,7 +417,6 @@ class ProfileService:
                 temperature=0.1,
             )
 
-            # 精简输出推理结果
             dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
                             for k, v in resp.dimensions_patch.items()}
             logger.info("[ProfileService] 全局画像 LLM推理结果: should_update=%s dimensions_patch=%s",
@@ -429,7 +424,7 @@ class ProfileService:
 
             updated = False
             if resp.should_update and resp.dimensions_patch:
-                profile_json = merge_global_dimensions(profile_json, resp.dimensions_patch)
+                profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
                 global_profile.profile_json = profile_json
                 global_profile.updated_at = datetime.now(timezone.utc)
                 db.add(global_profile)
@@ -439,7 +434,7 @@ class ProfileService:
                              updated, list(dims_summary.keys()))
 
         if updated:
-            score_result = await self.refresh_global_profile_score(user_id=user_id)
+            score_result = await self.score_profile(user_id=user_id)
             logger.info("[ProfileService] 全局画像评分刷新完成: user_id=%s overall_score=%s dimension_scores=%s",
                          user_id, score_result.get("overall_score"), score_result.get("dimension_scores"))
 
@@ -449,7 +444,7 @@ class ProfileService:
             "updated_at": global_profile.updated_at,
         }
 
-    async def update_course_from_tutoring(
+    async def infer_course_profile_from_tutoring(
         self,
         *,
         user_id: int,
@@ -457,11 +452,11 @@ class ProfileService:
         course_name: str,
         active_topic: str | None = None,
     ) -> dict[str, Any]:
-        """从会话中推理并重写单一课程子画像 Markdown。"""
+        """从辅导对话推理并重写单一课程子画像 Markdown。"""
         logger.info("[ProfileService] 课程画像更新开始: user_id=%s session_id=%s course_name=%s active_topic=%s",
                      user_id, session_id, course_name, active_topic)
         async with session_scope() as db:
-            global_profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
+            global_profile = await self.get_profile(user_id=user_id, db=db)
             global_profile_id = global_profile.id
 
             course_profiles = await self.get_course_profiles(user_id=user_id)
@@ -482,7 +477,7 @@ class ProfileService:
                     course_key=target_key,
                     course_name=course_name,
                     aliases=[],
-                    profile_markdown=make_default_course_markdown(course_name),
+                    profile_markdown=_DEFAULT_COURSE_MARKDOWN_TEMPLATE.format(course_name=course_name),
                 )
                 db.add(target_profile)
                 await db.flush()
@@ -491,24 +486,23 @@ class ProfileService:
                 target_profile = await db.merge(target_profile)
                 logger.info("[ProfileService] 课程画像已存在: course_key=%s course_name=%s", target_key, course_name)
 
-            # 整理已有课程简要列表，避免 LLM 起重名重复课程
             course_list = [
                 {
                     "course_name": cp.course_name,
                     "course_key": cp.course_key,
                     "aliases": cp.aliases,
-                    "preview": cp.profile_markdown[:200]
+                    "preview": cp.profile_markdown[:200],
                 }
                 for cp in course_profiles
             ]
 
-            recent_dialogue, _ = await self._build_recent_dialogue(
-                db=db,
-                user_id=user_id,
-                session_id=session_id,
+            # 获取最近对话
+            from app.chat.memory.service import get_chat_memory_service
+            memory_service = get_chat_memory_service()
+            recent_dialogue, _, _ = await memory_service._build_dialogue_since(
+                db=db, user_id=user_id, session_id=session_id, after_message_id=0, limit=20,
             )
 
-            # 无对话内容时跳过更新
             if not recent_dialogue or not recent_dialogue.strip():
                 logger.info("[ProfileService] 课程画像: 无对话内容可提取，跳过更新")
                 return {
@@ -519,7 +513,17 @@ class ProfileService:
                     "reason": "no_dialogue",
                 }
 
-            long_term_memory = await self._get_long_term_memory_text(user_id=user_id)
+            # 获取长期记忆
+            ltm = (
+                await db.exec(
+                    select(ChatLongTermMemory).where(
+                        ChatLongTermMemory.user_id == user_id,
+                        ChatLongTermMemory.module == self.module,
+                    )
+                )
+            ).first()
+            long_term_memory = ltm.memory_markdown if ltm and ltm.memory_markdown else ""
+
             logger.info("[ProfileService] 课程画像: recent_dialogue长度=%s long_term_memory长度=%s",
                          len(recent_dialogue), len(long_term_memory))
 
@@ -558,7 +562,7 @@ class ProfileService:
                          updated, len(target_profile.profile_markdown or ""))
 
         if updated:
-            score_result = await self.refresh_global_profile_score(user_id=user_id)
+            score_result = await self.score_profile(user_id=user_id)
             logger.info("[ProfileService] 课程画像评分刷新完成: user_id=%s overall_score=%s",
                          user_id, score_result.get("overall_score"))
 
@@ -569,17 +573,14 @@ class ProfileService:
             "updated_at": target_profile.updated_at,
         }
 
-    async def refresh_global_profile_score(self, *, user_id: int) -> dict[str, Any]:
-        """重新计算并刷新用户的全局打分。打分输入 = 全局画像 JSON + 课程画像 Markdown 拼接。"""
+    async def score_profile(self, *, user_id: int) -> dict[str, Any]:
+        """根据文字画像和课程画像重新计算全局评分。"""
         logger.info("[ProfileService] 全局评分刷新开始: user_id=%s", user_id)
         async with session_scope() as db:
-            global_profile = await self.get_or_create_global_profile(user_id=user_id, db=db)
+            global_profile = await self.get_profile(user_id=user_id, db=db)
 
             course_profiles = await self.get_course_profiles(user_id=user_id)
-            course_markdown_list = []
-            for cp in course_profiles:
-                course_markdown_list.append(cp.profile_markdown)
-
+            course_markdown_list = [cp.profile_markdown for cp in course_profiles]
             concatenated_markdown = "\n\n---\n\n".join(course_markdown_list)
             logger.info("[ProfileService] 全局评分: course_profiles数量=%s markdown总长度=%s",
                          len(course_profiles), len(concatenated_markdown))
@@ -599,7 +600,7 @@ class ProfileService:
             logger.info("[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s dimension_evidence_keys=%s",
                          resp.dimension_scores, list(resp.dimension_evidence.keys()))
 
-            scores = validate_score_output(resp)
+            scores = sanitize_score_output(resp)
             global_profile.profile_score_json = scores
             global_profile.updated_at = datetime.now(timezone.utc)
 
@@ -610,54 +611,6 @@ class ProfileService:
                          user_id, scores.get("overall_score"), scores.get("dimension_scores"))
 
             return scores
-
-
-
-    # ── Private Helpers ───────────────────────────────────────────────────
-
-    async def _build_recent_dialogue(
-        self,
-        *,
-        db: AsyncSession,
-        user_id: int,
-        session_id: str,
-        max_messages: int = 20,
-        after_message_id: int = 0,
-    ) -> tuple[str, int]:
-        """构建最近对话文本，委托给 ChatMemoryService._build_dialogue_since。
-
-        避免与 memory/service.py 中的对话构建逻辑重复。
-        """
-        from app.chat.memory.service import get_chat_memory_service
-        memory_service = get_chat_memory_service()
-
-        dialogue, message_count, latest_message_id = await memory_service._build_dialogue_since(
-            db=db,
-            user_id=user_id,
-            session_id=session_id,
-            after_message_id=after_message_id,
-            limit=max_messages,
-        )
-        logger.debug(
-            "[ProfileService._build_recent_dialogue] 委托构建对话: user_id=%s session_id=%s messages=%s length=%s",
-            user_id, session_id, message_count, len(dialogue),
-        )
-        return dialogue, latest_message_id
-
-    async def _get_long_term_memory_text(self, *, user_id: int) -> str:
-        """获取用户的长期记忆 Markdown 文本。"""
-        async with session_scope() as db:
-            ltm = (
-                await db.exec(
-                    select(ChatLongTermMemory).where(
-                        ChatLongTermMemory.user_id == user_id,
-                        ChatLongTermMemory.module == self.module,
-                    )
-                )
-            ).first()
-            if ltm and ltm.memory_markdown:
-                return ltm.memory_markdown
-        return ""
 
 
 _profile_service_cache: dict[str, ProfileService] = {}
@@ -674,7 +627,7 @@ __all__ = [
     "ProfileService",
     "get_profile_service",
     "normalize_course_key",
-    "merge_global_dimensions",
-    "validate_score_output",
+    "merge_dimensions",
+    "sanitize_score_output",
     "validate_course_markdown",
 ]

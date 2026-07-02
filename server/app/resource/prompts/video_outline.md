@@ -70,5 +70,5 @@
 2. 各场景的时长 (`duration_seconds`) 累加和必须严格等于 `constraints.duration_seconds`。
 3. 第一幕 `role` 必须是 `hook`，最后一幕 `role` 必须是 `recap`。
 4. 中间场景必须来源于上游资源（即 `VideoMaterialDigest` 中的概念、事实与误区），严禁凭空编造上游资源未提及的理论概念。
-5. 必须为每个场景分镜合理分配其所需的上游来源 Agent（如 `"content"`, `"mindmap"`, `"quiz"`, `"reading"` 等），填写在 `required_sources` 中。
+5. 必须为每个场景分镜合理分配其所需的上游来源 Agent（如 "content", "mindmap", "quiz", "reading", "code" 等），填写在 `required_sources` 中。**注意：你只能在 required_sources 中填写输入中的 digest.source_map 里实际存在的 Agent 名称。如果某 Agent（例如 'quiz'）在 source_map 中不存在，表示该资源未成功生成或未被启用，你绝对不能将它列入任何场景的 required_sources 中。**
 6. 输出必须是 JSON 对象，不要包含解释文字。

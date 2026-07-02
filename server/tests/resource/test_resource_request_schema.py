@@ -56,11 +56,7 @@ def test_resource_generation_request_accepts_current_frontend_payload():
                     "max_items": 1,
                     "language_preference": "both",
                 },
-                "ppt": {
-                    "theme_id": "paper-light",
-                    "explanation_style": "conceptual",
-                    "visual_emphasis": "balanced",
-                },
+                "ppt": {},
             },
             }
     )
@@ -70,7 +66,6 @@ def test_resource_generation_request_accepts_current_frontend_payload():
     assert request.agent_configs.quiz.difficulty_mode == "basic"
     assert request.agent_configs.quiz.question_types == ["single", "multiple", "judge", "fill"]
     assert request.agent_configs.reading.language_preference == "both"
-    assert request.agent_configs.ppt.theme_id == "paper-light"
 
 
 def test_resource_generation_request_normalizes_frontend_bilingual_alias():
@@ -86,20 +81,6 @@ def test_resource_generation_request_normalizes_frontend_bilingual_alias():
     )
 
     assert request.agent_configs.reading.language_preference == "both"
-
-
-def test_resource_generation_request_rejects_unsupported_ppt_output_format():
-    with pytest.raises(ValidationError):
-        ResourceGenerationRequest.model_validate(
-            {
-                "learning_need": "把离散数学章节做成课堂讲解PPT",
-                "agent_configs": {
-                    "ppt": {
-                        "output_format": "pptx",
-                    },
-                },
-            }
-        )
 
 
 def test_resource_generation_request_rejects_legacy_payload_fields():
@@ -160,3 +141,32 @@ def test_resource_generation_request_video_is_not_default_enabled():
     )
 
     assert "video" not in request.enabled_agent_ids()
+
+
+# ---------------------------------------------------------------------------
+# PptConfig
+# ---------------------------------------------------------------------------
+
+
+class TestPptConfig:
+    def test_accepts_empty_object(self):
+        from app.resource.schemas.request import PptConfig
+
+        config = PptConfig.model_validate({})
+        assert config.model_dump() == {}
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("theme_id", "neon"),
+            ("explanation_style", "detailed"),
+            ("visual_emphasis", "high"),
+            ("template_id", "corporate"),
+            ("output_format", "pdf"),
+        ],
+    )
+    def test_rejects_old_fields(self, field, value):
+        from app.resource.schemas.request import PptConfig
+
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            PptConfig.model_validate({field: value})

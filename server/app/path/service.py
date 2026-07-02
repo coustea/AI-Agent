@@ -550,7 +550,7 @@ class PathService:
         )
         return list((await self.session.exec(stmt)).all())
 
-    async def get_node_tutorials(
+    async def _get_node_tutorials(
         self, node_id: int
     ) -> list[PathNodeTutorial]:
         stmt = (
@@ -563,7 +563,7 @@ class PathService:
         )
         return list((await self.session.exec(stmt)).all())
 
-    async def get_node_resources(
+    async def _get_node_resources(
         self, node_id: int
     ) -> list[PathNodeResource]:
         stmt = (
@@ -576,7 +576,7 @@ class PathService:
         )
         return list((await self.session.exec(stmt)).all())
 
-    async def get_current_tutorial(
+    async def _get_current_tutorial(
         self, node_id: int
     ) -> PathNodeTutorial | None:
         stmt = (
@@ -602,14 +602,14 @@ class PathService:
         )
         return (await self.session.exec(stmt)).first()
 
-    async def get_latest_round(self, node_id: int) -> int:
+    async def _get_latest_round(self, node_id: int) -> int:
         stmt = select(PathNodeQuestion).where(
             PathNodeQuestion.node_id == node_id
         )
         questions = list((await self.session.exec(stmt)).all())
         return max((q.round_no for q in questions), default=0)
 
-    async def get_round_questions(
+    async def _get_round_questions(
         self, node_id: int, round_no: int
     ) -> list[PathNodeQuestion]:
         stmt = (
@@ -622,7 +622,7 @@ class PathService:
         )
         return list((await self.session.exec(stmt)).all())
 
-    async def get_profile_dict(
+    async def _get_profile_dict(
         self, user_id: int
     ) -> dict[str, Any]:
         try:
@@ -674,7 +674,7 @@ class PathService:
             item.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
 
-    async def get_active_path_record(
+    async def _get_active_path_record(
         self, user_id: int, module: str = "mentor"
     ) -> LearningPath | None:
         stmt = (
@@ -711,7 +711,7 @@ class PathService:
             ),
         )
 
-    async def get_path_active_minutes(
+    async def _get_path_active_minutes(
         self, *, user_id: int, path_id: int
     ) -> int:
         stmt = select(LearningSession).where(
@@ -723,7 +723,7 @@ class PathService:
             item.duration_seconds or 0 for item in sessions
         ) // 60
 
-    async def get_current_path_node(
+    async def _get_current_path_node(
         self, path_id: int, current_node_key: str | None
     ) -> PathNode | None:
         if not current_node_key:

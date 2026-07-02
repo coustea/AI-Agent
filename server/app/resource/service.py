@@ -1,11 +1,17 @@
-"""资源域公共服务 — 直接使用 ORM，供 API 和兄弟模块调用。
+"""资源域公共服务 — 直接使用 ORM，供 API 和工作流节点调用。
 
-重构说明（v4）：
-- split_content() 替代 _content_envelope()，严格分流
-- 窄持久化 API：create_task, save_teaching_plan, start_agent_run, save_agent_result,
-  complete_agent_run, mark_agent_failed, finalize_generation
-- finalizer 只相信数据库状态
-- 不创建 fallback、placeholder 或默认内容
+持久化 API：
+- create_task: 创建资源生成任务
+- save_teaching_plan: 保存教学计划
+- start_agent_run / complete_agent_run / mark_agent_failed: Agent 运行生命周期
+- save_agent_result: 保存 Agent 生成内容
+- finalize_generation: 从数据库计算终态
+- update_resource_status: 更新任务状态
+
+查询 API：
+- get_resource / list_resources / count_resources
+- list_resource_items / list_resource_type_summary
+- get_generation_status / get_resource_bundle
 """
 
 from __future__ import annotations
@@ -24,7 +30,6 @@ from app.resource.schemas import (
     AgentResult,
     DownstreamContext,
     GeneratedResourceItem,
-    GeneratedResourceItemSummary,
     ResourceBundle,
     ResourceGenerationRequest,
     ResourceStatusSnapshot,
@@ -39,10 +44,10 @@ COORDINATOR_AGENT_ID = "coordinator"
 VIDEO_AGENT_ID = "video"
 BUNDLE_AGENT_ID = "bundle"
 AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID)
-STANDALONE_RESOURCE_SOURCES = ("standalone", "single_agent")
 
 
-def split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | None, str | None]:
+
+def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | None, str | None]:
     """将 AgentResult 内容拆分为 JSON 和纯文本存储字段。
 
     严格分流：不创建 envelope 包装，不降级非法 JSON。
@@ -52,6 +57,9 @@ def split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | Non
         if not isinstance(value, (dict, list)):
             raise ValueError("JSON resource content must be an object or array")
         return value, None
+    if result.file_type == "html":
+        # HTML 文件不存储内容，只存储文件路径
+        return None, None
     if result.file_type in {"markdown", "mermaid", "text", "code"}:
         if not isinstance(result.content, str) or not result.content.strip():
             raise ValueError("Text resource content must be non-empty")
@@ -59,23 +67,30 @@ def split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | Non
     raise ValueError(f"Unsupported resource format: {result.file_type}")
 
 
-def _db_item_to_dto(item: ItemModel) -> GeneratedResourceItem:
+def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedResourceItem:
     """将数据库行转换为前端资源项 DTO。
 
-    按 content_format 读取 content_json 或 content_text，不猜测旧 envelope。
+    include_content=False 时 content 为 None，用于状态轮询等轻量场景。
     """
     if not item.title or not item.content_format:
         raise ValueError(f"资源项 {item.id} 缺少标题或格式")
-    if item.content_format == "json":
-        if item.content_json is None:
-            raise ValueError(f"资源项 {item.id} JSON 格式但 content_json 为空")
-        content = item.content_json
-    elif item.content_format in {"markdown", "mermaid", "text", "code"}:
-        if not item.content_text:
-            raise ValueError(f"资源项 {item.id} 文本格式但 content_text 为空")
-        content = item.content_text
+
+    if include_content:
+        if item.content_format == "json":
+            if item.content_json is None:
+                raise ValueError(f"资源项 {item.id} JSON 格式但 content_json 为空")
+            content = item.content_json
+        elif item.content_format in {"markdown", "mermaid", "text", "code"}:
+            if not item.content_text:
+                raise ValueError(f"资源项 {item.id} 文本格式但 content_text 为空")
+            content = item.content_text
+        elif item.content_format == "html":
+            content = item.metadata_json or {}
+        else:
+            content = None
     else:
-        raise ValueError(f"资源项 {item.id} 不支持的格式: {item.content_format}")
+        content = None
+
     return GeneratedResourceItem(
         id=str(item.id), type=item.agent_type,
         title=item.title,
@@ -84,25 +99,6 @@ def _db_item_to_dto(item: ItemModel) -> GeneratedResourceItem:
         downstream_context=DownstreamContext.model_validate(item.downstream_context) if isinstance(item.downstream_context, dict) else None,
         execution_report=item.execution_report, metadata=item.metadata_json or {},
         status=item.status, error_message=item.error_message,
-        created_at=item.created_at.isoformat() if item.created_at else None,
-        updated_at=item.updated_at.isoformat() if item.updated_at else None,
-    )
-
-
-def _db_item_to_summary_dto(item: ItemModel) -> GeneratedResourceItemSummary:
-    """将数据库行转换为轻量资源摘要 DTO，不包含正文内容。"""
-    if not item.title or not item.content_format:
-        raise ValueError(f"资源项 {item.id} 缺少标题或格式")
-    return GeneratedResourceItemSummary(
-        id=str(item.id),
-        type=item.agent_type,
-        title=item.title,
-        format=item.content_format,
-        summary=item.summary or "",
-        metrics=item.metrics or {},
-        metadata=item.metadata_json or {},
-        status=item.status,
-        error_message=item.error_message,
         created_at=item.created_at.isoformat() if item.created_at else None,
         updated_at=item.updated_at.isoformat() if item.updated_at else None,
     )
@@ -161,67 +157,6 @@ class ResourceService:
         resource_id = int(getattr(resource, "id", 0) or 0)
         await self._commit(resource)
         return {"resource_id": resource_id, "status": "pending", "source": source}
-
-    async def initialize_run(
-        self,
-        *,
-        user_id: int,
-        resource_id: int,
-        run_id: str,
-    ) -> bool:
-        """认领任务并初始化可恢复的工作流运行节点。"""
-        resource = await self.session.get(GeneratedResource, resource_id)
-        if (
-            resource is None
-            or resource.user_id != user_id
-            or resource.status != "pending"
-        ):
-            return False
-
-        now = datetime.now(timezone.utc)
-        resource.status = "generating"
-        resource.run_id = run_id
-        resource.started_at = now
-        resource.heartbeat_at = now
-
-        selected_agents = list(dict.fromkeys(resource.selected_agents or []))
-        workflow_nodes = [
-            ("planning", "planning"),
-            (COORDINATOR_AGENT_ID, "coordination"),
-            *[
-                (
-                    agent_id,
-                    "aggregation" if agent_id in AGGREGATION_AGENT_IDS else "generation",
-                )
-                for agent_id in selected_agents
-            ],
-            (BUNDLE_AGENT_ID, "aggregation"),
-        ]
-        for agent_id, stage in workflow_nodes:
-            self.session.add(
-                GeneratedResourceAgentRun(
-                    resource_id=resource_id,
-                    run_id=run_id,
-                    agent_id=agent_id,
-                    stage=stage,
-                    status="pending",
-                )
-            )
-
-        await self.session.commit()
-        return True
-
-    async def claim_task(self, resource_id: int, run_id: str) -> bool:
-        """兼容旧调用：认领任务但不创建工作流节点。"""
-        resource = await self.session.get(GeneratedResource, resource_id)
-        if resource is None or resource.status != "pending":
-            return False
-        resource.status = "generating"
-        resource.run_id = run_id
-        resource.started_at = datetime.now(timezone.utc)
-        resource.heartbeat_at = datetime.now(timezone.utc)
-        await self._commit(resource)
-        return True
 
     # =========================================================================
     # Teaching Plan 持久化
@@ -344,27 +279,6 @@ class ResourceService:
             self.session.add(new_run)
             await self._commit(new_run)
 
-    async def interrupt_unfinished_runs(
-        self,
-        *,
-        resource_id: int,
-        error_message: str,
-    ) -> None:
-        """工作流整体退出时，将未完成节点落为 interrupted。"""
-        result = await self.session.exec(
-            select(GeneratedResourceAgentRun).where(
-                GeneratedResourceAgentRun.resource_id == resource_id,
-                GeneratedResourceAgentRun.status.in_(["pending", "running"]),
-            )
-        )
-        finished_at = datetime.now(timezone.utc)
-        for run in result.all():
-            run.status = "interrupted"
-            run.error_type = "WorkflowInterrupted"
-            run.error_message = error_message[:500]
-            run.finished_at = finished_at
-        await self.session.commit()
-
     # =========================================================================
     # Agent Result 持久化
     # =========================================================================
@@ -427,8 +341,7 @@ class ResourceService:
                     f"Agent 依赖尚未成功持久化: agent_id={agent_id!r} missing={sorted(missing)}"
                 )
 
-        # 使用 split_content 进行严格分流
-        content_json, content_text = split_content(result)
+        content_json, content_text = _split_content(result)
 
         # 从 metadata 提取文件路径
         output_file_path = result.metadata.get("output_file_path") if result.metadata else None
@@ -492,10 +405,21 @@ class ResourceService:
         if resource is None or resource.user_id != user_id:
             raise ValueError("资源不存在或无权限")
 
-        # 从数据库查询成功 item
-        successful = set(await self.get_completed_agent_ids(resource_id))
-        # 从数据库查询失败/中断 run
-        failed = set(await self.get_failed_agent_ids(resource_id)) & expected_agent_ids
+        # 从数据库查询成功 item 的 agent_id
+        completed_stmt = (
+            select(ItemModel.agent_type)
+            .where(ItemModel.resource_id == resource_id)
+            .where(ItemModel.status == "completed")
+        )
+        successful = set((await self.session.exec(completed_stmt)).all())
+
+        # 从数据库查询失败/中断 run 的 agent_id
+        failed_stmt = (
+            select(GeneratedResourceAgentRun.agent_id)
+            .where(GeneratedResourceAgentRun.resource_id == resource_id)
+            .where(GeneratedResourceAgentRun.status.in_(["failed", "interrupted"]))
+        )
+        failed = set((await self.session.exec(failed_stmt)).all()) & expected_agent_ids
 
         unresolved = expected_agent_ids - successful - failed
         overlap = successful & failed
@@ -545,23 +469,7 @@ class ResourceService:
             resource.updated_at = datetime.now(timezone.utc)
             await self._commit(resource)
 
-    async def get_completed_agent_ids(self, resource_id: int) -> list[str]:
-        """获取已完成 item 的 agent_id 列表。"""
-        stmt = (
-            select(ItemModel.agent_type)
-            .where(ItemModel.resource_id == resource_id)
-            .where(ItemModel.status == "completed")
-        )
-        return list((await self.session.exec(stmt)).all())
 
-    async def get_failed_agent_ids(self, resource_id: int) -> list[str]:
-        """获取失败/中断 run 的 agent_id 列表。"""
-        stmt = (
-            select(GeneratedResourceAgentRun.agent_id)
-            .where(GeneratedResourceAgentRun.resource_id == resource_id)
-            .where(GeneratedResourceAgentRun.status.in_(["failed", "interrupted"]))
-        )
-        return list((await self.session.exec(stmt)).all())
 
     async def get_resource(self, user_id: int, resource_id: int, *, allowed_sources: tuple[str, ...] | None = None) -> GeneratedResource | None:
         resource = await self.session.get(GeneratedResource, resource_id)
@@ -670,13 +578,12 @@ class ResourceService:
 
         return ResourceStatusSnapshot(
             resource_id=resource_id,
-            run_id=resource.run_id,
             learning_need=resource.learning_need or "",
             status=resource.status,
             selected_agents=selected_agents,
             agent_snapshots=merged,
             current_message=current_message,
-            resources=[_db_item_to_summary_dto(item) for item in db_items],
+            resources=[_item_to_dto(item, include_content=False) for item in db_items],
             started_at=resource.started_at.isoformat() if resource.started_at else None,
             updated_at=resource.updated_at.isoformat() if resource.updated_at else None,
         )
@@ -689,7 +596,7 @@ class ResourceService:
         return ResourceBundle(
             id=str(resource.id), task_id=str(resource.id), title="个性化学习资源包",
             learning_need=resource.learning_need or "", selected_agents=resource.selected_agents or [],
-            resources=[_db_item_to_dto(item) for item in db_items], status=resource.status,
+            resources=[_item_to_dto(item) for item in db_items], status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",
             updated_at=resource.updated_at.isoformat() if resource.updated_at else "",
             metadata={"source": "database", "failed_agents": resource.failed_agents or [], "teaching_plan": resource.teaching_plan or {}},

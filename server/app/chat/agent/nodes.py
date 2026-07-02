@@ -18,7 +18,11 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.chat.agent.state import TutorAgentState
-from app.chat.emitter import build_agent_status_payload, build_attachment_status_payload
+from app.chat.emitter import (
+    build_agent_status_payload,
+    build_attachment_status_payload,
+    build_workflow_activity_payload,
+)
 from app.chat.agent.tool_runner import (
     ToolExecutionContext,
     TutorToolRunner,
@@ -41,6 +45,7 @@ from app.chat.utils.files import analyze_documents
 from app.chat.utils.vision import VisionService
 from app.config import IMAGE_EXTENSIONS
 from app.infra.logging import get_logger
+from app.infra.markdown_output import with_markdown_output_contract
 from app.infra.tool_excute import ToolExcute, ToolRuntimeEvent
 
 logger = get_logger(__name__)
@@ -96,6 +101,21 @@ async def classify_node(
     has_attachments = bool(attachments)
     has_web_search = state.get("enable_web_search", False)
     has_diagram = state.get("need_teaching_diagram", False)
+    events: list[TutorRuntimeEvent] = []
+
+    start_event = TutorRuntimeEvent(
+        type="workflow_status",
+        payload=build_workflow_activity_payload(
+            stage="classifying",
+            activity_id="workflow:current",
+            title="正在判断回答方式",
+            message="正在判断是否需要查资料或分析附件",
+            summary="",
+        ),
+        sequence=len(state.get("stream_events", [])) + 1,
+        timestamp=time.time(),
+    )
+    events.extend(await agent._emit_event(state, start_event, turn_event_type="classify.start"))
 
     prompt = (
         f"学生问题: {question}\n"
@@ -135,13 +155,33 @@ async def classify_node(
     if has_diagram and not classification.needs_diagram:
         classification = classification.model_copy(update={"needs_diagram": True})
 
+    route_parts: list[str] = []
+    if classification.needs_file_analysis:
+        route_parts.append("附件分析")
+    if classification.needs_knowledge_search:
+        route_parts.append("课程知识库")
+    if classification.needs_web_search:
+        route_parts.append("联网检索")
+    if classification.needs_diagram:
+        route_parts.append("教学图解")
+    route_summary = "、".join(route_parts) if route_parts else "直接回答"
+
     event = TutorRuntimeEvent(
         type="classify_done",
-        payload=classification.model_dump(),
-        sequence=len(state.get("stream_events", [])) + 1,
+        payload={
+            **classification.model_dump(),
+            **build_workflow_activity_payload(
+                stage="route_ready",
+                activity_id="workflow:current",
+                title="正在选择信息来源",
+                message=f"回答方式：{route_summary}",
+                summary=route_summary,
+            ),
+        },
+        sequence=len(state.get("stream_events", [])) + len(events) + 1,
         timestamp=time.time(),
     )
-    events = await agent._emit_event(state, event, turn_event_type="classify.done")
+    events.extend(await agent._emit_event(state, event, turn_event_type="classify.done"))
 
     return {
         "classification": classification,
@@ -382,6 +422,26 @@ async def search_node(
     node_tool_invocations: list[dict[str, Any]] = []
     node_errors: list[str] = []
 
+    plan_parts = []
+    if tools_to_call:
+        plan_parts.append("学习记录")
+    if needs_web_research:
+        plan_parts.append("网页资料")
+    if plan_parts:
+        plan_event = TutorRuntimeEvent(
+            type="workflow_status",
+            payload=build_workflow_activity_payload(
+                stage="collecting_context",
+                activity_id="workflow:current",
+                title="正在查找相关信息",
+                message=f"正在读取{'和'.join(plan_parts)}",
+                summary="、".join(plan_parts),
+            ),
+            sequence=base_seq,
+            timestamp=time.time(),
+        )
+        await emit_event_callback(plan_event)
+
     def collect_result(result: Any) -> None:
         if isinstance(result, Exception):
             node_errors.append(f"parallel_tool_call: {result}")
@@ -490,6 +550,7 @@ async def answer_node(
         file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
         attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
     )
+    system_prompt = with_markdown_output_contract(system_prompt)
     system_prompt += (
         f"\n\n# 当前日期\n{_current_date_text()}\n"
         "涉及年份、最新、考试真题、政策、版本或其他时效信息时，必须以本轮工具证据为准；"
@@ -518,6 +579,21 @@ async def answer_node(
     raw_answer = ""
     seq = len(state.get("stream_events", [])) + 1
     stream_started = False
+
+    compose_event = TutorRuntimeEvent(
+        type="workflow_status",
+        payload=build_workflow_activity_payload(
+            stage="composing_answer",
+            activity_id="workflow:current",
+            title="正在组织回答",
+            message="正在把上下文整理成回答",
+            summary="",
+        ),
+        sequence=seq,
+        timestamp=time.time(),
+    )
+    node_events.extend(await agent._emit_event(state, compose_event, turn_event_type="answer.compose"))
+    seq += 1
 
     try:
         stream_buffer = SafetyBufferedResponseStreamer(

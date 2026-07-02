@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from app.resource.schemas import TeachingPlan, TeachingOutlineItem
 from app.resource.agents.reading import ReadingPayload
 from app.resource.agents.quiz import QuizPayload
-from app.resource.ppt_contract import PPTDocument as PptDocument
 from app.resource.agents.video import VideoMaterialDigest, VideoOutline, SceneDraft
 from app.path.schemas import AgentLearningPathPlan, AgentQuestionSet
 from app.profile.types import (
@@ -96,47 +95,6 @@ AGENT_QUESTION_SET_JSON = {
             "answer": "A",
             "analysis": "find 返回第一个匹配",
             "knowledge_points": ["BeautifulSoup"],
-        }
-    ]
-}
-
-PPT_DOCUMENT_JSON = {
-    "template_id": "teaching-lesson",
-    "theme_id": "technical-blueprint",
-    "explanation_style": "conceptual",
-    "visual_emphasis": "balanced",
-    "title": "Python 爬虫入门",
-    "audience": "初学者",
-    "slides": [
-        {
-            "id": "slide-01",
-            "role": "cover",
-            "title": "Python 爬虫入门",
-            "key_message": "了解爬虫概念",
-            "density": "light",
-            "elements": [
-                {
-                    "type": "concept",
-                    "content": "网络爬虫",
-                    "label": "爬虫"
-                }
-            ],
-            "relations": []
-        },
-        {
-            "id": "slide-02",
-            "role": "ending",
-            "title": "总结",
-            "key_message": "核心知识点回顾",
-            "density": "light",
-            "elements": [
-                {
-                    "type": "concept",
-                    "content": "爬虫开发",
-                    "label": "开发"
-                }
-            ],
-            "relations": []
         }
     ]
 }
@@ -340,19 +298,6 @@ class TestAgentQuestionSetSchema:
         assert result.questions[0].answer == "A"
 
 
-class TestPptDocumentSchema:
-    def test_parses_valid_json(self) -> None:
-        result = PptDocument.model_validate(PPT_DOCUMENT_JSON)
-        assert result.title == "Python 爬虫入门"
-        assert len(result.slides) == 2
-        assert result.slides[0].role == "cover"
-
-    def test_rejects_invalid_theme(self) -> None:
-        data = {**PPT_DOCUMENT_JSON, "theme_id": "invalid_theme"}
-        with pytest.raises(ValidationError):
-            PptDocument.model_validate(data)
-
-
 class TestAgentLearningPathPlanSchema:
     def test_parses_valid_json(self) -> None:
         result = AgentLearningPathPlan.model_validate(AGENT_LEARNING_PATH_PLAN_JSON)
@@ -439,7 +384,6 @@ class TestSchemaRoundTrip:
             (ReadingPayload, READING_PAYLOAD_JSON),
             (QuizPayload, QUIZ_PAYLOAD_JSON),
             (AgentQuestionSet, AGENT_QUESTION_SET_JSON),
-            (PptDocument, PPT_DOCUMENT_JSON),
             (AgentLearningPathPlan, AGENT_LEARNING_PATH_PLAN_JSON),
             (OnboardingGlobalInferenceOutput, ONBOARDING_GLOBAL_JSON),
             (GlobalTutoringInferenceOutput, GLOBAL_TUTORING_JSON),

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends
 
 from app.auth.security import get_current_user
@@ -14,9 +16,6 @@ from app.infra.response import HttpResponse
 from app.profile import (
     BaseInfoData,
     GlobalProfileResponse,
-    GlobalScoreResponse,
-    GlobalTutoringProfileUpdate,
-    CourseTutoringProfileUpdate,
     OnboardingResponse,
     OnboardingUpdate,
     StudentProfileData,
@@ -26,11 +25,14 @@ from app.profile.service import get_profile_service
 logger = get_logger(__name__)
 router = APIRouter()
 
+# 正在执行的 onboarding task，用于防抖去重
+_onboarding_tasks: dict[int, asyncio.Task] = {}
+
 
 @router.get("/profile")
 async def get_profile(current_user: User = Depends(get_current_user)):
-    profile_builder = get_profile_service()
-    profile = await profile_builder.get_or_create_global_profile(user_id=current_user.id)
+    svc = get_profile_service()
+    profile = await svc.get_profile(user_id=current_user.id)
     profile_json = profile.profile_json or {}
 
     return HttpResponse.success(data=GlobalProfileResponse(
@@ -44,58 +46,16 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     ))
 
 
-@router.get("/profile/score")
-async def get_profile_score(current_user: User = Depends(get_current_user)):
-    profile_builder = get_profile_service()
-    profile = await profile_builder.get_or_create_global_profile(user_id=current_user.id)
-    score_json = profile.profile_score_json or {}
-
-    scores = score_json.get("dimension_scores") or {}
-    evidences = score_json.get("dimension_evidence") or {}
-
-    from app.profile.types import SCORE_DIMENSIONS, DIMENSION_NAMES
-    dimensions = []
-    for key in SCORE_DIMENSIONS:
-        score = scores.get(key)
-        dimensions.append({
-            "key": key,
-            "label": DIMENSION_NAMES.get(key, key),
-            "score": score if isinstance(score, (int, float)) else None,
-            "evidence": evidences.get(key) or [],
-        })
-
-    return HttpResponse.success(data=GlobalScoreResponse(
-        user_id=profile.user_id,
-        module=profile.module,
-        score=score_json.get("overall_score"),
-        metrics={
-            "dimension_scores": scores,
-            "dimension_evidence": evidences,
-        },
-        dimensions=dimensions,
-        scored_at=score_json.get("scored_at"),
-        updated_at=profile.updated_at,
-    ))
-
-
 @router.get("/profile/onboarding")
 async def get_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
-    profile_builder = get_profile_service()
-    profile = await profile_builder.get_or_create_global_profile(user_id=current_user.id)
+    svc = get_profile_service()
+    profile = await svc.get_profile(user_id=current_user.id)
     base_info = profile.profile_json.get("base_info") or {}
     return HttpResponse.success(data=OnboardingResponse(
         base_info=BaseInfoData(**base_info),
-        student_profile=StudentProfileData(
-            school=base_info.get("school"),
-            school_level=base_info.get("school_level"),
-            major=base_info.get("major"),
-            grade=base_info.get("grade"),
-            courses=base_info.get("courses", []),
-            learning_goal=base_info.get("global_learning_goal"),
-            preferred_language=", ".join(base_info.get("programming_languages", [])),
-        ),
+        student_profile=StudentProfileData.from_base_info(base_info),
         profile_initialized=bool(base_info.get("major")),
     ).model_dump())
 
@@ -105,59 +65,57 @@ async def update_profile_onboarding(
     payload: OnboardingUpdate,
     current_user: User = Depends(get_current_user),
 ):
-    profile_builder = get_profile_service()
+    """更新 onboarding 信息并触发 LLM 推理生成画像和评分。
+
+    流程：
+    1. 立即返回成功，用户可继续进入系统
+    2. 后台异步保存基础信息到数据库
+    3. 后台异步触发 LLM 推理，生成 7 维度文字画像
+    4. 自动计算并更新分数画像
+    """
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
 
-    try:
-        result = await profile_builder.update_from_onboarding(
-            user_id=user_id,
-            payload=payload_data,
-        )
-        logger.info("[ProfileAPI] onboarding complete: user_id=%s", user_id)
-    except Exception as e:
-        logger.warning("[ProfileAPI] onboarding update failed: user_id=%s err=%s", user_id, e)
-        return HttpResponse.error(code=400, message=str(e))
+    # 取消同用户正在运行的旧 task（防抖去重）
+    old_task = _onboarding_tasks.get(user_id)
+    if old_task and not old_task.done():
+        old_task.cancel()
+        logger.info("[ProfileAPI] cancelled previous onboarding task: user_id=%s", user_id)
+
+    # 全部后台执行，不阻塞用户
+    task = asyncio.create_task(
+        _run_onboarding_full_async(user_id, payload_data),
+        name=f"onboarding_full_{user_id}",
+    )
+    _onboarding_tasks[user_id] = task
+    task.add_done_callback(lambda t: _onboarding_tasks.pop(user_id, None))
+
+    logger.info("[ProfileAPI] onboarding accepted, background scheduled: user_id=%s", user_id)
 
     return HttpResponse.success(data={
-        "profile": result,
         "inference_scheduled": True,
     })
 
 
-@router.patch("/profile/global/tutoring-update")
-async def update_global_profile_from_tutoring(
-    payload: GlobalTutoringProfileUpdate,
-    current_user: User = Depends(get_current_user),
-):
-    profile_builder = get_profile_service()
+async def _run_onboarding_full_async(user_id: int, payload: dict) -> None:
+    """后台异步运行 onboarding 全流程：保存基础信息 → LLM 推理 → 评分。"""
+    svc = get_profile_service()
     try:
-        logger.info("[ProfileAPI] 收到全局画像更新请求: user_id=%s", current_user.id)
-        result = await profile_builder.update_global_from_tutoring(
-            user_id=current_user.id,
-            session_id=payload.session_id,
+        # 1. 保存基础信息到数据库
+        await svc.save_onboarding_info(
+            user_id=user_id,
+            payload=payload,
         )
-        return HttpResponse.success(data=result)
-    except Exception as e:
-        logger.warning("[ProfileAPI] global profile update failed: user_id=%s err=%s", current_user.id, e)
-        return HttpResponse.error(code=400, message=str(e))
+        logger.info("[ProfileAPI] onboarding save complete: user_id=%s", user_id)
+    except Exception as exc:
+        logger.error("[ProfileAPI] onboarding save failed: user_id=%s err=%s", user_id, exc)
+        return  # 保存失败则不继续推理
 
-
-@router.patch("/profile/course/tutoring-update")
-async def update_course_profile_from_tutoring(
-    payload: CourseTutoringProfileUpdate,
-    current_user: User = Depends(get_current_user),
-):
-    profile_builder = get_profile_service()
     try:
-        logger.info("[ProfileAPI] 收到课程画像更新请求: user_id=%s", current_user.id)
-        result = await profile_builder.update_course_from_tutoring(
-            user_id=current_user.id,
-            session_id=payload.session_id,
-            course_name=payload.course_name,
-            active_topic=payload.active_topic,
+        # 2. LLM 推理 + 评分
+        await svc.infer_profile_from_onboarding(
+            user_id=user_id,
+            payload=payload,
         )
-        return HttpResponse.success(data=result)
-    except Exception as e:
-        logger.warning("[ProfileAPI] course profile update failed: user_id=%s err=%s", current_user.id, e)
-        return HttpResponse.error(code=400, message=str(e))
+    except Exception as exc:
+        logger.error("[ProfileAPI] onboarding inference failed: user_id=%s err=%s", user_id, exc)

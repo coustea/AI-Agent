@@ -77,6 +77,7 @@ def build_agent_resource_input(
     resource_id: int,
     agent_id: str,
     learning_need: str,
+    learning_scenario: str,
     selected_agents: list[str],
     agent_configs: dict[str, Any],
     teaching_plan: TeachingPlan | None,
@@ -91,6 +92,7 @@ def build_agent_resource_input(
         resource_id: 资源 ID
         agent_id: Agent 标识符
         learning_need: 用户学习需求
+        learning_scenario: 用户选择的学习场景
         selected_agents: 选中的 agent IDs
         agent_configs: agent 配置
         teaching_plan: 教学计划（包含策略和大纲）
@@ -118,7 +120,7 @@ def build_agent_resource_input(
     return ResourceInput(
         resource_id=resource_id,
         learning_need=learning_need,
-        learning_scenario=agent_config.get("learning_scenario") or "self_study",
+        learning_scenario=learning_scenario,
         agent_name=agent_id,
         agent_config=agent_config,
         teaching_plan=teaching_plan,
@@ -394,7 +396,7 @@ async def _execute_non_planning_agent(
                 .where(GeneratedResourceItem.agent_type.in_(depends_on_agents))
             )
             result = await session.exec(stmt)
-            source_item_ids = list(result.all())
+            source_item_ids = list(result.scalars().all())
 
     outcome = await execute_resource_agent(
         user_id=user_id,
@@ -469,6 +471,7 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
     learning_need = snapshot["learning_need"]
     agent_configs = snapshot["agent_configs"]
     profile = snapshot["profile_snapshot"]
+    request_snapshot = snapshot["request_snapshot"]
 
     # 从数据库获取教学计划
     teaching_plan = await _get_teaching_plan(resource_id)
@@ -480,6 +483,7 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
         resource_id=resource_id,
         agent_id=agent_id,
         learning_need=learning_need,
+        learning_scenario=request_snapshot.get("learning_scenario") or "self_study",
         selected_agents=snapshot["selected_agents"],
         agent_configs=agent_configs,
         teaching_plan=teaching_plan,
@@ -695,6 +699,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         resource_id=resource_id,
         agent_id=PPT_AGENT_ID,
         learning_need=learning_need,
+        learning_scenario=request_snapshot.get("learning_scenario") or "self_study",
         selected_agents=snapshot["selected_agents"],
         agent_configs=agent_configs,
         teaching_plan=teaching_plan,
@@ -735,6 +740,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
     learning_need = snapshot["learning_need"]
     agent_configs = snapshot["agent_configs"]
     profile = snapshot["profile_snapshot"]
+    request_snapshot = snapshot["request_snapshot"]
 
     # 从数据库获取教学计划
     teaching_plan = await _get_teaching_plan(resource_id)
@@ -753,6 +759,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         resource_id=resource_id,
         agent_id=VIDEO_AGENT_ID,
         learning_need=learning_need,
+        learning_scenario=request_snapshot.get("learning_scenario") or "self_study",
         selected_agents=snapshot["selected_agents"],
         agent_configs=agent_configs,
         teaching_plan=teaching_plan,

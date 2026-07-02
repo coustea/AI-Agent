@@ -1,235 +1,197 @@
-"""教学课件生成 Agent - 完全对齐前端 PPTDocument 结构。
-
-直接生成前端兼容的 JSON，包含 slots、blocks、takeaway 等字段。
-"""
+"""Frontend Slides HTML presentation agent."""
 
 from __future__ import annotations
 
-import json
-from typing import Any
+import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from app.config import INFERENCE_TEMPERATURE
-from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.prompts import prompts
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import outline_coverage_summary
-from app.resource.ppt_contract import PPTDocument, PptSlide, ThemeType
-from app.resource.schemas import AgentResult, DownstreamContext, NodeInput, ResourceInput
+from app.resource.agents.ppt_pipeline import (
+    PresentationGenerationError,
+    PresentationPipeline,
+)
+from app.resource.agents.ppt_pipeline.schemas import SourceArtifact, SourcePack
+from app.resource.schemas import (
+    AgentResult,
+    DownstreamContext,
+    NodeInput,
+    ResourceInput,
+    ReusableAssets,
+)
 
 logger = get_logger(__name__)
 
 
-class NodeMaterialContext(BaseModel):
-    """节点学习材料上下文"""
-    model_config = ConfigDict(extra="forbid")
-
-    path_title: str = ""
-    path_goal: str = ""
-    node_title: str = ""
-    node_key: str = ""
-    difficulty: str | None = None
-    knowledge_points: list[str] = Field(default_factory=list)
-    weak_knowledge_points: list[str] = Field(default_factory=list)
-    generation_focus: list[str] = Field(default_factory=list)
-    tutorial_title: str = ""
-    tutorial_summary: str | None = None
-    tutorial_markdown: str = ""
-
-
-class SourceArtifact(BaseModel):
-    """源材料"""
-    model_config = ConfigDict(extra="forbid")
-
-    agent_id: str
-    title: str
-    summary: str
-    materials: list[str] = Field(default_factory=list, max_length=12)
+def _source_artifacts(
+    handoffs: dict[str, DownstreamContext],
+) -> list[SourceArtifact]:
+    artifacts: list[SourceArtifact] = []
+    for agent_id, handoff in handoffs.items():
+        materials = [
+            handoff.one_sentence_summary,
+            *handoff.reusable_assets.examples[:4],
+            *handoff.reusable_assets.visual_ideas[:4],
+        ]
+        deduped = list(
+            dict.fromkeys(str(item).strip() for item in materials if str(item).strip())
+        )
+        artifacts.append(
+            SourceArtifact(
+                agent_id=agent_id,
+                title=handoff.title or agent_id,
+                summary=handoff.one_sentence_summary or handoff.title or agent_id,
+                materials=deduped[:12],
+            )
+        )
+    return artifacts
 
 
-class SourcePack(BaseModel):
-    """PPT 生成输入源"""
-    model_config = ConfigDict(extra="forbid")
-
-    learning_need: str
-    learning_scenario: str
-    profile: dict[str, Any] | str
-    teaching_plan: dict[str, Any] | None
-    source_type: str
-    artifacts: list[SourceArtifact]
-    node_context: NodeMaterialContext | None = None
-
-
-def _artifact_from_handoff(agent_id: str, handoff: DownstreamContext) -> SourceArtifact:
-    """从 handoff 创建源材料"""
-    materials = [handoff.one_sentence_summary] if handoff.one_sentence_summary else []
-    materials.extend(handoff.reusable_assets.examples[:4])
-    materials.extend(handoff.reusable_assets.visual_ideas[:4])
-    deduped_materials: list[str] = []
-    for item in materials:
-        text = str(item).strip()
-        if text and text not in deduped_materials:
-            deduped_materials.append(text)
-    return SourceArtifact(
-        agent_id=agent_id,
-        title=handoff.title or agent_id,
-        summary=handoff.one_sentence_summary or handoff.title or agent_id,
-        materials=deduped_materials[:12],
-    )
+def _result_artifacts(results: dict[str, AgentResult]) -> list[SourceArtifact]:
+    return [
+        SourceArtifact(
+            agent_id=agent_id,
+            title=result.title or agent_id,
+            summary=result.summary or result.title or agent_id,
+            materials=[result.content[:4000]] if result.content.strip() else [],
+        )
+        for agent_id, result in results.items()
+        if result.success
+    ]
 
 
 def build_resource_source_pack(input_data: ResourceInput) -> SourcePack:
-    """构建独立资源生成的源材料"""
-    artifacts = [
-        _artifact_from_handoff(agent_id, handoff)
-        for agent_id, handoff in input_data.upstream_handoffs.items()
-    ]
     return SourcePack(
         learning_need=input_data.learning_need,
         learning_scenario=input_data.learning_scenario,
         profile=input_data.profile or {},
-        teaching_plan=input_data.teaching_plan.model_dump(mode="json") if input_data.teaching_plan else None,
+        teaching_plan=(
+            input_data.teaching_plan.model_dump(mode="json")
+            if input_data.teaching_plan
+            else None
+        ),
         source_type="resource",
-        artifacts=artifacts,
+        artifacts=_source_artifacts(input_data.upstream_handoffs),
     )
 
 
 def build_node_source_pack(input_data: NodeInput) -> SourcePack:
-    """构建节点学习材料源"""
-    node_context = NodeMaterialContext(
-        path_title=input_data.path_title,
-        path_goal=input_data.path_goal,
-        node_title=input_data.node_title,
-        node_key=input_data.node_key,
-        difficulty=input_data.difficulty,
-        knowledge_points=input_data.knowledge_points or [],
-        weak_knowledge_points=input_data.weak_knowledge_points or [],
-        generation_focus=input_data.generation_focus or [],
-        tutorial_title=input_data.tutorial_title,
-        tutorial_summary=input_data.tutorial_summary,
-        tutorial_markdown=input_data.tutorial_markdown,
-    )
-    artifacts = [
-        _artifact_from_handoff(agent_id, handoff)
-        for agent_id, handoff in input_data.upstream_handoffs.items()
-    ]
     return SourcePack(
         learning_need=input_data.learning_need,
-        learning_scenario=input_data.learning_scenario,
+        learning_scenario="self_study",
         profile=input_data.profile or {},
         teaching_plan=None,
         source_type="node",
-        artifacts=artifacts,
-        node_context=node_context,
+        artifacts=_result_artifacts(input_data.existing_resources),
+        node_context={
+            "path_title": input_data.path_title,
+            "path_goal": input_data.path_goal,
+            "node_title": input_data.node_title,
+            "node_key": input_data.node_key,
+            "difficulty": input_data.difficulty,
+            "knowledge_points": input_data.knowledge_points,
+            "weak_knowledge_points": input_data.weak_knowledge_points,
+            "generation_focus": input_data.generation_focus,
+            "tutorial_title": input_data.tutorial_title,
+            "tutorial_summary": input_data.tutorial_summary,
+            "tutorial_markdown": input_data.tutorial_markdown,
+        },
     )
 
 
 @register_agent
 class PPTAgent(BaseResourceAgent):
-    """PPT 生成 Agent - 生成前端兼容的 PPTDocument JSON"""
-    
     agent_id = "ppt"
     agent_name = "教学课件"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter=None, pipeline: PresentationPipeline | None = None):
         super().__init__(emitter=emitter)
-        self.llm = get_llm()
+        self.pipeline = pipeline or PresentationPipeline()
 
-    async def generate_resource(self, input_data: ResourceInput | NodeInput) -> AgentResult:
-        """生成 PPT 课件"""
-        # 构建源材料
+    async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        return await self._generate(
+            build_node_source_pack(input_data),
+            file_id=f"node_{input_data.node_id}",
+        )
+
+    async def generate_resource(
+        self,
+        input_data: ResourceInput | NodeInput,
+    ) -> AgentResult:
         if isinstance(input_data, NodeInput):
-            source_pack = build_node_source_pack(input_data)
-        else:
-            source_pack = build_resource_source_pack(input_data)
+            return await self.generate_node(input_data)
+        file_id = (
+            str(input_data.resource_id)
+            if input_data.resource_id is not None
+            else uuid.uuid4().hex
+        )
+        return await self._generate(
+            build_resource_source_pack(input_data),
+            file_id=file_id,
+        )
 
-        await self.emitter.send(self.agent_id, "running", "正在收集并组织讲义内容与大纲...", 15)
+    async def _generate(
+        self,
+        source_pack: SourcePack,
+        *,
+        file_id: str,
+    ) -> AgentResult:
+        async def progress(message: str, percent: int) -> None:
+            await self.emitter.send(self.agent_id, "running", message, percent)
 
-        # 准备 LLM 输入
-        prompt_template = prompts.get("resource").get("ppt_chapter")
-        if not prompt_template:
-            return AgentResult(
-                success=False,
-                title="PPT 生成失败",
-                file_type="json",
-                content="",
-                error="ppt_chapter 提示模板未找到",
-            )
-
-        # 调用 LLM 生成
         try:
-            await self.emitter.send(self.agent_id, "running", "正在调用AI大模型研制课件大纲与幻灯片页面结构...", 45)
-            response = await self.llm.ainvoke(
-                prompt_template.format(
-                    source_pack=json.dumps(source_pack.model_dump(mode="json"), ensure_ascii=False, indent=2),
-                    outline_coverage=outline_coverage_summary(input_data.teaching_plan, input_data.upstream_handoffs),
-                )
+            artifact = await self.pipeline.generate(
+                source_pack,
+                file_id=file_id,
+                progress=progress,
             )
-            raw_content = response.content
-
-            # 解析和验证 JSON
-            try:
-                ppt_data = json.loads(raw_content)
-                # 验证是否符合 PPTDocument schema
-                await self.emitter.send(self.agent_id, "running", "正在校验 PPT 页面布局与排版结构...", 85)
-                ppt_doc = PPTDocument.model_validate(ppt_data)
-                
-                logger.info(
-                    "PPT 生成成功",
-                    extra={
-                        "resource_id": input_data.resource_id,
-                        "slides_count": len(ppt_doc.slides),
-                        "theme": ppt_doc.theme_id,
-                    },
-                )
-
-                return AgentResult(
-                    success=True,
-                    title=f"{ppt_doc.title} - 教学课件",
-                    file_type="json",
-                    content=json.dumps(ppt_doc.model_dump(mode="json"), ensure_ascii=False, indent=2),
-                    summary=f"生成 {len(ppt_doc.slides)} 页教学课件",
-                    metadata={
-                        "agent_id": "ppt",
-                        "slides_count": len(ppt_doc.slides),
-                        "theme_id": ppt_doc.theme_id,
-                        "template_id": ppt_doc.template_id,
-                    },
-                    downstream_context=DownstreamContext(
-                        title=ppt_doc.title,
-                        one_sentence_summary=f"{ppt_doc.title} - {len(ppt_doc.slides)} 页教学课件",
-                        reusable_assets={"examples": [], "visual_ideas": []},
-                        covered_outline_ids=[],
-                        quality_score=0.85,
-                    ),
-                )
-            except json.JSONDecodeError as e:
-                logger.error(f"PPT JSON 解析失败: {e}")
-                return AgentResult(
-                    success=False,
-                    title="PPT 生成失败",
-                    file_type="json",
-                    content=raw_content,
-                    error=f"JSON 解析失败: {str(e)}",
-                )
-            except Exception as e:
-                logger.error(f"PPT schema 验证失败: {e}")
-                return AgentResult(
-                    success=False,
-                    title="PPT 生成失败",
-                    file_type="json",
-                    content=raw_content,
-                    error=f"schema 验证失败: {str(e)}",
-                )
-
-        except Exception as e:
-            logger.error(f"PPT LLM 调用失败: {e}")
+        except PresentationGenerationError as exc:
+            logger.error(
+                "PPT validation failed after repair: static=%s visual=%s",
+                exc.static_audit.problems,
+                [problem.model_dump() for problem in exc.visual_audit.problems],
+            )
             return AgentResult(
                 success=False,
                 title="PPT 生成失败",
-                file_type="json",
-                content="",
-                error=str(e),
+                file_type="html",
+                error=str(exc),
+                metadata={"agent_id": self.agent_id},
             )
+        except Exception as exc:
+            logger.exception("PPT pipeline failed")
+            return AgentResult(
+                success=False,
+                title="PPT 生成失败",
+                file_type="html",
+                error=str(exc),
+                metadata={"agent_id": self.agent_id},
+            )
+
+        title = artifact.brief.purpose
+        path = artifact.path
+        return AgentResult(
+            success=True,
+            title=f"{title} - 教学课件",
+            file_type="html",
+            content="",
+            summary=f"生成 {artifact.slide_count} 页 HTML 教学课件",
+            metrics={"slide_count": artifact.slide_count},
+            metadata={
+                "agent_id": self.agent_id,
+                "html_file_path": str(path),
+                "html_url": f"/api/v1/ai/resources/public/{file_id}/html",
+                "slide_count": artifact.slide_count,
+                "style_name": artifact.style.selected.name,
+                "density": artifact.brief.density,
+                "file_size": path.stat().st_size,
+            },
+            downstream_context=DownstreamContext(
+                source_agent=self.agent_id,
+                title=title,
+                one_sentence_summary=(
+                    f"{title} - {artifact.slide_count} 页 HTML 教学课件"
+                ),
+                reusable_assets=ReusableAssets(),
+                covered_outline_ids=[],
+            ),
+        )

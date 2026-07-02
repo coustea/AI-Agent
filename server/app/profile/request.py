@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class OnboardingUpdate(BaseModel):
     """入门信息更新请求 — 用户首次填写的基本信息。"""
 
-    school: str = ""
+    school: str
     major: str
     grade: str
     daily_study_time: str

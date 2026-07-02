@@ -79,47 +79,34 @@ COGNITIVE_DIMENSIONS: Final[tuple[str, ...]] = (
 )
 
 
-# ── 画像更新调度常量 ──────────────────────────────────────────────────────
+# ── 默认值 ──────────────────────────────────────────────────────────────
 
-PROFILE_TOKEN_THRESHOLD: Final[int] = 8000
-PROFILE_MESSAGE_THRESHOLD: Final[int] = 30
-PROFILE_UPDATE_COOLDOWN_MINUTES: Final[int] = 90
-PROFILE_MIN_COVERAGE: Final[int] = 60  # 至少 4/7 维度有值
+default_profile_json: dict[str, Any] = {
+    "base_info": {
+        "school": "",
+        "school_level": "",
+        "major": "",
+        "grade": "",
+        "daily_study_time": "",
+        "global_learning_goal": "",
+        "programming_languages": [],
+        "courses": [],
+    },
+    "dimensions": {
+        dim: {
+            "value": "",
+            "evidence": [],
+        }
+        for dim in ALL_DIMENSIONS
+    },
+}
 
-
-# ── 默认值生成函数 ──────────────────────────────────────────────────────
-
-def make_default_profile_json() -> dict[str, Any]:
-    """生成空白画像 JSON — 7 个维度，每个维度包含 value 和 evidence。"""
-    return {
-        "base_info": {
-            "school": "",
-            "school_level": "",
-            "major": "",
-            "grade": "",
-            "daily_study_time": "",
-            "global_learning_goal": "",
-            "programming_languages": [],
-            "courses": [],
-        },
-        "dimensions": {
-            dim: {
-                "value": "",
-                "evidence": [],
-            }
-            for dim in ALL_DIMENSIONS
-        },
-    }
-
-
-def make_default_score_json() -> dict[str, Any]:
-    """生成空白画像评分 JSON — 7 个维度初始分为 0。"""
-    return {
-        "overall_score": 0,
-        "dimension_scores": {key: 0 for key in ALL_DIMENSIONS},
-        "dimension_evidence": {key: [] for key in ALL_DIMENSIONS},
-        "scored_at": "",
-    }
+default_score_json: dict[str, Any] = {
+    "overall_score": 0,
+    "dimension_scores": {key: 0 for key in ALL_DIMENSIONS},
+    "dimension_evidence": {key: [] for key in ALL_DIMENSIONS},
+    "scored_at": "",
+}
 
 
 # ── Pydantic 模型 ──────────────────────────────────────────────────────
@@ -135,11 +122,6 @@ class ProfileDimensionsPatch(BaseModel):
     dimensions_patch: dict[str, DimensionValue] = Field(default_factory=dict)
 
 
-class OnboardingGlobalInferenceOutput(ProfileDimensionsPatch):
-    """Onboarding 推理输出。"""
-    pass
-
-
 class GlobalTutoringInferenceOutput(BaseModel):
     """辅导对话中的画像推理输出。"""
     should_update: bool = False
@@ -151,4 +133,3 @@ class ProfileScoreOutput(BaseModel):
     overall_score: float = 0
     dimension_scores: dict[str, float] = Field(default_factory=dict)
     dimension_evidence: dict[str, list[str]] = Field(default_factory=dict)
-    scoring_reason: str = ""  # 评分理由

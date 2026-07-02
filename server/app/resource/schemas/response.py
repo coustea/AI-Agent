@@ -14,12 +14,15 @@ from app.resource.schemas.result import AgentResult
 
 
 class GeneratedResourceItem(BaseModel):
-    """生成的资源项，作为后端存储和前端 SSE 的统一资源契约。"""
+    """生成的资源项，作为后端存储和前端 SSE 的统一资源契约。
+
+    content 为 None 时表示轻量摘要（不含正文），用于状态轮询等场景。
+    """
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: ResourceAgentId
     title: str
     format: str
-    content: Any
+    content: Any = None
     summary: str = ""
     metrics: dict[str, Any] = Field(default_factory=dict)
     downstream_context: DownstreamContext | None = None
@@ -31,31 +34,15 @@ class GeneratedResourceItem(BaseModel):
     updated_at: str | None = None
 
 
-class GeneratedResourceItemSummary(BaseModel):
-    """生成中状态接口使用的轻量资源摘要。"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    type: ResourceAgentId
-    title: str
-    format: str
-    summary: str = ""
-    metrics: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    status: str = "completed"
-    error_message: str | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
-
-
 class ResourceStatusSnapshot(BaseModel):
     """SSE/轮询状态接口返回的轻量任务快照。"""
     resource_id: int
-    run_id: str | None = None
     learning_need: str = ""
     status: str
     selected_agents: list[str] = Field(default_factory=list)
     agent_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
     current_message: str = ""
-    resources: list[GeneratedResourceItemSummary] = Field(default_factory=list)
+    resources: list[GeneratedResourceItem] = Field(default_factory=list)
     started_at: str | None = None
     updated_at: str | None = None
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.config import INFERENCE_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.infra.markdown_output import with_markdown_output_contract
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
     build_basic_handoff,
@@ -94,10 +95,10 @@ class ContentAgent(BaseResourceAgent):
 
         await self.emitter.send(self.agent_id, "running", "正在构建课程讲解提示词...", 45)
         prompt = prompts.get("resource").get("content")
-        await self.emitter.send(self.agent_id, "running", "正在调用AI大模型生成精解讲义内容...", 60)
+        prompt = with_markdown_output_contract(prompt)
+        await self.emitter.send(self.agent_id, "running", "正在精解讲义内容...", 60)
         response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
-        content = _clean_markdown_fences(content)
 
         return AgentResult(
             success=True,
@@ -108,9 +109,3 @@ class ContentAgent(BaseResourceAgent):
             metrics={"char_count": len(content)},
             metadata={"agent_id": "content"},
         )
-
-
-def _clean_markdown_fences(content: str) -> str:
-    """移除 LLM 输出中的 markdown fence 包裹标记（```markdown 等）。"""
-    lines = content.split("\n")
-    return "\n".join(line for line in lines if line.strip() not in ("```", "```markdown", "```text"))

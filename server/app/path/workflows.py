@@ -26,6 +26,7 @@ from app.evaluation.service import (
 )
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm
+from app.infra.markdown_output import with_markdown_output_contract
 from app.infra.tool_excute import Tool
 from app.infra.prompts import prompts
 from app.infra.models import (
@@ -498,6 +499,7 @@ class NodeLearningAgent:
             weak_points_section=weak_points_section,
             profile_section=profile_section,
         )
+        prompt = with_markdown_output_contract(prompt)
         response = await self.llm.ainvoke(prompt, temperature=INFERENCE_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
         return {

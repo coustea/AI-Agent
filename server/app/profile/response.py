@@ -32,6 +32,19 @@ class StudentProfileData(BaseModel):
     learning_goal: str | None = None
     preferred_language: str | None = None
 
+    @classmethod
+    def from_base_info(cls, base_info: dict[str, Any]) -> "StudentProfileData":
+        """从 base_info 字典构造 StudentProfileData。"""
+        return cls(
+            school=base_info.get("school"),
+            school_level=base_info.get("school_level"),
+            major=base_info.get("major"),
+            grade=base_info.get("grade"),
+            courses=base_info.get("courses", []),
+            learning_goal=base_info.get("global_learning_goal"),
+            preferred_language=", ".join(base_info.get("programming_languages", [])),
+        )
+
 
 class OnboardingResponse(BaseModel):
     """入门信息查询响应 — 包含基础信息和学生画像摘要。"""
@@ -50,24 +63,4 @@ class GlobalProfileResponse(BaseModel):
     dimensions: dict[str, Any] = Field(default_factory=dict)
     profile_json: dict[str, Any] = Field(default_factory=dict)
     profile_score_json: dict[str, Any] = Field(default_factory=dict)
-    updated_at: datetime | str | None = None
-
-
-class ProfileScoreDimension(BaseModel):
-    """维度分数和证据详情。"""
-    key: str
-    label: str
-    score: int | float | None = None
-    evidence: list[str] = Field(default_factory=list)
-
-
-class GlobalScoreResponse(BaseModel):
-    """全局评分响应（GET /profile/score）。"""
-
-    user_id: int
-    module: str
-    score: int | float | None = None
-    metrics: dict[str, Any] = Field(default_factory=dict)
-    dimensions: list[ProfileScoreDimension] = Field(default_factory=list)
-    scored_at: str | None = None
     updated_at: datetime | str | None = None

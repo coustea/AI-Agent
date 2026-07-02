@@ -198,6 +198,11 @@ SPARK_API_KEY = get("spark.api_key", "")
 # 星火大模型 API 密钥签名
 SPARK_API_SECRET = get("spark.api_secret", "")
 
+# 星火 TTS 配置（回退到通用 Spark 配置）
+SPARK_TTS_APP_ID = get("spark_tts.app_id", SPARK_APP_ID)
+SPARK_TTS_API_KEY = get("spark_tts.api_key", SPARK_API_KEY)
+SPARK_TTS_API_SECRET = get("spark_tts.api_secret", SPARK_API_SECRET)
+
 # ============ 聊天附件与保护机制 ============
 # 单个文件内容最大读取字符数（防止超大文件撑爆上下文）
 MAX_FILE_CONTENT_CHARS = get("chat.max_file_content_chars", 15000)
@@ -237,6 +242,11 @@ LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 30)
 # ============ 模型推理参数 ============
 # 通用模型温度参数（控制输出随机性，0=确定性，1=高随机性）
 INFERENCE_TEMPERATURE = get("models.temperature", 0.3)
+# 结构化输出策略：json_schema_first / json_mode_first / prompt_first
+# json_schema_first — 优先 json_schema strict，失败后降级 json_mode → prompt
+# json_mode_first — 跳过 json_schema，直接 json_mode，失败后降级 prompt
+# prompt_first — 仅 prompt 注入 + 手动解析
+STRUCTURED_OUTPUT_STRATEGY = get("models.structured_output_strategy", "json_schema_first")
 # 视觉模型温度参数（通常需要更高的创造性）
 VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
 

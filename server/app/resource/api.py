@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -279,6 +279,58 @@ async def get_resource(
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在")
     return HttpResponse.success(data=bundle.model_dump(mode="json"))
+
+
+@router.get("/resources/public/{resource_id}/html")
+async def get_public_html(
+    resource_id: str,
+):
+    """公开获取 HTML 幻灯片内容，支持 iframe 直接加载。"""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", resource_id):
+        return HttpResponse.error(code=400, message="非法幻灯片 ID")
+    file_path = WORKPLACE_DIR / "html_slides" / f"{resource_id}.html"
+    if not file_path.exists():
+        return HttpResponse.error(code=404, message="HTML 幻灯片不存在")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="text/html",
+    )
+
+
+@router.get("/resources/{resource_id}/html")
+async def download_html(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """下载 HTML 幻灯片文件。"""
+    service = ResourceService(session)
+
+    # 获取资源项
+    items = await service.list_resource_items(current_user.id, resource_id)
+    ppt_item = None
+    for item in items:
+        if item.agent_type == "ppt":
+            ppt_item = item
+            break
+
+    if not ppt_item:
+        return HttpResponse.error(code=404, message="PPT 资源不存在")
+
+    # 从 metadata 获取 HTML 文件路径
+    html_path = None
+    if ppt_item.metadata_json:
+        html_path = ppt_item.metadata_json.get("html_file_path")
+
+    if not html_path or not os.path.exists(html_path):
+        return HttpResponse.error(code=404, message="HTML 文件未找到")
+
+    return FileResponse(
+        path=html_path,
+        filename=f"{ppt_item.title}.html",
+        media_type="text/html",
+    )
 
 
 @router.get("/video/audio/{filename:path}")

@@ -118,16 +118,54 @@ class TtsService:
         file_path: Path,
         voice: str = "zh-CN-XiaoxiaoNeural",
     ) -> TtsResult:
-        """带字幕合成：文本 → MP3 + 逐词时间戳。
-
+        """带字幕合成：文本 → MP3 + 逐词时间戳（具有 SHA-256 缓存优化）。
+        
         通过 edge-tts 的 WordBoundary 事件获取每个词的起止时间。
         """
         if not text or not text.strip():
             logger.warning("Empty text passed to TtsService. Skip synthesis.")
             return TtsResult(duration=0.0, captions=[])
 
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+        import hashlib
+        import json
+        import shutil
+        from app.config import WORKPLACE_DIR
 
+        # 1. 计算文本和配音的 Hash
+        payload_str = f"{voice}:{text.strip()}"
+        sha256_hash = hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
+        
+        # 缓存路径
+        cache_dir = WORKPLACE_DIR / "tts_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_mp3_path = cache_dir / f"tts_{sha256_hash}.mp3"
+        cache_meta_path = cache_dir / f"tts_{sha256_hash}.json"
+
+        # 2. 如果缓存存在，直接使用缓存
+        if cache_mp3_path.exists() and cache_meta_path.exists():
+            try:
+                meta = json.loads(cache_meta_path.read_text(encoding="utf-8"))
+                duration = meta.get("duration", 0.0)
+                captions = [
+                    CaptionWord(
+                        text=c["text"],
+                        start_ms=c["start_ms"],
+                        end_ms=c["end_ms"]
+                    )
+                    for c in meta.get("captions", [])
+                ]
+                
+                # 确保目标文件夹存在并拷贝音频文件
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(cache_mp3_path), str(file_path))
+                
+                logger.info("TTS Cache Hit! Reused audio cache: %s", cache_mp3_path.name)
+                return TtsResult(duration=duration, captions=captions)
+            except Exception as e:
+                logger.warning("Failed to load TTS cache, falling back to synthesis: %s", e)
+
+        # 3. 缓存不存在，执行合成
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         logger.info("Starting TTS+captions synthesis for text (len=%d)", len(text))
 
         communicate = edge_tts.Communicate(text, voice)
@@ -161,4 +199,17 @@ class TtsService:
         audio = MP3(str(file_path))
         duration = audio.info.length
         logger.info("TTS+captions synthesis complete. Duration: %.2fs, %d caption words", duration, len(word_captions))
+
+        # 4. 写入缓存
+        try:
+            shutil.copy2(str(file_path), str(cache_mp3_path))
+            meta_data = {
+                "duration": duration,
+                "captions": [c.to_dict() for c in word_captions]
+            }
+            cache_meta_path.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            logger.info("TTS Cache Saved: %s", cache_mp3_path.name)
+        except Exception as e:
+            logger.warning("Failed to save TTS cache: %s", e)
+
         return TtsResult(duration=duration, captions=word_captions)
