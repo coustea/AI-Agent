@@ -267,6 +267,11 @@
                     :activities="msg.agentActivities"
                   />
 
+                  <KnowledgeSources
+                    v-if="msg.role === 'ai' && msg.sources?.length"
+                    :sources="msg.sources"
+                  />
+
                   <div
                     v-if="getDisplayContent(msg)"
                     :class="[
@@ -636,6 +641,7 @@ import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/current
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
+import KnowledgeSources from '@/features/chat/components/KnowledgeSources.vue'
 import AppLogo from '@/shared/ui/AppLogo.vue'
 
 import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
@@ -662,6 +668,7 @@ import {
   type Attachment,
   type ChatMsg,
   type AgentActivity,
+  type KnowledgeSource,
   normalizeTeachingDiagram,
   getDocumentType,
   getDocumentIconColor,
@@ -1761,6 +1768,10 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         ? [...imageAttachments, ...fileAttachments]
         : null
 
+      // 从 usage_metadata 提取 sources
+      const usageMetadata = msg.usage_metadata as Record<string, unknown> | undefined
+      const sources = (usageMetadata?.sources as KnowledgeSource[] | undefined) || undefined
+
       return {
         id: msg.id || Date.now() + i,
         role: msg.role === 'user' ? 'user' as const : 'ai' as const,
@@ -1768,6 +1779,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
         attachments,
         agentActivities: [],
+        sources,
       }
     })
     // 防止刷新后历史中相邻重复消息导致双排显示
@@ -1827,8 +1839,16 @@ const switchSession = async (sessionId: string) => {
         clearAgentStatus(messages.value.find(m => m.id === aiMsgId))
         enqueueStreamChunk(aiMsgId, chunk)
       },
-      onDone: () => {
+      onDone: (data) => {
         completeStreamingMessage(aiMsgId)
+        // 处理知识库来源
+        const sourcesArray = data.sources as KnowledgeSource[] | undefined
+        console.log('[Tutor] onDone received:', { sources: sourcesArray, hasSources: !!sourcesArray?.length })
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg && sourcesArray && sourcesArray.length > 0) {
+          aiMsg.sources = sourcesArray
+          console.log('[Tutor] assigned sources to message:', aiMsg.id, 'count:', aiMsg.sources.length)
+        }
         void refreshSessionTitleWithRetry(sessionId)
       },
       onError: (_err) => {
@@ -2209,8 +2229,16 @@ const handleSend = async () => {
         }
         enqueueStreamChunk(aiMsgId, chunk)
       },
-      onDone: () => {
+      onDone: (data) => {
         completeStreamingMessage(aiMsgId)
+        // 处理知识库来源
+        const sourcesArray = data.sources as KnowledgeSource[] | undefined
+        console.log('[Tutor] onDone received:', { sources: sourcesArray, hasSources: !!sourcesArray?.length })
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        if (aiMsg && sourcesArray && sourcesArray.length > 0) {
+          aiMsg.sources = sourcesArray
+          console.log('[Tutor] assigned sources to message:', aiMsg.id, 'count:', aiMsg.sources.length)
+        }
         void refreshSessionTitleWithRetry(activeSessionId)
       },
       onError: (_err) => {

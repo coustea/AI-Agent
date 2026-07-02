@@ -204,6 +204,7 @@ export interface ChatMessageItem {
   tool_calls?: Array<{ id: string; name: string; args?: Record<string, unknown> }> | null
   tool_call_id?: string | null
   created_at: string | null
+  usage_metadata?: Record<string, unknown> | null
 }
 
 export interface ChatSession {

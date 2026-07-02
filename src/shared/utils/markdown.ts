@@ -698,16 +698,50 @@ export function normalizeStreamingMarkdown(text: string, isStreaming = false): s
   const fences = repaired.match(fencePattern)
   if (!fences || fences.length % 2 === 0) return repaired
 
+
   return `${repaired}\n\`\`\``
+}
+
+// 匹配 <details>...</details> 块（包括嵌套内容）
+const detailsBlockPattern = /<details>\s*<summary>([^]*?)<\/summary>\s*([^]*?)<\/details>/gi
+
+function preserveDetailsBlocks(text: string): { text: string; blocks: Map<string, string> } {
+  const blocks = new Map<string, string>()
+  let index = 0
+  const preserved = text.replace(detailsBlockPattern, (match) => {
+    const placeholder = `\n\n__DETAILS_BLOCK_${index}__\n\n`
+    blocks.set(placeholder, match)
+    index += 1
+    return placeholder
+  })
+  return { text: preserved, blocks }
+}
+
+function restoreDetailsBlocks(html: string, blocks: Map<string, string>): string {
+  // 匹配可能被包裹在 <p> 标签中的占位符
+  return html.replace(/(?:<p>)?__DETAILS_BLOCK_\d+__(?:<\/p>)?/g, (match) => {
+    // 提取纯占位符
+    const placeholder = match.replace(/<\/?p>/g, '')
+    const original = blocks.get(placeholder)
+    if (!original) return match
+    // details 块已经是 HTML，直接返回
+    return original
+  })
 }
 
 export function renderStreamingMarkdownHtml(text: string, isStreaming = false): string {
   const normalized = normalizeStreamingMarkdown(text, isStreaming)
   if (!normalized.trim()) return ''
 
+  // 先提取 details 块，避免被 markdown 渲染器转义
+  const { text: preservedText, blocks } = preserveDetailsBlocks(normalized)
+
   try {
-    return streamingMarkdown.render(normalized)
+    const rendered = streamingMarkdown.render(preservedText)
+    // 恢复 details 块
+    return restoreDetailsBlocks(rendered, blocks)
   } catch {
-    return baseMarkdown.render(normalized || text || '')
+    const rendered = baseMarkdown.render(preservedText || text || '')
+    return restoreDetailsBlocks(rendered, blocks)
   }
 }
