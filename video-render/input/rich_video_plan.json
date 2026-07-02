@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "video_id": "demo_video",
+    "title": "示例教学视频",
+    "subject": "计算机基础",
+    "topic": "数据结构入门",
+    "difficulty": "基础",
+    "target_audience": "初学者",
+    "estimated_duration_seconds": 60,
+    "language": "zh-CN"
+  },
+  "global_style": {
+    "theme": "clean_tech_education",
+    "background": "soft_grid_gradient",
+    "primary_color": "#2563eb",
+    "accent_color": "#3b82f6",
+    "danger_color": "#ef4444",
+    "success_color": "#10b981",
+    "font_family": "Inter, system-ui, sans-serif"
+  },
+  "render_config": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "format": "mp4",
+    "default_scene_transition": "fade",
+    "subtitle_enabled": true,
+    "voiceover_enabled": false
+  },
+  "audio": {
+    "bgm_volume": 0.15
+  },
+  "scenes": [
+    {
+      "id": "scene_1",
+      "type": "title_intro",
+      "duration_seconds": 8,
+      "title": "数据结构入门",
+      "narration": "欢迎来到数据结构入门课程。今天我们将学习计算机科学中最基础的概念。",
+      "visual": {
+        "course": "计算机基础",
+        "chapter": "第一章",
+        "subtitle": "掌握核心数据结构，提升编程能力",
+        "tags": ["数据结构", "算法", "编程基础"],
+        "hero_keywords": ["数组", "链表", "栈", "队列"]
+      },
+      "transition": "fade"
+    },
+    {
+      "id": "scene_2",
+      "type": "concept_explain",
+      "duration_seconds": 12,
+      "title": "什么是数据结构",
+      "narration": "数据结构是计算机存储和组织数据的方式。好的数据结构可以提高算法效率。",
+      "visual": {
+        "main_concept": "数据结构",
+        "definition": "数据结构是一种数据组织、管理和存储的格式，可以实现高效的数据访问和修改。",
+        "keywords": ["组织", "存储", "效率"],
+        "why_it_matters": [
+          "提高程序运行效率",
+          "减少内存使用",
+          "简化代码逻辑"
+        ],
+        "related_concepts": [
+          {"name": "算法", "relation": "相辅相成"},
+          {"name": "内存管理", "relation": "底层支持"}
+        ],
+        "common_misconception": "数据结构只是存储数据，不影响程序性能。"
+      },
+      "transition": "fade"
+    },
+    {
+      "id": "scene_3",
+      "type": "compare_summary",
+      "duration_seconds": 10,
+      "title": "常见数据结构对比",
+      "narration": "让我们来对比几种常见的数据结构，了解它们各自的特点。",
+      "visual": {
+        "comparison_title": "数据结构对比",
+        "items": [
+          {
+            "name": "数组",
+            "attributes": {"访问": "O(1)", "插入": "O(n)", "删除": "O(n)"}
+          },
+          {
+            "name": "链表",
+            "attributes": {"访问": "O(n)", "插入": "O(1)", "删除": "O(1)"}
+          }
+        ],
+        "dimensions": ["随机访问", "插入操作", "删除操作"],
+        "conclusion": "根据场景选择合适的数据结构。"
+      },
+      "transition": "fade"
+    }
+  ]
+}

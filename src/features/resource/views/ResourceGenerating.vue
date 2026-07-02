@@ -898,7 +898,9 @@ function getStageNode(id: string): DagNodeState {
 }
 
 function hasGeneratedResource(type: string) {
-  return props.generatedResources.some(resource => resource.type === type)
+  const isReadyInResources = props.generatedResources.some(resource => resource.type === type)
+  const isReadyInDag = props.dagNodeStates[type]?.status === 'success'
+  return isReadyInResources || isReadyInDag
 }
 
 function getNodeStatusLabel(node: DagNodeState) {

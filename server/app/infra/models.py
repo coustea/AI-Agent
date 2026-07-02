@@ -417,45 +417,32 @@ class GeneratedResourceItem(SQLModel, table=True):
 
     每个 (resource_id, agent_type) 组合只能有一条成功记录。
     失败 Agent 不创建记录，仅在工作流状态中保留失败信息。
+    content_format 由 agent_type 推导，不再单独存储。
     """
     __tablename__ = "generated_resource_items"
     __table_args__ = (
         UniqueConstraint("resource_id", "agent_type", name="uq_generated_resource_items_resource_agent"),
         Index("ix_generated_resource_items_content_json", "content_json", postgresql_using="gin"),
         Index("ix_generated_resource_items_metadata_json", "metadata_json", postgresql_using="gin"),
-        Index("ix_generated_resource_items_metrics", "metrics", postgresql_using="gin"),
-        Index("ix_generated_resource_items_user_created_at", "user_id", "created_at"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
-    user_id: int = Field(index=True)
 
     # Agent 类型（content/mindmap/quiz/code/reading/ppt/video）
     agent_type: str = Field(max_length=50, index=True)
 
-    # 内容格式（markdown/json/text/code）
-    content_format: str = Field(default="json", max_length=50)
-
-    # 展示与契约信息
+    # 展示信息
     title: str | None = Field(default=None, max_length=200)
-    summary: str | None = Field(default=None, sa_column=Column(Text))
 
-    # 内容主体（根据 content_format 选择存储位置）
+    # 内容主体（根据 agent_type 选择存储位置）
     content_json: dict[str, Any] | list[Any] | None = Field(default=None, sa_column=Column(JSONB))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    metrics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    status: str = Field(default="pending", max_length=50)
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
 
@@ -463,7 +450,6 @@ class GeneratedResourceAgentRun(SQLModel, table=True):
     """Agent 运行状态表 — 记录每个 Agent 的生命周期状态。
 
     每个 (resource_id, agent_id) 组合只有一条记录。
-    用于持久化 Agent 运行状态，支持重启后恢复。
     """
     __tablename__ = "generated_resource_agent_runs"
     __table_args__ = (
@@ -477,13 +463,9 @@ class GeneratedResourceAgentRun(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
     agent_id: str = Field(max_length=32)
-    stage: str = Field(max_length=32)
     status: str = Field(default="pending", max_length=16)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
-    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    finished_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     elapsed_ms: int | None = Field(default=None)
-    metrics: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
 
 # ---------------------------------------------------------------------------
