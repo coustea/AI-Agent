@@ -672,7 +672,7 @@ async def node_load_context(state: LearnState) -> dict:
 
     try:
         profile_service = get_profile_service()
-        profile_markdown = await profile_service.get_profile_for_agents(user_id=user_id)
+        profile_markdown = await profile_service.build_profile_markdown(user_id=user_id)
     except Exception:
         profile_markdown = ""
 

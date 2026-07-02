@@ -39,7 +39,7 @@ def make_get_learner_profile(
     ) -> str:
         svc = profile_service or get_profile_service()
         try:
-            markdown = await svc.get_profile_for_agents(user_id=request.user_id, dimension=dimension)
+            markdown = await svc.build_profile_markdown(user_id=request.user_id)
             return compact_text(f"画像读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
             logger.warning("[get_learner_profile] failed: %s", exc)

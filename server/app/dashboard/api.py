@@ -163,13 +163,13 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
 
 async def _get_profile_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
     """获取用户画像数据。"""
-    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id, db=session)
+    profile = await get_profile_service().get_profile(user_id=user_id, db=session)
     return profile.profile_json or {}
 
 
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
     """获取用户评分数据。"""
-    profile = await get_profile_service().get_or_create_global_profile(user_id=user_id, db=session)
+    profile = await get_profile_service().get_profile(user_id=user_id, db=session)
     return profile.profile_score_json or {}
 
 

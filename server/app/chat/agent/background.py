@@ -134,7 +134,7 @@ async def _run_profile_update(
     course_updated = False
 
     if should_update_global:
-        res_global = await profile_service.update_global_from_tutoring(
+        res_global = await profile_service.infer_profile_from_tutoring(
             user_id=user_id,
             session_id=session_id,
         )
@@ -142,7 +142,7 @@ async def _run_profile_update(
         logger.info("[background] 全局画像更新完成: global_updated=%s", global_updated)
 
     if should_update_course:
-        global_profile = await profile_service.get_or_create_global_profile(user_id=user_id)
+        global_profile = await profile_service.get_profile(user_id=user_id)
         profile_json = global_profile.profile_json or {}
         active_courses = profile_json.get("base_info", {}).get("courses", [])
         course_name = ""
@@ -159,7 +159,7 @@ async def _run_profile_update(
         course_name = str(course_name) if course_name else ""
 
         if course_name:
-            res_course = await profile_service.update_course_from_tutoring(
+            res_course = await profile_service.infer_course_profile_from_tutoring(
                 user_id=user_id,
                 session_id=session_id,
                 course_name=course_name,
