@@ -276,15 +276,18 @@ import { toast } from 'vue-sonner'
 import MarkdownView from '@/features/resource/components/MarkdownView.vue'
 
 import {
-  generateAuxiliaryResource,
+  generateMindmap,
+  generateCode,
+  generatePpt,
+  generateReading,
   generateNodeQuestions,
+  generateTutorial,
   getLearningNodeWorkspace,
-  startNodeLearning,
+  startLearning,
   submitNodeQuiz,
 } from '@/features/learning-path/api/path'
 import { recordPathLearningEvent } from '@/features/evaluation/api/evaluation'
 import type {
-  AuxiliaryResourceRequest,
   LearningPathTutorial,
   LearningPathWorkspace,
   PathQuizRound,
@@ -299,7 +302,7 @@ type TocItem = {
   level: number
 }
 
-type ResourceKind = AuxiliaryResourceRequest['resource_type']
+type ResourceKind = 'mindmap' | 'code' | 'ppt' | 'reading'
 
 type ResourcePushItem = {
   type: ResourceKind
@@ -469,6 +472,7 @@ async function loadWorkspace() {
     const res = await getLearningNodeWorkspace(nodeId.value)
     workspace.value = res.data.data
 
+    // 如果教程尚未生成（例如用户直接导航到此 URL），自动生成
     if (workspace.value && !workspace.value.current_tutorial) {
       await generatePrimaryTutorial()
     } else if (workspace.value?.current_tutorial) {
@@ -514,8 +518,12 @@ async function generatePrimaryTutorial() {
   }, 1600)
 
   try {
-    const startRes = await startNodeLearning(nodeId.value)
-    workspace.value = startRes.data.data
+    // 1. 轻量标记开始学习
+    await startLearning(nodeId.value)
+
+    // 2. 调用独立教程生成接口
+    const tutorialRes = await generateTutorial(nodeId.value)
+    workspace.value = tutorialRes.data.data
 
     if (workspace.value?.current_tutorial) {
       selectedTutorialId.value = workspace.value.current_tutorial.id
@@ -617,13 +625,21 @@ async function submitQuiz() {
   }
 }
 
+const resourceApiMap: Record<ResourceKind, (nodeId: number) => Promise<any>> = {
+  mindmap: generateMindmap,
+  code: generateCode,
+  ppt: generatePpt,
+  reading: generateReading,
+}
+
 async function createResource(type: ResourceKind) {
   if (!workspace.value) return
 
   resourceLoading.value = type
 
   try {
-    const res = await generateAuxiliaryResource(workspace.value.node.id, { resource_type: type })
+    const apiFn = resourceApiMap[type]
+    const res = await apiFn(workspace.value.node.id)
     openResourceDetail(res.data.data.id)
   } catch (error) {
     toast.error(getErrorMessage(error, '生成辅助资源失败'))

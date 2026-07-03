@@ -1,11 +1,10 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
 import type {
-  AuxiliaryResourceRequest,
-  CreateLearningPathRequest,
-  CreateLearningPathResponse,
+  PathRequest,
+  CreatePathResponse,
   LearningPathHistoryItem,
-  LearningPathOverview,
+  PathOverview,
   LearningPathWorkspace,
   PathQuizRound,
   PathQuizSubmitRequest,
@@ -15,11 +14,10 @@ import type {
 } from '@/features/learning-path/model/path'
 
 export type {
-  AuxiliaryResourceRequest,
-  CreateLearningPathRequest,
-  CreateLearningPathResponse,
+  PathRequest,
+  CreatePathResponse,
   LearningPathHistoryItem,
-  LearningPathOverview,
+  PathOverview,
   LearningPathWorkspace,
   PathQuizRound,
   PathQuizSubmitRequest,
@@ -28,18 +26,18 @@ export type {
   PathLearningEvaluationResponse,
 }
 
-export function createLearningPath(payload: CreateLearningPathRequest) {
-  return http.post<ApiResponse<CreateLearningPathResponse>>('/ai/path-plan', payload)
+export function createLearningPath(payload: PathRequest) {
+  return http.post<ApiResponse<CreatePathResponse>>('/ai/path-plan', payload)
 }
 
 export function getCurrentLearningPath(module = 'mentor') {
-  return http.get<ApiResponse<LearningPathOverview | null>>('/ai/path-plan/active', {
+  return http.get<ApiResponse<PathOverview | null>>('/ai/path-plan/active', {
     params: { module },
   })
 }
 
 export function getLearningPathById(pathId: number) {
-  return http.get<ApiResponse<LearningPathOverview>>(`/ai/path-plan/${pathId}`)
+  return http.get<ApiResponse<PathOverview>>(`/ai/path-plan/${pathId}`)
 }
 
 export function getLearningPathHistory(module = 'mentor') {
@@ -49,15 +47,19 @@ export function getLearningPathHistory(module = 'mentor') {
 }
 
 export function activateLearningPath(pathId: number) {
-  return http.post<ApiResponse<LearningPathOverview>>(`/ai/path-plan/${pathId}/activate`)
+  return http.post<ApiResponse<PathOverview>>(`/ai/path-plan/${pathId}/activate`)
 }
 
 export function getLearningNodeWorkspace(nodeId: number) {
   return http.get<ApiResponse<LearningPathWorkspace>>(`/ai/path-plan/nodes/${nodeId}/workspace`)
 }
 
-export function startNodeLearning(nodeId: number) {
-  return http.post<ApiResponse<LearningPathWorkspace>>(`/ai/path-plan/nodes/${nodeId}/start-learning`)
+export function startLearning(nodeId: number) {
+  return http.post<ApiResponse<PathOverview>>(`/ai/path-plan/nodes/${nodeId}/start-learning`)
+}
+
+export function generateTutorial(nodeId: number) {
+  return http.post<ApiResponse<LearningPathWorkspace>>(`/ai/path-plan/nodes/${nodeId}/tutorial`)
 }
 
 export function generateNodeQuestions(nodeId: number) {
@@ -68,8 +70,52 @@ export function submitNodeQuiz(nodeId: number, payload: PathQuizSubmitRequest) {
   return http.post<ApiResponse<PathQuizSubmitResponse>>(`/ai/path-plan/nodes/${nodeId}/quiz-submit`, payload)
 }
 
-export function generateAuxiliaryResource(nodeId: number, payload: AuxiliaryResourceRequest) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/resources`, payload)
+export function generateMindmap(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/mindmap`)
+}
+
+export function generateCode(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/code`)
+}
+
+export function generatePpt(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/ppt`)
+}
+
+export function generateReading(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/reading`)
+}
+
+export function generateContent(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/content`)
+}
+
+export function generateQuizResource(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/quiz-resource`)
+}
+
+export function getMindmap(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/mindmap`)
+}
+
+export function getCode(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/code`)
+}
+
+export function getPpt(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/ppt`)
+}
+
+export function getReading(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/reading`)
+}
+
+export function getContent(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/content`)
+}
+
+export function getQuizResource(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/quiz-resource`)
 }
 
 export function getLearningEvaluation(pathId: number) {

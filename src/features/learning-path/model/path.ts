@@ -17,7 +17,7 @@ export interface LearningPathNode {
   prerequisites: string[]
 }
 
-export interface LearningPathOverview {
+export interface PathOverview {
   id: number
   module: string
   title: string
@@ -87,7 +87,7 @@ export interface LearningPathQuestion {
 }
 
 export interface LearningPathWorkspace {
-  path: LearningPathOverview
+  path: PathOverview
   node: LearningPathNode
   current_tutorial: LearningPathTutorial | null
   tutorials: LearningPathTutorial[]
@@ -123,7 +123,7 @@ export interface PathQuizSubmitResponse {
   current_tutorial_id: number | null
 }
 
-export interface CreateLearningPathRequest {
+export interface PathRequest {
   goal: string
   topic?: string
   module?: string
@@ -132,14 +132,10 @@ export interface CreateLearningPathRequest {
   enable_search?: boolean
 }
 
-export interface CreateLearningPathResponse {
+export interface CreatePathResponse {
   id: number
   run_id: string
   status: string
-}
-
-export interface AuxiliaryResourceRequest {
-  resource_type: PathResourceType
 }
 
 interface LearningSignalSnapshot {

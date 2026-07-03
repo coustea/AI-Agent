@@ -4,7 +4,7 @@
 1. 路径规划智能体 (PathPlannerAgent) 与 LangGraph 规划工作流
 2. 节点学习智能体 (NodeLearningAgent)
 3. 节点学习工作流 (get_learn_workflow)
-4. 兜底与修复函数 (build_fallback_path_plan, repair_generated_plan_from_macro_stages)
+4. 兜底与修复函数 (build_fallback_plan, repair_plan)
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ from app.evaluation.service import (
 )
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm
-from app.infra.tool_excute import Tool
 from app.infra.prompts import prompts
 from app.infra.models import (
     LearningPath,
@@ -38,20 +37,14 @@ from app.infra.models import (
 from app.profile.service import get_profile_service
 from app.resource.path_helpers import generate_path_node_resource
 from app.resource.schemas import NodeInput
-from app.shared.research.search_tools import (
-    SearchQueryArgs,
-    duckduckgo_search,
-    duckduckgo_instant_answer,
-    spark_search,
-    tavily_search,
-)
+from app.shared.research import ResearchAgent, ResearchTask
 
 # 从本地合并后的 schemas 导入
 from app.path.schemas import (
-    AgentLearningPathPlan,
-    AgentPathNode,
+    LearningPlan,
+    PlanNode,
     AgentStage,
-    CreateLearningPathRequest,
+    PathRequest,
     LearnState,
     AgentQuestionSet,
 )
@@ -62,12 +55,12 @@ logger = get_logger(__name__)
 # 1. 兜底与修复规划函数 (源自 plan_workflow.py)
 # ======================================================================
 
-def repair_generated_plan_from_macro_stages(
+def repair_plan(
     *,
-    plan: AgentLearningPathPlan,
+    plan: LearningPlan,
     macro_stages: list[AgentStage],
-    request: CreateLearningPathRequest,
-) -> AgentLearningPathPlan:
+    request: PathRequest,
+) -> LearningPlan:
     """修复 LLM 生成的路径规划，确保 stages 和 nodes 正确对齐。"""
     if not plan.stages and macro_stages:
         plan.stages = list(macro_stages)
@@ -85,13 +78,13 @@ def repair_generated_plan_from_macro_stages(
 
     if not plan.nodes and plan.stages:
         previous_node_id = ""
-        nodes: list[AgentPathNode] = []
+        nodes: list[PlanNode] = []
         for index, stage in enumerate(plan.stages, 1):
             node_id = f"{stage.stage_id}-core"
             difficulty = "beginner" if index == 1 else "intermediate"
             if index == len(plan.stages) and len(plan.stages) >= 3:
                 difficulty = "advanced"
-            node = AgentPathNode(
+            node = PlanNode(
                 node_id=node_id,
                 stage_id=stage.stage_id,
                 title=stage.title,
@@ -106,9 +99,9 @@ def repair_generated_plan_from_macro_stages(
     return plan
 
 
-def build_fallback_path_plan(
-    request: CreateLearningPathRequest,
-) -> AgentLearningPathPlan:
+def build_fallback_plan(
+    request: PathRequest,
+) -> LearningPlan:
     """构建兜底学习路径 — 当 LLM 结构化规划失败时使用。"""
     topic = (request.topic or request.goal or "课程学习").strip()
     goal = (request.goal or topic).strip()
@@ -120,7 +113,7 @@ def build_fallback_path_plan(
     ]
 
     nodes = [
-        AgentPathNode(
+        PlanNode(
             node_id="node-1",
             stage_id="stage-1",
             title=f"{topic}学习地图与核心术语",
@@ -128,7 +121,7 @@ def build_fallback_path_plan(
             difficulty="beginner",
             priority=1,
         ),
-        AgentPathNode(
+        PlanNode(
             node_id="node-2",
             stage_id="stage-1",
             title="前置基础补齐",
@@ -136,7 +129,7 @@ def build_fallback_path_plan(
             difficulty="beginner",
             priority=2,
         ),
-        AgentPathNode(
+        PlanNode(
             node_id="node-3",
             stage_id="stage-2",
             title="核心概念与结构关系",
@@ -144,7 +137,7 @@ def build_fallback_path_plan(
             difficulty="intermediate",
             priority=3,
         ),
-        AgentPathNode(
+        PlanNode(
             node_id="node-4",
             stage_id="stage-2",
             title="关键流程与典型机制",
@@ -152,7 +145,7 @@ def build_fallback_path_plan(
             difficulty="intermediate",
             priority=4,
         ),
-        AgentPathNode(
+        PlanNode(
             node_id="node-5",
             stage_id="stage-2",
             title="易错点与薄弱点专项巩固",
@@ -160,7 +153,7 @@ def build_fallback_path_plan(
             difficulty="intermediate",
             priority=5,
         ),
-        AgentPathNode(
+        PlanNode(
             node_id="node-6",
             stage_id="stage-3",
             title="综合练习与知识总结",
@@ -170,7 +163,7 @@ def build_fallback_path_plan(
         ),
     ]
 
-    return AgentLearningPathPlan(
+    return LearningPlan(
         title=f"{topic}个性化学习路径", stages=stages, nodes=nodes
     )
 
@@ -181,42 +174,27 @@ def build_fallback_path_plan(
 
 ProgressCallback = Callable[[str, int, str], Awaitable[None]]
 
-_SEARCH_FAILURE_MARKERS = (
-    "搜索不可用",
-    "搜索失败",
-    "未找到相关搜索结果",
-    "无可用搜索结果",
-    "所有搜索引擎调用均失败",
-)
-
 
 class PathState(TypedDict):
     """LangGraph 状态图中 research → strategist 的全局状态。"""
-    request: CreateLearningPathRequest
+    request: PathRequest
     profile: dict[str, Any]
     profile_markdown: str
     search_context: str
     progress_callback: ProgressCallback | None
-    final_plan: AgentLearningPathPlan | None
+    final_plan: LearningPlan | None
 
 
 class PathPlannerAgent:
     """课程级学习路径规划智能体。"""
 
-    def __init__(self, search_tools: list[Tool] | None = None):
+    def __init__(self) -> None:
         self.llm = get_llm()
-        self.search_tools = search_tools if search_tools is not None else [
-            Tool("duckduckgo_search", "General web search for articles and tutorials.", SearchQueryArgs, duckduckgo_search),
-            Tool("duckduckgo_instant_answer", "Instant definitions and encyclopedia summaries.", SearchQueryArgs, duckduckgo_instant_answer),
-            Tool("tavily_search", "AI-optimized structured web search.", SearchQueryArgs, tavily_search),
-            Tool("spark_search", "Chinese semantic web search.", SearchQueryArgs, spark_search),
-        ]
-        self.tool_excute = self.llm.create_tool_excute(self.search_tools)
-        self.max_search_tool_calls = 3
+        self.research_agent = ResearchAgent()
         self.system_prompt = prompts.get("path").get("planner_system")
-        self.generate_graph = self._build_generate_graph()
+        self.generate_graph = self._build_graph()
 
-    def _build_generate_graph(self):
+    def _build_graph(self):
         workflow = StateGraph(PathState)
 
         async def research_node(state: PathState) -> dict[str, Any]:
@@ -228,7 +206,7 @@ class PathPlannerAgent:
                     30,
                     "正在检索高价值参考资料",
                 )
-            search_context = await self._collect_search_evidence(
+            search_context = await self._search(
                 request=state["request"],
                 profile=state["profile"],
             )
@@ -259,7 +237,7 @@ class PathPlannerAgent:
                     state["profile"], ensure_ascii=False, indent=2
                 )
 
-            request_context = _format_request_context(state["request"])
+            request_context = _format_request(state["request"])
             search_context = state.get("search_context", "")
             messages = _build_planner_messages(
                 request_context=request_context,
@@ -268,12 +246,12 @@ class PathPlannerAgent:
             )
 
             result = await self.llm.ainvoke_json(
-                AgentLearningPathPlan,
+                LearningPlan,
                 messages,
                 max_tokens=4096,
             )
 
-            result = repair_generated_plan_from_macro_stages(
+            result = repair_plan(
                 plan=result,
                 macro_stages=result.stages,
                 request=state["request"],
@@ -294,11 +272,11 @@ class PathPlannerAgent:
 
     async def generate_plan(
         self,
-        request: CreateLearningPathRequest,
+        request: PathRequest,
         profile: dict[str, Any],
         progress_callback: ProgressCallback | None = None,
         profile_markdown: str = "",
-    ) -> AgentLearningPathPlan:
+    ) -> LearningPlan:
         loguru_logger.info("PathPlannerAgent 开始规划路径 - Topic: {}", request.topic)
         try:
             initial_state: PathState = {
@@ -324,52 +302,41 @@ class PathPlannerAgent:
                 76,
                 "结构化规划失败，正在生成稳定兜底路径",
             )
-            return build_fallback_path_plan(request)
+            return build_fallback_plan(request)
 
-    async def _collect_search_evidence(
+    async def _search(
         self,
-        request: CreateLearningPathRequest,
+        request: PathRequest,
         profile: dict[str, Any],
     ) -> str:
-        if not request.enable_search or not self.search_tools:
+        if not request.enable_search:
             return ""
 
         try:
-            messages = _build_search_messages(request, profile)
-            response, tool_calls = await self.tool_excute.invoke(
-                messages, max_tokens=1000
+            query = f"{request.topic or request.goal} 学习路径 课程结构"
+            report = await self.research_agent.run(
+                ResearchTask(
+                    query=query,
+                    objective="为学习路径规划收集课程结构、知识点和教学参考",
+                    sources={"web"},
+                    depth="standard",
+                )
+            )
+            context = report.context.strip()
+            if not context or not report.has_usable_evidence:
+                return ""
+
+            return (
+                "\n\n联网检索参考:\n"
+                "以下内容只作为课程路径规划的外部参考。必须优先服从用户目标、画像和已掌握知识；"
+                "不得编造检索资料未支持的事实，不要把搜索摘要中的广告、无关页面或不确定内容写成课程结论。\n\n"
+                + context[:6000]
             )
         except Exception as exc:
             loguru_logger.warning(
-                "[PathPlannerAgent] search tool setup failed: %s", exc
+                "[PathPlannerAgent] ResearchAgent search failed: %s", exc
             )
             return ""
-
-        tool_calls = tool_calls[: self.max_search_tool_calls]
-        if not tool_calls:
-            direct = _message_content(response)
-            if is_usable_search_result(direct):
-                return f"\n\n联网检索参考:\n{direct[:6000]}"
-            return ""
-
-        raw_results = await self.tool_excute.execute_all(tool_calls)
-        results = [
-            f"{call.get('name', '')} 搜索失败: {result}" if isinstance(result, Exception) else str(result)
-            for call, result in zip(tool_calls, raw_results, strict=True)
-        ]
-        usable = [r for r in results if is_usable_search_result(r)]
-        if not usable:
-            return ""
-
-        combined = "\n\n".join(usable)
-        if len(combined) > 6000:
-            combined = combined[:6000]
-        return (
-            "\n\n联网检索参考:\n"
-            "以下内容只作为课程路径规划的外部参考。必须优先服从用户目标、画像和已掌握知识；"
-            "不得编造检索资料未支持的事实，不要把搜索摘要中的广告、无关页面或不确定内容写成课程结论。\n\n"
-            + combined
-        )
 
 
 def _build_planner_messages(
@@ -393,7 +360,7 @@ def _build_planner_messages(
     return [sys_msg, human_msg]
 
 
-def _format_request_context(request: CreateLearningPathRequest) -> str:
+def _format_request(request: PathRequest) -> str:
     current_knowledge = (
         "、".join(request.current_knowledge)
         if request.current_knowledge
@@ -412,42 +379,6 @@ def _format_request_context(request: CreateLearningPathRequest) -> str:
         f"学习偏好:\n{preferences}"
     )
 
-
-def _build_search_messages(
-    request: CreateLearningPathRequest,
-    profile: dict[str, Any],
-) -> list[Any]:
-    profile_context = (
-        json.dumps(profile, ensure_ascii=False, indent=2)
-        if profile
-        else "未提供"
-    )
-    return [
-        SystemMessage(
-            content=prompts.get("path").get("search_research_system")
-        ),
-        HumanMessage(
-            content=prompts.get("path").render(
-                "search_research_user",
-                request_context=_format_request_context(request),
-                profile_context=profile_context,
-            )
-        ),
-    ]
-
-
-def is_usable_search_result(result: object) -> bool:
-    text = str(result or "").strip()
-    if not text:
-        return False
-    return not any(marker in text for marker in _SEARCH_FAILURE_MARKERS)
-
-
-def _message_content(message: Any) -> str:
-    content = getattr(message, "content", message)
-    if isinstance(content, list):
-        return "\n".join(str(item) for item in content)
-    return str(content or "")
 
 
 async def emit_progress(
@@ -1197,8 +1128,8 @@ __all__ = [
     "NodeLearningAgent",
     "PathPlannerAgent",
     "get_learn_workflow",
-    "repair_generated_plan_from_macro_stages",
-    "build_fallback_path_plan",
+    "repair_plan",
+    "build_fallback_plan",
     "COMPLETED_NODE_STATUSES",
     "ACTIVE_NODE_STATUSES",
 ]

@@ -12,8 +12,7 @@ from app.infra.models import PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
 from app.path.event import PathEvents
 from app.path.schemas import (
-    AuxiliaryResourceRequest,
-    CreateLearningPathRequest,
+    PathRequest,
     LearningPathResourceDTO,
     PathQuizSubmitRequest,
 )
@@ -24,13 +23,13 @@ router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])  # 路径规�
 
 @router.post("")  # POST /api/v1/ai/path-plan — 创建学习路径
 async def create_path(
-    request: CreateLearningPathRequest,
+    request: PathRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
-    path_id = await service.init_path_task(current_user.id, request)  # 创建路径记录（状态=generating）
+    path_id = await service.create_path(current_user.id, request)
     run_id = str(uuid4())
     events = PathEvents(user_id=current_user.id, path_id=path_id, run_id=run_id)
     await events.open()
@@ -99,15 +98,29 @@ async def get_node_workspace(
 
 
 
-@router.post("/nodes/{node_id}/start-learning")  # POST 节点深入学习 — 标记开始并懒加载主教程
-async def start_node_learning(
+@router.post("/nodes/{node_id}/start-learning")  # POST 标记节点开始学习（轻量）
+async def start_learning(
     node_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
     try:
-        result = await service.start_node_learning(current_user.id, node_id)
+        result = await service.start_learning(current_user.id, node_id)
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/tutorial")  # POST 为节点生成教程（耗时）
+async def generate_tutorial(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.generate_tutorial(current_user.id, node_id)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json"))
@@ -142,19 +155,172 @@ async def submit_node_quiz(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/resources")  # POST 生成节点辅助资源 — mindmap/code/ppt/content/reading
-async def generate_node_resource(
+@router.post("/nodes/{node_id}/mindmap")  # POST 生成思维导图
+async def generate_mindmap(
     node_id: int,
-    payload: AuxiliaryResourceRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
     try:
-        result = await service.generate_node_resource(current_user.id, node_id, payload)
+        result = await service.generate_node_resource(current_user.id, node_id, "mindmap")
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/code")  # POST 生成代码实操
+async def generate_code(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.generate_node_resource(current_user.id, node_id, "code")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/ppt")  # POST 生成 PPT 课件
+async def generate_ppt(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.generate_node_resource(current_user.id, node_id, "ppt")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/reading")  # POST 生成拓展阅读
+async def generate_reading(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.generate_node_resource(current_user.id, node_id, "reading")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/content")  # POST 生成补充内容
+async def generate_content(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.generate_node_resource(current_user.id, node_id, "content")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.post("/nodes/{node_id}/quiz-resource")  # POST 生成辅助习题资源
+async def generate_quiz_resource(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.generate_node_resource(current_user.id, node_id, "quiz")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+@router.get("/nodes/{node_id}/mindmap")  # GET 获取节点思维导图（最新版本）
+async def get_mindmap(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "mindmap")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
+
+
+@router.get("/nodes/{node_id}/code")  # GET 获取节点代码实操
+async def get_code(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "code")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
+
+
+@router.get("/nodes/{node_id}/ppt")  # GET 获取节点 PPT 课件
+async def get_ppt(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "ppt")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
+
+
+@router.get("/nodes/{node_id}/reading")  # GET 获取节点拓展阅读
+async def get_reading(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "reading")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
+
+
+@router.get("/nodes/{node_id}/content")  # GET 获取节点补充内容
+async def get_content(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "content")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
+
+
+@router.get("/nodes/{node_id}/quiz-resource")  # GET 获取节点辅助习题
+async def get_quiz_resource(
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    service = PathService(session)
+    try:
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "quiz")
+    except ValueError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
 @router.get("/resources")  # GET /api/v1/ai/path-plan/resources — 获取路径资源列表
@@ -269,7 +435,7 @@ async def get_path_learning_evaluation(
 async def _run_generation_bg(
     user_id: int,
     path_id: int,
-    request: CreateLearningPathRequest,
+    request: PathRequest,
     run_id: str,
 ):
     await run_generation_bg(user_id, path_id, request, run_id)

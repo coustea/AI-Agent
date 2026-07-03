@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 # ======================================================================
 
 
-class CreateLearningPathRequest(BaseModel):
+class PathRequest(BaseModel):
     """新学习路径创建请求。"""
 
     goal: str = Field(description="学习目标")
@@ -27,14 +27,6 @@ class CreateLearningPathRequest(BaseModel):
     current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
     preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
     enable_search: bool = Field(default=False, description="是否允许规划阶段检索外部资料")
-
-
-class AuxiliaryResourceRequest(BaseModel):
-    """节点辅助资源生成请求。"""
-
-    resource_type: Literal["content", "mindmap", "code", "reading", "quiz", "ppt"] = Field(
-        description="资源类型: content / mindmap / code / reading / quiz / ppt"
-    )
 
 
 # ======================================================================
@@ -191,7 +183,7 @@ class LearningPathNodeDTO(BaseModel):
         )
 
 
-class LearningPathOverviewResponse(BaseModel):
+class PathResponse(BaseModel):
     id: int
     module: str
     title: str
@@ -217,7 +209,7 @@ class LearningPathHistoryItem(BaseModel):
 
 
 class LearningPathNodeWorkspaceResponse(BaseModel):
-    path: LearningPathOverviewResponse
+    path: PathResponse
     node: LearningPathNodeDTO
     current_tutorial: LearningPathTutorialDTO | None = None
     tutorials: list[LearningPathTutorialDTO] = Field(default_factory=list)
@@ -272,7 +264,7 @@ class AgentQuestionSet(BaseModel):
     questions: list[AgentQuestionItem] = Field(default_factory=list, min_length=0, max_length=5)
 
 
-class AgentPathNode(BaseModel):
+class PlanNode(BaseModel):
     """规划 Agent 输出的单个路径节点。"""
 
     node_id: str = Field(description="节点唯一标识")
@@ -290,12 +282,12 @@ class AgentStage(BaseModel):
     title: str = Field(description="阶段标题")
 
 
-class AgentLearningPathPlan(BaseModel):
+class LearningPlan(BaseModel):
     """规划 Agent 的结构化输出。"""
 
     title: str = Field(description="路径标题")
     stages: list[AgentStage] = Field(min_length=1, description="宏观阶段骨架列表，至少1个阶段")
-    nodes: list[AgentPathNode] = Field(min_length=1, description="所有阶段的具体学习节点列表，至少1个节点")
+    nodes: list[PlanNode] = Field(min_length=1, description="所有阶段的具体学习节点列表，至少1个节点")
 
 
 class PathLearningEvaluationResponse(BaseModel):
@@ -400,7 +392,7 @@ class PathPlanValidationError(ValueError):
     """路径规划结构校验失败 — LLM 输出不安全，不应持久化。"""
 
 
-def validate_path_plan(plan: AgentLearningPathPlan) -> None:
+def validate_path_plan(plan: LearningPlan) -> None:
     """校验生成的路径规划，不合格时抛出 PathPlanValidationError。
 
     校验项：
@@ -465,7 +457,7 @@ def validate_path_plan(plan: AgentLearningPathPlan) -> None:
     _validate_stage_node_coverage(plan, stage_ids)
 
 
-def _validate_stage_node_coverage(plan: AgentLearningPathPlan, stage_ids: set[str]) -> None:
+def _validate_stage_node_coverage(plan: LearningPlan, stage_ids: set[str]) -> None:
     """校验每个阶段至少包含一个节点。"""
     stages_with_nodes: set[str] = set()
     for node in plan.nodes:
@@ -502,12 +494,11 @@ def _assert_no_dependency_cycle(adjacency: dict[str, list[str]]) -> None:
 
 __all__ = [
     # Request
-    "CreateLearningPathRequest",
-    "AuxiliaryResourceRequest",
+    "PathRequest",
     # Agent output
-    "AgentPathNode",
+    "PlanNode",
     "AgentStage",
-    "AgentLearningPathPlan",
+    "LearningPlan",
     "AgentQuestionItem",
     "AgentQuestionSet",
     # Resource types
@@ -525,7 +516,7 @@ __all__ = [
     "LearningPathResourceDTO",
     "LearningPathTutorialDTO",
     "LearningPathNodeDTO",
-    "LearningPathOverviewResponse",
+    "PathResponse",
     "LearningPathHistoryItem",
     "LearningPathNodeWorkspaceResponse",
     "PathQuizRoundResponse",

@@ -27,13 +27,12 @@ from app.infra.models import (
     PathNodeTutorial,
 )
 from app.path.schemas import (
-    AgentLearningPathPlan,
-    AuxiliaryResourceRequest,
-    CreateLearningPathRequest,
+    LearningPlan,
+    PathRequest,
     LearningPathHistoryItem,
     LearningPathNodeDTO,
     LearningPathNodeWorkspaceResponse,
-    LearningPathOverviewResponse,
+    PathResponse,
     LearningPathQuestionDTO,
     LearningPathResourceDTO,
     LearningPathTutorialDTO,
@@ -73,10 +72,10 @@ class PathService:
 
     # ── 路径规划 ────────────────────────────────────────────────────────────
 
-    async def init_path_task(
-        self, user_id: int, request: CreateLearningPathRequest
+    async def create_path(
+        self, user_id: int, request: PathRequest
     ) -> int:
-        await self._archive_active_paths(user_id, request.module)
+        await self._archive_active(user_id, request.module)
         path = LearningPath(
             user_id=user_id,
             module=request.module,
@@ -92,8 +91,8 @@ class PathService:
         await self.session.refresh(path)
         return path.id
 
-    async def _persist_path_plan(
-        self, path_id: int, user_id: int, plan: AgentLearningPathPlan
+    async def _save_plan(
+        self, path_id: int, user_id: int, plan: LearningPlan
     ) -> None:
         path = await self.session.get(LearningPath, path_id)
         if not path:
@@ -139,7 +138,7 @@ class PathService:
         self,
         path_id: int,
         user_id: int,
-        request: CreateLearningPathRequest,
+        request: PathRequest,
         run_id: str,
     ) -> None:
         events = PathEvents(user_id=user_id, path_id=path_id, run_id=run_id)
@@ -175,14 +174,14 @@ class PathService:
                 progress=85,
             )
 
-            plan = repair_generated_plan_from_macro_stages(
+            plan = repair_plan(
                 plan=plan,
                 macro_stages=list(getattr(plan, "stages", []) or []),
                 request=request,
             )
 
             validate_path_plan(plan)
-            await self._persist_path_plan(path_id, user_id, plan)
+            await self._save_plan(path_id, user_id, plan)
 
             await events.send(event="planning.completed", message="路径规划完成", progress=100)
         except Exception as exc:
@@ -201,17 +200,17 @@ class PathService:
 
     async def get_active_path_overview(
         self, user_id: int, module: str = "mentor"
-    ) -> LearningPathOverviewResponse | None:
-        path = await self._get_active_path_record(user_id, module)
+    ) -> PathResponse | None:
+        path = await self._get_active_path(user_id, module)
         if path is None:
             return None
-        return await self._build_path_response(path)
+        return await self._build_response(path)
 
     async def get_path_by_id(
         self, user_id: int, path_id: int
-    ) -> LearningPathOverviewResponse:
+    ) -> PathResponse:
         path = await self._must_get_path(user_id, path_id)
-        return await self._build_path_response(path)
+        return await self._build_response(path)
 
     async def list_path_history(
         self, user_id: int, module: str = "mentor"
@@ -242,15 +241,15 @@ class PathService:
 
     async def activate_history_path(
         self, user_id: int, path_id: int
-    ) -> LearningPathOverviewResponse:
+    ) -> PathResponse:
         path = await self._must_get_path(user_id, path_id)
-        await self._archive_active_paths(
+        await self._archive_active(
             user_id, path.module, exclude_path_id=path.id
         )
         path.status = "active"
         path.updated_at = datetime.now(timezone.utc)
         await self.session.commit()
-        return await self._build_path_response(path)
+        return await self._build_response(path)
 
     # ── 节点工作区 ──────────────────────────────────────────────────────────
 
@@ -261,9 +260,25 @@ class PathService:
         self._ensure_node_accessible(node)
         return await self._build_workspace_response(node)
 
-    async def start_node_learning(
+    async def start_learning(
+        self, user_id: int, node_id: int
+    ) -> PathResponse:
+        """标记节点开始学习（轻量，不生成教程）。"""
+        node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
+
+        if node.status == "available":
+            node.status = "in_progress"
+            node.started_at = datetime.now(timezone.utc)
+            await self.session.commit()
+
+        path = await self._must_get_path(user_id, node.path_id)
+        return await self._build_response(path)
+
+    async def generate_tutorial(
         self, user_id: int, node_id: int
     ) -> LearningPathNodeWorkspaceResponse:
+        """为节点生成教程（耗时操作，独立 API）。"""
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
 
@@ -281,10 +296,6 @@ class PathService:
             result = await self.learn_graph.ainvoke(state)
             if result.get("error"):
                 raise ValueError(result["error"])
-        elif node.status == "available":
-            node.status = "in_progress"
-            node.started_at = datetime.now(timezone.utc)
-            await self.session.commit()
 
         node = await self._must_get_node(user_id, node_id)
         return await self._build_workspace_response(node)
@@ -296,7 +307,7 @@ class PathService:
         tutorials = await self._get_node_tutorials(node.id)
         current = next((t for t in tutorials if t.is_current), None)
         resources = await self._get_node_resources(node.id)
-        overview = await self._build_path_response(path)
+        overview = await self._build_response(path)
         return LearningPathNodeWorkspaceResponse(
             path=overview,
             node=LearningPathNodeDTO.from_model(node),
@@ -319,10 +330,10 @@ class PathService:
         self,
         user_id: int,
         node_id: int,
-        payload: AuxiliaryResourceRequest,
+        resource_type: str,
     ) -> LearningPathResourceDTO:
-        if payload.resource_type not in AUX_RESOURCE_TYPES:
-            raise ValueError(f"不支持的资源类型: {payload.resource_type}")
+        if resource_type not in AUX_RESOURCE_TYPES:
+            raise ValueError(f"不支持的资源类型: {resource_type}")
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
         self._ensure_node_in_deep_learning(node)
@@ -332,7 +343,7 @@ class PathService:
             node_id=node_id,
             phase="resource",
             session=self.session,
-            resource_type=payload.resource_type,
+            resource_type=resource_type,
         )
         result = await self.learn_graph.ainvoke(state)
         if result.get("error"):
@@ -340,6 +351,32 @@ class PathService:
 
         resource_dto = result.get("resource_dto", {})
         return LearningPathResourceDTO(**resource_dto)
+
+    async def get_node_resource_by_type(
+        self,
+        user_id: int,
+        node_id: int,
+        resource_type: str,
+    ) -> LearningPathResourceDTO | None:
+        """获取节点指定类型的最新资源（用于复习回看）。"""
+        if resource_type not in AUX_RESOURCE_TYPES:
+            raise ValueError(f"不支持的资源类型: {resource_type}")
+        node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
+
+        stmt = (
+            select(PathNodeResource)
+            .where(
+                PathNodeResource.node_id == node.id,
+                PathNodeResource.resource_type == resource_type,
+                PathNodeResource.status == "completed",
+            )
+            .order_by(col(PathNodeResource.version_no).desc())
+        )
+        resource = (await self.session.exec(stmt)).first()
+        if resource is None:
+            return None
+        return LearningPathResourceDTO.from_model(resource)
 
     # ── 测验 ────────────────────────────────────────────────────────────────
 
@@ -655,7 +692,7 @@ class PathService:
             )
             return ""
 
-    async def _archive_active_paths(
+    async def _archive_active(
         self,
         user_id: int,
         module: str,
@@ -674,7 +711,7 @@ class PathService:
             item.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
 
-    async def _get_active_path_record(
+    async def _get_active_path(
         self, user_id: int, module: str = "mentor"
     ) -> LearningPath | None:
         stmt = (
@@ -688,11 +725,11 @@ class PathService:
         )
         return (await self.session.exec(stmt)).first()
 
-    async def _build_path_response(
+    async def _build_response(
         self, path: LearningPath
-    ) -> LearningPathOverviewResponse:
+    ) -> PathResponse:
         nodes = await self._get_nodes_for_path(path.id)
-        return LearningPathOverviewResponse(
+        return PathResponse(
             id=path.id,
             module=path.module,
             title=path.title,
@@ -760,7 +797,7 @@ def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
 async def run_generation_bg(
     user_id: int,
     path_id: int,
-    request: CreateLearningPathRequest,
+    request: PathRequest,
     run_id: str,
 ):
     async with session_scope() as session:

@@ -52,6 +52,29 @@
       </div>
     </section>
 
+    <section v-else-if="isGeneratingTutorial" class="generating-view">
+      <div class="generate-panel">
+        <div class="generate-loader">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <div class="generate-copy">
+          <p>AI Tutorial Agent</p>
+          <h1>正在生成节点主教程</h1>
+          <span>后端正在调用学习推进智能体，结合画像与路径目标生成定制讲义。</span>
+        </div>
+
+        <transition-group name="log" tag="div" class="generate-log">
+          <div v-for="(msg, index) in tutorialMessages" :key="`${msg}-${index}`" class="log-item">
+            <i></i>
+            <span>{{ msg }}</span>
+          </div>
+        </transition-group>
+      </div>
+    </section>
+
     <div v-else-if="path" class="overview-layout">
       <header class="compact-header">
         <div class="title-area">
@@ -207,7 +230,7 @@
                         <em v-if="node.prerequisites.length > 2">+{{ node.prerequisites.length - 2 }}</em>
                       </div>
 
-                      <p>{{ canEnterNode(node) ? '点击进入节点学习空间' : nodeActionText(node.status) }}</p>
+                      <p>{{ canEnterNode(node) ? '点击右侧「学习」按钮开始' : nodeActionText(node.status) }}</p>
                     </div>
                   </button>
                 </div>
@@ -259,30 +282,22 @@
               <p v-else>该节点没有前置依赖，可以直接开始学习。</p>
             </div>
 
-            <div class="learn-flow">
-              <div>
-                <span>1</span>
-                <p>进入节点学习空间</p>
-              </div>
-              <div>
-                <span>2</span>
-                <p>懒加载主教程</p>
-              </div>
-              <div>
-                <span>3</span>
-                <p>生成节点测验</p>
-              </div>
-              <div>
-                <span>4</span>
-                <p>按需生成导图、代码、PPT、阅读资源</p>
-              </div>
-            </div>
+            <button
+              v-if="canEnterNode(displayedNode)"
+              class="btn btn-primary learn-btn"
+              :disabled="isGeneratingTutorial"
+              @click="startNodeLearning(displayedNode)"
+            >
+              {{ isGeneratingTutorial && tutorialNodeId === displayedNode.id ? '正在生成教程...' : '开始学习' }}
+            </button>
+
+            <p v-else class="lock-hint">完成前置节点后可解锁学习</p>
 
             <div class="side-tip">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M11 17h2v-6h-2v6Zm0-8h2V7h-2v2Zm1 13a10 10 0 1 1 0-20 10 10 0 0 1 0 20Zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" />
               </svg>
-              <span>{{ canEnterNode(displayedNode) ? '点击左侧路径节点即可进入学习。' : '该节点需要完成前置依赖后才能进入学习。' }}</span>
+              <span>点击「开始学习」后，系统将为你生成节点主教程。</span>
             </div>
           </section>
 
@@ -313,13 +328,15 @@ import EvaluationBanner from '@/features/learning-path/components/EvaluationBann
 
 import {
   createLearningPath,
+  generateTutorial,
   getCurrentLearningPath,
   getLearningEvaluation,
   getLearningPathById,
+  startLearning,
 } from '@/features/learning-path/api/path'
 import type {
   LearningPathNode,
-  LearningPathOverview,
+  PathOverview,
   PathLearningEvaluationResponse,
 } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
@@ -343,7 +360,7 @@ const router = useRouter()
 const route = useRoute()
 
 const loading = ref(false)
-const path = ref<LearningPathOverview | null>(null)
+const path = ref<PathOverview | null>(null)
 const evaluation = ref<PathLearningEvaluationResponse | null>(null)
 const activeDetailNode = ref<LearningPathNode | null>(null)
 
@@ -352,6 +369,10 @@ const generatingProgress = ref(12)
 const generatingMessages = ref<string[]>([])
 const pathEvents = usePathEvents()
 const activeRunId = ref<string | null>(null)
+
+const isGeneratingTutorial = ref(false)
+const tutorialNodeId = ref<number | null>(null)
+const tutorialMessages = ref<string[]>([])
 
 const learningStatuses = new Set(['in_progress', 'remediation', 'reinforced'])
 const completedStatuses = new Set(['completed', 'completed_with_gaps'])
@@ -529,13 +550,45 @@ const previewNode = (node: LearningPathNode) => {
 
 const handleNodeClick = (node: LearningPathNode) => {
   activeDetailNode.value = node
+}
 
-  if (!canEnterNode(node)) {
-    toast.info('该节点尚未解锁，请先完成前置节点')
-    return
+const startNodeLearning = async (node: LearningPathNode) => {
+  if (isGeneratingTutorial.value) return
+
+  isGeneratingTutorial.value = true
+  tutorialNodeId.value = node.id
+  tutorialMessages.value = [
+    '正在呼叫后端学习推进智能体...',
+    '正在读取路径目标与学习者画像...',
+  ]
+
+  const logs = [
+    '正在调用 LangGraph 生成节点主教程...',
+    '正在结合画像裁剪讲解深度与案例...',
+    '正在组织教程目录、例子和易错点...',
+    '正在写入主教程并刷新学习空间...',
+  ]
+
+  let logIndex = 0
+  const interval = window.setInterval(() => {
+    if (logIndex < logs.length) {
+      tutorialMessages.value.push(logs[logIndex]!)
+      if (tutorialMessages.value.length > 5) tutorialMessages.value.shift()
+      logIndex++
+    }
+  }, 1800)
+
+  try {
+    await startLearning(node.id)
+    await generateTutorial(node.id)
+    router.push(`/path-planner/node/${node.id}`)
+  } catch (error) {
+    toast.error(getErrorMessage(error, '教程生成失败'))
+  } finally {
+    window.clearInterval(interval)
+    isGeneratingTutorial.value = false
+    tutorialNodeId.value = null
   }
-
-  router.push(`/path-planner/node/${node.id}`)
 }
 
 const stopSSE = () => {
@@ -1622,6 +1675,26 @@ onMounted(loadPath)
   font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.5;
+}
+
+.learn-btn {
+  margin-top: 16px;
+  width: 100%;
+  min-height: 48px;
+  font-size: 1rem;
+  font-weight: 900;
+  border-radius: 16px;
+}
+
+.lock-hint {
+  margin: 16px 0 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--lp-border);
+  color: var(--lp-slate);
+  font-size: 0.84rem;
+  text-align: center;
 }
 
 .empty-current {
