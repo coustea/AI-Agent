@@ -17,6 +17,21 @@ export type {
   DigitalHumanStateType,
 }
 
+export interface IdleDisconnectState {
+    state: DigitalHumanStateType
+    isSpeaking: boolean
+    isListening: boolean
+}
+
+export function shouldPauseIdleDisconnect({ state, isSpeaking, isListening }: IdleDisconnectState): boolean {
+    if (isSpeaking || isListening) return true
+    return state === 'avatar_connecting'
+        || state === 'recognizing'
+        || state === 'thinking'
+        || state === 'speaking'
+        || state === 'listening'
+}
+
 // ==========================================
 // Composable
 // ==========================================
@@ -103,8 +118,12 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
 
         idleTimer = setInterval(() => {
-            // Do not auto-disconnect while actively speaking/listening.
-            if (isSpeaking.value || isListening.value) {
+            // Do not auto-disconnect while an interaction is still active.
+            if (shouldPauseIdleDisconnect({
+                state: digitalHumanState.value,
+                isSpeaking: isSpeaking.value,
+                isListening: isListening.value,
+            })) {
                 idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
                 return
             }
@@ -247,26 +266,36 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             return
         }
 
-        // Handle digital_human_state events
+        // Filter stale events (skip if turn_id mismatch)
+        // Apply this filter BEFORE handling digital_human_state to prevent old turn pollution
+        const turnDependentTypes = [
+            'assistant_chunk', 'assistant_complete',
+            'avatar_speaking', 'avatar_stopped', 'diagram', 'status',
+            'digital_human_state', 'error'  // Add digital_human_state and error to turn-dependent types
+        ]
+        if (turnDependentTypes.includes(type)) {
+            // Filter if turn_id doesn't match activeTurnId
+            if (turn_id && activeTurnId && turn_id !== activeTurnId) {
+                // Stale event from previous turn - ignore
+                console.warn('[DH] Ignoring stale turn event:', type, turn_id, 'current:', activeTurnId)
+                return
+            }
+            // Also filter if we're waiting for turn_start (activeTurnId starts with 'pending_')
+            // Exception: global errors without turn_id should not be filtered
+            if (!turn_id && activeTurnId && activeTurnId.startsWith('pending_')) {
+                // Event from old turn without turn_id - ignore while waiting for new turn_start
+                console.warn('[DH] Ignoring event without turn_id while pending:', type, 'pending:', activeTurnId)
+                return
+            }
+        }
+
+        // Handle digital_human_state events (after stale filter)
         if (type === 'digital_human_state') {
             const state = data.state as DigitalHumanStateType
             digitalHumanState.value = state
             callbacks?.onDigitalHumanStateChange?.(state, turn_id)
             callbacks?.onStatus?.({ stage: state, message: data.message })
             return
-        }
-
-        // Filter stale events (skip if turn_id mismatch)
-        const turnDependentTypes = [
-            'assistant_chunk', 'assistant_complete',
-            'avatar_speaking', 'avatar_stopped', 'diagram', 'status'
-        ]
-        if (turnDependentTypes.includes(type)) {
-            if (turn_id && activeTurnId && turn_id !== activeTurnId) {
-                // Stale event from previous turn - ignore
-                console.warn('[DH] Ignoring stale turn event:', type, turn_id, 'current:', activeTurnId)
-                return
-            }
         }
 
         if (type === 'stream_info') {
@@ -514,11 +543,14 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             ws.send(JSON.stringify({ type: 'stop_speaking' }))
         }
 
+        // Mark turn as pending - old events will be filtered until turn_start arrives
+        // Use a sentinel value to distinguish from null (no active turn)
+        activeTurnId = 'pending_' + Date.now()
+
         // Clear all turn state
         updateCache('', false) // 开始新的提问，清空旧缓存
         bufferedAssistantText = ''
         pendingAssistantComplete = false
-        activeTurnId = null
         clearAssistantFlushFallbackTimer()
         clearAssistantRevealTimer()
 
@@ -541,6 +573,30 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // ==========================================
     // Voice Activity Detection (VAD) + mic capture
     // ==========================================
+
+    function cleanupAudioInput(): void {
+        // Stop mic tracks - does NOT depend on vadActive
+        if (audioStream) {
+            audioStream.getTracks().forEach((track) => track.stop())
+            audioStream = null
+        }
+
+        // Close audio context - use void + catch to avoid unhandled promise
+        if (audioContext) {
+            void audioContext.close().catch(() => {})
+            audioContext = null
+        }
+
+        // Clear speech detection timers
+        if (speechHangTimer) {
+            clearTimeout(speechHangTimer)
+            speechHangTimer = null
+        }
+        if (speechDetected) {
+            speechDetected = false
+            callbacks?.onSpeechDetectedChange?.(false)
+        }
+    }
 
     async function startVad(needDiagram = false, capabilities: DigitalHumanCapabilities = {}): Promise<void> {
         if (vadActive) return
@@ -645,28 +701,24 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             }
         } catch (err) {
             console.error('[DH] mic error:', err)
+            // Cleanup audio resources even when vadActive not yet set
+            cleanupAudioInput()
             backendVadReady = false
             error.value = '无法访问麦克风或语音服务未就绪，请检查权限并重试'
             callbacks?.onError?.(error.value)
+            // Notify backend to cleanup if start_vad was sent
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'stop_vad' }))
+            }
         }
     }
 
     function stopVad(): void {
-        if (!vadActive) return
+        // Always cleanup audio resources, even if vadActive is false
+        // (e.g., if vad failed during startup but audioStream/audioContext were created)
+        cleanupAudioInput()
 
-        // Stop mic tracks
-        if (audioStream) {
-            audioStream.getTracks().forEach((track) => track.stop())
-            audioStream = null
-        }
-
-        // Close audio context
-        if (audioContext) {
-            audioContext.close()
-            audioContext = null
-        }
-
-        // Notify backend
+        // Notify backend if connected
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'stop_vad' }))
         }
@@ -674,14 +726,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         vadActive = false
         isListening.value = false
         backendVadReady = false
-        if (speechHangTimer) {
-            clearTimeout(speechHangTimer)
-            speechHangTimer = null
-        }
-        if (speechDetected) {
-            speechDetected = false
-            callbacks?.onSpeechDetectedChange?.(false)
-        }
         asrText.value = ''
     }
 
