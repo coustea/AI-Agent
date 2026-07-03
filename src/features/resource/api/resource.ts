@@ -1,6 +1,7 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
 import type {
+  PptTemplateOption,
   ResourceGenerationRequest,
   ResourceTaskStatus,
 } from '@/features/resource/model/resource'
@@ -19,6 +20,10 @@ export function pollResourceStatus(resourceId: number) {
 
 export function getResourceBundle(resourceId: number) {
   return http.get<ApiResponse<any>>(`/ai/resources/${resourceId}`, { timeout: 30000 })
+}
+
+export function getPptTemplates() {
+  return http.get<ApiResponse<PptTemplateOption[]>>('/ai/ppt/templates')
 }
 
 /**

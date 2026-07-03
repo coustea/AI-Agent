@@ -166,10 +166,10 @@ const hasComplexity = computed(() => {
   --fg: var(--color-text);
   --border: var(--color-border);
   --accent: var(--color-primary);
-  --code-bg: #ffffff;
-  --code-head-bg: #f8fafc;
-  --code-border: #e2e8f0;
-  --code-text: #24292f;
+  --code-bg: var(--color-bg);
+  --code-head-bg: var(--color-surface-hover);
+  --code-border: var(--color-border);
+  --code-text: var(--color-text-strong);
 }
 
 .code-card-content {
@@ -198,7 +198,7 @@ const hasComplexity = computed(() => {
   color: var(--fg);
   line-height: 1.78;
   overflow-wrap: anywhere;
-  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family: var(--font-sans);
   font-size: 0.96rem;
 }
 
@@ -207,9 +207,9 @@ const hasComplexity = computed(() => {
 .code-markdown-shell :deep(h3) {
   margin: 1.7em 0 0.85em;
   padding-bottom: 0.48em;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   color: var(--color-text-strong);
-  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family: var(--font-sans);
   line-height: 1.35;
   font-weight: 700;
 }
@@ -234,10 +234,10 @@ const hasComplexity = computed(() => {
 .code-markdown-shell :deep(blockquote) {
   margin: 1em 0;
   padding: 10px 14px;
-  border-left: 3px solid var(--color-primary-border, var(--primary));
-  background: #f8fafc;
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-primary-soft);
   color: var(--color-text-secondary);
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
 /* --- 重构的代码块卡片外观 --- */
@@ -245,10 +245,10 @@ const hasComplexity = computed(() => {
 .code-resource :deep(.code-block-wrapper) {
   margin: 1.2em 0;
   border: 1px solid var(--code-border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--code-bg);
   overflow: hidden; /* 保证圆角能裁剪内部区域 */
-  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.03);
+  box-shadow: var(--shadow-sm);
 }
 
 .code-resource :deep(.code-block-header) {
@@ -262,8 +262,8 @@ const hasComplexity = computed(() => {
 
 .code-resource :deep(.lang-label) {
   font-size: 0.75rem;
-  color: #64748b;
-  font-family: var(--font-mono, Consolas, monospace);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -288,7 +288,7 @@ const hasComplexity = computed(() => {
   padding: 0;
   background: transparent !important;
   color: var(--code-text) !important;
-  font-family: var(--font-mono, "JetBrains Mono", "Fira Code", Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   line-height: 1.76;
   white-space: pre;
@@ -308,21 +308,21 @@ const hasComplexity = computed(() => {
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
-  background-color: #cbd5e1;
+  background-color: var(--color-border-hover);
 }
 
 .code-resource :deep(pre::-webkit-scrollbar-thumb:hover) {
-  background-color: #94a3b8;
+  background-color: var(--color-primary-border);
 }
 
 /* 行内小代码块样式 */
 .code-resource :deep(:not(pre) > code) {
   padding: 0.16em 0.42em;
-  border: 1px solid #dbeafe;
-  border-radius: 6px;
-  background: #eff6ff !important;
-  color: #1d4ed8;
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg) !important;
+  color: var(--color-primary-text);
+  font-family: var(--font-mono);
   font-size: 0.86em;
   font-weight: 600;
 }
@@ -337,11 +337,12 @@ const hasComplexity = computed(() => {
 }
 
 .mono-tag {
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #e6f7ec; /* 清新浅绿色背景 */
-  color: #0aa55a;      /* 绿色文本 */
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-border, var(--color-border));
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -349,17 +350,18 @@ const hasComplexity = computed(() => {
 .footer-line {
   flex: 1;
   height: 1px;
-  background: #e2e8f0; /* 实色浅灰线条 */
+  background: var(--color-border);
 }
 
-/* --- 其余复杂度及练习题样式保持一致 --- */
+/* --- 复杂度及练习题样式 --- */
 
 .code-footer-extras {
   margin-top: 16px;
   padding: 18px;
-  border: 1px solid var(--code-border);
-  border-radius: 14px;
-  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .footer-divider {
@@ -370,17 +372,17 @@ const hasComplexity = computed(() => {
 }
 
 .divider-label {
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-family: var(--font-sans);
   font-size: 0.75rem;
-  color: var(--primary);
-  letter-spacing: 1px;
+  color: var(--color-primary-text);
+  letter-spacing: 0.5px;
   font-weight: 700;
 }
 
 .divider-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, var(--border), transparent);
+  background: linear-gradient(to right, var(--color-border), transparent);
 }
 
 .extras-grid {
@@ -400,24 +402,24 @@ const hasComplexity = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--primary);
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  color: var(--color-primary-text);
+  font-family: var(--font-sans);
   font-size: 0.85rem;
   font-weight: 700;
-  letter-spacing: 0.3px;
 }
 
 .extra-content {
-  color: var(--code-text);
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  color: var(--color-text-strong);
+  font-family: var(--font-mono);
   font-size: 0.9rem;
 }
 
 .extra-content code {
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: #e0f2fe;
-  color: #0369a1;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-border);
   font-weight: 700;
 }
 
@@ -425,7 +427,7 @@ const hasComplexity = computed(() => {
   margin: 0;
   padding-left: 20px;
   color: var(--color-text-secondary);
-  font-family: var(--font-sans, system-ui, sans-serif);
+  font-family: var(--font-sans);
   font-size: 0.9rem;
   line-height: 1.65;
 }
@@ -442,37 +444,40 @@ const hasComplexity = computed(() => {
   align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
-  border: 1px solid var(--code-border);
-  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   background: #ffffff;
-  color: var(--code-text);
-  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--color-text-strong);
+  font-family: var(--font-sans);
   font-size: 0.92rem;
-  transition: border-color 0.18s ease, transform 0.18s ease;
+  transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: var(--shadow-sm);
 }
 
 .exercise-item:hover {
-  border-color: var(--primary);
-  transform: translateX(4px);
+  border-color: var(--color-primary-border);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .ex-num {
   flex-shrink: 0;
   padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--color-primary-soft, #eef2ff);
-  color: var(--primary);
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   font-weight: 700;
 }
 
 .code-empty-hud {
   padding: 48px;
-  border: 1px dashed var(--border);
-  border-radius: 14px;
-  background: #f8fafc;
-  color: var(--primary);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: var(--color-primary-text);
   text-align: center;
 }
 
@@ -484,7 +489,7 @@ const hasComplexity = computed(() => {
 }
 
 .empty-icon {
-  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 1.8rem;
   opacity: 0.55;
 }

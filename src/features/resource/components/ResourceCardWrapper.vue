@@ -13,13 +13,11 @@ defineProps<{
 <style scoped>
 .resource-card-wrapper {
   position: relative;
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   padding: 24px 32px 32px; /* 保持原有较宽裕的内边距，提升高级感 */
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
   transition: all var(--transition-base);
   width: 100%;
   box-sizing: border-box;
@@ -27,9 +25,9 @@ defineProps<{
 }
 
 .resource-card-wrapper:hover {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1.5px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary-border);
 }
 
 /* 紧凑模式：去除所有边框、阴影和背景，适应内联场景 */
@@ -45,30 +43,4 @@ defineProps<{
   box-shadow: none;
 }
 
-/* 自动消除在模态弹窗、详情区域内的嵌套框线 */
-:global(.preview-dialog-body) .resource-card-wrapper,
-:global(.custom-modal-body) .resource-card-wrapper,
-:global(.note-preview-modal) .resource-card-wrapper,
-:global(.custom-modal-content) .resource-card-wrapper,
-:global(.custom-modal-container) .resource-card-wrapper,
-:global(.resource-view) .resource-card-wrapper {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  border-radius: 0 !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-:global(.preview-dialog-body) .resource-card-wrapper:hover,
-:global(.custom-modal-body) .resource-card-wrapper:hover,
-:global(.note-preview-modal) .resource-card-wrapper:hover,
-:global(.custom-modal-content) .resource-card-wrapper:hover,
-:global(.custom-modal-container) .resource-card-wrapper:hover,
-:global(.resource-view) .resource-card-wrapper:hover {
-  background: transparent !important;
-  box-shadow: none !important;
-  border: none !important;
-}
 </style>

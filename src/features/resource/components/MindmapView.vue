@@ -57,24 +57,22 @@ const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
           paddingX: 30,
           style: (id: string) => `
             .${id}-g {
-              font-family: var(--font-mono);
-              font-size: 15px;
+              font-family: var(--font-sans);
+              font-size: 14px;
             }
             .${id}-g foreignObject {
               overflow: visible;
             }
             .${id}-g .markmap-node text {
-              fill: #000000;
+              fill: var(--color-text);
             }
             .${id}-g .markmap-link {
-              stroke: #000000;
-              stroke-width: 1.5px;
-              opacity: 0.6;
+              stroke-width: 2px;
+              opacity: 0.85;
             }
             .${id}-g .markmap-node circle {
-              fill: #FFFFFF;
-              stroke: #000000;
-              stroke-width: 2px;
+              fill: #ffffff;
+              stroke-width: 2.5px;
             }
           `,
         })
@@ -330,27 +328,26 @@ onBeforeUnmount(() => {
 .mono-tag {
   font-family: var(--font-mono);
   font-size: 0.65rem;
-  color: var(--primary);
-  background: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
-  border-radius: 2px;
+  color: var(--color-primary-text);
+  background: var(--color-primary-soft);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
 }
 
 .footer-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, var(--border), transparent);
+  background: linear-gradient(to right, var(--color-border), transparent);
 }
 
 .markmap-shell {
   width: 100%;
   min-height: 420px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background-image: none;
-  background-size: 32px 32px;
 }
 
 .markmap-shell :deep(svg) {
@@ -368,9 +365,20 @@ onBeforeUnmount(() => {
 }
 
 .markmap-shell :deep(.markmap-node[data-depth="0"] text) {
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  fill: var(--primary) !important;
+  fill: var(--color-primary-text) !important;
+}
+
+.markmap-shell :deep(.markmap-node[data-depth="1"] text) {
+  font-size: 0.95rem;
+  font-weight: 600;
+  fill: var(--color-text-strong) !important;
+}
+
+.markmap-shell :deep(.markmap-node text) {
+  font-size: 0.85rem;
+  fill: var(--color-text) !important;
 }
 
 .markmap-error {

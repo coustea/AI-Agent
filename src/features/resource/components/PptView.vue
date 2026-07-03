@@ -88,20 +88,21 @@ const downloadUrl = computed(() => htmlUrl.value)
 .header-actions {
   display: flex;
   justify-content: flex-end;
-  padding: 8px 16px;
-  background: var(--ppt-bg-secondary, #ffffff);
-  border: 1px solid var(--ppt-border, #e2e8f0);
-  border-radius: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .player-wrapper {
   width: 100%;
   aspect-ratio: 16 / 9;
   max-height: 75vh;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  border: 1px solid var(--ppt-border, #e2e8f0);
-  background: #000; /* 幻灯片一般是黑色或暗色底，保证 iframe 加载前不变白 */
+  border: 1px solid var(--color-border);
+  background: #ffffff; /* 幻灯片白色背景兜底，保证 iframe 加载前不变黑 */
 }
 
 .slides-iframe {
@@ -116,7 +117,7 @@ const downloadUrl = computed(() => htmlUrl.value)
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #a0aec0;
+  color: var(--color-text-faint);
   font-size: 16px;
 }
 

@@ -34,16 +34,6 @@ const content = computed(() => getMarkdownContent(props.resultData))
 .markdown-resource {
   min-width: 0;
   width: 100%;
-
-  --primary: var(--color-primary);
-  --bg: var(--color-surface);
-  --fg: var(--color-text);
-  --muted: var(--color-text-muted);
-  --border: var(--color-border);
-  --soft-bg: var(--color-bg);
-  --code-bg: var(--color-bg);
-  --inline-code-bg: var(--color-primary-soft);
-  --accent: var(--color-primary);
 }
 
 .frame-footer {
@@ -56,142 +46,21 @@ const content = computed(() => getMarkdownContent(props.resultData))
 .mono-tag {
   font-family: var(--font-mono);
   font-size: 0.65rem;
-  color: var(--primary);
-  background: var(--color-surface-hover);
-  padding: 2px 6px;
-  border-radius: 4px;
+  color: var(--color-primary-text);
+  background: var(--color-primary-soft);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
 }
 
 .footer-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, var(--border), transparent);
+  background: linear-gradient(to right, var(--color-border), transparent);
 }
 
-/* Markdown 主体 */
 .markdown-shell {
-  color: var(--fg);
-  line-height: 1.78;
-  overflow-wrap: anywhere;
-  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 0.98rem;
   background: transparent;
-}
-
-/* 标题 */
-.markdown-shell :deep(h1),
-.markdown-shell :deep(h2),
-.markdown-shell :deep(h3) {
-  font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  color: var(--color-text-strong);
-  margin-top: 1.8em;
-  margin-bottom: 0.8em;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.markdown-shell :deep(h1) {
-  font-size: 1.5rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  padding-bottom: 0.4em;
-}
-
-.markdown-shell :deep(h2) {
-  font-size: 1.25rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.05);
-  padding-bottom: 0.3em;
-}
-
-.markdown-shell :deep(h3) {
-  font-size: 1.1rem;
-}
-
-/* 段落 */
-.markdown-shell :deep(p) {
-  color: var(--color-text-secondary, #334155);
-  margin: 1em 0 1.2em;
-}
-
-/* 列表 */
-.markdown-shell :deep(ul),
-.markdown-shell :deep(ol) {
-  padding-left: 1.5em;
-  margin: 1em 0;
-  color: var(--color-text-secondary, #334155);
-}
-
-.markdown-shell :deep(li) {
-  margin-bottom: 0.5em;
-}
-
-/* 引用块：优雅左侧标识风格 */
-.markdown-shell :deep(blockquote) {
-  border-left: 4px solid var(--color-primary);
-  background: rgba(99, 102, 241, 0.03);
-  padding: 14px 20px;
-  margin: 1.5em 0;
-  color: var(--color-text-secondary);
-  border-radius: 0 10px 10px 0;
-  font-style: normal;
-}
-
-/* 表格：无感斑马纹 */
-.markdown-shell :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1.5em 0;
-  background: transparent;
-  border: none;
-}
-
-.markdown-shell :deep(th),
-.markdown-shell :deep(td) {
-  border: none;
-  padding: 12px 16px;
-  color: var(--fg);
-}
-
-.markdown-shell :deep(th) {
-  background: var(--color-surface-hover);
-  color: var(--color-text-strong);
-  font-weight: 600;
-  border-bottom: 2px solid rgba(0, 0, 0, 0.05);
-}
-
-.markdown-shell :deep(tr:nth-child(even)) {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-
-/* 行内代码：浅色背景 */
-.markdown-shell :deep(p > code),
-.markdown-shell :deep(li > code),
-.markdown-shell :deep(td > code) {
-  font-family: var(--font-mono);
-  background: var(--color-primary-soft) !important;
-  color: var(--color-primary-hover);
-  padding: 0.18em 0.4em;
-  border-radius: 5px;
-  font-size: 0.86em;
-  font-weight: 500;
-}
-
-
-/* Shiki 浅色主题兜底 */
-.markdown-shell :deep(.shiki) {
-  background: var(--color-bg) !important;
-  color: #334155 !important;
-}
-
-.markdown-shell :deep(.shiki code) {
-  background: transparent !important;
-}
-
-/* 防止第三方 Markdown 样式带入黑色背景 */
-.markdown-shell :deep(pre),
-.markdown-shell :deep(code),
-.markdown-shell :deep(.shiki) {
-  text-shadow: none !important;
 }
 
 /* 紧凑模式 */
@@ -213,15 +82,16 @@ const content = computed(() => getMarkdownContent(props.resultData))
 /* 空状态 */
 .markdown-empty {
   padding: 48px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: var(--color-bg);
-  color: var(--primary);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: var(--color-primary-text);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
 .empty-icon {
@@ -231,8 +101,7 @@ const content = computed(() => getMarkdownContent(props.resultData))
 }
 
 .empty-text {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.8rem;
-  letter-spacing: 1px;
 }
 </style>

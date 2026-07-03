@@ -28,38 +28,12 @@
       @preview="openResourcePreview"
     />
 
-    <Teleport to="body">
-      <transition name="modal-fade">
-        <div v-if="previewVisible" class="custom-modal-overlay" @click.self="previewVisible = false">
-          <div class="custom-modal-container" :class="{ 'is-ppt-dialog': previewItem?.type === 'ppt' }">
-            <header class="custom-modal-header" v-if="previewItem?.type !== 'ppt'">
-              <h3>{{ previewItem?.title || '资源预览' }}</h3>
-              <button class="modal-close-btn" @click="previewVisible = false">
-                <svg viewBox="0 0 24 24" class="close-icon"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12Z"/></svg>
-              </button>
-            </header>
-            <div class="custom-modal-body" :class="{ 'is-ppt-body': previewItem?.type === 'ppt' }">
-              <div
-                v-if="previewItem"
-                class="preview-dialog-body"
-                :class="{ 'is-ppt-preview': previewItem.type === 'ppt' }"
-              >
-                <MindmapView v-if="previewItem.type === 'mindmap'" :result-data="previewItem.content" />
-                <QuizView v-else-if="previewItem.type === 'quiz'" :result-data="previewItem.content" />
-                <CodeView v-else-if="previewItem.type === 'code'" :result-data="previewItem.content" />
-                <ReadingView v-else-if="previewItem.type === 'reading'" :result-data="previewItem.content" />
-                <PptView
-                  v-else-if="previewItem.type === 'ppt'"
-                  :resource="previewItem.resource"
-                />
-                <VideoView v-else-if="previewItem.type === 'video'" :result-data="previewItem.content" />
-                <MarkdownView v-else :result-data="previewItem.content" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </transition>
-    </Teleport>
+    <!-- 统一资源预览弹窗 -->
+    <ResourcePreviewDialog
+      v-model:active-agent="activePreviewAgent"
+      :data="previewData"
+      :resource="previewResource"
+    />
   </div>
 </template>
 
@@ -69,13 +43,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 import ResourceBundleView from '@/features/resource/components/ResourceBundleView.vue'
-import MindmapView from '@/features/resource/components/MindmapView.vue'
-import MarkdownView from '@/features/resource/components/MarkdownView.vue'
-import QuizView from '@/features/resource/components/QuizView.vue'
-import CodeView from '@/features/resource/components/CodeView.vue'
-import ReadingView from '@/features/resource/components/ReadingView.vue'
-import PptView from '@/features/resource/components/PptView.vue'
-import VideoView from '@/features/resource/components/VideoView.vue'
+import ResourcePreviewDialog from '@/features/resource/components/ResourcePreviewDialog.vue'
 import { getGeneratedResourceDetail } from '@/features/resource/api/resource-history'
 import type { GeneratedResourceBundle } from '@/features/resource/api/resource-history'
 
@@ -86,12 +54,7 @@ type PreviewPayload = {
   resource?: any
 }
 
-type PreviewItem = {
-  type: string
-  content: any
-  title: string
-  resource?: any
-}
+
 
 const route = useRoute()
 const router = useRouter()
@@ -99,8 +62,9 @@ const router = useRouter()
 const loading = ref(true)
 const error = ref(false)
 const resource = shallowRef<GeneratedResourceBundle | null>(null)
-const previewItem = shallowRef<PreviewItem | null>(null)
-const previewVisible = ref(false)
+const activePreviewAgent = ref<string | null>(null)
+const previewData = ref<any>(null)
+const previewResource = ref<any>(null)
 
 const resourceId = computed(() => Number(route.params.id) || null)
 
@@ -138,13 +102,9 @@ async function loadResource() {
 }
 
 function openResourcePreview(payload: PreviewPayload) {
-  previewItem.value = {
-    type: payload.agentId,
-    content: payload.resultData,
-    title: payload.title,
-    resource: payload.resource,
-  }
-  previewVisible.value = true
+  activePreviewAgent.value = payload.agentId || null
+  previewData.value = payload.resultData || null
+  previewResource.value = payload.resource || null
 }
 
 function goBack() {

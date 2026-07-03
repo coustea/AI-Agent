@@ -103,22 +103,22 @@ const styleLabel = computed(() => {
 <style scoped>
 .video-view {
   width: 100%;
-  color: #172033;
+  color: var(--color-text);
 }
 
 .player-frame {
   overflow: hidden;
-  border: 1px solid #dbe3e8;
-  border-radius: 8px;
-  background: #08111b;
-  box-shadow: 0 18px 48px rgb(23 32 51 / 12%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 
 .player {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: #08111b;
+  background: #000000;
 }
 
 .video-meta {
@@ -131,7 +131,8 @@ const styleLabel = computed(() => {
 
 .eyebrow {
   margin: 0 0 4px;
-  color: #2563eb;
+  color: var(--color-primary-text);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 700;
 }
@@ -140,26 +141,39 @@ h3 {
   margin: 0;
   font-size: 18px;
   line-height: 1.35;
+  color: var(--color-text-strong);
 }
 
 .video-meta p:last-child {
   margin: 5px 0 0;
-  color: #667085;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .download-button {
   display: inline-flex;
-  min-height: 38px;
   align-items: center;
+  justify-content: center;
+  height: 40px;
   gap: 8px;
-  padding: 0 14px;
-  border-radius: 6px;
-  background: #172033;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
   color: white;
-  font-size: 13px;
-  font-weight: 650;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   text-decoration: none;
+  transition: var(--btn-transition);
+}
+
+.download-button:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-0.5px);
+}
+
+.download-button:active {
+  transform: translateY(0.5px);
 }
 
 .empty-state {
@@ -168,7 +182,7 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #667085;
+  color: var(--color-text-faint);
 }
 
 .spinner {
