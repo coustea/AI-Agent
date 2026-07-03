@@ -10,6 +10,7 @@ AvatarController 职责：
 import asyncio
 import json
 import uuid
+from typing import Optional
 
 import websockets
 
@@ -48,6 +49,8 @@ class AvatarController:
         self._on_reconnect_callback = None
         self._last_stream_info = None
         self._event_callback = None
+        # 当前播报的 turn_id — 用于回调时绑定正确的 turn
+        self._current_speak_turn_id: Optional[str] = None
 
     @property
     def _ws_closed(self) -> bool:
@@ -99,7 +102,11 @@ class AvatarController:
             raise RuntimeError(f"Failed to connect to avatar service: {e}")
 
     async def receive_messages(self, callback):
-        """持续接收 Avatar 服务的事件消息（stream_info、tts_start、tts_end）。"""
+        """持续接收 Avatar 服务的事件消息（stream_info、tts_start、tts_end）。
+
+        Args:
+            callback: 回调函数，签名为 async (event_type: str, data: dict, turn_id: Optional[str])
+        """
         if not self.ws:
             raise RuntimeError("Avatar not connected")
 
@@ -127,7 +134,8 @@ class AvatarController:
                     # 视频流就绪 — 标记 Avatar 可用，触发回调
                     self.is_ready = True
                     self._last_stream_info = avatar_data
-                    await callback("stream_info", avatar_data)
+                    # stream_info 不关联特定 turn
+                    await callback("stream_info", avatar_data, None)
                     logger.info(
                         f"Avatar video stream ready: {avatar_data.get('stream_url')}"
                     )
@@ -139,16 +147,18 @@ class AvatarController:
                         self._playback_task = asyncio.create_task(self._process_queue())
 
                 elif event_type == "tts_start":
-                    # TTS 开始播报
+                    # TTS 开始播报 — 使用当前播报的 turn_id
                     self.is_speaking = True
-                    await callback("tts_start", avatar_data)
-                    logger.debug("Avatar started speaking")
+                    turn_id = self._current_speak_turn_id
+                    await callback("tts_start", avatar_data, turn_id)
+                    logger.debug(f"Avatar started speaking (turn_id: {turn_id})")
 
                 elif event_type == "tts_end":
-                    # TTS 播报结束
+                    # TTS 播报结束 — 使用当前播报的 turn_id
                     self.is_speaking = False
-                    await callback("tts_end", avatar_data)
-                    logger.debug("Avatar finished speaking")
+                    turn_id = self._current_speak_turn_id
+                    await callback("tts_end", avatar_data, turn_id)
+                    logger.debug(f"Avatar finished speaking (turn_id: {turn_id})")
 
             logger.warning("Avatar message loop exited normally (connection closed)")
 
@@ -158,17 +168,25 @@ class AvatarController:
             logger.error(f"Failed to receive avatar messages: {e}", exc_info=True)
             raise RuntimeError(f"Failed to receive avatar messages: {e}")
 
-    async def speak(self, text: str, speech_rate: float = 1.0):
-        """将文本加入播报队列 — Avatar 就绪后自动开始播放。"""
+    async def speak(self, text: str, speech_rate: float = 1.0, turn_id: Optional[str] = None):
+        """将文本加入播报队列 — Avatar 就绪后自动开始播放。
+
+        Args:
+            text: 要播报的文本
+            speech_rate: 语速 (0.8~1.5)
+            turn_id: 关联的 turn_id，用于回调时绑定正确的 turn
+        """
         if not text:
             logger.warning("Empty text, skipping speech")
             return
 
         # 限制语速在 0.8~1.5 范围内
         safe_rate = max(0.8, min(1.5, float(speech_rate)))
-        await self.sentence_queue.put((text, safe_rate))
+        # 将 turn_id 存入队列，但不在入队时设置 _current_speak_turn_id
+        # _current_speak_turn_id 只在 _process_queue() 取出当前项时设置
+        await self.sentence_queue.put((text, safe_rate, turn_id))
         logger.debug(
-            f"Sentence queued: {text[:30]}... (queue size: {self.sentence_queue.qsize()})"
+            f"Sentence queued: {text[:30]}... (queue size: {self.sentence_queue.qsize()}, turn_id: {turn_id})"
         )
 
         # Avatar 未就绪时仅入队，等待 stream_info 事件后自动播放
@@ -181,11 +199,20 @@ class AvatarController:
             self._playback_task = asyncio.create_task(self._process_queue())
 
     async def _process_queue(self):
-        """串行处理播报队列 — 逐句发送 TTS 指令并等待播报完成。"""
+        """串行处理播报队列 — 逐句发送 TTS 指令并等待播报完成。
+
+        改进的等待机制：
+        1. 发送 text_driver 后等待 tts_start 事件（最长 3 秒超时）
+        2. 收到 tts_start 后等待 tts_end 事件（最长 30 秒超时）
+        3. 未收到 tts_start 时也不立即发送下一句，避免重叠
+        """
         logger.info("Starting to process sentence queue")
 
         while not self.sentence_queue.empty():
-            sentence, speech_rate = await self.sentence_queue.get()
+            sentence, speech_rate, turn_id = await self.sentence_queue.get()
+            # 设置当前播报的 turn_id
+            self._current_speak_turn_id = turn_id
+
             # 带重试的 TTS 发送
             success = await self._speak_with_retry(sentence, speech_rate)
 
@@ -195,11 +222,26 @@ class AvatarController:
                 )
                 continue
 
-            # 等待播报完成（最长 30 秒超时）
-            await asyncio.sleep(0.5)
+            logger.debug(f"Avatar speech dispatched: {sentence[:30]}... (turn_id: {turn_id})")
 
-            logger.debug(f"Avatar speech dispatched: {sentence[:30]}...")
-            wait_end_timeout = 300
+            # Wait for tts_start event (max 3 seconds)
+            wait_start_count = 30  # 3 seconds at 0.1s per iteration
+            while not self.is_speaking and wait_start_count > 0:
+                await asyncio.sleep(0.1)
+                wait_start_count -= 1
+
+            if not self.is_speaking:
+                # tts_start not received within timeout
+                logger.warning(
+                    f"tts_start timeout (3s) for: {sentence[:30]}... - waiting extra 1.5s before next sentence"
+                )
+                # Don't immediately send next sentence - wait to avoid overlap
+                await asyncio.sleep(1.5)
+                self._current_speak_turn_id = None
+                continue
+
+            # Wait for tts_end event (max 30 seconds)
+            wait_end_timeout = 300  # 30 seconds at 0.1s per iteration
             while self.is_speaking and wait_end_timeout > 0:
                 await asyncio.sleep(0.1)
                 wait_end_timeout -= 1
@@ -210,7 +252,9 @@ class AvatarController:
                 )
                 self.is_speaking = False
 
-            logger.debug(f"Sentence completed: {sentence[:30]}...")
+            logger.debug(f"Sentence completed: {sentence[:30]}... (turn_id: {turn_id})")
+            # 清除当前播报的 turn_id
+            self._current_speak_turn_id = None
 
         logger.info("Sentence queue processing completed")
 
