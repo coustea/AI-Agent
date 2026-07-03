@@ -94,10 +94,29 @@
     </transition>
   </Teleport>
 
+  <!-- 动画讲解弹窗 -->
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="activeAgent === 'cartoon'" class="custom-modal-overlay" @click="close">
+        <div class="custom-modal-content note-preview-modal max-w-[78%] w-full" @click.stop>
+          <div class="modal-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-start">
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">动画讲解视频</h3>
+            </div>
+            <button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="close">×</button>
+          </div>
+          <div class="preview-dialog-body">
+            <VideoView :result-data="data" />
+          </div>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
+
   <!-- 核心精要弹窗 -->
   <Teleport to="body">
     <transition name="modal-fade">
-      <div v-if="activeAgent === 'markdown' || (activeAgent && !['mindmap', 'quiz', 'code', 'reading', 'ppt'].includes(activeAgent))" class="custom-modal-overlay" @click="close">
+      <div v-if="activeAgent === 'markdown' || (activeAgent && !['mindmap', 'quiz', 'code', 'reading', 'ppt', 'cartoon'].includes(activeAgent))" class="custom-modal-overlay" @click="close">
         <div class="custom-modal-content note-preview-modal max-w-[78%] w-full" @click.stop>
           <div class="modal-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-start">
             <div>
@@ -121,6 +140,7 @@ import QuizView from './QuizView.vue'
 import CodeView from './CodeView.vue'
 import ReadingView from './ReadingView.vue'
 import PptView from './PptView.vue'
+import VideoView from './VideoView.vue'
 
 defineProps<{
   activeAgent: string | null

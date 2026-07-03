@@ -108,6 +108,7 @@ import type {
 
 import {
   PPT_AGENT_ID,
+  CARTOON_AGENT_ID,
   COORDINATOR_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
@@ -137,6 +138,7 @@ const agentConfigs = ref<AnyAgentConfigs>({
   code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner', focus: 'syntax' },
   reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
   ppt: { template: 'auto', explanation_style: 'concept', density: 'standard', focus: ['core_concepts'] },
+  cartoon: { style: 'diagram', voice: 'teacher', video_length_seconds: 120, focus: 'concept' },
 })
 
 const goToPersonalize = () => {
@@ -194,7 +196,7 @@ function handleWorkflowAnimation(event: ResourceEvent) {
 }
 
 const baseGenerationAgentIds = computed(() => (
-  dagSelectedAgentIds.value.filter(id => id !== PPT_AGENT_ID)
+  dagSelectedAgentIds.value.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
 ))
 
 const dagNodesV2 = computed<DagNodeState[]>(() => {
@@ -209,6 +211,9 @@ const dagNodesV2 = computed<DagNodeState[]>(() => {
   }
   if (selected.includes(PPT_AGENT_ID)) {
     nodes.push(dagNodeStates.value[PPT_AGENT_ID] || { id: PPT_AGENT_ID, label: '演示文稿助手', icon: '📊', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
+  }
+  if (selected.includes(CARTOON_AGENT_ID)) {
+    nodes.push(dagNodeStates.value[CARTOON_AGENT_ID] || { id: CARTOON_AGENT_ID, label: '动画讲解助手', icon: '🎬', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
   }
   nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
   return nodes
@@ -272,6 +277,9 @@ function updateOverallProgressFromDag() {
     { weight: 55, progress: parallelPoolNodes.value.length ? parallelPoolNodes.value.reduce((sum, node) => sum + node.progress, 0) / parallelPoolNodes.value.length : 0 },
     ...(dagSelectedAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId) ? [
       { weight: 20, progress: getStageNode(PPT_AGENT_ID).progress },
+    ] : []),
+    ...(dagSelectedAgentIds.value.includes(CARTOON_AGENT_ID as ResourceAgentId) ? [
+      { weight: 20, progress: getStageNode(CARTOON_AGENT_ID).progress },
     ] : []),
     { weight: 10, progress: getStageNode(BUNDLE_AGENT_ID).progress },
   ]

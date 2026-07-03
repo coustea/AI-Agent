@@ -188,42 +188,38 @@
 
           <div v-if="showAggregationStage" class="agent-station-row agent-station-row-v4 aggregation-agent-row">
             <article
+              v-for="node in aggregationNodes"
+              :key="node.id"
               class="agent-station-card agent-station-card-v4"
-              :class="['status-' + pptNode.status, { 'is-selected': selectedDagNodeId === pptNode.id, 'has-artifact': hasGeneratedResource(pptNode.id), 'is-unselected': !showPptNode }]"
-              @click="showPptNode && handleAgentClick(pptNode.id, $event)"
+              :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id, 'has-artifact': hasGeneratedResource(node.id) }]"
+              @click="handleAgentClick(node.id, $event)"
             >
               <div class="station-header">
                 <div class="station-icon">
-                  <component :is="getWorkflowIcon(pptNode.id)"  class='w-4 h-4' />
+                  <component :is="getWorkflowIcon(node.id)" class='w-4 h-4' />
                 </div>
                 <div>
-                  <strong>教学课件</strong>
-                  <span>PPT Agent</span>
+                  <strong>{{ getWorkflowTitle(node.id) }}</strong>
+                  <span>{{ node.id === CARTOON_AGENT_ID ? 'Cartoon Agent' : 'PPT Agent' }}</span>
                 </div>
-                <em>{{ showPptNode ? getNodeStatusLabel(pptNode) : '未选择' }}</em>
+                <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${pptNode.status}`]">
-                <template v-if="showPptNode">
-                  <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
-                    <div v-for="(msg, i) in getNodeMessages(pptNode)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(pptNode).length > 1 }">
-                      <span class="station-live-dot" :class="i === 0 && getNodeMessages(pptNode).length > 1 ? 'muted' : pptNode.status"></span>
-                      <p class="live-message-only">{{ msg }}</p>
-                    </div>
-                  </TransitionGroup>
-                  <div v-if="!getNodeMessages(pptNode).length" class="station-live-current message-only-layout">
-                    <span class="station-live-dot" :class="pptNode.status"></span>
-                    <p class="live-message-only">{{ getNodeDisplayMessage(pptNode) }}</p>
+              <div class="station-live-log" :class="[`is-${node.status}`]">
+                <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
+                  <div v-for="(msg, i) in getNodeMessages(node)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(node).length > 1 }">
+                    <span class="station-live-dot" :class="i === 0 && getNodeMessages(node).length > 1 ? 'muted' : node.status"></span>
+                    <p class="live-message-only">{{ msg }}</p>
                   </div>
-                </template>
-                <div v-else class="station-live-current message-only-layout">
-                  <span class="station-live-dot waiting"></span>
-                  <p class="live-message-only">当前任务未选择 PPT Agent</p>
+                </TransitionGroup>
+                <div v-if="!getNodeMessages(node).length" class="station-live-current message-only-layout">
+                  <span class="station-live-dot" :class="node.status"></span>
+                  <p class="live-message-only">{{ getNodeDisplayMessage(node) }}</p>
                 </div>
               </div>
               <div class="station-footer">
-                <span>{{ showPptNode ? getNodeStageLabel(pptNode) : '未加入本次任务' }}</span>
+                <span>{{ getNodeStageLabel(node) }}</span>
                 <div class="station-progress-track">
-                  <i :style="{ width: `${pptNode.progress}%` }"></i>
+                  <i :style="{ width: `${node.progress}%` }"></i>
                 </div>
               </div>
             </article>
@@ -400,6 +396,7 @@ import {
 import type { ResourceAgentId } from '@/features/resource/model/resource'
 import {
   COORDINATOR_AGENT_ID,
+  CARTOON_AGENT_ID,
   PPT_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
@@ -455,6 +452,7 @@ const workflowIconMap: Record<string, Component> = {
   code: Cpu,
   reading: Reading,
   ppt: DataBoard,
+  cartoon: DataBoard,
   bundle: Box,
 }
 
@@ -467,6 +465,7 @@ const workflowTitleMap: Record<string, string> = {
   code: '代码示例',
   reading: '拓展阅读',
   ppt: '教学课件',
+  cartoon: '动画讲解',
   bundle: '资源包交付',
 }
 
@@ -531,7 +530,7 @@ function updateDetailPanelPosition() {
 }
 
 const baseGenerationAgentIds = computed(() => {
-  return props.dagSelectedAgentIds.filter(id => id !== PPT_AGENT_ID)
+  return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
 })
 
 const parallelPoolNodes = computed(() => {
@@ -664,16 +663,15 @@ const trailingStageNodes = computed(() => {
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(PPT_AGENT_ID))
   }
+  if (props.dagSelectedAgentIds.includes(CARTOON_AGENT_ID as ResourceAgentId)) {
+    nodes.push(getStageNode(CARTOON_AGENT_ID))
+  }
   return nodes
 })
 
 const aggregationNodes = computed(() => trailingStageNodes.value)
 
-const showPptNode = computed(() => props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId))
-
-const showAggregationStage = computed(() => showPptNode.value)
-
-const pptNode = computed(() => getStageNode(PPT_AGENT_ID))
+const showAggregationStage = computed(() => aggregationNodes.value.length > 0)
 
 const bundleNode = computed(() => getStageNode(BUNDLE_AGENT_ID))
 
@@ -867,7 +865,7 @@ function getNodeStageLabel(node: DagNodeState) {
   if (node.status === 'running') {
     if (node.id === 'planning') return '计划生成中'
     if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
-    if (node.id === PPT_AGENT_ID) return '生成中'
+    if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
     if (node.phase === 'llm_generating') return '核心推演中'
     if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
     if (node.phase === 'validating') return '一致性校验中'
@@ -876,7 +874,7 @@ function getNodeStageLabel(node: DagNodeState) {
     return '工位执行中'
   }
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与课件'
-  if (node.id === PPT_AGENT_ID) return '等待基础资源'
+  if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '等待基础资源'
   return '等待上游协同'
 }
 
@@ -888,6 +886,7 @@ function getNodePhaseLabel(node: DagNodeState) {
     validating: '一致性校验',
     ppt_generating: 'PPT 聚合',
     ppt_waiting_sources: '等待讲义要义',
+    cartoon_planning: '动画分镜',
     artifact_saved: '成果移交',
     research: '资料研究',
     research_delegate: '研究委托',
@@ -899,7 +898,7 @@ function getNodePhaseLabel(node: DagNodeState) {
   if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
   if (node.id === 'planning' && node.status === 'running') return '计划生成'
   if (node.id === COORDINATOR_AGENT_ID && node.status === 'running') return '任务调度'
-  if (node.id === PPT_AGENT_ID && node.status === 'running') return '聚合生成'
+  if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id) && node.status === 'running') return '聚合生成'
   if (node.id === BUNDLE_AGENT_ID && node.status === 'running') return '打包交付'
   if (node.status === 'waiting') return '等待上游'
   if (node.status === 'success') return '已完成'
@@ -919,6 +918,7 @@ function getNodeDisplayMessage(node: DagNodeState) {
   if (node.id === 'planning') return '正在根据学习需求与画像生成教学计划'
   if (node.id === COORDINATOR_AGENT_ID) return '等待基础资源完成后汇总成功、失败与大纲覆盖情况'
   if (node.id === PPT_AGENT_ID) return '等待讲义要义就绪以重排宣讲幻灯'
+  if (node.id === CARTOON_AGENT_ID) return '等待基础知识素材就绪后生成同步动画、配音与字幕'
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与聚合结果就绪后打包交付'
   return getNodeFallbackMessage(node)
 }
@@ -938,6 +938,9 @@ function getNodeArtifactStatus(node: DagNodeState) {
   if (node.id === PPT_AGENT_ID) {
     return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
   }
+  if (node.id === CARTOON_AGENT_ID) {
+    return hasGeneratedResource(node.id) ? '动画视频已交付' : '等待基础资源后生成'
+  }
   return hasGeneratedResource(node.id) ? '基础资源已交付' : '工位响应中'
 }
 
@@ -946,6 +949,7 @@ function getNodeInputSummary(node: DagNodeState) {
   if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
   if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
   if (node.id === PPT_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
+  if (node.id === CARTOON_AGENT_ID) return '学习需求 / 基础资源 handoff / 动画个性化参数'
   return '学习需求 / 用户画像 / 教学计划'
 }
 
@@ -955,6 +959,7 @@ function getNodeOutputSummary(node: DagNodeState) {
   if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
   if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
   if (node.id === PPT_AGENT_ID) return '聚合资源生成中 / 等待中'
+  if (node.id === CARTOON_AGENT_ID) return 'MP4 动画视频生成中 / 等待中'
   return '基础资源生成中 / 等待中'
 }
 
@@ -3125,6 +3130,12 @@ function getMetricChips(node: DagNodeState) {
   max-width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.aggregation-agent-row .agent-station-card-v4:only-child {
+  grid-column: 1 / -1;
+  width: min(100%, 640px);
+  justify-self: center;
 }
 
 .aggregation-agent-row .agent-station-card-v4.is-unselected {

@@ -67,14 +67,18 @@ function parseArtifact(value: unknown): VideoArtifactView | null {
   const record = asRecord(candidate)
   if (!record) return null
   const nested = asRecord(record.metadata)
-  const source = nested?.public_url ? nested : record
-  const publicUrl = source.public_url
+  const source = nested?.public_url || nested?.video_url ? nested : record
+  const publicUrl = source.public_url ?? source.video_url
   if (typeof publicUrl !== 'string' || !publicUrl.endsWith('.mp4')) return null
 
   return {
     title: String(record.title ?? source.title ?? '讲解视频'),
     publicUrl,
-    durationMs: Number(record.duration_ms ?? source.duration_ms ?? 0),
+    durationMs: Number(
+      record.duration_ms ??
+      source.duration_ms ??
+      Number(record.duration_seconds ?? source.duration_seconds ?? 0) * 1000
+    ),
     width: Number(record.width ?? source.width ?? 1920),
     height: Number(record.height ?? source.height ?? 1080),
     style: String(record.style ?? source.style ?? '')
@@ -94,7 +98,10 @@ const styleLabel = computed(() => {
   const labels: Record<string, string> = {
     precision_light: '精密图解',
     systems_dark: '系统实验室',
-    editorial_classroom: '编辑课堂'
+    editorial_classroom: '编辑课堂',
+    diagram: '清晰图解',
+    minimal: '简约教学',
+    dark_tech: '暗黑科技'
   }
   return labels[artifact.value?.style ?? ''] ?? '讲解视频'
 })

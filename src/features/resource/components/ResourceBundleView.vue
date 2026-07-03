@@ -125,6 +125,7 @@ import quizCover from '@/features/resource/assets/result-covers/exam-prep.svg'
 import codeCover from '@/features/resource/assets/result-covers/web-developer.svg'
 import readingCover from '@/features/resource/assets/result-covers/open-book.svg'
 import pptCover from '@/features/resource/assets/result-covers/presentation.svg'
+import cartoonCover from '@/features/resource/assets/result-covers/video-tutorial.svg'
 
 import {
   getDifficultyLabel,
@@ -193,6 +194,7 @@ const RESOURCE_ORDER = [
   'code',
   'reading',
   'ppt',
+  'cartoon',
 ]
 
 const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
@@ -204,6 +206,7 @@ const RESOURCE_COVERS: Record<string, string> = {
   code: codeCover,
   reading: readingCover,
   ppt: pptCover,
+  cartoon: cartoonCover,
 }
 
 const activeFilter = ref('all')
@@ -438,6 +441,7 @@ function getResourceFormat(
     code: 'CODE',
     reading: 'LINKS',
     ppt: 'SLIDES',
+    cartoon: 'MP4',
   }
 
   return fallback[type] || 'RESOURCE'
@@ -491,6 +495,7 @@ function getResourceIcon(type: string) {
     code: '💻',
     reading: '📚',
     ppt: '📊',
+    cartoon: '🎬',
   }
 
   return icons[type] || '✨'
@@ -510,6 +515,8 @@ function getDefaultSummary(type: string) {
         '补充可靠的课程资料与延伸阅读，便于继续深入学习。',
     ppt:
         '整合基础资源形成结构化教学课件，适合快速复习和演示。',
+    cartoon:
+        '通过知识图形、同步动画、配音和字幕讲清概念与执行过程。',
   }
 
   return (
@@ -567,8 +574,8 @@ function getResourceHighlights(card: ResourceCard) {
 }
 
 function hasContent(value: unknown, type?: string): boolean {
-  // PPTX 类型不依赖 content 字段判断，通过 metadata 中的文件路径判断
-  if (type === 'ppt') {
+  // 文件型资源通过 metadata 中的发布路径判断
+  if (type === 'ppt' || type === 'cartoon') {
     return true
   }
 

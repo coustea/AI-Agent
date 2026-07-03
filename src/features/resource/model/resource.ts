@@ -1,7 +1,7 @@
 // src/types/resource.ts — 资源生成相关类型定义
 // 各 agent 只暴露影响生成质量的核心参数，前后端完全对齐
 
-export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt'
+export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 
@@ -62,6 +62,12 @@ export interface ResourceGenerationRequest {
       explanation_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
       density: 'concise' | 'standard' | 'detailed'
       focus: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
+    }
+    cartoon: {
+      style: 'diagram' | 'minimal' | 'dark_tech'
+      voice: 'teacher' | 'coach'
+      video_length_seconds: number
+      focus: 'concept' | 'process' | 'comparison' | 'practice'
     }
   }
 }

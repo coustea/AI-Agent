@@ -386,6 +386,82 @@
                 </div>
               </template>
 
+              <!-- Cartoon Agent -->
+              <template v-if="agent.id === 'cartoon'">
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">动画视觉</label>
+                  <select
+                    v-model="localConfigs.cartoon.style"
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
+                  >
+                    <option value="diagram">清晰图解</option>
+                    <option value="minimal">简约教学</option>
+                    <option value="dark_tech">暗黑科技</option>
+                  </select>
+                  <p class="m-0 text-[11px] leading-5 text-slate-400">
+                    动画用于解释结构、状态和执行过程，不添加无意义炫技效果
+                  </p>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">讲解重点</label>
+                  <div class="grid grid-cols-2 gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '概念原理', value: 'concept' },
+                        { label: '过程演示', value: 'process' },
+                        { label: '对比辨析', value: 'comparison' },
+                        { label: '实践应用', value: 'practice' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.cartoon.focus === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="localConfigs.cartoon.focus = opt.value as any"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <div class="slider-label-row flex justify-between items-center mb-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">成片时长</label>
+                    <span class="text-xs font-bold text-blue">约 <b>{{ localConfigs.cartoon.video_length_seconds }}</b> 秒</span>
+                  </div>
+                  <input
+                    v-model.number="localConfigs.cartoon.video_length_seconds"
+                    type="range"
+                    :min="60"
+                    :max="180"
+                    :step="30"
+                    class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
+                  />
+                  <p class="m-0 text-[11px] leading-5 text-slate-400">
+                    系统根据知识完整度动态安排场景，不会重复内容凑时长
+                  </p>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">配音角色</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '沉稳教师', value: 'teacher' },
+                        { label: '互动教练', value: 'coach' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.cartoon.voice === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="localConfigs.cartoon.voice = opt.value as any"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+
             </div>
           </div>
         </div>
