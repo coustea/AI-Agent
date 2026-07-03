@@ -14,9 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.evaluation.request import LearningEventCreate, LearningSessionCreate
 from app.evaluation.response import (
     DailyTimeEntry,
-    EvaluationMetric,
     EvaluationSummaryResponse,
-    HourlyDistributionEntry,
     LearningEventItem,
     LearningTimeStatsResponse,
 )
@@ -59,15 +57,15 @@ async def bg_apply_profile_update_from_learning_event(user_id: int, event_payloa
     )
 
 
-def build_summary_from_events(events: list[LearningEvent], active_minutes: int = 0) -> EvaluationSummaryResponse:
+def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryResponse:
     """从学习事件列表构建评估摘要（平均分、薄弱点、推荐等）。"""
-    score_values = [event.score for event in events if event.score is not None]  # 提取所有有分数的事件
-    average_score = round(sum(score_values) / len(score_values), 1) if score_values else None  # 计算平均分
-    completed_resources = sum(1 for event in events if event.event_type == "resource_completed")  # 已完成资源数
-    viewed_resources = sum(1 for event in events if event.event_type == "resource_viewed")  # 已浏览资源数
+    score_values = [event.score for event in events if event.score is not None]
+    average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
+    completed_resources = sum(1 for event in events if event.event_type == "resource_completed")
+    viewed_resources = sum(1 for event in events if event.event_type == "resource_viewed")
 
-    weak_counter: Counter[str] = Counter()  # 薄弱知识点计数器
-    preferred_counter: Counter[str] = Counter()  # 资源偏好计数器
+    weak_counter: Counter[str] = Counter()
+    preferred_counter: Counter[str] = Counter()
     for event in events:
         topic = event.topic or event.course
         if event.event_type == "quiz_submitted" and event.score is not None and event.score < 65 and topic:
@@ -85,32 +83,24 @@ def build_summary_from_events(events: list[LearningEvent], active_minutes: int =
             if keyword in feedback:
                 preferred_counter[label] += 1
 
-    recommendations: list[str] = []  # 优化建议列表
+    recommendations: list[str] = []
     if average_score is not None and average_score < 70:
-        recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")  # 低分建议
+        recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")
     if weak_counter:
-        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")  # 薄弱点建议
+        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")
     if preferred_counter:
-        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")  # 偏好建议
+        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")
     if not recommendations:
-        recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")  # 默认建议
-
-    metrics = [  # 构建评估指标卡片列表
-        EvaluationMetric(label="平均测验分", value="暂无" if average_score is None else f"{average_score:.1f}"),
-        EvaluationMetric(label="完成资源", value=str(completed_resources)),
-        EvaluationMetric(label="活跃学习", value=f"{active_minutes} 分钟"),
-    ]
+        recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")
 
     return EvaluationSummaryResponse(
         event_count=len(events),
         average_score=average_score,
         completed_resources=completed_resources,
         viewed_resources=viewed_resources,
-        active_minutes=active_minutes,
         weak_topics=[item for item, _ in weak_counter.most_common(5)],
         preferred_resources=[item for item, _ in preferred_counter.most_common(5)],
         recommendations=recommendations,
-        metrics=metrics,
         recent_events=[_to_item(event) for event in events[:10]],
     )
 
@@ -205,15 +195,7 @@ class EvaluationService:
         result = await session.exec(stmt)
         events = list(result.all())
 
-        active_minutes = await self._get_active_minutes(session, user_id=user_id)
-        return build_summary_from_events(events, active_minutes=active_minutes)
-
-    async def _get_active_minutes(self, session: AsyncSession, *, user_id: int) -> int:
-        """获取用户总活跃分钟数。"""
-        stmt = select(LearningSession).where(LearningSession.user_id == user_id)
-        result = await session.exec(stmt)
-        total_seconds = sum(s.duration_seconds or 0 for s in result.all())
-        return total_seconds // 60
+        return build_summary_from_events(events)
 
     async def get_time_stats(
         self,
@@ -246,10 +228,7 @@ class EvaluationService:
         all_sessions = list(total_result.all())
 
         today_seconds = 0
-        week_seconds = 0
-        month_seconds = 0
         daily_map: dict[date, int] = defaultdict(int)
-        hourly_map: dict[int, int] = defaultdict(int)
         context_map: dict[str, int] = defaultdict(int)
 
         for sess in recent_sessions:
@@ -260,15 +239,10 @@ class EvaluationService:
             created_local = _to_local(sess.started_at)
             if created_local >= bounds["today_start_local"]:
                 today_seconds += duration
-            if created_local >= bounds["week_start_local"]:
-                week_seconds += duration
-            if created_local >= bounds["month_start_local"]:
-                month_seconds += duration
 
             event_date = created_local.date()
             if event_date >= (now_local.date() - timedelta(days=window_days - 1)):
                 daily_map[event_date] += duration
-            hourly_map[created_local.hour] += duration
 
             context = sess.source_page
             if context:
@@ -279,12 +253,9 @@ class EvaluationService:
 
         return LearningTimeStatsResponse(
             today_seconds=today_seconds,
-            week_seconds=week_seconds,
-            month_seconds=month_seconds,
             total_seconds=total_seconds,
             streak_days=streak_days,
             daily_breakdown=_build_daily_breakdown(now_local.date(), window_days, daily_map),
-            hourly_distribution=_build_hourly_distribution(hourly_map),
             context_breakdown=dict(sorted(context_map.items(), key=lambda item: item[1], reverse=True)),
         )
 
@@ -298,18 +269,12 @@ def _parse_iso_datetime(value: str) -> datetime:
 
 
 def _to_item(event: LearningEvent) -> LearningEventItem:
-    """将 LearningEvent 模型转换为响应项。"""
+    """将 LearningEvent 模型转换为响应项 — 仅返回前端展示所需字段。"""
     return LearningEventItem(
         id=event.id or 0,
         event_type=event.event_type,
-        resource_id=event.resource_id,
-        resource_item_id=event.resource_item_id,
-        path_id=event.path_id,
-        path_node_id=event.path_node_id,
-        node_id=event.node_id,
         course=event.course,
         topic=event.topic,
-        score=event.score,
         feedback=event.feedback,
         created_at=event.created_at,
     )
@@ -352,10 +317,6 @@ def _build_daily_breakdown(end_date: date, days: int, daily_map: dict[date, int]
         for offset in range(days)
     ]
 
-
-def _build_hourly_distribution(hourly_map: dict[int, int]) -> list[HourlyDistributionEntry]:
-    """构建24小时学习时长分布列表。"""
-    return [HourlyDistributionEntry(hour=hour, seconds=hourly_map.get(hour, 0)) for hour in range(24)]
 
 
 def _compute_streak_days(sessions: list[LearningSession], today_local: date) -> int:

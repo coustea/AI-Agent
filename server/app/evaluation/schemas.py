@@ -3,9 +3,7 @@
 from app.evaluation.request import LearningEventCreate, LearningEventType, LearningSessionCreate
 from app.evaluation.response import (
     DailyTimeEntry,
-    EvaluationMetric,
     EvaluationSummaryResponse,
-    HourlyDistributionEntry,
     LearningEventItem,
     LearningTimeStatsResponse,
 )
@@ -15,9 +13,7 @@ __all__ = [
     "LearningEventCreate",
     "LearningSessionCreate",
     "LearningEventItem",
-    "EvaluationMetric",
     "EvaluationSummaryResponse",
     "DailyTimeEntry",
-    "HourlyDistributionEntry",
     "LearningTimeStatsResponse",
 ]

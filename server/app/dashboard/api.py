@@ -73,13 +73,6 @@ def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list
     return [DIMENSION_NAMES.get(key, key) for key, _ in items[:limit]]
 
 
-def _score_evidence(score_json: dict[str, Any], key: str, *, limit: int = 3) -> list[str]:
-    """获取指定维度的评分证据列表。"""
-    evidence = _score_json(score_json).get("dimension_evidence") or {}
-    values = evidence.get(key) or []
-    return [str(item) for item in values[:limit] if str(item).strip()]
-
-
 def _status_label(value: str) -> str:
     """将状态值转换为中文标签。"""
     return {
@@ -316,45 +309,31 @@ async def get_profile_radar(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取用户画像雷达图数据 — 各维度得分和证据。"""
+    """获取用户画像雷达图数据 — 各维度得分。"""
     profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
     score_json = profile.profile_score_json or {}
 
     scores = score_json.get("dimension_scores") or {}
-    evidence = score_json.get("dimension_evidence") or {}
-    dimensions: list[dict[str, Any]] = []
-    for key in ALL_DIMENSIONS:
-        score = scores.get(key)
-        evidence_items = evidence.get(key) or []
-        dimensions.append({
+    dimensions = [
+        {
             "key": key,
             "label": DIMENSION_NAMES.get(key, key),
-            "score": score if isinstance(score, (int, float)) else 0,
-            "evidence": evidence_items,
-            "missing": not evidence_items,
-        })
+            "score": scores.get(key) if isinstance(scores.get(key), (int, float)) else 0,
+        }
+        for key in ALL_DIMENSIONS
+    ]
 
     weak_areas = _low_score_dimensions(score_json)
 
     return HttpResponse.success(data={
-        "user_id": profile.user_id,
-        "module": profile.module,
         "score": score_json.get("overall_score"),
         "dimensions": dimensions,
         "weak_areas": weak_areas,
-        "metrics": {
-            "dimension_scores": scores,
-            "dimension_evidence": evidence,
-        },
+        "metrics": {"dimension_scores": scores},
         "radar": {
-            "eyebrow": "画像",
-            "title": "用户画像雷达图",
-            "link_label": "查看画像",
             "path": "/profile",
             "note": "完整画像、课程背景和薄弱点明细已放在个人中心，首页只保留能力趋势信号。",
         },
-        "scored_at": score_json.get("scored_at"),
-        "updated_at": profile.updated_at,
     })
 
 
@@ -486,63 +465,8 @@ async def get_quick_actions(
         for item in sorted(action_defs, key=lambda value: value["score"], reverse=True)
     ]
 
-    # 今日建议
-    path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
-    suggestions: list[dict[str, str]] = []
-    tones = ["blue", "amber", "green", "indigo"]
-
-    if active_path:
-        node = _current_node(path_nodes)
-        title = f"继续推进「{node.title}」" if node else "继续当前学习路径"
-        reason = f"路径进度 {active_path.overall_progress}%，优先完成当前节点再进入下一阶段"
-        suggestions.append({"title": title, "reason": reason, "path": "/path-planner", "tone": tones[0]})
-
-    if weak_topics:
-        topic = weak_topics[0]
-        strategy_hint = f"「{topic}」维度偏弱，需要通过专项练习巩固"
-        suggestions.append({
-            "title": f"完成「{topic}」专项练习",
-            "reason": strategy_hint,
-            "path": "/question-bank",
-            "tone": tones[1],
-        })
-
-    low_quiz = next(
-        (e for e in recent_events
-         if e.event_type == "quiz_submitted" and e.score is not None and e.score < 70),
-        None,
-    )
-    if low_quiz:
-        topic = _event_topic(low_quiz) or "最近测验"
-        suggestions.append({
-            "title": f"复盘「{topic}」错题",
-            "reason": f"最近测验得分 {low_quiz.score:.0f}，先讲清错因再回到题库验证",
-            "path": "/question-bank?tab=wrong",
-            "tone": tones[2],
-        })
-
-    latest_resource = recent_resources[0] if recent_resources else None
-    if latest_resource and latest_resource.status == "completed":
-        suggestions.append({
-            "title": "复习最近生成资料",
-            "reason": "用错题和资源回顾保持知识稳定度",
-            "path": f"/resource-detail/{latest_resource.id}" if latest_resource.id else "/resource-generator",
-            "tone": tones[3],
-        })
-
-    fallbacks = [
-        {"title": "生成新的学习资源", "reason": "把当前学习需求转成课件、导读或练习", "path": "/resource-generator", "tone": "blue"},
-        {"title": "规划下一阶段路径", "reason": "将目标拆成阶段节点，系统会按节点持续推荐", "path": "/path-planner", "tone": "amber"},
-    ]
-    for fb in fallbacks:
-        if len(suggestions) >= 3:
-            break
-        if not any(s["path"] == fb["path"] for s in suggestions):
-            suggestions.append(fb)
-
     return HttpResponse.success(data={
         "actions": actions,
-        "today_suggestions": suggestions[:3],
     })
 
 
@@ -591,7 +515,7 @@ async def get_study_stats(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取学习统计 — 本周天数、总时长、待完成节点等。"""
+    """获取学习统计 — 本周活跃天数。"""
     now = datetime.now(timezone.utc)
     week_start = now - timedelta(days=now.weekday())
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -601,48 +525,6 @@ async def get_study_stats(
         .where(LearningSession.user_id == current_user.id, LearningSession.started_at >= week_start)
     )).one() or 0
 
-    total_seconds = (await session.exec(
-        select(func.coalesce(func.sum(LearningSession.duration_seconds), 0))
-        .where(LearningSession.user_id == current_user.id)
-    )).one() or 0
-    total_hours = math.ceil(int(total_seconds) / 3600)
-
-    active_paths = await _get_active_paths(session, current_user.id)
-    active_path = active_paths[0] if active_paths else None
-    pending_nodes = 0
-    if active_path:
-        pending_nodes = (await session.exec(
-            select(func.count())
-            .select_from(PathNode)
-            .where(
-                PathNode.user_id == current_user.id,
-                PathNode.path_id == active_path.id,
-                col(PathNode.status).in_(["available", "locked"]),
-            )
-        )).one() or 0
-
-    recent_events_count = (await session.exec(
-        select(func.count())
-        .select_from(LearningEvent)
-        .where(LearningEvent.user_id == current_user.id)
-    )).one() or 0
-    recent_resources_count = (await session.exec(
-        select(func.count())
-        .select_from(GeneratedResource)
-        .where(
-            GeneratedResource.user_id == current_user.id,
-        )
-    )).one() or 0
-    today_suggestion_count = sum([
-        1 if active_path else 0,
-        1 if recent_events_count else 0,
-        1 if recent_resources_count else 0,
-        1,
-    ])
-
     return HttpResponse.success(data={
         "weekly_days": int(weekly_days),
-        "total_hours": int(total_hours),
-        "pending_nodes": int(pending_nodes),
-        "today_suggestions": int(today_suggestion_count),
     })

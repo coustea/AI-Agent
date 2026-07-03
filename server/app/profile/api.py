@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
 from app.auth.security import get_current_user
+from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.response import HttpResponse
@@ -20,6 +22,7 @@ from app.profile import (
     StudentProfileData,
 )
 from app.profile.service import get_profile_service
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -28,34 +31,25 @@ router = APIRouter()
 _onboarding_tasks: dict[int, asyncio.Task] = {}
 
 
-@router.get("/profile/base-info")
-async def get_profile_base_info(current_user: User = Depends(get_current_user)):
-    """获取用户基本信息 — 学校、专业、年级、课程等。"""
+@router.get("/profile")
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取完整用户画像 — 聚合 base_info、dimensions 和 score。"""
     svc = get_profile_service()
-    profile = await svc.get_profile(user_id=current_user.id)
-    base_info = (profile.profile_json or {}).get("base_info") or {}
-    return HttpResponse.success(data=BaseInfoData(**base_info))
-
-
-@router.get("/profile/text")
-async def get_profile_text(current_user: User = Depends(get_current_user)):
-    """获取文字版画像 — 7 维度的文字描述和推断依据。"""
-    svc = get_profile_service()
-    profile = await svc.get_profile(user_id=current_user.id)
+    profile = await svc.get_profile(user_id=current_user.id, db=session)
     profile_json = profile.profile_json or {}
+    score_json = profile.profile_score_json or {}
+    base_info = profile_json.get("base_info") or {}
+
     return HttpResponse.success(data={
+        "user_id": profile.user_id,
+        "module": profile.module,
+        "base_info": BaseInfoData(**base_info).model_dump(),
         "dimensions": profile_json.get("dimensions") or {},
-        "updated_at": profile.updated_at,
-    })
-
-
-@router.get("/profile/score")
-async def get_profile_score(current_user: User = Depends(get_current_user)):
-    """获取分数版画像 — 各维度分数和总体评分。"""
-    svc = get_profile_service()
-    profile = await svc.get_profile(user_id=current_user.id)
-    return HttpResponse.success(data={
-        "profile_score_json": profile.profile_score_json or {},
+        "profile_json": profile_json,
+        "profile_score_json": score_json,
         "updated_at": profile.updated_at,
     })
 

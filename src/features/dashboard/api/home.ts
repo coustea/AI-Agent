@@ -1,6 +1,5 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
-import type { ProfileScoreData } from '@/features/profile/api/profile'
 
 // ---------------------------------------------------------------------------
 // 1. Recommendation
@@ -26,12 +25,14 @@ export function getRecommendation() {
 // 2. Profile Radar
 // ---------------------------------------------------------------------------
 
-export interface ProfileRadarData extends ProfileScoreData {
+export interface ProfileRadarData {
+  score: number | null
+  dimensions?: { key: string; label: string; score: number }[]
   weak_areas?: string[]
+  metrics: {
+    dimension_scores?: Record<string, number>
+  }
   radar: {
-    eyebrow: string
-    title: string
-    link_label: string
     path: string
     note: string
   }
@@ -75,12 +76,6 @@ export interface HomeActionItem {
 
 export interface QuickActionsData {
   actions: HomeActionItem[]
-  today_suggestions: {
-    title: string
-    reason: string
-    path: string
-    tone: string
-  }[]
 }
 
 export function getQuickActions() {
@@ -109,9 +104,6 @@ export function getRecentResources() {
 
 export interface StudyStatsData {
   weekly_days: number
-  total_hours: number
-  pending_nodes: number
-  today_suggestions: number
 }
 
 export function getStudyStats() {

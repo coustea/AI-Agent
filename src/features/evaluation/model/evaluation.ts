@@ -40,41 +40,19 @@ export interface DailyTimeEntry {
   seconds: number
 }
 
-export interface HourlyDistributionEntry {
-  hour: number
-  seconds: number
-}
-
 export interface LearningTimeStats {
   today_seconds: number
-  week_seconds: number
-  month_seconds: number
   total_seconds: number
   streak_days: number
   daily_breakdown: DailyTimeEntry[]
-  hourly_distribution: HourlyDistributionEntry[]
   context_breakdown?: Record<string, number>
-  avg_seconds?: number
-  active_days?: number
-}
-
-export interface EvaluationMetric {
-  label: string
-  value: string
-  trend: string
 }
 
 export interface LearningEventItem {
   id: number
   event_type: LearningEventType
-  resource_id?: number | null
-  resource_item_id?: number | null
-  path_id?: number | null
-  path_node_id?: number | null
-  node_id?: string | null
   course?: string | null
   topic?: string | null
-  score?: number | null
   feedback?: string | null
   created_at: string
 }
@@ -84,10 +62,8 @@ export interface EvaluationSummary {
   average_score: number | null
   completed_resources: number
   viewed_resources: number
-  active_minutes: number
   weak_topics: string[]
   preferred_resources: string[]
   recommendations: string[]
-  metrics: EvaluationMetric[]
   recent_events: LearningEventItem[]
 }
