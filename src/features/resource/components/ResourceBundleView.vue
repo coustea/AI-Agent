@@ -125,7 +125,6 @@ import quizCover from '@/features/resource/assets/result-covers/exam-prep.svg'
 import codeCover from '@/features/resource/assets/result-covers/web-developer.svg'
 import readingCover from '@/features/resource/assets/result-covers/open-book.svg'
 import pptCover from '@/features/resource/assets/result-covers/presentation.svg'
-import videoCover from '@/features/resource/assets/result-covers/video-tutorial.svg'
 
 import {
   getDifficultyLabel,
@@ -194,7 +193,6 @@ const RESOURCE_ORDER = [
   'code',
   'reading',
   'ppt',
-  'video',
 ]
 
 const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
@@ -206,7 +204,6 @@ const RESOURCE_COVERS: Record<string, string> = {
   code: codeCover,
   reading: readingCover,
   ppt: pptCover,
-  video: videoCover,
 }
 
 const activeFilter = ref('all')
@@ -441,7 +438,6 @@ function getResourceFormat(
     code: 'CODE',
     reading: 'LINKS',
     ppt: 'SLIDES',
-    video: 'VIDEO',
   }
 
   return fallback[type] || 'RESOURCE'
@@ -495,7 +491,6 @@ function getResourceIcon(type: string) {
     code: '💻',
     reading: '📚',
     ppt: '📊',
-    video: '🎬',
   }
 
   return icons[type] || '✨'
@@ -515,8 +510,6 @@ function getDefaultSummary(type: string) {
         '补充可靠的课程资料与延伸阅读，便于继续深入学习。',
     ppt:
         '整合基础资源形成结构化教学课件，适合快速复习和演示。',
-    video:
-        '以分镜和讲解节奏组织知识内容，适合视听化学习。',
   }
 
   return (

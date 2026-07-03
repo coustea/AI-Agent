@@ -44,7 +44,7 @@
           <div>
             <span class="panel-eyebrow">执行流程</span>
             <h3>资源生成进度</h3>
-            <p>教学计划完成后生成基础资源，再生成课件与视频，最后完成资源整合。</p>
+            <p>教学计划完成后生成基础资源，再生成教学课件，最后完成资源整合。</p>
           </div>
           <div class="workbench-actions">
             <button
@@ -228,46 +228,6 @@
               </div>
             </article>
 
-            <article
-              class="agent-station-card agent-station-card-v4"
-              :class="['status-' + videoNode.status, { 'is-selected': selectedDagNodeId === videoNode.id, 'has-artifact': hasGeneratedResource(videoNode.id), 'is-unselected': !showVideoNode }]"
-              @click="showVideoNode && handleAgentClick(videoNode.id, $event)"
-            >
-              <div class="station-header">
-                <div class="station-icon">
-                  <component :is="getWorkflowIcon(videoNode.id)"  class='w-4 h-4' />
-                </div>
-                <div>
-                  <strong>讲解视频</strong>
-                  <span>Video Agent</span>
-                </div>
-                <em>{{ showVideoNode ? getNodeStatusLabel(videoNode) : '未选择' }}</em>
-              </div>
-              <div class="station-live-log" :class="[`is-${videoNode.status}`]">
-                <template v-if="showVideoNode">
-                  <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
-                    <div v-for="(msg, i) in getNodeMessages(videoNode)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(videoNode).length > 1 }">
-                      <span class="station-live-dot" :class="i === 0 && getNodeMessages(videoNode).length > 1 ? 'muted' : videoNode.status"></span>
-                      <p class="live-message-only">{{ msg }}</p>
-                    </div>
-                  </TransitionGroup>
-                  <div v-if="!getNodeMessages(videoNode).length" class="station-live-current message-only-layout">
-                    <span class="station-live-dot" :class="videoNode.status"></span>
-                    <p class="live-message-only">{{ getNodeDisplayMessage(videoNode) }}</p>
-                  </div>
-                </template>
-                <div v-else class="station-live-current message-only-layout">
-                  <span class="station-live-dot waiting"></span>
-                  <p class="live-message-only">当前任务未选择 Video Agent</p>
-                </div>
-              </div>
-              <div class="station-footer">
-                <span>{{ showVideoNode ? getNodeStageLabel(videoNode) : '未加入本次任务' }}</span>
-                <div class="station-progress-track">
-                  <i :style="{ width: `${videoNode.progress}%` }"></i>
-                </div>
-              </div>
-            </article>
           </div>
 
           <div v-if="showAggregationStage" class="dual-flow-connector is-merge" aria-hidden="true">
@@ -435,14 +395,12 @@ import {
   PhFileText as Document,
   PhNotePencil as EditPen,
   PhBookOpen as Reading,
-  PhShareNetwork as Share,
-  PhVideoCamera as VideoCamera
+  PhShareNetwork as Share
 } from '@phosphor-icons/vue'
 import type { ResourceAgentId } from '@/features/resource/model/resource'
 import {
   COORDINATOR_AGENT_ID,
   PPT_AGENT_ID,
-  VIDEO_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
@@ -497,7 +455,6 @@ const workflowIconMap: Record<string, Component> = {
   code: Cpu,
   reading: Reading,
   ppt: DataBoard,
-  video: VideoCamera,
   bundle: Box,
 }
 
@@ -510,7 +467,6 @@ const workflowTitleMap: Record<string, string> = {
   code: '代码示例',
   reading: '拓展阅读',
   ppt: '教学课件',
-  video: '讲解视频',
   bundle: '资源包交付',
 }
 
@@ -575,7 +531,7 @@ function updateDetailPanelPosition() {
 }
 
 const baseGenerationAgentIds = computed(() => {
-  return props.dagSelectedAgentIds.filter(id => id !== PPT_AGENT_ID && id !== VIDEO_AGENT_ID)
+  return props.dagSelectedAgentIds.filter(id => id !== PPT_AGENT_ID)
 })
 
 const parallelPoolNodes = computed(() => {
@@ -708,9 +664,6 @@ const trailingStageNodes = computed(() => {
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(PPT_AGENT_ID))
   }
-  if (props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId)) {
-    nodes.push(getStageNode(VIDEO_AGENT_ID))
-  }
   return nodes
 })
 
@@ -718,13 +671,9 @@ const aggregationNodes = computed(() => trailingStageNodes.value)
 
 const showPptNode = computed(() => props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId))
 
-const showVideoNode = computed(() => props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId))
-
-const showAggregationStage = computed(() => showPptNode.value || showVideoNode.value)
+const showAggregationStage = computed(() => showPptNode.value)
 
 const pptNode = computed(() => getStageNode(PPT_AGENT_ID))
-
-const videoNode = computed(() => getStageNode(VIDEO_AGENT_ID))
 
 const bundleNode = computed(() => getStageNode(BUNDLE_AGENT_ID))
 
@@ -741,7 +690,7 @@ const runningAgentCount = computed(() => {
 const dagHeroMessage = computed(() => {
   const running = Object.values(props.dagNodeStates).find(n => n.id !== COORDINATOR_AGENT_ID && n.status === 'running')
   if (running) return running.currentMessage || `${running.label}处理中...`
-  if (getStageNode(COORDINATOR_AGENT_ID).status === 'running') return '正在准备课件与视频...'
+  if (getStageNode(COORDINATOR_AGENT_ID).status === 'running') return '正在准备教学课件...'
   const allDone = Object.values(props.dagNodeStates).every(n => n.status === 'success')
   if (allDone) return '所有资源生成完成'
   return props.latestWorkflowMessage || '多智能体协同生成中'
@@ -771,7 +720,7 @@ const routeSteps = computed(() => {
     },
     {
       key: 'aggregation',
-      label: 'PPT / Video',
+      label: '教学课件',
       state: aggregationDone && aggregationNodes.value.length ? 'done' : aggregationRunning || coordinator.status === 'running' ? 'active' : '',
       lineState: aggregationDone || bundle.status === 'running' || bundle.status === 'success' ? 'done' : aggregationRunning ? 'active' : '',
     },
@@ -918,7 +867,7 @@ function getNodeStageLabel(node: DagNodeState) {
   if (node.status === 'running') {
     if (node.id === 'planning') return '计划生成中'
     if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
-    if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '生成中'
+    if (node.id === PPT_AGENT_ID) return '生成中'
     if (node.phase === 'llm_generating') return '核心推演中'
     if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
     if (node.phase === 'validating') return '一致性校验中'
@@ -926,8 +875,8 @@ function getNodeStageLabel(node: DagNodeState) {
     if (node.phase === 'bundling') return '资源整合中'
     return '工位执行中'
   }
-  if (node.id === BUNDLE_AGENT_ID) return '等待课件与视频'
-  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '等待基础资源'
+  if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与课件'
+  if (node.id === PPT_AGENT_ID) return '等待基础资源'
   return '等待上游协同'
 }
 
@@ -938,7 +887,6 @@ function getNodePhaseLabel(node: DagNodeState) {
     llm_generating: '深度推演',
     validating: '一致性校验',
     ppt_generating: 'PPT 聚合',
-    video_generating: '视频聚合',
     ppt_waiting_sources: '等待讲义要义',
     artifact_saved: '成果移交',
     research: '资料研究',
@@ -951,7 +899,7 @@ function getNodePhaseLabel(node: DagNodeState) {
   if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
   if (node.id === 'planning' && node.status === 'running') return '计划生成'
   if (node.id === COORDINATOR_AGENT_ID && node.status === 'running') return '任务调度'
-  if ((node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) && node.status === 'running') return '聚合生成'
+  if (node.id === PPT_AGENT_ID && node.status === 'running') return '聚合生成'
   if (node.id === BUNDLE_AGENT_ID && node.status === 'running') return '打包交付'
   if (node.status === 'waiting') return '等待上游'
   if (node.status === 'success') return '已完成'
@@ -971,7 +919,6 @@ function getNodeDisplayMessage(node: DagNodeState) {
   if (node.id === 'planning') return '正在根据学习需求与画像生成教学计划'
   if (node.id === COORDINATOR_AGENT_ID) return '等待基础资源完成后汇总成功、失败与大纲覆盖情况'
   if (node.id === PPT_AGENT_ID) return '等待讲义要义就绪以重排宣讲幻灯'
-  if (node.id === VIDEO_AGENT_ID) return '等待讲义就绪以生成讲解视频分镜'
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与聚合结果就绪后打包交付'
   return getNodeFallbackMessage(node)
 }
@@ -988,7 +935,7 @@ function getNodeArtifactStatus(node: DagNodeState) {
     if (node.status === 'running') return '正在汇总并打包资源'
     return '等待上游资源就绪'
   }
-  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) {
+  if (node.id === PPT_AGENT_ID) {
     return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
   }
   return hasGeneratedResource(node.id) ? '基础资源已交付' : '工位响应中'
@@ -998,7 +945,7 @@ function getNodeInputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '学习需求 / 学习场景 / 用户画像 / 已选 Agent'
   if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
   if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
-  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
+  if (node.id === PPT_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
   return '学习需求 / 用户画像 / 教学计划'
 }
 
@@ -1007,7 +954,7 @@ function getNodeOutputSummary(node: DagNodeState) {
   if (node.id === COORDINATOR_AGENT_ID) return '成功失败统计 / 覆盖情况 / 基础资源 handoff'
   if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
   if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
-  if (node.id === PPT_AGENT_ID || node.id === VIDEO_AGENT_ID) return '聚合资源生成中 / 等待中'
+  if (node.id === PPT_AGENT_ID) return '聚合资源生成中 / 等待中'
   return '基础资源生成中 / 等待中'
 }
 

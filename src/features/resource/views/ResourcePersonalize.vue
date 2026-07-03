@@ -310,9 +310,17 @@
                     class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
                   >
                     <option value="auto">自动推荐</option>
-                    <option value="editorial">教学编辑部</option>
-                    <option value="techmap">技术图谱</option>
+                    <option
+                      v-for="template in pptTemplates"
+                      :key="template.id"
+                      :value="template.id"
+                    >
+                      {{ template.name }}
+                    </option>
                   </select>
+                  <p class="m-0 text-[11px] leading-5 text-slate-400">
+                    {{ selectedPptTemplateDescription }}
+                  </p>
                 </div>
 
                 <div class="ctrl-group flex flex-col gap-1.5">
@@ -378,46 +386,6 @@
                 </div>
               </template>
 
-              <!-- Video Agent -->
-              <template v-if="agent.id === 'video'">
-                <p class="m-0 text-sm leading-6 text-slate-500">
-                  系统会根据知识类型自动选择精密图解、系统实验室或编辑课堂风格。
-                </p>
-
-                <div class="ctrl-group flex flex-col gap-1.5">
-                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">虚拟主播声线</label>
-                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
-                    <button
-                      v-for="opt in [
-                        { label: '亲和导师', value: 'teacher' },
-                        { label: '硬核教练', value: 'coach' }
-                      ]"
-                      :key="opt.value"
-                      type="button"
-                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
-                      :class="localConfigs.video.voice === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
-                      @click="setVideoVoice(opt.value)"
-                    >
-                      {{ opt.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div class="ctrl-group flex flex-col gap-1.5">
-                  <div class="slider-label-row flex justify-between items-center mb-1">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">预估微课时长</label>
-                    <span class="text-xs font-bold text-blue"><b>{{ localConfigs.video.duration_seconds }}</b> 秒</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    v-model.number="localConfigs.video.duration_seconds" 
-                    :min="60" 
-                    :max="300" 
-                    :step="30"
-                    class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue focus:outline-none"
-                  />
-                </div>
-              </template>
             </div>
           </div>
         </div>
@@ -451,11 +419,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   PhPaperPlaneTilt as Position
 } from '@phosphor-icons/vue'
 import { toast } from 'vue-sonner'
+import {
+  getPptTemplates,
+  type PptTemplateOption,
+} from '@/features/resource/api/resource'
 import type { LearningScenario, ResourceAgentId } from '@/features/resource/model/resource'
 import {
   MIN_AGENTS,
@@ -481,7 +453,9 @@ const emit = defineEmits<{
   launch: []
 }>()
 
-const personalizeAgents = computed(() => agentMetaList.filter(agent => !['master', 'assembler'].includes(agent.id)))
+const personalizeAgents = computed(() => agentMetaList.filter(
+  agent => !['master', 'assembler'].includes(agent.id),
+))
 
 const learningScenario = computed({
   get: () => props.learningScenario,
@@ -494,6 +468,29 @@ const enabledAgentIds = computed({
 })
 
 const localConfigs = ref<AnyAgentConfigs>(JSON.parse(JSON.stringify(props.agentConfigs)))
+const pptTemplates = ref<PptTemplateOption[]>([])
+
+const selectedPptTemplateDescription = computed(() => {
+  if (localConfigs.value.ppt.template === 'auto') {
+    return '系统会根据知识类型自动匹配最合适的模板'
+  }
+  return pptTemplates.value.find(
+    template => template.id === localConfigs.value.ppt.template,
+  )?.description || '所选模板当前不可用，请重新选择'
+})
+
+onMounted(async () => {
+  try {
+    const response = await getPptTemplates()
+    const templates = response.data?.data
+    if (!Array.isArray(templates) || templates.length === 0) {
+      throw new Error('PPT 模板列表为空')
+    }
+    pptTemplates.value = templates
+  } catch (error) {
+    console.error('PPT 模板列表加载失败', error)
+  }
+})
 
 // Watch parent prop changes (e.g. when scenario changes or is initialized)
 watch(() => props.agentConfigs, (newVal) => {
@@ -549,10 +546,6 @@ const setQuizDifficultyMode = (val: any) => {
 const setReadingLanguagePreference = (val: any) => {
   if (localConfigs.value.reading) localConfigs.value.reading.language_preference = val
 }
-const setVideoVoice = (val: any) => {
-  if (localConfigs.value.video) localConfigs.value.video.voice = val
-}
-
 const togglePptFocus = (value: 'core_concepts' | 'cases' | 'pitfalls' | 'derivation') => {
   const focus = localConfigs.value.ppt.focus
   if (focus.includes(value)) {

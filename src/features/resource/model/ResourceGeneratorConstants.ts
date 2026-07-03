@@ -14,8 +14,6 @@ import {
 // ===================== Agent 元数据 =====================
 
 export const PPT_AGENT_ID = 'ppt'
-export const VIDEO_AGENT_ID = 'video'
-export const CARTOON_AGENT_ID = 'cartoon'
 export const COORDINATOR_AGENT_ID = 'coordinator'
 export const BUNDLE_AGENT_ID = 'bundle'
 export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, BUNDLE_AGENT_ID]
@@ -30,8 +28,6 @@ export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   code: { label: '工程实训工位', icon: '💻' },
   reading: { label: '学术博览工位', icon: '📚' },
   ppt: { label: '宣讲排版工位', icon: '📊' },
-  video: { label: '微课导演工位', icon: '🎬' },
-  cartoon: { label: '动画讲解工位', icon: '🎞️' },
   bundle: { label: '汇编归档工位', icon: '📦' },
 }
 
@@ -44,8 +40,6 @@ export const agentMetaList = [
   { id: 'quiz', name: '考工检校', icon: Edit, colorClass: 'text-emerald' },
   { id: 'reading', name: '学术博览', icon: Collection, colorClass: 'text-indigo' },
   { id: 'ppt', name: '宣讲排版师', icon: DataBoard, colorClass: 'text-pink' },
-  { id: 'video', name: '微课导演', icon: DataBoard, colorClass: 'text-orange' },
-  { id: 'cartoon', name: '动画讲解', icon: DataBoard, colorClass: 'text-amber' },
 ]
 
 export const getAgentMeta = (id: string) =>
@@ -64,8 +58,6 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     code: { programming_language: 'python', difficulty: 'intermediate', case_type: 'algorithm_template', focus: 'application' },
     reading: { reading_depth: 'course_extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'review', density: 'detailed', focus: ['core_concepts', 'pitfalls'] },
-    video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
-    cartoon: { video_length_seconds: 90, voice: 'teacher', style: 'diagram', focus: 'concept' },
   },
   daily_review: {
     content: { structure: 'progressive', depth_level: 'quick', focus_mode: 'weak_points', include_examples: true },
@@ -73,9 +65,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', difficulty: 'beginner', case_type: 'basic_demo', focus: 'syntax' },
     reading: { reading_depth: 'course_extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'editorial', explanation_style: 'review', density: 'concise', focus: ['core_concepts', 'pitfalls'] },
-    video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
-    cartoon: { video_length_seconds: 90, voice: 'teacher', style: 'diagram', focus: 'concept' },
+    ppt: { template: 'instructional-editorial', explanation_style: 'review', density: 'concise', focus: ['core_concepts', 'pitfalls'] },
   },
   project_practice: {
     content: { structure: 'case_driven', depth_level: 'deep', focus_mode: 'full_coverage', include_examples: true },
@@ -83,9 +73,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
     code: { programming_language: 'python', difficulty: 'intermediate', case_type: 'basic_demo', focus: 'application' },
     reading: { reading_depth: 'engineering', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
-    ppt: { template: 'techmap', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
-    video: { duration_seconds: 240, voice: 'coach', aspect_ratio: '16:9', include_captions: true },
-    cartoon: { video_length_seconds: 120, voice: 'coach', style: 'lab', focus: 'process' },
+    ppt: { template: 'technical-atlas', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
   },
   self_study: {
     content: { structure: 'progressive', depth_level: 'deep', focus_mode: 'key_concepts', include_examples: true },
@@ -94,8 +82,6 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     code: { programming_language: 'python', difficulty: 'beginner', case_type: 'basic_demo', focus: 'syntax' },
     reading: { reading_depth: 'course_extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'review', density: 'standard', focus: ['core_concepts', 'pitfalls'] },
-    video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
-    cartoon: { video_length_seconds: 90, voice: 'teacher', style: 'classroom', focus: 'concept' },
   },
 }
 
@@ -126,8 +112,6 @@ export const getResourceTypeLabel = (type: string) => {
     quiz: '学力检校',
     reading: '学术博览',
     ppt: '演示幻灯',
-    video: '音影微课',
-    cartoon: '动画讲解',
   }
   return labelMap[type] || getAgentMeta(type).name || type
 }
@@ -152,8 +136,6 @@ export const getResourceToneClass = (type: string) => {
     quiz: 'tone-emerald',
     reading: 'tone-indigo',
     ppt: 'tone-pink',
-    video: 'tone-orange',
-    cartoon: 'tone-amber',
   }
   return toneMap[type] || 'tone-blue'
 }
@@ -166,8 +148,6 @@ export const getAgentOutputFormat = (agentId: string) => {
     quiz: 'Quiz 题库',
     reading: 'Reading List',
     ppt: 'PPT 页面',
-    video: '视频脚本',
-    cartoon: '动画视频',
   }
   return formatMap[agentId] || '学习资源'
 }

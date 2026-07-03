@@ -78,7 +78,10 @@
         </div>
 
         <template v-if="!compact && showAnswers[index]">
-          <div v-if="question.answer" class="quiz-answer">
+          <div
+            v-if="question.answer !== undefined && question.answer !== null && question.answer !== ''"
+            class="quiz-answer"
+          >
             <div class="answer-header">
               <span class="header-tag">TARGET</span>
               <span class="header-text">正确答案</span>
@@ -190,8 +193,12 @@ const hasSelected = (qIndex: number) => {
 }
 
 const isCorrectOption = (option: any, question: any) => {
-  if (!question.answer) return false
+  if (question.answer === undefined || question.answer === null) return false
   const val = option.label || (typeof option === 'string' ? option : option.content)
+  const type = (question.type || question.question_type)?.toLowerCase() || ''
+  if (type === 'true_false' && typeof question.answer === 'boolean') {
+    return val === (question.answer ? 'A' : 'B')
+  }
   if (Array.isArray(question.answer)) {
     return question.answer.includes(val)
   }
@@ -224,6 +231,7 @@ const getQuestionTypeText = (questionType?: string) => {
       return '多选'
     case 'true_false':
       return '判断'
+    case 'fill_blank':
     case 'blank':
       return '填空'
     case 'short_answer':

@@ -5,6 +5,15 @@ import type {
   ResourceTaskStatus,
 } from '@/features/resource/model/resource'
 
+export interface PptTemplateOption {
+  id: string
+  name: string
+  description: string
+  family: string
+  scheme: string
+  tags: string[]
+}
+
 // ==========================================
 // 资源生成 API
 // ==========================================
@@ -21,25 +30,6 @@ export function getResourceBundle(resourceId: number) {
   return http.get<ApiResponse<any>>(`/ai/resources/${resourceId}`, { timeout: 30000 })
 }
 
-/**
- * Fetch resource bundle with automatic retry.
- * Retries up to `retries` times with exponential backoff (1s, 2s, 4s).
- * Used when content is missing from polling summaries and needs recovery.
- */
-export async function getResourceBundleWithRetry(
-  resourceId: number,
-  retries = 2,
-): Promise<ReturnType<typeof getResourceBundle>> {
-  let lastError: unknown
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await getResourceBundle(resourceId)
-    } catch (err) {
-      lastError = err
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)))
-      }
-    }
-  }
-  throw lastError
+export function getPptTemplates() {
+  return http.get<ApiResponse<PptTemplateOption[]>>('/ai/ppt/templates')
 }
