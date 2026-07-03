@@ -15,6 +15,7 @@ import {
 
 export const PPT_AGENT_ID = 'ppt'
 export const VIDEO_AGENT_ID = 'video'
+export const CARTOON_AGENT_ID = 'cartoon'
 export const COORDINATOR_AGENT_ID = 'coordinator'
 export const BUNDLE_AGENT_ID = 'bundle'
 export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, BUNDLE_AGENT_ID]
@@ -30,6 +31,7 @@ export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   reading: { label: '学术博览工位', icon: '📚' },
   ppt: { label: '宣讲排版工位', icon: '📊' },
   video: { label: '微课导演工位', icon: '🎬' },
+  cartoon: { label: '动画讲解工位', icon: '🎞️' },
   bundle: { label: '汇编归档工位', icon: '📦' },
 }
 
@@ -43,51 +45,57 @@ export const agentMetaList = [
   { id: 'reading', name: '学术博览', icon: Collection, colorClass: 'text-indigo' },
   { id: 'ppt', name: '宣讲排版师', icon: DataBoard, colorClass: 'text-pink' },
   { id: 'video', name: '微课导演', icon: DataBoard, colorClass: 'text-orange' },
+  { id: 'cartoon', name: '动画讲解', icon: DataBoard, colorClass: 'text-amber' },
 ]
 
 export const getAgentMeta = (id: string) =>
   agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
 
 // ===================== 场景选项与默认值 =====================
+// 每个 agent 严格 4 个核心参数
 
 export type AnyAgentConfigs = ResourceGenerationRequest['agent_configs']
 
 export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
   exam_prep: {
-    content: { structure: 'exam_points', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'standard' },
-    quiz: { question_count: 5, difficulty_mode: 'exam', weak_point_weight: 50, exam_style: '考研', include_analysis: true, question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'exam_map', max_depth: 3, highlight_weak: true, leaf_detail: 'annotated', show_relations: true },
-    code: { programming_language: 'python', case_type: 'algorithm_template', difficulty: 'intermediate' },
-    reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-    ppt: {},
-    video: { duration_seconds: 180, scene_count: 6, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+    content: { structure: 'exam_points', depth_level: 'standard', focus_mode: 'weak_points', include_examples: true },
+    quiz: { difficulty_mode: 'exam', question_count: 5, exam_style: 'postgrad', question_types: ['single', 'multiple', 'judge', 'fill'] },
+    mindmap: { map_type: 'exam_map', max_depth: 3, leaf_detail: 'annotated', show_relations: true },
+    code: { programming_language: 'python', difficulty: 'intermediate', case_type: 'algorithm_template', focus: 'application' },
+    reading: { reading_depth: 'course_extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
+    ppt: { template: 'auto', explanation_style: 'review', density: 'detailed', focus: ['core_concepts', 'pitfalls'] },
+    video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+    cartoon: { video_length_seconds: 90, voice: 'teacher', style: 'diagram', focus: 'concept' },
   },
   daily_review: {
-    content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'weak_points', depth_level: 'quick' },
-    quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, leaf_detail: 'brief_note', show_relations: true },
-    code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
-    reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-    ppt: {},
-    video: { duration_seconds: 180, scene_count: 6, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+    content: { structure: 'progressive', depth_level: 'quick', focus_mode: 'weak_points', include_examples: true },
+    quiz: { difficulty_mode: 'adaptive', question_count: 5, exam_style: 'school', question_types: ['single', 'multiple', 'judge', 'fill'] },
+    mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
+    code: { programming_language: 'python', difficulty: 'beginner', case_type: 'basic_demo', focus: 'syntax' },
+    reading: { reading_depth: 'course_extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
+    ppt: { template: 'editorial', explanation_style: 'review', density: 'concise', focus: ['core_concepts', 'pitfalls'] },
+    video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+    cartoon: { video_length_seconds: 90, voice: 'teacher', style: 'diagram', focus: 'concept' },
   },
   project_practice: {
-    content: { structure: 'case_driven', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'deep' },
-    quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, leaf_detail: 'keyword', show_relations: false },
-    code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'intermediate' },
-    reading: { reading_depth: 'engineering', max_items: 5, language_preference: 'chinese' },
-    ppt: {},
-    video: { duration_seconds: 240, scene_count: 8, voice: 'coach', aspect_ratio: '16:9', include_captions: true },
+    content: { structure: 'case_driven', depth_level: 'deep', focus_mode: 'full_coverage', include_examples: true },
+    quiz: { difficulty_mode: 'adaptive', question_count: 5, exam_style: 'school', question_types: ['single', 'multiple', 'judge', 'fill'] },
+    mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
+    code: { programming_language: 'python', difficulty: 'intermediate', case_type: 'basic_demo', focus: 'application' },
+    reading: { reading_depth: 'engineering', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
+    ppt: { template: 'techmap', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
+    video: { duration_seconds: 240, voice: 'coach', aspect_ratio: '16:9', include_captions: true },
+    cartoon: { video_length_seconds: 120, voice: 'coach', style: 'lab', focus: 'process' },
   },
   self_study: {
-    content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'key_concepts', depth_level: 'deep' },
-    quiz: { question_count: 5, difficulty_mode: 'basic', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 4, highlight_weak: false, leaf_detail: 'brief_note', show_relations: true },
-    code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
-    reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-    ppt: {},
-    video: { duration_seconds: 180, scene_count: 6, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+    content: { structure: 'progressive', depth_level: 'deep', focus_mode: 'key_concepts', include_examples: true },
+    quiz: { difficulty_mode: 'basic', question_count: 5, exam_style: 'school', question_types: ['single', 'multiple', 'judge', 'fill'] },
+    mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'brief_note', show_relations: true },
+    code: { programming_language: 'python', difficulty: 'beginner', case_type: 'basic_demo', focus: 'syntax' },
+    reading: { reading_depth: 'course_extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
+    ppt: { template: 'auto', explanation_style: 'review', density: 'standard', focus: ['core_concepts', 'pitfalls'] },
+    video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+    cartoon: { video_length_seconds: 90, voice: 'teacher', style: 'classroom', focus: 'concept' },
   },
 }
 
@@ -119,6 +127,7 @@ export const getResourceTypeLabel = (type: string) => {
     reading: '学术博览',
     ppt: '演示幻灯',
     video: '音影微课',
+    cartoon: '动画讲解',
   }
   return labelMap[type] || getAgentMeta(type).name || type
 }
@@ -144,6 +153,7 @@ export const getResourceToneClass = (type: string) => {
     reading: 'tone-indigo',
     ppt: 'tone-pink',
     video: 'tone-orange',
+    cartoon: 'tone-amber',
   }
   return toneMap[type] || 'tone-blue'
 }
@@ -157,6 +167,7 @@ export const getAgentOutputFormat = (agentId: string) => {
     reading: 'Reading List',
     ppt: 'PPT 页面',
     video: '视频脚本',
+    cartoon: '动画视频',
   }
   return formatMap[agentId] || '学习资源'
 }

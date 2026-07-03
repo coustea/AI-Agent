@@ -66,17 +66,12 @@
 
     </transition>
 
-    <Teleport to="body"><transition name="modal-fade"><div v-if="previewVisible" class="custom-modal-overlay" @click="previewVisible = false"><div class="custom-modal-content note-preview-modal max-w-[78%] w-full" @click.stop><div class="modal-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-start"><div><h3 class="text-lg font-bold text-slate-900">{{ previewData ? getResourceTypeLabel(previewData.agentId) : '资源预览' }}</h3></div><button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="previewVisible = false">×</button></div>>
-      <div v-if="previewData" class="preview-dialog-body" :class="{ 'is-ppt-preview': previewData.agentId === 'ppt' }">
-        <MindmapView v-if="previewData.agentId === 'mindmap'" :result-data="previewData.resultData" />
-        <QuizView v-else-if="previewData.agentId === 'quiz'" :result-data="previewData.resultData" />
-        <CodeView v-else-if="previewData.agentId === 'code'" :result-data="previewData.resultData" />
-        <ReadingView v-else-if="previewData.agentId === 'reading'" :result-data="previewData.resultData" />
-        <PptView v-else-if="previewData.agentId === 'ppt'" :resource="previewData.resource" />
-        <VideoView v-else-if="previewData.agentId === 'video'" :result-data="previewData.resultData" />
-        <MarkdownView v-else :result-data="previewData.resultData" />
-      </div>
-    </div></div></transition></Teleport>
+    <!-- 统一资源预览弹窗 -->
+    <ResourcePreviewDialog
+      v-model:active-agent="activePreviewAgent"
+      :data="previewData"
+      :resource="previewResource"
+    />
   </div>
 </template>
 
@@ -94,13 +89,7 @@ import ResourceGenerating from '@/features/resource/views/ResourceGenerating.vue
 import ResourceBundleView from '@/features/resource/components/ResourceBundleView.vue'
 import './resource-generator.css'
 
-import MindmapView from '@/features/resource/components/MindmapView.vue'
-import MarkdownView from '@/features/resource/components/MarkdownView.vue'
-import QuizView from '@/features/resource/components/QuizView.vue'
-import CodeView from '@/features/resource/components/CodeView.vue'
-import ReadingView from '@/features/resource/components/ReadingView.vue'
-import PptView from '@/features/resource/components/PptView.vue'
-import VideoView from '@/features/resource/components/VideoView.vue'
+import ResourcePreviewDialog from '@/features/resource/components/ResourcePreviewDialog.vue'
 
 import {
   startResourceGeneration,
@@ -143,13 +132,14 @@ const learningScenario = ref<LearningScenario>('daily_review')
 const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt'])
 
 const agentConfigs = ref<AnyAgentConfigs>({
-  content: { structure: 'progressive', include_common_mistakes: true, include_examples: true, focus_mode: 'full_coverage', depth_level: 'standard' },
-  mindmap: { map_type: 'knowledge_tree', max_depth: 3, highlight_weak: true, leaf_detail: 'brief_note', show_relations: true },
-  quiz: { question_count: 5, difficulty_mode: 'adaptive', weak_point_weight: 50, exam_style: 'school', include_analysis: true, question_types: ['single', 'multiple', 'judge', 'fill'] },
-  code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner' },
-  reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese' },
-  ppt: {},
-  video: { duration_seconds: 180, scene_count: 6, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+  content: { structure: 'progressive', depth_level: 'standard', focus_mode: 'full_coverage', include_examples: true },
+  mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
+  quiz: { question_count: 5, difficulty_mode: 'adaptive', exam_style: 'school', question_types: ['single', 'multiple', 'judge', 'fill'] },
+  code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner', focus: 'syntax' },
+  reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
+  ppt: { template: 'auto', explanation_style: 'concept', density: 'standard', focus: ['core_concepts'] },
+  video: { duration_seconds: 180, voice: 'teacher', aspect_ratio: '16:9', include_captions: true },
+  cartoon: { style: 'diagram', voice: 'teacher', video_length_seconds: 90, focus: 'concept' },
 })
 
 const goToPersonalize = () => {
@@ -656,11 +646,14 @@ const resumeLiveGenerationUpdates = async () => {
   if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(resourceId)
 }
 
-const previewVisible = ref(false)
+const activePreviewAgent = ref<string | null>(null)
 const previewData = ref<any>(null)
+const previewResource = ref<any>(null)
+
 const handlePreview = (data: any) => {
-  previewData.value = data
-  previewVisible.value = true
+  activePreviewAgent.value = data?.agentId || null
+  previewData.value = data?.resultData || null
+  previewResource.value = data?.resource || null
 }
 
 const resetGenerator = () => {

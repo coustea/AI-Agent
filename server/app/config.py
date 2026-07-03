@@ -121,6 +121,9 @@ VIDEO_RENDER_TIMEOUT_SECONDS = get("video.render_timeout_seconds", 900)
 VIDEO_RENDER_CONCURRENCY = get("video.concurrency", 4)
 VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
 
+# ============ 动画讲解视频渲染配置 ============
+CARTOON_RENDER_WORKERS = get("cartoon.render_workers", 4)
+
 # ============ 知识库配置 ============
 # 是否启用知识库功能
 KB_ENABLED = get("knowledge.enabled", True)

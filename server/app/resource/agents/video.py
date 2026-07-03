@@ -83,9 +83,15 @@ def _node_materials(input_data: NodeInput) -> list[SourceMaterial]:
 
 
 def _request_options(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 VideoRequest 选项。
+
+    scene_count 由 duration_seconds 自动计算（约30秒/场景），
+    不再由用户直接配置。
+    """
+    duration = int(config.get("duration_seconds", 180))
     return {
-        "duration_seconds": int(config.get("duration_seconds", 180)),
-        "scene_count": int(config.get("scene_count", 6)),
+        "duration_seconds": duration,
+        "scene_count": max(3, min(12, round(duration / 30))),
         "aspect_ratio": config.get("aspect_ratio", "16:9"),
         "voice": config.get("voice", "teacher"),
         "include_captions": bool(config.get("include_captions", True)),

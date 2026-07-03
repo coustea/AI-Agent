@@ -185,6 +185,11 @@ video:
   concurrency: 4
   chromium_gl: angle
 
+# 动画讲解视频渲染
+cartoon:
+  # 并行渲染 worker 数量
+  render_workers: 4
+
 # 题库导入配置
 quiz:
   # 批量写入的批次大小

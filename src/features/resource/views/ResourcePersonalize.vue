@@ -29,7 +29,10 @@
         <div class="agent-configs-grid">
           <div 
             class="config-card-v2 bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col" 
-            :class="{ 'agent-off': !isAgentEnabled(agent.id) }" 
+            :class="{
+              'agent-off': !isAgentEnabled(agent.id),
+              'ppt-config-card': agent.id === 'ppt',
+            }"
             v-for="agent in personalizeAgents" 
             :key="agent.id"
           >
@@ -69,20 +72,6 @@
                 </div>
                 
                 <div class="ctrl-switch-group-v2 flex flex-col gap-4">
-                  <div class="ctrl-switch-v2 flex justify-between items-start">
-                    <div class="sw-info flex flex-col">
-                      <span class="sw-label text-sm font-semibold text-slate-800">涵盖易错点解析</span>
-                      <span class="sw-desc text-xs text-slate-400">针对常见误区进行深度剖析</span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        v-model="localConfigs.content.include_common_mistakes" 
-                        class="sr-only peer"
-                      />
-                      <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue"></div>
-                    </label>
-                  </div>
                   
                   <div class="ctrl-switch-v2 flex justify-between items-start">
                     <div class="sw-info flex flex-col">
@@ -314,9 +303,79 @@
 
               <!-- PPT Agent -->
               <template v-if="agent.id === 'ppt'">
-                <p class="m-0 text-sm leading-6 text-slate-500">
-                  系统将根据内容、受众与演示密度自动选择视觉方向。
-                </p>
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">模板</label>
+                  <select
+                    v-model="localConfigs.ppt.template"
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-blue"
+                  >
+                    <option value="auto">自动推荐</option>
+                    <option value="editorial">教学编辑部</option>
+                    <option value="techmap">技术图谱</option>
+                  </select>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">讲解方式</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '概念讲解', value: 'concept' },
+                        { label: '案例驱动', value: 'case_driven' },
+                        { label: '问题引导', value: 'problem_led' },
+                        { label: '复习提炼', value: 'review' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.ppt.explanation_style === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="localConfigs.ppt.explanation_style = opt.value as any"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">内容深度</label>
+                  <div class="flex gap-1.5 bg-slate-50 p-1 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '精炼', value: 'concise' },
+                        { label: '标准', value: 'standard' },
+                        { label: '深入', value: 'detailed' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                      :class="localConfigs.ppt.density === opt.value ? 'bg-white text-slate-900 shadow-sm' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                      @click="localConfigs.ppt.density = opt.value as any"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="ctrl-group flex flex-col gap-1.5">
+                  <label class="text-xs font-bold text-slate-500 uppercase tracking-wide">内容侧重</label>
+                  <div class="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl">
+                    <button
+                      v-for="opt in [
+                        { label: '核心概念', value: 'core_concepts' },
+                        { label: '案例', value: 'cases' },
+                        { label: '易错点', value: 'pitfalls' },
+                        { label: '过程推导', value: 'derivation' }
+                      ]"
+                      :key="opt.value"
+                      type="button"
+                      class="px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer transition-all"
+                      :class="localConfigs.ppt.focus.includes(opt.value) ? 'bg-white text-slate-900 border-slate-200 shadow-sm' : 'bg-transparent text-slate-400 border-transparent hover:text-slate-600'"
+                      @click="togglePptFocus(opt.value as any)"
+                    >
+                      {{ opt.label }}
+                    </button>
+                  </div>
+                </div>
               </template>
 
               <!-- Video Agent -->
@@ -492,6 +551,19 @@ const setReadingLanguagePreference = (val: any) => {
 }
 const setVideoVoice = (val: any) => {
   if (localConfigs.value.video) localConfigs.value.video.voice = val
+}
+
+const togglePptFocus = (value: 'core_concepts' | 'cases' | 'pitfalls' | 'derivation') => {
+  const focus = localConfigs.value.ppt.focus
+  if (focus.includes(value)) {
+    if (focus.length === 1) {
+      toast.warning('至少保留一个 PPT 讲解重点')
+      return
+    }
+    localConfigs.value.ppt.focus = focus.filter(item => item !== value)
+    return
+  }
+  localConfigs.value.ppt.focus = [...focus, value]
 }
 </script>
 

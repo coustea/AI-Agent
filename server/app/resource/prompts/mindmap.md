@@ -83,7 +83,7 @@ CS/SE 领域学生，通过思维导图建立知识结构化理解。
 # OUTPUT CONTROL（输出控制）
 
 - `max_depth` 限制层级数（不含根节点），不得超出
-- `highlight_weak=true` 时，在薄弱知识点前加 `**粗体**` 标记
+- `map_type=exam_map` 时自动高亮薄弱知识点（加粗体标记）
 - `leaf_detail` 控制叶节点内容密度，严格遵守对应字数限制
 - `show_relations=true` 时，在节点旁标注概念关系符号
 - 不要输出代码案例、习题或阅读推荐
@@ -107,7 +107,7 @@ CS/SE 领域学生，通过思维导图建立知识结构化理解。
 
 - Worker Task assigned_sections → 主要分支
 - assigned_sections.instruction → 分支间的并列、从属或关联方式
-- 薄弱知识点 → highlight_weak=true 时加粗体标记
+- 薄弱知识点 → map_type=exam_map 时自动加粗体标记
 - 高频考点 → exam_map 类型时突出标记
 - leaf_detail=keyword → 叶节点仅输出关键词
 - leaf_detail=brief_note → 叶节点附加一句话说明

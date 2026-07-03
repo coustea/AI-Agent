@@ -5,6 +5,7 @@
   build_resource_context — 构建 standalone 多智能体资源生成 prompt 上下文
   build_node_context     — 构建路径规划节点资源生成 prompt 上下文
   build_agent_config_section — 将 agent_config 字典转为结构化 Markdown 配置段
+  expand_agent_config    — 从 4 个核心参数自动推断被删除的派生参数
   salvage_json_from_llm  — 从 LLM 输出中健壮地提取 JSON（处理 markdown fence 包裹）
 """
 
@@ -21,49 +22,56 @@ from app.resource.schemas import (
 
 
 # ── Agent config 字段的人类可读标签映射 ──────────────────────────────────
+# 每个 agent 严格 4 个核心参数，前后端完全对齐。
 
 _CONTENT_LABELS: dict[str, str | dict] = {
-    "structure": "讲解结构",
-    "include_common_mistakes": "涵盖易错点解析",
-    "include_examples": "丰富生活化示例",
-    "focus_mode": {
-        "weak_points": "聚焦薄弱点",
-        "key_concepts": "聚焦核心概念",
-        "full_coverage": "全面覆盖",
+    "structure": {
+        "progressive": "渐进式引导",
+        "summary_first": "先总后分",
+        "exam_points": "考点驱动",
+        "case_driven": "案例驱动",
     },
     "depth_level": {
-        "quick": "快速概览",
-        "standard": "标准深度",
-        "deep": "深度剖析",
+        "quick": "精炼",
+        "standard": "标准",
+        "deep": "深入",
     },
+    "focus_mode": {
+        "weak_points": "薄弱强化",
+        "key_concepts": "核心概念",
+        "full_coverage": "全覆盖",
+    },
+    "include_examples": "生活化示例",
 }
 
 _MINDMAP_LABELS: dict[str, str | dict] = {
     "map_type": {
-        "knowledge_tree": "核心知识树",
-        "exam_map": "高频考点图",
-        "comparison_map": "对比复习图",
+        "knowledge_tree": "知识树",
+        "exam_map": "考点图",
+        "comparison_map": "对比图",
     },
-    "max_depth": "节点发散层级",
-    "highlight_weak": "高亮薄弱知识点",
+    "max_depth": "发散层级",
     "leaf_detail": {
-        "keyword": "仅关键词（每节点 ≤8 字）",
-        "brief_note": "关键词+简要说明（每节点 ≤20 字）",
-        "annotated": "关键词+详细注释（每节点 ≤40 字，含定义或要点）",
+        "keyword": "关键词（≤8字）",
+        "brief_note": "简要（≤20字）",
+        "annotated": "详注（≤40字）",
     },
-    "show_relations": "标注概念关系（→因果、⇄对比、⇢依赖、⊂包含）",
+    "show_relations": "标注概念关系",
 }
 
 _QUIZ_LABELS: dict[str, str | dict] = {
-    "question_count": "题目数量",
     "difficulty_mode": {
         "basic": "基础巩固",
         "adaptive": "动态自适应",
-        "exam": "硬核考试",
+        "exam": "硬核考研",
     },
-    "weak_point_weight": "薄弱点侧重权重",
-    "exam_style": "考试风格",
-    "include_analysis": "每题包含详细解析",
+    "question_count": "生成题量",
+    "exam_style": {
+        "school": "校考",
+        "postgrad": "考研",
+        "certification": "考证",
+        "interview": "面试",
+    },
     "question_types": {
         "single": "单选",
         "multiple": "多选",
@@ -74,42 +82,97 @@ _QUIZ_LABELS: dict[str, str | dict] = {
 
 _CODE_LABELS: dict[str, str | dict] = {
     "programming_language": "编程语言",
-    "case_type": {
-        "basic_demo": "基础教学",
-        "algorithm_template": "算法模板",
-        "debug_demo": "调试演示",
-    },
     "difficulty": {
         "beginner": "入门",
         "intermediate": "进阶",
         "advanced": "挑战",
     },
+    "case_type": {
+        "basic_demo": "基础教学",
+        "algorithm_template": "算法模板",
+        "debug_demo": "调试排错",
+    },
+    "focus": {
+        "syntax": "语法基础",
+        "application": "实战应用",
+        "debugging": "调试排错",
+    },
 }
 
 _READING_LABELS: dict[str, str | dict] = {
     "reading_depth": {
-        "course_extended": "课程内延展",
-        "engineering": "工程化实践",
-        "frontier": "前沿学术论文",
+        "course_extended": "课程延展",
+        "engineering": "工程实践",
+        "frontier": "学术前沿",
     },
-    "max_items": "拓展上限",
     "language_preference": {
         "chinese": "中文优先",
-        "english": "英文原版",
         "both": "中英双语",
+        "english": "英文原版",
+    },
+    "max_items": "拓展上限",
+    "focus": {
+        "textbook": "教材拓展",
+        "engineering": "工程实践",
+        "paper": "论文研读",
+    },
+}
+
+_PPT_LABELS: dict[str, str | dict] = {
+    "template": {
+        "auto": "自动推荐",
+        "editorial": "教学编辑部",
+        "techmap": "技术图谱",
+    },
+    "explanation_style": {
+        "concept": "概念讲解",
+        "case_driven": "案例驱动",
+        "problem_led": "问题引导",
+        "review": "复习提炼",
+    },
+    "density": {
+        "concise": "精炼",
+        "standard": "标准",
+        "detailed": "深入",
+    },
+    "focus": {
+        "core_concepts": "核心概念",
+        "cases": "案例",
+        "pitfalls": "易错点",
+        "derivation": "过程推导",
     },
 }
 
 _VIDEO_LABELS: dict[str, str | dict] = {
-    "duration_seconds": "预估微课时长",
-    "scene_count": "场景数",
     "voice": {
         "teacher": "亲和导师",
         "coach": "硬核教练",
-        "concise": "简洁旁白",
     },
-    "aspect_ratio": "画面比例",
-    "include_captions": "包含字幕",
+    "duration_seconds": "预估时长",
+    "aspect_ratio": {
+        "16:9": "横屏",
+        "9:16": "竖屏",
+        "1:1": "方形",
+    },
+    "include_captions": "字幕开关",
+}
+
+_CARTOON_LABELS: dict[str, str | dict] = {
+    "style": {
+        "diagram": "精密图解",
+        "lab": "系统实验室",
+        "classroom": "编辑课堂",
+    },
+    "voice": {
+        "teacher": "亲和导师",
+        "coach": "硬核教练",
+    },
+    "video_length_seconds": "预估时长",
+    "focus": {
+        "concept": "概念讲解",
+        "process": "过程演示",
+        "comparison": "对比分析",
+    },
 }
 
 # agent_id → 标签映射
@@ -119,7 +182,9 @@ _AGENT_CONFIG_LABELS: dict[str, dict[str, str | dict]] = {
     "quiz": _QUIZ_LABELS,
     "code": _CODE_LABELS,
     "reading": _READING_LABELS,
+    "ppt": _PPT_LABELS,
     "video": _VIDEO_LABELS,
+    "cartoon": _CARTOON_LABELS,
 }
 
 _AGENT_CONFIG_TITLES: dict[str, str] = {
@@ -128,17 +193,21 @@ _AGENT_CONFIG_TITLES: dict[str, str] = {
     "quiz": "习题配置",
     "code": "代码配置",
     "reading": "阅读配置",
+    "ppt": "课件配置",
     "video": "视频配置",
+    "cartoon": "动画配置",
 }
 
-# 每个基础 agent 在 prompt 中输出的结构化配置字段（排除运行时注入的非用户字段）
+# 每个 agent 对外开放的核心参数字段名
 _AGENT_CONFIG_FIELDS: dict[str, list[str]] = {
-    "content": ["structure", "include_common_mistakes", "include_examples", "focus_mode", "depth_level"],
-    "mindmap": ["map_type", "max_depth", "highlight_weak", "leaf_detail", "show_relations"],
-    "quiz": ["question_count", "difficulty_mode", "weak_point_weight", "exam_style", "include_analysis", "question_types"],
-    "code": ["programming_language", "case_type", "difficulty"],
-    "reading": ["reading_depth", "max_items", "language_preference"],
-    "video": ["duration_seconds", "scene_count", "voice", "aspect_ratio", "include_captions"],
+    "content": ["structure", "depth_level", "focus_mode", "include_examples"],
+    "mindmap": ["map_type", "max_depth", "leaf_detail", "show_relations"],
+    "quiz": ["difficulty_mode", "question_count", "exam_style", "question_types"],
+    "code": ["programming_language", "difficulty", "case_type", "focus"],
+    "reading": ["reading_depth", "language_preference", "max_items", "focus"],
+    "ppt": ["template", "explanation_style", "density", "focus"],
+    "video": ["voice", "duration_seconds", "aspect_ratio", "include_captions"],
+    "cartoon": ["style", "voice", "video_length_seconds", "focus"],
 }
 
 
@@ -156,7 +225,7 @@ def _format_config_value(field: str, value: object, labels: dict[str, str | dict
     if isinstance(label_or_map, dict) and isinstance(value, str):
         return label_or_map.get(value, value)
 
-    # 列表值（如 question_types）
+    # 列表值（如 question_types / ppt focus）
     if isinstance(value, list):
         if isinstance(label_or_map, dict):
             mapped = []
@@ -171,6 +240,44 @@ def _format_config_value(field: str, value: object, labels: dict[str, str | dict
         return f"{label_or_map}: {value}"
 
     return str(value)
+
+
+def expand_agent_config(agent_id: str, config: dict) -> dict:
+    """从 4 个核心参数自动推断被删除的派生参数，注入回 config dict。
+
+    被删除的参数不再由用户直接配置，但其语义由核心参数自动恢复，
+    以保证 agent 运行逻辑不受影响。
+
+    Args:
+        agent_id: Agent 标识符
+        config: 原始 4 参数 agent_config 字典
+
+    Returns:
+        扩展后的 config 字典（包含推断出的派生参数）
+    """
+    expanded = dict(config)
+
+    if agent_id == "content":
+        # include_common_mistakes: focus_mode=weak_points 时自动启用
+        expanded["include_common_mistakes"] = config.get("focus_mode") == "weak_points"
+
+    elif agent_id == "mindmap":
+        # highlight_weak: map_type=exam_map 时自动启用
+        expanded["highlight_weak"] = config.get("map_type") == "exam_map"
+
+    elif agent_id == "quiz":
+        # weak_point_weight: 由 difficulty_mode 推断
+        mode = config.get("difficulty_mode", "basic")
+        expanded["weak_point_weight"] = {"basic": 30, "adaptive": 50, "exam": 70}.get(mode, 50)
+        # include_analysis: 始终包含解析
+        expanded["include_analysis"] = True
+
+    elif agent_id == "video":
+        # scene_count: 由 duration_seconds 自动计算（约30秒/场景）
+        duration = int(config.get("duration_seconds", 180))
+        expanded["scene_count"] = max(3, min(12, round(duration / 30)))
+
+    return expanded
 
 
 def build_agent_config_section(agent_id: str, config: dict) -> str | None:
@@ -236,10 +343,11 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
         }
         parts.append("## 上游交接摘要\n" + json.dumps(handoffs, ensure_ascii=False, indent=2))
 
-    # 统一注入 Agent 配置
+    # 先自动推断派生参数，再注入配置段到 prompt
     effective_agent_id = (input_data.agent_config.get("agent_id") if input_data.agent_config else None) or input_data.agent_name
     if effective_agent_id and input_data.agent_config:
-        config_section = build_agent_config_section(effective_agent_id, input_data.agent_config)
+        expanded_config = expand_agent_config(effective_agent_id, input_data.agent_config)
+        config_section = build_agent_config_section(effective_agent_id, expanded_config)
         if config_section:
             parts.append(config_section)
 
@@ -318,7 +426,6 @@ def build_basic_handoff(
     )
 
 
-
 def build_node_context(input_data: NodeInput) -> list[str]:
     """构建路径规划当前节点资源生成上下文。"""
     parts = [
@@ -348,11 +455,12 @@ def build_node_context(input_data: NodeInput) -> list[str]:
         )
         parts.append(f"## 学习者画像\n{profile_text}")
 
-    # 统一注入 Agent 配置（路径节点场景）
+    # 先自动推断派生参数，再注入配置段到 prompt
     if input_data.agent_config:
         effective_agent_id = input_data.agent_config.get("agent_id")
         if effective_agent_id:
-            config_section = build_agent_config_section(effective_agent_id, input_data.agent_config)
+            expanded_config = expand_agent_config(effective_agent_id, input_data.agent_config)
+            config_section = build_agent_config_section(effective_agent_id, expanded_config)
             if config_section:
                 parts.append(config_section)
 

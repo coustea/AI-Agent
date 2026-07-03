@@ -71,7 +71,7 @@ CS/SE 领域学生，根据画像调整：
 
 - Worker Task 的每个 `assigned_sections` 大纲项必须在文档中有明确对应内容
 - 配置关闭示例时（`include_examples=false`），不生成独立示例章节，可用简短类比替代
-- 配置关闭误区时（`include_common_mistakes=false`），只保留必要注意事项
+- 配置关闭误区时（`focus_mode` 非 `weak_points`），只保留必要注意事项
 - 画像或指令中有薄弱点时，在对应领域增加更多解释和示例
 - 不要代替其他 Agent 生成代码案例、习题、思维导图或阅读推荐
 
@@ -95,7 +95,7 @@ CS/SE 领域学生，根据画像调整：
 - 大纲项标记 must_not_miss=true → 重点讲解并满足对应执行指令
 - 薄弱点领域 → 增加解释和示例
 - 配置关闭示例 → 用简短类比替代
-- 配置关闭误区 → 只保留必要注意事项
+- 配置 `focus_mode=weak_points` → 自动涵盖易错点解析
 
 # VALIDATION（质量检查）
 

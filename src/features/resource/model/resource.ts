@@ -1,6 +1,7 @@
 // src/types/resource.ts — 资源生成相关类型定义
+// 各 agent 只暴露影响生成质量的核心参数，前后端完全对齐
 
-export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video'
+export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'video' | 'cartoon'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 
@@ -28,43 +29,51 @@ export interface ResourceGenerationRequest {
   agent_configs: {
     content: {
       structure: 'progressive' | 'summary_first' | 'exam_points' | 'case_driven'
-      include_common_mistakes: boolean
-      include_examples: boolean
-      focus_mode: 'weak_points' | 'key_concepts' | 'full_coverage'
       depth_level: 'quick' | 'standard' | 'deep'
+      focus_mode: 'weak_points' | 'key_concepts' | 'full_coverage'
+      include_examples: boolean
     }
     mindmap: {
       map_type: 'knowledge_tree' | 'exam_map' | 'comparison_map'
       max_depth: number
-      highlight_weak: boolean
       leaf_detail: 'keyword' | 'brief_note' | 'annotated'
       show_relations: boolean
     }
     quiz: {
-      question_count: number
       difficulty_mode: 'basic' | 'adaptive' | 'exam'
-      weak_point_weight: number
-      exam_style: 'school' | '考研' | '考证' | 'interview'
-      include_analysis: boolean
+      question_count: number
+      exam_style: 'school' | 'postgrad' | 'certification' | 'interview'
       question_types: Array<'single' | 'multiple' | 'judge' | 'fill'>
     }
     code: {
       programming_language: 'python' | 'c' | 'cpp' | 'java' | 'go' | 'javascript' | 'typescript'
-      case_type: 'basic_demo' | 'algorithm_template' | 'debug_demo'
       difficulty: 'beginner' | 'intermediate' | 'advanced'
+      case_type: 'basic_demo' | 'algorithm_template' | 'debug_demo'
+      focus: 'syntax' | 'application' | 'debugging'
     }
     reading: {
       reading_depth: 'course_extended' | 'engineering' | 'frontier'
-      max_items: number
       language_preference: 'chinese' | 'english' | 'both'
+      max_items: number
+      focus: 'textbook' | 'engineering' | 'paper'
     }
-    ppt: Record<string, never>
+    ppt: {
+      template: 'auto' | 'editorial' | 'techmap'
+      explanation_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
+      density: 'concise' | 'standard' | 'detailed'
+      focus: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
+    }
     video: {
+      voice: 'teacher' | 'coach'
       duration_seconds: number
-      scene_count: number
-      voice: 'teacher' | 'coach' | 'concise'
       aspect_ratio: '16:9' | '9:16' | '1:1'
       include_captions: boolean
+    }
+    cartoon: {
+      style: 'diagram' | 'lab' | 'classroom'
+      voice: 'teacher' | 'coach'
+      video_length_seconds: number
+      focus: 'concept' | 'process' | 'comparison'
     }
   }
 }

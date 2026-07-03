@@ -97,6 +97,10 @@ CS/SE 领域学生，需要通过延伸阅读加深理解。
   - `frontier`：优先论文、前沿文章、经典项目
 - `max_items`：推荐资源数量上限，不得超出
 - `language_preference`：资源语言偏好
+- `focus`：内容侧重方向
+  - `textbook`：教材拓展，侧重经典教材和入门读物
+  - `engineering`：工程实践，侧重实战指南和开源项目
+  - `paper`：论文研读，侧重学术论文和前沿研究
 
 # OUTPUT CONTROL（输出控制）
 

@@ -5,6 +5,8 @@
 - SingleResourceRequest     — 单智能体资源生成请求
 - AgentConfigs              — 各 agent 的配置集合
 - 各 agent 配置类（ContentConfig / MindmapConfig / QuizConfig 等）
+
+各 agent 只暴露影响生成质量的核心参数，前后端完全对齐。
 """
 
 from __future__ import annotations
@@ -46,47 +48,50 @@ class AgentSelection(BaseModel):
 
 
 class ContentConfig(BaseModel):
-    """内容 Agent 配置。"""
+    """内容 Agent 配置 — 4 个核心参数。"""
+
     structure: Literal["progressive", "summary_first", "exam_points", "case_driven"] = "progressive"
-    include_common_mistakes: bool = True
-    include_examples: bool = True
-    focus_mode: Literal["weak_points", "key_concepts", "full_coverage"] = "key_concepts"
     depth_level: Literal["quick", "standard", "deep"] = "standard"
+    focus_mode: Literal["weak_points", "key_concepts", "full_coverage"] = "key_concepts"
+    include_examples: bool = True
 
 
 class MindmapConfig(BaseModel):
-    """思维导图 Agent 配置。"""
+    """思维导图 Agent 配置 — 4 个核心参数。"""
+
     map_type: Literal["knowledge_tree", "exam_map", "comparison_map"] = "knowledge_tree"
     max_depth: int = Field(default=3, ge=2, le=5)
-    highlight_weak: bool = True
     leaf_detail: Literal["keyword", "brief_note", "annotated"] = "brief_note"
     show_relations: bool = True
 
 
 class QuizConfig(BaseModel):
-    """习题 Agent 配置。"""
-    question_count: int = Field(default=5, ge=1, le=20)
+    """习题 Agent 配置 — 4 个核心参数。"""
+
     difficulty_mode: Literal["basic", "adaptive", "exam"] = "basic"
-    weak_point_weight: float = Field(default=50, ge=0.0, le=100.0)
-    exam_style: Literal["school", "考研", "考证", "interview"] = "school"
-    include_analysis: bool = True
+    question_count: int = Field(default=5, ge=1, le=20)
+    exam_style: Literal["school", "postgrad", "certification", "interview"] = "school"
     question_types: list[Literal["single", "multiple", "judge", "fill"]] = Field(
         default_factory=lambda: ["single", "multiple", "judge", "fill"]
     )
 
 
 class CodeConfig(BaseModel):
-    """代码 Agent 配置。"""
+    """代码 Agent 配置 — 4 个核心参数。"""
+
     programming_language: Literal["python", "c", "cpp", "java", "go", "javascript", "typescript"] = "python"
-    case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = "basic_demo"
     difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
+    case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = "basic_demo"
+    focus: Literal["syntax", "application", "debugging"] = "syntax"
 
 
 class ReadingConfig(BaseModel):
-    """阅读推荐 Agent 配置。"""
+    """阅读推荐 Agent 配置 — 4 个核心参数。"""
+
     reading_depth: Literal["course_extended", "engineering", "frontier"] = "course_extended"
-    max_items: int = Field(default=5, ge=1, le=10)
     language_preference: Literal["chinese", "english", "both"] = "chinese"
+    max_items: int = Field(default=5, ge=1, le=10)
+    focus: Literal["textbook", "engineering", "paper"] = "textbook"
 
     @field_validator("language_preference", mode="before")
     @classmethod
@@ -97,19 +102,32 @@ class ReadingConfig(BaseModel):
 
 
 class PptConfig(BaseModel):
-    """PPT 风格与密度由生成流水线自动推断。"""
+    """PPT Agent 配置 — 4 个核心参数。"""
 
-    model_config = ConfigDict(extra="forbid")
+    template: Literal["auto", "editorial", "techmap"] = "auto"
+    explanation_style: Literal["concept", "case_driven", "problem_led", "review"] = "concept"
+    density: Literal["concise", "standard", "detailed"] = "standard"
+    focus: list[Literal["core_concepts", "cases", "pitfalls", "derivation"]] = Field(
+        default_factory=lambda: ["core_concepts"],
+    )
 
 
 class VideoConfig(BaseModel):
-    """Shared VideoAgent runtime preferences."""
+    """视频 Agent 配置 — 4 个核心参数。"""
 
+    voice: Literal["teacher", "coach"] = "teacher"
     duration_seconds: int = Field(default=180, ge=60, le=600)
-    scene_count: int = Field(default=6, ge=3, le=12)
-    voice: Literal["teacher", "coach", "concise"] = "teacher"
     aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
     include_captions: bool = True
+
+
+class CartoonConfig(BaseModel):
+    """动画讲解 Agent 配置 — 4 个核心参数。"""
+
+    style: Literal["diagram", "lab", "classroom"] = "diagram"
+    voice: Literal["teacher", "coach"] = "teacher"
+    video_length_seconds: int = Field(default=90, ge=60, le=180)
+    focus: Literal["concept", "process", "comparison"] = "concept"
 
 
 class AgentConfigs(BaseModel):
@@ -123,6 +141,7 @@ class AgentConfigs(BaseModel):
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
     ppt: PptConfig = Field(default_factory=PptConfig)
     video: VideoConfig = Field(default_factory=VideoConfig)
+    cartoon: CartoonConfig = Field(default_factory=CartoonConfig)
 
     def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
         value = getattr(self, agent_id, None)
@@ -168,11 +187,11 @@ class ResourceGenerationRequest(BaseModel):
         }
         if not enabled_agent_ids:
             raise ValueError("selected_agents 过滤 enabled=true 后不能为空")
-        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video"}
+        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video", "cartoon"}
         base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
         if aggregation_agent_ids and not base_agent_ids:
             raise ValueError(
-                "PPT/Video 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
+                "PPT/Video/动画 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
             )
         self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
         return self
@@ -184,3 +203,13 @@ class ResourceGenerationRequest(BaseModel):
             for item in sorted(self.selected_agents, key=_agent_sort_key)
             if item.enabled
         ]
+
+
+class SingleResourceRequest(BaseModel):
+    """单智能体资源生成请求。"""
+    model_config = ConfigDict(extra="forbid")
+
+    learning_need: str
+    learning_scenario: LearningScenario = "self_study"
+    agent_id: ResourceAgentId
+    agent_config: dict[str, Any] = Field(default_factory=dict)
