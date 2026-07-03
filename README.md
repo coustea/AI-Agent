@@ -100,6 +100,9 @@ software/
 - markdown-it + KaTeX（Markdown/LaTeX 渲染）
 - markmap（思维导图）
 - highlight.js（代码高亮）
+- **mp4-muxer**（浏览器端 MP4 封装）
+- **pptxgenjs**（PowerPoint 生成）
+- **reveal.js**（演示幻灯片）
 
 ### 前端启动
 
@@ -132,6 +135,10 @@ npm run build
 - OpenAI 兼容 API
 - ChromaDB / FAISS（向量检索）
 - uv（Python 包管理）
+- **Remotion 4.0**（讲解视频渲染）
+- **HyperFrames**（动画视频渲染）
+- **FFmpeg / FFprobe**（音视频处理）
+- **Edge-TTS / 讯飞 TTS**（视频配音）
 
 ### 后端启动
 
@@ -140,6 +147,62 @@ cd server
 uv sync
 uv run fastapi dev app/main.py --port 9999
 ```
+
+## 视频渲染依赖
+
+本项目包含两条独立的视频渲染管线，需要以下外部工具：
+
+### 1. 讲解视频（Remotion）
+
+基于 Remotion 4.0 的专业教学视频渲染：
+
+**必需工具**：
+- **Node.js** 18+（推荐 20+）
+- **FFmpeg** 与 **FFprobe**（用于音视频流处理）
+- **Chromium**（Remotion 自动管理）
+
+**安装**：
+```bash
+# macOS
+brew install ffmpeg node
+
+# Ubuntu/Debian
+sudo apt install ffmpeg nodejs npm
+
+# 验证安装
+ffmpeg -version
+ffprobe -version
+node --version  # 应 >= 18.0.0
+```
+
+**初始化 Remotion 项目**：
+```bash
+cd video-render
+npm install
+```
+
+**配置项**（`server/config.yaml`）：
+- `video.render_timeout_seconds`: 渲染超时（默认 900s）
+- `video.concurrency`: 并发渲染数（默认 4）
+- `video.chromium_gl`: Chromium GL 后端（angle / swiftshader / egl）
+
+### 2. 动画讲解视频（HyperFrames）
+
+基于 HyperFrames 的手绘动画渲染：
+
+**必需工具**：
+- **Node.js** 18+
+- **FFmpeg**（推荐带 NVENC 支持，用于 GPU 加速）
+- **nvidia-smi**（仅 Linux，用于检测 NVIDIA GPU）
+
+**GPU 加速**（可选）：
+- 检测到 NVIDIA GPU + NVENC 编码器时自动启用
+- 低内存模式（≤8GB）自动降级为单 worker、CPU 渲染
+
+**自动环境检测**：
+- macOS: 通过 `sysctl` 检测物理核心与内存
+- Linux: 通过 `/proc/meminfo` 和 CPU topology 检测
+- 自动选择最优 worker 数、GPU/CPU 模式
 
 ### 配置
 
@@ -202,6 +265,55 @@ uv run fastapi dev app/main.py --port 9999           # 开发服务器
 uv run pytest                                         # 全部测试
 uv run pytest tests/chat -q                           # 指定模块测试
 uv run pytest -x                                      # 首个失败即停止
+```
+
+## 可选依赖与扩展功能
+
+### 向量检索（知识库）
+
+需安装 Ollama 并拉取 embedding 模型：
+
+**安装 Ollama**：
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 拉取模型
+ollama pull bge-m3:latest
+ollama serve  # 确保 http://127.0.0.1:11434 可访问
+```
+
+**配置项**（`server/config.yaml`）：
+```yaml
+knowledge:
+  enabled: true
+  embed_model: "bge-m3:latest"
+  ollama_base_url: "http://127.0.0.1:11434"
+```
+
+### 数字人（讯飞 Avatar）
+
+需配置讯飞数字人服务密钥（`server/config.yaml`）：
+```yaml
+avatar:
+  app_id: "your-app-id"
+  api_key: "your-api-key"
+  api_secret: "your-api-secret"
+  url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
+```
+
+WebSocket 入口：`ws://host:9999/ws/avatar?token=JWT`
+
+### 搜索服务
+
+支持 Tavily 和讯飞搜索：
+```yaml
+search:
+  tavily_key: "tvly-xxx"  # Tavily API Key
+  spark_key: "xxx:xxx"    # 讯飞搜索密钥
 ```
 
 ## 端口配置

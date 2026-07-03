@@ -12,6 +12,141 @@ FastAPI + LangGraph 多智能体学习平台后端。
 | LLM | OpenAI 兼容 API (ChatOpenAI) |
 | 向量检索 | ChromaDB, FAISS, Ollama (bge-m3) |
 | 包管理 | uv |
+| 视频渲染 | Remotion 4.0, HyperFrames, FFmpeg |
+| TTS 配音 | Edge-TTS, 讯飞星火 TTS |
+
+## 视频渲染模块
+
+后端包含两条独立的视频渲染管线，均需要 FFmpeg 支持。
+
+### 1. Remotion 讲解视频
+
+**入口**：`app/resource/agents/video.py` → `app/shared/video/agent.py`
+
+**渲染器**：`app/shared/video/renderer.py` → `video-render/` (Remotion 项目)
+
+**依赖**：
+- FFmpeg / FFprobe（必须）
+- Node.js 18+（必须）
+- Remotion 4.0.478（video-render/package.json）
+
+**工作流程**：
+1. `VideoMaterialAgent` 提取教学材料要点
+2. `VideoDirectorAgent` 规划场景节奏
+3. `SceneWriterAgent` 为每个场景撰写脚本与视觉 cue
+4. `VideoTtsService`（讯飞 TTS 或 Edge-TTS）生成配音 MP3
+5. `RemotionVideoRenderer` 调用 `npx tsx scripts/render.ts` 渲染 MP4
+
+**配置**（`config.yaml`）：
+```yaml
+video:
+  render_timeout_seconds: 900  # 单视频最大渲染时长
+  concurrency: 4                # Remotion 并发
+  chromium_gl: angle            # Chromium GL 后端
+```
+
+**验证 FFmpeg 安装**：
+```bash
+ffmpeg -version      # 需能看到 libx264、aac 编码器
+ffprobe -version     # 用于探测音视频流信息
+```
+
+**初始化 video-render**：
+```bash
+cd video-render
+npm install
+# 验证 Remotion CLI
+npx remotion --version
+```
+
+### 2. HyperFrames 动画讲解
+
+**入口**：`app/resource/agents/cartoon.py` → `app/shared/cartoon/pipeline.py`
+
+**渲染器**：`app/shared/cartoon/renderer.py` → `npx hyperframes render`
+
+**依赖**：
+- FFmpeg（必须，推荐带 NVENC）
+- Node.js 18+（必须）
+- HyperFrames CLI（自动通过 npx 调用）
+
+**自动环境检测**：
+- 物理核心数（macOS: `sysctl hw.physicalcpu`，Linux: CPU topology）
+- 可用内存（macOS: `vm_stat`，Linux: `/proc/meminfo`）
+- NVIDIA GPU（Linux: `nvidia-smi` + `h264_nvenc` 编码器）
+- 低内存模式（≤8GB）自动降级为单 worker、CPU 渲染
+
+**GPU 加速条件**（仅 Linux）：
+1. `ffmpeg -encoders` 输出包含 `h264_nvenc`
+2. `nvidia-smi` 查询到 GPU 设备
+3. 可用内存 > 3GB
+
+**渲染命令示例**：
+```bash
+npx --no-install hyperframes render . \
+  --output video.mp4 \
+  --fps 30 \
+  --quality high \
+  --workers 4 \
+  --browser-gpu \
+  --gpu
+```
+
+### FFmpeg 安装指南
+
+**macOS**：
+```bash
+brew install ffmpeg
+# 验证
+ffmpeg -version
+```
+
+**Ubuntu/Debian**：
+```bash
+sudo apt update
+sudo apt install ffmpeg
+# 验证
+ffmpeg -version
+```
+
+**带 NVENC 支持的 FFmpeg（Linux + NVIDIA GPU）**：
+```bash
+# 安装 NVIDIA 驱动后
+sudo apt install ffmpeg
+# 验证 NVENC 支持
+ffmpeg -encoders | grep nvenc
+# 应看到：h264_nvenc, hevc_nvenc
+```
+
+**Windows**：
+从 https://ffmpeg.org/download.html 下载预编译版本，解压后添加到 PATH。
+
+## TTS 配音服务
+
+视频渲染管线支持两种 TTS 后端：
+
+### 讯飞星火 TTS（默认）
+
+配置（`config.yaml`）：
+```yaml
+spark_tts:
+  app_id: "your-app-id"
+  api_key: "your-api-key"
+  api_secret: "your-api-secret"
+```
+
+使用场景：讲解视频（`voice: teacher`）
+
+### Microsoft Edge TTS（免费）
+
+无需密钥，通过 `edge-tts` Python 包调用：
+
+```bash
+# 已在 pyproject.toml 中声明
+uv sync  # 自动安装 edge-tts>=7.2.8
+```
+
+使用场景：动画讲解视频（`voice: teacher`）、离线/测试环境
 
 ## 项目结构
 
@@ -46,14 +181,45 @@ server/
 ### 前置条件
 
 - Python 3.13+
-- PostgreSQL
+- PostgreSQL 12+
+- **Node.js 18+**（视频渲染必需）
+- **FFmpeg & FFprobe**（视频渲染必需）
 - [uv](https://docs.astral.sh/uv/)（Python 包管理器）
+- **Ollama + bge-m3**（可选，向量检索）
 
 ### 1. 安装依赖
 
+**系统依赖**：
+```bash
+# macOS
+brew install ffmpeg node ollama  # ollama 为可选
+
+# Ubuntu/Debian
+sudo apt install ffmpeg nodejs npm
+# 可选：curl -fsSL https://ollama.ai/install.sh | sh
+
+# 验证
+ffmpeg -version
+ffprobe -version
+node --version  # >= 18.0.0
+```
+
+**Python 依赖**：
 ```bash
 cd server
 uv sync
+```
+
+**Remotion 项目**（讲解视频渲染）：
+```bash
+cd video-render
+npm install
+```
+
+**Ollama embedding 模型**（可选）：
+```bash
+ollama pull bge-m3:latest
+ollama serve
 ```
 
 ### 2. 配置
@@ -126,7 +292,7 @@ WebSocket 桥接讯飞数字人服务，ASR → 数字人播报。前端通过 `
 |------|------|----------|
 | `/api/v1/users` | auth | 注册, 登录, 登出, 用户信息 |
 | `/api/v1/ai/chat` | chat | SSE 流式对话, 附件上传, 会话管理 |
-| `/api/v1/ai/resource` | resource | 资源生成（多/单智能体）, 状态查询, 事件流 |
+| `/api/v1/ai/resource` | resource | 资源生成（含 video、cartoon 智能体），状态查询，事件流 |
 | `/api/v1/ai/path` | path | 路径规划, 节点工作空间, 教程/题目生成 |
 | `/api/v1/ai/evaluation` | evaluation | 学习事件, 评估 |
 | `/api/v1/ai/dashboard` | dashboard | 首页聚合数据 |
