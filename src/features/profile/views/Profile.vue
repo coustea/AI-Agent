@@ -680,7 +680,7 @@ const identityFacts = computed(() => [
 const learningSummaryCards = computed(() => [
   {
     label: '本周活跃',
-    value: `${studyStats.value?.weekly_days ?? learningStats.value?.active_days ?? 0}天`,
+    value: `${studyStats.value?.weekly_days ?? learningStats.value?.streak_days ?? 0}天`,
     hint: `今日 ${formatStudyDuration(learningStats.value?.today_seconds || 0)}`,
     icon: CalendarDays,
   },
@@ -1316,9 +1316,7 @@ const submitProfile = async () => {
 <style scoped>
 .profile-page {
   min-height: 100%;
-  background:
-    radial-gradient(circle at 14% 8%, rgba(70, 184, 180, .12), transparent 26%),
-    linear-gradient(180deg, #fbffff 0%, var(--color-bg) 100%);
+  background: #ffffff;
   color: var(--color-text);
 }
 

@@ -83,26 +83,6 @@ export interface ProfileOnboardingUpdateResult {
 
 
 
-export interface ProfileScoreDimension {
-  key: string
-  label: string
-  score: number | null
-  evidence: string[]
-}
-
-export interface ProfileScoreData {
-  user_id: number | null
-  module: string | null
-  score: number | null
-  metrics: {
-    dimension_scores?: Record<string, number>
-    dimension_evidence?: Record<string, string[]>
-  }
-  dimensions?: ProfileScoreDimension[]
-  scored_at: string | null
-  updated_at: string | null
-}
-
 export function isProfileOnboardingComplete(baseInfo: BaseInfoData | null | undefined): boolean {
   if (!baseInfo) return false
 

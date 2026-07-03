@@ -6,7 +6,6 @@ import type {
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
-  ProfileScoreData,
   ProfileDimensionKey,
   DimensionValue,
 } from '@/features/profile/model/profile'
@@ -17,7 +16,6 @@ export type {
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
-  ProfileScoreData,
   ProfileDimensionKey,
   DimensionValue,
 }
