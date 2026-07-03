@@ -166,6 +166,7 @@ def _llm_route(query: str) -> list[_CourseScore]:
                 "stream": False,
             },
             timeout=5.0,
+            trust_env=False,
         )
         response.raise_for_status()
         payload = response.json()

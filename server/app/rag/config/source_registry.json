@@ -1,0 +1,385 @@
+{
+  "version": "2026-07-01",
+  "sources": [
+    {
+      "canonical_source_id": "计算机网络（第7版）",
+      "display_name": "计算机网络（第7版）",
+      "aliases": [
+        "计算机网络（第7版）",
+        "计算机网络",
+        "谢希仁 计算机网络",
+        "十二五普通高等教育本科国家级规划教材 计算机网络"
+      ],
+      "domain": "computer_network",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 100
+    },
+    {
+      "canonical_source_id": "计算机网络自顶向下方法(原书第8版)",
+      "display_name": "计算机网络自顶向下方法(原书第8版)",
+      "aliases": [
+        "计算机网络自顶向下方法",
+        "计算机网络自顶向下",
+        "Computer Networking: A Top-Down Approach"
+      ],
+      "domain": "computer_network",
+      "language": "zh-CN",
+      "trust_tier": "secondary",
+      "priority": 80
+    },
+    {
+      "canonical_source_id": "计算机操作系统（慕课版）",
+      "display_name": "计算机操作系统（慕课版）",
+      "aliases": [
+        "计算机操作系统（慕课版）",
+        "计算机操作系统",
+        "汤小丹 操作系统",
+        "汤子瀛 操作系统"
+      ],
+      "domain": "operating_system",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 100
+    },
+    {
+      "canonical_source_id": "操作系统导论-OSTEP",
+      "display_name": "操作系统导论-OSTEP",
+      "aliases": [
+        "操作系统导论",
+        "OSTEP",
+        "Operating Systems: Three Easy Pieces"
+      ],
+      "domain": "operating_system",
+      "language": "zh-CN",
+      "trust_tier": "secondary",
+      "priority": 85
+    },
+    {
+      "canonical_source_id": "数据结构（C语言版）（第2版）",
+      "display_name": "数据结构（C语言版）（第2版）",
+      "aliases": [
+        "数据结构（C语言版）（第2版）",
+        "数据结构（C语言版）",
+        "严蔚敏 数据结构",
+        "数据结构 严蔚敏"
+      ],
+      "domain": "data_structure",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 100
+    },
+    {
+      "canonical_source_id": "数据结构（C语言版）（第3版）双色版",
+      "display_name": "数据结构（C语言版）（第3版）双色版",
+      "aliases": [
+        "数据结构（C语言版）（第3版）",
+        "数据结构 第3版"
+      ],
+      "domain": "data_structure",
+      "language": "zh-CN",
+      "trust_tier": "secondary",
+      "priority": 90
+    },
+    {
+      "canonical_source_id": "《数据结构》算法实现及解析",
+      "display_name": "《数据结构》算法实现及解析",
+      "aliases": [
+        "数据结构算法实现",
+        "高一凡 数据结构"
+      ],
+      "domain": "data_structure",
+      "language": "zh-CN",
+      "trust_tier": "supplementary",
+      "priority": 70
+    },
+    {
+      "canonical_source_id": "数据结构题集 C语言版",
+      "display_name": "数据结构题集 C语言版",
+      "aliases": [
+        "数据结构题集",
+        "严蔚敏 数据结构题集"
+      ],
+      "domain": "data_structure",
+      "language": "zh-CN",
+      "trust_tier": "supplementary",
+      "priority": 75
+    },
+    {
+      "canonical_source_id": "计算机组成原理 (谭志虎)",
+      "display_name": "计算机组成原理 (谭志虎)",
+      "aliases": [
+        "计算机组成原理 (谭志虎)",
+        "计算机组成原理",
+        "谭志虎 计组",
+        "计组 谭志虎"
+      ],
+      "domain": "computer_organization",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 100
+    },
+    {
+      "canonical_source_id": "计算机组成原理第3版",
+      "display_name": "计算机组成原理第3版",
+      "aliases": [
+        "计算机组成原理第3版",
+        "计算机组成原理 唐朔飞",
+        "唐朔飞 计组"
+      ],
+      "domain": "computer_organization",
+      "language": "zh-CN",
+      "trust_tier": "secondary",
+      "priority": 85
+    },
+    {
+      "canonical_source_id": "计算机组成原理（第2版）笔记和课后习题",
+      "display_name": "计算机组成原理（第2版）笔记和课后习题",
+      "aliases": [
+        "计算机组成原理笔记",
+        "计算机组成原理习题"
+      ],
+      "domain": "computer_organization",
+      "language": "zh-CN",
+      "trust_tier": "supplementary",
+      "priority": 70
+    },
+    {
+      "canonical_source_id": "计算机系统解密",
+      "display_name": "计算机系统解密",
+      "aliases": [
+        "计算机系统解密",
+        "理解计算机"
+      ],
+      "domain": "computer_organization",
+      "language": "zh-CN",
+      "trust_tier": "supplementary",
+      "priority": 75
+    },
+    {
+      "canonical_source_id": "深入理解计算机系统",
+      "display_name": "深入理解计算机系统",
+      "aliases": [
+        "深入理解计算机系统",
+        "CSAPP",
+        "Computer Systems: A Programmer's Perspective"
+      ],
+      "domain": "computer_systems",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 95
+    },
+    {
+      "canonical_source_id": "算法（第4版）",
+      "display_name": "算法（第4版）",
+      "aliases": [
+        "算法（第4版）",
+        "算法 第4版",
+        "Algorithms 4th Edition",
+        "Sedgewick 算法"
+      ],
+      "domain": "algorithms",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 100
+    },
+    {
+      "canonical_source_id": "Java从入门到精通（第5版）",
+      "display_name": "Java从入门到精通（第5版）",
+      "aliases": [
+        "Java从入门到精通",
+        "Java 入门到精通",
+        "明日科技 Java"
+      ],
+      "domain": "java",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 95
+    },
+    {
+      "canonical_source_id": "Python编程三剑客",
+      "display_name": "Python编程三剑客",
+      "aliases": [
+        "Python编程三剑客",
+        "Python编程从入门到实践",
+        "Python 快速上手",
+        "Python 极客编程"
+      ],
+      "domain": "python",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 95
+    },
+    {
+      "canonical_source_id": "《Python编程之美：最佳实践指南》",
+      "display_name": "《Python编程之美：最佳实践指南》",
+      "aliases": [
+        "Python编程之美",
+        "Python 最佳实践",
+        "The Hitchhiker's Guide to Python"
+      ],
+      "domain": "python",
+      "language": "zh-CN",
+      "trust_tier": "secondary",
+      "priority": 85
+    },
+    {
+      "canonical_source_id": "Redis设计与实现",
+      "display_name": "Redis设计与实现",
+      "aliases": [
+        "Redis设计与实现",
+        "Redis 设计与实现",
+        "黄健宏 Redis"
+      ],
+      "domain": "redis",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 95
+    },
+    {
+      "canonical_source_id": "Vue.js Node.js全栈开发实战",
+      "display_name": "Vue.js Node.js全栈开发实战",
+      "aliases": [
+        "Vue.js Node.js全栈开发",
+        "Vue 全栈开发",
+        "王金柱 Vue"
+      ],
+      "domain": "vue",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 90
+    },
+    {
+      "canonical_source_id": "数据库系统概念（原书第6版）",
+      "display_name": "数据库系统概念（原书第6版）",
+      "aliases": [
+        "数据库系统概念",
+        "Database System Concepts",
+        "数据库概念"
+      ],
+      "domain": "database",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 95
+    },
+    {
+      "canonical_source_id": "高性能MySQL（第4版）",
+      "display_name": "高性能MySQL（第4版）",
+      "aliases": [
+        "高性能MySQL",
+        "High Performance MySQL",
+        "MySQL 高性能"
+      ],
+      "domain": "database",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 90
+    },
+    {
+      "canonical_source_id": "软件工程案例教程（第三版）",
+      "display_name": "软件工程案例教程（第三版）",
+      "aliases": [
+        "软件工程案例教程",
+        "软件项目开发实践",
+        "韩万江 软件工程"
+      ],
+      "domain": "software_engineering",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 85
+    },
+    {
+      "canonical_source_id": "人月神话(二十周年纪念版)",
+      "display_name": "人月神话(二十周年纪念版)",
+      "aliases": [
+        "人月神话",
+        "The Mythical Man-Month",
+        "弗雷德里克·布鲁克斯"
+      ],
+      "domain": "software_engineering",
+      "language": "zh-CN",
+      "trust_tier": "classic",
+      "priority": 90
+    },
+    {
+      "canonical_source_id": "代码大全（第2版）",
+      "display_name": "代码大全（第2版）",
+      "aliases": [
+        "代码大全",
+        "Code Complete",
+        "Steve McConnell"
+      ],
+      "domain": "software_engineering",
+      "language": "zh-CN",
+      "trust_tier": "classic",
+      "priority": 90
+    },
+    {
+      "canonical_source_id": "张宇带你学高等数学",
+      "display_name": "张宇带你学高等数学",
+      "aliases": [
+        "张宇带你学高等数学",
+        "张宇 高等数学",
+        "高等数学 同济7版"
+      ],
+      "domain": "mathematics",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 85
+    },
+    {
+      "canonical_source_id": "高等数学习题全解指导（配第八版）",
+      "display_name": "高等数学习题全解指导（配第八版）",
+      "aliases": [
+        "高等数学习题全解",
+        "同济大学 高等数学",
+        "高等数学习题"
+      ],
+      "domain": "mathematics",
+      "language": "zh-CN",
+      "trust_tier": "secondary",
+      "priority": 80
+    },
+    {
+      "canonical_source_id": "概率论与数理统计（慕课版）",
+      "display_name": "概率论与数理统计（慕课版）",
+      "aliases": [
+        "概率论与数理统计",
+        "概率论 慕课版",
+        "张天德 概率论"
+      ],
+      "domain": "mathematics",
+      "language": "zh-CN",
+      "trust_tier": "primary",
+      "priority": 90
+    },
+    {
+      "canonical_source_id": "第一推动丛书·逻辑的引擎",
+      "display_name": "第一推动丛书·逻辑的引擎",
+      "aliases": [
+        "逻辑的引擎",
+        "The Universal Computer",
+        "马丁·戴维斯"
+      ],
+      "domain": "computer_science",
+      "language": "zh-CN",
+      "trust_tier": "supplementary",
+      "priority": 65
+    }
+  ],
+  "course_primary_sources": {
+    "计算机网络": "计算机网络（第7版）",
+    "操作系统": "计算机操作系统（慕课版）",
+    "数据结构": "数据结构（C语言版）（第2版）",
+    "计算机组成原理": "计算机组成原理 (谭志虎)",
+    "Java": "Java从入门到精通（第5版）",
+    "Python": "Python编程三剑客",
+    "Redis": "Redis设计与实现",
+    "Vue": "Vue.js Node.js全栈开发实战",
+    "数据库": "数据库系统概念（原书第6版）",
+    "算法": "算法（第4版）",
+    "软件工程": "软件工程案例教程（第三版）",
+    "高等数学": "张宇带你学高等数学",
+    "概率论": "概率论与数理统计（慕课版）"
+  }
+}

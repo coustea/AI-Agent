@@ -224,6 +224,7 @@ def rewrite_query_with_llm(query: str, max_variants: int | None = None) -> list[
                 "stream": False,
             },
             timeout=0.3,
+            trust_env=False,
         )
         response.raise_for_status()
         data = response.json()

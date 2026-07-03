@@ -14,10 +14,12 @@ from __future__ import annotations
 import asyncio
 import math
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+import httpx
 from langchain_core.tools import tool
 from langchain_ollama import OllamaEmbeddings
 from pydantic import BaseModel, Field
@@ -50,12 +52,15 @@ from app.config import (
 )
 from app.rag.knowledge_router import route_query_sources as _hybrid_route, QueryRouteResult as _RouterQueryRouteResult
 from app.infra.logging import get_logger
-from app.chat.utils import compact_text
+from app.rag.indexing.embeddings import create_ollama_embeddings
+from app.rag.text import compact_text
 
 logger = get_logger(__name__)
 
 # Cache for query embeddings to avoid repeated model calls.
 # Key: normalized query string, Value: embedding vector.
+_EMBEDDING_BREAKER_SECONDS = 900.0
+_EMBEDDING_BREAKER_UNTIL = 0.0
 # 中文分词正则：匹配连续 2 个及以上的中文字符
 _CHINESE_TERM_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
 # 英文/数字分词正则：匹配连续 2 个及以上的字母、数字、+、#、.、-
@@ -63,6 +68,9 @@ _ASCII_TERM_RE = re.compile(r"[A-Za-z0-9+#.-]{2,}")
 # 查询改写规则：对特定领域术语进行同义词扩展，提升召回率
 # 格式：(匹配模式, 扩展词列表)
 _QUERY_REWRITE_RULES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    (re.compile(r"dns|域名解析", re.IGNORECASE), ("DNS", "域名解析", "递归查询", "迭代查询", "CNAME", "IP地址")),
+    (re.compile(r"虚拟内存"), ("虚拟内存", "页表", "缺页中断", "地址变换", "交换")),
+    (re.compile(r"cache|映射方式", re.IGNORECASE), ("Cache", "直接映射", "全相联", "组相联", "局部性")),
     # 网络相关
     (re.compile(r"tcp\s*三次握手", re.IGNORECASE), ("TCP", "三次握手", "连接建立", "传输控制协议")),
     (re.compile(r"udp", re.IGNORECASE), ("UDP", "用户数据报协议", "无连接", "传输层")),
@@ -297,12 +305,72 @@ def _get_embeddings() -> OllamaEmbeddings | None:
     if not KB_ENABLED:
         return None
     try:
-        return OllamaEmbeddings(
-            model=KB_EMBED_MODEL,
-            base_url=KB_OLLAMA_BASE_URL,
-        )
+        return get_rag_embeddings()
     except Exception:
         logger.exception("[knowledge] failed to create embeddings")
+        return None
+
+
+def get_rag_embeddings() -> OllamaEmbeddings:
+    return create_ollama_embeddings(KB_EMBED_MODEL, KB_OLLAMA_BASE_URL)
+
+
+def _get_embedding_breaker_now() -> float:
+    return time.monotonic()
+
+
+def _embedding_breaker_open() -> bool:
+    return _EMBEDDING_BREAKER_UNTIL > _get_embedding_breaker_now()
+
+
+def _open_embedding_breaker(reason: str) -> None:
+    global _EMBEDDING_BREAKER_UNTIL
+    now = _get_embedding_breaker_now()
+    next_until = now + _EMBEDDING_BREAKER_SECONDS
+    if _EMBEDDING_BREAKER_UNTIL <= now:
+        logger.warning(
+            "[knowledge] embedding backend unavailable (%s); dense retrieval disabled for %.0fs",
+            reason,
+            _EMBEDDING_BREAKER_SECONDS,
+        )
+    _EMBEDDING_BREAKER_UNTIL = max(_EMBEDDING_BREAKER_UNTIL, next_until)
+
+
+def _parse_embedding_payload(payload: dict[str, Any]) -> tuple[float, ...] | None:
+    raw = payload.get("embeddings")
+    if isinstance(raw, list) and raw:
+        first = raw[0]
+        if isinstance(first, list) and first:
+            return tuple(float(value) for value in first)
+
+    legacy = payload.get("embedding")
+    if isinstance(legacy, list) and legacy:
+        return tuple(float(value) for value in legacy)
+    return None
+
+
+def _embed_query_via_raw_http(query: str) -> tuple[float, ...] | None:
+    try:
+        response = httpx.post(
+            f"{KB_OLLAMA_BASE_URL}/api/embed",
+            json={"model": KB_EMBED_MODEL, "input": query},
+            timeout=15.0,
+            trust_env=False,
+        )
+        response.raise_for_status()
+        return _parse_embedding_payload(response.json())
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code >= 500:
+            _open_embedding_breaker(f"ollama status {status_code}")
+        else:
+            logger.warning("[knowledge] embedding request rejected: status=%s", status_code)
+        return None
+    except httpx.RequestError as exc:
+        _open_embedding_breaker(exc.__class__.__name__)
+        return None
+    except Exception as exc:
+        logger.warning("[knowledge] raw embedding request failed: %s", exc)
         return None
 
 
@@ -323,14 +391,15 @@ def _get_vectorstore() -> Chroma | None:
 
     try:
         embeddings = _get_embeddings()
-        if embeddings is None:
-            return None
-        # 连接到本地 Chroma 持久化目录，使用指定的 collection 和 embedding 模型
-        return Chroma(
-            collection_name=KB_COLLECTION,
-            embedding_function=embeddings,
-            persist_directory=str(db_dir),
-        )
+        # 连接到本地 Chroma 持久化目录。检索阶段使用预计算 query vector，
+        # 所以即使 SDK embedding 暂时不可用，也应允许 sparse / vector-by-id 能打开库。
+        kwargs: dict[str, Any] = {
+            "collection_name": KB_COLLECTION,
+            "persist_directory": str(db_dir),
+        }
+        if embeddings is not None:
+            kwargs["embedding_function"] = embeddings
+        return Chroma(**kwargs)
     except Exception:
         logger.exception("[knowledge] failed to open KB vectorstore")
         return None
@@ -402,14 +471,24 @@ def _get_cached_embedding(query: str) -> tuple[float, ...] | None:
 
     使用 tuple 而非 list 作为返回值，因为 list 不可哈希，无法用于 LRU 缓存。
     """
+    if _embedding_breaker_open():
+        return None
+
+    raw_embedding = _embed_query_via_raw_http(query)
+    if raw_embedding is not None:
+        return raw_embedding
+
+    if _embedding_breaker_open():
+        return None
+
     embeddings = _get_embeddings()
     if embeddings is None:
         return None
     try:
         embedding = embeddings.embed_query(query)
         return tuple(embedding) if embedding else None
-    except Exception:
-        logger.exception("[knowledge] failed to embed query")
+    except Exception as exc:
+        _open_embedding_breaker(exc.__class__.__name__)
         return None
 
 
@@ -900,9 +979,17 @@ async def aformat_knowledge_context(
 
 
 class SearchKnowledgeBaseArgs(BaseModel):
-    query: str = Field(description="Search query for local course knowledge.")
-    course_name: str | None = Field(default=None, description="Course name used as a retrieval hint.")
-    top_k: int = Field(default=4, ge=1, le=8, description="Maximum number of snippets to return.")
+    query: str = Field(
+        description=(
+            "Search query for a local textbook, course, or 408 concept question. "
+            "Use concise concept terms such as TCP 三次握手, 进程调度, 虚拟内存, 二叉树."
+        )
+    )
+    course_name: str | None = Field(
+        default=None,
+        description="Optional course hint, such as 计算机网络, 操作系统, 数据结构, 计算机组成原理, 数据库, 编译原理.",
+    )
+    top_k: int = Field(default=4, ge=1, le=8, description="Maximum number of textbook snippets to return.")
 
 
 @tool("search_knowledge_base", args_schema=SearchKnowledgeBaseArgs)
