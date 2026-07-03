@@ -1,3 +1,4 @@
+from app.rag.indexing.embeddings import create_ollama_embeddings
 from app.rag.rag_config import EMBEDDING_MODEL, OLLAMA_BASE_URL
 
 
@@ -6,7 +7,8 @@ def get_embedding_settings():
 
 
 def get_embeddings():
-    from langchain_ollama import OllamaEmbeddings
-
     settings = get_embedding_settings()
-    return OllamaEmbeddings(model=settings["model"], base_url=settings["base_url"])
+    return create_ollama_embeddings(settings["model"], settings["base_url"])
+
+
+__all__ = ["create_ollama_embeddings", "get_embedding_settings", "get_embeddings"]

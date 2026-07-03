@@ -129,7 +129,12 @@ def evaluate_single_query(test_case: dict[str, Any], top_k: int = 4) -> dict[str
         for source in result_sources
     ):
         diagnostic_flags.append("cross_book_pollution")
-    if route.source_filter and route.applied_filter_scope == "strict" and expected_sources:
+    route_applied_scope = str(getattr(route, "applied_filter_scope", "") or "")
+    route_mode = str(getattr(route, "route_mode", "keyword") or "keyword")
+    route_confidence = float(getattr(route, "route_confidence", 0.0) or 0.0)
+    route_matched_terms = tuple(getattr(route, "matched_terms", ()) or ())
+
+    if route.source_filter and route_applied_scope == "strict" and expected_sources:
         if not any(
             any(expected_source in routed_source or routed_source in expected_source for expected_source in expected_sources)
             for routed_source in route.source_filter
@@ -158,11 +163,11 @@ def evaluate_single_query(test_case: dict[str, Any], top_k: int = 4) -> dict[str
         "acceptable_sources": acceptable_sources,
         "business_severity": test_case.get("business_severity", "medium"),
         "route_source_filter": list(route.source_filter or []),
-        "route_mode": route.route_mode,
-        "route_confidence": route.route_confidence,
-        "route_applied_scope": route.applied_filter_scope,
+        "route_mode": route_mode,
+        "route_confidence": route_confidence,
+        "route_applied_scope": route_applied_scope,
         "route_filter_size": len(route.source_filter or ()),
-        "route_matched_terms": list(route.matched_terms or ()),
+        "route_matched_terms": list(route_matched_terms),
         "diagnostic_flags": diagnostic_flags,
         "no_answer_false_positive": no_answer_false_positive if is_no_answer else None,
     }

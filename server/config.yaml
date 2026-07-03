@@ -148,7 +148,7 @@ chat:
   # 查询 embedding 缓存大小
   query_embedding_cache_size: 500
   # 稀疏检索加载的文档上限
-  sparse_corpus_limit: 12000
+  sparse_corpus_limit: 50000
 
 # 内容安全过滤配置
 safety:
