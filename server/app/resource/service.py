@@ -37,8 +37,9 @@ logger = get_module_logger("resource", sub="service")
 PPT_AGENT_ID = "ppt"
 COORDINATOR_AGENT_ID = "coordinator"
 VIDEO_AGENT_ID = "video"
+CARTOON_AGENT_ID = "cartoon"
 BUNDLE_AGENT_ID = "bundle"
-AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID)
+AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID)
 
 # agent_type → content_format 映射（不再存 content_format 列）
 AGENT_CONTENT_FORMAT: dict[str, str] = {
@@ -49,6 +50,7 @@ AGENT_CONTENT_FORMAT: dict[str, str] = {
     "reading": "json",
     "ppt": "html",
     "video": "mp4",
+    "cartoon": "mp4",
 }
 
 

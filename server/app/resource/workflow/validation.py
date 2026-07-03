@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 # Agent ID 常量
 BASE_RESOURCE_AGENT_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
-AGGREGATION_AGENT_IDS = frozenset({"ppt", "video"})
+AGGREGATION_AGENT_IDS = frozenset({"ppt", "video", "cartoon"})
 
 # 内容相似度阈值
 CONTENT_SIMILARITY_THRESHOLD = 0.7
@@ -217,6 +217,30 @@ def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:
         raise ValidationError("Video must contain an audio stream")
 
 
+def validate_cartoon(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """Cartoon 资源必须提供 HyperFrames 生成的带音频 MP4 发布引用。"""
+    if result.file_type != "mp4":
+        raise ValidationError("Cartoon must be MP4")
+
+    try:
+        data = json.loads(result.content) if isinstance(result.content, str) else result.content
+    except json.JSONDecodeError as exc:
+        raise ValidationError(f"Cartoon JSON parse error: {exc}") from exc
+
+    if not isinstance(data, dict) or data.get("schema_version") != "cartoon/v1":
+        raise ValidationError("Cartoon must use the cartoon/v1 schema")
+    if not str(data.get("video_url", "")).endswith(".mp4"):
+        raise ValidationError("Cartoon must expose an MP4 video_url")
+    if float(data.get("duration_seconds", 0)) <= 0:
+        raise ValidationError("Cartoon duration must be positive")
+    if int(data.get("scene_count", 0)) < 3:
+        raise ValidationError("Cartoon must contain at least three scenes")
+    if result.metadata.get("engine") != "hyperframes":
+        raise ValidationError("Cartoon must be rendered by HyperFrames")
+    if result.metadata.get("has_audio") is not True:
+        raise ValidationError("Cartoon must contain an audio stream")
+
+
 # =============================================================================
 # Validator 注册表
 # =============================================================================
@@ -231,6 +255,7 @@ AGENT_VALIDATORS: dict[str, Validator] = {
     "reading": validate_reading,
     "ppt": validate_ppt,
     "video": validate_video,
+    "cartoon": validate_cartoon,
 }
 
 

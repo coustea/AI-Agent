@@ -11,6 +11,7 @@ from app.resource.schemas.meta import (
 from app.resource.schemas.request import (
     AgentConfigs,
     AgentSelection,
+    CartoonConfig,
     CodeConfig,
     ContentConfig,
     DEFAULT_SELECTED_AGENT_IDS,

@@ -2,7 +2,7 @@
 
 节点拓扑：
   START → planning → worker_node(×N, Send并行) → merge_workers
-    → [ppt_node, video_node] → merge_aggregation → save_node
+    → [ppt_node, video_node, cartoon_node] → merge_aggregation → save_node
 
 核心设计：
 - 传递 user_id, resource_id, selected_agents, request_data, profile, teaching_plan
@@ -33,6 +33,7 @@ from app.resource.workflow.state import ParentState, WorkerInputState, AgentFail
 from app.resource.service import (
     AGGREGATION_AGENT_IDS,
     BUNDLE_AGENT_ID,
+    CARTOON_AGENT_ID,
     COORDINATOR_AGENT_ID,
     PPT_AGENT_ID,
     VIDEO_AGENT_ID,
@@ -298,6 +299,7 @@ AGENT_TIMEOUTS: dict[str, float] = {
     "reading": 300.0,
     PPT_AGENT_ID: 600.0,
     VIDEO_AGENT_ID: 900.0,
+    CARTOON_AGENT_ID: 1800.0,
 }
 
 
@@ -541,6 +543,8 @@ def route_after_merge(state: ParentState) -> list[str]:
         destinations.append("ppt_node")
     if VIDEO_AGENT_ID in selected_agents:
         destinations.append("video_node")
+    if CARTOON_AGENT_ID in selected_agents:
+        destinations.append("cartoon_node")
     return destinations or ["save_node"]
 
 
@@ -650,6 +654,57 @@ async def video_node(state: ParentState) -> dict[str, Any]:
 
     return await _execute_non_planning_agent(
         agent_id=VIDEO_AGENT_ID,
+        user_id=user_id,
+        resource_id=resource_id,
+        resource_input=resource_input,
+    )
+
+
+async def cartoon_node(state: ParentState) -> dict[str, Any]:
+    """Cartoon 聚合节点 — 基于基础资源生成带配音与字幕的动画讲解 MP4。"""
+    user_id = state["user_id"]
+    resource_id = state["resource_id"]
+    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+
+    await events.send(
+        CARTOON_AGENT_ID,
+        "running",
+        "正在规划动画分镜与讲解节奏",
+        72,
+    )
+
+    request_data: dict[str, Any] = state.get("request_data") or {}
+    profile: dict[str, Any] = state.get("profile") or {}
+    selected_agents: list[str] = state.get("selected_agents") or []
+    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
+    teaching_plan = (
+        TeachingPlan.model_validate(teaching_plan_raw)
+        if teaching_plan_raw
+        else None
+    )
+    base_handoffs = await get_handoffs(
+        resource_id=resource_id,
+        user_id=user_id,
+    )
+    resource_input = build_agent_resource_input(
+        resource_id=resource_id,
+        user_id=user_id,
+        agent_id=CARTOON_AGENT_ID,
+        learning_need=request_data.get("learning_need", ""),
+        learning_scenario=request_data.get("learning_scenario", "self_study"),
+        selected_agents=selected_agents,
+        agent_configs=request_data.get("agent_configs", {}),
+        teaching_plan=teaching_plan,
+        profile=profile,
+        upstream_handoffs=base_handoffs,
+        agent_config_extra={
+            "upstream_handoff_agent_ids": list(base_handoffs),
+        },
+    )
+    resource_input.username = str(request_data.get("username", ""))
+
+    return await _execute_non_planning_agent(
+        agent_id=CARTOON_AGENT_ID,
         user_id=user_id,
         resource_id=resource_id,
         resource_input=resource_input,

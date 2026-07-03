@@ -33,6 +33,9 @@ from app.resource.agents.ppt import PPTAgent
 # 视频 Agent：生成最终 MP4 讲解视频
 from app.resource.agents.video import VideoAgent
 
+# 动画讲解 Agent：使用 HyperFrames 生成带配音与字幕的 MP4
+from app.resource.agents.cartoon import CartoonAgent
+
 # 模块公开导出列表
 __all__ = [
     # 全局 agent 注册表字典
@@ -57,4 +60,6 @@ __all__ = [
     "PPTAgent",
     # 视频 Agent
     "VideoAgent",
+    # 动画讲解 Agent
+    "CartoonAgent",
 ]

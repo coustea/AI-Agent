@@ -38,15 +38,20 @@ def _source_artifacts_from_handoffs(
         title = getattr(ctx, "title", None) or agent_id
         summary = getattr(ctx, "one_sentence_summary", None) or title
         materials: list[str] = []
+        materials.extend(
+            str(item).strip()[:2000]
+            for item in getattr(ctx, "materials", [])[:4]
+            if str(item).strip()
+        )
         reusable = getattr(ctx, "reusable_assets", None)
         if reusable:
             materials.extend(
-                str(item)
+                str(item).strip()[:600]
                 for item in getattr(reusable, "examples", [])[:4]
                 if str(item).strip()
             )
             materials.extend(
-                str(item)
+                str(item).strip()[:600]
                 for item in getattr(reusable, "visual_ideas", [])[:4]
                 if str(item).strip()
             )
@@ -82,7 +87,7 @@ def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
     渲染参数由运行环境自动探测，不接受用户配置。
     """
     return {
-        "video_length_seconds": int(config.get("video_length_seconds", 90)),
+        "video_length_seconds": int(config.get("video_length_seconds", 120)),
         "voice": config.get("voice", "teacher"),
         "style": config.get("style", "diagram"),
         "focus": config.get("focus", "concept"),
@@ -103,7 +108,7 @@ class CartoonAgent(BaseResourceAgent):
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         cfg = _agent_config_defaults(input_data.agent_config)
-        username = input_data.username or "anonymous"
+        username = input_data.username or str(input_data.user_id or "anonymous")
         resource_key = str(input_data.resource_id or uuid.uuid4().hex)
         output_dir = user_resource_cartoon_dir(username, resource_key)
 
@@ -188,6 +193,7 @@ class CartoonAgent(BaseResourceAgent):
                 "schema_version": "cartoon/v1",
                 "title": artifact.brief.title,
                 "video_url": video_url,
+                "public_url": video_url,
                 "html_url": html_url,
                 "duration_seconds": artifact.brief.total_duration,
                 "scene_count": artifact.scene_count,

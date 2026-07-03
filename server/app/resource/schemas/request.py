@@ -32,6 +32,7 @@ class ResourceAgentId(str, Enum):
     CODE = "code"
     PPT = "ppt"
     VIDEO = "video"
+    CARTOON = "cartoon"
 
 
 DEFAULT_SELECTED_AGENT_IDS: list[ResourceAgentId] = [
@@ -108,7 +109,7 @@ class CartoonConfig(BaseModel):
 
     style: Literal["diagram", "minimal", "dark_tech"] = "diagram"
     voice: Literal["teacher", "coach"] = "teacher"
-    video_length_seconds: int = Field(default=90, ge=60, le=180)
+    video_length_seconds: int = Field(default=120, ge=60, le=180)
     focus: Literal["concept", "process", "comparison", "practice"] = "concept"
 
 
@@ -169,11 +170,11 @@ class ResourceGenerationRequest(BaseModel):
         }
         if not enabled_agent_ids:
             raise ValueError("selected_agents 过滤 enabled=true 后不能为空")
-        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video"}
+        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video", "cartoon"}
         base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
         if aggregation_agent_ids and not base_agent_ids:
             raise ValueError(
-                "PPT/Video 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
+                "PPT/Video/Cartoon 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
             )
         self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
         return self

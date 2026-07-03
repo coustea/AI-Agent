@@ -19,6 +19,22 @@
 - 优先使用 artifacts 中的事实，不虚构公式、数据、API 行为或结论。
 - focus=concept 强调定义与原理；process 强调逐步变化；comparison 强调差异；practice 强调例子与执行。
 
+# PERSONALIZATION RULES
+
+- style=diagram：以结构图、流程、状态变化和因果箭头为主，信息清晰优先。
+- style=minimal：减少同时出现的对象，每一步只保留当前讲解所需元素。
+- style=dark_tech：使用技术系统、数据流和状态信号的表达方式，但不得加入无教学意义的炫光或装饰动画。
+- voice=teacher：旁白沉稳、准确、循序渐进；voice=coach：旁白更有互动感，适当使用提问和行动提示。
+- video_length_seconds 是内容预算，不是强制凑时长。优先保证知识闭环，避免重复旁白。
+- artifacts 是已生成并校验过的上游教学素材。必须优先提取其中的定义、步骤、例子、易错点和代码行为，不要只复述 summary。
+
+# QUALITY RULES
+
+- 每个非 recap 场景至少设置 2 个与旁白关键词关联的动画 cue。
+- process、architecture、code_trace 场景必须展示对象变化或传递过程，不能只做卡片依次出现。
+- 字幕旁白使用短句，专业术语前后一致；单个场景旁白不塞入多个独立知识点。
+- recap 只回收前文已经讲过的结论，不引入新概念。
+
 # VISUAL GRAMMAR
 
 layout:

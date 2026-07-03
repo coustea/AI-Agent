@@ -72,6 +72,6 @@ class SingleResourceRequest(BaseModel):
     @field_validator("agent_id")
     @classmethod
     def reject_aggregation_agent(cls, value: ResourceAgentId) -> ResourceAgentId:
-        if value in {ResourceAgentId.PPT, ResourceAgentId.VIDEO}:
-            raise ValueError("PPT/Video 是聚合 Agent，不能作为单智能体任务运行")
+        if value in {ResourceAgentId.PPT, ResourceAgentId.VIDEO, ResourceAgentId.CARTOON}:
+            raise ValueError("PPT/Video/Cartoon 是聚合 Agent，不能作为单智能体任务运行")
         return value

@@ -15,7 +15,8 @@ AGENT_META: dict[str, dict[str, str]] = {
     "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
     "ppt": {"name": "PPT文稿", "icon": "DataBoard", "description": "PPT文稿生成"},
     "video": {"name": "讲解视频", "icon": "Video", "description": "带配音和字幕的 MP4 讲解视频"},
+    "cartoon": {"name": "动画讲解", "icon": "FilmStrip", "description": "知识点动画、配音与字幕同步的 MP4 教学视频"},
 }
 
-AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "video"]
+AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon", "video"]
 AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "ppt"]
