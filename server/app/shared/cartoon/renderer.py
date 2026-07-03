@@ -17,13 +17,6 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 _GIB = 1024**3
-_HARDWARE_ENCODERS = (
-    ("h264_nvenc", "nvenc"),
-    ("h264_videotoolbox", "videotoolbox"),
-    ("h264_qsv", "qsv"),
-    ("h264_vaapi", "vaapi"),
-    ("h264_amf", "amf"),
-)
 
 
 class CartoonRenderError(RuntimeError):
@@ -43,10 +36,8 @@ class CartoonRenderProfile:
     fps: int = 30
     quality: str = "high"
     gpu_detected: bool = False
-    gpu_vendors: tuple[str, ...] = ()
     browser_gpu: bool = False
     gpu_encoding: bool = False
-    hardware_encoder: str | None = None
     low_memory_mode: bool = False
     cpu_fallback: bool = False
 
@@ -168,102 +159,29 @@ def _ffmpeg_encoders() -> str:
     return f"{result.stdout}\n{result.stderr}".lower()
 
 
-def _linux_gpu_vendors() -> set[str]:
-    vendor_ids = {
-        "0x10de": "nvidia",
-        "0x1002": "amd",
-        "0x8086": "intel",
-    }
-    vendors: set[str] = set()
-    drm_root = Path("/sys/class/drm")
-    for vendor_file in drm_root.glob("card[0-9]*/device/vendor"):
-        try:
-            vendor_id = vendor_file.read_text(encoding="utf-8").strip().lower()
-        except OSError:
-            continue
-        vendors.add(vendor_ids.get(vendor_id, "unknown"))
-    if vendors:
-        return vendors
+def _nvidia_gpu_available(encoders: str) -> bool:
+    """Return whether Linux has a working NVIDIA driver and NVENC encoder."""
+    if platform.system() != "Linux" or "h264_nvenc" not in encoders:
+        return False
 
-    lspci = shutil.which("lspci")
-    if lspci is None:
-        return set()
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        return False
     try:
         result = subprocess.run(
-            [lspci],
+            [
+                nvidia_smi,
+                "--query-gpu=name",
+                "--format=csv,noheader",
+            ],
             capture_output=True,
             text=True,
             timeout=3,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
-        return set()
-    for line in result.stdout.lower().splitlines():
-        if not any(
-            label in line
-            for label in ("vga compatible", "3d controller", "display controller")
-        ):
-            continue
-        if "nvidia" in line:
-            vendors.add("nvidia")
-        elif "amd" in line or "ati" in line:
-            vendors.add("amd")
-        elif "intel" in line:
-            vendors.add("intel")
-        else:
-            vendors.add("unknown")
-    return vendors
-
-
-def _gpu_vendors(encoders: str) -> set[str]:
-    system = platform.system()
-    if system == "Darwin":
-        return {"apple"} if "videotoolbox" in encoders else set()
-    if system == "Linux":
-        return _linux_gpu_vendors()
-    if system == "Windows":
-        return (
-            {"unknown"}
-            if any(name in encoders for name, _ in _HARDWARE_ENCODERS)
-            else set()
-        )
-    return set()
-
-
-def _hardware_encoder(encoders: str, gpu_vendors: set[str]) -> str | None:
-    if not gpu_vendors:
-        return None
-
-    system = platform.system()
-    candidates = _HARDWARE_ENCODERS
-    if system == "Darwin":
-        candidates = (("h264_videotoolbox", "videotoolbox"),)
-    elif system == "Linux":
-        candidates = ()
-        if "nvidia" in gpu_vendors:
-            candidates += (("h264_nvenc", "nvenc"),)
-        if "amd" in gpu_vendors:
-            candidates += (
-                ("h264_vaapi", "vaapi"),
-                ("h264_amf", "amf"),
-            )
-        if "intel" in gpu_vendors:
-            candidates += (
-                ("h264_qsv", "qsv"),
-                ("h264_vaapi", "vaapi"),
-            )
-        if "unknown" in gpu_vendors:
-            candidates += (
-                ("h264_vaapi", "vaapi"),
-                ("h264_qsv", "qsv"),
-                ("h264_nvenc", "nvenc"),
-                ("h264_amf", "amf"),
-            )
-
-    for ffmpeg_name, profile_name in candidates:
-        if ffmpeg_name in encoders:
-            return profile_name
-    return None
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def _worker_count(
@@ -289,8 +207,7 @@ def detect_cartoon_render_profile() -> CartoonRenderProfile:
     physical_cores = max(1, _physical_core_count(logical_cpus))
     total_memory, available_memory = _memory_bytes()
     encoders = _ffmpeg_encoders()
-    gpu_vendors = _gpu_vendors(encoders)
-    encoder = _hardware_encoder(encoders, gpu_vendors)
+    nvidia_gpu = _nvidia_gpu_available(encoders)
     low_memory_mode = total_memory <= 8 * _GIB or available_memory <= 3 * _GIB
     workers = _worker_count(
         physical_cores,
@@ -305,11 +222,9 @@ def detect_cartoon_render_profile() -> CartoonRenderProfile:
         total_memory_gb=round(total_memory / _GIB, 1),
         available_memory_gb=round(available_memory / _GIB, 1),
         workers=workers,
-        gpu_detected=bool(gpu_vendors),
-        gpu_vendors=tuple(sorted(gpu_vendors)),
-        browser_gpu=bool(gpu_vendors),
-        gpu_encoding=encoder is not None,
-        hardware_encoder=encoder,
+        gpu_detected=nvidia_gpu,
+        browser_gpu=nvidia_gpu,
+        gpu_encoding=nvidia_gpu,
         low_memory_mode=low_memory_mode,
     )
     logger.info("HyperFrames 自动渲染配置: %s", profile.as_metadata())
@@ -340,7 +255,6 @@ class CartoonVideoRenderer:
                 profile,
                 browser_gpu=False,
                 gpu_encoding=False,
-                hardware_encoder=None,
                 cpu_fallback=True,
             )
             second_error = await self._run_render(output_dir, final_output, profile)
