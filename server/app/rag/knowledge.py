@@ -53,7 +53,7 @@ from app.config import (
 from app.rag.knowledge_router import route_query_sources as _hybrid_route, QueryRouteResult as _RouterQueryRouteResult
 from app.infra.logging import get_logger
 from app.rag.indexing.embeddings import create_ollama_embeddings
-from app.rag.text import compact_text
+from app.chat.utils import compact_text
 
 logger = get_logger(__name__)
 

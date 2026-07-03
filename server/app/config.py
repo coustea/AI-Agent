@@ -103,7 +103,7 @@ KB_DIR_NAME = get("paths.knowledge", "data")
 # ============ 路径对象 ============
 # 项目根目录：server/
 SERVER_DIR = Path(__file__).resolve().parents[1]
-# 工作数据目录：server/workplace/
+# 工作数据目录：server/static/（静态文件根目录）
 WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
 # 日志输出目录：server/logs/
 LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
@@ -111,18 +111,185 @@ LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
 KNOWLEDGE_BASE_DIR = SERVER_DIR / KB_DIR_NAME
 # 向后兼容别名（旧模块引用 KB_DIR）
 KB_DIR = KNOWLEDGE_BASE_DIR
-# 聊天记录目录：server/workplace/chat/
-CHAT_DIR = WORKPLACE_DIR / "chat"
-# 数字人头像数据目录：server/workplace/avatars/
-AVATAR_DIR = WORKPLACE_DIR / "avatars"
+# 共享资源目录：server/static/shared/（跨用户共享的 TTS 缓存、模板等）
+SHARED_DIR = WORKPLACE_DIR / "shared"
+
+
+# ============ 用户路径构建函数 ============
+def user_dir(username: str) -> Path:
+    """获取用户静态文件根目录。
+
+    Args:
+        username: 用户名（数据库约束 unique=True）
+
+    Returns:
+        Path: static/{username}/
+    """
+    return WORKPLACE_DIR / username
+
+
+def user_avatar_dir(username: str) -> Path:
+    """获取用户头像目录：static/{username}/avatar/"""
+    return user_dir(username) / "avatar"
+
+
+def user_chat_dir(username: str, session_id: str) -> Path:
+    """获取用户聊天会话目录：static/{username}/chat/{session_id}/"""
+    return user_dir(username) / "chat" / session_id
+
+
+def user_chat_uploads_dir(username: str, session_id: str) -> Path:
+    """获取用户聊天附件目录：static/{username}/chat/{session_id}/uploads/"""
+    return user_chat_dir(username, session_id) / "uploads"
+
+
+def user_chat_diagrams_dir(username: str, session_id: str) -> Path:
+    """获取用户教学图解目录：static/{username}/chat/{session_id}/diagrams/"""
+    return user_chat_dir(username, session_id) / "diagrams"
+
+
+def user_chat_videos_dir(username: str, session_id: str, message_id: str) -> Path:
+    """获取用户聊天视频目录：static/{username}/chat/{session_id}/videos/{message_id}/"""
+    return user_chat_dir(username, session_id) / "videos" / message_id
+
+
+def user_resources_dir(username: str) -> Path:
+    """获取用户资源目录：static/{username}/resources/"""
+    return user_dir(username) / "resources"
+
+
+def user_resource_dir(username: str, resource_id: str) -> Path:
+    """获取单个资源目录：static/{username}/resources/{resource_id}/"""
+    return user_resources_dir(username) / str(resource_id)
+
+
+def user_resource_ppt_dir(username: str, resource_id: str) -> Path:
+    """获取资源 PPT 目录：static/{username}/resources/{resource_id}/ppt/"""
+    return user_resource_dir(username, resource_id) / "ppt"
+
+
+def user_resource_video_dir(username: str, resource_id: str) -> Path:
+    """获取资源视频目录：static/{username}/resources/{resource_id}/video/"""
+    return user_resource_dir(username, resource_id) / "video"
+
+
+def user_paths_dir(username: str) -> Path:
+    """获取用户学习路径目录：static/{username}/paths/"""
+    return user_dir(username) / "paths"
+
+
+def user_path_dir(username: str, path_id: str) -> Path:
+    """获取单个学习路径目录：static/{username}/paths/{path_id}/"""
+    return user_paths_dir(username) / str(path_id)
+
+
+def user_path_node_dir(username: str, path_id: str, node_id: str) -> Path:
+    """获取路径节点目录：static/{username}/paths/{path_id}/nodes/{node_id}/"""
+    return user_path_dir(username, path_id) / "nodes" / str(node_id)
+
+
+def user_path_node_ppt_dir(username: str, path_id: str, node_id: str) -> Path:
+    """获取路径节点 PPT 目录：static/{username}/paths/{path_id}/nodes/{node_id}/ppt/"""
+    return user_path_node_dir(username, path_id, node_id) / "ppt"
+
+
+def user_path_node_video_dir(username: str, path_id: str, node_id: str) -> Path:
+    """获取路径节点视频目录：static/{username}/paths/{path_id}/nodes/{node_id}/video/"""
+    return user_path_node_dir(username, path_id, node_id) / "video"
+
+
+def user_resource_cartoon_dir(username: str, resource_id: str) -> Path:
+    """获取资源动画目录：static/{username}/resources/{resource_id}/cartoon/"""
+    return user_resource_dir(username, resource_id) / "cartoon"
+
+
+def user_path_node_cartoon_dir(username: str, path_id: str, node_id: str) -> Path:
+    """获取路径节点动画目录：static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/"""
+    return user_path_node_dir(username, path_id, node_id) / "cartoon"
+
+
+def shared_tts_cache_dir() -> Path:
+    """获取共享 TTS 缓存目录：static/shared/tts_cache/"""
+    return SHARED_DIR / "tts_cache"
+
+
+def shared_ppt_templates_dir() -> Path:
+    """获取共享 PPT 模板目录：static/shared/ppt_templates/"""
+    return SHARED_DIR / "ppt_templates"
+
+
+# ============ URL 构建函数 ============
+def static_url(path: Path) -> str:
+    """将本地路径转换为静态文件 URL。
+
+    Args:
+        path: 相对于 WORKPLACE_DIR 的本地路径
+
+    Returns:
+        str: /static/{relative_path}
+    """
+    try:
+        relative = path.relative_to(WORKPLACE_DIR)
+        return f"/static/{relative.as_posix()}"
+    except ValueError:
+        # 路径不在 WORKPLACE_DIR 下，返回绝对路径
+        return str(path)
+
+
+def avatar_url(username: str, ext: str) -> str:
+    """构建头像 URL：/static/{username}/avatar/avatar.{ext}"""
+    return f"/static/{username}/avatar/avatar.{ext}"
+
+
+def chat_upload_url(username: str, session_id: str, filename: str) -> str:
+    """构建聊天附件 URL：/static/{username}/chat/{session_id}/uploads/{filename}"""
+    return f"/static/{username}/chat/{session_id}/uploads/{filename}"
+
+
+def chat_diagram_url(username: str, session_id: str, diagram_id: str) -> str:
+    """构建教学图解 URL：/static/{username}/chat/{session_id}/diagrams/{diagram_id}.json"""
+    return f"/static/{username}/chat/{session_id}/diagrams/{diagram_id}.json"
+
+
+def chat_video_url(username: str, session_id: str, message_id: str) -> str:
+    """构建聊天视频 URL：/static/{username}/chat/{session_id}/videos/{message_id}/video.mp4"""
+    return f"/static/{username}/chat/{session_id}/videos/{message_id}/video.mp4"
+
+
+def resource_ppt_url(username: str, resource_id: str) -> str:
+    """构建资源 PPT URL：/static/{username}/resources/{resource_id}/ppt/slides.html"""
+    return f"/static/{username}/resources/{resource_id}/ppt/slides.html"
+
+
+def resource_video_url(username: str, resource_id: str) -> str:
+    """构建资源视频 URL：/static/{username}/resources/{resource_id}/video/video.mp4"""
+    return f"/static/{username}/resources/{resource_id}/video/video.mp4"
+
+
+def path_node_ppt_url(username: str, path_id: str, node_id: str) -> str:
+    """构建路径节点 PPT URL：/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"""
+    return f"/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"
+
+
+def path_node_video_url(username: str, path_id: str, node_id: str) -> str:
+    """构建路径节点视频 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/video/video.mp4"""
+    return f"/static/{username}/paths/{path_id}/nodes/{node_id}/video/video.mp4"
+
+
+def resource_cartoon_url(username: str, resource_id: str, filename: str = "index.html") -> str:
+    """构建资源动画 URL：/static/{username}/resources/{resource_id}/cartoon/{filename}"""
+    return f"/static/{username}/resources/{resource_id}/cartoon/{filename}"
+
+
+def path_node_cartoon_url(username: str, path_id: str, node_id: str, filename: str = "index.html") -> str:
+    """构建路径节点动画 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"""
+    return f"/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"
+
 
 # ============ 讲解视频渲染配置 ============
 VIDEO_RENDER_TIMEOUT_SECONDS = get("video.render_timeout_seconds", 900)
 VIDEO_RENDER_CONCURRENCY = get("video.concurrency", 4)
 VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
-
-# ============ 动画讲解视频渲染配置 ============
-CARTOON_RENDER_WORKERS = get("cartoon.render_workers", 4)
 
 # ============ 知识库配置 ============
 # 是否启用知识库功能
@@ -166,6 +333,11 @@ KB_PROFILE_EXACT_SPARSE_MULTIPLIER: int = get("knowledge.retrieval.profile.exact
 
 # Rerank configuration
 KB_RERANK_ENABLED: bool = get("knowledge.rerank.enabled", False)
+KB_RERANK_MODEL: str = get(
+    "knowledge.rerank.model",
+    "BAAI/bge-reranker-base",
+)
+KB_RERANK_TOP_K: int = get("knowledge.rerank.top_k", 4)
 
 # Global fallback configuration
 KB_GLOBAL_CANDIDATE_MULTIPLIER: int = get("knowledge.retrieval.global_candidate_multiplier", 2)

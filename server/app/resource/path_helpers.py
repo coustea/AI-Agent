@@ -21,9 +21,6 @@ async def generate_path_node_resource(
 
     从 AGENT_REGISTRY 查找对应 agent，调用 generate_node 方法。
     """
-    supported_agent_ids = {"content", "mindmap", "code", "reading", "quiz", "ppt", "video"}
-    if agent_id not in supported_agent_ids:
-        raise ValueError(f"Unsupported agent_id for path node: {agent_id}")
     if agent_id not in AGENT_REGISTRY:
         raise ValueError(f"Agent '{agent_id}' not found in AGENT_REGISTRY")
 

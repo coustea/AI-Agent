@@ -106,6 +106,7 @@ async def create_mentor_chat_message(
         run_chat_agent,
         user_message_id=user_message_id,
         user_id=current_user.id,
+        username=current_user.username,
         session_id=effective_session,
         user_input=effective_message,
         attachments=[str(item.get("url") or "") for item in parsed_attachments],
@@ -134,12 +135,12 @@ async def upload_file(
         return HttpResponse.error(code=400, message="文件名不能为空")
     uc = get_chat_usecases()
     content = await file.read()
-    logger.info("[ChatAPI] 文件上传: user_id=%s session_id=%s filename=%s size=%d", current_user.id, session_id, file.filename, len(content))
+    logger.info("[ChatAPI] 文件上传: username=%s session_id=%s filename=%s size=%d", current_user.username, session_id, file.filename, len(content))
     try:
         saved = await uc.save_upload(
             filename=file.filename,
             content=content,
-            user_id=current_user.id,
+            username=current_user.username,
             session_id=session_id,
         )
     except ValueError as exc:
@@ -147,9 +148,9 @@ async def upload_file(
     return HttpResponse.success(data=saved)
 
 
-@router.get("/chat/uploads/{owner_id}/{session_id}/{filename}")
+@router.get("/chat/uploads/{owner_username}/{session_id}/{filename}")
 async def get_uploaded_file(
-    owner_id: int,
+    owner_username: str,
     session_id: str,
     filename: str,
     current_user: User = Depends(get_current_user_flexible),
@@ -157,8 +158,8 @@ async def get_uploaded_file(
     uc = get_chat_usecases()
     try:
         file_path = uc.resolve_uploaded_file(
-            current_user_id=current_user.id,
-            owner_id=owner_id,
+            current_username=current_user.username,
+            owner_username=owner_username,
             session_id=session_id,
             filename=filename,
         )
@@ -171,9 +172,9 @@ async def get_uploaded_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
-@router.get("/chat/uploads/{owner_id}/{session_id}/diagrams/{filename}")
+@router.get("/chat/uploads/{owner_username}/{session_id}/diagrams/{filename}")
 async def get_diagram_file(
-    owner_id: int,
+    owner_username: str,
     session_id: str,
     filename: str,
     current_user: User = Depends(get_current_user_flexible),
@@ -181,8 +182,8 @@ async def get_diagram_file(
     uc = get_chat_usecases()
     try:
         file_path = uc.resolve_uploaded_file(
-            current_user_id=current_user.id,
-            owner_id=owner_id,
+            current_username=current_user.username,
+            owner_username=owner_username,
             session_id=session_id,
             filename=f"diagrams/{filename}",
         )
@@ -195,9 +196,9 @@ async def get_diagram_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
-@router.get("/chat/files/{owner_id}/{session_id}/{filename}")
+@router.get("/chat/files/{owner_username}/{session_id}/{filename}")
 async def get_chat_file(
-    owner_id: int,
+    owner_username: str,
     session_id: str,
     filename: str,
     current_user: User = Depends(get_current_user_flexible),
@@ -205,8 +206,8 @@ async def get_chat_file(
     uc = get_chat_usecases()
     try:
         file_path = uc.resolve_uploaded_file(
-            current_user_id=current_user.id,
-            owner_id=owner_id,
+            current_username=current_user.username,
+            owner_username=owner_username,
             session_id=session_id,
             filename=filename,
         )

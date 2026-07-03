@@ -15,7 +15,7 @@ from app.auth.security import get_current_user
 from app.auth.service import auth_usecases
 from app.infra.database import get_session
 from app.infra.models import User
-from app.config import AVATAR_DIR
+from app.config import user_avatar_dir, avatar_url
 from app.infra.response import HttpResponse
 
 # 创建路由实例，挂载在 /api/v1/users 下
@@ -117,7 +117,7 @@ async def upload_avatar(
     """上传用户头像。
 
     支持 jpg, jpeg, png, gif, webp 格式，最大 2MB。
-    文件保存到 workplace/avatars/ 目录，以 {user_id}.{ext} 命名。
+    文件保存到 static/{username}/avatar/avatar.{ext} 目录。
     """
     # 验证文件类型：只允许常见的图片格式
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -136,37 +136,40 @@ async def upload_avatar(
             message=f"文件大小超过限制（最大 {max_size // (1024 * 1024)}MB）",
         )
 
-    # 确保头像存储目录存在
-    AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    # 确保头像存储目录存在：static/{username}/avatar/
+    username = current_user.username
+    avatar_dir = user_avatar_dir(username)
+    avatar_dir.mkdir(parents=True, exist_ok=True)
 
-    # 生成文件名：{user_id}.{扩展名}，确保每个用户只有一个头像
+    # 生成文件名：avatar.{扩展名}
     ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
-    filename = f"{current_user.id}.{ext}"
-    file_path = AVATAR_DIR / filename
+    filename = f"avatar.{ext}"
+    file_path = avatar_dir / filename
 
     # 将文件内容写入磁盘
     file_path.write_bytes(content)
 
     # 生成头像访问 URL 并更新用户记录
-    avatar_url = f"/api/v1/users/avatars/{filename}"
+    avatar_url_str = avatar_url(username, ext)
     user = await auth_usecases.update_me(
         session,
         current_user.id,
-        UserUpdate(avatar=avatar_url)
+        UserUpdate(avatar=avatar_url_str)
     )
 
-    return HttpResponse.success(data={"avatar": avatar_url})
+    return HttpResponse.success(data={"avatar": avatar_url_str})
 
 
-@router.get("/avatars/{filename}")
-async def get_avatar(filename: str):
+@router.get("/avatars/{username}/{filename}")
+async def get_avatar(username: str, filename: str):
     """获取用户头像文件。
 
-    根据文件名返回头像图片，不存在则返回 404。
+    根据用户名和文件名返回头像图片，不存在则返回 404。
     """
     from fastapi.responses import FileResponse
 
-    file_path = AVATAR_DIR / filename
+    avatar_dir = user_avatar_dir(username)
+    file_path = avatar_dir / filename
     if not file_path.exists():
         return HttpResponse.error(code=404, message="头像不存在")
     # 直接返回文件响应（FastAPI 自动处理 Content-Type）

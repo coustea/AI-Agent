@@ -16,7 +16,6 @@ from app.resource.schemas.request import (
     DEFAULT_SELECTED_AGENT_IDS,
     LearningScenario,
     MindmapConfig,
-    PptConfig,
     QuizConfig,
     ReadingConfig,
     ResourceAgentId,

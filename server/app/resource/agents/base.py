@@ -35,6 +35,7 @@ class BaseResourceAgent:
 
     agent_id: str
     agent_name: str
+    research_enabled: bool = True
 
     def __init__(
         self,
@@ -50,6 +51,11 @@ class BaseResourceAgent:
                     return noop
 
             self.emitter = NoopEvents()
+
+        if not self.research_enabled:
+            self.tools = []
+            self.tool_excute = None
+            return
 
         from app.infra.llm import get_llm
         from app.infra.tool_excute import ToolExcute

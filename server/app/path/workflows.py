@@ -2,9 +2,13 @@
 
 包含：
 1. 路径规划智能体 (PathPlannerAgent) 与 LangGraph 规划工作流
-2. 节点学习智能体 (NodeLearningAgent)
-3. 节点学习工作流 (get_learn_workflow)
+2. 节点学习智能体 (NodeLearningAgent) — 生成教程和测验题目
+3. 节点学习工作流 (get_learn_workflow) — 教程/测验/资源的完整流程
 4. 兜底与修复函数 (build_fallback_plan, repair_plan)
+
+工作流拓扑：
+- 路径规划：START → research → strategist → END
+- 节点学习：START → load_context → [phase路由] → gen_tutorial/gen_questions/score_answers/gen_resource → END
 """
 
 from __future__ import annotations
@@ -52,16 +56,17 @@ from app.path.schemas import (
 logger = get_logger(__name__)
 
 # ======================================================================
-# 1. 兜底与修复规划函数 (源自 plan_workflow.py)
+# 1. 兜底与修复规划函数
 # ======================================================================
 
-def repair_plan(
-    *,
-    plan: LearningPlan,
-    macro_stages: list[AgentStage],
-    request: PathRequest,
-) -> LearningPlan:
-    """修复 LLM 生成的路径规划，确保 stages 和 nodes 正确对齐。"""
+def repair_plan(*, plan: LearningPlan, macro_stages: list[AgentStage], request: PathRequest) -> LearningPlan:
+    """修复 LLM 生成的路径规划，确保 stages 和 nodes 正确对齐。
+
+    处理场景：
+    - plan.stages 为空但 macro_stages 有内容 → 复制 macro_stages
+    - plan.stages 为空但 nodes 有内容 → 从 nodes 推导 stages
+    - plan.nodes 为空但 stages 有内容 → 从 stages 生成默认 nodes
+    """
     if not plan.stages and macro_stages:
         plan.stages = list(macro_stages)
 
@@ -99,10 +104,11 @@ def repair_plan(
     return plan
 
 
-def build_fallback_plan(
-    request: PathRequest,
-) -> LearningPlan:
-    """构建兜底学习路径 — 当 LLM 结构化规划失败时使用。"""
+def build_fallback_plan(request: PathRequest) -> LearningPlan:
+    """构建兜底学习路径 — 当 LLM 结构化规划失败时使用。
+
+    生成 3 个阶段、6 个节点的标准学习路径结构。
+    """
     topic = (request.topic or request.goal or "课程学习").strip()
     goal = (request.goal or topic).strip()
 
@@ -169,12 +175,14 @@ def build_fallback_plan(
 
 
 # ======================================================================
-# 2. 路径规划智能体 (源自 planner.py)
+# 2. 路径规划智能体
 # ======================================================================
 
+# 进度回调函数类型
 ProgressCallback = Callable[[str, int, str], Awaitable[None]]
 
 
+# LangGraph 规划工作流状态
 class PathState(TypedDict):
     """LangGraph 状态图中 research → strategist 的全局状态。"""
     request: PathRequest
@@ -186,7 +194,12 @@ class PathState(TypedDict):
 
 
 class PathPlannerAgent:
-    """课程级学习路径规划智能体。"""
+    """课程级学习路径规划智能体。
+
+    使用 LangGraph 编排 research → strategist 两个阶段：
+    - research：联网检索课程结构参考
+    - strategist：基于画像和目标生成阶段与节点
+    """
 
     def __init__(self) -> None:
         self.llm = get_llm()
@@ -270,13 +283,11 @@ class PathPlannerAgent:
 
         return workflow.compile()
 
-    async def generate_plan(
-        self,
-        request: PathRequest,
-        profile: dict[str, Any],
-        progress_callback: ProgressCallback | None = None,
-        profile_markdown: str = "",
-    ) -> LearningPlan:
+    async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "") -> LearningPlan:
+        """执行路径规划工作流，返回 LearningPlan。
+
+        失败时自动降级到 build_fallback_plan。
+        """
         loguru_logger.info("PathPlannerAgent 开始规划路径 - Topic: {}", request.topic)
         try:
             initial_state: PathState = {
@@ -393,11 +404,16 @@ async def emit_progress(
 
 
 # ======================================================================
-# 3. 节点学习智能体 (源自 node_learning.py)
+# 3. 节点学习智能体
 # ======================================================================
 
 class NodeLearningAgent:
-    """节点学习智能体 — 调用 LLM 生成节点教程内容和测验题目。"""
+    """节点学习智能体 — 调用 LLM 生成节点教程内容和测验题目。
+
+    主要方法：
+    - generate_tutorial：生成教程 Markdown
+    - generate_questions：生成 5 道测验题目
+    """
 
     def __init__(self) -> None:
         self.llm = get_llm()
@@ -479,20 +495,23 @@ class NodeLearningAgent:
 
 
 # ======================================================================
-# 4. 节点学习工作流 (源自 learn_workflow.py)
+# 4. 节点学习工作流
 # ======================================================================
 
+# 节点完成状态集合
 COMPLETED_NODE_STATUSES = frozenset({"completed", "completed_with_gaps"})
-ACTIVE_NODE_STATUSES = frozenset(
-    {"available", "in_progress", "remediation", "reinforced"}
-)
+
+# 节点活跃状态集合
+ACTIVE_NODE_STATUSES = frozenset({"available", "in_progress", "remediation", "reinforced"})
 
 
 def _route_by_phase(state: LearnState) -> str:
+    """路由函数：根据 phase 字段决定下一个节点。"""
     return state["phase"]
 
 
 def _route_by_outcome(state: LearnState) -> str:
+    """路由函数：根据测验结果决定下一步（补救/强化/解锁）。"""
     outcome = state.get("outcome", "completed")
     if outcome == "remediation":
         return "gen_remediation_tutorial"
@@ -502,6 +521,15 @@ def _route_by_outcome(state: LearnState) -> str:
 
 
 def _build_learn_workflow() -> StateGraph:
+    """构建节点学习 LangGraph 工作流。
+
+    拓扑：
+      START → load_context → [phase 路由]
+        - start: gen_tutorial → persist → END
+        - questions: gen_questions → persist → END
+        - quiz: score_answers → advance_state → [outcome 路由] → END
+        - resource: gen_resource → persist → END
+    """
     wf = StateGraph(LearnState)
 
     wf.add_node("load_context", node_load_context)
@@ -576,7 +604,10 @@ def get_learn_workflow() -> StateGraph:
     return _learn_workflow
 
 
+# ── 工作流节点函数 ──────────────────────────────────────────────────────────
+
 async def node_load_context(state: LearnState) -> dict:
+    """加载节点上下文：PathNode、LearningPath、教程列表、学习者画像。"""
     session = state["session"]
     user_id = state["user_id"]
     node_id = state["node_id"]
@@ -616,6 +647,7 @@ async def node_load_context(state: LearnState) -> dict:
 
 
 async def node_generate_tutorial(state: LearnState) -> dict:
+    """生成节点教程内容 — 调用 NodeLearningAgent。"""
     if state.get("error"):
         return {}
     agent = NodeLearningAgent()
@@ -633,6 +665,7 @@ async def node_generate_tutorial(state: LearnState) -> dict:
 
 
 async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
+    """持久化教程并标记为 current，更新节点状态为 in_progress。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -679,6 +712,7 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
 
 
 async def node_generate_questions(state: LearnState) -> dict:
+    """生成测验题目 — 若无教程则先自动生成主教程。"""
     if state.get("error"):
         return {}
     node = state["node"]
@@ -734,6 +768,7 @@ async def node_generate_questions(state: LearnState) -> dict:
 
 
 async def node_persist_questions(state: LearnState) -> dict:
+    """持久化测验题目到数据库。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -771,6 +806,7 @@ async def node_persist_questions(state: LearnState) -> dict:
 
 
 async def node_score_answers(state: LearnState) -> dict:
+    """评分用户答案，计算得分和薄弱知识点。"""
     if state.get("error"):
         return {}
     questions = state.get("quiz_questions", [])
@@ -802,6 +838,7 @@ async def node_score_answers(state: LearnState) -> dict:
 
 
 async def node_advance_state(state: LearnState) -> dict:
+    """推进节点状态：completed/remediation/completed_with_gaps。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -842,6 +879,7 @@ async def node_advance_state(state: LearnState) -> dict:
 
 
 async def node_unlock_and_update_progress(state: LearnState) -> dict:
+    """解锁后续节点并更新路径进度百分比。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -876,6 +914,7 @@ async def node_unlock_and_update_progress(state: LearnState) -> dict:
 
 
 async def node_record_quiz_event(state: LearnState) -> dict:
+    """记录测验事件到评估系统，触发画像更新。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -926,6 +965,7 @@ async def node_record_quiz_event(state: LearnState) -> dict:
 
 
 async def node_generate_resource(state: LearnState) -> dict:
+    """生成节点辅助资源 — 通过 path_helpers 调用 resource 模块 agent。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -990,6 +1030,7 @@ async def node_generate_resource(state: LearnState) -> dict:
 
 
 async def node_persist_resource(state: LearnState) -> dict:
+    """持久化辅助资源到 PathNodeResource 表。"""
     if state.get("error"):
         return {}
     session = state["session"]

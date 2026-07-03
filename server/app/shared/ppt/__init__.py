@@ -1,19 +1,18 @@
-from app.shared.ppt.pipeline import (
-    PresentationArtifact,
-    PresentationGenerationError,
-    PresentationPipeline,
-)
-from app.shared.ppt.schemas import (
-    ResourcePPTRequest,
+from app.shared.ppt.generator import PPTGenerationError, PPTGenerator
+from app.shared.ppt.models import (
+    PPTArtifact,
+    PPTPreferences,
+    PPTSource,
     PathPPTRequest,
-    SourceArtifact,
+    ResourcePPTRequest,
 )
 
 __all__ = [
-    "PresentationArtifact",
-    "PresentationGenerationError",
-    "PresentationPipeline",
-    "ResourcePPTRequest",
     "PathPPTRequest",
-    "SourceArtifact",
+    "PPTArtifact",
+    "PPTGenerationError",
+    "PPTGenerator",
+    "PPTPreferences",
+    "PPTSource",
+    "ResourcePPTRequest",
 ]

@@ -48,6 +48,7 @@ class TutorAgent:
         event_queue: asyncio.Queue[TutorRuntimeEvent] = asyncio.Queue()
         initial_state: TutorAgentState = {
             "user_id": input.user_id,
+            "username": input.username,
             "session_id": input.session_id,
             "user_message_id": input.user_message_id,
             "question": input.question,

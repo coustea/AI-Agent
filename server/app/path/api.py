@@ -18,7 +18,10 @@ from app.path.schemas import (
 )
 from app.path.service import PathService, build_learning_event_item, run_generation_bg
 
-router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])  # 路径规划模块路由，挂载在 /api/v1/ai/path-plan/ 下
+router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
+
+
+# ── 路径创建 ───────────────────────────────────────────────────────────
 
 
 @router.post("")  # POST /api/v1/ai/path-plan — 创建学习路径
@@ -44,6 +47,9 @@ async def create_path(
         data={"id": path_id, "run_id": run_id, "status": "generating"},
         status_code=201,
     )
+
+
+# ── 路径查询 ───────────────────────────────────────────────────────────
 
 
 @router.get("/active")  # GET /api/v1/ai/path-plan/active — 获取当前激活的学习路径
@@ -82,6 +88,9 @@ async def activate_history_path(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# ── 节点工作区 ───────────────────────────────────────────────────────────
+
+
 @router.get("/nodes/{node_id}/workspace")  # GET /api/v1/ai/path-plan/nodes/{id}/workspace — 获取节点学习区
 async def get_node_workspace(
     node_id: int,
@@ -96,6 +105,9 @@ async def get_node_workspace(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+
+
+# ── 节点学习流程 ───────────────────────────────────────────────────────────
 
 
 @router.post("/nodes/{node_id}/start-learning")  # POST 标记节点开始学习（轻量）
@@ -126,6 +138,9 @@ async def generate_tutorial(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# ── 测验流程 ───────────────────────────────────────────────────────────
+
+
 @router.post("/nodes/{node_id}/questions")  # POST 生成节点测验题 — LLM 根据教程生成 5 道题
 async def generate_node_questions(
     node_id: int,
@@ -153,6 +168,9 @@ async def submit_node_quiz(
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json"))
+
+
+# ── 辅助资源生成 ───────────────────────────────────────────────────────────
 
 
 @router.post("/nodes/{node_id}/mindmap")  # POST 生成思维导图
@@ -239,6 +257,9 @@ async def generate_quiz_resource(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# ── 辅助资源获取 ───────────────────────────────────────────────────────────
+
+
 @router.get("/nodes/{node_id}/mindmap")  # GET 获取节点思维导图（最新版本）
 async def get_mindmap(
     node_id: int,
@@ -323,6 +344,9 @@ async def get_quiz_resource(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
+# ── 资源列表与详情 ───────────────────────────────────────────────────────────
+
+
 @router.get("/resources")  # GET /api/v1/ai/path-plan/resources — 获取路径资源列表
 async def list_path_resources(
     limit: int = Query(default=20, ge=1, le=100),
@@ -395,6 +419,9 @@ async def get_path_by_id(
     return HttpResponse.success(data=response.model_dump(mode="json"))
 
 
+# ── 学习事件与评估 ───────────────────────────────────────────────────────────
+
+
 @router.post("/{path_id}/events")  # POST 记录路径学习事件 — 前端上报学习行为
 async def record_path_learning_event(
     path_id: int,
@@ -430,7 +457,7 @@ async def get_path_learning_evaluation(
     return HttpResponse.success(data=evaluation.model_dump(mode="json") if evaluation else None)
 
 
-# ── Background task wrapper ──────────────────────────────────────────────────
+# ── 后台任务包装器 ──────────────────────────────────────────────────────────
 
 async def _run_generation_bg(
     user_id: int,

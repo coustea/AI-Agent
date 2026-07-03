@@ -2,7 +2,6 @@
 
 包含：
 - ResourceGenerationRequest — 多智能体资源生成请求
-- SingleResourceRequest     — 单智能体资源生成请求
 - AgentConfigs              — 各 agent 的配置集合
 - 各 agent 配置类（ContentConfig / MindmapConfig / QuizConfig 等）
 
@@ -17,6 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.resource.schemas.meta import AGENT_DEFAULT_ENABLED, AGENT_DEFAULT_ORDER
+from app.shared.ppt import PPTPreferences
 
 
 LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "self_study", "path_learning"]
@@ -93,27 +93,9 @@ class ReadingConfig(BaseModel):
     max_items: int = Field(default=5, ge=1, le=10)
     focus: Literal["textbook", "engineering", "paper"] = "textbook"
 
-    @field_validator("language_preference", mode="before")
-    @classmethod
-    def normalize_language_preference(cls, value: Any) -> str:
-        if value == "bilingual":
-            return "both"
-        return value
-
-
-class PptConfig(BaseModel):
-    """PPT Agent 配置 — 4 个核心参数。"""
-
-    template: Literal["auto", "editorial", "techmap"] = "auto"
-    explanation_style: Literal["concept", "case_driven", "problem_led", "review"] = "concept"
-    density: Literal["concise", "standard", "detailed"] = "standard"
-    focus: list[Literal["core_concepts", "cases", "pitfalls", "derivation"]] = Field(
-        default_factory=lambda: ["core_concepts"],
-    )
-
 
 class VideoConfig(BaseModel):
-    """视频 Agent 配置 — 4 个核心参数。"""
+    """视频 Agent 配置。后端保留能力，当前资源生成前端不暴露入口。"""
 
     voice: Literal["teacher", "coach"] = "teacher"
     duration_seconds: int = Field(default=180, ge=60, le=600)
@@ -122,12 +104,12 @@ class VideoConfig(BaseModel):
 
 
 class CartoonConfig(BaseModel):
-    """动画讲解 Agent 配置 — 4 个核心参数。"""
+    """动画讲解 Agent 配置。"""
 
-    style: Literal["diagram", "lab", "classroom"] = "diagram"
+    style: Literal["diagram", "minimal", "dark_tech"] = "diagram"
     voice: Literal["teacher", "coach"] = "teacher"
     video_length_seconds: int = Field(default=90, ge=60, le=180)
-    focus: Literal["concept", "process", "comparison"] = "concept"
+    focus: Literal["concept", "process", "comparison", "practice"] = "concept"
 
 
 class AgentConfigs(BaseModel):
@@ -139,7 +121,7 @@ class AgentConfigs(BaseModel):
     quiz: QuizConfig = Field(default_factory=QuizConfig)
     code: CodeConfig = Field(default_factory=CodeConfig)
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
-    ppt: PptConfig = Field(default_factory=PptConfig)
+    ppt: PPTPreferences = Field(default_factory=PPTPreferences)
     video: VideoConfig = Field(default_factory=VideoConfig)
     cartoon: CartoonConfig = Field(default_factory=CartoonConfig)
 
@@ -187,11 +169,11 @@ class ResourceGenerationRequest(BaseModel):
         }
         if not enabled_agent_ids:
             raise ValueError("selected_agents 过滤 enabled=true 后不能为空")
-        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video", "cartoon"}
+        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video"}
         base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
         if aggregation_agent_ids and not base_agent_ids:
             raise ValueError(
-                "PPT/Video/动画 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
+                "PPT/Video 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
             )
         self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
         return self
@@ -203,13 +185,3 @@ class ResourceGenerationRequest(BaseModel):
             for item in sorted(self.selected_agents, key=_agent_sort_key)
             if item.enabled
         ]
-
-
-class SingleResourceRequest(BaseModel):
-    """单智能体资源生成请求。"""
-    model_config = ConfigDict(extra="forbid")
-
-    learning_need: str
-    learning_scenario: LearningScenario = "self_study"
-    agent_id: ResourceAgentId
-    agent_config: dict[str, Any] = Field(default_factory=dict)

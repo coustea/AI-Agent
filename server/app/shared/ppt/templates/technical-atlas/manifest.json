@@ -1,0 +1,32 @@
+{
+  "id": "technical-atlas",
+  "name": "技术图谱",
+  "version": "1.0.0",
+  "description": "暗色网格、路径信号与工程标注构成的克制技术教学模板",
+  "family": "technical",
+  "scheme": "dark",
+  "tags": ["架构", "代码", "协议", "数据流", "系统", "工程"],
+  "fallback_layout": "statement-split",
+  "layouts": [
+    {"id":"cover-orbit","name":"坐标封面","shapes":["statement"],"roles":["cover"],"skeleton":"hero","animation":"build","point_capacity":3,"step_capacity":0},
+    {"id":"cover-index","name":"系统索引","shapes":["concept"],"roles":["cover"],"skeleton":"hero-index","animation":"reveal","point_capacity":4,"step_capacity":0},
+    {"id":"section-marker","name":"模块切换","shapes":["statement","concept"],"roles":["section"],"skeleton":"section","animation":"focus","point_capacity":3,"step_capacity":0},
+    {"id":"question-stage","name":"问题终端","shapes":["statement","quiz"],"roles":["hook","practice"],"skeleton":"question","animation":"resolve","point_capacity":4,"step_capacity":0},
+    {"id":"statement-poster","name":"状态大字","shapes":["statement"],"roles":["explain","hook"],"skeleton":"poster","animation":"focus","point_capacity":4,"step_capacity":0},
+    {"id":"statement-split","name":"信号分栏","shapes":["statement"],"roles":["explain","case"],"skeleton":"split","animation":"reveal","point_capacity":6,"step_capacity":0},
+    {"id":"concept-lens","name":"核心节点","shapes":["concept"],"roles":["explain"],"skeleton":"lens","animation":"focus","point_capacity":5,"step_capacity":0},
+    {"id":"concept-annotated","name":"工程批注","shapes":["concept"],"roles":["explain","derive"],"skeleton":"annotated","animation":"reveal","point_capacity":6,"step_capacity":0},
+    {"id":"sequence-path","name":"请求链路","shapes":["sequence"],"roles":["explain","derive"],"skeleton":"path","animation":"trace","point_capacity":0,"step_capacity":6},
+    {"id":"sequence-stair","name":"状态递进","shapes":["sequence"],"roles":["derive","case"],"skeleton":"stair","animation":"build","point_capacity":0,"step_capacity":5},
+    {"id":"comparison-split","name":"方案对照","shapes":["comparison"],"roles":["explain","case"],"skeleton":"compare","animation":"compare","point_capacity":4,"step_capacity":0},
+    {"id":"comparison-axis","name":"权衡坐标","shapes":["comparison"],"roles":["derive","summary"],"skeleton":"axis","animation":"compare","point_capacity":4,"step_capacity":0},
+    {"id":"system-map","name":"拓扑地图","shapes":["system"],"roles":["explain","case"],"skeleton":"map","animation":"trace","point_capacity":0,"step_capacity":0},
+    {"id":"system-layers","name":"系统分层","shapes":["system"],"roles":["derive","case"],"skeleton":"layers","animation":"build","point_capacity":0,"step_capacity":0},
+    {"id":"code-trace","name":"执行追踪","shapes":["code"],"roles":["derive","case"],"skeleton":"code-trace","animation":"trace","point_capacity":5,"step_capacity":5},
+    {"id":"code-terminal","name":"终端结果","shapes":["code"],"roles":["explain","practice"],"skeleton":"code-output","animation":"build","point_capacity":5,"step_capacity":4},
+    {"id":"formula-build","name":"模型推导","shapes":["formula"],"roles":["derive","explain"],"skeleton":"formula","animation":"build","point_capacity":6,"step_capacity":5},
+    {"id":"misconception-reveal","name":"故障诊断","shapes":["comparison","quiz"],"roles":["practice","case"],"skeleton":"misconception","animation":"resolve","point_capacity":4,"step_capacity":0},
+    {"id":"summary-map","name":"系统复盘","shapes":["concept","sequence","statement"],"roles":["summary"],"skeleton":"summary","animation":"reveal","point_capacity":6,"step_capacity":5},
+    {"id":"closing-line","name":"链路收束","shapes":["statement"],"roles":["closing"],"skeleton":"closing","animation":"focus","point_capacity":3,"step_capacity":0}
+  ]
+}

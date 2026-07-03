@@ -14,6 +14,11 @@ import re
 from typing import TYPE_CHECKING, Any, Callable
 
 from app.infra.logging import get_logger
+from app.resource.schemas.quiz import (
+    QuizPayload,
+    build_quiz_blueprint,
+    validate_quiz_payload,
+)
 
 if TYPE_CHECKING:
     from app.resource.schemas import AgentResult, ResourceInput, TeachingPlan
@@ -108,7 +113,7 @@ def validate_mindmap(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_quiz(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Quiz 资源校验：数量等于配置、ID 唯一、答案属于选项。"""
+    """Quiz 资源校验：结构、数量、题型和难度必须与请求蓝图一致。"""
     if result.file_type != "json":
         raise ValidationError("Quiz must be JSON")
 
@@ -117,20 +122,21 @@ def validate_quiz(result: "AgentResult", input_data: "ResourceInput") -> None:
     except json.JSONDecodeError as e:
         raise ValidationError(f"Quiz JSON parse error: {e}")
 
-    if isinstance(data, dict):
-        questions = data.get("questions", [])
-    elif isinstance(data, list):
-        questions = data
-    else:
-        raise ValidationError("Quiz must be object with questions or array")
+    if not isinstance(data, dict):
+        raise ValidationError("Quiz must be a QuizPayload object")
 
-    if not questions:
-        raise ValidationError("Quiz has no questions")
-
-    # 检查 ID 唯一性
-    ids = [q.get("id") for q in questions if q.get("id")]
-    if len(ids) != len(set(ids)):
-        raise ValidationError("Quiz question IDs must be unique")
+    try:
+        payload = QuizPayload.model_validate(data)
+        blueprint = build_quiz_blueprint(
+            question_count=int(input_data.agent_config.get("question_count", 5)),
+            question_types=input_data.agent_config.get("question_types"),
+            difficulty_mode=str(
+                input_data.agent_config.get("difficulty_mode", "basic")
+            ),
+        )
+        validate_quiz_payload(payload, blueprint)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"Quiz contract validation failed: {exc}") from exc
 
 
 def validate_code(result: "AgentResult", input_data: "ResourceInput") -> None:
@@ -178,61 +184,29 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """PPT 资源校验：严格校验 HTML 幻灯片文件生成。"""
+    """PPT 资源只校验发布引用，不检查生成器内部结构或 HTML 内容。"""
     if result.file_type != "html":
         raise ValidationError("PPT resource must be HTML format")
 
     metadata = result.metadata or {}
-    required_fields = {
-        "agent_id",
-        "html_file_path",
-        "html_url",
-        "slide_count",
-        "style_name",
-        "density",
-        "file_size",
-    }
-    if not required_fields <= metadata.keys():
-        missing = sorted(required_fields - metadata.keys())
-        raise ValidationError(f"HTML PPT metadata is missing: {', '.join(missing)}")
-
-    unexpected_fields = sorted(metadata.keys() - required_fields)
-    if unexpected_fields:
-        raise ValidationError(
-            f"HTML PPT metadata contains unsupported fields: "
-            f"{', '.join(unexpected_fields)}"
-        )
-
-    html_path = metadata["html_file_path"]
-    html_url = metadata["html_url"]
-    if not re.fullmatch(
-        r"/api/v1/ai/resources/public/[A-Za-z0-9_-]+/html",
-        str(html_url),
-    ):
-        raise ValidationError("HTML PPT has an invalid public html_url")
-    if not isinstance(metadata["slide_count"], int) or metadata["slide_count"] < 1:
-        raise ValidationError("HTML PPT slide_count must be a positive integer")
-    if metadata["density"] not in {"speaker_led", "reading_first"}:
-        raise ValidationError("HTML PPT density is invalid")
-
-    import os
-    if not os.path.exists(html_path):
-        raise ValidationError(f"Generated HTML slide file does not exist: {html_path}")
+    if not str(metadata.get("html_file_path", "")).strip():
+        raise ValidationError("PPT resource requires html_file_path")
+    if not str(metadata.get("html_url", "")).strip():
+        raise ValidationError("PPT resource requires html_url")
 
 
 def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Video resources must be final, playable MP4 artifacts."""
+    """Video 资源必须是带音频的最终 MP4 产物。"""
     if result.file_type != "mp4":
         raise ValidationError("Video must be MP4")
 
     try:
         data = json.loads(result.content) if isinstance(result.content, str) else result.content
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"Video JSON parse error: {e}")
+    except json.JSONDecodeError as exc:
+        raise ValidationError(f"Video JSON parse error: {exc}") from exc
 
     if not isinstance(data, dict):
         raise ValidationError("Video must be object")
-
     if data.get("schema_version") != "video/v2":
         raise ValidationError("Video must use the video/v2 schema")
     if not str(data.get("public_url", "")).endswith(".mp4"):

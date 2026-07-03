@@ -30,7 +30,7 @@ from app.resource.agents.reading import ReadingAgent
 # 课件 Agent：生成教学 PPT
 from app.resource.agents.ppt import PPTAgent
 
-# 视频 Agent：生成结构化讲解视频脚本
+# 视频 Agent：生成最终 MP4 讲解视频
 from app.resource.agents.video import VideoAgent
 
 # 模块公开导出列表
@@ -54,7 +54,7 @@ __all__ = [
     # 阅读 Agent
     "ReadingAgent",
     # 课件 Agent
-    "PptAgent",
+    "PPTAgent",
     # 视频 Agent
     "VideoAgent",
 ]

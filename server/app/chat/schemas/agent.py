@@ -16,6 +16,7 @@ class TutorToolCall(BaseModel):
 class TutorRequestContext(BaseModel):
     """当前用户消息的辅导请求上下文。"""
     user_id: int
+    username: str  # 用户名，用于文件路径构建
     session_id: str
     user_input: str = ""
     attachments: list[str] = Field(default_factory=list)
@@ -26,6 +27,7 @@ class TutorRequestContext(BaseModel):
 class TutorAgentInput(BaseModel):
     """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。"""
     user_id: int
+    username: str  # 用户名，用于文件路径构建
     session_id: str
     user_message_id: int
     question: str

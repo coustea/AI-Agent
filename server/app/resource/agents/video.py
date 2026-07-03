@@ -6,7 +6,7 @@ import json
 import uuid
 from typing import Any
 
-from app.config import WORKPLACE_DIR
+from app.config import user_resource_video_dir, user_path_node_video_dir
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -110,13 +110,8 @@ class VideoAgent(BaseResourceAgent):
         self.video_agent = video_agent or SharedVideoAgent()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        resource_key = (
-            f"res_{input_data.resource_id}"
-            if input_data.resource_id is not None
-            else f"res_{uuid.uuid4().hex}"
-        )
-        user_id = input_data.user_id or 0
-        output_dir = WORKPLACE_DIR / "resource" / str(user_id) / str(input_data.resource_id or uuid.uuid4().hex)
+        username = input_data.username or "anonymous"
+        output_dir = user_resource_video_dir(username, str(input_data.resource_id or uuid.uuid4().hex))
         request = VideoRequest(
             topic=input_data.learning_need,
             audience=_profile_text(input_data.profile),
@@ -133,17 +128,13 @@ class VideoAgent(BaseResourceAgent):
         return await self._generate(request)
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        username = input_data.username or "anonymous"
         request = VideoRequest(
             topic=input_data.node_title,
             audience=_profile_text(input_data.profile),
             learning_goal=input_data.mastery_target or input_data.path_goal,
             materials=_node_materials(input_data),
-            output_dir=(
-                WORKPLACE_DIR
-                / "resource"
-                / str(input_data.user_id if hasattr(input_data, 'user_id') else 0)
-                / f"path_{input_data.path_id}_node_{input_data.node_id}"
-            ),
+            output_dir=user_path_node_video_dir(username, str(input_data.path_id), str(input_data.node_id)),
             metadata={
                 "origin": "path",
                 "path_id": input_data.path_id,

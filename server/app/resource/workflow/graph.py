@@ -2,7 +2,7 @@
 
 拓扑：
   START → planning → worker_node(×N, Send并行) → merge_workers
-    → [ppt_node, video_node] (并行) → merge_aggregation → save_node
+    → [ppt_node, video_node] → merge_aggregation → save_node
     → save_node (无聚合Agent时直接保存)
 """
 

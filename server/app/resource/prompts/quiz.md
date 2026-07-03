@@ -83,7 +83,7 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
 ```json
 {"id": 2, "type": "multiple_choice", "question": "以下哪些是面向对象编程的特征？", "options": [{"label": "A", "content": "封装"}, {"label": "B", "content": "递归"}, {"label": "C", "content": "继承"}, {"label": "D", "content": "多态"}], "answer": ["A", "C", "D"], "explanation": "封装、继承、多态是 OOP 三大特征，递归是算法策略", "difficulty": "medium", "knowledge_points": ["面向对象编程"]}
 ```
-- 必须有 4-5 个 options
+- 必须有恰好 4 个 options，按 A、B、C、D 排列
 - answer 为 label 数组（如 ["A", "C", "D"]），至少 2 个正确选项
 
 #### true_false — 判断题
@@ -103,7 +103,7 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
 ### 题型分布
 
 - `question_types` 指定出题的题型组合，可选：`single`（单选）、`multiple`（多选）、`judge`（判断）、`fill`（填空）
-- 题目按指定题型分布生成，各题型数量大致均衡
+- 系统会提供确定性的题目蓝图；逐题严格遵守蓝图中的 id、type 和 difficulty
 - 未指定时默认包含单选、多选、判断
 
 ### 薄弱点侧重
@@ -130,7 +130,7 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
 
 # OUTPUT CONTROL（输出控制）
 
-- 题目数量严格等于 `question_count`，不多不少
+- 题目数量严格等于题目蓝图长度，不多不少
 - 选择题必须有 4 个选项，单选题只有一个正确答案，多选题至少两个
 - 每题必须提供 `explanation`（始终包含解析）
 - 不要输出 Markdown、讲义、代码案例或阅读推荐
@@ -168,7 +168,7 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
 
 # FEEDBACK LOOP（反馈机制）
 
-无。习题 Agent 为单次输出。
+系统在结构或蓝图校验失败时会携带具体错误定向纠正一次。
 
 # EXAMPLES（实例）
 

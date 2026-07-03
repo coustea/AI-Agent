@@ -35,6 +35,7 @@ class ResourceInput(BaseModel):
 
     resource_id: int | None = None
     user_id: int | None = None
+    username: str = ""  # 用户名，用于文件路径构建
     learning_need: str
     learning_scenario: LearningScenario = "self_study"
     agent_name: str = ""
@@ -67,3 +68,4 @@ class NodeInput(BaseModel):
     profile: str | dict[str, Any] = ""  # Markdown 格式的学习者画像或字典快照
     existing_resources: dict[str, AgentResult] = Field(default_factory=dict)
     agent_config: dict[str, Any] = Field(default_factory=dict)
+    username: str = ""  # 用户名，用于文件路径构建

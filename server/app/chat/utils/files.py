@@ -16,18 +16,18 @@ from typing import Optional
 from langchain_core.messages import HumanMessage
 
 from app.infra.logging import get_logger
-from app.config import CHAT_DIR
+from app.config import WORKPLACE_DIR
 
 logger = get_logger(__name__)
 
-# 上传文件的根目录，与 config.yaml 中 chat.dir 对应
-UPLOAD_DIR = CHAT_DIR
 # 单个文件最大读取字符数，防止超大文件撑爆 LLM 上下文窗口
 MAX_FILE_CONTENT_CHARS = 15000
 
 
-def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
-    """将 URL 路径解析为 (owner_id, absolute_path)，校验路径安全性和文件存在性。
+def resolve_uploaded_path(file_url: str) -> tuple[str, str] | None:
+    """将 URL 路径解析为 (username, absolute_path)，校验路径安全性和文件存在性。
+
+    新 URL 格式: /static/{username}/chat/{session_id}/uploads/{filename}
 
     安全策略：
     1. 路径遍历攻击防护：resolve() 后必须以 user_dir 为前缀
@@ -38,73 +38,75 @@ def resolve_uploaded_path(file_url: str) -> tuple[int, str] | None:
         file_url: 上传文件的 URL 路径。
 
     Returns:
-        元组 (owner_id, absolute_path)，无效路径返回 None。
+        元组 (username, absolute_path)，无效路径返回 None。
     """
-    relative: str
-    # 支持两种 URL 前缀格式：API 路由前缀和简短前缀
-    if file_url.startswith("/api/v1/ai/chat/uploads/"):
-        relative = file_url.removeprefix("/api/v1/ai/chat/uploads/")
-    elif file_url.startswith("/uploads/"):
-        relative = file_url.removeprefix("/uploads/")
-    else:
-        # 兜底：支持直接传入本地绝对路径（chat-uploads/<user>/<session>/<file>）
-        try:
-            local_path = Path(file_url).expanduser().resolve()
-        except (OSError, RuntimeError, ValueError):
-            return None
-        upload_root = UPLOAD_DIR.resolve()
-        # 路径遍历攻击防护：确保解析后的路径仍在上传根目录内
-        try:
-            local_path.relative_to(upload_root)
-        except ValueError:
-            return None
-        if not local_path.exists():
-            return None
-        # 从绝对路径反推目录结构，支持 2 层（user/file）或 3 层（user/session/file）
-        relative_parts = local_path.relative_to(upload_root).parts
-        if len(relative_parts) == 3:
-            owner_part, session_id, filename = relative_parts
-        elif len(relative_parts) == 2:
-            owner_part, filename = relative_parts
-            session_id = ""
-        else:
-            return None
-        if not owner_part.isdigit():
-            return None
-        # 安全校验：session_id 和 filename 不能包含路径分隔符（防目录穿越）
-        if session_id and Path(session_id).name != session_id:
-            return None
-        if Path(filename).name != filename:
-            return None
-        return int(owner_part), str(local_path)
+    # 支持 /static/{username}/chat/{session_id}/uploads/{filename} 格式
+    if file_url.startswith("/static/"):
+        relative = file_url.removeprefix("/static/")
+        parts = [p for p in relative.split("/") if p]
+        # 期望格式: {username}/chat/{session_id}/uploads/{filename}
+        # 或: {username}/chat/{session_id}/diagrams/{filename}
+        if len(parts) >= 5 and parts[1] == "chat":
+            username = parts[0]
+            session_id = parts[2]
+            subdir = parts[3]  # uploads 或 diagrams
+            filename = "/".join(parts[4:])  # 支持子目录中的文件
 
-    # URL 路径解析：按 "/" 分割，过滤空段
-    parts = [p for p in relative.split("/") if p]
-    if len(parts) == 3:
-        owner_part, session_id, filename = parts
-    elif len(parts) == 2:
-        owner_part, filename = parts
-        session_id = ""
-    else:
-        return None
+            # 安全校验：session_id 和 filename 不能包含路径分隔符（防目录穿越）
+            if session_id and Path(session_id).name != session_id:
+                return None
+            if subdir not in {"uploads", "diagrams"}:
+                return None
 
-    # 安全校验：owner 必须是纯数字用户 ID
-    if not owner_part.isdigit():
-        return None
-    if session_id and Path(session_id).name != session_id:
-        return None
-    if Path(filename).name != filename:
+            # 构建路径
+            user_dir = (WORKPLACE_DIR / username).resolve()
+            file_path = (user_dir / "chat" / session_id / subdir / filename).resolve()
+
+            if not str(file_path).startswith(str(user_dir)):
+                return None
+            if not file_path.exists():
+                return None
+            return username, str(file_path)
+
+        # 兼容旧格式: {username}/chat/{session_id}/{filename} (无 uploads 层级)
+        if len(parts) == 4 and parts[1] == "chat":
+            username = parts[0]
+            session_id = parts[2]
+            filename = parts[3]
+
+            if session_id and Path(session_id).name != session_id:
+                return None
+            if Path(filename).name != filename:
+                return None
+
+            user_dir = (WORKPLACE_DIR / username).resolve()
+            file_path = (user_dir / "chat" / session_id / "uploads" / filename).resolve()
+
+            if not str(file_path).startswith(str(user_dir)):
+                return None
+            if not file_path.exists():
+                return None
+            return username, str(file_path)
+
+    # 兜底：支持直接传入本地绝对路径
+    try:
+        local_path = Path(file_url).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
         return None
 
-    # 拼接绝对路径并再次验证路径遍历安全性
-    user_dir = (UPLOAD_DIR / owner_part).resolve()
-    path = (user_dir / session_id / filename).resolve() if session_id else (user_dir / filename).resolve()
-    if not str(path).startswith(str(user_dir)):
-        return None
-    if not path.exists():
+    if not local_path.exists():
         return None
 
-    return int(owner_part), str(path)
+    # 尝试从路径中提取 username
+    try:
+        relative_parts = local_path.relative_to(WORKPLACE_DIR).parts
+        if len(relative_parts) >= 3 and relative_parts[1] == "chat":
+            username = relative_parts[0]
+            return username, str(local_path)
+    except ValueError:
+        pass
+
+    return None
 
 
 def resolve_uploaded_image_path(image_url: str) -> Path | None:
@@ -196,7 +198,7 @@ def read_uploaded_file_content(
 
 async def analyze_documents(
     *,
-    current_user_id: int,
+    current_username: str,
     file_urls: list[str],
     question: str,
     max_total_chars: int = 40000,
@@ -209,7 +211,7 @@ async def analyze_documents(
     流程：URL 解析 → 权限校验 → 内容读取 → 截断 → 拼接为分析上下文。
 
     Args:
-        current_user_id: 当前用户 ID（用于权限校验）。
+        current_username: 当前用户名（用于权限校验）。
         file_urls: 文件 URL 列表。
         question: 用户问题（用于构建分析提示词）。
 
@@ -222,18 +224,18 @@ async def analyze_documents(
     snippets: list[str] = []
 
     for file_url in file_urls:
-        # 将 URL 解析为 (owner_id, absolute_path)，失败则跳过
+        # 将 URL 解析为 (username, absolute_path)，失败则跳过
         resolved = resolve_uploaded_path(file_url)
         if resolved is None:
             logger.warning("[DocumentAnalysis] failed to resolve %s", file_url)
             continue
 
-        owner_id, absolute_path = resolved
+        owner_username, absolute_path = resolved
         # 安全校验：确保当前用户只能访问自己的文件
-        if owner_id != current_user_id:
+        if owner_username != current_username:
             logger.warning(
                 "[DocumentAnalysis] forbidden file access user=%s owner=%s",
-                current_user_id, owner_id,
+                current_username, owner_username,
             )
             continue
 

@@ -59,8 +59,16 @@ class ParentState(TypedDict, total=False):
     success: bool
 
 
-class WorkerInputState(TypedDict):
-    """Worker 节点输入状态 — 每个并行 worker 的独立输入。"""
+class WorkerInputState(TypedDict, total=False):
+    """Worker 节点输入状态 — 每个并行 worker 的独立输入。
+
+    Send payload 携带 worker_node 所需的全部数据，
+    因为 LangGraph Send 创建独立 state，不继承父 state。
+    """
     agent_id: str
     user_id: int
     resource_id: int
+    selected_agents: list[str]
+    request_data: dict[str, Any]
+    profile: dict[str, Any]
+    teaching_plan: dict[str, Any]

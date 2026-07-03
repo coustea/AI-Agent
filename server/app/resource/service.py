@@ -61,6 +61,7 @@ def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | No
     """将 AgentResult 内容拆分为 JSON 和纯文本存储字段。
 
     严格分流：不创建 envelope 包装，不降级非法 JSON。
+    HTML/MP4 文件型资源仅在 metadata_json 中保存发布引用。
     """
     if result.file_type == "json":
         value = json.loads(result.content) if isinstance(result.content, str) else result.content
@@ -226,6 +227,9 @@ class ResourceService:
 
     async def list_resource_items(self, user_id: int, resource_id: int) -> list[ItemModel]:
         """查询资源项列表。user_id 通过 resource_id → GeneratedResource 验证所有权。"""
+        resource = await self.session.get(GeneratedResource, resource_id)
+        if resource is None or resource.user_id != user_id:
+            return []
         stmt = (
             select(ItemModel)
             .where(ItemModel.resource_id == resource_id)
@@ -354,7 +358,10 @@ class ResourceService:
         # 从 items 和 runs 推导 selected_agents
         agent_ids_from_items = {item.agent_type for item in db_items}
         agent_ids_from_runs = {run.agent_id for run in runs_by_agent.values()}
-        selected_agents = sorted(agent_ids_from_items | agent_ids_from_runs)
+        selected_agents = sorted(
+            (agent_ids_from_items | agent_ids_from_runs)
+            & set(AGENT_CONTENT_FORMAT)
+        )
 
         # 构建 agent_snapshots
         merged: dict[str, dict[str, Any]] = {}

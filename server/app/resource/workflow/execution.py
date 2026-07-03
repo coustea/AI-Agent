@@ -70,6 +70,25 @@ async def execute_resource_agent(
     """执行单个资源 Agent，包含完整的生命周期管理。"""
     started = time.perf_counter()
 
+    # 先持久化运行态，使页面刷新后仍能恢复本次选中的 Agent 和当前阶段。
+    try:
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.upsert_agent_run(
+                resource_id=resource_id,
+                agent_id=agent_id,
+                status="running",
+            )
+    except Exception as exc:
+        return await _record_failure(
+            resource_id=resource_id,
+            agent_id=agent_id,
+            stage="persistence",
+            exception=exc,
+            started_at=started,
+            events=events,
+        )
+
     # 发送开始事件
     await _observe(
         events.send(

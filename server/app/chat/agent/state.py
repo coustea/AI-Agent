@@ -26,6 +26,7 @@ class TutorAgentState(TypedDict, total=False):
 
     # ── 请求输入（无 reducer — 后写覆盖）──
     user_id: int
+    username: str  # 用户名，用于文件路径构建
     session_id: str
     user_message_id: int
     question: str

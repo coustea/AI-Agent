@@ -2,7 +2,7 @@
 
 节点拓扑：
   START → planning → worker_node(×N, Send并行) → merge_workers
-    → [ppt_node, video_node] (并行) → merge_aggregation → save_node
+    → [ppt_node, video_node] → merge_aggregation → save_node
 
 核心设计：
 - 传递 user_id, resource_id, selected_agents, request_data, profile, teaching_plan
@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -42,6 +43,29 @@ from app.resource.event import ResourceEvents
 logger = logging.getLogger(__name__)
 
 BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
+
+
+def _split_handoff_materials(content: str, *, limit: int = 12000) -> list[str]:
+    """把已持久化正文切成适合 PPT 规划器消费的有界材料块。"""
+    normalized = content.strip()[:limit]
+    if not normalized:
+        return []
+
+    chunks: list[str] = []
+    current = ""
+    for paragraph in normalized.split("\n\n"):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        candidate = f"{current}\n\n{paragraph}".strip()
+        if current and len(candidate) > 2400:
+            chunks.append(current)
+            current = paragraph
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks[:6]
 
 
 def build_agent_resource_input(
@@ -96,10 +120,7 @@ async def get_handoffs(
     resource_id: int,
     user_id: int,
 ) -> dict[str, DownstreamContext]:
-    """获取成功持久化的基础 Agent handoffs。
-
-    从 Item 行的 title/summary 直接构建，不再依赖 downstream_context 列。
-    """
+    """从成功持久化的基础资源构建 PPT 所需的真实内容交接。"""
     async with session_scope() as session:
         service = ResourceService(session)
         items = await service.list_resource_items(user_id, resource_id)
@@ -108,11 +129,23 @@ async def get_handoffs(
     for item in items:
         if item.agent_type not in BASE_RESOURCE_AGENT_IDS:
             continue
-        # item 表只有成功记录，无需检查 status
+        if item.content_text:
+            content = item.content_text
+        elif item.content_json is not None:
+            content = json.dumps(
+                item.content_json,
+                ensure_ascii=False,
+                indent=2,
+            )
+        else:
+            content = ""
+        materials = _split_handoff_materials(content)
+        summary = " ".join(content.split())[:300] or item.title or item.agent_type
         handoffs[item.agent_type] = DownstreamContext(
             source_agent=item.agent_type,
             title=item.title or "",
-            one_sentence_summary=item.title or "",
+            one_sentence_summary=summary,
+            materials=materials,
         )
     return handoffs
 
@@ -177,6 +210,13 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     started = time.perf_counter()
     try:
+        async with session_scope() as session:
+            service = ResourceService(session)
+            await service.upsert_agent_run(
+                resource_id=resource_id,
+                agent_id="planning",
+                status="running",
+            )
         await events.send(
             "planning",
             "running",
@@ -329,11 +369,17 @@ def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
     worker_ids = [aid for aid in selected_agents if aid in BASE_RESOURCE_AGENT_IDS]
     if not worker_ids:
         return ["merge_workers"]
+    # Send 必须携带 worker_node 所需的全部数据，
+    # 因为 LangGraph Send 创建独立 state，不继承父 state。
     return [
         Send("worker_node", {
             "agent_id": agent_id,
             "user_id": state["user_id"],
             "resource_id": state["resource_id"],
+            "selected_agents": selected_agents,
+            "request_data": state.get("request_data") or {},
+            "profile": state.get("profile") or {},
+            "teaching_plan": state.get("teaching_plan") or {},
         })
         for agent_id in worker_ids
     ]
@@ -498,14 +544,14 @@ def route_after_merge(state: ParentState) -> list[str]:
     return destinations or ["save_node"]
 
 
-# ── Aggregation nodes (PPT, Video) ─────────────────────────────────────
+# ── Aggregation nodes (PPT, Video) ────────────────────────────────────
 
 
 async def ppt_node(state: ParentState) -> dict[str, Any]:
-    """PPT 聚合节点 — 运行两阶段教学课件生成。
+    """PPT 聚合节点 — 调用独立课件生成器并保存其发布引用。
 
     从 state 读取数据，从数据库读取成功的基础 Agent handoffs。
-    聚合 Agent 不需要 downstream_context。
+    模板选择、布局、渲染和 HTML 发布均由 PPT Agent 内部流水线负责。
     """
     user_id = state["user_id"]
     resource_id = state["resource_id"]
@@ -538,11 +584,6 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         user_id=user_id,
     )
 
-    agent_config_extra: dict[str, Any] = {
-        "upstream_handoff_agent_ids": list(base_handoffs.keys()),
-        "programming_language": agent_configs.get("code", {}).get("programming_language"),
-    }
-
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
         user_id=user_id,
@@ -554,7 +595,6 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs=base_handoffs,
-        agent_config_extra=agent_config_extra,
     )
 
     return await _execute_non_planning_agent(
@@ -566,11 +606,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
 
 
 async def video_node(state: ParentState) -> dict[str, Any]:
-    """Video 聚合节点 — 运行 VideoAgent 内部流水线生成视频脚本。
-
-    从 state 读取数据，从数据库读取成功的基础 Agent handoffs。
-    聚合 Agent 不需要 downstream_context。
-    """
+    """Video 聚合节点 — 基于已保存的基础资源生成最终 MP4。"""
     user_id = state["user_id"]
     resource_id = state["resource_id"]
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
@@ -578,46 +614,38 @@ async def video_node(state: ParentState) -> dict[str, Any]:
     await events.send(
         VIDEO_AGENT_ID,
         "running",
-        "正在生成讲解视频配置与分镜",
+        "正在生成讲解视频",
         80,
     )
 
-    # 从 state 获取数据
     request_data: dict[str, Any] = state.get("request_data") or {}
     profile: dict[str, Any] = state.get("profile") or {}
     selected_agents: list[str] = state.get("selected_agents") or []
     teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
 
-    learning_need = request_data.get("learning_need", "")
-    agent_configs = request_data.get("agent_configs", {})
-    learning_scenario = request_data.get("learning_scenario", "self_study")
-
-    teaching_plan = None
-    if teaching_plan_raw:
-        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
-
-    # 从数据库读取成功持久化的基础 Agent handoffs
+    teaching_plan = (
+        TeachingPlan.model_validate(teaching_plan_raw)
+        if teaching_plan_raw
+        else None
+    )
     base_handoffs = await get_handoffs(
         resource_id=resource_id,
         user_id=user_id,
     )
-
-    agent_config_extra: dict[str, Any] = {
-        "upstream_handoff_agent_ids": list(base_handoffs.keys()),
-    }
-
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
         user_id=user_id,
         agent_id=VIDEO_AGENT_ID,
-        learning_need=learning_need,
-        learning_scenario=learning_scenario,
+        learning_need=request_data.get("learning_need", ""),
+        learning_scenario=request_data.get("learning_scenario", "self_study"),
         selected_agents=selected_agents,
-        agent_configs=agent_configs,
+        agent_configs=request_data.get("agent_configs", {}),
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs=base_handoffs,
-        agent_config_extra=agent_config_extra,
+        agent_config_extra={
+            "upstream_handoff_agent_ids": list(base_handoffs),
+        },
     )
 
     return await _execute_non_planning_agent(
@@ -632,7 +660,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
 
 
 async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
-    """聚合 Barrier 节点 — 等待所有聚合 Agent（PPT/Video）完成后再保存。
+    """聚合 Barrier 节点 — 等待 PPT/Video Agent 完成后再保存。
 
     results 仅包含成功持久化的 Agent。
     failures 包含失败的 Agent 记录。

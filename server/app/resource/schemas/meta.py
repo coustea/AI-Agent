@@ -14,7 +14,7 @@ AGENT_META: dict[str, dict[str, str]] = {
     "code": {"name": "代码示例", "icon": "Code", "description": "代码实操案例"},
     "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
     "ppt": {"name": "PPT文稿", "icon": "DataBoard", "description": "PPT文稿生成"},
-    "video": {"name": "讲解视频", "icon": "Video", "description": "结构化讲解视频脚本与分镜"},
+    "video": {"name": "讲解视频", "icon": "Video", "description": "带配音和字幕的 MP4 讲解视频"},
 }
 
 AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "video"]

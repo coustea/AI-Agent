@@ -11,7 +11,11 @@ import json
 import uuid
 from typing import Any
 
-from app.config import CARTOON_RENDER_WORKERS, WORKPLACE_DIR
+from app.config import (
+    WORKPLACE_DIR,
+    user_path_node_cartoon_dir,
+    user_resource_cartoon_dir,
+)
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -75,7 +79,7 @@ def _source_artifacts_from_results(
 def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
     """从 4 个核心参数构建 cartoon 请求选项。
 
-    render_workers 从 config.yaml 读取，不再由用户配置。
+    渲染参数由运行环境自动探测，不接受用户配置。
     """
     return {
         "video_length_seconds": int(config.get("video_length_seconds", 90)),
@@ -99,15 +103,17 @@ class CartoonAgent(BaseResourceAgent):
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         cfg = _agent_config_defaults(input_data.agent_config)
-        user_id = input_data.user_id or 0
+        username = input_data.username or "anonymous"
         resource_key = str(input_data.resource_id or uuid.uuid4().hex)
-        output_dir = WORKPLACE_DIR / "cartoon" / str(user_id) / resource_key
+        output_dir = user_resource_cartoon_dir(username, resource_key)
 
         request = CartoonVideoRequest(
             learning_need=input_data.learning_need,
             profile=_profile_text(input_data.profile),
             video_length_seconds=cfg["video_length_seconds"],
             voice=cfg["voice"],
+            style=cfg["style"],
+            focus=cfg["focus"],
             output_dir=output_dir,
             artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
         )
@@ -121,18 +127,16 @@ class CartoonAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         cfg = _agent_config_defaults(input_data.agent_config)
-        output_dir = (
-            WORKPLACE_DIR
-            / "cartoon"
-            / f"path_{input_data.path_id}"
-            / f"node_{input_data.node_id}"
-        )
+        username = input_data.username or "anonymous"
+        output_dir = user_path_node_cartoon_dir(username, str(input_data.path_id), str(input_data.node_id))
 
         request = CartoonVideoRequest(
             learning_need=input_data.learning_need,
             profile=_profile_text(input_data.profile),
             video_length_seconds=cfg["video_length_seconds"],
             voice=cfg["voice"],
+            style=cfg["style"],
+            focus=cfg["focus"],
             output_dir=output_dir,
             artifacts=_source_artifacts_from_results(input_data.existing_resources),
         )
@@ -150,8 +154,7 @@ class CartoonAgent(BaseResourceAgent):
         *,
         output_dir: Any,
     ) -> AgentResult:
-        renderer = CartoonVideoRenderer(timeout_seconds=600, workers=CARTOON_RENDER_WORKERS)
-        pipeline = CartoonPipeline(renderer=renderer)
+        pipeline = CartoonPipeline(renderer=CartoonVideoRenderer())
 
         async def progress(message: str, percent: int) -> None:
             await self.emitter.send(self.agent_id, "running", message, percent)
@@ -188,8 +191,7 @@ class CartoonAgent(BaseResourceAgent):
                 "html_url": html_url,
                 "duration_seconds": artifact.brief.total_duration,
                 "scene_count": artifact.scene_count,
-                "style": artifact.style.selected.name,
-                "repaired": artifact.repaired,
+                "style": artifact.theme,
             },
             ensure_ascii=False,
         )
@@ -233,10 +235,9 @@ class CartoonAgent(BaseResourceAgent):
                 "title": artifact.brief.title,
                 "duration_seconds": artifact.brief.total_duration,
                 "scene_count": artifact.scene_count,
-                "style": artifact.style.selected.name,
-                "repaired": artifact.repaired,
+                "style": artifact.theme,
                 "video_size_bytes": video_size,
                 "has_audio": True,
-                "render_workers": CARTOON_RENDER_WORKERS,
+                "render_profile": artifact.render_profile.as_metadata(),
             },
         )

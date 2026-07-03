@@ -1,14 +1,18 @@
-"""Scene planner — designs the narrative arc and scene timeline."""
+"""Create one structured storyboard for the complete teaching video."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
-from app.shared.cartoon.schemas import VideoBrief, CartoonVideoRequest
+from app.shared.cartoon.schemas import CartoonVideoRequest, VideoBrief
 
 
 class VideoPlanner:
-    def __init__(self, llm=None):
+    """Use one model call to produce narration and semantic visual instructions."""
+
+    def __init__(self, llm: Any = None) -> None:
         self.llm = llm or get_llm()
 
     async def plan(self, request: CartoonVideoRequest) -> VideoBrief:

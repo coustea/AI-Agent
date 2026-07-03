@@ -5,12 +5,9 @@
   build_resource_context — 构建 standalone 多智能体资源生成 prompt 上下文
   build_node_context     — 构建路径规划节点资源生成 prompt 上下文
   build_agent_config_section — 将 agent_config 字典转为结构化 Markdown 配置段
-  expand_agent_config    — 从 4 个核心参数自动推断被删除的派生参数
-  salvage_json_from_llm  — 从 LLM 输出中健壮地提取 JSON（处理 markdown fence 包裹）
 """
 
 import json
-import re
 
 from app.resource.schemas import (
     DownstreamContext,
@@ -121,8 +118,6 @@ _READING_LABELS: dict[str, str | dict] = {
 _PPT_LABELS: dict[str, str | dict] = {
     "template": {
         "auto": "自动推荐",
-        "editorial": "教学编辑部",
-        "techmap": "技术图谱",
     },
     "explanation_style": {
         "concept": "概念讲解",
@@ -160,8 +155,8 @@ _VIDEO_LABELS: dict[str, str | dict] = {
 _CARTOON_LABELS: dict[str, str | dict] = {
     "style": {
         "diagram": "精密图解",
-        "lab": "系统实验室",
-        "classroom": "编辑课堂",
+        "minimal": "清晰简约",
+        "dark_tech": "克制暗黑科技",
     },
     "voice": {
         "teacher": "亲和导师",
@@ -172,6 +167,7 @@ _CARTOON_LABELS: dict[str, str | dict] = {
         "concept": "概念讲解",
         "process": "过程演示",
         "comparison": "对比分析",
+        "practice": "实例推演",
     },
 }
 
@@ -242,44 +238,6 @@ def _format_config_value(field: str, value: object, labels: dict[str, str | dict
     return str(value)
 
 
-def expand_agent_config(agent_id: str, config: dict) -> dict:
-    """从 4 个核心参数自动推断被删除的派生参数，注入回 config dict。
-
-    被删除的参数不再由用户直接配置，但其语义由核心参数自动恢复，
-    以保证 agent 运行逻辑不受影响。
-
-    Args:
-        agent_id: Agent 标识符
-        config: 原始 4 参数 agent_config 字典
-
-    Returns:
-        扩展后的 config 字典（包含推断出的派生参数）
-    """
-    expanded = dict(config)
-
-    if agent_id == "content":
-        # include_common_mistakes: focus_mode=weak_points 时自动启用
-        expanded["include_common_mistakes"] = config.get("focus_mode") == "weak_points"
-
-    elif agent_id == "mindmap":
-        # highlight_weak: map_type=exam_map 时自动启用
-        expanded["highlight_weak"] = config.get("map_type") == "exam_map"
-
-    elif agent_id == "quiz":
-        # weak_point_weight: 由 difficulty_mode 推断
-        mode = config.get("difficulty_mode", "basic")
-        expanded["weak_point_weight"] = {"basic": 30, "adaptive": 50, "exam": 70}.get(mode, 50)
-        # include_analysis: 始终包含解析
-        expanded["include_analysis"] = True
-
-    elif agent_id == "video":
-        # scene_count: 由 duration_seconds 自动计算（约30秒/场景）
-        duration = int(config.get("duration_seconds", 180))
-        expanded["scene_count"] = max(3, min(12, round(duration / 30)))
-
-    return expanded
-
-
 def build_agent_config_section(agent_id: str, config: dict) -> str | None:
     """将 agent_config 字典转为结构化 Markdown 配置段。
 
@@ -343,11 +301,12 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
         }
         parts.append("## 上游交接摘要\n" + json.dumps(handoffs, ensure_ascii=False, indent=2))
 
-    # 先自动推断派生参数，再注入配置段到 prompt
     effective_agent_id = (input_data.agent_config.get("agent_id") if input_data.agent_config else None) or input_data.agent_name
     if effective_agent_id and input_data.agent_config:
-        expanded_config = expand_agent_config(effective_agent_id, input_data.agent_config)
-        config_section = build_agent_config_section(effective_agent_id, expanded_config)
+        config_section = build_agent_config_section(
+            effective_agent_id,
+            input_data.agent_config,
+        )
         if config_section:
             parts.append(config_section)
 
@@ -455,12 +414,13 @@ def build_node_context(input_data: NodeInput) -> list[str]:
         )
         parts.append(f"## 学习者画像\n{profile_text}")
 
-    # 先自动推断派生参数，再注入配置段到 prompt
     if input_data.agent_config:
         effective_agent_id = input_data.agent_config.get("agent_id")
         if effective_agent_id:
-            expanded_config = expand_agent_config(effective_agent_id, input_data.agent_config)
-            config_section = build_agent_config_section(effective_agent_id, expanded_config)
+            config_section = build_agent_config_section(
+                effective_agent_id,
+                input_data.agent_config,
+            )
             if config_section:
                 parts.append(config_section)
 
@@ -473,34 +433,3 @@ def build_node_context(input_data: NodeInput) -> list[str]:
     ]))
 
     return parts
-
-
-def salvage_json_from_llm(raw: str, *, require_key: str | None = None) -> dict | None:
-    """从 LLM 输出中健壮地提取 JSON 字典。"""
-    try:
-        data = json.loads(raw)
-        if isinstance(data, dict) and (not require_key or require_key in data):
-            return data
-    except json.JSONDecodeError:
-        pass
-
-    match = re.search(r"```(?:json)?\s*\n(.*?)```", raw, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            if isinstance(data, dict) and (not require_key or require_key in data):
-                return data
-        except json.JSONDecodeError:
-            pass
-
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            data = json.loads(raw[start:end + 1])
-            if isinstance(data, dict) and (not require_key or require_key in data):
-                return data
-        except json.JSONDecodeError:
-            pass
-
-    return None

@@ -36,10 +36,17 @@ from app.resource.event import (
     encode_resource_sse,
     get_resource_channel,
 )
+from app.shared.ppt import PPTGenerator
 
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+# 当前多智能体资源生成页面只开放基础资源与 PPT。
+# Video 仍保留在后端注册表和请求契约中，供后续入口或路径模块调用。
+FRONTEND_RESOURCE_AGENT_IDS = frozenset(
+    {"content", "mindmap", "quiz", "code", "reading", "ppt"}
+)
 
 
 @router.post("/resources")
@@ -214,9 +221,11 @@ async def get_resource_events(
 
 @router.get("/agents")
 async def list_agents():
-    """查询可用 Agent 列表。"""
+    """查询当前资源生成前端可选择的 Agent 列表。"""
     agents: list[dict[str, Any]] = []
     for agent_id in AGENT_DEFAULT_ORDER:
+        if agent_id not in FRONTEND_RESOURCE_AGENT_IDS:
+            continue
         meta = AGENT_META.get(agent_id, {})
         agents.append({
             "id": agent_id,
@@ -227,6 +236,14 @@ async def list_agents():
         })
 
     return HttpResponse.success(data=agents)
+
+
+@router.get("/ppt/templates")
+async def list_ppt_templates(
+    current_user: User = Depends(get_current_user),
+):
+    """查询当前 PPT 模块中可用的运行时模板。"""
+    return HttpResponse.success(data=PPTGenerator.available_templates())
 
 
 @router.get("/resources")

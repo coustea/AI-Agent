@@ -223,11 +223,12 @@ class ReusableAssets(BaseModel):
 
 
 class DownstreamContext(BaseModel):
-    """基础 agent 给 PPT/Video 的短交接摘要。"""
+    """基础 Agent 给聚合 Agent 的结构化交接内容。"""
 
     model_config = ConfigDict(extra="forbid")
 
     source_agent: str
     title: str = ""
     one_sentence_summary: str = ""
+    materials: list[str] = Field(default_factory=list, max_length=12)
     reusable_assets: ReusableAssets = Field(default_factory=ReusableAssets)

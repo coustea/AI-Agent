@@ -1,6 +1,13 @@
 """路径规划模块 Pydantic 模型。
 
 包含请求/响应/内部状态的所有数据结构。
+
+主要分类：
+1. 请求模型 — PathRequest
+2. Agent 结构化输出 — LearningPlan, PlanNode, AgentStage
+3. 响应 DTO — PathResponse, LearningPathNodeWorkspaceResponse 等
+4. 工作流状态 — LearnState (LangGraph 状态图)
+5. 校验函数 — validate_path_plan (阶段/节点/依赖环校验)
 """
 
 from __future__ import annotations
@@ -18,6 +25,7 @@ if TYPE_CHECKING:
 # ======================================================================
 
 
+# 路径创建请求 — POST /path-plan 的请求体
 class PathRequest(BaseModel):
     """新学习路径创建请求。"""
 
@@ -30,26 +38,11 @@ class PathRequest(BaseModel):
 
 
 # ======================================================================
-# 资源类型白名单
-# ======================================================================
-
-ALLOWED_RESOURCE_TYPES: tuple[str, ...] = (
-    "content",
-    "mindmap",
-    "code",
-    "reading",
-    "quiz",
-    "ppt",
-)
-
-
-# ======================================================================
 # Agent 结构化输出模型
 # ======================================================================
 
 
-
-
+# 学习效果快照 — 用于路径优化决策
 class LearningSignalSnapshot(BaseModel):
     """学习效果摘要 — 路径调整用的聚合信号。"""
 
@@ -63,6 +56,7 @@ class LearningSignalSnapshot(BaseModel):
     recommendations: list[str] = Field(default_factory=list, description="系统调整建议")
 
 
+# 节点教程 DTO — 用于工作区响应
 class LearningPathTutorialDTO(BaseModel):
     id: int
     tutorial_type: str
@@ -91,6 +85,7 @@ class LearningPathTutorialDTO(BaseModel):
         )
 
 
+# 节点测验题目 DTO
 class LearningPathQuestionDTO(BaseModel):
     id: int
     question_no: int
@@ -123,6 +118,7 @@ class LearningPathQuestionDTO(BaseModel):
         )
 
 
+# 节点资源 DTO — 辅助学习资源
 class LearningPathResourceDTO(BaseModel):
     id: int
     resource_type: str
@@ -157,6 +153,7 @@ class LearningPathResourceDTO(BaseModel):
         )
 
 
+# 路径节点 DTO
 class LearningPathNodeDTO(BaseModel):
     id: int
     node_id: str
@@ -183,6 +180,7 @@ class LearningPathNodeDTO(BaseModel):
         )
 
 
+# 路径概览响应 — GET /path-plan/active 等的响应体
 class PathResponse(BaseModel):
     id: int
     module: str
@@ -198,6 +196,7 @@ class PathResponse(BaseModel):
     updated_at: str
 
 
+# 路径历史列表项
 class LearningPathHistoryItem(BaseModel):
     id: int
     title: str
@@ -208,6 +207,7 @@ class LearningPathHistoryItem(BaseModel):
     updated_at: str
 
 
+# 节点工作区响应 — GET /nodes/{id}/workspace 的完整响应
 class LearningPathNodeWorkspaceResponse(BaseModel):
     path: PathResponse
     node: LearningPathNodeDTO
@@ -218,6 +218,7 @@ class LearningPathNodeWorkspaceResponse(BaseModel):
     quiz_available: bool = False
 
 
+# 测验轮次响应 — GET /nodes/{id}/questions
 class PathQuizRoundResponse(BaseModel):
     node_id: int
     tutorial_id: int | None = None
@@ -225,15 +226,18 @@ class PathQuizRoundResponse(BaseModel):
     questions: list[LearningPathQuestionDTO] = Field(default_factory=list)
 
 
+# 测验答案提交项
 class PathQuizAnswerItem(BaseModel):
     question_id: int
     response: str
 
 
+# 测验提交请求 — POST /nodes/{id}/quiz-submit
 class PathQuizSubmitRequest(BaseModel):
     answers: list[PathQuizAnswerItem] = Field(default_factory=list, min_length=5, max_length=5)
 
 
+# 测验提交响应 — 评分结果和下一步指引
 class PathQuizSubmitResponse(BaseModel):
     node_id: int
     round_no: int
@@ -245,6 +249,7 @@ class PathQuizSubmitResponse(BaseModel):
     current_tutorial_id: int | None = None
 
 
+# Agent 生成的单道题目
 class AgentQuestionItem(BaseModel):
     question: str = Field(description="题干")
     choice: dict[str, str] = Field(description="选项映射，如 {'A': '选项内容', 'B': '选项内容'}，至少2个选项")
@@ -260,10 +265,12 @@ class AgentQuestionItem(BaseModel):
         return self
 
 
+# Agent 生成的题目集 — LLM 结构化输出
 class AgentQuestionSet(BaseModel):
     questions: list[AgentQuestionItem] = Field(default_factory=list, min_length=0, max_length=5)
 
 
+# 规划节点 — LLM 输出的节点定义
 class PlanNode(BaseModel):
     """规划 Agent 输出的单个路径节点。"""
 
@@ -275,6 +282,7 @@ class PlanNode(BaseModel):
     priority: int = Field(default=0, description="优先级")
 
 
+# 规划阶段 — LLM 输出的阶段定义
 class AgentStage(BaseModel):
     """规划 Agent 输出的阶段。"""
 
@@ -282,6 +290,7 @@ class AgentStage(BaseModel):
     title: str = Field(description="阶段标题")
 
 
+# 学习计划 — PathPlannerAgent 的完整输出
 class LearningPlan(BaseModel):
     """规划 Agent 的结构化输出。"""
 
@@ -290,6 +299,7 @@ class LearningPlan(BaseModel):
     nodes: list[PlanNode] = Field(min_length=1, description="所有阶段的具体学习节点列表，至少1个节点")
 
 
+# 路径学习评估响应
 class PathLearningEvaluationResponse(BaseModel):
     """路径内学习效果评估响应。"""
 
@@ -305,6 +315,7 @@ class PathLearningEvaluationResponse(BaseModel):
 # LangGraph 工作流状态定义
 # ======================================================================
 
+# 节点学习工作流状态 — LangGraph 状态图的 total=False TypedDict
 class LearnState(TypedDict, total=False):
     """节点学习工作流的状态结构。
 
@@ -385,9 +396,11 @@ class LearnState(TypedDict, total=False):
 # 路径规划结构校验
 # ======================================================================
 
+# 合法的难度等级
 VALID_DIFFICULTIES: tuple[str, ...] = ("beginner", "intermediate", "advanced")
 
 
+# 路径规划校验失败异常
 class PathPlanValidationError(ValueError):
     """路径规划结构校验失败 — LLM 输出不安全，不应持久化。"""
 
@@ -501,8 +514,6 @@ __all__ = [
     "LearningPlan",
     "AgentQuestionItem",
     "AgentQuestionSet",
-    # Resource types
-    "ALLOWED_RESOURCE_TYPES",
     # Signal
     "LearningSignalSnapshot",
     # State

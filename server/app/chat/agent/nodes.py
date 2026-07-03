@@ -92,6 +92,7 @@ async def preprocess_node(
     """
     attachments = state.get("attachments", [])
     user_id = state.get("user_id", 0)
+    username = state.get("username", "")
     session_id = state.get("session_id", "")
     user_message_id = state.get("user_message_id", 0)
 
@@ -162,7 +163,7 @@ async def preprocess_node(
     if file_urls:
         try:
             analysis = await analyze_documents(
-                current_user_id=user_id,
+                current_username=username,
                 file_urls=file_urls[:5],
                 question="请分析这些文档",
             )

@@ -53,6 +53,7 @@ async def chat(
     *,
     user_message_id: int,
     user_id: int,
+    username: str,
     session_id: str,
     user_input: str,
     attachments: list[str] | None = None,
@@ -117,6 +118,7 @@ async def chat(
     # ── 3. 调用 TutorAgent ──
     agent_input = TutorAgentInput(
         user_id=user_id,
+        username=username,
         session_id=effective_session,
         user_message_id=user_message_id,
         question=current_message,
@@ -255,6 +257,7 @@ async def run_chat_agent(
     *,
     user_message_id: int,
     user_id: int,
+    username: str,
     session_id: str,
     user_input: str,
     attachments: list[str],
@@ -290,6 +293,7 @@ async def run_chat_agent(
         async for event in chat(
             user_message_id=user_message_id,
             user_id=user_id,
+            username=username,
             session_id=session_id,
             user_input=user_input,
             attachments=attachments or None,
@@ -510,7 +514,7 @@ class ChatUseCases:
         *,
         filename: str,
         content: bytes,
-        user_id: int,
+        username: str,
         session_id: str,
     ) -> dict[str, Any]:
         """保存用户上传的文件。
@@ -524,14 +528,14 @@ class ChatUseCases:
         if not filename:
             raise ValueError("文件名不能为空")
         # 检查文件数上限
-        existing = self.file_store.list_files(user_id=user_id, session_id=session_id)
+        existing = self.file_store.list_files(username=username, session_id=session_id)
         if len(existing) >= MAX_UPLOAD_FILES_PER_REQUEST:
             raise ValueError(f"单次上传最多 {MAX_UPLOAD_FILES_PER_REQUEST} 个文件")
         # 写入磁盘
         payload = await self.file_store.save_upload(
             filename=filename,
             content=content,
-            user_id=user_id,
+            username=username,
             session_id=session_id,
         )
         return payload
@@ -539,8 +543,8 @@ class ChatUseCases:
     def resolve_uploaded_file(
         self,
         *,
-        current_user_id: int,
-        owner_id: int,
+        current_username: str,
+        owner_username: str,
         session_id: str,
         filename: str,
     ) -> Path:
@@ -549,11 +553,11 @@ class ChatUseCases:
         只有文件所有者才能访问，防止越权读取。
         实际路径解析委托给 LocalFileStore.resolve_user_file。
         """
-        if current_user_id != owner_id:
+        if current_username != owner_username:
             raise PermissionError("无权访问此文件")
         return self.file_store.resolve_user_file(
-            current_user_id=current_user_id,
-            owner_id=owner_id,
+            current_username=current_username,
+            owner_username=owner_username,
             session_id=session_id,
             filename=filename,
         )

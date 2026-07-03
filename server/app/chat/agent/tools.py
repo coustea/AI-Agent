@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.chat.tools.knowledge import as_tool as _knowledge_tool
+from app.rag.tools import as_tool as _knowledge_tool
 from app.chat.tools.user_context import as_tool as _user_context_tools
 from app.chat.schemas import EvidenceSet, TutorRequestContext
 from app.chat.schemas.diagram import TeachingDiagramGenerator
