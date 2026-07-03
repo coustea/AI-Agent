@@ -369,8 +369,8 @@
                       :key="opt.value"
                       type="button"
                       class="px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer transition-all"
-                      :class="localConfigs.ppt.focus.includes(opt.value) ? 'bg-white text-slate-900 border-slate-200 shadow-sm' : 'bg-transparent text-slate-400 border-transparent hover:text-slate-600'"
-                      @click="togglePptFocus(opt.value as any)"
+                      :class="localConfigs.ppt.focus.includes(opt.value as 'core_concepts' | 'cases' | 'pitfalls' | 'derivation') ? 'bg-white text-slate-900 border-slate-200 shadow-sm' : 'bg-transparent text-slate-400 border-transparent hover:text-slate-600'"
+                      @click="togglePptFocus(opt.value as 'core_concepts' | 'cases' | 'pitfalls' | 'derivation')"
                     >
                       {{ opt.label }}
                     </button>
