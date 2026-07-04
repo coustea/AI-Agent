@@ -840,6 +840,23 @@ function togglePptFocus(item: any) {
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
+/* 下拉菜单白色背景、向下展开 */
+.ctrl-group select::-webkit-dropdown-button {
+  background-color: #ffffff;
+}
+
+.ctrl-group select option {
+  background-color: #ffffff;
+  color: #1e293b;
+  padding: 8px 12px;
+}
+
+.ctrl-group select option:checked,
+.ctrl-group select option:hover {
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
 .ctrl-group select:hover {
   border-color: rgba(15, 23, 42, 0.22);
 }
