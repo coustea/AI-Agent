@@ -99,7 +99,7 @@ class CartoonAgent(BaseResourceAgent):
     """Translate resource inputs into the cartoon animation pipeline."""
 
     agent_id = "cartoon"
-    agent_name = "动画讲解视频"
+    agent_name = "动画讲解"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)

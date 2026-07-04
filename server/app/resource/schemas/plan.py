@@ -9,10 +9,9 @@ PlanningAgent 输出两层信息：
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 BASE_WORKER_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
@@ -176,42 +175,6 @@ class TeachingPlan(BaseModel):
             )
         return self
 
-
-@lru_cache(maxsize=32)
-def create_planning_output_model(enabled_agents: tuple[str, ...]) -> type[BaseModel]:
-    """为本次选择的 Worker 创建精确键集合的 LLM 输出模型。
-
-    动态模型让结构化输出层直接要求每个选中 Agent 的键存在，并拒绝任何
-    未选中的 Agent。这样不会再依赖 LLM 在数组中正确回显 agent_id。
-    """
-    if not enabled_agents:
-        raise ValueError("Planning requires at least one base worker")
-    if len(enabled_agents) != len(set(enabled_agents)):
-        raise ValueError("Planning worker IDs must be unique")
-
-    unknown_agents = set(enabled_agents) - BASE_WORKER_IDS
-    if unknown_agents:
-        raise ValueError(f"Planning contains unsupported workers: {sorted(unknown_agents)}")
-
-    worker_fields = {
-        agent_id: (
-            WorkerTask,
-            Field(description=f"{agent_id} Worker 的完整任务合约"),
-        )
-        for agent_id in enabled_agents
-    }
-    worker_tasks_model = create_model(
-        "SelectedWorkerTasks_" + "_".join(enabled_agents),
-        __config__=ConfigDict(extra="forbid"),
-        **worker_fields,
-    )
-    return create_model(
-        "PlanningOutput_" + "_".join(enabled_agents),
-        __config__=ConfigDict(extra="forbid"),
-        schema_version=(Literal["3.0"], Field(description="固定为 3.0")),
-        global_plan=(GlobalTeachingPlan, Field(description="所有 Worker 共享的教学规划")),
-        worker_tasks=(worker_tasks_model, Field(description="按选中 Agent ID 索引的任务")),
-    )
 
 
 class ReusableAssets(BaseModel):

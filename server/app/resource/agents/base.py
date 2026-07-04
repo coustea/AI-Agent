@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
 
 from app.infra.logging import get_logger
@@ -13,7 +14,6 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from app.infra.tool_excute import Tool
     from app.resource.event import ResourceEvents
     from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
@@ -28,10 +28,7 @@ def register_agent(cls: type[BaseResourceAgent]) -> type[BaseResourceAgent]:
 
 
 class BaseResourceAgent:
-    """资源 Agent 基类。子类必须显式实现 resource 和 node 两个入口。
-
-    集成 ToolExcute，统一把网页研究委托给 ResearchAgent。
-    """
+    """资源 Agent 基类。子类必须显式实现 resource 和 node 两个入口。"""
 
     agent_id: str
     agent_name: str
@@ -40,7 +37,6 @@ class BaseResourceAgent:
     def __init__(
         self,
         emitter: ResourceEvents | None = None,
-        tools: list[Tool] | None = None,
     ) -> None:
         self.emitter = emitter
         if emitter is None:
@@ -52,14 +48,14 @@ class BaseResourceAgent:
 
             self.emitter = NoopEvents()
 
+    async def search(self, query: str) -> str:
+        """通过共享 research 工具把网页研究委托给 ResearchAgent。"""
         if not self.research_enabled:
-            self.tools = []
-            self.tool_excute = None
-            return
+            return "联网研究已关闭"
 
         from app.infra.llm import get_llm
-        from app.infra.tool_excute import ToolExcute
-        from app.shared.research import build_research_tool
+        from app.shared.research.agent import ResearchAgent
+        from app.shared.research.schemas import ResearchTask
 
         llm = get_llm()
 
@@ -90,97 +86,64 @@ class BaseResourceAgent:
                 },
             )
 
-        async def handle_tool_event(event: dict[str, Any]) -> None:
-            status = event.get("status")
-            tool_name = event.get("tool_name")
-            agent_id = getattr(self, "agent_id", "base_resource")
-            if status == "running":
-                await self.emitter.send(
-                    agent_id,
-                    "running",
-                    "正在委托 ResearchAgent 研究资料...",
-                    data={
-                        "phase": "research_delegate",
-                        "sub_agent": "research",
-                        "tool_name": tool_name,
-                        "tool_status": "running",
-                    },
-                )
-            elif status == "done":
-                duration = event.get("duration_ms", 0)
-                await self.emitter.send(
-                    agent_id,
-                    "running",
-                    f"ResearchAgent 已完成资料研究（耗时 {duration}ms）",
-                    data={
-                        "phase": "research_delegate",
-                        "sub_agent": "research",
-                        "tool_name": tool_name,
-                        "tool_status": "completed",
-                        "elapsed_ms": duration,
-                    },
-                )
-            elif status == "failed":
-                error = event.get("error", "未知错误")
-                await self.emitter.send(
-                    agent_id,
-                    "running",
-                    f"ResearchAgent 研究失败: {error}",
-                    data={
-                        "phase": "research_delegate",
-                        "sub_agent": "research",
-                        "tool_name": tool_name,
-                        "tool_status": "failed",
-                    },
-                )
-
-        research_tool = build_research_tool(
-            model=llm.model,
-            event_handler=handle_research_event,
-        )
-        custom_tools = [tool for tool in (tools or []) if tool.name != "research"]
-        self.tools = [research_tool, *custom_tools]
-        self.tool_excute = ToolExcute(self.tools, event_handler=handle_tool_event)
-
-    async def search(self, query: str) -> str:
-        """通过共享 research 工具把网页研究委托给 ResearchAgent。"""
         try:
-            result = await self.tool_excute.execute({
-                "name": "research",
-                "args": {
-                    "query": query,
-                    "objective": "为资源生成提供准确、可引用的网页资料",
-                    "depth": "standard",
+            await self.emitter.send(
+                getattr(self, "agent_id", "base_resource"),
+                "running",
+                "正在委托 ResearchAgent 研究资料...",
+                data={
+                    "phase": "research_delegate",
+                    "sub_agent": "research",
+                    "tool_name": "research",
+                    "tool_status": "running",
                 },
-            })
-            if isinstance(result, dict):
-                return str(result.get("text") or "")
-            return str(result or "")
+            )
+            started_at = time.perf_counter()
+            report = await ResearchAgent(
+                model=llm.model,
+                event_handler=handle_research_event,
+            ).run(
+                ResearchTask(
+                    query=query,
+                    objective="为资源生成提供准确、可引用的网页资料",
+                    depth="standard",
+                    sources={"web"},
+                )
+            )
+            duration = int((time.perf_counter() - started_at) * 1000)
+            await self.emitter.send(
+                getattr(self, "agent_id", "base_resource"),
+                "running",
+                f"ResearchAgent 已完成资料研究（耗时 {duration}ms）",
+                data={
+                    "phase": "research_delegate",
+                    "sub_agent": "research",
+                    "tool_name": "research",
+                    "tool_status": "completed",
+                    "elapsed_ms": duration,
+                },
+            )
+            result_text = report.context.strip()
+            if not result_text:
+                error_summary = "；".join(error.message for error in report.errors[:3])
+                result_text = "联网研究未获得可用于回答的证据。"
+                if error_summary:
+                    result_text += f" 原因：{error_summary}"
+            return result_text
         except Exception as exc:
             logger.error("[BaseResourceAgent] ResearchAgent failed: %s", exc)
+            await self.emitter.send(
+                getattr(self, "agent_id", "base_resource"),
+                "running",
+                f"ResearchAgent 研究失败: {exc}",
+                data={
+                    "phase": "research_delegate",
+                    "sub_agent": "research",
+                    "tool_name": "research",
+                    "tool_status": "failed",
+                },
+            )
             return f"搜索失败: {exc}"
-
-    # -- ToolExcute 集成 -----------------------------------------------------
-
-    async def invoke_with_tools(self, messages: Any, **kwargs: Any) -> tuple[Any, list[dict[str, Any]]]:
-        """使用 ToolExcute 调用 LLM，返回 (response, tool_calls)。
-
-        如果没有注册工具，退化为普通 LLM 调用。
-        """
-        if not self.tool_excute:
-            from app.infra.llm import get_llm
-
-            llm = get_llm()
-            response = await llm.ainvoke(messages, **kwargs)
-            return response, []
-
-        return await self.tool_excute.invoke(messages, **kwargs)
-
-    async def execute_tools(self, tool_calls: list[dict[str, Any]]) -> list[Any]:
-        """执行工具调用列表。"""
-        if not self.tool_excute or not tool_calls:
-            return []
-        return await self.tool_excute.execute_all(tool_calls)
 
     # -- 子类必须实现的入口 ----------------------------------------------------
 

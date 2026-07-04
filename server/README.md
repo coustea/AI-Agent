@@ -15,6 +15,25 @@ FastAPI + LangGraph 多智能体学习平台后端。
 | 视频渲染 | Remotion 4.0, HyperFrames, FFmpeg |
 | TTS 配音 | Edge-TTS, 讯飞星火 TTS |
 
+## 环境要求
+
+### 必需环境
+
+| 工具 | 版本要求 | 用途 |
+|------|---------|------|
+| **Python** | ≥ 3.13 | 后端运行环境 |
+| **PostgreSQL** | ≥ 12 | 主数据库 |
+| **FFmpeg** | 任意版本 | 视频渲染音视频处理 |
+| **FFprobe** | 与 FFmpeg 同版本 | 音视频流探测 |
+| **uv** | 最新版 | Python 包管理器 |
+
+### 可选环境
+
+| 工具 | 用途 | 配置位置 |
+|------|------|----------|
+| **Ollama + bge-m3** | 向量检索知识库 | `config.yaml` → `knowledge` |
+| **NVIDIA GPU + NVENC** | GPU 加速视频编码（仅 Linux） | 自动检测 |
+
 ## 视频渲染模块
 
 后端包含两条独立的视频渲染管线，均需要 FFmpeg 支持。
@@ -67,7 +86,6 @@ npx remotion --version
 
 **依赖**：
 - FFmpeg（必须，推荐带 NVENC）
-- Node.js 18+（必须）
 - HyperFrames CLI（自动通过 npx 调用）
 
 **自动环境检测**：
@@ -178,80 +196,198 @@ server/
 
 ## 快速开始
 
-### 前置条件
+### 1. 安装系统依赖
 
-- Python 3.13+
-- PostgreSQL 12+
-- **Node.js 18+**（视频渲染必需）
-- **FFmpeg & FFprobe**（视频渲染必需）
-- [uv](https://docs.astral.sh/uv/)（Python 包管理器）
-- **Ollama + bge-m3**（可选，向量检索）
+#### macOS
 
-### 1. 安装依赖
-
-**系统依赖**：
 ```bash
-# macOS
-brew install ffmpeg node ollama  # ollama 为可选
+# 安装 Homebrew（如未安装）
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Ubuntu/Debian
-sudo apt install ffmpeg nodejs npm
-# 可选：curl -fsSL https://ollama.ai/install.sh | sh
+# 安装必需工具
+brew install python@3.13 postgresql ffmpeg uv
 
-# 验证
-ffmpeg -version
-ffprobe -version
-node --version  # >= 18.0.0
+# 验证安装
+python3 --version    # 应 ≥ 3.13.0
+psql --version       # 应 ≥ 12.0
+ffmpeg -version      # 应显示版本和编码器信息
+ffprobe -version     # 应显示版本信息
+uv --version         # 应显示版本信息
 ```
 
-**Python 依赖**：
+#### Ubuntu/Debian
+
+```bash
+# 安装必需工具
+sudo apt update
+sudo apt install -y python3.13 python3-pip postgresql ffmpeg
+
+# 安装 uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 验证安装
+python3 --version
+psql --version
+ffmpeg -version
+ffprobe -version
+uv --version
+```
+
+#### Windows
+
+```powershell
+# 使用 winget 安装
+winget install Python.Python.3.13
+winget install PostgreSQL.PostgreSQL
+winget install Gyan.FFmpeg
+
+# 手动安装 uv
+# 从 https://docs.astral.sh/uv/ 下载安装脚本
+
+# 验证安装
+python --version
+psql --version
+ffmpeg -version
+ffprobe -version
+uv --version
+```
+
+### 2. 安装 Python 依赖
+
 ```bash
 cd server
 uv sync
 ```
 
-**Remotion 项目**（讲解视频渲染）：
+这将自动安装 `pyproject.toml` 中定义的所有依赖：
+
+**核心框架**：
+- `fastapi[standard]>=0.135.3` - Web 框架
+- `sqlmodel>=0.0.38` - ORM
+- `asyncpg>=0.30.0` - PostgreSQL 异步驱动
+- `langchain>=1.2.14`, `langgraph>=1.1.4` - 多智能体编排
+
+**视频与 TTS**：
+- `edge-tts>=7.2.8` - Microsoft Edge TTS（免费）
+- `xfyunsdkspeech>=0.0.4` - 讯飞语音 SDK
+- `mutagen>=1.47.0` - 音频元数据处理
+- `playwright>=1.59.0` - 浏览器自动化（用于渲染）
+
+**向量检索**：
+- `chromadb>=0.6.3` - 向量数据库
+- `langchain-chroma>=0.2.2` - LangChain ChromaDB 集成
+- `langchain-ollama>=1.1.0` - Ollama embedding 集成
+- `faiss-cpu>=1.13.2` - FAISS 向量检索
+
+**文档处理**：
+- `pymupdf>=1.27.2.2` - PDF 处理
+- `python-docx>=1.2.0` - Word 文档
+- `python-pptx>=1.0.2` - PowerPoint
+- `openpyxl>=3.1.5` - Excel
+- `beautifulsoup4>=4.14.3` - HTML 解析
+
+### 3. 配置数据库
+
 ```bash
-cd video-render
-npm install
+# macOS (Homebrew)
+brew services start postgresql@14
+
+# Ubuntu/Debian
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# 创建数据库
+createdb agent
+
+# 或使用 psql
+psql -U postgres -c "CREATE DATABASE agent;"
+
+# 初始化数据库表结构
+psql -d agent -f init_schema.sql
 ```
 
-**Ollama embedding 模型**（可选）：
-```bash
-ollama pull bge-m3:latest
-ollama serve
-```
+### 4. 配置应用
 
-### 2. 配置
-
-编辑 `config.yaml`，至少配置以下项：
+编辑 `config.yaml`，配置以下必需项：
 
 ```yaml
+# 数据库连接
 database:
-  url: postgresql+asyncpg://user:pass@localhost:5432/dbname
+  url: "postgresql+asyncpg://用户名:密码@主机:5432/agent"
+
+# JWT 认证
 jwt:
-  secret_key: your-secret-key
+  secret_key: "your-secret-key-min-32-characters"  # 必须至少 32 字符
+
+# LLM 模型配置（必需）
 models:
-  base_url: https://api.openai.com/v1
-  api_key: sk-xxx
-  model_name: gpt-4o
+  base_url: "https://api.openai.com/v1"  # 或其他 OpenAI 兼容 API
+  api_key: "sk-xxx"                       # API 密钥
+  model_name: "gpt-4o"                    # 模型名称
 ```
 
-可选配置：`models.vision`（视觉模型）、`search.tavily_key`（搜索）、`avatar.*`（数字人）、`knowledge.*`（向量检索）。
+**可选配置**：
 
-### 3. 初始化数据库
+```yaml
+# 视觉模型（可选，用于图片理解）
+models:
+  vision:
+    base_url: "https://open.bigmodel.cn/api/paas/v4/"
+    api_key: "your-zhipu-api-key"
+    model_name: "glm-4v-flash"
 
-```bash
-psql -d dbname -f server/init_schema.sql
+# 讯飞 TTS（可选，如不配置则使用免费的 Edge-TTS）
+spark_tts:
+  app_id: "your-app-id"
+  api_key: "your-api-key"
+  api_secret: "your-api-secret"
+
+# 讯飞数字人（可选）
+avatar:
+  app_id: "your-app-id"
+  api_key: "your-api-key"
+  api_secret: "your-api-secret"
+  url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
+
+# 搜索服务（可选）
+search:
+  tavily_key: "tvly-xxx"        # Tavily API Key
+  spark_key: "xxx:xxx"          # 讯飞搜索密钥
+
+# 向量检索知识库（可选）
+knowledge:
+  enabled: true
+  collection: "langchain"
+  embed_model: "bge-m3:latest"
+  ollama_base_url: "http://127.0.0.1:11434"
 ```
 
-### 4. 启动
+### 5. 启动应用
 
 ```bash
 uv run fastapi dev app/main.py --port 9999
 ```
 
-- API 文档：http://localhost:9999/docs
+访问 API 文档：http://localhost:9999/docs
+
+### 6. 安装可选依赖
+
+#### Ollama + bge-m3（向量检索知识库）
+
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 启动服务并拉取模型
+ollama serve
+ollama pull bge-m3:latest
+
+# 验证
+curl http://127.0.0.1:11434/api/tags
+```
 
 ## 多智能体架构
 
@@ -383,3 +519,95 @@ uv run pytest -x
 | 首页 500 | 检查 dashboard 聚合查询是否访问不存在的表/字段 |
 | 路径规划异常 | 检查 `learning_paths` 子表结构、接口字段与前端是否一致、节点资源是否误走独立资源域 |
 | 前端 API 500 | 检查 Vite 代理端口（9999）是否与后端一致 |
+| 视频渲染失败 | 检查 FFmpeg 是否安装、`video-render` 目录是否初始化（`npm install`）、Remotion 版本是否正确 |
+| TTS 无声音 | 检查 `spark_tts` 配置是否正确，或检查网络连接（Edge-TTS 需联网） |
+| 向量检索失效 | 检查 Ollama 服务是否启动、`bge-m3` 模型是否下载、`knowledge.enabled` 是否为 `true` |
+| 数字人连接失败 | 检查 `avatar.*` 配置是否完整、WebSocket 地址是否正确、JWT Token 是否有效 |
+
+## 依赖清单
+
+### Python 包依赖（pyproject.toml）
+
+**核心框架**：
+- `fastapi[standard]>=0.135.3` - Web 框架
+- `sqlmodel>=0.0.38` - ORM
+- `asyncpg>=0.30.0` - PostgreSQL 异步驱动
+- `pyjwt>=2.10.0` - JWT 认证
+- `passlib[bcrypt]>=1.7.4` - 密码哈希
+
+**多智能体**：
+- `langchain>=1.2.14` - LangChain 核心
+- `langgraph>=1.1.4` - 多智能体编排
+- `langgraph-cli[inmem]>=0.4.19` - LangGraph CLI
+- `langchain-openai>=1.1.12` - OpenAI 集成
+- `langchain-community>=0.4.1` - 社区集成
+- `langchain-unstructured>=1.0.1` - Unstructured 集成
+
+**向量检索**：
+- `chromadb>=0.6.3` - 向量数据库
+- `langchain-chroma>=0.2.2` - ChromaDB 集成
+- `langchain-ollama>=1.1.0` - Ollama 集成
+- `faiss-cpu>=1.13.2` - FAISS 向量检索
+
+**视频与 TTS**：
+- `edge-tts>=7.2.8` - Microsoft Edge TTS
+- `xfyunsdkspeech>=0.0.4` - 讯飞语音 SDK
+- `mutagen>=1.47.0` - 音频元数据
+- `playwright>=1.59.0` - 浏览器自动化
+
+**文档处理**：
+- `pymupdf>=1.27.2.2` - PDF
+- `python-docx>=1.2.0` - Word
+- `python-pptx>=1.0.2` - PowerPoint
+- `openpyxl>=3.1.5` - Excel
+- `xlrd>=2.0.2` - 旧版 Excel
+- `pypdf>=6.10.0` - PDF 处理
+- `beautifulsoup4>=4.14.3` - HTML 解析
+
+**搜索与 API**：
+- `tavily-python>=0.7.23` - Tavily 搜索
+- `langchain-tavily>=0.2.18` - LangChain Tavily 集成
+- `serpapi>=1.0.2` - SerpAPI 搜索
+- `ddgs>=9.13.1` - DuckDuckGo 搜索
+- `httpx>=0.28.1` - HTTP 客户端
+- `websockets>=12.0,<14` - WebSocket
+
+**LLM 服务**：
+- `anthropic>=0.94.0` - Anthropic API
+- `zhipuai>=1.0.7` - 智谱 AI API
+- `deepagents>=0.5.3` - DeepAgents
+
+**工具库**：
+- `pyyaml>=6.0.3` - YAML 解析
+- `markdown>=3.10.2` - Markdown 处理
+- `rich>=14.3.3` - 终端美化
+- `loguru>=0.7.2` - 日志
+- `requests>=2.33.1` - HTTP 请求
+- `pandas>=3.0.3` - 数据处理
+- `fonttools>=4.62.1` - 字体处理
+- `greenlet>=3.3.2` - 协程支持
+
+**开发依赖**：
+- `pytest>=9.0.2` - 测试框架
+- `pytest-asyncio>=1.3.0` - 异步测试
+- `aiosqlite>=0.22.1` - SQLite 异步驱动
+- `vulture>=2.16` - 死代码检测
+
+### 系统依赖
+
+| 工具 | 用途 | 安装方式 |
+|------|------|----------|
+| **FFmpeg** | 视频音视频处理 | `brew install ffmpeg` (macOS) / `apt install ffmpeg` (Ubuntu) |
+| **FFprobe** | 音视频流探测 | 随 FFmpeg 安装 |
+| **PostgreSQL** | 主数据库 | `brew install postgresql@14` (macOS) / `apt install postgresql` (Ubuntu) |
+| **Ollama** | 向量检索 embedding（可选） | `brew install ollama` (macOS) / 官方脚本 (Linux) |
+
+### 外部服务（可选）
+
+| 服务 | 用途 | 配置位置 |
+|------|------|----------|
+| **OpenAI / 兼容 API** | LLM 推理 | `config.yaml` → `models` |
+| **讯飞星火 TTS** | 高质量配音 | `config.yaml` → `spark_tts` |
+| **讯飞数字人** | 数字人播报 | `config.yaml` → `avatar` |
+| **Tavily 搜索** | 网页搜索 | `config.yaml` → `search.tavily_key` |
+| **智谱视觉模型** | 图片理解 | `config.yaml` → `models.vision` |

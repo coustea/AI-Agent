@@ -34,7 +34,6 @@ from app.resource.schemas.plan import (
     AssignedSection,
     WorkerDeliverable,
     WorkerTask,
-    create_planning_output_model,
 )
 
 # ── Result ────────────────────────────────────────────────────────────────
@@ -67,7 +66,6 @@ __all__ = [
     "AssignedSection",
     "WorkerDeliverable",
     "WorkerTask",
-    "create_planning_output_model",
     "ReusableAssets",
     "DownstreamContext",
     # Runtime input/output

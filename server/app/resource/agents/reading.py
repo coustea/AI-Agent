@@ -56,7 +56,7 @@ class ReadingAgent(BaseResourceAgent):
     """基于教学蓝图生成拓展阅读材料。"""
 
     agent_id = "reading"
-    agent_name = "阅读生成"
+    agent_name = "拓展阅读"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)

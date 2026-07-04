@@ -14,7 +14,6 @@ from app.resource.schemas import (
     NodeInput,
     ResourceInput,
     TeachingPlan,
-    create_planning_output_model,
 )
 
 logger = get_logger(__name__)
@@ -43,20 +42,17 @@ class PlanningAgent(BaseResourceAgent):
 
         await self.emitter.send(self.agent_id, "running", "正在生成教学方向与大纲", 25)
 
-        enabled_agents = tuple(input_data.agent_config.get("enabled_agents", []))
-        output_model = create_planning_output_model(enabled_agents)
         attempt_prompt = full_prompt
         plan: TeachingPlan | None = None
 
         for attempt in range(_MAX_PLAN_ATTEMPTS):
-            raw_plan = await self.llm.ainvoke_json(
-                output_model,
-                attempt_prompt,
-                temperature=INFERENCE_TEMPERATURE,
-                max_attempts=2,
-            )
             try:
-                plan = TeachingPlan.model_validate(raw_plan.model_dump(mode="json"))
+                plan = await self.llm.ainvoke_json(
+                    TeachingPlan,
+                    attempt_prompt,
+                    temperature=INFERENCE_TEMPERATURE,
+                    max_attempts=2,
+                )
                 break
             except ValueError as exc:
                 if attempt + 1 >= _MAX_PLAN_ATTEMPTS:

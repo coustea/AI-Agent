@@ -21,7 +21,7 @@ class ContentAgent(BaseResourceAgent):
     """基于教学蓝图生成课程讲解文档（Markdown 格式）。"""
 
     agent_id = "content"
-    agent_name = "内容生成"
+    agent_name = "课程讲解"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)

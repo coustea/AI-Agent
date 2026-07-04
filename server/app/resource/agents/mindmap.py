@@ -21,7 +21,7 @@ class MindmapAgent(BaseResourceAgent):
     """基于教学蓝图生成 Markmap 思维导图（标准 Markdown 标题+列表格式）。"""
 
     agent_id = "mindmap"
-    agent_name = "思维导图生成"
+    agent_name = "思维导图"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)

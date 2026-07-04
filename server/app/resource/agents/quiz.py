@@ -29,7 +29,7 @@ class QuizAgent(BaseResourceAgent):
     """习题生成 Agent — 输出 JSON 结构化的习题集。"""
 
     agent_id = "quiz"
-    agent_name = "习题生成"
+    agent_name = "随堂练习"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)

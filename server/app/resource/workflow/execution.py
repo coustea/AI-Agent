@@ -1,9 +1,8 @@
-"""
-普通 Agent 唯一单次执行边界。
+"""普通 Agent 唯一单次执行边界。
 
 职责：
 - 单次 timeout
-- 调用 Agent
+- 实例化并调用 Agent
 - 校验结果
 - 立即提交
 - 记录运行状态
@@ -18,35 +17,28 @@ from typing import TYPE_CHECKING, Any
 
 from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
+from app.resource.agents import AGENT_REGISTRY
+from app.resource.event import ResourceEvents
 from app.resource.service import ResourceService
+from app.resource.workflow.state import AgentFailure
 from app.resource.workflow.validation import validate_agent_result
 
 if TYPE_CHECKING:
-    from app.resource.agents.base import BaseResourceAgent
-    from app.resource.event import ResourceEvents
-    from app.resource.schemas import AgentResult, ResourceInput
+    from app.resource.schemas import ResourceInput
 
 logger = get_module_logger("resource", sub="execution")
 
-
-class AgentOutcome:
-    """Agent 执行结果。"""
-
-    def __init__(
-        self,
-        agent_id: str,
-        status: str,
-        item_id: int | None = None,
-        failure_stage: str | None = None,
-        failure_type: str | None = None,
-        failure_message: str | None = None,
-    ):
-        self.agent_id = agent_id
-        self.status = status  # "completed", "failed", "interrupted"
-        self.item_id = item_id
-        self.failure_stage = failure_stage
-        self.failure_type = failure_type
-        self.failure_message = failure_message
+# Agent 超时配置（秒）
+AGENT_TIMEOUTS: dict[str, float] = {
+    "content": 300.0,
+    "mindmap": 300.0,
+    "quiz": 300.0,
+    "code": 300.0,
+    "reading": 300.0,
+    "ppt": 600.0,
+    "video": 900.0,
+    "cartoon": 1800.0,
+}
 
 
 async def _observe(coro: Any) -> None:
@@ -62,13 +54,13 @@ async def execute_resource_agent(
     user_id: int,
     resource_id: int,
     agent_id: str,
-    agent: "BaseResourceAgent",
-    input_data: "ResourceInput",
-    events: "ResourceEvents",
-    timeout_seconds: float,
-) -> AgentOutcome:
-    """执行单个资源 Agent，包含完整的生命周期管理。"""
+    input_data: ResourceInput,
+) -> dict[str, Any]:
+    """执行单个资源 Agent，包含完整的生命周期管理、状态变更、数据持久化及 SSE 事件分发。"""
     started = time.perf_counter()
+    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+    agent = AGENT_REGISTRY[agent_id](events)
+    timeout_seconds = AGENT_TIMEOUTS.get(agent_id, 300.0)
 
     # 先持久化运行态，使页面刷新后仍能恢复本次选中的 Agent 和当前阶段。
     try:
@@ -178,11 +170,7 @@ async def execute_resource_agent(
         )
     )
 
-    return AgentOutcome(
-        agent_id=agent_id,
-        status="completed",
-        item_id=item.id,
-    )
+    return {"results": {agent_id: True}}
 
 
 async def _record_failure(
@@ -192,14 +180,14 @@ async def _record_failure(
     stage: str,
     exception: Exception,
     started_at: float,
-    events: "ResourceEvents",
-) -> AgentOutcome:
-    """记录失败并返回失败结果。"""
+    events: ResourceEvents,
+) -> dict[str, Any]:
+    """记录失败并返回失败结果字典供有向图状态合并。"""
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     error_type = type(exception).__name__
     error_message = str(exception)[:500]
 
-    # 输出失败日志（重要：让开发者能看到失败原因）
+    # 输出失败日志
     logger.error(
         "Agent 执行失败: agent_id=%s resource_id=%s stage=%s error_type=%s error=%s elapsed_ms=%d",
         agent_id,
@@ -233,13 +221,14 @@ async def _record_failure(
         )
     )
 
-    return AgentOutcome(
-        agent_id=agent_id,
-        status="failed",
-        failure_stage=stage,
-        failure_type=error_type,
-        failure_message=error_message,
-    )
-
-
-__all__ = ["execute_resource_agent", "AgentOutcome"]
+    return {
+        "results": {},
+        "failures": {
+            agent_id: AgentFailure(
+                agent_id=agent_id,
+                stage=stage,
+                error_type=error_type,
+                message=error_message,
+            )
+        },
+    }

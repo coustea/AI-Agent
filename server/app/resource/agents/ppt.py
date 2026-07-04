@@ -122,7 +122,7 @@ class PPTAgent(BaseResourceAgent):
     """Adapt resource and path inputs to the shared PPT Module."""
 
     agent_id = "ppt"
-    agent_name = "教学课件"
+    agent_name = "演示幻灯"
     research_enabled = False
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:

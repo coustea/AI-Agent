@@ -21,7 +21,7 @@ class CodeAgent(BaseResourceAgent):
     """基于教学蓝图生成代码示例和讲解。"""
 
     agent_id = "code"
-    agent_name = "代码生成"
+    agent_name = "代码实操"
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
