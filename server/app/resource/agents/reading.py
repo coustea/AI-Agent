@@ -299,15 +299,19 @@ class ReadingAgent(BaseResourceAgent):
         for query in queries:
             try:
                 # 使用基类内置的统一搜索工具调用
-                search_text = await self.search(query)
+                report = await self.search(query)
 
-                # 解析搜索结果
-                parsed = self._parse_search_results(search_text)
-                results.extend(parsed)
+                # 直接使用结构化搜索结果
+                for source in report.sources:
+                    results.append({
+                        "title": source.title,
+                        "url": source.url,
+                        "snippet": source.summary,
+                    })
 
                 logger.info(
                     "Agent[reading] 搜索完成: query=%s results=%d",
-                    query, len(parsed)
+                    query, len(report.sources)
                 )
 
                 # 如果已经获取足够的资源，停止搜索
@@ -328,43 +332,6 @@ class ReadingAgent(BaseResourceAgent):
                 seen_urls.add(url)
 
         return unique_results
-
-    def _parse_search_results(self, search_text: str) -> list[dict]:
-        """解析搜索结果文本为结构化数据。"""
-        results = []
-
-        # 搜索结果格式："{index}. {title}\n   链接: {url}\n   摘要: {snippet}"
-        lines = search_text.split("\n")
-
-        current_result = {}
-        for line in lines:
-            line = line.strip()
-
-            # 匹配标题行（数字开头）
-            if line and line[0].isdigit() and ". " in line:
-                if current_result and current_result.get("url"):
-                    results.append(current_result)
-                current_result = {}
-                # 提取标题
-                title = line.split(". ", 1)[-1]
-                current_result["title"] = title
-
-            # 匹配链接行
-            elif "链接:" in line or "链接 :" in line:
-                url = line.split("链接:")[-1].split("链接 :")[-1].strip()
-                if url.startswith("http"):
-                    current_result["url"] = url
-
-            # 匹配摘要行
-            elif "摘要:" in line or "摘要 :" in line:
-                snippet = line.split("摘要:")[-1].split("摘要 :")[-1].strip()
-                current_result["snippet"] = snippet
-
-        # 添加最后一个结果
-        if current_result and current_result.get("url"):
-            results.append(current_result)
-
-        return results
 
     def _build_enhanced_input(
         self,

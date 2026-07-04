@@ -112,6 +112,8 @@ function fillExample(text: string) {
 
 <style scoped>
 .omni-input-view {
+  display: flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
   position: relative;

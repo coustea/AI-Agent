@@ -1,7 +1,7 @@
 """ResearchAgent - 独立的搜索子 Agent。
 
 可以被 chat、resource、path 等模块调用。
-只负责搜索和总结，不涉及存储或业务逻辑。
+只负责搜索和返回结构化结果，不涉及 LLM 总结、存储或业务逻辑。
 """
 
 from __future__ import annotations
@@ -10,19 +10,14 @@ import asyncio
 from typing import Any
 from uuid import uuid4
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from app.infra.llm import get_llm
-from app.infra.prompts import prompts
-from app.infra.tool_excute import ToolExcute
 from app.infra.logging import get_logger
+from app.infra.tool_excute import ToolExcute
 from app.shared.research.schemas import (
-    ResearchDepth,
     ResearchError,
-    ResearchEvidence,
     ResearchEvent,
     ResearchEventHandler,
     ResearchReport,
+    ResearchSourceItem,
     ResearchTask,
 )
 from app.shared.research.tools import (
@@ -68,33 +63,25 @@ class ResearchAgent:
     def __init__(
         self,
         *,
-        model: Any | None = None,
         tools: list[Any] | None = None,
         event_handler: ResearchEventHandler | None = None,
-        system_prompt: str | None = None,
     ) -> None:
         """初始化 ResearchAgent。
 
         Args:
-            model: 大模型实例（可选，默认使用系统配置）
             tools: 工具列表（可选，默认使用所有搜索工具）
             event_handler: 事件回调（可选，用于监听执行进度）
-            system_prompt: 总结提示词（可选，默认使用内置模板）
         """
-        llm = get_llm()
-        self.model = model if model is not None else llm.model
         self.tools = list(tools) if tools is not None else build_search_tools()
         self.event_handler = event_handler
-        self.system_prompt = system_prompt  # None = 从 prompts 注册表加载
 
     async def run(self, task: ResearchTask) -> ResearchReport:
-        """执行搜索任务，返回总结后的报告。
+        """执行搜索任务，返回结构化结果。
 
         流程：
         1. 多引擎并发搜索
-        2. 收集有效结果
-        3. 大模型总结
-        4. 返回结构化报告
+        2. 解析搜索结果为结构化数据
+        3. 去重并返回
 
         Args:
             task: 搜索任务定义
@@ -110,22 +97,16 @@ class ResearchAgent:
             event_handler=self._emit_event,
         )
 
-        # 2. ResearchAgent 只负责普通网页搜索与网页抓取。
+        # 2. 并发搜索
         search_tasks = [
-            self._search_tool(
-                tool_excute,
-                tool_name,
-                task.query,
-            )
+            self._search_tool(tool_excute, tool_name, task.query)
             for tool_name in SEARCH_TOOL_NAMES
         ]
-
-        # 3. 并发执行，收集结果
         all_results = await asyncio.gather(*search_tasks, return_exceptions=True)
 
-        # 4. 过滤有效结果
-        valid_results: list[tuple[str, str]] = []
-        errors = []
+        # 3. 解析有效结果
+        sources: list[ResearchSourceItem] = []
+        errors: list[ResearchError] = []
 
         for i, result in enumerate(all_results):
             if isinstance(result, Exception):
@@ -139,8 +120,10 @@ class ResearchAgent:
                 continue
 
             if self._is_valid_result(result):
-                logger.debug("[ResearchAgent] result[%d] valid len=%d", i, len(str(result)))
-                valid_results.append(result)
+                tool_name, result_text = result
+                parsed = self._parse_search_text(result_text, tool_name)
+                sources.extend(parsed)
+                logger.debug("[ResearchAgent] result[%d] parsed %d items", i, len(parsed))
             else:
                 reason = "too_short" if len(str(result).strip()) < 50 else "failure_marker"
                 logger.debug("[ResearchAgent] result[%d] invalid reason=%s", i, reason)
@@ -151,40 +134,20 @@ class ResearchAgent:
                     recoverable=True,
                 ))
 
-        # 5. 如果没有有效结果
-        if not valid_results:
-            logger.warning("[ResearchAgent] no valid results: query=%r", task.query)
-            return ResearchReport(
-                query=task.query,
-                errors=errors,
-            )
+        # 4. 去重（按 URL）
+        unique_sources: list[ResearchSourceItem] = []
+        seen_urls = set()
+        for s in sources:
+            if s.url and s.url not in seen_urls:
+                unique_sources.append(s)
+                seen_urls.add(s.url)
 
-        logger.info("[ResearchAgent] found %d valid results", len(valid_results))
+        logger.info("[ResearchAgent] completed: query=%r sources=%d", task.query, len(unique_sources))
 
-        # 6. 大模型总结（不限制长度）
-        import time
-        start_time = time.time()
-        summary = await self._summarize(task.query, [result for _, result in valid_results])
-        duration_ms = int((time.time() - start_time) * 1000)
-        logger.info("[ResearchAgent] LLM summarize done duration_ms=%d input_chars=%d output_chars=%d",
-                    duration_ms, len("\n\n---\n\n".join(result for _, result in valid_results)), len(summary))
-
-        evidence = []
-        for tool_name, result in valid_results:
-            evidence.append(
-                ResearchEvidence(
-                    source_type="web",
-                    summary=result[:500],
-                    details={"tool_name": tool_name},
-                    confidence=0.8,
-                )
-            )
-
-        # 7. 构建报告
-        report = ResearchReport(
+        # 5. 返回报告
+        return ResearchReport(
             query=task.query,
-            context=summary,
-            evidence=evidence,
+            sources=unique_sources,
             errors=errors,
         )
 
@@ -251,61 +214,54 @@ class ResearchAgent:
 
         return True
 
-    async def _summarize(self, query: str, results: list[str]) -> str:
-        """大模型总结搜索结果。
+    def _parse_search_text(self, text: str, source: str) -> list[ResearchSourceItem]:
+        """解析搜索工具返回的格式化字符串为结构化数据。
 
         Args:
-            query: 搜索查询
-            results: 有效搜索结果列表
+            text: 搜索结果文本（格式："{index}. {title}\n   链接: {url}\n   摘要: {snippet}"）
+            source: 来源工具名称
 
         Returns:
-            总结后的文本
+            结构化搜索结果列表
         """
-        # 合并搜索结果
-        combined_results = "\n\n---\n\n".join(results)
+        results: list[ResearchSourceItem] = []
+        lines = text.split("\n")
+        current: dict[str, str] = {"source": source}
 
-        # 如果结果太长，截取（避免 token 超限）
-        # 但不限制输出长度，让模型自由总结
-        max_input_chars = 8000
-        if len(combined_results) > max_input_chars:
-            combined_results = combined_results[:max_input_chars]
+        for line in lines:
+            line = line.strip()
 
-        # 加载总结 prompt（优先使用外部模板，fallback 到内置简版）
-        if self.system_prompt:
-            system_content = self.system_prompt
-        else:
-            try:
-                system_content = prompts.get("research").render(
-                    "summary",
-                    query=query,
-                    objective="",
-                )
-            except Exception:
-                system_content = "你是一个专业的信息总结助手。从搜索结果中提取关键信息，整理成清晰、结构化的总结。"
+            # 匹配标题行（数字开头）
+            if line and line[0].isdigit() and ". " in line:
+                # 保存前一个结果
+                if current.get("url"):
+                    results.append(ResearchSourceItem(
+                        source=current.get("source", source),
+                        title=current.get("title", ""),
+                        url=current.get("url", ""),
+                        summary=current.get("summary", ""),
+                    ))
+                current = {"source": source}
+                current["title"] = line.split(". ", 1)[-1]
 
-        # 构建总结 prompt
-        prompt_messages = [
-            SystemMessage(content=system_content),
-            HumanMessage(content=f"""请根据以下搜索结果，总结关于"{query}"的关键信息。
+            # 匹配链接行
+            elif "链接:" in line or "链接 :" in line:
+                url = line.split("链接:")[-1].split("链接 :")[-1].strip()
+                if url.startswith("http"):
+                    current["url"] = url
 
-要求：
-1. 提取核心观点和关键信息
-2. 去除重复和冗余内容
-3. 保持信息准确，不添加搜索结果中没有的内容
-4. 用清晰的结构化格式呈现
-5. 可以详细展开，不要限制长度
+            # 匹配摘要行
+            elif "摘要:" in line or "摘要 :" in line:
+                snippet = line.split("摘要:")[-1].split("摘要 :")[-1].strip()
+                current["summary"] = snippet
 
-搜索结果：
-{combined_results}
+        # 添加最后一个结果
+        if current.get("url"):
+            results.append(ResearchSourceItem(
+                source=current.get("source", source),
+                title=current.get("title", ""),
+                url=current.get("url", ""),
+                summary=current.get("summary", ""),
+            ))
 
-请总结："""),
-        ]
-
-        # 调用大模型
-        try:
-            response = await self.model.ainvoke(prompt_messages)
-            return response.content
-        except Exception as exc:
-            logger.warning("[ResearchAgent] summarize failed: %s", exc)
-            # 如果总结失败，直接返回合并的原始结果
-            return combined_results
+        return results

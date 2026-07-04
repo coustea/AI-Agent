@@ -54,45 +54,30 @@
           @openResource="openResourceByType"
         />
 
-        <Bundle
-          v-else
-          key="result"
-          :bundle="finalBundle"
-          :warning="resultWarning"
-          actionLabel="生成新资源"
-          actionKind="reset"
-          @action="reset"
-          @preview="handlePreview"
-        />
+        <!-- result phase: redirect handled in watcher, show brief loading state -->
+        <div v-else key="result" class="redirecting-shell">
+          <div class="redirecting-spinner"></div>
+          <p>正在跳转到资源展示页面…</p>
+        </div>
       </transition>
     </div>
-
-    <!-- Unified Preview Dialog -->
-    <PreviewDialog
-      v-model:activeAgent="activePreviewAgent"
-      :data="previewData"
-      :resource="previewResource"
-      class="elegant-dialog"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, watch, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { PhClockAfternoon as HistoryIcon } from '@phosphor-icons/vue'
 
-import Input from '../components/generator/Input.vue'
+import Input    from '../components/generator/Input.vue'
 import Settings from '../components/generator/Settings.vue'
 import Progress from '../components/generator/Progress.vue'
-import Bundle from '../components/result/Bundle.vue'
-import PreviewDialog from '@/shared/content/PreviewDialog.vue'
 
 import { useGeneration } from '../composables/useGeneration'
 import { getResourceBundle } from '../api/resource'
-import { getResourceTypeLabel } from '../model/catalog'
 
-const route = useRoute()
+const route  = useRoute()
+const router = useRouter()
 
 const {
   currentPhase,
@@ -105,9 +90,7 @@ const {
   overallProgress,
   latestWorkflowMessage,
   generatedResources,
-  finalBundle,
   generationError,
-  resultWarning,
   planReady,
   latestArtifactAgentId,
   activeResourceId,
@@ -116,35 +99,34 @@ const {
   submitInput,
   start,
   restore,
-  reset,
   pause,
   resume,
   dispose,
   selectDagNode,
 } = useGeneration()
 
-// Preview Modal States
-const activePreviewAgent = ref<string | null>(null)
-const previewData = ref<any>(null)
-const previewResource = ref<any>(null)
+// ── When generation completes, redirect to ResourceDetail ─────────────────────
+watch(currentPhase, (phase) => {
+  if (phase === 'result' && activeResourceId.value) {
+    router.push({ name: 'ResourceDetail', params: { id: activeResourceId.value } })
+  }
+})
 
-const handlePreview = (data: any) => {
-  activePreviewAgent.value = data?.agentId || null
-  previewData.value = data?.resultData || null
-  previewResource.value = data?.resource || null
-}
+// ── Preview for in-progress resources (Progress stage only) ──────────────────
+const activePreviewAgent = ref<string | null>(null)
+const previewData        = ref<any>(null)
+const previewResource    = ref<any>(null)
 
 async function openResourceByType(type: string) {
-  let resource = generatedResources.value.find(item => item.type === type)
+  let resource = generatedResources.value.find((item: any) => item.type === type)
 
-  // content 缺失说明从未获取过完整数据，从 bundle 补全
   if (resource && !resource.content && activeResourceId.value) {
     try {
       const bundle = (await getResourceBundle(activeResourceId.value)).data?.data
-      const full = bundle?.resources?.find((item: any) => item.type === type)
+      const full   = bundle?.resources?.find((item: any) => item.type === type)
       if (full) {
         const updated = [...generatedResources.value]
-        updated[updated.findIndex(item => item.type === type)] = full
+        updated[updated.findIndex((item: any) => item.type === type)] = full
         generatedResources.value = updated
         resource = full
       }
@@ -153,14 +135,10 @@ async function openResourceByType(type: string) {
     }
   }
 
-  // 仅当有实际内容时才打开预览，避免展示空白
   if (resource?.content) {
-    handlePreview({
-      agentId: resource.type || resource.agent_type,
-      resultData: resource.content,
-      title: resource.title || getResourceTypeLabel(resource.type || resource.agent_type),
-      resource: resource,
-    })
+    activePreviewAgent.value = resource.type || resource.agent_type
+    previewData.value        = resource.content
+    previewResource.value    = resource
   }
 }
 
@@ -173,9 +151,9 @@ onMounted(() => {
   }
 })
 
-onActivated(() => { void resume() })
-onDeactivated(() => { pause() })
-onBeforeUnmount(() => { dispose() })
+onActivated(()      => { void resume() })
+onDeactivated(()    => { pause() })
+onBeforeUnmount(()  => { dispose() })
 </script>
 
 <style scoped>
@@ -193,9 +171,7 @@ onBeforeUnmount(() => { dispose() })
   font-family: var(--font-sans);
 }
 
-.resource-generator-ambient {
-  display: none;
-}
+.resource-generator-ambient { display: none; }
 
 .floating-history-btn {
   position: absolute; top: 24px; right: 24px; z-index: 50;
@@ -224,12 +200,30 @@ onBeforeUnmount(() => { dispose() })
   flex-direction: column;
 }
 
+/* Brief redirect placeholder */
+.redirecting-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.redirecting-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: var(--color-primary, #6366f1);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .page-slide-enter-active, .page-slide-leave-active { transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .page-slide-enter-from { opacity: 0; transform: translateY(30px) scale(0.98); }
-.page-slide-leave-to { opacity: 0; transform: translateY(-30px) scale(1.02); }
-
-.elegant-dialog :deep(.resource-card-wrapper) { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; }
-.elegant-dialog :deep(.resource-card-wrapper:hover) { background: transparent !important; box-shadow: none !important; border: none !important; }
-.preview-dialog-body.is-ppt-preview { padding: 0 !important; background: transparent !important; border: none !important; box-shadow: none !important; }
-.preview-dialog-body.is-ppt-preview :deep(.player-wrapper) { margin-top: 0 !important; border: none !important; border-radius: 0 !important; }
+.page-slide-leave-to   { opacity: 0; transform: translateY(-30px) scale(1.02); }
 </style>

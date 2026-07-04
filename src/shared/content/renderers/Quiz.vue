@@ -1,7 +1,7 @@
 <template>
   <div class="quiz-resource" :class="{ compact }">
     <div v-if="questions.length" class="quiz-list">
-      <Frame v-for="(question, index) in visibleQuestions" :key="index" :compact="compact" class="quiz-item">
+      <div v-for="(question, index) in visibleQuestions" :key="index" class="quiz-item">
         <div class="quiz-stem">
           <span class="quiz-index">Q{{ index + 1 }}</span>
           <div class="quiz-title">
@@ -117,7 +117,7 @@
             </div>
           </div>
         </template>
-      </Frame>
+      </div>
 
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
         <button class="btn-link text-blue hover:underline more-btn-hud">
@@ -143,7 +143,6 @@ import {
   PhX as CloseIcon
 } from '@phosphor-icons/vue'
 import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
-import Frame from '../Frame.vue'
 import { normalizeQuizQuestions, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
@@ -258,6 +257,14 @@ const getQuestionTypeText = (questionType?: string) => {
   display: flex;
   flex-direction: column;
   gap: 32px;
+}
+
+.quiz-item {
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .quiz-stem {
@@ -677,9 +684,9 @@ const getQuestionTypeText = (questionType?: string) => {
 }
 
 .compact .quiz-item {
-  padding: 0;
-  border: none;
-  background: transparent;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  background: #ffffff;
   box-shadow: none;
 }
 

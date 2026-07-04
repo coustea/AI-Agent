@@ -48,16 +48,21 @@ class BaseResourceAgent:
 
             self.emitter = NoopEvents()
 
-    async def search(self, query: str) -> str:
-        """通过共享 research 工具把网页研究委托给 ResearchAgent。"""
-        if not self.research_enabled:
-            return "联网研究已关闭"
+    async def search(self, query: str) -> "ResearchReport":
+        """通过共享 research 工具把网页研究委托给 ResearchAgent。
 
-        from app.infra.llm import get_llm
+        Returns:
+            ResearchReport: 包含 sources 列表的搜索结果报告
+        """
+        if not self.research_enabled:
+            from app.shared.research.schemas import ResearchReport, ResearchError
+            return ResearchReport(
+                query=query,
+                errors=[ResearchError(stage="search", code="disabled", message="联网研究已关闭")],
+            )
+
         from app.shared.research.agent import ResearchAgent
         from app.shared.research.schemas import ResearchTask
-
-        llm = get_llm()
 
         async def handle_research_event(event: dict[str, Any]) -> None:
             status = str(event.get("status") or "running")
@@ -100,7 +105,6 @@ class BaseResourceAgent:
             )
             started_at = time.perf_counter()
             report = await ResearchAgent(
-                model=llm.model,
                 event_handler=handle_research_event,
             ).run(
                 ResearchTask(
@@ -123,13 +127,7 @@ class BaseResourceAgent:
                     "elapsed_ms": duration,
                 },
             )
-            result_text = report.context.strip()
-            if not result_text:
-                error_summary = "；".join(error.message for error in report.errors[:3])
-                result_text = "联网研究未获得可用于回答的证据。"
-                if error_summary:
-                    result_text += f" 原因：{error_summary}"
-            return result_text
+            return report
         except Exception as exc:
             logger.error("[BaseResourceAgent] ResearchAgent failed: %s", exc)
             await self.emitter.send(
@@ -143,7 +141,11 @@ class BaseResourceAgent:
                     "tool_status": "failed",
                 },
             )
-            return f"搜索失败: {exc}"
+            from app.shared.research.schemas import ResearchReport, ResearchError
+            return ResearchReport(
+                query=query,
+                errors=[ResearchError(stage="search", code="exception", message=str(exc))],
+            )
 
     # -- 子类必须实现的入口 ----------------------------------------------------
 

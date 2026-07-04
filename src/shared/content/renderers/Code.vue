@@ -1,6 +1,6 @@
 <template>
   <div class="code-resource" :class="{ compact }">
-    <Frame v-if="rendererContent" :compact="compact" class="code-card-content">
+    <div v-if="rendererContent" class="code-card-content">
       <div v-if="!compact && parsedData?.explanation" class="code-header-meta">
         <span class="code-summary-text">{{ parsedData.explanation }}</span>
       </div>
@@ -45,12 +45,7 @@
           </div>
         </div>
       </div>
-
-      <div class="frame-footer">
-        <span class="mono-tag">可执行</span>
-        <div class="footer-line"></div>
-      </div>
-    </Frame>
+    </div>
 
     <div v-else class="code-empty-hud">
       <div class="empty-frame">
@@ -69,7 +64,6 @@ import {
   PhNotePencil as EditPen
 } from '@phosphor-icons/vue'
 import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
-import Frame from '../Frame.vue'
 import { parseJsonObject, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
@@ -175,6 +169,11 @@ const hasComplexity = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .code-main-body {
@@ -328,27 +327,7 @@ const hasComplexity = computed(() => {
 /* --- 底部执行标签栏 --- */
 
 .frame-footer {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.mono-tag {
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--color-success-soft);
-  color: var(--color-success);
-  border: 1px solid var(--color-success-border, var(--color-border));
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.footer-line {
-  flex: 1;
-  height: 1px;
-  background: var(--color-border);
+  display: none;
 }
 
 /* --- 复杂度及练习题样式 --- */
@@ -497,5 +476,12 @@ const hasComplexity = computed(() => {
   overflow: hidden;
   font-size: 0.86rem;
   mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
+}
+
+.compact .code-card-content {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 </style>

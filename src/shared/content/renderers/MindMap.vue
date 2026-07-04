@@ -1,13 +1,8 @@
 <template>
   <div class="mindmap-resource" :class="{ compact }">
-    <Frame v-if="markdownContent" :compact="compact" class="mindmap-container">
+    <div v-if="markdownContent" class="mindmap-container">
       <div ref="markmapRef" class="markmap-shell"></div>
-
-      <div class="frame-footer">
-        <span class="mono-tag">导图同步中</span>
-        <div class="footer-line"></div>
-      </div>
-    </Frame>
+    </div>
     <div v-else class="mindmap-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
@@ -19,7 +14,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import Frame from '../Frame.vue'
 import { parseJsonObject, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
@@ -286,29 +280,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.frame-footer {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mono-tag {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-}
-
-.footer-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(to right, var(--color-border), transparent);
-}
-
 .markmap-shell {
   width: 100%;
   min-height: 420px;
@@ -364,10 +335,6 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   box-shadow: none;
-}
-
-.compact .frame-footer {
-  display: none;
 }
 
 .compact .markmap-shell {

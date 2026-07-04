@@ -14,15 +14,23 @@
         :key="agentId"
         type="button"
         class="output-dock-item"
-        :class="{ ready: isReady(agentId), 'just-arrived': latestId === agentId }"
-        @click="emit('open', agentId)"
+        :class="[
+          isReady(agentId) ? 'ready' : isRunning(agentId) ? 'running' : 'waiting',
+          { 'just-arrived': latestId === agentId }
+        ]"
+        :disabled="!isReady(agentId)"
+        @click="isReady(agentId) && emit('open', agentId)"
       >
         <span class="output-icon"><component :is="getIcon(agentId)" class="h-4 w-4" /></span>
         <span class="output-copy">
           <strong>{{ getArtifactLabel(agentId) }}</strong>
-          <small>{{ isReady(agentId) ? '已生成，可预览' : getAgentOutputFormat(agentId) }}</small>
+          <small>{{ getAgentOutputFormat(agentId) }}</small>
         </span>
-        <em>{{ isReady(agentId) ? '刚刚完成' : getStatus(agentId) }}</em>
+        <em class="output-status">
+          <template v-if="isReady(agentId)">刚刚完成 ▶</template>
+          <template v-else-if="isRunning(agentId)">执行中<span class="loading-dots">...</span></template>
+          <template v-else>就绪待命</template>
+        </em>
       </button>
     </div>
   </section>
@@ -73,12 +81,8 @@ function isReady(id: string) {
   return props.generatedTypes.includes(id) || props.nodeStates[id]?.status === 'success'
 }
 
-function getStatus(id: string) {
-  const status = props.nodeStates[id]?.status
-  if (status === 'failed') return '受阻'
-  if (status === 'skipped') return '已跳过'
-  if (status === 'running') return '执行中'
-  return '就绪待命'
+function isRunning(id: string) {
+  return props.nodeStates[id]?.status === 'running'
 }
 </script>
 
@@ -127,38 +131,77 @@ function getStatus(id: string) {
   gap: 8px;
 }
 
+/* 三种状态样式 */
+
+/* 已生成 ✅ (ready) */
 .output-dock-item {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid #dde3eb;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: 10px;
-  color: #667085;
-  background: #fff;
+  background: #f4f6f9;
+  color: #94a3b8;
   text-align: left;
+  opacity: 0.65;
+  cursor: default;
+  transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .output-dock-item.ready {
-  border-color: #b7d8c8;
+  opacity: 1;
+  background: #ffffff;
+  border-left-color: #20b986;
+  border-color: rgba(16, 185, 129, 0.18);
+  color: #344054;
   cursor: pointer;
 }
 
 .output-dock-item.ready:hover {
-  border-color: #74b397;
-  box-shadow: 0 4px 12px rgb(15 23 42 / 6%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 6%), 0 0 0 1px rgba(16, 185, 129, 0.12);
+  border-left-color: #10b981;
 }
 
-.output-icon {
+.output-dock-item.running {
+  opacity: 1;
+  background: #ffffff;
+  border-left-color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.18);
+  color: #344054;
+  cursor: default;
+  animation: border-shimmer 2s infinite ease-in-out;
+}
+
+@keyframes border-shimmer {
+  0%, 100% { border-left-color: rgba(59, 130, 246, 0.48); }
+  50% { border-left-color: rgba(59, 130, 246, 0.9); }
+}
+
+.output-dock-icon {
   display: grid;
   width: 28px;
   height: 28px;
   place-items: center;
   border-radius: 8px;
-  color: #2c5f9f;
   background: #edf4fc;
+  color: #2c5f9f;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.output-dock-item.running .output-icon {
+  background: #dbeafe;
+  color: #3b82f6;
+}
+
+.output-dock-item.waiting .output-icon {
+  background: #f1f5f9;
+  color: #cbd5e1;
 }
 
 .output-copy {
@@ -174,23 +217,93 @@ function getStatus(id: string) {
 }
 
 .output-copy strong {
-  color: #344054;
   font-size: 11px;
+  transition: color 0.2s ease;
 }
 
-.output-copy small,
-.output-dock-item em {
-  color: #98a2b3;
+.output-dock-item.waiting .output-copy strong {
+  color: #94a3b8;
+}
+
+.output-copy small {
   font-size: 9px;
+  color: #98a2b3;
   font-style: normal;
 }
 
-.output-dock-item.just-arrived {
-  animation: arrive 0.8s ease-out;
+.output-dock-item.waiting .output-copy small {
+  color: #cbd5e1;
 }
 
-@keyframes arrive {
-  0% { box-shadow: 0 0 0 0 rgb(22 131 87 / 30%); }
-  100% { box-shadow: 0 0 0 10px transparent; }
+.output-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  white-space: nowrap;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.output-dock-item.ready .output-status {
+  color: #16a34a;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.output-dock-item.running .output-status {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.output-dock-item.waiting .output-status {
+  color: #94a3b8;
+  background: transparent;
+}
+
+.loading-dots {
+  display: inline-block;
+  animation: dots-pulse 1.2s infinite;
+}
+
+@keyframes dots-pulse {
+  0%, 20% { opacity: 0.2; }
+  50% { opacity: 1; }
+  80%, 100% { opacity: 0.2; }
+}
+
+/* 到达动画 */
+.output-dock-item.just-arrived {
+  animation: artifact-arrive 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes artifact-arrive {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  60% {
+    transform: scale(1.02);
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.25);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .output-dock-item.just-arrived,
+  .output-dock-item.running,
+  .loading-dots {
+    animation: none !important;
+  }
+  .output-dock-item.ready:hover {
+    transform: none;
+  }
 }
 </style>

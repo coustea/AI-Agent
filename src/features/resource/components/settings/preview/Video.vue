@@ -1,14 +1,36 @@
 <template>
   <div class="video">
-    <div class="stage"><div class="visual"><i></i><i></i><b>{{ shortTopic }}</b></div><span>先从这个核心概念开始，一步步看清它的运行过程。</span><button type="button" aria-label="播放预演" tabindex="-1"><Play weight="fill" /></button></div>
-    <div class="timeline"><span>00:00</span><i><b></b></i><span>{{ duration }}</span></div>
-    <div class="story"><span v-for="scene in scenes" :key="scene">{{ scene }}</span></div>
+    <div class="stage">
+      <div class="poster">
+        <span class="topic-text">{{ shortTopic }}</span>
+        <button type="button" aria-label="播放预演" tabindex="-1">
+          <PhPlay weight="fill" />
+        </button>
+      </div>
+      <div class="scene-bar">
+        <span v-for="scene in scenes" :key="scene">{{ scene }}</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="timeline">
+        <span class="time">00:00</span>
+        <div class="track"><div class="fill"></div></div>
+        <span class="time">{{ duration }}</span>
+      </div>
+      <span class="mp4-badge">MP4</span>
+    </div>
+    <div class="story">
+      <div class="scene-card" v-for="scene in scenes" :key="scene">
+        <div class="scene-icon">▷</div>
+        <span>{{ scene }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { PhPlay as Play } from '@phosphor-icons/vue'
+import { PhPlay } from '@phosphor-icons/vue'
 import type { AnyAgentConfigs } from '../../../model/catalog'
 const props = defineProps<{ config: AnyAgentConfigs['cartoon']; topic: string }>()
 const shortTopic = computed(() => props.topic.length > 18 ? `${props.topic.slice(0, 18)}…` : props.topic)
@@ -17,10 +39,23 @@ const scenes = computed(() => ({ concept: ['提出问题', '解释概念', '总�
 </script>
 
 <style scoped>
-.video { min-height: 414px; padding: 20px; background: #111c28; }.stage { position: relative; display: grid; min-height: 270px; place-items: center; overflow: hidden; border-radius: 10px; background: #1b2a38; }
-.visual { position: relative; display: grid; width: 170px; height: 170px; place-items: center; border: 1px solid rgb(99 194 181 / 28%); border-radius: 50%; }.visual i { position: absolute; inset: 20px -30px; border: 1px solid rgb(99 194 181 / 22%); border-radius: 50%; }.visual i:nth-child(2) { inset: -20px 30px; }
-.visual b { z-index: 2; max-width: 118px; color: #e6f5f2; font-size: 12px; line-height: 1.5; text-align: center; }.stage > span { position: absolute; right: 18px; bottom: 13px; left: 18px; padding: 7px 10px; color: #dce7ed; background: rgb(4 10 16 / 65%); font-size: 9px; text-align: center; }
-button { position: absolute; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 50%; color: #18312e; background: #8dd4ca; pointer-events: none; } button svg { width: 13px; }
-.timeline { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; margin-top: 13px; color: #748495; font: 8px var(--font-mono, monospace); }.timeline i { height: 2px; background: #314252; }.timeline b { display: block; width: 28%; height: 100%; background: #66b8ad; }
-.story { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 12px; }.story span { padding: 8px; border: 1px solid rgb(255 255 255 / 7%); color: #8392a1; background: #182532; font-size: 8px; text-align: center; }
+.video { min-height: 320px; padding: 16px; background: #fff; display: flex; flex-direction: column; gap: 12px; }
+.stage { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; aspect-ratio: 16 / 9; background: #e8f0fe; flex-shrink: 0; }
+.poster { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; gap: 14px; }
+.topic-text { max-width: 70%; color: #3c4a6b; font-size: 13px; font-weight: 600; text-align: center; line-height: 1.4; }
+button { display: grid; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 50%; color: #fff; background: #4f6ef7; box-shadow: 0 4px 16px rgb(79 110 247 / 30%); cursor: default; pointer-events: none; }
+button svg { width: 15px; height: 15px; }
+.scene-bar { position: absolute; bottom: 0; left: 0; right: 0; display: flex; gap: 0; background: rgb(255 255 255 / 82%); backdrop-filter: blur(4px); border-top: 1px solid rgb(0 0 0 / 6%); }
+.scene-bar span { flex: 1; padding: 6px 4px; color: #4a5568; font-size: 7.5px; font-weight: 500; text-align: center; border-right: 1px solid rgb(0 0 0 / 6%); }
+.scene-bar span:last-child { border-right: none; }
+.controls { display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+.timeline { display: flex; flex: 1; align-items: center; gap: 8px; }
+.time { color: #8b9ab0; font: 8px var(--font-mono, monospace); white-space: nowrap; }
+.track { flex: 1; height: 3px; border-radius: 2px; background: #e2e8f0; }
+.fill { width: 28%; height: 100%; border-radius: 2px; background: #4f9e9a; }
+.mp4-badge { padding: 2px 7px; border: 1px solid #c5cae9; border-radius: 4px; background: #eef0fb; color: #5c6bc0; font-size: 8px; font-weight: 700; letter-spacing: .06em; white-space: nowrap; }
+.story { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scene-card { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 6px; border: 1px solid #e8eaf0; border-radius: 8px; background: #fff; }
+.scene-icon { color: #4f6ef7; font-size: 12px; }
+.scene-card span { color: #4a5568; font-size: 8px; text-align: center; }
 </style>

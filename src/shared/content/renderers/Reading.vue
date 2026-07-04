@@ -1,6 +1,6 @@
 <template>
   <div class="reading-resource" :class="{ compact }">
-    <Frame v-if="readingData && resources.length" :compact="compact" class="reading-container">
+    <div v-if="readingData && resources.length" class="reading-container">
 
       <div v-if="!compact && readingData.summary" class="reading-summary">
         <div class="summary-icon"><Reading class='w-4 h-4 inline-block align-middle' /></div>
@@ -57,13 +57,8 @@
           查看全部资源 ({{ resources.length }}) <ArrowRightIcon class='w-4 h-4 inline-block align-middle' />
         </button>
       </div>
+    </div>
 
-      <div class="frame-footer">
-        <span class="mono-tag">知识同步完成</span>
-        <div class="footer-line"></div>
-      </div>
-    </Frame>
-    
     <div v-else class="reading-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
@@ -81,7 +76,6 @@ import {
   PhBookOpen as Reading,
   PhLink as LinkIcon
 } from '@phosphor-icons/vue'
-import Frame from '../Frame.vue'
 import { normalizeReadingArtifact, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
@@ -154,29 +148,6 @@ const getDifficultyText = (difficulty?: string) => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.frame-footer {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mono-tag {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-}
-
-.footer-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(to right, var(--color-border), transparent);
 }
 
 .reading-summary {
@@ -417,9 +388,6 @@ const getDifficultyText = (difficulty?: string) => {
   border: none;
   background: transparent;
   box-shadow: none;
-}
-.compact .frame-footer {
-  display: none;
 }
 .compact .reading-list { gap: 12px; }
 .compact .reading-item { padding: 12px; }

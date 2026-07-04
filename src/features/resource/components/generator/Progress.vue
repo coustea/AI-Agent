@@ -59,18 +59,7 @@
                 </div>
                 <em>{{ getNodeStatusLabel(getStageNode('planning')) }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]">
-                <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
-                  <div v-for="(msg, i) in getNodeMessages(getStageNode('planning'))" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(getStageNode('planning')).length > 1 }">
-                    <span class="station-live-dot" :class="i === 0 && getNodeMessages(getStageNode('planning')).length > 1 ? 'muted' : getStageNode('planning').status"></span>
-                    <p class="live-message-only">{{ msg }}</p>
-                  </div>
-                </TransitionGroup>
-                <div v-if="!getNodeMessages(getStageNode('planning')).length" class="station-live-current message-only-layout">
-                  <span class="station-live-dot" :class="getStageNode('planning').status"></span>
-                  <p class="live-message-only">{{ getNodeDisplayMessage(getStageNode('planning')) }}</p>
-                </div>
-              </div>
+              <AgentMessageTicker :node="getStageNode('planning')" />
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(getStageNode('planning')) }}</span>
                 <div class="station-progress-track">
@@ -132,18 +121,7 @@
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${node.status}`]">
-                <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
-                  <div v-for="(msg, i) in getNodeMessages(node)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(node).length > 1 }">
-                    <span class="station-live-dot" :class="i === 0 && getNodeMessages(node).length > 1 ? 'muted' : node.status"></span>
-                    <p class="live-message-only">{{ msg }}</p>
-                  </div>
-                </TransitionGroup>
-                <div v-if="!getNodeMessages(node).length" class="station-live-current message-only-layout">
-                  <span class="station-live-dot" :class="node.status"></span>
-                  <p class="live-message-only">{{ getNodeDisplayMessage(node) }}</p>
-                </div>
-              </div>
+              <AgentMessageTicker :node="node" />
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
                 <div class="station-progress-track">
@@ -175,18 +153,7 @@
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <div class="station-live-log" :class="[`is-${node.status}`]">
-                <TransitionGroup name="msg-queue" tag="div" class="msg-queue-shell">
-                  <div v-for="(msg, i) in getNodeMessages(node)" :key="msg" class="station-live-current message-queue-item" :class="{ 'is-head': i === 0 && getNodeMessages(node).length > 1 }">
-                    <span class="station-live-dot" :class="i === 0 && getNodeMessages(node).length > 1 ? 'muted' : node.status"></span>
-                    <p class="live-message-only">{{ msg }}</p>
-                  </div>
-                </TransitionGroup>
-                <div v-if="!getNodeMessages(node).length" class="station-live-current message-only-layout">
-                  <span class="station-live-dot" :class="node.status"></span>
-                  <p class="live-message-only">{{ getNodeDisplayMessage(node) }}</p>
-                </div>
-              </div>
+              <AgentMessageTicker :node="node" />
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
                 <div class="station-progress-track">
@@ -315,13 +282,19 @@
       :generated-types="generatedResources.map(resource => resource.type)"
       :node-states="dagNodeStates"
       :latest-id="latestArtifactAgentId"
-      @open="emit('openResource', $event)"
+      @open="openResourcePreview"
     />
 
     <Logs
       :open="workflowLogDrawerVisible"
       :items="workflowLogItems"
       @close="workflowLogDrawerVisible = false"
+    />
+
+    <PreviewDialog
+      v-model:activeAgent="activePreviewAgent"
+      :data="previewData"
+      :resource="previewResource"
     />
   </div>
 </template>
@@ -344,6 +317,8 @@ import type { ResourceAgentId } from '@/features/resource/model/resource'
 import Summary from '../progress/Summary.vue'
 import Outputs from '../progress/Outputs.vue'
 import Logs from '../progress/Logs.vue'
+import PreviewDialog from '@/shared/content/PreviewDialog.vue'
+import AgentMessageTicker from './AgentMessageTicker.vue'
 import { useFlow } from '../../composables/useFlow'
 import {
   COORDINATOR_AGENT_ID,
@@ -385,6 +360,28 @@ const workflowLogDrawerVisible = ref(false)
 const detailPanelVisible = ref(false)
 const detailPanelStyle = ref<Record<string, string>>({})
 const detailAnchorElement = ref<HTMLElement | null>(null)
+
+// Preview dialog state (for Outputs dock click-to-preview)
+const activePreviewAgent = ref<string | null>(null)
+const previewData        = ref<any>(null)
+const previewResource    = ref<any>(null)
+
+function openResourcePreview(type: string) {
+  const resource = props.generatedResources.find((r: any) => r.type === type)
+  if (!resource) {
+    // Fall through to parent if data not loaded yet
+    emit('openResource', type)
+    return
+  }
+  if (resource.content) {
+    activePreviewAgent.value = resource.type || resource.agent_type
+    previewData.value        = resource.content
+    previewResource.value    = resource
+  } else {
+    // Content not yet loaded — delegate to parent (which fetches from API)
+    emit('openResource', type)
+  }
+}
 
 const workflowIconMap: Record<string, Component> = {
   planning: Aim,
@@ -474,8 +471,6 @@ const parallelPoolNodes = computed(() => {
 })
 
 const {
-  canvasRef: flowCanvasRef,
-  sourceRef: planningNodeRef,
   canvasSize: linkCanvasSize,
   links: agentLinkPaths,
   setCardRef: setStationCardRef,
@@ -741,12 +736,6 @@ function getNodePhaseLabel(node: DagNodeState) {
   if (node.status === 'success') return '已完成'
   if (node.status === 'failed') return '受阻'
   return '工位状态'
-}
-
-function getNodeMessages(node: DagNodeState): string[] {
-  const history = node.stepHistory || []
-  if (history.length === 0) return []
-  return history.slice(-2)
 }
 
 function getNodeDisplayMessage(node: DagNodeState) {

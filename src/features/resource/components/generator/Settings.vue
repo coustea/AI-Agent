@@ -2,12 +2,10 @@
   <div class="phase-view personalize-view">
     <div class="personalize-container">
       <!-- Page Title Header -->
-      <div class="view-header text-center">
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold tracking-wide uppercase bg-slate-900 text-white rounded-full mb-3">
-          Orchestrator Settings
-        </span>
-        <h2>多智能体参数定制中心</h2>
-        <p>配置各智能体加工参数。您的定制设置将直接传递给多智能体系统作为最高生成指南。</p>
+      <div class="view-header">
+        <span class="settings-eyebrow">Orchestrator Settings</span>
+        <h2>多智能体参数定制</h2>
+        <p>配置各智能体的加工参数，定制设置将直接作为最高优先级指令传入生成系统。</p>
       </div>
 
       <!-- Scenario Selector Cards -->
@@ -38,7 +36,7 @@
         />
 
         <!-- 2-Column Split Workspace Body -->
-        <div class="workspace-body grid grid-cols-1 lg:grid-cols-12 gap-8 p-8 min-h-[500px]">
+        <div class="workspace-body grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 min-h-[500px]">
           <!-- Left Column: Parameter Configurator form (7 columns span) -->
           <div class="lg:col-span-7 flex flex-col justify-between">
             <div class="form-content-area">
@@ -459,37 +457,44 @@
             </div>
           </div>
 
-          <Preview
-            class="lg:col-span-5"
-            :active-id="activeAgentId"
-            :configs="localConfigs"
-            :enabled="isAgentEnabled(activeAgentId)"
-            :natural-input="naturalInput"
-          />
+          <!-- Right Column: Preview Card wrapper -->
+          <div class="lg:col-span-5">
+            <div class="preview-wrapper">
+              <Preview
+                :active-id="activeAgentId"
+                :configs="localConfigs"
+                :enabled="isAgentEnabled(activeAgentId)"
+                :natural-input="naturalInput"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Action Pills and Action Buttons -->
-      <div class="personalize-footer-v2 flex flex-col items-center gap-6 mt-4 pb-16">
-        <div class="selected-agents-bar flex items-center gap-4 flex-wrap justify-center bg-white border border-slate-100 rounded-3xl px-6 py-4 max-w-[860px] shadow-sm">
-          <span class="sab-label font-bold text-xs text-slate-500 tracking-wider">已选智能体工位：</span>
-          <div class="sab-pills flex gap-2 flex-wrap">
+      <!-- Footer: selected agents + action buttons -->
+      <div class="settings-footer">
+        <!-- Selected agents pill bar -->
+        <div class="agents-bar">
+          <span class="agents-bar-label">已选智能体</span>
+          <div class="agents-bar-pills">
             <span
               v-for="id in enabledAgentIds"
               :key="id"
-              class="inline-flex items-center gap-1.5 px-3.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-100 rounded-full"
+              class="agent-pill"
             >
-              <component :is="getAgentMeta(id).icon" class="w-3.5 h-3.5 text-blue" />
+              <component :is="getAgentMeta(id).icon" class="w-3 h-3" />
               {{ getAgentMeta(id).name }}
             </span>
+            <span v-if="enabledAgentIds.length === MIN_AGENTS" class="agents-bar-warn">已达最低限制</span>
           </div>
-          <span class="sab-hint text-xs font-bold text-slate-400" v-if="enabledAgentIds.length === MIN_AGENTS">⚠️ 已达最低要求</span>
         </div>
 
-        <div class="footer-btns flex gap-4">
-          <button type="button" @click="emit('back')" class="btn btn-outline footer-back-btn px-6 py-3 rounded-full font-bold">返回修改需求</button>
-          <button type="button" class="btn btn-primary launch-btn-v2 px-8 py-3 rounded-full font-bold flex items-center gap-2" @click="emit('launch')">
-            确认配置，启动多智能体加工 <Position class="w-4 h-4" />
+        <!-- CTA buttons -->
+        <div class="footer-actions">
+          <button type="button" @click="emit('back')" class="btn-back">← 返回修改需求</button>
+          <button type="button" class="btn-launch" @click="emit('launch')">
+            确认配置，启动多智能体
+            <Position class="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -661,7 +666,7 @@ function togglePptFocus(item: any) {
 <style scoped>
 .personalize-view {
   width: 100%;
-  padding: 24px clamp(18px, 3vw, 42px) 36px;
+  padding: 28px clamp(18px, 3vw, 48px) 48px;
   overflow-y: auto;
   background: #f4f7fb;
   font-family: var(--font-ui);
@@ -672,16 +677,39 @@ function togglePptFocus(item: any) {
   margin: 0 auto;
 }
 
+/* Header */
+.view-header {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.settings-eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .view-header h2 {
-  font-size: 1.8rem;
+  font-size: 1.75rem;
   font-weight: 800;
   color: var(--color-text-strong);
-  margin-bottom: 8px;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
 }
 
 .view-header p {
-  font-size: 0.95rem;
-  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  max-width: 560px;
+  margin: 0 auto;
+  line-height: 1.6;
 }
 
 .scenario-selector-v2 {
@@ -770,6 +798,14 @@ function togglePptFocus(item: any) {
   background: #ffffff;
 }
 
+/* Preview wrapper */
+.preview-wrapper {
+  height: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
 .ctrl-group {
   display: flex;
   flex-direction: column;
@@ -782,23 +818,35 @@ function togglePptFocus(item: any) {
   color: var(--color-text-strong);
 }
 
-.ctrl-group select,
-.ctrl-group input[type="range"] {
+.ctrl-group select {
+  width: 100%;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 36px 0 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 12px;
+  border-radius: 10px;
   font-family: inherit;
   font-size: 0.85rem;
-  color: var(--color-text-strong);
-  background: #ffffff;
+  font-weight: 500;
+  color: #1e293b;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  appearance: none;
+  -webkit-appearance: none;
   outline: none;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: border-color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ctrl-group select:hover {
+  border-color: rgba(15, 23, 42, 0.22);
 }
 
 .ctrl-group select:focus {
-  border-color: var(--color-primary);
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .ctrl-helper {
@@ -823,12 +871,112 @@ function togglePptFocus(item: any) {
   color: var(--color-text-muted);
 }
 
-.sab-label {
-  color: #64748b;
+/* Footer */
+.settings-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-top: 8px;
+  padding-bottom: 48px;
 }
 
-.launch-btn-v2 {
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.25);
+.agents-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 999px;
+  padding: 10px 20px;
+  max-width: 860px;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.04);
+}
+
+.agents-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.agents-bar-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.agent-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agents-bar-warn {
+  font-size: 10px;
+  font-weight: 700;
+  color: #f59e0b;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn-back {
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(15, 23, 42, 0.14);
+  background: #ffffff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+  border-color: rgba(15, 23, 42, 0.25);
+  color: #1e293b;
+}
+
+.btn-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 28px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-primary, #6366f1);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.28);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-launch:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.36);
+}
+
+.btn-launch:active {
+  transform: translateY(0);
 }
 
 @media (max-width: 980px) {
@@ -840,6 +988,12 @@ function togglePptFocus(item: any) {
 @media (max-width: 600px) {
   .scenario-selector-v2 {
     grid-template-columns: 1fr;
+  }
+
+  .preview-wrapper {
+    border-left: none;
+    border-top: 1px solid #edf1f5;
+    border-radius: 0 0 24px 24px;
   }
 }
 </style>

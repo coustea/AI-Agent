@@ -1,7 +1,34 @@
 <template>
   <div class="slides">
-    <aside><span class="active">01</span><span>02</span><span>03</span></aside>
-    <main><small>{{ style }} / 01</small><h3>{{ topic }}</h3><p>从一个关键问题开始，建立本次学习的核心理解框架。</p><div><span v-for="item in focus" :key="item">{{ item }}</span></div><b>01 — 08</b></main>
+    <aside>
+      <div class="thumb active">
+        <div class="thumb-bar"></div>
+        <div class="thumb-line"></div>
+        <div class="thumb-line short"></div>
+        <span>01</span>
+      </div>
+      <div class="thumb">
+        <div class="thumb-bar"></div>
+        <div class="thumb-line"></div>
+        <span>02</span>
+      </div>
+      <div class="thumb">
+        <div class="thumb-line"></div>
+        <div class="thumb-line short"></div>
+        <span>03</span>
+      </div>
+    </aside>
+    <main>
+      <div class="accent-bar"></div>
+      <div class="html-badge">HTML</div>
+      <small>{{ style }} / 01</small>
+      <h3>{{ topic }}</h3>
+      <p>从一个关键问题开始，建立本次学习的核心理解框架。</p>
+      <div class="tags">
+        <span v-for="item in focus" :key="item">{{ item }}</span>
+      </div>
+      <b class="slide-num">01 — 08</b>
+    </main>
   </div>
 </template>
 
@@ -14,9 +41,22 @@ const focus = computed(() => props.config.focus.slice(0, 3).map(item => ({ core_
 </script>
 
 <style scoped>
-.slides { display: grid; min-height: 414px; grid-template-columns: 48px 1fr; color: #fff; background: #172330; } aside { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 18px; border-right: 1px solid rgb(255 255 255 / 8%); }
-aside span { display: grid; width: 27px; height: 18px; place-items: center; border: 1px solid rgb(255 255 255 / 10%); color: #677687; font-size: 7px; } aside .active { border-color: #58b2a8; color: #a6ddd6; background: rgb(75 165 154 / 12%); }
-main { position: relative; padding: 56px 42px 30px; background: linear-gradient(120deg, transparent 66%, rgb(76 165 154 / 12%) 66%); } main small { color: #73bdb4; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
-h3 { max-width: 410px; margin: 15px 0 12px; color: #f7fafc; font-size: 24px; line-height: 1.22; } p { max-width: 360px; margin: 0; color: #a9b5c1; font-size: 11px; line-height: 1.7; }
-main div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 26px; } main div span { padding: 6px 9px; border: 1px solid rgb(255 255 255 / 11%); border-radius: 5px; color: #c8d1da; font-size: 8px; } main > b { position: absolute; right: 24px; bottom: 20px; color: #647384; font-size: 8px; }
+.slides { display: grid; min-height: 320px; grid-template-columns: 64px 1fr; background: #f4f5f7; }
+aside { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 8px; border-right: 1px solid #e2e5ea; background: #f4f5f7; }
+.thumb { position: relative; width: 44px; min-height: 30px; padding: 5px 6px 16px; border: 1px solid #dde1e8; border-radius: 3px; background: #fff; display: flex; flex-direction: column; gap: 4px; cursor: default; }
+.thumb.active { border-color: #5c6bc0; box-shadow: 0 0 0 1px #5c6bc0; }
+.thumb-bar { height: 4px; border-radius: 2px; background: #c5cae9; }
+.thumb.active .thumb-bar { background: #5c6bc0; }
+.thumb-line { height: 2px; border-radius: 1px; background: #e8eaf0; }
+.thumb-line.short { width: 60%; }
+.thumb span { position: absolute; bottom: 3px; right: 4px; font-size: 6px; color: #9fa8b0; }
+main { position: relative; padding: 0 36px 28px; background: #fff; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.accent-bar { position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, #5c6bc0 0%, #7986cb 100%); }
+.html-badge { position: absolute; top: 14px; right: 16px; padding: 2px 7px; border: 1px solid #c5cae9; border-radius: 4px; background: #e8eaf0; color: #5c6bc0; font-size: 8px; font-weight: 700; letter-spacing: .06em; }
+main small { color: #7986cb; font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; }
+h3 { max-width: 380px; margin: 0 0 10px; color: #1a202c; font-size: 20px; line-height: 1.25; }
+p { max-width: 340px; margin: 0; color: #718096; font-size: 10px; line-height: 1.7; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 20px; }
+.tags span { padding: 5px 9px; border: 1px solid #e2e8f0; border-radius: 5px; background: #f7f8fc; color: #4a5568; font-size: 8px; }
+.slide-num { position: absolute; right: 20px; bottom: 16px; color: #a0aec0; font-size: 8px; font-weight: 600; }
 </style>
