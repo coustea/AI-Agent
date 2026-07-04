@@ -1,6 +1,6 @@
 <template>
   <div class="code-resource" :class="{ compact }">
-    <ResourceCardWrapper v-if="rendererContent" :compact="compact" class="code-card-content">
+    <Frame v-if="rendererContent" :compact="compact" class="code-card-content">
       <div v-if="!compact && parsedData?.explanation" class="code-header-meta">
         <span class="code-summary-text">{{ parsedData.explanation }}</span>
       </div>
@@ -50,7 +50,7 @@
         <span class="mono-tag">可执行</span>
         <div class="footer-line"></div>
       </div>
-    </ResourceCardWrapper>
+    </Frame>
 
     <div v-else class="code-empty-hud">
       <div class="empty-frame">
@@ -69,8 +69,8 @@ import {
   PhNotePencil as EditPen
 } from '@phosphor-icons/vue'
 import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
-import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
+import Frame from '../Frame.vue'
+import { parseJsonObject, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -154,7 +154,6 @@ const hasComplexity = computed(() => {
   const complexity = parsedData.value?.complexity
   return !!(complexity?.time || complexity?.space)
 })
-
 </script>
 
 <style scoped>
@@ -247,7 +246,7 @@ const hasComplexity = computed(() => {
   border: 1px solid var(--code-border);
   border-radius: var(--radius-md);
   background: var(--code-bg);
-  overflow: hidden; /* 保证圆角能裁剪内部区域 */
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 
@@ -269,7 +268,6 @@ const hasComplexity = computed(() => {
   text-transform: uppercase;
 }
 
-/* 内部代码区域完全撑开显示 */
 .code-resource :deep(.code-block-wrapper pre) {
   margin: 0 !important;
   padding: 18px !important;

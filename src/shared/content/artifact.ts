@@ -75,7 +75,6 @@ function quizQuestionsFromRecord(record: Record<string, any>): Record<string, an
   const parsedRawJson = parseJsonObject(record.raw_json)
   if (parsedRawJson && Array.isArray(parsedRawJson.questions)) return ensureOptions(parsedRawJson.questions)
 
-  // Fallback: check nested data structures common in LLM output
   const data = record.data
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     if (Array.isArray(data.questions)) return ensureOptions(data.questions)

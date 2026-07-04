@@ -1,6 +1,5 @@
-// src/views/ResourceGenerator.vue/constants.ts — 资源生成器常量与元数据
-
-import type { LearningScenario, ResourceGenerationRequest } from '@/features/resource/model/resource'
+import type { LearningScenario, ResourceGenerationRequest } from './resource'
+import { getArtifactLabel } from '@/shared/content/kind'
 import {
   PhCpu as Cpu,
   PhPaperPlaneTilt as Position,
@@ -22,28 +21,28 @@ export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, BUNDLE_AGENT_
 export const MIN_AGENTS = 3
 
 export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
-  planning: { label: '认知架构工位', icon: '🎯' },
-  coordinator: { label: '协同中枢工位', icon: '⚙️' },
-  content: { label: '义理智笔工位', icon: '📝' },
-  mindmap: { label: '结构图解工位', icon: '🧠' },
-  quiz: { label: '考工检校工位', icon: '📋' },
-  code: { label: '工程实训工位', icon: '💻' },
-  reading: { label: '学术博览工位', icon: '📚' },
-  ppt: { label: '宣讲排版工位', icon: '📊' },
-  cartoon: { label: '动画讲解工位', icon: '🎬' },
-  bundle: { label: '汇编归档工位', icon: '📦' },
+  planning: { label: '认知架构', icon: '🎯' },
+  coordinator: { label: '协同中枢', icon: '⚙️' },
+  content: { label: '课程讲解', icon: '📝' },
+  mindmap: { label: '思维导图', icon: '🧠' },
+  quiz: { label: '随堂练习', icon: '📋' },
+  code: { label: '代码实操', icon: '💻' },
+  reading: { label: '拓展阅读', icon: '📚' },
+  ppt: { label: '演示幻灯', icon: '📊' },
+  cartoon: { label: '动画讲解', icon: '🎬' },
+  bundle: { label: '汇编归档', icon: '📦' },
 }
 
 export const agentMetaList = [
   { id: 'master', name: '认知架构师', icon: Cpu, colorClass: 'text-blue' },
   { id: 'assembler', name: '汇编归档仓', icon: Position, colorClass: 'text-indigo' },
-  { id: 'content', name: '义理智笔', icon: Document, colorClass: 'text-blue' },
-  { id: 'mindmap', name: '结构图解师', icon: Share, colorClass: 'text-purple' },
-  { id: 'code', name: '工程实训师', icon: Cpu, colorClass: 'text-red' },
-  { id: 'quiz', name: '考工检校', icon: Edit, colorClass: 'text-emerald' },
-  { id: 'reading', name: '学术博览', icon: Collection, colorClass: 'text-indigo' },
-  { id: 'ppt', name: '宣讲排版师', icon: DataBoard, colorClass: 'text-pink' },
-  { id: 'cartoon', name: '动画讲解师', icon: FilmStrip, colorClass: 'text-cyan-600' },
+  { id: 'content', name: '课程讲解', icon: Document, colorClass: 'text-blue' },
+  { id: 'mindmap', name: '思维导图', icon: Share, colorClass: 'text-purple' },
+  { id: 'code', name: '代码实操', icon: Cpu, colorClass: 'text-red' },
+  { id: 'quiz', name: '随堂练习', icon: Edit, colorClass: 'text-emerald' },
+  { id: 'reading', name: '拓展阅读', icon: Collection, colorClass: 'text-indigo' },
+  { id: 'ppt', name: '演示幻灯', icon: DataBoard, colorClass: 'text-pink' },
+  { id: 'cartoon', name: '动画讲解', icon: FilmStrip, colorClass: 'text-cyan-600' },
 ]
 
 export const getAgentMeta = (id: string) =>
@@ -113,16 +112,8 @@ export const getScenarioDesc = (scenario: string) => {
 // ===================== 资源展示辅助 =====================
 
 export const getResourceTypeLabel = (type: string) => {
-  const labelMap: Record<string, string> = {
-    content: '讲义精解',
-    mindmap: '结构导图',
-    code: '实战演练',
-    quiz: '学力检校',
-    reading: '学术博览',
-    ppt: '演示幻灯',
-    cartoon: '动画讲解',
-  }
-  return labelMap[type] || getAgentMeta(type).name || type
+  const label = getArtifactLabel(type)
+  return label === type ? getAgentMeta(type).name || type : label
 }
 
 export const getDifficultyLabel = (difficulty?: string) => {
@@ -152,13 +143,13 @@ export const getResourceToneClass = (type: string) => {
 
 export const getAgentOutputFormat = (agentId: string) => {
   const formatMap: Record<string, string> = {
-    content: 'Markdown 讲解',
-    mindmap: '知识结构图',
-    code: 'Code 示例',
-    quiz: 'Quiz 题库',
-    reading: 'Reading List',
-    ppt: 'PPT 页面',
-    cartoon: 'MP4 动画视频',
+    content: '课程讲解文档',
+    mindmap: '思维导图图片',
+    code: '代码实操案例',
+    quiz: '随堂练习题库',
+    reading: '拓展阅读文献',
+    ppt: '演示幻灯课件',
+    cartoon: '动画讲解视频',
   }
   return formatMap[agentId] || '学习资源'
 }

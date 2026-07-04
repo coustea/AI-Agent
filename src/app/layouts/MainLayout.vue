@@ -141,7 +141,7 @@ useAuthPolling(60000)
 
 const activePath = computed(() => {
   const current = pendingPath.value || route.path
-  if (current.startsWith('/resource-generator') || current.startsWith('/resource-detail') || current.startsWith('/resource-history')) {
+  if (current.startsWith('/resource-generator') || current.startsWith('/resource-detail') || current.startsWith('/ai/resources/history')) {
     return '/resource-generator'
   }
   if (current.startsWith('/path-planner') || current.startsWith('/path-resource') || current.startsWith('/path-resource-history')) {

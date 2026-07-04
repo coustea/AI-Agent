@@ -288,8 +288,8 @@ import { updateMe } from '@/features/auth/api/auth'
 import { useCurrentUser } from '@/features/auth/model/currentUser'
 import { getProfileOnboarding, updateProfileOnboarding } from '@/features/profile/api/profile'
 import type { ProfileOnboardingUpdate } from '@/features/profile/api/profile'
-import { searchSchools } from '@/features/resource/api/school'
-import type { SchoolItem } from '@/features/resource/api/school'
+import { searchSchools } from '@/features/profile/api/school'
+import type { SchoolItem } from '@/features/profile/model/school'
 import { hasAuthToken } from '@/shared/auth/token'
 
 const props = withDefaults(defineProps<{ modelValue?: boolean; standalone?: boolean }>(), {

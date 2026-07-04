@@ -1,43 +1,14 @@
 <template>
   <div class="phase-view generating-view workflow-stage-page workflow-stage-page-v4">
-    <header class="stage-topbar stage-topbar-v4">
-      <div class="stage-title-area">
-        <div class="stage-title-copy">
-          <h2>资源生成工作流</h2>
-          <p>{{ dagHeroMessage }}</p>
-        </div>
-        <div class="stage-route-progress">
-          <template v-for="(step, index) in routeSteps" :key="step.key">
-            <span class="route-step" :class="step.state">{{ step.label }}</span>
-            <span
-              v-if="index < routeSteps.length - 1"
-              class="route-line"
-              :class="step.lineState"
-            ></span>
-          </template>
-        </div>
-      </div>
-
-      <div class="stage-stat-group stage-stat-group-v4">
-        <div class="stage-stat-card progress-stat-card">
-          <span>生成进度</span>
-          <strong>{{ overallProgress }}%</strong>
-          <div class="mini-progress-track"><i :style="{ width: `${overallProgress}%` }"></i></div>
-        </div>
-        <div class="stage-stat-card">
-          <span>活跃 Agent</span>
-          <strong>{{ runningAgentCount }}<small>/{{ dagSelectedAgentIds.length }}</small></strong>
-        </div>
-        <div class="stage-stat-card wide">
-          <span>已交付资源</span>
-          <strong>{{ generatedResources.length }}<small> 项</small></strong>
-        </div>
-        <button class="btn btn-outline rounded-full stage-log-btn" @click="workflowLogDrawerVisible = true">
-          运行日志
-          <ArrowRight class='w-4 h-4 inline-block align-middle' />
-        </button>
-      </div>
-    </header>
+    <Summary
+      :message="dagHeroMessage"
+      :progress="overallProgress"
+      :running="runningAgentCount"
+      :selected="dagSelectedAgentIds.length"
+      :delivered="generatedResources.length"
+      :steps="routeSteps"
+      @open-logs="workflowLogDrawerVisible = true"
+    />
     <main class="agent-stage-shell-v4">
       <section class="dispatch-workbench-panel dispatch-workbench-panel-v4">
         <div class="workbench-header workbench-header-v4">
@@ -339,48 +310,24 @@
       </transition>
     </main>
 
-    <section class="output-dock-section output-dock-section-v4">
-      <div class="output-dock-heading">
-        <div>
-          <span class="panel-eyebrow">READY RESOURCES</span>
-          <strong>已交付资源</strong>
-        </div>
-        <p>这里仅展示已经完成并可预览的资源，不改变主流水线的阅读顺序。</p>
-      </div>
-      <div class="output-dock-list output-dock-list-v4">
-        <article
-          v-for="agentId in visibleOutputAgentIds"
-          :key="agentId"
-          class="output-dock-item output-dock-item-v4"
-          :class="{ ready: hasGeneratedResource(agentId), 'just-arrived': latestArtifactAgentId === agentId }"
-          @click="emit('openResource', agentId)"
-        >
-          <span><component :is="getWorkflowIcon(agentId)"  class='w-4 h-4' /></span>
-          <div>
-            <strong>{{ getResourceTypeLabel(agentId) }}</strong>
-            <p>{{ hasGeneratedResource(agentId) ? '已生成，可预览' : getAgentOutputFormat(agentId) }}</p>
-          </div>
-          <em>{{ hasGeneratedResource(agentId) ? '刚刚完成' : getNodeStatusLabel(getStageNode(agentId)) }}</em>
-        </article>
-      </div>
-    </section>
+    <Outputs
+      :agent-ids="visibleOutputAgentIds"
+      :generated-types="generatedResources.map(resource => resource.type)"
+      :node-states="dagNodeStates"
+      :latest-id="latestArtifactAgentId"
+      @open="emit('openResource', $event)"
+    />
 
-    <Teleport to="body"><transition name="slide-over"><div v-if="workflowLogDrawerVisible" class="custom-modal-overlay" @click="workflowLogDrawerVisible = false"><div class="custom-drawer-content max-w-[420px] w-full bg-white h-full absolute right-0 shadow-2xl p-6 flex flex-col z-50" @click.stop><div class="drawer-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-center"><h3 class="text-sm font-bold text-slate-900">实时调度日志</h3><button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="workflowLogDrawerVisible = false">×</button></div><div class="drawer-body flex-1 overflow-y-auto">
-      <div class="drawer-log-list">
-        <div v-for="item in workflowLogItems" :key="item.id" class="drawer-log-item" :class="`is-${item.status}`">
-          <span class="drawer-log-dot"></span>
-          <div>
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.message }}</p>
-          </div>
-        </div>
-      </div>
-    </div></div></div></transition></Teleport>
+    <Logs
+      :open="workflowLogDrawerVisible"
+      :items="workflowLogItems"
+      @close="workflowLogDrawerVisible = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch, type Component } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, onMounted, type Component } from 'vue'
 import {
   PhTarget as Aim,
   PhArrowRight as ArrowRight,
@@ -394,6 +341,10 @@ import {
   PhShareNetwork as Share
 } from '@phosphor-icons/vue'
 import type { ResourceAgentId } from '@/features/resource/model/resource'
+import Summary from '../progress/Summary.vue'
+import Outputs from '../progress/Outputs.vue'
+import Logs from '../progress/Logs.vue'
+import { useFlow } from '../../composables/useFlow'
 import {
   COORDINATOR_AGENT_ID,
   CARTOON_AGENT_ID,
@@ -401,22 +352,14 @@ import {
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
-  getResourceTypeLabel,
   getAgentOutputFormat,
   getNodeFallbackMessage,
   type DagNodeState,
-} from '@/features/resource/model/ResourceGeneratorConstants'
+} from '../../model/catalog'
 
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
   displayOrder?: number
-}
-
-type AgentLinkGeometry = {
-  id: string
-  x: number
-  y: number
-  d: string
 }
 
 const props = defineProps<{
@@ -477,14 +420,7 @@ function getWorkflowTitle(id: string) {
   return workflowTitleMap[id] || AGENT_DISPLAY[id]?.label || id
 }
 
-const flowCanvasRef = ref<HTMLElement | null>(null)
-const planningNodeRef = ref<HTMLElement | null>(null)
-const stationCardRefs = new Map<string, HTMLElement>()
-const linkCanvasSize = ref({ width: 1000, height: 700 })
-const measuredAgentLinks = ref<AgentLinkGeometry[]>([])
-let linkMeasureFrame = 0
 let detailPositionFrame = 0
-let canvasResizeObserver: ResizeObserver | null = null
 
 function handleAgentClick(id: string, event: MouseEvent) {
   const target = event.currentTarget
@@ -537,126 +473,27 @@ const parallelPoolNodes = computed(() => {
   return baseGenerationAgentIds.value.map(agentId => getStageNode(agentId))
 })
 
-const agentLinkPaths = computed(() => {
-  const nodes = parallelPoolNodes.value
-  const measuredMap = new Map(measuredAgentLinks.value.map(link => [link.id, link]))
-
-  return nodes.flatMap((node) => {
-    const measured = measuredMap.get(node.id)
-    return measured ? [{ ...measured, status: node.status }] : []
-  })
-})
-
-
-function setStationCardRef(id: string, el: unknown) {
-  if (el instanceof HTMLElement) {
-    stationCardRefs.set(id, el)
-  } else {
-    stationCardRefs.delete(id)
-  }
-  scheduleLinkMeasure()
-}
-
-function scheduleLinkMeasure() {
-  if (typeof window === 'undefined') return
-  if (linkMeasureFrame) window.cancelAnimationFrame(linkMeasureFrame)
-  linkMeasureFrame = window.requestAnimationFrame(() => {
-    linkMeasureFrame = 0
-    measureAgentLinks()
-  })
-}
-
-function measureAgentLinks() {
-  const canvas = flowCanvasRef.value
-  const planning = planningNodeRef.value
-  if (!canvas || !planning) return
-
-  const canvasRect = canvas.getBoundingClientRect()
-  const width = Math.max(1, Math.round(canvasRect.width))
-  const height = Math.max(1, Math.round(canvasRect.height))
-  if (linkCanvasSize.value.width !== width || linkCanvasSize.value.height !== height) {
-    linkCanvasSize.value = { width, height }
-  }
-
-  const planningRect = planning.getBoundingClientRect()
-  const startX = Math.round(planningRect.left - canvasRect.left + planningRect.width / 2)
-  const startY = Math.round(planningRect.bottom - canvasRect.top + 8)
-
-  const links = parallelPoolNodes.value
-    .map((node) => {
-      const station = stationCardRefs.get(node.id)
-      if (!station) return null
-
-      const stationRect = station.getBoundingClientRect()
-      const endX = Math.round(stationRect.left - canvasRect.left + stationRect.width / 2)
-      const endY = Math.round(stationRect.top - canvasRect.top - 8)
-      const distanceY = Math.max(42, endY - startY)
-      const distanceX = endX - startX
-      const sidePull = Math.min(120, Math.max(28, Math.abs(distanceX) * 0.18))
-      const c1X = Math.round(startX + (distanceX > 0 ? sidePull : -sidePull))
-      const c2X = Math.round(endX - (distanceX > 0 ? sidePull : -sidePull))
-      const c1Y = Math.round(startY + distanceY * 0.36)
-      const c2Y = Math.round(endY - distanceY * 0.28)
-
-      return {
-        id: node.id,
-        x: endX,
-        y: endY,
-        d: `M ${startX} ${startY} C ${c1X} ${c1Y}, ${c2X} ${c2Y}, ${endX} ${endY}`,
-      }
-    })
-    .filter((link): link is AgentLinkGeometry => Boolean(link))
-
-  if (!isSameLinkGeometry(measuredAgentLinks.value, links)) {
-    measuredAgentLinks.value = links
-  }
-}
-
-function isSameLinkGeometry(prev: AgentLinkGeometry[], next: AgentLinkGeometry[]) {
-  if (prev.length !== next.length) return false
-  return prev.every((item, index) => {
-    const target = next[index]
-    if (!target) return false
-    return item.id === target.id && item.x === target.x && item.y === target.y && item.d === target.d
-  })
-}
+const {
+  canvasRef: flowCanvasRef,
+  sourceRef: planningNodeRef,
+  canvasSize: linkCanvasSize,
+  links: agentLinkPaths,
+  setCardRef: setStationCardRef,
+} = useFlow(parallelPoolNodes)
 
 onMounted(async () => {
   await nextTick()
-  scheduleLinkMeasure()
-  window.addEventListener('resize', scheduleLinkMeasure)
   window.addEventListener('resize', scheduleDetailPanelPosition)
   window.addEventListener('scroll', scheduleDetailPanelPosition, true)
-
-  if (typeof ResizeObserver !== 'undefined' && flowCanvasRef.value) {
-    canvasResizeObserver = new ResizeObserver(scheduleLinkMeasure)
-    canvasResizeObserver.observe(flowCanvasRef.value)
-  }
 })
 
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', scheduleLinkMeasure)
     window.removeEventListener('resize', scheduleDetailPanelPosition)
     window.removeEventListener('scroll', scheduleDetailPanelPosition, true)
-    if (linkMeasureFrame) window.cancelAnimationFrame(linkMeasureFrame)
     if (detailPositionFrame) window.cancelAnimationFrame(detailPositionFrame)
   }
-  canvasResizeObserver?.disconnect()
 })
-
-watch(
-  () => [
-    parallelPoolNodes.value.map(node => `${node.id}:${node.status}:${node.progress}`).join('|'),
-    props.planReady,
-    props.generatedResources.length,
-  ],
-  async () => {
-    await nextTick()
-    scheduleLinkMeasure()
-  },
-  { immediate: true },
-)
 
 const trailingStageNodes = computed(() => {
   const nodes: DagNodeState[] = []

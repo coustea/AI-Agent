@@ -1,6 +1,6 @@
 <template>
   <div class="ppt-resource" :class="{ compact }">
-    <ResourceCardWrapper :compact="compact" class="ppt-item">
+    <Frame :compact="compact" class="ppt-item">
       <div class="header-actions" v-if="!compact">
         <a v-if="downloadUrl" :href="downloadUrl" target="_blank" class="btn btn-primary btn-sm">
           <Download class="w-4 h-4 inline-block align-middle mr-1" />
@@ -24,13 +24,13 @@
           暂无幻灯片课件预览
         </div>
       </div>
-    </ResourceCardWrapper>
+    </Frame>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import ResourceCardWrapper from './ResourceCardWrapper.vue'
+import Frame from '../Frame.vue'
 import { PhDownload as Download, PhArrowsOut as Expand } from '@phosphor-icons/vue'
 
 const props = defineProps<{
@@ -102,7 +102,7 @@ const downloadUrl = computed(() => htmlUrl.value)
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--color-border);
-  background: #ffffff; /* 幻灯片白色背景兜底，保证 iframe 加载前不变黑 */
+  background: #ffffff;
 }
 
 .slides-iframe {

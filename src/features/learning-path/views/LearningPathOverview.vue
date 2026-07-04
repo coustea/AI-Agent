@@ -240,78 +240,25 @@
         </section>
 
         <aside class="learning-panel">
-          <section v-if="displayedNode" class="current-card">
-            <div class="current-card-head">
-              <span>{{ activeDetailNode ? '选中节点' : '当前推荐节点' }}</span>
-              <strong class="status-badge" :class="displayedNode.status">
-                {{ statusText(displayedNode.status) }}
-              </strong>
-            </div>
-
-            <h2>{{ displayedNode.title }}</h2>
-            <p>{{ nodeLearningHint(displayedNode) }}</p>
-
-            <div class="current-grid">
-              <div>
-                <label>所属阶段</label>
-                <strong>{{ stageTitleById(displayedNode.stage_id) }}</strong>
-              </div>
-              <div>
-                <label>难度</label>
-                <strong>{{ difficultyText(displayedNode.difficulty) }}</strong>
-              </div>
-              <div>
-                <label>优先级</label>
-                <strong>P{{ displayedNode.priority }}</strong>
-              </div>
-              <div>
-                <label>测验轮次</label>
-                <strong>{{ displayedNode.attempt_count || 0 }}</strong>
-              </div>
-            </div>
-
-            <div class="dependency-box">
-              <div class="box-title">前置依赖</div>
-
-              <div v-if="displayedNode.prerequisites?.length" class="dependency-list">
-                <span v-for="item in displayedNode.prerequisites" :key="item">
-                  {{ prerequisiteLabel(item) }}
-                </span>
-              </div>
-
-              <p v-else>该节点没有前置依赖，可以直接开始学习。</p>
-            </div>
-
-            <button
-              v-if="canEnterNode(displayedNode)"
-              class="btn btn-primary learn-btn"
-              :disabled="isGeneratingTutorial"
-              @click="startNodeLearning(displayedNode)"
-            >
-              {{ isGeneratingTutorial && tutorialNodeId === displayedNode.id ? '正在生成教程...' : '开始学习' }}
-            </button>
-
-            <p v-else class="lock-hint">完成前置节点后可解锁学习</p>
-
-            <div class="side-tip">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M11 17h2v-6h-2v6Zm0-8h2V7h-2v2Zm1 13a10 10 0 1 1 0-20 10 10 0 0 1 0 20Zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" />
-              </svg>
-              <span>点击「开始学习」后，系统将为你生成节点主教程。</span>
-            </div>
-          </section>
-
-          <section v-else class="current-card empty-current">
-            <h2>请选择一个路径节点</h2>
-            <p>点击左侧任意节点后，这里会展示节点状态、前置依赖和学习说明。</p>
-          </section>
+          <NodePanel
+            :node="displayedNode"
+            :selected="Boolean(activeDetailNode)"
+            :status-label="displayedNode ? statusText(displayedNode.status) : ''"
+            :difficulty-label="displayedNode ? difficultyText(displayedNode.difficulty) : ''"
+            :stage-title="displayedNode ? stageTitleById(displayedNode.stage_id) : ''"
+            :prerequisites="displayedNode?.prerequisites.map(prerequisiteLabel) || []"
+            :hint="displayedNode ? nodeLearningHint(displayedNode) : ''"
+            :enterable="displayedNode ? canEnterNode(displayedNode) : false"
+            :generating="Boolean(displayedNode && isGeneratingTutorial && tutorialNodeId === displayedNode.id)"
+            @learn="displayedNode && startNodeLearning(displayedNode)"
+          />
 
           <section class="evaluation-card">
             <div class="evaluation-head">
               <span>Learning Evaluation</span>
               <h2>学习效果评估</h2>
             </div>
-            <EvaluationBanner :evaluation="evaluation" />
+            <Evaluation :evaluation="evaluation" />
           </section>
         </aside>
       </section>
@@ -324,7 +271,8 @@ import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import EvaluationBanner from '@/features/learning-path/components/EvaluationBanner.vue'
+import Evaluation from '@/features/learning-path/components/overview/Evaluation.vue'
+import NodePanel from '@/features/learning-path/components/overview/NodePanel.vue'
 
 import {
   createLearningPath,
@@ -341,7 +289,7 @@ import type {
 } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 import type { PathEvent } from '@/features/learning-path/model/pathEvent'
-import { usePathEvents } from '@/features/learning-path/model/usePathEvents'
+import { usePathEvents } from '@/features/learning-path/composables/usePathEvents'
 
 type StageLike = {
   stage_id?: string

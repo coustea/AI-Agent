@@ -1,15 +1,13 @@
 <template>
   <div class="markdown-resource" :class="{ compact }">
-    <ResourceCardWrapper v-if="content" :compact="compact">
-
-
+    <Frame v-if="content" :compact="compact">
       <MarkdownRenderer class="markdown-shell" :content="content" />
 
       <div class="frame-footer">
         <span class="mono-tag">EOF_READY</span>
         <div class="footer-line"></div>
       </div>
-    </ResourceCardWrapper>
+    </Frame>
     <div v-else class="markdown-empty">
       <div class="empty-icon">!</div>
       <div class="empty-text">NULL_CONTENT: NO_MARKDOWN_RECEIVED</div>
@@ -20,8 +18,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
-import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import { getMarkdownContent, type ResourceArtifactLike } from './resourceViewUtils'
+import Frame from '../Frame.vue'
+import { getMarkdownContent, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -30,6 +28,7 @@ const props = defineProps<{
 
 const content = computed(() => getMarkdownContent(props.resultData))
 </script>
+
 <style scoped>
 .markdown-resource {
   min-width: 0;

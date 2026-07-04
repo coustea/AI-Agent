@@ -91,9 +91,9 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhArrowLeft as ArrowLeft, PhClock as Clock, PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
-import { getPathGeneratedResources } from '@/features/learning-path/api/path-resource'
-import type { PathGeneratedResourceItem } from '@/features/resource/api/resource-history'
-import { getResourceTypeLabel } from '@/features/resource/model/ResourceGeneratorConstants'
+import { getPathGeneratedResources } from '@/features/learning-path/api/resource'
+import type { PathGeneratedResourceItem } from '@/features/learning-path/api/resource'
+import { getArtifactLabel as getResourceTypeLabel } from '@/shared/content/kind'
 
 const router = useRouter()
 const loading = ref(false)

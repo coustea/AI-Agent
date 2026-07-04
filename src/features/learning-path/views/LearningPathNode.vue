@@ -59,67 +59,20 @@
       </nav>
 
       <section class="study-workspace">
-        <aside class="toc-panel">
-          <div class="toc-card">
-            <div class="side-head">
-              <span>Contents</span>
-              <strong>教程目录</strong>
-            </div>
+        <Toc
+          :items="tutorialToc"
+          :active-id="activeHeadingId"
+          @select="scrollToHeading"
+        />
 
-            <div v-if="tutorialToc.length" class="toc-list">
-              <button
-                v-for="item in tutorialToc"
-                :key="item.id"
-                type="button"
-                :class="['toc-item', `level-${item.level}`, { active: activeHeadingId === item.id }]"
-                @click="scrollToHeading(item.id)"
-              >
-                {{ item.title }}
-              </button>
-            </div>
-
-            <div v-else class="toc-empty">
-              <p>当前教程暂未识别到标题目录。</p>
-              <span>AI 教程会自动展示在中间阅读区。</span>
-            </div>
-          </div>
-        </aside>
-
-        <article class="tutorial-main">
-          <header class="tutorial-head">
-            <div>
-              <span class="section-kicker">AI Tutorial</span>
-              <h2>{{ displayedTutorial?.title || workspace.node.title }}</h2>
-              <p>
-                这里是当前节点的主教程阅读区。先完成教程理解，再通过右侧资源推送生成导图、代码实操、PPT、拓展阅读和节点测验。
-              </p>
-            </div>
-
-            <div v-if="workspace.tutorials.length > 1" class="tutorial-tabs">
-              <button
-                v-for="tutorial in workspace.tutorials"
-                :key="tutorial.id"
-                type="button"
-                :class="{ active: tutorial.id === displayedTutorial?.id, current: tutorial.id === workspace.current_tutorial?.id }"
-                @click="selectedTutorialId = tutorial.id"
-              >
-                {{ tutorialTypeText(tutorial.tutorial_type) }}
-                <em>v{{ tutorial.version_no }}</em>
-              </button>
-            </div>
-          </header>
-
-          <section class="tutorial-reader">
-            <div v-if="displayedTutorial" class="markdown-shell" ref="tutorialContentRef">
-              <MarkdownView :result-data="{ content: displayedTutorial.content_markdown }" />
-            </div>
-
-            <div v-else class="tutorial-empty">
-              <h3>当前节点还没有教程</h3>
-              <p>进入节点后系统会自动调用后端学习推进智能体生成主教程。</p>
-            </div>
-          </section>
-        </article>
+        <Tutorial
+          ref="tutorialViewRef"
+          :node-title="workspace.node.title"
+          :tutorial="displayedTutorial"
+          :tutorials="workspace.tutorials"
+          :current-id="workspace.current_tutorial?.id || null"
+          @select="selectedTutorialId = $event"
+        />
 
         <aside class="resource-panel">
           <section class="resource-workbench-card">
@@ -273,7 +226,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import MarkdownView from '@/features/resource/components/MarkdownView.vue'
+import Toc from '@/features/learning-path/components/node/Toc.vue'
+import Tutorial from '@/features/learning-path/components/node/Tutorial.vue'
 
 import {
   generateMindmap,
@@ -329,7 +283,7 @@ const hasStartedTracking = ref(false)
 const selectedTutorialId = ref<number | null>(null)
 const isGeneratingTutorial = ref(false)
 const generatingLogs = ref<string[]>([])
-const tutorialContentRef = ref<HTMLElement | null>(null)
+const tutorialViewRef = ref<{ getContentElement: () => HTMLElement | null } | null>(null)
 const activeHeadingId = ref('')
 const isQuizSubmitted = ref(false)
 
@@ -437,7 +391,7 @@ async function syncHeadingAnchors() {
   await nextTick()
 
   window.setTimeout(() => {
-    const root = tutorialContentRef.value
+    const root = tutorialViewRef.value?.getContentElement()
     if (!root) return
 
     const headings = Array.from(root.querySelectorAll('h2, h3')) as HTMLElement[]
@@ -455,7 +409,7 @@ async function syncHeadingAnchors() {
 function scrollToHeading(id: string) {
   activeHeadingId.value = id
 
-  const root = tutorialContentRef.value
+  const root = tutorialViewRef.value?.getContentElement()
   const target = root?.querySelector(`#${CSS.escape(id)}`) as HTMLElement | null
 
   if (target) {
@@ -673,12 +627,6 @@ function goToNextNode(nextNodeId: number) {
 
 function choiceEntries(choice: Record<string, string> | undefined | null) {
   return Object.entries(choice || {})
-}
-
-function tutorialTypeText(value?: string | null) {
-  if (value === 'remediation') return '专项巩固'
-  if (value === 'reinforced') return '强化教程'
-  return '主教程'
 }
 
 function statusText(status: string) {

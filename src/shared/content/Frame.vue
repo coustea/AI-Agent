@@ -42,5 +42,4 @@ defineProps<{
 .resource-card-wrapper.is-compact:hover {
   box-shadow: none;
 }
-
 </style>

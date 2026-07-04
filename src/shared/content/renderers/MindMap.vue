@@ -1,13 +1,13 @@
 <template>
   <div class="mindmap-resource" :class="{ compact }">
-    <ResourceCardWrapper v-if="markdownContent" :compact="compact" class="mindmap-container">
+    <Frame v-if="markdownContent" :compact="compact" class="mindmap-container">
       <div ref="markmapRef" class="markmap-shell"></div>
 
       <div class="frame-footer">
         <span class="mono-tag">导图同步中</span>
         <div class="footer-line"></div>
       </div>
-    </ResourceCardWrapper>
+    </Frame>
     <div v-else class="mindmap-empty-hud">
       <div class="empty-frame">
         <div class="empty-icon">NULL</div>
@@ -19,8 +19,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import { parseJsonObject, type ResourceArtifactLike } from './resourceViewUtils'
+import Frame from '../Frame.vue'
+import { parseJsonObject, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -286,38 +286,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.frame-header {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-indicator {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: none;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.technical-label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--primary);
-  letter-spacing: 1px;
-}
-
 .frame-footer {
   margin-top: 12px;
   display: flex;
@@ -398,7 +366,6 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-.compact .frame-header,
 .compact .frame-footer {
   display: none;
 }

@@ -16,7 +16,7 @@
       </div>
     </div>
 
-    <ResourceBundleView
+    <Bundle
       v-else-if="resource"
       :bundle="resource"
       :warning="resourceWarning"
@@ -29,8 +29,8 @@
     />
 
     <!-- 统一资源预览弹窗 -->
-    <ResourcePreviewDialog
-      v-model:active-agent="activePreviewAgent"
+    <PreviewDialog
+      v-model:activeAgent="activePreviewAgent"
       :data="previewData"
       :resource="previewResource"
     />
@@ -42,10 +42,10 @@ import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import ResourceBundleView from '@/features/resource/components/ResourceBundleView.vue'
-import ResourcePreviewDialog from '@/features/resource/components/ResourcePreviewDialog.vue'
-import { getGeneratedResourceDetail } from '@/features/resource/api/resource-history'
-import type { GeneratedResourceBundle } from '@/features/resource/api/resource-history'
+import Bundle from '@/features/resource/components/result/Bundle.vue'
+import PreviewDialog from '@/shared/content/PreviewDialog.vue'
+import { getGeneratedResourceDetail } from '@/features/resource/api/history'
+import type { GeneratedResourceBundle } from '@/features/resource/api/history'
 
 type PreviewPayload = {
   agentId: string

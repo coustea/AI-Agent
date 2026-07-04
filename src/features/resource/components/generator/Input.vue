@@ -48,7 +48,7 @@
             <p>复习《计算机网络》TCP三次握手...</p>
           </div>
         </div>
-        <div class="inspiration-card" @click="fillExample('零基础学习 Python 多线程，需要底层原理和代码')">
+        <div class="inspiration-card" @click="fillExample('零基础学习 Python 多线程，需要底层原理 and 代码')">
           <div class="ins-icon" style="background: #F0FDF4; color: #22C55E;"><Cpu class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>零基础入门</h4>

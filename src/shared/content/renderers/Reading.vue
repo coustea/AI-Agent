@@ -1,7 +1,6 @@
 <template>
   <div class="reading-resource" :class="{ compact }">
-    <ResourceCardWrapper v-if="readingData && resources.length" :compact="compact" class="reading-container">
-
+    <Frame v-if="readingData && resources.length" :compact="compact" class="reading-container">
 
       <div v-if="!compact && readingData.summary" class="reading-summary">
         <div class="summary-icon"><Reading class='w-4 h-4 inline-block align-middle' /></div>
@@ -63,7 +62,7 @@
         <span class="mono-tag">知识同步完成</span>
         <div class="footer-line"></div>
       </div>
-    </ResourceCardWrapper>
+    </Frame>
     
     <div v-else class="reading-empty-hud">
       <div class="empty-frame">
@@ -82,8 +81,8 @@ import {
   PhBookOpen as Reading,
   PhLink as LinkIcon
 } from '@phosphor-icons/vue'
-import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import { normalizeReadingArtifact, type ResourceArtifactLike } from './resourceViewUtils'
+import Frame from '../Frame.vue'
+import { normalizeReadingArtifact, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike
@@ -144,11 +143,11 @@ const getDifficultyText = (difficulty?: string) => {
 <style scoped>
 .reading-resource {
   width: 100%;
-  --primary: var(--color-primary); /* Slate 600 */
+  --primary: var(--color-primary);
   --bg: var(--color-surface);
-  --fg: var(--color-text); /* Slate 700 */
+  --fg: var(--color-text);
   --border: var(--color-border);
-  --accent: var(--color-primary); /* Indigo 500 */
+  --accent: var(--color-primary);
 }
 
 .reading-container {
@@ -157,40 +156,6 @@ const getDifficultyText = (difficulty?: string) => {
   gap: 20px;
 }
 
-/* 头部 HUD */
-.frame-header {
-  position: absolute;
-  top: 12px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-indicator {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: none;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.technical-label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--primary);
-  letter-spacing: 1px;
-}
-
-/* 底部 HUD */
 .frame-footer {
   margin-top: 12px;
   display: flex;
@@ -246,7 +211,7 @@ const getDifficultyText = (difficulty?: string) => {
 .reading-item {
   padding: 24px;
   border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-primary); /* 默认系统冰川绿 */
+  border-left: 4px solid var(--color-primary);
   border-radius: var(--radius-md);
   background: #ffffff;
   transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
@@ -263,18 +228,17 @@ const getDifficultyText = (difficulty?: string) => {
   transform: translateY(-1.5px);
 }
 
-/* Category borders (辅助色点缀) */
 .reading-item.book {
-  border-left-color: var(--cat-path, #F59E0B); /* Path Yellow */
+  border-left-color: var(--cat-path, #F59E0B);
 }
 .reading-item.paper {
-  border-left-color: var(--color-primary); /* Glacier Teal */
+  border-left-color: var(--color-primary);
 }
 .reading-item.article {
-  border-left-color: var(--cat-tutor, #1E40AF); /* Tutor Blue */
+  border-left-color: var(--cat-tutor, #1E40AF);
 }
 .reading-item.documentation {
-  border-left-color: var(--cat-rose, #F43F5E); /* Rose Red */
+  border-left-color: var(--cat-rose, #F43F5E);
 }
 
 .reading-header {
@@ -359,7 +323,6 @@ const getDifficultyText = (difficulty?: string) => {
   line-height: 1.6;
 }
 
-/* Monospace domain URL link styling */
 .reading-url-wrap {
   display: flex;
   align-items: center;
@@ -378,7 +341,6 @@ const getDifficultyText = (difficulty?: string) => {
   text-decoration: underline;
 }
 
-/* System standard rectangular action button */
 .reading-action-btn {
   display: inline-flex;
   align-items: center;
@@ -450,15 +412,12 @@ const getDifficultyText = (difficulty?: string) => {
   color: var(--color-text-faint);
 }
 
-/* 紧凑模式 */
 .compact .reading-container {
   padding: 0;
   border: none;
   background: transparent;
   box-shadow: none;
 }
-.compact .frame-corners,
-.compact .frame-header,
 .compact .frame-footer {
   display: none;
 }

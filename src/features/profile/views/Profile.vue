@@ -484,13 +484,13 @@ import {
 } from '@/features/profile/api/profile'
 import { getRecentResources, getStudyStats } from '@/features/dashboard/api/home'
 import type { RecentResourceItem, StudyStatsData } from '@/features/dashboard/api/home'
-import { getGeneratedResources } from '@/features/resource/api/resource-history'
-import type { GeneratedResourceItem } from '@/features/resource/api/resource-history'
+import { getGeneratedResources } from '@/features/resource/api/history'
+import type { GeneratedResourceItem } from '@/features/resource/api/history'
 import { getEvaluationSummary, getLearningTimeStats } from '@/features/evaluation/api/evaluation'
 import type { EvaluationSummary, LearningTimeStats } from '@/features/evaluation/api/evaluation'
 import { fetchWrongQuestions } from '@/features/question-bank/api/wrongQuestions'
-import { searchSchools } from '@/features/resource/api/school'
-import type { SchoolItem } from '@/features/resource/api/school'
+import { searchSchools } from '@/features/profile/api/school'
+import type { SchoolItem } from '@/features/profile/model/school'
 import type { ProfileOnboardingUpdate, StudentProfileData } from '@/features/profile/api/profile'
 
 use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
@@ -665,7 +665,7 @@ const recommendationSeconds = computed(() => secondsForContexts(
   'PathResourceHistory',
   'resource-generator',
   'resource-detail',
-  'resource-history',
+  'ai/resources/history',
   'path-resource-detail',
   'path-resource-history',
 ))

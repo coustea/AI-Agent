@@ -1,7 +1,7 @@
 <template>
   <div class="quiz-resource" :class="{ compact }">
     <div v-if="questions.length" class="quiz-list">
-      <ResourceCardWrapper v-for="(question, index) in visibleQuestions" :key="index" :compact="compact" class="quiz-item">
+      <Frame v-for="(question, index) in visibleQuestions" :key="index" :compact="compact" class="quiz-item">
         <div class="quiz-stem">
           <span class="quiz-index">Q{{ index + 1 }}</span>
           <div class="quiz-title">
@@ -117,7 +117,7 @@
             </div>
           </div>
         </template>
-      </ResourceCardWrapper>
+      </Frame>
 
       <div v-if="compact && questions.length > visibleQuestions.length" class="quiz-more">
         <button class="btn-link text-blue hover:underline more-btn-hud">
@@ -143,8 +143,8 @@ import {
   PhX as CloseIcon
 } from '@phosphor-icons/vue'
 import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
-import ResourceCardWrapper from './ResourceCardWrapper.vue'
-import { normalizeQuizQuestions, type ResourceArtifactLike } from './resourceViewUtils'
+import Frame from '../Frame.vue'
+import { normalizeQuizQuestions, type ResourceArtifactLike } from '../artifact'
 
 const props = defineProps<{
   resultData: ResourceArtifactLike

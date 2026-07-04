@@ -1,6 +1,5 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
-import type { PathResourceDetail } from '@/features/learning-path/model/path'
 
 // ==========================================
 // 类型定义
@@ -58,16 +57,3 @@ export function getGeneratedResources(page = 1, limit = 20) {
 export function getGeneratedResourceDetail(resourceId: number) {
   return http.get<ApiResponse<GeneratedResourceBundle>>(`/ai/resources/${resourceId}`)
 }
-
-export interface PathGeneratedResourceItem extends GeneratedResourceItem {
-  path_id: number | null
-  node_id: string | null
-  path_node_id: number | null
-  node_title: string | null
-  resource_type?: string | null
-  title?: string | null
-  summary?: string | null
-  error_message?: string | null
-}
-
-export type { PathResourceDetail }

@@ -37,7 +37,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'tutor', name: 'Tutor', component: Tutor },
       { path: 'profile', name: 'Profile', component: Profile },
       { path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail },
-      { path: 'resource-history', name: 'ResourceHistory', component: ResourceHistory },
+      { path: '/ai/resources/history', name: 'ResourceHistory', component: ResourceHistory },
       { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
       { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },

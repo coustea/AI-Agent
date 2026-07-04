@@ -91,27 +91,27 @@
               </div>
 
               <div class="resource-view">
-                <MindmapView
+                <MindMap
                   v-if="resource.resource_type === 'mindmap'"
                   :result-data="resourceContent"
                 />
-                <CodeView
+                <Code
                   v-else-if="resource.resource_type === 'code'"
                   :result-data="resourceContent"
                 />
-                <PptView
+                <Slides
                   v-else-if="resource.resource_type === 'ppt'"
                   :resource="resource"
                 />
-                <ReadingView
+                <Reading
                   v-else-if="resource.resource_type === 'reading'"
                   :result-data="resourceContent"
                 />
-                <QuizView
+                <Quiz
                   v-else-if="resource.resource_type === 'quiz'"
                   :result-data="resourceContent"
                 />
-                <MarkdownView
+                <Article
                   v-else
                   :result-data="resourceContent"
                 />
@@ -245,13 +245,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import CodeView from '@/features/resource/components/CodeView.vue'
-import MarkdownView from '@/features/resource/components/MarkdownView.vue'
-import MindmapView from '@/features/resource/components/MindmapView.vue'
-import PptView from '@/features/resource/components/PptView.vue'
-import QuizView from '@/features/resource/components/QuizView.vue'
-import ReadingView from '@/features/resource/components/ReadingView.vue'
-import { getPathGeneratedResourceDetail } from '@/features/learning-path/api/path-resource'
+import Article from '@/shared/content/renderers/Article.vue'
+import MindMap from '@/shared/content/renderers/MindMap.vue'
+import Quiz from '@/shared/content/renderers/Quiz.vue'
+import Code from '@/shared/content/renderers/Code.vue'
+import Reading from '@/shared/content/renderers/Reading.vue'
+import Slides from '@/shared/content/renderers/Slides.vue'
+import { getPathGeneratedResourceDetail } from '@/features/learning-path/api/resource'
 import type { PathResourceDetail } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 
