@@ -21,7 +21,7 @@ from langgraph.types import Send
 from app.infra.database import session_scope
 from app.resource.agents import AGENT_REGISTRY
 from app.resource.service import ResourceService
-from app.resource.workflow.execution import execute_resource_agent, AgentOutcome
+from app.resource.workflow.execution import execute_resource_agent
 from app.resource.workflow.validation import check_content_overlap
 from app.resource.schemas import (
     AgentResult,
@@ -151,24 +151,21 @@ async def get_handoffs(
     return handoffs
 
 
-def _extract_state_data(state: ParentState) -> tuple[str, dict[str, Any], dict[str, Any], TeachingPlan | None]:
-    """从 state 提取通用数据：learning_need, agent_configs, profile, teaching_plan。"""
+def _extract_state_data(state: ParentState) -> tuple[str, str, dict[str, Any], dict[str, Any], TeachingPlan | None]:
+    """从 state 提取通用数据：learning_need, learning_scenario, agent_configs, profile, teaching_plan。"""
     request_data: dict[str, Any] = state.get("request_data") or {}
     profile: dict[str, Any] = state.get("profile") or {}
     teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
 
-    # 从 resource_id 对应的 GeneratedResource 获取 learning_need
-    # 注意：learning_need 仍需从 DB 读取，因为它在 GeneratedResource 表上
-    # 但我们也可以在 request_data 中传递它
     learning_need = request_data.get("learning_need", "")
-    agent_configs = request_data.get("agent_configs", {})
     learning_scenario = request_data.get("learning_scenario", "self_study")
+    agent_configs = request_data.get("agent_configs", {})
 
     teaching_plan = None
     if teaching_plan_raw:
         teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
 
-    return learning_need, agent_configs, profile, teaching_plan
+    return learning_need, learning_scenario, agent_configs, profile, teaching_plan
 
 
 # ── Planning node ──────────────────────────────────────────────────────
@@ -184,14 +181,8 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     user_id = state["user_id"]
     resource_id = state["resource_id"]
 
-    # 从 state 获取数据
-    request_data: dict[str, Any] = state.get("request_data") or {}
-    profile: dict[str, Any] = state.get("profile") or {}
     selected_agents: list[str] = state.get("selected_agents") or []
-
-    learning_need = request_data.get("learning_need", "")
-    agent_configs = request_data.get("agent_configs", {})
-    learning_scenario = request_data.get("learning_scenario", "self_study")
+    learning_need, learning_scenario, agent_configs, profile, _ = _extract_state_data(state)
 
     # 提取基础 Agent IDs
     enabled_base_agents = [
@@ -206,6 +197,7 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         learning_scenario=learning_scenario,
         profile=profile,
         agent_config={"enabled_agents": enabled_base_agents},
+        username=str(state.get("request_data", {}).get("username", "")),
     )
 
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
@@ -290,82 +282,13 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         raise
 
 
-# Agent 超时配置（秒）
-AGENT_TIMEOUTS: dict[str, float] = {
-    "content": 300.0,
-    "mindmap": 300.0,
-    "quiz": 300.0,
-    "code": 300.0,
-    "reading": 300.0,
-    PPT_AGENT_ID: 600.0,
-    VIDEO_AGENT_ID: 900.0,
-    CARTOON_AGENT_ID: 1800.0,
-}
-
-
-# ── Unified non-Planning Agent lifecycle ─────────────────────────────────
-
-
-async def _execute_non_planning_agent(
-    *,
-    agent_id: str,
-    user_id: int,
-    resource_id: int,
-    resource_input: ResourceInput,
-) -> dict[str, Any]:
-    """统一执行非 Planning Agent 的生命周期。
-
-    委托给 execution.execute_resource_agent 完成生成、校验、持久化。
-    失败不影响兄弟 Agent。
-
-    Args:
-        agent_id: Agent 标识符
-        user_id: 用户 ID
-        resource_id: 资源任务 ID
-        resource_input: Agent 输入参数
-
-    Returns:
-        包含 results 或 failures 的字典
-    """
-    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
-    agent = AGENT_REGISTRY[agent_id](events)
-    timeout_seconds = AGENT_TIMEOUTS.get(agent_id, 300.0)
-
-    outcome = await execute_resource_agent(
-        user_id=user_id,
-        resource_id=resource_id,
-        agent_id=agent_id,
-        agent=agent,
-        input_data=resource_input,
-        events=events,
-        timeout_seconds=timeout_seconds,
-    )
-
-    if outcome.status == "completed":
-        # 成功 - 返回标记（execute_resource_agent 已持久化）
-        return {"results": {agent_id: True}}
-    else:
-        # 失败 - 返回失败记录
-        return {
-            "results": {},
-            "failures": {
-                agent_id: AgentFailure(
-                    agent_id=agent_id,
-                    stage=outcome.failure_stage or "unknown",
-                    error_type=outcome.failure_type or "UnknownError",
-                    message=outcome.failure_message or "",
-                )
-            },
-        }
-
-
 # ── Worker nodes ───────────────────────────────────────────────────────
 
 
 def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
     """路由：有 worker agent → Send 并行分发，否则直接合并。
 
-    同步函数，从 state 读取 planning_node 写入的 selected_agents。
+    同步函数，从 state 读取 planning_node 写入 of selected_agents。
     """
     selected_agents = state.get("selected_agents") or []
     worker_ids = [aid for aid in selected_agents if aid in BASE_RESOURCE_AGENT_IDS]
@@ -396,20 +319,9 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
     agent_id = state["agent_id"]
     user_id = state["user_id"]
     resource_id = state["resource_id"]
+    selected_agents = state.get("selected_agents") or []
 
-    # 从 state 获取数据
-    request_data: dict[str, Any] = state.get("request_data") or {}
-    profile: dict[str, Any] = state.get("profile") or {}
-    selected_agents: list[str] = state.get("selected_agents") or []
-    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
-
-    learning_need = request_data.get("learning_need", "")
-    agent_configs = request_data.get("agent_configs", {})
-    learning_scenario = request_data.get("learning_scenario", "self_study")
-
-    teaching_plan = None
-    if teaching_plan_raw:
-        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
+    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
@@ -424,11 +336,11 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
         upstream_handoffs={},
     )
 
-    return await _execute_non_planning_agent(
-        agent_id=agent_id,
+    return await execute_resource_agent(
         user_id=user_id,
         resource_id=resource_id,
-        resource_input=resource_input,
+        agent_id=agent_id,
+        input_data=resource_input,
     )
 
 
@@ -568,19 +480,8 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         80,
     )
 
-    # 从 state 获取数据
-    request_data: dict[str, Any] = state.get("request_data") or {}
-    profile: dict[str, Any] = state.get("profile") or {}
-    selected_agents: list[str] = state.get("selected_agents") or []
-    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
-
-    learning_need = request_data.get("learning_need", "")
-    agent_configs = request_data.get("agent_configs", {})
-    learning_scenario = request_data.get("learning_scenario", "self_study")
-
-    teaching_plan = None
-    if teaching_plan_raw:
-        teaching_plan = TeachingPlan.model_validate(teaching_plan_raw)
+    selected_agents = state.get("selected_agents") or []
+    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
 
     # 从数据库读取成功持久化的基础 Agent handoffs
     base_handoffs = await get_handoffs(
@@ -601,11 +502,11 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         upstream_handoffs=base_handoffs,
     )
 
-    return await _execute_non_planning_agent(
-        agent_id=PPT_AGENT_ID,
+    return await execute_resource_agent(
         user_id=user_id,
         resource_id=resource_id,
-        resource_input=resource_input,
+        agent_id=PPT_AGENT_ID,
+        input_data=resource_input,
     )
 
 
@@ -622,16 +523,9 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         80,
     )
 
-    request_data: dict[str, Any] = state.get("request_data") or {}
-    profile: dict[str, Any] = state.get("profile") or {}
-    selected_agents: list[str] = state.get("selected_agents") or []
-    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
+    selected_agents = state.get("selected_agents") or []
+    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
 
-    teaching_plan = (
-        TeachingPlan.model_validate(teaching_plan_raw)
-        if teaching_plan_raw
-        else None
-    )
     base_handoffs = await get_handoffs(
         resource_id=resource_id,
         user_id=user_id,
@@ -640,10 +534,10 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         resource_id=resource_id,
         user_id=user_id,
         agent_id=VIDEO_AGENT_ID,
-        learning_need=request_data.get("learning_need", ""),
-        learning_scenario=request_data.get("learning_scenario", "self_study"),
+        learning_need=learning_need,
+        learning_scenario=learning_scenario,
         selected_agents=selected_agents,
-        agent_configs=request_data.get("agent_configs", {}),
+        agent_configs=agent_configs,
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs=base_handoffs,
@@ -652,11 +546,11 @@ async def video_node(state: ParentState) -> dict[str, Any]:
         },
     )
 
-    return await _execute_non_planning_agent(
-        agent_id=VIDEO_AGENT_ID,
+    return await execute_resource_agent(
         user_id=user_id,
         resource_id=resource_id,
-        resource_input=resource_input,
+        agent_id=VIDEO_AGENT_ID,
+        input_data=resource_input,
     )
 
 
@@ -674,14 +568,9 @@ async def cartoon_node(state: ParentState) -> dict[str, Any]:
     )
 
     request_data: dict[str, Any] = state.get("request_data") or {}
-    profile: dict[str, Any] = state.get("profile") or {}
-    selected_agents: list[str] = state.get("selected_agents") or []
-    teaching_plan_raw: dict[str, Any] = state.get("teaching_plan") or {}
-    teaching_plan = (
-        TeachingPlan.model_validate(teaching_plan_raw)
-        if teaching_plan_raw
-        else None
-    )
+    selected_agents = state.get("selected_agents") or []
+    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
+
     base_handoffs = await get_handoffs(
         resource_id=resource_id,
         user_id=user_id,
@@ -690,10 +579,10 @@ async def cartoon_node(state: ParentState) -> dict[str, Any]:
         resource_id=resource_id,
         user_id=user_id,
         agent_id=CARTOON_AGENT_ID,
-        learning_need=request_data.get("learning_need", ""),
-        learning_scenario=request_data.get("learning_scenario", "self_study"),
+        learning_need=learning_need,
+        learning_scenario=learning_scenario,
         selected_agents=selected_agents,
-        agent_configs=request_data.get("agent_configs", {}),
+        agent_configs=agent_configs,
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs=base_handoffs,
@@ -703,11 +592,11 @@ async def cartoon_node(state: ParentState) -> dict[str, Any]:
     )
     resource_input.username = str(request_data.get("username", ""))
 
-    return await _execute_non_planning_agent(
-        agent_id=CARTOON_AGENT_ID,
+    return await execute_resource_agent(
         user_id=user_id,
         resource_id=resource_id,
-        resource_input=resource_input,
+        agent_id=CARTOON_AGENT_ID,
+        input_data=resource_input,
     )
 
 

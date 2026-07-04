@@ -1024,6 +1024,7 @@ async def node_generate_resource(state: LearnState) -> dict:
         tutorial_markdown=current_tutorial.content_markdown,
         profile={},
         agent_config={},
+        username="",
     )
     result = await generate_path_node_resource(resource_type, node_input)
     return {"resource_result": result, "resource_type": resource_type}

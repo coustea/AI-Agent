@@ -272,6 +272,7 @@ async def react_node(
     # ── 1. 构建工具集 ──
     request_context = TutorRequestContext(
         user_id=user_id,
+        username=state.get("username", ""),
         session_id=session_id,
         user_input=question,
         attachments=attachments,
