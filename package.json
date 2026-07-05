@@ -11,6 +11,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@guolao/vue-monaco-editor": "^1.6.0",
     "@lucide/vue": "^1.22.0",
     "@phosphor-icons/vue": "^2.2.1",
     "@shikijs/langs": "^4.3.0",
@@ -27,6 +28,7 @@
     "html-to-image": "^1.11.13",
     "katex": "^0.17.0",
     "lucide-vue-next": "^1.0.0",
+    "markmap-common": "^0.18.9",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
     "mp4-muxer": "^5.2.2",
