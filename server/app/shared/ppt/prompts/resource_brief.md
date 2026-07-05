@@ -13,11 +13,13 @@
 1. 第一页必须是 `cover`，最后一页必须是 `summary` 或 `closing`。
 2. 每页只承担一个教学动作，使用结论驱动标题。
 3. 根据知识复杂度决定页数，不要为了凑页数压缩或拆散内容；常规控制在 8–16 页，任何情况都不得超过 18 页。
-4. 至少使用 5 种 content shape；相邻页面不要使用同一种 shape。
+4. 至少使用 5 种 content shape；相邻页面绝对不能使用同一种 shape。
 5. 系统原理优先使用 `system`，过程/算法优先使用 `sequence`，代码推演使用 `code`，差异判断使用 `comparison`，关键推导使用 `formula`，停顿思考使用 `quiz`。
 6. `points` 最多 6 项、`steps` 最多 6 项、`nodes` 最多 8 项；文字必须适合 1920×1080 教学画面。
 7. animation 只可选择 reveal、focus、trace、compare、build、resolve，并与教学动作一致。
-8. `speaker_notes` 写本页讲解顺序，不能写视觉样式或前端实现。
+8. speaker_notes 写本页讲解顺序，不能写视觉样式或前端实现。
+9. **内容极其饱满与深度要求**：对于每个 point、step、node，其 `detail` 描述必须详细生动（保持在 30–60 字之间），严禁使用几个词或一句话敷衍带过。每一页必须同时提供 `takeaway`（总结金句）或 `statement`，利用点睛金句填充版面，让 1920×1080 的教学界面布局充实、错落有致、细节满满。
+10. **多维排版杜绝单一**：严禁连续两页使用同一种排版结构。PPT 方案中必须频繁在 `concept`（概念卡）、`system`（架构地图）、`sequence`（步骤序列）、`comparison`（双栏对比）、`code`/`formula`（代码/公式）以及 `quiz`（答题卡）之间穿插交替，形成富于节奏感的现代教学课件。
 
 # USER PREFERENCES
 

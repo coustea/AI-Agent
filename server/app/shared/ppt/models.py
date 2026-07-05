@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 
 DensityMode = Literal["speaker_led", "reading_first"]
@@ -116,11 +116,44 @@ class SystemNode(PPTModel):
     detail: str = Field(default="", max_length=70)
     layer: str = Field(default="", max_length=20)
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def normalize_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip()
+        if s and not s[0].isalpha():
+            s = "n" + s
+        import re
+        s = re.sub(r"[^a-zA-Z0-9_-]", "_", s)
+        return s[:24]
+
+    @field_validator("layer", mode="before")
+    @classmethod
+    def serialize_layer(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        return str(v)
+
 
 class PPTSlide(PPTModel):
     role: SlideRole
     shape: ContentShape
     title: str = Field(min_length=1, max_length=54)
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value: str) -> str:
+        mapping = {
+            "code": "explain",
+            "content": "explain",
+            "system": "explain",
+            "formula": "explain",
+            "quiz": "practice",
+            "sequence": "explain",
+            "comparison": "explain",
+        }
+        return mapping.get(value, value)
     subtitle: str = Field(default="", max_length=110)
     eyebrow: str = Field(default="", max_length=28)
     statement: str = Field(default="", max_length=150)
@@ -165,6 +198,17 @@ class PPTPlan(PPTModel):
         default_factory=PPTTemplatePreference
     )
     slides: list[PPTSlide] = Field(min_length=3, max_length=18)
+
+    @field_validator("slides", mode="before")
+    @classmethod
+    def deserialize_slides(cls, v: Any) -> Any:
+        import json
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                pass
+        return v
 
     @model_validator(mode="after")
     def validate_deck_rhythm(self) -> "PPTPlan":

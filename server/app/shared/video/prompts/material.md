@@ -19,7 +19,7 @@
 # OUTPUT EXAMPLE
 
 ```json
-{
+{{
   "topic": "进程调度",
   "audience": "计算机专业本科生",
   "learning_goal": "理解进程调度的基本策略与状态转换",
@@ -30,8 +30,8 @@
   "misconceptions": ["误以为所有调度都是抢占式的", "混淆上下文切换与模式切换"],
   "practice_prompts": ["给定3个进程的到达时间和服务时间，画出Gantt图"],
   "visual_opportunities": ["进程状态转换图", "就绪队列动态变化", "Gantt图时间线"],
-  "source_map": {"core_concepts": ["s1"], "process_steps": ["s1", "s2"]}
-}
+  "source_map": {{"core_concepts": ["s1"], "process_steps": ["s1", "s2"]}}
+}}
 ```
 
 

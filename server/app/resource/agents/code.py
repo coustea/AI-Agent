@@ -75,9 +75,9 @@ class CodeAgent(BaseResourceAgent):
         # 执行搜索以获取该知识点的最佳实践或真实代码示例
         await self.emitter.send(self.agent_id, "running", "正在搜索相关代码最佳实践...", 30)
         search_query = f"{language} {title_prefix} 示例代码 best practice"
-        search_text = await self.search(search_query)
-
-        if "搜索失败" not in search_text and "未找到" not in search_text:
+        search_report = await self.search(search_query)
+        search_text = self.format_search_result(search_report)
+        if search_text:
             input_text = f"## 搜索到的参考代码示例背景\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建代码示例提示词...", 45)

@@ -439,6 +439,43 @@
                   </div>
                 </template>
 
+                <!-- VIDEO Agent parameters -->
+                <template v-if="activeAgentId === 'video'">
+                  <div class="ctrl-group">
+                    <label>视觉风格</label>
+                    <select v-model="localConfigs.video.style">
+                      <option value="precision_light">精确明亮 (Precision Light)</option>
+                      <option value="systems_dark">系统深色 (Systems Dark)</option>
+                      <option value="editorial_classroom">编辑式课堂 (Editorial Classroom)</option>
+                    </select>
+                    <p class="ctrl-helper">视频画面的整体视觉风格与配色基调</p>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>叙事焦点</label>
+                    <select v-model="localConfigs.video.focus">
+                      <option value="concept">概念精讲 (Concept)</option>
+                      <option value="process">流程演示 (Process)</option>
+                      <option value="comparison">对比分析 (Comparison)</option>
+                      <option value="practice">实战演练 (Practice)</option>
+                    </select>
+                    <p class="ctrl-helper">视频讲解的叙事策略与内容侧重点</p>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>配音音色</label>
+                    <div class="seg-ctrl">
+                      <button v-for="opt in [{ label: '教师', value: 'teacher' }, { label: '教练', value: 'coach' }]" :key="opt.value" type="button" class="seg-btn" :class="{ active: localConfigs.video.voice === opt.value }" @click="localConfigs.video.voice = opt.value as any">{{ opt.label }}</button>
+                    </div>
+                    <p class="ctrl-helper">TTS 语音合成的音色风格</p>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>画面比例</label>
+                    <div class="seg-ctrl">
+                      <button v-for="opt in [{ label: '16:9', value: '16:9' }, { label: '9:16', value: '9:16' }, { label: '1:1', value: '1:1' }]" :key="opt.value" type="button" class="seg-btn" :class="{ active: localConfigs.video.aspect_ratio === opt.value }" @click="localConfigs.video.aspect_ratio = opt.value as any">{{ opt.label }}</button>
+                    </div>
+                    <p class="ctrl-helper">视频输出分辨率与画面比例</p>
+                  </div>
+                </template>
+
               </div>
             </div>
           </div>
@@ -554,6 +591,7 @@ const getActiveAgentOutputLabel = computed(() => {
     reading: '拓展阅读文献',
     ppt: '演示幻灯课件',
     cartoon: '动画讲解视频',
+    video: '讲解视频',
   }
   return map[activeAgentId.value] || '学习资源'
 })

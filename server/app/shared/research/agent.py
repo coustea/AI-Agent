@@ -151,9 +151,6 @@ class ResearchAgent:
             errors=errors,
         )
 
-        logger.info("[ResearchAgent] completed: query=%r context_length=%d", task.query, len(summary))
-        return report
-
     async def _emit_event(self, event: dict[str, Any]) -> None:
         """补充展示语义后，把生命周期事件交还给调用方。"""
         if self.event_handler is None:

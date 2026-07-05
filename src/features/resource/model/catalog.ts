@@ -2,7 +2,6 @@ import type { LearningScenario, ResourceGenerationRequest } from './resource'
 import { getArtifactLabel } from '@/shared/content/kind'
 import {
   PhCpu as Cpu,
-  PhPaperPlaneTilt as Position,
   PhFileText as Document,
   PhShareNetwork as Share,
   PhNotePencil as Edit,
@@ -35,8 +34,6 @@ export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
 }
 
 export const agentMetaList = [
-  { id: 'master', name: '认知架构师', icon: Cpu, colorClass: 'text-blue' },
-  { id: 'assembler', name: '汇编归档仓', icon: Position, colorClass: 'text-indigo' },
   { id: 'content', name: '课程讲解', icon: Document, colorClass: 'text-blue' },
   { id: 'mindmap', name: '思维导图', icon: Share, colorClass: 'text-purple' },
   { id: 'code', name: '代码实操', icon: Cpu, colorClass: 'text-red' },

@@ -129,29 +129,44 @@ class SparkTtsService:
             "data": {"status": 2, "text": text_b64},
         }
 
+        import asyncio
         logger.info("Connecting to Spark TTS WebSocket API...")
         audio_data = bytearray()
 
-        async with websockets.connect(url, ssl=create_ssl_context()) as ws:
-            await ws.send(json.dumps(request_payload))
-            logger.info("Spark TTS request sent, waiting for audio frames...")
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with websockets.connect(url, ssl=create_ssl_context()) as ws:
+                    await ws.send(json.dumps(request_payload))
+                    logger.info("Spark TTS request sent, waiting for audio frames...")
 
-            async for message in ws:
-                resp = json.loads(message)
-                code = resp.get("code")
-                if code != 0:
-                    err_msg = resp.get("message", "Unknown error")
-                    raise RuntimeError(f"Spark TTS API returned error code {code}: {err_msg}")
+                    async for message in ws:
+                        resp = json.loads(message)
+                        code = resp.get("code")
+                        if code != 0:
+                            err_msg = resp.get("message", "Unknown error")
+                            raise RuntimeError(f"Spark TTS API returned error code {code}: {err_msg}")
 
-                data = resp.get("data", {})
-                audio_b64 = data.get("audio", "")
-                if audio_b64:
-                    audio_data.extend(base64.b64decode(audio_b64))
+                        data = resp.get("data", {})
+                        audio_b64 = data.get("audio", "")
+                        if audio_b64:
+                            audio_data.extend(base64.b64decode(audio_b64))
 
-                status = data.get("status")
-                if status == 2:  # Last frame
-                    logger.info("Received last audio frame from Spark TTS")
-                    break
+                        status = data.get("status")
+                        if status == 2:  # Last frame
+                            logger.info("Received last audio frame from Spark TTS")
+                            break
+                break  # Succeeded, exit retry loop
+            except Exception as e:
+                if attempt == max_retries:
+                    raise
+                wait_time = attempt * 2.0
+                logger.warning(
+                    "Spark TTS connection failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                    attempt, max_retries, e, wait_time
+                )
+                audio_data.clear()
+                await asyncio.sleep(wait_time)
 
         file_path.write_bytes(bytes(audio_data))
         logger.info("Saved Spark TTS output to %s", file_path)

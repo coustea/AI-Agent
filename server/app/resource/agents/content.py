@@ -67,9 +67,9 @@ class ContentAgent(BaseResourceAgent):
         # 执行搜索以获取最新/更全面的参考信息以生成更高质量的文档
         await self.emitter.send(self.agent_id, "running", "正在搜索相关课程讲解素材...", 30)
         search_query = f"{title_prefix} 教程 概念"
-        search_text = await self.search(search_query)
-
-        if "搜索失败" not in search_text and "未找到" not in search_text:
+        search_report = await self.search(search_query)
+        search_text = self.format_search_result(search_report)
+        if search_text:
             input_text = f"## 搜索到的参考背景信息\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建课程讲解提示词...", 45)

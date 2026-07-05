@@ -315,6 +315,21 @@ class PathPlannerAgent:
             )
             return build_fallback_plan(request)
 
+    @staticmethod
+    def _format_sources(report: "ResearchReport") -> str:
+        """将 ResearchReport.sources 格式化为纯文本上下文。"""
+        if not report.sources:
+            return ""
+        parts = []
+        for s in report.sources:
+            entry = s.title
+            if s.url:
+                entry += f"\n链接: {s.url}"
+            if s.summary:
+                entry += f"\n摘要: {s.summary}"
+            parts.append(entry)
+        return "\n\n".join(parts)
+
     async def _search(
         self,
         request: PathRequest,
@@ -333,8 +348,8 @@ class PathPlannerAgent:
                     depth="standard",
                 )
             )
-            context = report.context.strip()
-            if not context or not report.has_usable_evidence:
+            context = self._format_sources(report)
+            if not context:
                 return ""
 
             return (

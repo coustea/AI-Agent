@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 
 BASE_WORKER_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
@@ -110,6 +110,17 @@ class TeachingPlan(BaseModel):
     schema_version: Literal["3.0"]
     global_plan: GlobalTeachingPlan
     worker_tasks: dict[str, WorkerTask] = Field(min_length=1)
+
+    @field_validator("global_plan", "worker_tasks", mode="before")
+    @classmethod
+    def deserialize_json_fields(cls, v: Any) -> Any:
+        import json
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                pass
+        return v
 
     @property
     def outline(self) -> list[TeachingOutlineItem]:

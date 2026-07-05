@@ -70,9 +70,9 @@ class MindmapAgent(BaseResourceAgent):
         # 执行搜索以丰富导图中的分支深度与细化概念
         await self.emitter.send(self.agent_id, "running", "正在搜索相关知识导图大纲...", 30)
         search_query = f"{title_prefix} 知识图谱 知识链路"
-        search_text = await self.search(search_query)
-
-        if "搜索失败" not in search_text and "未找到" not in search_text:
+        search_report = await self.search(search_query)
+        search_text = self.format_search_result(search_report)
+        if search_text:
             input_text = f"## 搜索到的相关知识大纲参考\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)

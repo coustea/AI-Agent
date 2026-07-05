@@ -60,9 +60,7 @@ const emit = defineEmits<{
   toggle: [id: ResourceAgentId]
 }>()
 
-const agents = computed(() => agentMetaList.filter(agent => (
-  !['master', 'assembler'].includes(agent.id)
-)))
+const agents = computed(() => agentMetaList)
 
 function isEnabled(id: string) {
   return props.enabledIds.includes(id as ResourceAgentId)

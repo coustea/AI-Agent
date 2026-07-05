@@ -6,7 +6,8 @@ API 端点：
 - POST /resources/single - 创建单智能体资源生成任务
 - GET /resources/{id}/status - 查询任务执行状态
 - GET /resources/{id}/events - SSE 推送任务事件
-- GET /agents - 查询可用 Agent 列表
+- GET /resources/agents - 查询可用 Agent 列表
+- GET /resources/ppt/templates - 查询 PPT 模板列表
 - GET /resources - 查询资源列表
 - GET /resources/{id} - 查询资源详情
 """
@@ -219,7 +220,7 @@ async def get_resource_events(
     )
 
 
-@router.get("/agents")
+@router.get("/resources/agents")
 async def list_agents():
     """查询当前资源生成前端可选择的 Agent 列表。"""
     agents: list[dict[str, Any]] = []
@@ -238,7 +239,7 @@ async def list_agents():
     return HttpResponse.success(data=agents)
 
 
-@router.get("/ppt/templates")
+@router.get("/resources/ppt/templates")
 async def list_ppt_templates(
     current_user: User = Depends(get_current_user),
 ):

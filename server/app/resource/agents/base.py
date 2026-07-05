@@ -147,6 +147,31 @@ class BaseResourceAgent:
                 errors=[ResearchError(stage="search", code="exception", message=str(exc))],
             )
 
+    # -- 搜索结果格式化 -------------------------------------------------------
+
+    def format_search_result(self, report: "ResearchReport", *, max_chars: int = 6000) -> str | None:
+        """将 ResearchReport 格式化为供 LLM 提示词使用的文本。
+
+        所有子类统一使用此方法处理搜索结果，避免对 ResearchReport
+        做字符串操作（如 ``"搜索失败" not in report``），那会因
+        Pydantic 对象不支持 ``in`` 运算而抛出 TypeError。
+
+        Returns:
+            格式化后的文本，如果搜索无有效结果则返回 None。
+        """
+        if not report.has_results:
+            return None
+        parts: list[str] = []
+        for src in report.sources:
+            entry = f"- {src.title}"
+            if src.url:
+                entry += f" ({src.url})"
+            if src.summary:
+                entry += f": {src.summary}"
+            parts.append(entry)
+        text = "\n".join(parts)
+        return text[:max_chars] if text else None
+
     # -- 子类必须实现的入口 ----------------------------------------------------
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
