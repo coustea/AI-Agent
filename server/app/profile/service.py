@@ -296,76 +296,84 @@ class ProfileService:
         *,
         user_id: int,
         payload: dict[str, Any],
+        db: AsyncSession,
     ) -> dict[str, Any]:
-        """保存 onboarding 基本信息（仅数据库层写入，不执行 LLM）。"""
+        """保存 onboarding 基本信息（仅数据库层写入，不执行 LLM）。
+
+        必须传入请求作用域的 db session，确保写入在响应前提交。
+        """
         logger.info("[ProfileService] onboarding 写入开始: user_id=%s school=%s major=%s",
                      user_id, payload.get("school"), payload.get("major"))
+
+        base_info = payload.copy()
+        school_name = base_info.get("school")
+        if school_name:
+            school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
+            base_info["school_level"] = school.level if school and school.level else None
+
+        profile = await self.get_profile(user_id=user_id, db=db)
+
+        profile_json = profile.profile_json or deepcopy(default_profile_json)
+        profile_json["base_info"] = base_info
+        profile.profile_json = profile_json
+        profile.updated_at = datetime.now(timezone.utc)
+
+        db.add(profile)
+        await db.flush()
+
+        result = {
+            "user_id": profile.user_id,
+            "module": profile.module,
+            "profile_json": profile.profile_json or {},
+            "updated_at": profile.updated_at,
+        }
+        logger.info("[ProfileService] onboarding 写入完成: user_id=%s updated_at=%s",
+                     profile.user_id, profile.updated_at)
+        return result
+
+    async def infer_profile_from_onboarding(self, *, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        """从 onboarding 信息推理 7 维度画像并评分。
+
+        推理和评分全部在调用方请求内同步完成。
+        失败时抛出异常，由调用方决定如何处理。
+        """
+        logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
+
         async with session_scope() as db:
-            base_info = payload.copy()
-            school_name = base_info.get("school")
-            if school_name:
-                school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
-                base_info["school_level"] = school.level if school and school.level else None
+            profile = await self.get_profile(user_id=user_id, db=db)
+            profile_json = profile.profile_json or deepcopy(default_profile_json)
+            base_info = profile_json.get("base_info", {})
+
+            logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
+            prompt = prompts.get("profile").render(
+                "onboarding",
+                onboarding_data=json.dumps(base_info, ensure_ascii=False),
+            )
+            resp = await self.llm.ainvoke_json(
+                ProfileDimensionsPatch,
+                [HumanMessage(content=prompt)],
+            )
+
+            dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
+                            for k, v in resp.dimensions_patch.items()}
+            logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
+                        user_id, dims_summary)
 
             profile = await self.get_profile(user_id=user_id, db=db)
 
             profile_json = profile.profile_json or deepcopy(default_profile_json)
-            profile_json["base_info"] = base_info
+            profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
             profile.profile_json = profile_json
             profile.updated_at = datetime.now(timezone.utc)
 
             db.add(profile)
             await db.flush()
 
-            result = {
-                "user_id": profile.user_id,
-                "module": profile.module,
-                "profile_json": profile.profile_json or {},
-                "updated_at": profile.updated_at,
-            }
-            logger.info("[ProfileService] onboarding 写入完成: user_id=%s updated_at=%s",
-                         profile.user_id, profile.updated_at)
-            return result
+        score_result = await self.score_profile(user_id=user_id)
+        logger.info("[ProfileService] onboarding 推理+评分完成: user_id=%s dimensions_updated=%s overall_score=%s",
+                     user_id, list(dims_summary.keys()), score_result.get("overall_score"))
 
-    async def infer_profile_from_onboarding(self, *, user_id: int, payload: dict[str, Any]) -> None:
-        """从 onboarding 信息推理 7 维度画像并评分。"""
-        logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
-        try:
-            async with session_scope() as db:
-                profile = await self.get_profile(user_id=user_id, db=db)
-                profile_json = profile.profile_json or deepcopy(default_profile_json)
-                base_info = profile_json.get("base_info", {})
-
-                logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
-                prompt = prompts.get("profile").render(
-                    "onboarding",
-                    onboarding_data=json.dumps(base_info, ensure_ascii=False),
-                )
-                resp = await self.llm.ainvoke_json(
-                    ProfileDimensionsPatch,
-                    [HumanMessage(content=prompt)],
-                )
-
-                dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
-                                for k, v in resp.dimensions_patch.items()}
-                logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
-                            user_id, dims_summary)
-
-                profile = await self.get_profile(user_id=user_id, db=db)
-
-                profile_json = profile.profile_json or deepcopy(default_profile_json)
-                profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
-                profile.profile_json = profile_json
-                profile.updated_at = datetime.now(timezone.utc)
-
-                db.add(profile)
-                await db.flush()
-
-            score_result = await self.score_profile(user_id=user_id)
-            logger.info("[ProfileService] onboarding 推理+评分完成: user_id=%s dimensions_updated=%s overall_score=%s",
-                         user_id, list(dims_summary.keys()), score_result.get("overall_score"))
-        except Exception as exc:
-            logger.error("[ProfileService] background onboarding inference failed: user_id=%s err=%s", user_id, exc)
+        return score_result
 
     async def infer_profile_from_tutoring(self, *, user_id: int, session_id: str) -> dict[str, Any]:
         """从辅导对话推理更新全局画像。"""

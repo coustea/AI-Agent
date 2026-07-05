@@ -75,7 +75,7 @@ COMMENT ON COLUMN schools.level IS '学校层次，如小学/初中/高中';
 COMMENT ON COLUMN schools.tier IS '学校等级';
 
 -- ============================================================
--- 4. chat_sessions
+-- 4. chat_sessionss
 -- ============================================================
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id                      UUID            PRIMARY KEY DEFAULT gen_random_uuid(),

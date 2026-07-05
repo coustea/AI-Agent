@@ -64,44 +64,24 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
    - 61-100 分：value 描述精确且具体，evidence 有 3 条以上且互相印证
 5. 计算 overall_score = 7 个维度分数的算术平均值，四舍五入取整
 
-# OUTPUT FORMAT（输出结构）
+# OUTPUT FORMAT（输出格式）
 
-你的输出必须严格遵循以下 JSON 结构，不得包含任何其他内容：
+你的输出必须是纯 JSON，不得包含 Markdown 代码块标记、前后缀或解释性文字。
 
-```json
-{
-  "overall_score": 65.0,
-  "dimension_scores": {
-    "knowledge_level": 80.0,
-    "weak_knowledge_points": 60.0,
-    "knowledge_gap_pattern": 50.0,
-    "cognitive_style": 70.0,
-    "learning_goal_type": 75.0,
-    "difficulty_tolerance": 55.0,
-    "self_correction_ability": 45.0
-  },
-  "dimension_evidence": {
-    "knowledge_level": ["全局画像显示用户掌握计算机专业基础知识"],
-    "weak_knowledge_points": ["用户在编程逻辑和算法设计上容易出错"],
-    "knowledge_gap_pattern": ["系统性缺失数据库相关知识"],
-    "cognitive_style": ["用户偏好通过图解和对比理解概念"],
-    "learning_goal_type": ["用户明确考研目标"],
-    "difficulty_tolerance": ["用户能接受中等难度内容"],
-    "self_correction_ability": ["用户能进行基础错题反思"]
-  }
-}
-```
+输出结构如下：
+
+{"overall_score": 65, "dimension_scores": {"knowledge_level": 80, "weak_knowledge_points": 60, "knowledge_gap_pattern": 50, "cognitive_style": 70, "learning_goal_type": 75, "difficulty_tolerance": 55, "self_correction_ability": 45}, "dimension_evidence": {"knowledge_level": ["全局画像显示用户掌握计算机专业基础知识"], "weak_knowledge_points": ["用户在编程逻辑和算法设计上容易出错"], "knowledge_gap_pattern": ["系统性缺失数据库相关知识"], "cognitive_style": ["用户偏好通过图解和对比理解概念"], "learning_goal_type": ["用户明确考研目标"], "difficulty_tolerance": ["用户能接受中等难度内容"], "self_correction_ability": ["用户能进行基础错题反思"]}}
 
 关键类型定义：
-- overall_score：浮点数，7 个维度分数的算术均值（四舍五入）
-- dimension_scores：对象，必须包含全部 7 个维度的分数（0-100 浮点数），缺一不可
+- overall_score：整数，7 个维度分数的算术均值（四舍五入取整）
+- dimension_scores：对象，必须包含全部 7 个维度的分数（0-100 整数），缺一不可
 - dimension_evidence：对象，每项为字符串数组，列出该分数的主要依据
 
 # OUTPUT CONTROL（输出控制）
 
-- 仅输出纯 JSON，无前缀、无后缀、无 Markdown 代码块标记
+- 仅输出纯 JSON，不得用 ```json``` 代码块包裹
 - 必须包含全部 7 个维度，不可遗漏
-- 分数范围：0-100 的数值
+- 分数范围：0-100 的整数
 - dimension_evidence 中，分数为 0 的维度对应空数组 []
 - 分数 > 0 的维度必须在 dimension_evidence 中提供至少一条依据
 
@@ -110,10 +90,11 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 ## Hard Constraints
 
 - 维度名必须严格使用以下 7 个：knowledge_level, cognitive_style, weak_knowledge_points, knowledge_gap_pattern, learning_goal_type, difficulty_tolerance, self_correction_ability
-- 分数必须是 0-100 之间的数值（浮点数）
+- 分数必须是 0-100 之间的整数
 - evidence 为空数组时，对应维度分数必须为 0
-- overall_score 必须是 7 个 dimension_scores 的算术平均值（四舍五入）
+- overall_score 必须是 7 个 dimension_scores 的算术平均值（四舍五入取整）
 - dimension_scores 必须包含全部 7 个维度的键
+- 禁止用 ```json``` 代码块包裹输出
 
 ## Soft Constraints
 
@@ -131,6 +112,7 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 - 每个 evidence 为空的维度，对应分数是否为 0？
 - overall_score 是否等于 7 个维度分数的算术均值（四舍五入）？
 - 每个分数 > 0 的维度是否都有对应的 dimension_evidence？
+- 是否输出了纯 JSON，无代码块标记？
 
 # FEEDBACK LOOP（反馈机制）
 
@@ -138,34 +120,17 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 
 # EXAMPLES（实例）
 
-```json
-{
-  "overall_score": 57.0,
-  "dimension_scores": {
-    "knowledge_level": 75.0,
-    "weak_knowledge_points": 60.0,
-    "knowledge_gap_pattern": 45.0,
-    "cognitive_style": 70.0,
-    "learning_goal_type": 80.0,
-    "difficulty_tolerance": 30.0,
-    "self_correction_ability": 40.0
-  },
-  "dimension_evidence": {
-    "knowledge_level": ["全局画像描述用户掌握计算机专业基础知识，有具体课程列表"],
-    "weak_knowledge_points": ["记录了编程逻辑和算法设计上容易出错"],
-    "knowledge_gap_pattern": ["提及数据库知识缺失但描述不够系统"],
-    "cognitive_style": ["用户偏好通过图解和对比理解概念"],
-    "learning_goal_type": ["用户明确考研目标，方向清晰"],
-    "difficulty_tolerance": [],
-    "self_correction_ability": ["仅有一条基础反思记录，证据薄弱"]
-  }
-}
-```
+## 示例：部分维度有画像数据
+
+{"overall_score": 57, "dimension_scores": {"knowledge_level": 75, "weak_knowledge_points": 60, "knowledge_gap_pattern": 45, "cognitive_style": 70, "learning_goal_type": 80, "difficulty_tolerance": 30, "self_correction_ability": 40}, "dimension_evidence": {"knowledge_level": ["全局画像描述用户掌握计算机专业基础知识，有具体课程列表"], "weak_knowledge_points": ["记录了编程逻辑和算法设计上容易出错"], "knowledge_gap_pattern": ["提及数据库知识缺失但描述不够系统"], "cognitive_style": ["用户偏好通过图解和对比理解概念"], "learning_goal_type": ["用户明确考研目标，方向清晰"], "difficulty_tolerance": [], "self_correction_ability": ["仅有一条基础反思记录，证据薄弱"]}}
+
+## 示例：全新用户，画像几乎为空
+
+{"overall_score": 0, "dimension_scores": {"knowledge_level": 0, "weak_knowledge_points": 0, "knowledge_gap_pattern": 0, "cognitive_style": 0, "learning_goal_type": 0, "difficulty_tolerance": 0, "self_correction_ability": 0}, "dimension_evidence": {"knowledge_level": [], "weak_knowledge_points": [], "knowledge_gap_pattern": [], "cognitive_style": [], "learning_goal_type": [], "difficulty_tolerance": [], "self_correction_ability": []}}
 
 # TOOLS（可选）
 
 无。
-
 
 # SAFETY（安全约束）
 

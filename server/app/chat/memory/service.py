@@ -902,54 +902,6 @@ class ChatMemoryService:
             lines.append(f"{role_label}：{content[:700]}")
         return "\n".join(lines), len(messages), latest_message_id
 
-    # -------------------------------------------------------------------
-    # save_diagram: 持久化教学图解
-    # -------------------------------------------------------------------
-    async def save_diagram(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        message_id: int | None = None,
-        diagram_json: dict[str, Any],
-    ) -> Any:
-        """保存教学图解到数据库。"""
-        from app.infra.models import ChatDiagram
-        async with session_scope() as db:
-            diagram = ChatDiagram(
-                user_id=user_id,
-                session_id=session_id,
-                message_id=message_id,
-                graph_type=diagram_json.get("graph_type", ""),
-                title=diagram_json.get("title", ""),
-                diagram_json=diagram_json,
-            )
-            db.add(diagram)
-            await db.commit()
-            await db.refresh(diagram)
-            return diagram
-
-    async def list_diagrams(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        limit: int = 20,
-    ) -> list[Any]:
-        """获取会话的历史图解列表。"""
-        from app.infra.models import ChatDiagram
-        async with session_scope() as db:
-            stmt = (
-                select(ChatDiagram)
-                .where(
-                    ChatDiagram.user_id == user_id,
-                    ChatDiagram.session_id == session_id,
-                )
-                .order_by(ChatDiagram.created_at.desc())
-                .limit(limit)
-            )
-            return list((await db.exec(stmt)).all())
-
 
 _chat_memory_service: ChatMemoryService | None = None
 

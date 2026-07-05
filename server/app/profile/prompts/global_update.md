@@ -64,37 +64,27 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 4. 如果有需要更新的维度 → 设置 should_update: true，输出 dimensions_patch
 5. 如果所有证据都已在当前画像中体现或证据不足 → 设置 should_update: false，输出空的 dimensions_patch
 
-# OUTPUT FORMAT（输出结构）
+# OUTPUT FORMAT（输出格式）
 
-你的输出必须严格遵循以下 JSON 结构，不得包含任何其他内容：
+你的输出必须是纯 JSON，不得包含 Markdown 代码块标记、前后缀或解释性文字。
 
-```json
-{
-  "should_update": true,
-  "dimensions_patch": {
-    "cognitive_style": {
-      "value": "更容易通过对比理解概念，倾向于视觉型学习",
-      "evidence": [
-        "用户多次要求用例题解释抽象概念并且喜欢对比表格",
-        "用户偏好图解而非纯文字说明"
-      ]
-    }
-  }
-}
-```
+输出结构如下：
+
+{"should_update": true, "dimensions_patch": {"<维度名>": {"value": "<更新后描述>", "evidence": ["<行为证据>"]}}}
 
 关键类型定义：
 - should_update：布尔值，true 表示存在值得记录的画像变化
 - dimensions_patch：对象，key 为需要更新的维度名，value 为 {value, evidence} 对象
-- value：字符串，更新后的文字描述（合并新旧证据后的综合描述）
+- value：字符串，更新后的文字描述（合并新旧证据后的综合描述），不超过 80 字
 - evidence：字符串数组，每项为新发现的具体行为证据（引用自对话）
 
 # OUTPUT CONTROL（输出控制）
 
-- 仅输出纯 JSON，无前缀、无后缀、无 Markdown 代码块标记
+- 仅输出纯 JSON，不得用 ```json``` 代码块包裹
 - should_update 为 false 时，dimensions_patch 应为空对象 {}
 - dimensions_patch 中仅包含有足够证据的维度
 - 每个 value 描述融合新旧信息，不超过 80 字
+- 禁止输出空维度（value 为空字符串或 evidence 为空数组的维度应省略）
 
 # CONSTRAINTS（约束）
 
@@ -104,6 +94,7 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 - 不得编造对话中不存在的行为作为 evidence
 - 必须在 should_update 为 true 时提供至少一条具体 evidence
 - 维度名必须使用以下 7 个之一：knowledge_level, cognitive_style, weak_knowledge_points, knowledge_gap_pattern, learning_goal_type, difficulty_tolerance, self_correction_ability
+- 禁止用 ```json``` 代码块包裹输出
 
 ## Soft Constraints
 
@@ -123,6 +114,7 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 - evidence 是否均为对话观察，而非推断或常识？
 - dimensions_patch 中是否有内容属于课程画像而非全局画像？
 - 维度名是否在 7 个允许的范围内？
+- 是否输出了纯 JSON，无代码块标记？
 
 # FEEDBACK LOOP（反馈机制）
 
@@ -130,36 +122,17 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 
 # EXAMPLES（实例）
 
-## 示例: 检测到稳定认知风格，需要更新
+## 示例：检测到稳定认知风格，需要更新
 
-```json
-{
-  "should_update": true,
-  "dimensions_patch": {
-    "cognitive_style": {
-      "value": "更容易通过对比理解概念，倾向于视觉型学习",
-      "evidence": [
-        "用户多次要求用例题解释抽象概念并且喜欢对比表格",
-        "用户偏好图解而非纯文字说明"
-      ]
-    }
-  }
-}
-```
+{"should_update": true, "dimensions_patch": {"cognitive_style": {"value": "更容易通过对比理解概念，倾向于视觉型学习", "evidence": ["用户多次要求用例题解释抽象概念并且喜欢对比表格", "用户偏好图解而非纯文字说明"]}}}
 
-## 示例: 证据不足，不需要更新
+## 示例：证据不足，不需要更新
 
-```json
-{
-  "should_update": false,
-  "dimensions_patch": {}
-}
-```
+{"should_update": false, "dimensions_patch": {}}
 
 # TOOLS（可选）
 
 无。
-
 
 # SAFETY（安全约束）
 

@@ -28,7 +28,7 @@ interface ComparisonDimension {
   name: string
   left: string
   right: string
-  highlight?: string | null
+  highlight?: boolean | null
 }
 
 interface VisualSummary {
@@ -230,6 +230,7 @@ export interface ChatMessageItem {
     detail?: Record<string, unknown>
   }>
   usage_metadata?: Record<string, unknown> | null
+  diagram?: TeachingDiagram | null
   created_at: string | null
 }
 

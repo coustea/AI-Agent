@@ -1789,7 +1789,8 @@ const loadHistoryFromAPI = async (sessionId: string) => {
       const contentAttachments = [...imageAttachments, ...fileAttachments]
       const attachments = contentAttachments.length > 0 ? contentAttachments : null
       const diagram = normalizeTeachingDiagram(
-        msg.usage_metadata?.diagram as TeachingDiagram | null | undefined,
+        msg.diagram as TeachingDiagram | null | undefined
+          ?? msg.usage_metadata?.diagram as TeachingDiagram | null | undefined,
       )
 
       return {

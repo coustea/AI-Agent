@@ -913,7 +913,6 @@ REGISTERED_MODELS = (
     ChatActivity,
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
-    ChatDiagram,
     GlobalProfile,
     CourseProfile,
     GeneratedResource,

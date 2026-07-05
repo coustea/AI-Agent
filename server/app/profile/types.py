@@ -130,6 +130,6 @@ class GlobalTutoringInferenceOutput(BaseModel):
 
 class ProfileScoreOutput(BaseModel):
     """画像评分推理输出 — 基于文字画像进行评分。"""
-    overall_score: float = 0
-    dimension_scores: dict[str, float] = Field(default_factory=dict)
+    overall_score: int = 0
+    dimension_scores: dict[str, int] = Field(default_factory=dict)
     dimension_evidence: dict[str, list[str]] = Field(default_factory=dict)

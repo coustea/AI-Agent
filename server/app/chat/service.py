@@ -178,10 +178,9 @@ async def chat(
         return
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
+    saved_message_id: int | None = None
     if not has_error and full_answer:
         usage_meta: dict[str, Any] = {}
-        if diagram_result:
-            usage_meta["diagram"] = diagram_result
         if sources:
             usage_meta["sources"] = sources
         if tool_invocations:
@@ -189,8 +188,10 @@ async def chat(
                 {"tool_name": inv.get("tool_name", ""), "payload": inv.get("payload", {})}
                 for inv in tool_invocations
             ]
+        if diagram_result:
+            usage_meta["diagram"] = diagram_result
 
-        await memory_svc.save_message(
+        saved = await memory_svc.save_message(
             user_id=user_id,
             session_id=effective_session,
             user_message_id=user_message_id,
@@ -198,6 +199,7 @@ async def chat(
             content=[{"type": "text", "text": full_answer}],
             usage_metadata=usage_meta or None,
         )
+        saved_message_id = saved.id
     elif not has_error:
         has_error = True
         yield {"event": "error", "data": "模型未生成可用回答"}
@@ -472,6 +474,7 @@ class ChatUseCases:
                     attachment_analyses=analyses_by_message.get(root_message_id, []) if is_final_assistant else [],
                     activities=activities_by_message.get(root_message_id, []) if is_final_assistant else [],
                     usage_metadata=message.usage_metadata if isinstance(message.usage_metadata, dict) else None,
+                    diagram=message.usage_metadata.get("diagram") if (is_final_assistant and isinstance(message.usage_metadata, dict)) else None,
                     created_at=message.created_at,
                 )
             )

@@ -469,7 +469,8 @@ def _preview(value: Any, *, limit: int = 50) -> str:
 
 def _result_preview(value: Any, *, limit: int = 500) -> str:
     if isinstance(value, Mapping):
-        value = value.get("text") or value.get("message") or value
+        # 优先提取 thought 字段作为结果摘要，避免展示整个 JSON
+        value = value.get("thought") or value.get("text") or value.get("message") or value
     return _preview(value, limit=limit)
 
 

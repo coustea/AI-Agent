@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -26,9 +25,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = get_logger(__name__)
 router = APIRouter()
-
-# 正在执行的 onboarding task，用于防抖去重
-_onboarding_tasks: dict[int, asyncio.Task] = {}
 
 
 @router.get("/profile")
@@ -72,58 +68,37 @@ async def get_profile_onboarding(
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ):
-    """更新 onboarding 信息并触发 LLM 推理生成画像和评分。
+    """更新 onboarding 信息：同步保存基础信息 → 同步 LLM 推理 → 同步评分。
 
-    流程：
-    1. 立即返回成功，用户可继续进入系统
-    2. 后台异步保存基础信息到数据库
-    3. 后台异步触发 LLM 推理，生成 7 维度文字画像
-    4. 自动计算并更新分数画像
+    全部同步完成后再返回，确保前端进入个人中心时画像和分数一定存在。
+    如果 LLM 推理失败，基础信息仍然保存成功，但返回警告。
     """
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
-
-    # 取消同用户正在运行的旧 task（防抖去重）
-    old_task = _onboarding_tasks.get(user_id)
-    if old_task and not old_task.done():
-        old_task.cancel()
-        logger.info("[ProfileAPI] cancelled previous onboarding task: user_id=%s", user_id)
-
-    # 全部后台执行，不阻塞用户
-    task = asyncio.create_task(
-        _run_onboarding_full_async(user_id, payload_data),
-        name=f"onboarding_full_{user_id}",
-    )
-    _onboarding_tasks[user_id] = task
-    task.add_done_callback(lambda t: _onboarding_tasks.pop(user_id, None))
-
-    logger.info("[ProfileAPI] onboarding accepted, background scheduled: user_id=%s", user_id)
-
-    return HttpResponse.success(data={
-        "inference_scheduled": True,
-    })
-
-
-async def _run_onboarding_full_async(user_id: int, payload: dict) -> None:
-    """后台异步运行 onboarding 全流程：保存基础信息 → LLM 推理 → 评分。"""
     svc = get_profile_service()
-    try:
-        # 1. 保存基础信息到数据库
-        await svc.save_onboarding_info(
-            user_id=user_id,
-            payload=payload,
-        )
-        logger.info("[ProfileAPI] onboarding save complete: user_id=%s", user_id)
-    except Exception as exc:
-        logger.error("[ProfileAPI] onboarding save failed: user_id=%s err=%s", user_id, exc)
-        return  # 保存失败则不继续推理
 
+    # 1. 同步保存基础信息
+    await svc.save_onboarding_info(
+        user_id=user_id,
+        payload=payload_data,
+        db=session,
+    )
+    logger.info("[ProfileAPI] onboarding base info saved: user_id=%s", user_id)
+
+    # 2. 同步 LLM 推理 + 评分（在同一个请求内完成）
+    inference_ok = False
     try:
-        # 2. LLM 推理 + 评分
         await svc.infer_profile_from_onboarding(
             user_id=user_id,
-            payload=payload,
+            payload=payload_data,
         )
+        inference_ok = True
+        logger.info("[ProfileAPI] onboarding inference + scoring done: user_id=%s", user_id)
     except Exception as exc:
         logger.error("[ProfileAPI] onboarding inference failed: user_id=%s err=%s", user_id, exc)
+
+    return HttpResponse.success(data={
+        "inference_ok": inference_ok,
+    })

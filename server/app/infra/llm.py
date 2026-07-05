@@ -22,7 +22,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from app.config import DEFAULT_TEMPERATURE, JSON_TEMPERATURE, STRUCTURED_OUTPUT_STRATEGY, VISION_TEMPERATURE, get
+from app.config import DEFAULT_TEMPERATURE, JSON_TEMPERATURE, STREAM_TEMPERATURE, STRUCTURED_OUTPUT_STRATEGY, VISION_TEMPERATURE, get
 from app.infra.logging import get_logger
 from app.infra.utils import ServiceError, parse_first_json_object
 

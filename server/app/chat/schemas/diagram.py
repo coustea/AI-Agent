@@ -52,7 +52,7 @@ class ComparisonDimension(BaseModel):
     name: str = Field(max_length=20, description="维度名称")
     left: str = Field(max_length=60, description="左侧内容")
     right: str = Field(max_length=60, description="右侧内容")
-    highlight: Optional[str] = Field(default=None, max_length=60, description="重点标注")
+    highlight: Optional[bool] = Field(default=None, description="是否高亮该维度")
 
 
 class VisualSummary(BaseModel):
@@ -116,14 +116,14 @@ class SequencePayload(BaseModel):
 # ---- 4. 知识框架图 ----
 
 class FrameworkModule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    title: str = Field(max_length=20, description="模块标题")
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    title: str = Field(alias="name", max_length=20, description="模块标题")
     items: list[str] = Field(min_length=1, max_length=8, description="知识点列表")
 
 
 class FrameworkPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    center: str = Field(max_length=20, description="中心主题")
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    center: str = Field(alias="root", max_length=20, description="中心主题")
     modules: list[FrameworkModule] = Field(min_length=2, max_length=8, description="模块列表")
 
 

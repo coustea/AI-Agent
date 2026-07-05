@@ -355,19 +355,23 @@ UPDATE_MIN_TOKENS = get("memory.update_min_tokens", 6000)
 LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
 
 # ============ 模型推理参数 ============
-# JSON 结构化输出温度（低温度确保格式稳定）
-JSON_TEMPERATURE = get("models.json_temp", 0.1)
-# 流式对话输出温度（高温度增加创意性和自然感）
-STREAM_TEMPERATURE = get("models.stream_temp", 1.1)
-# 普通文本生成温度（中等温度平衡确定性和多样性）
-DEFAULT_TEMPERATURE = get("models.default_temp", 0.7)
+# JSON 结构化输出温度（低温度确保格式稳定，必须在 config.yaml 中配置 models.json_temp）
+JSON_TEMPERATURE = get("models.json_temp")
+assert JSON_TEMPERATURE is not None, "config.yaml 缺少 models.json_temp 配置"
+# 流式对话输出温度（高温度增加创意性和自然感，必须在 config.yaml 中配置 models.stream_temp）
+STREAM_TEMPERATURE = get("models.stream_temp")
+assert STREAM_TEMPERATURE is not None, "config.yaml 缺少 models.stream_temp 配置"
+# 普通文本生成温度（中等温度平衡确定性和多样性，必须在 config.yaml 中配置 models.default_temp）
+DEFAULT_TEMPERATURE = get("models.default_temp")
+assert DEFAULT_TEMPERATURE is not None, "config.yaml 缺少 models.default_temp 配置"
 # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
 # function_calling_first — 优先 function_calling，失败后降级 json_mode → prompt
 # json_mode_first — 跳过 function_calling，直接 json_mode，失败后降级 prompt
 # prompt_first — 仅 prompt 注入 + 手动解析
 STRUCTURED_OUTPUT_STRATEGY = get("models.structured_output_strategy", "function_calling_first")
-# 视觉模型温度参数（通常需要更高的创造性）
-VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
+# 视觉模型温度参数（必须在 config.yaml 中配置 models.vision.temperature）
+VISION_TEMPERATURE = get("models.vision.temperature")
+assert VISION_TEMPERATURE is not None, "config.yaml 缺少 models.vision.temperature 配置"
 
 # ============ Chat 扩展配置 ============
 # 支持的图片扩展名集合

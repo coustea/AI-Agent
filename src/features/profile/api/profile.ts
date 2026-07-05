@@ -29,7 +29,9 @@ export function getProfileOnboarding() {
 }
 
 export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
-  return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
+  return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload, {
+    timeout: 60000, // LLM 推理 + 评分需要较长耗时
+  })
 }
 
 
