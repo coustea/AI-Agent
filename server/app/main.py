@@ -15,9 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from app.config import WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
-from app.infra.logging import configure_logging
+from app.infra.logging import configure_logging, get_logger
 from app.infra.prompts import prompts
 from app.routes import install_routes
+from app.rag.retriever import check_index_health
 
 
 @asynccontextmanager
@@ -38,6 +39,20 @@ async def lifespan(app: FastAPI):
     await init_db()
     # 执行数据库连接检查，确保连接可用
     await check_all()
+
+    # 知识库索引健康检查（非阻塞，不影响启动）
+    try:
+        health = check_index_health()
+        if health.ready:
+            get_logger("main").info(
+                "Knowledge index ready: %d chunks", health.chunk_count
+            )
+        else:
+            get_logger("main").warning(
+                "Knowledge index not ready: %s", health.reason
+            )
+    except Exception as exc:
+        get_logger("main").warning("Knowledge index check failed: %s", exc)
 
     # yield 将控制权交给 FastAPI 应用，开始处理请求
     yield
