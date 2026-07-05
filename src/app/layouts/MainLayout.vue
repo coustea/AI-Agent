@@ -95,6 +95,7 @@ import {
   ClockIcon as Clock,
   CompassIcon as Connection,
   CpuIcon as Cpu,
+  GitBranchIcon as Branch,
   GraduationCapIcon as DataBoard,
   LayoutDashboardIcon as Menu,
   LibraryBigIcon as Collection,
@@ -139,6 +140,8 @@ const navItems = [
 
 useAuthPolling(60000)
 
+navItems.push({ path: '/algorithm-visualizer', label: '算法可视化', icon: Branch, theme: 'nav-theme-visualizer' })
+
 const activePath = computed(() => {
   const current = pendingPath.value || route.path
   if (current.startsWith('/resource-generator') || current.startsWith('/resource-detail') || current.startsWith('/ai/resources/history')) {
@@ -152,6 +155,9 @@ const activePath = computed(() => {
   }
   if (current.startsWith('/question-bank')) {
     return '/question-bank'
+  }
+  if (current.startsWith('/algorithm-visualizer')) {
+    return '/algorithm-visualizer'
   }
   if (current.startsWith('/profile')) {
     return '/profile'

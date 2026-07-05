@@ -18,6 +18,7 @@ const Profile = () => import('@/features/profile/views/Profile.vue')
 const ResourceDetail = () => import('@/features/resource/views/ResourceDetail.vue')
 const QuestionBank = () => import('@/features/question-bank/views/QuestionBank.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
+const AlgorithmVisualizer = () => import('@/features/algorithm-visualization/views/AlgorithmVisualization.vue')
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: () => (hasAuthToken() ? '/dashboard' : '/login') },
@@ -41,6 +42,14 @@ export const routes: RouteRecordRaw[] = [
       { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
       { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },
+      {
+        path: 'algorithm-visualizer',
+        name: 'AlgorithmVisualizer',
+        component: AlgorithmVisualizer,
+        meta: {
+          title: '算法可视化',
+        },
+      },
     ],
   },
 ]

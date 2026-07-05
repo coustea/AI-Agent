@@ -22,6 +22,8 @@ from app.evaluation.api import router as evaluation_router
 from app.path.api import router as path_router
 # 学习资源路由
 from app.resource.api import router as resource_router
+# 算法可视化路由
+from app.algorithm_visualizer.api import router as visualizer_router
 # WebSocket 路由
 from app.ws import router as websocket_router
 
@@ -42,6 +44,8 @@ def install_routes(app: FastAPI) -> None:
     """
     # 用户认证模块：/api/v1/users/*
     app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
+    # 算法可视化模块：/api/v1/ai/algorithm-visualizer/*
+    app.include_router(visualizer_router, prefix="/api/v1/ai", tags=["visualizer"])
     # AI 聊天模块：/api/v1/ai/chat/*
     app.include_router(chat_router, prefix="/api/v1/ai", tags=["ai"])
     # 仪表盘模块：/api/v1/ai/dashboard/*
