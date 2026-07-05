@@ -1,2 +1,1 @@
-"""RAG package for knowledge retrieval and indexing."""
-
+"""RAG package — local textbook knowledge retrieval."""
