@@ -1,23 +1,28 @@
-# Onboarding Dialog Redesign Implementation Plan (Glacier Teal System Aligned)
+# Onboarding Dialog Redesign Implementation Plan (Glacier Teal & Panels Layout)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign the first-login onboarding information page to have 100% zero rounded corners (sharp edges) while strictly preserving the system's "Glacier Teal" color palette, theme tokens, and typography.
+**Goal:** Redesign the onboarding dialog to have 100% zero rounded corners, replacing the legacy "cards-inside-a-card" layout with a clean, flat "panels and vertical dividers" layout aligned with the Glacier Teal style.
 
-**Architecture:** Modify the CSS in `OnboardingDialog.vue` to override all `border-radius` styles to 0px, implement a horizontal progress bar instead of a circular progress ring, and style chat elements as sharp academic notecards using the existing Glacier Teal variables.
+**Architecture:** 
+1. Remove all borders, backgrounds, and shadows from `.step-rail`, `.chat-card`, and `.profile-panel`.
+2. Set `.onboarding-workspace` to have `gap: 0` and make it flush with the main container. Add a top border to separate the workspace from the header.
+3. Add vertical border dividers: a right border on `.step-rail` and a right border on `.chat-card` (separating them from `.chat-card` and `.profile-panel`, respectively).
+4. Remove rounded corners (`border-radius: 0px`) on all elements including bubbles, avatars, buttons, progress badges, skip buttons, and dropdowns.
+5. Replace the circular progress ring with a horizontal rectangular progress bar inside the right panel.
 
 **Tech Stack:** Vue 3, TypeScript, Tailwind v4, CSS.
 
 ---
 
-### Task 1: Zero Rounded Corners on Container, Header, and Step Rail
+### Task 1: Zero Rounded Corners and Panel Layout Re-Alignment
 
 **Files:**
 - Modify: `src/features/auth/components/OnboardingDialog.vue`
 
-- [ ] **Step 1: Replace container dialog styles to remove rounded corners (preserving original colors)**
+- [ ] **Step 1: Update main container to remove rounded corners**
 
-Replace lines 1229-1246 in CSS:
+Modify `.onboarding-container` in CSS (around line 1229):
 ```css
 .onboarding-container {
   position: relative;
@@ -39,164 +44,43 @@ Replace lines 1229-1246 in CSS:
 }
 ```
 
-- [ ] **Step 2: Replace skip button, progress badge, and header elements to remove rounded corners (preserving colors)**
+- [ ] **Step 2: Update workspace to be a seamless panel layout**
 
-Replace lines 1274-1293 and lines 1310-1318 in CSS:
+Modify `.onboarding-workspace` to remove gap and margins, and add top border (around line 1383):
 ```css
-.progress-badge {
-  position: absolute;
-  top: 32px;
-  left: 24px;
-  z-index: 4;
-  min-width: 96px;
-  height: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 7px 12px;
-  border: 1px solid rgba(158, 218, 216, 0.78);
-  border-radius: 0px; /* zero rounded corners */
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(14px);
-  box-shadow:
-      0 12px 28px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.9) inset;
-}
-
-.skip-btn {
-  position: absolute;
-  top: 40px;
-  right: 24px;
-  z-index: 5;
-  height: 32px;
-  padding: 0 15px;
-  border: 1px solid rgba(158, 218, 216, 0.76);
-  border-radius: 0px; /* zero rounded corners */
-  background: rgba(255, 255, 255, 0.66);
-  color: #41676d;
-  font-size: 12px;
-  font-weight: 850;
-  cursor: pointer;
-  backdrop-filter: blur(14px);
-  transition:
-      transform 0.18s ease,
-      border-color 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease,
-      box-shadow 0.18s ease;
+.onboarding-workspace {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) 230px;
+  gap: 0px; /* no gaps between panels */
+  margin: 0px; /* flush with container edges */
+  border-top: 1px solid rgba(190, 230, 229, 0.74); /* top panel boundary */
 }
 ```
 
-- [ ] **Step 3: Modify step timeline and rail styles to remove rounded corners**
+- [ ] **Step 3: Redesign `.step-rail` as a sidebar panel with a vertical divider**
 
-Replace lines 1393-1404 and steps items styles in CSS:
+Modify `.step-rail` CSS (around line 1393):
 ```css
-.step-rail,
-.profile-panel {
+.step-rail {
+  padding: 16px 12px;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(183, 226, 224, 0.9);
-  border-radius: 0px; /* zero rounded corners */
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-      0 16px 42px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.94) inset;
+  border-radius: 0px;
+  background: rgba(255, 255, 255, 0.45);
+  border: none;
+  border-right: 1px solid rgba(190, 230, 229, 0.74); /* vertical divider */
+  box-shadow: none;
   backdrop-filter: blur(18px);
 }
-
-.step-rail-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border-radius: 0px; /* zero rounded corners */
-  background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
-  color: var(--color-primary-text);
-}
-
-.step-item {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  min-height: 46px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 0px; /* zero rounded corners */
-  color: #6b7f87;
-}
-
-.step-item.active {
-  border-color: rgba(20, 160, 157, 0.34);
-  background: rgba(231, 250, 248, 0.8);
-  color: var(--color-primary-text);
-}
-
-.step-item.done {
-  color: #315f66;
-  background: rgba(248, 253, 252, 0.88);
-}
-
-.step-index {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 0px; /* zero rounded corners */
-  color: #78919a;
-  background: rgba(236, 248, 247, 0.9);
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.step-item.active .step-index,
-.step-item.done .step-index {
-  color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-}
 ```
+And make sure step navigation items (`.step-rail-title`, `.step-item`, `.step-index`) have `border-radius: 0px`.
 
-- [ ] **Step 4: Clean up `.title-mark` visual indicators in header to remove rounded corners**
+- [ ] **Step 4: Redesign `.chat-card` as a center panel with a vertical divider**
 
-Replace `.title-mark` styles in CSS:
-```css
-.title-mark span:first-child {
-  width: 32px;
-  height: 5px;
-  border-radius: 0px; /* zero rounded corners */
-  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.2);
-}
-
-.title-mark span:last-child {
-  width: 6px;
-  height: 6px;
-  border-radius: 0px; /* zero rounded corners */
-  background: #93c5fd;
-}
-```
-
-- [ ] **Step 5: Verify and Commit**
-
-Run:
-```bash
-git add src/features/auth/components/OnboardingDialog.vue
-git commit -m "style: remove rounded corners on container, badge, and step rail"
-```
-
----
-
-### Task 2: Redesign Chat Card, Message Bubbles, and Quick Reply Tags
-
-**Files:**
-- Modify: `src/features/auth/components/OnboardingDialog.vue`
-
-- [ ] **Step 1: Remove rounded corners on `.chat-card` and `.current-question`**
-
-Replace lines 1500-1524 in CSS:
+Modify `.chat-card` CSS (around line 1500):
 ```css
 .chat-card {
   position: relative;
@@ -206,143 +90,100 @@ Replace lines 1500-1524 in CSS:
   grid-template-rows: auto minmax(0, 1fr) auto;
   margin: 0;
   overflow: hidden;
-  border: 1px solid rgba(183, 226, 224, 0.96);
-  border-radius: 0px; /* zero rounded corners */
+  border: none;
+  border-right: 1px solid rgba(190, 230, 229, 0.74); /* vertical divider */
+  border-radius: 0px;
   background: rgba(255, 255, 255, 0.86);
-  box-shadow:
-      0 18px 48px rgba(15, 23, 42, 0.08),
-      0 1px 0 rgba(255, 255, 255, 0.95) inset;
+  box-shadow: none;
   backdrop-filter: blur(18px);
 }
-
-.current-question {
-  display: block;
-  padding: 16px 22px;
-  border-bottom: 1px solid rgba(203, 235, 233, 0.82);
-  background:
-      linear-gradient(120deg, rgba(232, 250, 248, 0.92), rgba(255, 255, 255, 0.94) 54%, rgba(240, 253, 250, 0.88)),
-      #ffffff;
-}
 ```
 
-- [ ] **Step 2: Update message bubble styles and avatars to be sharp rectangles**
+- [ ] **Step 5: Redesign `.profile-panel` as a right sidebar panel**
 
-Replace lines 1592-1603 and lines 1638-1657 in CSS:
+Modify `.profile-panel` CSS (around line 2022):
 ```css
-.avatar-icon,
-.user-avatar {
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 0px; /* zero rounded corners */
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.avatar-icon {
-  color: var(--color-primary-text);
-  background:
-      linear-gradient(145deg, rgba(235, 251, 249, 0.95), rgba(213, 246, 243, 0.95));
-  border: 1px solid rgba(158, 218, 216, 0.88);
-  box-shadow: 0 12px 24px rgba(70, 184, 180, 0.12);
-}
-
-.user-avatar {
-  color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
-}
-
-.message-bubble {
-  position: relative;
-  border: 1px solid rgba(203, 235, 233, 0.98);
-  border-radius: 0px; /* zero rounded corners */
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-      0 12px 28px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.96) inset;
-}
-
-.message-row.assistant .message-bubble {
-  border-left: 3px solid var(--color-primary); /* Left accent bar instead of rounded corner */
-}
-
-.message-row.user .message-bubble {
-  border-color: transparent;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 14px 28px rgba(20, 160, 157, 0.2);
-}
-```
-
-- [ ] **Step 3: Update quick reply buttons and confirm selection buttons to be sharp blocks**
-
-Replace lines 1721-1736 and lines 1875-1905 in CSS:
-```css
-.confirm-selection-btn {
-  height: 34px;
-  padding: 0 13px;
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  overflow-y: auto;
+  min-height: 0;
   border: none;
-  border-radius: 0px; /* zero rounded corners */
-  color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  font-size: 12px;
-  font-weight: 950;
-  cursor: pointer;
-}
-
-.confirm-selection-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.quick-reply-btn {
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid rgba(20, 184, 166, 0.32);
-  border-radius: 0px; /* zero rounded corners */
-  background: #ffffff;
-  color: #3f6e72;
-  font-size: 12px;
-  font-weight: 750;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.quick-reply-btn:hover {
-  border-color: var(--color-primary);
-  background: rgba(20, 184, 166, 0.06);
-  color: var(--color-primary-text);
-  transform: translateY(-1px);
-}
-
-.quick-reply-btn.is-selected {
-  color: #ffffff;
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
+  border-radius: 0px;
+  background: rgba(255, 255, 255, 0.45);
   box-shadow: none;
+  backdrop-filter: blur(18px);
 }
 ```
 
-- [ ] **Step 4: Verify and Commit**
+- [ ] **Step 6: Remove rounded corners on progress badge, skip button, and title marks**
 
-Run:
+Ensure the following are updated:
+```css
+.progress-badge {
+  border-radius: 0px;
+}
+.skip-btn {
+  border-radius: 0px;
+}
+.title-mark span:first-child,
+.title-mark span:last-child {
+  border-radius: 0px;
+}
+```
+
+- [ ] **Step 7: Verify and Commit**
+
+Run `npm run build` and commit:
 ```bash
 git add src/features/auth/components/OnboardingDialog.vue
-git commit -m "style: remove rounded corners on chat elements and quick replies"
+git commit -m "style: implement seamless panel layout and zero rounded corners on panels"
 ```
 
 ---
 
-### Task 3: Redesign Input Dock, Progress Bar, Details Panel, and Mobile Layout
+### Task 2: Redesign Dialogue Bubbles, Avatars, Buttons, and Progress Bar
 
 **Files:**
 - Modify: `src/features/auth/components/OnboardingDialog.vue`
 
-- [ ] **Step 1: Replace circular progress ring with a horizontal rectangular progress bar**
+- [ ] **Step 1: Set message bubbles and avatars to be sharp rectangles**
 
-Replace lines 2058-2078 in CSS:
+Update the CSS for `.message-bubble`, `.avatar-icon`, `.user-avatar` to remove rounded corners:
+```css
+.avatar-icon,
+.user-avatar {
+  border-radius: 0px; /* zero rounded corners */
+}
+.message-bubble {
+  border-radius: 0px; /* zero rounded corners */
+}
+.message-row.assistant .message-bubble {
+  border-top-left-radius: 0px;
+  border-left: 3px solid var(--color-primary); /* Left accent bar for AI bubble */
+}
+.message-row.user .message-bubble {
+  border-top-right-radius: 0px;
+}
+```
+
+- [ ] **Step 2: Update quick reply buttons and confirm selection buttons to be sharp blocks**
+
+Remove rounded corners on `.quick-reply-btn` and `.confirm-selection-btn`:
+```css
+.quick-reply-btn {
+  border-radius: 0px; /* zero rounded corners */
+}
+.confirm-selection-btn {
+  border-radius: 0px; /* zero rounded corners */
+}
+```
+
+- [ ] **Step 3: Replace circular progress ring with a horizontal rectangular progress bar**
+
+Style `.progress-ring` in CSS to act as a horizontal progress bar (around line 2058):
 ```css
 .progress-ring {
   --progress: 0;
@@ -357,7 +198,6 @@ Replace lines 2058-2078 in CSS:
       0 4px 12px rgba(20, 160, 157, 0.06),
       inset 0 0 0 1px rgba(255, 255, 255, 0.92);
 }
-
 .progress-ring::after {
   content: '';
   position: absolute;
@@ -368,7 +208,6 @@ Replace lines 2058-2078 in CSS:
   background: linear-gradient(90deg, var(--color-primary), var(--color-action));
   transition: width 0.3s ease;
 }
-
 .progress-ring span {
   position: relative;
   z-index: 2;
@@ -382,113 +221,44 @@ Replace lines 2058-2078 in CSS:
 }
 ```
 
-- [ ] **Step 2: Update Input composer, Send button, and footer wrapper styles to be sharp**
+- [ ] **Step 4: Update other controls, inputs, suggestions popover, and notes to be sharp**
 
-Replace lines 1923-1936 and lines 1958-1984 in CSS:
+Ensure no rounded corners on:
 ```css
 .composer-wrapper {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px;
-  gap: 10px;
-  align-items: end;
-  padding: 8px;
-  border: 1px solid rgba(20, 160, 157, 0.5);
-  border-radius: 0px; /* zero rounded corners */
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-      0 0 0 5px rgba(20, 184, 166, 0.08),
-      0 16px 34px rgba(15, 23, 42, 0.08);
+  border-radius: 0px;
 }
-
 .send-btn {
-  width: 46px;
-  height: 46px;
-  border: none;
-  border-radius: 0px; /* zero rounded corners */
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 14px 28px rgba(70, 184, 180, 0.24);
-  cursor: pointer;
-  transition:
-      transform 0.16s ease,
-      opacity 0.16s ease,
-      box-shadow 0.16s ease;
+  border-radius: 0px;
 }
-
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(70, 184, 180, 0.28);
+.school-autocomplete-popover {
+  border-radius: 0px;
 }
-```
-
-- [ ] **Step 3: Update right details panel (`.info-row`), Note box, and mobile layout to remove rounded corners**
-
-Replace `.info-row`, `.profile-note`, and media query classes in CSS:
-```css
+.autocomplete-suggestion-item {
+  border-radius: 0px;
+}
 .info-row {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 0px; /* zero rounded corners */
-  font-size: 12px;
+  border-radius: 0px;
 }
-
-.info-row.confirmed {
-  border: 1px solid rgba(183, 226, 224, 0.88);
-  background: rgba(246, 254, 253, 0.9);
-}
-
-.info-row.pending {
-  border: 1px dashed rgba(183, 226, 224, 0.9);
-  background: rgba(255, 255, 255, 0.58);
-}
-
 .empty-copy {
-  margin: 0;
-  padding: 13px;
-  border-radius: 0px; /* zero rounded corners */
-  background: rgba(246, 254, 253, 0.86);
-  color: #6f8790;
-  font-size: 12px;
-  font-weight: 800;
+  border-radius: 0px;
 }
-
 .profile-note {
-  margin-top: auto;
-  align-self: stretch;
-  padding: 13px;
-  border: 1px solid rgba(20, 160, 157, 0.18);
-  border-radius: 0px; /* zero rounded corners */
-  background: linear-gradient(145deg, #e9fbf9, #ffffff);
-  box-shadow: 0 -8px 24px rgba(255, 255, 255, 0.82);
+  border-radius: 0px;
 }
 ```
 
-And in `@media (max-width: 860px)` replace:
-```css
-  .chat-card {
-    border-radius: 0px; /* zero rounded corners */
-    min-height: 560px;
-  }
-```
+- [ ] **Step 5: Verify and Commit**
 
-- [ ] **Step 4: Verify and Commit**
-
-Run:
+Run `npm run build` and commit:
 ```bash
 git add src/features/auth/components/OnboardingDialog.vue
-git commit -m "style: remove rounded corners on composer, progress bar, and info blocks"
+git commit -m "style: remove rounded corners on bubbles, buttons, progress bar, and autocomplete"
 ```
 
 ---
 
-### Task 4: Compilation and Verification
+### Task 3: Compilation and Verification
 
 - [ ] **Step 1: Run production build**
 

@@ -1234,12 +1234,15 @@ const handleCompleteLater = async () => {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 2px solid #0f172a;
+  border: 1px solid rgba(159, 220, 218, 0.58);
   border-radius: 0px;
   background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 253, 252, 0.98)),
       #ffffff;
-  box-shadow: 6px 6px 0px 0px rgba(15, 23, 42, 0.15);
+  box-shadow:
+      0 40px 100px rgba(10, 15, 35, 0.26),
+      0 8px 32px rgba(20, 184, 166, 0.12),
+      0 1px 0 rgba(255, 255, 255, 0.95) inset;
 }
 
 .onboarding-container::before {
@@ -1258,7 +1261,7 @@ const handleCompleteLater = async () => {
   min-height: 112px;
   padding: 18px 132px 14px;
   text-align: center;
-  border-bottom: 2px solid #0f172a;
+  border-bottom: 1px solid rgba(190, 230, 229, 0.74);
 }
 
 .header-center {
@@ -1280,10 +1283,13 @@ const handleCompleteLater = async () => {
   align-items: flex-start;
   justify-content: center;
   padding: 7px 12px;
-  border: 1px solid #0f172a;
+  border: 1px solid rgba(158, 218, 216, 0.78);
   border-radius: 0px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.15);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  box-shadow:
+      0 12px 28px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
 .progress-badge strong {
@@ -1308,27 +1314,28 @@ const handleCompleteLater = async () => {
   z-index: 5;
   height: 32px;
   padding: 0 15px;
-  border: 1px solid #0f172a;
+  border: 1px solid rgba(158, 218, 216, 0.76);
   border-radius: 0px;
-  background: #ffffff;
-  color: #0f172a;
+  background: rgba(255, 255, 255, 0.66);
+  color: #41676d;
   font-size: 12px;
   font-weight: 850;
   cursor: pointer;
-  transition: all 0.1s ease;
-  box-shadow: 2px 2px 0px 0px #0f172a;
+  backdrop-filter: blur(14px);
+  transition:
+      transform 0.18s ease,
+      border-color 0.18s ease,
+      background 0.18s ease,
+      color 0.18s ease,
+      box-shadow 0.18s ease;
 }
 
 .skip-btn:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0px 0px #0f172a;
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.skip-btn:active {
-  transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0px 0px #0f172a;
+  color: var(--color-primary-text);
+  border-color: rgba(20, 160, 157, 0.86);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .title-mark {
@@ -1342,16 +1349,17 @@ const handleCompleteLater = async () => {
 
 .title-mark span:first-child {
   width: 32px;
-  height: 4px;
+  height: 5px;
   border-radius: 0px;
-  background: #14b8a6;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.2);
 }
 
 .title-mark span:last-child {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
   border-radius: 0px;
-  background: #0f172a;
+  background: #93c5fd;
 }
 
 .conversation-header h1 {
@@ -1385,10 +1393,13 @@ const handleCompleteLater = async () => {
 .step-rail {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #475569;
+  border: 1px solid rgba(183, 226, 224, 0.9);
   border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 2px 2px 0px 0px rgba(71, 85, 105, 0.1);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+      0 16px 42px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.94) inset;
+  backdrop-filter: blur(18px);
   padding: 10px;
 }
 
@@ -1400,9 +1411,8 @@ const handleCompleteLater = async () => {
   margin-bottom: 12px;
   padding: 8px 10px;
   border-radius: 0px;
-  border-bottom: 1px solid #475569;
-  background: #f1f5f9;
-  color: #0f172a;
+  background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
+  color: var(--color-primary-text);
 }
 
 .step-rail-title span {
@@ -1432,19 +1442,18 @@ const handleCompleteLater = async () => {
   padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 0px;
-  color: #64748b;
+  color: #6b7f87;
 }
 
 .step-item.active {
-  border: 1px solid #14b8a6;
-  background: #f0fdfa;
-  color: #0f172a;
+  border-color: rgba(20, 160, 157, 0.34);
+  background: rgba(231, 250, 248, 0.8);
+  color: var(--color-primary-text);
 }
 
 .step-item.done {
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #0f172a;
+  color: #315f66;
+  background: rgba(248, 253, 252, 0.88);
 }
 
 .step-index {
@@ -1452,24 +1461,17 @@ const handleCompleteLater = async () => {
   height: 28px;
   display: grid;
   place-items: center;
-  border: 1px solid #cbd5e1;
   border-radius: 0px;
-  color: #64748b;
-  background: #ffffff;
+  color: #78919a;
+  background: rgba(236, 248, 247, 0.9);
   font-size: 12px;
   font-weight: 950;
 }
 
-.step-item.active .step-index {
-  color: #ffffff;
-  background: #14b8a6;
-  border-color: #14b8a6;
-}
-
+.step-item.active .step-index,
 .step-item.done .step-index {
   color: #ffffff;
-  background: #0f172a;
-  border-color: #0f172a;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
 }
 
 .step-item strong {
@@ -1499,22 +1501,18 @@ const handleCompleteLater = async () => {
   grid-template-rows: auto minmax(0, 1fr) auto;
   margin: 0;
   overflow: hidden;
-  border: 1px solid rgba(183, 226, 224, 0.96);
-  border-radius: 22px;
+  border: 2px solid #0f172a;
+  border-radius: 0px;
   background: rgba(255, 255, 255, 0.86);
-  box-shadow:
-      0 18px 48px rgba(15, 23, 42, 0.08),
-      0 1px 0 rgba(255, 255, 255, 0.95) inset;
+  box-shadow: 4px 4px 0px 0px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(18px);
 }
 
 .current-question {
   display: block;
   padding: 16px 22px;
-  border-bottom: 1px solid rgba(203, 235, 233, 0.82);
-  background:
-      linear-gradient(120deg, rgba(232, 250, 248, 0.92), rgba(255, 255, 255, 0.94) 54%, rgba(240, 253, 250, 0.88)),
-      #ffffff;
+  border-bottom: 2px solid #0f172a;
+  background: #f8fafc;
 }
 
 .question-copy span {
@@ -1590,7 +1588,8 @@ const handleCompleteLater = async () => {
   height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
+  border-radius: 0px;
+  border: 2px solid #0f172a;
   font-size: 13px;
   font-weight: 950;
 }
@@ -1599,7 +1598,6 @@ const handleCompleteLater = async () => {
   color: var(--color-primary-text);
   background:
       linear-gradient(145deg, rgba(235, 251, 249, 0.95), rgba(213, 246, 243, 0.95));
-  border: 1px solid rgba(158, 218, 216, 0.88);
   box-shadow: 0 12px 24px rgba(70, 184, 180, 0.12);
 }
 
@@ -1632,7 +1630,7 @@ const handleCompleteLater = async () => {
 .message-bubble {
   position: relative;
   border: 1px solid rgba(203, 235, 233, 0.98);
-  border-radius: 18px;
+  border-radius: 0px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow:
       0 12px 28px rgba(15, 23, 42, 0.06),
@@ -1640,13 +1638,13 @@ const handleCompleteLater = async () => {
 }
 
 .message-row.assistant .message-bubble {
-  border-top-left-radius: 8px;
+  border-left: 3px solid var(--color-primary);
 }
 
 .message-row.user .message-bubble {
-  border-color: transparent;
-  border-top-right-radius: 8px;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  border: 1px solid #0f172a;
+  background: var(--color-primary);
+  color: #ffffff;
   box-shadow: 0 14px 28px rgba(20, 160, 157, 0.2);
 }
 
@@ -1685,10 +1683,10 @@ const handleCompleteLater = async () => {
 .confirm-selection-btn {
   height: 34px;
   padding: 0 13px;
-  border: none;
-  border-radius: 12px;
+  border: 1px solid #0f172a;
+  border-radius: 0px;
   color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  background: #0f172a;
   font-size: 12px;
   font-weight: 950;
   cursor: pointer;
@@ -1839,10 +1837,10 @@ const handleCompleteLater = async () => {
 .quick-reply-btn {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid rgba(20, 184, 166, 0.32);
-  border-radius: 999px;
+  border: 1px solid #0f172a;
+  border-radius: 0px;
   background: #ffffff;
-  color: #3f6e72;
+  color: #0f172a;
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
@@ -1850,16 +1848,15 @@ const handleCompleteLater = async () => {
 }
 
 .quick-reply-btn:hover {
-  border-color: var(--color-primary);
-  background: rgba(20, 184, 166, 0.06);
-  color: var(--color-primary-text);
-  transform: translateY(-1px);
+  border-color: #0f172a;
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .quick-reply-btn.is-selected {
   color: #ffffff;
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
+  border-color: #0f172a;
+  background: #0f172a;
   box-shadow: none;
 }
 
@@ -2235,7 +2232,7 @@ const handleCompleteLater = async () => {
   }
 
   .chat-card {
-    border-radius: 22px;
+    border-radius: 0px;
     min-height: 560px;
   }
 
