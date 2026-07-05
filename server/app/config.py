@@ -4,7 +4,6 @@
 不包含任何业务逻辑，所有配置项在模块加载时一次性读取并缓存。
 """
 
-import json
 from pathlib import Path
 
 import yaml
@@ -30,14 +29,6 @@ def _load() -> dict:
 
 # 模块加载时立即读取配置
 _config = _load()
-
-
-def _load_knowledge_routes() -> dict:
-    routes_file = Path(__file__).resolve().parent / "rag" / "config" / "knowledge_routes.json"
-    if not routes_file.exists():
-        return {}
-    with open(routes_file, encoding="utf-8") as f:
-        return json.load(f) or {}
 
 
 def get(path: str, default=None):
@@ -68,9 +59,9 @@ DB_URL = get("database.url", "")
 # 是否打印 SQL 语句（调试用）
 DB_ECHO = get("database.echo", False)
 # 连接池大小：同时保持的最大连接数
-DB_POOL_SIZE = get("database.pool_size", 10)
+DB_POOL_SIZE = get("database.pool_size", 20)
 # 连接池溢出上限：超出 pool_size 后最多额外创建的连接数
-DB_MAX_OVERFLOW = get("database.max_overflow", 20)
+DB_MAX_OVERFLOW = get("database.max_overflow", 30)
 # 连接池回收时间（秒）：超过此时间的空闲连接会被关闭并重建
 DB_POOL_RECYCLE = get("database.pool_recycle", 1800)
 # 从连接池获取连接的超时时间（秒）
@@ -99,12 +90,9 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
 # 日志输出目录：server/logs/
 LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
-# 知识库目录：server/data/
+# 知识库目录：server/data/（KB_DIR 是别名，供其他模块引用）
 KNOWLEDGE_BASE_DIR = SERVER_DIR / KB_DIR_NAME
-# 向后兼容别名（旧模块引用 KB_DIR）
 KB_DIR = KNOWLEDGE_BASE_DIR
-# 共享资源目录：server/static/shared/（跨用户共享的 TTS 缓存、模板等）
-SHARED_DIR = WORKPLACE_DIR / "shared"
 
 
 # ============ 用户路径构建函数 ============
@@ -200,16 +188,6 @@ def user_path_node_cartoon_dir(username: str, path_id: str, node_id: str) -> Pat
     return user_path_node_dir(username, path_id, node_id) / "cartoon"
 
 
-def shared_tts_cache_dir() -> Path:
-    """获取共享 TTS 缓存目录：static/shared/tts_cache/"""
-    return SHARED_DIR / "tts_cache"
-
-
-def shared_ppt_templates_dir() -> Path:
-    """获取共享 PPT 模板目录：static/shared/ppt_templates/"""
-    return SHARED_DIR / "ppt_templates"
-
-
 # ============ URL 构建函数 ============
 def static_url(path: Path) -> str:
     """将本地路径转换为静态文件 URL。
@@ -287,53 +265,23 @@ VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
 # 是否启用知识库功能
 KB_ENABLED = get("knowledge.enabled", True)
 # 知识库集合名称（向量数据库中的 collection 名）
-KB_COLLECTION = get("knowledge.collection", "md_books")
+KB_COLLECTION = get("knowledge.collection", "langchain")
 # 嵌入模型名称（用于生成文本向量）
 KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3:latest")
 # 检索时返回的最相似文档数量
 KB_TOP_K = get("knowledge.top_k", 4)
 # Ollama 本地模型服务地址
 KB_OLLAMA_BASE_URL = get("knowledge.ollama_base_url", "http://127.0.0.1:11434")
-
-# ============ 知识库路由配置 ============
-_knowledge_routes = _load_knowledge_routes()
-KB_COURSE_ROUTING: dict = _knowledge_routes.get("course_routing", {})
-KB_COURSE_LINKAGE: dict = _knowledge_routes.get("course_linkage", {})
-KB_ROUTING_LLM_MODEL: str = get("knowledge.routing.llm_model", "qwen2.5:1.5b")
-KB_ROUTING_LLM_CONFIDENCE: float = get("knowledge.routing.llm_confidence_threshold", 0.6)
-KB_ROUTING_KEYWORD_THRESHOLD: float = get("knowledge.routing.keyword_score_threshold", 3.0)
-
-# ============ 知识库查询改写配置 ============
-KB_REWRITE_ENABLED: bool = get("knowledge.rewrite.enabled", True)
-KB_REWRITE_LLM_MODEL: str = get("knowledge.rewrite.llm_model", "qwen2.5:1.5b")
-KB_REWRITE_MAX_VARIANTS: int = get("knowledge.rewrite.max_variants", 3)
-KB_REWRITE_SIMILARITY_THRESHOLD: float = get("knowledge.rewrite.similarity_threshold", 0.6)
-KB_REWRITE_CONFIDENCE_THRESHOLD: float = get("knowledge.rewrite.confidence_threshold", 1.4)
-KB_REWRITE_BUDGET_MS: int = get("knowledge.rewrite.budget_ms", 800)
-KB_REWRITE_EFFECTIVENESS_CACHE_SIZE: int = get("knowledge.rewrite.effectiveness_cache_size", 200)
-
-# ============ 知识库检索配置 ============
-KB_RRF_K: int = get("knowledge.retrieval.rrf_k", 60)
-KB_SNIPPET_MIN: int = get("knowledge.retrieval.snippet_min", 500)
-KB_SNIPPET_MAX: int = get("knowledge.retrieval.snippet_max", 900)
-
-# Retrieval profile multipliers
-KB_PROFILE_MIN_TOP_K: int = get("knowledge.retrieval.profile.min_top_k", 4)
-KB_PROFILE_BALANCED_MULTIPLIER: int = get("knowledge.retrieval.profile.balanced_multiplier", 2)
-KB_PROFILE_CONCEPTUAL_DENSE_MULTIPLIER: int = get("knowledge.retrieval.profile.conceptual_dense_multiplier", 3)
-KB_PROFILE_EXACT_SPARSE_MULTIPLIER: int = get("knowledge.retrieval.profile.exact_sparse_multiplier", 3)
-
-# Rerank configuration
-KB_RERANK_ENABLED: bool = get("knowledge.rerank.enabled", False)
-KB_RERANK_MODEL: str = get(
-    "knowledge.rerank.model",
-    "BAAI/bge-reranker-base",
-)
-KB_RERANK_TOP_K: int = get("knowledge.rerank.top_k", 4)
-
-# Global fallback configuration
-KB_GLOBAL_CANDIDATE_MULTIPLIER: int = get("knowledge.retrieval.global_candidate_multiplier", 2)
-KB_ROUTING_FALLBACK_TO_GLOBAL: bool = get("knowledge.routing.fallback_to_global", True)
+# 知识库源文档目录
+KB_SOURCE_DIR = get("knowledge.source_dir", "app/rag/data/book")
+# 源文档 glob 模式
+KB_SOURCE_GLOB = get("knowledge.source_glob", "**/*.final.md")
+# 向量检索拉取数量（内部 fetch_k，去重后截断到 top_k）
+KB_FETCH_K = get("knowledge.fetch_k", 12)
+# Embedding 请求超时秒数
+KB_EMBED_TIMEOUT_SECONDS = get("knowledge.embedding_timeout_seconds", 8)
+# 返回给 ChatAgent 的最大上下文字符数
+KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
 
 # ============ 日志配置 ============
 # LangChain 调试开关
@@ -395,23 +343,16 @@ MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
 # 压缩后保留的最近原始消息条数
 COMPRESS_KEEP_RECENT_MESSAGES = get("memory.compress_keep_recent_messages", 4)
 # 触发压缩的最少消息数
-COMPRESS_MIN_MESSAGES = get("memory.compress_min_messages", 14)
+COMPRESS_MIN_MESSAGES = get("memory.compress_min_messages", 16)
 # 触发压缩的最少 Token 数
-COMPRESS_MIN_TOKENS = get("memory.compress_min_tokens", 3500)
+COMPRESS_MIN_TOKENS = get("memory.compress_min_tokens", 4000)
 # 压缩摘要时保留的上下文块数
 SUMMARY_CONTEXT_BLOCKS = get("memory.summary_context_blocks", 3)
-# 触发画像更新的最少消息数
-PROFILE_MIN_MESSAGES = get("memory.profile_min_messages", 12)
-# 触发画像更新的最少 Token 数
-PROFILE_MIN_TOKENS = get("memory.profile_min_tokens", 6000)
-# 写入长期记忆的最少消息数
-LTM_MIN_MESSAGES = get("memory.ltm_min_messages", 12)
-# 写入长期记忆的最少 Token 数
-LTM_MIN_TOKENS = get("memory.ltm_min_tokens", 3500)
-# 写入长期记忆的最低置信度阈值
+# 画像/长期记忆更新阈值（累积够了就触发）
+UPDATE_MIN_MESSAGES = get("memory.update_min_messages", 12)
+UPDATE_MIN_TOKENS = get("memory.update_min_tokens", 6000)
+# 长期记忆最低置信度
 LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
-# 长期记忆写入冷却时间（分钟），0 表示不限制
-LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 0)
 
 # ============ 模型推理参数 ============
 # JSON 结构化输出温度（低温度确保格式稳定）
@@ -419,7 +360,7 @@ JSON_TEMPERATURE = get("models.json_temp", 0.1)
 # 流式对话输出温度（高温度增加创意性和自然感）
 STREAM_TEMPERATURE = get("models.stream_temp", 1.1)
 # 普通文本生成温度（中等温度平衡确定性和多样性）
-DEFAULT_TEMPERATURE = get("models.default_temp", 0.3)
+DEFAULT_TEMPERATURE = get("models.default_temp", 0.7)
 # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
 # function_calling_first — 优先 function_calling，失败后降级 json_mode → prompt
 # json_mode_first — 跳过 function_calling，直接 json_mode，失败后降级 prompt
@@ -433,13 +374,6 @@ VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
 IMAGE_EXTENSIONS: set[str] = set(get("chat.image_extensions", ["png", "jpg", "jpeg", "gif", "webp"]))
 # 构建对话上下文时拉取的历史消息条数
 CHAT_HISTORY_LIMIT: int = get("chat.history_limit", 20)
-# 查询 embedding 缓存大小
-KB_QUERY_EMBEDDING_CACHE_SIZE: int = get("chat.query_embedding_cache_size", 500)
-# 稀疏检索加载的文档上限
-KB_SPARSE_CORPUS_LIMIT: int = get("chat.sparse_corpus_limit", 12000)
-
-# ============ 安全过滤配置 ============
-SAFETY_SENSITIVE_TERMS: tuple[str, ...] = tuple(get("safety.sensitive_terms", ["色情", "赌博", "毒品", "暴力"]))
 
 # ============ 评估配置 ============
 # 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃

@@ -36,7 +36,7 @@ models:
   # default_temp: 普通文本生成，中等温度平衡确定性和多样性
   json_temp: 0.1
   stream_temp: 1.1
-  default_temp: 0.3
+  default_temp: 0.7
 
   # 图片理解模型（独立配置）
   vision:
@@ -76,14 +76,15 @@ paths:
 
 knowledge:
   enabled: true
+  source_dir: "app/rag/data/book"
+  source_glob: "**/*.final.md"
   collection: "langchain"
   embed_model: "bge-m3:latest"
-  top_k: 4
   ollama_base_url: "http://127.0.0.1:11434"
-  retrieval:
-    rrf_k: 60
-    snippet_min: 500
-    snippet_max: 900
+  top_k: 4
+  fetch_k: 12
+  embedding_timeout_seconds: 8
+  max_context_chars: 6000
 
 # Memory 压缩与长期记忆
 memory:
@@ -92,14 +93,11 @@ memory:
   compress_min_messages: 16
   compress_min_tokens: 4000
   summary_context_blocks: 3
-  # 画像更新阈值（中等）
-  profile_min_messages: 12
-  profile_min_tokens: 6000
-  # 长期记忆阈值（最高，需要更多累积才触发）
-  ltm_min_messages: 20
-  ltm_min_tokens: 8000
+  # 画像/长期记忆更新阈值（累积够了就触发）
+  update_min_messages: 12
+  update_min_tokens: 6000
+  # 长期记忆最低置信度
   ltm_min_confidence: 0.75
-  ltm_cooldown_minutes: 0
 
 # Chat 附件与保护机制
 chat:
@@ -116,18 +114,6 @@ chat:
     - webp
   # 构建对话上下文时拉取的历史消息条数
   history_limit: 20
-  # 查询 embedding 缓存大小
-  query_embedding_cache_size: 500
-  # 稀疏检索加载的文档上限
-  sparse_corpus_limit: 50000
-
-# 内容安全过滤配置
-safety:
-  sensitive_terms:
-    - 色情
-    - 赌博
-    - 毒品
-    - 暴力
 
 # 评估配置
 evaluation:
