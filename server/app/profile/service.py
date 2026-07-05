@@ -344,7 +344,6 @@ class ProfileService:
                 resp = await self.llm.ainvoke_json(
                     ProfileDimensionsPatch,
                     [HumanMessage(content=prompt)],
-                    temperature=0.1,
                 )
 
                 dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
@@ -413,7 +412,6 @@ class ProfileService:
             resp = await self.llm.ainvoke_json(
                 GlobalTutoringInferenceOutput,
                 [HumanMessage(content=prompt)],
-                temperature=0.1,
             )
 
             dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
@@ -538,7 +536,6 @@ class ProfileService:
 
             resp = await self.llm.ainvoke(
                 [HumanMessage(content=prompt)],
-                temperature=0.1,
             )
 
             raw_content = str(resp.content or "")
@@ -592,7 +589,6 @@ class ProfileService:
             resp = await self.llm.ainvoke_json(
                 ProfileScoreOutput,
                 [HumanMessage(content=prompt)],
-                temperature=0.1,
             )
 
             logger.info("[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s dimension_evidence_keys=%s",

@@ -193,7 +193,7 @@ class CartoonCliValidator:
 
         html_content = html_file.read_text(encoding="utf-8")
         scene_count = len(
-            re.findall(r'class="[^"]*\bscene\b[^"]*"', html_content, re.IGNORECASE)
+            re.findall(r'class="[^"]*\bscene\b(?!-)[^"]*"', html_content, re.IGNORECASE)
         )
         static_problems = audit_hyperframes_html(html_content)
         if static_problems:
@@ -203,24 +203,23 @@ class CartoonCliValidator:
                 scene_count=scene_count,
             )
 
+        import platform
+        npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
         command = [
-            "npx",
+            npx_cmd,
             "hyperframes",
             "lint",
-            "index.html",
+            ".",
             "--json",
         ]
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                cwd=str(output_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=self.timeout_seconds,
+            from app.shared.utils.proc_logger import run_process_with_logging
+            return_code, stdout_str, stderr_str = await run_process_with_logging(
+                command,
+                cwd=output_dir,
+                timeout_seconds=self.timeout_seconds,
+                logger_name="app.shared.cartoon.validate",
             )
         except OSError as exc:
             return StaticAudit(
@@ -229,17 +228,14 @@ class CartoonCliValidator:
                 scene_count=scene_count,
             )
         except asyncio.TimeoutError:
-            process.kill()
-            await process.communicate()
             return StaticAudit(
                 passed=False,
                 problems=[f"HyperFrames lint timed out after {self.timeout_seconds} seconds"],
                 scene_count=0,
             )
 
-        return_code = process.returncode or 0
-        stdout_str = stdout.decode("utf-8", errors="replace").strip()
-        stderr_str = stderr.decode("utf-8", errors="replace").strip()
+        stdout_str = stdout_str.strip()
+        stderr_str = stderr_str.strip()
 
         problems: list[str] = []
         if return_code != 0:

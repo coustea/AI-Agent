@@ -46,36 +46,40 @@ CS/SE 领域学生，需要通过延伸阅读加深理解。
 
 ```json
 {
-  "title": "拓展阅读推荐",
-  "summary": "本组推荐资源的整体说明",
   "resources": [
     {
       "id": "R1",
       "type": "book",
-      "title": "资源名称",
-      "authors": ["作者1"],
-      "url": "",
+      "title": "操作系统概念（Silberschatz）",
+      "authors": ["Abraham Silberschatz"],
+      "url": "https://example.com/os-concepts",
       "language": "中文",
       "difficulty": "medium",
-      "suitable_for": "适合人群",
-      "related_knowledge_points": ["知识点1"],
-      "description": "资源简介",
-      "recommend_reason": "推荐理由",
-      "how_to_use": "使用建议",
+      "suitable_for": "计算机专业本科生",
+      "related_knowledge_points": ["进程调度", "内存管理"],
+      "description": "操作系统经典教材，涵盖进程、内存、文件系统等核心内容",
+      "recommend_reason": "内容全面且权威，适合建立系统化知识框架",
+      "how_to_use": "重点阅读第5章进程管理和第8章内存管理",
       "estimated_time": "2-3小时",
       "note": ""
-    }
-  ],
-  "learning_path": [
+    },
     {
-      "step": 1,
-      "title": "阶段标题",
-      "description": "阶段说明",
-      "resource_ids": ["R1"],
-      "goal": "达成目标"
+      "id": "R2",
+      "type": "documentation",
+      "title": "Linux 进程调度官方文档",
+      "authors": [],
+      "url": "https://www.kernel.org/doc/html/latest/scheduler/",
+      "language": "英文",
+      "difficulty": "advanced",
+      "suitable_for": "想深入理解调度实现的学习者",
+      "related_knowledge_points": ["CFS调度器", "调度策略"],
+      "description": "Linux 内核 CFS 调度器的官方技术文档",
+      "recommend_reason": "从实现角度理解调度算法，补充理论教材的不足",
+      "how_to_use": "对照教材中的 RR 策略，理解 CFS 如何实现公平分配",
+      "estimated_time": "1-2小时",
+      "note": ""
     }
-  ],
-  "follow_up_suggestions": ["后续学习建议"]
+  ]
 }
 ```
 
@@ -151,3 +155,8 @@ CS/SE 领域学生，需要通过延伸阅读加深理解。
 # TOOLS（可选）
 
 无。
+
+
+# SAFETY（安全约束）
+
+- 严禁输出任何涉及色情、赌博、毒品、暴力等违法违规或不良信息的内容

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-from app.config import DEFAULT_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -148,12 +147,10 @@ class QuizAgent(BaseResourceAgent):
         blueprint: list[QuizBlueprintSlot],
     ) -> QuizPayload:
         """使用结构化输出生成题库；语义不匹配时仅做一次定向纠正。"""
-        temperature = min(DEFAULT_TEMPERATURE, 0.35)
         try:
             payload = await self.llm.ainvoke_json(
                 QuizPayload,
                 prompt,
-                temperature=temperature,
             )
             payload = QuizPayload.model_validate(payload)
             validate_quiz_payload(payload, blueprint)
@@ -179,7 +176,6 @@ class QuizAgent(BaseResourceAgent):
             payload = await self.llm.ainvoke_json(
                 QuizPayload,
                 correction_prompt,
-                temperature=temperature,
             )
             payload = QuizPayload.model_validate(payload)
             validate_quiz_payload(payload, blueprint)

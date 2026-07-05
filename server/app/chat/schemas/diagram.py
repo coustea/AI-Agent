@@ -298,6 +298,5 @@ class TeachingDiagramGenerator:
                 SystemMessage(content=prompts.get("chat").get("teaching_diagram")),
                 HumanMessage(content=prompt),
             ],
-            temperature=0.1,
         )
         return diagram.model_dump(mode="json")

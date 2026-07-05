@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-from app.config import DEFAULT_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -50,7 +49,6 @@ class PlanningAgent(BaseResourceAgent):
                 plan = await self.llm.ainvoke_json(
                     TeachingPlan,
                     attempt_prompt,
-                    temperature=DEFAULT_TEMPERATURE,
                 )
                 break
             except ValueError as exc:

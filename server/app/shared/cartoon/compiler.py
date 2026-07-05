@@ -1,6 +1,7 @@
 """Compile a structured teaching storyboard into deterministic HyperFrames HTML.
 
-支持计算机理论知识的动画演示 — 树、图、队列、栈、链表等数据结构的动态操作演示。
+通用计算机理论知识动画演示编译器。
+支持数据结构、算法、数学、数据库、编译原理、操作系统等所有理论课程。
 """
 
 from __future__ import annotations
@@ -104,6 +105,7 @@ def _render_items(element: VisualElement) -> str:
         "array": "horizontal",
         "queue": "horizontal",
         "stack": "vertical",
+        "table": "table-rows",
         "code": "code-lines",
     }.get(element.kind, "horizontal")
     items = "".join(
@@ -132,16 +134,27 @@ def _render_element(element: VisualElement, scene_index: int) -> str:
 
 
 def _render_svg_edges(scene: SceneBrief, scene_index: int) -> str:
-    if not scene.connections or scene.layout not in ("tree", "graph"):
+    """Render SVG edges for tree/graph/state_diagram layouts."""
+    if not scene.connections or scene.layout not in ("tree", "graph", "state_diagram"):
         return ""
     edges = []
     for conn in scene.connections:
         edge_id = f"edge-{scene_index}-{conn.source}-{conn.target}"
-        dash = 'stroke-dasharray="8,4"' if conn.kind == "pointer" else ""
+        if conn.kind == "pointer":
+            dash = 'stroke-dasharray="8,4"'
+        elif conn.kind == "transition":
+            dash = 'stroke-dasharray="6,3"'
+        else:
+            dash = ""
+        # transition 类型添加条件标注
+        cond_label = ""
+        if conn.kind == "transition" and conn.condition:
+            cond_label = f'<text class="edge-condition" data-from="{conn.source}" data-to="{conn.target}">{_escape(conn.condition)}</text>'
         edges.append(
             f'<path id="{edge_id}" class="scene-edge {conn.kind}" '
             f'd="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2" {dash} '
             f'data-from="{conn.source}" data-to="{conn.target}"/>'
+            f"{cond_label}"
         )
     return f'<svg class="edges-layer" aria-hidden="true">{"".join(edges)}</svg>'
 
@@ -158,6 +171,12 @@ def _render_graph(scene: SceneBrief, scene_index: int) -> str:
     return f'<div class="visual-stage graph-stage">{edges}{nodes}</div>'
 
 
+def _render_state_diagram(scene: SceneBrief, scene_index: int) -> str:
+    nodes = "".join(_render_element(e, scene_index) for e in scene.elements)
+    edges = _render_svg_edges(scene, scene_index)
+    return f'<div class="visual-stage state-diagram-stage">{edges}{nodes}</div>'
+
+
 def _render_array_view(scene: SceneBrief, scene_index: int) -> str:
     cells = "".join(_render_element(e, scene_index) for e in scene.elements)
     return f'<div class="visual-stage array-view-stage">{cells}</div>'
@@ -166,6 +185,16 @@ def _render_array_view(scene: SceneBrief, scene_index: int) -> str:
 def _render_queue_view(scene: SceneBrief, scene_index: int) -> str:
     cells = "".join(_render_element(e, scene_index) for e in scene.elements)
     return f'<div class="visual-stage queue-view-stage"><div class="queue-label left">← 入队</div>{cells}<div class="queue-label right">出队 →</div></div>'
+
+
+def _render_table_view(scene: SceneBrief, scene_index: int) -> str:
+    rows = "".join(_render_element(e, scene_index) for e in scene.elements)
+    return f'<div class="visual-stage table-view-stage">{rows}</div>'
+
+
+def _render_derivation(scene: SceneBrief, scene_index: int) -> str:
+    steps = "".join(_render_element(e, scene_index) for e in scene.elements)
+    return f'<div class="visual-stage derivation-stage">{steps}</div>'
 
 
 def _render_flow(scene: SceneBrief, scene_index: int) -> str:
@@ -200,8 +229,11 @@ def _render_standard(scene: SceneBrief, scene_index: int) -> str:
 def _render_stage(scene: SceneBrief, scene_index: int) -> str:
     if scene.layout == "tree": return _render_tree(scene, scene_index)
     if scene.layout == "graph": return _render_graph(scene, scene_index)
+    if scene.layout == "state_diagram": return _render_state_diagram(scene, scene_index)
     if scene.layout == "array_view": return _render_array_view(scene, scene_index)
     if scene.layout == "queue_view": return _render_queue_view(scene, scene_index)
+    if scene.layout == "table_view": return _render_table_view(scene, scene_index)
+    if scene.layout == "derivation": return _render_derivation(scene, scene_index)
     if scene.layout == "flow": return _render_flow(scene, scene_index)
     if scene.layout == "compare": return _render_compare(scene, scene_index)
     if scene.layout == "stack": return _render_stack_layout(scene, scene_index)
@@ -233,14 +265,13 @@ def _render_captions(scene: SceneBrief, scene_index: int) -> str:
 def _render_scene(scene: SceneBrief, si: int, sc: int, req: CartoonVideoRequest) -> str:
     callout = f'<aside class="scene-callout"><span>关键结论</span><strong>{_escape(scene.callout)}</strong></aside>' if scene.callout and req.visuals != "clean" else ""
     prog = round((si + 1) / sc * 100, 2)
-    ta = "".join(f'<i id="transfer-{si}-{ci}" class="transfer-pulse"></i>' for ci, c in enumerate(scene.cues) if c.action == "transfer")
     return (
         f'<section id="scene-{si}" class="scene clip layout-{scene.layout}" '
         f'data-start="{_seconds(scene.start_time)}" data-duration="{_seconds(scene.duration)}" data-track-index="0">'
         '<div class="scene-shell"><header class="scene-header">'
         f'<div><span class="scene-role">{_escape(scene.role)}</span><h2 id="scene-title-{si}">{_escape(scene.title)}</h2></div>'
         f'<span class="scene-number">{si + 1:02d} / {sc:02d}</span></header>'
-        f"{_render_stage(scene, si)}{callout}{ta}"
+        f"{_render_stage(scene, si)}{callout}"
         '<footer class="scene-footer"><span>ANIMATED EXPLAINER</span>'
         f'<div class="progress-track"><i style="width:{prog}%"></i></div></footer>'
         f"{_render_captions(scene, si)}</div></section>"
@@ -277,7 +308,7 @@ def _cue_time(scene: SceneBrief, cue: AnimationCue, idx: int) -> float:
 
 
 def _selectors(si: int, cue: AnimationCue) -> str:
-    return ", ".join(f'"#{_object_id(si, t)}"' for t in cue.targets)
+    return ", ".join(f'"#s{si}-{t}"' for t in cue.targets)
 
 
 def _cue_timeline(scene: SceneBrief, si: int, req: CartoonVideoRequest) -> list:
@@ -288,47 +319,49 @@ def _cue_timeline(scene: SceneBrief, si: int, req: CartoonVideoRequest) -> list:
         at = _seconds(_cue_time(scene, cue, ci))
         sel = _selectors(si, cue)
         if cue.action == "reveal":
-            lines.append(f"tl.fromTo([{sel}], {{autoAlpha:0,y:36,scale:.94}}, {{autoAlpha:1,y:0,scale:1,duration:{bd:.2f},stagger:{st:.2f},ease:'power3.out'}}, {at});")
+            lines.append(f"HF_Animator.reveal(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
         elif cue.action == "focus":
-            lines.extend([f"tl.to([{sel}], {{scale:1.06,borderColor:'var(--accent)',boxShadow:'0 0 0 4px var(--accent-soft)',duration:.28}}, {at});", f"tl.to([{sel}], {{scale:1,boxShadow:'0 0 0 0 transparent',duration:.4}}, {_seconds(float(at) + 0.75)});"])
-        elif cue.action == "transfer":
-            p = f"#transfer-{si}-{ci}"
-            lines.extend([f'tl.fromTo("{p}", {{autoAlpha:0,xPercent:-220,scale:.5}}, {{autoAlpha:1,xPercent:220,scale:1,duration:.75,ease:"power2.inOut"}}, {at});', f"tl.to([{sel}], {{borderColor:'var(--accent)',duration:.18,stagger:.18}}, {at});"])
-        elif cue.action == "compare":
-            lines.append(f"tl.fromTo([{sel}], {{y:18,filter:'saturate(.45)'}}, {{y:0,filter:'saturate(1)',borderColor:'var(--accent-two)',duration:.45,stagger:.15}}, {at});")
-        elif cue.action == "swap":
-            lines.extend([f"tl.to([{sel}], {{x:(i)=>i%2===0?110:-110,y:-18,duration:.45,ease:'power2.inOut'}}, {at});", f"tl.to([{sel}], {{x:0,y:0,duration:.4,ease:'power2.out'}}, {_seconds(float(at) + 0.46)});"])
-        elif cue.action == "traverse":
-            lines.append(f"tl.fromTo([{sel}], {{backgroundColor:'var(--surface)'}}, {{backgroundColor:'var(--accent-soft)',borderColor:'var(--accent)',duration:.34,stagger:.24}}, {at});")
-        elif cue.action == "branch":
-            lines.append(f"tl.fromTo([{sel}], {{autoAlpha:0,scale:.7,transformOrigin:'50% 0%'}}, {{autoAlpha:1,scale:1,duration:.5,stagger:.16,ease:'back.out(1.4)'}}, {at});")
-        elif cue.action == "state_change":
-            lines.append(f"tl.to([{sel}], {{backgroundColor:'var(--accent-soft)',color:'var(--fg)',borderColor:'var(--accent)',duration:.45}}, {at});")
-        elif cue.action == "count":
-            lines.append(f"tl.fromTo([{sel}], {{scale:.82,autoAlpha:.5}}, {{scale:1,autoAlpha:1,duration:.65,ease:'back.out(1.7)'}}, {at});")
+            lines.append(f"HF_Animator.focus(tl, [{sel}], {at}, {bd:.2f});")
         elif cue.action == "insert":
-            d = cue.direction or "top"
-            fx = {"left": -120, "right": 120, "top": 0, "bottom": 0}.get(d, 0)
-            fy = {"left": 0, "right": 0, "top": -80, "bottom": 80}.get(d, 0)
-            lines.append(f"tl.fromTo([{sel}], {{autoAlpha:0,x:{fx},y:{fy},scale:.7}}, {{autoAlpha:1,x:0,y:0,scale:1,duration:{bd:.2f},ease:'back.out(1.4)',stagger:{st:.2f}}}, {at});")
+            parentId = ""
+            for conn in scene.connections:
+                if conn.target in cue.targets:
+                    parentId = f'"#s{si}-{conn.source}"'
+                    break
+            p_val = parentId if parentId else "null"
+            lines.append(f"HF_Animator.insert(tl, [{sel}], '{cue.direction}', {p_val}, {at}, {bd:.2f}, {st:.2f});")
         elif cue.action == "remove":
-            d = cue.direction or "left"
-            tx = {"left": -120, "right": 120, "top": 0, "bottom": 0}.get(d, 0)
-            ty = {"left": 0, "right": 0, "top": -80, "bottom": 80}.get(d, 0)
-            lines.append(f"tl.to([{sel}], {{autoAlpha:0,x:{tx},y:{ty},scale:.6,duration:.4,stagger:.12}}, {at});")
-        elif cue.action == "highlight_path" and cue.path:
-            for i, nid in enumerate(cue.path):
-                ns = f'"#{_object_id(si, nid)}"'
-                lines.append(f"tl.to({ns}, {{borderColor:'var(--accent)',boxShadow:'0 0 0 4px var(--accent-soft)',duration:.25}}, {_seconds(float(at) + i * 0.3)});")
-                if i < len(cue.path) - 1:
-                    es = f'"#edge-{si}-{nid}-{cue.path[i+1]}"'
-                    lines.append(f"tl.to({es}, {{stroke:'var(--accent)',strokeWidth:3,duration:.2}}, {_seconds(float(at) + i * 0.3 + 0.15)});")
+            lines.append(f"HF_Animator.remove(tl, [{sel}], '{cue.direction}', {at}, {bd:.2f}, {st:.2f});")
+        elif cue.action == "swap":
+            lines.append(f"HF_Animator.swap(tl, [{sel}], {at}, {bd:.2f});")
+        elif cue.action == "traverse":
+            lines.append(f"HF_Animator.traverse(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+        elif cue.action == "state_change":
+            lines.append(f"HF_Animator.stateChange(tl, [{sel}], {at}, {bd:.2f});")
         elif cue.action == "value_change":
-            lines.append(f"tl.to([{sel}], {{scale:.85,duration:.15}}, {at});")
-            lines.append(f"tl.call(() => {{[{sel}].forEach(el => {{const v = el.querySelector('.object-value');if(v) v.textContent = '{_escape(cue.new_value)}';}});}}, null, {_seconds(float(at) + 0.15)});")
-            lines.append(f"tl.to([{sel}], {{scale:1,duration:.2,ease:'back.out(1.7)'}}, {_seconds(float(at) + 0.2)});")
+            lines.append(f"HF_Animator.valueChange(tl, [{sel}], '{_escape(cue.new_value)}', {at}, {bd:.2f});")
+        elif cue.action == "highlight_path" and cue.path:
+            path_list = ", ".join(f"'{n}'" for n in cue.path)
+            lines.append(f"HF_Animator.highlightPath(tl, [{path_list}], {si}, {at}, {bd:.2f});")
+        elif cue.action == "transfer":
+            from_node = cue.targets[0] if len(cue.targets) > 0 else ""
+            to_node = cue.targets[1] if len(cue.targets) > 1 else ""
+            if from_node and to_node:
+                lines.append(f"HF_Animator.transfer(tl, '{from_node}', '{to_node}', {si}, {at}, {bd:.2f});")
+            else:
+                lines.append(f"HF_Animator.focus(tl, [{sel}], {at}, {bd:.2f});")
+        elif cue.action == "branch":
+            lines.append(f"HF_Animator.branch(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+        elif cue.action == "count":
+            lines.append(f"HF_Animator.count(tl, [{sel}], {at}, {bd:.2f});")
         elif cue.action == "shift":
-            lines.append(f"tl.to([{sel}], {{x:-120,duration:.35,ease:'power2.inOut',stagger:.06}}, {at});")
+            lines.append(f"HF_Animator.shift(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+        elif cue.action == "derive":
+            res_val = f'"#s{si}-{cue.result}"' if cue.result else "null"
+            lines.append(f"HF_Animator.derive(tl, [{sel}], {res_val}, {at}, {bd:.2f});")
+        elif cue.action == "transform":
+            res_val = f'"#s{si}-{cue.result}"' if cue.result else "null"
+            lines.append(f"HF_Animator.transform(tl, [{sel}], {res_val}, {at}, {bd:.2f});")
     return lines
 
 
@@ -348,7 +381,11 @@ def _caption_timeline(scene: SceneBrief, si: int) -> list:
 
 
 def _build_timeline(brief: VideoBrief, req: CartoonVideoRequest) -> str:
-    lines = ['const tl = gsap.timeline({paused:true});', 'window.__timelines = window.__timelines || {};']
+    lines = [
+        'const tl = gsap.timeline({paused:true});',
+        'gsap.registerPlugin(MotionPathPlugin);',
+        'window.__timelines = window.__timelines || {};'
+    ]
     for si, sc in enumerate(brief.scenes):
         lines.append(f'tl.fromTo("#scene-title-{si}", {{autoAlpha:0,y:-22}},{{autoAlpha:1,y:0,duration:.48,ease:"power3.out"}},{_seconds(sc.start_time + 0.12)});')
         if not any(c.action == "reveal" for c in sc.cues):
@@ -367,7 +404,7 @@ _CSS = """
       --accent-soft: color-mix(in srgb, var(--accent) 17%, transparent); --caption-active-fg: THEME_BACKGROUND;
     }
     * { box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--fg); font-family: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--fg); font-family: Inter, sans-serif; }
     [data-composition-id] { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px), var(--bg); background-size: 64px 64px; }
     .scene { position: absolute; inset: 0; padding: 54px 72px; }
     .scene-shell { position: relative; width: 100%; height: 100%; padding: 42px 48px 174px; border: 1px solid var(--line); border-radius: 30px; overflow: hidden; background: color-mix(in srgb, var(--bg) 88%, transparent); }
@@ -386,24 +423,39 @@ _CSS = """
     .object-detail { margin: 10px 0 0; color: var(--muted); font-size: 20px; line-height: 1.45; }
     .object-items { display: flex; gap: 8px; margin-top: 18px; }
     .object-items.vertical { flex-direction: column-reverse; }
-    .object-items.code-lines { flex-direction: column; font-family: "SFMono-Regular", Consolas, monospace; }
+    .object-items.code-lines { flex-direction: column; font-family: Consolas, monospace; }
+    .object-items.table-rows { flex-direction: column; gap: 4px; }
     .object-item { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-strong); text-align: center; font-size: 18px; font-weight: 750; }
     .object-items.code-lines .object-item { text-align: left; color: var(--accent); }
-    .kind-tree_node, .kind-graph_node { min-width: 80px; min-height: 80px; border-radius: 50%; display: grid; place-items: center; font-size: 32px; font-weight: 800; }
+    
+    .tree-stage .kind-node, .graph-stage .kind-node, .state-diagram-stage .kind-node { min-width: 80px; min-height: 80px; border-radius: 50%; display: grid; place-items: center; font-size: 32px; font-weight: 800; }
     .kind-cell { min-width: 70px; min-height: 70px; border-radius: 12px; position: relative; }
     .kind-cell::before { content: attr(data-index); position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 14px; color: var(--muted); font-weight: 600; }
-    .kind-pointer { min-width: 40px; min-height: 40px; border: 3px dashed var(--accent); background: transparent; }
-    .edges-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+    .kind-state { min-width: 90px; min-height: 90px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; font-weight: 800; border-width: 3px; }
+    .kind-step { border-left: 4px solid var(--accent); border-radius: 12px; padding-left: 20px; }
+    .kind-formula .object-label { font-size: 36px; color: var(--accent); font-family: serif; }
+    .kind-packet { min-width: 60px; border-radius: 8px; border: 2px dashed var(--accent); background: var(--accent-soft); }
+    .kind-table { border-radius: 12px; overflow: hidden; }
+    .kind-table .object-items.table-rows .object-item { border-radius: 0; border-bottom: 1px solid var(--line); text-align: left; }
+    
+    .edges-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; width: 100%; height: 100%; }
     .scene-edge { stroke-linecap: round; stroke-linejoin: round; }
     .scene-edge.pointer { stroke-dasharray: 8 4; }
-    .tree-stage, .graph-stage { display: block; }
-    .tree-stage .visual-object, .graph-stage .visual-object { position: absolute; }
+    .scene-edge.transition { stroke-dasharray: 6 3; stroke: var(--accent-two); }
+    .edge-condition { font-size: 14px; fill: var(--accent-two); font-weight: 700; font-family: sans-serif; text-anchor: middle; }
+    
+    .tree-stage, .graph-stage, .state-diagram-stage { display: block; position: relative; }
+    .tree-stage .visual-object, .graph-stage .visual-object, .state-diagram-stage .visual-object { position: absolute; transform: translate(-50%, -50%); }
     .array-view-stage, .queue-view-stage { display: flex; flex-direction: row; gap: 16px; justify-content: center; align-items: center; }
     .queue-label { font-size: 16px; font-weight: 700; color: var(--muted); padding: 8px 16px; border-radius: 8px; background: var(--surface-strong); }
     .queue-label.left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
     .queue-label.right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
     .stack-layout-stage { display: flex; flex-direction: column-reverse; gap: 12px; justify-content: center; align-items: center; }
     .stack-label { font-size: 16px; font-weight: 700; color: var(--muted); padding: 8px 16px; border-radius: 8px; background: var(--surface-strong); }
+    .table-view-stage { display: flex; flex-direction: column; gap: 4px; justify-content: center; align-items: center; }
+    .derivation-stage { display: flex; flex-direction: column; gap: 28px; justify-content: center; align-items: center; max-width: 1200px; margin: 0 auto; }
+    .derivation-stage .visual-object { width: 100%; text-align: center; }
+    .derivation-stage .kind-formula { border-left: 4px solid var(--accent); }
     .flow-stage { grid-template-columns: repeat(11, auto); align-items: center; }
     .flow-stage .visual-object { min-width: 220px; }
     .flow-connector { min-width: 72px; display: grid; place-items: center; gap: 7px; color: var(--muted); }
@@ -421,8 +473,8 @@ _CSS = """
     .hero-stage { grid-template-columns: minmax(0, 1.4fr) minmax(280px, .6fr); }
     .hero-stage .visual-object:first-child { padding: 46px; border-color: var(--accent); background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
     .hero-stage .visual-object:first-child .object-label { font-size: 44px; }
-    .kind-metric .object-value, .kind-formula .object-label { font-size: 40px; color: var(--accent); }
-    .kind-code { font-family: "SFMono-Regular", Consolas, monospace; }
+    .kind-metric .object-value { font-size: 40px; color: var(--accent); }
+    .kind-code { font-family: Consolas, monospace; }
     .scene-callout { position: absolute; z-index: 4; right: 48px; bottom: 118px; max-width: 690px; display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-left: 5px solid var(--accent-two); background: var(--surface); border-radius: 10px; }
     .scene-callout span { color: var(--accent-two); font-size: 14px; font-weight: 850; }
     .scene-callout strong { font-size: 20px; }
@@ -432,7 +484,13 @@ _CSS = """
     .captions { position: absolute; z-index: 20; left: 50%; bottom: 12px; width: 1550px; height: 58px; transform: translateX(-50%); text-align: center; pointer-events: none; }
     .caption-cue { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); padding: 10px 22px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--fg); font-size: 30px; font-weight: 800; line-height: 1.3; white-space: nowrap; opacity: 0; }
     .caption-word { display: inline-block; padding: 0 .08em; border-radius: .2em; }
-    .transfer-pulse { position: absolute; z-index: 8; left: 50%; top: 52%; width: 20px; height: 20px; border: 5px solid var(--bg); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 12px var(--accent-soft); opacity: 0; }
+    
+    .transfer-pulse { position: absolute; z-index: 8; width: 22px; height: 22px; border: 4px solid var(--bg); border-radius: 50%; background: var(--accent-two); box-shadow: 0 0 10px var(--accent-two); opacity: 0; transform: translate(-50%, -50%); }
+    .active-particle { animation: pulse-shadow 0.6s infinite alternate; }
+    @keyframes pulse-shadow {
+      from { box-shadow: 0 0 6px var(--accent-two); }
+      to { box-shadow: 0 0 16px var(--accent-two); }
+    }
 """
 
 
@@ -457,7 +515,340 @@ class CartoonCompiler:
     {audio}
   </main>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"></script>
   <script>
+    // === HyperFrames Client-Side Animator and Auto-Layout Engine ===
+    window.HF_Animator = {{
+      getCenter: (el) => {{
+        if (!el) return {{ x: 0, y: 0 }};
+        return {{
+          x: el.offsetLeft,
+          y: el.offsetTop
+        }};
+      }},
+      
+      reveal: (tl, targets, startTime, duration, stagger = 0.12) => {{
+        tl.fromTo(targets, 
+          {{ autoAlpha: 0, y: 30, scale: 0.92 }}, 
+          {{ autoAlpha: 1, y: 0, scale: 1, duration: duration, stagger: stagger, ease: "power3.out" }}, 
+          startTime
+        );
+      }},
+      
+      focus: (tl, targets, startTime, duration) => {{
+        tl.to(targets, {{ scale: 1.08, borderColor: "var(--accent)", boxShadow: "0 0 20px var(--accent-soft)", duration: duration * 0.4, ease: "power2.out" }}, startTime)
+          .to(targets, {{ scale: 1, borderColor: "var(--line)", boxShadow: "0 16px 40px rgba(0,0,0,0.08)", duration: duration * 0.6, ease: "power2.inOut" }}, startTime + duration * 0.4);
+      }},
+      
+      insert: (tl, targets, direction, parentId, startTime, duration, stagger = 0.12) => {{
+        targets.forEach((targetSel, idx) => {{
+          const targetEl = document.querySelector(targetSel);
+          const parentEl = parentId ? document.querySelector(parentId) : null;
+          let startX = 0, startY = 0;
+          
+          if (parentEl && targetEl) {{
+            const tPos = HF_Animator.getCenter(targetEl);
+            const pPos = HF_Animator.getCenter(parentEl);
+            startX = pPos.x - tPos.x;
+            startY = pPos.y - tPos.y;
+          }} else {{
+            startX = direction === "left" ? -120 : direction === "right" ? 120 : 0;
+            startY = direction === "top" ? -80 : direction === "bottom" ? 80 : 0;
+          }}
+          
+          tl.fromTo(targetSel,
+            {{ autoAlpha: 0, x: startX, y: startY, scale: 0.7 }},
+            {{ autoAlpha: 1, x: 0, y: 0, scale: 1, duration: duration, ease: "back.out(1.2)", delay: idx * stagger }},
+            startTime
+          );
+        }});
+      }},
+      
+      remove: (tl, targets, direction, startTime, duration, stagger = 0.12) => {{
+        targets.forEach((targetSel, idx) => {{
+          const destX = direction === "left" ? -120 : direction === "right" ? 120 : 0;
+          const destY = direction === "top" ? -80 : direction === "bottom" ? 80 : 0;
+          
+          tl.to(targetSel,
+            {{ autoAlpha: 0, x: destX, y: destY, scale: 0.6, duration: duration, ease: "power2.in", delay: idx * stagger }},
+            startTime
+          );
+        }});
+      }},
+      
+      swap: (tl, targets, startTime, duration) => {{
+        if (targets.length < 2) return;
+        const elA = document.querySelector(targets[0]);
+        const elB = document.querySelector(targets[1]);
+        if (!elA || !elB) return;
+        
+        const posA = HF_Animator.getCenter(elA);
+        const posB = HF_Animator.getCenter(elB);
+        const dx = posB.x - posA.x;
+        const dy = posB.y - posA.y;
+        
+        tl.to(targets[0], {{ x: dx, y: dy, zIndex: 10, duration: duration * 0.5, ease: "power2.inOut" }}, startTime)
+          .to(targets[0], {{ x: dx, y: dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }}, startTime + duration * 0.5)
+          
+          .to(targets[1], {{ x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.inOut" }}, startTime)
+          .to(targets[1], {{ x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }}, startTime + duration * 0.5);
+      }},
+      
+      traverse: (tl, targets, startTime, duration, stagger = 0.24) => {{
+        targets.forEach((targetSel, idx) => {{
+          const t = startTime + idx * stagger;
+          tl.to(targetSel, {{ backgroundColor: "var(--accent-soft)", borderColor: "var(--accent)", scale: 1.04, duration: duration * 0.4 }}, t)
+            .to(targetSel, {{ backgroundColor: "var(--surface)", borderColor: "var(--line)", scale: 1, duration: duration * 0.6 }}, t + duration * 0.4);
+        }});
+      }},
+      
+      stateChange: (tl, targets, startTime, duration) => {{
+        tl.to(targets, {{ backgroundColor: "var(--accent-soft)", borderColor: "var(--accent)", color: "var(--fg)", scale: 1.05, duration: duration * 0.5, ease: "power2.out" }}, startTime)
+          .to(targets, {{ scale: 1, duration: duration * 0.5, ease: "power2.inOut" }}, startTime + duration * 0.5);
+      }},
+      
+      valueChange: (tl, targets, newValue, startTime, duration) => {{
+        targets.forEach(targetSel => {{
+          tl.to(targetSel, {{ scale: 0.85, duration: duration * 0.3, ease: "power2.in" }}, startTime)
+            .call(() => {{
+              const el = document.querySelector(targetSel);
+              if (el) {{
+                const v = el.querySelector(".object-value");
+                if (v) v.textContent = newValue;
+              }}
+            }}, null, startTime + duration * 0.3)
+            .to(targetSel, {{ scale: 1, duration: duration * 0.7, ease: "back.out(1.5)" }}, startTime + duration * 0.3);
+        }});
+      }},
+      
+      highlightPath: (tl, pathNodes, sceneIndex, startTime, duration) => {{
+        const stepDuration = duration / (pathNodes.length || 1);
+        pathNodes.forEach((nodeId, idx) => {{
+          const t = startTime + idx * stepDuration;
+          const ns = `#s${{sceneIndex}}-${{nodeId}}`;
+          tl.to(ns, {{ borderColor: "var(--accent)", boxShadow: "0 0 15px var(--accent-soft)", scale: 1.05, duration: stepDuration * 0.5 }}, t)
+            .to(ns, {{ scale: 1, duration: stepDuration * 0.5 }}, t + stepDuration * 0.5);
+          
+          if (idx < pathNodes.length - 1) {{
+            const nextId = pathNodes[idx + 1];
+            const es = `#edge-${{sceneIndex}}-${{nodeId}}-${{nextId}}`;
+            tl.to(es, {{ stroke: "var(--accent)", strokeWidth: 4, duration: stepDuration }}, t);
+          }}
+        }});
+      }},
+      
+      transfer: (tl, fromNode, toNode, sceneIndex, startTime, duration) => {{
+        const particleId = `particle-${{sceneIndex}}-${{fromNode}}-${{toNode}}`;
+        const edgeId = `#edge-${{sceneIndex}}-${{fromNode}}-${{toNode}}`;
+        
+        tl.call(() => {{
+          const path = document.querySelector(edgeId);
+          const stage = document.querySelector("#scene-" + sceneIndex + " .visual-stage");
+          if (path && stage) {{
+            const particle = document.createElement("i");
+            particle.id = particleId;
+            particle.className = "transfer-pulse active-particle";
+            stage.appendChild(particle);
+            
+            gsap.to(particle, {{
+              motionPath: {{
+                path: path,
+                align: path,
+                alignOrigin: [0.5, 0.5]
+              }},
+              autoAlpha: 1,
+              duration: duration,
+              ease: "power1.inOut",
+              onComplete: () => particle.remove()
+            }});
+          }}
+        }}, null, startTime);
+      }},
+      
+      branch: (tl, targets, startTime, duration, stagger = 0.16) => {{
+        tl.fromTo(targets, 
+          {{ autoAlpha: 0, scale: 0.7, transformOrigin: "50% 0%" }},
+          {{ autoAlpha: 1, scale: 1, duration: duration, stagger: stagger, ease: "back.out(1.4)" }},
+          startTime
+        );
+      }},
+      
+      count: (tl, targets, startTime, duration) => {{
+        tl.fromTo(targets, 
+          {{ scale: 0.82, autoAlpha: 0.5 }},
+          {{ scale: 1, autoAlpha: 1, duration: duration, ease: "back.out(1.7)" }},
+          startTime
+        );
+      }},
+      
+      shift: (tl, targets, startTime, duration, stagger = 0.06) => {{
+        tl.to(targets, {{ x: -120, duration: duration, ease: "power2.inOut", stagger: stagger }}, startTime);
+      }},
+      
+      derive: (tl, targets, resultSelector, startTime, duration) => {{
+        tl.to(targets, {{ autoAlpha: 0, scale: 0.8, y: -20, duration: duration * 0.5, ease: "power2.in" }}, startTime);
+        if (resultSelector) {{
+          tl.fromTo(resultSelector,
+            {{ autoAlpha: 0, scale: 0.8, y: 20 }},
+            {{ autoAlpha: 1, scale: 1, y: 0, duration: duration * 0.5, ease: "back.out(1.4)" }},
+            startTime + duration * 0.5
+          );
+        }}
+      }},
+      
+      transform: (tl, targets, resultSelector, startTime, duration) => {{
+        tl.to(targets, {{ borderColor: "var(--accent-two)", boxShadow: "0 0 15px var(--accent-soft)", duration: duration * 0.3 }}, startTime)
+          .to(targets, {{ autoAlpha: 0, scale: 0.6, duration: duration * 0.3, ease: "power2.in" }}, startTime + duration * 0.3);
+        if (resultSelector) {{
+          tl.fromTo(resultSelector,
+            {{ autoAlpha: 0, scale: 0.5, transformOrigin: "50% 50%" }},
+            {{ autoAlpha: 1, scale: 1, duration: duration * 0.4, ease: "back.out(1.4)" }},
+            startTime + duration * 0.6
+          );
+        }}
+      }}
+    }};
+
+    function updateSvgEdges(stage) {{
+      const svgLayer = stage.querySelector(".edges-layer");
+      if (!svgLayer) return;
+      const paths = svgLayer.querySelectorAll("path");
+      
+      paths.forEach(path => {{
+        const fromId = path.getAttribute("data-from");
+        const toId = path.getAttribute("data-to");
+        const sceneId = path.id.split("-")[1];
+        
+        const fromEl = stage.querySelector("#s" + sceneId + "-" + fromId);
+        const toEl = stage.querySelector("#s" + sceneId + "-" + toId);
+        
+        if (fromEl && toEl) {{
+          // Calculate center positions
+          const fromX = fromEl.offsetLeft;
+          const fromY = fromEl.offsetTop;
+          const toX = toEl.offsetLeft;
+          const toY = toEl.offsetTop;
+          
+          path.setAttribute("d", `M ${{fromX}} ${{fromY}} L ${{toX}} ${{toY}}`);
+          
+          // Update condition label if exists
+          const textEl = stage.querySelector('.edge-condition[data-from="' + fromId + '"][data-to="' + toId + '"]');
+          if (textEl) {{
+            textEl.setAttribute("x", (fromX + toX) / 2);
+            textEl.setAttribute("y", (fromY + toY) / 2 - 10);
+          }}
+        }}
+      }});
+    }}
+
+    function layoutTree(nodes, edges, width, height) {{
+      const nodeMap = new Map(nodes.map(n => [n.getAttribute("data-object"), n]));
+      const adj = new Map();
+      const inDegree = new Map();
+      
+      nodes.forEach(n => {{
+        const id = n.getAttribute("data-object");
+        adj.set(id, []);
+        inDegree.set(id, 0);
+      }});
+      
+      edges.forEach(e => {{
+        if (nodeMap.has(e.source) && nodeMap.has(e.target)) {{
+          adj.get(e.source).push(e.target);
+          inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+        }}
+      }});
+      
+      const roots = nodes.filter(n => inDegree.get(n.getAttribute("data-object")) === 0)
+                         .map(n => n.getAttribute("data-object"));
+      if (roots.length === 0 && nodes.length > 0) {{
+        roots.push(nodes[0].getAttribute("data-object"));
+      }}
+      
+      const levels = [];
+      function traverse(nodeId, depth) {{
+        if (levels.length <= depth) levels.push([]);
+        if (!levels[depth].includes(nodeId)) levels[depth].push(nodeId);
+        adj.get(nodeId).forEach(childId => traverse(childId, depth + 1));
+      }}
+      roots.forEach(r => traverse(r, 0));
+      
+      const levelHeight = height / (levels.length || 1);
+      levels.forEach((levelNodes, depth) => {{
+        const levelY = 160 + depth * (levelHeight * 0.7);
+        const levelWidth = width / (levelNodes.length + 1);
+        levelNodes.forEach((nodeId, idx) => {{
+          const el = nodeMap.get(nodeId);
+          if (el && (!el.style.left || !el.style.top)) {{
+            const levelX = (idx + 1) * levelWidth;
+            el.style.left = `${{levelX}}px`;
+            el.style.top = `${{levelY}}px`;
+          }}
+        }});
+      }});
+    }}
+
+    function layoutGraph(nodes, edges, width, height) {{
+      const centerX = width / 2;
+      const centerY = height / 2 + 30;
+      const radius = Math.min(width, height) * 0.32;
+      const count = nodes.length;
+      nodes.forEach((n, idx) => {{
+        if (!n.style.left || !n.style.top) {{
+          const angle = (idx * 2 * Math.PI) / count;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          n.style.left = `${{x}}px`;
+          n.style.top = `${{y}}px`;
+        }}
+      }});
+    }}
+
+    document.addEventListener("DOMContentLoaded", () => {{
+      const stages = document.querySelectorAll(".visual-stage");
+      stages.forEach(stage => {{
+        const parentComp = stage.closest("[data-composition-id]");
+        const stageWidth = parentComp ? parseInt(parentComp.getAttribute("data-width") || "1920") - 144 : 1776;
+        const stageHeight = parentComp ? parseInt(parentComp.getAttribute("data-height") || "1080") - 300 : 780;
+        
+        const objects = Array.from(stage.querySelectorAll(".visual-object"));
+        const svgLayer = stage.querySelector(".edges-layer");
+        
+        const edges = [];
+        if (svgLayer) {{
+          const paths = svgLayer.querySelectorAll("path");
+          paths.forEach(path => {{
+            edges.push({{
+              source: path.getAttribute("data-from"),
+              target: path.getAttribute("data-to")
+            }});
+          }});
+        }}
+        
+        const isTree = stage.classList.contains("tree-stage");
+        const isGraph = stage.classList.contains("graph-stage");
+        const isState = stage.classList.contains("state-diagram-stage");
+        
+        const needsLayout = objects.some(el => !el.style.left || !el.style.top);
+        if (needsLayout) {{
+          if (isTree) {{
+            layoutTree(objects, edges, stageWidth, stageHeight);
+          }} else if (isGraph || isState) {{
+            layoutGraph(objects, edges, stageWidth, stageHeight);
+          }}
+        }}
+        
+        updateSvgEdges(stage);
+      }});
+      
+      // Update SVG edges in real-time on every animation tick
+      gsap.ticker.add(() => {{
+        document.querySelectorAll(".visual-stage").forEach(stage => {{
+          updateSvgEdges(stage);
+        }});
+      }});
+    }});
+
     {timeline}
   </script>
 </body>

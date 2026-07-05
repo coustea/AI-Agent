@@ -34,8 +34,17 @@ async def _run_process(
     cwd: Path | None = None,
     timeout_seconds: int,
 ) -> tuple[int, str, str]:
+    import platform
+    cmd = command.copy()
+    if cmd and not Path(cmd[0]).is_absolute():
+        resolved = shutil.which(cmd[0])
+        if resolved:
+            cmd[0] = resolved
+        elif platform.system() == "Windows" and cmd[0] == "npx":
+            cmd[0] = "npx.cmd"
+
     process = await asyncio.create_subprocess_exec(
-        *command,
+        *cmd,
         cwd=str(cwd) if cwd else None,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -112,8 +121,10 @@ class RemotionVideoRenderer:
             encoding="utf-8",
         )
 
+        import platform
+        npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
         command = [
-            "npx",
+            npx_cmd,
             "tsx",
             str(self.remotion_dir / "scripts" / "render.ts"),
             "--input",
@@ -126,14 +137,16 @@ class RemotionVideoRenderer:
             str(self.concurrency),
         ]
         try:
-            code, _, stderr = await _run_process(
+            from app.shared.utils.proc_logger import run_process_with_logging
+            code, stdout_text, stderr_text = await run_process_with_logging(
                 command,
                 cwd=self.remotion_dir,
                 timeout_seconds=self.timeout_seconds,
+                logger_name="app.shared.video.render",
             )
             if code != 0:
                 raise VideoRenderError(
-                    f"Remotion render failed: {stderr[-1200:].strip()}"
+                    f"Remotion render failed: {stderr_text[-1200:].strip()}"
                 )
             if not temporary_output.is_file() or temporary_output.stat().st_size == 0:
                 raise VideoRenderError("Remotion did not produce an MP4 file")

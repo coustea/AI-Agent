@@ -152,6 +152,7 @@ export const getAgentOutputFormat = (agentId: string) => {
     reading: '拓展阅读文献',
     ppt: '演示幻灯课件',
     cartoon: '动画讲解视频',
+    video: '讲解视频',
   }
   return formatMap[agentId] || '学习资源'
 }

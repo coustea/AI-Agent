@@ -362,10 +362,12 @@ class Llm:
         return self._text_model
 
     async def ainvoke(self, input_data: Any, *, model: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> Any:
-        return await _bind(model or self.model, temperature=temperature, max_tokens=max_tokens).ainvoke(input_data)
+        temp = temperature if temperature is not None else DEFAULT_TEMPERATURE
+        return await _bind(model or self.model, temperature=temp, max_tokens=max_tokens).ainvoke(input_data)
 
     async def astream(self, input_data: Any, *, model: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> AsyncIterator[Any]:
-        async for chunk in _bind(model or self.model, temperature=temperature, max_tokens=max_tokens).astream(input_data):
+        temp = temperature if temperature is not None else STREAM_TEMPERATURE
+        async for chunk in _bind(model or self.model, temperature=temp, max_tokens=max_tokens).astream(input_data):
             yield chunk
 
     def create_tool_excute(
@@ -521,7 +523,8 @@ class Llm:
     async def vision(self, input_data: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
         if self._vision_model is None:
             raise ServiceError("图片理解模型配置缺失")
-        return await _bind(self._vision_model, temperature=temperature, max_tokens=max_tokens).ainvoke(input_data)
+        temp = temperature if temperature is not None else VISION_TEMPERATURE
+        return await _bind(self._vision_model, temperature=temp, max_tokens=max_tokens).ainvoke(input_data)
 
 
 @lru_cache(maxsize=1)

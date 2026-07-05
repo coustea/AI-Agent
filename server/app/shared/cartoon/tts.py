@@ -51,11 +51,45 @@ class CartoonTtsService:
             return cached
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        duration_ms, words = await self._synthesize_edge(
-            narration,
-            output_path,
-            edge_voice,
-        )
+        try:
+            duration_ms, words = await self._synthesize_edge(
+                narration,
+                output_path,
+                edge_voice,
+            )
+        except Exception as network_exc:
+            logger.warning(
+                "Edge TTS 合成连接失败 (%s)，自动切换为本地 FFmpeg 静音音频兜底",
+                network_exc,
+            )
+            # Estimate duration based on Chinese character / word count
+            char_count = len(re.findall(r"[\u4e00-\u9fff]|[a-zA-Z0-9]+", narration)) or len(narration)
+            duration_sec = max(1.8, char_count / 3.2)
+
+            import subprocess
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=22050:cl=mono",
+                "-t",
+                f"{duration_sec:.3f}",
+                "-acodec",
+                "libmp3lame",
+                str(output_path),
+            ]
+            try:
+                subprocess.run(ffmpeg_cmd, capture_output=True, check=True, timeout=10)
+                duration_ms = round(duration_sec * 1000)
+                words = []
+            except Exception as ffmpeg_exc:
+                logger.error("FFmpeg 静音兜底失败: %s", ffmpeg_exc)
+                raise RuntimeError(
+                    "Edge TTS 合成失败且 FFmpeg 无法生成兜底音频"
+                ) from network_exc
+
         if not words:
             words = self._fallback_boundaries(narration, duration_ms)
         self._write_cache(cache_audio, cache_metadata, output_path, duration_ms, words)

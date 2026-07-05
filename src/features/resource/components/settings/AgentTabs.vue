@@ -1,5 +1,5 @@
 <template>
-  <div class="workspace-tabs-bar grid grid-cols-2 border-b border-slate-100 bg-slate-50/50 p-4 gap-3 md:grid-cols-7">
+  <div class="workspace-tabs-bar grid grid-cols-2 border-b border-slate-100 bg-slate-50/50 p-4 gap-3 md:grid-cols-8">
     <button
       v-for="agent in agents"
       :key="agent.id"
@@ -128,8 +128,17 @@ function getSummary(id: string) {
     const density: Record<string, string> = { concise: '精炼', standard: '标准', detailed: '深入' }
     return `${style[configs.ppt.explanation_style] || configs.ppt.explanation_style} · ${density[configs.ppt.density] || configs.ppt.density}`
   }
-  const style: Record<string, string> = { diagram: '图解', minimal: '简约', dark_tech: '暗黑', chalkboard: '黑板' }
-  const depth: Record<string, string> = { overview: '概览', standard: '标准', deep: '深度' }; return `${style[configs.cartoon.style] || configs.cartoon.style} · ${depth[configs.cartoon.depth] || configs.cartoon.depth}`
+  if (id === 'cartoon') {
+    const style: Record<string, string> = { diagram: '图解', minimal: '简约', dark_tech: '暗黑', chalkboard: '黑板' }
+    const depth: Record<string, string> = { overview: '概览', standard: '标准', deep: '深度' }
+    return `${style[configs.cartoon.style] || configs.cartoon.style} · ${depth[configs.cartoon.depth] || configs.cartoon.depth}`
+  }
+  if (id === 'video') {
+    const style: Record<string, string> = { precision_light: '精确明亮', systems_dark: '系统深色', editorial_classroom: '编辑式课堂' }
+    const focus: Record<string, string> = { concept: '概念', process: '过程', comparison: '对比', practice: '实战' }
+    return `${style[configs.video.style] || configs.video.style} · ${focus[configs.video.focus] || configs.video.focus}`
+  }
+  return id
 }
 </script>
 

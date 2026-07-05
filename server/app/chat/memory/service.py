@@ -34,9 +34,8 @@ from app.config import (
     COMPRESS_MIN_MESSAGES,
     COMPRESS_MIN_TOKENS,
     LTM_MIN_CONFIDENCE,
-    LTM_MIN_MESSAGES,
-    LTM_MIN_TOKENS,
-    LTM_COOLDOWN_MINUTES,
+    UPDATE_MIN_MESSAGES,
+    UPDATE_MIN_TOKENS,
     SUMMARY_CONTEXT_BLOCKS,
 )
 from app.infra.database import session_scope
@@ -78,7 +77,6 @@ class ChatMemoryService:
         )
         self.long_term_memory = ChatLongTermMemoryService(
             min_confidence=LTM_MIN_CONFIDENCE,
-            cooldown_minutes=LTM_COOLDOWN_MINUTES,
         )
         self.llm = get_llm()
 
@@ -198,7 +196,6 @@ class ChatMemoryService:
                     SystemMessage(content="你是会话标题生成器。只输出一个简短中文标题，不要标点、引号或解释。"),
                     HumanMessage(content=f"为这段学习辅导对话生成标题，最多12个中文字符：\n{first_message}"),
                 ],
-                temperature=0.2,
                 max_tokens=32,
             )
             raw_title = str(getattr(resp, "content", resp) or "")
@@ -654,8 +651,6 @@ class ChatMemoryService:
         assistant_reply: str,
     ) -> dict[str, Any]:
         """Combined LTM + compression + profile token threshold check in a single DB session."""
-        from app.config import PROFILE_MIN_TOKENS, PROFILE_MIN_MESSAGES
-
         signals = classify_turn_signals(user_message, assistant_reply)
         ltm_signal = signals["ltm"]
         profile_signal = signals["global_profile"] or signals["course_profile"]
@@ -685,32 +680,23 @@ class ChatMemoryService:
                         "profile_message_count": 0,
                     }
                 else:
-                    # LTM 阈值判断（token >= 8000 或消息 >= 20 或信号触发）
+                    # 画像/长期记忆更新阈值判断（统一阈值）
                     ltm_token = int(chat_session.ltm_token_count or 0)
                     ltm_msg = int(chat_session.ltm_message_count or 0)
-                    ltm_threshold_due = ltm_token >= LTM_MIN_TOKENS or ltm_msg >= LTM_MIN_MESSAGES
-                    # 冷却时间为 0 时不检查冷却
-                    if LTM_COOLDOWN_MINUTES > 0:
-                        cooldown_ok = (
-                            chat_session.last_ltm_updated_at is None
-                            or (now() - chat_session.last_ltm_updated_at).total_seconds() >= LTM_COOLDOWN_MINUTES * 60
-                        )
-                    else:
-                        cooldown_ok = True
-                    should_ltm = (ltm_signal or ltm_threshold_due) and cooldown_ok and ltm_msg > 0
+                    ltm_threshold_due = ltm_token >= UPDATE_MIN_TOKENS or ltm_msg >= UPDATE_MIN_MESSAGES
+                    should_ltm = (ltm_signal or ltm_threshold_due) and ltm_msg > 0
                     ltm_schedule = {
                         "signal_detected": ltm_signal,
                         "threshold_due": ltm_threshold_due,
-                        "cooldown_ok": cooldown_ok,
                         "ltm_token_count": ltm_token,
                         "ltm_message_count": ltm_msg,
                         "last_ltm_message_id": int(chat_session.last_ltm_message_id or 0),
                     }
 
-                    # 画像阈值判断（token >= 6000 或消息 >= 12 或信号触发）
+                    # 画像阈值判断（与 LTM 共用统一阈值）
                     profile_token = int(chat_session.profile_token_count or 0)
                     profile_msg = int(chat_session.profile_message_count or 0)
-                    profile_threshold_due = profile_token >= PROFILE_MIN_TOKENS or profile_msg >= PROFILE_MIN_MESSAGES
+                    profile_threshold_due = profile_token >= UPDATE_MIN_TOKENS or profile_msg >= UPDATE_MIN_MESSAGES
                     should_profile = profile_signal or profile_threshold_due
                     profile_schedule = {
                         "signal_detected": profile_signal,

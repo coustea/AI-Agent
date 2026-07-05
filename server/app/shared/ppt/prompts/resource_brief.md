@@ -48,6 +48,28 @@ INPUT 中的 `preferences` 是用户明确要求：
 
 只能输出合法 PPTPlan JSON，不要 Markdown，不要解释，不要 HTML、CSS、JavaScript、SVG。
 
+# OUTPUT EXAMPLE
+
+```json
+{
+  "title": "进程调度策略",
+  "subtitle": "从状态转换到调度算法的系统讲解",
+  "purpose": "帮助学习者掌握进程调度的核心机制与常见策略对比",
+  "audience": "计算机专业本科生，已学习进程基本概念",
+  "density": "reading_first",
+  "narrative": "从进程状态切入，展示调度器工作流程，对比三大策略，最后自测巩固",
+  "template_preference": {"family": "technical", "scheme": "dark", "keywords": ["进程", "调度", "系统"]},
+  "slides": [
+    {"role": "cover", "shape": "statement", "title": "进程调度策略", "animation": "reveal", "statement": "CPU 如何在多个进程间合理分配时间？"},
+    {"role": "explain", "shape": "concept", "title": "进程状态转换是调度的前提", "animation": "reveal", "points": [{"label": "五状态模型", "detail": "新建→就绪→运行→阻塞→终止"}, {"label": "调度触发点", "detail": "时间片耗尽、I/O等待、优先级抢占"}], "takeaway": "调度发生在状态转换的边界"},
+    {"role": "explain", "shape": "system", "title": "调度器在内核中的位置", "animation": "build", "nodes": [{"id": "scheduler", "label": "调度器", "detail": "核心决策模块"}, {"id": "readyQ", "label": "就绪队列", "detail": "按策略排序"}, {"id": "cpu", "label": "CPU", "detail": "执行被选中的进程"}, {"id": "blockQ", "label": "阻塞队列", "detail": "等待事件唤醒"}]},
+    {"role": "explain", "shape": "sequence", "title": "上下文切换四步骤", "animation": "trace", "steps": [{"title": "保存旧进程", "detail": "寄存器和PC写入PCB"}, {"title": "更新PCB状态", "detail": "标记为就绪或阻塞"}, {"title": "恢复新进程", "detail": "从PCB加载寄存器"}, {"title": "切换地址空间", "detail": "更新页表基址寄存器"}]},
+    {"role": "explain", "shape": "comparison", "title": "FCFS vs RR vs SJF", "animation": "compare", "comparison": [{"title": "FCFS", "points": ["实现简单", "平均等待时间长", "护航效应"]}, {"title": "RR", "points": ["时间片轮转", "响应时间短", "时间片选择影响大"]}]},
+    {"role": "summary", "shape": "concept", "title": "调度策略选择指南", "animation": "reveal", "points": [{"label": "交互系统", "detail": "优先 RR，保证响应时间"}, {"label": "批处理系统", "detail": "优先 SJF，减少平均等待"}, {"label": "实时系统", "detail": "优先级调度，保证截止时间"}], "takeaway": "没有万能策略，只有最适合场景的选择"}
+  ]
+}
+```
+
 PPTPlan 必填字段：
 - title: 标题（≤64 字符）
 - subtitle: 副标题（≤120 字符）
@@ -67,3 +89,8 @@ PPTSlide 每页必填字段：
 points 字段格式：[{label, detail}] 而非字符串数组。
 comparison 字段格式：[{title, points}] 恰好两组。
 steps 字段格式：[{title, detail}] 而非字符串数组。
+
+
+# SAFETY（安全约束）
+
+- 严禁输出任何涉及色情、赌博、毒品、暴力等违法违规或不良信息的内容

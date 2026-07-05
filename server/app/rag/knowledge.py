@@ -47,8 +47,6 @@ from app.config import (
     KB_SNIPPET_MAX,
     KB_SNIPPET_MIN,
     KB_TOP_K,
-    KB_QUERY_EMBEDDING_CACHE_SIZE,
-    KB_SPARSE_CORPUS_LIMIT,
 )
 from app.rag.knowledge_router import route_query_sources as _hybrid_route, QueryRouteResult as _RouterQueryRouteResult
 from app.infra.logging import get_logger
@@ -422,7 +420,7 @@ def _get_sparse_corpus() -> list[dict[str, Any]]:
         if collection is None:
             return []
         # 限制加载数量，防止超大知识库撑爆内存
-        raw = collection.get(include=["documents", "metadatas"], limit=KB_SPARSE_CORPUS_LIMIT)
+        raw = collection.get(include=["documents", "metadatas"], limit=50000)
     except Exception:
         logger.exception("[knowledge] failed to load sparse corpus")
         return []
@@ -465,7 +463,7 @@ def _get_bm25_index() -> BM25Index:
     return build_bm25_index(_get_sparse_corpus())
 
 
-@lru_cache(maxsize=KB_QUERY_EMBEDDING_CACHE_SIZE)
+@lru_cache(maxsize=500)
 def _get_cached_embedding(query: str) -> tuple[float, ...] | None:
     """获取查询的向量表示（带 LRU 缓存）。
 

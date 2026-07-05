@@ -220,7 +220,6 @@ class ChatSessionCompressor:
                     SystemMessage(content=prompt),
                     HumanMessage(content="请根据以上对话记录输出会话摘要 Markdown。"),
                 ],
-                temperature=0.1,
             )
             summary_markdown = str(resp.content or "").strip()
             logger.info(

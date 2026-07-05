@@ -41,10 +41,9 @@ class ChatLongTermMemoryService:
         self,
         *,
         min_confidence: float = 0.75,
-        cooldown_minutes: int = 30,
     ) -> None:
         self.min_confidence = min_confidence
-        self.cooldown_seconds = cooldown_minutes * 60
+        self.cooldown_seconds = 0  # 冷却时间由外层 evaluate_post_turn_jobs 控制
         self.llm = get_llm()
 
     def should_consider_update(
@@ -176,7 +175,6 @@ class ChatLongTermMemoryService:
         resp = await self.llm.ainvoke_json(
             MemoryUpdateOutput,
             prompt,
-            temperature=0.1,
         )
         logger.info(
             "[ChatLongTermMemoryService.maybe_update] LLM判断结果: user_id=%s need_update=%s confidence=%s",

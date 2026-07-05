@@ -19,7 +19,7 @@
         <div class="titlebar-dots">
           <span></span><span></span><span></span>
         </div>
-        <div class="titlebar-label">
+        <div class="titlebar-label" v-if="agentMeta">
           <component :is="agentMeta.icon" class="titlebar-icon" />
           <span>{{ agentMeta.name }}</span>
         </div>
@@ -27,7 +27,7 @@
       </div>
 
       <!-- The actual per-agent content preview component -->
-      <div class="preview-content-area">
+      <div class="preview-content-area" v-if="agentMeta">
         <!-- eslint-disable-next-line @typescript-eslint/no-explicit-any -->
         <component :is="agentMeta.view" :config="(activeConfig as any)" :topic="topic" />
       </div>
@@ -66,6 +66,7 @@ import {
   PhCode as CodeIcon,
   PhFileText as FileText,
   PhFilmStrip as FilmStrip,
+  PhVideoCamera as VideoCamera,
   PhPresentationChart as Presentation,
   PhShareNetwork as ShareNetwork,
 } from '@phosphor-icons/vue'
@@ -101,6 +102,7 @@ const agentMeta = computed(() => ({
   reading:  { name: '拓展阅读推荐',  icon: Books,         view: Read     },
   ppt:      { name: '演示幻灯课件',  icon: Presentation,  view: Slide    },
   cartoon:  { name: '动画讲解视频',  icon: FilmStrip,     view: Video    },
+  video:    { name: '讲解视频',      icon: VideoCamera,   view: Video    },
 })[props.activeId])
 
 // ── Impact lines ──────────────────────────────────────────────────────────────
@@ -194,9 +196,17 @@ const impactLines = computed((): string[] => {
     return [sLines[c.ppt.explanation_style], dLines[c.ppt.density], focusLabels.length ? `大纲重点：${focusLabels.join('、')}` : null].filter(Boolean) as string[]
   }
   if (id === 'cartoon') {
-    const sLines: Record<string, string> = { diagram: '立体结构图解，3D 视角可视化', minimal: '简约扁平风格，清晰无干扰', dark_tech: '暗黑荧光科技感，适合算法 / 底层' }
-    const fLines: Record<string, string> = { concept: '以概念原理解释为核心叙事', process: '逐帧追踪执行过程与状态变化', comparison: '多维对比辨析，强化理解差异', practice: '真实代码演练，边写边讲' }
-    return [sLines[c.cartoon.style], fLines[c.cartoon.focus], `视频时长上限 ${c.cartoon.video_length_seconds} 秒`].filter(Boolean) as string[]
+    const sLines: Record<string, string> = { diagram: '立体结构图解，3D 视角可视化', minimal: '简约扁平风格，清晰无干扰', dark_tech: '暗黑荧光科技感，适合算法 / 底层', chalkboard: '黑板粉笔风格，经典教学感' }
+    const dLines: Record<string, string> = { overview: '快速概览，适合预习', standard: '标准讲解深度', deep: '深度剖析，适合复习强化' }
+    const pLines: Record<string, string> = { fast: '快速演示节奏', normal: '正常讲解节奏', slow: '慢速细看节奏' }
+    const vLines: Record<string, string> = { clean: '简洁画面，突出核心', balanced: '平衡画面，图文并重', detailed: '详细画面，含辅助标注' }
+    return [sLines[c.cartoon.style], dLines[c.cartoon.depth], pLines[c.cartoon.pace], vLines[c.cartoon.visuals]].filter(Boolean) as string[]
+  }
+  if (id === 'video') {
+    const sLines: Record<string, string> = { precision_light: '精确明亮演算视图，适合算法/代码', systems_dark: '深色系统图谱，适合操作系统/网络', editorial_classroom: '编辑式课堂表达，适合概念讲解' }
+    const fLines: Record<string, string> = { concept: '侧重概念解释与定义', process: '侧重步骤追踪与状态变化', comparison: '侧重多维对比与辨析', practice: '侧重实战演示与代码演练' }
+    const rLines: Record<string, string> = { '16:9': '横屏 1920×1080，传统播放', '9:16': '竖屏 1080×1920，短视频平台', '1:1': '方形 1080×1080，社交媒体' }
+    return [sLines[c.video.style], fLines[c.video.focus], rLines[c.video.aspect_ratio]].filter(Boolean) as string[]
   }
   return []
 })

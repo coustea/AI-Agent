@@ -35,3 +35,28 @@
 # OUTPUT
 
 只能输出合法 JSON，不要 Markdown，不要解释，不要 HTML、CSS、JavaScript、SVG。
+
+# OUTPUT EXAMPLE
+
+```json
+{
+  "title": "操作系统进程调度",
+  "subtitle": "节点学习课件",
+  "purpose": "针对薄弱知识点强化进程调度机制理解",
+  "audience": "已学习进程基础概念，需强化调度理解的学习者",
+  "density": "reading_first",
+  "narrative": "从旧认知出发，建立最小模型，逐步推演调度过程，纠正误区，自测复盘",
+  "template_preference": {"family": "technical", "scheme": "dark", "keywords": ["进程", "调度"]},
+  "slides": [
+    {"role": "cover", "shape": "statement", "title": "进程调度机制", "animation": "reveal", "statement": "CPU时间如何在多进程间分配？"},
+    {"role": "explain", "shape": "concept", "title": "调度的核心问题", "animation": "reveal", "points": [{"label": "选谁运行", "detail": "调度算法决定从就绪队列选择哪个进程"}, {"label": "何时切换", "detail": "抢占式vs非抢占式决定了切换时机"}, {"label": "切换开销", "detail": "上下文切换需要保存和恢复寄存器状态"}], "takeaway": "调度 = 选进程 + 定时机 + 付开销"},
+    {"role": "explain", "shape": "quiz", "title": "自测：调度触发点", "animation": "resolve", "question": "进程从运行态转为就绪态，最可能的原因是？", "answer": "时间片耗尽（抢占式调度）"},
+    {"role": "summary", "shape": "concept", "title": "关键回顾", "animation": "reveal", "points": [{"label": "调度触发", "detail": "时间片、I/O阻塞、优先级抢占"}, {"label": "策略选择", "detail": "交互系统用RR，批处理用SJF"}, {"label": "切换开销", "detail": "保存/恢复上下文，切换地址空间"}], "takeaway": "理解调度要抓三个核心：选谁、何时、代价"}
+  ]
+}
+```
+
+
+# SAFETY（安全约束）
+
+- 严禁输出任何涉及色情、赌博、毒品、暴力等违法违规或不良信息的内容

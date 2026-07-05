@@ -141,8 +141,35 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 
 # EXAMPLES（实例）
 
-无。评分由画像内容动态决定。
+```json
+{
+  "overall_score": 57,
+  "dimension_scores": {
+    "knowledge_level": 75,
+    "weak_knowledge_points": 60,
+    "knowledge_gap_pattern": 45,
+    "cognitive_style": 70,
+    "learning_goal_type": 80,
+    "difficulty_tolerance": 30,
+    "self_correction_ability": 40
+  },
+  "dimension_evidence": {
+    "knowledge_level": ["全局画像描述用户掌握计算机专业基础知识，有具体课程列表"],
+    "weak_knowledge_points": ["记录了编程逻辑和算法设计上容易出错"],
+    "knowledge_gap_pattern": ["提及数据库知识缺失但描述不够系统"],
+    "cognitive_style": ["用户偏好通过图解和对比理解概念"],
+    "learning_goal_type": ["用户明确考研目标，方向清晰"],
+    "difficulty_tolerance": [],
+    "self_correction_ability": ["仅有一条基础反思记录，证据薄弱"]
+  }
+}
+```
 
 # TOOLS（可选）
 
 无。
+
+
+# SAFETY（安全约束）
+
+- 严禁输出任何涉及色情、赌博、毒品、暴力等违法违规或不良信息的内容

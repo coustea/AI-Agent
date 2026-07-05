@@ -28,7 +28,7 @@ from app.chat.agent.tools import build_tutor_tools
 from app.chat.utils import normalize_message_content
 from app.chat.utils.files import analyze_documents
 from app.chat.utils.vision import VisionService
-from app.config import IMAGE_EXTENSIONS, STREAM_TEMPERATURE
+from app.config import IMAGE_EXTENSIONS
 from app.infra.logging import get_logger
 from app.infra.tool_excute import ToolExcute, ToolRuntimeEvent
 
@@ -357,7 +357,6 @@ async def react_node(
             async for chunk in llm.astream(
                 messages,
                 model=tool_model,
-                temperature=STREAM_TEMPERATURE,
             ):
                 # 累积响应（用于最终获取完整的 tool_calls）
                 accumulated_response = chunk if accumulated_response is None else accumulated_response + chunk

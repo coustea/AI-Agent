@@ -85,6 +85,28 @@ def _memory_bytes() -> tuple[int, int]:
         except (OSError, subprocess.SubprocessError, ValueError):
             pass
 
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_uint64),
+                    ("ullAvailPhys", ctypes.c_uint64),
+                    ("ullTotalPageFile", ctypes.c_uint64),
+                    ("ullAvailPageFile", ctypes.c_uint64),
+                    ("ullTotalVirtual", ctypes.c_uint64),
+                    ("ullAvailVirtual", ctypes.c_uint64),
+                    ("ullAvailExtendedVirtual", ctypes.c_uint64),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            return int(stat.ullTotalPhys), int(stat.ullAvailPhys)
+        except Exception:
+            pass
+
     meminfo = Path("/proc/meminfo")
     if meminfo.is_file():
         values: dict[str, int] = {}
@@ -125,6 +147,21 @@ def _physical_core_count(logical_cpus: int) -> int:
         except (OSError, subprocess.SubprocessError, ValueError):
             return logical_cpus
 
+    if system == "Windows":
+        try:
+            result = subprocess.run(
+                ["wmic", "cpu", "get", "NumberOfCores"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=True,
+            )
+            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if len(lines) > 1:
+                return max(1, int(lines[1]))
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
+
     if system == "Linux":
         topology_root = Path("/sys/devices/system/cpu")
         cores: set[tuple[str, str]] = set()
@@ -160,11 +197,17 @@ def _ffmpeg_encoders() -> str:
 
 
 def _nvidia_gpu_available(encoders: str) -> bool:
-    """Return whether Linux has a working NVIDIA driver and NVENC encoder."""
-    if platform.system() != "Linux" or "h264_nvenc" not in encoders:
+    """Return whether Linux or Windows has a working NVIDIA driver and NVENC encoder."""
+    system = platform.system()
+    if system not in {"Linux", "Windows"} or "h264_nvenc" not in encoders:
         return False
 
     nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None and system == "Windows":
+        default_path = Path(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe")
+        if default_path.is_file():
+            nvidia_smi = str(default_path)
+
     if nvidia_smi is None:
         return False
     try:
@@ -288,39 +331,33 @@ class CartoonVideoRenderer:
         logger.info("在 %s 启动 HyperFrames: %s", output_dir, " ".join(command))
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                cwd=str(output_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-        except OSError as exc:
-            return f"无法启动 HyperFrames CLI: {exc}"
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=self.timeout_seconds,
+            from app.shared.utils.proc_logger import run_process_with_logging
+            code, stdout_text, stderr_text = await run_process_with_logging(
+                command,
+                cwd=output_dir,
+                timeout_seconds=self.timeout_seconds,
+                logger_name="app.shared.cartoon.render",
             )
         except asyncio.TimeoutError as exc:
-            process.kill()
-            await process.communicate()
             raise CartoonRenderError(
                 f"HyperFrames 渲染在 {self.timeout_seconds} 秒后超时"
             ) from exc
+        except OSError as exc:
+            return f"无法启动 HyperFrames CLI: {exc}"
 
-        if process.returncode == 0:
+        if code == 0:
             return None
 
-        stdout_text = stdout.decode("utf-8", errors="replace").strip()
-        stderr_text = stderr.decode("utf-8", errors="replace").strip()
+        stdout_text = stdout_text.strip()
+        stderr_text = stderr_text.strip()
         details = self._error_details(stdout_text, stderr_text)
-        return f"退出码 {process.returncode}: {details}"
+        return f"退出码 {code}: {details}"
 
     @staticmethod
     def _command(profile: CartoonRenderProfile) -> list[str]:
+        npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
         command = [
-            "npx",
+            npx_cmd,
             "--no-install",
             "hyperframes",
             "render",

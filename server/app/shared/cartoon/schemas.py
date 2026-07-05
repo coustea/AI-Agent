@@ -1,6 +1,11 @@
 """Structured contracts for deterministic animated teaching videos.
 
-面向计算机理论知识的动画演示 — 支持树、图、队列、栈、链表等数据结构的动态操作演示。
+面向计算机理论知识的动画演示 — 通用可视化原语体系。
+支持数据结构、算法、数学、数据库、编译原理、操作系统、离散数学等
+所有计算机本科理论课程的动态演示。
+
+核心设计：不按学科分类，按可视化模式分类。
+LLM 根据 learning_need 自动选择合适的可视化模式组合。
 """
 
 from __future__ import annotations
@@ -22,34 +27,39 @@ class SourceArtifact(StrictModel):
     materials: list[str] = Field(default_factory=list, max_length=12)
 
 
-# ===================== Visual Kind — 数据结构可视化原语 =====================
+# ===================== Visual Kind — 通用可视化原语 =====================
+#
+# 设计原则：
+# - 每个 kind 描述"这个元素在视觉上是什么形态"，而非"它属于哪个学科"
+# - 同一个 kind 可跨学科复用（node 既是树节点也是 ER 实体也是 NFA 状态）
+# - 学科差异由 prompt 根据 learning_need 自动推断，不写死在 schema 里
 
 VisualKind = Literal[
-    # 通用节点
-    "node",
-    "label",
-    "code",
-    "metric",
-    "formula",
-    "packet",
-    # 状态
-    "state",
-    # 数据结构（新增）
-    "tree_node",    # 树节点 — 圆形/圆角方块，显示值，可连边
-    "graph_node",   # 图节点 — 圆形，显示标签，可连边
-    "cell",         # 数组格子 — 带索引的方块，显示值
-    "pointer",      # 指针/引用 — 箭头指向目标
-    # 容器
-    "array",
-    "stack",
-    "queue",
+    # ── 通用元素 ──
+    "node",         # 通用节点 — 任何离散对象（概念、实体、状态、处理器）
+    "label",        # 纯文本标签 — 注释、说明、标题
+    "code",         # 代码块 — 代码行、伪代码
+    "metric",       # 数值指标 — 计数器、复杂度、命中率
+    "formula",      # 公式展示 — 数学公式、等式、不等式
+    "packet",       # 数据包/消息 — 网络包、请求/响应、信号
+
+    # ── 结构类元素（树/图/ER/语法树等） ──
+    "cell",         # 格子/槽位 — 数组格子、哈希桶、寄存器、页表项
+    "state",        # 状态指示器 — 自动机状态、进程状态、协议状态
+    "step",         # 步骤/阶段 — 流程步骤、推导步骤、证明步骤
+
+    # ── 容器类元素 ──
+    "array",        # 数组容器 — items 为格子内容
+    "stack",        # 栈容器 — items 自底向上排列
+    "queue",        # 队列容器 — items 从左到右排列
+    "table",        # 表格容器 — items 为行内容（数据库表、真值表、关系表）
 ]
 
 
-# ===================== Animation Action — 操作型动画 =====================
+# ===================== Animation Action — 通用操作型动画 =====================
 
 AnimationAction = Literal[
-    # 基础动画
+    # ── 基础动画 ──
     "reveal",       # 首次出现（淡入）
     "focus",        # 聚焦强调
     "transfer",     # 数据/请求沿连接传递
@@ -57,14 +67,19 @@ AnimationAction = Literal[
     "swap",         # 两个元素位置互换
     "traverse",     # 按 targets 顺序逐个高亮
     "branch",       # 展开分支
-    "state_change", # 状态变化（改背景色）
+    "state_change", # 状态变化（改背景色/显示内容）
     "count",        # 数值增长
-    # 操作型动画（新增）
+
+    # ── 操作型动画（优先使用） ──
     "insert",       # 元素从指定方向滑入到位置
     "remove",       # 元素从位置滑出消失
     "highlight_path",  # 高亮路径上的节点和边
     "value_change",    # 元素的值发生变化
     "shift",           # 一组元素整体平移
+
+    # ── 推导型动画 ──
+    "derive",       # 公式/等式的推导变换（源元素淡出，结果淡入）
+    "transform",    # 结构变换（如 NFA→DFA、语法树归约）
 ]
 
 
@@ -77,21 +92,25 @@ SceneRole = Literal[
     "compare",
     "architecture",
     "code_trace",
+    "derivation",   # 推导/证明场景
     "recap",
 ]
 
 SceneLayout = Literal[
-    "hero",
-    "flow",
-    "compare",
-    "stack",
-    "tree",
-    "graph",        # 新增：图布局
-    "code",
-    "array_view",   # 新增：数组视图
-    "queue_view",   # 新增：队列视图
-    "grid",
-    "recap",
+    "hero",         # 单一核心元素
+    "flow",         # 流程图，元素按顺序排列
+    "compare",      # 对比视图，左右分栏
+    "stack",        # 栈视图，元素纵向堆叠
+    "tree",         # 树/层次结构，节点绝对定位 + edges
+    "graph",        # 图/网络结构，节点绝对定位 + edges
+    "state_diagram", # 状态机/自动机，状态节点 + transitions
+    "code",         # 代码执行轨迹
+    "array_view",   # 数组/表格行视图，格子横向排列
+    "queue_view",   # 队列视图，左入口右出口
+    "table_view",   # 表格视图，行列结构（数据库表、真值表）
+    "derivation",   # 推导链视图，公式/等式逐步变换
+    "grid",         # 多元素网格
+    "recap",        # 总结回顾
 ]
 
 
@@ -112,7 +131,7 @@ class VisualElement(StrictModel):
     detail: str = Field(default="", max_length=160)
     items: list[str] = Field(default_factory=list, max_length=8)
     value: str = Field(default="", max_length=40)
-    # 新增：位置坐标（用于 tree/graph 绝对定位）
+    # 绝对定位坐标（用于 tree/graph/state_diagram 等需要精确定位的布局）
     x: int | None = None
     y: int | None = None
 
@@ -123,7 +142,9 @@ class VisualConnection(StrictModel):
     source: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     target: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     label: str = Field(default="", max_length=30)
-    kind: Literal["edge", "pointer", "arrow"] = "edge"  # 新增：连接类型
+    kind: Literal["edge", "pointer", "arrow", "transition"] = "edge"
+    # transition 的触发条件（如状态机转换条件）
+    condition: str = Field(default="", max_length=30)
 
 
 # ===================== Animation Cue =====================
@@ -134,10 +155,14 @@ class AnimationCue(StrictModel):
     action: AnimationAction
     targets: list[str] = Field(min_length=1, max_length=6)
     keyword: str = Field(default="", max_length=24)
-    # 新增：操作型动画参数
-    direction: Literal["left", "right", "top", "bottom"] = "top"  # insert/remove 的方向
-    path: list[str] = Field(default_factory=list, max_length=8)   # highlight_path 的节点序列
-    new_value: str = Field(default="", max_length=40)             # value_change 的新值
+    # insert/remove 的方向
+    direction: Literal["left", "right", "top", "bottom"] = "top"
+    # highlight_path 的节点序列
+    path: list[str] = Field(default_factory=list, max_length=8)
+    # value_change 的新值
+    new_value: str = Field(default="", max_length=40)
+    # derive/transform 的结果元素 ID
+    result: str = Field(default="", max_length=32)
 
 
 # ===================== Scene Brief =====================
@@ -200,7 +225,7 @@ class StaticAudit(StrictModel):
     scene_count: int = Field(ge=0)
 
 
-# ===================== Cartoon Video Request — 重构参数 =====================
+# ===================== Cartoon Video Request — 4 参数影响 HTML 输出 =====================
 
 class CartoonVideoRequest(StrictModel):
     """动画视频生成请求 — 4 个参数全部影响 HTML 输出。"""

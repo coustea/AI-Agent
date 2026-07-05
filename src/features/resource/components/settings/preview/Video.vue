@@ -32,10 +32,16 @@
 import { computed } from 'vue'
 import { PhPlay } from '@phosphor-icons/vue'
 import type { AnyAgentConfigs } from '../../../model/catalog'
-const props = defineProps<{ config: AnyAgentConfigs['cartoon']; topic: string }>()
+const props = defineProps<{ config: AnyAgentConfigs['video'] | AnyAgentConfigs['cartoon']; topic: string }>()
 const shortTopic = computed(() => props.topic.length > 18 ? `${props.topic.slice(0, 18)}…` : props.topic)
-const duration = computed(() => `${Math.floor(props.config.video_length_seconds / 60).toString().padStart(2, '0')}:${(props.config.video_length_seconds % 60).toString().padStart(2, '0')}`)
-const scenes = computed(() => ({ concept: ['提出问题', '解释概念', '总结要点'], process: ['起始状态', '过程演化', '结果回顾'], comparison: ['对象 A', '差异对照', '对象 B'], practice: ['任务说明', '动手演示', '运行结果'] })[props.config.focus])
+const duration = '03:00' // 固定 180 秒
+const scenes = computed(() => {
+  const c = props.config as Record<string, string>
+  // video agent uses focus; cartoon uses depth
+  if ('focus' in c) return ({ concept: ['提出问题', '解释概念', '总结要点'], process: ['起始状态', '过程演化', '结果回顾'], comparison: ['对象 A', '差异对照', '对象 B'], practice: ['任务说明', '动手演示', '运行结果'] })[c.focus as string] ?? ['开场', '讲解', '总结']
+  if ('depth' in c) return ({ overview: ['概念引入', '核心要点', '快速回顾'], standard: ['问题引入', '原理解析', '操作演示', '要点总结'], deep: ['问题引入', '原理剖析', '逐步演示', '变体讨论', '深度总结'] })[c.depth as string] ?? ['开场', '讲解', '总结']
+  return ['开场', '讲解', '总结']
+})
 </script>
 
 <style scoped>

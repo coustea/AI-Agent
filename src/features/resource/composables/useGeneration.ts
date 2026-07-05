@@ -17,6 +17,7 @@ import { useResourceEvents } from './useResourceEvents'
 import {
   PPT_AGENT_ID,
   CARTOON_AGENT_ID,
+  VIDEO_AGENT_ID,
   COORDINATOR_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
@@ -35,7 +36,7 @@ export function useGeneration() {
   const currentPhase = ref<Phase>('input')
   const naturalInput = ref('')
   const learningScenario = ref<LearningScenario>('daily_review')
-  const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt'])
+  const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'cartoon', 'video'])
 
   const agentConfigs = ref<AnyAgentConfigs>({
     content: { structure: 'progressive', depth_level: 'standard', focus_mode: 'full_coverage', include_examples: true },
@@ -44,7 +45,8 @@ export function useGeneration() {
     code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner', focus: 'syntax' },
     reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'concept', density: 'standard', focus: ['core_concepts'] },
-    cartoon: { style: 'diagram', voice: 'teacher', video_length_seconds: 120, focus: 'concept' },
+    cartoon: { style: 'diagram', depth: 'standard', pace: 'normal', visuals: 'balanced' },
+    video: { style: 'precision_light', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
   })
 
   const dagSelectedAgentIds = computed(() => {
@@ -52,7 +54,7 @@ export function useGeneration() {
   })
 
   const baseGenerationAgentIds = computed(() => (
-    dagSelectedAgentIds.value.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
+    dagSelectedAgentIds.value.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID, VIDEO_AGENT_ID].includes(id))
   ))
 
   const dagNodeStates = ref<Record<string, DagNodeState>>({})
@@ -93,6 +95,9 @@ export function useGeneration() {
     if (selected.includes(CARTOON_AGENT_ID)) {
       nodes.push(dagNodeStates.value[CARTOON_AGENT_ID] || { id: CARTOON_AGENT_ID, label: '动画讲解助手', icon: '🎬', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
     }
+    if (selected.includes(VIDEO_AGENT_ID)) {
+      nodes.push(dagNodeStates.value[VIDEO_AGENT_ID] || { id: VIDEO_AGENT_ID, label: '讲解视频助手', icon: '🎥', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
+    }
     nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
     return nodes
   })
@@ -129,10 +134,13 @@ export function useGeneration() {
       { weight: 15, progress: getStageNode('planning').progress },
       { weight: 55, progress: parallelPoolNodes.value.length ? parallelPoolNodes.value.reduce((sum, node) => sum + node.progress, 0) / parallelPoolNodes.value.length : 0 },
       ...(dagSelectedAgentIds.value.includes(PPT_AGENT_ID as ResourceAgentId) ? [
-        { weight: 20, progress: getStageNode(PPT_AGENT_ID).progress },
+        { weight: 15, progress: getStageNode(PPT_AGENT_ID).progress },
       ] : []),
       ...(dagSelectedAgentIds.value.includes(CARTOON_AGENT_ID as ResourceAgentId) ? [
-        { weight: 20, progress: getStageNode(CARTOON_AGENT_ID).progress },
+        { weight: 15, progress: getStageNode(CARTOON_AGENT_ID).progress },
+      ] : []),
+      ...(dagSelectedAgentIds.value.includes(VIDEO_AGENT_ID as ResourceAgentId) ? [
+        { weight: 15, progress: getStageNode(VIDEO_AGENT_ID).progress },
       ] : []),
       { weight: 10, progress: getStageNode(BUNDLE_AGENT_ID).progress },
     ]

@@ -10,7 +10,6 @@
 import json
 
 from app.resource.schemas import (
-    DownstreamContext,
     NodeInput,
     ResourceInput,
     TeachingPlan,

@@ -77,7 +77,7 @@ class CartoonPipeline:
                 return await self.tts.synthesize(
                     text=brief.scenes[index].narration,
                     output_path=audio_dir / f"scene_{index}.mp3",
-                    voice=request.voice,
+                    voice="zh-CN-XiaoxiaoNeural",
                 )
 
         try:
