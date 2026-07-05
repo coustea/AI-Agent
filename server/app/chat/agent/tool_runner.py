@@ -82,10 +82,18 @@ class TutorToolRunner:
             )
             normalized = normalize_tool_result(raw_result)
             result_text = normalized.text
-            tool_status = "success" if result_text else "ignored"
+            # RAG 工具返回 status 字段：ok/empty/unavailable
+            tool_status_value = normalized.metadata.get("status")
+            if tool_status_value == "empty":
+                tool_status = "ignored"
+            elif tool_status_value == "unavailable":
+                tool_status = "failed"
+            else:
+                tool_status = "success" if result_text else "ignored"
 
             evidence_type = TOOL_EVIDENCE_TYPES.get(tool_name)
-            if evidence_type and result_text:
+            # empty 和 unavailable 不建立 Evidence 和收集 sources
+            if evidence_type and result_text and tool_status_value != "empty" and tool_status_value != "unavailable":
                 evidence_details = {"tool_name": tool_name, "args": normalized_payload, **normalized.metadata}
                 evidence_entry = Evidence(
                     evidence_type=evidence_type,
@@ -94,7 +102,7 @@ class TutorToolRunner:
                 ).model_dump()
                 node_evidence.append(evidence_entry)
 
-            if evidence_type and result_text:
+            if evidence_type and result_text and tool_status_value != "empty" and tool_status_value != "unavailable":
                 node_sources.extend(source.model_dump() for source in normalized.sources)
 
         except Exception as exc:
