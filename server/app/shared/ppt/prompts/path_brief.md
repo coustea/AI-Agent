@@ -13,11 +13,13 @@
 1. 第一页 role=`cover`，最后一页 role=`summary` 或 `closing`。
 2. 使用“旧认知/痛点 → 最小模型 → 逐步推演 → 常见误区 → 自测 → 复盘”的自学节奏。
 3. 每页只解释一个关键变化，标题直接给出结论。
-4. 至少使用 5 种 content shape，相邻页不要使用同一种 shape，避免连续卡片式内容。
-5. tutorial_markdown 中的代码只截取能说明当前执行步骤的片段。
+4. 至少使用 5 种 content shape，相邻页绝对不能使用同一种 shape，避免连续卡片式内容。
+5. tutorial_markdown 中的代码只截取能说明当前执行步骤 of 片段。
 6. density 固定为 `reading_first`，但每页仍需控制容量：points/steps ≤ 6，nodes ≤ 8。
 7. animation 使用 reveal、focus、trace、compare、build、resolve，分别对应出现、聚焦、沿路径推进、对照、逐层构造和先问后答。
 8. speaker_notes 简述本页讲解顺序，帮助后续教学视频配音与画面节奏对齐。
+9. **页面饱满度与叙事深度**：对于 points、steps 或 nodes 中的每个子项，其 `detail` 必须详细且深入阐明其原理（保持在 30–60 字左右），不能写成单薄的一两句话。每页除主要图表外，必须同时填写 `takeaway`（总结金句）或 `statement`，从而精美填补排版间隙，防止页面空旷。
+10. **排版形式多样化交替**：严禁连续两页使用相同的 shape。整体课件必须频繁在 `concept`、`system`、`sequence`、`comparison`、`code`/`formula`、`quiz` 等各种结构版式间灵活穿插，为自学者提供卓越的可视化叙事体验。
 
 # REQUIRED SHAPE CONTENT
 

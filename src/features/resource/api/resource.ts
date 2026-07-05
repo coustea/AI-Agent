@@ -31,5 +31,5 @@ export function getResourceBundle(resourceId: number) {
 }
 
 export function getPptTemplates() {
-  return http.get<ApiResponse<PptTemplateOption[]>>('/ai/ppt/templates')
+  return http.get<ApiResponse<PptTemplateOption[]>>('/ai/resources/ppt/templates')
 }

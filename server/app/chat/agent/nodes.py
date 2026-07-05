@@ -281,7 +281,6 @@ async def react_node(
     )
     tools = build_tutor_tools(
         request_context,
-        research_model=llm.model,
         research_event_handler=emit_research_status,
     )
 

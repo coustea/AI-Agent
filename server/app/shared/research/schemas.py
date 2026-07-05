@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 # 搜索任务定义
 # ============================================================================
 
-ResearchSource = Literal["knowledge_base", "web"]
+ResearchSource = Literal["web"]
 ResearchDepth = Literal["quick", "standard", "deep"]
 
 

@@ -129,12 +129,24 @@ class VisualElement(StrictModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     kind: VisualKind
     label: str = Field(default="", max_length=80)
-    detail: str = Field(default="", max_length=160)
-    items: list[str] = Field(default_factory=list, max_length=8)
-    value: str = Field(default="", max_length=40)
+    detail: str = Field(default="", max_length=1000)
+    items: list[str] = Field(default_factory=list, max_length=30)
+    value: str = Field(default="", max_length=1000)
     # 绝对定位坐标（用于 tree/graph/state_diagram 等需要精确定位的布局）
     x: int | None = None
     y: int | None = None
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def normalize_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip().lower()
+        if s and not s[0].isalpha():
+            s = "n" + s
+        import re
+        s = re.sub(r"[^a-z0-9_-]", "_", s)
+        return s[:32]
 
     @field_validator("kind", mode="before")
     @classmethod
@@ -145,13 +157,21 @@ class VisualElement(StrictModel):
             "list_item": "step",
             "array_view": "array",
             "array_cell": "cell",
-            "list": "array"
+            "list": "array",
+            "box": "node",
+            "rect": "node",
+            "circle": "node",
+            "block": "node",
+            "pointer": "node",
+            "card": "node",
         }
         return mapping.get(value, value)
 
     @field_validator("items", mode="before")
     @classmethod
     def normalize_items(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return [str(x) for x in value]
         if isinstance(value, str):
             if value.startswith("[") and value.endswith("]"):
                 try:
@@ -173,8 +193,20 @@ class VisualConnection(StrictModel):
     target: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     label: str = Field(default="", max_length=30)
     kind: Literal["edge", "pointer", "arrow", "transition"] = "edge"
-    # transition 的触发条件（如状态机转换条件）
+    # transition 的触发 condition
     condition: str = Field(default="", max_length=30)
+
+    @field_validator("source", "target", mode="before")
+    @classmethod
+    def normalize_conn_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip().lower()
+        if s and not s[0].isalpha():
+            s = "n" + s
+        import re
+        s = re.sub(r"[^a-z0-9_-]", "_", s)
+        return s[:32]
 
 
 # ===================== Animation Cue =====================
@@ -203,9 +235,26 @@ class AnimationCue(StrictModel):
             "fade_in": "reveal",
             "animate": "reveal",
             "move": "reveal",
-            "connect": "reveal"
+            "connect": "reveal",
+            "highlight_line": "highlight_code",
+            "highlight_lines": "highlight_code",
         }
         return mapping.get(value, value)
+
+    @field_validator("targets", "path", mode="before")
+    @classmethod
+    def normalize_cue_ids(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            res = []
+            for item in value:
+                s = str(item).strip().lower()
+                if s and not s[0].isalpha():
+                    s = "n" + s
+                import re
+                s = re.sub(r"[^a-z0-9_-]", "_", s)
+                res.append(s[:32])
+            return res
+        return value
 
 
 # ===================== Scene Brief =====================

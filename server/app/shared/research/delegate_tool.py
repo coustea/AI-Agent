@@ -28,7 +28,6 @@ class ResearchToolArgs(BaseModel):
 
 def build_research_tool(
     *,
-    model: Any | None = None,
     event_handler: ResearchEventHandler | None = None,
     enabled: bool = True,
 ) -> Tool:
@@ -44,12 +43,10 @@ def build_research_tool(
                 "text": "当前任务未启用联网研究。",
                 "sources": [],
                 "query": query,
-                "evidence": [],
                 "errors": [],
             }
 
         report = await ResearchAgent(
-            model=model,
             event_handler=event_handler,
         ).run(
             ResearchTask(
@@ -59,7 +56,20 @@ def build_research_tool(
                 sources={"web"},
             )
         )
-        result_text = report.context.strip()
+
+        # 将搜索结果拼接为文本摘要
+        result_text = ""
+        if report.sources:
+            parts = []
+            for s in report.sources:
+                entry = s.title
+                if s.url:
+                    entry += f"\n链接: {s.url}"
+                if s.summary:
+                    entry += f"\n摘要: {s.summary}"
+                parts.append(entry)
+            result_text = "\n\n".join(parts)
+
         if not result_text:
             error_summary = "；".join(error.message for error in report.errors[:3])
             result_text = "联网研究未获得可用于回答的证据。"
@@ -70,7 +80,6 @@ def build_research_tool(
             "text": result_text,
             "sources": [source.model_dump() for source in report.sources],
             "query": report.query,
-            "evidence": [item.model_dump() for item in report.evidence],
             "errors": [error.model_dump() for error in report.errors],
         }
 

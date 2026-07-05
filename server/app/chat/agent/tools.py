@@ -61,7 +61,6 @@ def _result_handler(handler, tool_name: str):
 def build_tutor_tools(
     request: TutorRequestContext,
     *,
-    research_model: Any | None = None,
     research_event_handler: ResearchEventHandler | None = None,
 ) -> list[Tool]:
     """装配当前辅导请求可用的业务工具。"""
@@ -72,7 +71,6 @@ def build_tutor_tools(
         _knowledge_tool(),
         # 普通网页搜索与抓取统一委托给共享 ResearchAgent。
         build_research_tool(
-            model=research_model,
             event_handler=research_event_handler,
             enabled=request.enable_web_search,
         ),

@@ -92,13 +92,10 @@ class QuizAgent(BaseResourceAgent):
         # 执行搜索以获取相关的习题出题参考信息
         await self.emitter.send(self.agent_id, "running", "正在搜索相关习题参考素材...", 30)
         search_query = f"{title_prefix} 习题 题型"
-        search_text = await self.search(search_query)
-
-        if "搜索失败" not in search_text and "未找到" not in search_text:
-            input_text = (
-                f"## 搜索到的出题参考背景\n{search_text[:6000]}\n\n"
-                + input_text
-            )
+        search_report = await self.search(search_query)
+        search_text = self.format_search_result(search_report)
+        if search_text:
+            input_text = f"## 搜索到的出题参考背景\n{search_text}\n\n" + input_text
 
         full_prompt = (
             f"{prompt}\n\n{input_text}\n\n"

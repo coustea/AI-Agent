@@ -12,7 +12,6 @@ from app.shared.research.schemas import (
     ResearchEvent,
     ResearchEventHandler,
     ResearchReport,
-    ResearchSource,
     ResearchSourceItem,
     ResearchTask,
 )
@@ -25,7 +24,6 @@ __all__ = [
     "ResearchEvent",
     "ResearchEventHandler",
     "ResearchReport",
-    "ResearchSource",
     "ResearchSourceItem",
     "ResearchTask",
     "build_research_tool",

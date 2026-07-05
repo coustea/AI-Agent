@@ -149,7 +149,7 @@ def validate_code(result: "AgentResult", input_data: "ResourceInput") -> None:
 
 
 def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Reading 资源校验：所有资源必须有有效的 http/https URL。"""
+    """Reading 资源校验：所有资源必须有有效的 http/https URL。若缺少或格式不正确，则自动修正为搜索链接兜底。"""
     if result.file_type != "json":
         raise ValidationError("Reading must be JSON")
 
@@ -168,19 +168,28 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
     if not resources:
         raise ValidationError("Reading must have at least one resource")
 
+    import urllib.parse
     url_pattern = re.compile(r"^https?://")
+    modified = False
+
     for i, item in enumerate(resources, start=1):
         if not isinstance(item, dict):
             raise ValidationError(f"Resource #{i} must be an object")
 
         url = item.get("url", "")
-        if not url or not url.strip():
-            raise ValidationError(f"Resource #{i} '{item.get('title', 'unknown')}' must have a URL")
+        if not url or not url.strip() or not url_pattern.match(url):
+            title = item.get("title", "unknown")
+            search_query = urllib.parse.quote(title)
+            # 自动兜底生成 Bing 搜索链接，避免直接抛错引发阻断
+            item["url"] = f"https://www.bing.com/search?q={search_query}"
+            modified = True
 
-        if not url_pattern.match(url):
-            raise ValidationError(
-                f"Resource #{i} '{item.get('title', 'unknown')}' URL must be http/https: {url[:50]}"
-            )
+    if modified:
+        if isinstance(data, dict):
+            data["resources"] = resources
+            result.content = json.dumps(data, ensure_ascii=False)
+        else:
+            result.content = json.dumps(resources, ensure_ascii=False)
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:

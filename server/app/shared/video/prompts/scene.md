@@ -29,23 +29,23 @@
 # OUTPUT EXAMPLE
 
 ```json
-{
+{{
   "scene_id": "s3",
   "index": 3,
   "title": "上下文切换过程",
   "narration": "调度器选中 P2 后，先保存 P1 的寄存器和程序计数器到 PCB1，然后从 PCB2 恢复 P2 的寄存器状态，最后切换地址空间，P2 开始执行。",
   "visual_type": "process_flow",
-  "visual": {
+  "visual": {{
     "steps": ["保存 P1 上下文到 PCB1", "从 PCB2 恢复 P2 上下文", "切换页表地址空间", "P2 开始执行"],
     "highlight_step": 2
-  },
+  }},
   "visual_beats": [
-    {"id": "vb1", "kind": "trace_step", "target": "step_1", "text_anchor": "保存 P1 的寄存器", "summary": "保存旧进程状态"},
-    {"id": "vb2", "kind": "trace_step", "target": "step_2", "text_anchor": "从 PCB2 恢复", "summary": "恢复新进程状态"},
-    {"id": "vb3", "kind": "trace_step", "target": "step_3", "text_anchor": "切换地址空间", "summary": "切换内存映射"},
-    {"id": "vb4", "kind": "checkpoint", "target": "step_4", "text_anchor": "P2 开始执行", "summary": "新进程开始运行"}
+    {{"id": "vb1", "kind": "trace_step", "target": "step_1", "text_anchor": "保存 P1 的寄存器", "summary": "保存旧进程状态"}},
+    {{"id": "vb2", "kind": "trace_step", "target": "step_2", "text_anchor": "从 PCB2 恢复", "summary": "恢复新进程状态"}},
+    {{"id": "vb3", "kind": "trace_step", "target": "step_3", "text_anchor": "切换地址空间", "summary": "切换内存映射"}},
+    {{"id": "vb4", "kind": "checkpoint", "target": "step_4", "text_anchor": "P2 开始执行", "summary": "新进程开始运行"}}
   ]
-}
+}}
 ```
 
 

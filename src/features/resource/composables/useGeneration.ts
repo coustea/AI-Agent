@@ -49,9 +49,7 @@ export function useGeneration() {
     video: { style: 'precision_light', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
   })
 
-  const dagSelectedAgentIds = computed(() => {
-    return enabledAgentIds.value.filter(id => !['master', 'assembler'].includes(id))
-  })
+  const dagSelectedAgentIds = computed(() => enabledAgentIds.value)
 
   const baseGenerationAgentIds = computed(() => (
     dagSelectedAgentIds.value.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID, VIDEO_AGENT_ID].includes(id))
