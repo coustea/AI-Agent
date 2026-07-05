@@ -19,7 +19,6 @@ from app.chat.context_builder import ChatContextBuilder, build_user_content
 from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.memory.service import get_chat_memory_service
-from app.chat.streaming import safety_filter
 from app.chat.schemas import TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.schemas import ChatMessageItem
@@ -180,11 +179,6 @@ async def chat(
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
     if not has_error and full_answer:
-        # 安全过滤
-        safety_result = await safety_filter.check(full_answer)
-        if safety_result.has_violation:
-            full_answer = safety_result.sanitized_text
-
         usage_meta: dict[str, Any] = {}
         if diagram_result:
             usage_meta["diagram"] = diagram_result

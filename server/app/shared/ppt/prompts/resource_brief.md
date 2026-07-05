@@ -75,7 +75,7 @@ PPTPlan 必填字段：
 - subtitle: 副标题（≤120 字符）
 - purpose: 本课件教学目的（≤180 字符）
 - audience: 目标学习者描述（≤120 字符）
-- density: "concise" | "standard" | "detailed"
+- density: "speaker_led" | "reading_first"
 - narrative: 叙事主线说明（≤500 字符）
 - slides: 幻灯片数组（3–18 页，使用 PPTSlide 结构）
 - template_preference: {family, scheme, keywords}

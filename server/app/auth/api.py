@@ -33,13 +33,16 @@ async def create_user(
     """用户注册接口。
 
     创建新用户账号，用户名必须唯一。
-    成功返回 201 Created，用户名重复返回 400。
+    成功返回 201 Created，用户名重复返回 400 并附带字段级错误信息。
     """
-    # 调用注册用例，检查用户名唯一性并创建用户
     result = await auth_usecases.register(session, data)
-    if not result:
-        return HttpResponse.error(code=400, message="用户名已存在")
-    return HttpResponse.success(data=result, status_code=201)
+    if not result.success:
+        return HttpResponse.error(
+            code=400,
+            message=result.error_message,
+            data={"field": result.error_field},
+        )
+    return HttpResponse.success(data=result.data, status_code=201)
 
 
 # POST /api/v1/users/auth — 用户登录
@@ -51,13 +54,16 @@ async def login(
     """用户登录接口。
 
     验证用户名密码，成功签发 JWT Token。
-    返回 {token, user} 供前端保存。
+    失败时返回 401 并附带字段级错误信息（用户不存在 / 密码错误）。
     """
-    # 验证用户名密码并签发 JWT Token
     result = await auth_usecases.login(session, data)
-    if not result:
-        return HttpResponse.error(code=401, message="用户名或密码错误")
-    return HttpResponse.success(data=result)
+    if not result.success:
+        return HttpResponse.error(
+            code=401,
+            message=result.error_message,
+            data={"field": result.error_field},
+        )
+    return HttpResponse.success(data=result.data)
 
 
 # POST /api/v1/users/auth/logout — 用户登出

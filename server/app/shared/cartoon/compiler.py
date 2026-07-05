@@ -53,14 +53,14 @@ _THEMES = {
     ),
     "minimal": _Theme(
         name="清晰简约",
-        background="#f7f8fa",
-        surface="#ffffff",
-        surface_strong="#edf1f5",
-        foreground="#111820",
-        muted="#68727d",
-        accent="#2563eb",
-        accent_two="#12a594",
-        line="#d7dde4",
+        background="#ffffff",
+        surface="#f8fafc",
+        surface_strong="#f1f5f9",
+        foreground="#0f172a",
+        muted="#64748b",
+        accent="#4f46e5",
+        accent_two="#f43f5e",
+        line="#e2e8f0",
     ),
     "dark_tech": _Theme(
         name="克制暗黑科技",
@@ -152,28 +152,53 @@ def _render_svg_edges(scene: SceneBrief, scene_index: int) -> str:
             cond_label = f'<text class="edge-condition" data-from="{conn.source}" data-to="{conn.target}">{_escape(conn.condition)}</text>'
         edges.append(
             f'<path id="{edge_id}" class="scene-edge {conn.kind}" '
-            f'd="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2" {dash} '
+            f'd="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5" {dash} '
+            f'marker-end="url(#arrow-marker-{scene_index})" '
             f'data-from="{conn.source}" data-to="{conn.target}"/>'
             f"{cond_label}"
         )
-    return f'<svg class="edges-layer" aria-hidden="true">{"".join(edges)}</svg>'
+    defs = (
+        '<defs>'
+        f'<marker id="arrow-marker-{scene_index}" viewBox="0 0 10 10" refX="6" refY="5" '
+        'markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
+        '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" />'
+        '</marker>'
+        f'<marker id="arrow-marker-active-{scene_index}" viewBox="0 0 10 10" refX="6" refY="5" '
+        'markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
+        '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" />'
+        '</marker>'
+        '</defs>'
+    )
+    return f'<svg class="edges-layer" aria-hidden="true">{defs}{"".join(edges)}</svg>'
 
 
 def _render_tree(scene: SceneBrief, scene_index: int) -> str:
-    nodes = "".join(_render_element(e, scene_index) for e in scene.elements)
+    nodes = "".join(_render_element(e, scene_index) for e in scene.elements if e.kind != "code")
+    code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
+    if code_elements:
+        code_html = "".join(_render_element(e, scene_index) for e in code_elements)
+        return f'<div class="split-stage"><div class="visual-stage tree-stage">{edges}{nodes}</div><div class="sidebar-stage">{code_html}</div></div>'
     return f'<div class="visual-stage tree-stage">{edges}{nodes}</div>'
 
 
 def _render_graph(scene: SceneBrief, scene_index: int) -> str:
-    nodes = "".join(_render_element(e, scene_index) for e in scene.elements)
+    nodes = "".join(_render_element(e, scene_index) for e in scene.elements if e.kind != "code")
+    code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
+    if code_elements:
+        code_html = "".join(_render_element(e, scene_index) for e in code_elements)
+        return f'<div class="split-stage"><div class="visual-stage graph-stage">{edges}{nodes}</div><div class="sidebar-stage">{code_html}</div></div>'
     return f'<div class="visual-stage graph-stage">{edges}{nodes}</div>'
 
 
 def _render_state_diagram(scene: SceneBrief, scene_index: int) -> str:
-    nodes = "".join(_render_element(e, scene_index) for e in scene.elements)
+    nodes = "".join(_render_element(e, scene_index) for e in scene.elements if e.kind != "code")
+    code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
+    if code_elements:
+        code_html = "".join(_render_element(e, scene_index) for e in code_elements)
+        return f'<div class="split-stage"><div class="visual-stage state-diagram-stage">{edges}{nodes}</div><div class="sidebar-stage">{code_html}</div></div>'
     return f'<div class="visual-stage state-diagram-stage">{edges}{nodes}</div>'
 
 
@@ -362,6 +387,9 @@ def _cue_timeline(scene: SceneBrief, si: int, req: CartoonVideoRequest) -> list:
         elif cue.action == "transform":
             res_val = f'"#s{si}-{cue.result}"' if cue.result else "null"
             lines.append(f"HF_Animator.transform(tl, [{sel}], {res_val}, {at}, {bd:.2f});")
+        elif cue.action == "highlight_code":
+            line_idx = int(cue.new_value) if cue.new_value.isdigit() else 0
+            lines.append(f"HF_Animator.highlightCodeLine(tl, [{sel}], {line_idx}, {at}, {bd:.2f});")
     return lines
 
 
@@ -373,9 +401,6 @@ def _caption_timeline(scene: SceneBrief, si: int) -> list:
         en = min(scene.start_time + scene.duration - 0.08, scene.start_time + lw.end_ms / 1000 + 0.12)
         cs = f"#caption-cue-{si}-{ci}"
         lines.append(f'tl.fromTo("{cs}", {{autoAlpha:0,y:14}}, {{autoAlpha:1,y:0,duration:.14}}, {_seconds(st)});')
-        for wi, w in grp:
-            tr = scene.start_time + w.start_ms / 1000
-            lines.append(f'tl.to("#caption-{si}-{wi}", {{color:"var(--caption-active-fg)",backgroundColor:"var(--accent)",scale:1.06,duration:.1}}, {_seconds(tr)});')
         lines.append(f'tl.to("{cs}", {{autoAlpha:0,y:-10,duration:.12}}, {_seconds(en)});')
     return lines
 
@@ -388,9 +413,20 @@ def _build_timeline(brief: VideoBrief, req: CartoonVideoRequest) -> str:
     ]
     for si, sc in enumerate(brief.scenes):
         lines.append(f'tl.fromTo("#scene-title-{si}", {{autoAlpha:0,y:-22}},{{autoAlpha:1,y:0,duration:.48,ease:"power3.out"}},{_seconds(sc.start_time + 0.12)});')
-        if not any(c.action == "reveal" for c in sc.cues):
-            os = ", ".join(f'"#{_object_id(si, e.id)}"' for e in sc.elements)
+        
+        # Filter out elements that are targets of custom entry animations (insert, reveal, branch, derive, transform)
+        entry_targets = set()
+        for cue in sc.cues:
+            if cue.action in ("reveal", "insert", "branch", "derive", "transform"):
+                entry_targets.update(cue.targets)
+            if cue.action in ("derive", "transform") and cue.result:
+                entry_targets.add(cue.result)
+        
+        default_reveal_elements = [e for e in sc.elements if e.id not in entry_targets]
+        if default_reveal_elements:
+            os = ", ".join(f'"#{_object_id(si, e.id)}"' for e in default_reveal_elements)
             lines.append(f"tl.fromTo([{os}], {{autoAlpha:0,y:28}},{{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'}},{_seconds(sc.start_time + 0.35)});")
+            
         lines.extend(_cue_timeline(sc, si, req))
         lines.extend(_caption_timeline(sc, si))
     lines.append('window.__timelines["cartoon-explainer"] = tl;')
@@ -428,10 +464,10 @@ _CSS = """
     .object-item { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-strong); text-align: center; font-size: 18px; font-weight: 750; }
     .object-items.code-lines .object-item { text-align: left; color: var(--accent); }
     
-    .tree-stage .kind-node, .graph-stage .kind-node, .state-diagram-stage .kind-node { min-width: 80px; min-height: 80px; border-radius: 50%; display: grid; place-items: center; font-size: 32px; font-weight: 800; }
+    .tree-stage .kind-node, .graph-stage .kind-node, .state-diagram-stage .kind-node { min-width: 100px; min-height: 100px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; font-weight: 800; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-width: 3px; }
     .kind-cell { min-width: 70px; min-height: 70px; border-radius: 12px; position: relative; }
     .kind-cell::before { content: attr(data-index); position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 14px; color: var(--muted); font-weight: 600; }
-    .kind-state { min-width: 90px; min-height: 90px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; font-weight: 800; border-width: 3px; }
+    .kind-state { min-width: 100px; min-height: 100px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 800; border-width: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
     .kind-step { border-left: 4px solid var(--accent); border-radius: 12px; padding-left: 20px; }
     .kind-formula .object-label { font-size: 36px; color: var(--accent); font-family: serif; }
     .kind-packet { min-width: 60px; border-radius: 8px; border: 2px dashed var(--accent); background: var(--accent-soft); }
@@ -439,10 +475,10 @@ _CSS = """
     .kind-table .object-items.table-rows .object-item { border-radius: 0; border-bottom: 1px solid var(--line); text-align: left; }
     
     .edges-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; width: 100%; height: 100%; }
-    .scene-edge { stroke-linecap: round; stroke-linejoin: round; }
+    .scene-edge { stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.25s, stroke-width 0.25s; stroke-width: 3.5px; }
     .scene-edge.pointer { stroke-dasharray: 8 4; }
     .scene-edge.transition { stroke-dasharray: 6 3; stroke: var(--accent-two); }
-    .edge-condition { font-size: 14px; fill: var(--accent-two); font-weight: 700; font-family: sans-serif; text-anchor: middle; }
+    .edge-condition { font-size: 16px; fill: var(--accent-two); font-weight: 700; font-family: sans-serif; text-anchor: middle; }
     
     .tree-stage, .graph-stage, .state-diagram-stage { display: block; position: relative; }
     .tree-stage .visual-object, .graph-stage .visual-object, .state-diagram-stage .visual-object { position: absolute; transform: translate(-50%, -50%); }
@@ -474,7 +510,18 @@ _CSS = """
     .hero-stage .visual-object:first-child { padding: 46px; border-color: var(--accent); background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
     .hero-stage .visual-object:first-child .object-label { font-size: 44px; }
     .kind-metric .object-value { font-size: 40px; color: var(--accent); }
-    .kind-code { font-family: Consolas, monospace; }
+    .kind-code { background: #0f172a; border-color: #1e293b; color: #cbd5e1; font-family: Consolas, Monaco, monospace; box-shadow: 0 20px 40px rgba(0,0,0,0.15); }
+    .kind-code .object-kind { color: #64748b; }
+    .kind-code .object-value { color: var(--accent-two); }
+    .kind-code .object-label { color: #f8fafc; font-size: 22px; margin-bottom: 12px; }
+    .object-items.code-lines .object-item { font-family: Consolas, Monaco, monospace; color: #cbd5e1; text-align: left; background: transparent; padding: 4px 8px; border-radius: 4px; font-size: 16px; font-weight: 500; transition: background 0.2s, border-left 0.2s, color 0.2s; }
+    .object-items.code-lines .object-item.highlighted { background: rgba(99, 102, 241, 0.25); color: #ffffff; border-left: 4px solid var(--accent); padding-left: 8px; font-weight: 700; }
+    
+    .split-stage { display: flex; flex-direction: row; gap: 32px; min-height: 555px; width: 100%; align-items: stretch; }
+    .split-stage .visual-stage { flex: 1.2; position: relative; min-height: 555px; border: 2px dashed var(--line); border-radius: 20px; background: color-mix(in srgb, var(--surface) 20%, transparent); overflow: hidden; }
+    .split-stage .sidebar-stage { flex: 0.8; display: flex; flex-direction: column; gap: 20px; justify-content: center; }
+    .split-stage .sidebar-stage .visual-object { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+
     .scene-callout { position: absolute; z-index: 4; right: 48px; bottom: 118px; max-width: 690px; display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-left: 5px solid var(--accent-two); background: var(--surface); border-radius: 10px; }
     .scene-callout span { color: var(--accent-two); font-size: 14px; font-weight: 850; }
     .scene-callout strong { font-size: 20px; }
@@ -530,7 +577,7 @@ class CartoonCompiler:
       reveal: (tl, targets, startTime, duration, stagger = 0.12) => {{
         tl.fromTo(targets, 
           {{ autoAlpha: 0, y: 30, scale: 0.92 }}, 
-          {{ autoAlpha: 1, y: 0, scale: 1, duration: duration, stagger: stagger, ease: "power3.out" }}, 
+          {{ autoAlpha: 1, y: 0, scale: 1, duration: duration, stagger: stagger, ease: "power3.out", immediateRender: false }}, 
           startTime
         );
       }},
@@ -558,7 +605,7 @@ class CartoonCompiler:
           
           tl.fromTo(targetSel,
             {{ autoAlpha: 0, x: startX, y: startY, scale: 0.7 }},
-            {{ autoAlpha: 1, x: 0, y: 0, scale: 1, duration: duration, ease: "back.out(1.2)", delay: idx * stagger }},
+            {{ autoAlpha: 1, x: 0, y: 0, scale: 1, duration: duration, ease: "back.out(1.2)", delay: idx * stagger, immediateRender: false }},
             startTime
           );
         }});
@@ -626,14 +673,35 @@ class CartoonCompiler:
         pathNodes.forEach((nodeId, idx) => {{
           const t = startTime + idx * stepDuration;
           const ns = `#s${{sceneIndex}}-${{nodeId}}`;
-          tl.to(ns, {{ borderColor: "var(--accent)", boxShadow: "0 0 15px var(--accent-soft)", scale: 1.05, duration: stepDuration * 0.5 }}, t)
+          tl.to(ns, {{ borderColor: "var(--accent)", boxShadow: "0 0 25px var(--accent-soft)", scale: 1.08, duration: stepDuration * 0.5 }}, t)
             .to(ns, {{ scale: 1, duration: stepDuration * 0.5 }}, t + stepDuration * 0.5);
           
           if (idx < pathNodes.length - 1) {{
             const nextId = pathNodes[idx + 1];
             const es = `#edge-${{sceneIndex}}-${{nodeId}}-${{nextId}}`;
-            tl.to(es, {{ stroke: "var(--accent)", strokeWidth: 4, duration: stepDuration }}, t);
+            tl.to(es, {{ stroke: "var(--accent)", strokeWidth: 5, duration: stepDuration }}, t);
+            tl.set(es, {{ markerEnd: "url(#arrow-marker-active-" + sceneIndex + ")" }}, t);
           }}
+        }});
+      }},
+      
+      highlightCodeLine: (tl, targets, lineIndex, startTime, duration) => {{
+        targets.forEach(targetSel => {{
+          tl.call(() => {{
+            const codeObj = document.querySelector(targetSel);
+            if (codeObj) {{
+              const lines = codeObj.querySelectorAll(".object-item");
+              lines.forEach((line, idx) => {{
+                if (idx === lineIndex) {{
+                  line.classList.add("highlighted");
+                }} else {{
+                  line.classList.remove("highlighted");
+                }}
+              }});
+            }}
+          }}, null, startTime)
+          .to(targetSel, {{ scale: 1.02, duration: 0.15, ease: "power2.out" }}, startTime)
+          .to(targetSel, {{ scale: 1, duration: 0.25, ease: "power2.inOut" }}, startTime + 0.15);
         }});
       }},
       
@@ -668,7 +736,7 @@ class CartoonCompiler:
       branch: (tl, targets, startTime, duration, stagger = 0.16) => {{
         tl.fromTo(targets, 
           {{ autoAlpha: 0, scale: 0.7, transformOrigin: "50% 0%" }},
-          {{ autoAlpha: 1, scale: 1, duration: duration, stagger: stagger, ease: "back.out(1.4)" }},
+          {{ autoAlpha: 1, scale: 1, duration: duration, stagger: stagger, ease: "back.out(1.4)", immediateRender: false }},
           startTime
         );
       }},
@@ -676,7 +744,7 @@ class CartoonCompiler:
       count: (tl, targets, startTime, duration) => {{
         tl.fromTo(targets, 
           {{ scale: 0.82, autoAlpha: 0.5 }},
-          {{ scale: 1, autoAlpha: 1, duration: duration, ease: "back.out(1.7)" }},
+          {{ scale: 1, autoAlpha: 1, duration: duration, ease: "back.out(1.7)", immediateRender: false }},
           startTime
         );
       }},
@@ -690,7 +758,7 @@ class CartoonCompiler:
         if (resultSelector) {{
           tl.fromTo(resultSelector,
             {{ autoAlpha: 0, scale: 0.8, y: 20 }},
-            {{ autoAlpha: 1, scale: 1, y: 0, duration: duration * 0.5, ease: "back.out(1.4)" }},
+            {{ autoAlpha: 1, scale: 1, y: 0, duration: duration * 0.5, ease: "back.out(1.4)", immediateRender: false }},
             startTime + duration * 0.5
           );
         }}
@@ -702,7 +770,7 @@ class CartoonCompiler:
         if (resultSelector) {{
           tl.fromTo(resultSelector,
             {{ autoAlpha: 0, scale: 0.5, transformOrigin: "50% 50%" }},
-            {{ autoAlpha: 1, scale: 1, duration: duration * 0.4, ease: "back.out(1.4)" }},
+            {{ autoAlpha: 1, scale: 1, duration: duration * 0.4, ease: "back.out(1.4)", immediateRender: false }},
             startTime + duration * 0.6
           );
         }}
@@ -723,19 +791,40 @@ class CartoonCompiler:
         const toEl = stage.querySelector("#s" + sceneId + "-" + toId);
         
         if (fromEl && toEl) {{
-          // Calculate center positions
           const fromX = fromEl.offsetLeft;
           const fromY = fromEl.offsetTop;
           const toX = toEl.offsetLeft;
           const toY = toEl.offsetTop;
           
-          path.setAttribute("d", `M ${{fromX}} ${{fromY}} L ${{toX}} ${{toY}}`);
+          const fromW = fromEl.offsetWidth || 100;
+          const toW = toEl.offsetWidth || 100;
+          const r1 = fromW / 2;
+          const r2 = toW / 2;
           
-          // Update condition label if exists
+          const dx = toX - fromX;
+          const dy = toY - fromY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          let startX = fromX;
+          let startY = fromY;
+          let endX = toX;
+          let endY = toY;
+          
+          if (dist > 0) {{
+            const ux = dx / dist;
+            const uy = dy / dist;
+            startX = fromX + r1 * ux;
+            startY = fromY + r1 * uy;
+            endX = toX - r2 * ux;
+            endY = toY - r2 * uy;
+          }}
+          
+          path.setAttribute("d", "M " + startX + " " + startY + " L " + endX + " " + endY);
+          
           const textEl = stage.querySelector('.edge-condition[data-from="' + fromId + '"][data-to="' + toId + '"]');
           if (textEl) {{
-            textEl.setAttribute("x", (fromX + toX) / 2);
-            textEl.setAttribute("y", (fromY + toY) / 2 - 10);
+            textEl.setAttribute("x", (startX + endX) / 2);
+            textEl.setAttribute("y", (startY + endY) / 2 - 10);
           }}
         }}
       }});
@@ -808,8 +897,8 @@ class CartoonCompiler:
       const stages = document.querySelectorAll(".visual-stage");
       stages.forEach(stage => {{
         const parentComp = stage.closest("[data-composition-id]");
-        const stageWidth = parentComp ? parseInt(parentComp.getAttribute("data-width") || "1920") - 144 : 1776;
-        const stageHeight = parentComp ? parseInt(parentComp.getAttribute("data-height") || "1080") - 300 : 780;
+        const stageWidth = stage.clientWidth || (parentComp ? parseInt(parentComp.getAttribute("data-width") || "1920") - 144 : 1776);
+        const stageHeight = stage.clientHeight || (parentComp ? parseInt(parentComp.getAttribute("data-height") || "1080") - 300 : 780);
         
         const objects = Array.from(stage.querySelectorAll(".visual-object"));
         const svgLayer = stage.querySelector(".edges-layer");

@@ -70,15 +70,15 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 
 ```json
 {
-  "overall_score": 65,
+  "overall_score": 65.0,
   "dimension_scores": {
-    "knowledge_level": 80,
-    "weak_knowledge_points": 60,
-    "knowledge_gap_pattern": 50,
-    "cognitive_style": 70,
-    "learning_goal_type": 75,
-    "difficulty_tolerance": 55,
-    "self_correction_ability": 45
+    "knowledge_level": 80.0,
+    "weak_knowledge_points": 60.0,
+    "knowledge_gap_pattern": 50.0,
+    "cognitive_style": 70.0,
+    "learning_goal_type": 75.0,
+    "difficulty_tolerance": 55.0,
+    "self_correction_ability": 45.0
   },
   "dimension_evidence": {
     "knowledge_level": ["全局画像显示用户掌握计算机专业基础知识"],
@@ -88,22 +88,20 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
     "learning_goal_type": ["用户明确考研目标"],
     "difficulty_tolerance": ["用户能接受中等难度内容"],
     "self_correction_ability": ["用户能进行基础错题反思"]
-  },
-  "scoring_reason": "知识层维度相对完整，认知层维度部分明确，整体画像覆盖度中等"
+  }
 }
 ```
 
 关键类型定义：
-- overall_score：整数，7 个维度分数的算术均值（四舍五入）
-- dimension_scores：对象，必须包含全部 7 个维度的分数（0-100 整数），缺一不可
+- overall_score：浮点数，7 个维度分数的算术均值（四舍五入）
+- dimension_scores：对象，必须包含全部 7 个维度的分数（0-100 浮点数），缺一不可
 - dimension_evidence：对象，每项为字符串数组，列出该分数的主要依据
-- scoring_reason：字符串，整体评分理由，30-100 字
 
 # OUTPUT CONTROL（输出控制）
 
 - 仅输出纯 JSON，无前缀、无后缀、无 Markdown 代码块标记
 - 必须包含全部 7 个维度，不可遗漏
-- 分数范围：0-100 的整数
+- 分数范围：0-100 的数值
 - dimension_evidence 中，分数为 0 的维度对应空数组 []
 - 分数 > 0 的维度必须在 dimension_evidence 中提供至少一条依据
 
@@ -112,7 +110,7 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 ## Hard Constraints
 
 - 维度名必须严格使用以下 7 个：knowledge_level, cognitive_style, weak_knowledge_points, knowledge_gap_pattern, learning_goal_type, difficulty_tolerance, self_correction_ability
-- 分数必须是 0-100 之间的整数
+- 分数必须是 0-100 之间的数值（浮点数）
 - evidence 为空数组时，对应维度分数必须为 0
 - overall_score 必须是 7 个 dimension_scores 的算术平均值（四舍五入）
 - dimension_scores 必须包含全部 7 个维度的键
@@ -120,7 +118,6 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 ## Soft Constraints
 
 - 评分应保持一致性：同等质量的描述应得同等分数
-- scoring_reason 应点出画像的主要优势和明显缺失
 
 # DECISION RULES（决策规则）
 
@@ -143,15 +140,15 @@ CS/SE 领域学生，评分反映其画像信息的完整性和明确程度。
 
 ```json
 {
-  "overall_score": 57,
+  "overall_score": 57.0,
   "dimension_scores": {
-    "knowledge_level": 75,
-    "weak_knowledge_points": 60,
-    "knowledge_gap_pattern": 45,
-    "cognitive_style": 70,
-    "learning_goal_type": 80,
-    "difficulty_tolerance": 30,
-    "self_correction_ability": 40
+    "knowledge_level": 75.0,
+    "weak_knowledge_points": 60.0,
+    "knowledge_gap_pattern": 45.0,
+    "cognitive_style": 70.0,
+    "learning_goal_type": 80.0,
+    "difficulty_tolerance": 30.0,
+    "self_correction_ability": 40.0
   },
   "dimension_evidence": {
     "knowledge_level": ["全局画像描述用户掌握计算机专业基础知识，有具体课程列表"],

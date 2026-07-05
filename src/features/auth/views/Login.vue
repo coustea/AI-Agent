@@ -139,7 +139,7 @@ const handleLogin = async () => {
     if (data.token) {
       setAuthToken(data.token)
       setCurrentUser(data.user ?? null)
-      toast.success({ message: '登录成功！', duration: 2000, offset: 20 })
+      toast.success('登录成功！')
       if (!data.user?.is_first_login) {
         router.push('/dashboard?onboarding=true')
       } else {
@@ -147,7 +147,16 @@ const handleLogin = async () => {
       }
     }
   } catch (err: any) {
-    toast.error({ message: getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误'), duration: 2000, offset: 20 })
+    const msg = getErrorMessage(err, '登录失败，请检查用户名和密码输入是否有误')
+    const field = err?.response?.data?.data?.field as string | undefined
+    // 后端返回了字段级错误，绑定到对应表单字段
+    if (field === 'username') {
+      errors.username = msg
+    } else if (field === 'password') {
+      errors.password = msg
+    } else {
+      toast.error(msg)
+    }
   } finally {
     isLoading.value = false
   }

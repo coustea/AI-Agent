@@ -73,9 +73,10 @@ AnimationAction = Literal[
     # ── 操作型动画（优先使用） ──
     "insert",       # 元素从指定方向滑入到位置
     "remove",       # 元素从位置滑出消失
-    "highlight_path",  # 高亮路径上的节点和边
+    "highlight_path",  # 高亮路径上的节点 and 边
     "value_change",    # 元素的值发生变化
     "shift",           # 一组元素整体平移
+    "highlight_code",  # 高亮代码行
 
     # ── 推导型动画 ──
     "derive",       # 公式/等式的推导变换（源元素淡出，结果淡入）
@@ -127,7 +128,7 @@ class VisualElement(StrictModel):
 
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     kind: VisualKind
-    label: str = Field(min_length=1, max_length=80)
+    label: str = Field(default="", max_length=80)
     detail: str = Field(default="", max_length=160)
     items: list[str] = Field(default_factory=list, max_length=8)
     value: str = Field(default="", max_length=40)
@@ -172,9 +173,9 @@ class SceneBrief(StrictModel):
     title: str = Field(min_length=1, max_length=48)
     narration: str = Field(min_length=1, max_length=360)
     layout: SceneLayout
-    elements: list[VisualElement] = Field(min_length=1, max_length=10)
-    connections: list[VisualConnection] = Field(default_factory=list, max_length=12)
-    cues: list[AnimationCue] = Field(default_factory=list, max_length=12)
+    elements: list[VisualElement] = Field(min_length=1, max_length=24)
+    connections: list[VisualConnection] = Field(default_factory=list, max_length=24)
+    cues: list[AnimationCue] = Field(default_factory=list, max_length=24)
     callout: str = Field(default="", max_length=80)
 
     # Runtime-only fields populated from Edge TTS.

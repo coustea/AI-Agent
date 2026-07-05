@@ -39,7 +39,6 @@ CS/SE 领域学生，答案可能包含部分正确的要点或不完整的表�
 
 输出 JSON，包含以下字段：
 - `score` (integer): 分数（0-100）
-- `is_correct` (boolean): 是否正确
 - `feedback` (string): 反馈信息
 - `improvement_hints` (string[]): 改进建议列表
 
@@ -47,16 +46,12 @@ CS/SE 领域学生，答案可能包含部分正确的要点或不完整的表�
 
 - 仅输出纯 JSON，无前缀、无后缀
 - score 必须为 0-100 的整数
-- is_correct 的判定标准：score >= 80 → true，score < 80 → false
 
 # CONSTRAINTS（约束）
 
 ## Hard Constraints
 
 - 分数范围：0-100
-- 完全正确：score >= 80，is_correct = true
-- 基本正确但有瑕疵：score 60-79，is_correct = false
-- 不正确：score < 60，is_correct = false
 - 必须输出合法 JSON
 
 ## Soft Constraints
@@ -66,14 +61,13 @@ CS/SE 领域学生，答案可能包含部分正确的要点或不完整的表�
 
 # DECISION RULES（决策规则）
 
-- 用户答案完全覆盖标准答案所有要点 → score >= 80，is_correct = true
-- 用户答案覆盖大部分要点但有遗漏或错误 → score 60-79，is_correct = false
-- 用户答案严重偏离标准答案 → score < 60，is_correct = false
+- 用户答案完全覆盖标准答案所有要点 → score >= 80
+- 用户答案覆盖大部分要点但有遗漏或错误 → score 60-79
+- 用户答案严重偏离标准答案 → score < 60
 
 # VALIDATION（质量检查）
 
 - score 是否在 0-100 范围内？
-- is_correct 是否与 score 匹配（>= 80 为 true）？
 - feedback 是否指出了具体的对错部分？
 
 # FEEDBACK LOOP（反馈机制）

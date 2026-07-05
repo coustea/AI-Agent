@@ -23,7 +23,7 @@ from app.chat.emitter import (
 )
 from app.chat.agent.tool_runner import ToolExecutionContext, TutorToolRunner
 from app.chat.schemas import TutorRequestContext, TutorRuntimeEvent
-from app.chat.streaming import ResponseStreamer, SafetyBufferedResponseStreamer, safety_filter
+from app.chat.streaming import ResponseStreamer
 from app.chat.agent.tools import build_tutor_tools
 from app.chat.utils import normalize_message_content
 from app.chat.utils.files import analyze_documents
@@ -435,30 +435,14 @@ async def react_node(
                     continue
 
                 # 无工具调用 → 这是最终回答。思考 activity 完成后才发送纯正文。
-                stream_buffer = SafetyBufferedResponseStreamer(
-                    response_streamer=ResponseStreamer(),
-                    safety_check=safety_filter.check,
-                    guard_chars=safety_filter.stream_guard_chars,
-                )
-                async for safe_event in stream_buffer.push(answer_body):
-                    safe_token = safe_event.get("data", "")
-                    if safe_token:
-                        full_answer += safe_token
+                streamer = ResponseStreamer()
+                async for chunk_event in streamer.stream_answer(answer_body, skip_blank=False):
+                    chunk_token = chunk_event.get("data", "")
+                    if chunk_token:
+                        full_answer += chunk_token
                         event = TutorRuntimeEvent(
                             type="answer_token",
-                            payload={"token": safe_token},
-                            sequence=seq,
-                            timestamp=time.time(),
-                        )
-                        await agent._emit_event(state, event, persist=False)
-                        seq += 1
-                async for safe_event in stream_buffer.flush():
-                    safe_token = safe_event.get("data", "")
-                    if safe_token:
-                        full_answer += safe_token
-                        event = TutorRuntimeEvent(
-                            type="answer_token",
-                            payload={"token": safe_token},
+                            payload={"token": chunk_token},
                             sequence=seq,
                             timestamp=time.time(),
                         )

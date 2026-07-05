@@ -204,7 +204,18 @@ const handleRegister = async () => {
     toast.success('注册成功，欢迎加入！')
     router.push('/login')
   } catch (err: any) {
-    toast.error(getErrorMessage(err, '注册失败，请稍后重试'))
+    const msg = getErrorMessage(err, '注册失败，请稍后重试')
+    const field = err?.response?.data?.data?.field as string | undefined
+    // 后端返回了字段级错误，绑定到对应表单字段
+    if (field === 'username') {
+      errors.username = msg
+    } else if (field === 'email') {
+      errors.email = msg
+    } else if (field === 'password') {
+      errors.password = msg
+    } else {
+      toast.error(msg)
+    }
   } finally {
     isDeploying.value = false
   }

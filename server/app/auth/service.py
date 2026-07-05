@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -22,46 +24,65 @@ def _read_user(user: User) -> UserRead:
     return UserRead.model_validate(user)
 
 
+@dataclass
+class AuthResult:
+    """认证操作结果 — 统一成功/失败的数据载体。
+
+    成功时 data 有值，失败时 error_field + error_message 有值。
+    前端可根据 error_field 将错误绑定到对应表单字段。
+    """
+    success: bool = False
+    data: dict | None = None
+    # 失败时：错误对应的表单字段（username / password / email / "" 表示全局）
+    error_field: str = ""
+    # 失败时：面向用户的精确错误提示
+    error_message: str = ""
+
+
 class UserAccountStore:
     """用户账号持久化 — 负责 CRUD 操作。"""
 
-    async def register(self, session: AsyncSession, data: UserRegister) -> dict[str, UserRead] | None:
-        """注册新用户，返回 {"user": UserRead} 或 None（用户名已存在）。"""
-        existing = (await session.exec(select(User).where(User.username == data.username))).first()  # 检查用户名唯一性
+    async def register(self, session: AsyncSession, data: UserRegister) -> AuthResult:
+        """注册新用户，返回 AuthResult。"""
+        existing = (await session.exec(select(User).where(User.username == data.username))).first()
         if existing:
             logger.warning("[Auth] 注册失败，用户名已存在: %s", data.username)
-            return None
+            return AuthResult(error_field="username", error_message="该用户名已被注册，请换一个试试")
+
         user = User(
             username=data.username,
-            password=hash_password(data.password),  # bcrypt 哈希密码
+            password=hash_password(data.password),
             email=data.email,
         )
-        session.add(user)  # 标记待插入
+        session.add(user)
         try:
-            await session.commit()  # 提交事务
-        except IntegrityError:  # 并发注册导致唯一约束冲突
+            await session.commit()
+        except IntegrityError:
             await session.rollback()
             logger.warning("[Auth] 注册并发冲突: %s", data.username)
-            return None
-        await session.refresh(user)  # 刷新获取数据库生成的默认值（id, created_at）
-        return {"user": _read_user(user)}
+            return AuthResult(error_field="username", error_message="该用户名已被注册，请换一个试试")
+        await session.refresh(user)
+        return AuthResult(success=True, data={"user": _read_user(user)})
 
-    async def authenticate(self, session: AsyncSession, username: str, password: str) -> dict[str, str | UserRead] | None:
-        """验证用户名密码，成功返回 {"token": str, "user": UserRead}。"""
-        user = (await session.exec(select(User).where(User.username == username))).first()  # 按用户名查询
+    async def authenticate(self, session: AsyncSession, username: str, password: str) -> AuthResult:
+        """验证用户名密码，返回 AuthResult。
+
+        失败时 error_field 指向具体的表单字段，error_message 提供精确原因。
+        """
+        user = (await session.exec(select(User).where(User.username == username))).first()
         if not user:
             logger.warning("[Auth] 登录失败，用户不存在: %s", username)
-            return None
-        await session.refresh(user)  # 确保 password 字段已加载（exclude=True 可能延迟加载）
-        if not verify_password(password, user.password):  # bcrypt 校验密码
+            return AuthResult(error_field="username", error_message="该用户名未注册")
+
+        await session.refresh(user)
+        if not verify_password(password, user.password):
             logger.warning("[Auth] 登录失败，密码错误: user_id=%s", user.id)
-            return None
-        is_first_login = user.is_first_login  # 记录首次登录状态，返回给前端判断是否弹窗
-        user_read = _read_user(user)
-        token = await create_token(user.id, session)  # 签发 JWT 并写入白名单
-        # is_first_login 由引导页面或用户选择不再弹出时调用接口设置，不在登录时自动重置
+            return AuthResult(error_field="password", error_message="密码不正确，请重新输入")
+
         logger.info("[Auth] 登录成功: user_id=%s", user.id)
-        return {"token": token, "user": user_read}
+        user_read = _read_user(user)
+        token = await create_token(user.id, session)
+        return AuthResult(success=True, data={"token": token, "user": user_read})
 
     async def update(self, session: AsyncSession, user_id: int, data: UserUpdate) -> User | None:
         """更新用户信息，仅更新提交的非空字段。"""
@@ -85,11 +106,11 @@ class AuthUseCases:
     def __init__(self, account_store: UserAccountStore) -> None:
         self.account_store = account_store
 
-    async def register(self, session: AsyncSession, data: UserRegister) -> dict[str, UserRead] | None:
+    async def register(self, session: AsyncSession, data: UserRegister) -> AuthResult:
         """注册新用户。"""
         return await self.account_store.register(session, data)
 
-    async def login(self, session: AsyncSession, data: UserLogin) -> dict[str, str | UserRead] | None:
+    async def login(self, session: AsyncSession, data: UserLogin) -> AuthResult:
         """用户登录，验证凭据并签发 Token。"""
         return await self.account_store.authenticate(session, data.username, data.password)
 

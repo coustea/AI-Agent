@@ -60,7 +60,7 @@ http.interceptors.response.use(
     if (body && typeof body.code === 'number' && body.code !== 200) {
       return Promise.reject({
         response: {
-          data: { message: body.message, code: body.code },
+          data: { message: body.message, code: body.code, data: body.data },
           status: body.code,
         },
       })
