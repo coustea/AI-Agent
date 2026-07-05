@@ -1,0 +1,72 @@
+{
+  "type": "hierarchy",
+  "title": "TCP/IP 协议栈",
+  "summary": "四层网络协议模型",
+  "spec": {
+    "root": {
+      "id": "tcpip",
+      "label": "TCP/IP",
+      "description": "协议栈",
+      "children": [
+        {
+          "id": "app",
+          "label": "应用层",
+          "description": "HTTP/FTP/SMTP",
+          "children": [
+            {
+              "id": "http",
+              "label": "HTTP",
+              "description": "网页传输"
+            },
+            {
+              "id": "ftp",
+              "label": "FTP",
+              "description": "文件传输"
+            }
+          ]
+        },
+        {
+          "id": "trans",
+          "label": "传输层",
+          "description": "TCP/UDP",
+          "children": [
+            {
+              "id": "tcp",
+              "label": "TCP",
+              "description": "可靠传输"
+            },
+            {
+              "id": "udp",
+              "label": "UDP",
+              "description": "快速传输"
+            }
+          ]
+        },
+        {
+          "id": "net",
+          "label": "网络层",
+          "description": "IP/ICMP",
+          "children": [
+            {
+              "id": "ip",
+              "label": "IP",
+              "description": "寻址路由"
+            }
+          ]
+        },
+        {
+          "id": "link",
+          "label": "链路层",
+          "description": "以太网",
+          "children": [
+            {
+              "id": "eth",
+              "label": "Ethernet",
+              "description": "局域网"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

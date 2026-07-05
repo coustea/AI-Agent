@@ -1,0 +1,9 @@
+flowchart TB
+    master["Master节点"]
+    worker1["Worker1"]
+    worker2["Worker2"]
+    lb["负载均衡器"]
+    lb --> worker1
+    lb --> worker2
+    master -.-> worker1
+    master -.-> worker2

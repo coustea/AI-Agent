@@ -1,0 +1,12 @@
+flowchart TB
+    subgraph app ["com.example"]
+        controller["controller"]
+        service["service"]
+        repository["repository"]
+        model["model"]
+    end
+    config["config"]
+    util["util"]
+    controller --> service
+    service --> repository
+    repository --> model

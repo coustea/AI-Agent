@@ -1,0 +1,61 @@
+{
+  "type": "package",
+  "title": "项目包结构",
+  "summary": "Spring Boot 项目结构",
+  "spec": {
+    "packages": [
+      {
+        "id": "app",
+        "label": "com.example",
+        "children": [
+          {
+            "id": "controller",
+            "label": "controller"
+          },
+          {
+            "id": "service",
+            "label": "service"
+          },
+          {
+            "id": "repository",
+            "label": "repository"
+          },
+          {
+            "id": "model",
+            "label": "model"
+          }
+        ]
+      },
+      {
+        "id": "config",
+        "label": "config"
+      },
+      {
+        "id": "util",
+        "label": "util"
+      }
+    ],
+    "dependencies": [
+      {
+        "from": "controller",
+        "to": "service",
+        "type": "import"
+      },
+      {
+        "from": "service",
+        "to": "repository",
+        "type": "import"
+      },
+      {
+        "from": "repository",
+        "to": "model",
+        "type": "import"
+      },
+      {
+        "from": "service",
+        "to": "util",
+        "type": "access"
+      }
+    ]
+  }
+}

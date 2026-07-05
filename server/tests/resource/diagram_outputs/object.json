@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "title": "订单对象图",
+  "summary": "订单系统运行时对象",
+  "spec": {
+    "objects": [
+      {
+        "id": "order1",
+        "name": "order1",
+        "class": "Order",
+        "attributes": [
+          "id = 1001",
+          "status = pending"
+        ]
+      },
+      {
+        "id": "customer1",
+        "name": "customer1",
+        "class": "Customer",
+        "attributes": [
+          "name = 张三",
+          "vip = true"
+        ]
+      },
+      {
+        "id": "item1",
+        "name": "item1",
+        "class": "OrderItem",
+        "attributes": [
+          "product = 手机",
+          "qty = 2"
+        ]
+      }
+    ],
+    "links": [
+      {
+        "from": "order1",
+        "to": "customer1",
+        "type": "association",
+        "label": "belongs to"
+      },
+      {
+        "from": "order1",
+        "to": "item1",
+        "type": "composition",
+        "label": "contains"
+      }
+    ]
+  }
+}

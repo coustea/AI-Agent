@@ -1,0 +1,8 @@
+flowchart LR
+    order("orderService")
+    inventory("inventoryService")
+    payment("paymentService")
+    order -->|"1:检查库存"| inventory
+    inventory -->|"2:返回结果"| order
+    order -->|"3:发起支付"| payment
+    payment -->|"4:支付确认"| order

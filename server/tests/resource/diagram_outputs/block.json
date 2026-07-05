@@ -1,0 +1,57 @@
+{
+  "type": "block",
+  "title": "CPU 架构",
+  "summary": "CPU 内部模块",
+  "spec": {
+    "columns": 3,
+    "blocks": [
+      {
+        "id": "alu",
+        "type": "block",
+        "label": "ALU"
+      },
+      {
+        "id": "reg",
+        "type": "block",
+        "label": "寄存器组"
+      },
+      {
+        "id": "cu",
+        "type": "block",
+        "label": "控制单元"
+      },
+      {
+        "id": "cache",
+        "type": "block",
+        "label": "缓存"
+      },
+      {
+        "id": "bus",
+        "type": "block",
+        "label": "总线接口"
+      }
+    ],
+    "connections": [
+      {
+        "from": "cu",
+        "to": "alu",
+        "label": "控制信号"
+      },
+      {
+        "from": "reg",
+        "to": "alu",
+        "label": "数据"
+      },
+      {
+        "from": "cache",
+        "to": "reg",
+        "label": "加载"
+      },
+      {
+        "from": "bus",
+        "to": "cache",
+        "label": "内存访问"
+      }
+    ]
+  }
+}

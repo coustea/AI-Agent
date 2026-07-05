@@ -9,7 +9,6 @@ import pytest
 from app.dashboard import api as dashboard_api
 from app.dashboard.api import (
     _low_score_dimensions,
-    _score_evidence,
     _score_json,
 )
 from app.infra.models import GeneratedResource
@@ -70,37 +69,6 @@ def test_low_score_dimensions_ignores_zero_and_above_60():
     assert result == []
 
 
-def test_score_evidence_returns_items():
-    score = {
-        "dimension_evidence": {
-            "weak_knowledge_points": ["线性代数", "矩阵运算", "概率论"],
-        }
-    }
-    assert _score_evidence(score, "weak_knowledge_points") == ["线性代数", "矩阵运算", "概率论"]
-
-
-def test_score_evidence_respects_limit():
-    score = {
-        "dimension_evidence": {
-            "weak_knowledge_points": ["A", "B", "C", "D", "E"],
-        }
-    }
-    assert len(_score_evidence(score, "weak_knowledge_points", limit=2)) == 2
-
-
-def test_score_evidence_skips_empty_strings():
-    score = {
-        "dimension_evidence": {
-            "weak_knowledge_points": ["  ", "", "有效项"],
-        }
-    }
-    assert _score_evidence(score, "weak_knowledge_points") == ["有效项"]
-
-
-def test_score_evidence_returns_empty_when_no_data():
-    assert _score_evidence({}, "weak_knowledge_points") == []
-
-
 def test_profile_radar_dimensions_match_all_dimensions(monkeypatch):
     score_json = {
         "overall_score": 72,
@@ -153,19 +121,23 @@ def test_profile_radar_dimensions_match_all_dimensions(monkeypatch):
         "key": "knowledge_level",
         "label": "知识基础",
         "score": 80,
-        "evidence": ["计算机专业基础知识"],
-        "missing": False,
     }
 
     cognitive_style = next(item for item in dimensions if item["key"] == "cognitive_style")
     assert cognitive_style["score"] == 0
-    assert cognitive_style["missing"] is True
-    assert cognitive_style["evidence"] == []
 
-    assert "section_coverage" not in payload
-    assert "evidence_quality" not in payload
-    assert "confidence" not in payload
-    assert "knowledge_mastery" not in payload
+    # 维度不再包含 evidence/missing 字段
+    assert "evidence" not in knowledge_level
+    assert "missing" not in knowledge_level
+
+    # 顶层不再包含 user_id/module/scored_at/updated_at
+    assert "user_id" not in payload
+    assert "module" not in payload
+    assert "scored_at" not in payload
+    assert "updated_at" not in payload
+
+    # metrics 不再包含 dimension_evidence
+    assert "dimension_evidence" not in payload["metrics"]
 
 
 def test_profile_radar_weak_areas_from_low_scores(monkeypatch):
@@ -210,5 +182,6 @@ def test_profile_radar_weak_areas_from_low_scores(monkeypatch):
     assert DIMENSION_NAMES["weak_knowledge_points"] in payload["weak_areas"]
 
 
-def test_generated_resource_model_exposes_source_field_for_dashboard_filters():
-    assert "source" in GeneratedResource.model_fields
+def test_generated_resource_model_no_source_field_after_simplification():
+    """source 列已删除，dashboard 不再按 source 过滤。"""
+    assert "source" not in GeneratedResource.model_fields

@@ -1,0 +1,11 @@
+block-beta
+    columns 3
+    alu["ALU"]
+    reg["寄存器组"]
+    cu["控制单元"]
+    cache["缓存"]
+    bus["总线接口"]
+    cu --> alu
+    reg --> alu
+    cache --> reg
+    bus --> cache

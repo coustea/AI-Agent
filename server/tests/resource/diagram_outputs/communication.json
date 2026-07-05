@@ -1,0 +1,50 @@
+{
+  "type": "communication",
+  "title": "服务通信图",
+  "summary": "微服务消息交互",
+  "spec": {
+    "objects": [
+      {
+        "id": "order",
+        "name": "orderService",
+        "class": "OrderService"
+      },
+      {
+        "id": "inventory",
+        "name": "inventoryService",
+        "class": "InventoryService"
+      },
+      {
+        "id": "payment",
+        "name": "paymentService",
+        "class": "PaymentService"
+      }
+    ],
+    "messages": [
+      {
+        "from": "order",
+        "to": "inventory",
+        "label": "检查库存",
+        "sequence": "1"
+      },
+      {
+        "from": "inventory",
+        "to": "order",
+        "label": "返回结果",
+        "sequence": "2"
+      },
+      {
+        "from": "order",
+        "to": "payment",
+        "label": "发起支付",
+        "sequence": "3"
+      },
+      {
+        "from": "payment",
+        "to": "order",
+        "label": "支付确认",
+        "sequence": "4"
+      }
+    ]
+  }
+}

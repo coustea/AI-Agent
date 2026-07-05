@@ -1,0 +1,66 @@
+{
+  "type": "state",
+  "title": "词法分析状态",
+  "summary": "词法分析器状态机",
+  "spec": {
+    "states": [
+      {
+        "id": "start",
+        "label": "初始",
+        "description": "开始状态"
+      },
+      {
+        "id": "number",
+        "label": "数字",
+        "description": "解析数字"
+      },
+      {
+        "id": "ident",
+        "label": "标识符",
+        "description": "解析标识符"
+      },
+      {
+        "id": "string",
+        "label": "字符串",
+        "description": "解析字符串"
+      },
+      {
+        "id": "end",
+        "label": "结束",
+        "description": "终止状态"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "start",
+        "to": "number",
+        "label": "数字字符"
+      },
+      {
+        "from": "start",
+        "to": "ident",
+        "label": "字母"
+      },
+      {
+        "from": "start",
+        "to": "string",
+        "label": "引号"
+      },
+      {
+        "from": "number",
+        "to": "end",
+        "label": "非数字"
+      },
+      {
+        "from": "ident",
+        "to": "end",
+        "label": "非字母"
+      },
+      {
+        "from": "string",
+        "to": "end",
+        "label": "闭合引号"
+      }
+    ]
+  }
+}

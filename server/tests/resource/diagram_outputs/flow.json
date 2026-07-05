@@ -1,0 +1,73 @@
+{
+  "type": "flow",
+  "title": "进程调度流程",
+  "summary": "操作系统进程调度算法",
+  "spec": {
+    "steps": [
+      {
+        "id": "start",
+        "label": "开始",
+        "description": "进程创建"
+      },
+      {
+        "id": "ready",
+        "label": "就绪队列",
+        "description": "等待 CPU"
+      },
+      {
+        "id": "schedule",
+        "label": "调度算法",
+        "description": "选择进程"
+      },
+      {
+        "id": "running",
+        "label": "运行",
+        "description": "占用 CPU"
+      },
+      {
+        "id": "block",
+        "label": "阻塞",
+        "description": "等待 I/O"
+      },
+      {
+        "id": "end",
+        "label": "结束",
+        "description": "进程终止"
+      }
+    ],
+    "edges": [
+      {
+        "source": "start",
+        "target": "ready"
+      },
+      {
+        "source": "ready",
+        "target": "schedule"
+      },
+      {
+        "source": "schedule",
+        "target": "running"
+      },
+      {
+        "source": "running",
+        "target": "block",
+        "label": "I/O 请求"
+      },
+      {
+        "source": "block",
+        "target": "ready",
+        "label": "I/O 完成"
+      },
+      {
+        "source": "running",
+        "target": "ready",
+        "label": "时间片到"
+      },
+      {
+        "source": "running",
+        "target": "end",
+        "label": "完成"
+      }
+    ]
+  }
+}

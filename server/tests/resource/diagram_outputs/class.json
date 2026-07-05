@@ -1,0 +1,58 @@
+{
+  "type": "class",
+  "title": "工厂模式类图",
+  "summary": "设计模式类结构",
+  "spec": {
+    "classes": [
+      {
+        "name": "Product",
+        "annotation": "interface",
+        "attributes": [],
+        "methods": [
+          "+ operation()"
+        ]
+      },
+      {
+        "name": "ConcreteProduct",
+        "attributes": [
+          "- attribute"
+        ],
+        "methods": [
+          "+ operation()"
+        ]
+      },
+      {
+        "name": "Factory",
+        "attributes": [],
+        "methods": [
+          "+ createProduct()"
+        ]
+      },
+      {
+        "name": "ConcreteFactory",
+        "attributes": [],
+        "methods": [
+          "+ createProduct()"
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "ConcreteProduct",
+        "to": "Product",
+        "type": "implementation"
+      },
+      {
+        "from": "ConcreteFactory",
+        "to": "Factory",
+        "type": "inheritance"
+      },
+      {
+        "from": "Factory",
+        "to": "Product",
+        "type": "dependency",
+        "label": "creates"
+      }
+    ]
+  }
+}

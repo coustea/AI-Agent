@@ -1,0 +1,46 @@
+{
+  "type": "git",
+  "title": "Git 分支流程",
+  "summary": "功能分支开发流程",
+  "spec": {
+    "commits": [
+      {
+        "type": "commit",
+        "id": "init"
+      },
+      {
+        "type": "commit",
+        "id": "add feature"
+      },
+      {
+        "type": "branch",
+        "name": "feature"
+      },
+      {
+        "type": "checkout",
+        "name": "feature"
+      },
+      {
+        "type": "commit",
+        "id": "feat 1"
+      },
+      {
+        "type": "commit",
+        "id": "feat 2"
+      },
+      {
+        "type": "checkout",
+        "name": "main"
+      },
+      {
+        "type": "merge",
+        "name": "feature"
+      },
+      {
+        "type": "commit",
+        "id": "release",
+        "tag": "v1.0"
+      }
+    ]
+  }
+}

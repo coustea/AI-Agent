@@ -1,0 +1,115 @@
+{
+  "total": 18,
+  "success": 18,
+  "failed": 0,
+  "results": [
+    {
+      "type": "hierarchy",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1468/diagram.png"
+    },
+    {
+      "type": "flow",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1741/diagram.png"
+    },
+    {
+      "type": "compare",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1253/diagram.png"
+    },
+    {
+      "type": "relation",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1420/diagram.png"
+    },
+    {
+      "type": "sequence",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1303/diagram.png"
+    },
+    {
+      "type": "state",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1422/diagram.png"
+    },
+    {
+      "type": "class",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1833/diagram.png"
+    },
+    {
+      "type": "er",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1959/diagram.png"
+    },
+    {
+      "type": "block",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1099/diagram.png"
+    },
+    {
+      "type": "packet",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1092/diagram.png"
+    },
+    {
+      "type": "git",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1824/diagram.png"
+    },
+    {
+      "type": "activity",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1082/diagram.png"
+    },
+    {
+      "type": "usecase",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1887/diagram.png"
+    },
+    {
+      "type": "component",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1308/diagram.png"
+    },
+    {
+      "type": "package",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1676/diagram.png"
+    },
+    {
+      "type": "deployment",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1309/diagram.png"
+    },
+    {
+      "type": "object",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1978/diagram.png"
+    },
+    {
+      "type": "communication",
+      "success": true,
+      "file_type": "png",
+      "artifact_path": "/Users/apple/Code/software/server/workplace/resource/1/1561/diagram.png"
+    }
+  ]
+}

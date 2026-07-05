@@ -1,0 +1,79 @@
+{
+  "type": "er",
+  "title": "电商 ER 图",
+  "summary": "电商系统数据模型",
+  "spec": {
+    "entities": [
+      {
+        "name": "User",
+        "fields": [
+          {
+            "name": "id",
+            "type": "INT",
+            "key": "pk"
+          },
+          {
+            "name": "name",
+            "type": "VARCHAR"
+          },
+          {
+            "name": "email",
+            "type": "VARCHAR",
+            "key": "unique"
+          }
+        ]
+      },
+      {
+        "name": "Order",
+        "fields": [
+          {
+            "name": "id",
+            "type": "INT",
+            "key": "pk"
+          },
+          {
+            "name": "user_id",
+            "type": "INT",
+            "key": "fk"
+          },
+          {
+            "name": "total",
+            "type": "DECIMAL"
+          }
+        ]
+      },
+      {
+        "name": "Product",
+        "fields": [
+          {
+            "name": "id",
+            "type": "INT",
+            "key": "pk"
+          },
+          {
+            "name": "name",
+            "type": "VARCHAR"
+          },
+          {
+            "name": "price",
+            "type": "DECIMAL"
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "User",
+        "to": "Order",
+        "type": "||--o{",
+        "label": "places"
+      },
+      {
+        "from": "Order",
+        "to": "Product",
+        "type": "}o--o{",
+        "label": "contains"
+      }
+    ]
+  }
+}

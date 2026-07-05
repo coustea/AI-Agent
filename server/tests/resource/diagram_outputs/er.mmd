@@ -1,0 +1,18 @@
+erDiagram
+    User {
+        INT id PK
+        VARCHAR name
+        VARCHAR email UK
+    }
+    Order {
+        INT id PK
+        INT user_id FK
+        DECIMAL total
+    }
+    Product {
+        INT id PK
+        VARCHAR name
+        DECIMAL price
+    }
+    User ||--o{ Order : places
+    Order }o--o{ Product : contains

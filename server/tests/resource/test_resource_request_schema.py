@@ -7,6 +7,7 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.resource.schemas import ResourceGenerationRequest
+from app.shared.ppt import PPTPreferences
 
 
 def test_resource_generation_request_rebuilds_for_fastapi_body_validation():
@@ -25,8 +26,7 @@ def test_resource_generation_request_accepts_current_frontend_payload():
             ],
             "agent_configs": {
                 "content": {
-                    "structure": "summary_first",
-                    "include_common_mistakes": True,
+                    "structure": "progressive",
                     "include_examples": False,
                     "focus_mode": "key_concepts",
                     "depth_level": "quick",
@@ -34,31 +34,35 @@ def test_resource_generation_request_accepts_current_frontend_payload():
                 "mindmap": {
                     "map_type": "knowledge_tree",
                     "max_depth": 2,
-                    "highlight_weak": False,
-                    "expand_weak_points": False,
-                    "include_prerequisites": False,
+                    "leaf_detail": "brief_note",
+                    "show_relations": False,
                 },
                 "code": {
                     "programming_language": "python",
                     "case_type": "basic_demo",
                     "difficulty": "beginner",
+                    "focus": "syntax",
                 },
                 "quiz": {
-                    "question_count": 1,
+                    "question_count": 5,
                     "difficulty_mode": "basic",
-                    "weak_point_weight": 20,
                     "exam_style": "school",
-                    "include_analysis": True,
                     "question_types": ["single", "multiple", "judge", "fill"],
                 },
                 "reading": {
                     "reading_depth": "course_extended",
-                    "max_items": 1,
+                    "max_items": 5,
                     "language_preference": "both",
+                    "focus": "textbook",
                 },
-                "ppt": {},
+                "ppt": {
+                    "template": "auto",
+                    "explanation_style": "concept",
+                    "density": "standard",
+                    "focus": ["core_concepts"],
+                },
             },
-            }
+        }
     )
 
     assert request.learning_need == "复习 TCP 三次握手"
@@ -111,60 +115,55 @@ def test_resource_generation_request_accepts_video_agent_config():
             "learning_need": "把 TCP 三次握手生成讲解视频",
             "selected_agents": [
                 {"agent_id": "content", "enabled": True, "priority": 0},
-                {"agent_id": "video", "enabled": True, "priority": 1},
+                {"agent_id": "quiz", "enabled": True, "priority": 1},
+                {"agent_id": "video", "enabled": True, "priority": 2},
             ],
             "agent_configs": {
                 "video": {
-                    "duration_seconds": 180,
-                    "scene_count": 6,
-                    "style": "explainer",
+                    "style": "precision_light",
+                    "focus": "process",
                     "voice": "teacher",
                     "aspect_ratio": "16:9",
-                    "include_captions": True,
                 }
             },
         }
     )
 
-    assert request.enabled_agent_ids() == ["content", "video"]
-    assert request.agent_configs.video.duration_seconds == 180
-    assert request.agent_configs.video.scene_count == 6
+    assert request.enabled_agent_ids() == ["content", "quiz", "video"]
+    assert request.agent_configs.video.style == "precision_light"
+    assert request.agent_configs.video.focus == "process"
 
 
-def test_resource_generation_request_video_is_not_default_enabled():
+def test_resource_generation_request_video_is_now_default_enabled():
     request = ResourceGenerationRequest.model_validate(
         {
             "learning_need": "复习操作系统进程调度",
         }
     )
 
-    assert "video" not in request.enabled_agent_ids()
+    assert "video" in request.enabled_agent_ids()
 
 
 # ---------------------------------------------------------------------------
-# PptConfig
+# PPTPreferences
 # ---------------------------------------------------------------------------
 
 
 class TestPptConfig:
     def test_accepts_empty_object(self):
-        from app.resource.schemas.request import PptConfig
-
-        config = PptConfig.model_validate({})
-        assert config.model_dump() == {}
+        config = PPTPreferences.model_validate({})
+        assert config.template == "auto"
+        assert config.explanation_style == "concept"
 
     @pytest.mark.parametrize(
         "field,value",
         [
             ("theme_id", "neon"),
-            ("explanation_style", "detailed"),
             ("visual_emphasis", "high"),
             ("template_id", "corporate"),
             ("output_format", "pdf"),
         ],
     )
     def test_rejects_old_fields(self, field, value):
-        from app.resource.schemas.request import PptConfig
-
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-            PptConfig.model_validate({field: value})
+            PPTPreferences.model_validate({field: value})

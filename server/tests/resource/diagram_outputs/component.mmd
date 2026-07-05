@@ -1,0 +1,11 @@
+flowchart TB
+    web["Web前端"]
+    subgraph api ["API层"]
+        gateway["API网关"]
+        auth["认证服务"]
+    end
+    service["业务服务"]
+    data["数据层"]
+    web --> gateway
+    gateway -.-> service
+    service -.-> data

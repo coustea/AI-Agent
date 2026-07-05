@@ -1,0 +1,76 @@
+{
+  "type": "relation",
+  "title": "微服务依赖",
+  "summary": "系统组件关系图",
+  "spec": {
+    "nodes": [
+      {
+        "id": "gateway",
+        "label": "API 网关",
+        "description": "流量入口"
+      },
+      {
+        "id": "user",
+        "label": "用户服务",
+        "description": "认证授权"
+      },
+      {
+        "id": "order",
+        "label": "订单服务",
+        "description": "订单管理"
+      },
+      {
+        "id": "product",
+        "label": "商品服务",
+        "description": "商品信息"
+      },
+      {
+        "id": "payment",
+        "label": "支付服务",
+        "description": "支付处理"
+      },
+      {
+        "id": "db",
+        "label": "数据库",
+        "description": "数据持久化"
+      }
+    ],
+    "edges": [
+      {
+        "source": "gateway",
+        "target": "user",
+        "label": "路由"
+      },
+      {
+        "source": "gateway",
+        "target": "order",
+        "label": "路由"
+      },
+      {
+        "source": "order",
+        "target": "user",
+        "label": "验证用户"
+      },
+      {
+        "source": "order",
+        "target": "product",
+        "label": "查询商品"
+      },
+      {
+        "source": "order",
+        "target": "payment",
+        "label": "发起支付"
+      },
+      {
+        "source": "user",
+        "target": "db",
+        "label": "读写"
+      },
+      {
+        "source": "order",
+        "target": "db",
+        "label": "读写"
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+flowchart TB
+    subgraph packet ["IPv4 Header (32 bits)"]
+        v["Version (4bit)"]
+        ihl["IHL (4bit)"]
+        tos["TOS (8bit)"]
+        tl["Total Length (16bit)"]
+        id["Identification (16bit)"]
+        fl["Flags (3bit)"]
+        fo["Fragment Offset (13bit)"]
+        ttl["TTL (8bit)"]
+        proto["Protocol (8bit)"]
+        chk["Checksum (16bit)"]
+    end
+    v ~~~ ihl
+    ihl ~~~ tos

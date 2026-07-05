@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from unittest.mock import patch, AsyncMock
 
 import pytest
 
@@ -22,11 +23,11 @@ class FakeLlm:
         self._json_response = json_response
         self.calls: list[dict[str, Any]] = []
 
-    async def ainvoke(self, input_data, *, model=None, temperature=0, max_tokens=None):
+    async def ainvoke(self, input_data, *, model=None, temperature=0, max_tokens=None, **kwargs):
         self.calls.append({"method": "ainvoke", "input": input_data, "model": model})
         return _FakeLlmResponse(self._text_response)
 
-    async def ainvoke_json(self, schema, input_data, *, temperature=0, function_name=None, function_description=None, max_tokens=None):
+    async def ainvoke_json(self, schema, input_data, *, temperature=0, function_name=None, function_description=None, max_tokens=None, **kwargs):
         self.calls.append({
             "method": "ainvoke_json", "schema": schema.__name__,
             "function_name": function_name, "input": input_data,
@@ -45,41 +46,97 @@ class _FakeLlmResponse:
 
 
 def _make_input(agent_id: str, config: dict[str, Any] | None = None) -> ResourceInput:
-    from app.resource.schemas import TeachingPlan, TeachingOutlineItem, AgentAssignment
+    from app.resource.schemas import (
+        TeachingPlan,
+        TeachingOutlineItem,
+        GlobalTeachingPlan,
+        WorkerTask,
+        AssignedSection,
+        WorkerDeliverable,
+    )
 
     teaching_plan = TeachingPlan(
-        teaching_strategy="从基础概念到实际应用",
-        outline=[
-            TeachingOutlineItem(
-                id="o1",
-                title="变量与数据类型",
-                goal="理解 Python 变量和基本数据类型",
-                key_points=["变量定义", "数据类型分类"],
-                must_not_miss=True,
+        schema_version="3.0",
+        global_plan=GlobalTeachingPlan(
+            learning_goal="Python 基础语法",
+            teaching_strategy="从基础概念到实际应用",
+            difficulty="beginner",
+            outline=[
+                TeachingOutlineItem(
+                    id="o1",
+                    title="变量与数据类型",
+                    learning_objective="理解 Python 变量和基本数据类型",
+                    key_points=["变量定义", "数据类型分类"],
+                    must_not_miss=True,
+                ),
+                TeachingOutlineItem(
+                    id="o2",
+                    title="控制流",
+                    learning_objective="掌握条件判断和循环",
+                    key_points=["if-else", "for/while 循环"],
+                    must_not_miss=False,
+                ),
+                TeachingOutlineItem(
+                    id="o3",
+                    title="函数基础",
+                    learning_objective="学会定义和调用函数",
+                    key_points=["函数定义", "参数传递"],
+                    must_not_miss=False,
+                ),
+            ],
+        ),
+        worker_tasks={
+            "content": WorkerTask(
+                objective="讲解基础概念",
+                assigned_sections=[
+                    AssignedSection(outline_id="o1", responsibility="primary", instruction="FCFS"),
+                ],
+                deliverable=WorkerDeliverable(format="markdown", requirements=["Default requirement"]),
+                acceptance_criteria=["Default criterion"],
+                exclusions=["Default exclusion"],
+                avoid_overlap_with=[],
             ),
-            TeachingOutlineItem(
-                id="o2",
-                title="控制流",
-                goal="掌握条件判断和循环",
-                key_points=["if-else", "for/while 循环"],
-                must_not_miss=False,
+            "mindmap": WorkerTask(
+                objective="生成思维导图",
+                assigned_sections=[
+                    AssignedSection(outline_id="o1", responsibility="primary", instruction="FCFS"),
+                ],
+                deliverable=WorkerDeliverable(format="markdown", requirements=["Default requirement"]),
+                acceptance_criteria=["Default criterion"],
+                exclusions=["Default exclusion"],
+                avoid_overlap_with=[],
             ),
-            TeachingOutlineItem(
-                id="o3",
-                title="函数基础",
-                goal="学会定义和调用函数",
-                key_points=["函数定义", "参数传递"],
-                must_not_miss=False,
+            "quiz": WorkerTask(
+                objective="生成测验",
+                assigned_sections=[
+                    AssignedSection(outline_id="o1", responsibility="primary", instruction="FCFS"),
+                ],
+                deliverable=WorkerDeliverable(format="json", requirements=["Default requirement"]),
+                acceptance_criteria=["Default criterion"],
+                exclusions=["Default exclusion"],
+                avoid_overlap_with=[],
             ),
-        ],
-        agent_assignments=[
-            AgentAssignment(
-                agent_id="content",
-                assigned_outline_ids=["o1", "o2", "o3"],
-                focus_instruction="讲解基础概念",
-                style_constraint="案例驱动",
+            "code": WorkerTask(
+                objective="生成代码",
+                assigned_sections=[
+                    AssignedSection(outline_id="o1", responsibility="primary", instruction="FCFS"),
+                ],
+                deliverable=WorkerDeliverable(format="markdown", requirements=["Default requirement"]),
+                acceptance_criteria=["Default criterion"],
+                exclusions=["Default exclusion"],
+                avoid_overlap_with=[],
             ),
-        ],
+            "reading": WorkerTask(
+                objective="生成阅读材料",
+                assigned_sections=[
+                    AssignedSection(outline_id="o1", responsibility="primary", instruction="FCFS"),
+                ],
+                deliverable=WorkerDeliverable(format="json", requirements=["Default requirement"]),
+                acceptance_criteria=["Default criterion"],
+                exclusions=["Default exclusion"],
+                avoid_overlap_with=[],
+            ),
+        },
     )
     return ResourceInput(
         resource_id=1,
@@ -105,7 +162,7 @@ def test_content_agent_execute_success():
         assert result.file_type == "markdown"
         assert len(agent.llm.calls) == 1
         assert agent.llm.calls[0]["method"] == "ainvoke"
-        _assert_valid_handoff(result.downstream_context, "content")
+        _assert_valid_handoff(result, "content")
 
     asyncio.run(run())
 
@@ -138,7 +195,7 @@ def test_code_agent_execute_success():
         assert result.file_type == "markdown"
         assert result.metadata.get("language") == "python"
         assert result.metrics.get("language") == "python"
-        _assert_valid_handoff(result.downstream_context, "code")
+        _assert_valid_handoff(result, "code")
 
     asyncio.run(run())
 
@@ -157,7 +214,7 @@ def test_mindmap_agent_execute_success():
         assert result.file_type == "markdown"
         assert "基础语法" in result.metrics.get("branches", [])
         assert len(result.metrics.get("weak_points", [])) > 0
-        _assert_valid_handoff(result.downstream_context, "mindmap")
+        _assert_valid_handoff(result, "mindmap")
 
     asyncio.run(run())
 
@@ -184,7 +241,7 @@ def test_quiz_agent_execute_success():
                     ],
                     "answer": "B",
                     "explanation": "Python 使用 def 关键字",
-                    "difficulty": "easy",
+                    "difficulty": "basic",
                     "knowledge_points": ["函数定义"],
                 },
             ],
@@ -195,7 +252,7 @@ def test_quiz_agent_execute_success():
         assert result.success is True
         assert result.file_type == "json"
         assert result.metrics.get("total_count") == 1
-        _assert_valid_handoff(result.downstream_context, "quiz")
+        _assert_valid_handoff(result, "quiz")
 
     asyncio.run(run())
 
@@ -226,11 +283,24 @@ def test_reading_agent_execute_success():
         }
         agent = ReadingAgent(emitter=None)
         agent.llm = fake_llm
-        result = await agent.generate_resource(_make_input("reading", {"reading_depth": "course_extended", "max_items": 3}))
+        with patch.object(agent, "search", new_callable=AsyncMock) as mock_search:
+            from app.shared.research.schemas import ResearchReport, ResearchSourceItem
+            mock_search.return_value = ResearchReport(
+                query="Python 基础语法 教程",
+                sources=[
+                    ResearchSourceItem(
+                        source="duckduckgo_search",
+                        title="Python Cookbook",
+                        url="https://example.com",
+                        summary="Python Cookbook",
+                    )
+                ],
+            )
+            result = await agent.generate_resource(_make_input("reading", {"reading_depth": "course_extended", "max_items": 3}))
         assert result.success is True
         assert result.file_type == "json"
         assert result.metrics.get("resource_count") == 1
-        _assert_valid_handoff(result.downstream_context, "reading")
+        _assert_valid_handoff(result, "reading")
 
     asyncio.run(run())
 
@@ -239,7 +309,7 @@ def test_reading_agent_execute_success():
 
 
 def test_all_agents_registered():
-    expected = {"content", "mindmap", "code", "quiz", "reading", "ppt", "video", "planning"}
+    expected = {"content", "mindmap", "code", "quiz", "reading", "ppt", "video", "cartoon", "planning"}
     actual = set(AGENT_REGISTRY.keys())
     assert expected == actual, f"缺少: {expected - actual}, 多余: {actual - expected}"
 
@@ -270,36 +340,60 @@ def test_content_agent_llm_failure_raises():
 
 
 
-from app.resource.schemas import DownstreamContext, TeachingOutlineItem, TeachingPlan
+from app.resource.schemas import DownstreamContext, TeachingOutlineItem, TeachingPlan, GlobalTeachingPlan, WorkerTask, AssignedSection, WorkerDeliverable
 
 
 def _sample_teaching_plan() -> TeachingPlan:
     return TeachingPlan(
-        topic="TCP 三次握手",
-        learning_goal="理解三次握手",
-        outline=[
-            TeachingOutlineItem(
-                id="o1",
-                title="为什么需要三次握手",
-                goal="理解目的",
-                key_points=["确认双方收发能力"],
-                suggested_visuals=["时序图"],
+        schema_version="3.0",
+        global_plan=GlobalTeachingPlan(
+            learning_goal="理解三次握手",
+            teaching_strategy="逐步引入",
+            difficulty="beginner",
+            outline=[
+                TeachingOutlineItem(
+                    id="o1",
+                    title="为什么需要三次握手",
+                    learning_objective="理解目的",
+                    key_points=["确认双方收发能力"],
+                    must_not_miss=True,
+                ),
+                TeachingOutlineItem(
+                    id="o2",
+                    title="三次握手过程",
+                    learning_objective="理解流程",
+                    key_points=["SYN", "SYN-ACK", "ACK"],
+                    must_not_miss=False,
+                ),
+                TeachingOutlineItem(
+                    id="o3",
+                    title="三次握手的状态变化",
+                    learning_objective="理解状态机",
+                    key_points=["LISTEN", "SYN_SENT", "ESTABLISHED"],
+                    must_not_miss=False,
+                ),
+            ],
+        ),
+        worker_tasks={
+            "content": WorkerTask(
+                objective="讲解基础概念",
+                assigned_sections=[
+                    AssignedSection(outline_id="o1", responsibility="primary", instruction="FCFS"),
+                ],
+                deliverable=WorkerDeliverable(format="markdown", requirements=["Default requirement"]),
+                acceptance_criteria=["Default criterion"],
+                exclusions=["Default exclusion"],
+                avoid_overlap_with=[],
             ),
-            TeachingOutlineItem(
-                id="o2",
-                title="三次握手过程",
-                goal="理解流程",
-                key_points=["SYN", "SYN-ACK", "ACK"],
-            ),
-        ],
+        }
     )
 
 
-def _assert_valid_handoff(ctx: DownstreamContext, source_agent: str):
-    assert ctx.source_agent == source_agent
-    assert ctx.title
-    assert ctx.one_sentence_summary
-    assert len(ctx.one_sentence_summary) <= 180
+def _assert_valid_handoff(result: AgentResult, source_agent: str):
+    assert result.metadata.get("agent_id") == source_agent
+    assert result.title
+    assert result.summary
+    assert len(result.summary) <= 180
 
 
 def test_build_resource_context_uses_teaching_plan_and_handoffs_only():
@@ -316,7 +410,7 @@ def test_build_resource_context_uses_teaching_plan_and_handoffs_only():
     parts = build_resource_context(
         ResourceInput(
             learning_need="学习 TCP",
-            agent_name="video",
+            agent_name="content",
             teaching_plan=plan,
             upstream_handoffs={"content": handoff},
         )

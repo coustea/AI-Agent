@@ -1,0 +1,15 @@
+flowchart LR
+    subgraph system ["购物系统"]
+        browse(("浏览商品"))
+        cart(("管理购物车"))
+        order(("下单购买"))
+        pay(("在线支付"))
+        manage(("管理商品"))
+    end
+    user{{用户}}
+    admin{{管理员}}
+    user --> browse
+    user --> cart
+    user --> order
+    order -.->|"include"| pay
+    admin --> manage

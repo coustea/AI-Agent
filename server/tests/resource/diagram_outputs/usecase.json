@@ -1,0 +1,67 @@
+{
+  "type": "usecase",
+  "title": "购物系统用例",
+  "summary": "在线购物系统功能",
+  "spec": {
+    "system": "购物系统",
+    "actors": [
+      {
+        "id": "user",
+        "label": "用户"
+      },
+      {
+        "id": "admin",
+        "label": "管理员"
+      }
+    ],
+    "usecases": [
+      {
+        "id": "browse",
+        "label": "浏览商品"
+      },
+      {
+        "id": "cart",
+        "label": "管理购物车"
+      },
+      {
+        "id": "order",
+        "label": "下单购买"
+      },
+      {
+        "id": "pay",
+        "label": "在线支付"
+      },
+      {
+        "id": "manage",
+        "label": "管理商品"
+      }
+    ],
+    "relationships": [
+      {
+        "from": "user",
+        "to": "browse",
+        "type": "association"
+      },
+      {
+        "from": "user",
+        "to": "cart",
+        "type": "association"
+      },
+      {
+        "from": "user",
+        "to": "order",
+        "type": "association"
+      },
+      {
+        "from": "order",
+        "to": "pay",
+        "type": "include"
+      },
+      {
+        "from": "admin",
+        "to": "manage",
+        "type": "association"
+      }
+    ]
+  }
+}

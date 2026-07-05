@@ -1,0 +1,17 @@
+classDiagram
+    class Product {
+        +operation()
+    }
+    class ConcreteProduct {
+        -attribute
+        +operation()
+    }
+    class Factory {
+        +createProduct()
+    }
+    class ConcreteFactory {
+        +createProduct()
+    }
+    ConcreteProduct ..|> Product : 实现
+    ConcreteFactory --|> Factory : 继承
+    Factory ..> Product : 创建

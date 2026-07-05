@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant client as 客户端
+    participant server as 服务器
+    participant db as 数据库
+    client->>server: HTTP请求
+    server->>db: 查询数据
+    db->>server: 返回结果
+    server->>client: HTTP响应

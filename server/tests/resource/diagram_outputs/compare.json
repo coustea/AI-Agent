@@ -1,0 +1,41 @@
+{
+  "type": "compare",
+  "title": "数据库对比",
+  "summary": "关系型 vs 非关系型",
+  "spec": {
+    "items": [
+      {
+        "label": "MySQL",
+        "description": "关系型数据库",
+        "points": [
+          "ACID 事务",
+          "SQL 查询",
+          "固定表结构"
+        ]
+      },
+      {
+        "label": "MongoDB",
+        "description": "文档数据库",
+        "points": [
+          "灵活 Schema",
+          "JSON 文档",
+          "水平扩展"
+        ]
+      },
+      {
+        "label": "Redis",
+        "description": "键值存储",
+        "points": [
+          "内存存储",
+          "高性能",
+          "数据结构丰富"
+        ]
+      }
+    ],
+    "dimensions": [
+      "数据模型",
+      "查询方式",
+      "扩展性"
+    ]
+  }
+}

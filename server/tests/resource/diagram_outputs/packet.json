@@ -1,0 +1,60 @@
+{
+  "type": "packet",
+  "title": "IP 数据包结构",
+  "summary": "IPv4 头部格式",
+  "spec": {
+    "title": "IPv4 Header",
+    "fields": [
+      {
+        "name": "Version",
+        "start": 0,
+        "length": 4
+      },
+      {
+        "name": "IHL",
+        "start": 4,
+        "length": 4
+      },
+      {
+        "name": "TOS",
+        "start": 8,
+        "length": 8
+      },
+      {
+        "name": "Total Length",
+        "start": 16,
+        "length": 16
+      },
+      {
+        "name": "Identification",
+        "start": 32,
+        "length": 16
+      },
+      {
+        "name": "Flags",
+        "start": 48,
+        "length": 3
+      },
+      {
+        "name": "Fragment Offset",
+        "start": 51,
+        "length": 13
+      },
+      {
+        "name": "TTL",
+        "start": 64,
+        "length": 8
+      },
+      {
+        "name": "Protocol",
+        "start": 72,
+        "length": 8
+      },
+      {
+        "name": "Checksum",
+        "start": 80,
+        "length": 16
+      }
+    ]
+  }
+}

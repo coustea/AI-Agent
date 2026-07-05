@@ -1,0 +1,46 @@
+{
+  "type": "sequence",
+  "title": "HTTP 请求流程",
+  "summary": "客户端服务器交互",
+  "spec": {
+    "actors": [
+      {
+        "id": "client",
+        "label": "客户端",
+        "description": "浏览器"
+      },
+      {
+        "id": "server",
+        "label": "服务器",
+        "description": "Web 服务"
+      },
+      {
+        "id": "db",
+        "label": "数据库",
+        "description": "MySQL"
+      }
+    ],
+    "messages": [
+      {
+        "from": "client",
+        "to": "server",
+        "label": "HTTP 请求"
+      },
+      {
+        "from": "server",
+        "to": "db",
+        "label": "查询数据"
+      },
+      {
+        "from": "db",
+        "to": "server",
+        "label": "返回结果"
+      },
+      {
+        "from": "server",
+        "to": "client",
+        "label": "HTTP 响应"
+      }
+    ]
+  }
+}

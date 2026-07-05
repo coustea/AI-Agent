@@ -39,7 +39,7 @@ def _canvas_payload() -> dict:
 @pytest.mark.asyncio
 async def test_teaching_diagram_generator_returns_diagram(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.chat.schemas.diagram import TeachingDiagramGenerator
-    from app.chat.schemas import Evidence, EvidenceSet, TutorTurnContext
+    from app.chat.schemas import Evidence, EvidenceSet, TutorRequestContext
 
     class FakeLLM:
         async def ainvoke_json(self, schema, messages, **kwargs):
@@ -47,7 +47,7 @@ async def test_teaching_diagram_generator_returns_diagram(monkeypatch: pytest.Mo
 
     generator = TeachingDiagramGenerator(llm=FakeLLM())
     result = await generator.generate(
-        TutorTurnContext(user_id=7, session_id="session-1", user_input="三次握手为什么不能少？"),
+        TutorRequestContext(user_id=7, username="test", session_id="session-1", user_input="三次握手为什么不能少？"),
         "双方需要分别确认收发能力。",
         EvidenceSet(items=[Evidence(evidence_type="attachment", summary="[图片] 这是一张网络时序图")]),
     )
@@ -58,7 +58,7 @@ async def test_teaching_diagram_generator_returns_diagram(monkeypatch: pytest.Mo
 @pytest.mark.asyncio
 async def test_teaching_diagram_generator_propagates_failure() -> None:
     from app.chat.schemas.diagram import TeachingDiagramGenerator
-    from app.chat.schemas import EvidenceSet, TutorTurnContext
+    from app.chat.schemas import EvidenceSet, TutorRequestContext
 
     class RaisingLLM:
         async def ainvoke_json(self, schema, messages, **kwargs):
@@ -67,14 +67,14 @@ async def test_teaching_diagram_generator_propagates_failure() -> None:
     generator = TeachingDiagramGenerator(llm=RaisingLLM())
     with pytest.raises(ValueError, match="invalid board"):
         await generator.generate(
-            TutorTurnContext(user_id=7, session_id="session-1", user_input="画图说明递归"),
+            TutorRequestContext(user_id=7, username="test", session_id="session-1", user_input="画图说明递归"),
             "递归通过调用栈保存状态。",
             EvidenceSet(items=[]),
         )
 
 
 def test_teaching_diagram_new_cs_types() -> None:
-    from app.chat.schemas import TeachingDiagram
+    from app.chat.schemas.diagram import TeachingDiagram
 
     # 1. Tree
     tree_data = {

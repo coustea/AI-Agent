@@ -1,0 +1,15 @@
+flowchart TB
+    main["main"]
+    feature["feature"]
+    c1["commit: init"]
+    c2["commit: add feature"]
+    c3["commit: feat1"]
+    c4["commit: feat2"]
+    c5["commit: release v1.0"]
+    main --> c1
+    main --> c2
+    c2 --> feature
+    feature --> c3
+    feature --> c4
+    c4 --> main
+    main --> c5

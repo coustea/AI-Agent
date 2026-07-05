@@ -1,0 +1,8 @@
+stateDiagram-v2
+    [*] --> start
+    start --> number: 数字字符
+    start --> ident: 字母
+    start --> string: 引号
+    number --> [*]: 非数字
+    ident --> [*]: 非字母
+    string --> [*]: 闭合引号

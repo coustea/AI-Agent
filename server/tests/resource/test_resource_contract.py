@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.infra.models import GeneratedResourceItem, LearningEvent, LearningSession
+from app.infra.models import GeneratedResource, GeneratedResourceItem, GeneratedResourceAgentRun, LearningEvent, LearningSession
 
 
 def _table_sql(table_name: str) -> str:
@@ -27,28 +27,17 @@ def test_learning_event_and_session_do_not_expose_missing_runtime_columns():
     assert {"summary", "status", "error_message", "input_json"}.isdisjoint(session_columns)
 
 
-def test_generated_resources_has_teaching_plan_columns():
+def test_generated_resources_columns_match_init_schema():
     table_sql = _table_sql("generated_resources")
+    model_columns = set(GeneratedResource.__table__.columns.keys())
 
-    assert "teaching_plan       JSONB" in table_sql
-    assert "failed_agents       JSONB" in table_sql
-    assert "personalization" not in table_sql
-
-
-def test_generated_resource_items_has_downstream_context_and_metrics():
-    table_sql = _table_sql("generated_resource_items")
-
-    assert "metrics                         JSONB" in table_sql
-    assert "downstream_context              JSONB" in table_sql
-    assert "summary_data" not in table_sql
+    for column_name in model_columns:
+        assert column_name in table_sql
 
 
-def test_generated_resource_item_model_has_single_status_and_error_fields():
-    import inspect
-    from app.infra import models
+def test_generated_resource_agent_runs_columns_match_init_schema():
+    table_sql = _table_sql("generated_resource_agent_runs")
+    model_columns = set(GeneratedResourceAgentRun.__table__.columns.keys())
 
-    source = inspect.getsource(models.GeneratedResourceItem)
-
-    assert source.count("status: str = Field") == 1
-    assert source.count("error_message: str | None = Field") == 1
-
+    for column_name in model_columns:
+        assert column_name in table_sql

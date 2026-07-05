@@ -1,0 +1,22 @@
+graph TD
+    tcpip["TCP/IP 协议栈"]
+    app["应用层"]
+    trans["传输层"]
+    net["网络层"]
+    link["链路层"]
+    http["HTTP"]
+    ftp["FTP"]
+    tcp["TCP"]
+    udp["UDP"]
+    ip["IP"]
+    eth["Ethernet"]
+    tcpip --> app
+    tcpip --> trans
+    tcpip --> net
+    tcpip --> link
+    app --> http
+    app --> ftp
+    trans --> tcp
+    trans --> udp
+    net --> ip
+    link --> eth

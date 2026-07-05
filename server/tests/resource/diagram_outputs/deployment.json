@@ -1,0 +1,55 @@
+{
+  "type": "deployment",
+  "title": "K8s 部署架构",
+  "summary": "Kubernetes 集群部署",
+  "spec": {
+    "nodes": [
+      {
+        "id": "master",
+        "label": "Master 节点",
+        "type": "device"
+      },
+      {
+        "id": "worker1",
+        "label": "Worker 1",
+        "type": "device"
+      },
+      {
+        "id": "worker2",
+        "label": "Worker 2",
+        "type": "device"
+      },
+      {
+        "id": "lb",
+        "label": "负载均衡器",
+        "type": "execution"
+      }
+    ],
+    "connections": [
+      {
+        "from": "lb",
+        "to": "worker1",
+        "type": "association",
+        "label": "转发"
+      },
+      {
+        "from": "lb",
+        "to": "worker2",
+        "type": "association",
+        "label": "转发"
+      },
+      {
+        "from": "master",
+        "to": "worker1",
+        "type": "dependency",
+        "label": "调度"
+      },
+      {
+        "from": "master",
+        "to": "worker2",
+        "type": "dependency",
+        "label": "调度"
+      }
+    ]
+  }
+}

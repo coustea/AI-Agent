@@ -1,0 +1,73 @@
+{
+  "type": "component",
+  "title": "微服务组件",
+  "summary": "系统组件架构",
+  "spec": {
+    "components": [
+      {
+        "id": "web",
+        "label": "Web 前端",
+        "type": "component"
+      },
+      {
+        "id": "api",
+        "label": "API 层",
+        "type": "package",
+        "children": [
+          {
+            "id": "gateway",
+            "label": "API 网关"
+          },
+          {
+            "id": "auth",
+            "label": "认证服务"
+          }
+        ]
+      },
+      {
+        "id": "service",
+        "label": "业务服务",
+        "type": "component"
+      },
+      {
+        "id": "data",
+        "label": "数据层",
+        "type": "component"
+      }
+    ],
+    "interfaces": [
+      {
+        "id": "rest",
+        "label": "REST API",
+        "ifaceType": "provided"
+      },
+      {
+        "id": "db",
+        "label": "数据库接口",
+        "ifaceType": "required"
+      }
+    ],
+    "connections": [
+      {
+        "from": "web",
+        "to": "rest",
+        "type": "interface"
+      },
+      {
+        "from": "api",
+        "to": "service",
+        "type": "dependency"
+      },
+      {
+        "from": "service",
+        "to": "data",
+        "type": "dependency"
+      },
+      {
+        "from": "data",
+        "to": "db",
+        "type": "interface"
+      }
+    ]
+  }
+}

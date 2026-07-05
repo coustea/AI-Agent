@@ -1,0 +1,76 @@
+{
+  "type": "activity",
+  "title": "登录流程",
+  "summary": "用户登录业务流程",
+  "spec": {
+    "activities": [
+      {
+        "id": "start",
+        "label": "开始",
+        "nodeType": "start"
+      },
+      {
+        "id": "input",
+        "label": "输入账号密码",
+        "nodeType": "action"
+      },
+      {
+        "id": "validate",
+        "label": "验证格式",
+        "nodeType": "action"
+      },
+      {
+        "id": "check",
+        "label": "账号正确?",
+        "nodeType": "decision"
+      },
+      {
+        "id": "success",
+        "label": "登录成功",
+        "nodeType": "action"
+      },
+      {
+        "id": "fail",
+        "label": "显示错误",
+        "nodeType": "action"
+      },
+      {
+        "id": "end",
+        "label": "结束",
+        "nodeType": "end"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "start",
+        "to": "input"
+      },
+      {
+        "from": "input",
+        "to": "validate"
+      },
+      {
+        "from": "validate",
+        "to": "check"
+      },
+      {
+        "from": "check",
+        "to": "success",
+        "label": "是"
+      },
+      {
+        "from": "check",
+        "to": "fail",
+        "label": "否"
+      },
+      {
+        "from": "success",
+        "to": "end"
+      },
+      {
+        "from": "fail",
+        "to": "input"
+      }
+    ]
+  }
+}
