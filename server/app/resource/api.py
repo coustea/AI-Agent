@@ -42,10 +42,9 @@ from app.shared.ppt import PPTGenerator
 router = APIRouter()
 logger = get_logger(__name__)
 
-# 当前多智能体资源生成页面开放基础资源、PPT 与动画讲解。
-# Video 仍保留在后端注册表和请求契约中，供后续入口或路径模块调用。
+# 当前多智能体资源生成页面开放全部资源 Agent。
 FRONTEND_RESOURCE_AGENT_IDS = frozenset(
-    {"content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon"}
+    {"content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon", "video"}
 )
 
 

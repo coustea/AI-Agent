@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -136,6 +136,35 @@ class VisualElement(StrictModel):
     x: int | None = None
     y: int | None = None
 
+    @field_validator("kind", mode="before")
+    @classmethod
+    def normalize_kind(cls, value: str) -> str:
+        mapping = {
+            "text": "label",
+            "header": "label",
+            "list_item": "step",
+            "array_view": "array",
+            "array_cell": "cell",
+            "list": "array"
+        }
+        return mapping.get(value, value)
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            if value.startswith("[") and value.endswith("]"):
+                try:
+                    import ast
+                    parsed = ast.literal_eval(value)
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                except Exception:
+                    pass
+            if "," in value:
+                return [x.strip() for x in value.split(",")]
+        return value
+
 
 # ===================== Visual Connection — 边和指针 =====================
 
@@ -164,6 +193,19 @@ class AnimationCue(StrictModel):
     new_value: str = Field(default="", max_length=40)
     # derive/transform 的结果元素 ID
     result: str = Field(default="", max_length=32)
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def normalize_action(cls, value: str) -> str:
+        mapping = {
+            "highlight": "focus",
+            "select": "focus",
+            "fade_in": "reveal",
+            "animate": "reveal",
+            "move": "reveal",
+            "connect": "reveal"
+        }
+        return mapping.get(value, value)
 
 
 # ===================== Scene Brief =====================
