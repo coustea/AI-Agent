@@ -1215,9 +1215,6 @@ const handleCompleteLater = async () => {
 }
 
 .onboarding-standalone {
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
   background:
       radial-gradient(circle at 14% 12%, rgba(20, 184, 166, 0.13), transparent 30%),
       radial-gradient(circle at 86% 10%, rgba(103, 232, 249, 0.15), transparent 28%),
@@ -1512,8 +1509,8 @@ const handleCompleteLater = async () => {
 .current-question {
   display: block;
   padding: 16px 22px;
-  border-bottom: 2px solid #0f172a;
-  background: #f8fafc;
+  border-bottom: 1px solid rgba(203, 235, 233, 0.82);
+  background: linear-gradient(120deg, rgba(232, 250, 248, 0.92), rgba(255, 255, 255, 0.94) 54%, rgba(240, 253, 250, 0.88)), #ffffff;
 }
 
 .question-copy span {
@@ -1590,12 +1587,12 @@ const handleCompleteLater = async () => {
   display: grid;
   place-items: center;
   border-radius: 0px;
-  border: 2px solid #0f172a;
   font-size: 13px;
   font-weight: 950;
 }
 
 .avatar-icon {
+  border: 1px solid rgba(158, 218, 216, 0.88);
   color: var(--color-primary-text);
   background:
       linear-gradient(145deg, rgba(235, 251, 249, 0.95), rgba(213, 246, 243, 0.95));
@@ -1603,6 +1600,7 @@ const handleCompleteLater = async () => {
 }
 
 .user-avatar {
+  border: none;
   color: #ffffff;
   background: linear-gradient(145deg, var(--color-primary), var(--color-action));
   box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
@@ -1643,8 +1641,8 @@ const handleCompleteLater = async () => {
 }
 
 .message-row.user .message-bubble {
-  border: 1px solid #0f172a;
-  background: var(--color-primary);
+  border: none;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
   color: #ffffff;
   box-shadow: 0 14px 28px rgba(20, 160, 157, 0.2);
 }
@@ -1684,10 +1682,10 @@ const handleCompleteLater = async () => {
 .confirm-selection-btn {
   height: 34px;
   padding: 0 13px;
-  border: 1px solid #0f172a;
+  border: none;
   border-radius: 0px;
   color: #ffffff;
-  background: #0f172a;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
   font-size: 12px;
   font-weight: 950;
   cursor: pointer;
@@ -1732,7 +1730,7 @@ const handleCompleteLater = async () => {
   margin: 10px auto 0;
   padding: 0 14px;
   border: 1px solid rgba(158, 218, 216, 0.9);
-  border-radius: 999px;
+  border-radius: 0px;
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-primary-text);
   font-size: 12px;
@@ -1772,7 +1770,7 @@ const handleCompleteLater = async () => {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(20, 160, 157, 0.28);
-  border-radius: 16px;
+  border-radius: 0px;
   box-shadow: 0 12px 36px rgba(15, 23, 42, 0.12);
   padding: 6px;
 }
@@ -1790,7 +1788,7 @@ const handleCompleteLater = async () => {
   font-weight: 650;
   text-align: left;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 0px;
   transition: background 0.15s ease;
 }
 
@@ -1838,10 +1836,10 @@ const handleCompleteLater = async () => {
 .quick-reply-btn {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid #0f172a;
+  border: 1px solid rgba(20, 184, 166, 0.32);
   border-radius: 0px;
   background: #ffffff;
-  color: #0f172a;
+  color: #3f6e72;
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
@@ -1849,15 +1847,13 @@ const handleCompleteLater = async () => {
 }
 
 .quick-reply-btn:hover {
-  border-color: #0f172a;
   background: #f1f5f9;
-  color: #0f172a;
 }
 
 .quick-reply-btn.is-selected {
   color: #ffffff;
-  border-color: #0f172a;
-  background: #0f172a;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
   box-shadow: none;
 }
 
@@ -1874,7 +1870,7 @@ const handleCompleteLater = async () => {
   align-items: end;
   padding: 8px;
   border: 1px solid rgba(20, 160, 157, 0.5);
-  border-radius: 22px;
+  border-radius: 0px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow:
       0 0 0 5px rgba(20, 184, 166, 0.08),
@@ -1905,7 +1901,7 @@ const handleCompleteLater = async () => {
   width: 46px;
   height: 46px;
   border: none;
-  border-radius: 17px;
+  border-radius: 0px;
   display: grid;
   place-items: center;
   color: #ffffff;
@@ -1936,7 +1932,7 @@ const handleCompleteLater = async () => {
   gap: 18px;
   padding: 15px;
   border: 1px solid rgba(199, 210, 254, 0.76);
-  border-radius: 22px;
+  border-radius: 0px;
   background:
       linear-gradient(135deg, rgba(238, 242, 255, 0.86), rgba(255, 255, 255, 0.98));
 }
@@ -1959,7 +1955,7 @@ const handleCompleteLater = async () => {
   height: 42px;
   padding: 0 18px;
   border: none;
-  border-radius: 15px;
+  border-radius: 0px;
   font-weight: 900;
   background: linear-gradient(145deg, var(--color-primary), var(--color-action));
   box-shadow: 0 16px 32px rgba(70, 184, 180, 0.22);
@@ -2010,24 +2006,37 @@ const handleCompleteLater = async () => {
 
 .progress-ring {
   --progress: 0;
-  width: 96px;
-  height: 96px;
-  display: grid;
-  place-items: center;
-  justify-self: center;
-  border-radius: 999px;
-  background:
-      radial-gradient(circle closest-side, #ffffff 72%, transparent 73%),
-      conic-gradient(var(--color-primary) calc(var(--progress) * 1%), rgba(219, 239, 238, 0.95) 0);
+  position: relative;
+  width: 100%;
+  height: 28px;
+  border: 1px solid rgba(183, 226, 224, 0.9);
+  background: #f8fafc;
+  border-radius: 0px; /* zero rounded corners */
+  overflow: hidden;
   box-shadow:
-      0 16px 36px rgba(20, 160, 157, 0.14),
+      0 4px 12px rgba(20, 160, 157, 0.06),
       inset 0 0 0 1px rgba(255, 255, 255, 0.92);
 }
-
+.progress-ring::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--progress) * 1%);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
+  transition: width 0.3s ease;
+}
 .progress-ring span {
+  position: relative;
+  z-index: 2;
   color: var(--color-primary-text);
-  font-size: 22px;
+  font-size: 12px;
   font-weight: 950;
+  margin: auto;
+  display: block;
+  text-align: center;
+  line-height: 24px;
 }
 
 .info-block {
@@ -2053,7 +2062,7 @@ const handleCompleteLater = async () => {
   align-items: center;
   min-height: 32px;
   padding: 6px 10px;
-  border-radius: 14px;
+  border-radius: 0px;
   font-size: 12px;
 }
 
@@ -2088,7 +2097,7 @@ const handleCompleteLater = async () => {
 .empty-copy {
   margin: 0;
   padding: 13px;
-  border-radius: 14px;
+  border-radius: 0px;
   background: rgba(246, 254, 253, 0.86);
   color: #6f8790;
   font-size: 12px;
@@ -2100,7 +2109,7 @@ const handleCompleteLater = async () => {
   align-self: stretch;
   padding: 13px;
   border: 1px solid rgba(20, 160, 157, 0.18);
-  border-radius: 16px;
+  border-radius: 0px;
   background: linear-gradient(145deg, #e9fbf9, #ffffff);
   box-shadow: 0 -8px 24px rgba(255, 255, 255, 0.82);
 }
@@ -2162,7 +2171,6 @@ const handleCompleteLater = async () => {
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;
-    border-radius: 0;
     border-left: none;
     border-right: none;
   }
@@ -2231,7 +2239,6 @@ const handleCompleteLater = async () => {
   }
 
   .chat-card {
-    border-radius: 0px;
     min-height: 560px;
   }
 
@@ -2260,9 +2267,5 @@ const handleCompleteLater = async () => {
     max-height: none;
   }
 
-  .progress-ring {
-    width: 96px;
-    height: 96px;
-  }
 }
 </style>
