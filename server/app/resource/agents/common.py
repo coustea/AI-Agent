@@ -12,7 +12,6 @@ import json
 from app.resource.schemas import (
     DownstreamContext,
     NodeInput,
-    ReusableAssets,
     ResourceInput,
     TeachingPlan,
 )
@@ -139,35 +138,49 @@ _PPT_LABELS: dict[str, str | dict] = {
 }
 
 _VIDEO_LABELS: dict[str, str | dict] = {
+    "style": {
+        "precision_light": "精确明亮",
+        "systems_dark": "系统深色",
+        "editorial_classroom": "编辑式课堂",
+    },
+    "focus": {
+        "concept": "概念解释",
+        "process": "步骤追踪",
+        "comparison": "多维对比",
+        "practice": "实战演示",
+    },
     "voice": {
         "teacher": "亲和导师",
         "coach": "硬核教练",
     },
-    "duration_seconds": "预估时长",
     "aspect_ratio": {
         "16:9": "横屏",
         "9:16": "竖屏",
         "1:1": "方形",
     },
-    "include_captions": "字幕开关",
 }
 
 _CARTOON_LABELS: dict[str, str | dict] = {
     "style": {
-        "diagram": "精密图解",
-        "minimal": "清晰简约",
-        "dark_tech": "克制暗黑科技",
+        "diagram": "教学图解",
+        "minimal": "简约扁平",
+        "dark_tech": "暗黑科技",
+        "chalkboard": "黑板粉笔",
     },
-    "voice": {
-        "teacher": "亲和导师",
-        "coach": "硬核教练",
+    "depth": {
+        "overview": "快速概览",
+        "standard": "标准讲解",
+        "deep": "深度剖析",
     },
-    "video_length_seconds": "预估时长",
-    "focus": {
-        "concept": "概念讲解",
-        "process": "过程演示",
-        "comparison": "对比分析",
-        "practice": "实例推演",
+    "pace": {
+        "fast": "快速演示",
+        "normal": "正常节奏",
+        "slow": "慢速细看",
+    },
+    "visuals": {
+        "clean": "简洁画面",
+        "balanced": "平衡画面",
+        "detailed": "详细画面",
     },
 }
 
@@ -202,8 +215,8 @@ _AGENT_CONFIG_FIELDS: dict[str, list[str]] = {
     "code": ["programming_language", "difficulty", "case_type", "focus"],
     "reading": ["reading_depth", "language_preference", "max_items", "focus"],
     "ppt": ["template", "explanation_style", "density", "focus"],
-    "video": ["voice", "duration_seconds", "aspect_ratio", "include_captions"],
-    "cartoon": ["style", "voice", "video_length_seconds", "focus"],
+    "video": ["style", "focus", "voice", "aspect_ratio"],
+    "cartoon": ["style", "depth", "pace", "visuals"],
 }
 
 
@@ -359,30 +372,6 @@ def build_worker_task_context(plan: TeachingPlan, agent_id: str) -> list[str]:
     parts.append(f"## 全局教学策略\n{plan.teaching_strategy}")
     parts.append(f"## 计划难度\n{plan.global_plan.difficulty}")
     return parts
-
-
-def build_basic_handoff(
-    *,
-    source_agent: str,
-    title: str,
-    summary: str,
-    examples: list[str] | None = None,
-    visual_ideas: list[str] | None = None,
-    practice_refs: list[str] | None = None,
-    code_refs: list[str] | None = None,
-) -> DownstreamContext:
-    """构建基础的 DownstreamContext 交接摘要。"""
-    return DownstreamContext(
-        source_agent=source_agent,
-        title=title,
-        one_sentence_summary=summary,
-        reusable_assets=ReusableAssets(
-            examples=(examples or [])[:6],
-            visual_ideas=(visual_ideas or [])[:6],
-            practice_refs=(practice_refs or [])[:6],
-            code_refs=(code_refs or [])[:6],
-        ),
-    )
 
 
 def build_node_context(input_data: NodeInput) -> list[str]:

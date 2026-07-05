@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.config import DEBUG, WORKPLACE_DIR
+from app.config import WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging
@@ -55,8 +55,8 @@ def create_app() -> FastAPI:
     4. 安装全局异常处理器
     5. 注册所有 API 路由
     """
-    # 配置日志输出格式 and 级别
-    configure_logging(debug=DEBUG)
+    # 配置日志输出格式和级别（统一输出关键日志）
+    configure_logging()
 
     # 创建 FastAPI 实例，绑定 lifespan 生命周期管理器
     app = FastAPI(title="AI Learning Platform", lifespan=lifespan)

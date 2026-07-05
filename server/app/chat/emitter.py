@@ -433,17 +433,6 @@ class ChatRuntimeEventMapper:
 
         return False
 
-    async def publish_many(
-        self,
-        events: ChatEvents,
-        runtime_events: list[dict[str, Any]],
-    ) -> bool:
-        failed = False
-        for event in runtime_events:
-            if await self.publish(events, event):
-                failed = True
-        return failed
-
 
 # ===================== 工具状态构建 =====================
 

@@ -22,7 +22,7 @@ from langgraph.graph import END, START, StateGraph
 from loguru import logger as loguru_logger
 from sqlmodel import col, select
 
-from app.config import INFERENCE_TEMPERATURE, PATH_PASS_SCORE, PATH_QUIZ_SIZE
+from app.config import DEFAULT_TEMPERATURE, PATH_PASS_SCORE, PATH_QUIZ_SIZE
 from app.evaluation.request import LearningEventCreate
 from app.evaluation.service import (
     EvaluationService,
@@ -446,7 +446,7 @@ class NodeLearningAgent:
             profile_section=profile_section,
         )
         prompt = prompt
-        response = await self.llm.ainvoke(prompt, temperature=INFERENCE_TEMPERATURE)
+        response = await self.llm.ainvoke(prompt, temperature=DEFAULT_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
         return {
             "title": f"{node_title} - {tutorial_type}",

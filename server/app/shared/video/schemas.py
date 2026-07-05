@@ -71,6 +71,7 @@ class VideoRequest(BaseModel):
     voice: str = "teacher"
     include_captions: bool = True
     style_hint: VideoStyleId | None = None
+    narrative_focus: Literal["concept", "process", "comparison", "practice"] | None = None
     materials: list[SourceMaterial] = Field(min_length=1)
     output_dir: Path
     metadata: dict[str, Any] = Field(default_factory=dict)

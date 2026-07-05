@@ -3,7 +3,7 @@
     <section class="visual-side" aria-label="学习档案介绍">
       <div class="brand">
         <span class="brand-mark"><AppLogo /></span>
-        <span>学枢智导</span>
+        <span>Mentorly</span>
       </div>
 
       <div class="visual-copy">
@@ -32,7 +32,7 @@
       <div class="form-container">
         <div class="mobile-brand">
           <span class="brand-mark"><AppLogo /></span>
-          <span>学枢智导</span>
+          <span>Mentorly</span>
         </div>
 
         <div class="form-header">

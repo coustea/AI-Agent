@@ -125,7 +125,6 @@ class TutorAgent:
         state: TutorAgentState,
         event: TutorRuntimeEvent,
         *,
-        turn_event_type: str | None = None,
         persist: bool = True,
     ) -> list[TutorRuntimeEvent]:
         """Emit a stream event to the SSE queue.

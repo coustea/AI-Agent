@@ -27,34 +27,6 @@ class SourceItem(BaseModel):
     published_at: str | None = None
 
 
-class AgentError(BaseModel):
-    """归一化的 Agent 错误。"""
-    stage: str = ""
-    code: str = ""
-    message: str = ""
-    recoverable: bool = True
-
-
-class ToolInvocation(BaseModel):
-    """单次工具调用记录。"""
-    tool_call_id: str = ""
-    tool_name: str = ""
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    result_text: str = ""
-    status: Literal["success", "ignored", "failed"] = "success"
-    assistant_message_id: int | None = None
-    tool_message_id: int | None = None
-
-
-class AttachmentAnalysis(BaseModel):
-    """附件分析结果。"""
-    file_url: str = ""
-    file_name: str = ""
-    analysis_type: Literal["image", "document"] = "image"
-    summary_text: str = ""
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class NormalizedToolResult(BaseModel):
     """统一标准化的工具执行结果。"""
     text: str = ""

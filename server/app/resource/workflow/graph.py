@@ -58,9 +58,3 @@ def build_parent_graph() -> Any:
     workflow.add_edge("save_node", END)
 
     return workflow.compile()
-
-
-def export_mermaid_topology() -> str:
-    """导出工作流拓扑为 Mermaid 格式字符串。"""
-    graph = build_parent_graph()
-    return graph.get_graph().draw_mermaid()

@@ -24,7 +24,6 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import (
-    DEBUG,
     DB_ECHO,
     DB_MAX_OVERFLOW,
     DB_POOL_RECYCLE,
@@ -157,9 +156,8 @@ async def init_db() -> None:
         raise OperationalError("数据库连接失败", {}, None)
 
     logger.info(
-        "[Database] 连接验证通过: url=%s debug=%s",
+        "[Database] 连接验证通过: url=%s",
         engine.url.render_as_string(hide_password=True),
-        DEBUG,
     )
 
     # 启动时自动导入种子数据

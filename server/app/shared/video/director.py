@@ -100,6 +100,7 @@ class VideoDirectorAgent:
             digest=digest.model_dump_json(indent=2),
             style=style.model_dump_json(indent=2),
             scene_count=request.scene_count,
+            narrative_focus=request.narrative_focus or "concept",
         )
         outline = await self.llm.ainvoke_json(VideoOutline, prompt)
         return outline.model_copy(update={"style": style})

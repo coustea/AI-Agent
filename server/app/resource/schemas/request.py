@@ -15,7 +15,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.resource.schemas.meta import AGENT_DEFAULT_ENABLED, AGENT_DEFAULT_ORDER
+from app.resource.schemas.meta import (
+    AGENT_DEFAULT_ENABLED,
+    AGENT_DEFAULT_ORDER,
+    MIN_SELECTED_AGENTS,
+)
 from app.shared.ppt import PPTPreferences
 
 
@@ -94,23 +98,31 @@ class ReadingConfig(BaseModel):
     max_items: int = Field(default=5, ge=1, le=10)
     focus: Literal["textbook", "engineering", "paper"] = "textbook"
 
+    @field_validator("language_preference", mode="before")
+    @classmethod
+    def normalize_bilingual(cls, value: str) -> str:
+        """将前端遗留的 'bilingual' 归一化为 'both'。"""
+        if value == "bilingual":
+            return "both"
+        return value
+
 
 class VideoConfig(BaseModel):
-    """视频 Agent 配置。后端保留能力，当前资源生成前端不暴露入口。"""
+    """视频 Agent 配置 — 4 个核心参数，全部影响生成内容。"""
 
+    style: Literal["precision_light", "systems_dark", "editorial_classroom"] = "precision_light"
+    focus: Literal["concept", "process", "comparison", "practice"] = "concept"
     voice: Literal["teacher", "coach"] = "teacher"
-    duration_seconds: int = Field(default=180, ge=60, le=600)
     aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
-    include_captions: bool = True
 
 
 class CartoonConfig(BaseModel):
-    """动画讲解 Agent 配置。"""
+    """动画讲解 Agent 配置 — 4 个参数全部影响 HTML 输出."""
 
-    style: Literal["diagram", "minimal", "dark_tech"] = "diagram"
-    voice: Literal["teacher", "coach"] = "teacher"
-    video_length_seconds: int = Field(default=120, ge=60, le=180)
-    focus: Literal["concept", "process", "comparison", "practice"] = "concept"
+    style: Literal["diagram", "minimal", "dark_tech", "chalkboard"] = "diagram"
+    depth: Literal["overview", "standard", "deep"] = "standard"
+    pace: Literal["fast", "normal", "slow"] = "normal"
+    visuals: Literal["clean", "balanced", "detailed"] = "balanced"
 
 
 class AgentConfigs(BaseModel):
@@ -168,8 +180,10 @@ class ResourceGenerationRequest(BaseModel):
         enabled_agent_ids = {
             item.agent_id.value for item in self.selected_agents if item.enabled
         }
-        if not enabled_agent_ids:
-            raise ValueError("selected_agents 过滤 enabled=true 后不能为空")
+        if len(enabled_agent_ids) < MIN_SELECTED_AGENTS:
+            raise ValueError(
+                f"selected_agents 过滤 enabled=true 后至少需要 {MIN_SELECTED_AGENTS} 个 Agent"
+            )
         aggregation_agent_ids = enabled_agent_ids & {"ppt", "video", "cartoon"}
         base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
         if aggregation_agent_ids and not base_agent_ids:

@@ -9,7 +9,7 @@ import json
 
 from pydantic import BaseModel, Field
 
-from app.config import INFERENCE_TEMPERATURE
+from app.config import DEFAULT_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -175,7 +175,7 @@ class ReadingAgent(BaseResourceAgent):
             result = await self.llm.ainvoke_json(
                 ReadingPayload,
                 f"{prompt}\n\n{enhanced_input}",
-                temperature=INFERENCE_TEMPERATURE,
+                temperature=DEFAULT_TEMPERATURE,
             )
             attempt_resources = result.resources
 

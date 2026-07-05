@@ -1,9 +1,4 @@
-# 应用配置
-app:
-  debug: true
-  host: "0.0.0.0"
-  port: 9999
-
+# 应用配置（HOST/PORT 由启动脚本直接配置）
 # 数据库配置
 database:
   url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
@@ -22,20 +17,26 @@ jwt:
 # ============ 模型配置 ============
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-
   # --- 云端：讯飞 Maas ---
   base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
   api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
   model_name: "astron-code-latest"
 
   # 推理参数
-  temperature: 0.3
   max_tokens: 8192
-  # 结构化输出策略：json_mode_first / prompt_first / tool_first / auto
-  structured_output_strategy: "json_mode_first"
+  # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
+  structured_output_strategy: "function_calling_first"
   # 网络与重试参数
   timeout: 300          # 单次请求超时（秒）
   max_retries: 2        # 失败重试次数
+
+  # 温度参数（控制输出随机性，0=确定性，1=高随机性）
+  # json_temp: JSON 结构化输出，低温度确保格式稳定
+  # stream_temp: 流式对话输出，高温度增加创意性和自然感
+  # default_temp: 普通文本生成，中等温度平衡确定性和多样性
+  json_temp: 0.1
+  stream_temp: 1.1
+  default_temp: 0.3
 
   # 图片理解模型（独立配置）
   vision:
@@ -46,19 +47,13 @@ models:
     timeout: 300
     max_retries: 2
 
-# 星火 WebSocket API（Vision 用）
+# 星火 WebSocket API（Vision 用，TTS 也回退到此配置）
 spark:
   app_id: "97c2a0c6"
   api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
   api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
 
-# 星火 TTS 配置
-spark_tts:
-  app_id: "97c2a0c6"
-  api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
-  api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
-
-# Avatar 数字人
+# Avatar 数字人（ASR 也使用此配置）
 avatar:
   app_id: "d6d5f921"
   api_key: "25aff2481573fc7d6a807616facc2090"
@@ -67,9 +62,6 @@ avatar:
   anchor_id: "111204004"
   vcn: "x5_lingxiaoyue_flow"
   iat_url: "wss://iat-api.xfyun.cn/v2/iat"
-  asr_app_id: "d6d5f921"
-  asr_api_key: "25aff2481573fc7d6a807616facc2090"
-  asr_api_secret: "YzZlYzg5MjRjZWYwNGM0M2FmNTc4YTEz"
 
 # 搜索服务
 search:
@@ -90,17 +82,11 @@ knowledge:
   ollama_base_url: "http://127.0.0.1:11434"
   retrieval:
     rrf_k: 60
-    default_top_k: 4
     snippet_min: 500
     snippet_max: 900
-# 自己本地ollama的bge-m3模型
-# 日志配置
-logging:
-  level: "INFO"
 
 # Memory 压缩与长期记忆
 memory:
-  recent_raw_messages: 8
   # 会话压缩阈值
   compress_keep_recent_messages: 4
   compress_min_messages: 16
@@ -119,16 +105,6 @@ memory:
 chat:
   # 单个文件最大读取字符数，超过则截断
   max_file_content_chars: 15000
-  # 单次文档分析最大文件数量
-  max_analyze_file_count: 8
-  # 单次文档分析总字符数上限
-  max_analyze_total_chars: 40000
-  # PDF 最大读取页数
-  max_pdf_pages: 80
-  # DOCX 最大读取段落数
-  max_docx_paragraphs: 1200
-  # 单次分析最大图片数量
-  max_analyze_images: 8
   # 单次上传最大文件数量
   max_upload_files: 12
   # 支持的图片扩展名
@@ -160,30 +136,16 @@ evaluation:
 
 # 路径规划配置
 paths_config:
-  # 节点估计时长下限（分钟）
-  min_estimated_minutes: 10
-  # 节点估计时长上限（分钟）
-  max_estimated_minutes: 180
   # 路径节点测验题目数量
   quiz_size: 5
   # 通过测验的最低分数
   pass_score: 3
-
-# 资源生成配置
-resource:
-  # 审核时单个资源内容截断上限（字符数）
-  review_content_limit: 12000
 
 # Remotion 讲解视频渲染
 video:
   render_timeout_seconds: 900
   concurrency: 4
   chromium_gl: angle
-
-# 题库导入配置
-quiz:
-  # 批量写入的批次大小
-  import_batch_size: 200
 
 # ASR 语音识别配置
 asr:

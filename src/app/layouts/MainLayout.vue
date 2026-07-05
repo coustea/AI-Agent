@@ -5,7 +5,7 @@
         <div class="brand-logo">
           <AppLogo class="app-logo" />
         </div>
-        <span class="brand-name">学枢智导</span>
+        <span class="brand-name">Mentorly</span>
       </div>
 
       <div class="navbar-center">

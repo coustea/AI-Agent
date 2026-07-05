@@ -19,16 +19,16 @@ from app.resource.schemas.quiz import (
     build_quiz_blueprint,
     validate_quiz_payload,
 )
+from app.resource.service import (
+    AGGREGATION_AGENT_IDS,
+    BASE_RESOURCE_AGENT_IDS,
+)
 
 if TYPE_CHECKING:
     from app.resource.schemas import AgentResult, ResourceInput, TeachingPlan
 
 logger = get_logger(__name__)
 
-
-# Agent ID 常量
-BASE_RESOURCE_AGENT_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
-AGGREGATION_AGENT_IDS = frozenset({"ppt", "video", "cartoon"})
 
 # 内容相似度阈值
 CONTENT_SIMILARITY_THRESHOLD = 0.7
@@ -395,7 +395,5 @@ __all__ = [
     "validate_agent_result",
     "check_content_overlap",
     "AGENT_VALIDATORS",
-    "BASE_RESOURCE_AGENT_IDS",
-    "AGGREGATION_AGENT_IDS",
     "CONTENT_SIMILARITY_THRESHOLD",
 ]

@@ -11,9 +11,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
-
-from langchain_core.messages import HumanMessage
 
 from app.infra.logging import get_logger
 from app.config import WORKPLACE_DIR

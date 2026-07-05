@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.config import INFERENCE_TEMPERATURE
+from app.config import DEFAULT_TEMPERATURE
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -79,7 +79,7 @@ class MindmapAgent(BaseResourceAgent):
         await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)
         prompt = prompts.get("resource").get("mindmap")
         await self.emitter.send(self.agent_id, "running", "正在生成知识图谱结构...", 60)
-        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=INFERENCE_TEMPERATURE)
+        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}", temperature=DEFAULT_TEMPERATURE)
         content = response.content if hasattr(response, "content") else str(response)
 
         branches: list[str] = []

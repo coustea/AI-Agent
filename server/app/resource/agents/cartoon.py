@@ -82,15 +82,92 @@ def _source_artifacts_from_results(
 
 
 def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
-    """从 4 个核心参数构建 cartoon 请求选项。
-
-    渲染参数由运行环境自动探测，不接受用户配置。
-    """
+    """从 4 个核心参数构建 cartoon 请求选项。"""
     return {
-        "video_length_seconds": int(config.get("video_length_seconds", 120)),
-        "voice": config.get("voice", "teacher"),
         "style": config.get("style", "diagram"),
-        "focus": config.get("focus", "concept"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
+    }
+def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    """从 4 个核心参数构建 cartoon 请求选项。"""
+    return {
+        "style": config.get("style", "diagram"),
+        "depth": config.get("depth", "standard"),
+        "pace": config.get("pace", "normal"),
+        "visuals": config.get("visuals", "balanced"),
     }
 
 
@@ -115,10 +192,190 @@ class CartoonAgent(BaseResourceAgent):
         request = CartoonVideoRequest(
             learning_need=input_data.learning_need,
             profile=_profile_text(input_data.profile),
-            video_length_seconds=cfg["video_length_seconds"],
-            voice=cfg["voice"],
             style=cfg["style"],
-            focus=cfg["focus"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+        )
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
+            output_dir=output_dir,
+            artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
+        )
+        request = CartoonVideoRequest(
+            learning_need=input_data.learning_need,
+            profile=_profile_text(input_data.profile),
+            style=cfg["style"],
+            depth=cfg["depth"],
+            pace=cfg["pace"],
+            visuals=cfg["visuals"],
             output_dir=output_dir,
             artifacts=_source_artifacts_from_handoffs(input_data.upstream_handoffs),
         )

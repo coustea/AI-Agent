@@ -39,6 +39,7 @@ COORDINATOR_AGENT_ID = "coordinator"
 VIDEO_AGENT_ID = "video"
 CARTOON_AGENT_ID = "cartoon"
 BUNDLE_AGENT_ID = "bundle"
+BASE_RESOURCE_AGENT_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
 AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID)
 
 # agent_type → content_format 映射（不再存 content_format 列）

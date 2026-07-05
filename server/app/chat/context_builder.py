@@ -220,8 +220,3 @@ class ChatContextBuilder:
                     )
 
         return sanitize_tool_message_chain(messages)
-
-    async def build_session_context(self, user_id: int, session_id: str) -> str:
-        """获取会话摘要上下文。"""
-        svc = get_chat_memory_service()
-        return await svc.get_session_summary_context(user_id=user_id, session_id=session_id)

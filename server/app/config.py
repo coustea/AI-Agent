@@ -62,14 +62,6 @@ def get(path: str, default=None):
     return value
 
 
-# ============ 应用配置 ============
-# 调试模式开关
-DEBUG = get("app.debug", False)
-# 监听主机地址
-HOST = get("app.host", "0.0.0.0")
-# 监听端口号
-PORT = get("app.port", 9999)
-
 # ============ 数据库配置 ============
 # 数据库连接 URL（如 postgresql://user:pass@host/db）
 DB_URL = get("database.url", "")
@@ -344,8 +336,6 @@ KB_GLOBAL_CANDIDATE_MULTIPLIER: int = get("knowledge.retrieval.global_candidate_
 KB_ROUTING_FALLBACK_TO_GLOBAL: bool = get("knowledge.routing.fallback_to_global", True)
 
 # ============ 日志配置 ============
-# 日志级别（DEBUG / INFO / WARNING / ERROR）
-LOG_LEVEL = get("logging.level", "INFO")
 # LangChain 调试开关
 LANGCHAIN_DEBUG = False
 # LangChain 详细输出开关
@@ -376,12 +366,11 @@ AVATAR_ANCHOR = get("avatar.anchor_id", "")
 AVATAR_VCN = get("avatar.vcn", "")
 # 图片转动画（IAT）服务地址
 AVATAR_IAT_URL = get("avatar.iat_url", "")
-# 语音识别（ASR）应用 ID
-ASR_APP_ID = get("avatar.asr_app_id", "")
-# 语音识别 API 密钥
-ASR_API_KEY = get("avatar.asr_api_key", "")
-# 语音识别 API 密钥签名
-ASR_API_SECRET = get("avatar.asr_api_secret", "")
+
+# ASR 配置（回退到通用 Avatar 配置）
+ASR_APP_ID = get("avatar.app_id", AVATAR_APP_ID)
+ASR_API_KEY = get("avatar.api_key", AVATAR_API_KEY)
+ASR_API_SECRET = get("avatar.api_secret", AVATAR_API_SECRET)
 
 # ============ 星火 Spark WebSocket 配置 ============
 # 星火大模型应用 ID
@@ -392,29 +381,17 @@ SPARK_API_KEY = get("spark.api_key", "")
 SPARK_API_SECRET = get("spark.api_secret", "")
 
 # 星火 TTS 配置（回退到通用 Spark 配置）
-SPARK_TTS_APP_ID = get("spark_tts.app_id", SPARK_APP_ID)
-SPARK_TTS_API_KEY = get("spark_tts.api_key", SPARK_API_KEY)
-SPARK_TTS_API_SECRET = get("spark_tts.api_secret", SPARK_API_SECRET)
+SPARK_TTS_APP_ID = get("spark.app_id", SPARK_APP_ID)
+SPARK_TTS_API_KEY = get("spark.api_key", SPARK_API_KEY)
+SPARK_TTS_API_SECRET = get("spark.api_secret", SPARK_API_SECRET)
 
 # ============ 聊天附件与保护机制 ============
 # 单个文件内容最大读取字符数（防止超大文件撑爆上下文）
 MAX_FILE_CONTENT_CHARS = get("chat.max_file_content_chars", 15000)
-# 单次分析的最大文件数量
-MAX_ANALYZE_FILE_COUNT = get("chat.max_analyze_file_count", 8)
-# 单次分析的所有文件内容总字符数上限
-MAX_ANALYZE_TOTAL_CHARS = get("chat.max_analyze_total_chars", 40000)
-# PDF 文件最大读取页数
-MAX_PDF_PAGES_TO_READ = get("chat.max_pdf_pages", 80)
-# DOCX 文件最大读取段落数
-MAX_DOCX_PARAGRAPHS_TO_READ = get("chat.max_docx_paragraphs", 1200)
-# 单次分析的最大图片数量
-MAX_IMAGE_ANALYZE_COUNT = get("chat.max_analyze_images", 8)
 # 单次请求最大上传文件数
 MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
 
 # ============ 记忆压缩与长期记忆 ============
-# 保留最近多少条原始消息（不压缩）
-RECENT_RAW_MESSAGES = get("memory.recent_raw_messages", 8)
 # 压缩后保留的最近原始消息条数
 COMPRESS_KEEP_RECENT_MESSAGES = get("memory.compress_keep_recent_messages", 4)
 # 触发压缩的最少消息数
@@ -437,13 +414,17 @@ LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
 LTM_COOLDOWN_MINUTES = get("memory.ltm_cooldown_minutes", 0)
 
 # ============ 模型推理参数 ============
-# 通用模型温度参数（控制输出随机性，0=确定性，1=高随机性）
-INFERENCE_TEMPERATURE = get("models.temperature", 0.3)
-# 结构化输出策略：json_schema_first / json_mode_first / prompt_first
-# json_schema_first — 优先 json_schema strict，失败后降级 json_mode → prompt
-# json_mode_first — 跳过 json_schema，直接 json_mode，失败后降级 prompt
+# JSON 结构化输出温度（低温度确保格式稳定）
+JSON_TEMPERATURE = get("models.json_temp", 0.1)
+# 流式对话输出温度（高温度增加创意性和自然感）
+STREAM_TEMPERATURE = get("models.stream_temp", 1.1)
+# 普通文本生成温度（中等温度平衡确定性和多样性）
+DEFAULT_TEMPERATURE = get("models.default_temp", 0.3)
+# 结构化输出策略：function_calling_first / json_mode_first / prompt_first
+# function_calling_first — 优先 function_calling，失败后降级 json_mode → prompt
+# json_mode_first — 跳过 function_calling，直接 json_mode，失败后降级 prompt
 # prompt_first — 仅 prompt 注入 + 手动解析
-STRUCTURED_OUTPUT_STRATEGY = get("models.structured_output_strategy", "json_schema_first")
+STRUCTURED_OUTPUT_STRATEGY = get("models.structured_output_strategy", "function_calling_first")
 # 视觉模型温度参数（通常需要更高的创造性）
 VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
 
@@ -465,22 +446,10 @@ SAFETY_SENSITIVE_TERMS: tuple[str, ...] = tuple(get("safety.sensitive_terms", ["
 STREAK_MIN_SECONDS: int = get("evaluation.streak_min_seconds", 300)
 
 # ============ 路径规划配置 ============
-# 节点估计时长下限（分钟）
-PATH_MIN_ESTIMATED_MINUTES: int = get("paths_config.min_estimated_minutes", 10)
-# 节点估计时长上限（分钟）
-PATH_MAX_ESTIMATED_MINUTES: int = get("paths_config.max_estimated_minutes", 180)
 # 路径节点测验题目数量
 PATH_QUIZ_SIZE: int = get("paths_config.quiz_size", 5)
 # 通过测验的最低分数
 PATH_PASS_SCORE: int = get("paths_config.pass_score", 3)
-
-# ============ 资源生成配置 ============
-# 审核时单个资源内容截断上限（字符数）
-REVIEW_CONTENT_LIMIT: int = get("resource.review_content_limit", 12000)
-
-# ============ 题库导入配置 ============
-# 批量写入的批次大小
-QUIZ_IMPORT_BATCH_SIZE: int = get("quiz.import_batch_size", 200)
 
 # ============ ASR 配置 ============
 # VAD 结束静默时长（毫秒）

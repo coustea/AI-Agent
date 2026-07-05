@@ -6,7 +6,7 @@
 
         <div class="sidebar-top-header">
           <div class="sidebar-brand" v-if="!sessionSidebarCollapsed">
-            <AppLogo class="brand-icon" />
+            <ChatLineRound class="brand-icon" />
             <span class="brand-text">智能辅导</span>
           </div>
           <button
@@ -29,7 +29,7 @@
           </div>
 
           <PopoverRoot v-model:open="searchPopoverVisible">
-            <PopoverTrigger class="nav-item search-item" title="搜索历史" style="background: none; border: none; text-align: left; padding: 0; outline: none; width: 100%;">
+            <PopoverTrigger as="div" class="nav-item search-item" title="搜索历史">
               <Search class="nav-icon" /> <span class="nav-text">搜索历史</span>
             </PopoverTrigger>
 
@@ -553,6 +553,25 @@
       </transition>
     </div>
 
+    <!-- 删除对话确认框 -->
+    <Teleport to="body">
+      <transition name="modal-fade">
+        <div v-if="isDeleteConfirmVisible" class="custom-modal-overlay delete-confirm-overlay" @click.self="cancelDeleteSession">
+          <div class="delete-confirm-dialog">
+            <div class="delete-confirm-icon">
+              <Delete />
+            </div>
+            <h3 class="delete-confirm-title">删除对话</h3>
+            <p class="delete-confirm-desc">确定要删除「{{ sessionToDeleteTitle }}」吗？删除后将无法恢复。</p>
+            <div class="delete-confirm-actions">
+              <button class="btn btn-cancel" @click="cancelDeleteSession">取消</button>
+              <button class="btn btn-danger" @click="confirmArchiveSession">删除</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
+
     <!-- 教学图解全屏预览 -->
     <Teleport to="body">
       <transition name="modal-fade">
@@ -602,6 +621,8 @@
         </div>
       </transition>
     </Teleport>
+
+
   </div>
 </template>
 
@@ -636,7 +657,7 @@ import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/current
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
-import AppLogo from '@/shared/ui/AppLogo.vue'
+
 
 import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
 
@@ -700,6 +721,10 @@ const triggerImagePreview = (urls: string[], index: number) => {
     imgPreviewVisible.value = true
   }
 }
+
+const isDeleteConfirmVisible = ref(false)
+const sessionToDeleteId = ref<string | null>(null)
+const sessionToDeleteTitle = ref('')
 
 const isRecording = ref(false)
 const isVoiceChatting = ref(false)
@@ -1899,13 +1924,25 @@ const switchSession = async (sessionId: string) => {
   scrollToBottom()
 }
 
-const archiveSession = async (sessionId: string) => {
+const archiveSession = (sessionId: string) => {
   const targetSession = sessions.value.find(session => session.id === sessionId)
-  const sessionTitle = targetSession?.title?.trim() || '新建对话'
+  sessionToDeleteTitle.value = targetSession?.title?.trim() || '新建对话'
+  sessionToDeleteId.value = sessionId
+  isDeleteConfirmVisible.value = true
+}
 
-  if (!window.confirm(`确定删除“${sessionTitle}”吗？删除后无法恢复。`)) {
-    return
-  }
+const cancelDeleteSession = () => {
+  isDeleteConfirmVisible.value = false
+  sessionToDeleteId.value = null
+  sessionToDeleteTitle.value = ''
+}
+
+const confirmArchiveSession = async () => {
+  const sessionId = sessionToDeleteId.value
+  if (!sessionId) return
+
+  isDeleteConfirmVisible.value = false
+  sessionToDeleteId.value = null
 
   try {
     // 只有确认后才清理流状态并调用删除接口。
@@ -4999,6 +5036,96 @@ onBeforeUnmount(() => {
   .diagram-generation-progress span {
     animation: none;
   }
+}
+
+/* ================= 删除对话确认弹窗 ================= */
+.delete-confirm-overlay {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 22vh;
+}
+
+.delete-confirm-dialog {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 50px rgba(32, 95, 103, 0.12);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  padding: var(--space-7) var(--space-7) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.delete-confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-danger);
+  font-size: 1.3rem;
+  margin-bottom: var(--space-4);
+}
+
+.delete-confirm-title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.1rem;
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+}
+
+.delete-confirm-desc {
+  margin: 0 0 var(--space-5);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.delete-confirm-actions .btn {
+  flex: 1;
+  height: 38px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-confirm-actions .btn-cancel {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.delete-confirm-actions .btn-cancel:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.delete-confirm-actions .btn-danger {
+  background: var(--color-danger);
+  color: #ffffff;
+}
+
+.delete-confirm-actions .btn-danger:hover {
+  background: #a8324d;
 }
 
 </style>

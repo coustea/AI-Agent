@@ -19,4 +19,5 @@ AGENT_META: dict[str, dict[str, str]] = {
 }
 
 AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon", "video"]
-AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "ppt"]
+AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "reading", "ppt", "cartoon", "video"]
+MIN_SELECTED_AGENTS = 3

@@ -7,12 +7,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-class TutorToolCall(BaseModel):
-    """TutorAgent 节点选择出的工具调用。"""
-    tool_name: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-
-
 class TutorRequestContext(BaseModel):
     """当前用户消息的辅导请求上下文。"""
     user_id: int

@@ -73,12 +73,46 @@
 
                 <div class="message-main">
                   <div class="message-meta">
-                    <span>{{ msg.role === 'assistant' ? '学枢智导' : '你' }}</span>
+                    <span>{{ msg.role === 'assistant' ? 'Mentorly' : '你' }}</span>
                     <span>{{ msg.time }}</span>
                   </div>
 
                   <div class="message-bubble">
-                    <p class="message-text">{{ msg.content }}</p>
+                    <p class="message-text">
+                      {{ msg.content }}<span v-if="msg.streaming" class="streaming-cursor"></span>
+                    </p>
+
+                    <!-- Embedded active quick reply options inside assistant bubble -->
+                    <div
+                        v-if="msg.role === 'assistant' && isLatestAssistantMessage(msg.id) && showAssistantActions && currentQuickReplies.length > 0"
+                        class="bubble-quick-replies"
+                    >
+                      <div class="quick-replies-grid">
+                        <button
+                            v-for="reply in currentQuickReplies"
+                            :key="reply"
+                            class="quick-reply-btn"
+                            :class="{ 'is-selected': isReplySelected(reply) }"
+                            type="button"
+                            :disabled="isAssistantStreaming"
+                            @click="handleQuickReply(reply)"
+                        >
+                          <span>{{ reply }}</span>
+                        </button>
+                      </div>
+
+                      <div v-if="isMultiSelectStep" class="action-footer">
+                        <span>{{ selectionSummaryText }}</span>
+                        <button
+                            class="confirm-selection-btn"
+                            type="button"
+                            :disabled="!canSend"
+                            @click="handleSend"
+                        >
+                          确认选择
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -88,83 +122,12 @@
               </div>
             </transition-group>
 
-            <transition name="fade-up">
-              <div
-                  v-if="showAssistantActions"
-                  class="message-row assistant action-row"
-              >
-                <div class="avatar-icon">AI</div>
-
-                <div class="message-main">
-                  <div class="message-meta">
-                    <span>学枢智导</span>
-                    <span>{{ currentTimeLabel }}</span>
-                  </div>
-
-                  <div class="message-bubble action-bubble">
-                    <div class="action-copy">
-                      <strong>{{ activeActionTitle }}</strong>
-                      <p>{{ activeActionHint }}</p>
-                    </div>
-
-                    <div
-                        v-if="currentQuickReplies.length > 0"
-                        :class="['quick-replies-grid', { 'is-card-mode': shouldShowReplyHint, 'is-grade-mode': isGradeStep }]"
-                    >
-                      <button
-                          v-for="reply in currentQuickReplies"
-                          :key="reply"
-                          class="quick-reply-btn"
-                          :class="{ 'is-selected': isReplySelected(reply) }"
-                          type="button"
-                          :disabled="isAssistantStreaming"
-                          @click="handleQuickReply(reply)"
-                      >
-                        <span>{{ reply }}</span>
-                        <small v-if="getReplyHint(reply)">{{ getReplyHint(reply) }}</small>
-                      </button>
-                    </div>
-
-                    <div
-                        v-if="currentStep === 4 && schoolSuggestions.length > 0"
-                        class="school-suggestions-grid"
-                    >
-                      <button
-                          v-for="school in schoolSuggestions"
-                          :key="school.name"
-                          class="school-suggestion-btn"
-                          type="button"
-                          @click="selectSchool(school)"
-                      >
-                        <span class="school-name">{{ school.name }}</span>
-                        <span v-if="school.level" class="school-level-tag">
-                          {{ school.level }}
-                        </span>
-                      </button>
-                    </div>
-
-                    <div v-if="isMultiSelectStep" class="action-footer">
-                      <span>{{ selectionSummaryText }}</span>
-                      <button
-                          class="confirm-selection-btn"
-                          type="button"
-                          :disabled="!canSend"
-                          @click="handleSend"
-                      >
-                        确认选择
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </transition>
-
             <div v-if="isThinking" class="message-row assistant thinking-row">
               <div class="avatar-icon">AI</div>
 
               <div class="message-main">
                 <div class="message-meta">
-                  <span>学枢智导</span>
+                  <span>Mentorly</span>
                   <span>{{ currentTimeLabel }}</span>
                 </div>
 
@@ -188,6 +151,27 @@
 
           <div class="input-dock">
             <div v-if="currentStep <= 7" class="composer-wrapper">
+              <!-- Floating school autocomplete dropdown -->
+              <transition name="fade">
+                <div
+                    v-if="currentStep === 4 && schoolSuggestions.length > 0"
+                    class="school-autocomplete-popover"
+                >
+                  <button
+                      v-for="school in schoolSuggestions"
+                      :key="school.name"
+                      class="autocomplete-suggestion-item"
+                      type="button"
+                      @click="selectSchool(school)"
+                  >
+                    <span class="school-name">{{ school.name }}</span>
+                    <span v-if="school.level" class="school-level-tag">
+                      {{ school.level }}
+                    </span>
+                  </button>
+                </div>
+              </transition>
+
               <textarea
                   id="onboarding-chat-input"
                   ref="inputRef"
@@ -391,6 +375,17 @@ const PRESET_MAJORS = [
   '电子信息工程',
 ]
 
+const PRESET_SCHOOLS = [
+  '北京大学',
+  '清华大学',
+  '浙江大学',
+  '北京邮电大学',
+  '北京航空航天大学',
+  '上海交通大学',
+  '复旦大学',
+  '南京大学',
+]
+
 const PRESET_COURSES = [
   '数据结构',
   '操作系统',
@@ -504,8 +499,7 @@ const canSend = computed(() => {
 })
 
 const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
-const shouldShowReplyHint = computed(() => [7].includes(currentStep.value))
-const isGradeStep = computed(() => currentStep.value === 2)
+
 
 const currentStepMeta = computed<StepMeta>(() => {
   return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
@@ -547,7 +541,7 @@ const stepTimeline = computed<StepTimelineItem[]>(() => {
 })
 
 const composerPlaceholder = computed(() => {
-  if (isAssistantStreaming.value) return '学枢智导正在输入...'
+  if (isAssistantStreaming.value) return 'Mentorly 正在输入...'
   if (currentStep.value === 1) return '输入专业名称，或点击 AI 推荐标签...'
   if (currentStep.value === 2) return '输入年级，或点击 AI 推荐标签...'
   if (currentStep.value === 4) return '输入学校名称，支持搜索选择...'
@@ -572,6 +566,8 @@ const currentQuickReplies = computed(() => {
       return PRESET_GRADES
     case 3:
       return PRESET_GOALS
+    case 4:
+      return PRESET_SCHOOLS
     case 5:
       return PRESET_DAILY_STUDY_TIME
     case 6:
@@ -627,27 +623,7 @@ const showAssistantActions = computed(() => {
   return currentStep.value === 4 && schoolSuggestions.value.length > 0
 })
 
-const activeActionTitle = computed(() => {
-  if (currentStep.value === 4 && schoolSuggestions.value.length > 0) {
-    return '我找到了这些学校'
-  }
 
-  return currentStepMeta.value.quickTitle
-})
-
-const activeActionHint = computed(() => {
-  if (currentStep.value === 4) {
-    return schoolSuggestions.value.length > 0
-        ? '选择一个学校后，我会把它作为你的回答继续记录。'
-        : '输入学校名称后，我会从学校库里返回匹配项。'
-  }
-
-  if (isMultiSelectStep.value) {
-    return '这些标签会写入当前回答，可多选后再确认。'
-  }
-
-  return '点击任一标签，我会把它作为你的当前回答。'
-})
 
 const lockPageScroll = () => {
   previousBodyOverflow = document.body.style.overflow
@@ -770,7 +746,7 @@ const initializeDialog = async () => {
     return
   }
 
-  await streamAssistantMessage('你好，我是学枢智导。我们会用聊天方式完成基础资料。先只确认一个问题：你的专业是什么？')
+  await streamAssistantMessage('你好，我是 Mentorly。我们会用聊天方式完成基础资料。先只确认一个问题：你的专业是什么？')
 }
 
 const resetState = () => {
@@ -800,6 +776,12 @@ const formatTime = () => {
   return `${hour}:${minute}`
 }
 
+const isLatestAssistantMessage = (msgId: number) => {
+  const assistantMsgs = messages.value.filter(m => m.role === 'assistant')
+  if (assistantMsgs.length === 0) return false
+  return assistantMsgs[assistantMsgs.length - 1]?.id === msgId
+}
+
 const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 
 const isMessageListNearBottom = () => {
@@ -821,11 +803,18 @@ const scrollToBottom = async (options: { force?: boolean } = {}) => {
   const el = messageListRef.value
   if (!el) return
 
-  const shouldScroll = options.force || !isUserReadingHistory.value || isMessageListNearBottom()
+  const shouldScroll = options.force || isAssistantStreaming.value || !isUserReadingHistory.value || isMessageListNearBottom()
 
   if (!shouldScroll) return
 
-  el.scrollTop = el.scrollHeight
+  if (isAssistantStreaming.value && !options.force) {
+    el.scrollTop = el.scrollHeight
+  } else {
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: 'smooth',
+    })
+  }
   isUserReadingHistory.value = false
 }
 
@@ -1054,22 +1043,6 @@ const getGradeHint = (grade: string) => {
 }
 */
 
-const getReplyHint = (reply: string) => {
-  if (currentStep.value === 7) {
-    const courseHints: Record<string, string> = {
-      数据结构: '算法、树图',
-      操作系统: '进程、内存',
-      计算机网络: '协议、分层',
-      数据库系统: 'SQL、事务',
-      编译原理: '词法、语法',
-      机器学习: '模型、评估',
-    }
-
-    return courseHints[reply] || ''
-  }
-
-  return ''
-}
 
 const handleSend = async () => {
   if (!canSend.value) return
@@ -1412,8 +1385,8 @@ const handleCompleteLater = async () => {
   z-index: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 214px minmax(0, 1fr) 300px;
-  gap: 16px;
+  grid-template-columns: 150px minmax(0, 1fr) 210px;
+  gap: 12px;
   margin: 0 20px 20px;
 }
 
@@ -1431,34 +1404,34 @@ const handleCompleteLater = async () => {
 }
 
 .step-rail {
-  padding: 16px;
+  padding: 10px;
 }
 
 .step-rail-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 12px;
-  border-radius: 16px;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
   background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
   color: var(--color-primary-text);
 }
 
 .step-rail-title span {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 950;
 }
 
 .step-rail-title strong {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 950;
 }
 
 .step-list {
   display: grid;
-  gap: 9px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1466,13 +1439,13 @@ const handleCompleteLater = async () => {
 
 .step-item {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
-  min-height: 54px;
-  padding: 9px;
+  min-height: 46px;
+  padding: 6px 8px;
   border: 1px solid transparent;
-  border-radius: 16px;
+  border-radius: 12px;
   color: #6b7f87;
 }
 
@@ -1488,14 +1461,14 @@ const handleCompleteLater = async () => {
 }
 
 .step-index {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 10px;
   color: #78919a;
   background: rgba(236, 248, 247, 0.9);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -1507,18 +1480,19 @@ const handleCompleteLater = async () => {
 
 .step-item strong {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 950;
+  line-height: 1.2;
 }
 
 .step-item small {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   overflow: hidden;
   color: #8aa0a8;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 750;
-  line-height: 1.35;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1820,123 +1794,102 @@ const handleCompleteLater = async () => {
   padding: 14px 16px 16px;
 }
 
-.quick-replies-grid,
-.school-suggestions-grid {
+.school-autocomplete-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 100;
   display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  max-height: 132px;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
   overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-}
-
-.quick-replies-grid::-webkit-scrollbar,
-.school-suggestions-grid::-webkit-scrollbar {
-  width: 6px;
-}
-
-.quick-replies-grid::-webkit-scrollbar-thumb,
-.school-suggestions-grid::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(203, 213, 225, 0.65);
-}
-
-.quick-replies-grid::-webkit-scrollbar-track,
-.school-suggestions-grid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.quick-replies-grid.is-card-mode {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.quick-reply-btn,
-.school-suggestion-btn {
-  position: relative;
-  min-height: 36px;
-  border: 1px solid rgba(183, 226, 224, 0.96);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #24545b;
-  font-size: 13px;
-  font-weight: 850;
-  cursor: pointer;
-  overflow: hidden;
-  transition:
-      border-color 0.16s ease,
-      background 0.16s ease,
-      color 0.16s ease,
-      box-shadow 0.16s ease;
-}
-
-.quick-reply-btn {
-  padding: 0 15px;
-}
-
-.quick-replies-grid.is-card-mode .quick-reply-btn {
-  min-height: 54px;
-  padding: 9px 13px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(20, 160, 157, 0.28);
   border-radius: 16px;
-  text-align: left;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.12);
+  padding: 6px;
 }
 
-/* 年级专属：紧凑胶囊 pill，稍宽以容纳副标题 */
-.quick-replies-grid.is-grade-mode {
+.autocomplete-suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.autocomplete-suggestion-item:hover {
+  background: rgba(20, 184, 166, 0.08);
+}
+
+.school-level-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(20, 184, 166, 0.12);
+  color: var(--color-primary-text);
+  border-radius: 6px;
+  font-weight: 800;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: var(--color-primary);
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  from, to { background-color: transparent }
+  50% { background-color: var(--color-primary) }
+}
+
+.bubble-quick-replies {
+  margin-top: 10px;
+  padding: 10px 14px 12px;
+  border-top: 1px dashed rgba(203, 235, 233, 0.8);
+  background: rgba(246, 254, 253, 0.38);
+}
+
+.quick-replies-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-height: none;
-  overflow: visible;
 }
 
-.quick-replies-grid.is-grade-mode .quick-reply-btn {
-  min-height: 44px;
-  padding: 6px 16px;
+.quick-reply-btn {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(20, 184, 166, 0.32);
   border-radius: 999px;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  text-align: center;
-  min-width: 68px;
-}
-
-.quick-replies-grid.is-grade-mode .quick-reply-btn small {
-  margin-top: 2px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #94a3b8;
-  white-space: nowrap;
-}
-
-.quick-replies-grid.is-grade-mode .quick-reply-btn.is-selected small {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.quick-reply-btn span {
-  display: block;
-}
-
-.quick-reply-btn small {
-  display: block;
-  margin-top: 4px;
-  color: #94a3b8;
-  font-size: 11px;
+  background: #ffffff;
+  color: #3f6e72;
+  font-size: 12px;
   font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.quick-reply-btn:hover,
-.school-suggestion-btn:hover {
-  transform: none;
-  z-index: auto;
-  border-color: rgba(20, 160, 157, 0.82);
+.quick-reply-btn:hover {
+  border-color: var(--color-primary);
+  background: rgba(20, 184, 166, 0.06);
   color: var(--color-primary-text);
-  background: linear-gradient(180deg, #ffffff 0%, #f4fcfb 100%);
-  box-shadow: inset 0 0 0 1px rgba(20, 160, 157, 0.12);
+  transform: translateY(-1px);
 }
 
 .quick-reply-btn.is-selected {
@@ -1946,23 +1899,9 @@ const handleCompleteLater = async () => {
   box-shadow: none;
 }
 
-.quick-reply-btn.is-selected:hover {
-  color: #ffffff;
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
-  box-shadow: none;
-}
-
-.quick-reply-btn.is-selected small {
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.quick-reply-btn:disabled,
-.school-suggestion-btn:disabled {
+.quick-reply-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.58;
-  transform: none;
-  box-shadow: none;
+  opacity: 0.45;
 }
 
 .school-suggestion-btn {
@@ -1982,6 +1921,7 @@ const handleCompleteLater = async () => {
 }
 
 .composer-wrapper {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 46px;
   gap: 10px;

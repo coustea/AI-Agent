@@ -47,7 +47,7 @@
               ref="planningNodeRef"
               class="agent-station-card agent-station-card-v4 planning-core"
               :class="['status-' + getStageNode('planning').status, { 'is-selected': selectedDagNodeId === 'planning' }]"
-              @click="handleAgentClick('planning', $event)"
+              @click="handleAgentClick('planning')"
             >
               <div class="station-header">
                 <div class="station-icon">
@@ -109,7 +109,7 @@
               class="agent-station-card agent-station-card-v4"
               :ref="el => setStationCardRef(node.id, el)"
               :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id, 'has-artifact': hasGeneratedResource(node.id) }]"
-              @click="handleAgentClick(node.id, $event)"
+              @click="handleAgentClick(node.id)"
             >
               <div class="station-header">
                 <div class="station-icon">
@@ -141,7 +141,7 @@
               :key="node.id"
               class="agent-station-card agent-station-card-v4"
               :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id, 'has-artifact': hasGeneratedResource(node.id) }]"
-              @click="handleAgentClick(node.id, $event)"
+              @click="handleAgentClick(node.id)"
             >
               <div class="station-header">
                 <div class="station-icon">
@@ -172,7 +172,7 @@
             <article
               class="review-station-card review-station-card-v4 bundle-stage-card"
               :class="['status-' + bundleNode.status, { 'is-selected': selectedDagNodeId === bundleNode.id }]"
-              @click="handleAgentClick(bundleNode.id, $event)"
+              @click="handleAgentClick(bundleNode.id)"
             >
               <div class="review-icon">
                 <component :is="getWorkflowIcon(bundleNode.id)"  class='w-4 h-4' />
@@ -187,94 +187,103 @@
         </div>
       </section>
 
-      <transition name="detail-float">
-        <aside
-          v-if="detailPanelVisible && selectedDagNode"
-          class="agent-detail-floating-panel"
-          :style="detailPanelStyle"
-          role="dialog"
-          aria-label="Agent 运行详情"
-        >
-          <span class="detail-anchor-caret" aria-hidden="true"></span>
-
-          <div class="detail-panel-title">
-            <div class="focus-agent-icon">
-              <component :is="getWorkflowIcon(selectedDagNode.id)"  class='w-4 h-4' />
-            </div>
-            <div class="detail-title-copy">
-              <span>运行详情</span>
-              <h3>{{ getWorkflowTitle(selectedDagNode.id) }}</h3>
-              <p>{{ getNodeStageLabel(selectedDagNode) }}</p>
-            </div>
-            <span class="detail-status-dot" :class="`status-${selectedDagNode.status}`"></span>
-            <button class="detail-close-btn" type="button" aria-label="关闭 Agent 详情" @click="closeAgentDetail">×</button>
-          </div>
-
-          <div class="selected-agent-detail-card">
-            <div class="detail-current-task">
-              <span>当前任务</span>
-              <strong>{{ getNodeDisplayMessage(selectedDagNode) }}</strong>
-              <div class="detail-progress-line">
-                <i :style="{ width: `${selectedDagNode.progress}%` }"></i>
-              </div>
-              <em>{{ selectedDagNode.progress }}%</em>
-            </div>
-
-            <dl class="focus-metrics detail-metrics-v3">
-              <div>
-                <dt>当前阶段</dt>
-                <dd>{{ getNodePhaseLabel(selectedDagNode) }}</dd>
-              </div>
-              <div>
-                <dt>运行耗时</dt>
-                <dd>{{ formatElapsed(selectedDagNode.elapsedMs) }}</dd>
-              </div>
-              <div>
-                <dt>最近更新</dt>
-                <dd>{{ getNodeTimeLabel(selectedDagNode) }}</dd>
-              </div>
-              <div>
-                <dt>成果状态</dt>
-                <dd>{{ getNodeArtifactStatus(selectedDagNode) }}</dd>
-              </div>
-            </dl>
-
-            <div class="detail-io-grid">
-              <div>
-                <span>输入</span>
-                <p>{{ getNodeInputSummary(selectedDagNode) }}</p>
-              </div>
-              <div>
-                <span>输出</span>
-                <p>{{ getNodeOutputSummary(selectedDagNode) }}</p>
-              </div>
-            </div>
-
-            <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
-              <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
-            </div>
-
-            <div class="focus-history detail-history-v3">
-              <span class="panel-eyebrow">SSE EVENT STREAM</span>
-
-              <div
-                v-for="log in getNodeLiveLogs(selectedDagNode, 8)"
-                :key="log.id"
-                class="detail-live-log-item"
-                :class="`is-${log.status || selectedDagNode.status}`"
-              >
-                <div>
-                  <span>{{ getLogPhaseLabel(log.phase) }}</span>
-                  <em>{{ log.elapsedMs ? formatElapsed(log.elapsedMs) : getNodeTimeLabel(selectedDagNode) }}</em>
+      <Teleport to="body">
+        <transition name="detail-fade">
+          <div
+            v-if="detailPanelVisible && selectedDagNode"
+            class="detail-overlay"
+            @click="closeAgentDetail"
+          >
+            <aside
+              class="agent-detail-floating-panel"
+              :class="[getResourceToneClass(selectedDagNode.id)]"
+              role="dialog"
+              aria-label="Agent 运行详情"
+              @click.stop
+            >
+              <div class="detail-panel-title">
+                <div class="focus-agent-icon">
+                  <component :is="getWorkflowIcon(selectedDagNode.id)" class='w-4 h-4' />
                 </div>
-                <p>{{ log.message }}</p>
+                <div class="detail-title-copy">
+                  <span>运行详情</span>
+                  <h3>{{ getWorkflowTitle(selectedDagNode.id) }}</h3>
+                  <p>{{ getNodeStageLabel(selectedDagNode) }}</p>
+                </div>
+                <span class="detail-status-dot" :class="`status-${selectedDagNode.status}`"></span>
+                <button class="detail-close-btn" type="button" aria-label="关闭 Agent 详情" @click="closeAgentDetail">×</button>
               </div>
 
-              <p v-if="!getNodeLiveLogs(selectedDagNode, 8).length">等待该智能体上报执行步骤</p>
-            </div>
+              <div class="selected-agent-detail-card">
+                <div class="detail-current-task">
+                  <span>当前任务</span>
+                  <strong>{{ getNodeDisplayMessage(selectedDagNode) }}</strong>
+                  <div class="detail-progress-line">
+                    <i :style="{ width: `${selectedDagNode.progress}%` }"></i>
+                  </div>
+                  <em>{{ selectedDagNode.progress }}%</em>
+                </div>
+
+                <dl class="focus-metrics detail-metrics-v3">
+                  <div>
+                    <dt>当前阶段</dt>
+                    <dd>{{ getNodePhaseLabel(selectedDagNode) }}</dd>
+                  </div>
+                  <div>
+                    <dt>运行耗时</dt>
+                    <dd>{{ formatElapsed(selectedDagNode.elapsedMs) }}</dd>
+                  </div>
+                  <div>
+                    <dt>最近更新</dt>
+                    <dd>{{ getNodeTimeLabel(selectedDagNode) }}</dd>
+                  </div>
+                  <div>
+                    <dt>成果状态</dt>
+                    <dd>{{ getNodeArtifactStatus(selectedDagNode) }}</dd>
+                  </div>
+                </dl>
+
+                <div class="detail-io-grid">
+                  <div>
+                    <span>输入</span>
+                    <p>{{ getNodeInputSummary(selectedDagNode) }}</p>
+                  </div>
+                  <div>
+                    <span>输出</span>
+                    <p>{{ getNodeOutputSummary(selectedDagNode) }}</p>
+                  </div>
+                </div>
+
+                <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
+                  <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
+                </div>
+
+                <div class="focus-history detail-history-v3">
+                  <span class="panel-eyebrow">SSE EVENT STREAM</span>
+                  <div class="timeline-stream-wrapper" v-if="getNodeLiveLogs(selectedDagNode, 8).length">
+                    <div
+                      v-for="log in getNodeLiveLogs(selectedDagNode, 8)"
+                      :key="log.id"
+                      class="detail-live-log-item"
+                      :class="`is-${log.status || selectedDagNode.status}`"
+                    >
+                      <i class="timeline-dot"></i>
+                      <div class="timeline-content">
+                        <div class="timeline-header">
+                          <span>{{ getLogPhaseLabel(log.phase) }}</span>
+                          <em>{{ log.elapsedMs ? formatElapsed(log.elapsedMs) : getNodeTimeLabel(selectedDagNode) }}</em>
+                        </div>
+                        <p>{{ log.message }}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <p v-else class="timeline-empty-msg">等待该智能体上报执行步骤</p>
+                </div>
+              </div>
+            </aside>
           </div>
-        </aside>
-      </transition>
+        </transition>
+      </Teleport>
     </main>
 
     <Outputs
@@ -300,7 +309,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onBeforeUnmount, onMounted, type Component } from 'vue'
+import { ref, computed, type Component } from 'vue'
 import {
   PhTarget as Aim,
   PhArrowRight as ArrowRight,
@@ -329,6 +338,7 @@ import {
   AGENT_DISPLAY,
   getAgentOutputFormat,
   getNodeFallbackMessage,
+  getResourceToneClass,
   type DagNodeState,
 } from '../../model/catalog'
 
@@ -358,8 +368,6 @@ const emit = defineEmits<{
 
 const workflowLogDrawerVisible = ref(false)
 const detailPanelVisible = ref(false)
-const detailPanelStyle = ref<Record<string, string>>({})
-const detailAnchorElement = ref<HTMLElement | null>(null)
 
 // Preview dialog state (for Outputs dock click-to-preview)
 const activePreviewAgent = ref<string | null>(null)
@@ -417,49 +425,13 @@ function getWorkflowTitle(id: string) {
   return workflowTitleMap[id] || AGENT_DISPLAY[id]?.label || id
 }
 
-let detailPositionFrame = 0
-
-function handleAgentClick(id: string, event: MouseEvent) {
-  const target = event.currentTarget
-  detailAnchorElement.value = target instanceof HTMLElement ? target : null
+function handleAgentClick(id: string) {
   detailPanelVisible.value = true
   emit('selectNode', id)
-  nextTick(scheduleDetailPanelPosition)
 }
 
 function closeAgentDetail() {
   detailPanelVisible.value = false
-  detailAnchorElement.value = null
-}
-
-function scheduleDetailPanelPosition() {
-  if (typeof window === 'undefined' || !detailPanelVisible.value) return
-  if (detailPositionFrame) window.cancelAnimationFrame(detailPositionFrame)
-  detailPositionFrame = window.requestAnimationFrame(() => {
-    detailPositionFrame = 0
-    updateDetailPanelPosition()
-  })
-}
-
-function updateDetailPanelPosition() {
-  const anchor = detailAnchorElement.value
-  if (!anchor || typeof window === 'undefined') return
-
-  const anchorRect = anchor.getBoundingClientRect()
-  const viewportGap = 12
-  const anchorGap = 14
-  const panelWidth = Math.min(380, window.innerWidth - viewportGap * 2)
-  const preferredLeft = anchorRect.right + anchorGap
-  const left = Math.max(viewportGap, Math.min(preferredLeft, window.innerWidth - panelWidth - viewportGap))
-  const top = Math.max(viewportGap, anchorRect.top)
-  const maxHeight = Math.max(120, window.innerHeight - top - viewportGap)
-
-  detailPanelStyle.value = {
-    top: `${Math.round(top)}px`,
-    left: `${Math.round(left)}px`,
-    width: `${Math.round(panelWidth)}px`,
-    maxHeight: `${Math.round(maxHeight)}px`,
-  }
 }
 
 const baseGenerationAgentIds = computed(() => {
@@ -476,19 +448,7 @@ const {
   setCardRef: setStationCardRef,
 } = useFlow(parallelPoolNodes)
 
-onMounted(async () => {
-  await nextTick()
-  window.addEventListener('resize', scheduleDetailPanelPosition)
-  window.addEventListener('scroll', scheduleDetailPanelPosition, true)
-})
 
-onBeforeUnmount(() => {
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', scheduleDetailPanelPosition)
-    window.removeEventListener('scroll', scheduleDetailPanelPosition, true)
-    if (detailPositionFrame) window.cancelAnimationFrame(detailPositionFrame)
-  }
-})
 
 const trailingStageNodes = computed(() => {
   const nodes: DagNodeState[] = []
@@ -1733,265 +1693,7 @@ function getMetricChips(node: DagNodeState) {
   font-size: 0.72rem;
 }
 
-.agent-detail-floating-panel {
-  position: fixed;
-  top: calc(var(--navbar-height, 64px) + 82px);
-  right: clamp(18px, 2.4vw, 34px);
-  z-index: 80;
-  width: min(420px, calc(100vw - 36px));
-  max-height: calc(100vh - var(--navbar-height, 64px) - 112px);
-  overflow-y: auto;
-  padding: 24px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-outer); /* unified round corners */
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
-}
-
-.detail-close-btn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 12px;
-  background: rgba(241, 245, 249, 0.95);
-  color: #475569;
-  font-size: 1.35rem;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.detail-close-btn:hover {
-  background: #DBEAFE;
-  color: #2563EB;
-}
-
-.detail-panel-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding-right: 36px;
-}
-
-.detail-panel-title h3 {
-  margin: 6px 0 0;
-  color: var(--color-text);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-}
-
-.selected-agent-detail-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.detail-agent-head {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 12px;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 20px;
-  background: rgba(248, 250, 252, 0.76);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.detail-agent-head h4 {
-  margin: 0;
-  color: var(--color-text);
-  font-size: var(--text-lg);
-}
-
-.detail-agent-head p {
-  margin: 4px 0 0;
-  color: var(--color-success);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  font-family: var(--agent-body-font);
-}
-
-.detail-status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #94A3B8;
-}
-
-.detail-status-dot.status-running {
-  background: #3B82F6;
-  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.14);
-}
-
-.detail-status-dot.status-success {
-  background: #6366F1;
-}
-
-.detail-status-dot.status-failed {
-  background: #EF4444;
-}
-
-.focus-agent-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: var(--cat-resource-soft, #dbeafe);
-  border: 1px solid rgba(99,102,241,0.3);
-  font-size: 1.25rem;
-}
-
-.detail-current-task {
-  padding: 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.detail-current-task span {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  margin-bottom: 7px;
-}
-
-.detail-current-task strong {
-  display: block;
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  font-family: var(--agent-body-font);
-}
-
-.detail-progress-line {
-  height: 7px;
-  margin-top: 12px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.18);
-  overflow: hidden;
-}
-
-.detail-progress-line i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #3B82F6, #22D3EE);
-  transition: width 0.3s ease;
-}
-
-.detail-current-task em {
-  display: block;
-  text-align: right;
-  margin-top: 5px;
-  font-style: normal;
-  color: var(--cat-resource);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.focus-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-
-.focus-metrics div {
-  padding: 9px 10px;
-  border-radius: 14px;
-  background: rgba(248, 250, 252, 0.84);
-  border: 1px solid var(--color-border, #e2e8f0);
-}
-
-.focus-metrics dt {
-  color: var(--color-text-muted);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-}
-
-.focus-metrics dd {
-  margin: 4px 0 0;
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.detail-metrics-v3 {
-  grid-template-columns: 1fr 1fr;
-}
-
-.detail-io-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.detail-io-grid div {
-  padding: 12px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.72);
-  border: 1px solid rgba(226, 232, 240, 0.86);
-}
-
-.detail-io-grid span {
-  display: block;
-  color: var(--cat-resource);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.detail-io-grid p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  font-family: var(--agent-body-font);
-}
-
-.focus-metric-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.focus-metric-chips span {
-  padding: 5px var(--space-2);
-  border-radius: 999px;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-}
-
-.focus-history {
-  margin-top: 4px;
-}
-
-.detail-history-v3 {
-  max-height: 160px;
-  overflow-y: auto;
-}
-
-.focus-history p {
-  margin: var(--space-2) 0 0;
-  padding-left: var(--space-2);
-  border-left: 2px solid var(--color-success-border);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  font-family: var(--agent-body-font);
-}
+/* Legacy floating panel styles removed — modernized styles are defined below */
 
 .detail-float-enter-active,
 .detail-float-leave-active {
@@ -3325,33 +3027,60 @@ function getMetricChips(node: DagNodeState) {
 }
 
 /* v9 anchored Agent detail: follows the card that opened it */
-.agent-detail-floating-panel {
-  right: auto !important;
-  bottom: auto;
-  z-index: 90;
-  max-width: calc(100vw - 24px);
-  padding: 0;
-  overflow-x: visible;
-  overflow-y: auto;
-  border: var(--generator-card-border);
-  border-radius: var(--radius-outer);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
-  transform-origin: left top;
+/* Tone Theme color mappings */
+.agent-detail-floating-panel.tone-blue {
+  --agent-accent: #3b82f6;
+  --agent-accent-soft: rgba(59, 130, 246, 0.08);
+  --agent-accent-glow: rgba(59, 130, 246, 0.2);
+}
+.agent-detail-floating-panel.tone-purple {
+  --agent-accent: #8b5cf6;
+  --agent-accent-soft: rgba(139, 92, 246, 0.08);
+  --agent-accent-glow: rgba(139, 92, 246, 0.2);
+}
+.agent-detail-floating-panel.tone-rose {
+  --agent-accent: #f43f5e;
+  --agent-accent-soft: rgba(244, 63, 94, 0.08);
+  --agent-accent-glow: rgba(244, 63, 94, 0.2);
+}
+.agent-detail-floating-panel.tone-emerald {
+  --agent-accent: #10b981;
+  --agent-accent-soft: rgba(16, 185, 129, 0.08);
+  --agent-accent-glow: rgba(16, 185, 129, 0.2);
+}
+.agent-detail-floating-panel.tone-indigo {
+  --agent-accent: #6366f1;
+  --agent-accent-soft: rgba(99, 102, 241, 0.08);
+  --agent-accent-glow: rgba(99, 102, 241, 0.2);
+}
+.agent-detail-floating-panel.tone-pink {
+  --agent-accent: #ec4899;
+  --agent-accent-soft: rgba(236, 72, 153, 0.08);
+  --agent-accent-glow: rgba(236, 72, 153, 0.2);
 }
 
-.detail-anchor-caret {
-  position: absolute;
-  top: 26px;
-  left: -7px;
-  width: 13px;
-  height: 13px;
-  border-bottom: 1px solid #d9e0e8;
-  border-left: 1px solid #d9e0e8;
-  background: #fff;
-  transform: rotate(45deg);
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+.agent-detail-floating-panel {
+  width: min(460px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: 80vh;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: var(--radius-outer, 20px);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.14);
 }
 
 .detail-panel-title {
@@ -3359,20 +3088,26 @@ function getMetricChips(node: DagNodeState) {
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 10px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 11px;
-  min-height: 72px;
+  gap: 12px;
+  min-height: 64px;
   margin: 0;
-  padding: 13px 52px 13px 14px;
-  border-bottom: 1px solid #e6eaf0;
-  background: rgba(255, 255, 255, 0.97);
+  padding: 14px 48px 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .detail-panel-title .focus-agent-icon {
-  width: 40px;
-  height: 40px;
-  font-size: 17px;
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--agent-accent-soft, #f1f5f9);
+  color: var(--agent-accent, #64748b);
+  border: 1px solid var(--agent-accent-glow, rgba(226, 232, 240, 0.8));
 }
 
 .detail-title-copy {
@@ -3381,167 +3116,341 @@ function getMetricChips(node: DagNodeState) {
 
 .detail-title-copy > span {
   display: block;
-  margin-bottom: 2px;
-  color: #7a8495;
+  margin-bottom: 1px;
+  color: #94a3b8;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .detail-title-copy h3 {
   margin: 0;
   overflow: hidden;
-  color: #172033;
-  font-size: 14px;
-  line-height: 1.3;
+  color: #0f172a;
+  font-size: 13.5px;
+  font-weight: 800;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .detail-title-copy p {
   margin: 2px 0 0;
-  color: #667085;
+  color: #64748b;
   font-size: 10px;
   font-weight: 600;
 }
 
+.detail-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.detail-status-dot.status-running {
+  background: var(--agent-accent, #3b82f6);
+  box-shadow: 0 0 0 5px var(--agent-accent-glow, rgba(59, 130, 246, 0.2));
+  animation: pulse-ring 1.5s infinite ease-in-out;
+}
+
+.detail-status-dot.status-success {
+  background: #10b981;
+}
+
+.detail-status-dot.status-failed {
+  background: #ef4444;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
 .detail-close-btn {
   position: absolute;
-  top: 15px;
+  top: 17px;
   right: 14px;
   z-index: 3;
-  width: 30px;
-  height: 30px;
-  border: 1px solid #e3e8ef;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 8px;
-  background: #f7f8fa;
-  color: #5d6879;
-  font-size: 18px;
+  background: #fff;
+  color: #64748b;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.detail-close-btn:hover {
+  background: var(--agent-accent-soft, #f1f5f9);
+  color: var(--agent-accent, #0f172a);
+  border-color: var(--agent-accent-glow, #cbd5e1);
 }
 
 .selected-agent-detail-card {
-  gap: 12px;
-  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
 }
 
+/* Flattened - No double card layout */
 .detail-current-task {
-  padding: 12px 13px;
-  border-color: #dde4ec;
-  border-radius: 10px;
-  background: #f8fafc;
+  padding: 4px 4px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 0;
 }
 
 .detail-current-task span {
-  margin-bottom: 5px;
-  font-size: 10px;
+  display: block;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 
 .detail-current-task strong {
-  font-size: 12px;
+  display: block;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 700;
   line-height: 1.45;
 }
 
 .detail-progress-line {
   height: 5px;
   margin-top: 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  overflow: hidden;
+}
+
+.detail-progress-line i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--agent-accent, #3b82f6), #22d3ee);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .detail-current-task em {
+  display: block;
+  text-align: right;
   margin-top: 4px;
+  font-style: normal;
+  color: var(--agent-accent, #64748b);
   font-size: 10px;
+  font-weight: 800;
 }
 
+/* Light borderless metrics */
 .detail-metrics-v3 {
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid #e1e6ed;
-  border-radius: 10px;
-  background: #fff;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 4px 4px 14px;
+  border-radius: 0;
+  margin: 0;
 }
 
 .detail-metrics-v3 > div {
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 0;
-  background: #fff;
-}
-
-.detail-metrics-v3 > div:nth-child(odd) {
-  border-right: 1px solid #e8ecf1;
-}
-
-.detail-metrics-v3 > div:nth-child(-n + 2) {
-  border-bottom: 1px solid #e8ecf1;
+  padding: 9px 11px;
+  border: none !important;
+  background: #f8fafc;
+  border-radius: 8px;
 }
 
 .detail-metrics-v3 dt {
   font-size: 9px;
+  color: #94a3b8;
+  font-weight: 700;
 }
 
 .detail-metrics-v3 dd {
-  margin-top: 3px;
-  font-size: 11px;
+  margin-top: 2px;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 700;
 }
 
+/* IO grid */
 .detail-io-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 4px 4px 14px;
 }
 
 .detail-io-grid div {
-  padding: 10px 12px;
-  border-radius: 9px;
-  background: #fff;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: none;
 }
 
 .detail-io-grid span {
-  color: #476b9e;
+  color: var(--agent-accent, #476b9e);
   font-size: 9px;
+  font-weight: 700;
 }
 
 .detail-io-grid p {
-  margin-top: 4px;
+  margin-top: 3px;
+  color: #475569;
   font-size: 10px;
+  line-height: 1.4;
 }
 
+/* Metric chips */
 .focus-metric-chips {
-  gap: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 4px;
 }
 
 .focus-metric-chips span {
   padding: 3px 7px;
   border-radius: 6px;
   font-size: 9px;
+  font-weight: 700;
+  background: var(--agent-accent-soft, #f1f5f9);
+  color: var(--agent-accent, #475569);
+  border: 1px solid rgba(226, 232, 240, 0.2);
 }
 
+/* Sleek Timeline event stream */
 .detail-history-v3 {
   max-height: none;
-  padding-top: 2px;
+  padding: 12px 4px 4px;
+  margin-top: 4px;
+}
+
+.timeline-stream-wrapper {
+  position: relative;
+  padding-left: 14px;
+  margin-top: 10px;
+}
+
+.timeline-stream-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 3px;
+  bottom: 6px;
+  width: 1px;
+  background: rgba(226, 232, 240, 0.8);
 }
 
 .detail-live-log-item {
-  padding: 8px 0 8px 10px;
+  position: relative;
+  padding: 6px 0 10px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin-top: 0;
 }
 
-.detail-live-log-item span,
-.detail-live-log-item em,
-.detail-live-log-item p {
+.timeline-dot {
+  position: absolute;
+  left: -14px;
+  top: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.5);
+  z-index: 2;
+  transform: translateX(-1px);
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.detail-live-log-item.is-running .timeline-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.detail-live-log-item.is-success .timeline-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.detail-live-log-item.is-failed .timeline-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 9px;
 }
 
-.detail-float-enter-from,
-.detail-float-leave-to {
-  opacity: 0;
-  transform: translateX(10px);
+.timeline-header span {
+  font-weight: 700;
+  color: #475569;
 }
 
-@media (max-width: 760px) {
-  .agent-detail-floating-panel {
-    right: auto !important;
-  }
+.timeline-header em {
+  font-style: normal;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+}
 
-  .detail-anchor-caret {
-    display: none;
-  }
+.detail-live-log-item p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.4;
+  font-family: var(--font-mono);
+}
+
+.timeline-empty-msg {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 10px;
+  text-align: center;
+}
+
+.detail-fade-enter-active,
+.detail-fade-leave-active {
+  transition: opacity 0.22s ease;
+}
+
+.detail-fade-enter-from,
+.detail-fade-leave-to {
+  opacity: 0;
+}
+
+.detail-fade-enter-active .agent-detail-floating-panel,
+.detail-fade-leave-active .agent-detail-floating-panel {
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+}
+
+.detail-fade-enter-from .agent-detail-floating-panel,
+.detail-fade-leave-to .agent-detail-floating-panel {
+  opacity: 0;
+  transform: scale(0.96);
 }
 
 /* v10 contextual failure status: keep errors with the workflow they belong to */

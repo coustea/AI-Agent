@@ -5,6 +5,11 @@
 - 底层输出统一由 Loguru 负责（文件 + 控制台）
 - macOS spawn 模式下 multiprocessing SemLock 数量受限，因此不启用 enqueue
 - 捕获 `logging` 标准库日志、uvicorn/fastapi/sqlalchemy 等第三方日志，统一导入 Loguru
+
+统一日志输出：
+- 终端：INFO+（关键业务日志、Agent 流程、LLM 调用）
+- app.log：INFO+，异步写入，按天轮转
+- error.log：ERROR+，异步写入，保留 10 个文件
 """
 
 from __future__ import annotations
@@ -25,7 +30,6 @@ from app.config import (
     LANGCHAIN_DEBUG,
     LANGCHAIN_VERBOSE,
     LANGGRAPH_DEBUG,
-    LOG_LEVEL,
 )
 from app.config import LOGS_DIR as LOG_DIR
 
@@ -33,7 +37,7 @@ from app.config import LOGS_DIR as LOG_DIR
 # 输出格式尽量与旧 logging 版保持一致，便于 grep/排障。
 _LOGURU_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[logger_name]} | {message}"
 
-# 终端过滤：DEBUG 模式下只输出关键日志，过滤第三方噪音
+# 终端过滤：过滤第三方库噪音，保留关键业务日志
 _CONSOLE_NOISY_PREFIXES = (
     "httpcore",
     "httpx",
@@ -45,11 +49,8 @@ _CONSOLE_NOISY_PREFIXES = (
 
 
 def _console_filter(record: "loguru.Message") -> bool:
-    """DEBUG 模式终端过滤器：只保留业务日志，过滤第三方 DEBUG 噪音。"""
+    """终端过滤器：只保留业务日志，过滤第三方噪音。"""
     name = record["extra"].get("logger_name", "")
-    # LLM 调用只输出失败（WARNING+），成功太频繁
-    if name == "app.infra.llm" and record["level"].name == "DEBUG":
-        return False
     # 过滤第三方库噪音
     for prefix in _CONSOLE_NOISY_PREFIXES:
         if name.startswith(prefix) or name == prefix:
@@ -69,7 +70,7 @@ class _InterceptHandler(logging.Handler):
         # record.getMessage() 已经完成了 %-style 格式化
         msg = record.getMessage()
 
-        # 让 loguru 的 caller 定位尽量指向“真实调用点”，而不是 logging 框架内部。
+        # 让 loguru 的 caller 定位尽量指向"真实调用点"，而不是 logging 框架内部。
         frame = logging.currentframe()
         depth = 2
         while frame and frame.f_code.co_filename == logging.__file__:
@@ -161,7 +162,6 @@ class LoguruLoggerProxy:
         self._logger.opt(exception=True).error(msg, *fmt_args, **kwargs)
 
 
-
 def get_logger(name: str) -> LoguruLoggerProxy:
     """获取项目 logger（不再返回标准库 logging.Logger）。"""
     return LoguruLoggerProxy(name)
@@ -184,22 +184,15 @@ def get_module_logger(module: str, *, sub: str = "") -> LoguruLoggerProxy:
     return LoguruLoggerProxy(name)
 
 
-# Global flag for debug mode
-_APP_DEBUG_MODE: bool = False
+def configure_logging() -> None:
+    """Configure logging - unified output of key logs.
 
-
-def configure_logging(*, debug: bool = False) -> None:
-    """Configure logging based on APP_DEBUG flag.
-
-    Must be called once at application startup (in main.py lifespan).
-    - debug=True (development): log level = INFO, all module logs visible
-    - debug=False (production): log level = INFO, step details and LLM calls at DEBUG
+    统一日志输出：
+    - 终端：INFO+（关键业务日志、Agent 流程、LLM 调用）
+    - app.log：INFO+，异步写入，按天轮转
+    - error.log：ERROR+，异步写入，保留 10 个文件
     """
-    global _APP_DEBUG_MODE
-    _APP_DEBUG_MODE = debug
-
-    level = "DEBUG" if debug else "INFO"
-    setup_logging(level=level, force=True)
+    setup_logging(level="INFO", force=True)
 
 
 def _parse_level(raw: str) -> str:
@@ -239,6 +232,7 @@ def _configure_external_logger_levels() -> None:
         ext_logger.handlers.clear()
         ext_logger.propagate = True
 
+
 _CONFIGURED = False
 
 
@@ -247,14 +241,10 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
 
     在应用启动时调用一次即可（FastAPI lifespan）。
 
-    DEBUG 模式：
-      - 终端：INFO+（业务操作、Agent 流程、LLM 失败）
-      - error.log：ERROR+，异步写入
-      - app.log：不写
-    生产模式：
-      - 终端：WARNING+（只看错误和警告）
-      - app.log：INFO+，异步写入
-      - error.log：ERROR+，异步写入
+    统一输出关键日志：
+      - 终端：INFO+（关键业务日志、Agent 流程、LLM 调用）
+      - app.log：INFO+，异步写入，按天轮转
+      - error.log：ERROR+，异步写入，保留 10 个文件
     """
     global _CONFIGURED
     if _CONFIGURED and not force:
@@ -262,7 +252,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
 
     if not _HAS_LOGURU:
         logging.basicConfig(
-            level=getattr(logging, _parse_level(level or LOG_LEVEL), logging.INFO),
+            level=logging.INFO,
             force=True,
         )
         _CONFIGURED = True
@@ -270,46 +260,37 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    log_level = _parse_level(level or ("DEBUG" if _debug_logging_enabled() else LOG_LEVEL))
+    log_level = "DEBUG" if _debug_logging_enabled() else "INFO"
 
     # 1) 配置 loguru sinks
     _loguru_logger.remove()
     _loguru_logger.configure(extra={"logger_name": "root"})
 
-    if _APP_DEBUG_MODE:
-        # DEBUG 模式：终端输出关键日志，不写 app.log
-        _loguru_logger.add(
-            sys.stderr,
-            level="INFO",
-            format=_LOGURU_FORMAT,
-            filter=_console_filter,
-            backtrace=True,
-            diagnose=False,
-            enqueue=False,
-        )
-    else:
-        # 生产模式：终端只看 WARNING+，app.log 写 INFO+
-        _loguru_logger.add(
-            sys.stderr,
-            level="WARNING",
-            format=_LOGURU_FORMAT,
-            backtrace=True,
-            diagnose=False,
-            enqueue=False,
-        )
-        _loguru_logger.add(
-            str(LOG_DIR / "app.log"),
-            level="INFO",
-            format=_LOGURU_FORMAT,
-            rotation="00:00",
-            retention="30 days",
-            encoding="utf-8",
-            backtrace=True,
-            diagnose=False,
-            enqueue=False,
-        )
+    # 终端：INFO+，过滤第三方噪音
+    _loguru_logger.add(
+        sys.stderr,
+        level="INFO",
+        format=_LOGURU_FORMAT,
+        filter=_console_filter,
+        backtrace=True,
+        diagnose=False,
+        enqueue=False,
+    )
 
-    # error.log：两种模式都写
+    # app.log：INFO+，异步写入，按天轮转
+    _loguru_logger.add(
+        str(LOG_DIR / "app.log"),
+        level="INFO",
+        format=_LOGURU_FORMAT,
+        rotation="00:00",
+        retention="30 days",
+        encoding="utf-8",
+        backtrace=True,
+        diagnose=False,
+        enqueue=False,
+    )
+
+    # error.log：ERROR+，保留 10 个文件
     _loguru_logger.add(
         str(LOG_DIR / "error.log"),
         level="ERROR",
@@ -343,11 +324,8 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
     _configure_external_logger_levels()
 
     _loguru_logger.bind(logger_name="root").info(
-        "[Logging] 日志系统初始化完成: mode={mode} console={console} file={file} level={level}",
-        mode="DEBUG(终端+error.log)" if _APP_DEBUG_MODE else "PROD(终端WARNING+app.log+error.log)",
-        console="INFO(filtered)" if _APP_DEBUG_MODE else "WARNING+",
-        file="error.log" if _APP_DEBUG_MODE else "app.log+error.log",
-        level=log_level,
+        "[Logging] 日志系统初始化完成: console=INFO(filtered) file=app.log+error.log level=%s",
+        log_level,
     )
 
     _CONFIGURED = True

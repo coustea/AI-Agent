@@ -1,7 +1,7 @@
 // src/types/resource.ts — 资源生成相关类型定义
 // 各 agent 只暴露影响生成质量的核心参数，前后端完全对齐
 
-export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon'
+export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon' | 'video'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 
@@ -64,10 +64,16 @@ export interface ResourceGenerationRequest {
       focus: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
     }
     cartoon: {
-      style: 'diagram' | 'minimal' | 'dark_tech'
-      voice: 'teacher' | 'coach'
-      video_length_seconds: number
+      style: 'diagram' | 'minimal' | 'dark_tech' | 'chalkboard'
+      depth: 'overview' | 'standard' | 'deep'
+      pace: 'fast' | 'normal' | 'slow'
+      visuals: 'clean' | 'balanced' | 'detailed'
+    }
+    video: {
+      style: 'precision_light' | 'systems_dark' | 'editorial_classroom'
       focus: 'concept' | 'process' | 'comparison' | 'practice'
+      voice: 'teacher' | 'coach'
+      aspect_ratio: '16:9' | '9:16' | '1:1'
     }
   }
 }

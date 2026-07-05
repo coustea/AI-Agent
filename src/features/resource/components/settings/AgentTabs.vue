@@ -128,8 +128,8 @@ function getSummary(id: string) {
     const density: Record<string, string> = { concise: '精炼', standard: '标准', detailed: '深入' }
     return `${style[configs.ppt.explanation_style] || configs.ppt.explanation_style} · ${density[configs.ppt.density] || configs.ppt.density}`
   }
-  const style: Record<string, string> = { diagram: '图解', minimal: '简约', dark_tech: '暗黑' }
-  return `${style[configs.cartoon.style] || configs.cartoon.style} · ${configs.cartoon.video_length_seconds}秒`
+  const style: Record<string, string> = { diagram: '图解', minimal: '简约', dark_tech: '暗黑', chalkboard: '黑板' }
+  const depth: Record<string, string> = { overview: '概览', standard: '标准', deep: '深度' }; return `${style[configs.cartoon.style] || configs.cartoon.style} · ${depth[configs.cartoon.depth] || configs.cartoon.depth}`
 }
 </script>
 

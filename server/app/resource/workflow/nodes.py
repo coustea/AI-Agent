@@ -32,6 +32,7 @@ from app.resource.schemas import (
 from app.resource.workflow.state import ParentState, WorkerInputState, AgentFailure
 from app.resource.service import (
     AGGREGATION_AGENT_IDS,
+    BASE_RESOURCE_AGENT_IDS,
     BUNDLE_AGENT_ID,
     CARTOON_AGENT_ID,
     COORDINATOR_AGENT_ID,
@@ -42,8 +43,6 @@ from app.resource.service import (
 from app.resource.event import ResourceEvents
 
 logger = logging.getLogger(__name__)
-
-BASE_RESOURCE_AGENT_IDS = {"content", "mindmap", "quiz", "code", "reading"}
 
 
 def _split_handoff_materials(content: str, *, limit: int = 12000) -> list[str]:

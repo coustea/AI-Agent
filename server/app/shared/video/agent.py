@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.config import WORKPLACE_DIR
 from app.shared.video.director import VideoDirectorAgent
@@ -59,6 +59,7 @@ class VideoAgent:
         renderer: Any | None = None,
         tail_padding_ms: int = 400,
         max_parallel_scenes: int = 4,
+        progress_callback: Callable[[str, int], None] | None = None,
     ) -> None:
         self.material_agent = material_agent or VideoMaterialAgent()
         self.director = director or VideoDirectorAgent()
@@ -71,6 +72,12 @@ class VideoAgent:
         self.renderer = renderer
         self.tail_padding_ms = tail_padding_ms
         self._scene_semaphore = asyncio.Semaphore(max_parallel_scenes)
+        self._progress_callback = progress_callback
+
+    def _report_progress(self, message: str, percent: int) -> None:
+        """Report progress to callback if available."""
+        if self._progress_callback:
+            self._progress_callback(message, percent)
 
     async def _write_and_synthesize(
         self,
@@ -101,11 +108,15 @@ class VideoAgent:
         audio_dir = request.output_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
 
+        self._report_progress("正在提取教学素材...", 25)
         digest = await self.material_agent.extract(request)
+
+        self._report_progress("正在规划场景结构与叙事节奏...", 40)
         outline = await self.director.plan(request, digest)
         if len(outline.scenes) != request.scene_count:
             raise ValueError("video director returned an unexpected scene count")
 
+        self._report_progress(f"正在编写 {len(outline.scenes)} 个场景脚本...", 55)
         completed = await asyncio.gather(
             *[
                 self._write_and_synthesize(
@@ -124,6 +135,7 @@ class VideoAgent:
             tail_padding_ms=self.tail_padding_ms,
         )
 
+        self._report_progress("正在合成字幕与视觉对齐...", 75)
         scenes: list[VideoScene] = []
         for (contract, draft, synthesis), timing in zip(
             completed,
@@ -186,4 +198,5 @@ class VideoAgent:
                 "source_ids": [material.source_id for material in request.materials],
             },
         )
+        self._report_progress("正在渲染视频...", 85)
         return await self.renderer.render(plan, request.output_dir)

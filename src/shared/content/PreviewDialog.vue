@@ -4,7 +4,7 @@
       <div v-if="activeAgent" class="preview-overlay" @click="close">
         <section
           class="preview-dialog"
-          :class="{ 'is-slides': normalizedType === 'ppt' }"
+          :class="{ 'is-media': normalizedType === 'ppt' || normalizedType === 'video' }"
           role="dialog"
           aria-modal="true"
           :aria-label="title"
@@ -15,7 +15,7 @@
             <button type="button" aria-label="关闭预览" @click="close">×</button>
           </header>
 
-          <div class="preview-body" :class="{ 'is-slides': normalizedType === 'ppt' }">
+          <div class="preview-body" :class="{ 'is-media': normalizedType === 'ppt' || normalizedType === 'video' }">
             <component
               :is="renderer"
               v-if="renderer && hasRenderableData"
@@ -152,13 +152,18 @@ function close() {
 .preview-body {
   min-height: 240px;
   overflow: auto;
-  padding: 20px;
-  background: #f6f8fb;
+  padding: 24px;
+  background: #ffffff;
 }
 
-.preview-body.is-slides {
+/* PPT uses iframe (white), video uses native player (black poster) */
+.preview-body.is-media {
   padding: 0;
-  background: #111827;
+  background: #000;
+}
+
+.preview-dialog.is-media {
+  background: #000;
 }
 
 .preview-empty {

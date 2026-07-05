@@ -85,16 +85,18 @@ def _node_materials(input_data: NodeInput) -> list[SourceMaterial]:
 def _request_options(config: dict[str, Any]) -> dict[str, Any]:
     """从 4 个核心参数构建 VideoRequest 选项。
 
-    scene_count 由 duration_seconds 自动计算（约30秒/场景），
-    不再由用户直接配置。
+    style → director 视觉风格选择，focus → 场景叙事规划，
+    voice → TTS 音色，aspect_ratio → Remotion 画面尺寸。
+    duration_seconds 由上游固定为 180 秒（6 场景，~30s/场景）。
     """
-    duration = int(config.get("duration_seconds", 180))
     return {
-        "duration_seconds": duration,
-        "scene_count": max(3, min(12, round(duration / 30))),
+        "duration_seconds": 180,
+        "scene_count": 6,
+        "style_hint": config.get("style", "precision_light"),
+        "narrative_focus": config.get("focus", "concept"),
         "aspect_ratio": config.get("aspect_ratio", "16:9"),
         "voice": config.get("voice", "teacher"),
-        "include_captions": bool(config.get("include_captions", True)),
+        "include_captions": True,
     }
 
 
@@ -149,9 +151,26 @@ class VideoAgent(BaseResourceAgent):
         await self.emitter.send(
             self.agent_id,
             "running",
-            "正在规划讲解节奏、生成配音并渲染视频...",
-            15,
+            "正在初始化视频生成管线...",
+            10,
         )
+
+        def progress_callback(message: str, percent: int) -> None:
+            """将 VideoAgent 内部进度转发为 emitter 事件。"""
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.ensure_future(
+                        self.emitter.send(self.agent_id, "running", message, percent)
+                    )
+                )
+            except RuntimeError:
+                pass
+
+        video_agent = SharedVideoAgent(progress_callback=progress_callback)
+        self.video_agent = video_agent
+
         try:
             artifact = await self.video_agent.generate(request)
         except Exception as exc:

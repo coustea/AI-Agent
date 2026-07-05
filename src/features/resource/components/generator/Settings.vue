@@ -407,49 +407,35 @@
                 <!-- CARTOON Agent parameters -->
                 <template v-if="activeAgentId === 'cartoon'">
                   <div class="ctrl-group">
-                    <label>视觉讲解风格</label>
+                    <label>视觉风格</label>
                     <select v-model="localConfigs.cartoon.style">
-                      <option value="diagram">立体结构图解 (Diagrams)</option>
-                      <option value="minimal">简约平面扁平 (Minimal)</option>
-                      <option value="dark_tech">暗黑荧光科技 (Neon Dark)</option>
+                      <option value="diagram">教学图解</option>
+                      <option value="minimal">简约扁平</option>
+                      <option value="dark_tech">暗黑科技</option>
+                      <option value="chalkboard">黑板粉笔</option>
                     </select>
-                    <p class="ctrl-helper">视频图画的主流美学色调</p>
+                    <p class="ctrl-helper">视频画面的视觉主题风格</p>
                   </div>
-
                   <div class="ctrl-group">
-                    <label>讲解侧重点</label>
-                    <select v-model="localConfigs.cartoon.focus">
-                      <option value="concept">概念原理解释 (Concept)</option>
-                      <option value="process">过程演化追踪 (Process)</option>
-                      <option value="comparison">多维对比辨析 (Comparison)</option>
-                      <option value="practice">真实代码演练 (Practice)</option>
-                    </select>
-                    <p class="ctrl-helper">视频内容推进和图形动画的核心围绕主体</p>
-                  </div>
-
-                  <div class="ctrl-group">
-                    <label>配音角色</label>
-                    <select v-model="localConfigs.cartoon.voice">
-                      <option value="teacher">稳重资深教师 (Teacher)</option>
-                      <option value="coach">互动实战教练 (Coach)</option>
-                    </select>
-                    <p class="ctrl-helper">生成配音音频的TTS音色特质</p>
-                  </div>
-
-                  <div class="ctrl-group">
-                    <div class="slider-label-row flex justify-between items-center mb-1">
-                      <label class="m-0">视频时长上限</label>
-                      <span class="text-xs font-bold text-primary-main"><b>{{ localConfigs.cartoon.video_length_seconds }}</b> 秒</span>
+                    <label>讲解深度</label>
+                    <div class="seg-ctrl">
+                      <button v-for="opt in [{ label: '快速概览', value: 'overview' }, { label: '标准讲解', value: 'standard' }, { label: '深度剖析', value: 'deep' }]" :key="opt.value" type="button" class="seg-btn" :class="{ active: localConfigs.cartoon.depth === opt.value }" @click="localConfigs.cartoon.depth = opt.value as any">{{ opt.label }}</button>
                     </div>
-                    <input
-                      type="range"
-                      v-model.number="localConfigs.cartoon.video_length_seconds"
-                      :min="60"
-                      :max="180"
-                      :step="30"
-                      class="w-full"
-                    />
-                    <p class="ctrl-helper">限制生成视频在剪辑及合成时的总时间跨度</p>
+                    <p class="ctrl-helper">控制讲解深度和动画复杂度</p>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>动画节奏</label>
+                    <div class="seg-ctrl">
+                      <button v-for="opt in [{ label: '快速', value: 'fast' }, { label: '正常', value: 'normal' }, { label: '慢速', value: 'slow' }]" :key="opt.value" type="button" class="seg-btn" :class="{ active: localConfigs.cartoon.pace === opt.value }" @click="localConfigs.cartoon.pace = opt.value as any">{{ opt.label }}</button>
+                    </div>
+                    <p class="ctrl-helper">控制动画播放速度</p>
+                  </div>
+                  <div class="ctrl-group">
+                    <label>画面丰富度</label>
+                    <div class="seg-ctrl">
+                      <button v-for="opt in [{ label: '简洁', value: 'clean' }, { label: '平衡', value: 'balanced' }, { label: '详细', value: 'detailed' }]" :key="opt.value" type="button" class="seg-btn" :class="{ active: localConfigs.cartoon.visuals === opt.value }" @click="localConfigs.cartoon.visuals = opt.value as any">{{ opt.label }}</button>
+                    </div>
+                    <p class="ctrl-helper">控制画面元素数量和标注</p>
                   </div>
                 </template>
 
