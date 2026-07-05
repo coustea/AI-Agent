@@ -1385,22 +1385,22 @@ const handleCompleteLater = async () => {
   z-index: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 210px;
-  gap: 12px;
-  margin: 0 20px 20px;
+  grid-template-columns: 160px minmax(0, 1fr) 230px;
+  gap: 0px;
+  margin: 0px;
+  border-top: 1px solid rgba(190, 230, 229, 0.74);
 }
 
 .step-rail {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(183, 226, 224, 0.9);
+  border: none;
+  border-right: 1px solid rgba(190, 230, 229, 0.74);
   border-radius: 0px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-      0 16px 42px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.94) inset;
-  backdrop-filter: blur(18px);
-  padding: 10px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 16px 12px;
 }
 
 .step-rail-title {
@@ -1501,11 +1501,12 @@ const handleCompleteLater = async () => {
   grid-template-rows: auto minmax(0, 1fr) auto;
   margin: 0;
   overflow: hidden;
-  border: 2px solid #0f172a;
+  border: none;
+  border-right: 1px solid rgba(190, 230, 229, 0.74);
   border-radius: 0px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 4px 4px 0px 0px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(18px);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .current-question {
@@ -1967,13 +1968,11 @@ const handleCompleteLater = async () => {
 .profile-panel {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(183, 226, 224, 0.9);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-      0 16px 42px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.94) inset;
-  backdrop-filter: blur(18px);
+  border: none;
+  border-radius: 0px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
