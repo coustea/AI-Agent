@@ -152,7 +152,7 @@
           <div class="input-dock">
             <div v-if="currentStep <= 7" class="composer-wrapper">
               <!-- Floating school autocomplete dropdown -->
-              <transition name="fade">
+              <transition name="fade-up">
                 <div
                     v-if="currentStep === 4 && schoolSuggestions.length > 0"
                     class="school-autocomplete-popover"
@@ -1234,15 +1234,12 @@ const handleCompleteLater = async () => {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgba(159, 220, 218, 0.58);
-  border-radius: 26px;
+  border: 2px solid #0f172a;
+  border-radius: 0px;
   background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 253, 252, 0.98)),
       #ffffff;
-  box-shadow:
-      0 40px 100px rgba(10, 15, 35, 0.26),
-      0 8px 32px rgba(20, 184, 166, 0.12),
-      0 1px 0 rgba(255, 255, 255, 0.95) inset;
+  box-shadow: 6px 6px 0px 0px rgba(15, 23, 42, 0.15);
 }
 
 .onboarding-container::before {
@@ -1261,7 +1258,7 @@ const handleCompleteLater = async () => {
   min-height: 112px;
   padding: 18px 132px 14px;
   text-align: center;
-  border-bottom: 1px solid rgba(190, 230, 229, 0.74);
+  border-bottom: 2px solid #0f172a;
 }
 
 .header-center {
@@ -1283,13 +1280,10 @@ const handleCompleteLater = async () => {
   align-items: flex-start;
   justify-content: center;
   padding: 7px 12px;
-  border: 1px solid rgba(158, 218, 216, 0.78);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(14px);
-  box-shadow:
-      0 12px 28px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  border: 1px solid #0f172a;
+  border-radius: 0px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.15);
 }
 
 .progress-badge strong {
@@ -1314,28 +1308,27 @@ const handleCompleteLater = async () => {
   z-index: 5;
   height: 32px;
   padding: 0 15px;
-  border: 1px solid rgba(158, 218, 216, 0.76);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
-  color: #41676d;
+  border: 1px solid #0f172a;
+  border-radius: 0px;
+  background: #ffffff;
+  color: #0f172a;
   font-size: 12px;
   font-weight: 850;
   cursor: pointer;
-  backdrop-filter: blur(14px);
-  transition:
-      transform 0.18s ease,
-      border-color 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease,
-      box-shadow 0.18s ease;
+  transition: all 0.1s ease;
+  box-shadow: 2px 2px 0px 0px #0f172a;
 }
 
 .skip-btn:hover {
-  color: var(--color-primary-text);
-  border-color: rgba(20, 160, 157, 0.86);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  transform: translateY(-1px);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px 0px #0f172a;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.skip-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px 0px #0f172a;
 }
 
 .title-mark {
@@ -1349,17 +1342,16 @@ const handleCompleteLater = async () => {
 
 .title-mark span:first-child {
   width: 32px;
-  height: 5px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.2);
+  height: 4px;
+  border-radius: 0px;
+  background: #14b8a6;
 }
 
 .title-mark span:last-child {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #93c5fd;
+  width: 4px;
+  height: 4px;
+  border-radius: 0px;
+  background: #0f172a;
 }
 
 .conversation-header h1 {
@@ -1390,20 +1382,13 @@ const handleCompleteLater = async () => {
   margin: 0 20px 20px;
 }
 
-.step-rail,
-.profile-panel {
+.step-rail {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(183, 226, 224, 0.9);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-      0 16px 42px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.94) inset;
-  backdrop-filter: blur(18px);
-}
-
-.step-rail {
+  border: 1px solid #475569;
+  border-radius: 0px;
+  background: #ffffff;
+  box-shadow: 2px 2px 0px 0px rgba(71, 85, 105, 0.1);
   padding: 10px;
 }
 
@@ -1414,9 +1399,10 @@ const handleCompleteLater = async () => {
   gap: 6px;
   margin-bottom: 12px;
   padding: 8px 10px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
-  color: var(--color-primary-text);
+  border-radius: 0px;
+  border-bottom: 1px solid #475569;
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .step-rail-title span {
@@ -1445,19 +1431,20 @@ const handleCompleteLater = async () => {
   min-height: 46px;
   padding: 6px 8px;
   border: 1px solid transparent;
-  border-radius: 12px;
-  color: #6b7f87;
+  border-radius: 0px;
+  color: #64748b;
 }
 
 .step-item.active {
-  border-color: rgba(20, 160, 157, 0.34);
-  background: rgba(231, 250, 248, 0.8);
-  color: var(--color-primary-text);
+  border: 1px solid #14b8a6;
+  background: #f0fdfa;
+  color: #0f172a;
 }
 
 .step-item.done {
-  color: #315f66;
-  background: rgba(248, 253, 252, 0.88);
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .step-index {
@@ -1465,17 +1452,24 @@ const handleCompleteLater = async () => {
   height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  color: #78919a;
-  background: rgba(236, 248, 247, 0.9);
+  border: 1px solid #cbd5e1;
+  border-radius: 0px;
+  color: #64748b;
+  background: #ffffff;
   font-size: 12px;
   font-weight: 950;
 }
 
-.step-item.active .step-index,
+.step-item.active .step-index {
+  color: #ffffff;
+  background: #14b8a6;
+  border-color: #14b8a6;
+}
+
 .step-item.done .step-index {
   color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  background: #0f172a;
+  border-color: #0f172a;
 }
 
 .step-item strong {
@@ -1672,36 +1666,6 @@ const handleCompleteLater = async () => {
   font-weight: 750;
 }
 
-.action-row {
-  margin-top: 2px;
-}
-
-.action-bubble {
-  width: min(100%, 620px);
-  padding: 14px;
-  background:
-      linear-gradient(145deg, rgba(246, 254, 253, 0.98), rgba(255, 255, 255, 0.98));
-}
-
-.action-copy {
-  margin-bottom: 12px;
-}
-
-.action-copy strong {
-  display: block;
-  color: #123f48;
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.action-copy p {
-  margin: 5px 0 0;
-  color: #68818a;
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1.55;
-}
-
 .action-footer {
   display: flex;
   align-items: center;
@@ -1840,7 +1804,7 @@ const handleCompleteLater = async () => {
   padding: 2px 6px;
   background: rgba(20, 184, 166, 0.12);
   color: var(--color-primary-text);
-  border-radius: 6px;
+  border-radius: 0px;
   font-weight: 800;
 }
 
@@ -1902,22 +1866,6 @@ const handleCompleteLater = async () => {
 .quick-reply-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-}
-
-.school-suggestion-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-}
-
-.school-level-tag {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #e6f8f6;
-  color: var(--color-primary-text);
-  font-size: 11px;
-  font-weight: 900;
 }
 
 .composer-wrapper {
@@ -2020,6 +1968,15 @@ const handleCompleteLater = async () => {
 }
 
 .profile-panel {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(183, 226, 224, 0.9);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+      0 16px 42px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.94) inset;
+  backdrop-filter: blur(18px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2294,16 +2251,7 @@ const handleCompleteLater = async () => {
     max-width: 82%;
   }
 
-  .action-bubble {
-    width: 100%;
-  }
-
-  .quick-replies-grid.is-card-mode {
-    grid-template-columns: 1fr;
-  }
-
-  .quick-replies-grid,
-  .school-suggestions-grid {
+  .quick-replies-grid {
     max-height: 112px;
   }
 

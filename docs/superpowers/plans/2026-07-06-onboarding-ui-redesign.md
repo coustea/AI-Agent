@@ -1,10 +1,10 @@
-# Onboarding Dialog Redesign Implementation Plan
+# Onboarding Dialog Redesign Implementation Plan (Glacier Teal System Aligned)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign the first-login onboarding information page to adhere to a clean, straight-edge Academic Grid / Swiss Modernism style with 100% zero rounded corners.
+**Goal:** Redesign the first-login onboarding information page to have 100% zero rounded corners (sharp edges) while strictly preserving the system's "Glacier Teal" color palette, theme tokens, and typography.
 
-**Architecture:** Modify the CSS in `OnboardingDialog.vue` to override all `border-radius` styles to 0px, implement a horizontal progress bar instead of a circular progress ring, and style chat elements as sharp academic notecards.
+**Architecture:** Modify the CSS in `OnboardingDialog.vue` to override all `border-radius` styles to 0px, implement a horizontal progress bar instead of a circular progress ring, and style chat elements as sharp academic notecards using the existing Glacier Teal variables.
 
 **Tech Stack:** Vue 3, TypeScript, Tailwind v4, CSS.
 
@@ -15,7 +15,7 @@
 **Files:**
 - Modify: `src/features/auth/components/OnboardingDialog.vue`
 
-- [ ] **Step 1: Replace container dialog styles to remove rounded corners**
+- [ ] **Step 1: Replace container dialog styles to remove rounded corners (preserving original colors)**
 
 Replace lines 1229-1246 in CSS:
 ```css
@@ -27,14 +27,19 @@ Replace lines 1229-1246 in CSS:
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 6px 6px 0px 0px rgba(15, 23, 42, 0.15);
+  border: 1px solid rgba(159, 220, 218, 0.58);
+  border-radius: 0px; /* zero rounded corners */
+  background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 253, 252, 0.98)),
+      #ffffff;
+  box-shadow:
+      0 40px 100px rgba(10, 15, 35, 0.26),
+      0 8px 32px rgba(20, 184, 166, 0.12),
+      0 1px 0 rgba(255, 255, 255, 0.95) inset;
 }
 ```
 
-- [ ] **Step 2: Replace skip button, progress badge, and header border styles to remove rounded corners**
+- [ ] **Step 2: Replace skip button, progress badge, and header elements to remove rounded corners (preserving colors)**
 
 Replace lines 1274-1293 and lines 1310-1318 in CSS:
 ```css
@@ -50,10 +55,13 @@ Replace lines 1274-1293 and lines 1310-1318 in CSS:
   align-items: flex-start;
   justify-content: center;
   padding: 7px 12px;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.1);
+  border: 1px solid rgba(158, 218, 216, 0.78);
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  box-shadow:
+      0 12px 28px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
 .skip-btn {
@@ -63,19 +71,20 @@ Replace lines 1274-1293 and lines 1310-1318 in CSS:
   z-index: 5;
   height: 32px;
   padding: 0 15px;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  color: #0f172a;
+  border: 1px solid rgba(158, 218, 216, 0.76);
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(255, 255, 255, 0.66);
+  color: #41676d;
   font-size: 12px;
   font-weight: 850;
   cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.skip-btn:hover {
-  background: rgba(15, 23, 42, 0.05);
-  transform: translate(1px, 1px);
+  backdrop-filter: blur(14px);
+  transition:
+      transform 0.18s ease,
+      border-color 0.18s ease,
+      background 0.18s ease,
+      color 0.18s ease,
+      box-shadow 0.18s ease;
 }
 ```
 
@@ -87,10 +96,13 @@ Replace lines 1393-1404 and steps items styles in CSS:
 .profile-panel {
   min-height: 0;
   overflow: hidden;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 4px 4px 0px 0px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(183, 226, 224, 0.9);
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+      0 16px 42px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.94) inset;
+  backdrop-filter: blur(18px);
 }
 
 .step-rail-title {
@@ -100,10 +112,9 @@ Replace lines 1393-1404 and steps items styles in CSS:
   gap: 6px;
   margin-bottom: 12px;
   padding: 8px 10px;
-  border-radius: 0px;
-  border-bottom: 2px solid #0f172a;
-  background: #f8fafc;
-  color: #0f172a;
+  border-radius: 0px; /* zero rounded corners */
+  background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
+  color: var(--color-primary-text);
 }
 
 .step-item {
@@ -113,21 +124,20 @@ Replace lines 1393-1404 and steps items styles in CSS:
   align-items: center;
   min-height: 46px;
   padding: 6px 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 0px;
-  color: #64748b;
+  border: 1px solid transparent;
+  border-radius: 0px; /* zero rounded corners */
+  color: #6b7f87;
 }
 
 .step-item.active {
-  border: 2px solid #0f172a;
-  background: rgba(20, 184, 166, 0.08);
-  color: #0f172a;
+  border-color: rgba(20, 160, 157, 0.34);
+  background: rgba(231, 250, 248, 0.8);
+  color: var(--color-primary-text);
 }
 
 .step-item.done {
-  color: #0f172a;
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  color: #315f66;
+  background: rgba(248, 253, 252, 0.88);
 }
 
 .step-index {
@@ -135,10 +145,9 @@ Replace lines 1393-1404 and steps items styles in CSS:
   height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 0px;
-  border: 1px solid #0f172a;
-  color: #0f172a;
-  background: #ffffff;
+  border-radius: 0px; /* zero rounded corners */
+  color: #78919a;
+  background: rgba(236, 248, 247, 0.9);
   font-size: 12px;
   font-weight: 950;
 }
@@ -146,12 +155,31 @@ Replace lines 1393-1404 and steps items styles in CSS:
 .step-item.active .step-index,
 .step-item.done .step-index {
   color: #ffffff;
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
 }
 ```
 
-- [ ] **Step 4: Commit changes for Task 1**
+- [ ] **Step 4: Clean up `.title-mark` visual indicators in header to remove rounded corners**
+
+Replace `.title-mark` styles in CSS:
+```css
+.title-mark span:first-child {
+  width: 32px;
+  height: 5px;
+  border-radius: 0px; /* zero rounded corners */
+  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.2);
+}
+
+.title-mark span:last-child {
+  width: 6px;
+  height: 6px;
+  border-radius: 0px; /* zero rounded corners */
+  background: #93c5fd;
+}
+```
+
+- [ ] **Step 5: Verify and Commit**
 
 Run:
 ```bash
@@ -166,7 +194,7 @@ git commit -m "style: remove rounded corners on container, badge, and step rail"
 **Files:**
 - Modify: `src/features/auth/components/OnboardingDialog.vue`
 
-- [ ] **Step 1: Remove rounded corners and apply flat shadow on `.chat-card` and `.current-question`**
+- [ ] **Step 1: Remove rounded corners on `.chat-card` and `.current-question`**
 
 Replace lines 1500-1524 in CSS:
 ```css
@@ -178,17 +206,22 @@ Replace lines 1500-1524 in CSS:
   grid-template-rows: auto minmax(0, 1fr) auto;
   margin: 0;
   overflow: hidden;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 4px 4px 0px 0px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(183, 226, 224, 0.96);
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow:
+      0 18px 48px rgba(15, 23, 42, 0.08),
+      0 1px 0 rgba(255, 255, 255, 0.95) inset;
+  backdrop-filter: blur(18px);
 }
 
 .current-question {
   display: block;
   padding: 16px 22px;
-  border-bottom: 2px solid #0f172a;
-  background: #f8fafc;
+  border-bottom: 1px solid rgba(203, 235, 233, 0.82);
+  background:
+      linear-gradient(120deg, rgba(232, 250, 248, 0.92), rgba(255, 255, 255, 0.94) 54%, rgba(240, 253, 250, 0.88)),
+      #ffffff;
 }
 ```
 
@@ -203,40 +236,43 @@ Replace lines 1592-1603 and lines 1638-1657 in CSS:
   height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 0px;
-  border: 2px solid #0f172a;
+  border-radius: 0px; /* zero rounded corners */
   font-size: 13px;
   font-weight: 950;
 }
 
 .avatar-icon {
-  color: #0f172a;
-  background: #ffffff;
-  box-shadow: 2px 2px 0px 0px #0f172a;
+  color: var(--color-primary-text);
+  background:
+      linear-gradient(145deg, rgba(235, 251, 249, 0.95), rgba(213, 246, 243, 0.95));
+  border: 1px solid rgba(158, 218, 216, 0.88);
+  box-shadow: 0 12px 24px rgba(70, 184, 180, 0.12);
 }
 
 .user-avatar {
   color: #ffffff;
-  background: #0f172a;
-  box-shadow: 2px 2px 0px 0px var(--color-primary);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
 }
 
 .message-bubble {
   position: relative;
-  border: 1px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(203, 235, 233, 0.98);
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+      0 12px 28px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.96) inset;
 }
 
 .message-row.assistant .message-bubble {
-  border-left: 3px solid var(--color-primary);
+  border-left: 3px solid var(--color-primary); /* Left accent bar instead of rounded corner */
 }
 
 .message-row.user .message-bubble {
-  border: 1px solid #0f172a;
-  background: var(--color-primary);
-  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.1);
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 14px 28px rgba(20, 160, 157, 0.2);
 }
 ```
 
@@ -247,29 +283,27 @@ Replace lines 1721-1736 and lines 1875-1905 in CSS:
 .confirm-selection-btn {
   height: 34px;
   padding: 0 13px;
-  border: 1px solid #0f172a;
-  border-radius: 0px;
+  border: none;
+  border-radius: 0px; /* zero rounded corners */
   color: #ffffff;
-  background: #0f172a;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
   font-size: 12px;
   font-weight: 950;
   cursor: pointer;
-  box-shadow: 2px 2px 0px 0px rgba(15, 23, 42, 0.15);
 }
 
 .confirm-selection-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-  box-shadow: none;
 }
 
 .quick-reply-btn {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid #0f172a;
-  border-radius: 0px;
+  border: 1px solid rgba(20, 184, 166, 0.32);
+  border-radius: 0px; /* zero rounded corners */
   background: #ffffff;
-  color: #0f172a;
+  color: #3f6e72;
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
@@ -277,19 +311,21 @@ Replace lines 1721-1736 and lines 1875-1905 in CSS:
 }
 
 .quick-reply-btn:hover {
-  background: rgba(20, 184, 166, 0.08);
-  transform: translate(1px, 1px);
+  border-color: var(--color-primary);
+  background: rgba(20, 184, 166, 0.06);
+  color: var(--color-primary-text);
+  transform: translateY(-1px);
 }
 
 .quick-reply-btn.is-selected {
   color: #ffffff;
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
   box-shadow: none;
 }
 ```
 
-- [ ] **Step 4: Commit changes for Task 2**
+- [ ] **Step 4: Verify and Commit**
 
 Run:
 ```bash
@@ -313,11 +349,13 @@ Replace lines 2058-2078 in CSS:
   position: relative;
   width: 100%;
   height: 28px;
-  border: 2px solid #0f172a;
-  background: #f1f5f9;
-  border-radius: 0px;
+  border: 1px solid rgba(183, 226, 224, 0.9);
+  background: #f8fafc;
+  border-radius: 0px; /* zero rounded corners */
   overflow: hidden;
-  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.1);
+  box-shadow:
+      0 4px 12px rgba(20, 160, 157, 0.06),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.92);
 }
 
 .progress-ring::after {
@@ -327,14 +365,14 @@ Replace lines 2058-2078 in CSS:
   top: 0;
   bottom: 0;
   width: calc(var(--progress) * 1%);
-  background: var(--color-primary);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
   transition: width 0.3s ease;
 }
 
 .progress-ring span {
   position: relative;
   z-index: 2;
-  color: #0f172a;
+  color: var(--color-primary-text);
   font-size: 12px;
   font-weight: 950;
   margin: auto;
@@ -355,29 +393,34 @@ Replace lines 1923-1936 and lines 1958-1984 in CSS:
   gap: 10px;
   align-items: end;
   padding: 8px;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 4px 4px 0px 0px rgba(15, 23, 42, 0.1);
+  border: 1px solid rgba(20, 160, 157, 0.5);
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+      0 0 0 5px rgba(20, 184, 166, 0.08),
+      0 16px 34px rgba(15, 23, 42, 0.08);
 }
 
 .send-btn {
   width: 46px;
   height: 46px;
-  border: 1px solid #0f172a;
-  border-radius: 0px;
+  border: none;
+  border-radius: 0px; /* zero rounded corners */
   display: grid;
   place-items: center;
   color: #ffffff;
-  background: #0f172a;
-  box-shadow: 2px 2px 0px 0px rgba(15, 23, 42, 0.2);
+  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  box-shadow: 0 14px 28px rgba(70, 184, 180, 0.24);
   cursor: pointer;
-  transition: all 0.16s ease;
+  transition:
+      transform 0.16s ease,
+      opacity 0.16s ease,
+      box-shadow 0.16s ease;
 }
 
 .send-btn:hover:not(:disabled) {
-  transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0px 0px rgba(15, 23, 42, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(70, 184, 180, 0.28);
 }
 ```
 
@@ -392,27 +435,26 @@ Replace `.info-row`, `.profile-note`, and media query classes in CSS:
   align-items: center;
   min-height: 32px;
   padding: 6px 10px;
-  border-radius: 0px;
+  border-radius: 0px; /* zero rounded corners */
   font-size: 12px;
 }
 
 .info-row.confirmed {
-  border: 1px solid #0f172a;
-  background: rgba(20, 184, 166, 0.05);
+  border: 1px solid rgba(183, 226, 224, 0.88);
+  background: rgba(246, 254, 253, 0.9);
 }
 
 .info-row.pending {
-  border: 1px dashed #cbd5e1;
-  background: transparent;
+  border: 1px dashed rgba(183, 226, 224, 0.9);
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .empty-copy {
   margin: 0;
   padding: 13px;
-  border-radius: 0px;
-  border: 1px dashed #cbd5e1;
-  background: #f8fafc;
-  color: #64748b;
+  border-radius: 0px; /* zero rounded corners */
+  background: rgba(246, 254, 253, 0.86);
+  color: #6f8790;
   font-size: 12px;
   font-weight: 800;
 }
@@ -421,22 +463,22 @@ Replace `.info-row`, `.profile-note`, and media query classes in CSS:
   margin-top: auto;
   align-self: stretch;
   padding: 13px;
-  border: 2px solid #0f172a;
-  border-radius: 0px;
-  background: #ffffff;
-  box-shadow: 3px 3px 0px 0px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(20, 160, 157, 0.18);
+  border-radius: 0px; /* zero rounded corners */
+  background: linear-gradient(145deg, #e9fbf9, #ffffff);
+  box-shadow: 0 -8px 24px rgba(255, 255, 255, 0.82);
 }
 ```
 
 And in `@media (max-width: 860px)` replace:
 ```css
   .chat-card {
-    border-radius: 0px;
+    border-radius: 0px; /* zero rounded corners */
     min-height: 560px;
   }
 ```
 
-- [ ] **Step 4: Commit changes for Task 3**
+- [ ] **Step 4: Verify and Commit**
 
 Run:
 ```bash
