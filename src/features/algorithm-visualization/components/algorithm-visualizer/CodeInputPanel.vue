@@ -20,15 +20,7 @@
         <span class="line-indicator">{{ executionLabel }}</span>
       </div>
 
-      <Editor
-        :value="code"
-        :language="monacoLanguage"
-        theme="vs"
-        :options="editorOptions"
-        class="code-editor-monaco"
-        @change="onEditorChange"
-        @mount="handleEditorMount"
-      />
+      <div ref="editorContainer" class="code-editor-monaco" />
     </div>
 
     <div class="data-input-block">
@@ -59,8 +51,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import Editor from '@guolao/vue-monaco-editor'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as monaco from 'monaco-editor'
 import type { CodeLanguage } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
@@ -98,64 +90,140 @@ const localInput = computed({
   },
 })
 
-// Monaco Editor instances
-const editorRef = ref<any>(null)
-const monacoRef = ref<any>(null)
-const decorationsRef = ref<string[]>([])
+// --- Monaco Editor (native API) ---
 
-const monacoLanguage = computed(() => {
-  if (props.language === 'cpp') return 'cpp'
-  if (props.language === 'c') return 'c'
-  if (props.language === 'java') return 'java'
-  if (props.language === 'python') return 'python'
-  return 'python'
-})
+const editorContainer = ref<HTMLDivElement | null>(null)
+let editor: monaco.editor.IStandaloneCodeEditor | null = null
+let decorationsCollection: monaco.editor.IEditorDecorationsCollection | null = null
 
-const editorOptions = {
-  fontSize: 13,
-  fontFamily: 'JetBrains Mono, Fira Code, Menlo, Monaco, Consolas, Courier New, monospace',
-  automaticLayout: true,
-  minimap: { enabled: false },
-  scrollBeyondLastLine: false,
-  lineNumbers: 'on',
-  roundedSelection: true,
-  readOnly: false,
-  renderLineHighlight: 'all',
-  scrollbar: {
-    verticalScrollbarSize: 8,
-    horizontalScrollbarSize: 8,
-  },
+function mapLanguage(lang: CodeLanguage): string {
+  if (lang === 'cpp') return 'cpp'
+  if (lang === 'c') return 'c'
+  if (lang === 'java') return 'java'
+  if (lang === 'python') return 'python'
+  return 'plaintext'
 }
 
-function handleEditorMount(editor: any, monaco: any) {
-  editorRef.value = editor
-  monacoRef.value = monaco
-  updateLineHighlight(props.activeLine)
-}
-
-function onEditorChange(value: string | undefined) {
-  if (value !== undefined && value !== props.code) {
-    emit('update:code', value)
-    emit('dirty')
+function configureNoCompletion() {
+  // Disable JS/TS language service completions and diagnostics
+  // Monaco 0.50+ moved these to the top-level languages namespace
+  const langs = monaco.languages as any
+  if (langs.javascriptDefaults) {
+    langs.javascriptDefaults.setCompilerOptions({
+      noLib: true,
+      allowNonTsExtensions: true,
+    })
+    langs.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+    })
+  }
+  if (langs.typescriptDefaults) {
+    langs.typescriptDefaults.setCompilerOptions({
+      noLib: true,
+      allowNonTsExtensions: true,
+    })
+    langs.typescriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+    })
   }
 }
 
+onMounted(() => {
+  if (!editorContainer.value) return
+
+  configureNoCompletion()
+
+  editor = monaco.editor.create(editorContainer.value, {
+    value: props.code,
+    language: mapLanguage(props.language),
+    theme: 'vs',
+    fontSize: 13,
+    fontFamily: 'JetBrains Mono, Fira Code, Menlo, Monaco, Consolas, Courier New, monospace',
+    automaticLayout: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    lineNumbers: 'on',
+    readOnly: false,
+    renderLineHighlight: 'none',
+    scrollbar: {
+      verticalScrollbarSize: 8,
+      horizontalScrollbarSize: 8,
+    },
+    // Disable all completion / IntelliSense
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    parameterHints: { enabled: false },
+    hover: { enabled: false },
+    formatOnType: false,
+    formatOnPaste: false,
+    autoIndent: 'none',
+    folding: false,
+    wordBasedSuggestions: 'off',
+    // Keep syntax highlighting & bracket matching
+    matchBrackets: 'always',
+  })
+
+  editor.onDidChangeModelContent(() => {
+    if (editor) {
+      emit('update:code', editor.getValue())
+      emit('dirty')
+    }
+  })
+
+  decorationsCollection = editor.createDecorationsCollection()
+  updateLineHighlight(props.activeLine)
+})
+
+// External code changes (e.g. "使用示例" / "重置")
+watch(
+  () => props.code,
+  (newCode) => {
+    if (editor && editor.getValue() !== newCode) {
+      editor.setValue(newCode)
+    }
+  },
+)
+
+// Language switching via setModelLanguage
+watch(
+  () => props.language,
+  (lang) => {
+    if (!editor) return
+    const model = editor.getModel()
+    if (model) {
+      monaco.editor.setModelLanguage(model, mapLanguage(lang))
+    }
+  },
+)
+
+// Active line highlight for algorithm step execution
+watch(
+  () => [props.activeLine, props.finished],
+  ([line]) => {
+    updateLineHighlight(line as number | undefined)
+  },
+)
+
 function updateLineHighlight(line: number | undefined) {
-  const editor = editorRef.value
-  const monaco = monacoRef.value
-  if (!editor || !monaco) return
+  if (!editor || !decorationsCollection) return
 
   if (!line || line <= 0 || props.finished) {
-    decorationsRef.value = editor.deltaDecorations(decorationsRef.value, [])
+    decorationsCollection.clear()
     return
   }
 
-  decorationsRef.value = editor.deltaDecorations(decorationsRef.value, [
+  decorationsCollection.set([
     {
       range: new monaco.Range(line, 1, line, 1),
       options: {
         isWholeLine: true,
         className: 'monaco-active-line-highlight',
+        overviewRuler: {
+          color: '#2563eb',
+          position: monaco.editor.OverviewRulerLane.Full,
+        },
       },
     },
   ])
@@ -163,12 +231,13 @@ function updateLineHighlight(line: number | undefined) {
   editor.revealLineInCenterIfOutsideViewport(line)
 }
 
-watch(
-  () => [props.activeLine, props.finished],
-  ([line]) => {
-    updateLineHighlight(line as number)
-  },
-)
+onBeforeUnmount(() => {
+  if (editor) {
+    editor.dispose()
+    editor = null
+  }
+  decorationsCollection = null
+})
 </script>
 
 <style scoped>

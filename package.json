@@ -11,7 +11,6 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@guolao/vue-monaco-editor": "^1.6.0",
     "@lucide/vue": "^1.22.0",
     "@phosphor-icons/vue": "^2.2.1",
     "@shikijs/langs": "^4.3.0",
@@ -31,6 +30,7 @@
     "markmap-common": "^0.18.9",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
+    "monaco-editor": "^0.55.1",
     "mp4-muxer": "^5.2.2",
     "pptist": "^0.0.1",
     "pptxgenjs": "^4.0.1",
@@ -66,6 +66,7 @@
     "jsdom": "^29.1.1",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
+    "vite-plugin-monaco-editor": "^1.1.0",
     "vitest": "^4.1.9",
     "vue-tsc": "^3.1.4"
   }
