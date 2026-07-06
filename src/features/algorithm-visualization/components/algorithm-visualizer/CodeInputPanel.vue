@@ -2,14 +2,15 @@
   <section class="code-input-panel">
     <div class="panel-header">
       <div>
-        <h2>代码输入</h2>
-        <p>粘贴你想观察的算法代码。</p>
+        <h2>代码编辑</h2>
+        <p>编辑算法模板代码后点击运行可视化。</p>
       </div>
 
       <select v-model="localLanguage" class="language-select">
         <option value="python">Python</option>
-        <option value="java">Java</option>
+        <option value="javascript">JavaScript</option>
         <option value="cpp">C++</option>
+        <option value="java">Java</option>
         <option value="c">C</option>
       </select>
     </div>
@@ -17,34 +18,15 @@
     <div class="code-editor-shell">
       <div class="editor-meta">
         <span>算法代码</span>
-        <span class="line-indicator">{{ executionLabel }}</span>
+        <span v-if="activeLine" class="line-indicator">执行到第 {{ activeLine }} 行</span>
       </div>
 
       <div ref="editorContainer" class="code-editor-monaco" />
     </div>
 
-    <div class="data-input-block">
-      <label for="algorithm-visualizer-input">运行数据</label>
-      <textarea
-        id="algorithm-visualizer-input"
-        v-model="localInput"
-        class="data-input"
-        placeholder="例如：[5, 2, 8, 1, 3]"
-      />
-    </div>
-
     <div class="panel-actions">
-      <button class="primary-action" :disabled="loading || !code.trim()" @click="$emit('generate')">
-        {{ loading ? '生成中...' : '生成可视化' }}
-      </button>
-      <button class="secondary-action" @click="$emit('use-example')">
-        使用示例
-      </button>
-      <button class="ghost-action" @click="$emit('reset-all')">
-        重置
-      </button>
-      <button class="ghost-action" @click="$emit('clear')">
-        清空
+      <button class="secondary-action" @click="$emit('reset-template')">
+        重置模板
       </button>
     </div>
   </section>
@@ -58,21 +40,14 @@ import type { CodeLanguage } from '@/features/algorithm-visualization/types'
 const props = defineProps<{
   code: string
   language: CodeLanguage
-  input: string
   loading: boolean
   activeLine?: number
-  finished: boolean
-  executionLabel: string
 }>()
 
 const emit = defineEmits<{
   'update:code': [value: string]
   'update:language': [value: CodeLanguage]
-  'update:input': [value: string]
-  generate: []
-  'use-example': []
-  'reset-all': []
-  clear: []
+  'reset-template': []
   dirty: []
 }>()
 
@@ -83,50 +58,30 @@ const localLanguage = computed({
   },
 })
 
-const localInput = computed({
-  get: () => props.input,
-  set: (value: string) => {
-    emit('update:input', value)
-  },
-})
-
-// --- Monaco Editor (native API) ---
-
 const editorContainer = ref<HTMLDivElement | null>(null)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
 let decorationsCollection: monaco.editor.IEditorDecorationsCollection | null = null
 
 function mapLanguage(lang: CodeLanguage): string {
-  if (lang === 'cpp') return 'cpp'
-  if (lang === 'c') return 'c'
-  if (lang === 'java') return 'java'
-  if (lang === 'python') return 'python'
-  return 'plaintext'
+  const map: Record<CodeLanguage, string> = {
+    python: 'python',
+    javascript: 'javascript',
+    cpp: 'cpp',
+    java: 'java',
+    c: 'c',
+  }
+  return map[lang] ?? 'plaintext'
 }
 
 function configureNoCompletion() {
-  // Disable JS/TS language service completions and diagnostics
-  // Monaco 0.50+ moved these to the top-level languages namespace
   const langs = monaco.languages as any
   if (langs.javascriptDefaults) {
-    langs.javascriptDefaults.setCompilerOptions({
-      noLib: true,
-      allowNonTsExtensions: true,
-    })
-    langs.javascriptDefaults.setDiagnosticsOptions({
-      noSemanticValidation: true,
-      noSyntaxValidation: true,
-    })
+    langs.javascriptDefaults.setCompilerOptions({ noLib: true, allowNonTsExtensions: true })
+    langs.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: true })
   }
   if (langs.typescriptDefaults) {
-    langs.typescriptDefaults.setCompilerOptions({
-      noLib: true,
-      allowNonTsExtensions: true,
-    })
-    langs.typescriptDefaults.setDiagnosticsOptions({
-      noSemanticValidation: true,
-      noSyntaxValidation: true,
-    })
+    langs.typescriptDefaults.setCompilerOptions({ noLib: true, allowNonTsExtensions: true })
+    langs.typescriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: true })
   }
 }
 
@@ -147,11 +102,7 @@ onMounted(() => {
     lineNumbers: 'on',
     readOnly: false,
     renderLineHighlight: 'none',
-    scrollbar: {
-      verticalScrollbarSize: 8,
-      horizontalScrollbarSize: 8,
-    },
-    // Disable all completion / IntelliSense
+    scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
     quickSuggestions: false,
     suggestOnTriggerCharacters: false,
     parameterHints: { enabled: false },
@@ -161,7 +112,6 @@ onMounted(() => {
     autoIndent: 'none',
     folding: false,
     wordBasedSuggestions: 'off',
-    // Keep syntax highlighting & bracket matching
     matchBrackets: 'always',
   })
 
@@ -176,40 +126,28 @@ onMounted(() => {
   updateLineHighlight(props.activeLine)
 })
 
-// External code changes (e.g. "使用示例" / "重置")
-watch(
-  () => props.code,
-  (newCode) => {
-    if (editor && editor.getValue() !== newCode) {
-      editor.setValue(newCode)
-    }
-  },
-)
+watch(() => props.code, (newCode) => {
+  if (editor && editor.getValue() !== newCode) {
+    editor.setValue(newCode)
+  }
+})
 
-// Language switching via setModelLanguage
-watch(
-  () => props.language,
-  (lang) => {
-    if (!editor) return
-    const model = editor.getModel()
-    if (model) {
-      monaco.editor.setModelLanguage(model, mapLanguage(lang))
-    }
-  },
-)
+watch(() => props.language, (lang) => {
+  if (!editor) return
+  const model = editor.getModel()
+  if (model) {
+    monaco.editor.setModelLanguage(model, mapLanguage(lang))
+  }
+})
 
-// Active line highlight for algorithm step execution
-watch(
-  () => [props.activeLine, props.finished],
-  ([line]) => {
-    updateLineHighlight(line as number | undefined)
-  },
-)
+watch(() => props.activeLine, (line) => {
+  updateLineHighlight(line)
+})
 
 function updateLineHighlight(line: number | undefined) {
   if (!editor || !decorationsCollection) return
 
-  if (!line || line <= 0 || props.finished) {
+  if (!line || line <= 0) {
     decorationsCollection.clear()
     return
   }
@@ -247,7 +185,7 @@ onBeforeUnmount(() => {
   border-radius: 22px;
   padding: 16px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 130px auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(226, 232, 240, 0.95);
@@ -284,6 +222,11 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
+.language-select:focus {
+  border-color: rgba(37, 99, 235, 0.7);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
 .code-editor-shell {
   min-height: 0;
   display: grid;
@@ -314,92 +257,35 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.language-select:focus,
-.data-input:focus {
-  border-color: rgba(37, 99, 235, 0.7);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-}
-
-.data-input-block {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.data-input-block label {
-  font-size: 12px;
-  font-weight: 650;
-  color: #334155;
-}
-
-.data-input {
-  flex: 1;
-  min-height: 0;
-  resize: none;
-  border: 1px solid #dbe3ef;
-  border-radius: 14px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  color: #0f172a;
-  font-size: 13px;
-  outline: none;
-}
-
 .panel-actions {
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  display: flex;
   gap: 8px;
 }
 
-.primary-action,
-.secondary-action,
-.ghost-action {
-  height: 38px;
+.secondary-action {
+  height: 36px;
   border: none;
   border-radius: 12px;
   padding: 0 14px;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
-}
-
-.primary-action {
-  background: #2563eb;
-  color: #ffffff;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
-}
-
-.primary-action:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.secondary-action {
   background: #eff6ff;
   color: #1d4ed8;
 }
 
-.ghost-action {
-  background: #f8fafc;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-}
-
 @media (max-width: 1100px) {
   .code-input-panel {
-    min-height: 620px;
+    min-height: 480px;
   }
 }
 
 @media (max-width: 640px) {
   .panel-actions {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
 
-/* Monaco active line highlight */
 :deep(.monaco-active-line-highlight) {
   background-color: rgba(37, 99, 235, 0.12) !important;
   border-left: 3.5px solid #2563eb !important;
