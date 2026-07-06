@@ -60,6 +60,9 @@ function queueRender(): void {
   }
 
   const version = ++renderVersion
+  renderedHtml.value = escapeHtml(content)
+  degraded.value = true
+
   renderTimer = setTimeout(() => {
     renderTimer = undefined
     if (version !== renderVersion) {
