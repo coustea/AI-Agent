@@ -3,14 +3,15 @@
     <section class="algorithm-visualizer-main">
       <section class="visualizer-left">
         <VisualizerCanvas
-          :payload="payload"
-          :current-step="currentStep"
+          :events="events"
+          :current-event="currentEvent"
           :current-step-index="currentStepIndex"
+          :visualizer-type="visualizerType"
           :generating="generating"
         />
 
         <VisualizerControlBar
-          :steps="steps"
+          :events="events"
           :playing="playing"
           :current-step-index="currentStepIndex"
           :speed="speed"
@@ -26,19 +27,31 @@
       </section>
 
       <aside class="visualizer-right">
-        <CodeInputPanel
+        <AlgorithmToolbar
+          v-model:language="language"
+          v-model:algorithm="algorithm"
+          :languages="languages"
+          :algorithms="algorithms"
+          :code="code"
+          :generating="generating"
+          @run="handleRun"
+          @reset-template="resetTemplate"
+        />
+
+        <CodeEditorPanel
           v-model:code="code"
           v-model:language="language"
-          v-model:input="input"
           :loading="generating"
-          :active-line="currentStep?.codeLine"
-          :finished="finished"
-          :execution-label="activeLineLabel"
-          @generate="handleGenerate"
-          @use-example="handleUseExample"
-          @clear="handleClear"
-          @reset-all="handleResetAll"
-          @dirty="markCustomEditing"
+          :active-line="currentEvent?.line"
+        />
+
+        <AlgorithmInfoPanel
+          :algorithm-name="currentAlgorithmName"
+          :difficulty="currentAlgorithmDifficulty"
+          :current-event="currentEvent"
+          :current-step-index="currentStepIndex"
+          :total-steps="events.length"
+          :run-error="runError"
         />
       </aside>
     </section>
@@ -46,99 +59,80 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import CodeInputPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/CodeInputPanel.vue'
+import { computed, onMounted } from 'vue'
 import VisualizerCanvas from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerCanvas.vue'
 import VisualizerControlBar from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerControlBar.vue'
-import { useVisualizerPlayback } from '@/features/algorithm-visualization/composables/useVisualizerPlayback'
-import { useVisualizerState } from '@/features/algorithm-visualization/composables/useVisualizerState'
+import AlgorithmToolbar from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmToolbar.vue'
+import CodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/CodeInputPanel.vue'
+import AlgorithmInfoPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmInfoPanel.vue'
+import { useTracePlayer } from '@/features/algorithm-visualization/composables/useTracePlayer'
+import { useAlgorithmTemplate } from '@/features/algorithm-visualization/composables/useAlgorithmTemplate'
+import { useAlgorithmRun } from '@/features/algorithm-visualization/composables/useAlgorithmRun'
+import { useVisualizerResolver } from '@/features/algorithm-visualization/composables/useVisualizerResolver'
 import { useVisualizerTimeline } from '@/features/algorithm-visualization/composables/useVisualizerTimeline'
 
 const {
   language,
+  algorithm,
   code,
-  input,
-  payload,
+  languages,
+  algorithms,
+  loadMeta,
+  resetTemplate,
+  getCurrentAlgorithmInfo,
+  getCurrentVisualizerType,
+} = useAlgorithmTemplate()
+
+const {
+  events,
+  runError,
   generating,
-  useExample,
-  clearCode,
-  clearInput,
-  markCustomEditing,
-  generate,
-  resetAll,
-} = useVisualizerState()
+  run: runAlgorithm,
+} = useAlgorithmRun()
 
-const steps = computed(() => payload.value?.steps ?? [])
-const playback = useVisualizerPlayback(() => steps.value)
-
-const activeLineLabel = computed(() => {
-  if (finished.value) return '运行完毕'
-  if (!playback.currentStep.value?.codeLine) return '未开始执行'
-  return `当前执行到第 ${playback.currentStep.value.codeLine} 行`
-})
+const playback = useTracePlayer(() => events.value)
+const resolver = useVisualizerResolver(events)
 
 useVisualizerTimeline({
   playing: playback.playing,
   speed: playback.speed,
-  currentStep: playback.currentStep,
+  currentEvent: playback.currentEvent,
   next: playback.next,
   pause: playback.pause,
 })
 
-const currentStep = computed(() => playback.currentStep.value)
+const currentEvent = computed(() => playback.currentEvent.value)
 const currentStepIndex = computed(() => playback.currentStepIndex.value)
 const playing = computed(() => playback.playing.value)
 const speed = computed(() => playback.speed.value)
 const finished = computed(() => playback.finished.value)
+const visualizerType = computed(() => resolver.visualizerType.value)
 
-async function handleGenerate() {
-  await generate()
+const currentAlgorithmName = computed(() => getCurrentAlgorithmInfo()?.name ?? '算法可视化')
+const currentAlgorithmDifficulty = computed(() => getCurrentAlgorithmInfo()?.difficulty ?? '')
+
+onMounted(() => {
+  loadMeta()
+})
+
+async function handleRun() {
+  await runAlgorithm({
+    domain: 'data_structure',
+    algorithm: algorithm.value,
+    visualizerType: getCurrentVisualizerType(),
+    language: language.value,
+    code: code.value,
+  })
   playback.reset()
 }
 
-function handleUseExample() {
-  useExample()
-  playback.reset()
-}
-
-function handleClear() {
-  clearCode()
-  clearInput()
-  playback.reset()
-}
-
-function handleResetAll() {
-  resetAll()
-  playback.reset()
-}
-
-function play() {
-  playback.play()
-}
-
-function pause() {
-  playback.pause()
-}
-
-function next() {
-  playback.next()
-}
-
-function prev() {
-  playback.prev()
-}
-
-function resetPlayback() {
-  playback.reset()
-}
-
-function setSpeed(value: number) {
-  playback.setSpeed(value)
-}
-
-function seek(value: number) {
-  playback.seek(value)
-}
+function play() { playback.play() }
+function pause() { playback.pause() }
+function next() { playback.next() }
+function prev() { playback.prev() }
+function resetPlayback() { playback.reset() }
+function setSpeed(value: number) { playback.setSpeed(value) }
+function seek(value: number) { playback.seek(value) }
 </script>
 
 <style scoped>
@@ -173,6 +167,9 @@ function seek(value: number) {
 .visualizer-right {
   min-width: 0;
   min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
 }
 
 @media (max-width: 1100px) {

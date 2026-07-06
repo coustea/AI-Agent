@@ -2,28 +2,49 @@
   <section class="visualizer-canvas">
     <div v-if="generating" class="canvas-loading">
       <div class="loading-spinner"></div>
-      <p>正在生成可视化步骤...</p>
+      <p>正在运行算法代码...</p>
     </div>
 
     <ArrayBarsVisualizer
-      v-else-if="payload?.visualizerType === 'array' || payload?.visualizerType === '1D_ARRAY'"
-      :initial-state="payload.initialState as ArrayVisualizerState"
-      :current-step="currentStep"
+      v-else-if="visualizerType === 'array'"
+      :current-event="currentEvent"
       :current-step-index="currentStepIndex"
+      :events="events"
     />
 
-    <GraphVisualizer
-      v-else-if="payload?.visualizerType === 'graph' || payload?.visualizerType === 'GRAPH'"
-      :initial-state="payload.initialState"
-      :current-step="currentStep"
+    <StackQueueVisualizer
+      v-else-if="visualizerType === 'stack-queue'"
+      :current-event="currentEvent"
       :current-step-index="currentStepIndex"
+      :events="events"
+    />
+
+    <LinkedListVisualizer
+      v-else-if="visualizerType === 'linked-list'"
+      :current-event="currentEvent"
+      :current-step-index="currentStepIndex"
+      :events="events"
     />
 
     <TreeVisualizer
-      v-else-if="payload?.visualizerType === 'tree' || payload?.visualizerType === 'TREE'"
-      :initial-state="payload.initialState"
-      :current-step="currentStep"
+      v-else-if="visualizerType === 'tree'"
+      :current-event="currentEvent"
       :current-step-index="currentStepIndex"
+      :events="events"
+    />
+
+    <GraphVisualizer
+      v-else-if="visualizerType === 'graph'"
+      :current-event="currentEvent"
+      :current-step-index="currentStepIndex"
+      :events="events"
+    />
+
+    <DpTableVisualizer
+      v-else-if="visualizerType === 'dp-table'"
+      :current-event="currentEvent"
+      :current-step-index="currentStepIndex"
+      :events="events"
     />
 
     <VisualizerEmptyState v-else />
@@ -33,18 +54,18 @@
 <script setup lang="ts">
 import VisualizerEmptyState from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerEmptyState.vue'
 import ArrayBarsVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/ArrayBarsVisualizer.vue'
-import GraphVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/GraphVisualizer.vue'
+import StackQueueVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/StackQueueVisualizer.vue'
+import LinkedListVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/LinkedListVisualizer.vue'
 import TreeVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/TreeVisualizer.vue'
-import type {
-  ArrayVisualizerState,
-  VisualizerPayload,
-  VisualStep,
-} from '@/features/algorithm-visualization/types'
+import GraphVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/GraphVisualizer.vue'
+import DpTableVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/DpTableVisualizer.vue'
+import type { TraceEvent, VisualizerType } from '@/features/algorithm-visualization/types'
 
 defineProps<{
-  payload: VisualizerPayload | null
-  currentStep: VisualStep | null
+  events: TraceEvent[]
+  currentEvent: TraceEvent | null
   currentStepIndex: number
+  visualizerType: VisualizerType
   generating: boolean
 }>()
 </script>

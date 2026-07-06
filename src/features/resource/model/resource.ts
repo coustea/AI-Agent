@@ -24,7 +24,6 @@ export interface ResourceGenerationRequest {
   selected_agents: {
     agent_id: ResourceAgentId
     enabled: boolean
-    priority: number
   }[]
   agent_configs: {
     content: {
@@ -42,20 +41,20 @@ export interface ResourceGenerationRequest {
     quiz: {
       difficulty_mode: 'basic' | 'adaptive' | 'exam'
       question_count: number
-      exam_style: 'school' | 'postgrad' | 'certification' | 'interview'
+      emphasis: 'foundations' | 'application' | 'analysis'
       question_types: Array<'single' | 'multiple' | 'judge' | 'fill'>
     }
     code: {
       programming_language: 'python' | 'c' | 'cpp' | 'java' | 'go' | 'javascript' | 'typescript'
-      difficulty: 'beginner' | 'intermediate' | 'advanced'
-      case_type: 'basic_demo' | 'algorithm_template' | 'debug_demo'
+      output_style: 'tutorial' | 'reference' | 'challenge'
       focus: 'syntax' | 'application' | 'debugging'
+      include_tests: boolean
     }
     reading: {
-      reading_depth: 'course_extended' | 'engineering' | 'frontier'
+      coverage: 'core' | 'extended' | 'broad'
       language_preference: 'chinese' | 'english' | 'both'
       max_items: number
-      focus: 'textbook' | 'engineering' | 'paper'
+      focus: 'textbook' | 'engineering' | 'research'
     }
     ppt: {
       template: string

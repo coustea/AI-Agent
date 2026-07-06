@@ -113,12 +113,12 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
   - `adaptive` → 薄弱领域题目占比约 50%
   - `exam` → 薄弱领域题目占比约 70%
 
-### 考试风格
+### 出题侧重
 
-- `school`：校级考试风格，侧重基础知识
-- `postgrad`：考研风格，侧重深度分析和综合应用
-- `certification`：职业认证风格，侧重标准规范和实操
-- `interview`：面试风格，侧重原理理解和场景题
+- `emphasis` 决定出题角度和内容侧重方向：
+  - `foundations` — 侧重基础概念和定义辨析，题目围绕核心定义、基本性质和概念区分
+  - `application` — 侧重场景应用和综合分析，题目围绕真实场景、综合运用和工程实践
+  - `analysis` — 侧重原理推导和深度分析，题目围绕底层机制、推导论证和边界情况
 
 ### 难度分布
 
@@ -147,7 +147,7 @@ CS/SE 领域学生，需要通过练习检测和巩固学习效果。
 
 ## Soft Constraints
 
-- `exam_style` 影响题目表述风格（考研侧重深度分析，school 侧重基础知识）
+- `emphasis` 影响题目内容和考查角度（foundations 侧重概念辨析，application 侧重场景运用，analysis 侧重原理推导）
 - Worker Task 的 assigned_sections 大纲项必须在题目的 knowledge_points 中体现
 - 学习者有薄弱点时，在对应领域增加题目比重
 - 优先情境化出题，减少纯名词解释题

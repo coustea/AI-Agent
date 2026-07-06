@@ -244,11 +244,15 @@ class PathPlannerAgent:
                 "正在生成阶段与学习节点",
             )
 
-            profile_md = state.get("profile_markdown", "")
-            if not profile_md:
-                profile_md = json.dumps(
-                    state["profile"], ensure_ascii=False, indent=2
-                )
+            use_profile = state["request"].preferences.get("use_profile", True)
+            if use_profile is False or use_profile == "false":
+                profile_md = "用户已关闭个人画像融合，请勿结合画像数据，仅根据学习主题与目标进行最优路径推演规划。"
+            else:
+                profile_md = state.get("profile_markdown", "")
+                if not profile_md:
+                    profile_md = json.dumps(
+                        state["profile"], ensure_ascii=False, indent=2
+                    )
 
             request_context = _format_request(state["request"])
             search_context = state.get("search_context", "")

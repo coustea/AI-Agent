@@ -119,6 +119,14 @@ class PPTHTMLRenderer:
             )
         if slide.shape == "quiz":
             return self._quiz(slide)
+        if slide.shape == "misconception":
+            return self._misconception(slide)
+        if slide.shape == "hierarchy":
+            return self._hierarchy(slide)
+        if slide.shape == "timeline":
+            return self._timeline(slide)
+        if slide.shape == "matrix":
+            return self._matrix(slide)
         renderers = {
             "statement": self._statement_content,
             "concept": self._concept,
@@ -209,6 +217,67 @@ class PPTHTMLRenderer:
   <div class="answer-panel" data-step style="--step:8"><strong>答案：</strong>{html.escape(slide.answer)}</div>
   <div class="question-mark">?</div>
 </div>"""
+
+    def _misconception(self, slide: PPTSlide) -> str:
+        """新增：误区纠正布局"""
+        sides = "".join(
+            f"""<article class="comparison-side" data-step style="--step:{index + 3}">
+  <h3 class="comparison-title">{html.escape(side.title)}</h3>
+  <ul class="comparison-list">{''.join(f'<li>{html.escape(point)}</li>' for point in side.points)}</ul>
+</article>"""
+            for index, side in enumerate(slide.comparison)
+        )
+        return (
+            f'<div class="content-stage">'
+            f'<div class="statement" data-step style="--step:3">{html.escape(slide.statement)}</div>'
+            f'<div class="comparison">{sides}</div>'
+            f'{self._takeaway(slide)}</div>'
+        )
+
+    def _hierarchy(self, slide: PPTSlide) -> str:
+        """新增：层级结构布局"""
+        nodes = "".join(
+            f"""<article class="hierarchy-node level-{node.level}" data-step style="--step:{index + 3}">
+  <div class="hierarchy-label">{html.escape(node.label)}</div>
+  <p class="hierarchy-detail">{html.escape(node.detail)}</p>
+</article>"""
+            for index, node in enumerate(slide.hierarchy)
+        )
+        return (
+            f'<div class="content-stage">'
+            f'<div class="hierarchy-tree">{nodes}</div>'
+            f'{self._takeaway(slide)}</div>'
+        )
+
+    def _timeline(self, slide: PPTSlide) -> str:
+        """新增：时间线布局"""
+        events = "".join(
+            f"""<article class="timeline-event" data-step style="--step:{index + 3}">
+  <div class="timeline-time">{html.escape(event.time)}</div>
+  <h3 class="timeline-title">{html.escape(event.title)}</h3>
+  <p class="timeline-detail">{html.escape(event.detail)}</p>
+</article>"""
+            for index, event in enumerate(slide.timeline)
+        )
+        return (
+            f'<div class="content-stage">'
+            f'<div class="timeline">{events}</div>'
+            f'{self._takeaway(slide)}</div>'
+        )
+
+    def _matrix(self, slide: PPTSlide) -> str:
+        """新增：矩阵表格布局"""
+        cells = "".join(
+            f"""<div class="matrix-cell{' highlight' if cell.highlight else ''}" data-row="{cell.row}" data-col="{cell.col}" data-step style="--step:{index + 3}">
+  {html.escape(cell.content)}
+</div>"""
+            for index, cell in enumerate(slide.matrix)
+        )
+        return (
+            f'<div class="content-stage">'
+            f'<div class="matrix-grid">{cells}</div>'
+            f'{self._takeaway(slide)}</div>'
+        )
 
     def _summary(self, slide: PPTSlide) -> str:
         points = slide.points

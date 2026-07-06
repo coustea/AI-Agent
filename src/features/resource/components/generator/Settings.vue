@@ -197,34 +197,24 @@
                   </div>
 
                   <div class="ctrl-group">
-                    <label>代码难度等级</label>
+                    <label>代码输出风格</label>
                     <div class="flex gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
                       <button
                         v-for="opt in [
-                          { label: '入门', value: 'beginner' },
-                          { label: '进阶', value: 'intermediate' },
-                          { label: '挑战', value: 'advanced' }
+                          { label: '教学演示', value: 'tutorial' },
+                          { label: '参考实现', value: 'reference' },
+                          { label: '挑战练习', value: 'challenge' }
                         ]"
                         :key="opt.value"
                         type="button"
                         class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
-                        :class="localConfigs.code.difficulty === opt.value ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'bg-transparent text-slate-400 hover:text-slate-600'"
-                        @click="localConfigs.code.difficulty = opt.value as any"
+                        :class="localConfigs.code.output_style === opt.value ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                        @click="localConfigs.code.output_style = opt.value as any"
                       >
                         {{ opt.label }}
                       </button>
                     </div>
-                    <p class="ctrl-helper">控制实例的代码行数规模与算法/并发设计复杂度</p>
-                  </div>
-
-                  <div class="ctrl-group">
-                    <label>案例风格</label>
-                    <select v-model="localConfigs.code.case_type">
-                      <option value="basic_demo">基础演示模版 (Demo)</option>
-                      <option value="algorithm_template">核心算法模板 (Algorithm)</option>
-                      <option value="debug_demo">调试纠错练习 (Debug)</option>
-                    </select>
-                    <p class="ctrl-helper">案例的形式。纠错练习将有意埋入Bug，指导学员纠错</p>
+                    <p class="ctrl-helper">教学演示=完整代码+逐步注释；参考实现=精简代码+关键注释；挑战练习=框架代码+留空引导</p>
                   </div>
 
                   <div class="ctrl-group">
@@ -235,6 +225,17 @@
                       <option value="debugging">代码逻辑调试 (Logics)</option>
                     </select>
                     <p class="ctrl-helper">控制生成的代码解析注释侧重的视角与分析详尽度</p>
+                  </div>
+
+                  <div class="ctrl-switch-v2 flex justify-between items-center py-2 bg-slate-50/40 px-4 rounded-2xl border border-slate-100/50 mt-1">
+                    <div class="sw-info flex flex-col gap-0.5">
+                      <span class="sw-label">附带测试用例</span>
+                      <span class="sw-desc">在代码末尾生成 assert 或单元测试验证正确性</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer select-none">
+                      <input type="checkbox" v-model="localConfigs.code.include_tests" class="sr-only peer" />
+                      <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-main"></div>
+                    </label>
                   </div>
                 </template>
 
@@ -267,14 +268,13 @@
                   </div>
 
                   <div class="ctrl-group">
-                    <label>拟合考试风格</label>
-                    <select v-model="localConfigs.quiz.exam_style">
-                      <option value="school">普通期末考试 (Final Exam)</option>
-                      <option value="postgrad">名校考研试卷 (Postgraduate)</option>
-                      <option value="certification">行业专业认证 (Certification)</option>
-                      <option value="interview">大厂技术面试 (Tech Interview)</option>
+                    <label>出题侧重</label>
+                    <select v-model="localConfigs.quiz.emphasis">
+                      <option value="foundations">概念基础辨析 (Foundations)</option>
+                      <option value="application">场景应用分析 (Application)</option>
+                      <option value="analysis">原理深度推导 (Analysis)</option>
                     </select>
-                    <p class="ctrl-helper">决定出题话术和题干场景拟合，大厂面试将偏向真实工程场景</p>
+                    <p class="ctrl-helper">决定出题角度：概念辨析侧重定义区分，场景应用侧重综合运用，原理推导侧重底层机制</p>
                   </div>
 
                   <div class="ctrl-group">
@@ -302,13 +302,24 @@
                 <!-- READING Agent parameters -->
                 <template v-if="activeAgentId === 'reading'">
                   <div class="ctrl-group">
-                    <label>拓展阅读方向</label>
-                    <select v-model="localConfigs.reading.reading_depth">
-                      <option value="course_extended">课程延展学习 (Extended)</option>
-                      <option value="engineering">工业界落地实践 (Engineering)</option>
-                      <option value="frontier">前沿学术论文 (Frontier)</option>
-                    </select>
-                    <p class="ctrl-helper">挑选推荐资料的目标深度。前沿学术将推荐最新頂会/期刊论文</p>
+                    <label>推荐覆盖范围</label>
+                    <div class="flex gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                      <button
+                        v-for="opt in [
+                          { label: '精选', value: 'core' },
+                          { label: '延伸', value: 'extended' },
+                          { label: '广泛', value: 'broad' }
+                        ]"
+                        :key="opt.value"
+                        type="button"
+                        class="flex-1 py-1.5 text-xs font-semibold rounded-lg border-none cursor-pointer transition-all"
+                        :class="localConfigs.reading.coverage === opt.value ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'bg-transparent text-slate-400 hover:text-slate-600'"
+                        @click="localConfigs.reading.coverage = opt.value as any"
+                      >
+                        {{ opt.label }}
+                      </button>
+                    </div>
+                    <p class="ctrl-helper">精选=3-5个最核心资源；延伸=均衡各类型；广泛=覆盖入门到前沿全链路</p>
                   </div>
 
                   <div class="ctrl-group">
@@ -342,7 +353,7 @@
                     <select v-model="localConfigs.reading.focus">
                       <option value="textbook">经典教材/学术专著</option>
                       <option value="engineering">技术博客/官方白皮书</option>
-                      <option value="paper">顶会论文/前沿报告</option>
+                      <option value="research">顶会论文/前沿报告</option>
                     </select>
                     <p class="ctrl-helper">偏爱的文献媒介来源，学术论文偏向 arXiv/IEEE 等期刊</p>
                   </div>

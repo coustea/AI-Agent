@@ -16,9 +16,7 @@ from app.shared.video.schemas import SourceMaterial, VideoRequest
 logger = get_logger(__name__)
 
 
-def _profile_text(profile: str | dict[str, Any]) -> str:
-    if isinstance(profile, str):
-        return profile.strip()
+def _profile_text(profile: dict[str, Any]) -> str:
     return json.dumps(profile, ensure_ascii=False) if profile else ""
 
 
@@ -39,7 +37,7 @@ def _resource_materials(input_data: ResourceInput) -> list[SourceMaterial]:
                 source_id="teaching_plan",
                 source_type="teaching_plan",
                 title=input_data.learning_need,
-                content=input_data.teaching_plan.model_dump_json(),
+                content=input_data.teaching_plan,
             )
         )
     if not materials:

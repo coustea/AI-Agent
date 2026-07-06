@@ -27,14 +27,10 @@ class MindmapAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        config = {
-            **input_data.agent_config,
-            "_teaching_plan": input_data.teaching_plan,
-        }
         result = await self._generate_mindmap(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:32],
-            config=config,
+            config=input_data.agent_config,
         )
         await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result

@@ -1,20 +1,20 @@
-import { SubtitleChunk } from '../schema/types';
+import type { CaptionChunk } from "../schema/types";
 
 /**
- * Find the subtitle chunk that corresponds to the current frame.
- * @param chunks The array of subtitle chunks.
+ * Find the caption chunk that corresponds to the current frame.
+ * @param chunks The array of caption chunks.
  * @param currentFrame The current frame number.
  * @param fps The frame rate of the video.
  */
 export const getCurrentSubtitle = (
-  chunks: SubtitleChunk[] | undefined,
+  chunks: CaptionChunk[] | undefined,
   currentFrame: number,
-  fps: number
+  fps: number,
 ): string => {
-  if (!chunks || chunks.length === 0) return '';
-  const currentTime = currentFrame / fps;
+  if (!chunks || chunks.length === 0) return "";
+  const currentTimeMs = (currentFrame / fps) * 1000;
   const activeChunk = chunks.find(
-    (chunk) => currentTime >= chunk.start && currentTime <= chunk.end
+    (chunk) => currentTimeMs >= chunk.start_ms && currentTimeMs <= chunk.end_ms,
   );
-  return activeChunk ? activeChunk.text : '';
+  return activeChunk ? activeChunk.text : "";
 };

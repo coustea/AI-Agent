@@ -42,11 +42,10 @@ class ResourceStatusSnapshot(BaseModel):
 class ResourceBundle(BaseModel):
     """资源生成完成后的资源包。"""
     id: str
-    task_id: str
-    topic: str | None = None
     title: str = "个性化学习资源包"
     learning_need: str
     selected_agents: list[str] = Field(default_factory=list)
+    plan_content: str | None = None
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
     status: str = "completed"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

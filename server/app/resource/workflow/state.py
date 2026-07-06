@@ -53,7 +53,7 @@ class ParentState(TypedDict, total=False):
     selected_agents: list[str]  # planning_node 写入，路由函数读取
     request_data: dict[str, Any]  # {agent_configs, learning_scenario} from request
     profile: dict[str, Any]  # learner profile
-    teaching_plan: dict[str, Any]  # planning_node writes, workers read
+    teaching_plan: str  # planning_node writes Markdown plan, workers read
     results: Annotated[dict[str, Any], merge_results_dict]  # worker 返回 {agent_id: True}
     failures: Annotated[dict[str, AgentFailure], merge_failures_dict]
     success: bool
@@ -71,4 +71,4 @@ class WorkerInputState(TypedDict, total=False):
     selected_agents: list[str]
     request_data: dict[str, Any]
     profile: dict[str, Any]
-    teaching_plan: dict[str, Any]
+    teaching_plan: str

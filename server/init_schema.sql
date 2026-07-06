@@ -306,6 +306,7 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
+    plan_content        TEXT,
     status              VARCHAR(50)     DEFAULT 'pending',
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     DEFAULT NOW()

@@ -37,14 +37,10 @@ class QuizAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
-        config = {
-            **input_data.agent_config,
-            "_teaching_plan": input_data.teaching_plan,
-        }
         result = await self._generate_quiz(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
-            config=config,
+            config=input_data.agent_config,
         )
         await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
@@ -77,6 +73,7 @@ class QuizAgent(BaseResourceAgent):
         题型和难度先由后端形成确定性蓝图，再由模型填充题目内容。
         """
         question_count = config.get("question_count", 5) if config else 5
+        emphasis = config.get("emphasis", "foundations")
         blueprint = build_quiz_blueprint(
             question_count=question_count,
             question_types=config.get("question_types"),
@@ -134,6 +131,7 @@ class QuizAgent(BaseResourceAgent):
             metadata={
                 "engine": "quiz_structured_v2",
                 "question_count": len(questions),
+                "emphasis": emphasis,
                 "agent_id": "quiz",
             },
         )

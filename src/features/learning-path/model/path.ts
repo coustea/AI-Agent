@@ -1,4 +1,4 @@
-export type PathResourceType = 'content' | 'mindmap' | 'code' | 'reading' | 'quiz' | 'ppt'
+export type PathResourceType = 'content' | 'mindmap' | 'code' | 'reading' | 'ppt' | 'cartoon'
 
 export interface LearningPathStage {
   stage_id: string

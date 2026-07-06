@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>二叉搜索树构建演示</title>
+  <style>
+    :root {
+      --bg: #ffffff; --surface: #f8fafc; --surface-strong: #f1f5f9;
+      --fg: #0f172a; --muted: #64748b; --accent: #4f46e5; --accent-two: #f43f5e; --line: #e2e8f0;
+      --accent-soft: color-mix(in srgb, var(--accent) 17%, transparent); --caption-active-fg: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--fg); font-family: Inter, sans-serif; }
+    [data-composition-id] { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px), var(--bg); background-size: 64px 64px; }
+    .scene { position: absolute; inset: 0; padding: 54px 72px; }
+    .scene-shell { position: relative; width: 100%; height: 100%; padding: 42px 48px 174px; border: 1px solid var(--line); border-radius: 30px; overflow: hidden; background: color-mix(in srgb, var(--bg) 88%, transparent); }
+    .scene-shell::before { content: ""; position: absolute; width: 520px; height: 520px; right: -210px; top: -240px; border-radius: 50%; border: 90px solid var(--accent-soft); pointer-events: none; }
+    .scene-header { position: relative; z-index: 3; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 34px; }
+    .scene-role, .scene-number, .object-kind, .scene-footer { font-size: 18px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .scene-role { color: var(--accent); }
+    .scene-header h2 { max-width: 1350px; margin: 10px 0 0; font-size: 54px; line-height: 1.08; letter-spacing: -.035em; }
+    .scene-number { color: var(--muted); }
+    .visual-stage { position: relative; z-index: 2; display: grid; gap: 22px; min-height: 555px; align-content: center; }
+    .visual-object { position: relative; min-width: 0; padding: 24px 26px; border: 2px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 16px 40px color-mix(in srgb, var(--fg) 8%, transparent); }
+    .object-heading { display: flex; justify-content: space-between; gap: 16px; }
+    .object-kind { color: var(--muted); font-size: 14px; }
+    .object-value { color: var(--accent); font-size: 28px; line-height: 1; }
+    .object-label { margin: 14px 0 0; font-size: 28px; line-height: 1.15; }
+    .object-detail { margin: 10px 0 0; color: var(--muted); font-size: 20px; line-height: 1.45; }
+    .object-items { display: flex; gap: 8px; margin-top: 18px; }
+    .object-items.vertical { flex-direction: column-reverse; }
+    .object-items.code-lines { flex-direction: column; font-family: Consolas, monospace; }
+    .object-items.table-rows { flex-direction: column; gap: 4px; }
+    .object-item { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-strong); text-align: center; font-size: 18px; font-weight: 750; }
+    .object-items.code-lines .object-item { text-align: left; color: var(--accent); }
+    
+    .tree-stage .kind-node, .graph-stage .kind-node, .state-diagram-stage .kind-node { min-width: 100px; min-height: 100px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; font-weight: 800; box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-width: 3px; }
+    .kind-cell { min-width: 70px; min-height: 70px; border-radius: 12px; position: relative; }
+    .kind-cell::before { content: attr(data-index); position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 14px; color: var(--muted); font-weight: 600; }
+    .kind-state { min-width: 100px; min-height: 100px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 800; border-width: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+    .kind-step { border-left: 4px solid var(--accent); border-radius: 12px; padding-left: 20px; }
+    .kind-formula .object-label { font-size: 36px; color: var(--accent); font-family: serif; }
+    .kind-packet { min-width: 60px; border-radius: 8px; border: 2px dashed var(--accent); background: var(--accent-soft); }
+    .kind-table { border-radius: 12px; overflow: hidden; }
+    .kind-table .object-items.table-rows .object-item { border-radius: 0; border-bottom: 1px solid var(--line); text-align: left; }
+    
+    .edges-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; width: 100%; height: 100%; }
+    .scene-edge { stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.25s, stroke-width 0.25s; stroke-width: 3.5px; }
+    .scene-edge.pointer { stroke-dasharray: 8 4; }
+    .scene-edge.transition { stroke-dasharray: 6 3; stroke: var(--accent-two); }
+    .edge-condition { font-size: 16px; fill: var(--accent-two); font-weight: 700; font-family: sans-serif; text-anchor: middle; }
+    
+    .tree-stage, .graph-stage, .state-diagram-stage { display: block; position: relative; }
+    .tree-stage .visual-object, .graph-stage .visual-object, .state-diagram-stage .visual-object { position: absolute; transform: translate(-50%, -50%); }
+    .array-view-stage, .queue-view-stage { display: flex; flex-direction: row; gap: 16px; justify-content: center; align-items: center; }
+    .queue-label { font-size: 16px; font-weight: 700; color: var(--muted); padding: 8px 16px; border-radius: 8px; background: var(--surface-strong); }
+    .queue-label.left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+    .queue-label.right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .stack-layout-stage { display: flex; flex-direction: column-reverse; gap: 12px; justify-content: center; align-items: center; }
+    .stack-label { font-size: 16px; font-weight: 700; color: var(--muted); padding: 8px 16px; border-radius: 8px; background: var(--surface-strong); }
+    .table-view-stage { display: flex; flex-direction: column; gap: 4px; justify-content: center; align-items: center; }
+    .derivation-stage { display: flex; flex-direction: column; gap: 28px; justify-content: center; align-items: center; max-width: 1200px; margin: 0 auto; }
+    .derivation-stage .visual-object { width: 100%; text-align: center; }
+    .derivation-stage .kind-formula { border-left: 4px solid var(--accent); }
+    .flow-stage { grid-template-columns: repeat(11, auto); align-items: center; }
+    .flow-stage .visual-object { min-width: 220px; }
+    .flow-connector { min-width: 72px; display: grid; place-items: center; gap: 7px; color: var(--muted); }
+    .flow-connector span { min-height: 22px; font-size: 14px; white-space: nowrap; }
+    .flow-connector i { position: relative; width: 100%; height: 3px; background: var(--accent); }
+    .flow-connector i::after { content: ""; position: absolute; right: -1px; top: -5px; width: 10px; height: 10px; border-top: 3px solid var(--accent); border-right: 3px solid var(--accent); transform: rotate(45deg); }
+    .compare-stage { grid-template-columns: 1fr 84px 1fr; align-items: stretch; }
+    .compare-column { position: relative; display: grid; gap: 18px; align-content: center; padding: 26px; border: 1px solid var(--line); border-radius: 24px; background: color-mix(in srgb, var(--surface) 68%, transparent); }
+    .column-index { position: absolute; top: -20px; left: 26px; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--caption-active-fg); font-weight: 900; }
+    .versus { align-self: center; text-align: center; color: var(--accent-two); font-size: 28px; font-weight: 950; }
+    .stack-stage { grid-template-columns: 1fr; max-width: 1180px; width: 100%; margin: auto; }
+    .stack-stage .visual-object { padding: 18px 28px; }
+    .code-stage { grid-template-columns: minmax(0, 1.4fr) minmax(300px, .6fr); }
+    .grid-stage, .recap-stage { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .hero-stage { grid-template-columns: minmax(0, 1.4fr) minmax(280px, .6fr); }
+    .hero-stage .visual-object:first-child { padding: 46px; border-color: var(--accent); background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
+    .hero-stage .visual-object:first-child .object-label { font-size: 44px; }
+    .kind-metric .object-value { font-size: 40px; color: var(--accent); }
+    .kind-code { background: #0f172a; border-color: #1e293b; color: #cbd5e1; font-family: Consolas, Monaco, monospace; box-shadow: 0 20px 40px rgba(0,0,0,0.15); }
+    .kind-code .object-kind { color: #64748b; }
+    .kind-code .object-value { color: var(--accent-two); }
+    .kind-code .object-label { color: #f8fafc; font-size: 22px; margin-bottom: 12px; }
+    .object-items.code-lines .object-item { font-family: Consolas, Monaco, monospace; color: #cbd5e1; text-align: left; background: transparent; padding: 4px 8px; border-radius: 4px; font-size: 16px; font-weight: 500; transition: background 0.2s, border-left 0.2s, color 0.2s; }
+    .object-items.code-lines .object-item.highlighted { background: rgba(99, 102, 241, 0.25); color: #ffffff; border-left: 4px solid var(--accent); padding-left: 8px; font-weight: 700; }
+    
+    .split-stage { display: flex; flex-direction: row; gap: 32px; min-height: 555px; width: 100%; align-items: stretch; }
+    .split-stage .visual-stage { flex: 1.2; position: relative; min-height: 555px; border: 2px dashed var(--line); border-radius: 20px; background: color-mix(in srgb, var(--surface) 20%, transparent); overflow: hidden; }
+    .split-stage .sidebar-stage { flex: 0.8; display: flex; flex-direction: column; gap: 20px; justify-content: center; }
+    .split-stage .sidebar-stage .visual-object { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+
+    .scene-callout { position: absolute; z-index: 4; right: 48px; bottom: 118px; max-width: 690px; display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-left: 5px solid var(--accent-two); background: var(--surface); border-radius: 10px; }
+    .scene-callout span { color: var(--accent-two); font-size: 14px; font-weight: 850; }
+    .scene-callout strong { font-size: 20px; }
+    .scene-footer { position: absolute; z-index: 4; left: 48px; right: 48px; bottom: 72px; display: flex; align-items: center; gap: 24px; color: var(--muted); font-size: 13px; }
+    .progress-track { flex: 1; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); }
+    .progress-track i { display: block; height: 100%; background: var(--accent); }
+    .captions { position: absolute; z-index: 20; left: 50%; bottom: 12px; width: 1550px; height: 58px; transform: translateX(-50%); text-align: center; pointer-events: none; }
+    .caption-cue { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); padding: 10px 22px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--fg); font-size: 30px; font-weight: 800; line-height: 1.3; white-space: nowrap; opacity: 0; }
+    .caption-word { display: inline-block; padding: 0 .08em; border-radius: .2em; }
+    
+    .transfer-pulse { position: absolute; z-index: 8; width: 22px; height: 22px; border: 4px solid var(--bg); border-radius: 50%; background: var(--accent-two); box-shadow: 0 0 10px var(--accent-two); opacity: 0; transform: translate(-50%, -50%); }
+    .active-particle { animation: pulse-shadow 0.6s infinite alternate; }
+    @keyframes pulse-shadow {
+      from { box-shadow: 0 0 6px var(--accent-two); }
+      to { box-shadow: 0 0 16px var(--accent-two); }
+    }
+</style>
+</head>
+<body>
+  <main data-composition-id="cartoon-explainer" data-start="0" data-duration="88.274" data-width="1920" data-height="1080" data-fps="30">
+    <section id="scene-0" class="scene clip layout-hero" data-start="0" data-duration="11.27" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">hook</span><h2 id="scene-title-0">二叉搜索树的构建之旅</h2></div><span class="scene-number">01 / 07</span></header><div class="visual-stage hero-stage"><article id="s0-title_label" class="visual-object kind-label" data-object="title_label" style="left:960px;top:300px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">Binary Search Tree</h3></article><article id="s0-hint" class="visual-object kind-label" data-object="hint" style="left:960px;top:450px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">左 &lt; 根 &lt; 右</h3></article><article id="s0-step_card" class="visual-object kind-step" data-object="step_card" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">构建步骤</h3><div class="object-items horizontal"><span class="object-item">插入 5 作为根节点</span><span class="object-item">插入 3 到左子树</span><span class="object-item">插入 7 到右子树</span><span class="object-item">插入 4 到左子树右侧</span><span class="object-item">插入 6 到右子树左侧</span></div></article></div><aside class="scene-callout"><span>关键结论</span><strong>BST 的核心性质：左子树 &lt; 根 &lt; 右子树</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:14.29%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-0-0" class="caption-cue"><span id="caption-0-0" class="caption-word">二</span><span id="caption-0-1" class="caption-word">叉</span><span id="caption-0-2" class="caption-word">搜</span><span id="caption-0-3" class="caption-word">索</span><span id="caption-0-4" class="caption-word">树</span><span id="caption-0-5" class="caption-word">：</span></div><div id="caption-cue-0-1" class="caption-cue"><span id="caption-0-6" class="caption-word">每</span><span id="caption-0-7" class="caption-word">个</span><span id="caption-0-8" class="caption-word">节</span><span id="caption-0-9" class="caption-word">点</span><span id="caption-0-10" class="caption-word">的</span><span id="caption-0-11" class="caption-word">左</span><span id="caption-0-12" class="caption-word">子</span><span id="caption-0-13" class="caption-word">树</span><span id="caption-0-14" class="caption-word">都</span><span id="caption-0-15" class="caption-word">小</span><span id="caption-0-16" class="caption-word">于</span><span id="caption-0-17" class="caption-word">它</span><span id="caption-0-18" class="caption-word">，</span></div><div id="caption-cue-0-2" class="caption-cue"><span id="caption-0-19" class="caption-word">右</span><span id="caption-0-20" class="caption-word">子</span><span id="caption-0-21" class="caption-word">树</span><span id="caption-0-22" class="caption-word">都</span><span id="caption-0-23" class="caption-word">大</span><span id="caption-0-24" class="caption-word">于</span><span id="caption-0-25" class="caption-word">它</span><span id="caption-0-26" class="caption-word">。</span></div><div id="caption-cue-0-3" class="caption-cue"><span id="caption-0-27" class="caption-word">今</span><span id="caption-0-28" class="caption-word">天</span><span id="caption-0-29" class="caption-word">我</span><span id="caption-0-30" class="caption-word">们</span><span id="caption-0-31" class="caption-word">从</span><span id="caption-0-32" class="caption-word">零</span><span id="caption-0-33" class="caption-word">开</span><span id="caption-0-34" class="caption-word">始</span><span id="caption-0-35" class="caption-word">，</span></div><div id="caption-cue-0-4" class="caption-cue"><span id="caption-0-36" class="caption-word">亲</span><span id="caption-0-37" class="caption-word">手</span><span id="caption-0-38" class="caption-word">构</span><span id="caption-0-39" class="caption-word">建</span><span id="caption-0-40" class="caption-word">一</span><span id="caption-0-41" class="caption-word">棵</span><span id="caption-0-42" class="caption-word">完</span><span id="caption-0-43" class="caption-word">整</span><span id="caption-0-44" class="caption-word">的</span><span id="caption-0-45" class="caption-word">BST</span><span id="caption-0-46" class="caption-word">。</span></div></div></div></section>
+    <section id="scene-1" class="scene clip layout-tree" data-start="11.27" data-duration="11.246" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">process</span><h2 id="scene-title-1">插入根节点 5</h2></div><span class="scene-number">02 / 07</span></header><div class="visual-stage tree-stage"><article id="s1-n5" class="visual-object kind-node" data-object="n5" style="left:960px;top:180px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">5</strong></div><h3 class="object-label">根节点</h3></article><article id="s1-metric_compare" class="visual-object kind-metric" data-object="metric_compare" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">0</strong></div><h3 class="object-label">比较次数</h3></article><article id="s1-metric_depth" class="visual-object kind-metric" data-object="metric_depth" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">0</strong></div><h3 class="object-label">当前深度</h3></article><article id="s1-status_label" class="visual-object kind-label" data-object="status_label" style="left:1500px;top:300px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">空树 → 直接插入根节点</h3></article><article id="s1-step_hint" class="visual-object kind-step" data-object="step_hint" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">第 1 步：插入根节点</h3><div class="object-items horizontal"><span class="object-item">当前节点: 5</span><span class="object-item">位置: 根</span><span class="object-item">状态: 已完成</span></div></article></div><aside class="scene-callout"><span>关键结论</span><strong>根节点是所有后续比较的基准点</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:28.57%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-1-0" class="caption-cue"><span id="caption-1-0" class="caption-word">从</span><span id="caption-1-1" class="caption-word">空</span><span id="caption-1-2" class="caption-word">树</span><span id="caption-1-3" class="caption-word">开</span><span id="caption-1-4" class="caption-word">始</span><span id="caption-1-5" class="caption-word">，</span></div><div id="caption-cue-1-1" class="caption-cue"><span id="caption-1-6" class="caption-word">第</span><span id="caption-1-7" class="caption-word">一</span><span id="caption-1-8" class="caption-word">个</span><span id="caption-1-9" class="caption-word">节</span><span id="caption-1-10" class="caption-word">点</span><span id="caption-1-11" class="caption-word">5</span><span id="caption-1-12" class="caption-word">直</span><span id="caption-1-13" class="caption-word">接</span><span id="caption-1-14" class="caption-word">成</span><span id="caption-1-15" class="caption-word">为</span><span id="caption-1-16" class="caption-word">根</span><span id="caption-1-17" class="caption-word">节</span><span id="caption-1-18" class="caption-word">点</span></div><div id="caption-cue-1-2" class="caption-cue"><span id="caption-1-19" class="caption-word">，</span></div><div id="caption-cue-1-3" class="caption-cue"><span id="caption-1-20" class="caption-word">无</span><span id="caption-1-21" class="caption-word">需</span><span id="caption-1-22" class="caption-word">任</span><span id="caption-1-23" class="caption-word">何</span><span id="caption-1-24" class="caption-word">比</span><span id="caption-1-25" class="caption-word">较</span><span id="caption-1-26" class="caption-word">。</span></div><div id="caption-cue-1-4" class="caption-cue"><span id="caption-1-27" class="caption-word">它</span><span id="caption-1-28" class="caption-word">是</span><span id="caption-1-29" class="caption-word">整</span><span id="caption-1-30" class="caption-word">棵</span><span id="caption-1-31" class="caption-word">树</span><span id="caption-1-32" class="caption-word">的</span><span id="caption-1-33" class="caption-word">起</span><span id="caption-1-34" class="caption-word">点</span><span id="caption-1-35" class="caption-word">，</span></div><div id="caption-cue-1-5" class="caption-cue"><span id="caption-1-36" class="caption-word">所</span><span id="caption-1-37" class="caption-word">有</span><span id="caption-1-38" class="caption-word">后</span><span id="caption-1-39" class="caption-word">续</span><span id="caption-1-40" class="caption-word">节</span><span id="caption-1-41" class="caption-word">点</span><span id="caption-1-42" class="caption-word">都</span><span id="caption-1-43" class="caption-word">将</span><span id="caption-1-44" class="caption-word">与</span><span id="caption-1-45" class="caption-word">它</span><span id="caption-1-46" class="caption-word">比</span><span id="caption-1-47" class="caption-word">较</span><span id="caption-1-48" class="caption-word">。</span></div></div></div></section>
+    <section id="scene-2" class="scene clip layout-tree" data-start="22.516" data-duration="11.078" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">process</span><h2 id="scene-title-2">插入节点 3：向左查找</h2></div><span class="scene-number">03 / 07</span></header><div class="visual-stage tree-stage"><svg class="edges-layer" aria-hidden="true"><defs><marker id="arrow-marker-2" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" /></marker><marker id="arrow-marker-active-2" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" /></marker></defs><path id="edge-2-n5-n3" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-2)" data-from="n5" data-to="n3"/></svg><article id="s2-n5" class="visual-object kind-node" data-object="n5" style="left:960px;top:180px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">5</strong></div><h3 class="object-label">根节点</h3></article><article id="s2-n3" class="visual-object kind-node" data-object="n3" style="left:560px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">3</strong></div><h3 class="object-label">左子节点</h3></article><article id="s2-metric_compare" class="visual-object kind-metric" data-object="metric_compare" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">1</strong></div><h3 class="object-label">比较次数</h3></article><article id="s2-metric_depth" class="visual-object kind-metric" data-object="metric_depth" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">1</strong></div><h3 class="object-label">当前深度</h3></article><article id="s2-status_label" class="visual-object kind-label" data-object="status_label" style="left:1500px;top:300px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">3 &lt; 5 → 向左查找</h3></article><article id="s2-step_hint" class="visual-object kind-step" data-object="step_hint" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">第 2 步：插入节点 3</h3><div class="object-items horizontal"><span class="object-item">比较: 3 &lt; 5</span><span class="object-item">方向: 左</span><span class="object-item">状态: 已完成</span></div></article></div><aside class="scene-callout"><span>关键结论</span><strong>每次比较决定向左还是向右</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:42.86%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-2-0" class="caption-cue"><span id="caption-2-0" class="caption-word">插</span><span id="caption-2-1" class="caption-word">入</span><span id="caption-2-2" class="caption-word">3</span><span id="caption-2-3" class="caption-word">。</span></div><div id="caption-cue-2-1" class="caption-cue"><span id="caption-2-4" class="caption-word">首</span><span id="caption-2-5" class="caption-word">先</span><span id="caption-2-6" class="caption-word">与</span><span id="caption-2-7" class="caption-word">根</span><span id="caption-2-8" class="caption-word">节</span><span id="caption-2-9" class="caption-word">点</span><span id="caption-2-10" class="caption-word">5</span><span id="caption-2-11" class="caption-word">比</span><span id="caption-2-12" class="caption-word">较</span><span id="caption-2-13" class="caption-word">，</span></div><div id="caption-cue-2-2" class="caption-cue"><span id="caption-2-14" class="caption-word">3</span><span id="caption-2-15" class="caption-word">小</span><span id="caption-2-16" class="caption-word">于</span><span id="caption-2-17" class="caption-word">5</span><span id="caption-2-18" class="caption-word">，</span></div><div id="caption-cue-2-3" class="caption-cue"><span id="caption-2-19" class="caption-word">向</span><span id="caption-2-20" class="caption-word">左</span><span id="caption-2-21" class="caption-word">走</span><span id="caption-2-22" class="caption-word">。</span></div><div id="caption-cue-2-4" class="caption-cue"><span id="caption-2-23" class="caption-word">左</span><span id="caption-2-24" class="caption-word">侧</span><span id="caption-2-25" class="caption-word">为</span><span id="caption-2-26" class="caption-word">空</span><span id="caption-2-27" class="caption-word">，</span></div><div id="caption-cue-2-5" class="caption-cue"><span id="caption-2-28" class="caption-word">找</span><span id="caption-2-29" class="caption-word">到</span><span id="caption-2-30" class="caption-word">插</span><span id="caption-2-31" class="caption-word">入</span><span id="caption-2-32" class="caption-word">位</span><span id="caption-2-33" class="caption-word">置</span><span id="caption-2-34" class="caption-word">，</span></div><div id="caption-cue-2-6" class="caption-cue"><span id="caption-2-35" class="caption-word">3</span><span id="caption-2-36" class="caption-word">成</span><span id="caption-2-37" class="caption-word">为</span><span id="caption-2-38" class="caption-word">5</span><span id="caption-2-39" class="caption-word">的</span><span id="caption-2-40" class="caption-word">左</span><span id="caption-2-41" class="caption-word">子</span><span id="caption-2-42" class="caption-word">节</span><span id="caption-2-43" class="caption-word">点</span><span id="caption-2-44" class="caption-word">。</span></div></div></div></section>
+    <section id="scene-3" class="scene clip layout-tree" data-start="33.594" data-duration="10.622" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">process</span><h2 id="scene-title-3">插入节点 7：向右查找</h2></div><span class="scene-number">04 / 07</span></header><div class="visual-stage tree-stage"><svg class="edges-layer" aria-hidden="true"><defs><marker id="arrow-marker-3" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" /></marker><marker id="arrow-marker-active-3" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" /></marker></defs><path id="edge-3-n5-n3" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-3)" data-from="n5" data-to="n3"/><path id="edge-3-n5-n7" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-3)" data-from="n5" data-to="n7"/></svg><article id="s3-n5" class="visual-object kind-node" data-object="n5" style="left:960px;top:180px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">5</strong></div><h3 class="object-label">根节点</h3></article><article id="s3-n3" class="visual-object kind-node" data-object="n3" style="left:560px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">3</strong></div><h3 class="object-label">左子节点</h3></article><article id="s3-n7" class="visual-object kind-node" data-object="n7" style="left:1360px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">7</strong></div><h3 class="object-label">右子节点</h3></article><article id="s3-metric_compare" class="visual-object kind-metric" data-object="metric_compare" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">1</strong></div><h3 class="object-label">比较次数</h3></article><article id="s3-metric_depth" class="visual-object kind-metric" data-object="metric_depth" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">1</strong></div><h3 class="object-label">当前深度</h3></article><article id="s3-status_label" class="visual-object kind-label" data-object="status_label" style="left:1500px;top:300px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">7 &gt; 5 → 向右查找</h3></article><article id="s3-step_hint" class="visual-object kind-step" data-object="step_hint" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">第 3 步：插入节点 7</h3><div class="object-items horizontal"><span class="object-item">比较: 7 &gt; 5</span><span class="object-item">方向: 右</span><span class="object-item">状态: 已完成</span></div></article><article id="s3-path_indicator" class="visual-object kind-label" data-object="path_indicator" style="left:1500px;top:450px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">路径: 5 → 右</h3></article></div><aside class="scene-callout"><span>关键结论</span><strong>BST 的左右子树严格区分大小</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:57.14%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-3-0" class="caption-cue"><span id="caption-3-0" class="caption-word">插</span><span id="caption-3-1" class="caption-word">入</span><span id="caption-3-2" class="caption-word">7</span><span id="caption-3-3" class="caption-word">。</span></div><div id="caption-cue-3-1" class="caption-cue"><span id="caption-3-4" class="caption-word">与</span><span id="caption-3-5" class="caption-word">根</span><span id="caption-3-6" class="caption-word">节</span><span id="caption-3-7" class="caption-word">点</span><span id="caption-3-8" class="caption-word">5</span><span id="caption-3-9" class="caption-word">比</span><span id="caption-3-10" class="caption-word">较</span><span id="caption-3-11" class="caption-word">，</span></div><div id="caption-cue-3-2" class="caption-cue"><span id="caption-3-12" class="caption-word">7</span><span id="caption-3-13" class="caption-word">大</span><span id="caption-3-14" class="caption-word">于</span><span id="caption-3-15" class="caption-word">5</span><span id="caption-3-16" class="caption-word">，</span></div><div id="caption-cue-3-3" class="caption-cue"><span id="caption-3-17" class="caption-word">向</span><span id="caption-3-18" class="caption-word">右</span><span id="caption-3-19" class="caption-word">走</span><span id="caption-3-20" class="caption-word">。</span></div><div id="caption-cue-3-4" class="caption-cue"><span id="caption-3-21" class="caption-word">右</span><span id="caption-3-22" class="caption-word">侧</span><span id="caption-3-23" class="caption-word">为</span><span id="caption-3-24" class="caption-word">空</span><span id="caption-3-25" class="caption-word">，</span></div><div id="caption-cue-3-5" class="caption-cue"><span id="caption-3-26" class="caption-word">找</span><span id="caption-3-27" class="caption-word">到</span><span id="caption-3-28" class="caption-word">插</span><span id="caption-3-29" class="caption-word">入</span><span id="caption-3-30" class="caption-word">位</span><span id="caption-3-31" class="caption-word">置</span><span id="caption-3-32" class="caption-word">，</span></div><div id="caption-cue-3-6" class="caption-cue"><span id="caption-3-33" class="caption-word">7</span><span id="caption-3-34" class="caption-word">成</span><span id="caption-3-35" class="caption-word">为</span><span id="caption-3-36" class="caption-word">5</span><span id="caption-3-37" class="caption-word">的</span><span id="caption-3-38" class="caption-word">右</span><span id="caption-3-39" class="caption-word">子</span><span id="caption-3-40" class="caption-word">节</span><span id="caption-3-41" class="caption-word">点</span><span id="caption-3-42" class="caption-word">。</span></div></div></div></section>
+    <section id="scene-4" class="scene clip layout-tree" data-start="44.216" data-duration="15.038" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">process</span><h2 id="scene-title-4">插入节点 4：两轮比较</h2></div><span class="scene-number">05 / 07</span></header><div class="visual-stage tree-stage"><svg class="edges-layer" aria-hidden="true"><defs><marker id="arrow-marker-4" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" /></marker><marker id="arrow-marker-active-4" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" /></marker></defs><path id="edge-4-n5-n3" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-4)" data-from="n5" data-to="n3"/><path id="edge-4-n5-n7" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-4)" data-from="n5" data-to="n7"/><path id="edge-4-n3-n4" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-4)" data-from="n3" data-to="n4"/></svg><article id="s4-n5" class="visual-object kind-node" data-object="n5" style="left:960px;top:180px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">5</strong></div><h3 class="object-label">根节点</h3></article><article id="s4-n3" class="visual-object kind-node" data-object="n3" style="left:560px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">3</strong></div><h3 class="object-label">左子节点</h3></article><article id="s4-n7" class="visual-object kind-node" data-object="n7" style="left:1360px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">7</strong></div><h3 class="object-label">右子节点</h3></article><article id="s4-n4" class="visual-object kind-node" data-object="n4" style="left:760px;top:580px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">4</strong></div><h3 class="object-label">新节点</h3></article><article id="s4-metric_compare" class="visual-object kind-metric" data-object="metric_compare" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">2</strong></div><h3 class="object-label">比较次数</h3></article><article id="s4-metric_depth" class="visual-object kind-metric" data-object="metric_depth" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">2</strong></div><h3 class="object-label">当前深度</h3></article><article id="s4-status_label" class="visual-object kind-label" data-object="status_label" style="left:1500px;top:300px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">4 &lt; 5 → 左 | 4 &gt; 3 → 右</h3></article><article id="s4-step_hint" class="visual-object kind-step" data-object="step_hint" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">第 4 步：插入节点 4</h3><div class="object-items horizontal"><span class="object-item">比较1: 4 &lt; 5 → 左</span><span class="object-item">比较2: 4 &gt; 3 → 右</span><span class="object-item">状态: 已完成</span></div></article><article id="s4-path_indicator" class="visual-object kind-label" data-object="path_indicator" style="left:1500px;top:450px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">路径: 5 → 3 → 右</h3></article></div><aside class="scene-callout"><span>关键结论</span><strong>深度增加意味着比较次数增加</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:71.43%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-4-0" class="caption-cue"><span id="caption-4-0" class="caption-word">插</span><span id="caption-4-1" class="caption-word">入</span><span id="caption-4-2" class="caption-word">4</span><span id="caption-4-3" class="caption-word">。</span></div><div id="caption-cue-4-1" class="caption-cue"><span id="caption-4-4" class="caption-word">第</span><span id="caption-4-5" class="caption-word">一</span><span id="caption-4-6" class="caption-word">轮</span><span id="caption-4-7" class="caption-word">：</span></div><div id="caption-cue-4-2" class="caption-cue"><span id="caption-4-8" class="caption-word">与</span><span id="caption-4-9" class="caption-word">根</span><span id="caption-4-10" class="caption-word">节</span><span id="caption-4-11" class="caption-word">点</span><span id="caption-4-12" class="caption-word">5</span><span id="caption-4-13" class="caption-word">比</span><span id="caption-4-14" class="caption-word">较</span><span id="caption-4-15" class="caption-word">，</span></div><div id="caption-cue-4-3" class="caption-cue"><span id="caption-4-16" class="caption-word">4</span><span id="caption-4-17" class="caption-word">小</span><span id="caption-4-18" class="caption-word">于</span><span id="caption-4-19" class="caption-word">5</span><span id="caption-4-20" class="caption-word">，</span></div><div id="caption-cue-4-4" class="caption-cue"><span id="caption-4-21" class="caption-word">向</span><span id="caption-4-22" class="caption-word">左</span><span id="caption-4-23" class="caption-word">走</span><span id="caption-4-24" class="caption-word">。</span></div><div id="caption-cue-4-5" class="caption-cue"><span id="caption-4-25" class="caption-word">第</span><span id="caption-4-26" class="caption-word">二</span><span id="caption-4-27" class="caption-word">轮</span><span id="caption-4-28" class="caption-word">：</span></div><div id="caption-cue-4-6" class="caption-cue"><span id="caption-4-29" class="caption-word">与</span><span id="caption-4-30" class="caption-word">节</span><span id="caption-4-31" class="caption-word">点</span><span id="caption-4-32" class="caption-word">3</span><span id="caption-4-33" class="caption-word">比</span><span id="caption-4-34" class="caption-word">较</span><span id="caption-4-35" class="caption-word">，</span></div><div id="caption-cue-4-7" class="caption-cue"><span id="caption-4-36" class="caption-word">4</span><span id="caption-4-37" class="caption-word">大</span><span id="caption-4-38" class="caption-word">于</span><span id="caption-4-39" class="caption-word">3</span><span id="caption-4-40" class="caption-word">，</span></div><div id="caption-cue-4-8" class="caption-cue"><span id="caption-4-41" class="caption-word">向</span><span id="caption-4-42" class="caption-word">右</span><span id="caption-4-43" class="caption-word">走</span><span id="caption-4-44" class="caption-word">。</span></div><div id="caption-cue-4-9" class="caption-cue"><span id="caption-4-45" class="caption-word">右</span><span id="caption-4-46" class="caption-word">侧</span><span id="caption-4-47" class="caption-word">为</span><span id="caption-4-48" class="caption-word">空</span><span id="caption-4-49" class="caption-word">，</span></div><div id="caption-cue-4-10" class="caption-cue"><span id="caption-4-50" class="caption-word">4</span><span id="caption-4-51" class="caption-word">成</span><span id="caption-4-52" class="caption-word">为</span><span id="caption-4-53" class="caption-word">3</span><span id="caption-4-54" class="caption-word">的</span><span id="caption-4-55" class="caption-word">右</span><span id="caption-4-56" class="caption-word">子</span><span id="caption-4-57" class="caption-word">节</span><span id="caption-4-58" class="caption-word">点</span><span id="caption-4-59" class="caption-word">。</span></div></div></div></section>
+    <section id="scene-5" class="scene clip layout-tree" data-start="59.254" data-duration="14.966" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">process</span><h2 id="scene-title-5">插入节点 6：两轮比较</h2></div><span class="scene-number">06 / 07</span></header><div class="visual-stage tree-stage"><svg class="edges-layer" aria-hidden="true"><defs><marker id="arrow-marker-5" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" /></marker><marker id="arrow-marker-active-5" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" /></marker></defs><path id="edge-5-n5-n3" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-5)" data-from="n5" data-to="n3"/><path id="edge-5-n5-n7" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-5)" data-from="n5" data-to="n7"/><path id="edge-5-n3-n4" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-5)" data-from="n3" data-to="n4"/><path id="edge-5-n7-n6" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-5)" data-from="n7" data-to="n6"/></svg><article id="s5-n5" class="visual-object kind-node" data-object="n5" style="left:960px;top:180px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">5</strong></div><h3 class="object-label">根节点</h3></article><article id="s5-n3" class="visual-object kind-node" data-object="n3" style="left:560px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">3</strong></div><h3 class="object-label">左子节点</h3></article><article id="s5-n7" class="visual-object kind-node" data-object="n7" style="left:1360px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">7</strong></div><h3 class="object-label">右子节点</h3></article><article id="s5-n4" class="visual-object kind-node" data-object="n4" style="left:760px;top:580px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">4</strong></div><h3 class="object-label">叶子节点</h3></article><article id="s5-n6" class="visual-object kind-node" data-object="n6" style="left:1160px;top:580px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">6</strong></div><h3 class="object-label">新节点</h3></article><article id="s5-metric_compare" class="visual-object kind-metric" data-object="metric_compare" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">2</strong></div><h3 class="object-label">比较次数</h3></article><article id="s5-metric_depth" class="visual-object kind-metric" data-object="metric_depth" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">2</strong></div><h3 class="object-label">当前深度</h3></article><article id="s5-status_label" class="visual-object kind-label" data-object="status_label" style="left:1500px;top:300px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">6 &gt; 5 → 右 | 6 &lt; 7 → 左</h3></article><article id="s5-step_hint" class="visual-object kind-step" data-object="step_hint" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">第 5 步：插入节点 6</h3><div class="object-items horizontal"><span class="object-item">比较1: 6 &gt; 5 → 右</span><span class="object-item">比较2: 6 &lt; 7 → 左</span><span class="object-item">状态: 已完成</span></div></article><article id="s5-path_indicator" class="visual-object kind-label" data-object="path_indicator" style="left:1500px;top:450px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">路径: 5 → 7 → 左</h3></article></div><aside class="scene-callout"><span>关键结论</span><strong>每次插入都从根节点开始查找</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:85.71%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-5-0" class="caption-cue"><span id="caption-5-0" class="caption-word">插</span><span id="caption-5-1" class="caption-word">入</span><span id="caption-5-2" class="caption-word">6</span><span id="caption-5-3" class="caption-word">。</span></div><div id="caption-cue-5-1" class="caption-cue"><span id="caption-5-4" class="caption-word">第</span><span id="caption-5-5" class="caption-word">一</span><span id="caption-5-6" class="caption-word">轮</span><span id="caption-5-7" class="caption-word">：</span></div><div id="caption-cue-5-2" class="caption-cue"><span id="caption-5-8" class="caption-word">与</span><span id="caption-5-9" class="caption-word">根</span><span id="caption-5-10" class="caption-word">节</span><span id="caption-5-11" class="caption-word">点</span><span id="caption-5-12" class="caption-word">5</span><span id="caption-5-13" class="caption-word">比</span><span id="caption-5-14" class="caption-word">较</span><span id="caption-5-15" class="caption-word">，</span></div><div id="caption-cue-5-3" class="caption-cue"><span id="caption-5-16" class="caption-word">6</span><span id="caption-5-17" class="caption-word">大</span><span id="caption-5-18" class="caption-word">于</span><span id="caption-5-19" class="caption-word">5</span><span id="caption-5-20" class="caption-word">，</span></div><div id="caption-cue-5-4" class="caption-cue"><span id="caption-5-21" class="caption-word">向</span><span id="caption-5-22" class="caption-word">右</span><span id="caption-5-23" class="caption-word">走</span><span id="caption-5-24" class="caption-word">。</span></div><div id="caption-cue-5-5" class="caption-cue"><span id="caption-5-25" class="caption-word">第</span><span id="caption-5-26" class="caption-word">二</span><span id="caption-5-27" class="caption-word">轮</span><span id="caption-5-28" class="caption-word">：</span></div><div id="caption-cue-5-6" class="caption-cue"><span id="caption-5-29" class="caption-word">与</span><span id="caption-5-30" class="caption-word">节</span><span id="caption-5-31" class="caption-word">点</span><span id="caption-5-32" class="caption-word">7</span><span id="caption-5-33" class="caption-word">比</span><span id="caption-5-34" class="caption-word">较</span><span id="caption-5-35" class="caption-word">，</span></div><div id="caption-cue-5-7" class="caption-cue"><span id="caption-5-36" class="caption-word">6</span><span id="caption-5-37" class="caption-word">小</span><span id="caption-5-38" class="caption-word">于</span><span id="caption-5-39" class="caption-word">7</span><span id="caption-5-40" class="caption-word">，</span></div><div id="caption-cue-5-8" class="caption-cue"><span id="caption-5-41" class="caption-word">向</span><span id="caption-5-42" class="caption-word">左</span><span id="caption-5-43" class="caption-word">走</span><span id="caption-5-44" class="caption-word">。</span></div><div id="caption-cue-5-9" class="caption-cue"><span id="caption-5-45" class="caption-word">左</span><span id="caption-5-46" class="caption-word">侧</span><span id="caption-5-47" class="caption-word">为</span><span id="caption-5-48" class="caption-word">空</span><span id="caption-5-49" class="caption-word">，</span></div><div id="caption-cue-5-10" class="caption-cue"><span id="caption-5-50" class="caption-word">6</span><span id="caption-5-51" class="caption-word">成</span><span id="caption-5-52" class="caption-word">为</span><span id="caption-5-53" class="caption-word">7</span><span id="caption-5-54" class="caption-word">的</span><span id="caption-5-55" class="caption-word">左</span><span id="caption-5-56" class="caption-word">子</span><span id="caption-5-57" class="caption-word">节</span><span id="caption-5-58" class="caption-word">点</span><span id="caption-5-59" class="caption-word">。</span></div></div></div></section>
+    <section id="scene-6" class="scene clip layout-tree" data-start="74.22" data-duration="14.054" data-track-index="0"><div class="scene-shell"><header class="scene-header"><div><span class="scene-role">recap</span><h2 id="scene-title-6">BST 构建完成</h2></div><span class="scene-number">07 / 07</span></header><div class="visual-stage tree-stage"><svg class="edges-layer" aria-hidden="true"><defs><marker id="arrow-marker-6" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" /></marker><marker id="arrow-marker-active-6" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" /></marker></defs><path id="edge-6-n5-n3" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-6)" data-from="n5" data-to="n3"/><path id="edge-6-n5-n7" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-6)" data-from="n5" data-to="n7"/><path id="edge-6-n3-n4" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-6)" data-from="n3" data-to="n4"/><path id="edge-6-n7-n6" class="scene-edge edge" d="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5"  marker-end="url(#arrow-marker-6)" data-from="n7" data-to="n6"/></svg><article id="s6-n5" class="visual-object kind-node" data-object="n5" style="left:960px;top:180px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">5</strong></div><h3 class="object-label">根节点</h3></article><article id="s6-n3" class="visual-object kind-node" data-object="n3" style="left:560px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">3</strong></div><h3 class="object-label">左子节点</h3></article><article id="s6-n7" class="visual-object kind-node" data-object="n7" style="left:1360px;top:380px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">7</strong></div><h3 class="object-label">右子节点</h3></article><article id="s6-n4" class="visual-object kind-node" data-object="n4" style="left:760px;top:580px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">4</strong></div><h3 class="object-label">叶子节点</h3></article><article id="s6-n6" class="visual-object kind-node" data-object="n6" style="left:1160px;top:580px;"><div class="object-heading"><span class="object-kind">node</span><strong class="object-value">6</strong></div><h3 class="object-label">叶子节点</h3></article><article id="s6-metric_total" class="visual-object kind-metric" data-object="metric_total" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">5</strong></div><h3 class="object-label">节点总数</h3></article><article id="s6-metric_height" class="visual-object kind-metric" data-object="metric_height" style=""><div class="object-heading"><span class="object-kind">metric</span><strong class="object-value">3</strong></div><h3 class="object-label">树高度</h3></article><article id="s6-inorder_label" class="visual-object kind-label" data-object="inorder_label" style="left:960px;top:750px;"><div class="object-heading"><span class="object-kind">label</span></div><h3 class="object-label">中序遍历: 3 → 4 → 5 → 6 → 7</h3></article><article id="s6-summary_card" class="visual-object kind-step" data-object="summary_card" style=""><div class="object-heading"><span class="object-kind">step</span></div><h3 class="object-label">构建总结</h3><div class="object-items horizontal"><span class="object-item">插入顺序: 5, 3, 7, 4, 6</span><span class="object-item">总比较次数: 6 次</span><span class="object-item">树高: 3 层</span><span class="object-item">中序遍历有序</span></div></article></div><aside class="scene-callout"><span>关键结论</span><strong>BST 的中序遍历结果是有序序列</strong></aside><footer class="scene-footer"><span>ANIMATED EXPLAINER</span><div class="progress-track"><i style="width:100.0%"></i></div></footer><div class="captions" aria-hidden="true"><div id="caption-cue-6-0" class="caption-cue"><span id="caption-6-0" class="caption-word">完</span><span id="caption-6-1" class="caption-word">成</span><span id="caption-6-2" class="caption-word">！</span></div><div id="caption-cue-6-1" class="caption-cue"><span id="caption-6-3" class="caption-word">一</span><span id="caption-6-4" class="caption-word">棵</span><span id="caption-6-5" class="caption-word">三</span><span id="caption-6-6" class="caption-word">层</span><span id="caption-6-7" class="caption-word">二</span><span id="caption-6-8" class="caption-word">叉</span><span id="caption-6-9" class="caption-word">搜</span><span id="caption-6-10" class="caption-word">索</span><span id="caption-6-11" class="caption-word">树</span><span id="caption-6-12" class="caption-word">已</span><span id="caption-6-13" class="caption-word">构</span><span id="caption-6-14" class="caption-word">建</span></div><div id="caption-cue-6-2" class="caption-cue"><span id="caption-6-15" class="caption-word">完</span><span id="caption-6-16" class="caption-word">毕</span><span id="caption-6-17" class="caption-word">。</span></div><div id="caption-cue-6-3" class="caption-cue"><span id="caption-6-18" class="caption-word">每</span><span id="caption-6-19" class="caption-word">个</span><span id="caption-6-20" class="caption-word">节</span><span id="caption-6-21" class="caption-word">点</span><span id="caption-6-22" class="caption-word">都</span><span id="caption-6-23" class="caption-word">遵</span><span id="caption-6-24" class="caption-word">循</span><span id="caption-6-25" class="caption-word">左</span><span id="caption-6-26" class="caption-word">小</span><span id="caption-6-27" class="caption-word">右</span><span id="caption-6-28" class="caption-word">大</span><span id="caption-6-29" class="caption-word">的</span></div><div id="caption-cue-6-4" class="caption-cue"><span id="caption-6-30" class="caption-word">规</span><span id="caption-6-31" class="caption-word">则</span><span id="caption-6-32" class="caption-word">，</span></div><div id="caption-cue-6-5" class="caption-cue"><span id="caption-6-33" class="caption-word">中</span><span id="caption-6-34" class="caption-word">序</span><span id="caption-6-35" class="caption-word">遍</span><span id="caption-6-36" class="caption-word">历</span><span id="caption-6-37" class="caption-word">将</span><span id="caption-6-38" class="caption-word">得</span><span id="caption-6-39" class="caption-word">到</span><span id="caption-6-40" class="caption-word">有</span><span id="caption-6-41" class="caption-word">序</span><span id="caption-6-42" class="caption-word">序</span><span id="caption-6-43" class="caption-word">列</span><span id="caption-6-44" class="caption-word">：</span></div><div id="caption-cue-6-6" class="caption-cue"><span id="caption-6-45" class="caption-word">3</span><span id="caption-6-46" class="caption-word">、</span><span id="caption-6-47" class="caption-word">4</span><span id="caption-6-48" class="caption-word">、</span><span id="caption-6-49" class="caption-word">5</span><span id="caption-6-50" class="caption-word">、</span><span id="caption-6-51" class="caption-word">6</span><span id="caption-6-52" class="caption-word">、</span><span id="caption-6-53" class="caption-word">7</span><span id="caption-6-54" class="caption-word">。</span></div></div></div></section>
+    <audio id="scene-audio-0" data-start="0" data-duration="10.92" data-track-index="1" data-volume="1" src="audio/scene_0.mp3"></audio>
+    <audio id="scene-audio-1" data-start="11.27" data-duration="10.896" data-track-index="1" data-volume="1" src="audio/scene_1.mp3"></audio>
+    <audio id="scene-audio-2" data-start="22.516" data-duration="10.728" data-track-index="1" data-volume="1" src="audio/scene_2.mp3"></audio>
+    <audio id="scene-audio-3" data-start="33.594" data-duration="10.272" data-track-index="1" data-volume="1" src="audio/scene_3.mp3"></audio>
+    <audio id="scene-audio-4" data-start="44.216" data-duration="14.688" data-track-index="1" data-volume="1" src="audio/scene_4.mp3"></audio>
+    <audio id="scene-audio-5" data-start="59.254" data-duration="14.616" data-track-index="1" data-volume="1" src="audio/scene_5.mp3"></audio>
+    <audio id="scene-audio-6" data-start="74.22" data-duration="13.704" data-track-index="1" data-volume="1" src="audio/scene_6.mp3"></audio>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"></script>
+  <script>
+    // === HyperFrames Client-Side Animator and Auto-Layout Engine ===
+    window.HF_Animator = {
+      getCenter: (el) => {
+        if (!el) return { x: 0, y: 0 };
+        return {
+          x: el.offsetLeft,
+          y: el.offsetTop
+        };
+      },
+      
+      reveal: (tl, targets, startTime, duration, stagger = 0.12) => {
+        tl.fromTo(targets, 
+          { autoAlpha: 0, y: 30, scale: 0.92 }, 
+          { autoAlpha: 1, y: 0, scale: 1, duration: duration, stagger: stagger, ease: "power3.out", immediateRender: false }, 
+          startTime
+        );
+      },
+      
+      focus: (tl, targets, startTime, duration) => {
+        tl.to(targets, { scale: 1.08, borderColor: "var(--accent)", boxShadow: "0 0 20px var(--accent-soft)", duration: duration * 0.4, ease: "power2.out" }, startTime)
+          .to(targets, { scale: 1, borderColor: "var(--line)", boxShadow: "0 16px 40px rgba(0,0,0,0.08)", duration: duration * 0.6, ease: "power2.inOut" }, startTime + duration * 0.4);
+      },
+      
+      insert: (tl, targets, direction, parentId, startTime, duration, stagger = 0.12) => {
+        targets.forEach((targetSel, idx) => {
+          const targetEl = document.querySelector(targetSel);
+          const parentEl = parentId ? document.querySelector(parentId) : null;
+          let startX = 0, startY = 0;
+          
+          if (parentEl && targetEl) {
+            const tPos = HF_Animator.getCenter(targetEl);
+            const pPos = HF_Animator.getCenter(parentEl);
+            startX = pPos.x - tPos.x;
+            startY = pPos.y - tPos.y;
+          } else {
+            startX = direction === "left" ? -120 : direction === "right" ? 120 : 0;
+            startY = direction === "top" ? -80 : direction === "bottom" ? 80 : 0;
+          }
+          
+          tl.fromTo(targetSel,
+            { autoAlpha: 0, x: startX, y: startY, scale: 0.7 },
+            { autoAlpha: 1, x: 0, y: 0, scale: 1, duration: duration, ease: "back.out(1.2)", delay: idx * stagger, immediateRender: false },
+            startTime
+          );
+        });
+      },
+      
+      remove: (tl, targets, direction, startTime, duration, stagger = 0.12) => {
+        targets.forEach((targetSel, idx) => {
+          const destX = direction === "left" ? -120 : direction === "right" ? 120 : 0;
+          const destY = direction === "top" ? -80 : direction === "bottom" ? 80 : 0;
+          
+          tl.to(targetSel,
+            { autoAlpha: 0, x: destX, y: destY, scale: 0.6, duration: duration, ease: "power2.in", delay: idx * stagger },
+            startTime
+          );
+        });
+      },
+      
+      swap: (tl, targets, startTime, duration) => {
+        if (targets.length < 2) return;
+        const elA = document.querySelector(targets[0]);
+        const elB = document.querySelector(targets[1]);
+        if (!elA || !elB) return;
+        
+        const posA = HF_Animator.getCenter(elA);
+        const posB = HF_Animator.getCenter(elB);
+        const dx = posB.x - posA.x;
+        const dy = posB.y - posA.y;
+        
+        tl.to(targets[0], { x: dx, y: dy, zIndex: 10, duration: duration * 0.5, ease: "power2.inOut" }, startTime)
+          .to(targets[0], { x: dx, y: dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }, startTime + duration * 0.5)
+          
+          .to(targets[1], { x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.inOut" }, startTime)
+          .to(targets[1], { x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }, startTime + duration * 0.5);
+      },
+      
+      traverse: (tl, targets, startTime, duration, stagger = 0.24) => {
+        targets.forEach((targetSel, idx) => {
+          const t = startTime + idx * stagger;
+          tl.to(targetSel, { backgroundColor: "var(--accent-soft)", borderColor: "var(--accent)", scale: 1.04, duration: duration * 0.4 }, t)
+            .to(targetSel, { backgroundColor: "var(--surface)", borderColor: "var(--line)", scale: 1, duration: duration * 0.6 }, t + duration * 0.4);
+        });
+      },
+      
+      stateChange: (tl, targets, startTime, duration) => {
+        tl.to(targets, { backgroundColor: "var(--accent-soft)", borderColor: "var(--accent)", color: "var(--fg)", scale: 1.05, duration: duration * 0.5, ease: "power2.out" }, startTime)
+          .to(targets, { scale: 1, duration: duration * 0.5, ease: "power2.inOut" }, startTime + duration * 0.5);
+      },
+      
+      valueChange: (tl, targets, newValue, startTime, duration) => {
+        targets.forEach(targetSel => {
+          tl.to(targetSel, { scale: 0.85, duration: duration * 0.3, ease: "power2.in" }, startTime)
+            .call(() => {
+              const el = document.querySelector(targetSel);
+              if (el) {
+                const v = el.querySelector(".object-value");
+                if (v) v.textContent = newValue;
+              }
+            }, null, startTime + duration * 0.3)
+            .to(targetSel, { scale: 1, duration: duration * 0.7, ease: "back.out(1.5)" }, startTime + duration * 0.3);
+        });
+      },
+      
+      highlightPath: (tl, pathNodes, sceneIndex, startTime, duration) => {
+        const stepDuration = duration / (pathNodes.length || 1);
+        pathNodes.forEach((nodeId, idx) => {
+          const t = startTime + idx * stepDuration;
+          const ns = `#s${sceneIndex}-${nodeId}`;
+          tl.to(ns, { borderColor: "var(--accent)", boxShadow: "0 0 25px var(--accent-soft)", scale: 1.08, duration: stepDuration * 0.5 }, t)
+            .to(ns, { scale: 1, duration: stepDuration * 0.5 }, t + stepDuration * 0.5);
+          
+          if (idx < pathNodes.length - 1) {
+            const nextId = pathNodes[idx + 1];
+            const es = `#edge-${sceneIndex}-${nodeId}-${nextId}`;
+            tl.to(es, { stroke: "var(--accent)", strokeWidth: 5, duration: stepDuration }, t);
+            tl.set(es, { markerEnd: "url(#arrow-marker-active-" + sceneIndex + ")" }, t);
+          }
+        });
+      },
+      
+      highlightCodeLine: (tl, targets, lineIndex, startTime, duration) => {
+        targets.forEach(targetSel => {
+          tl.call(() => {
+            const codeObj = document.querySelector(targetSel);
+            if (codeObj) {
+              const lines = codeObj.querySelectorAll(".object-item");
+              lines.forEach((line, idx) => {
+                if (idx === lineIndex) {
+                  line.classList.add("highlighted");
+                } else {
+                  line.classList.remove("highlighted");
+                }
+              });
+            }
+          }, null, startTime)
+          .to(targetSel, { scale: 1.02, duration: 0.15, ease: "power2.out" }, startTime)
+          .to(targetSel, { scale: 1, duration: 0.25, ease: "power2.inOut" }, startTime + 0.15);
+        });
+      },
+      
+      transfer: (tl, fromNode, toNode, sceneIndex, startTime, duration) => {
+        const particleId = `particle-${sceneIndex}-${fromNode}-${toNode}`;
+        const edgeId = `#edge-${sceneIndex}-${fromNode}-${toNode}`;
+        
+        tl.call(() => {
+          const path = document.querySelector(edgeId);
+          const stage = document.querySelector("#scene-" + sceneIndex + " .visual-stage");
+          if (path && stage) {
+            const particle = document.createElement("i");
+            particle.id = particleId;
+            particle.className = "transfer-pulse active-particle";
+            stage.appendChild(particle);
+            
+            gsap.to(particle, {
+              motionPath: {
+                path: path,
+                align: path,
+                alignOrigin: [0.5, 0.5]
+              },
+              autoAlpha: 1,
+              duration: duration,
+              ease: "power1.inOut",
+              onComplete: () => particle.remove()
+            });
+          }
+        }, null, startTime);
+      },
+      
+      branch: (tl, targets, startTime, duration, stagger = 0.16) => {
+        tl.fromTo(targets, 
+          { autoAlpha: 0, scale: 0.7, transformOrigin: "50% 0%" },
+          { autoAlpha: 1, scale: 1, duration: duration, stagger: stagger, ease: "back.out(1.4)", immediateRender: false },
+          startTime
+        );
+      },
+      
+      count: (tl, targets, startTime, duration) => {
+        tl.fromTo(targets, 
+          { scale: 0.82, autoAlpha: 0.5 },
+          { scale: 1, autoAlpha: 1, duration: duration, ease: "back.out(1.7)", immediateRender: false },
+          startTime
+        );
+      },
+      
+      shift: (tl, targets, startTime, duration, stagger = 0.06) => {
+        tl.to(targets, { x: -120, duration: duration, ease: "power2.inOut", stagger: stagger }, startTime);
+      },
+      
+      derive: (tl, targets, resultSelector, startTime, duration) => {
+        tl.to(targets, { autoAlpha: 0, scale: 0.8, y: -20, duration: duration * 0.5, ease: "power2.in" }, startTime);
+        if (resultSelector) {
+          tl.fromTo(resultSelector,
+            { autoAlpha: 0, scale: 0.8, y: 20 },
+            { autoAlpha: 1, scale: 1, y: 0, duration: duration * 0.5, ease: "back.out(1.4)", immediateRender: false },
+            startTime + duration * 0.5
+          );
+        }
+      },
+      
+      transform: (tl, targets, resultSelector, startTime, duration) => {
+        tl.to(targets, { borderColor: "var(--accent-two)", boxShadow: "0 0 15px var(--accent-soft)", duration: duration * 0.3 }, startTime)
+          .to(targets, { autoAlpha: 0, scale: 0.6, duration: duration * 0.3, ease: "power2.in" }, startTime + duration * 0.3);
+        if (resultSelector) {
+          tl.fromTo(resultSelector,
+            { autoAlpha: 0, scale: 0.5, transformOrigin: "50% 50%" },
+            { autoAlpha: 1, scale: 1, duration: duration * 0.4, ease: "back.out(1.4)", immediateRender: false },
+            startTime + duration * 0.6
+          );
+        }
+      }
+    };
+
+    function updateSvgEdges(stage) {
+      const svgLayer = stage.querySelector(".edges-layer");
+      if (!svgLayer) return;
+      const paths = svgLayer.querySelectorAll("path");
+      
+      paths.forEach(path => {
+        const fromId = path.getAttribute("data-from");
+        const toId = path.getAttribute("data-to");
+        const sceneId = path.id.split("-")[1];
+        
+        const fromEl = stage.querySelector("#s" + sceneId + "-" + fromId);
+        const toEl = stage.querySelector("#s" + sceneId + "-" + toId);
+        
+        if (fromEl && toEl) {
+          const fromX = fromEl.offsetLeft;
+          const fromY = fromEl.offsetTop;
+          const toX = toEl.offsetLeft;
+          const toY = toEl.offsetTop;
+          
+          const fromW = fromEl.offsetWidth || 100;
+          const toW = toEl.offsetWidth || 100;
+          const r1 = fromW / 2;
+          const r2 = toW / 2;
+          
+          const dx = toX - fromX;
+          const dy = toY - fromY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          let startX = fromX;
+          let startY = fromY;
+          let endX = toX;
+          let endY = toY;
+          
+          if (dist > 0) {
+            const ux = dx / dist;
+            const uy = dy / dist;
+            startX = fromX + r1 * ux;
+            startY = fromY + r1 * uy;
+            endX = toX - r2 * ux;
+            endY = toY - r2 * uy;
+          }
+          
+          path.setAttribute("d", "M " + startX + " " + startY + " L " + endX + " " + endY);
+          
+          const textEl = stage.querySelector('.edge-condition[data-from="' + fromId + '"][data-to="' + toId + '"]');
+          if (textEl) {
+            textEl.setAttribute("x", (startX + endX) / 2);
+            textEl.setAttribute("y", (startY + endY) / 2 - 10);
+          }
+        }
+      });
+    }
+
+    function layoutTree(nodes, edges, width, height) {
+      const nodeMap = new Map(nodes.map(n => [n.getAttribute("data-object"), n]));
+      const adj = new Map();
+      const inDegree = new Map();
+      
+      nodes.forEach(n => {
+        const id = n.getAttribute("data-object");
+        adj.set(id, []);
+        inDegree.set(id, 0);
+      });
+      
+      edges.forEach(e => {
+        if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+          adj.get(e.source).push(e.target);
+          inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+        }
+      });
+      
+      const roots = nodes.filter(n => inDegree.get(n.getAttribute("data-object")) === 0)
+                         .map(n => n.getAttribute("data-object"));
+      if (roots.length === 0 && nodes.length > 0) {
+        roots.push(nodes[0].getAttribute("data-object"));
+      }
+      
+      const levels = [];
+      function traverse(nodeId, depth) {
+        if (levels.length <= depth) levels.push([]);
+        if (!levels[depth].includes(nodeId)) levels[depth].push(nodeId);
+        adj.get(nodeId).forEach(childId => traverse(childId, depth + 1));
+      }
+      roots.forEach(r => traverse(r, 0));
+      
+      const levelHeight = height / (levels.length || 1);
+      levels.forEach((levelNodes, depth) => {
+        const levelY = 160 + depth * (levelHeight * 0.7);
+        const levelWidth = width / (levelNodes.length + 1);
+        levelNodes.forEach((nodeId, idx) => {
+          const el = nodeMap.get(nodeId);
+          if (el && (!el.style.left || !el.style.top)) {
+            const levelX = (idx + 1) * levelWidth;
+            el.style.left = `${levelX}px`;
+            el.style.top = `${levelY}px`;
+          }
+        });
+      });
+    }
+
+    function layoutGraph(nodes, edges, width, height) {
+      const centerX = width / 2;
+      const centerY = height / 2 + 30;
+      const radius = Math.min(width, height) * 0.32;
+      const count = nodes.length;
+      nodes.forEach((n, idx) => {
+        if (!n.style.left || !n.style.top) {
+          const angle = (idx * 2 * Math.PI) / count;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          n.style.left = `${x}px`;
+          n.style.top = `${y}px`;
+        }
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const stages = document.querySelectorAll(".visual-stage");
+      stages.forEach(stage => {
+        const parentComp = stage.closest("[data-composition-id]");
+        const stageWidth = stage.clientWidth || (parentComp ? parseInt(parentComp.getAttribute("data-width") || "1920") - 144 : 1776);
+        const stageHeight = stage.clientHeight || (parentComp ? parseInt(parentComp.getAttribute("data-height") || "1080") - 300 : 780);
+        
+        const objects = Array.from(stage.querySelectorAll(".visual-object"));
+        const svgLayer = stage.querySelector(".edges-layer");
+        
+        const edges = [];
+        if (svgLayer) {
+          const paths = svgLayer.querySelectorAll("path");
+          paths.forEach(path => {
+            edges.push({
+              source: path.getAttribute("data-from"),
+              target: path.getAttribute("data-to")
+            });
+          });
+        }
+        
+        const isTree = stage.classList.contains("tree-stage");
+        const isGraph = stage.classList.contains("graph-stage");
+        const isState = stage.classList.contains("state-diagram-stage");
+        
+        const needsLayout = objects.some(el => !el.style.left || !el.style.top);
+        if (needsLayout) {
+          if (isTree) {
+            layoutTree(objects, edges, stageWidth, stageHeight);
+          } else if (isGraph || isState) {
+            layoutGraph(objects, edges, stageWidth, stageHeight);
+          }
+        }
+        
+        updateSvgEdges(stage);
+      });
+      
+      // Update SVG edges in real-time on every animation tick
+      gsap.ticker.add(() => {
+        document.querySelectorAll(".visual-stage").forEach(stage => {
+          updateSvgEdges(stage);
+        });
+      });
+    });
+
+    const tl = gsap.timeline({paused:true});
+    gsap.registerPlugin(MotionPathPlugin);
+    window.__timelines = window.__timelines || {};
+    tl.fromTo("#scene-title-0", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},0.12);
+    tl.fromTo(["#s0-step_card"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},0.35);
+    HF_Animator.reveal(tl, ["#s0-title_label"], 0.25, 0.55, 0.12);
+    HF_Animator.reveal(tl, ["#s0-hint"], 2.4, 0.55, 0.12);
+    tl.fromTo("#caption-cue-0-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 0);
+    tl.to("#caption-cue-0-0", {autoAlpha:0,y:-10,duration:.12}, 1.463);
+    tl.fromTo("#caption-cue-0-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 1.343);
+    tl.to("#caption-cue-0-1", {autoAlpha:0,y:-10,duration:.12}, 4.285);
+    tl.fromTo("#caption-cue-0-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 4.165);
+    tl.to("#caption-cue-0-2", {autoAlpha:0,y:-10,duration:.12}, 6.146);
+    tl.fromTo("#caption-cue-0-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 6.026);
+    tl.to("#caption-cue-0-3", {autoAlpha:0,y:-10,duration:.12}, 8.122);
+    tl.fromTo("#caption-cue-0-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 8.002);
+    tl.to("#caption-cue-0-4", {autoAlpha:0,y:-10,duration:.12}, 11.04);
+    tl.fromTo("#scene-title-1", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},11.39);
+    tl.fromTo(["#s1-metric_depth", "#s1-status_label", "#s1-step_hint"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},11.62);
+    HF_Animator.reveal(tl, ["#s1-metric_compare"], 11.52, 0.55, 0.12);
+    HF_Animator.insert(tl, ["#s1-n5"], 'top', null, 14.297, 0.55, 0.12);
+    HF_Animator.focus(tl, ["#s1-n5"], 17.704, 0.55);
+    tl.fromTo("#caption-cue-1-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 11.27);
+    tl.to("#caption-cue-1-0", {autoAlpha:0,y:-10,duration:.12}, 12.73);
+    tl.fromTo("#caption-cue-1-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 12.61);
+    tl.to("#caption-cue-1-1", {autoAlpha:0,y:-10,duration:.12}, 15.472);
+    tl.fromTo("#caption-cue-1-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 15.352);
+    tl.to("#caption-cue-1-2", {autoAlpha:0,y:-10,duration:.12}, 15.757);
+    tl.fromTo("#caption-cue-1-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 15.637);
+    tl.to("#caption-cue-1-3", {autoAlpha:0,y:-10,duration:.12}, 17.402);
+    tl.fromTo("#caption-cue-1-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 17.282);
+    tl.to("#caption-cue-1-4", {autoAlpha:0,y:-10,duration:.12}, 19.375);
+    tl.fromTo("#caption-cue-1-5", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 19.255);
+    tl.to("#caption-cue-1-5", {autoAlpha:0,y:-10,duration:.12}, 22.286);
+    tl.fromTo("#scene-title-2", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},22.636);
+    tl.fromTo(["#s2-n5", "#s2-metric_compare", "#s2-metric_depth", "#s2-status_label", "#s2-step_hint"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},22.866);
+    HF_Animator.focus(tl, ["#s2-n5"], 24.011, 0.55);
+    HF_Animator.highlightPath(tl, ['n5'], 2, 25.847, 0.55);
+    HF_Animator.insert(tl, ["#s2-n3"], 'right', "#s2-n5", 29.254, 0.55, 0.12);
+    HF_Animator.transfer(tl, 'n5', 'n3', 2, 27.023, 0.55);
+    tl.fromTo("#caption-cue-2-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 22.516);
+    tl.to("#caption-cue-2-0", {autoAlpha:0,y:-10,duration:.12}, 23.691);
+    tl.fromTo("#caption-cue-2-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 23.571);
+    tl.to("#caption-cue-2-1", {autoAlpha:0,y:-10,duration:.12}, 25.967);
+    tl.fromTo("#caption-cue-2-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 25.847);
+    tl.to("#caption-cue-2-2", {autoAlpha:0,y:-10,duration:.12}, 27.143);
+    tl.fromTo("#caption-cue-2-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 27.023);
+    tl.to("#caption-cue-2-3", {autoAlpha:0,y:-10,duration:.12}, 28.198);
+    tl.fromTo("#caption-cue-2-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 28.078);
+    tl.to("#caption-cue-2-4", {autoAlpha:0,y:-10,duration:.12}, 29.374);
+    tl.fromTo("#caption-cue-2-5", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 29.254);
+    tl.to("#caption-cue-2-5", {autoAlpha:0,y:-10,duration:.12}, 30.99);
+    tl.fromTo("#caption-cue-2-6", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 30.87);
+    tl.to("#caption-cue-2-6", {autoAlpha:0,y:-10,duration:.12}, 33.364);
+    tl.fromTo("#scene-title-3", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},33.714);
+    tl.fromTo(["#s3-n5", "#s3-n3", "#s3-metric_compare", "#s3-metric_depth", "#s3-status_label", "#s3-step_hint", "#s3-path_indicator"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},33.944);
+    HF_Animator.focus(tl, ["#s3-n5"], 34.648, 0.55);
+    HF_Animator.highlightPath(tl, ['n5'], 3, 36.48, 0.55);
+    HF_Animator.insert(tl, ["#s3-n7"], 'left', "#s3-n5", 39.882, 0.55, 0.12);
+    HF_Animator.transfer(tl, 'n5', 'n7', 3, 37.655, 0.55);
+    tl.fromTo("#caption-cue-3-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 33.594);
+    tl.to("#caption-cue-3-0", {autoAlpha:0,y:-10,duration:.12}, 34.768);
+    tl.fromTo("#caption-cue-3-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 34.648);
+    tl.to("#caption-cue-3-1", {autoAlpha:0,y:-10,duration:.12}, 36.6);
+    tl.fromTo("#caption-cue-3-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 36.48);
+    tl.to("#caption-cue-3-2", {autoAlpha:0,y:-10,duration:.12}, 37.775);
+    tl.fromTo("#caption-cue-3-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 37.655);
+    tl.to("#caption-cue-3-3", {autoAlpha:0,y:-10,duration:.12}, 38.828);
+    tl.fromTo("#caption-cue-3-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 38.708);
+    tl.to("#caption-cue-3-4", {autoAlpha:0,y:-10,duration:.12}, 40.002);
+    tl.fromTo("#caption-cue-3-5", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 39.882);
+    tl.to("#caption-cue-3-5", {autoAlpha:0,y:-10,duration:.12}, 41.616);
+    tl.fromTo("#caption-cue-3-6", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 41.496);
+    tl.to("#caption-cue-3-6", {autoAlpha:0,y:-10,duration:.12}, 43.986);
+    tl.fromTo("#scene-title-4", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},44.336);
+    tl.fromTo(["#s4-n5", "#s4-n3", "#s4-n7", "#s4-metric_compare", "#s4-metric_depth", "#s4-status_label", "#s4-step_hint", "#s4-path_indicator"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},44.566);
+    HF_Animator.focus(tl, ["#s4-n5"], 45.29, 0.55);
+    HF_Animator.highlightPath(tl, ['n5', 'n3'], 4, 49.328, 0.55);
+    HF_Animator.transfer(tl, 'n5', 'n3', 4, 48.131, 0.55);
+    HF_Animator.focus(tl, ["#s4-n3"], 50.402, 0.55);
+    HF_Animator.insert(tl, ["#s4-n4"], 'top', "#s4-n3", 56.364, 0.55, 0.12);
+    tl.fromTo("#caption-cue-4-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 44.216);
+    tl.to("#caption-cue-4-0", {autoAlpha:0,y:-10,duration:.12}, 45.41);
+    tl.fromTo("#caption-cue-4-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 45.29);
+    tl.to("#caption-cue-4-1", {autoAlpha:0,y:-10,duration:.12}, 46.383);
+    tl.fromTo("#caption-cue-4-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 46.263);
+    tl.to("#caption-cue-4-2", {autoAlpha:0,y:-10,duration:.12}, 48.251);
+    tl.fromTo("#caption-cue-4-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 48.131);
+    tl.to("#caption-cue-4-3", {autoAlpha:0,y:-10,duration:.12}, 49.448);
+    tl.fromTo("#caption-cue-4-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 49.328);
+    tl.to("#caption-cue-4-4", {autoAlpha:0,y:-10,duration:.12}, 50.522);
+    tl.fromTo("#caption-cue-4-5", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 50.402);
+    tl.to("#caption-cue-4-5", {autoAlpha:0,y:-10,duration:.12}, 51.495);
+    tl.fromTo("#caption-cue-4-6", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 51.375);
+    tl.to("#caption-cue-4-6", {autoAlpha:0,y:-10,duration:.12}, 53.14);
+    tl.fromTo("#caption-cue-4-7", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 53.02);
+    tl.to("#caption-cue-4-7", {autoAlpha:0,y:-10,duration:.12}, 54.337);
+    tl.fromTo("#caption-cue-4-8", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 54.217);
+    tl.to("#caption-cue-4-8", {autoAlpha:0,y:-10,duration:.12}, 55.411);
+    tl.fromTo("#caption-cue-4-9", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 55.291);
+    tl.to("#caption-cue-4-9", {autoAlpha:0,y:-10,duration:.12}, 56.608);
+    tl.fromTo("#caption-cue-4-10", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 56.488);
+    tl.to("#caption-cue-4-10", {autoAlpha:0,y:-10,duration:.12}, 59.024);
+    tl.fromTo("#scene-title-5", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},59.374);
+    tl.fromTo(["#s5-n5", "#s5-n3", "#s5-n7", "#s5-n4", "#s5-metric_compare", "#s5-metric_depth", "#s5-status_label", "#s5-step_hint", "#s5-path_indicator"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},59.604);
+    HF_Animator.focus(tl, ["#s5-n5"], 60.323, 0.55);
+    HF_Animator.highlightPath(tl, ['n5', 'n7'], 5, 64.341, 0.55);
+    HF_Animator.transfer(tl, 'n5', 'n7', 5, 63.15, 0.55);
+    HF_Animator.focus(tl, ["#s5-n7"], 65.41, 0.55);
+    HF_Animator.insert(tl, ["#s5-n6"], 'top', "#s5-n7", 71.342, 0.55, 0.12);
+    tl.fromTo("#caption-cue-5-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 59.254);
+    tl.to("#caption-cue-5-0", {autoAlpha:0,y:-10,duration:.12}, 60.443);
+    tl.fromTo("#caption-cue-5-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 60.323);
+    tl.to("#caption-cue-5-1", {autoAlpha:0,y:-10,duration:.12}, 61.411);
+    tl.fromTo("#caption-cue-5-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 61.291);
+    tl.to("#caption-cue-5-2", {autoAlpha:0,y:-10,duration:.12}, 63.27);
+    tl.fromTo("#caption-cue-5-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 63.15);
+    tl.to("#caption-cue-5-3", {autoAlpha:0,y:-10,duration:.12}, 64.461);
+    tl.fromTo("#caption-cue-5-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 64.341);
+    tl.to("#caption-cue-5-4", {autoAlpha:0,y:-10,duration:.12}, 65.53);
+    tl.fromTo("#caption-cue-5-5", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 65.41);
+    tl.to("#caption-cue-5-5", {autoAlpha:0,y:-10,duration:.12}, 66.498);
+    tl.fromTo("#caption-cue-5-6", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 66.378);
+    tl.to("#caption-cue-5-6", {autoAlpha:0,y:-10,duration:.12}, 68.135);
+    tl.fromTo("#caption-cue-5-7", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 68.015);
+    tl.to("#caption-cue-5-7", {autoAlpha:0,y:-10,duration:.12}, 69.326);
+    tl.fromTo("#caption-cue-5-8", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 69.206);
+    tl.to("#caption-cue-5-8", {autoAlpha:0,y:-10,duration:.12}, 70.394);
+    tl.fromTo("#caption-cue-5-9", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 70.274);
+    tl.to("#caption-cue-5-9", {autoAlpha:0,y:-10,duration:.12}, 71.586);
+    tl.fromTo("#caption-cue-5-10", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 71.466);
+    tl.to("#caption-cue-5-10", {autoAlpha:0,y:-10,duration:.12}, 73.99);
+    tl.fromTo("#scene-title-6", {autoAlpha:0,y:-22},{autoAlpha:1,y:0,duration:.48,ease:"power3.out"},74.34);
+    tl.fromTo(["#s6-n5", "#s6-n3", "#s6-n7", "#s6-n4", "#s6-n6", "#s6-metric_total", "#s6-metric_height", "#s6-inorder_label"], {autoAlpha:0,y:28},{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'},74.57);
+    HF_Animator.traverse(tl, ["#s6-n3", "#s6-n4", "#s6-n5", "#s6-n6", "#s6-n7"], 82.27, 0.55, 0.12);
+    HF_Animator.focus(tl, ["#s6-n5"], 81.197, 0.55);
+    HF_Animator.reveal(tl, ["#s6-summary_card"], 84.46, 0.55, 0.12);
+    tl.fromTo("#caption-cue-6-0", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 74.22);
+    tl.to("#caption-cue-6-0", {autoAlpha:0,y:-10,duration:.12}, 75.215);
+    tl.fromTo("#caption-cue-6-1", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 75.095);
+    tl.to("#caption-cue-6-1", {autoAlpha:0,y:-10,duration:.12}, 77.979);
+    tl.fromTo("#caption-cue-6-2", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 77.859);
+    tl.to("#caption-cue-6-2", {autoAlpha:0,y:-10,duration:.12}, 78.854);
+    tl.fromTo("#caption-cue-6-3", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 78.734);
+    tl.to("#caption-cue-6-3", {autoAlpha:0,y:-10,duration:.12}, 81.618);
+    tl.fromTo("#caption-cue-6-4", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 81.498);
+    tl.to("#caption-cue-6-4", {autoAlpha:0,y:-10,duration:.12}, 82.39);
+    tl.fromTo("#caption-cue-6-5", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 82.27);
+    tl.to("#caption-cue-6-5", {autoAlpha:0,y:-10,duration:.12}, 85.234);
+    tl.fromTo("#caption-cue-6-6", {autoAlpha:0,y:14}, {autoAlpha:1,y:0,duration:.14}, 85.114);
+    tl.to("#caption-cue-6-6", {autoAlpha:0,y:-10,duration:.12}, 88.044);
+    window.__timelines["cartoon-explainer"] = tl;
+  </script>
+</body>
+</html>

@@ -95,16 +95,16 @@ CS/SE 领域学生，需要通过延伸阅读加深理解。
 
 ### 配置说明
 
-- `reading_depth`：
-  - `course_extended`：围绕课程扩展，教材、文章、文档均衡推荐
-  - `engineering`：优先官方文档、工程实践文章、开源项目
-  - `frontier`：优先论文、前沿文章、经典项目
+- `coverage`：
+  - `core`：核心精选，3-5 个最权威、最相关的资源
+  - `extended`：课程延伸，均衡推荐各类型资源
+  - `broad`：广泛覆盖，覆盖入门到前沿全链路
 - `max_items`：推荐资源数量上限，不得超出
 - `language_preference`：资源语言偏好
 - `focus`：内容侧重方向
   - `textbook`：教材拓展，侧重经典教材和入门读物
   - `engineering`：工程实践，侧重实战指南和开源项目
-  - `paper`：论文研读，侧重学术论文和前沿研究
+  - `research`：学术前沿，侧重论文、前沿文章和经典项目
 
 # OUTPUT CONTROL（输出控制）
 
@@ -134,8 +134,10 @@ CS/SE 领域学生，需要通过延伸阅读加深理解。
 
 - 链接不确定 → url 设为空字符串，note 中说明
 - Worker Task assigned_sections → 应在推荐资源的 related_knowledge_points 中体现
-- reading_depth=engineering → 优先官方文档和工程实践
-- reading_depth=frontier → 优先论文和前沿文章
+- coverage=core → 精选最权威最相关的核心资源
+- coverage=broad → 广泛覆盖从入门到前沿的全链路
+- focus=engineering → 优先官方文档和工程实践
+- focus=research → 优先论文和前沿文章
 
 # VALIDATION（质量检查）
 

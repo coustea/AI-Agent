@@ -143,13 +143,10 @@ const impactLines = computed((): string[] => {
   }
   if (id === 'code') {
     const langMap: Record<string, string> = { python: 'Python', java: 'Java', cpp: 'C++', c: 'C', go: 'Go', javascript: 'JavaScript', typescript: 'TypeScript' }
-    const dLines: Record<string, string>  = { beginner: '入门级代码，注释详尽', intermediate: '进阶难度，含设计模式或并发场景', advanced: '挑战级，涵盖复杂算法与性能优化' }
-    const tLines: Record<string, string>  = { basic_demo: '基础演示模板，逐行可读', algorithm_template: '核心算法模板，可直接复用', debug_demo: '有意内置 Bug，引导定位修复' }
-    return [
-      `使用 ${langMap[c.code.programming_language] ?? c.code.programming_language} 生成实战案例`,
-      dLines[c.code.difficulty],
-      tLines[c.code.case_type],
-    ].filter(Boolean) as string[]
+    const sLines: Record<string, string>  = { tutorial: '完整可运行代码，含逐步注释和运行说明', reference: '精简参考实现，聚焦核心逻辑和接口', challenge: '框架代码+提示引导，关键实现留空' }
+    const lines = [`使用 ${langMap[c.code.programming_language] ?? c.code.programming_language} 生成实战案例`, sLines[c.code.output_style]]
+    if (c.code.include_tests) lines.push('代码末尾附带 assert 或单元测试用例')
+    return lines.filter(Boolean) as string[]
   }
   if (id === 'quiz') {
     const dLines: Record<string, string> = {
@@ -166,17 +163,17 @@ const impactLines = computed((): string[] => {
     ].filter(Boolean) as string[]
   }
   if (id === 'reading') {
-    const dLines: Record<string, string> = {
-      course_extended: '推荐与课程内容直接衔接的延伸资料',
-      engineering:     '侧重工业界落地实践与案例研究',
-      frontier:        '精选顶会 / 期刊前沿论文',
+    const cLines: Record<string, string> = {
+      core: '精选最核心、最权威的 3-5 个资源',
+      extended: '均衡推荐各类型延伸资料',
+      broad: '广泛覆盖从入门到前沿的全链路',
     }
     const fLines: Record<string, string> = {
-      textbook:    '来源以经典教材和学术专著为主',
+      textbook: '来源以经典教材和学术专著为主',
       engineering: '来源以技术博客和官方文档为主',
-      paper:       '来源以 arXiv / IEEE 等学术论文为主',
+      research: '来源以 arXiv / IEEE 等学术论文为主',
     }
-    return [dLines[c.reading.reading_depth], `最多推荐 ${c.reading.max_items} 篇`, fLines[c.reading.focus]].filter(Boolean) as string[]
+    return [cLines[c.reading.coverage], `最多推荐 ${c.reading.max_items} 篇`, fLines[c.reading.focus]].filter(Boolean) as string[]
   }
   if (id === 'ppt') {
     const sLines: Record<string, string> = {

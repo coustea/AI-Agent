@@ -15,6 +15,12 @@ class LearningEventItem(BaseModel):
     course: str | None = None
     topic: str | None = None
     feedback: str | None = None
+    score: int | None = None
+    path_id: int | None = None
+    path_node_id: int | None = None
+    node_id: str | None = None
+    resource_id: int | None = None
+    resource_item_id: int | None = None
     created_at: datetime
 
 

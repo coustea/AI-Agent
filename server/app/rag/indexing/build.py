@@ -31,15 +31,11 @@ from app.config import (
     KB_COLLECTION,
     KB_DIR,
     KB_EMBED_MODEL,
-    KB_OLLAMA_BASE_URL,
     KB_SOURCE_DIR,
     KB_SOURCE_GLOB,
-    KB_TOP_K,
-    KB_FETCH_K,
-    KB_EMBED_TIMEOUT_SECONDS,
-    KB_MAX_CONTEXT_CHARS,
 )
 from app.infra.logging import get_logger
+from app.rag.embeddings import embed_documents
 
 logger = get_logger(__name__)
 
@@ -85,11 +81,9 @@ def _split_markdown(text: str) -> list[str]:
 
     for line in text.split("\n"):
         stripped = line.strip()
-        # 标题行切分
         if stripped.startswith("#") and " " in stripped and len(stripped) > 2:
             if current.strip():
                 raw_chunks.append(current.strip())
-            # 将标题文本追加到下一块中，增强语义匹配
             current = stripped + "\n"
         else:
             current += line + "\n"
@@ -111,7 +105,6 @@ def _split_markdown(text: str) -> list[str]:
         candidate = (buffer + "\n\n" + chunk).strip() if buffer else chunk.strip()
 
         if len(chunk) > _CHUNK_MAX_SIZE:
-            # 超长块先 flush buffer，然后按句子拆分
             if buffer:
                 merged.append(buffer.strip())
                 buffer = ""
@@ -142,7 +135,6 @@ def _split_markdown(text: str) -> list[str]:
     if buf.strip():
         final.append(buf)
 
-    # 过滤空块
     return [c for c in final if c.strip()]
 
 
@@ -199,7 +191,6 @@ def _load_documents(source_dir: Path, source_glob: str) -> list[dict[str, Any]]:
         if path.is_file():
             text = path.read_text(encoding="utf-8", errors="replace")
             if text.strip():
-                # 源文件路径：相对路径
                 try:
                     rel_path = path.relative_to(source_dir).as_posix()
                 except ValueError:
@@ -259,31 +250,6 @@ def _extract_section(text: str) -> str:
     return ""
 
 
-# ============ Embedding ============
-
-
-def _embed_batch(texts: list[str]) -> list[list[float]] | None:
-    """批量调用 Ollama embedding API。"""
-    import httpx
-
-    try:
-        response = httpx.post(
-            f"{KB_OLLAMA_BASE_URL}/api/embed",
-            json={"model": KB_EMBED_MODEL, "input": texts},
-            timeout=float(KB_EMBED_TIMEOUT_SECONDS),
-            trust_env=False,
-        )
-        response.raise_for_status()
-        data = response.json()
-        raw = data.get("embeddings")
-        if isinstance(raw, list) and raw and isinstance(raw[0], list):
-            return [[float(v) for v in vec] for vec in raw]
-        return None
-    except Exception as exc:
-        logger.warning("[build] embedding batch failed: %s", exc)
-        return None
-
-
 # ============ Manifest ============
 
 
@@ -327,7 +293,6 @@ def _build_temp_index(
     col = client.create_collection(name=collection)
 
     doc_count = len(docs)
-    total_chunks = 0
     all_ids: list[str] = []
     all_texts: list[str] = []
     all_metas: list[dict[str, Any]] = []
@@ -338,7 +303,7 @@ def _build_temp_index(
         title = _infer_title(source)
         chunks = _split_markdown(text)
         chunks = _apply_overlap(chunks)
-        chunks = [c for c in chunks if c.strip()]  # 清理空块
+        chunks = [c for c in chunks if c.strip()]
 
         for chunk_idx, chunk in enumerate(chunks):
             section = _extract_section(chunk)
@@ -358,7 +323,6 @@ def _build_temp_index(
             all_texts.append(chunk)
             all_metas.append(meta)
 
-    # 批量 embedding + 写入
     total_chunks = len(all_ids)
     if total_chunks == 0:
         raise ValueError("No chunks produced from source documents")
@@ -369,7 +333,7 @@ def _build_temp_index(
         batch_ids = all_ids[start:end]
         batch_metas = all_metas[start:end]
 
-        embeddings = _embed_batch(batch_texts)
+        embeddings = embed_documents(batch_texts)
         if embeddings is None:
             raise RuntimeError(
                 f"Embedding failed at batch starting index {start}. "
@@ -401,14 +365,12 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
         final_dir.rename(backup_dir)
     temp_dir.rename(final_dir)
 
-    # 验证正式索引可重新打开
     try:
         client = chromadb.PersistentClient(path=str(final_dir))
         col = client.get_collection(name=KB_COLLECTION)
         logger.info("[build] index swapped and verified: %d chunks", col.count())
     except Exception as exc:
         logger.error("[build] verification of swapped index failed: %s", exc)
-        # 恢复 backup
         if final_dir.exists():
             shutil.rmtree(final_dir)
         backup_dir.rename(final_dir)
@@ -429,7 +391,6 @@ def build_index(
     out_dir = output_dir or Path(KB_DIR)
     col_name = collection or KB_COLLECTION
 
-    # 1. 检查源目录
     logger.info("[build] loading from %s (glob=%s)", src_dir, src_glob)
     docs = _load_documents(src_dir, src_glob)
     if not docs:
@@ -437,27 +398,22 @@ def build_index(
 
     logger.info("[build] found %d documents", len(docs))
 
-    # 2. 构建到临时目录
     temp_dir = out_dir.parent / f"{out_dir.name}.building-{uuid.uuid4().hex[:8]}"
     try:
         logger.info("[build] building to temp dir: %s", temp_dir)
         doc_count, chunk_count = _build_temp_index(docs, temp_dir, col_name, batch_size)
         logger.info("[build] indexed %d docs into %d chunks", doc_count, chunk_count)
 
-        # 3. 写 Manifest
         _write_manifest(temp_dir, col_name, chunk_count, doc_count)
         logger.info("[build] manifest written")
 
-        # 4. 重新打开验证
         _verify_temp_index(temp_dir, col_name, chunk_count)
         logger.info("[build] temp index verified")
 
-        # 5. 原子替换
         _swap_index(temp_dir, out_dir)
         logger.info("[build] index build complete")
 
     except Exception:
-        # 任一步失败，清理临时目录
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
         logger.error("[build] build failed, temp dir cleaned up")

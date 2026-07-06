@@ -1,0 +1,115 @@
+{
+  "duration": 8.064,
+  "captions": [
+    {
+      "text": "Welcome",
+      "start_ms": 0,
+      "end_ms": 480
+    },
+    {
+      "text": "to",
+      "start_ms": 480,
+      "end_ms": 617
+    },
+    {
+      "text": "the",
+      "start_ms": 617,
+      "end_ms": 822
+    },
+    {
+      "text": "course",
+      "start_ms": 822,
+      "end_ms": 1233
+    },
+    {
+      "text": ".",
+      "start_ms": 1233,
+      "end_ms": 1360
+    },
+    {
+      "text": "Today",
+      "start_ms": 1360,
+      "end_ms": 1702
+    },
+    {
+      "text": "we",
+      "start_ms": 1702,
+      "end_ms": 1839
+    },
+    {
+      "text": "will",
+      "start_ms": 1839,
+      "end_ms": 2114
+    },
+    {
+      "text": "explore",
+      "start_ms": 2114,
+      "end_ms": 2593
+    },
+    {
+      "text": "the",
+      "start_ms": 2593,
+      "end_ms": 2799
+    },
+    {
+      "text": "fundamental",
+      "start_ms": 2799,
+      "end_ms": 3552
+    },
+    {
+      "text": "concepts",
+      "start_ms": 3552,
+      "end_ms": 4101
+    },
+    {
+      "text": "of",
+      "start_ms": 4101,
+      "end_ms": 4238
+    },
+    {
+      "text": "data",
+      "start_ms": 4238,
+      "end_ms": 4512
+    },
+    {
+      "text": "structures",
+      "start_ms": 4512,
+      "end_ms": 5197
+    },
+    {
+      "text": "and",
+      "start_ms": 5197,
+      "end_ms": 5402
+    },
+    {
+      "text": "how",
+      "start_ms": 5402,
+      "end_ms": 5608
+    },
+    {
+      "text": "they",
+      "start_ms": 5608,
+      "end_ms": 5882
+    },
+    {
+      "text": "organize",
+      "start_ms": 5882,
+      "end_ms": 6430
+    },
+    {
+      "text": "information",
+      "start_ms": 6430,
+      "end_ms": 7184
+    },
+    {
+      "text": "efficiently",
+      "start_ms": 7184,
+      "end_ms": 7938
+    },
+    {
+      "text": ".",
+      "start_ms": 7938,
+      "end_ms": 8064
+    }
+  ]
+}

@@ -39,7 +39,7 @@ class TestCheckIndexHealth:
         manifest = {
             "schema_version": "99",
             "collection": "langchain",
-            "embedding_model": "bge-m3:latest",
+            "embedding_model": "bge-m3",
             "chunk_count": 100,
         }
         (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -55,7 +55,7 @@ class TestCheckIndexHealth:
         manifest = {
             "schema_version": "1",
             "collection": "wrong_collection",
-            "embedding_model": "bge-m3:latest",
+            "embedding_model": "bge-m3",
             "chunk_count": 100,
         }
         (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -87,7 +87,7 @@ class TestCheckIndexHealth:
         manifest = {
             "schema_version": "1",
             "collection": "langchain",
-            "embedding_model": "bge-m3:latest",
+            "embedding_model": "bge-m3",
             "chunk_count": 0,
         }
         (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

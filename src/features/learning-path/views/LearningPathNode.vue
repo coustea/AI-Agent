@@ -234,6 +234,7 @@ import {
   generateCode,
   generatePpt,
   generateReading,
+  generateCartoon,
   generateNodeQuestions,
   generateTutorial,
   getLearningNodeWorkspace,
@@ -256,7 +257,7 @@ type TocItem = {
   level: number
 }
 
-type ResourceKind = 'mindmap' | 'code' | 'ppt' | 'reading'
+type ResourceKind = 'mindmap' | 'code' | 'ppt' | 'reading' | 'cartoon'
 
 type ResourcePushItem = {
   type: ResourceKind
@@ -366,6 +367,13 @@ const resourcePushItems = computed<ResourcePushItem[]>(() => [
     desc: '围绕当前节点推送补充材料和延伸阅读。',
     icon: 'M12 6.5A5.5 5.5 0 0 0 6.5 1H3v18h4.5A4.5 4.5 0 0 1 12 23a4.5 4.5 0 0 1 4.5-4H21V1h-3.5A5.5 5.5 0 0 0 12 6.5ZM5 3h1.5A3.5 3.5 0 0 1 10 6.5v11.2A6.5 6.5 0 0 0 7.5 17H5V3Zm14 14h-2.5a6.5 6.5 0 0 0-2.5.7V6.5A3.5 3.5 0 0 1 17.5 3H19v14Z',
     resource: latestResourceByType('reading'),
+  },
+  {
+    type: 'cartoon',
+    title: '动画讲解',
+    desc: '生成带有旁白配音的动画讲解视频。',
+    icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z',
+    resource: latestResourceByType('cartoon'),
   },
 ])
 
@@ -584,6 +592,7 @@ const resourceApiMap: Record<ResourceKind, (nodeId: number) => Promise<any>> = {
   code: generateCode,
   ppt: generatePpt,
   reading: generateReading,
+  cartoon: generateCartoon,
 }
 
 async function createResource(type: ResourceKind) {
@@ -1326,6 +1335,10 @@ onBeforeUnmount(() => {
 
 .resource-icon.reading {
   background: linear-gradient(135deg, #059669, #10b981);
+}
+
+.resource-icon.cartoon {
+  background: linear-gradient(135deg, #db2777, #f43f5e);
 }
 
 .resource-copy {

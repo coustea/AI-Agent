@@ -29,14 +29,15 @@ if TYPE_CHECKING:
 logger = get_module_logger("resource", sub="execution")
 
 # Agent 超时配置（秒）
+# 基础 Agent 需要搜索+LLM 生成，300s LLM 超时加上搜索耗时容易触发 agent 级超时。
 AGENT_TIMEOUTS: dict[str, float] = {
-    "content": 300.0,
-    "mindmap": 300.0,
-    "quiz": 300.0,
-    "code": 300.0,
-    "reading": 300.0,
-    "ppt": 600.0,
-    "video": 900.0,
+    "content": 600.0,
+    "mindmap": 600.0,
+    "quiz": 600.0,
+    "code": 600.0,
+    "reading": 600.0,
+    "ppt": 900.0,
+    "video": 1200.0,
     "cartoon": 1800.0,
 }
 

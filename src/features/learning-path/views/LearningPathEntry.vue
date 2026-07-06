@@ -1,5 +1,6 @@
 <template>
   <main class="blueprint-canvas">
+    <!-- Top Nav -->
     <div class="top-nav">
       <div class="brand">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -11,93 +12,160 @@
       </button>
     </div>
 
-    <div class="canvas-center">
-      <div class="topology-wrapper">
-        <svg class="topology-lines" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <linearGradient id="line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#4f46e5" />
-              <stop offset="50%" stop-color="#0ea5e9" />
-              <stop offset="100%" stop-color="#3b82f6" />
-            </linearGradient>
-          </defs>
-          <path d="M 250,300 C 350,300 400,300 500,300" class="ghost-line main-line" />
-          <path d="M 150,150 C 250,150 350,300 500,300" class="ghost-line" />
-          <path d="M 150,450 C 250,450 350,300 500,300" class="ghost-line" />
-        </svg>
+    <!-- Main Workspace Grid -->
+    <div class="workspace-grid">
+      <!-- Left Column: Guidance & Suggestions -->
+      <section class="guidance-panel">
+        <div class="header-group">
+          <span class="section-badge">Path Planner</span>
+          <h1>反向推演最优知识路径</h1>
+          <p>输入你的目标与基础，AI 会根据你的背景动态定制多阶段学习路径，并生成对应的学习课件与阶段测验。</p>
+        </div>
 
-        <div class="ghost-nodes">
-          <div class="ghost-node" style="top: 150px; left: 150px; transform: translate(-100%, -50%);">
-            <span class="pulse-dot"></span>
-            <div class="ghost-text">基础原理依赖<br><small>AI 自动推导中...</small></div>
+        <div class="recommendations">
+          <h3>热门学习话题</h3>
+          <div class="suggestion-list">
+            <button 
+              class="suggestion-card" 
+              type="button" 
+              @click="applySuggestion('Vue3 源码解析', '深入理解 Vue3 响应式原理与编译器源码')"
+            >
+              <strong>深入理解 Vue3 源码</strong>
+              <span>深入剖析底层响应式与编译优化机制</span>
+            </button>
+            <button 
+              class="suggestion-card" 
+              type="button" 
+              @click="applySuggestion('K8s 自动化运维', '掌握 Kubernetes 集群的自动化运维与高可用部署')"
+            >
+              <strong>Kubernetes 自动化运维</strong>
+              <span>面向生产环境的容器编排与监控体系</span>
+            </button>
+            <button 
+              class="suggestion-card" 
+              type="button" 
+              @click="applySuggestion('Rust 游戏引擎', '从零构建一个基于 Rust 语言的 WebAssembly 游戏引擎')"
+            >
+              <strong>Rust + WebAssembly 游戏引擎</strong>
+              <span>结合 Rust 安全特性与 Wasm 高性能开发</span>
+            </button>
           </div>
-          <div class="ghost-node" style="top: 300px; left: 250px; transform: translate(-100%, -50%);">
-            <span class="pulse-dot"></span>
-            <div class="ghost-text">核心组件分支<br><small>计算图谱权重...</small></div>
+        </div>
+      </section>
+
+      <!-- Center Flat Vertical Line -->
+      <div class="center-divider"></div>
+
+      <!-- Right Column: Structured Config Form -->
+      <section class="config-panel">
+        <div class="config-section">
+          <h2>[ 01 // 学习意图 ]</h2>
+          
+          <div class="form-item">
+            <label>学习主题 (Topic)</label>
+            <input 
+              v-model="topic" 
+              type="text" 
+              placeholder="例如：FastAPI / Kubernetes / Vue3"
+              maxlength="40"
+            />
           </div>
-          <div class="ghost-node" style="top: 450px; left: 150px; transform: translate(-100%, -50%);">
-            <span class="pulse-dot"></span>
-            <div class="ghost-text">先决环境准备<br><small>匹配个体熟练度...</small></div>
+
+          <div class="form-item">
+            <label>终极学习目标 (Goal)</label>
+            <textarea 
+              ref="textareaRef"
+              v-model="goal" 
+              placeholder="例如：系统掌握 FastAPI 高并发架构设计与部署，能独立维护生产级系统"
+              rows="3"
+              maxlength="150"
+              @input="autoResize"
+            ></textarea>
           </div>
         </div>
 
-        <div class="destination-node" :class="{ 'is-focused': isFocused, 'has-input': goal.trim().length > 0 }">
-          <div class="node-label">
-            <span class="badge">终极目标</span>
-            <h3>你想达到什么高度？</h3>
-          </div>
+        <div class="config-section">
+          <h2>[ 02 // 学习策略 ]</h2>
 
-          <div class="input-wrapper">
-            <textarea
-              ref="textareaRef"
-              v-model="goal"
-              class="destination-input"
-              placeholder="例如：系统掌握 FastAPI 高并发架构与部署..."
-              :maxlength="maxLength"
-              @focus="isFocused = true"
-              @blur="isFocused = false"
-              @input="autoResize"
-              @keydown.enter.exact.prevent="handleSubmit"
-              rows="2"
-            />
-            <div class="input-footer" v-show="isFocused || goal.trim().length > 0">
-              <span class="hint-text">↵ 提交 / Shift + ↵ 换行</span>
-              <span class="char-count" :class="{ 'is-near-limit': goal.length > maxLength * 0.9 }">
-                {{ goal.length }} / {{ maxLength }}
-              </span>
-            </div>
-          </div>
-
-          <transition name="fade-slide">
-            <div class="suggestions" v-if="isFocused && goal.trim().length === 0">
-              <span class="suggestion-tag" @click.stop="applySuggestion('从零构建一个基于 Rust 的 WebAssembly 游戏引擎')">Rust + Wasm 引擎</span>
-              <span class="suggestion-tag" @click.stop="applySuggestion('掌握 Kubernetes 集群的自动化运维与监控')">K8s 自动化运维</span>
-              <span class="suggestion-tag" @click.stop="applySuggestion('深入理解 Vue3 响应式原理与编译器源码')">Vue3 源码解析</span>
-            </div>
-          </transition>
-
-          <transition name="fade">
-            <div class="node-footer" v-if="goal.trim().length > 0">
-              <button 
-                class="reverse-btn" 
-                :class="{ 'is-loading': isSubmitting }"
-                :disabled="isSubmitting"
-                @click="handleSubmit"
+          <div class="form-item">
+            <label>当前已掌握的基础 (Prerequisites)</label>
+            <div class="tag-input-container">
+              <span 
+                v-for="tag in prerequisites" 
+                :key="tag" 
+                class="prereq-tag"
               >
-                <span class="btn-text" v-if="!isSubmitting">生成学习路径图谱</span>
-                <span class="btn-text" v-else>
-                  <svg class="spinner" viewBox="0 0 50 50"><circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle></svg>
-                  构建中...
-                </span>
+                {{ tag }}
+                <button type="button" @click="removePrerequisite(tag)">×</button>
+              </span>
+              <input 
+                v-model="newPrerequisite"
+                type="text" 
+                placeholder="+ 输入基础回车添加"
+                @keydown.enter.prevent="addPrerequisite"
+              />
+            </div>
+          </div>
+
+          <div class="form-item">
+            <label>学习难度倾向 (Preferences)</label>
+            <div class="difficulty-slider">
+              <button 
+                type="button"
+                :class="{ active: difficulty === 'beginner' }" 
+                @click="difficulty = 'beginner'"
+              >
+                零基础入门
+              </button>
+              <button 
+                type="button"
+                :class="{ active: difficulty === 'intermediate' }" 
+                @click="difficulty = 'intermediate'"
+              >
+                中级进阶
+              </button>
+              <button 
+                type="button"
+                :class="{ active: difficulty === 'advanced' }" 
+                @click="difficulty = 'advanced'"
+              >
+                极客专家
               </button>
             </div>
-          </transition>
-        </div>
-      </div>
-    </div>
+          </div>
 
-    <div class="canvas-hints" v-if="!isFocused && !goal">
-      <p>输入你的终极学习目标，AI 将反向逆推所需的知识节点，为你构建一条可执行的最优学习图谱。</p>
+          <div class="form-item inline-switch">
+            <div class="switch-info">
+              <strong>融合个人动态画像</strong>
+              <span>智能融入您现有的 8 维用户画像数据</span>
+            </div>
+            <button 
+              type="button"
+              class="switch-btn" 
+              :class="{ active: useProfile }" 
+              @click="useProfile = !useProfile"
+            >
+              {{ useProfile ? '已开启' : '已关闭' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="action-item">
+          <button 
+            class="submit-btn" 
+            :disabled="isSubmitting"
+            @click="handleSubmit"
+          >
+            <span v-if="!isSubmitting">开始生成学习路径图谱</span>
+            <span v-else class="loading-spin">
+              <svg class="spinner" viewBox="0 0 50 50">
+                <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle>
+              </svg>
+              构建中...
+            </span>
+          </button>
+        </div>
+      </section>
     </div>
   </main>
 </template>
@@ -108,78 +176,99 @@ import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 const router = useRouter()
+
+// 属性数据绑定
+const topic = ref('')
 const goal = ref('')
-const isFocused = ref(false)
+const prerequisites = ref<string[]>([])
+const newPrerequisite = ref('')
+const difficulty = ref<'beginner' | 'intermediate' | 'advanced'>('intermediate')
+const useProfile = ref(true)
+
 const isSubmitting = ref(false)
-const maxLength = 100 // 目标长度限制
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 
-// 文本框自动调整高度
+// 文本框自动自适应高度
 const autoResize = () => {
   if (!textareaRef.value) return
   textareaRef.value.style.height = 'auto'
-  // 设置最大高度限制，防止超出卡片
   const scrollHeight = textareaRef.value.scrollHeight
-  textareaRef.value.style.height = `${Math.min(scrollHeight, 120)}px`
+  textareaRef.value.style.height = `${Math.min(scrollHeight, 150)}px`
 }
 
-// 应用快捷建议
-const applySuggestion = (text: string) => {
-  goal.value = text
+// 应用模板建议
+const applySuggestion = (selectedTopic: string, selectedGoal: string) => {
+  topic.value = selectedTopic
+  goal.value = selectedGoal
   nextTick(() => {
     textareaRef.value?.focus()
     autoResize()
   })
 }
 
+// 添加入参 Prerequisite 标签
+const addPrerequisite = () => {
+  const val = newPrerequisite.value.trim()
+  if (!val) return
+  if (prerequisites.value.includes(val)) {
+    newPrerequisite.value = ''
+    return
+  }
+  prerequisites.value.push(val)
+  newPrerequisite.value = ''
+}
+
+// 移除 Prerequisite 标签
+const removePrerequisite = (tag: string) => {
+  prerequisites.value = prerequisites.value.filter(item => item !== tag)
+}
+
 const handleSubmit = async () => {
-  const value = goal.value.trim()
-  if (!value) {
+  const finalTopic = topic.value.trim()
+  const finalGoal = goal.value.trim()
+
+  if (!finalTopic) {
+    toast.warning('请先输入学习主题')
+    return
+  }
+  if (!finalGoal) {
     toast.warning('请先输入终极学习目标')
-    textareaRef.value?.focus()
     return
   }
 
   isSubmitting.value = true
 
-  // 模拟极短的计算延迟，增强 AI "思考" 的仪式感
+  // 稍微延迟，提升系统运行仪式感
   await new Promise(resolve => setTimeout(resolve, 600))
 
   router.push({
     path: `/path-planner/overview/new`,
-    query: { goal: value }
+    query: {
+      topic: finalTopic,
+      goal: finalGoal,
+      current_knowledge: JSON.stringify(prerequisites.value),
+      difficulty: difficulty.value,
+      use_profile: useProfile.value ? 'true' : 'false'
+    }
   })
-  
-  // 如果需要保持本页状态，这里可以不置为 false；因为直接路由跳转了
-  // isSubmitting.value = false 
 }
 </script>
 
 <style scoped>
-/* 原有的全局和画布样式保持不变 */
+/* 纯白 glacier grid 基础背景 */
 .blueprint-canvas {
   position: relative;
   min-height: calc(100vh - 64px);
-  background-color: var(--color-bg);
+  background-color: #ffffff;
   background-image:
-    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.08) 0%, transparent 50%),
-    linear-gradient(rgba(79, 70, 229, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(79, 70, 229, 0.03) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 30px 30px, 30px 30px;
-  overflow: hidden;
+    radial-gradient(circle at 15% 50%, rgba(70, 184, 180, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(70, 184, 180, 0.03) 0%, transparent 50%),
+    linear-gradient(rgba(70, 184, 180, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(70, 184, 180, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-}
-
-.blueprint-canvas::after {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(circle at center, transparent 30%, var(--color-bg) 100%);
-  pointer-events: none;
-  z-index: 0;
 }
 
 .top-nav {
@@ -188,7 +277,10 @@ const handleSubmit = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px 40px;
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--color-border-light);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
 }
 
 .brand {
@@ -197,12 +289,12 @@ const handleSubmit = async () => {
   gap: 12px;
   color: var(--color-text);
   font-weight: 800;
-  font-size: 1.1rem;
-  letter-spacing: 0.05em;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
 }
 
 .brand svg {
-  color: #4f46e5;
+  color: var(--color-primary);
 }
 
 .history-btn {
@@ -211,281 +303,337 @@ const handleSubmit = async () => {
   gap: 8px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  padding: 8px 16px;
-  border-radius: 999px;
-  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  padding: 8px 18px;
+  border-radius: 0px; /* 严格直角 */
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .history-btn:hover {
-  background: #e0e7ff;
-  color: #4f46e5;
-  border-color: #a5b4fc;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
 }
 
-.canvas-center {
-  position: relative;
-  z-index: 1;
+/* 分栏大布局 */
+.workspace-grid {
   flex: 1;
+  display: grid;
+  grid-template-cols: 1fr 1px 1.1fr;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 40px;
+  gap: 40px;
+  align-items: start;
+}
+
+.center-divider {
+  background-color: var(--color-border-light);
+  width: 1px;
+  align-self: stretch;
+}
+
+/* 左侧引导栏 */
+.guidance-panel {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 32px;
+  padding-top: 10px;
 }
 
-.topology-wrapper {
-  position: relative;
-  width: 800px;
-  height: 600px;
-}
-
-.topology-lines, .ghost-nodes {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none;
-}
-
-.ghost-line {
-  fill: none;
-  stroke: url(#line-gradient);
-  stroke-width: 2;
-  stroke-dasharray: 6 6;
-  opacity: 0.4;
-  animation: flowLine 2s linear infinite;
-}
-
-@keyframes flowLine {
-  to { stroke-dashoffset: -16; }
-}
-
-.ghost-node {
-  position: absolute;
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  gap: 12px;
-  opacity: 0.6;
-}
-
-.pulse-dot {
-  width: 12px; height: 12px;
-  background: var(--color-surface);
-  border: 2px solid #4f46e5;
-  border-radius: 50%;
-  position: relative;
-}
-
-.pulse-dot::after {
-  content: '';
-  position: absolute;
-  top: -6px; left: -6px; right: -6px; bottom: -6px;
-  border-radius: 50%;
-  border: 2px solid #4f46e5;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(0.5); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
-}
-
-.ghost-text {
-  background: var(--color-surface);
-  border: 1px dashed var(--color-border);
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-align: right;
-}
-
-.ghost-text small {
-  display: block;
-  font-size: 0.75rem;
-  background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-top: 4px;
-  font-weight: normal;
-}
-
-.destination-node {
-  position: absolute;
-  top: 50%; left: 500px;
-  transform: translate(0, -50%);
-  width: 420px; /* 稍微加宽一点适应更多内容 */
-  background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  z-index: 10;
-}
-
-.destination-node::before {
-  content: '';
-  position: absolute;
-  top: 50%; left: -6px;
-  transform: translateY(-50%);
-  width: 12px; height: 12px;
-  background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%);
-  border-radius: 50%;
-  box-shadow: 0 0 10px rgba(79, 70, 229, 0.4);
-}
-
-.destination-node.is-focused,
-.destination-node.has-input {
-  border-color: #4f46e5;
-  box-shadow: 0 15px 50px rgba(79, 70, 229, 0.15);
-}
-
-.node-label { margin-bottom: 16px; }
-
-.badge {
+.header-group .section-badge {
   display: inline-block;
-  background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%);
-  color: white;
-  font-size: 0.7rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  font-size: 0.75rem;
   font-weight: 800;
   padding: 4px 10px;
-  border-radius: 999px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.node-label h3 {
-  margin: 0;
-  font-size: 1.2rem;
-  color: var(--color-text);
+.header-group h1 {
+  font-size: 2.2rem;
   font-weight: 800;
+  color: var(--color-text-strong);
+  line-height: 1.25;
+  margin: 0 0 16px 0;
+  letter-spacing: -0.02em;
 }
 
-/* === 新增/优化的输入框样式 === */
-.input-wrapper {
-  position: relative;
-  background: var(--color-bg);
-  border: 2px solid var(--color-border);
-  border-radius: 12px;
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.destination-node.is-focused .input-wrapper {
-  border-color: #4f46e5;
-  background: var(--color-surface);
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
-}
-
-.destination-input {
-  width: 100%;
-  box-sizing: border-box;
-  background: transparent;
-  border: none;
-  padding: 16px;
-  resize: none;
-  font-size: 1.05rem;
-  color: var(--color-text);
+.header-group p {
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
   line-height: 1.6;
+  margin: 0;
+}
+
+.recommendations h3 {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin: 0 0 16px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suggestion-card {
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  padding: 16px;
+  border-radius: 0px; /* 直角 */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.suggestion-card:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.suggestion-card strong {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.suggestion-card span {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* 右侧配置栏 */
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 10px;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.config-section h2 {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-primary-text);
+  margin: 0;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-item label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.form-item input[type="text"],
+.form-item textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 0px; /* 严格直角 */
+  padding: 12px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  background: #ffffff;
   outline: none;
   font-family: var(--font-sans);
-  min-height: 70px;
+  transition: all 0.2s ease;
 }
 
-.destination-input::placeholder {
-  color: var(--color-text-muted);
-  opacity: 0.6;
+.form-item input[type="text"]:focus,
+.form-item textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
 
-.input-footer {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 16px;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  background: rgba(0,0,0,0.02);
-  border-top: 1px solid var(--color-border);
-}
-
-.char-count.is-near-limit {
-  color: #ef4444;
-  font-weight: bold;
-}
-
-/* 快捷标签 */
-.suggestions {
+/* 标签选择器 */
+.tag-input-container {
+  border: 1px solid var(--color-border);
+  background: #ffffff;
+  padding: 8px;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.suggestion-tag {
-  font-size: 0.8rem;
-  padding: 4px 10px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.suggestion-tag:hover {
-  background: #e0e7ff;
-  color: #4f46e5;
-  border-color: #a5b4fc;
-}
-
-/* 按钮样式优化 */
-.node-footer {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px dashed var(--color-border);
-}
-
-.reverse-btn {
-  position: relative;
-  width: 100%;
-  background: linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%);
-  color: white;
-  border: none;
-  padding: 14px 20px;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  overflow: hidden;
-  transition: all 0.2s;
-  display: flex;
-  justify-content: center;
+  gap: 6px;
   align-items: center;
 }
 
-.reverse-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+.tag-input-container:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
 
-.reverse-btn:disabled {
+.prereq-tag {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-border);
+  color: var(--color-primary-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 0px; /* 直角 */
+  font-family: var(--font-mono);
+}
+
+.prereq-tag button {
+  border: none;
+  background: transparent;
+  color: var(--color-primary-text);
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 0;
+  line-height: 1;
+}
+
+.tag-input-container input {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+  padding: 4px;
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 120px;
+}
+
+/* 难度切换胶囊滑块 */
+.difficulty-slider {
+  display: grid;
+  grid-template-cols: 1fr 1fr 1fr;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  padding: 3px;
+}
+
+.difficulty-slider button {
+  border: none;
+  background: transparent;
+  padding: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 0px; /* 直角 */
+}
+
+.difficulty-slider button.active {
+  background: #ffffff;
+  color: var(--color-primary-text);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(70, 184, 180, 0.08);
+}
+
+/* 开关选择器 */
+.inline-switch {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  padding: 14px;
+  background: var(--color-surface);
+}
+
+.switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.switch-info strong {
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.switch-info span {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.switch-btn {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 0px; /* 直角 */
+  transition: all 0.2s ease;
+}
+
+.switch-btn.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+}
+
+/* 按钮与进度 */
+.action-item {
+  margin-top: 10px;
+}
+
+.submit-btn {
+  width: 100%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+  color: white;
+  border: none;
+  padding: 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 0px; /* 直角 */
+  box-shadow: 0 4px 12px rgba(70, 184, 180, 0.15);
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(70, 184, 180, 0.25);
+}
+
+.submit-btn:disabled {
   opacity: 0.8;
   cursor: not-allowed;
 }
 
-.btn-text {
-  position: relative;
-  z-index: 2;
+.loading-spin {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
-/* Loading 动画 */
 .spinner {
   animation: rotate 2s linear infinite;
   width: 18px;
@@ -505,41 +653,13 @@ const handleSubmit = async () => {
   100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
 }
 
-.canvas-hints {
-  position: absolute;
-  bottom: 40px;
-  left: 0;
-  width: 100%;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 0.95rem;
-  font-weight: 500;
-  z-index: 1;
-}
-
-/* 动画效果 */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-.fade-slide-enter-active, .fade-slide-leave-active {
-  transition: all 0.3s ease;
-}
-.fade-slide-enter-from, .fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-5px);
-}
-
-@media (max-width: 900px) {
-  .topology-wrapper { transform: scale(0.8); }
-}
-@media (max-width: 600px) {
-  .topology-wrapper { transform: scale(0.6); }
-  .ghost-nodes, .topology-lines { display: none; }
-  .destination-node { left: 50%; transform: translate(-50%, -50%); width: 90%; }
+@media (max-width: 1024px) {
+  .workspace-grid {
+    grid-template-cols: 1fr;
+    gap: 30px;
+  }
+  .center-divider {
+    display: none;
+  }
 }
 </style>

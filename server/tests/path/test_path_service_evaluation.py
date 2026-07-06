@@ -17,13 +17,14 @@ from app.infra.models import (
 from app.evaluation.request import LearningEventCreate
 from app.path.service import PathService
 from app.path.schemas import (
-    AgentLearningPathPlan,
-    AgentPathNode,
+    LearningPlan,
+    PlanNode,
     AgentStage,
     PathQuizAnswerItem,
     PathQuizSubmitRequest,
-    CreateLearningPathRequest,
     PathPlanValidationError,
+    PathRequest,
+    validate_path_plan,
 )
 
 
@@ -204,8 +205,6 @@ async def test_locked_node_question_generation_is_rejected():
 
 @pytest.mark.asyncio
 async def test_locked_node_resource_generation_is_rejected():
-    from app.path.schemas import AuxiliaryResourceRequest
-
     node = PathNode(
         id=10,
         path_id=1,
@@ -223,7 +222,7 @@ async def test_locked_node_resource_generation_is_rejected():
     service._must_get_path = AsyncMock()
 
     with pytest.raises(ValueError, match="未解锁"):
-        await service.generate_node_resource(1, node.id, AuxiliaryResourceRequest(resource_type="mindmap"))
+        await service.generate_node_resource(1, node.id, "mindmap")
 
     service._must_get_path.assert_not_awaited()
 
@@ -329,8 +328,6 @@ async def test_question_generation_uses_learn_workflow():
 
 @pytest.mark.asyncio
 async def test_auxiliary_resource_generation_uses_learn_workflow():
-    from app.path.schemas import AuxiliaryResourceRequest
-
     path = LearningPath(
         id=1,
         user_id=1,
@@ -390,7 +387,7 @@ async def test_auxiliary_resource_generation_uses_learn_workflow():
     result = await service.generate_node_resource(
         path.user_id,
         node.id,
-        AuxiliaryResourceRequest(resource_type="mindmap"),
+        "mindmap",
     )
 
     assert result.resource_type == "mindmap"
@@ -549,11 +546,11 @@ async def test_complete_path_generation_persists_stages_and_nodes():
         status="generating",
         stages_json=[],
     )
-    plan = AgentLearningPathPlan(
+    plan = LearningPlan(
         title="SQL Path",
         stages=[AgentStage(stage_id="stage-1", title="基础")],
         nodes=[
-            AgentPathNode(
+            PlanNode(
                 node_id="sql-join",
                 stage_id="stage-1",
                 title="SQL Join",
@@ -564,7 +561,7 @@ async def test_complete_path_generation_persists_stages_and_nodes():
     session = _CaptureSession(get_result=path)
     service = PathService(session)
 
-    await service._persist_path_plan(path.id, path.user_id, plan)
+    await service._save_plan(path.id, path.user_id, plan)
 
     saved_node = next(item for item in session.added if isinstance(item, PathNode))
     assert saved_node.node_id == "sql-join"
@@ -753,3 +750,29 @@ async def test_second_failed_quiz_delegates_to_learn_workflow():
     assert result.next_node_id == 11
     assert result.current_tutorial_id == reinforced.id
     service.learn_graph.ainvoke.assert_awaited_once()
+
+
+def test_repair_generated_plan_recovers_empty_final_output_from_macro_stages() -> None:
+    from app.path.workflows import repair_plan
+
+    plan = LearningPlan.model_construct(
+        title="Python 学习路径",
+        stages=[],
+        nodes=[],
+    )
+    stages = [
+        AgentStage(stage_id="stage-1", title="基础入门"),
+        AgentStage(stage_id="stage-2", title="实践应用"),
+    ]
+
+    repaired = repair_plan(
+        plan=plan,
+        macro_stages=stages,
+        request=PathRequest(goal="系统学习 Python 编程", topic="Python"),
+    )
+    validate_path_plan(repaired)
+
+    assert [stage.stage_id for stage in repaired.stages] == ["stage-1", "stage-2"]
+    assert [node.stage_id for node in repaired.nodes] == ["stage-1", "stage-2"]
+    assert repaired.nodes[0].prerequisites == []
+    assert repaired.nodes[1].prerequisites == [repaired.nodes[0].node_id]

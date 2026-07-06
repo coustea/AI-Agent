@@ -129,12 +129,16 @@ class PPTTemplateCatalog:
         )
         resolved: list[ResolvedPPTSlide] = []
         recent_skeletons: list[str] = []
+        used_skeletons: set[str] = set()  # 新增：全局已使用骨架
+
         for index, slide in enumerate(plan.slides):
             layout = self._select_layout(
                 template,
                 slide,
                 index=index,
                 recent_skeletons=recent_skeletons,
+                used_skeletons=used_skeletons,
+                total_slides=len(plan.slides),
             )
             normalized = slide.model_copy(
                 update={
@@ -144,6 +148,8 @@ class PPTTemplateCatalog:
             )
             resolved.append(ResolvedPPTSlide(spec=normalized, layout=layout))
             recent_skeletons = [*recent_skeletons[-1:], layout.skeleton]
+            used_skeletons.add(layout.skeleton)
+
         return ResolvedPPT(plan=plan, template=template, slides=tuple(resolved))
 
     def _select_template(self, plan: PPTPlan) -> PPTTemplate:
@@ -179,8 +185,20 @@ class PPTTemplateCatalog:
         *,
         index: int,
         recent_skeletons: list[str],
+        used_skeletons: set[str],
+        total_slides: int,
     ) -> PPTLayout:
         layouts = template.manifest.layouts
+
+        # 强制章节分隔：每4页插入 section-marker
+        if index > 0 and index % 4 == 0 and slide.role != "section":
+            section_layout = next(
+                (l for l in layouts if l.id == "section-marker"),
+                None
+            )
+            if section_layout and slide.role in section_layout.roles:
+                return section_layout
+
         if slide.preferred_layout:
             preferred = next(
                 (
@@ -213,11 +231,28 @@ class PPTTemplateCatalog:
             )
 
         def score(layout: PPTLayout) -> tuple[int, str]:
-            value = 20 if slide.role in layout.roles else 0
-            value += 8 if slide.animation == layout.animation else 0
-            value -= recent_skeletons.count(layout.skeleton) * 30
+            value = 0
+
+            # 角色匹配加分
+            if slide.role in layout.roles:
+                value += 20
+
+            # 动画匹配加分
+            if slide.animation == layout.animation:
+                value += 8
+
+            # 重复惩罚：最近3页用过的骨架大幅扣分
+            if layout.skeleton in recent_skeletons:
+                value -= 100  # 大幅提高惩罚
+
+            # 全局未使用加分：鼓励使用新布局
+            if layout.skeleton not in used_skeletons:
+                value += 30
+
+            # 章节节奏：每4页强制降低非章节页评分
             if index and index % 4 == 0 and layout.skeleton in recent_skeletons:
-                value -= 20
+                value -= 50
+
             return value, layout.id
 
         return max(candidates, key=score)

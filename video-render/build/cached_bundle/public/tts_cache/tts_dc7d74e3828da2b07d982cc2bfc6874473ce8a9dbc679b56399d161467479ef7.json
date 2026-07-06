@@ -1,0 +1,960 @@
+{
+  "duration": 38.808,
+  "captions": [
+    {
+      "text": "想",
+      "start_ms": 0,
+      "end_ms": 203
+    },
+    {
+      "text": "象",
+      "start_ms": 203,
+      "end_ms": 406
+    },
+    {
+      "text": "一",
+      "start_ms": 406,
+      "end_ms": 608
+    },
+    {
+      "text": "下",
+      "start_ms": 608,
+      "end_ms": 811
+    },
+    {
+      "text": "，",
+      "start_ms": 811,
+      "end_ms": 953
+    },
+    {
+      "text": "一",
+      "start_ms": 953,
+      "end_ms": 1156
+    },
+    {
+      "text": "家",
+      "start_ms": 1156,
+      "end_ms": 1359
+    },
+    {
+      "text": "热",
+      "start_ms": 1359,
+      "end_ms": 1562
+    },
+    {
+      "text": "门",
+      "start_ms": 1562,
+      "end_ms": 1764
+    },
+    {
+      "text": "餐",
+      "start_ms": 1764,
+      "end_ms": 1967
+    },
+    {
+      "text": "厅",
+      "start_ms": 1967,
+      "end_ms": 2170
+    },
+    {
+      "text": "只",
+      "start_ms": 2170,
+      "end_ms": 2373
+    },
+    {
+      "text": "有",
+      "start_ms": 2373,
+      "end_ms": 2576
+    },
+    {
+      "text": "一",
+      "start_ms": 2576,
+      "end_ms": 2779
+    },
+    {
+      "text": "位",
+      "start_ms": 2779,
+      "end_ms": 2981
+    },
+    {
+      "text": "厨",
+      "start_ms": 2981,
+      "end_ms": 3184
+    },
+    {
+      "text": "师",
+      "start_ms": 3184,
+      "end_ms": 3387
+    },
+    {
+      "text": "，",
+      "start_ms": 3387,
+      "end_ms": 3529
+    },
+    {
+      "text": "但",
+      "start_ms": 3529,
+      "end_ms": 3732
+    },
+    {
+      "text": "门",
+      "start_ms": 3732,
+      "end_ms": 3935
+    },
+    {
+      "text": "口",
+      "start_ms": 3935,
+      "end_ms": 4137
+    },
+    {
+      "text": "有",
+      "start_ms": 4137,
+      "end_ms": 4340
+    },
+    {
+      "text": "十",
+      "start_ms": 4340,
+      "end_ms": 4543
+    },
+    {
+      "text": "几",
+      "start_ms": 4543,
+      "end_ms": 4746
+    },
+    {
+      "text": "位",
+      "start_ms": 4746,
+      "end_ms": 4949
+    },
+    {
+      "text": "顾",
+      "start_ms": 4949,
+      "end_ms": 5151
+    },
+    {
+      "text": "客",
+      "start_ms": 5151,
+      "end_ms": 5354
+    },
+    {
+      "text": "在",
+      "start_ms": 5354,
+      "end_ms": 5557
+    },
+    {
+      "text": "等",
+      "start_ms": 5557,
+      "end_ms": 5760
+    },
+    {
+      "text": "餐",
+      "start_ms": 5760,
+      "end_ms": 5963
+    },
+    {
+      "text": "。",
+      "start_ms": 5963,
+      "end_ms": 6206
+    },
+    {
+      "text": "有",
+      "start_ms": 6206,
+      "end_ms": 6409
+    },
+    {
+      "text": "的",
+      "start_ms": 6409,
+      "end_ms": 6612
+    },
+    {
+      "text": "顾",
+      "start_ms": 6612,
+      "end_ms": 6814
+    },
+    {
+      "text": "客",
+      "start_ms": 6814,
+      "end_ms": 7017
+    },
+    {
+      "text": "只",
+      "start_ms": 7017,
+      "end_ms": 7220
+    },
+    {
+      "text": "要",
+      "start_ms": 7220,
+      "end_ms": 7423
+    },
+    {
+      "text": "一",
+      "start_ms": 7423,
+      "end_ms": 7626
+    },
+    {
+      "text": "份",
+      "start_ms": 7626,
+      "end_ms": 7829
+    },
+    {
+      "text": "炒",
+      "start_ms": 7829,
+      "end_ms": 8031
+    },
+    {
+      "text": "饭",
+      "start_ms": 8031,
+      "end_ms": 8234
+    },
+    {
+      "text": "，",
+      "start_ms": 8234,
+      "end_ms": 8376
+    },
+    {
+      "text": "几",
+      "start_ms": 8376,
+      "end_ms": 8579
+    },
+    {
+      "text": "分",
+      "start_ms": 8579,
+      "end_ms": 8782
+    },
+    {
+      "text": "钟",
+      "start_ms": 8782,
+      "end_ms": 8985
+    },
+    {
+      "text": "就",
+      "start_ms": 8985,
+      "end_ms": 9187
+    },
+    {
+      "text": "能",
+      "start_ms": 9187,
+      "end_ms": 9390
+    },
+    {
+      "text": "做",
+      "start_ms": 9390,
+      "end_ms": 9593
+    },
+    {
+      "text": "好",
+      "start_ms": 9593,
+      "end_ms": 9796
+    },
+    {
+      "text": "，",
+      "start_ms": 9796,
+      "end_ms": 9938
+    },
+    {
+      "text": "有",
+      "start_ms": 9938,
+      "end_ms": 10141
+    },
+    {
+      "text": "的",
+      "start_ms": 10141,
+      "end_ms": 10343
+    },
+    {
+      "text": "顾",
+      "start_ms": 10343,
+      "end_ms": 10546
+    },
+    {
+      "text": "客",
+      "start_ms": 10546,
+      "end_ms": 10749
+    },
+    {
+      "text": "要",
+      "start_ms": 10749,
+      "end_ms": 10952
+    },
+    {
+      "text": "一",
+      "start_ms": 10952,
+      "end_ms": 11155
+    },
+    {
+      "text": "桌",
+      "start_ms": 11155,
+      "end_ms": 11357
+    },
+    {
+      "text": "满",
+      "start_ms": 11357,
+      "end_ms": 11560
+    },
+    {
+      "text": "汉",
+      "start_ms": 11560,
+      "end_ms": 11763
+    },
+    {
+      "text": "全",
+      "start_ms": 11763,
+      "end_ms": 11966
+    },
+    {
+      "text": "席",
+      "start_ms": 11966,
+      "end_ms": 12169
+    },
+    {
+      "text": "，",
+      "start_ms": 12169,
+      "end_ms": 12311
+    },
+    {
+      "text": "需",
+      "start_ms": 12311,
+      "end_ms": 12513
+    },
+    {
+      "text": "要",
+      "start_ms": 12513,
+      "end_ms": 12716
+    },
+    {
+      "text": "很",
+      "start_ms": 12716,
+      "end_ms": 12919
+    },
+    {
+      "text": "长",
+      "start_ms": 12919,
+      "end_ms": 13122
+    },
+    {
+      "text": "时",
+      "start_ms": 13122,
+      "end_ms": 13325
+    },
+    {
+      "text": "间",
+      "start_ms": 13325,
+      "end_ms": 13528
+    },
+    {
+      "text": "。",
+      "start_ms": 13528,
+      "end_ms": 13771
+    },
+    {
+      "text": "厨",
+      "start_ms": 13771,
+      "end_ms": 13974
+    },
+    {
+      "text": "师",
+      "start_ms": 13974,
+      "end_ms": 14177
+    },
+    {
+      "text": "该",
+      "start_ms": 14177,
+      "end_ms": 14379
+    },
+    {
+      "text": "如",
+      "start_ms": 14379,
+      "end_ms": 14582
+    },
+    {
+      "text": "何",
+      "start_ms": 14582,
+      "end_ms": 14785
+    },
+    {
+      "text": "安",
+      "start_ms": 14785,
+      "end_ms": 14988
+    },
+    {
+      "text": "排",
+      "start_ms": 14988,
+      "end_ms": 15191
+    },
+    {
+      "text": "做",
+      "start_ms": 15191,
+      "end_ms": 15393
+    },
+    {
+      "text": "菜",
+      "start_ms": 15393,
+      "end_ms": 15596
+    },
+    {
+      "text": "顺",
+      "start_ms": 15596,
+      "end_ms": 15799
+    },
+    {
+      "text": "序",
+      "start_ms": 15799,
+      "end_ms": 16002
+    },
+    {
+      "text": "？",
+      "start_ms": 16002,
+      "end_ms": 16245
+    },
+    {
+      "text": "是",
+      "start_ms": 16245,
+      "end_ms": 16448
+    },
+    {
+      "text": "先",
+      "start_ms": 16448,
+      "end_ms": 16651
+    },
+    {
+      "text": "来",
+      "start_ms": 16651,
+      "end_ms": 16854
+    },
+    {
+      "text": "先",
+      "start_ms": 16854,
+      "end_ms": 17056
+    },
+    {
+      "text": "做",
+      "start_ms": 17056,
+      "end_ms": 17259
+    },
+    {
+      "text": "？",
+      "start_ms": 17259,
+      "end_ms": 17503
+    },
+    {
+      "text": "还",
+      "start_ms": 17503,
+      "end_ms": 17705
+    },
+    {
+      "text": "是",
+      "start_ms": 17705,
+      "end_ms": 17908
+    },
+    {
+      "text": "先",
+      "start_ms": 17908,
+      "end_ms": 18111
+    },
+    {
+      "text": "做",
+      "start_ms": 18111,
+      "end_ms": 18314
+    },
+    {
+      "text": "简",
+      "start_ms": 18314,
+      "end_ms": 18517
+    },
+    {
+      "text": "单",
+      "start_ms": 18517,
+      "end_ms": 18720
+    },
+    {
+      "text": "的",
+      "start_ms": 18720,
+      "end_ms": 18922
+    },
+    {
+      "text": "？",
+      "start_ms": 18922,
+      "end_ms": 19166
+    },
+    {
+      "text": "还",
+      "start_ms": 19166,
+      "end_ms": 19369
+    },
+    {
+      "text": "是",
+      "start_ms": 19369,
+      "end_ms": 19571
+    },
+    {
+      "text": "让",
+      "start_ms": 19571,
+      "end_ms": 19774
+    },
+    {
+      "text": "每",
+      "start_ms": 19774,
+      "end_ms": 19977
+    },
+    {
+      "text": "位",
+      "start_ms": 19977,
+      "end_ms": 20180
+    },
+    {
+      "text": "顾",
+      "start_ms": 20180,
+      "end_ms": 20383
+    },
+    {
+      "text": "客",
+      "start_ms": 20383,
+      "end_ms": 20585
+    },
+    {
+      "text": "轮",
+      "start_ms": 20585,
+      "end_ms": 20788
+    },
+    {
+      "text": "流",
+      "start_ms": 20788,
+      "end_ms": 20991
+    },
+    {
+      "text": "吃",
+      "start_ms": 20991,
+      "end_ms": 21194
+    },
+    {
+      "text": "一",
+      "start_ms": 21194,
+      "end_ms": 21397
+    },
+    {
+      "text": "口",
+      "start_ms": 21397,
+      "end_ms": 21599
+    },
+    {
+      "text": "？",
+      "start_ms": 21599,
+      "end_ms": 21843
+    },
+    {
+      "text": "这",
+      "start_ms": 21843,
+      "end_ms": 22046
+    },
+    {
+      "text": "就",
+      "start_ms": 22046,
+      "end_ms": 22248
+    },
+    {
+      "text": "是",
+      "start_ms": 22248,
+      "end_ms": 22451
+    },
+    {
+      "text": "处",
+      "start_ms": 22451,
+      "end_ms": 22654
+    },
+    {
+      "text": "理",
+      "start_ms": 22654,
+      "end_ms": 22857
+    },
+    {
+      "text": "机",
+      "start_ms": 22857,
+      "end_ms": 23060
+    },
+    {
+      "text": "调",
+      "start_ms": 23060,
+      "end_ms": 23262
+    },
+    {
+      "text": "度",
+      "start_ms": 23262,
+      "end_ms": 23465
+    },
+    {
+      "text": "要",
+      "start_ms": 23465,
+      "end_ms": 23668
+    },
+    {
+      "text": "解",
+      "start_ms": 23668,
+      "end_ms": 23871
+    },
+    {
+      "text": "决",
+      "start_ms": 23871,
+      "end_ms": 24074
+    },
+    {
+      "text": "的",
+      "start_ms": 24074,
+      "end_ms": 24277
+    },
+    {
+      "text": "核",
+      "start_ms": 24277,
+      "end_ms": 24479
+    },
+    {
+      "text": "心",
+      "start_ms": 24479,
+      "end_ms": 24682
+    },
+    {
+      "text": "问",
+      "start_ms": 24682,
+      "end_ms": 24885
+    },
+    {
+      "text": "题",
+      "start_ms": 24885,
+      "end_ms": 25088
+    },
+    {
+      "text": "。",
+      "start_ms": 25088,
+      "end_ms": 25331
+    },
+    {
+      "text": "在",
+      "start_ms": 25331,
+      "end_ms": 25534
+    },
+    {
+      "text": "操",
+      "start_ms": 25534,
+      "end_ms": 25737
+    },
+    {
+      "text": "作",
+      "start_ms": 25737,
+      "end_ms": 25940
+    },
+    {
+      "text": "系",
+      "start_ms": 25940,
+      "end_ms": 26142
+    },
+    {
+      "text": "统",
+      "start_ms": 26142,
+      "end_ms": 26345
+    },
+    {
+      "text": "中",
+      "start_ms": 26345,
+      "end_ms": 26548
+    },
+    {
+      "text": "，",
+      "start_ms": 26548,
+      "end_ms": 26690
+    },
+    {
+      "text": "处",
+      "start_ms": 26690,
+      "end_ms": 26893
+    },
+    {
+      "text": "理",
+      "start_ms": 26893,
+      "end_ms": 27096
+    },
+    {
+      "text": "机",
+      "start_ms": 27096,
+      "end_ms": 27298
+    },
+    {
+      "text": "是",
+      "start_ms": 27298,
+      "end_ms": 27501
+    },
+    {
+      "text": "计",
+      "start_ms": 27501,
+      "end_ms": 27704
+    },
+    {
+      "text": "算",
+      "start_ms": 27704,
+      "end_ms": 27907
+    },
+    {
+      "text": "机",
+      "start_ms": 27907,
+      "end_ms": 28110
+    },
+    {
+      "text": "最",
+      "start_ms": 28110,
+      "end_ms": 28312
+    },
+    {
+      "text": "宝",
+      "start_ms": 28312,
+      "end_ms": 28515
+    },
+    {
+      "text": "贵",
+      "start_ms": 28515,
+      "end_ms": 28718
+    },
+    {
+      "text": "的",
+      "start_ms": 28718,
+      "end_ms": 28921
+    },
+    {
+      "text": "资",
+      "start_ms": 28921,
+      "end_ms": 29124
+    },
+    {
+      "text": "源",
+      "start_ms": 29124,
+      "end_ms": 29327
+    },
+    {
+      "text": "，",
+      "start_ms": 29327,
+      "end_ms": 29469
+    },
+    {
+      "text": "而",
+      "start_ms": 29469,
+      "end_ms": 29671
+    },
+    {
+      "text": "进",
+      "start_ms": 29671,
+      "end_ms": 29874
+    },
+    {
+      "text": "程",
+      "start_ms": 29874,
+      "end_ms": 30077
+    },
+    {
+      "text": "就",
+      "start_ms": 30077,
+      "end_ms": 30280
+    },
+    {
+      "text": "像",
+      "start_ms": 30280,
+      "end_ms": 30483
+    },
+    {
+      "text": "那",
+      "start_ms": 30483,
+      "end_ms": 30685
+    },
+    {
+      "text": "些",
+      "start_ms": 30685,
+      "end_ms": 30888
+    },
+    {
+      "text": "等",
+      "start_ms": 30888,
+      "end_ms": 31091
+    },
+    {
+      "text": "待",
+      "start_ms": 31091,
+      "end_ms": 31294
+    },
+    {
+      "text": "用",
+      "start_ms": 31294,
+      "end_ms": 31497
+    },
+    {
+      "text": "餐",
+      "start_ms": 31497,
+      "end_ms": 31699
+    },
+    {
+      "text": "的",
+      "start_ms": 31699,
+      "end_ms": 31902
+    },
+    {
+      "text": "顾",
+      "start_ms": 31902,
+      "end_ms": 32105
+    },
+    {
+      "text": "客",
+      "start_ms": 32105,
+      "end_ms": 32308
+    },
+    {
+      "text": "。",
+      "start_ms": 32308,
+      "end_ms": 32551
+    },
+    {
+      "text": "调",
+      "start_ms": 32551,
+      "end_ms": 32754
+    },
+    {
+      "text": "度",
+      "start_ms": 32754,
+      "end_ms": 32957
+    },
+    {
+      "text": "器",
+      "start_ms": 32957,
+      "end_ms": 33160
+    },
+    {
+      "text": "的",
+      "start_ms": 33160,
+      "end_ms": 33363
+    },
+    {
+      "text": "任",
+      "start_ms": 33363,
+      "end_ms": 33565
+    },
+    {
+      "text": "务",
+      "start_ms": 33565,
+      "end_ms": 33768
+    },
+    {
+      "text": "，",
+      "start_ms": 33768,
+      "end_ms": 33910
+    },
+    {
+      "text": "就",
+      "start_ms": 33910,
+      "end_ms": 34113
+    },
+    {
+      "text": "是",
+      "start_ms": 34113,
+      "end_ms": 34316
+    },
+    {
+      "text": "让",
+      "start_ms": 34316,
+      "end_ms": 34519
+    },
+    {
+      "text": "有",
+      "start_ms": 34519,
+      "end_ms": 34721
+    },
+    {
+      "text": "限",
+      "start_ms": 34721,
+      "end_ms": 34924
+    },
+    {
+      "text": "的",
+      "start_ms": 34924,
+      "end_ms": 35127
+    },
+    {
+      "text": "CPU",
+      "start_ms": 35127,
+      "end_ms": 35522
+    },
+    {
+      "text": "资",
+      "start_ms": 35522,
+      "end_ms": 35725
+    },
+    {
+      "text": "源",
+      "start_ms": 35725,
+      "end_ms": 35928
+    },
+    {
+      "text": "公",
+      "start_ms": 35928,
+      "end_ms": 36131
+    },
+    {
+      "text": "平",
+      "start_ms": 36131,
+      "end_ms": 36334
+    },
+    {
+      "text": "且",
+      "start_ms": 36334,
+      "end_ms": 36537
+    },
+    {
+      "text": "高",
+      "start_ms": 36537,
+      "end_ms": 36739
+    },
+    {
+      "text": "效",
+      "start_ms": 36739,
+      "end_ms": 36942
+    },
+    {
+      "text": "地",
+      "start_ms": 36942,
+      "end_ms": 37145
+    },
+    {
+      "text": "服",
+      "start_ms": 37145,
+      "end_ms": 37348
+    },
+    {
+      "text": "务",
+      "start_ms": 37348,
+      "end_ms": 37551
+    },
+    {
+      "text": "于",
+      "start_ms": 37551,
+      "end_ms": 37753
+    },
+    {
+      "text": "多",
+      "start_ms": 37753,
+      "end_ms": 37956
+    },
+    {
+      "text": "个",
+      "start_ms": 37956,
+      "end_ms": 38159
+    },
+    {
+      "text": "进",
+      "start_ms": 38159,
+      "end_ms": 38362
+    },
+    {
+      "text": "程",
+      "start_ms": 38362,
+      "end_ms": 38565
+    },
+    {
+      "text": "。",
+      "start_ms": 38565,
+      "end_ms": 38808
+    }
+  ]
+}

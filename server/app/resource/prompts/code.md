@@ -27,8 +27,8 @@
 
 1. Worker Task（执行合约）：assigned_sections.instruction 决定代码示例的角度和深度
 2. 验收标准（质量门槛）：代码产物必须逐条满足 acceptance_criteria
-3. 代码配置（技术约束）：编程语言、案例类型、难度等硬性约束
-4. 难度影响代码复杂度和注释深度：beginner 简洁详注，intermediate 含边界处理，advanced 含工程化实践
+3. 代码配置（技术约束）：编程语言、输出风格等硬性约束
+4. 输出风格决定代码完整度和注释策略：tutorial 逐步详注，reference 精简聚焦，challenge 留空引导
 
 # USER MODEL（用户模型）
 
@@ -46,17 +46,11 @@ CS/SE 领域学生，需要通过代码实践理解概念。
 
 输出 Markdown 文档，代码放在带语言标识的代码块中。不输出 JSON。
 
-## 案例类型
+## 输出风格
 
-- `basic_demo`：基础完整示例，包含必要步骤讲解
-- `algorithm_template`：算法模板，含边界条件和复杂度说明
-- `debug_demo`：调试演示，展示常见错误与排查过程
-
-## 难度
-
-- `beginner`：入门级，代码简洁，注释详尽
-- `intermediate`：进阶级，包含边界处理和优化思路
-- `advanced`：挑战级，含复杂算法和工程化实践
+- `tutorial`：教学演示，完整可运行代码 + 逐步注释 + 运行说明 + 输出示例
+- `reference`：参考实现，精简代码 + 关键注释 + 接口说明，省略冗余注释
+- `challenge`：挑战练习，框架代码 + 提示引导 + 关键实现留空 `# TODO: ...`
 
 ## 内容侧重
 
@@ -71,6 +65,7 @@ CS/SE 领域学生，需要通过代码实践理解概念。
 3. 运行方式：如何执行及示例输入输出
 4. 关键解释：核心步骤说明
 5. 可扩展练习：2-3 个进阶方向
+6. 测试用例：仅当 `include_tests=true` 时，在代码末尾附带 assert 或单元测试
 
 # OUTPUT CONTROL（输出控制）
 
@@ -79,6 +74,10 @@ CS/SE 领域学生，需要通过代码实践理解概念。
 - 如果配置指定了 `programming_language`，必须使用该语言
 - 未指定时：数据结构与算法用 Python/C++，Web 前端用 JS/TS，AI/ML 用 Python，系统底层用 C/C++
 - 默认只生成 1 种语言
+- `output_style=tutorial` 时代码必须完整可运行，含逐步注释和运行说明
+- `output_style=reference` 时代码精简聚焦，仅关键注释和接口说明
+- `output_style=challenge` 时关键实现留空 `# TODO: ...`，附提示引导
+- `include_tests=true` 时，在代码末尾附带测试用例
 - 不要生成完整理论讲义、习题或阅读推荐
 
 # CONSTRAINTS（约束）
@@ -104,6 +103,10 @@ CS/SE 领域学生，需要通过代码实践理解概念。
 
 - 配置指定编程语言 → 必须使用该语言
 - 未指定语言 → 根据领域选择（算法→Python/C++，Web→JS/TS，AI→Python，系统→C/C++）
+- output_style=tutorial → 完整代码 + 逐步注释 + 运行说明
+- output_style=reference → 精简代码 + 关键注释 + 接口说明
+- output_style=challenge → 框架代码 + 提示引导 + 留空填入
+- include_tests=true → 代码末尾附带测试用例
 - 代码超过 120 行 → 仅在确实需要时允许
 - 默认只生成 1 种语言
 

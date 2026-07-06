@@ -10,7 +10,7 @@
       <span>上一步</span>
     </button>
 
-    <button class="control-btn" :disabled="disabled || currentStepIndex >= steps.length - 1" @click="$emit('next')">
+    <button class="control-btn" :disabled="disabled || currentStepIndex >= events.length - 1" @click="$emit('next')">
       <StepForward class="btn-icon" />
       <span>下一步</span>
     </button>
@@ -38,7 +38,7 @@
         class="timeline-input"
         type="range"
         min="0"
-        :max="Math.max(0, steps.length - 1)"
+        :max="Math.max(0, events.length - 1)"
         :value="currentStepIndex"
         :disabled="disabled"
         @input="handleSeek"
@@ -50,10 +50,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Pause, Play, RotateCcw, StepBack, StepForward } from 'lucide-vue-next'
-import type { VisualStep } from '@/features/algorithm-visualization/types'
+import type { TraceEvent } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
-  steps: VisualStep[]
+  events: TraceEvent[]
   playing: boolean
   currentStepIndex: number
   speed: number
@@ -70,7 +70,7 @@ const emit = defineEmits<{
   seek: [value: number]
 }>()
 
-const disabled = computed(() => props.steps.length === 0)
+const disabled = computed(() => props.events.length === 0)
 
 const primaryLabel = computed(() => {
   if (props.playing) {
@@ -87,11 +87,11 @@ const primaryLabel = computed(() => {
 const primaryIcon = computed(() => (props.playing ? Pause : Play))
 
 const countLabel = computed(() => {
-  if (!props.steps.length) {
+  if (!props.events.length) {
     return '还没有可播放的步骤'
   }
 
-  return `${props.currentStepIndex + 1} / ${props.steps.length}`
+  return `${props.currentStepIndex + 1} / ${props.events.length}`
 })
 
 function handlePrimaryAction() {

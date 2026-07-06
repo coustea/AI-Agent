@@ -64,14 +64,10 @@ class ReadingAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
-        config = {
-            **input_data.agent_config,
-            "_teaching_plan": input_data.teaching_plan,
-        }
         result = await self._generate_reading(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
-            config=config,
+            config=input_data.agent_config,
         )
         await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
@@ -104,7 +100,7 @@ class ReadingAgent(BaseResourceAgent):
         3. 基于搜索结果生成阅读推荐
         4. 资源不足时自动重试一次，合并两次结果
         """
-        reading_depth = config.get("reading_depth") or "course_extended"
+        coverage = config.get("coverage") or "extended"
         max_items = config.get("max_items", 5)
         min_items = max(2, max_items // 2)  # 至少生成 max_items 的一半
         language_preference = config.get("language_preference") or "chinese"
@@ -234,12 +230,12 @@ class ReadingAgent(BaseResourceAgent):
             metrics={
                 "resource_count": len(best_resources),
                 "search_results_used": len(search_results),
-                "reading_depth": reading_depth,
+                "coverage": coverage,
                 "language_preference": language_preference,
             },
             metadata={
                 "agent_id": "reading",
-                "reading_depth": reading_depth,
+                "coverage": coverage,
                 "min_items": min_items,
                 "max_items": max_items,
                 "language_preference": language_preference,
@@ -361,6 +357,7 @@ class ReadingAgent(BaseResourceAgent):
         # 添加明确要求
         max_items = config.get("max_items", 5)
         min_items = max(2, max_items // 2)
+        coverage = config.get("coverage", "extended")
         parts.append(f"\n**重要要求**：")
         parts.append(f"1. 必须生成至少 {min_items} 条阅读资源")
         parts.append(f"2. 每条资源的 URL 必须来自上面的搜索结果（真实 URL）")
@@ -371,6 +368,10 @@ class ReadingAgent(BaseResourceAgent):
             f"6. 【严禁】resources 为空数组 []。"
             f"你必须生成至少 {min_items} 条阅读资源，缺少任何一条都是错误。"
         )
+        if coverage == "core":
+            parts.append("7. 推荐策略：精选最核心、最权威的 3-5 个资源，不追求数量")
+        elif coverage == "broad":
+            parts.append("7. 推荐策略：广泛覆盖从入门到前沿的全链路，涵盖不同难度和类型")
         if is_retry:
             parts.append(
                 "7. 【错误反馈】你上一次返回了 resources: []（空数组），这是严重错误。"

@@ -37,7 +37,7 @@ async def create_path(
     events = PathEvents(user_id=current_user.id, path_id=path_id, run_id=run_id)
     await events.open()
     background_tasks.add_task(  # 后台异步执行路径生成（LLM 规划 + 节点创建）
-        _run_generation_bg,
+        run_generation_bg,
         user_id=current_user.id,
         path_id=path_id,
         request=request,
@@ -243,15 +243,16 @@ async def generate_content(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-@router.post("/nodes/{node_id}/quiz-resource")  # POST 生成辅助习题资源
-async def generate_quiz_resource(
+
+@router.post("/nodes/{node_id}/cartoon")  # POST 生成动画讲解资源
+async def generate_cartoon(
     node_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
     try:
-        result = await service.generate_node_resource(current_user.id, node_id, "quiz")
+        result = await service.generate_node_resource(current_user.id, node_id, "cartoon")
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json"))
@@ -330,15 +331,16 @@ async def get_content(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
-@router.get("/nodes/{node_id}/quiz-resource")  # GET 获取节点辅助习题
-async def get_quiz_resource(
+
+@router.get("/nodes/{node_id}/cartoon")  # GET 获取节点动画讲解资源
+async def get_cartoon(
     node_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
     try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, "quiz")
+        result = await service.get_node_resource_by_type(current_user.id, node_id, "cartoon")
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
@@ -457,12 +459,3 @@ async def get_path_learning_evaluation(
     return HttpResponse.success(data=evaluation.model_dump(mode="json") if evaluation else None)
 
 
-# ── 后台任务包装器 ──────────────────────────────────────────────────────────
-
-async def _run_generation_bg(
-    user_id: int,
-    path_id: int,
-    request: PathRequest,
-    run_id: str,
-):
-    await run_generation_bg(user_id, path_id, request, run_id)

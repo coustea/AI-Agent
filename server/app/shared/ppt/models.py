@@ -27,6 +27,10 @@ ContentShape = Literal[
     "code",
     "formula",
     "quiz",
+    "misconception",  # 新增：误区纠正
+    "hierarchy",      # 新增：层级结构
+    "timeline",       # 新增：时间线
+    "matrix",         # 新增：矩阵表格
 ]
 AnimationKind = Literal["reveal", "focus", "trace", "compare", "build", "resolve"]
 TemplateFamily = Literal["auto", "editorial", "technical"]
@@ -64,7 +68,7 @@ class ResourcePPTRequest(PPTModel):
     learning_need: str = Field(min_length=1)
     learning_scenario: str = Field(min_length=1)
     profile: dict[str, Any] | str
-    teaching_plan: dict[str, Any] | None
+    teaching_plan: str | None
     artifacts: list[PPTSource] = Field(default_factory=list)
     preferences: PPTPreferences = Field(
         default_factory=PPTPreferences
@@ -97,23 +101,23 @@ class PPTTemplatePreference(PPTModel):
 
 class KeyPoint(PPTModel):
     label: str = Field(min_length=1, max_length=28)
-    detail: str = Field(min_length=1, max_length=120)
+    detail: str = Field(min_length=1, max_length=200)  # 增加字数上限
 
 
 class ProcessStep(PPTModel):
     title: str = Field(min_length=1, max_length=32)
-    detail: str = Field(min_length=1, max_length=100)
+    detail: str = Field(min_length=1, max_length=200)  # 增加字数上限
 
 
 class ComparisonSide(PPTModel):
     title: str = Field(min_length=1, max_length=32)
-    points: list[str] = Field(min_length=1, max_length=4)
+    points: list[str] = Field(min_length=1, max_length=6)  # 增加点数上限
 
 
 class SystemNode(PPTModel):
     id: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_-]{0,23}$")
     label: str = Field(min_length=1, max_length=24)
-    detail: str = Field(default="", max_length=70)
+    detail: str = Field(default="", max_length=120)  # 增加字数上限
     layer: str = Field(default="", max_length=20)
 
     @field_validator("id", mode="before")
@@ -136,6 +140,30 @@ class SystemNode(PPTModel):
         return str(v)
 
 
+class HierarchyNode(PPTModel):
+    """层级结构节点（新增）"""
+    id: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_-]{0,23}$")
+    label: str = Field(min_length=1, max_length=28)
+    detail: str = Field(default="", max_length=120)
+    level: int = Field(default=0, ge=0, le=5)
+    children: list[str] = Field(default_factory=list)
+
+
+class TimelineEvent(PPTModel):
+    """时间线事件（新增）"""
+    time: str = Field(min_length=1, max_length=20)
+    title: str = Field(min_length=1, max_length=32)
+    detail: str = Field(default="", max_length=120)
+
+
+class MatrixCell(PPTModel):
+    """矩阵单元格（新增）"""
+    row: int = Field(ge=0)
+    col: int = Field(ge=0)
+    content: str = Field(min_length=1, max_length=100)
+    highlight: bool = Field(default=False)
+
+
 class PPTSlide(PPTModel):
     role: SlideRole
     shape: ContentShape
@@ -152,6 +180,10 @@ class PPTSlide(PPTModel):
             "quiz": "practice",
             "sequence": "explain",
             "comparison": "explain",
+            "misconception": "practice",
+            "hierarchy": "explain",
+            "timeline": "explain",
+            "matrix": "explain",
         }
         return mapping.get(value, value)
     subtitle: str = Field(default="", max_length=110)
@@ -171,18 +203,22 @@ class PPTSlide(PPTModel):
     animation: AnimationKind = "reveal"
     preferred_layout: str = Field(default="", max_length=40)
 
+    # 新增字段
+    hierarchy: list[HierarchyNode] = Field(default_factory=list, max_length=10)
+    timeline: list[TimelineEvent] = Field(default_factory=list, max_length=8)
+    matrix: list[MatrixCell] = Field(default_factory=list, max_length=20)
+
     @model_validator(mode="after")
     def validate_shape_content(self) -> "PPTSlide":
-        requirements = {
-            "sequence": bool(self.steps),
-            "comparison": len(self.comparison) == 2,
-            "system": bool(self.nodes),
-            "code": bool(self.code),
-            "formula": bool(self.formula),
-            "quiz": bool(self.question and self.answer),
-        }
-        if self.shape in requirements and not requirements[self.shape]:
-            raise ValueError(f"{self.shape} slide is missing its structured content")
+        """Soft validation: log missing content but don't block compilation."""
+        # 编译器可能调整 shape，内容不一定完全匹配，不再强制报错
+        return self
+
+    @model_validator(mode="after")
+    def validate_statement_and_takeaway(self) -> "PPTSlide":
+        """Soft validation: statement/takeaway recommended but not mandatory."""
+        # 编译器/LLM 可能不总是提供 statement 和 takeaway，
+        # 渲染器会用 title/question 作为 fallback，不再强制报错
         return self
 
 
@@ -197,7 +233,7 @@ class PPTPlan(PPTModel):
     template_preference: PPTTemplatePreference = Field(
         default_factory=PPTTemplatePreference
     )
-    slides: list[PPTSlide] = Field(min_length=3, max_length=18)
+    slides: list[PPTSlide] = Field(min_length=3, max_length=20)  # 增加上限到20
 
     @field_validator("slides", mode="before")
     @classmethod

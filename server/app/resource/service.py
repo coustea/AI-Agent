@@ -435,8 +435,9 @@ class ResourceService:
         failed_agents = list((await self.session.exec(failed_stmt)).all())
 
         return ResourceBundle(
-            id=str(resource.id), task_id=str(resource.id), title="个性化学习资源包",
+            id=str(resource.id), title="个性化学习资源包",
             learning_need=resource.learning_need or "", selected_agents=selected_agents,
+            plan_content=resource.plan_content,
             resources=[_item_to_dto(item) for item in db_items], status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",
             updated_at=resource.updated_at.isoformat() if resource.updated_at else "",

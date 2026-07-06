@@ -13,6 +13,7 @@ from app.shared.video.schemas import (
     VideoRequest,
     VideoStyleDecision,
 )
+from app.shared.video.visual_contracts import get_visual_contract
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "scene.md"
 
@@ -37,7 +38,8 @@ class SceneWriterAgent:
             visual_contract=json.dumps(
                 {
                     "visual_type": contract.visual_type,
-                    "rule": "visual 仅含知识数据，不含样式、坐标和时间戳",
+                    "required_keys": get_visual_contract(contract.visual_type),
+                    "rule": "visual 仅含知识数据，不含样式、坐标和时间戳。必须严格按 required_keys 的键名和类型生成，数组中的对象必须包含指定的子字段。",
                 },
                 ensure_ascii=False,
             ),

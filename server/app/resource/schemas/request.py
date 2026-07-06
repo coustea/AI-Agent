@@ -49,7 +49,6 @@ class AgentSelection(BaseModel):
     """前端上传的 Agent 选择配置。"""
     agent_id: ResourceAgentId
     enabled: bool = True
-    priority: int = Field(default=0, ge=0, le=10)
 
 
 class ContentConfig(BaseModel):
@@ -75,7 +74,7 @@ class QuizConfig(BaseModel):
 
     difficulty_mode: Literal["basic", "adaptive", "exam"] = "basic"
     question_count: int = Field(default=5, ge=1, le=20)
-    exam_style: Literal["school", "postgrad", "certification", "interview"] = "school"
+    emphasis: Literal["foundations", "application", "analysis"] = "foundations"
     question_types: list[Literal["single", "multiple", "judge", "fill"]] = Field(
         default_factory=lambda: ["single", "multiple", "judge", "fill"]
     )
@@ -85,26 +84,18 @@ class CodeConfig(BaseModel):
     """代码 Agent 配置 — 4 个核心参数。"""
 
     programming_language: Literal["python", "c", "cpp", "java", "go", "javascript", "typescript"] = "python"
-    difficulty: Literal["beginner", "intermediate", "advanced"] = "beginner"
-    case_type: Literal["basic_demo", "algorithm_template", "debug_demo"] = "basic_demo"
+    output_style: Literal["tutorial", "reference", "challenge"] = "tutorial"
     focus: Literal["syntax", "application", "debugging"] = "syntax"
+    include_tests: bool = False
 
 
 class ReadingConfig(BaseModel):
     """阅读推荐 Agent 配置 — 4 个核心参数。"""
 
-    reading_depth: Literal["course_extended", "engineering", "frontier"] = "course_extended"
+    coverage: Literal["core", "extended", "broad"] = "extended"
     language_preference: Literal["chinese", "english", "both"] = "chinese"
     max_items: int = Field(default=5, ge=1, le=10)
-    focus: Literal["textbook", "engineering", "paper"] = "textbook"
-
-    @field_validator("language_preference", mode="before")
-    @classmethod
-    def normalize_bilingual(cls, value: str) -> str:
-        """将前端遗留的 'bilingual' 归一化为 'both'。"""
-        if value == "bilingual":
-            return "both"
-        return value
+    focus: Literal["textbook", "engineering", "research"] = "textbook"
 
 
 class VideoConfig(BaseModel):
@@ -145,8 +136,8 @@ class AgentConfigs(BaseModel):
         return value.model_dump(mode="json")
 
 
-def _agent_sort_key(item: AgentSelection) -> tuple[int, int]:
-    return (item.priority, AGENT_DEFAULT_ORDER.index(item.agent_id.value) if item.agent_id.value in AGENT_DEFAULT_ORDER else 999)
+def _agent_sort_key(item: AgentSelection) -> int:
+    return AGENT_DEFAULT_ORDER.index(item.agent_id.value) if item.agent_id.value in AGENT_DEFAULT_ORDER else 999
 
 
 class ResourceGenerationRequest(BaseModel):
@@ -170,8 +161,8 @@ class ResourceGenerationRequest(BaseModel):
     def validate_selection(self) -> "ResourceGenerationRequest":
         if not self.selected_agents:
             self.selected_agents = [
-                AgentSelection(agent_id=agent_id, enabled=True, priority=index)
-                for index, agent_id in enumerate(DEFAULT_SELECTED_AGENT_IDS)
+                AgentSelection(agent_id=agent_id, enabled=True)
+                for agent_id in DEFAULT_SELECTED_AGENT_IDS
             ]
         agent_ids = [item.agent_id.value for item in self.selected_agents]
         duplicate_agent_ids = sorted({agent_id for agent_id in agent_ids if agent_ids.count(agent_id) > 1})

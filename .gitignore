@@ -86,3 +86,17 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# RAG data (large binary)
+server/app/rag/data/
+
+# Generated static files
+server/static/
+
+# Server config with secrets
+server/config.yaml

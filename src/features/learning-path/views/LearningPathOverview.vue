@@ -598,6 +598,7 @@ const loadPath = async () => {
     generatingProgress.value = 12
 
     const newGoal = route.query.goal as string
+    const newTopic = (route.query.topic as string) || newGoal
 
     if (!newGoal) {
       router.replace('/path-planner')
@@ -612,7 +613,26 @@ const loadPath = async () => {
     }
 
     try {
-      const res = await createLearningPath({ goal: newGoal, topic: newGoal })
+      let parsedKnowledge: string[] = []
+      if (route.query.current_knowledge) {
+        try {
+          parsedKnowledge = JSON.parse(route.query.current_knowledge as string)
+        } catch (e) {
+          console.warn('解析已掌握知识点失败:', e)
+        }
+      }
+      const preferences = {
+        difficulty: (route.query.difficulty as string) || 'intermediate',
+        use_profile: route.query.use_profile !== 'false'
+      }
+
+      const res = await createLearningPath({
+        goal: newGoal,
+        topic: newTopic,
+        current_knowledge: parsedKnowledge,
+        preferences: preferences,
+        enable_search: false
+      })
       const newPath = res.data.data
       activeRunId.value = newPath.run_id
       router.replace({

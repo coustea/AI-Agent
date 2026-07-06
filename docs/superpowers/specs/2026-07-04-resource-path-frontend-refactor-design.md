@@ -43,7 +43,8 @@ Resource 与 Learning Path 使用的 `pages / generation / library / workspace`
 5. 把无业务归属的学习内容渲染能力迁到共享深 Module。
 6. 保持 Resource 与 Learning Path 的请求、事件、记录、详情和持久化模型独立。
 7. 个性化设置和最终结果使用同一个资源摘要卡片。
-8. 保留现有 URL 与路由名称，直接更新内部引用，不保留兼容转发文件。
+8. 除 Resource 历史改为 `/ai/resources/history` 外保留现有 URL；路由名称不变，
+   直接更新内部引用，不保留兼容转发文件。
 
 ## 3. 非目标
 
@@ -295,11 +296,11 @@ path api ─────> path model ─────> useWorkspace/useStudy ─�
 
 ## 8. 路由策略
 
-以下 URL 与现有 route name 均保持不变：
+除 Resource 历史采用新的产品 URL 外，以下 URL 与现有 route name 保持不变：
 
 - `/resource-generator`
 - `/resource-detail/:id`
-- `/resource-history`
+- `/ai/resources/history`
 - `/path-planner`
 - `/path-planner/overview/:id?`
 - `/path-planner/node/:nodeId`
@@ -380,7 +381,7 @@ path api ─────> path model ─────> useWorkspace/useStudy ─�
 
 ## 12. 验收标准
 
-1. URL、route name 与所有路由行为保持不变。
+1. Resource 历史使用 `/ai/resources/history`，其余 URL、route name 与路由行为保持不变。
 2. 顶层目录遵守项目已有 `api / components / composables / model / views` 约定。
 3. Resource 与 Path 不再互相导入 API、记录类型或业务 Vue。
 4. 两个领域只通过 `shared/content` 复用内容展示。

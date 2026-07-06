@@ -10,7 +10,6 @@ def test_research_module_import():
         ResearchAgent,
         ResearchTask,
         ResearchReport,
-        ResearchEvidence,
         ResearchError,
     )
 
@@ -30,7 +29,6 @@ def test_research_agent_creation():
     assert agent is not None
     assert agent.tools is not None
     assert len(agent.tools) > 0  # 应该有默认搜索工具
-    assert agent.system_prompt is not None
 
 
 def test_research_task_creation():
@@ -48,20 +46,20 @@ def test_research_task_creation():
 def test_research_report_creation():
     """测试 ResearchReport 可以正常创建。"""
 
-    from app.shared.research import ResearchReport, ResearchEvidence
+    from app.shared.research import ResearchReport, ResearchSourceItem
 
     report = ResearchReport(
         query="测试查询",
-        context="总结内容",
-        evidence=[
-            ResearchEvidence(
-                source_type="web",
+        sources=[
+            ResearchSourceItem(
+                source="duckduckgo",
+                title="Python 异步编程",
+                url="https://example.com",
                 summary="摘要",
-                confidence=0.8,
-            )
+            ),
         ],
     )
 
     assert report.query == "测试查询"
-    assert report.context == "总结内容"
-    assert report.has_usable_evidence is True
+    assert report.has_results is True
+    assert len(report.sources) == 1

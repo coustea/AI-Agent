@@ -1,7 +1,7 @@
 <template>
   <div class="quiz">
     <div class="progress"><span>第 1 题 / 共 {{ config.question_count }} 题</span><i><b></b></i></div>
-    <small>{{ difficulty }} · {{ style }}</small>
+    <small>{{ difficulty }} · {{ emphasis }}</small>
     <h3>关于“{{ shortTopic }}”，下面哪一项描述最准确？</h3>
     <div class="options">
       <div><b>A</b><span>只关注最终结果，不需要理解中间过程</span></div>
@@ -18,7 +18,7 @@ import type { AnyAgentConfigs } from '../../../model/catalog'
 const props = defineProps<{ config: AnyAgentConfigs['quiz']; topic: string }>()
 const shortTopic = computed(() => props.topic.length > 18 ? `${props.topic.slice(0, 18)}…` : props.topic)
 const difficulty = computed(() => ({ basic: '概念巩固', adaptive: '自适应难度', exam: '考试强化' })[props.config.difficulty_mode])
-const style = computed(() => ({ school: '期末风格', postgrad: '考研风格', certification: '认证考试', interview: '技术面试' })[props.config.exam_style])
+const emphasis = computed(() => ({ foundations: '概念辨析', application: '场景应用', analysis: '原理推导' })[props.config.emphasis])
 </script>
 
 <style scoped>

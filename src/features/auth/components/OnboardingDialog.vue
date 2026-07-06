@@ -1,71 +1,53 @@
 <template>
   <section
-      v-if="visible"
-      :class="['onboarding-page', { 'onboarding-standalone': standalone }]"
+    v-if="visible"
+    :class="['onboarding-page', { 'onboarding-standalone': standalone }]"
   >
     <main class="onboarding-container">
       <header class="conversation-header">
-        <div class="progress-badge" aria-label="基础资料进度">
-          <strong>{{ profileProgress }}%</strong>
-          <span>资料进度</span>
-        </div>
-
-        <button class="skip-btn" type="button" @click="handleCompleteLater">
-          稍后完善
-        </button>
-
-        <div class="header-center">
-          <div class="title-mark">
-            <span></span>
-            <span></span>
+        <div class="header-main">
+          <div class="header-copy">
+            <span class="header-eyebrow">学习画像初始化</span>
+            <h1>对话式构建基础资料</h1>
+            <p>每次只确认一个主题，填写完成后可在个人中心继续修改。</p>
           </div>
 
-          <h1>对话式构建基础资料</h1>
-          <p>每次只确认一个主题，填写完成后可在个人中心继续修改。</p>
+          <button class="skip-btn" type="button" @click="handleCompleteLater">
+            稍后完善
+          </button>
         </div>
+
+        <nav class="top-step-tabs" aria-label="填写步骤">
+          <button
+            v-for="step in stepTimeline"
+            :key="step.key"
+            :class="['top-step-tab', step.state]"
+            type="button"
+          >
+            <span class="step-dot">{{ step.key }}</span>
+            <span class="step-text">{{ step.short }}</span>
+          </button>
+        </nav>
       </header>
 
       <section class="onboarding-workspace">
-        <aside class="step-rail" aria-label="填写步骤">
-          <div class="step-rail-title">
-            <span>{{ currentStepLabel }}</span>
-            <strong>{{ currentStepMeta.short }}</strong>
-          </div>
-
-          <ol class="step-list">
-            <li
-                v-for="step in stepTimeline"
-                :key="step.key"
-                :class="['step-item', step.state]"
-            >
-              <span class="step-index">{{ step.key }}</span>
-              <div>
-                <strong>{{ step.short }}</strong>
-                <small>{{ step.title }}</small>
-              </div>
-            </li>
-          </ol>
-        </aside>
-
-        <section class="chat-card">
+        <section class="chat-area" aria-label="对话式填写基础资料">
           <div class="current-question">
-            <div class="question-copy">
-              <span>当前问题</span>
-              <strong>{{ currentQuestionTitle }}</strong>
-              <p>{{ currentStepMeta.description }}</p>
-            </div>
+            <span>当前确认</span>
+            <strong>{{ currentQuestionTitle }}</strong>
+            <p>{{ currentStepMeta.description }}</p>
           </div>
 
           <div
-              ref="messageListRef"
-              class="message-list"
-              @scroll="handleMessageListScroll"
+            ref="messageListRef"
+            class="message-list"
+            @scroll="handleMessageListScroll"
           >
             <transition-group name="message-pop" tag="div" class="message-inner">
               <div
-                  v-for="msg in messages"
-                  :key="msg.id"
-                  :class="['message-row', msg.role, { 'is-streaming': msg.streaming }]"
+                v-for="msg in messages"
+                :key="msg.id"
+                :class="['message-row', msg.role, { 'is-streaming': msg.streaming }]"
               >
                 <div v-if="msg.role === 'assistant'" class="avatar-icon">
                   AI
@@ -82,20 +64,19 @@
                       {{ msg.content }}<span v-if="msg.streaming" class="streaming-cursor"></span>
                     </p>
 
-                    <!-- Embedded active quick reply options inside assistant bubble -->
                     <div
-                        v-if="msg.role === 'assistant' && isLatestAssistantMessage(msg.id) && showAssistantActions && currentQuickReplies.length > 0"
-                        class="bubble-quick-replies"
+                      v-if="msg.role === 'assistant' && isLatestAssistantMessage(msg.id) && showAssistantActions && currentQuickReplies.length > 0"
+                      class="bubble-quick-replies"
                     >
                       <div class="quick-replies-grid">
                         <button
-                            v-for="reply in currentQuickReplies"
-                            :key="reply"
-                            class="quick-reply-btn"
-                            :class="{ 'is-selected': isReplySelected(reply) }"
-                            type="button"
-                            :disabled="isAssistantStreaming"
-                            @click="handleQuickReply(reply)"
+                          v-for="reply in currentQuickReplies"
+                          :key="reply"
+                          class="quick-reply-btn"
+                          :class="{ 'is-selected': isReplySelected(reply) }"
+                          type="button"
+                          :disabled="isAssistantStreaming"
+                          @click="handleQuickReply(reply)"
                         >
                           <span>{{ reply }}</span>
                         </button>
@@ -104,10 +85,10 @@
                       <div v-if="isMultiSelectStep" class="action-footer">
                         <span>{{ selectionSummaryText }}</span>
                         <button
-                            class="confirm-selection-btn"
-                            type="button"
-                            :disabled="!canSend"
-                            @click="handleSend"
+                          class="confirm-selection-btn"
+                          type="button"
+                          :disabled="!canSend"
+                          @click="handleSend"
                         >
                           确认选择
                         </button>
@@ -140,10 +121,10 @@
             </div>
 
             <button
-                v-if="isUserReadingHistory"
-                class="back-bottom-btn"
-                type="button"
-                @click="scrollToBottom({ force: true })"
+              v-if="isUserReadingHistory"
+              class="back-bottom-btn"
+              type="button"
+              @click="scrollToBottom({ force: true })"
             >
               回到底部
             </button>
@@ -151,18 +132,17 @@
 
           <div class="input-dock">
             <div v-if="currentStep <= 7" class="composer-wrapper">
-              <!-- Floating school autocomplete dropdown -->
               <transition name="fade-up">
                 <div
-                    v-if="currentStep === 4 && schoolSuggestions.length > 0"
-                    class="school-autocomplete-popover"
+                  v-if="currentStep === 4 && schoolSuggestions.length > 0"
+                  class="school-autocomplete-popover"
                 >
                   <button
-                      v-for="school in schoolSuggestions"
-                      :key="school.name"
-                      class="autocomplete-suggestion-item"
-                      type="button"
-                      @click="selectSchool(school)"
+                    v-for="school in schoolSuggestions"
+                    :key="school.name"
+                    class="autocomplete-suggestion-item"
+                    type="button"
+                    @click="selectSchool(school)"
                   >
                     <span class="school-name">{{ school.name }}</span>
                     <span v-if="school.level" class="school-level-tag">
@@ -173,23 +153,24 @@
               </transition>
 
               <textarea
-                  id="onboarding-chat-input"
-                  ref="inputRef"
-                  v-model="userInput"
-                  class="chat-composer"
-                  name="onboarding_reply"
-                  rows="1"
-                  :placeholder="composerPlaceholder"
-                  :disabled="isAssistantStreaming || submitting"
-                  @keydown="handleComposerKeydown"
-                  @input="handleInputChange"
+                id="onboarding-chat-input"
+                ref="inputRef"
+                v-model="userInput"
+                class="chat-composer"
+                name="onboarding_reply"
+                rows="1"
+                :placeholder="composerPlaceholder"
+                :disabled="isAssistantStreaming || submitting"
+                @keydown="handleComposerKeydown"
+                @input="handleInputChange"
               ></textarea>
 
               <button
-                  class="send-btn"
-                  type="button"
-                  :disabled="!canSend"
-                  @click="handleSend"
+                class="send-btn"
+                type="button"
+                :disabled="!canSend"
+                @click="handleSend"
+                aria-label="发送"
               >
                 <Position class="btn-icon" />
               </button>
@@ -202,9 +183,9 @@
               </div>
 
               <button
-                  class="btn btn-primary finish-btn"
-                  :disabled="submitting"
-                  @click="submitForm"
+                class="btn btn-primary finish-btn"
+                :disabled="submitting"
+                @click="submitForm"
               >
                 <span>确认进入</span>
                 <Right class="btn-icon-right ml-2" />
@@ -215,21 +196,22 @@
 
         <aside class="profile-panel" aria-label="基础资料确认">
           <div class="profile-panel-head">
-            <span>正在生成基础资料</span>
-            <strong>{{ profileProgress }}%</strong>
-          </div>
-
-          <div class="progress-ring" :style="{ '--progress': profileProgress }">
-            <span>{{ profileProgress }}%</span>
+            <div>
+              <span>资料预览</span>
+              <strong>{{ profileProgress }}%</strong>
+            </div>
+            <div class="progress-line" aria-hidden="true">
+              <i :style="{ width: `${profileProgress}%` }"></i>
+            </div>
           </div>
 
           <div class="info-block">
             <h2>已确认</h2>
             <div v-if="confirmedFields.length > 0" class="info-list">
               <div
-                  v-for="item in confirmedFields"
-                  :key="item.key"
-                  class="info-row confirmed"
+                v-for="item in confirmedFields"
+                :key="item.key"
+                class="info-row confirmed"
               >
                 <span>{{ item.label }}</span>
                 <strong>{{ item.value }}</strong>
@@ -242,9 +224,9 @@
             <h2>待确认</h2>
             <div class="info-list">
               <div
-                  v-for="item in pendingFields"
-                  :key="item.key"
-                  class="info-row pending"
+                v-for="item in pendingFields"
+                :key="item.key"
+                class="info-row pending"
               >
                 <span>{{ item.label }}</span>
                 <strong>{{ item.value }}</strong>
@@ -253,8 +235,8 @@
           </div>
 
           <div class="profile-note">
-            <strong>填写后可在个人中心修改</strong>
-            <p>点击稍后完善不会标记完成，下次进入系统仍会继续引导。</p>
+            <strong>填写后可继续修改</strong>
+            <p>这里仅用于初始化学习路径、资源推荐和题库偏好。</p>
           </div>
         </aside>
       </section>
@@ -295,7 +277,6 @@ const visible = computed({
   set: value => emit('update:modelValue', value),
 })
 
-// 聊天消息
 type ChatMessage = {
   id: number
   role: 'assistant' | 'user'
@@ -351,9 +332,9 @@ let previousBodyOverflow = ''
 let previousHtmlOverflow = ''
 
 const onboardingDraftKey = computed(() =>
-    currentUser.value?.id
-        ? `onboarding-dialog-draft:${currentUser.value.id}`
-        : 'onboarding-dialog-draft',
+  currentUser.value?.id
+    ? `onboarding-dialog-draft:${currentUser.value.id}`
+    : 'onboarding-dialog-draft',
 )
 
 const form = reactive<ProfileOnboardingUpdate>({
@@ -458,23 +439,18 @@ const currentTimeLabel = computed(() => {
   return formatTime()
 })
 
-const currentStepLabel = computed(() => {
-  const safeStep = Math.min(currentStep.value, 7)
-  return `${safeStep}/7`
-})
-
 const coursesValue = computed<string[]>(() => {
   return Array.isArray(form.courses) ? (form.courses as string[]).map(String) : []
 })
 
 const isComplete = computed(() => {
   return currentStep.value > 7 || Boolean(
-      form.school &&
-      form.major &&
-      form.grade &&
-      form.daily_study_time &&
-      form.global_learning_goal &&
-      coursesValue.value.length > 0,
+    form.school &&
+    form.major &&
+    form.grade &&
+    form.daily_study_time &&
+    form.global_learning_goal &&
+    coursesValue.value.length > 0,
   )
 })
 
@@ -499,7 +475,6 @@ const canSend = computed(() => {
 })
 
 const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
-
 
 const currentStepMeta = computed<StepMeta>(() => {
   return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
@@ -542,8 +517,8 @@ const stepTimeline = computed<StepTimelineItem[]>(() => {
 
 const composerPlaceholder = computed(() => {
   if (isAssistantStreaming.value) return 'Mentorly 正在输入...'
-  if (currentStep.value === 1) return '输入专业名称，或点击 AI 推荐标签...'
-  if (currentStep.value === 2) return '输入年级，或点击 AI 推荐标签...'
+  if (currentStep.value === 1) return '输入专业名称，或点击推荐标签...'
+  if (currentStep.value === 2) return '输入年级，或点击推荐标签...'
   if (currentStep.value === 4) return '输入学校名称，支持搜索选择...'
   if (currentStep.value === 7) return '输入多门课程，用逗号、空格或顿号分隔...'
   if (isMultiSelectStep.value) return '输入多个内容，用逗号、空格或顿号分隔...'
@@ -623,8 +598,6 @@ const showAssistantActions = computed(() => {
   return currentStep.value === 4 && schoolSuggestions.value.length > 0
 })
 
-
-
 const lockPageScroll = () => {
   previousBodyOverflow = document.body.style.overflow
   previousHtmlOverflow = document.documentElement.style.overflow
@@ -679,8 +652,8 @@ const loadDraft = () => {
     currentStep.value = typeof state.currentStep === 'number' ? state.currentStep : 1
     userInput.value = typeof state.userInput === 'string' ? state.userInput : ''
     messages.value = Array.isArray(state.messages)
-        ? state.messages.map(message => ({ ...message }))
-        : []
+      ? state.messages.map(message => ({ ...message }))
+      : []
 
     form.school = typeof state.form?.school === 'string' ? state.form.school : ''
     form.major = typeof state.form?.major === 'string' ? state.form.major : ''
@@ -815,6 +788,7 @@ const scrollToBottom = async (options: { force?: boolean } = {}) => {
       behavior: 'smooth',
     })
   }
+
   isUserReadingHistory.value = false
 }
 
@@ -1032,18 +1006,6 @@ const extractMultiple = (text: string, presets: string[]) => {
   return result
 }
 
-/*
-const getGradeHint = (grade: string) => {
-  if (grade.includes('大一')) return '偏基础导入'
-  if (grade.includes('大二')) return '核心专业课'
-  if (grade.includes('大三')) return '项目与复习'
-  if (grade.includes('大四')) return '毕设与实习'
-  if (grade.includes('研')) return '专题深入'
-  return '调整难度'
-}
-*/
-
-
 const handleSend = async () => {
   if (!canSend.value) return
 
@@ -1199,13 +1161,11 @@ const handleCompleteLater = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px 0;
+  padding: 24px 0;
   color: #0f172a;
-  /* 深色半透明遮罩 + 背景模糊，让底层页面模糊可见 */
   background: rgba(10, 15, 35, 0.55);
   backdrop-filter: blur(12px) saturate(120%);
   -webkit-backdrop-filter: blur(12px) saturate(120%);
-  /* 阻止点击穿透到下层所有元素 */
   pointer-events: all;
 }
 
@@ -1215,10 +1175,13 @@ const handleCompleteLater = async () => {
 }
 
 .onboarding-standalone {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   background:
-      radial-gradient(circle at 14% 12%, rgba(20, 184, 166, 0.13), transparent 30%),
-      radial-gradient(circle at 86% 10%, rgba(103, 232, 249, 0.15), transparent 28%),
-      linear-gradient(180deg, #f8fcfb 0%, #eef8f8 100%);
+    radial-gradient(circle at 12% 10%, rgba(20, 184, 166, 0.09), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgba(103, 232, 249, 0.1), transparent 28%),
+    linear-gradient(180deg, #f8fcfb 0%, #eef8f8 100%);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -1226,155 +1189,174 @@ const handleCompleteLater = async () => {
 .onboarding-container {
   position: relative;
   width: min(1240px, calc(100vw - 40px));
-  height: min(760px, calc(100dvh - 72px));
-  max-height: calc(100dvh - 72px);
+  height: min(760px, calc(100dvh - 64px));
+  max-height: calc(100dvh - 64px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgba(159, 220, 218, 0.58);
-  border-radius: 0px;
+  border: 1px solid rgba(190, 230, 229, 0.58);
+  border-radius: 26px;
   background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 253, 252, 0.98)),
-      #ffffff;
+    radial-gradient(circle at 18% 10%, rgba(20, 184, 166, 0.07), transparent 28%),
+    radial-gradient(circle at 86% 14%, rgba(59, 130, 246, 0.05), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 253, 252, 0.98));
   box-shadow:
-      0 40px 100px rgba(10, 15, 35, 0.26),
-      0 8px 32px rgba(20, 184, 166, 0.12),
-      0 1px 0 rgba(255, 255, 255, 0.95) inset;
-}
-
-.onboarding-container::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-      radial-gradient(circle at 18% 8%, rgba(70, 184, 180, 0.12), transparent 30%),
-      radial-gradient(circle at 86% 16%, rgba(98, 201, 197, 0.12), transparent 34%);
+    0 38px 98px rgba(10, 15, 35, 0.22),
+    0 1px 0 rgba(255, 255, 255, 0.96) inset;
 }
 
 .conversation-header {
   position: relative;
   z-index: 1;
-  min-height: 112px;
-  padding: 18px 132px 14px;
-  text-align: center;
-  border-bottom: 1px solid rgba(190, 230, 229, 0.74);
+  padding: 26px 34px 18px;
 }
 
-.header-center {
-  position: relative;
-  top: 0;
-  width: min(560px, 100%);
-  margin: 0 auto;
-}
-
-.progress-badge {
-  position: absolute;
-  top: 32px;
-  left: 24px;
-  z-index: 4;
-  min-width: 96px;
-  height: 48px;
+.header-main {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
-  padding: 7px 12px;
-  border: 1px solid rgba(158, 218, 216, 0.78);
-  border-radius: 0px;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(14px);
-  box-shadow:
-      0 12px 28px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  justify-content: space-between;
+  gap: 28px;
 }
 
-.progress-badge strong {
-  color: var(--color-primary-text);
-  font-size: 17px;
-  font-weight: 950;
-  line-height: 1;
+.header-copy {
+  min-width: 0;
 }
 
-.progress-badge span {
-  margin-top: 4px;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 850;
-  line-height: 1;
-}
-
-.skip-btn {
-  position: absolute;
-  top: 40px;
-  right: 24px;
-  z-index: 5;
-  height: 32px;
-  padding: 0 15px;
-  border: 1px solid rgba(158, 218, 216, 0.76);
-  border-radius: 0px;
-  background: rgba(255, 255, 255, 0.66);
-  color: #41676d;
-  font-size: 12px;
-  font-weight: 850;
-  cursor: pointer;
-  backdrop-filter: blur(14px);
-  transition:
-      transform 0.18s ease,
-      border-color 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease,
-      box-shadow 0.18s ease;
-}
-
-.skip-btn:hover {
-  color: var(--color-primary-text);
-  border-color: rgba(20, 160, 157, 0.86);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  transform: translateY(-1px);
-}
-
-.title-mark {
+.header-eyebrow {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 10px;
-  margin-bottom: 6px;
+  gap: 8px;
+  color: var(--color-primary-text, #0f766e);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
 }
 
-.title-mark span:first-child {
-  width: 32px;
-  height: 5px;
-  border-radius: 0px;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 8px 20px rgba(70, 184, 180, 0.2);
-}
-
-.title-mark span:last-child {
-  width: 6px;
-  height: 6px;
-  border-radius: 0px;
-  background: #93c5fd;
+.header-eyebrow::before {
+  content: '';
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
 }
 
 .conversation-header h1 {
-  margin: 0;
+  margin: 8px 0 0;
   color: #0f172a;
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 950;
-  line-height: 1.15;
-  letter-spacing: 0;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
 }
 
 .conversation-header p {
-  margin: 8px auto 0;
-  max-width: 520px;
-  color: #5f7780;
+  margin: 8px 0 0;
+  color: #64748b;
   font-size: 14px;
   font-weight: 650;
   line-height: 1.55;
+}
+
+.skip-btn {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.54);
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.skip-btn:hover {
+  color: var(--color-primary-text, #0f766e);
+  border-color: rgba(20, 184, 166, 0.45);
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.top-step-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.top-step-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.top-step-tab {
+  position: relative;
+  flex: 1 0 0;
+  min-width: 108px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: default;
+}
+
+.top-step-tab::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.step-dot {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.75);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.step-text {
+  white-space: nowrap;
+}
+
+.top-step-tab.active {
+  color: var(--color-primary-text, #0f766e);
+  background: rgba(240, 253, 250, 0.72);
+}
+
+.top-step-tab.active::after {
+  background: linear-gradient(90deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+}
+
+.top-step-tab.active .step-dot,
+.top-step-tab.done .step-dot {
+  color: #ffffff;
+  background: linear-gradient(145deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+}
+
+.top-step-tab.done {
+  color: #0f766e;
 }
 
 .onboarding-workspace {
@@ -1382,159 +1364,50 @@ const handleCompleteLater = async () => {
   z-index: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) 230px;
-  gap: 0px;
-  margin: 0px;
-  border-top: 1px solid rgba(190, 230, 229, 0.74);
-}
-
-.step-rail {
-  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 34px;
+  padding: 8px 34px 30px;
   overflow: hidden;
-  border: none;
-  border-right: 1px solid rgba(190, 230, 229, 0.74);
-  border-radius: 0px;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  padding: 16px 12px;
 }
 
-.step-rail-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-  border-radius: 0px;
-  background: linear-gradient(135deg, rgba(225, 250, 248, 0.96), rgba(255, 255, 255, 0.96));
-  color: var(--color-primary-text);
-}
-
-.step-rail-title span {
-  font-size: 16px;
-  font-weight: 950;
-}
-
-.step-rail-title strong {
-  font-size: 11px;
-  font-weight: 950;
-}
-
-.step-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.step-item {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  min-height: 46px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 0px;
-  color: #6b7f87;
-}
-
-.step-item.active {
-  border-color: rgba(20, 160, 157, 0.34);
-  background: rgba(231, 250, 248, 0.8);
-  color: var(--color-primary-text);
-}
-
-.step-item.done {
-  color: #315f66;
-  background: rgba(248, 253, 252, 0.88);
-}
-
-.step-index {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 0px;
-  color: #78919a;
-  background: rgba(236, 248, 247, 0.9);
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.step-item.active .step-index,
-.step-item.done .step-index {
-  color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-}
-
-.step-item strong {
-  display: block;
-  font-size: 12px;
-  font-weight: 950;
-  line-height: 1.2;
-}
-
-.step-item small {
-  display: block;
-  margin-top: 2px;
-  overflow: hidden;
-  color: #8aa0a8;
-  font-size: 10px;
-  font-weight: 750;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-card {
-  position: relative;
-  z-index: 1;
+.chat-area {
+  min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  margin: 0;
   overflow: hidden;
-  border: none;
-  border-right: 1px solid rgba(190, 230, 229, 0.74);
-  border-radius: 0px;
   background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
 }
 
 .current-question {
-  display: block;
-  padding: 16px 22px;
-  border-bottom: 1px solid rgba(203, 235, 233, 0.82);
-  background: linear-gradient(120deg, rgba(232, 250, 248, 0.92), rgba(255, 255, 255, 0.94) 54%, rgba(240, 253, 250, 0.88)), #ffffff;
+  max-width: 760px;
+  padding: 0 0 18px;
 }
 
-.question-copy span {
+.current-question span {
   display: block;
-  margin-bottom: 5px;
-  color: var(--color-primary-text);
+  margin-bottom: 6px;
+  color: var(--color-primary-text, #0f766e);
   font-size: 12px;
   font-weight: 950;
+  letter-spacing: 0.06em;
 }
 
-.question-copy strong {
+.current-question strong {
   display: block;
   color: #0f172a;
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 950;
-  line-height: 1.3;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
 
-.question-copy p {
+.current-question p {
   margin: 7px 0 0;
   color: #64748b;
   font-size: 14px;
   font-weight: 650;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .message-list {
@@ -1543,7 +1416,7 @@ const handleCompleteLater = async () => {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 22px;
+  padding: 8px 10px 20px 0;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -1565,7 +1438,7 @@ const handleCompleteLater = async () => {
 .message-inner {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   min-height: min-content;
 }
 
@@ -1582,32 +1455,28 @@ const handleCompleteLater = async () => {
 .avatar-icon,
 .user-avatar {
   flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 0px;
-  font-size: 13px;
+  border-radius: 12px;
+  border: none;
+  font-size: 12px;
   font-weight: 950;
 }
 
 .avatar-icon {
-  border: 1px solid rgba(158, 218, 216, 0.88);
-  color: var(--color-primary-text);
-  background:
-      linear-gradient(145deg, rgba(235, 251, 249, 0.95), rgba(213, 246, 243, 0.95));
-  box-shadow: 0 12px 24px rgba(70, 184, 180, 0.12);
+  color: var(--color-primary-text, #0f766e);
+  background: rgba(209, 250, 244, 0.82);
 }
 
 .user-avatar {
-  border: none;
   color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
+  background: linear-gradient(145deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
 }
 
 .message-main {
-  max-width: min(640px, 84%);
+  max-width: min(670px, 84%);
 }
 
 .message-row.user .message-main {
@@ -1620,31 +1489,24 @@ const handleCompleteLater = async () => {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 7px;
+  margin-bottom: 6px;
   color: #94a3b8;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 800;
 }
 
 .message-bubble {
   position: relative;
-  border: 1px solid rgba(203, 235, 233, 0.98);
-  border-radius: 0px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-      0 12px 28px rgba(15, 23, 42, 0.06),
-      0 1px 0 rgba(255, 255, 255, 0.96) inset;
-}
-
-.message-row.assistant .message-bubble {
-  border-left: 3px solid var(--color-primary);
+  border: 1px solid rgba(226, 232, 240, 0.62);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: none;
 }
 
 .message-row.user .message-bubble {
-  border: none;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
   color: #ffffff;
-  box-shadow: 0 14px 28px rgba(20, 160, 157, 0.2);
 }
 
 .message-text {
@@ -1653,7 +1515,7 @@ const handleCompleteLater = async () => {
   color: #1e293b;
   font-size: 15px;
   font-weight: 650;
-  line-height: 1.85;
+  line-height: 1.82;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1663,14 +1525,58 @@ const handleCompleteLater = async () => {
   font-weight: 750;
 }
 
+.bubble-quick-replies {
+  padding: 0 14px 14px;
+}
+
+.quick-replies-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-reply-btn {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.quick-reply-btn:hover {
+  border-color: rgba(20, 184, 166, 0.58);
+  background: rgba(240, 253, 250, 0.96);
+  color: var(--color-primary-text, #0f766e);
+  transform: translateY(-1px);
+}
+
+.quick-reply-btn.is-selected {
+  color: #ffffff;
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+}
+
+.quick-reply-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+
 .action-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(203, 235, 233, 0.86);
 }
 
 .action-footer span {
@@ -1680,14 +1586,14 @@ const handleCompleteLater = async () => {
 }
 
 .confirm-selection-btn {
-  height: 34px;
+  height: 32px;
   padding: 0 13px;
   border: none;
-  border-radius: 0px;
+  border-radius: 999px;
   color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
+  background: #0f172a;
   font-size: 12px;
-  font-weight: 950;
+  font-weight: 900;
   cursor: pointer;
 }
 
@@ -1706,7 +1612,7 @@ const handleCompleteLater = async () => {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--color-primary);
+  background: var(--color-primary, #14b8a6);
   animation: typing-bounce 1s infinite ease-in-out;
 }
 
@@ -1730,151 +1636,32 @@ const handleCompleteLater = async () => {
   margin: 10px auto 0;
   padding: 0 14px;
   border: 1px solid rgba(158, 218, 216, 0.9);
-  border-radius: 0px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
-  color: var(--color-primary-text);
+  color: var(--color-primary-text, #0f766e);
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
   backdrop-filter: blur(14px);
   box-shadow: 0 12px 28px rgba(70, 184, 180, 0.14);
-  transition:
-      box-shadow 0.18s ease,
-      background 0.18s ease;
-}
-
-.back-bottom-btn:hover {
-  background: #ffffff;
-  box-shadow: 0 16px 34px rgba(70, 184, 180, 0.18);
 }
 
 .input-dock {
-  border-top: 1px solid rgba(203, 235, 233, 0.9);
-  background:
-      linear-gradient(180deg, rgba(248, 250, 252, 0.86), rgba(255, 255, 255, 0.98));
-  padding: 14px 16px 16px;
-}
-
-.school-autocomplete-popover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 200px;
-  overflow-y: auto;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(20, 160, 157, 0.28);
-  border-radius: 0px;
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.12);
-  padding: 6px;
-}
-
-.autocomplete-suggestion-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 8px 14px;
-  border: none;
+  padding: 12px 0 0;
   background: transparent;
-  color: #1e293b;
-  font-size: 13px;
-  font-weight: 650;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 0px;
-  transition: background 0.15s ease;
-}
-
-.autocomplete-suggestion-item:hover {
-  background: rgba(20, 184, 166, 0.08);
-}
-
-.school-level-tag {
-  font-size: 10px;
-  padding: 2px 6px;
-  background: rgba(20, 184, 166, 0.12);
-  color: var(--color-primary-text);
-  border-radius: 0px;
-  font-weight: 800;
-}
-
-.streaming-cursor {
-  display: inline-block;
-  width: 2px;
-  height: 14px;
-  background: var(--color-primary);
-  margin-left: 4px;
-  vertical-align: middle;
-  animation: cursor-blink 1s step-end infinite;
-}
-
-@keyframes cursor-blink {
-  from, to { background-color: transparent }
-  50% { background-color: var(--color-primary) }
-}
-
-.bubble-quick-replies {
-  margin-top: 10px;
-  padding: 10px 14px 12px;
-  border-top: 1px dashed rgba(203, 235, 233, 0.8);
-  background: rgba(246, 254, 253, 0.38);
-}
-
-.quick-replies-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.quick-reply-btn {
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid rgba(20, 184, 166, 0.32);
-  border-radius: 0px;
-  background: #ffffff;
-  color: #3f6e72;
-  font-size: 12px;
-  font-weight: 750;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.quick-reply-btn:hover {
-  background: #f1f5f9;
-}
-
-.quick-reply-btn.is-selected {
-  color: #ffffff;
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-action));
-  box-shadow: none;
-}
-
-.quick-reply-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .composer-wrapper {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   gap: 10px;
   align-items: end;
   padding: 8px;
-  border: 1px solid rgba(20, 160, 157, 0.5);
-  border-radius: 0px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-      0 0 0 5px rgba(20, 184, 166, 0.08),
-      0 16px 34px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
 }
 
 .chat-composer {
@@ -1898,31 +1685,88 @@ const handleCompleteLater = async () => {
 }
 
 .send-btn {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   border: none;
-  border-radius: 0px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   color: #ffffff;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 14px 28px rgba(70, 184, 180, 0.24);
+  background: linear-gradient(145deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+  box-shadow: none;
   cursor: pointer;
   transition:
-      transform 0.16s ease,
-      opacity 0.16s ease,
-      box-shadow 0.16s ease;
+    transform 0.16s ease,
+    opacity 0.16s ease;
 }
 
 .send-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(70, 184, 180, 0.28);
 }
 
 .send-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-  box-shadow: none;
+}
+
+.school-autocomplete-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(20, 160, 157, 0.22);
+  border-radius: 16px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.1);
+  padding: 6px;
+}
+
+.autocomplete-suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.autocomplete-suggestion-item:hover {
+  background: rgba(20, 184, 166, 0.08);
+}
+
+.school-level-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(20, 184, 166, 0.12);
+  color: var(--color-primary-text, #0f766e);
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: var(--color-primary, #14b8a6);
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: cursor-blink 1s step-end infinite;
 }
 
 .profile-footer {
@@ -1930,11 +1774,7 @@ const handleCompleteLater = async () => {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 15px;
-  border: 1px solid rgba(199, 210, 254, 0.76);
-  border-radius: 0px;
-  background:
-      linear-gradient(135deg, rgba(238, 242, 255, 0.86), rgba(255, 255, 255, 0.98));
+  padding: 15px 0;
 }
 
 .profile-footer strong {
@@ -1955,25 +1795,21 @@ const handleCompleteLater = async () => {
   height: 42px;
   padding: 0 18px;
   border: none;
-  border-radius: 0px;
+  border-radius: 14px;
   font-weight: 900;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-action));
-  box-shadow: 0 16px 32px rgba(70, 184, 180, 0.22);
+  background: linear-gradient(145deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+  box-shadow: none;
 }
 
 .profile-panel {
+  min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  border: none;
-  border-radius: 0px;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  overflow-y: auto;
+  gap: 22px;
+  padding: 4px 2px 8px 4px;
+  background: transparent;
 }
 
 .profile-panel::-webkit-scrollbar {
@@ -1986,57 +1822,42 @@ const handleCompleteLater = async () => {
 }
 
 .profile-panel-head {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-panel-head > div:first-child {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
 
 .profile-panel-head span {
-  color: #315f66;
-  font-size: 14px;
+  color: #123f48;
+  font-size: 16px;
   font-weight: 950;
 }
 
 .profile-panel-head strong {
-  color: var(--color-primary-text);
-  font-size: 22px;
+  color: var(--color-primary-text, #0f766e);
+  font-size: 24px;
   font-weight: 950;
 }
 
-.progress-ring {
-  --progress: 0;
-  position: relative;
-  width: 100%;
-  height: 28px;
-  border: 1px solid rgba(183, 226, 224, 0.9);
-  background: #f8fafc;
-  border-radius: 0px; /* zero rounded corners */
+.progress-line {
+  height: 6px;
   overflow: hidden;
-  box-shadow:
-      0 4px 12px rgba(20, 160, 157, 0.06),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.9);
 }
-.progress-ring::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: calc(var(--progress) * 1%);
-  background: linear-gradient(90deg, var(--color-primary), var(--color-action));
-  transition: width 0.3s ease;
-}
-.progress-ring span {
-  position: relative;
-  z-index: 2;
-  color: var(--color-primary-text);
-  font-size: 12px;
-  font-weight: 950;
-  margin: auto;
+
+.progress-line i {
   display: block;
-  text-align: center;
-  line-height: 24px;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+  transition: width 0.25s ease;
 }
 
 .info-block {
@@ -2044,89 +1865,74 @@ const handleCompleteLater = async () => {
 }
 
 .info-block h2 {
-  margin: 0 0 9px;
+  margin: 0 0 12px;
   color: #123f48;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 950;
+  letter-spacing: 0.08em;
 }
 
 .info-list {
   display: grid;
-  gap: 6px;
+  gap: 9px;
 }
 
 .info-row {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 0px;
-  font-size: 12px;
+  min-height: 30px;
+  font-size: 13px;
 }
 
 .info-row span {
-  color: #6f8790;
+  color: #64748b;
   font-weight: 850;
 }
 
 .info-row strong {
   overflow: hidden;
   color: #123f48;
-  font-weight: 950;
+  font-weight: 900;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.info-row.confirmed {
-  border: 1px solid rgba(183, 226, 224, 0.88);
-  background: rgba(246, 254, 253, 0.9);
-}
-
-.info-row.pending {
-  border: 1px dashed rgba(183, 226, 224, 0.9);
-  background: rgba(255, 255, 255, 0.58);
+.info-row.confirmed strong {
+  color: var(--color-primary-text, #0f766e);
 }
 
 .info-row.pending strong {
-  color: #8aa0a8;
+  color: #94a3b8;
 }
 
 .empty-copy {
   margin: 0;
-  padding: 13px;
-  border-radius: 0px;
-  background: rgba(246, 254, 253, 0.86);
-  color: #6f8790;
-  font-size: 12px;
-  font-weight: 800;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.6;
 }
 
 .profile-note {
   margin-top: auto;
-  align-self: stretch;
-  padding: 13px;
-  border: 1px solid rgba(20, 160, 157, 0.18);
-  border-radius: 0px;
-  background: linear-gradient(145deg, #e9fbf9, #ffffff);
-  box-shadow: 0 -8px 24px rgba(255, 255, 255, 0.82);
+  color: #64748b;
 }
 
 .profile-note strong {
   display: block;
-  color: var(--color-primary-text);
+  color: var(--color-primary-text, #0f766e);
   font-size: 13px;
   font-weight: 950;
 }
 
 .profile-note p {
   margin: 6px 0 0;
-  color: #68818a;
   font-size: 12px;
   font-weight: 750;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .message-pop-enter-active,
@@ -2134,8 +1940,8 @@ const handleCompleteLater = async () => {
 .fade-up-enter-active,
 .fade-up-leave-active {
   transition:
-      opacity 0.18s ease,
-      transform 0.18s ease;
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
 .message-pop-enter-from,
@@ -2160,7 +1966,18 @@ const handleCompleteLater = async () => {
   }
 }
 
-@media (max-width: 860px) {
+@keyframes cursor-blink {
+  from,
+  to {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: var(--color-primary, #14b8a6);
+  }
+}
+
+@media (max-width: 960px) {
   .onboarding-page {
     align-items: stretch;
     justify-content: stretch;
@@ -2171,101 +1988,107 @@ const handleCompleteLater = async () => {
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;
+    border-radius: 0;
     border-left: none;
     border-right: none;
   }
 
   .conversation-header {
-    min-height: 134px;
-    padding: 70px 20px 14px;
-    text-align: left;
+    padding: 22px 18px 14px;
   }
 
-  .header-center {
-    top: 0;
-    width: 100%;
-    margin: 0;
-  }
-
-  .progress-badge {
-    top: 34px;
-    left: 16px;
-  }
-
-  .skip-btn {
-    top: 42px;
-    right: 16px;
+  .header-main {
+    gap: 16px;
   }
 
   .conversation-header h1 {
     font-size: 25px;
   }
 
-  .conversation-header p {
-    margin-left: 0;
-    font-size: 13px;
+  .top-step-tabs {
+    margin-top: 16px;
   }
 
-  .title-mark {
-    justify-content: flex-start;
+  .top-step-tab {
+    flex: 0 0 auto;
   }
 
   .onboarding-workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 10px;
-    margin: 0 12px 12px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 20px;
+    padding: 4px 18px 18px;
     overflow-y: auto;
   }
 
-  .step-rail {
-    padding: 10px;
-  }
-
-  .step-rail-title {
-    margin-bottom: 10px;
-  }
-
-  .step-list {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .step-item {
-    width: 138px;
-    flex: 0 0 auto;
-  }
-
-  .chat-card {
+  .chat-area {
     min-height: 560px;
   }
 
-  .current-question {
-    padding: 16px;
-  }
-
   .message-list {
-    padding: 18px 14px;
+    padding-right: 0;
   }
 
   .message-main {
     max-width: 82%;
   }
 
-  .quick-replies-grid {
-    max-height: 112px;
+  .profile-panel {
+    max-height: none;
+    padding-bottom: 8px;
+  }
+
+  .profile-note {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skip-btn {
+    align-self: flex-start;
+  }
+
+  .conversation-header h1 {
+    font-size: 23px;
+  }
+
+  .current-question strong {
+    font-size: 19px;
+  }
+
+  .message-row {
+    gap: 8px;
+  }
+
+  .avatar-icon,
+  .user-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .message-main {
+    max-width: 86%;
+  }
+
+  .composer-wrapper {
+    grid-template-columns: minmax(0, 1fr) 42px;
+    border-radius: 16px;
+  }
+
+  .send-btn {
+    width: 42px;
+    height: 42px;
   }
 
   .profile-footer {
     align-items: stretch;
     flex-direction: column;
   }
-
-  .profile-panel {
-    max-height: none;
-  }
-
 }
 </style>

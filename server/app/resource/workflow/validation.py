@@ -1,10 +1,9 @@
-"""
-资源输出确定性验证层 — 无数据库、无网络的纯验证函数。
+"""资源输出确定性验证层 — 无数据库、无网络的纯验证函数。
 
 验证规则：
 - 通用校验：success, content 非空, title, file_type, identity
 - 每类资源的特定契约
-- 内容去重：检查 avoid_overlap_with 配置，警告相似度过高的内容
+- 内容去重：检查相似度过高的内容
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ from app.resource.service import (
 )
 
 if TYPE_CHECKING:
-    from app.resource.schemas import AgentResult, ResourceInput, TeachingPlan
+    from app.resource.schemas import AgentResult, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -62,16 +61,10 @@ def validate_common_result(
     if result.metadata.get("agent_id") != scheduled_agent_id:
         raise ValidationError("Agent result identity mismatch")
 
-    # Base Agent 校验
+    # Base Agent 校验：必须有协同计划
     if scheduled_agent_id in BASE_RESOURCE_AGENT_IDS:
-        if input_data.teaching_plan is None:
-            raise ValidationError("Base Agent requires a TeachingPlan")
-        task = input_data.teaching_plan.task_for(scheduled_agent_id)
-        if result.file_type != task.deliverable.format:
-            raise ValidationError(
-                f"Agent result format does not match Worker Task: "
-                f"expected={task.deliverable.format} actual={result.file_type}"
-            )
+        if not input_data.teaching_plan:
+            raise ValidationError("Base Agent requires a teaching plan")
 
 
 # =============================================================================
@@ -87,20 +80,14 @@ def validate_content(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_mindmap(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Mindmap 资源校验：Markdown 格式（Markmap）、至少包含一级标题和二级标题。
-
-    Mindmap agent 生成标准 Markdown 标题+列表结构，前端使用 Markmap 渲染。
-    不使用 Mermaid 语法。
-    """
+    """Mindmap 资源校验：Markdown 格式（Markmap）、至少包含一级标题和二级标题。"""
     if result.file_type != "markdown":
         raise ValidationError("Mindmap must be markdown format (for Markmap rendering)")
 
-    # 检查基本的 Markdown 标题结构
     content = result.content.strip()
     if not content:
         raise ValidationError("Mindmap content is empty")
 
-    # 至少需要一个一级标题（根节点）和至少两个二级标题（分支）
     lines = content.splitlines()
     has_h1 = any(line.strip().startswith("# ") for line in lines)
     h2_count = sum(1 for line in lines if line.strip().startswith("## "))
@@ -143,13 +130,12 @@ def validate_code(result: "AgentResult", input_data: "ResourceInput") -> None:
     """Code 资源校验：fenced language 与配置一致，语法解析但绝不执行。"""
     if result.file_type not in {"code", "markdown"}:
         raise ValidationError("Code must be code or markdown format")
-    # 不执行代码，只检查内容非空
     if not result.content.strip():
         raise ValidationError("Code content is empty")
 
 
 def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Reading 资源校验：所有资源必须有有效的 http/https URL。若缺少或格式不正确，则自动修正为搜索链接兜底。"""
+    """Reading 资源校验：所有资源必须有有效的 http/https URL。"""
     if result.file_type != "json":
         raise ValidationError("Reading must be JSON")
 
@@ -180,7 +166,6 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
         if not url or not url.strip() or not url_pattern.match(url):
             title = item.get("title", "unknown")
             search_query = urllib.parse.quote(title)
-            # 自动兜底生成 Bing 搜索链接，避免直接抛错引发阻断
             item["url"] = f"https://www.bing.com/search?q={search_query}"
             modified = True
 
@@ -193,7 +178,7 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """PPT 资源只校验发布引用，不检查生成器内部结构或 HTML 内容。"""
+    """PPT 资源只校验发布引用。"""
     if result.file_type != "html":
         raise ValidationError("PPT resource must be HTML format")
 
@@ -274,17 +259,7 @@ def validate_agent_result(
     input_data: "ResourceInput",
     existing_results: dict[str, "AgentResult"] | None = None,
 ) -> list[str]:
-    """执行通用校验和特定校验，返回内容重复警告列表。
-
-    Args:
-        agent_id: Agent 标识符
-        result: Agent 输出结果
-        input_data: Agent 输入数据
-        existing_results: 已完成的其他 Agent 结果（用于去重检查）
-
-    Returns:
-        内容重复警告列表（不影响验证结果，仅作为警告）
-    """
+    """执行通用校验和特定校验，返回内容重复警告列表。"""
     validate_common_result(agent_id, result, input_data)
 
     validator = AGENT_VALIDATORS.get(agent_id)
@@ -293,9 +268,9 @@ def validate_agent_result(
 
     # 内容去重检查
     overlap_warnings = []
-    if existing_results and input_data.teaching_plan:
+    if existing_results:
         overlap_warnings = check_content_overlap(
-            agent_id, result, input_data.teaching_plan, existing_results
+            agent_id, result, existing_results
         )
 
     return overlap_warnings
@@ -304,17 +279,15 @@ def validate_agent_result(
 def check_content_overlap(
     agent_id: str,
     result: "AgentResult",
-    teaching_plan: "TeachingPlan",
     existing_results: dict[str, "AgentResult"],
 ) -> list[str]:
-    """检查内容是否与 avoid_overlap_with 配置中的 Agent 重复。
+    """检查内容是否与其他 Agent 重复。
 
-    使用简单关键词重叠率作为相似度指标，避免引入重量级 NLP 库。
+    使用简单关键词重叠率作为相似度指标。
 
     Args:
         agent_id: 当前 Agent ID
         result: 当前 Agent 结果
-        teaching_plan: 教学计划（包含 avoid_overlap_with 配置）
         existing_results: 已完成的其他 Agent 结果
 
     Returns:
@@ -322,21 +295,16 @@ def check_content_overlap(
     """
     warnings = []
 
-    task = teaching_plan.worker_tasks.get(agent_id)
-    if not task or not task.avoid_overlap_with:
+    overlap_targets = [aid for aid in existing_results if aid != agent_id]
+    if not overlap_targets:
         return warnings
 
-    # 提取当前内容的关键词
     current_keywords = extract_keywords(result.content)
 
-    for other_agent_id in task.avoid_overlap_with:
-        if other_agent_id not in existing_results:
-            continue
-
+    for other_agent_id in overlap_targets:
         other_content = existing_results[other_agent_id].content
         other_keywords = extract_keywords(other_content)
 
-        # 计算关键词重叠率
         similarity = compute_keyword_overlap(current_keywords, other_keywords)
 
         if similarity > CONTENT_SIMILARITY_THRESHOLD:
@@ -354,11 +322,7 @@ def check_content_overlap(
 
 
 def extract_keywords(content: str, max_keywords: int = 50) -> set[str]:
-    """从内容中提取关键词（简单实现：提取非停用词）。
-
-    使用分词和停用词过滤，不依赖外部 NLP 库。
-    """
-    # 中文停用词（简化版）
+    """从内容中提取关键词（简单实现：提取非停用词）。"""
     stop_words = {
         "的", "是", "在", "有", "和", "与", "或", "但", "如果", "因为",
         "所以", "那么", "这", "那", "它", "他", "她", "我", "你", "我们",
@@ -367,17 +331,14 @@ def extract_keywords(content: str, max_keywords: int = 50) -> set[str]:
         "通过", "使用", "进行", "实现", "完成", "开始", "结束", "继续",
     }
 
-    # 提取中文词汇和英文单词
     words = set()
 
-    # 提取中文连续字符（2-4字的词）
-    chinese_pattern = re.findall(r"[a-zA-Z0-9\u4e00-\u9fff]{2,10}", content)
+    chinese_pattern = re.findall(r"[a-zA-Z0-9一-鿿]{2,10}", content)
     for w in chinese_pattern:
         w_lower = w.lower()
         if w_lower not in stop_words and len(w_lower) >= 2:
             words.add(w_lower)
 
-    # 提取英文单词
     english_words = re.findall(r"[a-zA-Z]{3,}", content)
     for w in english_words:
         w_lower = w.lower()

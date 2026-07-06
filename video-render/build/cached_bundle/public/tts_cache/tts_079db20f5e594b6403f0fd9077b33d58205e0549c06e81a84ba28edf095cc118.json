@@ -1,0 +1,1415 @@
+{
+  "duration": 59.22,
+  "captions": [
+    {
+      "text": "构",
+      "start_ms": 0,
+      "end_ms": 211
+    },
+    {
+      "text": "建",
+      "start_ms": 211,
+      "end_ms": 422
+    },
+    {
+      "text": "二",
+      "start_ms": 422,
+      "end_ms": 633
+    },
+    {
+      "text": "叉",
+      "start_ms": 633,
+      "end_ms": 844
+    },
+    {
+      "text": "排",
+      "start_ms": 844,
+      "end_ms": 1055
+    },
+    {
+      "text": "序",
+      "start_ms": 1055,
+      "end_ms": 1266
+    },
+    {
+      "text": "树",
+      "start_ms": 1266,
+      "end_ms": 1477
+    },
+    {
+      "text": "时",
+      "start_ms": 1477,
+      "end_ms": 1688
+    },
+    {
+      "text": "，",
+      "start_ms": 1688,
+      "end_ms": 1836
+    },
+    {
+      "text": "有",
+      "start_ms": 1836,
+      "end_ms": 2047
+    },
+    {
+      "text": "三",
+      "start_ms": 2047,
+      "end_ms": 2258
+    },
+    {
+      "text": "个",
+      "start_ms": 2258,
+      "end_ms": 2469
+    },
+    {
+      "text": "常",
+      "start_ms": 2469,
+      "end_ms": 2680
+    },
+    {
+      "text": "见",
+      "start_ms": 2680,
+      "end_ms": 2891
+    },
+    {
+      "text": "误",
+      "start_ms": 2891,
+      "end_ms": 3102
+    },
+    {
+      "text": "区",
+      "start_ms": 3102,
+      "end_ms": 3313
+    },
+    {
+      "text": "需",
+      "start_ms": 3313,
+      "end_ms": 3524
+    },
+    {
+      "text": "要",
+      "start_ms": 3524,
+      "end_ms": 3735
+    },
+    {
+      "text": "注",
+      "start_ms": 3735,
+      "end_ms": 3946
+    },
+    {
+      "text": "意",
+      "start_ms": 3946,
+      "end_ms": 4157
+    },
+    {
+      "text": "。",
+      "start_ms": 4157,
+      "end_ms": 4410
+    },
+    {
+      "text": "第",
+      "start_ms": 4410,
+      "end_ms": 4621
+    },
+    {
+      "text": "一",
+      "start_ms": 4621,
+      "end_ms": 4832
+    },
+    {
+      "text": "个",
+      "start_ms": 4832,
+      "end_ms": 5043
+    },
+    {
+      "text": "误",
+      "start_ms": 5043,
+      "end_ms": 5254
+    },
+    {
+      "text": "区",
+      "start_ms": 5254,
+      "end_ms": 5465
+    },
+    {
+      "text": "是",
+      "start_ms": 5465,
+      "end_ms": 5676
+    },
+    {
+      "text": "方",
+      "start_ms": 5676,
+      "end_ms": 5887
+    },
+    {
+      "text": "向",
+      "start_ms": 5887,
+      "end_ms": 6098
+    },
+    {
+      "text": "选",
+      "start_ms": 6098,
+      "end_ms": 6309
+    },
+    {
+      "text": "择",
+      "start_ms": 6309,
+      "end_ms": 6520
+    },
+    {
+      "text": "错",
+      "start_ms": 6520,
+      "end_ms": 6731
+    },
+    {
+      "text": "误",
+      "start_ms": 6731,
+      "end_ms": 6942
+    },
+    {
+      "text": "。",
+      "start_ms": 6942,
+      "end_ms": 7195
+    },
+    {
+      "text": "比",
+      "start_ms": 7195,
+      "end_ms": 7406
+    },
+    {
+      "text": "如",
+      "start_ms": 7406,
+      "end_ms": 7617
+    },
+    {
+      "text": "要",
+      "start_ms": 7617,
+      "end_ms": 7828
+    },
+    {
+      "text": "插",
+      "start_ms": 7828,
+      "end_ms": 8039
+    },
+    {
+      "text": "入",
+      "start_ms": 8039,
+      "end_ms": 8250
+    },
+    {
+      "text": "值",
+      "start_ms": 8250,
+      "end_ms": 8462
+    },
+    {
+      "text": "30",
+      "start_ms": 8462,
+      "end_ms": 8736
+    },
+    {
+      "text": "到",
+      "start_ms": 8736,
+      "end_ms": 8947
+    },
+    {
+      "text": "根",
+      "start_ms": 8947,
+      "end_ms": 9158
+    },
+    {
+      "text": "节",
+      "start_ms": 9158,
+      "end_ms": 9369
+    },
+    {
+      "text": "点",
+      "start_ms": 9369,
+      "end_ms": 9580
+    },
+    {
+      "text": "为",
+      "start_ms": 9580,
+      "end_ms": 9791
+    },
+    {
+      "text": "50",
+      "start_ms": 9791,
+      "end_ms": 10065
+    },
+    {
+      "text": "的",
+      "start_ms": 10065,
+      "end_ms": 10276
+    },
+    {
+      "text": "树",
+      "start_ms": 10276,
+      "end_ms": 10487
+    },
+    {
+      "text": "中",
+      "start_ms": 10487,
+      "end_ms": 10698
+    },
+    {
+      "text": "，",
+      "start_ms": 10698,
+      "end_ms": 10846
+    },
+    {
+      "text": "30",
+      "start_ms": 10846,
+      "end_ms": 11120
+    },
+    {
+      "text": "小",
+      "start_ms": 11120,
+      "end_ms": 11331
+    },
+    {
+      "text": "于",
+      "start_ms": 11331,
+      "end_ms": 11542
+    },
+    {
+      "text": "50",
+      "start_ms": 11542,
+      "end_ms": 11817
+    },
+    {
+      "text": "，",
+      "start_ms": 11817,
+      "end_ms": 11964
+    },
+    {
+      "text": "应",
+      "start_ms": 11964,
+      "end_ms": 12175
+    },
+    {
+      "text": "该",
+      "start_ms": 12175,
+      "end_ms": 12386
+    },
+    {
+      "text": "插",
+      "start_ms": 12386,
+      "end_ms": 12597
+    },
+    {
+      "text": "入",
+      "start_ms": 12597,
+      "end_ms": 12808
+    },
+    {
+      "text": "左",
+      "start_ms": 12808,
+      "end_ms": 13019
+    },
+    {
+      "text": "子",
+      "start_ms": 13019,
+      "end_ms": 13230
+    },
+    {
+      "text": "树",
+      "start_ms": 13230,
+      "end_ms": 13441
+    },
+    {
+      "text": "，",
+      "start_ms": 13441,
+      "end_ms": 13589
+    },
+    {
+      "text": "但",
+      "start_ms": 13589,
+      "end_ms": 13800
+    },
+    {
+      "text": "错",
+      "start_ms": 13800,
+      "end_ms": 14011
+    },
+    {
+      "text": "误",
+      "start_ms": 14011,
+      "end_ms": 14222
+    },
+    {
+      "text": "地",
+      "start_ms": 14222,
+      "end_ms": 14433
+    },
+    {
+      "text": "插",
+      "start_ms": 14433,
+      "end_ms": 14644
+    },
+    {
+      "text": "入",
+      "start_ms": 14644,
+      "end_ms": 14855
+    },
+    {
+      "text": "到",
+      "start_ms": 14855,
+      "end_ms": 15066
+    },
+    {
+      "text": "了",
+      "start_ms": 15066,
+      "end_ms": 15277
+    },
+    {
+      "text": "右",
+      "start_ms": 15277,
+      "end_ms": 15488
+    },
+    {
+      "text": "子",
+      "start_ms": 15488,
+      "end_ms": 15699
+    },
+    {
+      "text": "树",
+      "start_ms": 15699,
+      "end_ms": 15910
+    },
+    {
+      "text": "，",
+      "start_ms": 15910,
+      "end_ms": 16058
+    },
+    {
+      "text": "这",
+      "start_ms": 16058,
+      "end_ms": 16269
+    },
+    {
+      "text": "就",
+      "start_ms": 16269,
+      "end_ms": 16480
+    },
+    {
+      "text": "违",
+      "start_ms": 16480,
+      "end_ms": 16691
+    },
+    {
+      "text": "反",
+      "start_ms": 16691,
+      "end_ms": 16902
+    },
+    {
+      "text": "了",
+      "start_ms": 16902,
+      "end_ms": 17113
+    },
+    {
+      "text": "二",
+      "start_ms": 17113,
+      "end_ms": 17324
+    },
+    {
+      "text": "叉",
+      "start_ms": 17324,
+      "end_ms": 17535
+    },
+    {
+      "text": "排",
+      "start_ms": 17535,
+      "end_ms": 17746
+    },
+    {
+      "text": "序",
+      "start_ms": 17746,
+      "end_ms": 17957
+    },
+    {
+      "text": "树",
+      "start_ms": 17957,
+      "end_ms": 18168
+    },
+    {
+      "text": "的",
+      "start_ms": 18168,
+      "end_ms": 18379
+    },
+    {
+      "text": "定",
+      "start_ms": 18379,
+      "end_ms": 18590
+    },
+    {
+      "text": "义",
+      "start_ms": 18590,
+      "end_ms": 18801
+    },
+    {
+      "text": "。",
+      "start_ms": 18801,
+      "end_ms": 19054
+    },
+    {
+      "text": "正",
+      "start_ms": 19054,
+      "end_ms": 19265
+    },
+    {
+      "text": "确",
+      "start_ms": 19265,
+      "end_ms": 19476
+    },
+    {
+      "text": "做",
+      "start_ms": 19476,
+      "end_ms": 19687
+    },
+    {
+      "text": "法",
+      "start_ms": 19687,
+      "end_ms": 19898
+    },
+    {
+      "text": "是",
+      "start_ms": 19898,
+      "end_ms": 20109
+    },
+    {
+      "text": "牢",
+      "start_ms": 20109,
+      "end_ms": 20320
+    },
+    {
+      "text": "记",
+      "start_ms": 20320,
+      "end_ms": 20531
+    },
+    {
+      "text": "左",
+      "start_ms": 20531,
+      "end_ms": 20742
+    },
+    {
+      "text": "小",
+      "start_ms": 20742,
+      "end_ms": 20953
+    },
+    {
+      "text": "右",
+      "start_ms": 20953,
+      "end_ms": 21164
+    },
+    {
+      "text": "大",
+      "start_ms": 21164,
+      "end_ms": 21375
+    },
+    {
+      "text": "原",
+      "start_ms": 21375,
+      "end_ms": 21586
+    },
+    {
+      "text": "则",
+      "start_ms": 21586,
+      "end_ms": 21797
+    },
+    {
+      "text": "。",
+      "start_ms": 21797,
+      "end_ms": 22051
+    },
+    {
+      "text": "第",
+      "start_ms": 22051,
+      "end_ms": 22262
+    },
+    {
+      "text": "二",
+      "start_ms": 22262,
+      "end_ms": 22473
+    },
+    {
+      "text": "个",
+      "start_ms": 22473,
+      "end_ms": 22684
+    },
+    {
+      "text": "误",
+      "start_ms": 22684,
+      "end_ms": 22895
+    },
+    {
+      "text": "区",
+      "start_ms": 22895,
+      "end_ms": 23106
+    },
+    {
+      "text": "是",
+      "start_ms": 23106,
+      "end_ms": 23317
+    },
+    {
+      "text": "重",
+      "start_ms": 23317,
+      "end_ms": 23528
+    },
+    {
+      "text": "复",
+      "start_ms": 23528,
+      "end_ms": 23739
+    },
+    {
+      "text": "元",
+      "start_ms": 23739,
+      "end_ms": 23950
+    },
+    {
+      "text": "素",
+      "start_ms": 23950,
+      "end_ms": 24161
+    },
+    {
+      "text": "处",
+      "start_ms": 24161,
+      "end_ms": 24372
+    },
+    {
+      "text": "理",
+      "start_ms": 24372,
+      "end_ms": 24583
+    },
+    {
+      "text": "不",
+      "start_ms": 24583,
+      "end_ms": 24794
+    },
+    {
+      "text": "当",
+      "start_ms": 24794,
+      "end_ms": 25005
+    },
+    {
+      "text": "。",
+      "start_ms": 25005,
+      "end_ms": 25258
+    },
+    {
+      "text": "如",
+      "start_ms": 25258,
+      "end_ms": 25469
+    },
+    {
+      "text": "果",
+      "start_ms": 25469,
+      "end_ms": 25680
+    },
+    {
+      "text": "树",
+      "start_ms": 25680,
+      "end_ms": 25891
+    },
+    {
+      "text": "中",
+      "start_ms": 25891,
+      "end_ms": 26102
+    },
+    {
+      "text": "已",
+      "start_ms": 26102,
+      "end_ms": 26313
+    },
+    {
+      "text": "经",
+      "start_ms": 26313,
+      "end_ms": 26524
+    },
+    {
+      "text": "有",
+      "start_ms": 26524,
+      "end_ms": 26735
+    },
+    {
+      "text": "50",
+      "start_ms": 26735,
+      "end_ms": 27009
+    },
+    {
+      "text": "，",
+      "start_ms": 27009,
+      "end_ms": 27157
+    },
+    {
+      "text": "再",
+      "start_ms": 27157,
+      "end_ms": 27368
+    },
+    {
+      "text": "次",
+      "start_ms": 27368,
+      "end_ms": 27579
+    },
+    {
+      "text": "插",
+      "start_ms": 27579,
+      "end_ms": 27790
+    },
+    {
+      "text": "入",
+      "start_ms": 27790,
+      "end_ms": 28001
+    },
+    {
+      "text": "50",
+      "start_ms": 28001,
+      "end_ms": 28275
+    },
+    {
+      "text": "时",
+      "start_ms": 28275,
+      "end_ms": 28486
+    },
+    {
+      "text": "，",
+      "start_ms": 28486,
+      "end_ms": 28634
+    },
+    {
+      "text": "直",
+      "start_ms": 28634,
+      "end_ms": 28845
+    },
+    {
+      "text": "接",
+      "start_ms": 28845,
+      "end_ms": 29056
+    },
+    {
+      "text": "插",
+      "start_ms": 29056,
+      "end_ms": 29267
+    },
+    {
+      "text": "入",
+      "start_ms": 29267,
+      "end_ms": 29478
+    },
+    {
+      "text": "会",
+      "start_ms": 29478,
+      "end_ms": 29689
+    },
+    {
+      "text": "导",
+      "start_ms": 29689,
+      "end_ms": 29900
+    },
+    {
+      "text": "致",
+      "start_ms": 29900,
+      "end_ms": 30111
+    },
+    {
+      "text": "树",
+      "start_ms": 30111,
+      "end_ms": 30322
+    },
+    {
+      "text": "中",
+      "start_ms": 30322,
+      "end_ms": 30533
+    },
+    {
+      "text": "出",
+      "start_ms": 30533,
+      "end_ms": 30744
+    },
+    {
+      "text": "现",
+      "start_ms": 30744,
+      "end_ms": 30955
+    },
+    {
+      "text": "重",
+      "start_ms": 30955,
+      "end_ms": 31166
+    },
+    {
+      "text": "复",
+      "start_ms": 31166,
+      "end_ms": 31377
+    },
+    {
+      "text": "节",
+      "start_ms": 31377,
+      "end_ms": 31588
+    },
+    {
+      "text": "点",
+      "start_ms": 31588,
+      "end_ms": 31799
+    },
+    {
+      "text": "，",
+      "start_ms": 31799,
+      "end_ms": 31947
+    },
+    {
+      "text": "破",
+      "start_ms": 31947,
+      "end_ms": 32158
+    },
+    {
+      "text": "坏",
+      "start_ms": 32158,
+      "end_ms": 32369
+    },
+    {
+      "text": "了",
+      "start_ms": 32369,
+      "end_ms": 32580
+    },
+    {
+      "text": "有",
+      "start_ms": 32580,
+      "end_ms": 32791
+    },
+    {
+      "text": "序",
+      "start_ms": 32791,
+      "end_ms": 33002
+    },
+    {
+      "text": "性",
+      "start_ms": 33002,
+      "end_ms": 33213
+    },
+    {
+      "text": "。",
+      "start_ms": 33213,
+      "end_ms": 33466
+    },
+    {
+      "text": "正",
+      "start_ms": 33466,
+      "end_ms": 33677
+    },
+    {
+      "text": "确",
+      "start_ms": 33677,
+      "end_ms": 33888
+    },
+    {
+      "text": "做",
+      "start_ms": 33888,
+      "end_ms": 34099
+    },
+    {
+      "text": "法",
+      "start_ms": 34099,
+      "end_ms": 34310
+    },
+    {
+      "text": "是",
+      "start_ms": 34310,
+      "end_ms": 34521
+    },
+    {
+      "text": "检",
+      "start_ms": 34521,
+      "end_ms": 34732
+    },
+    {
+      "text": "查",
+      "start_ms": 34732,
+      "end_ms": 34943
+    },
+    {
+      "text": "是",
+      "start_ms": 34943,
+      "end_ms": 35154
+    },
+    {
+      "text": "否",
+      "start_ms": 35154,
+      "end_ms": 35365
+    },
+    {
+      "text": "存",
+      "start_ms": 35365,
+      "end_ms": 35576
+    },
+    {
+      "text": "在",
+      "start_ms": 35576,
+      "end_ms": 35787
+    },
+    {
+      "text": "，",
+      "start_ms": 35787,
+      "end_ms": 35935
+    },
+    {
+      "text": "存",
+      "start_ms": 35935,
+      "end_ms": 36146
+    },
+    {
+      "text": "在",
+      "start_ms": 36146,
+      "end_ms": 36357
+    },
+    {
+      "text": "则",
+      "start_ms": 36357,
+      "end_ms": 36568
+    },
+    {
+      "text": "忽",
+      "start_ms": 36568,
+      "end_ms": 36779
+    },
+    {
+      "text": "略",
+      "start_ms": 36779,
+      "end_ms": 36990
+    },
+    {
+      "text": "或",
+      "start_ms": 36990,
+      "end_ms": 37201
+    },
+    {
+      "text": "采",
+      "start_ms": 37201,
+      "end_ms": 37412
+    },
+    {
+      "text": "用",
+      "start_ms": 37412,
+      "end_ms": 37623
+    },
+    {
+      "text": "计",
+      "start_ms": 37623,
+      "end_ms": 37834
+    },
+    {
+      "text": "数",
+      "start_ms": 37834,
+      "end_ms": 38045
+    },
+    {
+      "text": "策",
+      "start_ms": 38045,
+      "end_ms": 38256
+    },
+    {
+      "text": "略",
+      "start_ms": 38256,
+      "end_ms": 38467
+    },
+    {
+      "text": "。",
+      "start_ms": 38467,
+      "end_ms": 38720
+    },
+    {
+      "text": "第",
+      "start_ms": 38720,
+      "end_ms": 38931
+    },
+    {
+      "text": "三",
+      "start_ms": 38931,
+      "end_ms": 39142
+    },
+    {
+      "text": "个",
+      "start_ms": 39142,
+      "end_ms": 39353
+    },
+    {
+      "text": "误",
+      "start_ms": 39353,
+      "end_ms": 39564
+    },
+    {
+      "text": "区",
+      "start_ms": 39564,
+      "end_ms": 39775
+    },
+    {
+      "text": "是",
+      "start_ms": 39775,
+      "end_ms": 39986
+    },
+    {
+      "text": "忽",
+      "start_ms": 39986,
+      "end_ms": 40197
+    },
+    {
+      "text": "视",
+      "start_ms": 40197,
+      "end_ms": 40408
+    },
+    {
+      "text": "插",
+      "start_ms": 40408,
+      "end_ms": 40619
+    },
+    {
+      "text": "入",
+      "start_ms": 40619,
+      "end_ms": 40830
+    },
+    {
+      "text": "顺",
+      "start_ms": 40830,
+      "end_ms": 41041
+    },
+    {
+      "text": "序",
+      "start_ms": 41041,
+      "end_ms": 41252
+    },
+    {
+      "text": "的",
+      "start_ms": 41252,
+      "end_ms": 41463
+    },
+    {
+      "text": "影",
+      "start_ms": 41463,
+      "end_ms": 41675
+    },
+    {
+      "text": "响",
+      "start_ms": 41675,
+      "end_ms": 41886
+    },
+    {
+      "text": "。",
+      "start_ms": 41886,
+      "end_ms": 42139
+    },
+    {
+      "text": "用",
+      "start_ms": 42139,
+      "end_ms": 42350
+    },
+    {
+      "text": "序",
+      "start_ms": 42350,
+      "end_ms": 42561
+    },
+    {
+      "text": "列",
+      "start_ms": 42561,
+      "end_ms": 42772
+    },
+    {
+      "text": "1",
+      "start_ms": 42772,
+      "end_ms": 42983
+    },
+    {
+      "text": "、",
+      "start_ms": 42983,
+      "end_ms": 43078
+    },
+    {
+      "text": "2",
+      "start_ms": 43078,
+      "end_ms": 43289
+    },
+    {
+      "text": "、",
+      "start_ms": 43289,
+      "end_ms": 43384
+    },
+    {
+      "text": "3",
+      "start_ms": 43384,
+      "end_ms": 43595
+    },
+    {
+      "text": "、",
+      "start_ms": 43595,
+      "end_ms": 43690
+    },
+    {
+      "text": "4",
+      "start_ms": 43690,
+      "end_ms": 43901
+    },
+    {
+      "text": "、",
+      "start_ms": 43901,
+      "end_ms": 43996
+    },
+    {
+      "text": "5",
+      "start_ms": 43996,
+      "end_ms": 44207
+    },
+    {
+      "text": "构",
+      "start_ms": 44207,
+      "end_ms": 44418
+    },
+    {
+      "text": "建",
+      "start_ms": 44418,
+      "end_ms": 44629
+    },
+    {
+      "text": "二",
+      "start_ms": 44629,
+      "end_ms": 44840
+    },
+    {
+      "text": "叉",
+      "start_ms": 44840,
+      "end_ms": 45051
+    },
+    {
+      "text": "排",
+      "start_ms": 45051,
+      "end_ms": 45262
+    },
+    {
+      "text": "序",
+      "start_ms": 45262,
+      "end_ms": 45473
+    },
+    {
+      "text": "树",
+      "start_ms": 45473,
+      "end_ms": 45684
+    },
+    {
+      "text": "，",
+      "start_ms": 45684,
+      "end_ms": 45831
+    },
+    {
+      "text": "所",
+      "start_ms": 45831,
+      "end_ms": 46042
+    },
+    {
+      "text": "有",
+      "start_ms": 46042,
+      "end_ms": 46253
+    },
+    {
+      "text": "节",
+      "start_ms": 46253,
+      "end_ms": 46464
+    },
+    {
+      "text": "点",
+      "start_ms": 46464,
+      "end_ms": 46675
+    },
+    {
+      "text": "都",
+      "start_ms": 46675,
+      "end_ms": 46886
+    },
+    {
+      "text": "只",
+      "start_ms": 46886,
+      "end_ms": 47097
+    },
+    {
+      "text": "有",
+      "start_ms": 47097,
+      "end_ms": 47308
+    },
+    {
+      "text": "右",
+      "start_ms": 47308,
+      "end_ms": 47519
+    },
+    {
+      "text": "孩",
+      "start_ms": 47519,
+      "end_ms": 47730
+    },
+    {
+      "text": "子",
+      "start_ms": 47730,
+      "end_ms": 47942
+    },
+    {
+      "text": "，",
+      "start_ms": 47942,
+      "end_ms": 48089
+    },
+    {
+      "text": "形",
+      "start_ms": 48089,
+      "end_ms": 48300
+    },
+    {
+      "text": "成",
+      "start_ms": 48300,
+      "end_ms": 48511
+    },
+    {
+      "text": "一",
+      "start_ms": 48511,
+      "end_ms": 48722
+    },
+    {
+      "text": "条",
+      "start_ms": 48722,
+      "end_ms": 48933
+    },
+    {
+      "text": "向",
+      "start_ms": 48933,
+      "end_ms": 49144
+    },
+    {
+      "text": "右",
+      "start_ms": 49144,
+      "end_ms": 49355
+    },
+    {
+      "text": "延",
+      "start_ms": 49355,
+      "end_ms": 49566
+    },
+    {
+      "text": "伸",
+      "start_ms": 49566,
+      "end_ms": 49777
+    },
+    {
+      "text": "的",
+      "start_ms": 49777,
+      "end_ms": 49988
+    },
+    {
+      "text": "单",
+      "start_ms": 49988,
+      "end_ms": 50199
+    },
+    {
+      "text": "支",
+      "start_ms": 50199,
+      "end_ms": 50410
+    },
+    {
+      "text": "树",
+      "start_ms": 50410,
+      "end_ms": 50621
+    },
+    {
+      "text": "，",
+      "start_ms": 50621,
+      "end_ms": 50769
+    },
+    {
+      "text": "树",
+      "start_ms": 50769,
+      "end_ms": 50980
+    },
+    {
+      "text": "的",
+      "start_ms": 50980,
+      "end_ms": 51191
+    },
+    {
+      "text": "高",
+      "start_ms": 51191,
+      "end_ms": 51402
+    },
+    {
+      "text": "度",
+      "start_ms": 51402,
+      "end_ms": 51613
+    },
+    {
+      "text": "达",
+      "start_ms": 51613,
+      "end_ms": 51824
+    },
+    {
+      "text": "到",
+      "start_ms": 51824,
+      "end_ms": 52035
+    },
+    {
+      "text": "5",
+      "start_ms": 52035,
+      "end_ms": 52246
+    },
+    {
+      "text": "，",
+      "start_ms": 52246,
+      "end_ms": 52394
+    },
+    {
+      "text": "查",
+      "start_ms": 52394,
+      "end_ms": 52605
+    },
+    {
+      "text": "找",
+      "start_ms": 52605,
+      "end_ms": 52816
+    },
+    {
+      "text": "效",
+      "start_ms": 52816,
+      "end_ms": 53027
+    },
+    {
+      "text": "率",
+      "start_ms": 53027,
+      "end_ms": 53238
+    },
+    {
+      "text": "从",
+      "start_ms": 53238,
+      "end_ms": 53449
+    },
+    {
+      "text": "O",
+      "start_ms": 53449,
+      "end_ms": 53660
+    },
+    {
+      "text": "log",
+      "start_ms": 53660,
+      "end_ms": 54071
+    },
+    {
+      "text": "n",
+      "start_ms": 54071,
+      "end_ms": 54282
+    },
+    {
+      "text": "退",
+      "start_ms": 54282,
+      "end_ms": 54493
+    },
+    {
+      "text": "化",
+      "start_ms": 54493,
+      "end_ms": 54704
+    },
+    {
+      "text": "为",
+      "start_ms": 54704,
+      "end_ms": 54915
+    },
+    {
+      "text": "O",
+      "start_ms": 54915,
+      "end_ms": 55126
+    },
+    {
+      "text": "n",
+      "start_ms": 55126,
+      "end_ms": 55337
+    },
+    {
+      "text": "。",
+      "start_ms": 55337,
+      "end_ms": 55591
+    },
+    {
+      "text": "这",
+      "start_ms": 55591,
+      "end_ms": 55802
+    },
+    {
+      "text": "说",
+      "start_ms": 55802,
+      "end_ms": 56013
+    },
+    {
+      "text": "明",
+      "start_ms": 56013,
+      "end_ms": 56224
+    },
+    {
+      "text": "插",
+      "start_ms": 56224,
+      "end_ms": 56435
+    },
+    {
+      "text": "入",
+      "start_ms": 56435,
+      "end_ms": 56646
+    },
+    {
+      "text": "顺",
+      "start_ms": 56646,
+      "end_ms": 56857
+    },
+    {
+      "text": "序",
+      "start_ms": 56857,
+      "end_ms": 57068
+    },
+    {
+      "text": "决",
+      "start_ms": 57068,
+      "end_ms": 57279
+    },
+    {
+      "text": "定",
+      "start_ms": 57279,
+      "end_ms": 57490
+    },
+    {
+      "text": "了",
+      "start_ms": 57490,
+      "end_ms": 57701
+    },
+    {
+      "text": "树",
+      "start_ms": 57701,
+      "end_ms": 57912
+    },
+    {
+      "text": "的",
+      "start_ms": 57912,
+      "end_ms": 58123
+    },
+    {
+      "text": "平",
+      "start_ms": 58123,
+      "end_ms": 58334
+    },
+    {
+      "text": "衡",
+      "start_ms": 58334,
+      "end_ms": 58545
+    },
+    {
+      "text": "程",
+      "start_ms": 58545,
+      "end_ms": 58756
+    },
+    {
+      "text": "度",
+      "start_ms": 58756,
+      "end_ms": 58967
+    },
+    {
+      "text": "。",
+      "start_ms": 58967,
+      "end_ms": 59220
+    }
+  ]
+}

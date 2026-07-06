@@ -1,0 +1,725 @@
+{
+  "duration": 34.632,
+  "captions": [
+    {
+      "text": "三",
+      "start_ms": 0,
+      "end_ms": 192
+    },
+    {
+      "text": "次",
+      "start_ms": 192,
+      "end_ms": 385
+    },
+    {
+      "text": "握",
+      "start_ms": 385,
+      "end_ms": 577
+    },
+    {
+      "text": "手",
+      "start_ms": 577,
+      "end_ms": 770
+    },
+    {
+      "text": "过",
+      "start_ms": 770,
+      "end_ms": 962
+    },
+    {
+      "text": "程",
+      "start_ms": 962,
+      "end_ms": 1154
+    },
+    {
+      "text": "中",
+      "start_ms": 1154,
+      "end_ms": 1347
+    },
+    {
+      "text": "，",
+      "start_ms": 1347,
+      "end_ms": 1481
+    },
+    {
+      "text": "客",
+      "start_ms": 1481,
+      "end_ms": 1674
+    },
+    {
+      "text": "户",
+      "start_ms": 1674,
+      "end_ms": 1866
+    },
+    {
+      "text": "端",
+      "start_ms": 1866,
+      "end_ms": 2059
+    },
+    {
+      "text": "和",
+      "start_ms": 2059,
+      "end_ms": 2251
+    },
+    {
+      "text": "服",
+      "start_ms": 2251,
+      "end_ms": 2443
+    },
+    {
+      "text": "务",
+      "start_ms": 2443,
+      "end_ms": 2636
+    },
+    {
+      "text": "端",
+      "start_ms": 2636,
+      "end_ms": 2828
+    },
+    {
+      "text": "各",
+      "start_ms": 2828,
+      "end_ms": 3021
+    },
+    {
+      "text": "自",
+      "start_ms": 3021,
+      "end_ms": 3213
+    },
+    {
+      "text": "经",
+      "start_ms": 3213,
+      "end_ms": 3405
+    },
+    {
+      "text": "历",
+      "start_ms": 3405,
+      "end_ms": 3598
+    },
+    {
+      "text": "了",
+      "start_ms": 3598,
+      "end_ms": 3790
+    },
+    {
+      "text": "一",
+      "start_ms": 3790,
+      "end_ms": 3983
+    },
+    {
+      "text": "系",
+      "start_ms": 3983,
+      "end_ms": 4175
+    },
+    {
+      "text": "列",
+      "start_ms": 4175,
+      "end_ms": 4367
+    },
+    {
+      "text": "状",
+      "start_ms": 4367,
+      "end_ms": 4560
+    },
+    {
+      "text": "态",
+      "start_ms": 4560,
+      "end_ms": 4752
+    },
+    {
+      "text": "变",
+      "start_ms": 4752,
+      "end_ms": 4945
+    },
+    {
+      "text": "迁",
+      "start_ms": 4945,
+      "end_ms": 5137
+    },
+    {
+      "text": "。",
+      "start_ms": 5137,
+      "end_ms": 5368
+    },
+    {
+      "text": "客",
+      "start_ms": 5368,
+      "end_ms": 5560
+    },
+    {
+      "text": "户",
+      "start_ms": 5560,
+      "end_ms": 5753
+    },
+    {
+      "text": "端",
+      "start_ms": 5753,
+      "end_ms": 5945
+    },
+    {
+      "text": "从",
+      "start_ms": 5945,
+      "end_ms": 6138
+    },
+    {
+      "text": "CLOSED",
+      "start_ms": 6138,
+      "end_ms": 6888
+    },
+    {
+      "text": "状",
+      "start_ms": 6888,
+      "end_ms": 7080
+    },
+    {
+      "text": "态",
+      "start_ms": 7080,
+      "end_ms": 7273
+    },
+    {
+      "text": "开",
+      "start_ms": 7273,
+      "end_ms": 7465
+    },
+    {
+      "text": "始",
+      "start_ms": 7465,
+      "end_ms": 7658
+    },
+    {
+      "text": "，",
+      "start_ms": 7658,
+      "end_ms": 7792
+    },
+    {
+      "text": "发",
+      "start_ms": 7792,
+      "end_ms": 7985
+    },
+    {
+      "text": "送",
+      "start_ms": 7985,
+      "end_ms": 8177
+    },
+    {
+      "text": "SYN",
+      "start_ms": 8177,
+      "end_ms": 8552
+    },
+    {
+      "text": "报",
+      "start_ms": 8552,
+      "end_ms": 8745
+    },
+    {
+      "text": "文",
+      "start_ms": 8745,
+      "end_ms": 8937
+    },
+    {
+      "text": "后",
+      "start_ms": 8937,
+      "end_ms": 9129
+    },
+    {
+      "text": "进",
+      "start_ms": 9129,
+      "end_ms": 9322
+    },
+    {
+      "text": "入",
+      "start_ms": 9322,
+      "end_ms": 9514
+    },
+    {
+      "text": "SYN",
+      "start_ms": 9514,
+      "end_ms": 9889
+    },
+    {
+      "text": "SENT",
+      "start_ms": 9889,
+      "end_ms": 10390
+    },
+    {
+      "text": "状",
+      "start_ms": 10390,
+      "end_ms": 10582
+    },
+    {
+      "text": "态",
+      "start_ms": 10582,
+      "end_ms": 10774
+    },
+    {
+      "text": "，",
+      "start_ms": 10774,
+      "end_ms": 10909
+    },
+    {
+      "text": "收",
+      "start_ms": 10909,
+      "end_ms": 11101
+    },
+    {
+      "text": "到",
+      "start_ms": 11101,
+      "end_ms": 11294
+    },
+    {
+      "text": "服",
+      "start_ms": 11294,
+      "end_ms": 11486
+    },
+    {
+      "text": "务",
+      "start_ms": 11486,
+      "end_ms": 11679
+    },
+    {
+      "text": "端",
+      "start_ms": 11679,
+      "end_ms": 11871
+    },
+    {
+      "text": "的",
+      "start_ms": 11871,
+      "end_ms": 12063
+    },
+    {
+      "text": "SYN",
+      "start_ms": 12063,
+      "end_ms": 12439
+    },
+    {
+      "text": "ACK",
+      "start_ms": 12439,
+      "end_ms": 12814
+    },
+    {
+      "text": "并",
+      "start_ms": 12814,
+      "end_ms": 13006
+    },
+    {
+      "text": "回",
+      "start_ms": 13006,
+      "end_ms": 13199
+    },
+    {
+      "text": "复",
+      "start_ms": 13199,
+      "end_ms": 13391
+    },
+    {
+      "text": "ACK",
+      "start_ms": 13391,
+      "end_ms": 13766
+    },
+    {
+      "text": "后",
+      "start_ms": 13766,
+      "end_ms": 13959
+    },
+    {
+      "text": "，",
+      "start_ms": 13959,
+      "end_ms": 14093
+    },
+    {
+      "text": "最",
+      "start_ms": 14093,
+      "end_ms": 14286
+    },
+    {
+      "text": "终",
+      "start_ms": 14286,
+      "end_ms": 14478
+    },
+    {
+      "text": "进",
+      "start_ms": 14478,
+      "end_ms": 14671
+    },
+    {
+      "text": "入",
+      "start_ms": 14671,
+      "end_ms": 14863
+    },
+    {
+      "text": "ESTABLISHED",
+      "start_ms": 14863,
+      "end_ms": 16239
+    },
+    {
+      "text": "状",
+      "start_ms": 16239,
+      "end_ms": 16431
+    },
+    {
+      "text": "态",
+      "start_ms": 16431,
+      "end_ms": 16623
+    },
+    {
+      "text": "。",
+      "start_ms": 16623,
+      "end_ms": 16854
+    },
+    {
+      "text": "服",
+      "start_ms": 16854,
+      "end_ms": 17047
+    },
+    {
+      "text": "务",
+      "start_ms": 17047,
+      "end_ms": 17239
+    },
+    {
+      "text": "端",
+      "start_ms": 17239,
+      "end_ms": 17431
+    },
+    {
+      "text": "从",
+      "start_ms": 17431,
+      "end_ms": 17624
+    },
+    {
+      "text": "LISTEN",
+      "start_ms": 17624,
+      "end_ms": 18374
+    },
+    {
+      "text": "状",
+      "start_ms": 18374,
+      "end_ms": 18567
+    },
+    {
+      "text": "态",
+      "start_ms": 18567,
+      "end_ms": 18759
+    },
+    {
+      "text": "开",
+      "start_ms": 18759,
+      "end_ms": 18951
+    },
+    {
+      "text": "始",
+      "start_ms": 18951,
+      "end_ms": 19144
+    },
+    {
+      "text": "，",
+      "start_ms": 19144,
+      "end_ms": 19278
+    },
+    {
+      "text": "收",
+      "start_ms": 19278,
+      "end_ms": 19471
+    },
+    {
+      "text": "到",
+      "start_ms": 19471,
+      "end_ms": 19663
+    },
+    {
+      "text": "客",
+      "start_ms": 19663,
+      "end_ms": 19856
+    },
+    {
+      "text": "户",
+      "start_ms": 19856,
+      "end_ms": 20048
+    },
+    {
+      "text": "端",
+      "start_ms": 20048,
+      "end_ms": 20240
+    },
+    {
+      "text": "的",
+      "start_ms": 20240,
+      "end_ms": 20433
+    },
+    {
+      "text": "SYN",
+      "start_ms": 20433,
+      "end_ms": 20808
+    },
+    {
+      "text": "并",
+      "start_ms": 20808,
+      "end_ms": 21000
+    },
+    {
+      "text": "发",
+      "start_ms": 21000,
+      "end_ms": 21193
+    },
+    {
+      "text": "送",
+      "start_ms": 21193,
+      "end_ms": 21385
+    },
+    {
+      "text": "SYN",
+      "start_ms": 21385,
+      "end_ms": 21760
+    },
+    {
+      "text": "ACK",
+      "start_ms": 21760,
+      "end_ms": 22136
+    },
+    {
+      "text": "后",
+      "start_ms": 22136,
+      "end_ms": 22328
+    },
+    {
+      "text": "，",
+      "start_ms": 22328,
+      "end_ms": 22463
+    },
+    {
+      "text": "进",
+      "start_ms": 22463,
+      "end_ms": 22655
+    },
+    {
+      "text": "入",
+      "start_ms": 22655,
+      "end_ms": 22848
+    },
+    {
+      "text": "SYN",
+      "start_ms": 22848,
+      "end_ms": 23223
+    },
+    {
+      "text": "RCVD",
+      "start_ms": 23223,
+      "end_ms": 23723
+    },
+    {
+      "text": "状",
+      "start_ms": 23723,
+      "end_ms": 23915
+    },
+    {
+      "text": "态",
+      "start_ms": 23915,
+      "end_ms": 24108
+    },
+    {
+      "text": "，",
+      "start_ms": 24108,
+      "end_ms": 24242
+    },
+    {
+      "text": "收",
+      "start_ms": 24242,
+      "end_ms": 24435
+    },
+    {
+      "text": "到",
+      "start_ms": 24435,
+      "end_ms": 24627
+    },
+    {
+      "text": "客",
+      "start_ms": 24627,
+      "end_ms": 24820
+    },
+    {
+      "text": "户",
+      "start_ms": 24820,
+      "end_ms": 25012
+    },
+    {
+      "text": "端",
+      "start_ms": 25012,
+      "end_ms": 25204
+    },
+    {
+      "text": "的",
+      "start_ms": 25204,
+      "end_ms": 25397
+    },
+    {
+      "text": "最",
+      "start_ms": 25397,
+      "end_ms": 25589
+    },
+    {
+      "text": "终",
+      "start_ms": 25589,
+      "end_ms": 25782
+    },
+    {
+      "text": "ACK",
+      "start_ms": 25782,
+      "end_ms": 26157
+    },
+    {
+      "text": "后",
+      "start_ms": 26157,
+      "end_ms": 26349
+    },
+    {
+      "text": "，",
+      "start_ms": 26349,
+      "end_ms": 26484
+    },
+    {
+      "text": "也",
+      "start_ms": 26484,
+      "end_ms": 26676
+    },
+    {
+      "text": "进",
+      "start_ms": 26676,
+      "end_ms": 26869
+    },
+    {
+      "text": "入",
+      "start_ms": 26869,
+      "end_ms": 27061
+    },
+    {
+      "text": "ESTABLISHED",
+      "start_ms": 27061,
+      "end_ms": 28437
+    },
+    {
+      "text": "状",
+      "start_ms": 28437,
+      "end_ms": 28629
+    },
+    {
+      "text": "态",
+      "start_ms": 28629,
+      "end_ms": 28822
+    },
+    {
+      "text": "。",
+      "start_ms": 28822,
+      "end_ms": 29052
+    },
+    {
+      "text": "双",
+      "start_ms": 29052,
+      "end_ms": 29245
+    },
+    {
+      "text": "方",
+      "start_ms": 29245,
+      "end_ms": 29437
+    },
+    {
+      "text": "都",
+      "start_ms": 29437,
+      "end_ms": 29630
+    },
+    {
+      "text": "进",
+      "start_ms": 29630,
+      "end_ms": 29822
+    },
+    {
+      "text": "入",
+      "start_ms": 29822,
+      "end_ms": 30014
+    },
+    {
+      "text": "ESTABLISHED",
+      "start_ms": 30014,
+      "end_ms": 31390
+    },
+    {
+      "text": "状",
+      "start_ms": 31390,
+      "end_ms": 31582
+    },
+    {
+      "text": "态",
+      "start_ms": 31582,
+      "end_ms": 31775
+    },
+    {
+      "text": "，",
+      "start_ms": 31775,
+      "end_ms": 31910
+    },
+    {
+      "text": "标",
+      "start_ms": 31910,
+      "end_ms": 32102
+    },
+    {
+      "text": "志",
+      "start_ms": 32102,
+      "end_ms": 32294
+    },
+    {
+      "text": "着",
+      "start_ms": 32294,
+      "end_ms": 32487
+    },
+    {
+      "text": "TCP",
+      "start_ms": 32487,
+      "end_ms": 32862
+    },
+    {
+      "text": "连",
+      "start_ms": 32862,
+      "end_ms": 33054
+    },
+    {
+      "text": "接",
+      "start_ms": 33054,
+      "end_ms": 33247
+    },
+    {
+      "text": "正",
+      "start_ms": 33247,
+      "end_ms": 33439
+    },
+    {
+      "text": "式",
+      "start_ms": 33439,
+      "end_ms": 33632
+    },
+    {
+      "text": "建",
+      "start_ms": 33632,
+      "end_ms": 33824
+    },
+    {
+      "text": "立",
+      "start_ms": 33824,
+      "end_ms": 34016
+    },
+    {
+      "text": "完",
+      "start_ms": 34016,
+      "end_ms": 34209
+    },
+    {
+      "text": "成",
+      "start_ms": 34209,
+      "end_ms": 34401
+    },
+    {
+      "text": "。",
+      "start_ms": 34401,
+      "end_ms": 34632
+    }
+  ]
+}
