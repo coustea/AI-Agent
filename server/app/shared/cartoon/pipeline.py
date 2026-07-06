@@ -69,7 +69,7 @@ class CartoonPipeline:
         except Exception as exc:
             raise CartoonGenerationError(f"教学分镜生成失败: {exc}") from exc
 
-        await self._progress(progress, "正在使用 Edge TTS 合成配音与词级时间轴...", 30)
+        await self._progress(progress, "正在合成配音与词级时间轴...", 30)
         semaphore = asyncio.Semaphore(self.tts_concurrency)
 
         async def synthesize_scene(index: int) -> tuple[int, list]:

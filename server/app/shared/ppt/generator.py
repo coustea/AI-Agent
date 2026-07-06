@@ -53,10 +53,10 @@ class PPTGenerator:
         output_dir: Path,
         progress: ProgressCallback | None = None,
     ) -> PPTArtifact:
-        stage = "planning"
+        stage = "generation"
         try:
-            await self._progress(progress, "正在规划教学叙事与逐页画面...", 25)
-            plan = await self._plan(request)
+            await self._progress(progress, "正在基于教学资源生成课件内容...", 25)
+            plan, plan_markdown = await self._generate_markdown(request)
             plan = plan.model_copy(
                 update={"density": DENSITY_MODES[request.preferences.density]}
             )
@@ -83,22 +83,28 @@ class PPTGenerator:
         return PPTArtifact(
             path=path,
             plan=plan,
+            plan_markdown=plan_markdown,
             template_id=resolved.template.manifest.id,
             template_name=resolved.template.manifest.name,
             slide_count=len(resolved.slides),
         )
 
-    async def _plan(
+    async def _generate_markdown(
         self,
         request: ResourcePPTRequest | PathPPTRequest,
-    ) -> PPTPlan:
+    ) -> tuple[PPTPlan, str]:
+        """基于上游资源和协同计划，让 LLM 直接生成 Markdown 课件。
+
+        不做二次规划——协同计划已由 PlanningAgent 完成，
+        此处只将已有素材组织为课件页面。
+        """
         prompt = prompts.get("ppt").render(
             "slide_outline",
             request=request.model_dump_json(indent=2),
         )
         response = await self._llm.ainvoke(prompt)
         markdown = response.content if hasattr(response, "content") else str(response)
-        return compile_ppt_plan(
+        plan = compile_ppt_plan(
             markdown,
             title="",  # 由 Markdown 内 # 标题指定
             density=DENSITY_MODES[request.preferences.density],
@@ -106,6 +112,7 @@ class PPTGenerator:
             if request.preferences.template != "auto"
             else "auto",
         )
+        return plan, markdown
 
     @classmethod
     def available_templates(cls) -> list[dict[str, object]]:

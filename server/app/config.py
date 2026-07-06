@@ -123,11 +123,6 @@ def user_chat_uploads_dir(username: str, session_id: str) -> Path:
     return user_chat_dir(username, session_id) / "uploads"
 
 
-def user_chat_diagrams_dir(username: str, session_id: str) -> Path:
-    """获取用户教学图解目录：static/{username}/chat/{session_id}/diagrams/"""
-    return user_chat_dir(username, session_id) / "diagrams"
-
-
 def user_chat_videos_dir(username: str, session_id: str, message_id: str) -> Path:
     """获取用户聊天视频目录：static/{username}/chat/{session_id}/videos/{message_id}/"""
     return user_chat_dir(username, session_id) / "videos" / message_id
@@ -215,10 +210,6 @@ def chat_upload_url(username: str, session_id: str, filename: str) -> str:
     """构建聊天附件 URL：/static/{username}/chat/{session_id}/uploads/{filename}"""
     return f"/static/{username}/chat/{session_id}/uploads/{filename}"
 
-
-def chat_diagram_url(username: str, session_id: str, diagram_id: str) -> str:
-    """构建教学图解 URL：/static/{username}/chat/{session_id}/diagrams/{diagram_id}.json"""
-    return f"/static/{username}/chat/{session_id}/diagrams/{diagram_id}.json"
 
 
 def chat_video_url(username: str, session_id: str, message_id: str) -> str:

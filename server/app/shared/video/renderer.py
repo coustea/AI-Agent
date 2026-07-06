@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import platform
 import shutil
+import subprocess
 import uuid
+from functools import lru_cache
 from pathlib import Path
 
 from app.config import (
@@ -22,6 +26,97 @@ logger = get_logger(__name__)
 REPOSITORY_DIR = Path(__file__).resolve().parents[4]
 REMOTION_DIR = REPOSITORY_DIR / "video-render"
 ALLOWED_GL_BACKENDS = {"angle", "swiftshader", "egl"}
+
+
+# ---------------------------------------------------------------------------
+# GPU 自动检测 — 与 cartoon 渲染器保持一致的检测逻辑
+# ---------------------------------------------------------------------------
+
+
+def _ffmpeg_encoders() -> str:
+    """探测本机 FFmpeg 支持的编码器列表（小写）。"""
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        return ""
+    try:
+        result = subprocess.run(
+            [ffmpeg, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return f"{result.stdout}\n{result.stderr}".lower()
+
+
+def _nvidia_gpu_available(encoders: str) -> bool:
+    """判断 Linux/Windows 是否存在可用的 NVIDIA GPU 与 NVENC 编码器。"""
+    system = platform.system()
+    if system not in {"Linux", "Windows"} or "h264_nvenc" not in encoders:
+        return False
+
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None and system == "Windows":
+        default_path = Path(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe")
+        if default_path.is_file():
+            nvidia_smi = str(default_path)
+
+    if nvidia_smi is None:
+        return False
+    try:
+        result = subprocess.run(
+            [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+@lru_cache(maxsize=1)
+def detect_chromium_gl_backend(configured: str | None = None) -> str:
+    """探测 GPU 并选择最合适的 Chromium GL 后端（针对 Ubuntu Linux 优化）。
+
+    Remotion 官方文档在 GPU 渲染场景下统一推荐 ``angle`` 后端
+    (webgl2-context / shaders / three / skia / html-in-canvas 等），
+    ANGLE 在 Linux NVIDIA 上经由 Vulkan/OpenGL 后端访问 GPU，兼容性最佳。
+    参考: https://www.remotion.dev/docs/troubleshooting/webgl2-context
+
+    优先级（Ubuntu 优先）：
+    1. 显式配置（config.yaml 中 chromium_gl 非默认值）始终生效
+    2. 检测到 NVIDIA GPU（NVENC + nvidia-smi）→ angle（Remotion 推荐的 GPU 后端）
+    3. 无 GPU → swiftshader（纯软件渲染，确保 headless 下也能出帧）
+
+    Args:
+        configured: 来自 config.yaml 的显式配置值，为 None 时读取全局配置。
+
+    Returns:
+        合法的 GL 后端名称，必定属于 ALLOWED_GL_BACKENDS。
+    """
+    # 显式配置优先（用户在 config.yaml 中手动设置时尊重其选择）
+    explicit = configured if configured is not None else VIDEO_RENDER_CHROMIUM_GL
+    if explicit not in ALLOWED_GL_BACKENDS:
+        explicit = "angle"
+
+    encoders = _ffmpeg_encoders()
+    has_gpu = _nvidia_gpu_available(encoders)
+
+    # Ubuntu Linux + NVIDIA GPU：使用 Remotion 官方推荐的 angle 后端
+    # 无 GPU 时退回 swiftshader，保证 headless 环境也能完成渲染
+    chosen = "angle" if has_gpu else "swiftshader"
+
+    logger.info(
+        "Chromium GL 后端选择 (Ubuntu 优先): configured=%s, gpu_detected=%s, chosen=%s",
+        explicit,
+        has_gpu,
+        chosen,
+    )
+    return chosen
 
 
 class VideoRenderError(RuntimeError):
@@ -72,14 +167,29 @@ class RemotionVideoRenderer:
         remotion_dir: Path = REMOTION_DIR,
         timeout_seconds: int = VIDEO_RENDER_TIMEOUT_SECONDS,
         concurrency: int = VIDEO_RENDER_CONCURRENCY,
-        chromium_gl: str = VIDEO_RENDER_CHROMIUM_GL,
+        chromium_gl: str | None = None,
+        auto_detect_gl: bool = True,
     ) -> None:
-        if chromium_gl not in ALLOWED_GL_BACKENDS:
-            raise ValueError(f"unsupported Chromium GL backend: {chromium_gl}")
+        """初始化 Remotion 渲染器。
+
+        Args:
+            remotion_dir: video-render 项目根目录。
+            timeout_seconds: 单次渲染最大超时（秒）。
+            concurrency: Remotion 并发数。
+            chromium_gl: 显式指定 Chromium GL 后端。None 表示由配置或自动检测决定。
+            auto_detect_gl: 是否在渲染时自动探测 GPU 选择最优 GL 后端。
+                当 chromium_gl 显式指定时，自动检测不再覆盖该值。
+        """
         self.remotion_dir = remotion_dir
         self.timeout_seconds = timeout_seconds
         self.concurrency = concurrency
-        self.chromium_gl = chromium_gl
+        self._explicit_gl = chromium_gl
+        self.auto_detect_gl = auto_detect_gl
+        # 初始值：优先显式参数，其次配置默认值；运行时可能被自动检测覆盖
+        initial_gl = chromium_gl or VIDEO_RENDER_CHROMIUM_GL
+        if initial_gl not in ALLOWED_GL_BACKENDS:
+            raise ValueError(f"unsupported Chromium GL backend: {initial_gl}")
+        self.chromium_gl = initial_gl
 
     async def render(self, plan: VideoPlan, output_dir: Path) -> VideoArtifact:
         if not (self.remotion_dir / "package.json").is_file():
@@ -123,6 +233,12 @@ class RemotionVideoRenderer:
 
         import platform
         npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
+
+        # 运行时探测 GPU 并选择最优 GL 后端（除非显式指定）
+        # 与 cartoon 渲染器保持一致的 GPU 检测逻辑
+        if self.auto_detect_gl and self._explicit_gl is None:
+            self.chromium_gl = await asyncio.to_thread(detect_chromium_gl_backend)
+
         command = [
             npx_cmd,
             "tsx",

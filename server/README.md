@@ -1,613 +1,370 @@
-# AI Learning Platform - 后端
+# AI 学习平台 · 后端服务
 
-FastAPI + LangGraph 多智能体学习平台后端。
+基于 **FastAPI + LangGraph** 的多智能体个性化学习平台后端，提供 AI 辅导对话、多模态学习资源生成、学习路径规划、题库与数字人播报等能力。后端通过三层记忆与学习者画像驱动个性化教学，并将多智能体编排复用于独立资源生成与路径节点学习两条独立的业务链路。
+
+---
+
+## 目录
+
+- [核心能力](#核心能力)
+- [技术栈](#技术栈)
+- [系统架构](#系统架构)
+- [快速开始](#快速开始)
+- [配置](#配置)
+- [API 参考](#api-参考)
+- [视频渲染子系统](#视频渲染子系统)
+- [记忆与画像](#记忆与画像)
+- [测试](#测试)
+- [项目结构](#项目结构)
+- [开发约定](#开发约定)
+- [故障排查](#故障排查)
+
+---
+
+## 核心能力
+
+- **AI 辅导对话** — SSE 流式输出，融合三层上下文（会话摘要 / 长期记忆 / 学习画像）实现因材施教；支持附件分析、联网搜索与教学图生成。
+- **多智能体资源生成** — 一键生成教程、思维导图、题目、代码示例、阅读材料、PPT、讲解视频、动画讲解等多模态资源。
+- **学习路径规划** — 课程级路径编排，节点内形成「教程 → 测验 → 辅助资源」的学习闭环，节点资源按需单智能体生成。
+- **题库与错题本** — 编程题与客观题管理，答题事件自动归集错题。
+- **数字人播报** — WebSocket 桥接讯飞数字人，ASR 实时识别 + 数字人播报互动。
+- **首页仪表盘** — 学习数据聚合、学习进度追踪与个性化推荐。
+- **GPU 加速视频渲染** — 检测到 NVIDIA GPU + NVENC 时自动启用 GPU 渲染（Ubuntu Linux 优先）。
 
 ## 技术栈
 
-| 层级 | 技术 |
+| 分类 | 选型 |
 |------|------|
-| 后端框架 | FastAPI, SQLModel, SQLAlchemy Async |
-| 多智能体 | LangGraph, LangChain |
-| 数据库 | PostgreSQL (asyncpg) |
-| LLM | OpenAI 兼容 API (ChatOpenAI) |
-| 向量检索 | ChromaDB, FAISS, Ollama (bge-m3) |
+| Web 框架 | FastAPI · SQLModel · SQLAlchemy (async) |
+| 多智能体编排 | LangGraph · LangChain |
+| 数据库 | PostgreSQL · asyncpg |
+| LLM 接入 | OpenAI 兼容 API · Anthropic · 智谱 AI |
+| 视频渲染 | Remotion 4 · HyperFrames · FFmpeg (NVENC) |
+| 语音合成 | Microsoft Edge-TTS · 讯飞星火 TTS |
+| 向量检索 | Ollama (bge-m3) · FAISS · ChromaDB |
 | 包管理 | uv |
-| 视频渲染 | Remotion 4.0, HyperFrames, FFmpeg |
-| TTS 配音 | Edge-TTS, 讯飞星火 TTS |
 
-## 环境要求
+## 系统架构
 
-### 必需环境
+### 领域模块
 
-| 工具 | 版本要求 | 用途 |
-|------|---------|------|
-| **Python** | ≥ 3.13 | 后端运行环境 |
-| **PostgreSQL** | ≥ 12 | 主数据库 |
-| **FFmpeg** | 任意版本 | 视频渲染音视频处理 |
-| **FFprobe** | 与 FFmpeg 同版本 | 音视频流探测 |
-| **uv** | 最新版 | Python 包管理器 |
+后端按业务领域拆分，每个领域遵循统一的分层结构：`api.py`（路由）→ `service.py`（编排）→ `schemas.py` / `request.py` / `response.py`（DTO）。
 
-### 可选环境
+| 领域 | 职责 |
+|------|------|
+| `auth` | 注册 / 登录 / 登出，JWT 校验 + `ActiveToken` 白名单 |
+| `chat` | SSE 辅导对话、附件分析、记忆与画像集成 |
+| `resource` | 独立多智能体资源生成（不依赖学习路径上下文） |
+| `path` | 学习路径规划与节点工作空间 |
+| `profile` | 学习者画像推断（`GlobalProfile` / `CourseProfile`） |
+| `evaluation` | 学习事件采集与会话汇总 |
+| `dashboard` | 首页聚合与推荐 |
+| `quiz` | 题库与错题本 |
+| `avatar` | 数字人 REST 接口与 WebSocket 桥接 |
+| `infra` | 数据库、SQLModel、日志、配置、Prompt、响应信封 |
+| `shared` | 跨领域共享能力（视频渲染、动画渲染、工具函数） |
 
-| 工具 | 用途 | 配置位置 |
-|------|------|----------|
-| **Ollama + bge-m3** | 向量检索知识库 | `config.yaml` → `knowledge` |
-| **NVIDIA GPU + NVENC** | GPU 加速视频编码（仅 Linux） | 自动检测 |
+应用启动流程集中在 `app/main.py`：`create_app()` 配置 CORS 与异常处理，`lifespan()` 预热 Prompt 模板、初始化数据库并执行健康检查，`app/routes.py` 统一挂载全部 HTTP 与 WebSocket 路由。
 
-## 视频渲染模块
+### 三条核心运行链路
 
-后端包含两条独立的视频渲染管线，均需要 FFmpeg 支持。
+**1. 辅导对话链路（个性化主链路）**
+`POST /api/v1/ai/chat/stream` → 创建 `ChatTurn` → 持久化用户消息与附件 → 组装多层上下文（历史 / 摘要块 / 长期记忆 / 画像 / 检索源）→ `TutorAgent`（LangGraph StateGraph：classify → 路由 → answer / search / attachment）→ SSE 流式回传 → 持久化回复 → 触发压缩与长期记忆抽取。
 
-### 1. Remotion 讲解视频
+**2. 独立资源生成链路**
+`POST /api/v1/ai/resources` → 持久化 `GeneratedResource` 任务 → 后台 LangGraph 父工作流（Planning → 并行 Worker → Review）→ 持久化 `GeneratedResourceItem` → 通过 SSE 推送进度。
 
-**入口**：`app/resource/agents/video.py` → `app/shared/video/agent.py`
+**3. 学习路径链路**
+`POST /api/v1/ai/path-plan` → 后台生成阶段与节点 → `GET .../nodes/{id}/workspace` 驱动节点工作空间 → 节点学习走 LangGraph learn workflow → 节点资源存入 `PathNodeResource` → 学习事件反馈画像与评估。
 
-**渲染器**：`app/shared/video/renderer.py` → `video-render/` (Remotion 项目)
+> **关键设计边界**：独立资源（`generated_resources`）与路径节点资源（`path_node_resources`）**共用 Agent 实现，但持久化模型、API 与详情页各自独立**。两者不可合并记录或混用接口。
 
-**依赖**：
-- FFmpeg / FFprobe（必须）
-- Node.js 18+（必须）
-- Remotion 4.0.478（video-render/package.json）
+## 快速开始
 
-**工作流程**：
-1. `VideoMaterialAgent` 提取教学材料要点
-2. `VideoDirectorAgent` 规划场景节奏
-3. `SceneWriterAgent` 为每个场景撰写脚本与视觉 cue
-4. `VideoTtsService`（讯飞 TTS 或 Edge-TTS）生成配音 MP3
-5. `RemotionVideoRenderer` 调用 `npx tsx scripts/render.ts` 渲染 MP4
+本节以 **Ubuntu 22.04 / 24.04** 为主线说明（视频渲染管线的主要目标平台）。Windows / macOS 仅需替换对应包管理命令，不再赘述。
 
-**配置**（`config.yaml`）：
-```yaml
-video:
-  render_timeout_seconds: 900  # 单视频最大渲染时长
-  concurrency: 4                # Remotion 并发
-  chromium_gl: angle            # Chromium GL 后端
-```
+### 环境要求
 
-**验证 FFmpeg 安装**：
+按用途分为「必需」「视频功能必需」「可选」三档：
+
+| 依赖 | 版本 | 档位 | 用途 |
+|------|------|------|------|
+| Python | ≥ 3.13 | 必需 | 后端运行时 |
+| uv | 最新 | 必需 | Python 包 / 虚拟环境管理 |
+| PostgreSQL | ≥ 12 | 必需 | 主数据库 |
+| Python 构建工具链 | — | 必需 | 编译 `asyncpg` / `faiss-cpu` / `greenlet` 等 C 扩展 |
+| FFmpeg / FFprobe | ≥ 4.0 | 视频功能必需 | Remotion / HyperFrames 渲染（含软件编码） |
+| Node.js | ≥ 18 | 视频功能必需 | Remotion 渲染（`npx tsx`） |
+| Ollama + bge-m3 | — | 可选 | 向量检索（`knowledge.enabled: true` 时启用） |
+| NVIDIA 驱动 + NVENC | — | 可选 | GPU 加速视频编码（无则自动回退 CPU） |
+
+> 仅运行核心对话与资源生成时，装齐「必需」档即可；视频生成、向量检索、数字人按需追加。
+
+### 1. 安装系统依赖（apt）
+
 ```bash
-ffmpeg -version      # 需能看到 libx264、aac 编码器
-ffprobe -version     # 用于探测音视频流信息
+sudo apt update
+
+# Python 构建工具链：asyncpg / faiss-cpu / greenlet 等需要 C 编译器与 libpq 头文件
+sudo apt install -y build-essential python3-dev libpq-dev libffi-dev libssl-dev \
+                    pkg-config curl git
+
+# PostgreSQL
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl enable --now postgresql
+
+# FFmpeg / FFprobe（含软件编码器）
+sudo apt install -y ffmpeg
 ```
 
-**初始化 video-render**：
+### 2. 安装 Python 3.13 与 uv
+
+```bash
+# Python 3.13（Ubuntu 22.04 默认源为 3.10，需 deadsnakes PPA；24.04 可省略 PPA）
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt install -y python3.13 python3.13-venv python3.13-dev
+
+# uv（Astral 官方安装脚本）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source "$HOME/.local/bin/env"     # 激活 uv 到当前 shell
+```
+
+### 3. 安装 Node.js 18（视频渲染才需要）
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v   # 验证 ≥ 18
+```
+
+### 4. 安装项目 Python 依赖
+
+```bash
+cd server
+uv sync            # 自动创建 .venv 并按 pyproject.toml 安装全部依赖
+```
+
+### 5. 初始化数据库
+
+```bash
+# 创建角色与数据库（用户名/密码需与 config.yaml → database.url 对应）
+sudo -u postgres psql -c "CREATE USER coustea WITH PASSWORD 'Aa123456';"
+sudo -u postgres psql -c "CREATE DATABASE agent OWNER coustea;"
+
+# 导入初始 schema（建表 + 索引）
+psql "postgresql://coustea:Aa123456@127.0.0.1:5432/agent" -f init_schema.sql
+```
+
+> 也可用仓库自带的 `docker-compose.yml` 以容器方式运行 PostgreSQL，首次启动会自动挂载 `init_schema.sql` 执行初始化。
+
+### 6. 配置 `config.yaml`
+
+填入真实凭据（详见下节 [配置](#配置)）。最简启动只需保证 `database.url`、`jwt.secret_key`、`models.{base_url, api_key, model_name}` 三项有效。
+
+### 7. 启动服务
+
+```bash
+uv run fastapi dev app/main.py --port 9999    # 开发模式（热重载）
+# 或
+uv run python app/main.py                     # 生产模式
+```
+
+启动成功后访问交互式 API 文档：<http://localhost:9999/docs>
+
+### 可选：启用视频 GPU 渲染（Ubuntu + NVIDIA）
+
+```bash
+# 1. 安装 NVIDIA 驱动（重启生效）
+sudo ubuntu-drivers autoinstall
+sudo reboot
+
+# 2. 验证 NVENC 硬件编码器可用
+ffmpeg -hide_banner -encoders | grep nvenc    # 应列出 h264_nvenc / hevc_nvenc 等
+nvidia-smi                                    # 确认驱动与显存
+
+# 3. 初始化 Remotion 前端依赖（首次渲染前一次性执行）
+cd video-render
+npm install
+npx remotion --version                        # 验证 4.0.478
+cd ..
+```
+
+无 GPU 环境无需任何额外操作，渲染管线会自动回退 `swiftshader` / CPU 软件渲染。
+
+### 可选：启用向量检索（Ollama + bge-m3）
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh    # 安装 Ollama
+systemctl --user enable --now ollama
+ollama pull bge-m3                               # 拉取向量模型
+```
+
+随后确认 `config.yaml → knowledge.enabled: true` 即可生效。
+
+## 配置
+
+所有运行时配置集中在 **`config.yaml`**（本项目不使用 `.env`）。核心配置组与必填标注：
+
+| 配置组 | 必填 | 说明 |
+|--------|------|------|
+| `app` | 否 | host / port / debug |
+| `database` | **是** | PostgreSQL 连接 URL、连接池 |
+| `jwt` | **是** | `secret_key`（≥ 32 字符）/ algorithm / expire_days |
+| `models` | **是** | 主 LLM 的 `base_url` / `api_key` / `model_name` / 各场景 temperature |
+| `models.vision` | 否 | 图片理解模型（缺失则跳过图片分析） |
+| `spark` / `spark_tts` | 否 | 讯飞星火 TTS（缺失则自动回退 Edge-TTS） |
+| `avatar` | 否 | 讯飞数字人 + ASR（缺失则数字人功能不可用） |
+| `search` | 否 | Tavily / 讯飞搜索密钥（缺失则关闭联网搜索） |
+| `knowledge` | 否 | Ollama + bge-m3 向量检索（`enabled: false` 可整体关闭） |
+| `memory` | 否 | 会话压缩与长期记忆抽取阈值（有合理默认值） |
+| `chat` | 否 | 文件上传限制、历史长度（有合理默认值） |
+| `paths_config` | 否 | 测验题量、及格分 |
+| `video` | 否 | 渲染超时、并发数、Chromium GL 后端（默认 `angle`） |
+
+最小可启动配置示例（只列必填三项）：
+
+```yaml
+database:
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+jwt:
+  secret_key: "至少-32-个字符的随机字符串"        # 必须 ≥ 32 字符
+models:
+  base_url: "https://api.openai.com/v1"          # 或任意 OpenAI 兼容端点
+  api_key: "sk-xxx"
+  model_name: "gpt-4o"
+```
+
+> `config.yaml` 中其余可选配置组即使留空或缺失，对应功能会优雅降级，不会阻塞核心服务启动。
+
+## API 参考
+
+所有响应统一使用 `HttpResponse` 信封：
+
+```json
+{ "code": 200, "message": "...", "data": {} }
+```
+
+| 前缀 | 领域 | 主要能力 |
+|------|------|----------|
+| `/api/v1/users` | auth | 注册 / 登录 / 登出 / 当前用户 |
+| `/api/v1/ai/chat` | chat | SSE 流式对话、附件上传、会话与画像接口 |
+| `/api/v1/ai/resources` | resource | 独立资源生成、状态查询、详情、历史、Agent 列表、SSE |
+| `/api/v1/ai/path-plan` | path | 路径生成、当前/历史路径、节点工作空间、节点教程/测验/资源 |
+| `/api/v1/ai/cartoon` | cartoon | 动画讲解视频生成 |
+| `/api/v1/ai/dashboard` | dashboard | 首页聚合与推荐 |
+| `/api/v1/ai/evaluation` | evaluation | 学习事件、评估汇总 |
+| `/api/v1/ai/quiz-bank` | quiz | 题库管理 |
+| `/api/v1/ai/wrong-questions` | quiz | 错题本 |
+| `/api/v1/ai/avatar` | avatar | 数字人 REST 接口 |
+| `/ws/avatar` | websocket | 数字人 WebSocket（`?token=JWT` 鉴权） |
+
+> 路由的权威来源是 `app/routes.py` 与各领域 `api.py`；完整端点签名以 `/docs` 的 OpenAPI 文档为准。
+
+## 视频渲染子系统
+
+后端包含两条独立的视频渲染管线，均检测到 NVIDIA GPU 时自动启用 GPU 加速。
+
+### Remotion 讲解视频
+
+- **入口**：`app/resource/agents/video.py` → `app/shared/video/agent.py`
+- **渲染器**：`app/shared/video/renderer.py` → `video-render/scripts/render.ts`
+- **流程**：素材提取 → 场景节奏规划 → 逐场景脚本撰写 → TTS 合成 → `npx tsx scripts/render.ts` 渲染 MP4
+- **GPU 路径**：Chromium GL 后端 `angle`（Remotion 官方推荐的 GPU 后端）+ FFmpeg `hardwareAcceleration` 启用 NVENC 硬件编码
+- **无 GPU 兜底**：自动回退 `swiftshader` 软件渲染，保证 headless 环境也能出帧
+
+首次渲染前需初始化前端依赖：
+
 ```bash
 cd video-render
 npm install
-# 验证 Remotion CLI
-npx remotion --version
+npx remotion --version    # 验证 Remotion 4.0.478
 ```
 
-### 2. HyperFrames 动画讲解
+### HyperFrames 动画讲解
 
-**入口**：`app/resource/agents/cartoon.py` → `app/shared/cartoon/pipeline.py`
+- **入口**：`app/resource/agents/cartoon.py` → `app/shared/cartoon/pipeline.py`
+- **渲染器**：`app/shared/cartoon/renderer.py` → `npx hyperframes render`
+- **GPU 路径**：`--browser-gpu`（浏览器 GPU 合成）+ `--gpu`（NVENC 编码）
+- **自动环境调优**：物理核心数、可用内存、NVIDIA 检测；低内存（≤ 8GB）自动降级为单 worker
+- **失败回退**：GPU 渲染失败时自动以 CPU 模式重试
 
-**渲染器**：`app/shared/cartoon/renderer.py` → `npx hyperframes render`
+### TTS 语音合成
 
-**依赖**：
-- FFmpeg（必须，推荐带 NVENC）
-- HyperFrames CLI（自动通过 npx 调用）
+| 后端 | 适用场景 | 是否需要密钥 |
+|------|----------|--------------|
+| 讯飞星火 TTS | 高质量配音（讲解视频默认） | 是（`config.yaml → spark_tts`） |
+| Microsoft Edge-TTS | 免费 / 测试 / 动画讲解 | 否（需联网，随 `uv sync` 自动安装） |
 
-**自动环境检测**：
-- 物理核心数（macOS: `sysctl hw.physicalcpu`，Linux: CPU topology）
-- 可用内存（macOS: `vm_stat`，Linux: `/proc/meminfo`）
-- NVIDIA GPU（Linux: `nvidia-smi` + `h264_nvenc` 编码器）
-- 低内存模式（≤8GB）自动降级为单 worker、CPU 渲染
+## 记忆与画像
 
-**GPU 加速条件**（仅 Linux）：
-1. `ffmpeg -encoders` 输出包含 `h264_nvenc`
-2. `nvidia-smi` 查询到 GPU 设备
-3. 可用内存 > 3GB
+个性化能力建立在三层记忆架构之上，由对话 token 数 / 消息数阈值触发：
 
-**渲染命令示例**：
-```bash
-npx --no-install hyperframes render . \
-  --output video.mp4 \
-  --fps 30 \
-  --quality high \
-  --workers 4 \
-  --browser-gpu \
-  --gpu
-```
+| 层级 | 存储表 | 作用 |
+|------|--------|------|
+| 会话压缩 | `chat_session_summary_blocks` | 近期对话 → 压缩摘要块 |
+| 长期记忆 | `chat_long_term_memories` | 抽取可复用的学习者事实 |
+| 学习画像 | `global_profiles` / `course_profiles` | 由记忆 + 学习事件构建多维度画像 |
 
-### FFmpeg 安装指南
+> 修改个性化行为时，应**联合检查** `chat`、`profile`、`evaluation` 三个领域，而非孤立看待。
 
-**macOS**：
-```bash
-brew install ffmpeg
-# 验证
-ffmpeg -version
-```
-
-**Ubuntu/Debian**：
-```bash
-sudo apt update
-sudo apt install ffmpeg
-# 验证
-ffmpeg -version
-```
-
-**带 NVENC 支持的 FFmpeg（Linux + NVIDIA GPU）**：
-```bash
-# 安装 NVIDIA 驱动后
-sudo apt install ffmpeg
-# 验证 NVENC 支持
-ffmpeg -encoders | grep nvenc
-# 应看到：h264_nvenc, hevc_nvenc
-```
-
-**Windows**：
-从 https://ffmpeg.org/download.html 下载预编译版本，解压后添加到 PATH。
-
-## TTS 配音服务
-
-视频渲染管线支持两种 TTS 后端：
-
-### 讯飞星火 TTS（默认）
-
-配置（`config.yaml`）：
-```yaml
-spark_tts:
-  app_id: "your-app-id"
-  api_key: "your-api-key"
-  api_secret: "your-api-secret"
-```
-
-使用场景：讲解视频（`voice: teacher`）
-
-### Microsoft Edge TTS（免费）
-
-无需密钥，通过 `edge-tts` Python 包调用：
+## 测试
 
 ```bash
-# 已在 pyproject.toml 中声明
-uv sync  # 自动安装 edge-tts>=7.2.8
+uv run pytest                         # 全部测试
+uv run pytest tests/chat -q           # 指定模块
+uv run pytest tests/resource -q
+uv run pytest tests/path -q
+uv run pytest -x                      # 首个失败即停止
+uv run pytest tests/chat/test_history.py -q -k summary   # 单一用例
 ```
 
-使用场景：动画讲解视频（`voice: teacher`）、离线/测试环境
+> 已知预存失败（无需调试）：`tests/chat/test_reasoning_agent.py`，`FakeLlm` 缺少 `astream` 属性。
 
 ## 项目结构
 
 ```
 server/
-├── app/                     # 应用源码
-│   ├── auth/                # 认证与用户管理（JWT + ActiveToken 白名单）
-│   ├── chat/                # AI 辅导对话（SSE 流式）
-│   ├── resource/            # 多智能体资源生成
-│   ├── path/                # 学习路径规划
-│   ├── memory/              # 记忆系统（短期/长期/画像）
-│   ├── evaluation/          # 学习评估与事件
-│   ├── dashboard/           # 首页仪表盘
-│   ├── quiz/                # 题库与编程题
-│   ├── avatar/              # 数字人（讯飞 WebSocket）
-│   ├── profile/             # 用户画像
-│   ├── infra/               # 基础设施（DB, LLM, 配置, 日志, 模型注册）
-│   ├── prompts/             # 全局 Prompt 模板
-│   ├── app.py               # FastAPI 应用工厂
-│   ├── lifecycle.py         # 启动生命周期
-│   ├── routes.py            # 路由挂载
-│   ├── ws_routes.py         # WebSocket 路由
-│   └── main.py              # 入口
-├── tests/                   # pytest 测试
-├── config.yaml              # 运行配置
-├── init_schema.sql          # 数据库初始化脚本
-└── pyproject.toml           # Python 依赖
+├── app/
+│   ├── auth/            # 认证（JWT + ActiveToken 白名单）
+│   ├── chat/            # 辅导对话（SSE + 三层记忆）
+│   │   └── memory/      # 会话压缩、长期记忆、画像构建
+│   ├── resource/        # 独立资源生成（多智能体工作流）
+│   ├── path/            # 学习路径规划与节点学习
+│   ├── profile/         # 学习者画像
+│   ├── evaluation/      # 学习事件与评估
+│   ├── dashboard/       # 首页仪表盘
+│   ├── quiz/            # 题库与错题本
+│   ├── avatar/          # 数字人桥接
+│   ├── shared/          # 跨领域共享（video / cartoon / utils）
+│   ├── infra/           # 数据库、模型、配置、日志、Prompt
+│   ├── main.py          # 应用入口
+│   └── routes.py        # 路由挂载
+├── tests/               # pytest 测试
+├── config.yaml          # 运行配置（唯一配置来源）
+├── init_schema.sql      # 数据库初始化 SQL
+└── pyproject.toml       # Python 依赖声明
 ```
-
-## 快速开始
-
-### 1. 安装系统依赖
-
-#### macOS
-
-```bash
-# 安装 Homebrew（如未安装）
-# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# 安装必需工具
-brew install python@3.13 postgresql ffmpeg uv
-
-# 验证安装
-python3 --version    # 应 ≥ 3.13.0
-psql --version       # 应 ≥ 12.0
-ffmpeg -version      # 应显示版本和编码器信息
-ffprobe -version     # 应显示版本信息
-uv --version         # 应显示版本信息
-```
-
-#### Ubuntu/Debian
-
-```bash
-# 安装必需工具
-sudo apt update
-sudo apt install -y python3.13 python3-pip postgresql ffmpeg
-
-# 安装 uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 验证安装
-python3 --version
-psql --version
-ffmpeg -version
-ffprobe -version
-uv --version
-```
-
-#### Windows
-
-```powershell
-# 使用 winget 安装
-winget install Python.Python.3.13
-winget install PostgreSQL.PostgreSQL
-winget install Gyan.FFmpeg
-
-# 手动安装 uv
-# 从 https://docs.astral.sh/uv/ 下载安装脚本
-
-# 验证安装
-python --version
-psql --version
-ffmpeg -version
-ffprobe -version
-uv --version
-```
-
-### 2. 安装 Python 依赖
-
-```bash
-cd server
-uv sync
-```
-
-这将自动安装 `pyproject.toml` 中定义的所有依赖：
-
-**核心框架**：
-- `fastapi[standard]>=0.135.3` - Web 框架
-- `sqlmodel>=0.0.38` - ORM
-- `asyncpg>=0.30.0` - PostgreSQL 异步驱动
-- `langchain>=1.2.14`, `langgraph>=1.1.4` - 多智能体编排
-
-**视频与 TTS**：
-- `edge-tts>=7.2.8` - Microsoft Edge TTS（免费）
-- `xfyunsdkspeech>=0.0.4` - 讯飞语音 SDK
-- `mutagen>=1.47.0` - 音频元数据处理
-- `playwright>=1.59.0` - 浏览器自动化（用于渲染）
-
-**向量检索**：
-- `chromadb>=0.6.3` - 向量数据库
-- `langchain-chroma>=0.2.2` - LangChain ChromaDB 集成
-- `langchain-ollama>=1.1.0` - Ollama embedding 集成
-- `faiss-cpu>=1.13.2` - FAISS 向量检索
-
-**文档处理**：
-- `pymupdf>=1.27.2.2` - PDF 处理
-- `python-docx>=1.2.0` - Word 文档
-- `python-pptx>=1.0.2` - PowerPoint
-- `openpyxl>=3.1.5` - Excel
-- `beautifulsoup4>=4.14.3` - HTML 解析
-
-### 3. 配置数据库
-
-```bash
-# macOS (Homebrew)
-brew services start postgresql@14
-
-# Ubuntu/Debian
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-
-# 创建数据库
-createdb agent
-
-# 或使用 psql
-psql -U postgres -c "CREATE DATABASE agent;"
-
-# 初始化数据库表结构
-psql -d agent -f init_schema.sql
-```
-
-### 4. 配置应用
-
-编辑 `config.yaml`，配置以下必需项：
-
-```yaml
-# 数据库连接
-database:
-  url: "postgresql+asyncpg://用户名:密码@主机:5432/agent"
-
-# JWT 认证
-jwt:
-  secret_key: "your-secret-key-min-32-characters"  # 必须至少 32 字符
-
-# LLM 模型配置（必需）
-models:
-  base_url: "https://api.openai.com/v1"  # 或其他 OpenAI 兼容 API
-  api_key: "sk-xxx"                       # API 密钥
-  model_name: "gpt-4o"                    # 模型名称
-```
-
-**可选配置**：
-
-```yaml
-# 视觉模型（可选，用于图片理解）
-models:
-  vision:
-    base_url: "https://open.bigmodel.cn/api/paas/v4/"
-    api_key: "your-zhipu-api-key"
-    model_name: "glm-4v-flash"
-
-# 讯飞 TTS（可选，如不配置则使用免费的 Edge-TTS）
-spark_tts:
-  app_id: "your-app-id"
-  api_key: "your-api-key"
-  api_secret: "your-api-secret"
-
-# 讯飞数字人（可选）
-avatar:
-  app_id: "your-app-id"
-  api_key: "your-api-key"
-  api_secret: "your-api-secret"
-  url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
-
-# 搜索服务（可选）
-search:
-  tavily_key: "tvly-xxx"        # Tavily API Key
-  spark_key: "xxx:xxx"          # 讯飞搜索密钥
-
-# 向量检索知识库（可选）
-knowledge:
-  enabled: true
-  collection: "langchain"
-  embed_model: "bge-m3:latest"
-  ollama_base_url: "http://127.0.0.1:11434"
-```
-
-### 5. 启动应用
-
-```bash
-uv run fastapi dev app/main.py --port 9999
-```
-
-访问 API 文档：http://localhost:9999/docs
-
-### 6. 安装可选依赖
-
-#### Ollama + bge-m3（向量检索知识库）
-
-```bash
-# macOS
-brew install ollama
-
-# Linux
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# 启动服务并拉取模型
-ollama serve
-ollama pull bge-m3:latest
-
-# 验证
-curl http://127.0.0.1:11434/api/tags
-```
-
-## 多智能体架构
-
-### 辅导对话（TutorAgent）
-
-基于 LangGraph StateGraph，节点流程：`classify` → 路由分发 → `answer_node` / `search_node` / `attachment_answer` / `teaching_diagram_generate`。通过 SSE 流式输出，读取三层上下文（画像、长期记忆、对话历史）。
-
-### 资源生成（Resource Agents）
-
-两种编排模式：
-
-- **多智能体模式**：PlanningAgent → 并行 Worker Agents → ReviewAgent → 存储
-- **单智能体模式**：直接调用 `AGENT_REGISTRY[agent_id].run(state)`，用于路径节点内按需生成
-
-已注册 Agent：`planning`、`content`、`mindmap`、`quiz`、`code`、`reading`、`ppt`、`review`。每个 Agent 继承 `BaseResourceAgent`，通过 `@register_agent` 注册。
-
-### 记忆系统（MemoryService）
-
-三层记忆架构：
-
-- **SessionCompressor** — 短期对话 → 摘要压缩
-- **LongTermMemoryExtractor** — 事实提取至 `UserLongTermMemory`
-- **ProfileBuilder** — 8 维度画像构建（从记忆 + 事件）
-
-由 `ChatSession` 的 token 计数阈值触发。
-
-### 学习路径（Path Planner）
-
-课程级学习路径规划 Agent，节点资源生成使用单智能体模式。路径内形成「教程 → 题目 → 辅助资源」的学习闭环。
-
-### 数字人（Avatar Bridge）
-
-WebSocket 桥接讯飞数字人服务，ASR → 数字人播报。前端通过 `ws://host:9999/ws/avatar?token=JWT` 连接。
-
-## API 路由
-
-| 前缀 | 模块 | 主要端点 |
-|------|------|----------|
-| `/api/v1/users` | auth | 注册, 登录, 登出, 用户信息 |
-| `/api/v1/ai/chat` | chat | SSE 流式对话, 附件上传, 会话管理 |
-| `/api/v1/ai/resource` | resource | 资源生成（含 video、cartoon 智能体），状态查询，事件流 |
-| `/api/v1/ai/path` | path | 路径规划, 节点工作空间, 教程/题目生成 |
-| `/api/v1/ai/evaluation` | evaluation | 学习事件, 评估 |
-| `/api/v1/ai/dashboard` | dashboard | 首页聚合数据 |
-| `/api/v1/ai/quiz-bank` | quiz | 题库管理 |
-| `/api/v1/ai/wrong-questions` | quiz | 错题本 |
-| `/api/v1/ai/avatar` | avatar | 数字人 REST 接口 |
-| `/ws/avatar` | websocket | 数字人 WebSocket |
-
-所有 API 响应使用 `HttpResponse` 信封格式：`{code, message, data}`。
-
-## 认证流程
-
-1. 登录返回 JWT Token，前端存入 `localStorage`
-2. 请求通过 `get_current_user` 依赖校验 JWT + `ActiveToken` 数据库白名单
-3. 登出移除白名单 Token + 触发后台画像构建
-4. WebSocket 认证使用查询参数 `?token=JWT`
-
-## 核心数据表
-
-| 领域 | 表 |
-|------|-----|
-| 认证 | `users`, `active_tokens`, `schools` |
-| 对话 | `chat_sessions`, `chat_turns`, `chat_messages`, `chat_session_summary_blocks`, `chat_long_term_memories`, `chat_attachment_analyses`, `chat_uploaded_files`, `chat_message_attachments`, `chat_tool_invocations`, `chat_turn_transcripts` |
-| 画像 | `global_profiles`, `course_profiles` |
-| 资源生成 | `generated_resources`, `generated_resource_items` |
-| 学习路径 | `learning_paths`, `path_nodes`, `path_node_tutorials`, `path_node_questions`, `path_node_resources` |
-| 评估 | `learning_events`, `learning_sessions` |
-| 题库 | `quiz_questions`, `wrong_questions` |
-
-数据库结构变更需同步修改 `init_schema.sql` 和 `infra/models.py`，新表必须加入 `REGISTERED_MODELS` 元组。
-
-## Prompt 系统
-
-每个模块拥有独立的 `prompts/` 目录，使用 `.md` 模板文件：
-
-- `chat/prompts/` — 辅导系统指令, 回答策略, 搜索指令, 教学图
-- `chat/memory/prompts/` — 压缩, 长期记忆更新
-- `path/prompts/` — 路径规划, 教程, 题目生成
-- `resource/prompts/` — 各 Agent 指令（planning, content, mindmap, quiz, code, reading, ppt, review, video）
-
-模板支持 `{variable_name}` 变量替换，启动时通过 `warm_prompt_loaders()` 预加载缓存。
-
-## 路径规划与资源生成的边界
-
-> 这是本项目最重要的设计约束。
-
-**独立资源生成**：用户直接请求"生成教程/导图/PPT"，不依赖学习路径上下文。数据存 `generated_resources`，API 走 `/resource`。
-
-**路径节点资源**：用户在学习路径内，围绕节点生成资源。数据存 `path_node_resources`，API 走 `/path`。
-
-两种资源不共用记录表和展示接口。
-
-## 测试
-
-```bash
-# 全部测试
-uv run pytest
-
-# 指定模块
-uv run pytest tests/chat -q
-uv run pytest tests/resource -q
-uv run pytest tests/path -q
-
-# 首个失败即停止
-uv run pytest -x
-```
-
-已知的预存在问题（不要浪费时间调试）：
-
-- `tests/chat/test_reasoning_agent.py` — `FakeLlm` 缺少 `astream` 属性
 
 ## 开发约定
 
-- 配置统一从 `config.yaml` 读取，不硬编码、不使用 `.env`
-- 数据库结构变更同步修改 `init_schema.sql` 和 `infra/models.py`
-- 新表必须加入 `REGISTERED_MODELS` 元组
-- `get_session()` 用于 FastAPI 依赖注入（手动提交），`session_scope()` 用于后台任务（自动提交/回滚）
-- LLM 通过 `get_llm()` 单例访问，使用 OpenAI 兼容 API
-- Python 代码遵循 Google Python Style Guide
-- 4-space indent, type hints, snake_case modules
-- 前端 `.vue` 文件使用 `<script setup lang="ts">`，禁止 Options API
+- **配置**：统一从 `config.yaml` 读取，不硬编码、不使用 `.env`。
+- **Schema 同步**：结构变更需**同时**更新 `init_schema.sql` 与 `app/infra/models.py`；新增表必须加入 `REGISTERED_MODELS` 元组，否则 `init_db()` 不会创建。
+- **数据库会话**：请求处理器使用 `get_session()`（调用方手动提交）；后台任务使用 `session_scope()`（自动提交/回滚）。鉴权依赖 `get_session()`，**勿替换为 `session_scope()`**。
+- **LLM 访问**：通过 `get_llm()` 单例，统一使用 OpenAI 兼容 API。
+- **响应格式**：所有 API 返回 `HttpResponse` 信封 `{code, message, data}`。
+- **Prompt 模板**：各模块 `prompts/*.md`，支持 `{variable}` 占位替换，应用启动时预热。
+- **代码风格**：4 空格缩进、type hints、`snake_case`、Google Python Style Guide。
 
 ## 故障排查
 
-| 问题 | 排查方向 |
+| 症状 | 排查方向 |
 |------|----------|
-| 启动数据库错误 | 检查 `config.yaml` 的 `database.url`、PostgreSQL 是否运行、是否执行过 `init_schema.sql` |
-| 首页 500 | 检查 dashboard 聚合查询是否访问不存在的表/字段 |
-| 路径规划异常 | 检查 `learning_paths` 子表结构、接口字段与前端是否一致、节点资源是否误走独立资源域 |
-| 前端 API 500 | 检查 Vite 代理端口（9999）是否与后端一致 |
-| 视频渲染失败 | 检查 FFmpeg 是否安装、`video-render` 目录是否初始化（`npm install`）、Remotion 版本是否正确 |
-| TTS 无声音 | 检查 `spark_tts` 配置是否正确，或检查网络连接（Edge-TTS 需联网） |
-| 向量检索失效 | 检查 Ollama 服务是否启动、`bge-m3` 模型是否下载、`knowledge.enabled` 是否为 `true` |
-| 数字人连接失败 | 检查 `avatar.*` 配置是否完整、WebSocket 地址是否正确、JWT Token 是否有效 |
-
-## 依赖清单
-
-### Python 包依赖（pyproject.toml）
-
-**核心框架**：
-- `fastapi[standard]>=0.135.3` - Web 框架
-- `sqlmodel>=0.0.38` - ORM
-- `asyncpg>=0.30.0` - PostgreSQL 异步驱动
-- `pyjwt>=2.10.0` - JWT 认证
-- `passlib[bcrypt]>=1.7.4` - 密码哈希
-
-**多智能体**：
-- `langchain>=1.2.14` - LangChain 核心
-- `langgraph>=1.1.4` - 多智能体编排
-- `langgraph-cli[inmem]>=0.4.19` - LangGraph CLI
-- `langchain-openai>=1.1.12` - OpenAI 集成
-- `langchain-community>=0.4.1` - 社区集成
-- `langchain-unstructured>=1.0.1` - Unstructured 集成
-
-**向量检索**：
-- `chromadb>=0.6.3` - 向量数据库
-- `langchain-chroma>=0.2.2` - ChromaDB 集成
-- `langchain-ollama>=1.1.0` - Ollama 集成
-- `faiss-cpu>=1.13.2` - FAISS 向量检索
-
-**视频与 TTS**：
-- `edge-tts>=7.2.8` - Microsoft Edge TTS
-- `xfyunsdkspeech>=0.0.4` - 讯飞语音 SDK
-- `mutagen>=1.47.0` - 音频元数据
-- `playwright>=1.59.0` - 浏览器自动化
-
-**文档处理**：
-- `pymupdf>=1.27.2.2` - PDF
-- `python-docx>=1.2.0` - Word
-- `python-pptx>=1.0.2` - PowerPoint
-- `openpyxl>=3.1.5` - Excel
-- `xlrd>=2.0.2` - 旧版 Excel
-- `pypdf>=6.10.0` - PDF 处理
-- `beautifulsoup4>=4.14.3` - HTML 解析
-
-**搜索与 API**：
-- `tavily-python>=0.7.23` - Tavily 搜索
-- `langchain-tavily>=0.2.18` - LangChain Tavily 集成
-- `serpapi>=1.0.2` - SerpAPI 搜索
-- `ddgs>=9.13.1` - DuckDuckGo 搜索
-- `httpx>=0.28.1` - HTTP 客户端
-- `websockets>=12.0,<14` - WebSocket
-
-**LLM 服务**：
-- `anthropic>=0.94.0` - Anthropic API
-- `zhipuai>=1.0.7` - 智谱 AI API
-- `deepagents>=0.5.3` - DeepAgents
-
-**工具库**：
-- `pyyaml>=6.0.3` - YAML 解析
-- `markdown>=3.10.2` - Markdown 处理
-- `rich>=14.3.3` - 终端美化
-- `loguru>=0.7.2` - 日志
-- `requests>=2.33.1` - HTTP 请求
-- `pandas>=3.0.3` - 数据处理
-- `fonttools>=4.62.1` - 字体处理
-- `greenlet>=3.3.2` - 协程支持
-
-**开发依赖**：
-- `pytest>=9.0.2` - 测试框架
-- `pytest-asyncio>=1.3.0` - 异步测试
-- `aiosqlite>=0.22.1` - SQLite 异步驱动
-- `vulture>=2.16` - 死代码检测
-
-### 系统依赖
-
-| 工具 | 用途 | 安装方式 |
-|------|------|----------|
-| **FFmpeg** | 视频音视频处理 | `brew install ffmpeg` (macOS) / `apt install ffmpeg` (Ubuntu) |
-| **FFprobe** | 音视频流探测 | 随 FFmpeg 安装 |
-| **PostgreSQL** | 主数据库 | `brew install postgresql@14` (macOS) / `apt install postgresql` (Ubuntu) |
-| **Ollama** | 向量检索 embedding（可选） | `brew install ollama` (macOS) / 官方脚本 (Linux) |
-
-### 外部服务（可选）
-
-| 服务 | 用途 | 配置位置 |
-|------|------|----------|
-| **OpenAI / 兼容 API** | LLM 推理 | `config.yaml` → `models` |
-| **讯飞星火 TTS** | 高质量配音 | `config.yaml` → `spark_tts` |
-| **讯飞数字人** | 数字人播报 | `config.yaml` → `avatar` |
-| **Tavily 搜索** | 网页搜索 | `config.yaml` → `search.tavily_key` |
-| **智谱视觉模型** | 图片理解 | `config.yaml` → `models.vision` |
+| 启动数据库错误 | 检查 `config.yaml → database.url`；确认 PostgreSQL 运行中；确认已执行 `init_schema.sql` |
+| 首页 500 | 检查 dashboard 聚合查询是否访问了不存在的表或字段 |
+| 路径规划异常 | 检查 `learning_paths` 子表结构；确认节点资源未误走独立资源域 |
+| 视频渲染失败 | 确认 FFmpeg 已安装；`video-render/` 已 `npm install`；Remotion 版本为 4.0.478 |
+| GPU 未生效 | `ffmpeg -encoders \| grep nvenc` 确认 NVENC；`nvidia-smi` 确认驱动；查看日志中 GL 后端选择记录 |
+| TTS 无声 | 检查 `spark_tts` 配置；Edge-TTS 需要联网 |
+| 向量检索失效 | 确认 Ollama 运行中、`bge-m3` 已下载、`knowledge.enabled: true` |
+| 数字人连接失败 | 检查 `avatar.*` 配置完整、WebSocket 地址正确、JWT 有效 |
+| 前端 API 500 | 确认 Vite 代理端口（默认 9999）与后端一致 |

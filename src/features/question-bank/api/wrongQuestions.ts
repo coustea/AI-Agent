@@ -8,7 +8,6 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   short_answer: '简答题',
   analysis: '分析题',
   comprehensive: '综合题',
-  programming: '编程题',
 }
 
 export interface WrongQuestion {
