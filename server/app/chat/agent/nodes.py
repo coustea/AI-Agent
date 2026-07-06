@@ -22,7 +22,8 @@ from app.chat.emitter import (
     build_workflow_activity_payload,
 )
 from app.chat.agent.tool_runner import ToolExecutionContext, TutorToolRunner
-from app.chat.schemas import TutorRequestContext, TutorRuntimeEvent
+from app.chat.schemas import EvidenceSet, TutorRequestContext, TutorRuntimeEvent
+from app.chat.schemas.diagram import TeachingDiagramGenerator
 from app.chat.streaming import ResponseStreamer
 from app.chat.agent.tools import build_tutor_tools
 from app.chat.utils import normalize_message_content
@@ -252,6 +253,7 @@ async def react_node(
     node_tool_invocations: list[dict[str, Any]] = []
     node_sources: list[dict[str, Any]] = []
     node_errors: list[str] = []
+    node_diagram_result: dict[str, Any] | None = None
     full_answer = ""
     base_seq = len(state.get("stream_events", [])) + 1
 
@@ -284,27 +286,6 @@ async def react_node(
         research_event_handler=emit_research_status,
     )
 
-    # ── 2. 构建 system prompt ──
-    system_prompt = prompts.get("chat").render(
-        "tutor_agent",
-        session_summary_context=session_summary,
-        file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
-        attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
-        current_date=_current_date_text(),
-    )
-
-    # ── 3. 初始化消息和事件收集 ──
-    human_content = question
-    if attachment_context:
-        human_content = f"{question}\n\n[附件分析结果]\n{attachment_context}"
-
-    messages: list[AnyMessage] = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
-
-    # ── 4. ReAct 循环 ──
-    max_iterations = 8
-    iteration = 0
-
-    # 创建 ToolExcute 用于工具调用
     async def emit_tool_status(event: ToolRuntimeEvent) -> None:
         nonlocal base_seq
         base_seq += 1
@@ -320,6 +301,76 @@ async def react_node(
         node_events.extend(emitted)
 
     tool_excute = ToolExcute(tools=tools, event_handler=emit_tool_status)
+    tool_context = ToolExecutionContext(
+        user_id=user_id,
+        session_id=session_id,
+        user_message_id=user_message_id,
+        memory_service=memory_service,
+    )
+
+    async def execute_tutor_tool(
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        tool_call_id: str,
+    ) -> Any:
+        nonlocal node_diagram_result
+        runner = TutorToolRunner()
+        result = await runner.execute(
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_call_id=tool_call_id,
+            context=tool_context,
+            tool_excute=tool_excute,
+        )
+        if result.invocation:
+            node_tool_invocations.append(result.invocation)
+            if tool_name == "generate_teaching_diagram":
+                payload = result.invocation.get("result_payload")
+                if isinstance(payload, dict) and not payload.get("error"):
+                    node_diagram_result = payload
+        node_sources.extend(result.sources)
+        node_errors.extend(result.errors)
+        return result
+
+    forced_context_blocks: list[str] = []
+    if enable_web_search:
+        search_result = await execute_tutor_tool(
+            tool_name="research",
+            arguments={
+                "query": question,
+                "objective": "Provide current web evidence for the tutor answer.",
+                "depth": "standard",
+            },
+            tool_call_id="forced-research",
+        )
+        search_text = str((search_result.invocation or {}).get("result_text", "") or "").strip()
+        if search_text:
+            forced_context_blocks.append(f"[联网搜索结果]\n{search_text}")
+
+    # ── 2. 构建 system prompt ──
+    system_prompt = prompts.get("chat").render(
+        "tutor_agent",
+        session_summary_context=session_summary,
+        file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
+        attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
+        current_date=_current_date_text(),
+    )
+
+    # ── 3. 初始化消息和事件收集 ──
+    human_content = question
+    if attachment_context:
+        human_content = f"{question}\n\n[附件分析结果]\n{attachment_context}"
+
+    if forced_context_blocks:
+        human_content = f"{human_content}\n\n" + "\n\n".join(forced_context_blocks)
+
+    messages: list[AnyMessage] = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
+
+    # ── 4. ReAct 循环 ──
+    max_iterations = 8
+    iteration = 0
+
     tool_model = (
         llm.model.bind_tools(tool_excute.get_tools_description())
         if tools
@@ -475,30 +526,14 @@ async def react_node(
             tool_name = str(tool_call.get("name", ""))
             tool_args = tool_call.get("args", {}) if isinstance(tool_call.get("args"), dict) else {}
 
-            # 执行工具
-            runner = TutorToolRunner()
-            context = ToolExecutionContext(
-                user_id=user_id,
-                session_id=session_id,
-                user_message_id=user_message_id,
-                memory_service=memory_service,
-            )
-
             try:
-                result = await runner.execute(
+                result = await execute_tutor_tool(
                     tool_name=tool_name,
                     arguments=tool_args,
                     tool_call_id=tool_call_id,
-                    context=context,
-                    tool_excute=tool_excute,
                 )
 
                 # 收集结果
-                if result.invocation:
-                    node_tool_invocations.append(result.invocation)
-                node_sources.extend(result.sources)
-                node_errors.extend(result.errors)
-
                 # 添加 ToolMessage
                 tool_result_text = str((result.invocation or {}).get("result_text", "") or "")
                 messages.append(ToolMessage(content=tool_result_text, tool_call_id=tool_call_id))
@@ -508,9 +543,65 @@ async def react_node(
                 node_errors.append(f"{tool_name}: {exc}")
                 messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
 
+    if need_teaching_diagram and full_answer and node_diagram_result is None:
+        diagram_activity_id = "forced-teaching-diagram"
+        base_seq += 1
+        running_event = TutorRuntimeEvent(
+            type="agent_status",
+            payload=build_workflow_activity_payload(
+                stage="teaching_diagram",
+                activity_id=diagram_activity_id,
+                title="生成图解",
+                message="正在生成教学图解",
+                status="running",
+            ),
+            sequence=base_seq,
+            timestamp=time.time(),
+        )
+        node_events.extend(await agent._emit_event(state, running_event))
+        try:
+            node_diagram_result = await TeachingDiagramGenerator().generate(
+                request_context,
+                full_answer,
+                EvidenceSet(items=[]),
+            )
+            base_seq += 1
+            done_event = TutorRuntimeEvent(
+                type="agent_status",
+                payload=build_workflow_activity_payload(
+                    stage="teaching_diagram",
+                    activity_id=diagram_activity_id,
+                    title="生成图解",
+                    message="教学图解已生成",
+                    status="done",
+                ),
+                sequence=base_seq,
+                timestamp=time.time(),
+            )
+            node_events.extend(await agent._emit_event(state, done_event))
+        except Exception as exc:
+            logger.warning("[react_node] forced teaching diagram failed: %s", exc)
+            node_errors.append(f"generate_teaching_diagram: {exc}")
+            base_seq += 1
+            failed_event = TutorRuntimeEvent(
+                type="agent_status",
+                payload=build_workflow_activity_payload(
+                    stage="teaching_diagram",
+                    activity_id=diagram_activity_id,
+                    title="生成图解",
+                    message="教学图解生成失败",
+                    summary=str(exc),
+                    status="failed",
+                ),
+                sequence=base_seq,
+                timestamp=time.time(),
+            )
+            node_events.extend(await agent._emit_event(state, failed_event))
+
     # ── 5. 返回 state 更新 ──
     return {
         "final_answer": full_answer,
+        "diagram_result": node_diagram_result,
         "messages": messages,
         "stream_events": node_events,
         "tool_invocations": node_tool_invocations,

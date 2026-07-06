@@ -61,6 +61,7 @@ class TutorToolRunner:
         session_id = context.session_id if context else ""
         memory_service = context.memory_service if context else None
         tool_status = "success"
+        raw_result: Any = None
 
         if memory_service:
             try:
@@ -129,6 +130,7 @@ class TutorToolRunner:
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
             "payload": normalized_payload,
+            "result_payload": raw_result,
             "result_text": result_text,
             "status": tool_status,
             "evidence": node_evidence,
