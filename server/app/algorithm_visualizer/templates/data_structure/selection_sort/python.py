@@ -21,3 +21,4 @@ def selection_sort(arr):
     return nums
 
 result = selection_sort([5, 3, 8, 1, 2])
+tracer.dump()

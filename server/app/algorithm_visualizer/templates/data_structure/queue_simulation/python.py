@@ -13,3 +13,4 @@ def queue_simulation(operations):
     tracer.finish()
 
 queue_simulation([("enqueue", 10), ("enqueue", 20), ("dequeue", None), ("enqueue", 30)])
+tracer.dump()

@@ -23,3 +23,4 @@ def binary_search(arr, target):
     return -1
 
 result = binary_search([1, 2, 3, 5, 8], 5)
+tracer.dump()

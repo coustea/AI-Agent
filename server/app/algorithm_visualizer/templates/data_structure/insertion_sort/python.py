@@ -26,3 +26,4 @@ def insertion_sort(arr):
     return nums
 
 result = insertion_sort([5, 3, 8, 1, 2])
+tracer.dump()

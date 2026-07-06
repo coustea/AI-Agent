@@ -9,13 +9,12 @@ def bracket_match(s):
     for idx, char in enumerate(s):
         tracer.highlight_input(idx)
         if char in "({[":
-            # Push the ord value of char or just ord(char)
-            tracer.push(ord(char))
+            tracer.push(char)
         elif char in ")}]":
             if not tracer._items:
                 tracer.finish()
                 return False
-            top = chr(tracer.pop())
+            top = tracer.pop()
             if top != mapping[char]:
                 tracer.finish()
                 return False
@@ -23,3 +22,4 @@ def bracket_match(s):
     return len(tracer._items) == 0
 
 result = bracket_match("({[]})")
+tracer.dump()
