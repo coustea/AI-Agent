@@ -553,7 +553,7 @@ class LearningSession(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    source_page: str = Field(max_length=50, description="来源页面标识")
+    source_page: str = Field(max_length=50, index=True, description="来源页面标识")
     started_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), index=True))
     ended_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     duration_seconds: int = Field(ge=1, le=86400, description="实际活跃时长(秒)")
@@ -726,6 +726,7 @@ class PathNodeResource(SQLModel, table=True):
     __table_args__ = (
         Index("ix_path_node_resources_node_type", "node_id", "resource_type"),
         Index("ix_path_node_resources_content_json", "content_json", postgresql_using="gin"),
+        Index("ix_path_node_resources_input_json", "input_json", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -795,33 +796,6 @@ class WrongQuestion(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
-    )
-
-
-class ChatDiagram(SQLModel, table=True):
-    """教学图解表 — 持久化 TutorAgent 生成的结构化图解。"""
-    __tablename__ = "chat_diagrams"
-    __table_args__ = (
-        Index("ix_chat_diagrams_user_session_created", "user_id", "session_id", "created_at"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
-    session_id: str = Field(
-        sa_column=Column(PG_UUID(as_uuid=True), ForeignKey("chat_sessions.id"), index=True),
-    )
-    message_id: int | None = Field(
-        default=None,
-        sa_column=Column(Integer, ForeignKey("chat_messages.id"), nullable=True, index=True),
-    )
-    module: str = Field(default="mentor", index=True)
-    graph_type: str = Field(max_length=50)
-    title: str = Field(max_length=200)
-    diagram_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True)),
     )
 
 
