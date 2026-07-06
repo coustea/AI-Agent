@@ -1,0 +1,137 @@
+database:
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  echo: false
+  pool_size: 20
+  max_overflow: 30
+  pool_recycle: 1800
+  pool_timeout: 30
+
+# JWT 配置
+jwt:
+  secret_key: "agent-platform-secret-key-2024-min-32-bytes"
+  algorithm: "HS256"
+  expire_days: 7
+
+# ============ 模型配置 ============
+# 切换本地/云端只需修改 base_url、api_key、model_name
+models:
+  # --- 云端：讯飞 Maas ---
+  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+  api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
+  model_name: "astron-code-latest"
+
+  # 推理参数
+  max_tokens: 8192
+  # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
+  structured_output_strategy: "function_calling_first"
+  # 网络与重试参数
+  timeout: 300          # 单次请求超时（秒）
+  max_retries: 2        # 失败重试次数
+
+  # 温度参数（控制输出随机性，0=确定性，1=高随机性）
+  # json_temp: JSON 结构化输出，低温度确保格式稳定
+  # stream_temp: 流式对话输出，高温度增加创意性和自然感
+  # default_temp: 普通文本生成，中等温度平衡确定性和多样性
+  json_temp: 0.1
+  stream_temp: 1.0
+  default_temp: 0.7
+
+  # 图片理解模型（独立配置）
+  vision:
+    base_url: "https://open.bigmodel.cn/api/paas/v4/"
+    api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
+    model_name: "glm-4.6v-flash"
+    temperature: 0.7
+    timeout: 300
+    max_retries: 2
+
+# 星火 WebSocket API（Vision 用，TTS 也回退到此配置）
+spark:
+  app_id: "97c2a0c6"
+  api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
+  api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
+
+# Avatar 数字人（ASR 也使用此配置）
+avatar:
+  app_id: "d6d5f921"
+  api_key: "25aff2481573fc7d6a807616facc2090"
+  api_secret: "YzZlYzg5MjRjZWYwNGM0M2FmNTc4YTEz"
+  url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
+  anchor_id: "111204004"
+  vcn: "x5_lingxiaoyue_flow"
+  iat_url: "wss://iat-api.xfyun.cn/v2/iat"
+
+# 搜索服务
+search:
+  tavily_key: "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"
+  spark_key: "fJBSbtdchNCLigLHcEMn:HWSLhFEcXxAItAvgvERb"
+
+# 路径配置
+paths:
+  workplace: "static"
+  logs: "logs"
+  knowledge: "app/rag/data/book/my_chroma_db"
+
+knowledge:
+  enabled: true
+  source_dir: "app/rag/data/book"
+  source_glob: "**/*.final.md"
+  collection: "langchain"
+  embed_model: "bge-m3:latest"
+  ollama_base_url: "http://127.0.0.1:11434"
+  top_k: 4
+  fetch_k: 12
+  embedding_timeout_seconds: 8
+  max_context_chars: 6000
+
+# Memory 压缩与长期记忆
+memory:
+  # 会话压缩阈值
+  compress_keep_recent_messages: 4
+  compress_min_messages: 16
+  compress_min_tokens: 4000
+  summary_context_blocks: 3
+  # 画像/长期记忆更新阈值（累积够了就触发）
+  update_min_messages: 12
+  update_min_tokens: 6000
+  # 长期记忆最低置信度
+  ltm_min_confidence: 0.75
+
+# Chat 附件与保护机制
+chat:
+  # 单个文件最大读取字符数，超过则截断
+  max_file_content_chars: 15000
+  # 单次上传最大文件数量
+  max_upload_files: 12
+  # 支持的图片扩展名
+  image_extensions:
+    - png
+    - jpg
+    - jpeg
+    - gif
+    - webp
+  # 构建对话上下文时拉取的历史消息条数
+  history_limit: 20
+
+# 评估配置
+evaluation:
+  # 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃
+  streak_min_seconds: 300
+
+# 路径规划配置
+paths_config:
+  # 路径节点测验题目数量
+  quiz_size: 5
+  # 通过测验的最低分数
+  pass_score: 3
+
+# Remotion 讲解视频渲染
+video:
+  render_timeout_seconds: 900
+  concurrency: 4
+  chromium_gl: angle
+
+# ASR 语音识别配置
+asr:
+  # VAD 结束静默时长（毫秒）
+  vad_eos: 1000

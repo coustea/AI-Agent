@@ -6,10 +6,10 @@
  *   npx tsx scripts/render.ts --input path/to/plan.json --output path/to/output.mp4 --gl angle
  *   npx tsx scripts/render.ts --input path/to/plan.json --output path/to/output.mp4 --remote 192.168.1.100
  *
- * GPU options:
- *   --gl angle      Use ANGLE (default, works on Mac & Windows/Linux with GPU)
- *   --gl swiftshader Use software rendering (fallback)
- *   --gl native-egl Use native EGL (Linux with NVIDIA)
+ * GPU options (Ubuntu NVIDIA 默认走 angle，由后端 GPU 探测自动选择):
+ *   --gl angle       Use ANGLE — Remotion 官方推荐的 GPU 后端，Ubuntu NVIDIA 默认
+ *   --gl swiftshader Use software rendering (无 GPU 时的兜底)
+ *   --gl egl         Use native EGL (Linux NVIDIA 纯 headless、无 X11 显示器场景)
  *
  * For remote 4060 PC:
  *   --remote <host>  SSH to remote machine and render there (requires Remotion setup on remote)
@@ -101,42 +101,44 @@ async function main() {
   console.log("\n[1/3] Bundling Remotion project...");
   const entryPoint = path.resolve(process.cwd(), "src/index.ts");
   const bundleStart = Date.now();
-  
+
   const cacheBundleDir = path.resolve(process.cwd(), "build/cached_bundle");
   const cacheIndexHtml = path.join(cacheBundleDir, "index.html");
-  
+
   let bundleLocation: string;
   let useCache = false;
-  
+
   if (fs.existsSync(cacheIndexHtml)) {
     const srcMaxMtime = Math.max(
       getDirectoryMaxMtime(path.resolve(process.cwd(), "src")),
       fs.statSync(path.resolve(process.cwd(), "package.json")).mtimeMs,
-      fs.existsSync(path.resolve(process.cwd(), "remotion.config.ts")) 
-        ? fs.statSync(path.resolve(process.cwd(), "remotion.config.ts")).mtimeMs 
-        : 0
+      fs.existsSync(path.resolve(process.cwd(), "remotion.config.ts"))
+        ? fs.statSync(path.resolve(process.cwd(), "remotion.config.ts")).mtimeMs
+        : 0,
     );
     const bundleMtime = fs.statSync(cacheIndexHtml).mtimeMs;
     if (bundleMtime > srcMaxMtime) {
       useCache = true;
     }
   }
-  
+
   if (useCache) {
     bundleLocation = cacheBundleDir;
-    console.log(`Reused cached bundle at ${bundleLocation} (saved bundle compilation time)`);
+    console.log(
+      `Reused cached bundle at ${bundleLocation} (saved bundle compilation time)`,
+    );
   } else {
     // Ensure clean directory
     if (fs.existsSync(cacheBundleDir)) {
       fs.rmSync(cacheBundleDir, { recursive: true, force: true });
     }
-    
+
     // Bundle to temp first, then copy to cache
     const tempBundleLocation = await bundle(entryPoint, () => undefined);
-    
+
     // Copy temp bundle to cached_bundle directory
     fs.mkdirSync(cacheBundleDir, { recursive: true });
-    
+
     const copyDir = (src: string, dest: string) => {
       fs.mkdirSync(dest, { recursive: true });
       const entries = fs.readdirSync(src, { withFileTypes: true });
@@ -150,7 +152,7 @@ async function main() {
         }
       }
     };
-    
+
     copyDir(tempBundleLocation, cacheBundleDir);
     bundleLocation = cacheBundleDir;
     console.log(
