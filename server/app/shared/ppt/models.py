@@ -258,6 +258,7 @@ class PPTPlan(PPTModel):
 class PPTArtifact(PPTModel):
     path: Path
     plan: PPTPlan
+    plan_markdown: str = ""  # LLM 输出的原始 Markdown 课件大纲
     template_id: str
     template_name: str
     slide_count: int

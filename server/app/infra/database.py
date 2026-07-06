@@ -145,7 +145,7 @@ async def check_all() -> HealthReport:
 async def init_db() -> None:
     """初始化数据库。
 
-    验证连接后，按需导入种子数据（学校、408题库、编程题）。
+    验证连接后，按需导入种子数据（学校、408题库）。
     已存在则跳过。
     """
     if not await _test_connection():
@@ -167,10 +167,9 @@ async def init_db() -> None:
 async def _seed_initial_data() -> None:
     """启动时自动导入种子数据。
 
-    分别检查学校、408题库、编程题数据是否为空，为空则导入。
+    分别检查学校、408题库数据是否为空，为空则导入。
     """
     from app.importers.import_quiz import import_408_quiz
-    from app.importers.import_leetcode import import_leetcode
     from app.importers.import_schools import import_schools
 
     logger.info("[Database] 开始检查种子数据...")
@@ -180,9 +179,6 @@ async def _seed_initial_data() -> None:
 
     # 导入 408 题库
     await import_408_quiz()
-
-    # 导入编程题
-    await import_leetcode()
 
     logger.info("[Database] 种子数据检查完成")
 

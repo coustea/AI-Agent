@@ -508,83 +508,6 @@ class QuizQuestion(SQLModel, table=True):
     )
 
 
-# ---------------------------------------------------------------------------
-# Programming Problems – 编程题题库
-# ---------------------------------------------------------------------------
-
-class ProgrammingQuestion(SQLModel, table=True):
-    """编程题题库表，存储从各平台爬取的编程题目。"""
-    __tablename__ = "programming_questions"
-    __table_args__ = (
-        UniqueConstraint("question_id", name="uq_programming_questions_question_id"),
-        Index("ix_programming_questions_subject_type", "subject", "difficulty"),
-        Index("ix_programming_questions_platform", "source", "platform_question_id"),
-        Index("ix_programming_questions_tags", "tags", postgresql_using="gin"),
-        Index("ix_programming_questions_knowledge_points", "knowledge_points", postgresql_using="gin"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    question_id: str = Field(max_length=255, index=True, description="唯一标识")
-    source: str = Field(max_length=100, index=True, description="来源平台")
-    platform_question_id: str | None = Field(default=None, max_length=255, index=True, description="平台原题ID")
-    title: str = Field(max_length=500, description="题目标题")
-    title_en: str | None = Field(default=None, max_length=500, description="英文标题")
-    content: str = Field(sa_column=Column(Text), description="题目描述(HTML/Markdown)")
-    difficulty: str | None = Field(default=None, max_length=100, index=True, description="难度")
-    subject: str | None = Field(default=None, max_length=255, index=True, description="所属科目/分类")
-    code_templates: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="各语言代码模板")
-    supported_languages: list[str] | None = Field(default=None, sa_column=Column(JSONB), description="支持的编程语言")
-    example_test_cases: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB), description="示例测试用例")
-    test_cases: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB), description="隐藏测试用例")
-    time_limit: int | None = Field(default=None, description="时间限制(ms)")
-    memory_limit: int | None = Field(default=None, description="内存限制(MB)")
-    tags: list[str] | None = Field(default=None, sa_column=Column(JSONB), description="标签")
-    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB), description="知识点")
-    acceptance_rate: float | None = Field(default=None, description="通过率")
-    total_submissions: int | None = Field(default=None, description="总提交数")
-    total_accepted: int | None = Field(default=None, description="总通过数")
-    url: str | None = Field(default=None, max_length=1000, description="原题链接")
-    raw_record: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="原始数据")
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
-    )
-
-
-class ProgrammingSubmission(SQLModel, table=True):
-    """编程题提交记录表。"""
-    __tablename__ = "programming_submissions"
-    __table_args__ = (
-        Index("ix_programming_submissions_user_question", "user_id", "question_id"),
-        Index("ix_programming_submissions_status", "status"),
-        Index("ix_programming_submissions_created_at", "created_at"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True, description="用户ID")
-    question_id: str = Field(max_length=255, index=True, description="题目ID")
-    language: str = Field(max_length=50, description="编程语言")
-    code: str = Field(sa_column=Column(Text), description="提交的代码")
-    status: str = Field(max_length=50, default="pending", description="提交状态")
-    result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB), description="运行结果")
-    execution_time: float | None = Field(default=None, description="执行时间(ms)")
-    memory_used: float | None = Field(default=None, description="内存使用(KB)")
-    test_case_results: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB), description="各测试用例结果")
-    error_message: str | None = Field(default=None, sa_column=Column(Text), description="错误信息")
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -920,8 +843,6 @@ REGISTERED_MODELS = (
     GeneratedResourceItem,
     GeneratedResourceAgentRun,
     QuizQuestion,
-    ProgrammingQuestion,
-    ProgrammingSubmission,
     LearningEvent,
     LearningSession,
     LearningPath,
