@@ -5,7 +5,7 @@
         <span class="tab active">{{ filename }}</span>
         <span class="tab">输出</span>
       </div>
-      <small>{{ difficulty }} · {{ focus }}</small>
+      <small>{{ outputStyle }} · {{ focus }}</small>
     </header>
     <pre><code><i># {{ topic }}</i>
 <b>{{ keyword }}</b> <em>learn_step</em>(concept):
@@ -27,7 +27,7 @@ import type { AnyAgentConfigs } from '../../../model/catalog'
 const props = defineProps<{ config: AnyAgentConfigs['code']; topic: string }>()
 const filename = computed(() => `practice.${({ python: 'py', c: 'c', cpp: 'cpp', java: 'java', go: 'go', javascript: 'js', typescript: 'ts' })[props.config.programming_language]}`)
 const keyword = computed(() => props.config.programming_language === 'python' ? 'def' : 'function')
-const difficulty = computed(() => ({ beginner: '入门', intermediate: '进阶', advanced: '挑战' })[props.config.difficulty])
+const outputStyle = computed(() => ({ tutorial: '教学演示', reference: '参考实现', challenge: '挑战练习' })[props.config.output_style])
 const focus = computed(() => ({ syntax: '语法讲解', application: '工程应用', debugging: '调试分析' })[props.config.focus])
 </script>
 

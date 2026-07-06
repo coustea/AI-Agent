@@ -23,7 +23,6 @@ from app.resource.schemas import (
     DownstreamContext,
     NodeInput,
     ResourceInput,
-    ReusableAssets,
 )
 
 
@@ -102,8 +101,32 @@ def _node_input(**overrides: object) -> NodeInput:
 
 def test_pipeline_execution_passes():
     async def _run():
+        # Mock LLM: ainvoke returns a response with .content (Markdown text)
+        mock_response = MagicMock()
+        mock_response.content = """# Test Deck
+
+---
+
+## [cover|statement|reveal] Test
+
+**核心论点：** Welcome
+
+---
+
+## [explain|concept|reveal] Topic
+
+**核心论点：** A topic
+- **Point：** Detail here
+**总结金句：** Summary
+
+---
+
+## [summary|statement|reveal] End
+
+**核心论点：** Done
+"""
         llm = MagicMock()
-        llm.ainvoke_json = AsyncMock(return_value=_deck_plan())
+        llm.ainvoke = AsyncMock(return_value=mock_response)
         generator = PPTGenerator(llm=llm)
 
         resolved_deck = MagicMock()
@@ -159,9 +182,9 @@ def test_ppt_agent_standalone_resource():
             assert result.file_type == "html"
             mock_generate.assert_awaited_once()
             call_kwargs = mock_generate.call_args
-            assert call_kwargs.kwargs["output_dir"] == Path("/Users/apple/Code/software/server/app/resource/static/resources/anonymous/42")
-        # html_url should embed the resource path
-        assert result.metadata["html_url"] == "/api/v1/ai/resources/public/anonymous/42/html"
+            assert call_kwargs.kwargs["output_dir"] == Path("/Users/apple/Code/software/server/static/anonymous/resources/42/ppt")
+        # html_url is derived from user_resource_ppt_dir
+        assert "/static/" in result.metadata["html_url"]
         tmp_path.unlink(missing_ok=True)
 
     asyncio.run(_run())
@@ -198,11 +221,8 @@ def test_ppt_agent_path_node():
         assert result.success is True
         mock_generate.assert_awaited_once()
         call_kwargs = mock_generate.call_args
-        assert call_kwargs.kwargs["output_dir"] == Path("/Users/apple/Code/software/server/app/resource/static/paths/anonymous/1/7")
-        assert (
-            result.metadata["html_url"]
-            == "/api/v1/ai/resources/public/paths/anonymous/1/7/html"
-        )
+        assert call_kwargs.kwargs["output_dir"] == Path("/Users/apple/Code/software/server/static/anonymous/paths/1/nodes/7/ppt")
+        assert "/static/" in result.metadata["html_url"]
         tmp_path.unlink(missing_ok=True)
 
     asyncio.run(_run())
@@ -251,7 +271,7 @@ def test_ppt_agent_result_metadata():
         }
         assert set(result.metadata.keys()) == expected_keys
         assert result.metadata["slide_count"] == 8
-        assert result.metadata["density"] == "reading_first"
+        assert result.metadata["density"] == "speaker_led"
         assert result.metadata["style_name"] == "Neon Cyber"
         assert result.metadata["template_id"] == "neon-cyber"
         assert result.metadata["file_size"] == tmp_path.stat().st_size

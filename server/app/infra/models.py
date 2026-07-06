@@ -400,6 +400,7 @@ class GeneratedResource(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     learning_need: str | None = Field(default=None, sa_column=Column(Text))
+    plan_content: str | None = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="pending", max_length=50)
 
     created_at: datetime = Field(

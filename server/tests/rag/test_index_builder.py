@@ -150,7 +150,7 @@ class TestBuildIndex:
         out_dir.mkdir()
         (out_dir / "existing.txt").write_text("existing index", encoding="utf-8")
 
-        with patch("app.rag.indexing.build._embed_batch") as mock_embed:
+        with patch("app.rag.indexing.build.embed_documents") as mock_embed:
             mock_embed.return_value = None  # embedding 失败
 
             with pytest.raises(RuntimeError, match="Embedding failed"):

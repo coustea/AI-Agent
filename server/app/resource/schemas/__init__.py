@@ -27,13 +27,9 @@ from app.resource.schemas.request import (
 # ── Plan ──────────────────────────────────────────────────────────────────
 from app.resource.schemas.plan import (
     DownstreamContext,
-    GlobalTeachingPlan,
-    ReusableAssets,
-    TeachingOutlineItem,
-    TeachingPlan,
-    AssignedSection,
-    WorkerDeliverable,
-    WorkerTask,
+    PlanValidationError,
+    ResourcePlan,
+    validate_resource_plan,
 )
 
 # ── Result ────────────────────────────────────────────────────────────────
@@ -59,14 +55,10 @@ __all__ = [
     # Request models
     "ResourceGenerationRequest",
     "SingleResourceRequest",
-    # Learning blueprint & planning
-    "TeachingPlan",
-    "TeachingOutlineItem",
-    "GlobalTeachingPlan",
-    "AssignedSection",
-    "WorkerDeliverable",
-    "WorkerTask",
-    "ReusableAssets",
+    # Planning
+    "ResourcePlan",
+    "PlanValidationError",
+    "validate_resource_plan",
     "DownstreamContext",
     # Runtime input/output
     "AgentResult",
@@ -75,5 +67,4 @@ __all__ = [
     "GeneratedResourceItem",
     "ResourceBundle",
     "ResourceStatusSnapshot",
-    # Response models
 ]

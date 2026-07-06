@@ -36,21 +36,9 @@ def _source_artifacts_from_handoffs(
         materials: list[str] = []
         materials.extend(
             str(item).strip()[:2000]
-            for item in getattr(ctx, "materials", [])[:4]
+            for item in getattr(ctx, "materials", [])[:8]
             if str(item).strip()
         )
-        reusable = getattr(ctx, "reusable_assets", None)
-        if reusable:
-            materials.extend(
-                str(item).strip()[:600]
-                for item in getattr(reusable, "examples", [])[:4]
-                if str(item).strip()
-            )
-            materials.extend(
-                str(item).strip()[:600]
-                for item in getattr(reusable, "visual_ideas", [])[:4]
-                if str(item).strip()
-            )
         artifacts.append(
             SourceArtifact(
                 agent_id=agent_id,
@@ -75,6 +63,28 @@ def _source_artifacts_from_results(
         for aid, r in results.items()
         if r.success
     ]
+
+
+def _split_text_to_materials(content: str, *, limit: int = 12000) -> list[str]:
+    normalized = content.strip()[:limit]
+    if not normalized:
+        return []
+
+    chunks: list[str] = []
+    current = ""
+    for paragraph in normalized.split("\n\n"):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        candidate = f"{current}\n\n{paragraph}".strip()
+        if current and len(candidate) > 2400:
+            chunks.append(current)
+            current = paragraph
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks[:12]
 
 
 def _agent_config_defaults(config: dict[str, Any]) -> dict[str, Any]:
@@ -108,6 +118,7 @@ class CartoonAgent(BaseResourceAgent):
         request = CartoonVideoRequest(
             learning_need=input_data.learning_need,
             profile=input_data.profile,
+            teaching_plan=input_data.teaching_plan,
             style=cfg["style"],
             depth=cfg["depth"],
             pace=cfg["pace"],
@@ -128,15 +139,29 @@ class CartoonAgent(BaseResourceAgent):
         username = input_data.username or "anonymous"
         output_dir = user_path_node_cartoon_dir(username, str(input_data.path_id), str(input_data.node_id))
 
+        artifacts: list[SourceArtifact] = []
+        if input_data.tutorial_markdown:
+            materials = _split_text_to_materials(input_data.tutorial_markdown)
+            artifacts.append(
+                SourceArtifact(
+                    agent_id="tutorial",
+                    title=input_data.tutorial_title or input_data.node_title,
+                    summary=input_data.tutorial_summary or input_data.node_title,
+                    materials=materials,
+                )
+            )
+
+        artifacts.extend(_source_artifacts_from_results(input_data.existing_resources))
+
         request = CartoonVideoRequest(
-            learning_need=input_data.learning_need,
+            learning_need=input_data.node_title,
             profile=input_data.profile,
             style=cfg["style"],
             depth=cfg["depth"],
             pace=cfg["pace"],
             visuals=cfg["visuals"],
             output_dir=output_dir,
-            artifacts=_source_artifacts_from_results(input_data.existing_resources),
+            artifacts=artifacts,
         )
 
         return await self._generate(

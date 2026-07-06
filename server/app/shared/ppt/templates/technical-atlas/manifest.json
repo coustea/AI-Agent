@@ -1,7 +1,7 @@
 {
   "id": "technical-atlas",
   "name": "技术图谱",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "暗色网格、路径信号与工程标注构成的克制技术教学模板",
   "family": "technical",
   "scheme": "dark",
@@ -27,6 +27,9 @@
     {"id":"formula-build","name":"模型推导","shapes":["formula"],"roles":["derive","explain"],"skeleton":"formula","animation":"build","point_capacity":6,"step_capacity":5},
     {"id":"misconception-reveal","name":"故障诊断","shapes":["comparison","quiz"],"roles":["practice","case"],"skeleton":"misconception","animation":"resolve","point_capacity":4,"step_capacity":0},
     {"id":"summary-map","name":"系统复盘","shapes":["concept","sequence","statement"],"roles":["summary"],"skeleton":"summary","animation":"reveal","point_capacity":6,"step_capacity":5},
-    {"id":"closing-line","name":"链路收束","shapes":["statement"],"roles":["closing"],"skeleton":"closing","animation":"focus","point_capacity":3,"step_capacity":0}
+    {"id":"closing-line","name":"链路收束","shapes":["statement"],"roles":["closing"],"skeleton":"closing","animation":"focus","point_capacity":3,"step_capacity":0},
+    {"id":"hierarchy-tree","name":"层级树","shapes":["hierarchy"],"roles":["explain","derive"],"skeleton":"hierarchy","animation":"build","point_capacity":0,"step_capacity":0},
+    {"id":"timeline-horizontal","name":"时间线","shapes":["timeline"],"roles":["explain","case"],"skeleton":"timeline","animation":"trace","point_capacity":0,"step_capacity":0},
+    {"id":"matrix-grid","name":"矩阵表","shapes":["matrix"],"roles":["explain","derive"],"skeleton":"matrix","animation":"reveal","point_capacity":0,"step_capacity":0}
   ]
 }

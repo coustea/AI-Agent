@@ -77,7 +77,6 @@ const {
   code,
   languages,
   algorithms,
-  loading: templateLoading,
   loadMeta,
   resetTemplate,
   getCurrentAlgorithmInfo,
@@ -86,11 +85,9 @@ const {
 
 const {
   events,
-  runResult,
   runError,
   generating,
   run: runAlgorithm,
-  clear: clearRun,
 } = useAlgorithmRun()
 
 const playback = useTracePlayer(() => events.value)

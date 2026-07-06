@@ -6,6 +6,7 @@ from typing import Any
 
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
+from app.shared.ppt.compiler import compile_ppt_plan
 from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer
 from app.shared.ppt.models import (
     PPTArtifact,
@@ -91,16 +92,20 @@ class PPTGenerator:
         self,
         request: ResourcePPTRequest | PathPPTRequest,
     ) -> PPTPlan:
-        prompt_name = (
-            "resource_brief"
-            if isinstance(request, ResourcePPTRequest)
-            else "path_brief"
-        )
         prompt = prompts.get("ppt").render(
-            prompt_name,
+            "slide_outline",
             request=request.model_dump_json(indent=2),
         )
-        return await self._llm.ainvoke_json(PPTPlan, prompt)
+        response = await self._llm.ainvoke(prompt)
+        markdown = response.content if hasattr(response, "content") else str(response)
+        return compile_ppt_plan(
+            markdown,
+            title="",  # 由 Markdown 内 # 标题指定
+            density=DENSITY_MODES[request.preferences.density],
+            template_family=request.preferences.template
+            if request.preferences.template != "auto"
+            else "auto",
+        )
 
     @classmethod
     def available_templates(cls) -> list[dict[str, object]]:

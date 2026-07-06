@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.auth.security import get_current_user
 from app.infra.models import User
-from app.path.schemas import LearningPathOverviewResponse, LearningPathNodeDTO
+from app.path.schemas import PathResponse, LearningPathNodeDTO
 
 # Setup test client
 client = TestClient(app)
@@ -31,7 +31,7 @@ def authenticated_client(monkeypatch):
 
 
 def test_get_active_path_endpoint(authenticated_client):
-    mock_response = LearningPathOverviewResponse(
+    mock_response = PathResponse(
         id=12,
         module="mentor",
         title="SQL Path",
@@ -207,3 +207,53 @@ def test_generation_task_endpoints_removed(authenticated_client):
     assert active_response.status_code == 404
     assert status_response.status_code == 404
     assert generate_response.status_code == 405
+
+
+def test_generate_cartoon_endpoint(authenticated_client):
+    mock_response = MagicMock()
+    mock_response.model_dump.return_value = {
+        "id": 1,
+        "resource_type": "cartoon",
+        "version_no": 1,
+        "title": "Cartoon",
+        "content_format": "mp4",
+        "content_text": "cartoon-video-url",
+        "created_at": "2026-07-06T11:00:00",
+    }
+
+    with patch("app.path.api.PathService") as MockService:
+        mock_service_instance = MockService.return_value
+        mock_service_instance.generate_node_resource = AsyncMock(return_value=mock_response)
+
+        response = authenticated_client.post("/api/v1/ai/path-plan/nodes/101/cartoon")
+
+        assert response.status_code == 200
+        json_data = response.json()
+        assert json_data["code"] == 200
+        assert json_data["data"]["resource_type"] == "cartoon"
+        mock_service_instance.generate_node_resource.assert_awaited_once_with(1, 101, "cartoon")
+
+
+def test_get_cartoon_endpoint(authenticated_client):
+    mock_response = MagicMock()
+    mock_response.model_dump.return_value = {
+        "id": 1,
+        "resource_type": "cartoon",
+        "version_no": 1,
+        "title": "Cartoon",
+        "content_format": "mp4",
+        "content_text": "cartoon-video-url",
+        "created_at": "2026-07-06T11:00:00",
+    }
+
+    with patch("app.path.api.PathService") as MockService:
+        mock_service_instance = MockService.return_value
+        mock_service_instance.get_node_resource_by_type = AsyncMock(return_value=mock_response)
+
+        response = authenticated_client.get("/api/v1/ai/path-plan/nodes/101/cartoon")
+
+        assert response.status_code == 200
+        json_data = response.json()
+        assert json_data["code"] == 200
+        assert json_data["data"]["resource_type"] == "cartoon"
+        mock_service_instance.get_node_resource_by_type.assert_awaited_once_with(1, 101, "cartoon")

@@ -28,7 +28,7 @@ class RetrievalResult(BaseModel):
     status 语义：
       ok          — 索引正常，至少返回一条 chunk
       empty       — 索引正常，但没有匹配结果
-      unavailable — 索引不存在 / 损坏 / Ollama 不可用
+      unavailable — 索引不存在 / 损坏 / 嵌入服务不可用
     """
 
     status: RetrievalStatus

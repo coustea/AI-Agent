@@ -79,7 +79,7 @@ class TestRagToolHandler:
 
         with patch("app.rag.tools.retrieve") as mock_retrieve:
             mock_retrieve.return_value = RetrievalResult(
-                status="unavailable", query="TCP", message="Ollama down"
+                status="unavailable", query="TCP", message="嵌入服务不可用"
             )
 
             result = await _search_knowledge_base_handler("TCP")

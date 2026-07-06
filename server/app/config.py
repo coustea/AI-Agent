@@ -266,20 +266,20 @@ VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
 KB_ENABLED = get("knowledge.enabled", True)
 # 知识库集合名称（向量数据库中的 collection 名）
 KB_COLLECTION = get("knowledge.collection", "langchain")
-# 嵌入模型名称（用于生成文本向量）
-KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3:latest")
+# 嵌入模型配置（OpenAI 兼容 API，留空则使用主模型配置）
+_models_base_url = get("models.base_url", "")
+_models_api_key = get("models.api_key", "")
+KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3")
+KB_EMBED_BASE_URL = get("knowledge.embed_base_url", "") or _models_base_url
+KB_EMBED_API_KEY = get("knowledge.embed_api_key", "") or _models_api_key
 # 检索时返回的最相似文档数量
 KB_TOP_K = get("knowledge.top_k", 4)
-# Ollama 本地模型服务地址
-KB_OLLAMA_BASE_URL = get("knowledge.ollama_base_url", "http://127.0.0.1:11434")
 # 知识库源文档目录
 KB_SOURCE_DIR = get("knowledge.source_dir", "app/rag/data/book")
 # 源文档 glob 模式
 KB_SOURCE_GLOB = get("knowledge.source_glob", "**/*.final.md")
 # 向量检索拉取数量（内部 fetch_k，去重后截断到 top_k）
 KB_FETCH_K = get("knowledge.fetch_k", 12)
-# Embedding 请求超时秒数
-KB_EMBED_TIMEOUT_SECONDS = get("knowledge.embedding_timeout_seconds", 8)
 # 返回给 ChatAgent 的最大上下文字符数
 KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
 

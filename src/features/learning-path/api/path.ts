@@ -90,8 +90,8 @@ export function generateContent(nodeId: number) {
   return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/content`)
 }
 
-export function generateQuizResource(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/quiz-resource`)
+export function generateCartoon(nodeId: number) {
+  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/cartoon`)
 }
 
 export function getMindmap(nodeId: number) {
@@ -114,8 +114,8 @@ export function getContent(nodeId: number) {
   return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/content`)
 }
 
-export function getQuizResource(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/quiz-resource`)
+export function getCartoon(nodeId: number) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/cartoon`)
 }
 
 export function getLearningEvaluation(pathId: number) {

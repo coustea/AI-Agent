@@ -1,0 +1,8294 @@
+{
+  "schema_version": "video/v2",
+  "title": "处理机调度算法详解",
+  "topic": "操作系统中的处理机调度算法",
+  "language": "zh-CN",
+  "aspect_ratio": "16:9",
+  "style": {
+    "id": "precision_light",
+    "rationale": "调用方提供了明确的视觉风格偏好"
+  },
+  "render": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "format": "mp4"
+  },
+  "scenes": [
+    {
+      "scene_id": "s1",
+      "index": 1,
+      "role": "hook",
+      "title": "为什么需要处理机调度？",
+      "learning_objective": "理解多道程序环境下CPU资源竞争与调度的必要性",
+      "visual_type": "concept_explain",
+      "visual": "{\"main_concept\": \"处理机调度\", \"definition\": \"从就绪队列中选择进程并分配 CPU 使用权的机制\", \"keywords\": [\"CPU 资源\", \"多进程竞争\", \"公平与效率\", \"调度决策\"], \"why_it_matters\": [\"多道程序环境下 CPU 是最宝贵的资源\", \"多个进程同时竞争 CPU 使用权\", \"调度质量直接影响系统性能和用户体验\", \"是操作系统核心功能之一\"], \"related_concepts\": [{\"name\": \"进程状态\", \"relation\": \"调度发生在就绪态与运行态之间\"}, {\"name\": \"上下文切换\", \"relation\": \"调度执行的实现机制\"}, {\"name\": \"调度算法\", \"relation\": \"调度决策的具体策略\"}], \"common_misconception\": \"调度只是简单的排队，实际上需要在公平性、效率和响应时间之间权衡\"}",
+      "narration": "想象一下，一家热门餐厅只有一位厨师，但门口有十几位顾客在等餐。有的顾客只要一份炒饭，几分钟就能做好，有的顾客要一桌满汉全席，需要很长时间。厨师该如何安排做菜顺序？是先来先做？还是先做简单的？还是让每位顾客轮流吃一口？这就是处理机调度要解决的核心问题。在操作系统中，处理机是计算机最宝贵的资源，而进程就像那些等待用餐的顾客。调度器的任务，就是让有限的 CPU 资源公平且高效地服务于多个进程。",
+      "audio_src": "/render-assets/.render-1664efbb11e943f5abf581fb2e79d718/01-s1.mp3",
+      "start_ms": 0,
+      "duration_ms": 39208,
+      "audio_duration_ms": 38808,
+      "caption_words": [
+        {
+          "text": "想",
+          "start_ms": 0,
+          "end_ms": 203
+        },
+        {
+          "text": "象",
+          "start_ms": 203,
+          "end_ms": 406
+        },
+        {
+          "text": "一",
+          "start_ms": 406,
+          "end_ms": 608
+        },
+        {
+          "text": "下",
+          "start_ms": 608,
+          "end_ms": 811
+        },
+        {
+          "text": "，",
+          "start_ms": 811,
+          "end_ms": 953
+        },
+        {
+          "text": "一",
+          "start_ms": 953,
+          "end_ms": 1156
+        },
+        {
+          "text": "家",
+          "start_ms": 1156,
+          "end_ms": 1359
+        },
+        {
+          "text": "热",
+          "start_ms": 1359,
+          "end_ms": 1562
+        },
+        {
+          "text": "门",
+          "start_ms": 1562,
+          "end_ms": 1764
+        },
+        {
+          "text": "餐",
+          "start_ms": 1764,
+          "end_ms": 1967
+        },
+        {
+          "text": "厅",
+          "start_ms": 1967,
+          "end_ms": 2170
+        },
+        {
+          "text": "只",
+          "start_ms": 2170,
+          "end_ms": 2373
+        },
+        {
+          "text": "有",
+          "start_ms": 2373,
+          "end_ms": 2576
+        },
+        {
+          "text": "一",
+          "start_ms": 2576,
+          "end_ms": 2779
+        },
+        {
+          "text": "位",
+          "start_ms": 2779,
+          "end_ms": 2981
+        },
+        {
+          "text": "厨",
+          "start_ms": 2981,
+          "end_ms": 3184
+        },
+        {
+          "text": "师",
+          "start_ms": 3184,
+          "end_ms": 3387
+        },
+        {
+          "text": "，",
+          "start_ms": 3387,
+          "end_ms": 3529
+        },
+        {
+          "text": "但",
+          "start_ms": 3529,
+          "end_ms": 3732
+        },
+        {
+          "text": "门",
+          "start_ms": 3732,
+          "end_ms": 3935
+        },
+        {
+          "text": "口",
+          "start_ms": 3935,
+          "end_ms": 4137
+        },
+        {
+          "text": "有",
+          "start_ms": 4137,
+          "end_ms": 4340
+        },
+        {
+          "text": "十",
+          "start_ms": 4340,
+          "end_ms": 4543
+        },
+        {
+          "text": "几",
+          "start_ms": 4543,
+          "end_ms": 4746
+        },
+        {
+          "text": "位",
+          "start_ms": 4746,
+          "end_ms": 4949
+        },
+        {
+          "text": "顾",
+          "start_ms": 4949,
+          "end_ms": 5151
+        },
+        {
+          "text": "客",
+          "start_ms": 5151,
+          "end_ms": 5354
+        },
+        {
+          "text": "在",
+          "start_ms": 5354,
+          "end_ms": 5557
+        },
+        {
+          "text": "等",
+          "start_ms": 5557,
+          "end_ms": 5760
+        },
+        {
+          "text": "餐",
+          "start_ms": 5760,
+          "end_ms": 5963
+        },
+        {
+          "text": "。",
+          "start_ms": 5963,
+          "end_ms": 6206
+        },
+        {
+          "text": "有",
+          "start_ms": 6206,
+          "end_ms": 6409
+        },
+        {
+          "text": "的",
+          "start_ms": 6409,
+          "end_ms": 6612
+        },
+        {
+          "text": "顾",
+          "start_ms": 6612,
+          "end_ms": 6814
+        },
+        {
+          "text": "客",
+          "start_ms": 6814,
+          "end_ms": 7017
+        },
+        {
+          "text": "只",
+          "start_ms": 7017,
+          "end_ms": 7220
+        },
+        {
+          "text": "要",
+          "start_ms": 7220,
+          "end_ms": 7423
+        },
+        {
+          "text": "一",
+          "start_ms": 7423,
+          "end_ms": 7626
+        },
+        {
+          "text": "份",
+          "start_ms": 7626,
+          "end_ms": 7829
+        },
+        {
+          "text": "炒",
+          "start_ms": 7829,
+          "end_ms": 8031
+        },
+        {
+          "text": "饭",
+          "start_ms": 8031,
+          "end_ms": 8234
+        },
+        {
+          "text": "，",
+          "start_ms": 8234,
+          "end_ms": 8376
+        },
+        {
+          "text": "几",
+          "start_ms": 8376,
+          "end_ms": 8579
+        },
+        {
+          "text": "分",
+          "start_ms": 8579,
+          "end_ms": 8782
+        },
+        {
+          "text": "钟",
+          "start_ms": 8782,
+          "end_ms": 8985
+        },
+        {
+          "text": "就",
+          "start_ms": 8985,
+          "end_ms": 9187
+        },
+        {
+          "text": "能",
+          "start_ms": 9187,
+          "end_ms": 9390
+        },
+        {
+          "text": "做",
+          "start_ms": 9390,
+          "end_ms": 9593
+        },
+        {
+          "text": "好",
+          "start_ms": 9593,
+          "end_ms": 9796
+        },
+        {
+          "text": "，",
+          "start_ms": 9796,
+          "end_ms": 9938
+        },
+        {
+          "text": "有",
+          "start_ms": 9938,
+          "end_ms": 10141
+        },
+        {
+          "text": "的",
+          "start_ms": 10141,
+          "end_ms": 10343
+        },
+        {
+          "text": "顾",
+          "start_ms": 10343,
+          "end_ms": 10546
+        },
+        {
+          "text": "客",
+          "start_ms": 10546,
+          "end_ms": 10749
+        },
+        {
+          "text": "要",
+          "start_ms": 10749,
+          "end_ms": 10952
+        },
+        {
+          "text": "一",
+          "start_ms": 10952,
+          "end_ms": 11155
+        },
+        {
+          "text": "桌",
+          "start_ms": 11155,
+          "end_ms": 11357
+        },
+        {
+          "text": "满",
+          "start_ms": 11357,
+          "end_ms": 11560
+        },
+        {
+          "text": "汉",
+          "start_ms": 11560,
+          "end_ms": 11763
+        },
+        {
+          "text": "全",
+          "start_ms": 11763,
+          "end_ms": 11966
+        },
+        {
+          "text": "席",
+          "start_ms": 11966,
+          "end_ms": 12169
+        },
+        {
+          "text": "，",
+          "start_ms": 12169,
+          "end_ms": 12311
+        },
+        {
+          "text": "需",
+          "start_ms": 12311,
+          "end_ms": 12513
+        },
+        {
+          "text": "要",
+          "start_ms": 12513,
+          "end_ms": 12716
+        },
+        {
+          "text": "很",
+          "start_ms": 12716,
+          "end_ms": 12919
+        },
+        {
+          "text": "长",
+          "start_ms": 12919,
+          "end_ms": 13122
+        },
+        {
+          "text": "时",
+          "start_ms": 13122,
+          "end_ms": 13325
+        },
+        {
+          "text": "间",
+          "start_ms": 13325,
+          "end_ms": 13528
+        },
+        {
+          "text": "。",
+          "start_ms": 13528,
+          "end_ms": 13771
+        },
+        {
+          "text": "厨",
+          "start_ms": 13771,
+          "end_ms": 13974
+        },
+        {
+          "text": "师",
+          "start_ms": 13974,
+          "end_ms": 14177
+        },
+        {
+          "text": "该",
+          "start_ms": 14177,
+          "end_ms": 14379
+        },
+        {
+          "text": "如",
+          "start_ms": 14379,
+          "end_ms": 14582
+        },
+        {
+          "text": "何",
+          "start_ms": 14582,
+          "end_ms": 14785
+        },
+        {
+          "text": "安",
+          "start_ms": 14785,
+          "end_ms": 14988
+        },
+        {
+          "text": "排",
+          "start_ms": 14988,
+          "end_ms": 15191
+        },
+        {
+          "text": "做",
+          "start_ms": 15191,
+          "end_ms": 15393
+        },
+        {
+          "text": "菜",
+          "start_ms": 15393,
+          "end_ms": 15596
+        },
+        {
+          "text": "顺",
+          "start_ms": 15596,
+          "end_ms": 15799
+        },
+        {
+          "text": "序",
+          "start_ms": 15799,
+          "end_ms": 16002
+        },
+        {
+          "text": "？",
+          "start_ms": 16002,
+          "end_ms": 16245
+        },
+        {
+          "text": "是",
+          "start_ms": 16245,
+          "end_ms": 16448
+        },
+        {
+          "text": "先",
+          "start_ms": 16448,
+          "end_ms": 16651
+        },
+        {
+          "text": "来",
+          "start_ms": 16651,
+          "end_ms": 16854
+        },
+        {
+          "text": "先",
+          "start_ms": 16854,
+          "end_ms": 17056
+        },
+        {
+          "text": "做",
+          "start_ms": 17056,
+          "end_ms": 17259
+        },
+        {
+          "text": "？",
+          "start_ms": 17259,
+          "end_ms": 17503
+        },
+        {
+          "text": "还",
+          "start_ms": 17503,
+          "end_ms": 17705
+        },
+        {
+          "text": "是",
+          "start_ms": 17705,
+          "end_ms": 17908
+        },
+        {
+          "text": "先",
+          "start_ms": 17908,
+          "end_ms": 18111
+        },
+        {
+          "text": "做",
+          "start_ms": 18111,
+          "end_ms": 18314
+        },
+        {
+          "text": "简",
+          "start_ms": 18314,
+          "end_ms": 18517
+        },
+        {
+          "text": "单",
+          "start_ms": 18517,
+          "end_ms": 18720
+        },
+        {
+          "text": "的",
+          "start_ms": 18720,
+          "end_ms": 18922
+        },
+        {
+          "text": "？",
+          "start_ms": 18922,
+          "end_ms": 19166
+        },
+        {
+          "text": "还",
+          "start_ms": 19166,
+          "end_ms": 19369
+        },
+        {
+          "text": "是",
+          "start_ms": 19369,
+          "end_ms": 19571
+        },
+        {
+          "text": "让",
+          "start_ms": 19571,
+          "end_ms": 19774
+        },
+        {
+          "text": "每",
+          "start_ms": 19774,
+          "end_ms": 19977
+        },
+        {
+          "text": "位",
+          "start_ms": 19977,
+          "end_ms": 20180
+        },
+        {
+          "text": "顾",
+          "start_ms": 20180,
+          "end_ms": 20383
+        },
+        {
+          "text": "客",
+          "start_ms": 20383,
+          "end_ms": 20585
+        },
+        {
+          "text": "轮",
+          "start_ms": 20585,
+          "end_ms": 20788
+        },
+        {
+          "text": "流",
+          "start_ms": 20788,
+          "end_ms": 20991
+        },
+        {
+          "text": "吃",
+          "start_ms": 20991,
+          "end_ms": 21194
+        },
+        {
+          "text": "一",
+          "start_ms": 21194,
+          "end_ms": 21397
+        },
+        {
+          "text": "口",
+          "start_ms": 21397,
+          "end_ms": 21599
+        },
+        {
+          "text": "？",
+          "start_ms": 21599,
+          "end_ms": 21843
+        },
+        {
+          "text": "这",
+          "start_ms": 21843,
+          "end_ms": 22046
+        },
+        {
+          "text": "就",
+          "start_ms": 22046,
+          "end_ms": 22248
+        },
+        {
+          "text": "是",
+          "start_ms": 22248,
+          "end_ms": 22451
+        },
+        {
+          "text": "处",
+          "start_ms": 22451,
+          "end_ms": 22654
+        },
+        {
+          "text": "理",
+          "start_ms": 22654,
+          "end_ms": 22857
+        },
+        {
+          "text": "机",
+          "start_ms": 22857,
+          "end_ms": 23060
+        },
+        {
+          "text": "调",
+          "start_ms": 23060,
+          "end_ms": 23262
+        },
+        {
+          "text": "度",
+          "start_ms": 23262,
+          "end_ms": 23465
+        },
+        {
+          "text": "要",
+          "start_ms": 23465,
+          "end_ms": 23668
+        },
+        {
+          "text": "解",
+          "start_ms": 23668,
+          "end_ms": 23871
+        },
+        {
+          "text": "决",
+          "start_ms": 23871,
+          "end_ms": 24074
+        },
+        {
+          "text": "的",
+          "start_ms": 24074,
+          "end_ms": 24277
+        },
+        {
+          "text": "核",
+          "start_ms": 24277,
+          "end_ms": 24479
+        },
+        {
+          "text": "心",
+          "start_ms": 24479,
+          "end_ms": 24682
+        },
+        {
+          "text": "问",
+          "start_ms": 24682,
+          "end_ms": 24885
+        },
+        {
+          "text": "题",
+          "start_ms": 24885,
+          "end_ms": 25088
+        },
+        {
+          "text": "。",
+          "start_ms": 25088,
+          "end_ms": 25331
+        },
+        {
+          "text": "在",
+          "start_ms": 25331,
+          "end_ms": 25534
+        },
+        {
+          "text": "操",
+          "start_ms": 25534,
+          "end_ms": 25737
+        },
+        {
+          "text": "作",
+          "start_ms": 25737,
+          "end_ms": 25940
+        },
+        {
+          "text": "系",
+          "start_ms": 25940,
+          "end_ms": 26142
+        },
+        {
+          "text": "统",
+          "start_ms": 26142,
+          "end_ms": 26345
+        },
+        {
+          "text": "中",
+          "start_ms": 26345,
+          "end_ms": 26548
+        },
+        {
+          "text": "，",
+          "start_ms": 26548,
+          "end_ms": 26690
+        },
+        {
+          "text": "处",
+          "start_ms": 26690,
+          "end_ms": 26893
+        },
+        {
+          "text": "理",
+          "start_ms": 26893,
+          "end_ms": 27096
+        },
+        {
+          "text": "机",
+          "start_ms": 27096,
+          "end_ms": 27298
+        },
+        {
+          "text": "是",
+          "start_ms": 27298,
+          "end_ms": 27501
+        },
+        {
+          "text": "计",
+          "start_ms": 27501,
+          "end_ms": 27704
+        },
+        {
+          "text": "算",
+          "start_ms": 27704,
+          "end_ms": 27907
+        },
+        {
+          "text": "机",
+          "start_ms": 27907,
+          "end_ms": 28110
+        },
+        {
+          "text": "最",
+          "start_ms": 28110,
+          "end_ms": 28312
+        },
+        {
+          "text": "宝",
+          "start_ms": 28312,
+          "end_ms": 28515
+        },
+        {
+          "text": "贵",
+          "start_ms": 28515,
+          "end_ms": 28718
+        },
+        {
+          "text": "的",
+          "start_ms": 28718,
+          "end_ms": 28921
+        },
+        {
+          "text": "资",
+          "start_ms": 28921,
+          "end_ms": 29124
+        },
+        {
+          "text": "源",
+          "start_ms": 29124,
+          "end_ms": 29327
+        },
+        {
+          "text": "，",
+          "start_ms": 29327,
+          "end_ms": 29469
+        },
+        {
+          "text": "而",
+          "start_ms": 29469,
+          "end_ms": 29671
+        },
+        {
+          "text": "进",
+          "start_ms": 29671,
+          "end_ms": 29874
+        },
+        {
+          "text": "程",
+          "start_ms": 29874,
+          "end_ms": 30077
+        },
+        {
+          "text": "就",
+          "start_ms": 30077,
+          "end_ms": 30280
+        },
+        {
+          "text": "像",
+          "start_ms": 30280,
+          "end_ms": 30483
+        },
+        {
+          "text": "那",
+          "start_ms": 30483,
+          "end_ms": 30685
+        },
+        {
+          "text": "些",
+          "start_ms": 30685,
+          "end_ms": 30888
+        },
+        {
+          "text": "等",
+          "start_ms": 30888,
+          "end_ms": 31091
+        },
+        {
+          "text": "待",
+          "start_ms": 31091,
+          "end_ms": 31294
+        },
+        {
+          "text": "用",
+          "start_ms": 31294,
+          "end_ms": 31497
+        },
+        {
+          "text": "餐",
+          "start_ms": 31497,
+          "end_ms": 31699
+        },
+        {
+          "text": "的",
+          "start_ms": 31699,
+          "end_ms": 31902
+        },
+        {
+          "text": "顾",
+          "start_ms": 31902,
+          "end_ms": 32105
+        },
+        {
+          "text": "客",
+          "start_ms": 32105,
+          "end_ms": 32308
+        },
+        {
+          "text": "。",
+          "start_ms": 32308,
+          "end_ms": 32551
+        },
+        {
+          "text": "调",
+          "start_ms": 32551,
+          "end_ms": 32754
+        },
+        {
+          "text": "度",
+          "start_ms": 32754,
+          "end_ms": 32957
+        },
+        {
+          "text": "器",
+          "start_ms": 32957,
+          "end_ms": 33160
+        },
+        {
+          "text": "的",
+          "start_ms": 33160,
+          "end_ms": 33363
+        },
+        {
+          "text": "任",
+          "start_ms": 33363,
+          "end_ms": 33565
+        },
+        {
+          "text": "务",
+          "start_ms": 33565,
+          "end_ms": 33768
+        },
+        {
+          "text": "，",
+          "start_ms": 33768,
+          "end_ms": 33910
+        },
+        {
+          "text": "就",
+          "start_ms": 33910,
+          "end_ms": 34113
+        },
+        {
+          "text": "是",
+          "start_ms": 34113,
+          "end_ms": 34316
+        },
+        {
+          "text": "让",
+          "start_ms": 34316,
+          "end_ms": 34519
+        },
+        {
+          "text": "有",
+          "start_ms": 34519,
+          "end_ms": 34721
+        },
+        {
+          "text": "限",
+          "start_ms": 34721,
+          "end_ms": 34924
+        },
+        {
+          "text": "的",
+          "start_ms": 34924,
+          "end_ms": 35127
+        },
+        {
+          "text": "CPU",
+          "start_ms": 35127,
+          "end_ms": 35522
+        },
+        {
+          "text": "资",
+          "start_ms": 35522,
+          "end_ms": 35725
+        },
+        {
+          "text": "源",
+          "start_ms": 35725,
+          "end_ms": 35928
+        },
+        {
+          "text": "公",
+          "start_ms": 35928,
+          "end_ms": 36131
+        },
+        {
+          "text": "平",
+          "start_ms": 36131,
+          "end_ms": 36334
+        },
+        {
+          "text": "且",
+          "start_ms": 36334,
+          "end_ms": 36537
+        },
+        {
+          "text": "高",
+          "start_ms": 36537,
+          "end_ms": 36739
+        },
+        {
+          "text": "效",
+          "start_ms": 36739,
+          "end_ms": 36942
+        },
+        {
+          "text": "地",
+          "start_ms": 36942,
+          "end_ms": 37145
+        },
+        {
+          "text": "服",
+          "start_ms": 37145,
+          "end_ms": 37348
+        },
+        {
+          "text": "务",
+          "start_ms": 37348,
+          "end_ms": 37551
+        },
+        {
+          "text": "于",
+          "start_ms": 37551,
+          "end_ms": 37753
+        },
+        {
+          "text": "多",
+          "start_ms": 37753,
+          "end_ms": 37956
+        },
+        {
+          "text": "个",
+          "start_ms": 37956,
+          "end_ms": 38159
+        },
+        {
+          "text": "进",
+          "start_ms": 38159,
+          "end_ms": 38362
+        },
+        {
+          "text": "程",
+          "start_ms": 38362,
+          "end_ms": 38565
+        },
+        {
+          "text": "。",
+          "start_ms": 38565,
+          "end_ms": 38808
+        }
+      ],
+      "captions": [
+        {
+          "text": "想象一下，一家热门餐厅只有一位厨师，但门口有十几位顾客在等餐",
+          "start_ms": 0,
+          "end_ms": 5963
+        },
+        {
+          "text": "有的顾客只要一份炒饭，几分钟就能做好，有的顾客要一桌满汉全席，需要很长时间",
+          "start_ms": 6206,
+          "end_ms": 13528
+        },
+        {
+          "text": "厨师该如何安排做菜顺序",
+          "start_ms": 13771,
+          "end_ms": 16002
+        },
+        {
+          "text": "是先来先做",
+          "start_ms": 16245,
+          "end_ms": 17259
+        },
+        {
+          "text": "还是先做简单的",
+          "start_ms": 17503,
+          "end_ms": 18922
+        },
+        {
+          "text": "还是让每位顾客轮流吃一口",
+          "start_ms": 19166,
+          "end_ms": 21599
+        },
+        {
+          "text": "这就是处理机调度要解决的核心问题",
+          "start_ms": 21843,
+          "end_ms": 25088
+        },
+        {
+          "text": "在操作系统中，处理机是计算机最宝贵的资源，而进程就像那些等待用餐的顾客",
+          "start_ms": 25331,
+          "end_ms": 32308
+        },
+        {
+          "text": "调度器的任务，就是让有限的 CPU 资源公平且高效地服务于多个进程",
+          "start_ms": 32551,
+          "end_ms": 38808
+        }
+      ],
+      "visual_cues": [
+        {
+          "id": "vb1",
+          "kind": "example",
+          "target": "",
+          "summary": "引入餐厅类比场景",
+          "start_ms": 953,
+          "end_ms": 21843,
+          "caption_text": "一家热门餐厅只有一位厨师"
+        },
+        {
+          "id": "vb2",
+          "kind": "define",
+          "target": "",
+          "summary": "定义处理机调度概念",
+          "start_ms": 21843,
+          "end_ms": 26690,
+          "caption_text": "这就是处理机调度要解决的核心问题"
+        },
+        {
+          "id": "vb3",
+          "kind": "trace_step",
+          "target": "",
+          "summary": "强调 CPU 资源的重要性",
+          "start_ms": 26690,
+          "end_ms": 35928,
+          "caption_text": "处理机是计算机最宝贵的资源"
+        },
+        {
+          "id": "vb4",
+          "kind": "compare",
+          "target": "",
+          "summary": "揭示调度的核心目标",
+          "start_ms": 35928,
+          "end_ms": 38808,
+          "caption_text": "公平且高效地服务于多个进程"
+        }
+      ]
+    },
+    {
+      "scene_id": "s2",
+      "index": 2,
+      "role": "concept",
+      "title": "调度评价指标体系",
+      "learning_objective": "掌握周转时间、等待时间、带权周转时间的定义与计算方法",
+      "visual_type": "concept_explain",
+      "visual": "{\"main_concept\": \"调度评价指标\", \"definition\": \"衡量调度算法性能的量化标准，包括周转时间、等待时间、带权周转时间\", \"keywords\": [\"周转时间\", \"等待时间\", \"带权周转时间\", \"公平性\", \"效率\"], \"why_it_matters\": [\"周转时间短，说明系统处理速度快，吞吐量大\", \"等待时间短，说明用户等待少，体验好\", \"带权周转时间公平，避免短作业被长作业欺负\", \"为算法选择提供客观依据\"], \"related_concepts\": [{\"name\": \"完成时间\", \"relation\": \"进程执行完毕的时刻\"}, {\"name\": \"到达时间\", \"relation\": \"进程进入就绪队列的时刻\"}, {\"name\": \"服务时间\", \"relation\": \"进程实际需要CPU的时间\"}], \"common_misconception\": \"误以为周转时间越短算法越好，忽略了公平性和响应时间\"}",
+      "narration": "评价调度算法的好坏，需要一套量化指标。第一个核心指标是周转时间，它等于进程的完成时间减去到达时间，反映了进程从\"进门\"到\"离店\"的总时长。第二个指标是等待时间，它等于周转时间减去服务时间，代表了进程在就绪队列中\"干等\"的时间。第三个指标是带权周转时间，它是周转时间除以服务时间的比值，让短作业和长作业可以在同一标准下公平比较。周转时间关注系统整体效率，等待时间关注用户体验，带权周转时间则关注公平性。这三个指标共同构成了评价调度算法的标尺。",
+      "audio_src": "/render-assets/.render-1664efbb11e943f5abf581fb2e79d718/02-s2.mp3",
+      "start_ms": 39208,
+      "duration_ms": 43060,
+      "audio_duration_ms": 42660,
+      "caption_words": [
+        {
+          "text": "评",
+          "start_ms": 0,
+          "end_ms": 201
+        },
+        {
+          "text": "价",
+          "start_ms": 201,
+          "end_ms": 402
+        },
+        {
+          "text": "调",
+          "start_ms": 402,
+          "end_ms": 602
+        },
+        {
+          "text": "度",
+          "start_ms": 602,
+          "end_ms": 803
+        },
+        {
+          "text": "算",
+          "start_ms": 803,
+          "end_ms": 1004
+        },
+        {
+          "text": "法",
+          "start_ms": 1004,
+          "end_ms": 1205
+        },
+        {
+          "text": "的",
+          "start_ms": 1205,
+          "end_ms": 1405
+        },
+        {
+          "text": "好",
+          "start_ms": 1405,
+          "end_ms": 1606
+        },
+        {
+          "text": "坏",
+          "start_ms": 1606,
+          "end_ms": 1807
+        },
+        {
+          "text": "，",
+          "start_ms": 1807,
+          "end_ms": 1947
+        },
+        {
+          "text": "需",
+          "start_ms": 1947,
+          "end_ms": 2148
+        },
+        {
+          "text": "要",
+          "start_ms": 2148,
+          "end_ms": 2349
+        },
+        {
+          "text": "一",
+          "start_ms": 2349,
+          "end_ms": 2550
+        },
+        {
+          "text": "套",
+          "start_ms": 2550,
+          "end_ms": 2750
+        },
+        {
+          "text": "量",
+          "start_ms": 2750,
+          "end_ms": 2951
+        },
+        {
+          "text": "化",
+          "start_ms": 2951,
+          "end_ms": 3152
+        },
+        {
+          "text": "指",
+          "start_ms": 3152,
+          "end_ms": 3353
+        },
+        {
+          "text": "标",
+          "start_ms": 3353,
+          "end_ms": 3553
+        },
+        {
+          "text": "。",
+          "start_ms": 3553,
+          "end_ms": 3794
+        },
+        {
+          "text": "第",
+          "start_ms": 3794,
+          "end_ms": 3995
+        },
+        {
+          "text": "一",
+          "start_ms": 3995,
+          "end_ms": 4196
+        },
+        {
+          "text": "个",
+          "start_ms": 4196,
+          "end_ms": 4396
+        },
+        {
+          "text": "核",
+          "start_ms": 4396,
+          "end_ms": 4597
+        },
+        {
+          "text": "心",
+          "start_ms": 4597,
+          "end_ms": 4798
+        },
+        {
+          "text": "指",
+          "start_ms": 4798,
+          "end_ms": 4999
+        },
+        {
+          "text": "标",
+          "start_ms": 4999,
+          "end_ms": 5200
+        },
+        {
+          "text": "是",
+          "start_ms": 5200,
+          "end_ms": 5400
+        },
+        {
+          "text": "周",
+          "start_ms": 5400,
+          "end_ms": 5601
+        },
+        {
+          "text": "转",
+          "start_ms": 5601,
+          "end_ms": 5802
+        },
+        {
+          "text": "时",
+          "start_ms": 5802,
+          "end_ms": 6003
+        },
+        {
+          "text": "间",
+          "start_ms": 6003,
+          "end_ms": 6203
+        },
+        {
+          "text": "，",
+          "start_ms": 6203,
+          "end_ms": 6344
+        },
+        {
+          "text": "它",
+          "start_ms": 6344,
+          "end_ms": 6545
+        },
+        {
+          "text": "等",
+          "start_ms": 6545,
+          "end_ms": 6745
+        },
+        {
+          "text": "于",
+          "start_ms": 6745,
+          "end_ms": 6946
+        },
+        {
+          "text": "进",
+          "start_ms": 6946,
+          "end_ms": 7147
+        },
+        {
+          "text": "程",
+          "start_ms": 7147,
+          "end_ms": 7348
+        },
+        {
+          "text": "的",
+          "start_ms": 7348,
+          "end_ms": 7548
+        },
+        {
+          "text": "完",
+          "start_ms": 7548,
+          "end_ms": 7749
+        },
+        {
+          "text": "成",
+          "start_ms": 7749,
+          "end_ms": 7950
+        },
+        {
+          "text": "时",
+          "start_ms": 7950,
+          "end_ms": 8151
+        },
+        {
+          "text": "间",
+          "start_ms": 8151,
+          "end_ms": 8351
+        },
+        {
+          "text": "减",
+          "start_ms": 8351,
+          "end_ms": 8552
+        },
+        {
+          "text": "去",
+          "start_ms": 8552,
+          "end_ms": 8753
+        },
+        {
+          "text": "到",
+          "start_ms": 8753,
+          "end_ms": 8954
+        },
+        {
+          "text": "达",
+          "start_ms": 8954,
+          "end_ms": 9154
+        },
+        {
+          "text": "时",
+          "start_ms": 9154,
+          "end_ms": 9355
+        },
+        {
+          "text": "间",
+          "start_ms": 9355,
+          "end_ms": 9556
+        },
+        {
+          "text": "，",
+          "start_ms": 9556,
+          "end_ms": 9696
+        },
+        {
+          "text": "反",
+          "start_ms": 9696,
+          "end_ms": 9897
+        },
+        {
+          "text": "映",
+          "start_ms": 9897,
+          "end_ms": 10098
+        },
+        {
+          "text": "了",
+          "start_ms": 10098,
+          "end_ms": 10299
+        },
+        {
+          "text": "进",
+          "start_ms": 10299,
+          "end_ms": 10499
+        },
+        {
+          "text": "程",
+          "start_ms": 10499,
+          "end_ms": 10700
+        },
+        {
+          "text": "从",
+          "start_ms": 10700,
+          "end_ms": 10901
+        },
+        {
+          "text": "进",
+          "start_ms": 10901,
+          "end_ms": 11102
+        },
+        {
+          "text": "门",
+          "start_ms": 11102,
+          "end_ms": 11302
+        },
+        {
+          "text": "到",
+          "start_ms": 11302,
+          "end_ms": 11503
+        },
+        {
+          "text": "离",
+          "start_ms": 11503,
+          "end_ms": 11704
+        },
+        {
+          "text": "店",
+          "start_ms": 11704,
+          "end_ms": 11905
+        },
+        {
+          "text": "的",
+          "start_ms": 11905,
+          "end_ms": 12105
+        },
+        {
+          "text": "总",
+          "start_ms": 12105,
+          "end_ms": 12306
+        },
+        {
+          "text": "时",
+          "start_ms": 12306,
+          "end_ms": 12507
+        },
+        {
+          "text": "长",
+          "start_ms": 12507,
+          "end_ms": 12708
+        },
+        {
+          "text": "。",
+          "start_ms": 12708,
+          "end_ms": 12949
+        },
+        {
+          "text": "第",
+          "start_ms": 12949,
+          "end_ms": 13149
+        },
+        {
+          "text": "二",
+          "start_ms": 13149,
+          "end_ms": 13350
+        },
+        {
+          "text": "个",
+          "start_ms": 13350,
+          "end_ms": 13551
+        },
+        {
+          "text": "指",
+          "start_ms": 13551,
+          "end_ms": 13752
+        },
+        {
+          "text": "标",
+          "start_ms": 13752,
+          "end_ms": 13952
+        },
+        {
+          "text": "是",
+          "start_ms": 13952,
+          "end_ms": 14153
+        },
+        {
+          "text": "等",
+          "start_ms": 14153,
+          "end_ms": 14354
+        },
+        {
+          "text": "待",
+          "start_ms": 14354,
+          "end_ms": 14555
+        },
+        {
+          "text": "时",
+          "start_ms": 14555,
+          "end_ms": 14755
+        },
+        {
+          "text": "间",
+          "start_ms": 14755,
+          "end_ms": 14956
+        },
+        {
+          "text": "，",
+          "start_ms": 14956,
+          "end_ms": 15097
+        },
+        {
+          "text": "它",
+          "start_ms": 15097,
+          "end_ms": 15297
+        },
+        {
+          "text": "等",
+          "start_ms": 15297,
+          "end_ms": 15498
+        },
+        {
+          "text": "于",
+          "start_ms": 15498,
+          "end_ms": 15699
+        },
+        {
+          "text": "周",
+          "start_ms": 15699,
+          "end_ms": 15900
+        },
+        {
+          "text": "转",
+          "start_ms": 15900,
+          "end_ms": 16100
+        },
+        {
+          "text": "时",
+          "start_ms": 16100,
+          "end_ms": 16301
+        },
+        {
+          "text": "间",
+          "start_ms": 16301,
+          "end_ms": 16502
+        },
+        {
+          "text": "减",
+          "start_ms": 16502,
+          "end_ms": 16703
+        },
+        {
+          "text": "去",
+          "start_ms": 16703,
+          "end_ms": 16903
+        },
+        {
+          "text": "服",
+          "start_ms": 16903,
+          "end_ms": 17104
+        },
+        {
+          "text": "务",
+          "start_ms": 17104,
+          "end_ms": 17305
+        },
+        {
+          "text": "时",
+          "start_ms": 17305,
+          "end_ms": 17506
+        },
+        {
+          "text": "间",
+          "start_ms": 17506,
+          "end_ms": 17706
+        },
+        {
+          "text": "，",
+          "start_ms": 17706,
+          "end_ms": 17847
+        },
+        {
+          "text": "代",
+          "start_ms": 17847,
+          "end_ms": 18048
+        },
+        {
+          "text": "表",
+          "start_ms": 18048,
+          "end_ms": 18248
+        },
+        {
+          "text": "了",
+          "start_ms": 18248,
+          "end_ms": 18449
+        },
+        {
+          "text": "进",
+          "start_ms": 18449,
+          "end_ms": 18650
+        },
+        {
+          "text": "程",
+          "start_ms": 18650,
+          "end_ms": 18851
+        },
+        {
+          "text": "在",
+          "start_ms": 18851,
+          "end_ms": 19051
+        },
+        {
+          "text": "就",
+          "start_ms": 19051,
+          "end_ms": 19252
+        },
+        {
+          "text": "绪",
+          "start_ms": 19252,
+          "end_ms": 19453
+        },
+        {
+          "text": "队",
+          "start_ms": 19453,
+          "end_ms": 19654
+        },
+        {
+          "text": "列",
+          "start_ms": 19654,
+          "end_ms": 19854
+        },
+        {
+          "text": "中",
+          "start_ms": 19854,
+          "end_ms": 20055
+        },
+        {
+          "text": "干",
+          "start_ms": 20055,
+          "end_ms": 20256
+        },
+        {
+          "text": "等",
+          "start_ms": 20256,
+          "end_ms": 20457
+        },
+        {
+          "text": "的",
+          "start_ms": 20457,
+          "end_ms": 20657
+        },
+        {
+          "text": "时",
+          "start_ms": 20657,
+          "end_ms": 20858
+        },
+        {
+          "text": "间",
+          "start_ms": 20858,
+          "end_ms": 21059
+        },
+        {
+          "text": "。",
+          "start_ms": 21059,
+          "end_ms": 21300
+        },
+        {
+          "text": "第",
+          "start_ms": 21300,
+          "end_ms": 21501
+        },
+        {
+          "text": "三",
+          "start_ms": 21501,
+          "end_ms": 21701
+        },
+        {
+          "text": "个",
+          "start_ms": 21701,
+          "end_ms": 21902
+        },
+        {
+          "text": "指",
+          "start_ms": 21902,
+          "end_ms": 22103
+        },
+        {
+          "text": "标",
+          "start_ms": 22103,
+          "end_ms": 22304
+        },
+        {
+          "text": "是",
+          "start_ms": 22304,
+          "end_ms": 22504
+        },
+        {
+          "text": "带",
+          "start_ms": 22504,
+          "end_ms": 22705
+        },
+        {
+          "text": "权",
+          "start_ms": 22705,
+          "end_ms": 22906
+        },
+        {
+          "text": "周",
+          "start_ms": 22906,
+          "end_ms": 23107
+        },
+        {
+          "text": "转",
+          "start_ms": 23107,
+          "end_ms": 23307
+        },
+        {
+          "text": "时",
+          "start_ms": 23307,
+          "end_ms": 23508
+        },
+        {
+          "text": "间",
+          "start_ms": 23508,
+          "end_ms": 23709
+        },
+        {
+          "text": "，",
+          "start_ms": 23709,
+          "end_ms": 23849
+        },
+        {
+          "text": "它",
+          "start_ms": 23849,
+          "end_ms": 24050
+        },
+        {
+          "text": "是",
+          "start_ms": 24050,
+          "end_ms": 24251
+        },
+        {
+          "text": "周",
+          "start_ms": 24251,
+          "end_ms": 24452
+        },
+        {
+          "text": "转",
+          "start_ms": 24452,
+          "end_ms": 24652
+        },
+        {
+          "text": "时",
+          "start_ms": 24652,
+          "end_ms": 24853
+        },
+        {
+          "text": "间",
+          "start_ms": 24853,
+          "end_ms": 25054
+        },
+        {
+          "text": "除",
+          "start_ms": 25054,
+          "end_ms": 25255
+        },
+        {
+          "text": "以",
+          "start_ms": 25255,
+          "end_ms": 25455
+        },
+        {
+          "text": "服",
+          "start_ms": 25455,
+          "end_ms": 25656
+        },
+        {
+          "text": "务",
+          "start_ms": 25656,
+          "end_ms": 25857
+        },
+        {
+          "text": "时",
+          "start_ms": 25857,
+          "end_ms": 26058
+        },
+        {
+          "text": "间",
+          "start_ms": 26058,
+          "end_ms": 26258
+        },
+        {
+          "text": "的",
+          "start_ms": 26258,
+          "end_ms": 26459
+        },
+        {
+          "text": "比",
+          "start_ms": 26459,
+          "end_ms": 26660
+        },
+        {
+          "text": "值",
+          "start_ms": 26660,
+          "end_ms": 26861
+        },
+        {
+          "text": "，",
+          "start_ms": 26861,
+          "end_ms": 27001
+        },
+        {
+          "text": "让",
+          "start_ms": 27001,
+          "end_ms": 27202
+        },
+        {
+          "text": "短",
+          "start_ms": 27202,
+          "end_ms": 27403
+        },
+        {
+          "text": "作",
+          "start_ms": 27403,
+          "end_ms": 27604
+        },
+        {
+          "text": "业",
+          "start_ms": 27604,
+          "end_ms": 27804
+        },
+        {
+          "text": "和",
+          "start_ms": 27804,
+          "end_ms": 28005
+        },
+        {
+          "text": "长",
+          "start_ms": 28005,
+          "end_ms": 28206
+        },
+        {
+          "text": "作",
+          "start_ms": 28206,
+          "end_ms": 28407
+        },
+        {
+          "text": "业",
+          "start_ms": 28407,
+          "end_ms": 28607
+        },
+        {
+          "text": "可",
+          "start_ms": 28607,
+          "end_ms": 28808
+        },
+        {
+          "text": "以",
+          "start_ms": 28808,
+          "end_ms": 29009
+        },
+        {
+          "text": "在",
+          "start_ms": 29009,
+          "end_ms": 29210
+        },
+        {
+          "text": "同",
+          "start_ms": 29210,
+          "end_ms": 29410
+        },
+        {
+          "text": "一",
+          "start_ms": 29410,
+          "end_ms": 29611
+        },
+        {
+          "text": "标",
+          "start_ms": 29611,
+          "end_ms": 29812
+        },
+        {
+          "text": "准",
+          "start_ms": 29812,
+          "end_ms": 30013
+        },
+        {
+          "text": "下",
+          "start_ms": 30013,
+          "end_ms": 30213
+        },
+        {
+          "text": "公",
+          "start_ms": 30213,
+          "end_ms": 30414
+        },
+        {
+          "text": "平",
+          "start_ms": 30414,
+          "end_ms": 30615
+        },
+        {
+          "text": "比",
+          "start_ms": 30615,
+          "end_ms": 30816
+        },
+        {
+          "text": "较",
+          "start_ms": 30816,
+          "end_ms": 31016
+        },
+        {
+          "text": "。",
+          "start_ms": 31016,
+          "end_ms": 31257
+        },
+        {
+          "text": "周",
+          "start_ms": 31257,
+          "end_ms": 31458
+        },
+        {
+          "text": "转",
+          "start_ms": 31458,
+          "end_ms": 31659
+        },
+        {
+          "text": "时",
+          "start_ms": 31659,
+          "end_ms": 31859
+        },
+        {
+          "text": "间",
+          "start_ms": 31859,
+          "end_ms": 32060
+        },
+        {
+          "text": "关",
+          "start_ms": 32060,
+          "end_ms": 32261
+        },
+        {
+          "text": "注",
+          "start_ms": 32261,
+          "end_ms": 32462
+        },
+        {
+          "text": "系",
+          "start_ms": 32462,
+          "end_ms": 32663
+        },
+        {
+          "text": "统",
+          "start_ms": 32663,
+          "end_ms": 32863
+        },
+        {
+          "text": "整",
+          "start_ms": 32863,
+          "end_ms": 33064
+        },
+        {
+          "text": "体",
+          "start_ms": 33064,
+          "end_ms": 33265
+        },
+        {
+          "text": "效",
+          "start_ms": 33265,
+          "end_ms": 33466
+        },
+        {
+          "text": "率",
+          "start_ms": 33466,
+          "end_ms": 33666
+        },
+        {
+          "text": "，",
+          "start_ms": 33666,
+          "end_ms": 33807
+        },
+        {
+          "text": "等",
+          "start_ms": 33807,
+          "end_ms": 34008
+        },
+        {
+          "text": "待",
+          "start_ms": 34008,
+          "end_ms": 34208
+        },
+        {
+          "text": "时",
+          "start_ms": 34208,
+          "end_ms": 34409
+        },
+        {
+          "text": "间",
+          "start_ms": 34409,
+          "end_ms": 34610
+        },
+        {
+          "text": "关",
+          "start_ms": 34610,
+          "end_ms": 34811
+        },
+        {
+          "text": "注",
+          "start_ms": 34811,
+          "end_ms": 35011
+        },
+        {
+          "text": "用",
+          "start_ms": 35011,
+          "end_ms": 35212
+        },
+        {
+          "text": "户",
+          "start_ms": 35212,
+          "end_ms": 35413
+        },
+        {
+          "text": "体",
+          "start_ms": 35413,
+          "end_ms": 35614
+        },
+        {
+          "text": "验",
+          "start_ms": 35614,
+          "end_ms": 35814
+        },
+        {
+          "text": "，",
+          "start_ms": 35814,
+          "end_ms": 35955
+        },
+        {
+          "text": "带",
+          "start_ms": 35955,
+          "end_ms": 36156
+        },
+        {
+          "text": "权",
+          "start_ms": 36156,
+          "end_ms": 36356
+        },
+        {
+          "text": "周",
+          "start_ms": 36356,
+          "end_ms": 36557
+        },
+        {
+          "text": "转",
+          "start_ms": 36557,
+          "end_ms": 36758
+        },
+        {
+          "text": "时",
+          "start_ms": 36758,
+          "end_ms": 36959
+        },
+        {
+          "text": "间",
+          "start_ms": 36959,
+          "end_ms": 37159
+        },
+        {
+          "text": "则",
+          "start_ms": 37159,
+          "end_ms": 37360
+        },
+        {
+          "text": "关",
+          "start_ms": 37360,
+          "end_ms": 37561
+        },
+        {
+          "text": "注",
+          "start_ms": 37561,
+          "end_ms": 37762
+        },
+        {
+          "text": "公",
+          "start_ms": 37762,
+          "end_ms": 37962
+        },
+        {
+          "text": "平",
+          "start_ms": 37962,
+          "end_ms": 38163
+        },
+        {
+          "text": "性",
+          "start_ms": 38163,
+          "end_ms": 38364
+        },
+        {
+          "text": "。",
+          "start_ms": 38364,
+          "end_ms": 38605
+        },
+        {
+          "text": "这",
+          "start_ms": 38605,
+          "end_ms": 38806
+        },
+        {
+          "text": "三",
+          "start_ms": 38806,
+          "end_ms": 39006
+        },
+        {
+          "text": "个",
+          "start_ms": 39006,
+          "end_ms": 39207
+        },
+        {
+          "text": "指",
+          "start_ms": 39207,
+          "end_ms": 39408
+        },
+        {
+          "text": "标",
+          "start_ms": 39408,
+          "end_ms": 39609
+        },
+        {
+          "text": "共",
+          "start_ms": 39609,
+          "end_ms": 39809
+        },
+        {
+          "text": "同",
+          "start_ms": 39809,
+          "end_ms": 40010
+        },
+        {
+          "text": "构",
+          "start_ms": 40010,
+          "end_ms": 40211
+        },
+        {
+          "text": "成",
+          "start_ms": 40211,
+          "end_ms": 40412
+        },
+        {
+          "text": "了",
+          "start_ms": 40412,
+          "end_ms": 40612
+        },
+        {
+          "text": "评",
+          "start_ms": 40612,
+          "end_ms": 40813
+        },
+        {
+          "text": "价",
+          "start_ms": 40813,
+          "end_ms": 41014
+        },
+        {
+          "text": "调",
+          "start_ms": 41014,
+          "end_ms": 41215
+        },
+        {
+          "text": "度",
+          "start_ms": 41215,
+          "end_ms": 41415
+        },
+        {
+          "text": "算",
+          "start_ms": 41415,
+          "end_ms": 41616
+        },
+        {
+          "text": "法",
+          "start_ms": 41616,
+          "end_ms": 41817
+        },
+        {
+          "text": "的",
+          "start_ms": 41817,
+          "end_ms": 42018
+        },
+        {
+          "text": "标",
+          "start_ms": 42018,
+          "end_ms": 42218
+        },
+        {
+          "text": "尺",
+          "start_ms": 42218,
+          "end_ms": 42419
+        },
+        {
+          "text": "。",
+          "start_ms": 42419,
+          "end_ms": 42660
+        }
+      ],
+      "captions": [
+        {
+          "text": "评价调度算法的好坏，需要一套量化指标",
+          "start_ms": 0,
+          "end_ms": 3553
+        },
+        {
+          "text": "第一个核心指标是周转时间，它等于进程的完成时间减去到达时间，反映了进程从\"进门\"到\"离店\"的总时长",
+          "start_ms": 3794,
+          "end_ms": 12708
+        },
+        {
+          "text": "第二个指标是等待时间，它等于周转时间减去服务时间，代表了进程在就绪队列中\"干等\"的时间",
+          "start_ms": 12949,
+          "end_ms": 21059
+        },
+        {
+          "text": "第三个指标是带权周转时间，它是周转时间除以服务时间的比值，让短作业和长作业可以在同一标准下公平比较",
+          "start_ms": 21300,
+          "end_ms": 31016
+        },
+        {
+          "text": "周转时间关注系统整体效率，等待时间关注用户体验，带权周转时间则关注公平性",
+          "start_ms": 31257,
+          "end_ms": 38364
+        },
+        {
+          "text": "这三个指标共同构成了评价调度算法的标尺",
+          "start_ms": 38605,
+          "end_ms": 42660
+        }
+      ],
+      "visual_cues": [
+        {
+          "id": "vb1",
+          "kind": "define",
+          "target": "",
+          "summary": "定义周转时间",
+          "start_ms": 3794,
+          "end_ms": 6344,
+          "caption_text": "第一个核心指标是周转时间"
+        },
+        {
+          "id": "vb2",
+          "kind": "example",
+          "target": "",
+          "summary": "展示周转时间公式",
+          "start_ms": 6344,
+          "end_ms": 12949,
+          "caption_text": "它等于进程的完成时间减去到达时间"
+        },
+        {
+          "id": "vb3",
+          "kind": "define",
+          "target": "",
+          "summary": "定义等待时间",
+          "start_ms": 12949,
+          "end_ms": 15097,
+          "caption_text": "第二个指标是等待时间"
+        },
+        {
+          "id": "vb4",
+          "kind": "example",
+          "target": "",
+          "summary": "展示等待时间公式",
+          "start_ms": 15097,
+          "end_ms": 21300,
+          "caption_text": "它等于周转时间减去服务时间"
+        },
+        {
+          "id": "vb5",
+          "kind": "define",
+          "target": "",
+          "summary": "定义带权周转时间",
+          "start_ms": 21300,
+          "end_ms": 23849,
+          "caption_text": "第三个指标是带权周转时间"
+        },
+        {
+          "id": "vb6",
+          "kind": "example",
+          "target": "",
+          "summary": "展示带权周转公式",
+          "start_ms": 23849,
+          "end_ms": 31257,
+          "caption_text": "它是周转时间除以服务时间的比值"
+        },
+        {
+          "id": "vb7",
+          "kind": "compare",
+          "target": "",
+          "summary": "解释周转时间意义",
+          "start_ms": 31257,
+          "end_ms": 33807,
+          "caption_text": "周转时间关注系统整体效率"
+        },
+        {
+          "id": "vb8",
+          "kind": "compare",
+          "target": "",
+          "summary": "解释等待时间意义",
+          "start_ms": 33807,
+          "end_ms": 35955,
+          "caption_text": "等待时间关注用户体验"
+        },
+        {
+          "id": "vb9",
+          "kind": "compare",
+          "target": "",
+          "summary": "解释带权周转意义",
+          "start_ms": 35955,
+          "end_ms": 38605,
+          "caption_text": "带权周转时间则关注公平性"
+        },
+        {
+          "id": "vb10",
+          "kind": "checkpoint",
+          "target": "",
+          "summary": "总结指标体系",
+          "start_ms": 38605,
+          "end_ms": 42660,
+          "caption_text": "这三个指标共同构成了评价调度算法的标尺"
+        }
+      ]
+    },
+    {
+      "scene_id": "s3",
+      "index": 3,
+      "role": "process",
+      "title": "FCFS：先来先服务",
+      "learning_objective": "理解FCFS算法的决策逻辑、护航效应及性能计算",
+      "visual_type": "algorithm_trace",
+      "visual": "{\"algorithm_name\": \"FCFS（先来先服务）\", \"problem\": \"对 P1-P5 五个进程进行调度，计算周转时间和等待时间\", \"data\": [{\"name\": \"P1\", \"arrival\": 0, \"service\": 5}, {\"name\": \"P2\", \"arrival\": 1, \"service\": 3}, {\"name\": \"P3\", \"arrival\": 2, \"service\": 1}, {\"name\": \"P4\", \"arrival\": 3, \"service\": 2}, {\"name\": \"P5\", \"arrival\": 4, \"service\": 4}], \"pseudocode\": [\"按到达时间排序进程\", \"current_time = 0\", \"for each process in sorted order:\", \"    if current_time < arrival_time:\", \"        current_time = arrival_time\", \"    start_time = current_time\", \"    current_time += service_time\", \"    finish_time = current_time\", \"    turnaround = finish - arrival\", \"    waiting = turnaround - service\"], \"steps\": [{\"line\": 1, \"description\": \"按到达时间排序：P1(0)→P2(1)→P3(2)→P4(3)→P5(4)\", \"variables\": {\"queue\": [\"P1\", \"P2\", \"P3\", \"P4\", \"P5\"]}, \"highlight_indices\": [0]}, {\"line\": 3, \"description\": \"调度 P1：时刻 0 开始，服务时间 5，时刻 5 完成\", \"variables\": {\"current_time\": 5, \"running\": \"P1\", \"gantt\": \"P1[0-5]\"}, \"highlight_indices\": [0]}, {\"line\": 3, \"description\": \"调度 P2：时刻 5 开始，服务时间 3，时刻 8 完成\", \"variables\": {\"current_time\": 8, \"running\": \"P2\", \"gantt\": \"P1[0-5]→P2[5-8]\"}, \"highlight_indices\": [1]}, {\"line\": 3, \"description\": \"调度 P3：时刻 8 开始，服务时间 1，时刻 9 完成\", \"variables\": {\"current_time\": 9, \"running\": \"P3\", \"gantt\": \"P1[0-5]→P2[5-8]→P3[8-9]\"}, \"highlight_indices\": [2]}, {\"line\": 3, \"description\": \"调度 P4：时刻 9 开始，服务时间 2，时刻 11 完成\", \"variables\": {\"current_time\": 11, \"running\": \"P4\", \"gantt\": \"P1[0-5]→P2[5-8]→P3[8-9]→P4[9-11]\"}, \"highlight_indices\": [3]}, {\"line\": 3, \"description\": \"调度 P5：时刻 11 开始，服务时间 4，时刻 15 完成\", \"variables\": {\"current_time\": 15, \"running\": \"P5\", \"gantt\": \"P1[0-5]→P2[5-8]→P3[8-9]→P4[9-11]→P5[11-15]\"}, \"highlight_indices\": [4]}, {\"line\": 7, \"description\": \"计算周转时间：P1=5, P2=7, P3=7, P4=8, P5=11\", \"variables\": {\"avg_turnaround\": 7.6}, \"highlight_indices\": [0, 1, 2, 3, 4]}, {\"line\": 8, \"description\": \"计算等待时间：P1=0, P2=4, P3=6, P4=6, P5=7\", \"variables\": {\"avg_waiting\": 4.6}, \"highlight_indices\": [0, 1, 2, 3, 4]}], \"complexity\": {\"time\": \"O(n log n)\", \"space\": \"O(n)\"}, \"result\": \"平均周转时间: 7.6 | 平均等待时间: 4.6 | 护航效应: P3等待6单位(服务仅1单位)\"}",
+      "narration": "先来先服务算法的思想非常直观：按照进程到达就绪队列的先后顺序进行调度，先到的先执行。我们用 P1 到 P5 这组示例数据来演示。时刻 0，P1 到达，队列中只有 P1，调度 P1 执行，P1 服务时间为 5，一直运行到时刻 5 才完成。此时 P2、P3、P4、P5 都已到达，按到达顺序选择 P2。P2 服务时间为 3，从时刻 5 运行到时刻 8。接着执行 P3，服务时间 1，时刻 8 到 9。然后是 P4，服务时间 2，时刻 9 到 11。最后是 P5，服务时间 4，时刻 11 到 15。现在计算评价指标。P1 完成时间 5，周转时间 5 减 0 等于 5，等待时间 0。P2 完成时间 8，周转时间 7，等待时间 4。P3 完成时间 9，周转时间 7，等待时间 6。P4 完成时间 11，周转时间 8，等待时间 6。P5 完成时间 15，周转时间 11，等待时间 7。平均周转时间为 7.6，平均等待时间为 4.6。观察这个结果，P3 只需要 1 个单位时间，却等待了 6 个单位，这就是护航效应：长作业 P1 阻塞了后续所有短作业，导致短作业等待时间过长。",
+      "audio_src": "/render-assets/.render-1664efbb11e943f5abf581fb2e79d718/03-s3.mp3",
+      "start_ms": 82268,
+      "duration_ms": 110452,
+      "audio_duration_ms": 110052,
+      "caption_words": [
+        {
+          "text": "先",
+          "start_ms": 0,
+          "end_ms": 284
+        },
+        {
+          "text": "来",
+          "start_ms": 284,
+          "end_ms": 569
+        },
+        {
+          "text": "先",
+          "start_ms": 569,
+          "end_ms": 853
+        },
+        {
+          "text": "服",
+          "start_ms": 853,
+          "end_ms": 1137
+        },
+        {
+          "text": "务",
+          "start_ms": 1137,
+          "end_ms": 1422
+        },
+        {
+          "text": "算",
+          "start_ms": 1422,
+          "end_ms": 1706
+        },
+        {
+          "text": "法",
+          "start_ms": 1706,
+          "end_ms": 1990
+        },
+        {
+          "text": "的",
+          "start_ms": 1990,
+          "end_ms": 2275
+        },
+        {
+          "text": "思",
+          "start_ms": 2275,
+          "end_ms": 2559
+        },
+        {
+          "text": "想",
+          "start_ms": 2559,
+          "end_ms": 2843
+        },
+        {
+          "text": "非",
+          "start_ms": 2843,
+          "end_ms": 3128
+        },
+        {
+          "text": "常",
+          "start_ms": 3128,
+          "end_ms": 3412
+        },
+        {
+          "text": "直",
+          "start_ms": 3412,
+          "end_ms": 3696
+        },
+        {
+          "text": "观",
+          "start_ms": 3696,
+          "end_ms": 3981
+        },
+        {
+          "text": "：",
+          "start_ms": 3981,
+          "end_ms": 4180
+        },
+        {
+          "text": "按",
+          "start_ms": 4180,
+          "end_ms": 4464
+        },
+        {
+          "text": "照",
+          "start_ms": 4464,
+          "end_ms": 4748
+        },
+        {
+          "text": "进",
+          "start_ms": 4748,
+          "end_ms": 5033
+        },
+        {
+          "text": "程",
+          "start_ms": 5033,
+          "end_ms": 5317
+        },
+        {
+          "text": "到",
+          "start_ms": 5317,
+          "end_ms": 5601
+        },
+        {
+          "text": "达",
+          "start_ms": 5601,
+          "end_ms": 5886
+        },
+        {
+          "text": "就",
+          "start_ms": 5886,
+          "end_ms": 6170
+        },
+        {
+          "text": "绪",
+          "start_ms": 6170,
+          "end_ms": 6454
+        },
+        {
+          "text": "队",
+          "start_ms": 6454,
+          "end_ms": 6739
+        },
+        {
+          "text": "列",
+          "start_ms": 6739,
+          "end_ms": 7023
+        },
+        {
+          "text": "的",
+          "start_ms": 7023,
+          "end_ms": 7307
+        },
+        {
+          "text": "先",
+          "start_ms": 7307,
+          "end_ms": 7592
+        },
+        {
+          "text": "后",
+          "start_ms": 7592,
+          "end_ms": 7876
+        },
+        {
+          "text": "顺",
+          "start_ms": 7876,
+          "end_ms": 8160
+        },
+        {
+          "text": "序",
+          "start_ms": 8160,
+          "end_ms": 8445
+        },
+        {
+          "text": "进",
+          "start_ms": 8445,
+          "end_ms": 8729
+        },
+        {
+          "text": "行",
+          "start_ms": 8729,
+          "end_ms": 9013
+        },
+        {
+          "text": "调",
+          "start_ms": 9013,
+          "end_ms": 9298
+        },
+        {
+          "text": "度",
+          "start_ms": 9298,
+          "end_ms": 9582
+        },
+        {
+          "text": "，",
+          "start_ms": 9582,
+          "end_ms": 9781
+        },
+        {
+          "text": "先",
+          "start_ms": 9781,
+          "end_ms": 10065
+        },
+        {
+          "text": "到",
+          "start_ms": 10065,
+          "end_ms": 10350
+        },
+        {
+          "text": "的",
+          "start_ms": 10350,
+          "end_ms": 10634
+        },
+        {
+          "text": "先",
+          "start_ms": 10634,
+          "end_ms": 10918
+        },
+        {
+          "text": "执",
+          "start_ms": 10918,
+          "end_ms": 11203
+        },
+        {
+          "text": "行",
+          "start_ms": 11203,
+          "end_ms": 11487
+        },
+        {
+          "text": "。",
+          "start_ms": 11487,
+          "end_ms": 11828
+        },
+        {
+          "text": "我",
+          "start_ms": 11828,
+          "end_ms": 12113
+        },
+        {
+          "text": "们",
+          "start_ms": 12113,
+          "end_ms": 12397
+        },
+        {
+          "text": "用",
+          "start_ms": 12397,
+          "end_ms": 12681
+        },
+        {
+          "text": "P1",
+          "start_ms": 12681,
+          "end_ms": 13051
+        },
+        {
+          "text": "到",
+          "start_ms": 13051,
+          "end_ms": 13335
+        },
+        {
+          "text": "P5",
+          "start_ms": 13335,
+          "end_ms": 13705
+        },
+        {
+          "text": "这",
+          "start_ms": 13705,
+          "end_ms": 13989
+        },
+        {
+          "text": "组",
+          "start_ms": 13989,
+          "end_ms": 14274
+        },
+        {
+          "text": "示",
+          "start_ms": 14274,
+          "end_ms": 14558
+        },
+        {
+          "text": "例",
+          "start_ms": 14558,
+          "end_ms": 14842
+        },
+        {
+          "text": "数",
+          "start_ms": 14842,
+          "end_ms": 15127
+        },
+        {
+          "text": "据",
+          "start_ms": 15127,
+          "end_ms": 15411
+        },
+        {
+          "text": "来",
+          "start_ms": 15411,
+          "end_ms": 15695
+        },
+        {
+          "text": "演",
+          "start_ms": 15695,
+          "end_ms": 15980
+        },
+        {
+          "text": "示",
+          "start_ms": 15980,
+          "end_ms": 16264
+        },
+        {
+          "text": "。",
+          "start_ms": 16264,
+          "end_ms": 16605
+        },
+        {
+          "text": "时",
+          "start_ms": 16605,
+          "end_ms": 16890
+        },
+        {
+          "text": "刻",
+          "start_ms": 16890,
+          "end_ms": 17174
+        },
+        {
+          "text": "0",
+          "start_ms": 17174,
+          "end_ms": 17458
+        },
+        {
+          "text": "，",
+          "start_ms": 17458,
+          "end_ms": 17657
+        },
+        {
+          "text": "P1",
+          "start_ms": 17657,
+          "end_ms": 18027
+        },
+        {
+          "text": "到",
+          "start_ms": 18027,
+          "end_ms": 18311
+        },
+        {
+          "text": "达",
+          "start_ms": 18311,
+          "end_ms": 18596
+        },
+        {
+          "text": "，",
+          "start_ms": 18596,
+          "end_ms": 18795
+        },
+        {
+          "text": "队",
+          "start_ms": 18795,
+          "end_ms": 19079
+        },
+        {
+          "text": "列",
+          "start_ms": 19079,
+          "end_ms": 19363
+        },
+        {
+          "text": "中",
+          "start_ms": 19363,
+          "end_ms": 19648
+        },
+        {
+          "text": "只",
+          "start_ms": 19648,
+          "end_ms": 19932
+        },
+        {
+          "text": "有",
+          "start_ms": 19932,
+          "end_ms": 20216
+        },
+        {
+          "text": "P1",
+          "start_ms": 20216,
+          "end_ms": 20586
+        },
+        {
+          "text": "，",
+          "start_ms": 20586,
+          "end_ms": 20785
+        },
+        {
+          "text": "调",
+          "start_ms": 20785,
+          "end_ms": 21069
+        },
+        {
+          "text": "度",
+          "start_ms": 21069,
+          "end_ms": 21354
+        },
+        {
+          "text": "P1",
+          "start_ms": 21354,
+          "end_ms": 21723
+        },
+        {
+          "text": "执",
+          "start_ms": 21723,
+          "end_ms": 22008
+        },
+        {
+          "text": "行",
+          "start_ms": 22008,
+          "end_ms": 22292
+        },
+        {
+          "text": "，",
+          "start_ms": 22292,
+          "end_ms": 22491
+        },
+        {
+          "text": "P1",
+          "start_ms": 22491,
+          "end_ms": 22861
+        },
+        {
+          "text": "服",
+          "start_ms": 22861,
+          "end_ms": 23145
+        },
+        {
+          "text": "务",
+          "start_ms": 23145,
+          "end_ms": 23429
+        },
+        {
+          "text": "时",
+          "start_ms": 23429,
+          "end_ms": 23714
+        },
+        {
+          "text": "间",
+          "start_ms": 23714,
+          "end_ms": 23998
+        },
+        {
+          "text": "为",
+          "start_ms": 23998,
+          "end_ms": 24282
+        },
+        {
+          "text": "5",
+          "start_ms": 24282,
+          "end_ms": 24567
+        },
+        {
+          "text": "，",
+          "start_ms": 24567,
+          "end_ms": 24766
+        },
+        {
+          "text": "一",
+          "start_ms": 24766,
+          "end_ms": 25050
+        },
+        {
+          "text": "直",
+          "start_ms": 25050,
+          "end_ms": 25334
+        },
+        {
+          "text": "运",
+          "start_ms": 25334,
+          "end_ms": 25619
+        },
+        {
+          "text": "行",
+          "start_ms": 25619,
+          "end_ms": 25903
+        },
+        {
+          "text": "到",
+          "start_ms": 25903,
+          "end_ms": 26187
+        },
+        {
+          "text": "时",
+          "start_ms": 26187,
+          "end_ms": 26472
+        },
+        {
+          "text": "刻",
+          "start_ms": 26472,
+          "end_ms": 26756
+        },
+        {
+          "text": "5",
+          "start_ms": 26756,
+          "end_ms": 27040
+        },
+        {
+          "text": "才",
+          "start_ms": 27040,
+          "end_ms": 27325
+        },
+        {
+          "text": "完",
+          "start_ms": 27325,
+          "end_ms": 27609
+        },
+        {
+          "text": "成",
+          "start_ms": 27609,
+          "end_ms": 27893
+        },
+        {
+          "text": "。",
+          "start_ms": 27893,
+          "end_ms": 28235
+        },
+        {
+          "text": "此",
+          "start_ms": 28235,
+          "end_ms": 28519
+        },
+        {
+          "text": "时",
+          "start_ms": 28519,
+          "end_ms": 28803
+        },
+        {
+          "text": "P2",
+          "start_ms": 28803,
+          "end_ms": 29173
+        },
+        {
+          "text": "、",
+          "start_ms": 29173,
+          "end_ms": 29301
+        },
+        {
+          "text": "P3",
+          "start_ms": 29301,
+          "end_ms": 29670
+        },
+        {
+          "text": "、",
+          "start_ms": 29670,
+          "end_ms": 29798
+        },
+        {
+          "text": "P4",
+          "start_ms": 29798,
+          "end_ms": 30168
+        },
+        {
+          "text": "、",
+          "start_ms": 30168,
+          "end_ms": 30296
+        },
+        {
+          "text": "P5",
+          "start_ms": 30296,
+          "end_ms": 30666
+        },
+        {
+          "text": "都",
+          "start_ms": 30666,
+          "end_ms": 30950
+        },
+        {
+          "text": "已",
+          "start_ms": 30950,
+          "end_ms": 31234
+        },
+        {
+          "text": "到",
+          "start_ms": 31234,
+          "end_ms": 31519
+        },
+        {
+          "text": "达",
+          "start_ms": 31519,
+          "end_ms": 31803
+        },
+        {
+          "text": "，",
+          "start_ms": 31803,
+          "end_ms": 32002
+        },
+        {
+          "text": "按",
+          "start_ms": 32002,
+          "end_ms": 32286
+        },
+        {
+          "text": "到",
+          "start_ms": 32286,
+          "end_ms": 32571
+        },
+        {
+          "text": "达",
+          "start_ms": 32571,
+          "end_ms": 32855
+        },
+        {
+          "text": "顺",
+          "start_ms": 32855,
+          "end_ms": 33139
+        },
+        {
+          "text": "序",
+          "start_ms": 33139,
+          "end_ms": 33424
+        },
+        {
+          "text": "选",
+          "start_ms": 33424,
+          "end_ms": 33708
+        },
+        {
+          "text": "择",
+          "start_ms": 33708,
+          "end_ms": 33992
+        },
+        {
+          "text": "P2",
+          "start_ms": 33992,
+          "end_ms": 34362
+        },
+        {
+          "text": "。",
+          "start_ms": 34362,
+          "end_ms": 34703
+        },
+        {
+          "text": "P2",
+          "start_ms": 34703,
+          "end_ms": 35073
+        },
+        {
+          "text": "服",
+          "start_ms": 35073,
+          "end_ms": 35357
+        },
+        {
+          "text": "务",
+          "start_ms": 35357,
+          "end_ms": 35641
+        },
+        {
+          "text": "时",
+          "start_ms": 35641,
+          "end_ms": 35926
+        },
+        {
+          "text": "间",
+          "start_ms": 35926,
+          "end_ms": 36210
+        },
+        {
+          "text": "为",
+          "start_ms": 36210,
+          "end_ms": 36494
+        },
+        {
+          "text": "3",
+          "start_ms": 36494,
+          "end_ms": 36779
+        },
+        {
+          "text": "，",
+          "start_ms": 36779,
+          "end_ms": 36978
+        },
+        {
+          "text": "从",
+          "start_ms": 36978,
+          "end_ms": 37262
+        },
+        {
+          "text": "时",
+          "start_ms": 37262,
+          "end_ms": 37546
+        },
+        {
+          "text": "刻",
+          "start_ms": 37546,
+          "end_ms": 37831
+        },
+        {
+          "text": "5",
+          "start_ms": 37831,
+          "end_ms": 38115
+        },
+        {
+          "text": "运",
+          "start_ms": 38115,
+          "end_ms": 38399
+        },
+        {
+          "text": "行",
+          "start_ms": 38399,
+          "end_ms": 38684
+        },
+        {
+          "text": "到",
+          "start_ms": 38684,
+          "end_ms": 38968
+        },
+        {
+          "text": "时",
+          "start_ms": 38968,
+          "end_ms": 39252
+        },
+        {
+          "text": "刻",
+          "start_ms": 39252,
+          "end_ms": 39537
+        },
+        {
+          "text": "8",
+          "start_ms": 39537,
+          "end_ms": 39821
+        },
+        {
+          "text": "。",
+          "start_ms": 39821,
+          "end_ms": 40162
+        },
+        {
+          "text": "接",
+          "start_ms": 40162,
+          "end_ms": 40447
+        },
+        {
+          "text": "着",
+          "start_ms": 40447,
+          "end_ms": 40731
+        },
+        {
+          "text": "执",
+          "start_ms": 40731,
+          "end_ms": 41015
+        },
+        {
+          "text": "行",
+          "start_ms": 41015,
+          "end_ms": 41300
+        },
+        {
+          "text": "P3",
+          "start_ms": 41300,
+          "end_ms": 41669
+        },
+        {
+          "text": "，",
+          "start_ms": 41669,
+          "end_ms": 41868
+        },
+        {
+          "text": "服",
+          "start_ms": 41868,
+          "end_ms": 42153
+        },
+        {
+          "text": "务",
+          "start_ms": 42153,
+          "end_ms": 42437
+        },
+        {
+          "text": "时",
+          "start_ms": 42437,
+          "end_ms": 42721
+        },
+        {
+          "text": "间",
+          "start_ms": 42721,
+          "end_ms": 43006
+        },
+        {
+          "text": "1",
+          "start_ms": 43006,
+          "end_ms": 43290
+        },
+        {
+          "text": "，",
+          "start_ms": 43290,
+          "end_ms": 43489
+        },
+        {
+          "text": "时",
+          "start_ms": 43489,
+          "end_ms": 43773
+        },
+        {
+          "text": "刻",
+          "start_ms": 43773,
+          "end_ms": 44058
+        },
+        {
+          "text": "8",
+          "start_ms": 44058,
+          "end_ms": 44342
+        },
+        {
+          "text": "到",
+          "start_ms": 44342,
+          "end_ms": 44626
+        },
+        {
+          "text": "9",
+          "start_ms": 44626,
+          "end_ms": 44911
+        },
+        {
+          "text": "。",
+          "start_ms": 44911,
+          "end_ms": 45252
+        },
+        {
+          "text": "然",
+          "start_ms": 45252,
+          "end_ms": 45536
+        },
+        {
+          "text": "后",
+          "start_ms": 45536,
+          "end_ms": 45821
+        },
+        {
+          "text": "是",
+          "start_ms": 45821,
+          "end_ms": 46105
+        },
+        {
+          "text": "P4",
+          "start_ms": 46105,
+          "end_ms": 46475
+        },
+        {
+          "text": "，",
+          "start_ms": 46475,
+          "end_ms": 46674
+        },
+        {
+          "text": "服",
+          "start_ms": 46674,
+          "end_ms": 46958
+        },
+        {
+          "text": "务",
+          "start_ms": 46958,
+          "end_ms": 47242
+        },
+        {
+          "text": "时",
+          "start_ms": 47242,
+          "end_ms": 47527
+        },
+        {
+          "text": "间",
+          "start_ms": 47527,
+          "end_ms": 47811
+        },
+        {
+          "text": "2",
+          "start_ms": 47811,
+          "end_ms": 48095
+        },
+        {
+          "text": "，",
+          "start_ms": 48095,
+          "end_ms": 48294
+        },
+        {
+          "text": "时",
+          "start_ms": 48294,
+          "end_ms": 48579
+        },
+        {
+          "text": "刻",
+          "start_ms": 48579,
+          "end_ms": 48863
+        },
+        {
+          "text": "9",
+          "start_ms": 48863,
+          "end_ms": 49147
+        },
+        {
+          "text": "到",
+          "start_ms": 49147,
+          "end_ms": 49432
+        },
+        {
+          "text": "11",
+          "start_ms": 49432,
+          "end_ms": 49801
+        },
+        {
+          "text": "。",
+          "start_ms": 49801,
+          "end_ms": 50143
+        },
+        {
+          "text": "最",
+          "start_ms": 50143,
+          "end_ms": 50427
+        },
+        {
+          "text": "后",
+          "start_ms": 50427,
+          "end_ms": 50711
+        },
+        {
+          "text": "是",
+          "start_ms": 50711,
+          "end_ms": 50996
+        },
+        {
+          "text": "P5",
+          "start_ms": 50996,
+          "end_ms": 51365
+        },
+        {
+          "text": "，",
+          "start_ms": 51365,
+          "end_ms": 51564
+        },
+        {
+          "text": "服",
+          "start_ms": 51564,
+          "end_ms": 51849
+        },
+        {
+          "text": "务",
+          "start_ms": 51849,
+          "end_ms": 52133
+        },
+        {
+          "text": "时",
+          "start_ms": 52133,
+          "end_ms": 52417
+        },
+        {
+          "text": "间",
+          "start_ms": 52417,
+          "end_ms": 52702
+        },
+        {
+          "text": "4",
+          "start_ms": 52702,
+          "end_ms": 52986
+        },
+        {
+          "text": "，",
+          "start_ms": 52986,
+          "end_ms": 53185
+        },
+        {
+          "text": "时",
+          "start_ms": 53185,
+          "end_ms": 53469
+        },
+        {
+          "text": "刻",
+          "start_ms": 53469,
+          "end_ms": 53754
+        },
+        {
+          "text": "11",
+          "start_ms": 53754,
+          "end_ms": 54123
+        },
+        {
+          "text": "到",
+          "start_ms": 54123,
+          "end_ms": 54408
+        },
+        {
+          "text": "15",
+          "start_ms": 54408,
+          "end_ms": 54777
+        },
+        {
+          "text": "。",
+          "start_ms": 54777,
+          "end_ms": 55118
+        },
+        {
+          "text": "现",
+          "start_ms": 55118,
+          "end_ms": 55403
+        },
+        {
+          "text": "在",
+          "start_ms": 55403,
+          "end_ms": 55687
+        },
+        {
+          "text": "计",
+          "start_ms": 55687,
+          "end_ms": 55971
+        },
+        {
+          "text": "算",
+          "start_ms": 55971,
+          "end_ms": 56256
+        },
+        {
+          "text": "评",
+          "start_ms": 56256,
+          "end_ms": 56540
+        },
+        {
+          "text": "价",
+          "start_ms": 56540,
+          "end_ms": 56824
+        },
+        {
+          "text": "指",
+          "start_ms": 56824,
+          "end_ms": 57109
+        },
+        {
+          "text": "标",
+          "start_ms": 57109,
+          "end_ms": 57393
+        },
+        {
+          "text": "。",
+          "start_ms": 57393,
+          "end_ms": 57734
+        },
+        {
+          "text": "P1",
+          "start_ms": 57734,
+          "end_ms": 58104
+        },
+        {
+          "text": "完",
+          "start_ms": 58104,
+          "end_ms": 58388
+        },
+        {
+          "text": "成",
+          "start_ms": 58388,
+          "end_ms": 58673
+        },
+        {
+          "text": "时",
+          "start_ms": 58673,
+          "end_ms": 58957
+        },
+        {
+          "text": "间",
+          "start_ms": 58957,
+          "end_ms": 59241
+        },
+        {
+          "text": "5",
+          "start_ms": 59241,
+          "end_ms": 59526
+        },
+        {
+          "text": "，",
+          "start_ms": 59526,
+          "end_ms": 59725
+        },
+        {
+          "text": "周",
+          "start_ms": 59725,
+          "end_ms": 60009
+        },
+        {
+          "text": "转",
+          "start_ms": 60009,
+          "end_ms": 60293
+        },
+        {
+          "text": "时",
+          "start_ms": 60293,
+          "end_ms": 60578
+        },
+        {
+          "text": "间",
+          "start_ms": 60578,
+          "end_ms": 60862
+        },
+        {
+          "text": "5",
+          "start_ms": 60862,
+          "end_ms": 61146
+        },
+        {
+          "text": "减",
+          "start_ms": 61146,
+          "end_ms": 61431
+        },
+        {
+          "text": "0",
+          "start_ms": 61431,
+          "end_ms": 61715
+        },
+        {
+          "text": "等",
+          "start_ms": 61715,
+          "end_ms": 61999
+        },
+        {
+          "text": "于",
+          "start_ms": 61999,
+          "end_ms": 62284
+        },
+        {
+          "text": "5",
+          "start_ms": 62284,
+          "end_ms": 62568
+        },
+        {
+          "text": "，",
+          "start_ms": 62568,
+          "end_ms": 62767
+        },
+        {
+          "text": "等",
+          "start_ms": 62767,
+          "end_ms": 63051
+        },
+        {
+          "text": "待",
+          "start_ms": 63051,
+          "end_ms": 63336
+        },
+        {
+          "text": "时",
+          "start_ms": 63336,
+          "end_ms": 63620
+        },
+        {
+          "text": "间",
+          "start_ms": 63620,
+          "end_ms": 63904
+        },
+        {
+          "text": "0",
+          "start_ms": 63904,
+          "end_ms": 64189
+        },
+        {
+          "text": "。",
+          "start_ms": 64189,
+          "end_ms": 64530
+        },
+        {
+          "text": "P2",
+          "start_ms": 64530,
+          "end_ms": 64900
+        },
+        {
+          "text": "完",
+          "start_ms": 64900,
+          "end_ms": 65184
+        },
+        {
+          "text": "成",
+          "start_ms": 65184,
+          "end_ms": 65468
+        },
+        {
+          "text": "时",
+          "start_ms": 65468,
+          "end_ms": 65753
+        },
+        {
+          "text": "间",
+          "start_ms": 65753,
+          "end_ms": 66037
+        },
+        {
+          "text": "8",
+          "start_ms": 66037,
+          "end_ms": 66321
+        },
+        {
+          "text": "，",
+          "start_ms": 66321,
+          "end_ms": 66520
+        },
+        {
+          "text": "周",
+          "start_ms": 66520,
+          "end_ms": 66805
+        },
+        {
+          "text": "转",
+          "start_ms": 66805,
+          "end_ms": 67089
+        },
+        {
+          "text": "时",
+          "start_ms": 67089,
+          "end_ms": 67373
+        },
+        {
+          "text": "间",
+          "start_ms": 67373,
+          "end_ms": 67658
+        },
+        {
+          "text": "7",
+          "start_ms": 67658,
+          "end_ms": 67942
+        },
+        {
+          "text": "，",
+          "start_ms": 67942,
+          "end_ms": 68141
+        },
+        {
+          "text": "等",
+          "start_ms": 68141,
+          "end_ms": 68425
+        },
+        {
+          "text": "待",
+          "start_ms": 68425,
+          "end_ms": 68710
+        },
+        {
+          "text": "时",
+          "start_ms": 68710,
+          "end_ms": 68994
+        },
+        {
+          "text": "间",
+          "start_ms": 68994,
+          "end_ms": 69278
+        },
+        {
+          "text": "4",
+          "start_ms": 69278,
+          "end_ms": 69563
+        },
+        {
+          "text": "。",
+          "start_ms": 69563,
+          "end_ms": 69904
+        },
+        {
+          "text": "P3",
+          "start_ms": 69904,
+          "end_ms": 70273
+        },
+        {
+          "text": "完",
+          "start_ms": 70273,
+          "end_ms": 70558
+        },
+        {
+          "text": "成",
+          "start_ms": 70558,
+          "end_ms": 70842
+        },
+        {
+          "text": "时",
+          "start_ms": 70842,
+          "end_ms": 71126
+        },
+        {
+          "text": "间",
+          "start_ms": 71126,
+          "end_ms": 71411
+        },
+        {
+          "text": "9",
+          "start_ms": 71411,
+          "end_ms": 71695
+        },
+        {
+          "text": "，",
+          "start_ms": 71695,
+          "end_ms": 71894
+        },
+        {
+          "text": "周",
+          "start_ms": 71894,
+          "end_ms": 72179
+        },
+        {
+          "text": "转",
+          "start_ms": 72179,
+          "end_ms": 72463
+        },
+        {
+          "text": "时",
+          "start_ms": 72463,
+          "end_ms": 72747
+        },
+        {
+          "text": "间",
+          "start_ms": 72747,
+          "end_ms": 73032
+        },
+        {
+          "text": "7",
+          "start_ms": 73032,
+          "end_ms": 73316
+        },
+        {
+          "text": "，",
+          "start_ms": 73316,
+          "end_ms": 73515
+        },
+        {
+          "text": "等",
+          "start_ms": 73515,
+          "end_ms": 73799
+        },
+        {
+          "text": "待",
+          "start_ms": 73799,
+          "end_ms": 74084
+        },
+        {
+          "text": "时",
+          "start_ms": 74084,
+          "end_ms": 74368
+        },
+        {
+          "text": "间",
+          "start_ms": 74368,
+          "end_ms": 74652
+        },
+        {
+          "text": "6",
+          "start_ms": 74652,
+          "end_ms": 74937
+        },
+        {
+          "text": "。",
+          "start_ms": 74937,
+          "end_ms": 75278
+        },
+        {
+          "text": "P4",
+          "start_ms": 75278,
+          "end_ms": 75647
+        },
+        {
+          "text": "完",
+          "start_ms": 75647,
+          "end_ms": 75932
+        },
+        {
+          "text": "成",
+          "start_ms": 75932,
+          "end_ms": 76216
+        },
+        {
+          "text": "时",
+          "start_ms": 76216,
+          "end_ms": 76500
+        },
+        {
+          "text": "间",
+          "start_ms": 76500,
+          "end_ms": 76785
+        },
+        {
+          "text": "11",
+          "start_ms": 76785,
+          "end_ms": 77154
+        },
+        {
+          "text": "，",
+          "start_ms": 77154,
+          "end_ms": 77353
+        },
+        {
+          "text": "周",
+          "start_ms": 77353,
+          "end_ms": 77638
+        },
+        {
+          "text": "转",
+          "start_ms": 77638,
+          "end_ms": 77922
+        },
+        {
+          "text": "时",
+          "start_ms": 77922,
+          "end_ms": 78206
+        },
+        {
+          "text": "间",
+          "start_ms": 78206,
+          "end_ms": 78491
+        },
+        {
+          "text": "8",
+          "start_ms": 78491,
+          "end_ms": 78775
+        },
+        {
+          "text": "，",
+          "start_ms": 78775,
+          "end_ms": 78974
+        },
+        {
+          "text": "等",
+          "start_ms": 78974,
+          "end_ms": 79258
+        },
+        {
+          "text": "待",
+          "start_ms": 79258,
+          "end_ms": 79543
+        },
+        {
+          "text": "时",
+          "start_ms": 79543,
+          "end_ms": 79827
+        },
+        {
+          "text": "间",
+          "start_ms": 79827,
+          "end_ms": 80111
+        },
+        {
+          "text": "6",
+          "start_ms": 80111,
+          "end_ms": 80396
+        },
+        {
+          "text": "。",
+          "start_ms": 80396,
+          "end_ms": 80737
+        },
+        {
+          "text": "P5",
+          "start_ms": 80737,
+          "end_ms": 81107
+        },
+        {
+          "text": "完",
+          "start_ms": 81107,
+          "end_ms": 81391
+        },
+        {
+          "text": "成",
+          "start_ms": 81391,
+          "end_ms": 81675
+        },
+        {
+          "text": "时",
+          "start_ms": 81675,
+          "end_ms": 81960
+        },
+        {
+          "text": "间",
+          "start_ms": 81960,
+          "end_ms": 82244
+        },
+        {
+          "text": "15",
+          "start_ms": 82244,
+          "end_ms": 82614
+        },
+        {
+          "text": "，",
+          "start_ms": 82614,
+          "end_ms": 82813
+        },
+        {
+          "text": "周",
+          "start_ms": 82813,
+          "end_ms": 83097
+        },
+        {
+          "text": "转",
+          "start_ms": 83097,
+          "end_ms": 83381
+        },
+        {
+          "text": "时",
+          "start_ms": 83381,
+          "end_ms": 83666
+        },
+        {
+          "text": "间",
+          "start_ms": 83666,
+          "end_ms": 83950
+        },
+        {
+          "text": "11",
+          "start_ms": 83950,
+          "end_ms": 84320
+        },
+        {
+          "text": "，",
+          "start_ms": 84320,
+          "end_ms": 84519
+        },
+        {
+          "text": "等",
+          "start_ms": 84519,
+          "end_ms": 84803
+        },
+        {
+          "text": "待",
+          "start_ms": 84803,
+          "end_ms": 85087
+        },
+        {
+          "text": "时",
+          "start_ms": 85087,
+          "end_ms": 85372
+        },
+        {
+          "text": "间",
+          "start_ms": 85372,
+          "end_ms": 85656
+        },
+        {
+          "text": "7",
+          "start_ms": 85656,
+          "end_ms": 85940
+        },
+        {
+          "text": "。",
+          "start_ms": 85940,
+          "end_ms": 86282
+        },
+        {
+          "text": "平",
+          "start_ms": 86282,
+          "end_ms": 86566
+        },
+        {
+          "text": "均",
+          "start_ms": 86566,
+          "end_ms": 86850
+        },
+        {
+          "text": "周",
+          "start_ms": 86850,
+          "end_ms": 87135
+        },
+        {
+          "text": "转",
+          "start_ms": 87135,
+          "end_ms": 87419
+        },
+        {
+          "text": "时",
+          "start_ms": 87419,
+          "end_ms": 87703
+        },
+        {
+          "text": "间",
+          "start_ms": 87703,
+          "end_ms": 87988
+        },
+        {
+          "text": "为",
+          "start_ms": 87988,
+          "end_ms": 88272
+        },
+        {
+          "text": "7",
+          "start_ms": 88272,
+          "end_ms": 88556
+        },
+        {
+          "text": ".",
+          "start_ms": 88556,
+          "end_ms": 88897
+        },
+        {
+          "text": "6",
+          "start_ms": 88897,
+          "end_ms": 89182
+        },
+        {
+          "text": "，",
+          "start_ms": 89182,
+          "end_ms": 89381
+        },
+        {
+          "text": "平",
+          "start_ms": 89381,
+          "end_ms": 89665
+        },
+        {
+          "text": "均",
+          "start_ms": 89665,
+          "end_ms": 89949
+        },
+        {
+          "text": "等",
+          "start_ms": 89949,
+          "end_ms": 90234
+        },
+        {
+          "text": "待",
+          "start_ms": 90234,
+          "end_ms": 90518
+        },
+        {
+          "text": "时",
+          "start_ms": 90518,
+          "end_ms": 90802
+        },
+        {
+          "text": "间",
+          "start_ms": 90802,
+          "end_ms": 91087
+        },
+        {
+          "text": "为",
+          "start_ms": 91087,
+          "end_ms": 91371
+        },
+        {
+          "text": "4",
+          "start_ms": 91371,
+          "end_ms": 91656
+        },
+        {
+          "text": ".",
+          "start_ms": 91656,
+          "end_ms": 91997
+        },
+        {
+          "text": "6",
+          "start_ms": 91997,
+          "end_ms": 92281
+        },
+        {
+          "text": "。",
+          "start_ms": 92281,
+          "end_ms": 92622
+        },
+        {
+          "text": "观",
+          "start_ms": 92622,
+          "end_ms": 92907
+        },
+        {
+          "text": "察",
+          "start_ms": 92907,
+          "end_ms": 93191
+        },
+        {
+          "text": "这",
+          "start_ms": 93191,
+          "end_ms": 93475
+        },
+        {
+          "text": "个",
+          "start_ms": 93475,
+          "end_ms": 93760
+        },
+        {
+          "text": "结",
+          "start_ms": 93760,
+          "end_ms": 94044
+        },
+        {
+          "text": "果",
+          "start_ms": 94044,
+          "end_ms": 94328
+        },
+        {
+          "text": "，",
+          "start_ms": 94328,
+          "end_ms": 94527
+        },
+        {
+          "text": "P3",
+          "start_ms": 94527,
+          "end_ms": 94897
+        },
+        {
+          "text": "只",
+          "start_ms": 94897,
+          "end_ms": 95181
+        },
+        {
+          "text": "需",
+          "start_ms": 95181,
+          "end_ms": 95466
+        },
+        {
+          "text": "要",
+          "start_ms": 95466,
+          "end_ms": 95750
+        },
+        {
+          "text": "1",
+          "start_ms": 95750,
+          "end_ms": 96034
+        },
+        {
+          "text": "个",
+          "start_ms": 96034,
+          "end_ms": 96319
+        },
+        {
+          "text": "单",
+          "start_ms": 96319,
+          "end_ms": 96603
+        },
+        {
+          "text": "位",
+          "start_ms": 96603,
+          "end_ms": 96887
+        },
+        {
+          "text": "时",
+          "start_ms": 96887,
+          "end_ms": 97172
+        },
+        {
+          "text": "间",
+          "start_ms": 97172,
+          "end_ms": 97456
+        },
+        {
+          "text": "，",
+          "start_ms": 97456,
+          "end_ms": 97655
+        },
+        {
+          "text": "却",
+          "start_ms": 97655,
+          "end_ms": 97939
+        },
+        {
+          "text": "等",
+          "start_ms": 97939,
+          "end_ms": 98224
+        },
+        {
+          "text": "待",
+          "start_ms": 98224,
+          "end_ms": 98508
+        },
+        {
+          "text": "了",
+          "start_ms": 98508,
+          "end_ms": 98792
+        },
+        {
+          "text": "6",
+          "start_ms": 98792,
+          "end_ms": 99077
+        },
+        {
+          "text": "个",
+          "start_ms": 99077,
+          "end_ms": 99361
+        },
+        {
+          "text": "单",
+          "start_ms": 99361,
+          "end_ms": 99645
+        },
+        {
+          "text": "位",
+          "start_ms": 99645,
+          "end_ms": 99930
+        },
+        {
+          "text": "，",
+          "start_ms": 99930,
+          "end_ms": 100129
+        },
+        {
+          "text": "这",
+          "start_ms": 100129,
+          "end_ms": 100413
+        },
+        {
+          "text": "就",
+          "start_ms": 100413,
+          "end_ms": 100697
+        },
+        {
+          "text": "是",
+          "start_ms": 100697,
+          "end_ms": 100982
+        },
+        {
+          "text": "护",
+          "start_ms": 100982,
+          "end_ms": 101266
+        },
+        {
+          "text": "航",
+          "start_ms": 101266,
+          "end_ms": 101550
+        },
+        {
+          "text": "效",
+          "start_ms": 101550,
+          "end_ms": 101835
+        },
+        {
+          "text": "应",
+          "start_ms": 101835,
+          "end_ms": 102119
+        },
+        {
+          "text": "：",
+          "start_ms": 102119,
+          "end_ms": 102318
+        },
+        {
+          "text": "长",
+          "start_ms": 102318,
+          "end_ms": 102602
+        },
+        {
+          "text": "作",
+          "start_ms": 102602,
+          "end_ms": 102887
+        },
+        {
+          "text": "业",
+          "start_ms": 102887,
+          "end_ms": 103171
+        },
+        {
+          "text": "P1",
+          "start_ms": 103171,
+          "end_ms": 103541
+        },
+        {
+          "text": "阻",
+          "start_ms": 103541,
+          "end_ms": 103825
+        },
+        {
+          "text": "塞",
+          "start_ms": 103825,
+          "end_ms": 104109
+        },
+        {
+          "text": "了",
+          "start_ms": 104109,
+          "end_ms": 104394
+        },
+        {
+          "text": "后",
+          "start_ms": 104394,
+          "end_ms": 104678
+        },
+        {
+          "text": "续",
+          "start_ms": 104678,
+          "end_ms": 104962
+        },
+        {
+          "text": "所",
+          "start_ms": 104962,
+          "end_ms": 105247
+        },
+        {
+          "text": "有",
+          "start_ms": 105247,
+          "end_ms": 105531
+        },
+        {
+          "text": "短",
+          "start_ms": 105531,
+          "end_ms": 105815
+        },
+        {
+          "text": "作",
+          "start_ms": 105815,
+          "end_ms": 106100
+        },
+        {
+          "text": "业",
+          "start_ms": 106100,
+          "end_ms": 106384
+        },
+        {
+          "text": "，",
+          "start_ms": 106384,
+          "end_ms": 106583
+        },
+        {
+          "text": "导",
+          "start_ms": 106583,
+          "end_ms": 106867
+        },
+        {
+          "text": "致",
+          "start_ms": 106867,
+          "end_ms": 107152
+        },
+        {
+          "text": "短",
+          "start_ms": 107152,
+          "end_ms": 107436
+        },
+        {
+          "text": "作",
+          "start_ms": 107436,
+          "end_ms": 107720
+        },
+        {
+          "text": "业",
+          "start_ms": 107720,
+          "end_ms": 108005
+        },
+        {
+          "text": "等",
+          "start_ms": 108005,
+          "end_ms": 108289
+        },
+        {
+          "text": "待",
+          "start_ms": 108289,
+          "end_ms": 108573
+        },
+        {
+          "text": "时",
+          "start_ms": 108573,
+          "end_ms": 108858
+        },
+        {
+          "text": "间",
+          "start_ms": 108858,
+          "end_ms": 109142
+        },
+        {
+          "text": "过",
+          "start_ms": 109142,
+          "end_ms": 109426
+        },
+        {
+          "text": "长",
+          "start_ms": 109426,
+          "end_ms": 109711
+        },
+        {
+          "text": "。",
+          "start_ms": 109711,
+          "end_ms": 110052
+        }
+      ],
+      "captions": [
+        {
+          "text": "先来先服务算法的思想非常直观：按照进程到达就绪队列的先后顺序进行调度，先到的先执行",
+          "start_ms": 0,
+          "end_ms": 11487
+        },
+        {
+          "text": "我们用 P1 到 P5 这组示例数据来演示",
+          "start_ms": 11828,
+          "end_ms": 16264
+        },
+        {
+          "text": "时刻 0，P1 到达，队列中只有 P1，调度 P1 执行，P1 服务时间为 5，一直运行到时刻 5 才完成",
+          "start_ms": 16605,
+          "end_ms": 27893
+        },
+        {
+          "text": "此时 P2、P3、P4、P5 都已到达，按到达顺序选择 P2",
+          "start_ms": 28235,
+          "end_ms": 34362
+        },
+        {
+          "text": "P2 服务时间为 3，从时刻 5 运行到时刻 8",
+          "start_ms": 34703,
+          "end_ms": 39821
+        },
+        {
+          "text": "接着执行 P3，服务时间 1，时刻 8 到 9",
+          "start_ms": 40162,
+          "end_ms": 44911
+        },
+        {
+          "text": "然后是 P4，服务时间 2，时刻 9 到 11",
+          "start_ms": 45252,
+          "end_ms": 49801
+        },
+        {
+          "text": "最后是 P5，服务时间 4，时刻 11 到 15",
+          "start_ms": 50143,
+          "end_ms": 54777
+        },
+        {
+          "text": "现在计算评价指标",
+          "start_ms": 55118,
+          "end_ms": 57393
+        },
+        {
+          "text": "P1 完成时间 5，周转时间 5 减 0 等于 5，等待时间 0",
+          "start_ms": 57734,
+          "end_ms": 64189
+        },
+        {
+          "text": "P2 完成时间 8，周转时间 7，等待时间 4",
+          "start_ms": 64530,
+          "end_ms": 69563
+        },
+        {
+          "text": "P3 完成时间 9，周转时间 7，等待时间 6",
+          "start_ms": 69904,
+          "end_ms": 74937
+        },
+        {
+          "text": "P4 完成时间 11，周转时间 8，等待时间 6",
+          "start_ms": 75278,
+          "end_ms": 80396
+        },
+        {
+          "text": "P5 完成时间 15，周转时间 11，等待时间 7",
+          "start_ms": 80737,
+          "end_ms": 85940
+        },
+        {
+          "text": "平均周转时间为 7.6，平均等待时间为 4.6",
+          "start_ms": 86282,
+          "end_ms": 92281
+        },
+        {
+          "text": "观察这个结果，P3 只需要 1 个单位时间，却等待了 6 个单位，这就是护航效应：长作业 P1 阻塞了后续所有短作业，导致短作业等待时间过长",
+          "start_ms": 92622,
+          "end_ms": 110052
+        }
+      ],
+      "visual_cues": [
+        {
+          "id": "vb1",
+          "kind": "define",
+          "target": "",
+          "summary": "定义FCFS算法思想",
+          "start_ms": 4180,
+          "end_ms": 16605,
+          "caption_text": "按照进程到达就绪队列的先后顺序进行调度，先到的先执行"
+        },
+        {
+          "id": "vb2",
+          "kind": "trace_step",
+          "target": "step_1",
+          "summary": "P1到达并开始执行",
+          "start_ms": 16605,
+          "end_ms": 34703,
+          "caption_text": "时刻 0，P1 到达"
+        },
+        {
+          "id": "vb3",
+          "kind": "trace_step",
+          "target": "step_2",
+          "summary": "P2执行完成",
+          "start_ms": 34703,
+          "end_ms": 50143,
+          "caption_text": "P2 服务时间为 3，从时刻 5 运行到时刻 8"
+        },
+        {
+          "id": "vb4",
+          "kind": "trace_step",
+          "target": "step_5",
+          "summary": "P5执行完成，甘特图完整",
+          "start_ms": 50143,
+          "end_ms": 86282,
+          "caption_text": "最后是 P5，服务时间 4，时刻 11 到 15"
+        },
+        {
+          "id": "vb5",
+          "kind": "trace_step",
+          "target": "step_6",
+          "summary": "计算平均指标",
+          "start_ms": 86282,
+          "end_ms": 94527,
+          "caption_text": "平均周转时间为 7.6，平均等待时间为 4.6"
+        },
+        {
+          "id": "vb6",
+          "kind": "misconception",
+          "target": "",
+          "summary": "揭示护航效应问题",
+          "start_ms": 94527,
+          "end_ms": 110052,
+          "caption_text": "P3 只需要 1 个单位时间，却等待了 6 个单位"
+        }
+      ]
+    },
+    {
+      "scene_id": "s4",
+      "index": 4,
+      "role": "process",
+      "title": "SJF：短作业优先",
+      "learning_objective": "理解SJF算法的决策逻辑、饥饿现象及与FCFS的性能对比",
+      "visual_type": "algorithm_trace",
+      "visual": "{\"algorithm_name\": \"SJF（短作业优先，非抢占式）\", \"problem\": \"对5个进程进行SJF调度，计算周转时间和等待时间\", \"data\": [{\"name\": \"P1\", \"arrival\": 0, \"service\": 5}, {\"name\": \"P2\", \"arrival\": 1, \"service\": 3}, {\"name\": \"P3\", \"arrival\": 2, \"service\": 1}, {\"name\": \"P4\", \"arrival\": 3, \"service\": 2}, {\"name\": \"P5\", \"arrival\": 4, \"service\": 4}], \"pseudocode\": [\"按到达时间排序所有进程\", \"while 存在未完成进程:\", \"  将已到达进程加入就绪队列\", \"  从就绪队列选择服务时间最短的进程\", \"  执行该进程至完成\", \"  计算周转时间和等待时间\"], \"steps\": [{\"line\": 1, \"description\": \"时刻0：P1到达，队列[P1(5)]，调度P1\", \"variables\": {\"current_time\": 0, \"ready_queue\": [\"P1\"], \"running\": \"P1\", \"completed\": []}, \"highlight_indices\": [0]}, {\"line\": 2, \"description\": \"时刻5：P1完成，队列[P2(3),P3(1),P4(2),P5(4)]，选最短P3\", \"variables\": {\"current_time\": 5, \"ready_queue\": [\"P2\", \"P3\", \"P4\", \"P5\"], \"running\": \"P3\", \"completed\": [\"P1\"]}, \"highlight_indices\": [2, 3]}, {\"line\": 3, \"description\": \"时刻6：P3完成，队列[P2(3),P4(2),P5(4)]，选最短P4\", \"variables\": {\"current_time\": 6, \"ready_queue\": [\"P2\", \"P4\", \"P5\"], \"running\": \"P4\", \"completed\": [\"P1\", \"P3\"]}, \"highlight_indices\": [2, 3]}, {\"line\": 4, \"description\": \"时刻8：P4完成，队列[P2(3),P5(4)]，选较短P2\", \"variables\": {\"current_time\": 8, \"ready_queue\": [\"P2\", \"P5\"], \"running\": \"P2\", \"completed\": [\"P1\", \"P3\", \"P4\"]}, \"highlight_indices\": [2, 3]}, {\"line\": 5, \"description\": \"时刻11：P2完成，队列[P5(4)]，调度P5\", \"variables\": {\"current_time\": 11, \"ready_queue\": [\"P5\"], \"running\": \"P5\", \"completed\": [\"P1\", \"P3\", \"P4\", \"P2\"]}, \"highlight_indices\": [2, 3]}, {\"line\": 6, \"description\": \"时刻15：P5完成，全部结束\", \"variables\": {\"current_time\": 15, \"ready_queue\": [], \"running\": null, \"completed\": [\"P1\", \"P3\", \"P4\", \"P2\", \"P5\"]}, \"highlight_indices\": [4]}], \"complexity\": {\"time\": \"O(n²)\", \"space\": \"O(n)\"}, \"result\": \"平均周转时间=7.0，平均等待时间=4.0；甘特图：P1[0-5]→P3[5-6]→P4[6-8]→P2[8-11]→P5[11-15]\"}",
+      "narration": "现在我们来看短作业优先算法，SJF。它的核心思想很简单：每次从就绪队列中选择服务时间最短的进程优先执行。我们用同样的五个进程来演示。时刻零，P1到达，队列只有P1，调度执行。时刻五P1完成，此时P2、P3、P4、P5都已到达，服务时间分别是3、1、2、4。SJF选择服务时间最短的P3执行。时刻六P3完成，剩余进程中P4服务时间最短为2，调度P4。时刻八P4完成，P2服务时间3比P5的4更短，调度P2。时刻十一P2完成，最后执行P5。时刻十五全部完成。看甘特图：P1零到五，P3五到六，P4六到八，P2八到十一，P5十一到十五。计算平均周转时间为七点零，平均等待时间为四点零，相比FCFS的七点六和四点六都有提升。SJF确实能优化系统效率。但要注意两个问题：长作业可能无限等待，这就是饥饿现象；而且需要预知服务时间，实际系统中往往难以精确估计。",
+      "audio_src": "/render-assets/.render-1664efbb11e943f5abf581fb2e79d718/04-s4.mp3",
+      "start_ms": 192720,
+      "duration_ms": 79132,
+      "audio_duration_ms": 78732,
+      "caption_words": [
+        {
+          "text": "现",
+          "start_ms": 0,
+          "end_ms": 228
+        },
+        {
+          "text": "在",
+          "start_ms": 228,
+          "end_ms": 455
+        },
+        {
+          "text": "我",
+          "start_ms": 455,
+          "end_ms": 683
+        },
+        {
+          "text": "们",
+          "start_ms": 683,
+          "end_ms": 911
+        },
+        {
+          "text": "来",
+          "start_ms": 911,
+          "end_ms": 1138
+        },
+        {
+          "text": "看",
+          "start_ms": 1138,
+          "end_ms": 1366
+        },
+        {
+          "text": "短",
+          "start_ms": 1366,
+          "end_ms": 1594
+        },
+        {
+          "text": "作",
+          "start_ms": 1594,
+          "end_ms": 1821
+        },
+        {
+          "text": "业",
+          "start_ms": 1821,
+          "end_ms": 2049
+        },
+        {
+          "text": "优",
+          "start_ms": 2049,
+          "end_ms": 2276
+        },
+        {
+          "text": "先",
+          "start_ms": 2276,
+          "end_ms": 2504
+        },
+        {
+          "text": "算",
+          "start_ms": 2504,
+          "end_ms": 2732
+        },
+        {
+          "text": "法",
+          "start_ms": 2732,
+          "end_ms": 2959
+        },
+        {
+          "text": "，",
+          "start_ms": 2959,
+          "end_ms": 3119
+        },
+        {
+          "text": "SJF",
+          "start_ms": 3119,
+          "end_ms": 3563
+        },
+        {
+          "text": "。",
+          "start_ms": 3563,
+          "end_ms": 3836
+        },
+        {
+          "text": "它",
+          "start_ms": 3836,
+          "end_ms": 4064
+        },
+        {
+          "text": "的",
+          "start_ms": 4064,
+          "end_ms": 4291
+        },
+        {
+          "text": "核",
+          "start_ms": 4291,
+          "end_ms": 4519
+        },
+        {
+          "text": "心",
+          "start_ms": 4519,
+          "end_ms": 4746
+        },
+        {
+          "text": "思",
+          "start_ms": 4746,
+          "end_ms": 4974
+        },
+        {
+          "text": "想",
+          "start_ms": 4974,
+          "end_ms": 5202
+        },
+        {
+          "text": "很",
+          "start_ms": 5202,
+          "end_ms": 5429
+        },
+        {
+          "text": "简",
+          "start_ms": 5429,
+          "end_ms": 5657
+        },
+        {
+          "text": "单",
+          "start_ms": 5657,
+          "end_ms": 5885
+        },
+        {
+          "text": "：",
+          "start_ms": 5885,
+          "end_ms": 6044
+        },
+        {
+          "text": "每",
+          "start_ms": 6044,
+          "end_ms": 6272
+        },
+        {
+          "text": "次",
+          "start_ms": 6272,
+          "end_ms": 6499
+        },
+        {
+          "text": "从",
+          "start_ms": 6499,
+          "end_ms": 6727
+        },
+        {
+          "text": "就",
+          "start_ms": 6727,
+          "end_ms": 6955
+        },
+        {
+          "text": "绪",
+          "start_ms": 6955,
+          "end_ms": 7182
+        },
+        {
+          "text": "队",
+          "start_ms": 7182,
+          "end_ms": 7410
+        },
+        {
+          "text": "列",
+          "start_ms": 7410,
+          "end_ms": 7638
+        },
+        {
+          "text": "中",
+          "start_ms": 7638,
+          "end_ms": 7865
+        },
+        {
+          "text": "选",
+          "start_ms": 7865,
+          "end_ms": 8093
+        },
+        {
+          "text": "择",
+          "start_ms": 8093,
+          "end_ms": 8321
+        },
+        {
+          "text": "服",
+          "start_ms": 8321,
+          "end_ms": 8548
+        },
+        {
+          "text": "务",
+          "start_ms": 8548,
+          "end_ms": 8776
+        },
+        {
+          "text": "时",
+          "start_ms": 8776,
+          "end_ms": 9003
+        },
+        {
+          "text": "间",
+          "start_ms": 9003,
+          "end_ms": 9231
+        },
+        {
+          "text": "最",
+          "start_ms": 9231,
+          "end_ms": 9459
+        },
+        {
+          "text": "短",
+          "start_ms": 9459,
+          "end_ms": 9686
+        },
+        {
+          "text": "的",
+          "start_ms": 9686,
+          "end_ms": 9914
+        },
+        {
+          "text": "进",
+          "start_ms": 9914,
+          "end_ms": 10142
+        },
+        {
+          "text": "程",
+          "start_ms": 10142,
+          "end_ms": 10369
+        },
+        {
+          "text": "优",
+          "start_ms": 10369,
+          "end_ms": 10597
+        },
+        {
+          "text": "先",
+          "start_ms": 10597,
+          "end_ms": 10825
+        },
+        {
+          "text": "执",
+          "start_ms": 10825,
+          "end_ms": 11052
+        },
+        {
+          "text": "行",
+          "start_ms": 11052,
+          "end_ms": 11280
+        },
+        {
+          "text": "。",
+          "start_ms": 11280,
+          "end_ms": 11553
+        },
+        {
+          "text": "我",
+          "start_ms": 11553,
+          "end_ms": 11781
+        },
+        {
+          "text": "们",
+          "start_ms": 11781,
+          "end_ms": 12008
+        },
+        {
+          "text": "用",
+          "start_ms": 12008,
+          "end_ms": 12236
+        },
+        {
+          "text": "同",
+          "start_ms": 12236,
+          "end_ms": 12464
+        },
+        {
+          "text": "样",
+          "start_ms": 12464,
+          "end_ms": 12691
+        },
+        {
+          "text": "的",
+          "start_ms": 12691,
+          "end_ms": 12919
+        },
+        {
+          "text": "五",
+          "start_ms": 12919,
+          "end_ms": 13147
+        },
+        {
+          "text": "个",
+          "start_ms": 13147,
+          "end_ms": 13374
+        },
+        {
+          "text": "进",
+          "start_ms": 13374,
+          "end_ms": 13602
+        },
+        {
+          "text": "程",
+          "start_ms": 13602,
+          "end_ms": 13830
+        },
+        {
+          "text": "来",
+          "start_ms": 13830,
+          "end_ms": 14057
+        },
+        {
+          "text": "演",
+          "start_ms": 14057,
+          "end_ms": 14285
+        },
+        {
+          "text": "示",
+          "start_ms": 14285,
+          "end_ms": 14513
+        },
+        {
+          "text": "。",
+          "start_ms": 14513,
+          "end_ms": 14786
+        },
+        {
+          "text": "时",
+          "start_ms": 14786,
+          "end_ms": 15013
+        },
+        {
+          "text": "刻",
+          "start_ms": 15013,
+          "end_ms": 15241
+        },
+        {
+          "text": "零",
+          "start_ms": 15241,
+          "end_ms": 15469
+        },
+        {
+          "text": "，",
+          "start_ms": 15469,
+          "end_ms": 15628
+        },
+        {
+          "text": "P1",
+          "start_ms": 15628,
+          "end_ms": 15924
+        },
+        {
+          "text": "到",
+          "start_ms": 15924,
+          "end_ms": 16152
+        },
+        {
+          "text": "达",
+          "start_ms": 16152,
+          "end_ms": 16379
+        },
+        {
+          "text": "，",
+          "start_ms": 16379,
+          "end_ms": 16539
+        },
+        {
+          "text": "队",
+          "start_ms": 16539,
+          "end_ms": 16766
+        },
+        {
+          "text": "列",
+          "start_ms": 16766,
+          "end_ms": 16994
+        },
+        {
+          "text": "只",
+          "start_ms": 16994,
+          "end_ms": 17222
+        },
+        {
+          "text": "有",
+          "start_ms": 17222,
+          "end_ms": 17449
+        },
+        {
+          "text": "P1",
+          "start_ms": 17449,
+          "end_ms": 17745
+        },
+        {
+          "text": "，",
+          "start_ms": 17745,
+          "end_ms": 17905
+        },
+        {
+          "text": "调",
+          "start_ms": 17905,
+          "end_ms": 18132
+        },
+        {
+          "text": "度",
+          "start_ms": 18132,
+          "end_ms": 18360
+        },
+        {
+          "text": "执",
+          "start_ms": 18360,
+          "end_ms": 18587
+        },
+        {
+          "text": "行",
+          "start_ms": 18587,
+          "end_ms": 18815
+        },
+        {
+          "text": "。",
+          "start_ms": 18815,
+          "end_ms": 19088
+        },
+        {
+          "text": "时",
+          "start_ms": 19088,
+          "end_ms": 19316
+        },
+        {
+          "text": "刻",
+          "start_ms": 19316,
+          "end_ms": 19544
+        },
+        {
+          "text": "五",
+          "start_ms": 19544,
+          "end_ms": 19771
+        },
+        {
+          "text": "P1",
+          "start_ms": 19771,
+          "end_ms": 20067
+        },
+        {
+          "text": "完",
+          "start_ms": 20067,
+          "end_ms": 20295
+        },
+        {
+          "text": "成",
+          "start_ms": 20295,
+          "end_ms": 20522
+        },
+        {
+          "text": "，",
+          "start_ms": 20522,
+          "end_ms": 20682
+        },
+        {
+          "text": "此",
+          "start_ms": 20682,
+          "end_ms": 20909
+        },
+        {
+          "text": "时",
+          "start_ms": 20909,
+          "end_ms": 21137
+        },
+        {
+          "text": "P2",
+          "start_ms": 21137,
+          "end_ms": 21433
+        },
+        {
+          "text": "、",
+          "start_ms": 21433,
+          "end_ms": 21535
+        },
+        {
+          "text": "P3",
+          "start_ms": 21535,
+          "end_ms": 21831
+        },
+        {
+          "text": "、",
+          "start_ms": 21831,
+          "end_ms": 21934
+        },
+        {
+          "text": "P4",
+          "start_ms": 21934,
+          "end_ms": 22230
+        },
+        {
+          "text": "、",
+          "start_ms": 22230,
+          "end_ms": 22332
+        },
+        {
+          "text": "P5",
+          "start_ms": 22332,
+          "end_ms": 22628
+        },
+        {
+          "text": "都",
+          "start_ms": 22628,
+          "end_ms": 22856
+        },
+        {
+          "text": "已",
+          "start_ms": 22856,
+          "end_ms": 23083
+        },
+        {
+          "text": "到",
+          "start_ms": 23083,
+          "end_ms": 23311
+        },
+        {
+          "text": "达",
+          "start_ms": 23311,
+          "end_ms": 23539
+        },
+        {
+          "text": "，",
+          "start_ms": 23539,
+          "end_ms": 23698
+        },
+        {
+          "text": "服",
+          "start_ms": 23698,
+          "end_ms": 23926
+        },
+        {
+          "text": "务",
+          "start_ms": 23926,
+          "end_ms": 24153
+        },
+        {
+          "text": "时",
+          "start_ms": 24153,
+          "end_ms": 24381
+        },
+        {
+          "text": "间",
+          "start_ms": 24381,
+          "end_ms": 24609
+        },
+        {
+          "text": "分",
+          "start_ms": 24609,
+          "end_ms": 24836
+        },
+        {
+          "text": "别",
+          "start_ms": 24836,
+          "end_ms": 25064
+        },
+        {
+          "text": "是",
+          "start_ms": 25064,
+          "end_ms": 25292
+        },
+        {
+          "text": "3",
+          "start_ms": 25292,
+          "end_ms": 25519
+        },
+        {
+          "text": "、",
+          "start_ms": 25519,
+          "end_ms": 25622
+        },
+        {
+          "text": "1",
+          "start_ms": 25622,
+          "end_ms": 25849
+        },
+        {
+          "text": "、",
+          "start_ms": 25849,
+          "end_ms": 25952
+        },
+        {
+          "text": "2",
+          "start_ms": 25952,
+          "end_ms": 26179
+        },
+        {
+          "text": "、",
+          "start_ms": 26179,
+          "end_ms": 26282
+        },
+        {
+          "text": "4",
+          "start_ms": 26282,
+          "end_ms": 26510
+        },
+        {
+          "text": "。",
+          "start_ms": 26510,
+          "end_ms": 26783
+        },
+        {
+          "text": "SJF",
+          "start_ms": 26783,
+          "end_ms": 27227
+        },
+        {
+          "text": "选",
+          "start_ms": 27227,
+          "end_ms": 27454
+        },
+        {
+          "text": "择",
+          "start_ms": 27454,
+          "end_ms": 27682
+        },
+        {
+          "text": "服",
+          "start_ms": 27682,
+          "end_ms": 27910
+        },
+        {
+          "text": "务",
+          "start_ms": 27910,
+          "end_ms": 28137
+        },
+        {
+          "text": "时",
+          "start_ms": 28137,
+          "end_ms": 28365
+        },
+        {
+          "text": "间",
+          "start_ms": 28365,
+          "end_ms": 28593
+        },
+        {
+          "text": "最",
+          "start_ms": 28593,
+          "end_ms": 28820
+        },
+        {
+          "text": "短",
+          "start_ms": 28820,
+          "end_ms": 29048
+        },
+        {
+          "text": "的",
+          "start_ms": 29048,
+          "end_ms": 29276
+        },
+        {
+          "text": "P3",
+          "start_ms": 29276,
+          "end_ms": 29571
+        },
+        {
+          "text": "执",
+          "start_ms": 29571,
+          "end_ms": 29799
+        },
+        {
+          "text": "行",
+          "start_ms": 29799,
+          "end_ms": 30027
+        },
+        {
+          "text": "。",
+          "start_ms": 30027,
+          "end_ms": 30300
+        },
+        {
+          "text": "时",
+          "start_ms": 30300,
+          "end_ms": 30528
+        },
+        {
+          "text": "刻",
+          "start_ms": 30528,
+          "end_ms": 30755
+        },
+        {
+          "text": "六",
+          "start_ms": 30755,
+          "end_ms": 30983
+        },
+        {
+          "text": "P3",
+          "start_ms": 30983,
+          "end_ms": 31279
+        },
+        {
+          "text": "完",
+          "start_ms": 31279,
+          "end_ms": 31506
+        },
+        {
+          "text": "成",
+          "start_ms": 31506,
+          "end_ms": 31734
+        },
+        {
+          "text": "，",
+          "start_ms": 31734,
+          "end_ms": 31893
+        },
+        {
+          "text": "剩",
+          "start_ms": 31893,
+          "end_ms": 32121
+        },
+        {
+          "text": "余",
+          "start_ms": 32121,
+          "end_ms": 32349
+        },
+        {
+          "text": "进",
+          "start_ms": 32349,
+          "end_ms": 32576
+        },
+        {
+          "text": "程",
+          "start_ms": 32576,
+          "end_ms": 32804
+        },
+        {
+          "text": "中",
+          "start_ms": 32804,
+          "end_ms": 33032
+        },
+        {
+          "text": "P4",
+          "start_ms": 33032,
+          "end_ms": 33328
+        },
+        {
+          "text": "服",
+          "start_ms": 33328,
+          "end_ms": 33555
+        },
+        {
+          "text": "务",
+          "start_ms": 33555,
+          "end_ms": 33783
+        },
+        {
+          "text": "时",
+          "start_ms": 33783,
+          "end_ms": 34011
+        },
+        {
+          "text": "间",
+          "start_ms": 34011,
+          "end_ms": 34238
+        },
+        {
+          "text": "最",
+          "start_ms": 34238,
+          "end_ms": 34466
+        },
+        {
+          "text": "短",
+          "start_ms": 34466,
+          "end_ms": 34694
+        },
+        {
+          "text": "为",
+          "start_ms": 34694,
+          "end_ms": 34921
+        },
+        {
+          "text": "2",
+          "start_ms": 34921,
+          "end_ms": 35149
+        },
+        {
+          "text": "，",
+          "start_ms": 35149,
+          "end_ms": 35308
+        },
+        {
+          "text": "调",
+          "start_ms": 35308,
+          "end_ms": 35536
+        },
+        {
+          "text": "度",
+          "start_ms": 35536,
+          "end_ms": 35763
+        },
+        {
+          "text": "P4",
+          "start_ms": 35763,
+          "end_ms": 36059
+        },
+        {
+          "text": "。",
+          "start_ms": 36059,
+          "end_ms": 36333
+        },
+        {
+          "text": "时",
+          "start_ms": 36333,
+          "end_ms": 36560
+        },
+        {
+          "text": "刻",
+          "start_ms": 36560,
+          "end_ms": 36788
+        },
+        {
+          "text": "八",
+          "start_ms": 36788,
+          "end_ms": 37016
+        },
+        {
+          "text": "P4",
+          "start_ms": 37016,
+          "end_ms": 37311
+        },
+        {
+          "text": "完",
+          "start_ms": 37311,
+          "end_ms": 37539
+        },
+        {
+          "text": "成",
+          "start_ms": 37539,
+          "end_ms": 37767
+        },
+        {
+          "text": "，",
+          "start_ms": 37767,
+          "end_ms": 37926
+        },
+        {
+          "text": "P2",
+          "start_ms": 37926,
+          "end_ms": 38222
+        },
+        {
+          "text": "服",
+          "start_ms": 38222,
+          "end_ms": 38450
+        },
+        {
+          "text": "务",
+          "start_ms": 38450,
+          "end_ms": 38677
+        },
+        {
+          "text": "时",
+          "start_ms": 38677,
+          "end_ms": 38905
+        },
+        {
+          "text": "间",
+          "start_ms": 38905,
+          "end_ms": 39133
+        },
+        {
+          "text": "3",
+          "start_ms": 39133,
+          "end_ms": 39360
+        },
+        {
+          "text": "比",
+          "start_ms": 39360,
+          "end_ms": 39588
+        },
+        {
+          "text": "P5",
+          "start_ms": 39588,
+          "end_ms": 39884
+        },
+        {
+          "text": "的",
+          "start_ms": 39884,
+          "end_ms": 40112
+        },
+        {
+          "text": "4",
+          "start_ms": 40112,
+          "end_ms": 40339
+        },
+        {
+          "text": "更",
+          "start_ms": 40339,
+          "end_ms": 40567
+        },
+        {
+          "text": "短",
+          "start_ms": 40567,
+          "end_ms": 40794
+        },
+        {
+          "text": "，",
+          "start_ms": 40794,
+          "end_ms": 40954
+        },
+        {
+          "text": "调",
+          "start_ms": 40954,
+          "end_ms": 41181
+        },
+        {
+          "text": "度",
+          "start_ms": 41181,
+          "end_ms": 41409
+        },
+        {
+          "text": "P2",
+          "start_ms": 41409,
+          "end_ms": 41705
+        },
+        {
+          "text": "。",
+          "start_ms": 41705,
+          "end_ms": 41978
+        },
+        {
+          "text": "时",
+          "start_ms": 41978,
+          "end_ms": 42206
+        },
+        {
+          "text": "刻",
+          "start_ms": 42206,
+          "end_ms": 42434
+        },
+        {
+          "text": "十",
+          "start_ms": 42434,
+          "end_ms": 42661
+        },
+        {
+          "text": "一",
+          "start_ms": 42661,
+          "end_ms": 42889
+        },
+        {
+          "text": "P2",
+          "start_ms": 42889,
+          "end_ms": 43185
+        },
+        {
+          "text": "完",
+          "start_ms": 43185,
+          "end_ms": 43412
+        },
+        {
+          "text": "成",
+          "start_ms": 43412,
+          "end_ms": 43640
+        },
+        {
+          "text": "，",
+          "start_ms": 43640,
+          "end_ms": 43799
+        },
+        {
+          "text": "最",
+          "start_ms": 43799,
+          "end_ms": 44027
+        },
+        {
+          "text": "后",
+          "start_ms": 44027,
+          "end_ms": 44255
+        },
+        {
+          "text": "执",
+          "start_ms": 44255,
+          "end_ms": 44482
+        },
+        {
+          "text": "行",
+          "start_ms": 44482,
+          "end_ms": 44710
+        },
+        {
+          "text": "P5",
+          "start_ms": 44710,
+          "end_ms": 45006
+        },
+        {
+          "text": "。",
+          "start_ms": 45006,
+          "end_ms": 45279
+        },
+        {
+          "text": "时",
+          "start_ms": 45279,
+          "end_ms": 45507
+        },
+        {
+          "text": "刻",
+          "start_ms": 45507,
+          "end_ms": 45734
+        },
+        {
+          "text": "十",
+          "start_ms": 45734,
+          "end_ms": 45962
+        },
+        {
+          "text": "五",
+          "start_ms": 45962,
+          "end_ms": 46190
+        },
+        {
+          "text": "全",
+          "start_ms": 46190,
+          "end_ms": 46417
+        },
+        {
+          "text": "部",
+          "start_ms": 46417,
+          "end_ms": 46645
+        },
+        {
+          "text": "完",
+          "start_ms": 46645,
+          "end_ms": 46873
+        },
+        {
+          "text": "成",
+          "start_ms": 46873,
+          "end_ms": 47100
+        },
+        {
+          "text": "。",
+          "start_ms": 47100,
+          "end_ms": 47374
+        },
+        {
+          "text": "看",
+          "start_ms": 47374,
+          "end_ms": 47601
+        },
+        {
+          "text": "甘",
+          "start_ms": 47601,
+          "end_ms": 47829
+        },
+        {
+          "text": "特",
+          "start_ms": 47829,
+          "end_ms": 48056
+        },
+        {
+          "text": "图",
+          "start_ms": 48056,
+          "end_ms": 48284
+        },
+        {
+          "text": "：",
+          "start_ms": 48284,
+          "end_ms": 48443
+        },
+        {
+          "text": "P1",
+          "start_ms": 48443,
+          "end_ms": 48739
+        },
+        {
+          "text": "零",
+          "start_ms": 48739,
+          "end_ms": 48967
+        },
+        {
+          "text": "到",
+          "start_ms": 48967,
+          "end_ms": 49195
+        },
+        {
+          "text": "五",
+          "start_ms": 49195,
+          "end_ms": 49422
+        },
+        {
+          "text": "，",
+          "start_ms": 49422,
+          "end_ms": 49582
+        },
+        {
+          "text": "P3",
+          "start_ms": 49582,
+          "end_ms": 49878
+        },
+        {
+          "text": "五",
+          "start_ms": 49878,
+          "end_ms": 50105
+        },
+        {
+          "text": "到",
+          "start_ms": 50105,
+          "end_ms": 50333
+        },
+        {
+          "text": "六",
+          "start_ms": 50333,
+          "end_ms": 50561
+        },
+        {
+          "text": "，",
+          "start_ms": 50561,
+          "end_ms": 50720
+        },
+        {
+          "text": "P4",
+          "start_ms": 50720,
+          "end_ms": 51016
+        },
+        {
+          "text": "六",
+          "start_ms": 51016,
+          "end_ms": 51244
+        },
+        {
+          "text": "到",
+          "start_ms": 51244,
+          "end_ms": 51471
+        },
+        {
+          "text": "八",
+          "start_ms": 51471,
+          "end_ms": 51699
+        },
+        {
+          "text": "，",
+          "start_ms": 51699,
+          "end_ms": 51858
+        },
+        {
+          "text": "P2",
+          "start_ms": 51858,
+          "end_ms": 52154
+        },
+        {
+          "text": "八",
+          "start_ms": 52154,
+          "end_ms": 52382
+        },
+        {
+          "text": "到",
+          "start_ms": 52382,
+          "end_ms": 52609
+        },
+        {
+          "text": "十",
+          "start_ms": 52609,
+          "end_ms": 52837
+        },
+        {
+          "text": "一",
+          "start_ms": 52837,
+          "end_ms": 53065
+        },
+        {
+          "text": "，",
+          "start_ms": 53065,
+          "end_ms": 53224
+        },
+        {
+          "text": "P5",
+          "start_ms": 53224,
+          "end_ms": 53520
+        },
+        {
+          "text": "十",
+          "start_ms": 53520,
+          "end_ms": 53748
+        },
+        {
+          "text": "一",
+          "start_ms": 53748,
+          "end_ms": 53975
+        },
+        {
+          "text": "到",
+          "start_ms": 53975,
+          "end_ms": 54203
+        },
+        {
+          "text": "十",
+          "start_ms": 54203,
+          "end_ms": 54431
+        },
+        {
+          "text": "五",
+          "start_ms": 54431,
+          "end_ms": 54658
+        },
+        {
+          "text": "。",
+          "start_ms": 54658,
+          "end_ms": 54931
+        },
+        {
+          "text": "计",
+          "start_ms": 54931,
+          "end_ms": 55159
+        },
+        {
+          "text": "算",
+          "start_ms": 55159,
+          "end_ms": 55387
+        },
+        {
+          "text": "平",
+          "start_ms": 55387,
+          "end_ms": 55614
+        },
+        {
+          "text": "均",
+          "start_ms": 55614,
+          "end_ms": 55842
+        },
+        {
+          "text": "周",
+          "start_ms": 55842,
+          "end_ms": 56070
+        },
+        {
+          "text": "转",
+          "start_ms": 56070,
+          "end_ms": 56297
+        },
+        {
+          "text": "时",
+          "start_ms": 56297,
+          "end_ms": 56525
+        },
+        {
+          "text": "间",
+          "start_ms": 56525,
+          "end_ms": 56753
+        },
+        {
+          "text": "为",
+          "start_ms": 56753,
+          "end_ms": 56980
+        },
+        {
+          "text": "七",
+          "start_ms": 56980,
+          "end_ms": 57208
+        },
+        {
+          "text": "点",
+          "start_ms": 57208,
+          "end_ms": 57436
+        },
+        {
+          "text": "零",
+          "start_ms": 57436,
+          "end_ms": 57663
+        },
+        {
+          "text": "，",
+          "start_ms": 57663,
+          "end_ms": 57823
+        },
+        {
+          "text": "平",
+          "start_ms": 57823,
+          "end_ms": 58050
+        },
+        {
+          "text": "均",
+          "start_ms": 58050,
+          "end_ms": 58278
+        },
+        {
+          "text": "等",
+          "start_ms": 58278,
+          "end_ms": 58505
+        },
+        {
+          "text": "待",
+          "start_ms": 58505,
+          "end_ms": 58733
+        },
+        {
+          "text": "时",
+          "start_ms": 58733,
+          "end_ms": 58961
+        },
+        {
+          "text": "间",
+          "start_ms": 58961,
+          "end_ms": 59188
+        },
+        {
+          "text": "为",
+          "start_ms": 59188,
+          "end_ms": 59416
+        },
+        {
+          "text": "四",
+          "start_ms": 59416,
+          "end_ms": 59644
+        },
+        {
+          "text": "点",
+          "start_ms": 59644,
+          "end_ms": 59871
+        },
+        {
+          "text": "零",
+          "start_ms": 59871,
+          "end_ms": 60099
+        },
+        {
+          "text": "，",
+          "start_ms": 60099,
+          "end_ms": 60258
+        },
+        {
+          "text": "相",
+          "start_ms": 60258,
+          "end_ms": 60486
+        },
+        {
+          "text": "比",
+          "start_ms": 60486,
+          "end_ms": 60714
+        },
+        {
+          "text": "FCFS",
+          "start_ms": 60714,
+          "end_ms": 61306
+        },
+        {
+          "text": "的",
+          "start_ms": 61306,
+          "end_ms": 61533
+        },
+        {
+          "text": "七",
+          "start_ms": 61533,
+          "end_ms": 61761
+        },
+        {
+          "text": "点",
+          "start_ms": 61761,
+          "end_ms": 61989
+        },
+        {
+          "text": "六",
+          "start_ms": 61989,
+          "end_ms": 62216
+        },
+        {
+          "text": "和",
+          "start_ms": 62216,
+          "end_ms": 62444
+        },
+        {
+          "text": "四",
+          "start_ms": 62444,
+          "end_ms": 62671
+        },
+        {
+          "text": "点",
+          "start_ms": 62671,
+          "end_ms": 62899
+        },
+        {
+          "text": "六",
+          "start_ms": 62899,
+          "end_ms": 63127
+        },
+        {
+          "text": "都",
+          "start_ms": 63127,
+          "end_ms": 63354
+        },
+        {
+          "text": "有",
+          "start_ms": 63354,
+          "end_ms": 63582
+        },
+        {
+          "text": "提",
+          "start_ms": 63582,
+          "end_ms": 63810
+        },
+        {
+          "text": "升",
+          "start_ms": 63810,
+          "end_ms": 64037
+        },
+        {
+          "text": "。",
+          "start_ms": 64037,
+          "end_ms": 64311
+        },
+        {
+          "text": "SJF",
+          "start_ms": 64311,
+          "end_ms": 64754
+        },
+        {
+          "text": "确",
+          "start_ms": 64754,
+          "end_ms": 64982
+        },
+        {
+          "text": "实",
+          "start_ms": 64982,
+          "end_ms": 65210
+        },
+        {
+          "text": "能",
+          "start_ms": 65210,
+          "end_ms": 65437
+        },
+        {
+          "text": "优",
+          "start_ms": 65437,
+          "end_ms": 65665
+        },
+        {
+          "text": "化",
+          "start_ms": 65665,
+          "end_ms": 65893
+        },
+        {
+          "text": "系",
+          "start_ms": 65893,
+          "end_ms": 66120
+        },
+        {
+          "text": "统",
+          "start_ms": 66120,
+          "end_ms": 66348
+        },
+        {
+          "text": "效",
+          "start_ms": 66348,
+          "end_ms": 66576
+        },
+        {
+          "text": "率",
+          "start_ms": 66576,
+          "end_ms": 66803
+        },
+        {
+          "text": "。",
+          "start_ms": 66803,
+          "end_ms": 67076
+        },
+        {
+          "text": "但",
+          "start_ms": 67076,
+          "end_ms": 67304
+        },
+        {
+          "text": "要",
+          "start_ms": 67304,
+          "end_ms": 67532
+        },
+        {
+          "text": "注",
+          "start_ms": 67532,
+          "end_ms": 67759
+        },
+        {
+          "text": "意",
+          "start_ms": 67759,
+          "end_ms": 67987
+        },
+        {
+          "text": "两",
+          "start_ms": 67987,
+          "end_ms": 68215
+        },
+        {
+          "text": "个",
+          "start_ms": 68215,
+          "end_ms": 68442
+        },
+        {
+          "text": "问",
+          "start_ms": 68442,
+          "end_ms": 68670
+        },
+        {
+          "text": "题",
+          "start_ms": 68670,
+          "end_ms": 68898
+        },
+        {
+          "text": "：",
+          "start_ms": 68898,
+          "end_ms": 69057
+        },
+        {
+          "text": "长",
+          "start_ms": 69057,
+          "end_ms": 69285
+        },
+        {
+          "text": "作",
+          "start_ms": 69285,
+          "end_ms": 69512
+        },
+        {
+          "text": "业",
+          "start_ms": 69512,
+          "end_ms": 69740
+        },
+        {
+          "text": "可",
+          "start_ms": 69740,
+          "end_ms": 69968
+        },
+        {
+          "text": "能",
+          "start_ms": 69968,
+          "end_ms": 70195
+        },
+        {
+          "text": "无",
+          "start_ms": 70195,
+          "end_ms": 70423
+        },
+        {
+          "text": "限",
+          "start_ms": 70423,
+          "end_ms": 70651
+        },
+        {
+          "text": "等",
+          "start_ms": 70651,
+          "end_ms": 70878
+        },
+        {
+          "text": "待",
+          "start_ms": 70878,
+          "end_ms": 71106
+        },
+        {
+          "text": "，",
+          "start_ms": 71106,
+          "end_ms": 71265
+        },
+        {
+          "text": "这",
+          "start_ms": 71265,
+          "end_ms": 71493
+        },
+        {
+          "text": "就",
+          "start_ms": 71493,
+          "end_ms": 71720
+        },
+        {
+          "text": "是",
+          "start_ms": 71720,
+          "end_ms": 71948
+        },
+        {
+          "text": "饥",
+          "start_ms": 71948,
+          "end_ms": 72176
+        },
+        {
+          "text": "饿",
+          "start_ms": 72176,
+          "end_ms": 72403
+        },
+        {
+          "text": "现",
+          "start_ms": 72403,
+          "end_ms": 72631
+        },
+        {
+          "text": "象",
+          "start_ms": 72631,
+          "end_ms": 72859
+        },
+        {
+          "text": "；",
+          "start_ms": 72859,
+          "end_ms": 73064
+        },
+        {
+          "text": "而",
+          "start_ms": 73064,
+          "end_ms": 73291
+        },
+        {
+          "text": "且",
+          "start_ms": 73291,
+          "end_ms": 73519
+        },
+        {
+          "text": "需",
+          "start_ms": 73519,
+          "end_ms": 73747
+        },
+        {
+          "text": "要",
+          "start_ms": 73747,
+          "end_ms": 73974
+        },
+        {
+          "text": "预",
+          "start_ms": 73974,
+          "end_ms": 74202
+        },
+        {
+          "text": "知",
+          "start_ms": 74202,
+          "end_ms": 74429
+        },
+        {
+          "text": "服",
+          "start_ms": 74429,
+          "end_ms": 74657
+        },
+        {
+          "text": "务",
+          "start_ms": 74657,
+          "end_ms": 74885
+        },
+        {
+          "text": "时",
+          "start_ms": 74885,
+          "end_ms": 75112
+        },
+        {
+          "text": "间",
+          "start_ms": 75112,
+          "end_ms": 75340
+        },
+        {
+          "text": "，",
+          "start_ms": 75340,
+          "end_ms": 75499
+        },
+        {
+          "text": "实",
+          "start_ms": 75499,
+          "end_ms": 75727
+        },
+        {
+          "text": "际",
+          "start_ms": 75727,
+          "end_ms": 75955
+        },
+        {
+          "text": "系",
+          "start_ms": 75955,
+          "end_ms": 76182
+        },
+        {
+          "text": "统",
+          "start_ms": 76182,
+          "end_ms": 76410
+        },
+        {
+          "text": "中",
+          "start_ms": 76410,
+          "end_ms": 76638
+        },
+        {
+          "text": "往",
+          "start_ms": 76638,
+          "end_ms": 76865
+        },
+        {
+          "text": "往",
+          "start_ms": 76865,
+          "end_ms": 77093
+        },
+        {
+          "text": "难",
+          "start_ms": 77093,
+          "end_ms": 77321
+        },
+        {
+          "text": "以",
+          "start_ms": 77321,
+          "end_ms": 77548
+        },
+        {
+          "text": "精",
+          "start_ms": 77548,
+          "end_ms": 77776
+        },
+        {
+          "text": "确",
+          "start_ms": 77776,
+          "end_ms": 78004
+        },
+        {
+          "text": "估",
+          "start_ms": 78004,
+          "end_ms": 78231
+        },
+        {
+          "text": "计",
+          "start_ms": 78231,
+          "end_ms": 78459
+        },
+        {
+          "text": "。",
+          "start_ms": 78459,
+          "end_ms": 78732
+        }
+      ],
+      "captions": [
+        {
+          "text": "现在我们来看短作业优先算法，SJF",
+          "start_ms": 0,
+          "end_ms": 3563
+        },
+        {
+          "text": "它的核心思想很简单：每次从就绪队列中选择服务时间最短的进程优先执行",
+          "start_ms": 3836,
+          "end_ms": 11280
+        },
+        {
+          "text": "我们用同样的五个进程来演示",
+          "start_ms": 11553,
+          "end_ms": 14513
+        },
+        {
+          "text": "时刻零，P1到达，队列只有P1，调度执行",
+          "start_ms": 14786,
+          "end_ms": 18815
+        },
+        {
+          "text": "时刻五P1完成，此时P2、P3、P4、P5都已到达，服务时间分别是3、1、2、4",
+          "start_ms": 19088,
+          "end_ms": 26510
+        },
+        {
+          "text": "SJF选择服务时间最短的P3执行",
+          "start_ms": 26783,
+          "end_ms": 30027
+        },
+        {
+          "text": "时刻六P3完成，剩余进程中P4服务时间最短为2，调度P4",
+          "start_ms": 30300,
+          "end_ms": 36059
+        },
+        {
+          "text": "时刻八P4完成，P2服务时间3比P5的4更短，调度P2",
+          "start_ms": 36333,
+          "end_ms": 41705
+        },
+        {
+          "text": "时刻十一P2完成，最后执行P5",
+          "start_ms": 41978,
+          "end_ms": 45006
+        },
+        {
+          "text": "时刻十五全部完成",
+          "start_ms": 45279,
+          "end_ms": 47100
+        },
+        {
+          "text": "看甘特图：P1零到五，P3五到六，P4六到八，P2八到十一，P5十一到十五",
+          "start_ms": 47374,
+          "end_ms": 54658
+        },
+        {
+          "text": "计算平均周转时间为七点零，平均等待时间为四点零，相比FCFS的七点六和四点六都有提升",
+          "start_ms": 54931,
+          "end_ms": 64037
+        },
+        {
+          "text": "SJF确实能优化系统效率",
+          "start_ms": 64311,
+          "end_ms": 66803
+        },
+        {
+          "text": "但要注意两个问题：长作业可能无限等待，这就是饥饿现象",
+          "start_ms": 67076,
+          "end_ms": 72859
+        },
+        {
+          "text": "而且需要预知服务时间，实际系统中往往难以精确估计",
+          "start_ms": 73064,
+          "end_ms": 78732
+        }
+      ],
+      "visual_cues": [
+        {
+          "id": "vb1",
+          "kind": "define",
+          "target": "",
+          "summary": "定义SJF核心逻辑",
+          "start_ms": 6044,
+          "end_ms": 14786,
+          "caption_text": "每次从就绪队列中选择服务时间最短的进程优先执行"
+        },
+        {
+          "id": "vb2",
+          "kind": "trace_step",
+          "target": "step_1",
+          "summary": "P1开始执行",
+          "start_ms": 14786,
+          "end_ms": 19088,
+          "caption_text": "时刻零，P1到达，队列只有P1，调度执行"
+        },
+        {
+          "id": "vb3",
+          "kind": "trace_step",
+          "target": "step_2",
+          "summary": "P1完成，多进程就绪",
+          "start_ms": 19088,
+          "end_ms": 26783,
+          "caption_text": "时刻五P1完成，此时P2、P3、P4、P5都已到达"
+        },
+        {
+          "id": "vb4",
+          "kind": "trace_step",
+          "target": "step_2",
+          "summary": "选择最短进程P3",
+          "start_ms": 26783,
+          "end_ms": 30300,
+          "caption_text": "SJF选择服务时间最短的P3执行"
+        },
+        {
+          "id": "vb5",
+          "kind": "trace_step",
+          "target": "step_3",
+          "summary": "P3完成，调度P4",
+          "start_ms": 30300,
+          "end_ms": 36333,
+          "caption_text": "时刻六P3完成，剩余进程中P4服务时间最短为2，调度P4"
+        },
+        {
+          "id": "vb6",
+          "kind": "trace_step",
+          "target": "step_4",
+          "summary": "P4完成，调度P2",
+          "start_ms": 36333,
+          "end_ms": 41978,
+          "caption_text": "时刻八P4完成，P2服务时间3比P5的4更短，调度P2"
+        },
+        {
+          "id": "vb7",
+          "kind": "trace_step",
+          "target": "step_5",
+          "summary": "P2完成，调度P5",
+          "start_ms": 41978,
+          "end_ms": 45279,
+          "caption_text": "时刻十一P2完成，最后执行P5"
+        },
+        {
+          "id": "vb8",
+          "kind": "trace_step",
+          "target": "step_6",
+          "summary": "全部进程完成",
+          "start_ms": 45279,
+          "end_ms": 60258,
+          "caption_text": "时刻十五全部完成"
+        },
+        {
+          "id": "vb9",
+          "kind": "compare",
+          "target": "",
+          "summary": "对比FCFS性能提升",
+          "start_ms": 60258,
+          "end_ms": 69057,
+          "caption_text": "相比FCFS的七点六和四点六都有提升"
+        },
+        {
+          "id": "vb10",
+          "kind": "misconception",
+          "target": "",
+          "summary": "指出饥饿问题",
+          "start_ms": 69057,
+          "end_ms": 73519,
+          "caption_text": "长作业可能无限等待，这就是饥饿现象"
+        },
+        {
+          "id": "vb11",
+          "kind": "misconception",
+          "target": "",
+          "summary": "指出预知困难",
+          "start_ms": 73519,
+          "end_ms": 78732,
+          "caption_text": "需要预知服务时间，实际系统中往往难以精确估计"
+        }
+      ]
+    },
+    {
+      "scene_id": "s5",
+      "index": 5,
+      "role": "process",
+      "title": "RR：时间片轮转",
+      "learning_objective": "理解RR算法的时间片机制、公平性保障及时间片权衡",
+      "visual_type": "algorithm_trace",
+      "visual": "{\"algorithm_name\": \"RR（时间片轮转，q=2）\", \"problem\": \"对进程 P1-P5 进行时间片轮转调度，计算周转时间和等待时间\", \"data\": [{\"name\": \"P1\", \"arrival\": 0, \"service\": 5}, {\"name\": \"P2\", \"arrival\": 1, \"service\": 3}, {\"name\": \"P3\", \"arrival\": 2, \"service\": 1}, {\"name\": \"P4\", \"arrival\": 3, \"service\": 2}, {\"name\": \"P5\", \"arrival\": 4, \"service\": 4}], \"pseudocode\": [\"将到达进程加入就绪队列\", \"取出队首进程\", \"运行 min(时间片, 剩余时间)\", \"若未完成则加入队尾\", \"检查新到达进程\"], \"steps\": [{\"line\": 1, \"description\": \"时刻0：P1到达，加入队列[P1]\", \"variables\": {\"queue\": [\"P1\"], \"time\": 0}, \"highlight_indices\": [0]}, {\"line\": 2, \"description\": \"P1执行2单位，剩余3，排到队尾\", \"variables\": {\"queue\": [], \"time\": 2, \"running\": \"P1\", \"remaining\": 3}, \"highlight_indices\": [1, 2]}, {\"line\": 1, \"description\": \"时刻2：P2已到达，队列[P2, P1]\", \"variables\": {\"queue\": [\"P2\", \"P1\"], \"time\": 2}, \"highlight_indices\": [0]}, {\"line\": 2, \"description\": \"P2执行2单位，剩余1，排到队尾\", \"variables\": {\"queue\": [\"P1\"], \"time\": 4, \"running\": \"P2\", \"remaining\": 1}, \"highlight_indices\": [1, 2]}, {\"line\": 1, \"description\": \"时刻4：P3到达，队列[P1, P3]\", \"variables\": {\"queue\": [\"P1\", \"P3\"], \"time\": 4}, \"highlight_indices\": [0]}, {\"line\": 2, \"description\": \"P3执行1单位完成（服务时间<时间片）\", \"variables\": {\"queue\": [\"P1\"], \"time\": 6, \"running\": \"P3\", \"completed\": [\"P3\"]}, \"highlight_indices\": [1, 2]}, {\"line\": 1, \"description\": \"时刻6：P4已到达，队列[P1, P4]\", \"variables\": {\"queue\": [\"P1\", \"P4\"], \"time\": 6}, \"highlight_indices\": [0]}, {\"line\": 2, \"description\": \"P4执行2单位完成\", \"variables\": {\"queue\": [\"P1\"], \"time\": 8, \"running\": \"P4\", \"completed\": [\"P3\", \"P4\"]}, \"highlight_indices\": [1, 2]}, {\"line\": 1, \"description\": \"时刻8：P5已到达，队列[P1, P5]\", \"variables\": {\"queue\": [\"P1\", \"P5\"], \"time\": 8}, \"highlight_indices\": [0]}, {\"line\": 2, \"description\": \"P5执行2单位，剩余2，排到队尾\", \"variables\": {\"queue\": [\"P1\"], \"time\": 10, \"running\": \"P5\", \"remaining\": 2}, \"highlight_indices\": [1, 2]}, {\"line\": 2, \"description\": \"P1执行2单位，剩余1，排到队尾\", \"variables\": {\"queue\": [\"P5\"], \"time\": 12, \"running\": \"P1\", \"remaining\": 1}, \"highlight_indices\": [1, 2]}, {\"line\": 2, \"description\": \"P2执行1单位完成\", \"variables\": {\"queue\": [\"P5\", \"P1\"], \"time\": 13, \"running\": \"P2\", \"completed\": [\"P3\", \"P4\", \"P2\"]}, \"highlight_indices\": [1, 2]}, {\"line\": 2, \"description\": \"P5执行2单位，剩余2，排到队尾\", \"variables\": {\"queue\": [\"P1\"], \"time\": 15, \"running\": \"P5\", \"remaining\": 2}, \"highlight_indices\": [1, 2]}, {\"line\": 2, \"description\": \"P1执行1单位完成\", \"variables\": {\"queue\": [\"P5\"], \"time\": 16, \"running\": \"P1\", \"completed\": [\"P3\", \"P4\", \"P2\", \"P1\"]}, \"highlight_indices\": [1, 2]}, {\"line\": 2, \"description\": \"P5执行2单位完成\", \"variables\": {\"queue\": [], \"time\": 18, \"running\": \"P5\", \"completed\": [\"P3\", \"P4\", \"P2\", \"P1\", \"P5\"]}, \"highlight_indices\": [1, 2]}], \"complexity\": {\"time\": \"O(n × 总服务时间/时间片)\", \"space\": \"O(n)\"}, \"result\": \"平均周转时间: 9.2, 平均等待时间: 6.2, 甘特图: P1[0-2]→P2[2-4]→P3[4-6]→P4[6-8]→P5[8-10]→P1[10-12]→P2[12-13]→P5[13-15]→P1[15-16]→P5[16-18]\"}",
+      "narration": "时间片轮转算法的核心思想是把 CPU 时间切分成固定的时间片，每个进程轮流执行一个时间片。我们用时间片 q 等于 2 来演示。时刻 0，P1 到达并执行 2 单位，剩余 3。时刻 2，P2 已在时刻 1 到达，P1 排到队尾，P2 执行 2 单位，剩余 1。时刻 4，P3 执行 1 单位完成。时刻 6，P4 执行 2 单位完成。时刻 8，P5 执行 2 单位，剩余 2。时刻 10，P1 再次执行 2 单位，剩余 1。时刻 12，P2 执行剩余 1 单位完成。时刻 13，P5 执行 2 单位，剩余 2。时刻 14，P1 执行剩余 1 单位完成。时刻 15，P5 执行剩余 2 单位完成。最终甘特图是：P1、P2、P3、P4、P5、P1、P2、P5、P1、P5。平均周转时间 9.2，平均等待时间 6.2。时间片大小的选择很关键，过小会导致频繁切换开销大，过大会退化为先来先服务。经验值是 10 到 100 毫秒，保证切换开销小于 CPU 时间的 1%。",
+      "audio_src": "/render-assets/.render-1664efbb11e943f5abf581fb2e79d718/05-s5.mp3",
+      "start_ms": 271852,
+      "duration_ms": 98680,
+      "audio_duration_ms": 98280,
+      "caption_words": [
+        {
+          "text": "时",
+          "start_ms": 0,
+          "end_ms": 296
+        },
+        {
+          "text": "间",
+          "start_ms": 296,
+          "end_ms": 592
+        },
+        {
+          "text": "片",
+          "start_ms": 592,
+          "end_ms": 888
+        },
+        {
+          "text": "轮",
+          "start_ms": 888,
+          "end_ms": 1184
+        },
+        {
+          "text": "转",
+          "start_ms": 1184,
+          "end_ms": 1480
+        },
+        {
+          "text": "算",
+          "start_ms": 1480,
+          "end_ms": 1776
+        },
+        {
+          "text": "法",
+          "start_ms": 1776,
+          "end_ms": 2072
+        },
+        {
+          "text": "的",
+          "start_ms": 2072,
+          "end_ms": 2368
+        },
+        {
+          "text": "核",
+          "start_ms": 2368,
+          "end_ms": 2664
+        },
+        {
+          "text": "心",
+          "start_ms": 2664,
+          "end_ms": 2960
+        },
+        {
+          "text": "思",
+          "start_ms": 2960,
+          "end_ms": 3256
+        },
+        {
+          "text": "想",
+          "start_ms": 3256,
+          "end_ms": 3552
+        },
+        {
+          "text": "是",
+          "start_ms": 3552,
+          "end_ms": 3848
+        },
+        {
+          "text": "把",
+          "start_ms": 3848,
+          "end_ms": 4144
+        },
+        {
+          "text": "CPU",
+          "start_ms": 4144,
+          "end_ms": 4722
+        },
+        {
+          "text": "时",
+          "start_ms": 4722,
+          "end_ms": 5018
+        },
+        {
+          "text": "间",
+          "start_ms": 5018,
+          "end_ms": 5314
+        },
+        {
+          "text": "切",
+          "start_ms": 5314,
+          "end_ms": 5610
+        },
+        {
+          "text": "分",
+          "start_ms": 5610,
+          "end_ms": 5906
+        },
+        {
+          "text": "成",
+          "start_ms": 5906,
+          "end_ms": 6202
+        },
+        {
+          "text": "固",
+          "start_ms": 6202,
+          "end_ms": 6498
+        },
+        {
+          "text": "定",
+          "start_ms": 6498,
+          "end_ms": 6794
+        },
+        {
+          "text": "的",
+          "start_ms": 6794,
+          "end_ms": 7090
+        },
+        {
+          "text": "时",
+          "start_ms": 7090,
+          "end_ms": 7386
+        },
+        {
+          "text": "间",
+          "start_ms": 7386,
+          "end_ms": 7682
+        },
+        {
+          "text": "片",
+          "start_ms": 7682,
+          "end_ms": 7978
+        },
+        {
+          "text": "，",
+          "start_ms": 7978,
+          "end_ms": 8185
+        },
+        {
+          "text": "每",
+          "start_ms": 8185,
+          "end_ms": 8481
+        },
+        {
+          "text": "个",
+          "start_ms": 8481,
+          "end_ms": 8777
+        },
+        {
+          "text": "进",
+          "start_ms": 8777,
+          "end_ms": 9073
+        },
+        {
+          "text": "程",
+          "start_ms": 9073,
+          "end_ms": 9369
+        },
+        {
+          "text": "轮",
+          "start_ms": 9369,
+          "end_ms": 9665
+        },
+        {
+          "text": "流",
+          "start_ms": 9665,
+          "end_ms": 9961
+        },
+        {
+          "text": "执",
+          "start_ms": 9961,
+          "end_ms": 10257
+        },
+        {
+          "text": "行",
+          "start_ms": 10257,
+          "end_ms": 10553
+        },
+        {
+          "text": "一",
+          "start_ms": 10553,
+          "end_ms": 10849
+        },
+        {
+          "text": "个",
+          "start_ms": 10849,
+          "end_ms": 11145
+        },
+        {
+          "text": "时",
+          "start_ms": 11145,
+          "end_ms": 11441
+        },
+        {
+          "text": "间",
+          "start_ms": 11441,
+          "end_ms": 11737
+        },
+        {
+          "text": "片",
+          "start_ms": 11737,
+          "end_ms": 12033
+        },
+        {
+          "text": "。",
+          "start_ms": 12033,
+          "end_ms": 12389
+        },
+        {
+          "text": "我",
+          "start_ms": 12389,
+          "end_ms": 12685
+        },
+        {
+          "text": "们",
+          "start_ms": 12685,
+          "end_ms": 12981
+        },
+        {
+          "text": "用",
+          "start_ms": 12981,
+          "end_ms": 13277
+        },
+        {
+          "text": "时",
+          "start_ms": 13277,
+          "end_ms": 13573
+        },
+        {
+          "text": "间",
+          "start_ms": 13573,
+          "end_ms": 13869
+        },
+        {
+          "text": "片",
+          "start_ms": 13869,
+          "end_ms": 14165
+        },
+        {
+          "text": "q",
+          "start_ms": 14165,
+          "end_ms": 14461
+        },
+        {
+          "text": "等",
+          "start_ms": 14461,
+          "end_ms": 14757
+        },
+        {
+          "text": "于",
+          "start_ms": 14757,
+          "end_ms": 15053
+        },
+        {
+          "text": "2",
+          "start_ms": 15053,
+          "end_ms": 15349
+        },
+        {
+          "text": "来",
+          "start_ms": 15349,
+          "end_ms": 15645
+        },
+        {
+          "text": "演",
+          "start_ms": 15645,
+          "end_ms": 15941
+        },
+        {
+          "text": "示",
+          "start_ms": 15941,
+          "end_ms": 16237
+        },
+        {
+          "text": "。",
+          "start_ms": 16237,
+          "end_ms": 16592
+        },
+        {
+          "text": "时",
+          "start_ms": 16592,
+          "end_ms": 16888
+        },
+        {
+          "text": "刻",
+          "start_ms": 16888,
+          "end_ms": 17184
+        },
+        {
+          "text": "0",
+          "start_ms": 17184,
+          "end_ms": 17480
+        },
+        {
+          "text": "，",
+          "start_ms": 17480,
+          "end_ms": 17687
+        },
+        {
+          "text": "P1",
+          "start_ms": 17687,
+          "end_ms": 18072
+        },
+        {
+          "text": "到",
+          "start_ms": 18072,
+          "end_ms": 18368
+        },
+        {
+          "text": "达",
+          "start_ms": 18368,
+          "end_ms": 18664
+        },
+        {
+          "text": "并",
+          "start_ms": 18664,
+          "end_ms": 18960
+        },
+        {
+          "text": "执",
+          "start_ms": 18960,
+          "end_ms": 19256
+        },
+        {
+          "text": "行",
+          "start_ms": 19256,
+          "end_ms": 19552
+        },
+        {
+          "text": "2",
+          "start_ms": 19552,
+          "end_ms": 19848
+        },
+        {
+          "text": "单",
+          "start_ms": 19848,
+          "end_ms": 20144
+        },
+        {
+          "text": "位",
+          "start_ms": 20144,
+          "end_ms": 20440
+        },
+        {
+          "text": "，",
+          "start_ms": 20440,
+          "end_ms": 20648
+        },
+        {
+          "text": "剩",
+          "start_ms": 20648,
+          "end_ms": 20944
+        },
+        {
+          "text": "余",
+          "start_ms": 20944,
+          "end_ms": 21240
+        },
+        {
+          "text": "3",
+          "start_ms": 21240,
+          "end_ms": 21536
+        },
+        {
+          "text": "。",
+          "start_ms": 21536,
+          "end_ms": 21891
+        },
+        {
+          "text": "时",
+          "start_ms": 21891,
+          "end_ms": 22187
+        },
+        {
+          "text": "刻",
+          "start_ms": 22187,
+          "end_ms": 22483
+        },
+        {
+          "text": "2",
+          "start_ms": 22483,
+          "end_ms": 22779
+        },
+        {
+          "text": "，",
+          "start_ms": 22779,
+          "end_ms": 22986
+        },
+        {
+          "text": "P2",
+          "start_ms": 22986,
+          "end_ms": 23371
+        },
+        {
+          "text": "已",
+          "start_ms": 23371,
+          "end_ms": 23667
+        },
+        {
+          "text": "在",
+          "start_ms": 23667,
+          "end_ms": 23963
+        },
+        {
+          "text": "时",
+          "start_ms": 23963,
+          "end_ms": 24259
+        },
+        {
+          "text": "刻",
+          "start_ms": 24259,
+          "end_ms": 24555
+        },
+        {
+          "text": "1",
+          "start_ms": 24555,
+          "end_ms": 24851
+        },
+        {
+          "text": "到",
+          "start_ms": 24851,
+          "end_ms": 25147
+        },
+        {
+          "text": "达",
+          "start_ms": 25147,
+          "end_ms": 25443
+        },
+        {
+          "text": "，",
+          "start_ms": 25443,
+          "end_ms": 25650
+        },
+        {
+          "text": "P1",
+          "start_ms": 25650,
+          "end_ms": 26035
+        },
+        {
+          "text": "排",
+          "start_ms": 26035,
+          "end_ms": 26331
+        },
+        {
+          "text": "到",
+          "start_ms": 26331,
+          "end_ms": 26627
+        },
+        {
+          "text": "队",
+          "start_ms": 26627,
+          "end_ms": 26923
+        },
+        {
+          "text": "尾",
+          "start_ms": 26923,
+          "end_ms": 27219
+        },
+        {
+          "text": "，",
+          "start_ms": 27219,
+          "end_ms": 27427
+        },
+        {
+          "text": "P2",
+          "start_ms": 27427,
+          "end_ms": 27811
+        },
+        {
+          "text": "执",
+          "start_ms": 27811,
+          "end_ms": 28107
+        },
+        {
+          "text": "行",
+          "start_ms": 28107,
+          "end_ms": 28404
+        },
+        {
+          "text": "2",
+          "start_ms": 28404,
+          "end_ms": 28700
+        },
+        {
+          "text": "单",
+          "start_ms": 28700,
+          "end_ms": 28996
+        },
+        {
+          "text": "位",
+          "start_ms": 28996,
+          "end_ms": 29292
+        },
+        {
+          "text": "，",
+          "start_ms": 29292,
+          "end_ms": 29499
+        },
+        {
+          "text": "剩",
+          "start_ms": 29499,
+          "end_ms": 29795
+        },
+        {
+          "text": "余",
+          "start_ms": 29795,
+          "end_ms": 30091
+        },
+        {
+          "text": "1",
+          "start_ms": 30091,
+          "end_ms": 30387
+        },
+        {
+          "text": "。",
+          "start_ms": 30387,
+          "end_ms": 30742
+        },
+        {
+          "text": "时",
+          "start_ms": 30742,
+          "end_ms": 31038
+        },
+        {
+          "text": "刻",
+          "start_ms": 31038,
+          "end_ms": 31334
+        },
+        {
+          "text": "4",
+          "start_ms": 31334,
+          "end_ms": 31630
+        },
+        {
+          "text": "，",
+          "start_ms": 31630,
+          "end_ms": 31837
+        },
+        {
+          "text": "P3",
+          "start_ms": 31837,
+          "end_ms": 32222
+        },
+        {
+          "text": "执",
+          "start_ms": 32222,
+          "end_ms": 32518
+        },
+        {
+          "text": "行",
+          "start_ms": 32518,
+          "end_ms": 32814
+        },
+        {
+          "text": "1",
+          "start_ms": 32814,
+          "end_ms": 33110
+        },
+        {
+          "text": "单",
+          "start_ms": 33110,
+          "end_ms": 33406
+        },
+        {
+          "text": "位",
+          "start_ms": 33406,
+          "end_ms": 33702
+        },
+        {
+          "text": "完",
+          "start_ms": 33702,
+          "end_ms": 33998
+        },
+        {
+          "text": "成",
+          "start_ms": 33998,
+          "end_ms": 34294
+        },
+        {
+          "text": "。",
+          "start_ms": 34294,
+          "end_ms": 34650
+        },
+        {
+          "text": "时",
+          "start_ms": 34650,
+          "end_ms": 34946
+        },
+        {
+          "text": "刻",
+          "start_ms": 34946,
+          "end_ms": 35242
+        },
+        {
+          "text": "6",
+          "start_ms": 35242,
+          "end_ms": 35538
+        },
+        {
+          "text": "，",
+          "start_ms": 35538,
+          "end_ms": 35745
+        },
+        {
+          "text": "P4",
+          "start_ms": 35745,
+          "end_ms": 36130
+        },
+        {
+          "text": "执",
+          "start_ms": 36130,
+          "end_ms": 36426
+        },
+        {
+          "text": "行",
+          "start_ms": 36426,
+          "end_ms": 36722
+        },
+        {
+          "text": "2",
+          "start_ms": 36722,
+          "end_ms": 37018
+        },
+        {
+          "text": "单",
+          "start_ms": 37018,
+          "end_ms": 37314
+        },
+        {
+          "text": "位",
+          "start_ms": 37314,
+          "end_ms": 37610
+        },
+        {
+          "text": "完",
+          "start_ms": 37610,
+          "end_ms": 37906
+        },
+        {
+          "text": "成",
+          "start_ms": 37906,
+          "end_ms": 38202
+        },
+        {
+          "text": "。",
+          "start_ms": 38202,
+          "end_ms": 38557
+        },
+        {
+          "text": "时",
+          "start_ms": 38557,
+          "end_ms": 38853
+        },
+        {
+          "text": "刻",
+          "start_ms": 38853,
+          "end_ms": 39149
+        },
+        {
+          "text": "8",
+          "start_ms": 39149,
+          "end_ms": 39445
+        },
+        {
+          "text": "，",
+          "start_ms": 39445,
+          "end_ms": 39652
+        },
+        {
+          "text": "P5",
+          "start_ms": 39652,
+          "end_ms": 40037
+        },
+        {
+          "text": "执",
+          "start_ms": 40037,
+          "end_ms": 40333
+        },
+        {
+          "text": "行",
+          "start_ms": 40333,
+          "end_ms": 40629
+        },
+        {
+          "text": "2",
+          "start_ms": 40629,
+          "end_ms": 40925
+        },
+        {
+          "text": "单",
+          "start_ms": 40925,
+          "end_ms": 41221
+        },
+        {
+          "text": "位",
+          "start_ms": 41221,
+          "end_ms": 41517
+        },
+        {
+          "text": "，",
+          "start_ms": 41517,
+          "end_ms": 41725
+        },
+        {
+          "text": "剩",
+          "start_ms": 41725,
+          "end_ms": 42021
+        },
+        {
+          "text": "余",
+          "start_ms": 42021,
+          "end_ms": 42317
+        },
+        {
+          "text": "2",
+          "start_ms": 42317,
+          "end_ms": 42613
+        },
+        {
+          "text": "。",
+          "start_ms": 42613,
+          "end_ms": 42968
+        },
+        {
+          "text": "时",
+          "start_ms": 42968,
+          "end_ms": 43264
+        },
+        {
+          "text": "刻",
+          "start_ms": 43264,
+          "end_ms": 43560
+        },
+        {
+          "text": "10",
+          "start_ms": 43560,
+          "end_ms": 43945
+        },
+        {
+          "text": "，",
+          "start_ms": 43945,
+          "end_ms": 44152
+        },
+        {
+          "text": "P1",
+          "start_ms": 44152,
+          "end_ms": 44537
+        },
+        {
+          "text": "再",
+          "start_ms": 44537,
+          "end_ms": 44833
+        },
+        {
+          "text": "次",
+          "start_ms": 44833,
+          "end_ms": 45129
+        },
+        {
+          "text": "执",
+          "start_ms": 45129,
+          "end_ms": 45425
+        },
+        {
+          "text": "行",
+          "start_ms": 45425,
+          "end_ms": 45721
+        },
+        {
+          "text": "2",
+          "start_ms": 45721,
+          "end_ms": 46017
+        },
+        {
+          "text": "单",
+          "start_ms": 46017,
+          "end_ms": 46313
+        },
+        {
+          "text": "位",
+          "start_ms": 46313,
+          "end_ms": 46609
+        },
+        {
+          "text": "，",
+          "start_ms": 46609,
+          "end_ms": 46816
+        },
+        {
+          "text": "剩",
+          "start_ms": 46816,
+          "end_ms": 47112
+        },
+        {
+          "text": "余",
+          "start_ms": 47112,
+          "end_ms": 47408
+        },
+        {
+          "text": "1",
+          "start_ms": 47408,
+          "end_ms": 47704
+        },
+        {
+          "text": "。",
+          "start_ms": 47704,
+          "end_ms": 48060
+        },
+        {
+          "text": "时",
+          "start_ms": 48060,
+          "end_ms": 48356
+        },
+        {
+          "text": "刻",
+          "start_ms": 48356,
+          "end_ms": 48652
+        },
+        {
+          "text": "12",
+          "start_ms": 48652,
+          "end_ms": 49036
+        },
+        {
+          "text": "，",
+          "start_ms": 49036,
+          "end_ms": 49244
+        },
+        {
+          "text": "P2",
+          "start_ms": 49244,
+          "end_ms": 49628
+        },
+        {
+          "text": "执",
+          "start_ms": 49628,
+          "end_ms": 49924
+        },
+        {
+          "text": "行",
+          "start_ms": 49924,
+          "end_ms": 50220
+        },
+        {
+          "text": "剩",
+          "start_ms": 50220,
+          "end_ms": 50517
+        },
+        {
+          "text": "余",
+          "start_ms": 50517,
+          "end_ms": 50813
+        },
+        {
+          "text": "1",
+          "start_ms": 50813,
+          "end_ms": 51109
+        },
+        {
+          "text": "单",
+          "start_ms": 51109,
+          "end_ms": 51405
+        },
+        {
+          "text": "位",
+          "start_ms": 51405,
+          "end_ms": 51701
+        },
+        {
+          "text": "完",
+          "start_ms": 51701,
+          "end_ms": 51997
+        },
+        {
+          "text": "成",
+          "start_ms": 51997,
+          "end_ms": 52293
+        },
+        {
+          "text": "。",
+          "start_ms": 52293,
+          "end_ms": 52648
+        },
+        {
+          "text": "时",
+          "start_ms": 52648,
+          "end_ms": 52944
+        },
+        {
+          "text": "刻",
+          "start_ms": 52944,
+          "end_ms": 53240
+        },
+        {
+          "text": "13",
+          "start_ms": 53240,
+          "end_ms": 53625
+        },
+        {
+          "text": "，",
+          "start_ms": 53625,
+          "end_ms": 53832
+        },
+        {
+          "text": "P5",
+          "start_ms": 53832,
+          "end_ms": 54217
+        },
+        {
+          "text": "执",
+          "start_ms": 54217,
+          "end_ms": 54513
+        },
+        {
+          "text": "行",
+          "start_ms": 54513,
+          "end_ms": 54809
+        },
+        {
+          "text": "2",
+          "start_ms": 54809,
+          "end_ms": 55105
+        },
+        {
+          "text": "单",
+          "start_ms": 55105,
+          "end_ms": 55401
+        },
+        {
+          "text": "位",
+          "start_ms": 55401,
+          "end_ms": 55697
+        },
+        {
+          "text": "，",
+          "start_ms": 55697,
+          "end_ms": 55904
+        },
+        {
+          "text": "剩",
+          "start_ms": 55904,
+          "end_ms": 56200
+        },
+        {
+          "text": "余",
+          "start_ms": 56200,
+          "end_ms": 56496
+        },
+        {
+          "text": "2",
+          "start_ms": 56496,
+          "end_ms": 56792
+        },
+        {
+          "text": "。",
+          "start_ms": 56792,
+          "end_ms": 57147
+        },
+        {
+          "text": "时",
+          "start_ms": 57147,
+          "end_ms": 57443
+        },
+        {
+          "text": "刻",
+          "start_ms": 57443,
+          "end_ms": 57739
+        },
+        {
+          "text": "14",
+          "start_ms": 57739,
+          "end_ms": 58124
+        },
+        {
+          "text": "，",
+          "start_ms": 58124,
+          "end_ms": 58332
+        },
+        {
+          "text": "P1",
+          "start_ms": 58332,
+          "end_ms": 58716
+        },
+        {
+          "text": "执",
+          "start_ms": 58716,
+          "end_ms": 59012
+        },
+        {
+          "text": "行",
+          "start_ms": 59012,
+          "end_ms": 59308
+        },
+        {
+          "text": "剩",
+          "start_ms": 59308,
+          "end_ms": 59604
+        },
+        {
+          "text": "余",
+          "start_ms": 59604,
+          "end_ms": 59900
+        },
+        {
+          "text": "1",
+          "start_ms": 59900,
+          "end_ms": 60196
+        },
+        {
+          "text": "单",
+          "start_ms": 60196,
+          "end_ms": 60493
+        },
+        {
+          "text": "位",
+          "start_ms": 60493,
+          "end_ms": 60789
+        },
+        {
+          "text": "完",
+          "start_ms": 60789,
+          "end_ms": 61085
+        },
+        {
+          "text": "成",
+          "start_ms": 61085,
+          "end_ms": 61381
+        },
+        {
+          "text": "。",
+          "start_ms": 61381,
+          "end_ms": 61736
+        },
+        {
+          "text": "时",
+          "start_ms": 61736,
+          "end_ms": 62032
+        },
+        {
+          "text": "刻",
+          "start_ms": 62032,
+          "end_ms": 62328
+        },
+        {
+          "text": "15",
+          "start_ms": 62328,
+          "end_ms": 62713
+        },
+        {
+          "text": "，",
+          "start_ms": 62713,
+          "end_ms": 62920
+        },
+        {
+          "text": "P5",
+          "start_ms": 62920,
+          "end_ms": 63305
+        },
+        {
+          "text": "执",
+          "start_ms": 63305,
+          "end_ms": 63601
+        },
+        {
+          "text": "行",
+          "start_ms": 63601,
+          "end_ms": 63897
+        },
+        {
+          "text": "剩",
+          "start_ms": 63897,
+          "end_ms": 64193
+        },
+        {
+          "text": "余",
+          "start_ms": 64193,
+          "end_ms": 64489
+        },
+        {
+          "text": "2",
+          "start_ms": 64489,
+          "end_ms": 64785
+        },
+        {
+          "text": "单",
+          "start_ms": 64785,
+          "end_ms": 65081
+        },
+        {
+          "text": "位",
+          "start_ms": 65081,
+          "end_ms": 65377
+        },
+        {
+          "text": "完",
+          "start_ms": 65377,
+          "end_ms": 65673
+        },
+        {
+          "text": "成",
+          "start_ms": 65673,
+          "end_ms": 65969
+        },
+        {
+          "text": "。",
+          "start_ms": 65969,
+          "end_ms": 66324
+        },
+        {
+          "text": "最",
+          "start_ms": 66324,
+          "end_ms": 66620
+        },
+        {
+          "text": "终",
+          "start_ms": 66620,
+          "end_ms": 66916
+        },
+        {
+          "text": "甘",
+          "start_ms": 66916,
+          "end_ms": 67212
+        },
+        {
+          "text": "特",
+          "start_ms": 67212,
+          "end_ms": 67508
+        },
+        {
+          "text": "图",
+          "start_ms": 67508,
+          "end_ms": 67804
+        },
+        {
+          "text": "是",
+          "start_ms": 67804,
+          "end_ms": 68100
+        },
+        {
+          "text": "：",
+          "start_ms": 68100,
+          "end_ms": 68308
+        },
+        {
+          "text": "P1",
+          "start_ms": 68308,
+          "end_ms": 68692
+        },
+        {
+          "text": "、",
+          "start_ms": 68692,
+          "end_ms": 68826
+        },
+        {
+          "text": "P2",
+          "start_ms": 68826,
+          "end_ms": 69210
+        },
+        {
+          "text": "、",
+          "start_ms": 69210,
+          "end_ms": 69344
+        },
+        {
+          "text": "P3",
+          "start_ms": 69344,
+          "end_ms": 69728
+        },
+        {
+          "text": "、",
+          "start_ms": 69728,
+          "end_ms": 69862
+        },
+        {
+          "text": "P4",
+          "start_ms": 69862,
+          "end_ms": 70247
+        },
+        {
+          "text": "、",
+          "start_ms": 70247,
+          "end_ms": 70380
+        },
+        {
+          "text": "P5",
+          "start_ms": 70380,
+          "end_ms": 70765
+        },
+        {
+          "text": "、",
+          "start_ms": 70765,
+          "end_ms": 70898
+        },
+        {
+          "text": "P1",
+          "start_ms": 70898,
+          "end_ms": 71283
+        },
+        {
+          "text": "、",
+          "start_ms": 71283,
+          "end_ms": 71416
+        },
+        {
+          "text": "P2",
+          "start_ms": 71416,
+          "end_ms": 71801
+        },
+        {
+          "text": "、",
+          "start_ms": 71801,
+          "end_ms": 71934
+        },
+        {
+          "text": "P5",
+          "start_ms": 71934,
+          "end_ms": 72319
+        },
+        {
+          "text": "、",
+          "start_ms": 72319,
+          "end_ms": 72452
+        },
+        {
+          "text": "P1",
+          "start_ms": 72452,
+          "end_ms": 72837
+        },
+        {
+          "text": "、",
+          "start_ms": 72837,
+          "end_ms": 72970
+        },
+        {
+          "text": "P5",
+          "start_ms": 72970,
+          "end_ms": 73355
+        },
+        {
+          "text": "。",
+          "start_ms": 73355,
+          "end_ms": 73710
+        },
+        {
+          "text": "平",
+          "start_ms": 73710,
+          "end_ms": 74006
+        },
+        {
+          "text": "均",
+          "start_ms": 74006,
+          "end_ms": 74302
+        },
+        {
+          "text": "周",
+          "start_ms": 74302,
+          "end_ms": 74598
+        },
+        {
+          "text": "转",
+          "start_ms": 74598,
+          "end_ms": 74894
+        },
+        {
+          "text": "时",
+          "start_ms": 74894,
+          "end_ms": 75190
+        },
+        {
+          "text": "间",
+          "start_ms": 75190,
+          "end_ms": 75486
+        },
+        {
+          "text": "9",
+          "start_ms": 75486,
+          "end_ms": 75782
+        },
+        {
+          "text": ".",
+          "start_ms": 75782,
+          "end_ms": 76137
+        },
+        {
+          "text": "2",
+          "start_ms": 76137,
+          "end_ms": 76433
+        },
+        {
+          "text": "，",
+          "start_ms": 76433,
+          "end_ms": 76641
+        },
+        {
+          "text": "平",
+          "start_ms": 76641,
+          "end_ms": 76937
+        },
+        {
+          "text": "均",
+          "start_ms": 76937,
+          "end_ms": 77233
+        },
+        {
+          "text": "等",
+          "start_ms": 77233,
+          "end_ms": 77529
+        },
+        {
+          "text": "待",
+          "start_ms": 77529,
+          "end_ms": 77825
+        },
+        {
+          "text": "时",
+          "start_ms": 77825,
+          "end_ms": 78121
+        },
+        {
+          "text": "间",
+          "start_ms": 78121,
+          "end_ms": 78417
+        },
+        {
+          "text": "6",
+          "start_ms": 78417,
+          "end_ms": 78713
+        },
+        {
+          "text": ".",
+          "start_ms": 78713,
+          "end_ms": 79068
+        },
+        {
+          "text": "2",
+          "start_ms": 79068,
+          "end_ms": 79364
+        },
+        {
+          "text": "。",
+          "start_ms": 79364,
+          "end_ms": 79719
+        },
+        {
+          "text": "时",
+          "start_ms": 79719,
+          "end_ms": 80015
+        },
+        {
+          "text": "间",
+          "start_ms": 80015,
+          "end_ms": 80311
+        },
+        {
+          "text": "片",
+          "start_ms": 80311,
+          "end_ms": 80607
+        },
+        {
+          "text": "大",
+          "start_ms": 80607,
+          "end_ms": 80903
+        },
+        {
+          "text": "小",
+          "start_ms": 80903,
+          "end_ms": 81199
+        },
+        {
+          "text": "的",
+          "start_ms": 81199,
+          "end_ms": 81495
+        },
+        {
+          "text": "选",
+          "start_ms": 81495,
+          "end_ms": 81791
+        },
+        {
+          "text": "择",
+          "start_ms": 81791,
+          "end_ms": 82087
+        },
+        {
+          "text": "很",
+          "start_ms": 82087,
+          "end_ms": 82384
+        },
+        {
+          "text": "关",
+          "start_ms": 82384,
+          "end_ms": 82680
+        },
+        {
+          "text": "键",
+          "start_ms": 82680,
+          "end_ms": 82976
+        },
+        {
+          "text": "，",
+          "start_ms": 82976,
+          "end_ms": 83183
+        },
+        {
+          "text": "过",
+          "start_ms": 83183,
+          "end_ms": 83479
+        },
+        {
+          "text": "小",
+          "start_ms": 83479,
+          "end_ms": 83775
+        },
+        {
+          "text": "会",
+          "start_ms": 83775,
+          "end_ms": 84071
+        },
+        {
+          "text": "导",
+          "start_ms": 84071,
+          "end_ms": 84367
+        },
+        {
+          "text": "致",
+          "start_ms": 84367,
+          "end_ms": 84663
+        },
+        {
+          "text": "频",
+          "start_ms": 84663,
+          "end_ms": 84959
+        },
+        {
+          "text": "繁",
+          "start_ms": 84959,
+          "end_ms": 85255
+        },
+        {
+          "text": "切",
+          "start_ms": 85255,
+          "end_ms": 85551
+        },
+        {
+          "text": "换",
+          "start_ms": 85551,
+          "end_ms": 85847
+        },
+        {
+          "text": "开",
+          "start_ms": 85847,
+          "end_ms": 86143
+        },
+        {
+          "text": "销",
+          "start_ms": 86143,
+          "end_ms": 86439
+        },
+        {
+          "text": "大",
+          "start_ms": 86439,
+          "end_ms": 86735
+        },
+        {
+          "text": "，",
+          "start_ms": 86735,
+          "end_ms": 86942
+        },
+        {
+          "text": "过",
+          "start_ms": 86942,
+          "end_ms": 87238
+        },
+        {
+          "text": "大",
+          "start_ms": 87238,
+          "end_ms": 87534
+        },
+        {
+          "text": "会",
+          "start_ms": 87534,
+          "end_ms": 87830
+        },
+        {
+          "text": "退",
+          "start_ms": 87830,
+          "end_ms": 88126
+        },
+        {
+          "text": "化",
+          "start_ms": 88126,
+          "end_ms": 88422
+        },
+        {
+          "text": "为",
+          "start_ms": 88422,
+          "end_ms": 88718
+        },
+        {
+          "text": "先",
+          "start_ms": 88718,
+          "end_ms": 89014
+        },
+        {
+          "text": "来",
+          "start_ms": 89014,
+          "end_ms": 89310
+        },
+        {
+          "text": "先",
+          "start_ms": 89310,
+          "end_ms": 89606
+        },
+        {
+          "text": "服",
+          "start_ms": 89606,
+          "end_ms": 89903
+        },
+        {
+          "text": "务",
+          "start_ms": 89903,
+          "end_ms": 90199
+        },
+        {
+          "text": "。",
+          "start_ms": 90199,
+          "end_ms": 90554
+        },
+        {
+          "text": "经",
+          "start_ms": 90554,
+          "end_ms": 90850
+        },
+        {
+          "text": "验",
+          "start_ms": 90850,
+          "end_ms": 91146
+        },
+        {
+          "text": "值",
+          "start_ms": 91146,
+          "end_ms": 91442
+        },
+        {
+          "text": "是",
+          "start_ms": 91442,
+          "end_ms": 91738
+        },
+        {
+          "text": "10",
+          "start_ms": 91738,
+          "end_ms": 92123
+        },
+        {
+          "text": "到",
+          "start_ms": 92123,
+          "end_ms": 92419
+        },
+        {
+          "text": "100",
+          "start_ms": 92419,
+          "end_ms": 92996
+        },
+        {
+          "text": "毫",
+          "start_ms": 92996,
+          "end_ms": 93292
+        },
+        {
+          "text": "秒",
+          "start_ms": 93292,
+          "end_ms": 93588
+        },
+        {
+          "text": "，",
+          "start_ms": 93588,
+          "end_ms": 93795
+        },
+        {
+          "text": "保",
+          "start_ms": 93795,
+          "end_ms": 94091
+        },
+        {
+          "text": "证",
+          "start_ms": 94091,
+          "end_ms": 94387
+        },
+        {
+          "text": "切",
+          "start_ms": 94387,
+          "end_ms": 94683
+        },
+        {
+          "text": "换",
+          "start_ms": 94683,
+          "end_ms": 94979
+        },
+        {
+          "text": "开",
+          "start_ms": 94979,
+          "end_ms": 95275
+        },
+        {
+          "text": "销",
+          "start_ms": 95275,
+          "end_ms": 95571
+        },
+        {
+          "text": "小",
+          "start_ms": 95571,
+          "end_ms": 95867
+        },
+        {
+          "text": "于",
+          "start_ms": 95867,
+          "end_ms": 96163
+        },
+        {
+          "text": "CPU",
+          "start_ms": 96163,
+          "end_ms": 96741
+        },
+        {
+          "text": "时",
+          "start_ms": 96741,
+          "end_ms": 97037
+        },
+        {
+          "text": "间",
+          "start_ms": 97037,
+          "end_ms": 97333
+        },
+        {
+          "text": "的",
+          "start_ms": 97333,
+          "end_ms": 97629
+        },
+        {
+          "text": "1",
+          "start_ms": 97629,
+          "end_ms": 97925
+        },
+        {
+          "text": "。",
+          "start_ms": 97925,
+          "end_ms": 98280
+        }
+      ],
+      "captions": [
+        {
+          "text": "时间片轮转算法的核心思想是把 CPU 时间切分成固定的时间片，每个进程轮流执行一个时间片",
+          "start_ms": 0,
+          "end_ms": 12833
+        },
+        {
+          "text": "我们用时间片 q 等于 2 来演示",
+          "start_ms": 12833,
+          "end_ms": 16902
+        },
+        {
+          "text": "时刻 0，P1 到达并执行 2 单位，剩余 3",
+          "start_ms": 16902,
+          "end_ms": 21910
+        },
+        {
+          "text": "时刻 2，P2 已在时刻 1 到达，P1 排到队尾，P2 执行 2 单位，剩余 1",
+          "start_ms": 21910,
+          "end_ms": 30674
+        },
+        {
+          "text": "时刻 4，P3 执行 1 单位完成",
+          "start_ms": 30674,
+          "end_ms": 34430
+        },
+        {
+          "text": "时刻 6，P4 执行 2 单位完成",
+          "start_ms": 34430,
+          "end_ms": 38186
+        },
+        {
+          "text": "时刻 8，P5 执行 2 单位，剩余 2",
+          "start_ms": 38186,
+          "end_ms": 42255
+        },
+        {
+          "text": "时刻 10，P1 再次执行 2 单位，剩余 1",
+          "start_ms": 42255,
+          "end_ms": 47263
+        },
+        {
+          "text": "时刻 12，P2 执行剩余 1 单位完成",
+          "start_ms": 47263,
+          "end_ms": 51958
+        },
+        {
+          "text": "时刻 13，P5 执行 2 单位，剩余 2",
+          "start_ms": 51958,
+          "end_ms": 56340
+        },
+        {
+          "text": "时刻 14，P1 执行剩余 1 单位完成",
+          "start_ms": 56340,
+          "end_ms": 61035
+        },
+        {
+          "text": "时刻 15，P5 执行剩余 2 单位完成",
+          "start_ms": 61035,
+          "end_ms": 65730
+        },
+        {
+          "text": "最终甘特图是：P1、P2、P3、P4、P5、P1、P2、P5、P1、P5",
+          "start_ms": 65730,
+          "end_ms": 73868
+        },
+        {
+          "text": "平均周转时间 9.2，平均等待时间 6.2",
+          "start_ms": 73868,
+          "end_ms": 78876
+        },
+        {
+          "text": "时间片大小的选择很关键，过小会导致频繁切换开销大，过大会退化为先来先服务",
+          "start_ms": 78876,
+          "end_ms": 89518
+        },
+        {
+          "text": "经验值是 10 到 100 毫秒，保证切换开销小于 CPU 时间的 1%",
+          "start_ms": 89518,
+          "end_ms": 98280
+        }
+      ],
+      "visual_cues": [
+        {
+          "id": "vb1",
+          "kind": "define",
+          "target": "",
+          "summary": "定义RR算法核心思想",
+          "start_ms": 0,
+          "end_ms": 16592,
+          "caption_text": "时间片轮转算法的核心思想"
+        },
+        {
+          "id": "vb2",
+          "kind": "trace_step",
+          "target": "step_1",
+          "summary": "P1首次执行",
+          "start_ms": 16592,
+          "end_ms": 21891,
+          "caption_text": "时刻 0，P1 到达并执行 2 单位"
+        },
+        {
+          "id": "vb3",
+          "kind": "trace_step",
+          "target": "step_3",
+          "summary": "P1时间片用完排队尾",
+          "start_ms": 21891,
+          "end_ms": 30742,
+          "caption_text": "时刻 2，P2 已在时刻 1 到达，P1 排到队尾"
+        },
+        {
+          "id": "vb4",
+          "kind": "trace_step",
+          "target": "step_5",
+          "summary": "P3完成",
+          "start_ms": 30742,
+          "end_ms": 34650,
+          "caption_text": "时刻 4，P3 执行 1 单位完成"
+        },
+        {
+          "id": "vb5",
+          "kind": "trace_step",
+          "target": "step_7",
+          "summary": "P4完成",
+          "start_ms": 34650,
+          "end_ms": 38557,
+          "caption_text": "时刻 6，P4 执行 2 单位完成"
+        },
+        {
+          "id": "vb6",
+          "kind": "trace_step",
+          "target": "step_9",
+          "summary": "P5首次执行",
+          "start_ms": 38557,
+          "end_ms": 42968,
+          "caption_text": "时刻 8，P5 执行 2 单位，剩余 2"
+        },
+        {
+          "id": "vb7",
+          "kind": "trace_step",
+          "target": "step_11",
+          "summary": "P1第二次执行",
+          "start_ms": 42968,
+          "end_ms": 48060,
+          "caption_text": "时刻 10，P1 再次执行 2 单位，剩余 1"
+        },
+        {
+          "id": "vb8",
+          "kind": "trace_step",
+          "target": "step_13",
+          "summary": "P2完成",
+          "start_ms": 48060,
+          "end_ms": 66324,
+          "caption_text": "时刻 12，P2 执行剩余 1 单位完成"
+        },
+        {
+          "id": "vb9",
+          "kind": "checkpoint",
+          "target": "",
+          "summary": "展示完整甘特图",
+          "start_ms": 66324,
+          "end_ms": 73710,
+          "caption_text": "最终甘特图是：P1、P2、P3、P4、P5、P1、P2、P5、P1、P5"
+        },
+        {
+          "id": "vb10",
+          "kind": "checkpoint",
+          "target": "",
+          "summary": "计算结果",
+          "start_ms": 73710,
+          "end_ms": 79719,
+          "caption_text": "平均周转时间 9.2，平均等待时间 6.2"
+        },
+        {
+          "id": "vb11",
+          "kind": "compare",
+          "target": "",
+          "summary": "时间片权衡",
+          "start_ms": 79719,
+          "end_ms": 90554,
+          "caption_text": "时间片大小的选择很关键"
+        },
+        {
+          "id": "vb12",
+          "kind": "misconception",
+          "target": "",
+          "summary": "时间片经验值",
+          "start_ms": 90554,
+          "end_ms": 98280,
+          "caption_text": "经验值是 10 到 100 毫秒"
+        }
+      ]
+    },
+    {
+      "scene_id": "s6",
+      "index": 6,
+      "role": "recap",
+      "title": "Introduction to Data Structures",
+      "learning_objective": "掌握三种算法的性能特征对比与适用场景匹配",
+      "visual_type": "compare_summary",
+      "visual": {
+        "central_concept": "Data Structures",
+        "key_components": [
+          "Arrays",
+          "Linked Lists",
+          "Stacks",
+          "Queues"
+        ]
+      },
+      "narration": "Welcome to the course. Today we will explore the fundamental concepts of data structures and how they organize information efficiently.",
+      "audio_src": "/render-assets/.render-1664efbb11e943f5abf581fb2e79d718/06-s6.mp3",
+      "start_ms": 370532,
+      "duration_ms": 8464,
+      "audio_duration_ms": 8064,
+      "caption_words": [
+        {
+          "text": "Welcome",
+          "start_ms": 0,
+          "end_ms": 480
+        },
+        {
+          "text": "to",
+          "start_ms": 480,
+          "end_ms": 617
+        },
+        {
+          "text": "the",
+          "start_ms": 617,
+          "end_ms": 822
+        },
+        {
+          "text": "course",
+          "start_ms": 822,
+          "end_ms": 1233
+        },
+        {
+          "text": ".",
+          "start_ms": 1233,
+          "end_ms": 1360
+        },
+        {
+          "text": "Today",
+          "start_ms": 1360,
+          "end_ms": 1702
+        },
+        {
+          "text": "we",
+          "start_ms": 1702,
+          "end_ms": 1839
+        },
+        {
+          "text": "will",
+          "start_ms": 1839,
+          "end_ms": 2114
+        },
+        {
+          "text": "explore",
+          "start_ms": 2114,
+          "end_ms": 2593
+        },
+        {
+          "text": "the",
+          "start_ms": 2593,
+          "end_ms": 2799
+        },
+        {
+          "text": "fundamental",
+          "start_ms": 2799,
+          "end_ms": 3552
+        },
+        {
+          "text": "concepts",
+          "start_ms": 3552,
+          "end_ms": 4101
+        },
+        {
+          "text": "of",
+          "start_ms": 4101,
+          "end_ms": 4238
+        },
+        {
+          "text": "data",
+          "start_ms": 4238,
+          "end_ms": 4512
+        },
+        {
+          "text": "structures",
+          "start_ms": 4512,
+          "end_ms": 5197
+        },
+        {
+          "text": "and",
+          "start_ms": 5197,
+          "end_ms": 5402
+        },
+        {
+          "text": "how",
+          "start_ms": 5402,
+          "end_ms": 5608
+        },
+        {
+          "text": "they",
+          "start_ms": 5608,
+          "end_ms": 5882
+        },
+        {
+          "text": "organize",
+          "start_ms": 5882,
+          "end_ms": 6430
+        },
+        {
+          "text": "information",
+          "start_ms": 6430,
+          "end_ms": 7184
+        },
+        {
+          "text": "efficiently",
+          "start_ms": 7184,
+          "end_ms": 7938
+        },
+        {
+          "text": ".",
+          "start_ms": 7938,
+          "end_ms": 8064
+        }
+      ],
+      "captions": [
+        {
+          "text": "Welcome to the course. Today we will explore the fundamental concepts of data structures and how they organize information efficiently.",
+          "start_ms": 0,
+          "end_ms": 8064
+        }
+      ],
+      "visual_cues": [
+        {
+          "id": "beat_001",
+          "kind": "define",
+          "target": "Data Structures",
+          "summary": "Definition of data structures as a way to store and organize data.",
+          "start_ms": 2799,
+          "end_ms": 8064,
+          "caption_text": "fundamental concepts of data structures"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "origin": "resource",
+    "resource_id": 2,
+    "learning_scenario": "self_study",
+    "narrative": "从\"有限的CPU如何服务多个进程\"这一核心问题出发，通过统一的进程示例数据，逐步演示FCFS、SJF、RR三种核心调度算法的决策逻辑与执行过程，对比其性能差异与适用场景，帮助学习者建立\"根据场景选择算法\"的系统观。",
+    "source_ids": [
+      "mindmap",
+      "quiz",
+      "reading",
+      "code",
+      "content",
+      "teaching_plan"
+    ]
+  }
+}

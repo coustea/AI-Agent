@@ -27,21 +27,20 @@ class CodeAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        config = {
-            **input_data.agent_config,
-            "_teaching_plan": input_data.teaching_plan,
-        }
         result = await self._generate_code(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:32],
-            config=config,
+            config=input_data.agent_config,
         )
         await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
+        # Path node context: merge difficulty → output_style mapping
+        node_difficulty = input_data.difficulty or "beginner"
+        output_style_map = {"beginner": "tutorial", "intermediate": "reference", "advanced": "challenge"}
         config = {
-            "difficulty": input_data.difficulty or "beginner",
+            "output_style": output_style_map.get(node_difficulty, "tutorial"),
             **input_data.agent_config,
         }
         result = await self._generate_code(
@@ -67,10 +66,20 @@ class CodeAgent(BaseResourceAgent):
         此处仅提取运行时需要的参数（如 search 关键词、metrics 统计）。
         """
         language = config.get("programming_language") or "python"
-        case_type = config.get("case_type") or "basic_demo"
-        difficulty = config.get("difficulty") or "beginner"
+        output_style = config.get("output_style") or "tutorial"
+        focus = config.get("focus") or "syntax"
+        include_tests = config.get("include_tests", False)
 
         input_text += "\n\n请生成教学代码示例，包含代码注释和说明，输出为 Markdown 格式（代码块内为代码）。"
+        if output_style == "tutorial":
+            input_text += "\n请提供完整可运行的代码，包含逐步注释和运行说明。"
+        elif output_style == "reference":
+            input_text += "\n请提供精简的参考实现，聚焦核心逻辑和接口说明，省略冗余注释。"
+        elif output_style == "challenge":
+            input_text += "\n请提供框架代码和提示引导，关键实现部分留空让学习者填入。"
+
+        if include_tests:
+            input_text += "\n请在代码末尾附带测试用例（使用 assert 或单元测试框架）。"
 
         # 执行搜索以获取该知识点的最佳实践或真实代码示例
         await self.emitter.send(self.agent_id, "running", "正在搜索相关代码最佳实践...", 30)
@@ -92,6 +101,6 @@ class CodeAgent(BaseResourceAgent):
             file_type="markdown",
             title=f"{title_prefix} - 代码示例",
             summary="生成教学代码示例",
-            metrics={"language": language, "case_type": case_type, "difficulty": difficulty},
-            metadata={"agent_id": "code", "language": language, "case_type": case_type, "difficulty": difficulty},
+            metrics={"language": language, "output_style": output_style, "focus": focus},
+            metadata={"agent_id": "code", "language": language, "output_style": output_style, "focus": focus, "include_tests": include_tests},
         )

@@ -49,9 +49,13 @@ export function useAlgorithmTemplate() {
   }
 
   /** 切换语言/算法时自动重载模板 */
-  watch([language, algorithm], () => {
-    loadTemplate()
-  })
+  watch(
+    [language, algorithm],
+    () => {
+      loadTemplate()
+    },
+    { immediate: true },
+  )
 
   /** 重置到默认模板 */
   function resetTemplate() {

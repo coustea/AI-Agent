@@ -20,7 +20,6 @@ import type { TraceEvent } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
 const nodes = computed(() => { const raw = props.currentEvent?.state?.structure?.nodes; return Array.isArray(raw) ? raw : [] })
-const edges = computed(() => { const raw = props.currentEvent?.state?.structure?.edges; return Array.isArray(raw) ? raw : [] })
 function nodeStyle(node: any) { return { left: `${(node.x ?? 0) * 80}px`, top: `${(node.y ?? 0) * 80}px` } }
 </script>
 

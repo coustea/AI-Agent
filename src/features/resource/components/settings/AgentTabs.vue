@@ -100,21 +100,20 @@ function getSummary(id: string) {
       javascript: 'JS',
       typescript: 'TS',
     }
-    const difficulty: Record<string, string> = {
-      beginner: '入门',
-      intermediate: '进阶',
-      advanced: '挑战',
+    const outputStyle: Record<string, string> = {
+      tutorial: '教学',
+      reference: '参考',
+      challenge: '挑战',
     }
-    return `${language[configs.code.programming_language] || configs.code.programming_language} · ${difficulty[configs.code.difficulty] || configs.code.difficulty}`
+    return `${language[configs.code.programming_language] || configs.code.programming_language} · ${outputStyle[configs.code.output_style] || configs.code.output_style}`
   }
   if (id === 'reading') {
-    const depth: Record<string, string> = {
-      course_extended: '课内',
-      tag_reading: '学术',
-      engineering: '工程',
-      frontier: '前沿',
+    const coverage: Record<string, string> = {
+      core: '精选',
+      extended: '延伸',
+      broad: '广泛',
     }
-    return `${depth[configs.reading.reading_depth] || configs.reading.reading_depth} · ${configs.reading.max_items}篇`
+    return `${coverage[configs.reading.coverage] || configs.reading.coverage} · ${configs.reading.max_items}篇`
   }
   if (id === 'ppt') {
     const style: Record<string, string> = {

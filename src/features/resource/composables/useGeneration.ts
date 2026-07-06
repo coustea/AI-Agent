@@ -41,9 +41,9 @@ export function useGeneration() {
   const agentConfigs = ref<AnyAgentConfigs>({
     content: { structure: 'progressive', depth_level: 'standard', focus_mode: 'full_coverage', include_examples: true },
     mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
-    quiz: { question_count: 5, difficulty_mode: 'adaptive', exam_style: 'school', question_types: ['single', 'multiple', 'judge', 'fill'] },
-    code: { programming_language: 'python', case_type: 'basic_demo', difficulty: 'beginner', focus: 'syntax' },
-    reading: { reading_depth: 'course_extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
+    quiz: { question_count: 5, difficulty_mode: 'adaptive', emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
+    code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
+    reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'concept', density: 'standard', focus: ['core_concepts'] },
     cartoon: { style: 'diagram', depth: 'standard', pace: 'normal', visuals: 'balanced' },
     video: { style: 'precision_light', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
@@ -426,7 +426,7 @@ export function useGeneration() {
       const requestParams: ResourceGenerationRequest = {
         learning_need: naturalInput.value,
         learning_scenario: learningScenario.value,
-        selected_agents: enabledAgentIds.value.map((id, index) => ({ agent_id: id, enabled: true, priority: index })).filter(a => a.enabled),
+        selected_agents: enabledAgentIds.value.map((id) => ({ agent_id: id, enabled: true })).filter(a => a.enabled),
         agent_configs: agentConfigs.value,
       }
       const { resource_id } = (await startResourceGeneration(requestParams)).data.data

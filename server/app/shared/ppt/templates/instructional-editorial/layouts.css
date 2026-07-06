@@ -256,3 +256,68 @@
 .slide[data-title-size="compact"] .slide-title { font-size: 50px; }
 .slide[data-title-size="compact"][data-layout^="cover-"] .slide-title,
 .slide[data-title-size="compact"][data-layout="closing-line"] .slide-title { font-size: 72px; }
+
+/* ===== 新增布局：层级树 ===== */
+[data-layout="hierarchy-tree"] .content-stage { display: grid; place-items: center; }
+.hierarchy-tree { display: flex; flex-direction: column; align-items: center; gap: 24px; width: 100%; }
+.hierarchy-node {
+  padding: 24px 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(23, 32, 43, 0.1);
+  background: #ffffff;
+  text-align: center;
+  min-width: 200px;
+  box-shadow: 0 4px 12px rgba(23, 32, 43, 0.05);
+}
+.hierarchy-node.level-0 { border-color: var(--accent); background: var(--accent-soft); }
+.hierarchy-node.level-1 { border-color: var(--signal); border-left: 4px solid var(--signal); }
+.hierarchy-node.level-2 { border-color: var(--muted); }
+.hierarchy-label { font: 800 22px var(--font-mono); color: var(--accent); }
+.hierarchy-detail { margin-top: 8px; font-size: 16px; color: var(--muted); line-height: 1.5; }
+.hierarchy-children { display: flex; gap: 20px; margin-top: 16px; }
+
+/* ===== 新增布局：时间线 ===== */
+[data-layout="timeline-horizontal"] .content-stage { display: grid; place-items: center; }
+.timeline { display: flex; gap: 32px; align-items: flex-start; width: 100%; padding: 40px 0; }
+.timeline-event { position: relative; flex: 1; text-align: center; }
+.timeline-event::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: -16px;
+  right: -16px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--signal));
+}
+.timeline-time {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: white;
+  font: 800 14px var(--font-mono);
+  position: relative;
+  z-index: 1;
+}
+.timeline-title { margin-top: 20px; font-size: 20px; font-weight: 800; }
+.timeline-detail { margin-top: 8px; font-size: 15px; color: var(--muted); line-height: 1.5; }
+
+/* ===== 新增布局：矩阵表 ===== */
+[data-layout="matrix-grid"] .content-stage { display: grid; place-items: center; }
+.matrix-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: 100%; }
+.matrix-cell {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(23, 32, 43, 0.08);
+  background: #ffffff;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.5;
+  box-shadow: 0 2px 8px rgba(23, 32, 43, 0.03);
+}
+.matrix-cell.highlight {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}

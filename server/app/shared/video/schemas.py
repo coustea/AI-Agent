@@ -140,7 +140,7 @@ class SceneDraft(BaseModel):
     title: str = Field(min_length=1)
     narration: str = Field(min_length=1)
     visual_type: VisualType
-    visual: dict[str, Any] = Field(min_length=1)
+    visual: Any = Field(min_length=1)
     visual_beats: list[VisualBeatDraft] = Field(default_factory=list)
 
 
@@ -206,7 +206,7 @@ class VideoScene(BaseModel):
     title: str = Field(min_length=1)
     learning_objective: str = Field(min_length=1)
     visual_type: VisualType
-    visual: dict[str, Any] = Field(min_length=1)
+    visual: Any = Field(min_length=1)
     narration: str = Field(min_length=1)
     audio_src: str = Field(min_length=1)
     start_ms: int = Field(ge=0)

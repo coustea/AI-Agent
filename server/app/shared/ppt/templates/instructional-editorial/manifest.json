@@ -1,7 +1,7 @@
 {
   "id": "instructional-editorial",
   "name": "教学编辑部",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "明亮、克制、具有纸张与编辑排版气质的知识讲解模板",
   "family": "editorial",
   "scheme": "light",
@@ -27,6 +27,9 @@
     {"id":"formula-build","name":"公式推导","shapes":["formula"],"roles":["derive","explain"],"skeleton":"formula","animation":"build","point_capacity":6,"step_capacity":5},
     {"id":"misconception-reveal","name":"误区纠正","shapes":["comparison","quiz"],"roles":["practice","case"],"skeleton":"misconception","animation":"resolve","point_capacity":4,"step_capacity":0},
     {"id":"summary-map","name":"知识地图","shapes":["concept","sequence","statement"],"roles":["summary"],"skeleton":"summary","animation":"reveal","point_capacity":6,"step_capacity":5},
-    {"id":"closing-line","name":"收束页","shapes":["statement"],"roles":["closing"],"skeleton":"closing","animation":"focus","point_capacity":3,"step_capacity":0}
+    {"id":"closing-line","name":"收束页","shapes":["statement"],"roles":["closing"],"skeleton":"closing","animation":"focus","point_capacity":3,"step_capacity":0},
+    {"id":"hierarchy-tree","name":"层级树","shapes":["hierarchy"],"roles":["explain","derive"],"skeleton":"hierarchy","animation":"build","point_capacity":0,"step_capacity":0},
+    {"id":"timeline-horizontal","name":"时间线","shapes":["timeline"],"roles":["explain","case"],"skeleton":"timeline","animation":"trace","point_capacity":0,"step_capacity":0},
+    {"id":"matrix-grid","name":"矩阵表","shapes":["matrix"],"roles":["explain","derive"],"skeleton":"matrix","animation":"reveal","point_capacity":0,"step_capacity":0}
   ]
 }

@@ -27,7 +27,8 @@ from app.auth.security import get_current_user, get_current_user_flexible
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection
+from app.profile.service import ProfileService
+from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection, AgentConfigs
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.infra.response import HttpResponse
@@ -76,6 +77,8 @@ async def create_resource_task(
     await events.open()
 
     # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
+    profile_service = ProfileService()
+    profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
     asyncio.create_task(
         run_multi_agent_generation(
             user_id=current_user.id,
@@ -87,6 +90,7 @@ async def create_resource_task(
                 "agent_configs": req.agent_configs.model_dump(mode="json"),
                 "username": current_user.username,
             },
+            profile={"markdown": profile_markdown},
         )
     )
 
@@ -107,12 +111,17 @@ async def create_single_resource_task(
     )
 
     service = ResourceService(session)
+    # Single-agent 模式只有 1 个 Agent，不应受多 Agent 最少数量验证限制。
+    # 使用 model_construct 绕过 Pydantic 验证，因为 create_task 只需要 learning_need。
+    request = ResourceGenerationRequest.model_construct(
+        learning_need=req.learning_need,
+        learning_scenario="self_study",
+        selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
+        agent_configs=AgentConfigs(),
+    )
     result = await service.create_task(
         user_id=current_user.id,
-        request=ResourceGenerationRequest(
-            learning_need=req.learning_need,
-            selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
-        ),
+        request=request,
     )
     resource_id = result["resource_id"]
 
@@ -124,6 +133,8 @@ async def create_single_resource_task(
     await events.open()
 
     # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
+    profile_service = ProfileService()
+    profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
     asyncio.create_task(
         run_multi_agent_generation(
             user_id=current_user.id,
@@ -134,6 +145,7 @@ async def create_single_resource_task(
                 "learning_scenario": "self_study",
                 "agent_configs": {},
             },
+            profile={"markdown": profile_markdown},
         )
     )
 

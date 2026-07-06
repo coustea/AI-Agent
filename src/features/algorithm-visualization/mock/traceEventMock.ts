@@ -34,18 +34,19 @@ export function createBubbleSortEvents(inputArray: number[] = [5, 3, 8, 1, 2]): 
     for (let j = 0; j < nums.length - i - 1; j++) {
       emit('compare', { array: [...nums] }, {
         targets: [j, j + 1],
-        message: `比较 nums[${j}]=${nums[j]} 和 nums[${j + 1}]=${nums[j + 1]}`,
+        message: `比较 nums[${j}]=${nums[j]!} 和 nums[${j + 1}]=${nums[j + 1]!}`,
         line: 6,
       })
 
-      if (nums[j] > nums[j + 1]) {
-        const left = nums[j]
-        const right = nums[j + 1]
-        nums[j] = right
-        nums[j + 1] = left
+      const leftVal = nums[j]!
+      const rightVal = nums[j + 1]!
+
+      if (leftVal > rightVal) {
+        nums[j] = rightVal
+        nums[j + 1] = leftVal
         emit('swap', { array: [...nums] }, {
           targets: [j, j + 1],
-          message: `${left} > ${right}，交换位置`,
+          message: `${leftVal} > ${rightVal}，交换位置`,
           line: 7,
         })
       }

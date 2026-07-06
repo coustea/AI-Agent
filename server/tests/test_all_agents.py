@@ -6,7 +6,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.resource.schemas import TeachingPlan, DownstreamContext, AgentResult, ReusableAssets
+from app.resource.schemas import ResourcePlan, DownstreamContext, AgentResult
 from app.resource.agents.content import ContentAgent
 from app.resource.agents.mindmap import MindmapAgent
 from app.resource.agents.quiz import QuizAgent
@@ -18,69 +18,20 @@ from app.resource.agents.planning import PlanningAgent
 
 
 def test_core_schemas_exist():
-    """TeachingPlan, DownstreamContext, AgentResult 必须可用。"""
-    assert hasattr(TeachingPlan, "model_validate")
+    """ResourcePlan, DownstreamContext, AgentResult 必须可用。"""
+    assert hasattr(ResourcePlan, "model_validate")
     assert hasattr(DownstreamContext, "model_validate")
     assert hasattr(AgentResult, "model_validate")
 
 
-def test_teaching_plan_validates():
-    plan = TeachingPlan.model_validate({
-        "schema_version": "3.0",
-        "global_plan": {
-            "learning_goal": "理解三次握手和可靠传输",
-            "teaching_strategy": "先直观类比，再协议细节",
-            "difficulty": "beginner",
-            "outline": [
-                {
-                    "id": "o1",
-                    "title": "TCP 要解决的问题",
-                    "learning_objective": "理解可靠传输的目标",
-                    "key_points": ["连接", "确认", "重传"],
-                    "must_not_miss": True,
-                },
-                {
-                    "id": "o2",
-                    "title": "三次握手流程",
-                    "learning_objective": "理解握手流程",
-                    "key_points": ["SYN", "ACK"],
-                    "must_not_miss": True,
-                },
-                {
-                    "id": "o3",
-                    "title": "可靠传输实现",
-                    "learning_objective": "理解重传机制",
-                    "key_points": ["滑动窗口"],
-                    "must_not_miss": False,
-                }
-            ]
-        },
-        "worker_tasks": {
-            "content": {
-                "objective": "编写讲解文本",
-                "assigned_sections": [
-                    {
-                        "outline_id": "o1",
-                        "responsibility": "primary",
-                        "instruction": "详细讲解可靠传输目标"
-                    },
-                    {
-                        "outline_id": "o2",
-                        "responsibility": "supporting",
-                        "instruction": "配合图解流程"
-                    }
-                ],
-                "deliverable": {
-                    "format": "markdown",
-                    "requirements": ["字数不少于500字"]
-                },
-                "acceptance_criteria": ["大纲点全覆盖"],
-                "exclusions": ["不谈拥塞控制"],
-                "avoid_overlap_with": []
-            }
-        }
-    })
-    assert plan.outline[0].id == "o1"
+def test_resource_plan_validates():
+    plan = ResourcePlan(
+        content="# 资源生成协同计划\n\n## 1. 用户需求理解\n- 理解三次握手\n\n### [content]\n- 生成目标：讲解TCP三次握手\n- 重点聚焦：流程\n- 必须包含：时序图\n- 应避免：拥塞控制\n\n### [mindmap]\n- 生成目标：知识结构\n- 重点聚焦：TCP连接\n- 必须包含：握手步骤\n- 应避免：重复讲解",
+        title="TCP三次握手",
+    )
+    assert plan.agent_ids == ["content", "mindmap"]
+    assert plan.has_agent("content")
+    assert not plan.has_agent("quiz")
 
 
 def test_downstream_context_validates():
@@ -88,16 +39,11 @@ def test_downstream_context_validates():
         source_agent="content",
         title="TCP 内容",
         one_sentence_summary="讲解 TCP 三次握手",
-        reusable_assets=ReusableAssets(
-            examples=["电话拨通比喻"],
-            misconceptions=["两次握手足够"],
-            visual_ideas=["时序箭线图"],
-            practice_refs=[],
-            code_refs=[]
-        )
+        materials=["电话拨通比喻", "时序箭线图"],
     )
     assert ctx.source_agent == "content"
     assert ctx.title == "TCP 内容"
+    assert len(ctx.materials) == 2
 
 
 def test_agent_result_rejects_unknown_fields():

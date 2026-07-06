@@ -324,6 +324,7 @@ class CartoonVideoRequest(StrictModel):
 
     learning_need: str = Field(min_length=1)
     profile: dict[str, Any] | str
+    teaching_plan: str | None = None
 
     # 视觉风格 — 影响 CSS 主题配色
     style: Literal["diagram", "minimal", "dark_tech", "chalkboard"] = "diagram"

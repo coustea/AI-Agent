@@ -65,7 +65,7 @@ class TestRetrievalResult:
         assert result.chunks == []
 
     def test_unavailable_status(self):
-        result = RetrievalResult(status="unavailable", query="test", message="Ollama down")
+        result = RetrievalResult(status="unavailable", query="test", message="嵌入服务不可用")
         assert result.status == "unavailable"
 
     def test_chunks_default_not_shared(self):

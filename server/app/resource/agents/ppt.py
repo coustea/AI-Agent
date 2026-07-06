@@ -36,20 +36,15 @@ def _source_artifacts(
 ) -> list[PPTSource]:
     artifacts: list[PPTSource] = []
     for agent_id, handoff in handoffs.items():
-        materials = [
-            *handoff.materials,
-            *handoff.reusable_assets.examples[:4],
-            *handoff.reusable_assets.visual_ideas[:4],
-        ]
-        deduped = list(
-            dict.fromkeys(str(item).strip() for item in materials if str(item).strip())
+        materials = list(
+            dict.fromkeys(str(item).strip() for item in handoff.materials if str(item).strip())
         )
         artifacts.append(
             PPTSource(
                 agent_id=agent_id,
                 title=handoff.title or agent_id,
                 summary=handoff.one_sentence_summary or handoff.title or agent_id,
-                materials=deduped[:12],
+                materials=materials[:12],
             )
         )
     return artifacts
@@ -81,7 +76,7 @@ def build_resource_ppt_request(input_data: ResourceInput) -> ResourcePPTRequest:
         learning_scenario=input_data.learning_scenario,
         profile=input_data.profile or {},
         teaching_plan=(
-            input_data.teaching_plan.model_dump(mode="json")
+            input_data.teaching_plan
             if input_data.teaching_plan
             else None
         ),

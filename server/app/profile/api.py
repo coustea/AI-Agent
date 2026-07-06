@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 
 from app.auth.security import get_current_user
 from app.infra.database import get_session
@@ -67,38 +67,34 @@ async def get_profile_onboarding(
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """更新 onboarding 信息：同步保存基础信息 → 同步 LLM 推理 → 同步评分。
+    """更新 onboarding 信息：同步保存基础信息 → 异步后台 LLM 推理 + 评分。
 
-    全部同步完成后再返回，确保前端进入个人中心时画像和分数一定存在。
-    如果 LLM 推理失败，基础信息仍然保存成功，但返回警告。
+    保存基础资料到数据库后立即返回，由后台任务在后台完成画像构建。
     """
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
     svc = get_profile_service()
 
-    # 1. 同步保存基础信息
+    # 1. 同步保存基础信息到数据库，确保后续请求能获取到最新的基本资料
     await svc.save_onboarding_info(
         user_id=user_id,
         payload=payload_data,
         db=session,
     )
-    logger.info("[ProfileAPI] onboarding base info saved: user_id=%s", user_id)
+    logger.info("[ProfileAPI] onboarding base info saved synchronously: user_id=%s", user_id)
 
-    # 2. 同步 LLM 推理 + 评分（在同一个请求内完成）
-    inference_ok = False
-    try:
-        await svc.infer_profile_from_onboarding(
-            user_id=user_id,
-            payload=payload_data,
-        )
-        inference_ok = True
-        logger.info("[ProfileAPI] onboarding inference + scoring done: user_id=%s", user_id)
-    except Exception as exc:
-        logger.error("[ProfileAPI] onboarding inference failed: user_id=%s err=%s", user_id, exc)
+    # 2. 异步后台触发画像构建任务（推理 + 评分）
+    background_tasks.add_task(
+        svc.infer_profile_from_onboarding,
+        user_id=user_id,
+        payload=payload_data,
+    )
+    logger.info("[ProfileAPI] onboarding background task registered: user_id=%s", user_id)
 
     return HttpResponse.success(data={
-        "inference_ok": inference_ok,
+        "inference_ok": True,
     })

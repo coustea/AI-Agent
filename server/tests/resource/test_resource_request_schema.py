@@ -20,9 +20,9 @@ def test_resource_generation_request_accepts_current_frontend_payload():
             "learning_need": "复习 TCP 三次握手",
             "learning_scenario": "daily_review",
             "selected_agents": [
-                {"agent_id": "content", "enabled": True, "priority": 0},
-                {"agent_id": "mindmap", "enabled": True, "priority": 1},
-                {"agent_id": "quiz", "enabled": True, "priority": 2},
+                {"agent_id": "content", "enabled": True},
+                {"agent_id": "mindmap", "enabled": True},
+                {"agent_id": "quiz", "enabled": True},
             ],
             "agent_configs": {
                 "content": {
@@ -39,18 +39,18 @@ def test_resource_generation_request_accepts_current_frontend_payload():
                 },
                 "code": {
                     "programming_language": "python",
-                    "case_type": "basic_demo",
-                    "difficulty": "beginner",
+                    "output_style": "tutorial",
                     "focus": "syntax",
+                    "include_tests": False,
                 },
                 "quiz": {
                     "question_count": 5,
                     "difficulty_mode": "basic",
-                    "exam_style": "school",
+                    "emphasis": "foundations",
                     "question_types": ["single", "multiple", "judge", "fill"],
                 },
                 "reading": {
-                    "reading_depth": "course_extended",
+                    "coverage": "extended",
                     "max_items": 5,
                     "language_preference": "both",
                     "focus": "textbook",
@@ -68,22 +68,9 @@ def test_resource_generation_request_accepts_current_frontend_payload():
     assert request.learning_need == "复习 TCP 三次握手"
     assert request.enabled_agent_ids() == ["content", "mindmap", "quiz"]
     assert request.agent_configs.quiz.difficulty_mode == "basic"
-    assert request.agent_configs.quiz.question_types == ["single", "multiple", "judge", "fill"]
-    assert request.agent_configs.reading.language_preference == "both"
-
-
-def test_resource_generation_request_normalizes_frontend_bilingual_alias():
-    request = ResourceGenerationRequest.model_validate(
-        {
-            "learning_need": "阅读操作系统论文",
-            "agent_configs": {
-                "reading": {
-                    "language_preference": "bilingual",
-                },
-            },
-        }
-    )
-
+    assert request.agent_configs.quiz.emphasis == "foundations"
+    assert request.agent_configs.code.output_style == "tutorial"
+    assert request.agent_configs.reading.coverage == "extended"
     assert request.agent_configs.reading.language_preference == "both"
 
 
@@ -103,7 +90,7 @@ def test_resource_generation_request_rejects_legacy_diagram_agent():
             {
                 "learning_need": "复习 TCP 三次握手",
                 "selected_agents": [
-                    {"agent_id": "diagram", "enabled": True, "priority": 0},
+                    {"agent_id": "diagram", "enabled": True},
                 ],
             }
         )
@@ -114,9 +101,9 @@ def test_resource_generation_request_accepts_video_agent_config():
         {
             "learning_need": "把 TCP 三次握手生成讲解视频",
             "selected_agents": [
-                {"agent_id": "content", "enabled": True, "priority": 0},
-                {"agent_id": "quiz", "enabled": True, "priority": 1},
-                {"agent_id": "video", "enabled": True, "priority": 2},
+                {"agent_id": "content", "enabled": True},
+                {"agent_id": "quiz", "enabled": True},
+                {"agent_id": "video", "enabled": True},
             ],
             "agent_configs": {
                 "video": {

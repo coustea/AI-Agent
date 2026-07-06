@@ -93,7 +93,7 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
 
 
 def check_index_health() -> IndexHealth:
-    """检查知识库索引健康状态（非阻塞，不请求 Ollama）。
+    """检查知识库索引健康状态（非阻塞，不请求嵌入服务）。
 
     供 FastAPI lifespan 调用，异常不影响启动。
     """

@@ -1,0 +1,580 @@
+{
+  "duration": 24.768,
+  "captions": [
+    {
+      "text": "生",
+      "start_ms": 0,
+      "end_ms": 201
+    },
+    {
+      "text": "成",
+      "start_ms": 201,
+      "end_ms": 403
+    },
+    {
+      "text": "器",
+      "start_ms": 403,
+      "end_ms": 604
+    },
+    {
+      "text": "是",
+      "start_ms": 604,
+      "end_ms": 806
+    },
+    {
+      "text": "一",
+      "start_ms": 806,
+      "end_ms": 1007
+    },
+    {
+      "text": "种",
+      "start_ms": 1007,
+      "end_ms": 1209
+    },
+    {
+      "text": "特",
+      "start_ms": 1209,
+      "end_ms": 1410
+    },
+    {
+      "text": "殊",
+      "start_ms": 1410,
+      "end_ms": 1612
+    },
+    {
+      "text": "的",
+      "start_ms": 1612,
+      "end_ms": 1813
+    },
+    {
+      "text": "迭",
+      "start_ms": 1813,
+      "end_ms": 2014
+    },
+    {
+      "text": "代",
+      "start_ms": 2014,
+      "end_ms": 2216
+    },
+    {
+      "text": "器",
+      "start_ms": 2216,
+      "end_ms": 2417
+    },
+    {
+      "text": "。",
+      "start_ms": 2417,
+      "end_ms": 2659
+    },
+    {
+      "text": "当",
+      "start_ms": 2659,
+      "end_ms": 2861
+    },
+    {
+      "text": "你",
+      "start_ms": 2861,
+      "end_ms": 3062
+    },
+    {
+      "text": "写",
+      "start_ms": 3062,
+      "end_ms": 3263
+    },
+    {
+      "text": "下",
+      "start_ms": 3263,
+      "end_ms": 3465
+    },
+    {
+      "text": "包",
+      "start_ms": 3465,
+      "end_ms": 3666
+    },
+    {
+      "text": "含",
+      "start_ms": 3666,
+      "end_ms": 3868
+    },
+    {
+      "text": "yield",
+      "start_ms": 3868,
+      "end_ms": 4523
+    },
+    {
+      "text": "关",
+      "start_ms": 4523,
+      "end_ms": 4724
+    },
+    {
+      "text": "键",
+      "start_ms": 4724,
+      "end_ms": 4925
+    },
+    {
+      "text": "字",
+      "start_ms": 4925,
+      "end_ms": 5127
+    },
+    {
+      "text": "的",
+      "start_ms": 5127,
+      "end_ms": 5328
+    },
+    {
+      "text": "函",
+      "start_ms": 5328,
+      "end_ms": 5530
+    },
+    {
+      "text": "数",
+      "start_ms": 5530,
+      "end_ms": 5731
+    },
+    {
+      "text": "时",
+      "start_ms": 5731,
+      "end_ms": 5933
+    },
+    {
+      "text": "，",
+      "start_ms": 5933,
+      "end_ms": 6074
+    },
+    {
+      "text": "Python",
+      "start_ms": 6074,
+      "end_ms": 6859
+    },
+    {
+      "text": "会",
+      "start_ms": 6859,
+      "end_ms": 7061
+    },
+    {
+      "text": "自",
+      "start_ms": 7061,
+      "end_ms": 7262
+    },
+    {
+      "text": "动",
+      "start_ms": 7262,
+      "end_ms": 7464
+    },
+    {
+      "text": "为",
+      "start_ms": 7464,
+      "end_ms": 7665
+    },
+    {
+      "text": "它",
+      "start_ms": 7665,
+      "end_ms": 7867
+    },
+    {
+      "text": "生",
+      "start_ms": 7867,
+      "end_ms": 8068
+    },
+    {
+      "text": "成",
+      "start_ms": 8068,
+      "end_ms": 8269
+    },
+    {
+      "text": "iter",
+      "start_ms": 8269,
+      "end_ms": 8793
+    },
+    {
+      "text": "和",
+      "start_ms": 8793,
+      "end_ms": 8995
+    },
+    {
+      "text": "next",
+      "start_ms": 8995,
+      "end_ms": 9518
+    },
+    {
+      "text": "方",
+      "start_ms": 9518,
+      "end_ms": 9720
+    },
+    {
+      "text": "法",
+      "start_ms": 9720,
+      "end_ms": 9921
+    },
+    {
+      "text": "。",
+      "start_ms": 9921,
+      "end_ms": 10163
+    },
+    {
+      "text": "这",
+      "start_ms": 10163,
+      "end_ms": 10364
+    },
+    {
+      "text": "意",
+      "start_ms": 10364,
+      "end_ms": 10566
+    },
+    {
+      "text": "味",
+      "start_ms": 10566,
+      "end_ms": 10767
+    },
+    {
+      "text": "着",
+      "start_ms": 10767,
+      "end_ms": 10969
+    },
+    {
+      "text": "生",
+      "start_ms": 10969,
+      "end_ms": 11170
+    },
+    {
+      "text": "成",
+      "start_ms": 11170,
+      "end_ms": 11372
+    },
+    {
+      "text": "器",
+      "start_ms": 11372,
+      "end_ms": 11573
+    },
+    {
+      "text": "天",
+      "start_ms": 11573,
+      "end_ms": 11775
+    },
+    {
+      "text": "然",
+      "start_ms": 11775,
+      "end_ms": 11976
+    },
+    {
+      "text": "满",
+      "start_ms": 11976,
+      "end_ms": 12178
+    },
+    {
+      "text": "足",
+      "start_ms": 12178,
+      "end_ms": 12379
+    },
+    {
+      "text": "迭",
+      "start_ms": 12379,
+      "end_ms": 12580
+    },
+    {
+      "text": "代",
+      "start_ms": 12580,
+      "end_ms": 12782
+    },
+    {
+      "text": "器",
+      "start_ms": 12782,
+      "end_ms": 12983
+    },
+    {
+      "text": "协",
+      "start_ms": 12983,
+      "end_ms": 13185
+    },
+    {
+      "text": "议",
+      "start_ms": 13185,
+      "end_ms": 13386
+    },
+    {
+      "text": "，",
+      "start_ms": 13386,
+      "end_ms": 13527
+    },
+    {
+      "text": "是",
+      "start_ms": 13527,
+      "end_ms": 13729
+    },
+    {
+      "text": "一",
+      "start_ms": 13729,
+      "end_ms": 13930
+    },
+    {
+      "text": "种",
+      "start_ms": 13930,
+      "end_ms": 14132
+    },
+    {
+      "text": "更",
+      "start_ms": 14132,
+      "end_ms": 14333
+    },
+    {
+      "text": "简",
+      "start_ms": 14333,
+      "end_ms": 14534
+    },
+    {
+      "text": "洁",
+      "start_ms": 14534,
+      "end_ms": 14736
+    },
+    {
+      "text": "的",
+      "start_ms": 14736,
+      "end_ms": 14937
+    },
+    {
+      "text": "迭",
+      "start_ms": 14937,
+      "end_ms": 15139
+    },
+    {
+      "text": "代",
+      "start_ms": 15139,
+      "end_ms": 15340
+    },
+    {
+      "text": "器",
+      "start_ms": 15340,
+      "end_ms": 15542
+    },
+    {
+      "text": "实",
+      "start_ms": 15542,
+      "end_ms": 15743
+    },
+    {
+      "text": "现",
+      "start_ms": 15743,
+      "end_ms": 15945
+    },
+    {
+      "text": "方",
+      "start_ms": 15945,
+      "end_ms": 16146
+    },
+    {
+      "text": "式",
+      "start_ms": 16146,
+      "end_ms": 16347
+    },
+    {
+      "text": "。",
+      "start_ms": 16347,
+      "end_ms": 16589
+    },
+    {
+      "text": "生",
+      "start_ms": 16589,
+      "end_ms": 16791
+    },
+    {
+      "text": "成",
+      "start_ms": 16791,
+      "end_ms": 16992
+    },
+    {
+      "text": "器",
+      "start_ms": 16992,
+      "end_ms": 17194
+    },
+    {
+      "text": "继",
+      "start_ms": 17194,
+      "end_ms": 17395
+    },
+    {
+      "text": "承",
+      "start_ms": 17395,
+      "end_ms": 17596
+    },
+    {
+      "text": "了",
+      "start_ms": 17596,
+      "end_ms": 17798
+    },
+    {
+      "text": "迭",
+      "start_ms": 17798,
+      "end_ms": 17999
+    },
+    {
+      "text": "代",
+      "start_ms": 17999,
+      "end_ms": 18201
+    },
+    {
+      "text": "器",
+      "start_ms": 18201,
+      "end_ms": 18402
+    },
+    {
+      "text": "的",
+      "start_ms": 18402,
+      "end_ms": 18604
+    },
+    {
+      "text": "所",
+      "start_ms": 18604,
+      "end_ms": 18805
+    },
+    {
+      "text": "有",
+      "start_ms": 18805,
+      "end_ms": 19007
+    },
+    {
+      "text": "特",
+      "start_ms": 19007,
+      "end_ms": 19208
+    },
+    {
+      "text": "性",
+      "start_ms": 19208,
+      "end_ms": 19409
+    },
+    {
+      "text": "，",
+      "start_ms": 19409,
+      "end_ms": 19551
+    },
+    {
+      "text": "同",
+      "start_ms": 19551,
+      "end_ms": 19752
+    },
+    {
+      "text": "时",
+      "start_ms": 19752,
+      "end_ms": 19953
+    },
+    {
+      "text": "还",
+      "start_ms": 19953,
+      "end_ms": 20155
+    },
+    {
+      "text": "具",
+      "start_ms": 20155,
+      "end_ms": 20356
+    },
+    {
+      "text": "备",
+      "start_ms": 20356,
+      "end_ms": 20558
+    },
+    {
+      "text": "惰",
+      "start_ms": 20558,
+      "end_ms": 20759
+    },
+    {
+      "text": "性",
+      "start_ms": 20759,
+      "end_ms": 20961
+    },
+    {
+      "text": "求",
+      "start_ms": 20961,
+      "end_ms": 21162
+    },
+    {
+      "text": "值",
+      "start_ms": 21162,
+      "end_ms": 21364
+    },
+    {
+      "text": "的",
+      "start_ms": 21364,
+      "end_ms": 21565
+    },
+    {
+      "text": "能",
+      "start_ms": 21565,
+      "end_ms": 21766
+    },
+    {
+      "text": "力",
+      "start_ms": 21766,
+      "end_ms": 21968
+    },
+    {
+      "text": "，",
+      "start_ms": 21968,
+      "end_ms": 22109
+    },
+    {
+      "text": "能",
+      "start_ms": 22109,
+      "end_ms": 22310
+    },
+    {
+      "text": "在",
+      "start_ms": 22310,
+      "end_ms": 22512
+    },
+    {
+      "text": "需",
+      "start_ms": 22512,
+      "end_ms": 22713
+    },
+    {
+      "text": "要",
+      "start_ms": 22713,
+      "end_ms": 22915
+    },
+    {
+      "text": "时",
+      "start_ms": 22915,
+      "end_ms": 23116
+    },
+    {
+      "text": "才",
+      "start_ms": 23116,
+      "end_ms": 23318
+    },
+    {
+      "text": "计",
+      "start_ms": 23318,
+      "end_ms": 23519
+    },
+    {
+      "text": "算",
+      "start_ms": 23519,
+      "end_ms": 23720
+    },
+    {
+      "text": "下",
+      "start_ms": 23720,
+      "end_ms": 23922
+    },
+    {
+      "text": "一",
+      "start_ms": 23922,
+      "end_ms": 24123
+    },
+    {
+      "text": "个",
+      "start_ms": 24123,
+      "end_ms": 24325
+    },
+    {
+      "text": "值",
+      "start_ms": 24325,
+      "end_ms": 24526
+    },
+    {
+      "text": "。",
+      "start_ms": 24526,
+      "end_ms": 24768
+    }
+  ]
+}

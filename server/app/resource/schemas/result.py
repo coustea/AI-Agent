@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.resource.schemas.plan import DownstreamContext, TeachingPlan
+from app.resource.schemas.plan import DownstreamContext
 from app.resource.schemas.request import LearningScenario
 
 
@@ -40,8 +40,8 @@ class ResourceInput(BaseModel):
     learning_scenario: LearningScenario = "self_study"
     agent_name: str = ""
     agent_config: dict[str, Any] = Field(default_factory=dict)
-    teaching_plan: TeachingPlan | None = None
-    profile: str | dict[str, Any] = ""  # Markdown 格式的学习者画像或字典快照
+    teaching_plan: str | None = None  # Markdown 格式的协同计划
+    profile: dict[str, Any] = Field(default_factory=dict)  # 学习者画像
     upstream_handoffs: dict[str, DownstreamContext] = Field(default_factory=dict)
 
 
@@ -65,7 +65,7 @@ class NodeInput(BaseModel):
     tutorial_title: str
     tutorial_summary: str | None = None
     tutorial_markdown: str
-    profile: str | dict[str, Any] = ""  # Markdown 格式的学习者画像或字典快照
+    profile: dict[str, Any] = Field(default_factory=dict)  # 学习者画像
     existing_resources: dict[str, AgentResult] = Field(default_factory=dict)
     agent_config: dict[str, Any] = Field(default_factory=dict)
     username: str = ""  # 用户名，用于文件路径构建

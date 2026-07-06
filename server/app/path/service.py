@@ -76,7 +76,7 @@ from app.profile.service import get_profile_service
 logger = get_logger(__name__)
 
 # 辅助资源类型集合
-AUX_RESOURCE_TYPES = {"content", "mindmap", "code", "reading", "quiz", "ppt"}
+AUX_RESOURCE_TYPES = {"content", "mindmap", "code", "reading", "ppt", "cartoon"}
 
 # 节点状态常量
 STARTED_NODE_STATUSES = {"in_progress", "remediation", "reinforced"}
@@ -479,16 +479,14 @@ class PathService:
         active_minutes = await self._get_path_active_minutes(
             user_id=user_id, path_id=path.id
         )
-        summary = build_summary_from_events(
-            events, active_minutes=active_minutes
-        )
+        summary = build_summary_from_events(events)
         signal_snapshot = LearningSignalSnapshot(
             average_score=summary.average_score,
             weak_topics=list(summary.weak_topics),
             preferred_resources=list(summary.preferred_resources),
             completed_resource_count=summary.completed_resources,
             viewed_resource_count=summary.viewed_resources,
-            active_minutes=summary.active_minutes,
+            active_minutes=active_minutes,
             recommendations=list(summary.recommendations),
         )
         current_node = await self._get_current_path_node(
