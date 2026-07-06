@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: coustea
+      POSTGRES_PASSWORD: Aa123456
+      POSTGRES_DB: agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./server/data:/var/lib/postgresql/data
+      - ./server/init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
