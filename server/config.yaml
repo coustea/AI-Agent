@@ -20,6 +20,7 @@ models:
   api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
   model_name: "astron-code-latest"
 
+
   # 推理参数
   max_tokens: 8192
   # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
