@@ -28,14 +28,14 @@ from typing import Any
 import chromadb
 
 from app.config import (
-    KB_COLLECTION,
     KB_DIR,
     KB_EMBED_MODEL,
-    KB_SOURCE_DIR,
-    KB_SOURCE_GLOB,
+    SERVER_DIR,
 )
 from app.infra.logging import get_logger
 from app.rag.embeddings import embed_documents
+from app.rag.bm25 import BM25Index  # called by _build_temp_index for BM25 index creation
+from app.rag.models import CHROMA_COLLECTION
 
 logger = get_logger(__name__)
 
@@ -47,95 +47,109 @@ _CHUNK_MAX_SIZE = 800
 _CHUNK_MIN_SIZE = 100
 _CHUNK_OVERLAP = 100
 
+# 知识库源文档定位（锚定 server/，glob 固定为清洗后的最终 md）
+_SOURCE_DIR = SERVER_DIR / "app/rag/data/book"
+_SOURCE_GLOB = "**/*.final.md"
+
 
 # ============ 切分器 ============
 
 
-def _split_markdown(text: str) -> list[str]:
-    """将 Markdown 文本按标题和段落结构切分为块。
+def _split_markdown(text: str) -> list[tuple[str, str]]:
+    """将 Markdown 文本按标题结构切分为块，保留标题层级路径。
 
-    保护代码块和表格不被拆断。
+    Returns:
+        列表，每项为 (chunk_text, heading_path) 元组。
     """
     if not text or not text.strip():
         return []
+
+    from langchain_text_splitters import MarkdownHeaderTextSplitter
 
     # 第一阶段：保护代码块
     code_blocks: list[str] = []
     placeholder_map: dict[str, str] = {}
     idx = 0
-    while "```" in text:
-        start = text.index("```")
-        end_pos = text.find("```", start + 3)
+    safe_text = text
+    while "```" in safe_text:
+        start = safe_text.index("```")
+        end_pos = safe_text.find("```", start + 3)
         if end_pos == -1:
             break
-        code_block = text[start : end_pos + 3]
+        code_block = safe_text[start : end_pos + 3]
         placeholder = f"<<CODE_BLOCK_{idx}>>"
         code_blocks.append(code_block)
         placeholder_map[placeholder] = code_block
-        text = text[:start] + placeholder + text[end_pos + 3 :]
+        safe_text = safe_text[:start] + placeholder + safe_text[end_pos + 3 :]
         idx += 1
 
-    # 第二阶段：按标题和双换行切分
-    raw_chunks: list[str] = []
-    current = ""
+    # 第二阶段：Markdown 标题分割
+    headers_to_split_on = [
+        ("#", "h1"),
+        ("##", "h2"),
+        ("###", "h3"),
+    ]
+    splitter = MarkdownHeaderTextSplitter(
+        headers_to_split_on=headers_to_split_on,
+        strip_headers=False,
+    )
 
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("#") and " " in stripped and len(stripped) > 2:
-            if current.strip():
-                raw_chunks.append(current.strip())
-            current = stripped + "\n"
-        else:
-            current += line + "\n"
+    try:
+        md_chunks = splitter.split_text(safe_text)
+    except Exception:
+        # 回退：按段落分割
+        md_chunks = []
+        for para in safe_text.split("\n\n"):
+            if para.strip():
+                from langchain_core.documents import Document
+                md_chunks.append(Document(page_content=para.strip(), metadata={}))
 
-    if current.strip():
-        raw_chunks.append(current.strip())
-
-    # 恢复代码块
-    for i, chunk in enumerate(raw_chunks):
+    # 第三阶段：提取 heading_path 并处理超长块
+    results: list[tuple[str, str]] = []
+    for chunk in md_chunks:
+        content = chunk.page_content
+        # 恢复代码块
         for placeholder, code in placeholder_map.items():
-            chunk = chunk.replace(placeholder, code)
-        raw_chunks[i] = chunk
+            content = content.replace(placeholder, code)
 
-    # 第三阶段：合并短块 + 处理超长块
-    merged: list[str] = []
-    buffer = ""
+        # 构建 heading_path
+        meta = chunk.metadata
+        heading_parts = []
+        for key in ("h1", "h2", "h3"):
+            if key in meta and meta[key]:
+                heading_parts.append(meta[key])
+        heading_path = " > ".join(heading_parts)
 
-    for chunk in raw_chunks:
-        candidate = (buffer + "\n\n" + chunk).strip() if buffer else chunk.strip()
+        content = content.strip()
+        if not content:
+            continue
 
-        if len(chunk) > _CHUNK_MAX_SIZE:
-            if buffer:
-                merged.append(buffer.strip())
-                buffer = ""
-            merged.extend(_split_by_sentences(chunk))
-        elif len(candidate) > _CHUNK_MAX_SIZE and buffer:
-            merged.append(buffer.strip())
-            buffer = chunk
+        # 超长块按句子拆分
+        if len(content) > _CHUNK_MAX_SIZE:
+            sub_chunks = _split_by_sentences(content)
+            for sc in sub_chunks:
+                results.append((sc, heading_path))
         else:
-            buffer = candidate
+            results.append((content, heading_path))
 
-    if buffer.strip():
-        if len(buffer) > _CHUNK_MAX_SIZE:
-            merged.extend(_split_by_sentences(buffer))
+    # 第四阶段：合并过短块
+    final: list[tuple[str, str]] = []
+    buf_text = ""
+    buf_heading = ""
+    for chunk_text, heading in results:
+        candidate = (buf_text + "\n\n" + chunk_text).strip() if buf_text else chunk_text.strip()
+        if len(chunk_text) < _CHUNK_MIN_SIZE and len(candidate) <= _CHUNK_MAX_SIZE * 1.5:
+            buf_text = candidate
+            buf_heading = heading or buf_heading
         else:
-            merged.append(buffer.strip())
+            if buf_text:
+                final.append((buf_text, buf_heading))
+            buf_text = chunk_text
+            buf_heading = heading
+    if buf_text.strip():
+        final.append((buf_text, buf_heading))
 
-    # 合并过短的块
-    final: list[str] = []
-    buf = ""
-    for chunk in merged:
-        candidate = (buf + "\n\n" + chunk).strip() if buf else chunk.strip()
-        if len(chunk) < _CHUNK_MIN_SIZE and len(candidate) <= _CHUNK_MAX_SIZE * 1.5:
-            buf = candidate
-        else:
-            if buf:
-                final.append(buf)
-            buf = chunk
-    if buf.strip():
-        final.append(buf)
-
-    return [c for c in final if c.strip()]
+    return [(c, h) for c, h in final if c.strip()]
 
 
 def _split_by_sentences(text: str) -> list[str]:
@@ -164,17 +178,17 @@ def _split_by_sentences(text: str) -> list[str]:
     return chunks
 
 
-def _apply_overlap(chunks: list[str], overlap: int = _CHUNK_OVERLAP) -> list[str]:
+def _apply_overlap(chunks: list[tuple[str, str]], overlap: int = _CHUNK_OVERLAP) -> list[tuple[str, str]]:
     """在相邻块间添加滑动窗口重叠。"""
     if overlap <= 0 or len(chunks) <= 1:
         return chunks
-    result: list[str] = []
-    for i, chunk in enumerate(chunks):
+    result: list[tuple[str, str]] = []
+    for i, (chunk_text, heading) in enumerate(chunks):
         if i > 0:
-            prev = chunks[i - 1]
-            tail = prev[-overlap:] if len(prev) > overlap else prev
-            chunk = tail + "\n" + chunk
-        result.append(chunk)
+            prev_text = chunks[i - 1][0]
+            tail = prev_text[-overlap:] if len(prev_text) > overlap else prev_text
+            chunk_text = tail + "\n" + chunk_text
+        result.append((chunk_text, heading))
     return result
 
 
@@ -202,9 +216,9 @@ def _load_documents(source_dir: Path, source_glob: str) -> list[dict[str, Any]]:
 # ============ Metadata ============
 
 
-def _stable_chunk_id(source: str, section: str, content: str) -> str:
+def _stable_chunk_id(source: str, section: str, content: str, heading_path: str = "") -> str:
     """生成稳定的 chunk 哈希 ID。"""
-    raw = f"{source}|{section}|{content}"
+    raw = f"{source}|{section}|{heading_path}|{content}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -301,13 +315,14 @@ def _build_temp_index(
         source = doc["path"]
         text = doc["text"]
         title = _infer_title(source)
+        parent_id = hashlib.md5(source.encode("utf-8")).hexdigest()[:16]
         chunks = _split_markdown(text)
         chunks = _apply_overlap(chunks)
-        chunks = [c for c in chunks if c.strip()]
+        chunks = [(c, h) for c, h in chunks if c.strip()]
 
-        for chunk_idx, chunk in enumerate(chunks):
-            section = _extract_section(chunk)
-            chunk_id = _stable_chunk_id(source, section, chunk)
+        for chunk_idx, (chunk_text, heading_path) in enumerate(chunks):
+            section = _extract_section(chunk_text)
+            chunk_id = _stable_chunk_id(source, section, chunk_text, heading_path)
             course = _infer_course(title)
 
             meta: dict[str, Any] = {
@@ -317,10 +332,12 @@ def _build_temp_index(
                 "section": section,
                 "course": course,
                 "chunk_index": chunk_idx,
+                "parent_id": parent_id,
+                "heading_path": heading_path,
                 "schema_version": SCHEMA_VERSION,
             }
             all_ids.append(chunk_id)
-            all_texts.append(chunk)
+            all_texts.append(chunk_text)
             all_metas.append(meta)
 
     total_chunks = len(all_ids)
@@ -343,6 +360,14 @@ def _build_temp_index(
         col.add(ids=batch_ids, documents=batch_texts, embeddings=embeddings, metadatas=batch_metas)
         if end < total_chunks:
             time.sleep(0.1)
+
+    # 构建 BM25 索引并持久化
+    try:
+        bm25 = BM25Index()
+        bm25.build(all_texts, all_metas)
+        bm25.save(output_dir)
+    except Exception as exc:
+        logger.warning("[build] BM25 index build failed (non-fatal): %s", exc)
 
     return doc_count, total_chunks
 
@@ -367,7 +392,7 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
 
     try:
         client = chromadb.PersistentClient(path=str(final_dir))
-        col = client.get_collection(name=KB_COLLECTION)
+        col = client.get_collection(name=CHROMA_COLLECTION)
         logger.info("[build] index swapped and verified: %d chunks", col.count())
     except Exception as exc:
         logger.error("[build] verification of swapped index failed: %s", exc)
@@ -386,10 +411,10 @@ def build_index(
     batch_size: int = 32,
 ) -> None:
     """执行完整的安全构建流程。"""
-    src_dir = source_dir or Path(KB_SOURCE_DIR)
-    src_glob = source_glob or KB_SOURCE_GLOB
+    src_dir = source_dir or _SOURCE_DIR
+    src_glob = source_glob or _SOURCE_GLOB
     out_dir = output_dir or Path(KB_DIR)
-    col_name = collection or KB_COLLECTION
+    col_name = collection or CHROMA_COLLECTION
 
     logger.info("[build] loading from %s (glob=%s)", src_dir, src_glob)
     docs = _load_documents(src_dir, src_glob)

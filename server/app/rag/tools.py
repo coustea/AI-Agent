@@ -72,7 +72,10 @@ def _format_context(result: RetrievalResult) -> str:
         header = f"\n\n[资料 {idx}]"
         if chunk.title:
             header += f"\n来源：{chunk.title}"
-        if chunk.section:
+        # heading_path from Markdown header splitting (e.g. "计算机网络 > 传输层 > TCP")
+        if chunk.heading_path:
+            header += f"\n章节路径：{chunk.heading_path}"
+        elif chunk.section:
             header += f"\n章节：{chunk.section}"
         entry = f"{header}\n内容：{snippet}"
 

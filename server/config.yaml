@@ -75,15 +75,12 @@ paths:
 
 knowledge:
   enabled: true
-  source_dir: "app/rag/data/book"
-  source_glob: "**/*.final.md"
-  collection: "langchain"
   embed_model: "bge-m3:latest"
-  ollama_base_url: "http://127.0.0.1:11434"
+  embed_base_url: "http://127.0.0.1:10000/v1"
   top_k: 4
-  fetch_k: 12
-  embedding_timeout_seconds: 8
   max_context_chars: 6000
+  # 启动时索引不存在则自动构建（需要 embedding 服务可用）
+  auto_build: true
 
 # Memory 压缩与长期记忆
 memory:

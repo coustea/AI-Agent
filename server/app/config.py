@@ -253,26 +253,19 @@ VIDEO_RENDER_CONCURRENCY = get("video.concurrency", 4)
 VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
 
 # ============ 知识库配置 ============
+# 仅保留部署/调优参数；collection、切分、RRF 等实现细节下沉为 RAG 模块常量
 # 是否启用知识库功能
 KB_ENABLED = get("knowledge.enabled", True)
-# 知识库集合名称（向量数据库中的 collection 名）
-KB_COLLECTION = get("knowledge.collection", "langchain")
-# 嵌入模型配置（OpenAI 兼容 API，留空则使用主模型配置）
-_models_base_url = get("models.base_url", "")
-_models_api_key = get("models.api_key", "")
+# 嵌入模型名（OpenAI 兼容 API）
 KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3")
-KB_EMBED_BASE_URL = get("knowledge.embed_base_url", "") or _models_base_url
-KB_EMBED_API_KEY = get("knowledge.embed_api_key", "") or _models_api_key
+# 嵌入服务地址（llama.cpp /v1）
+KB_EMBED_BASE_URL = get("knowledge.embed_base_url", "http://127.0.0.1:10000/v1")
 # 检索时返回的最相似文档数量
 KB_TOP_K = get("knowledge.top_k", 4)
-# 知识库源文档目录
-KB_SOURCE_DIR = get("knowledge.source_dir", "app/rag/data/book")
-# 源文档 glob 模式
-KB_SOURCE_GLOB = get("knowledge.source_glob", "**/*.final.md")
-# 向量检索拉取数量（内部 fetch_k，去重后截断到 top_k）
-KB_FETCH_K = get("knowledge.fetch_k", 12)
 # 返回给 ChatAgent 的最大上下文字符数
 KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
+# 启动时索引不存在则自动构建
+KB_AUTO_BUILD = get("knowledge.auto_build", True)
 
 # ============ 日志配置 ============
 # LangChain 调试开关

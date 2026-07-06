@@ -1,7 +1,7 @@
 """OpenAI 兼容嵌入模型封装。
 
 使用 langchain_openai.OpenAIEmbeddings 通过 OpenAI 兼容 API 生成查询向量，
-不再依赖 Ollama。嵌入模型配置独立于全局 LLM 配置。
+嵌入模型配置独立于全局 LLM 配置。
 """
 
 from __future__ import annotations
@@ -11,10 +11,15 @@ from functools import lru_cache
 
 from langchain_openai import OpenAIEmbeddings
 
-from app.config import KB_EMBED_API_KEY, KB_EMBED_BASE_URL, KB_EMBED_MODEL
+from app.config import KB_EMBED_BASE_URL, KB_EMBED_MODEL
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+
+# llama.cpp 嵌入服务不校验 api_key，占位即可
+_EMBED_API_KEY = "sk-placeholder"
+# 嵌入请求超时秒数
+_REQUEST_TIMEOUT = 8
 
 # 熔断器：连续失败后暂时停止请求
 _BREAKER_COOLDOWN_SECONDS = 300.0
@@ -50,9 +55,10 @@ def _get_embeddings_client() -> OpenAIEmbeddings:
     """创建嵌入客户端单例。"""
     return OpenAIEmbeddings(
         model=KB_EMBED_MODEL,
-        api_key=KB_EMBED_API_KEY,
+        api_key=_EMBED_API_KEY,
         base_url=KB_EMBED_BASE_URL,
         check_embedding_ctx_length=False,
+        request_timeout=_REQUEST_TIMEOUT,
     )
 
 
