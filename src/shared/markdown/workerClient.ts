@@ -15,6 +15,7 @@ export interface WorkerLike {
 
 interface PendingRender {
   markdown: string
+  theme: MarkdownTheme
   resolve: (result: MarkdownRenderResult) => void
   timer: ReturnType<typeof setTimeout>
 }
@@ -40,7 +41,7 @@ export class MarkdownWorkerClient {
 
   render(markdown: string, theme: MarkdownTheme): Promise<MarkdownRenderResult> {
     if (this.disposed) {
-      return Promise.resolve(this.degradedResult(markdown, 'Markdown renderer disposed'))
+      return Promise.resolve(this.escapedDegradedResult(markdown, 'Markdown renderer disposed'))
     }
 
     if (!this.worker) {
@@ -49,7 +50,7 @@ export class MarkdownWorkerClient {
 
     const worker = this.worker
     if (!worker) {
-      return Promise.resolve(this.degradedResult(markdown, 'Markdown worker unavailable'))
+      return this.degradedResult(markdown, theme, 'Markdown worker unavailable')
     }
 
     const requestId = this.nextRequestId
@@ -64,7 +65,7 @@ export class MarkdownWorkerClient {
         this.failWorker('Markdown rendering timed out')
       }, this.timeoutMs)
 
-      this.pending.set(requestId, { markdown, resolve, timer })
+      this.pending.set(requestId, { markdown, theme, resolve, timer })
 
       try {
         worker.postMessage({ type: 'render', requestId, markdown, theme })
@@ -126,7 +127,7 @@ export class MarkdownWorkerClient {
       return
     }
 
-    pending.resolve(this.degradedResult(pending.markdown, response.message))
+    void this.resolvePendingWithFallback(pending, response.message)
   }
 
   private failWorker(message: string): void {
@@ -137,7 +138,7 @@ export class MarkdownWorkerClient {
   private resolveAllPending(message: string): void {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
-      pending.resolve(this.degradedResult(pending.markdown, message))
+      void this.resolvePendingWithFallback(pending, message)
     }
     this.pending.clear()
   }
@@ -153,7 +154,31 @@ export class MarkdownWorkerClient {
     this.worker = undefined
   }
 
-  private degradedResult(markdown: string, error: string): MarkdownRenderResult {
+  private async resolvePendingWithFallback(pending: PendingRender, error: string): Promise<void> {
+    pending.resolve(await this.degradedResult(pending.markdown, pending.theme, error))
+  }
+
+  private async degradedResult(
+    markdown: string,
+    theme: MarkdownTheme,
+    error: string,
+  ): Promise<MarkdownRenderResult> {
+    try {
+      const { renderMarkdownToHtml } = await import('./pipeline')
+      return {
+        html: await renderMarkdownToHtml(markdown, theme),
+        degraded: false,
+        error,
+      }
+    } catch (fallbackError: unknown) {
+      return this.escapedDegradedResult(
+        markdown,
+        `${error}; fallback render failed: ${this.errorMessage(fallbackError, 'unknown error')}`,
+      )
+    }
+  }
+
+  private escapedDegradedResult(markdown: string, error: string): MarkdownRenderResult {
     return {
       html: escapeHtml(markdown),
       degraded: true,
