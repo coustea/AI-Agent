@@ -65,6 +65,17 @@ export interface ChatMsg {
   sources?: KnowledgeSource[]  // 知识库来源
 }
 
+export const finalizeRunningAgentActivities = (
+  activities: AgentActivity[] | undefined,
+  status: Extract<AgentActivity['status'], 'done' | 'failed'>,
+): AgentActivity[] => (
+  (activities || []).map(activity => (
+    activity.status === 'running'
+      ? { ...activity, status }
+      : activity
+  ))
+)
+
 const SUPPORTED_DIAGRAM_TYPES = new Set([
   'comparison',
   'flowchart',

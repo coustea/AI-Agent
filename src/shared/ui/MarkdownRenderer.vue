@@ -18,6 +18,8 @@ const degraded = ref(false)
 const theme = ref<MarkdownTheme>('light')
 const copyTimers = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
+const STREAM_RENDER_INTERVAL_MS = 80
+
 let renderTimer: ReturnType<typeof setTimeout> | undefined
 let renderVersion = 0
 let themeObserver: MutationObserver | undefined
@@ -48,28 +50,29 @@ async function performRender(content: string): Promise<void> {
 }
 
 function queueRender(): void {
-  if (renderTimer !== undefined) {
-    clearTimeout(renderTimer)
-    renderTimer = undefined
-  }
-
   const content = props.content
   if (!props.streaming) {
+    if (renderTimer !== undefined) {
+      clearTimeout(renderTimer)
+      renderTimer = undefined
+    }
     void performRender(content)
     return
   }
 
-  const version = ++renderVersion
-  renderedHtml.value = escapeHtml(content)
-  degraded.value = true
+  if (!renderedHtml.value || degraded.value) {
+    renderedHtml.value = escapeHtml(content)
+    degraded.value = true
+  }
+
+  if (renderTimer !== undefined) {
+    return
+  }
 
   renderTimer = setTimeout(() => {
     renderTimer = undefined
-    if (version !== renderVersion) {
-      return
-    }
-    void performRender(content)
-  }, 80)
+    void performRender(props.content)
+  }, STREAM_RENDER_INTERVAL_MS)
 }
 
 function restoreCopyLabel(button: HTMLButtonElement, label: string): void {

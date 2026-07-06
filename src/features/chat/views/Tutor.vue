@@ -263,7 +263,7 @@
                   </div>
 
                   <AgentActivityCard
-                    v-if="msg.role === 'ai' && msg.agentActivities?.length"
+                    v-if="msg.role === 'ai' && msg.agentActivities?.length && !getDisplayContent(msg)"
                     :activities="msg.agentActivities"
                   />
 
@@ -688,6 +688,7 @@ import {
   getDocumentIconColor,
   formatFileSize,
   formatRelativeTime,
+  finalizeRunningAgentActivities,
   isInsideOpenFence,
   takeNextStreamUnit,
 } from './tutorUtils'
@@ -993,6 +994,10 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   if (event.event === 'content.replace') {
     const content = typeof data.content === 'string' ? data.content : ''
     if (content) {
+      if (streamingMsgRef.value?.id === aiMsg.id || streamingMsgId.value === aiMsg.id) {
+        streamFinalContent = content
+        return
+      }
       stopStreamFlushLoop()
       pendingRenderQueue.length = 0
       pendingRenderQueueStart = 0
@@ -1002,6 +1007,15 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
       aiMsg.content = content
       streamDisplayText.value = content
     }
+    return
+  }
+
+  if (event.event === 'message.completed' || event.event === 'message.failed') {
+    aiMsg.agentActivities = finalizeRunningAgentActivities(
+      aiMsg.agentActivities,
+      event.event === 'message.failed' ? 'failed' : 'done',
+    )
+    aiMsg.teachingDiagramGenerating = false
     return
   }
 
@@ -1154,6 +1168,7 @@ let pendingRenderOffset = 0
 let pendingRenderChars = 0
 let isStreamDone = false
 const streamRenderedChunks: string[] = []
+let streamFinalContent: string | null = null
 let lastAutoScrollAt = 0
 let lastChunkArrivedAt = 0
 const STREAM_FIRST_PAINT_UNITS = 1
@@ -1543,10 +1558,13 @@ const finishStream = (messageId: number) => {
 
 const completeStreamingMessage = (messageId: number) => {
   isStreamDone = true
-  stopStreamFlushLoop()
   const aiMsg = messages.value.find(message => message.id === messageId)
   if (aiMsg) aiMsg.teachingDiagramGenerating = false
-  finishStream(messageId)
+  if (pendingRenderQueueStart >= pendingRenderQueue.length) {
+    finishStream(messageId)
+    return
+  }
+  scheduleStreamFlush(true, STREAM_MIN_DELAY_MS)
 }
 
 const commitStreamTextToMessage = (messageId: number) => {
@@ -1563,7 +1581,9 @@ const commitStreamTextToMessage = (messageId: number) => {
     return
   }
   drainPendingStreamText()
-  if (streamRenderedChunks.length > 0) {
+  if (streamFinalContent !== null) {
+    aiMsg.content = streamFinalContent
+  } else if (streamRenderedChunks.length > 0) {
     aiMsg.content += streamRenderedChunks.join('')
   } else if (streamDisplayText.value && aiMsg.content !== streamDisplayText.value) {
     aiMsg.content += streamDisplayText.value
@@ -1573,6 +1593,7 @@ const commitStreamTextToMessage = (messageId: number) => {
   pendingRenderOffset = 0
   pendingRenderChars = 0
   isStreamDone = false
+  streamFinalContent = null
   lastChunkArrivedAt = 0
   streamRenderedChunks.length = 0
   streamDisplayText.value = ''
@@ -1857,6 +1878,7 @@ const switchSession = async (sessionId: string) => {
     streamingMsgRef.value = messages.value.find(message => message.id === aiMsgId) ?? null
     isAIThinking.value = true
     isStreamDone = false
+    streamFinalContent = null
     streamRenderedChunks.length = 0
     streamDisplayText.value = text
 
@@ -2234,6 +2256,7 @@ const handleSend = async () => {
   streamingMsgId.value = aiMsgId
   streamingMsgRef.value = messages.value[messages.value.length - 1] || null
   isStreamDone = false
+  streamFinalContent = null
   streamRenderedChunks.length = 0
   streamDisplayText.value = ''
 
