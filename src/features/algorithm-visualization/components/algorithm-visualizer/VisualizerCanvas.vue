@@ -6,21 +6,42 @@
     </div>
 
     <ArrayBarsVisualizer
-      v-else-if="payload?.visualizerType === 'array' || payload?.visualizerType === '1D_ARRAY'"
+      v-else-if="payload?.visualizerType === 'array'"
       :initial-state="payload.initialState as ArrayVisualizerState"
       :current-step="currentStep"
       :current-step-index="currentStepIndex"
     />
 
-    <GraphVisualizer
-      v-else-if="payload?.visualizerType === 'graph' || payload?.visualizerType === 'GRAPH'"
+    <TreeVisualizer
+      v-else-if="payload?.visualizerType === 'tree'"
       :initial-state="payload.initialState"
       :current-step="currentStep"
       :current-step-index="currentStepIndex"
     />
 
-    <TreeVisualizer
-      v-else-if="payload?.visualizerType === 'tree' || payload?.visualizerType === 'TREE'"
+    <GraphVisualizer
+      v-else-if="payload?.visualizerType === 'graph'"
+      :initial-state="payload.initialState"
+      :current-step="currentStep"
+      :current-step-index="currentStepIndex"
+    />
+
+    <DpTableVisualizer
+      v-else-if="payload?.visualizerType === 'dp-table'"
+      :initial-state="payload.initialState"
+      :current-step="currentStep"
+      :current-step-index="currentStepIndex"
+    />
+
+    <LinkedListVisualizer
+      v-else-if="payload?.visualizerType === 'linked-list'"
+      :initial-state="payload.initialState"
+      :current-step="currentStep"
+      :current-step-index="currentStepIndex"
+    />
+
+    <StackQueueVisualizer
+      v-else-if="payload?.visualizerType === 'stack-queue'"
       :initial-state="payload.initialState"
       :current-step="currentStep"
       :current-step-index="currentStepIndex"
@@ -33,8 +54,11 @@
 <script setup lang="ts">
 import VisualizerEmptyState from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerEmptyState.vue'
 import ArrayBarsVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/ArrayBarsVisualizer.vue'
-import GraphVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/GraphVisualizer.vue'
 import TreeVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/TreeVisualizer.vue'
+import GraphVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/GraphVisualizer.vue'
+import DpTableVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/DpTableVisualizer.vue'
+import LinkedListVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/LinkedListVisualizer.vue'
+import StackQueueVisualizer from '@/features/algorithm-visualization/components/algorithm-visualizer/visualizers/StackQueueVisualizer.vue'
 import type {
   ArrayVisualizerState,
   VisualizerPayload,

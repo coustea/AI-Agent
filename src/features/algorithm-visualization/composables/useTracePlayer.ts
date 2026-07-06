@@ -1,23 +1,25 @@
 import { computed, ref, watch } from 'vue'
-import type { VisualStep } from '@/features/algorithm-visualization/types'
+import type { TraceEvent } from '@/features/algorithm-visualization/types'
 
-export function useVisualizerPlayback(stepsRef: () => VisualStep[]) {
+/** 基于 TraceEvent[] 的播放控制器，替代旧 useVisualizerPlayback。
+ * AlgorithmVisualization.vue 直接使用。 */
+export function useTracePlayer(eventsRef: () => TraceEvent[]) {
   const playing = ref(false)
   const currentStepIndex = ref(0)
   const speed = ref(1)
 
-  const currentStep = computed(() => {
-    const steps = stepsRef()
-    return steps[currentStepIndex.value] || null
+  const currentEvent = computed(() => {
+    const events = eventsRef()
+    return events[currentStepIndex.value] || null
   })
 
   const finished = computed(() => {
-    const steps = stepsRef()
-    return steps.length > 0 && currentStepIndex.value >= steps.length - 1
+    const events = eventsRef()
+    return events.length > 0 && currentStepIndex.value >= events.length - 1
   })
 
   watch(
-    () => stepsRef().length,
+    () => eventsRef().length,
     (length) => {
       if (length <= 0) {
         currentStepIndex.value = 0
@@ -34,10 +36,10 @@ export function useVisualizerPlayback(stepsRef: () => VisualStep[]) {
   )
 
   function play() {
-    const steps = stepsRef()
-    if (!steps.length) return
+    const events = eventsRef()
+    if (!events.length) return
 
-    if (currentStepIndex.value >= steps.length - 1) {
+    if (currentStepIndex.value >= events.length - 1) {
       currentStepIndex.value = 0
     }
 
@@ -49,10 +51,10 @@ export function useVisualizerPlayback(stepsRef: () => VisualStep[]) {
   }
 
   function next() {
-    const steps = stepsRef()
-    if (!steps.length) return
+    const events = eventsRef()
+    if (!events.length) return
 
-    if (currentStepIndex.value < steps.length - 1) {
+    if (currentStepIndex.value < events.length - 1) {
       currentStepIndex.value += 1
     } else {
       playing.value = false
@@ -75,19 +77,19 @@ export function useVisualizerPlayback(stepsRef: () => VisualStep[]) {
   }
 
   function seek(index: number) {
-    const steps = stepsRef()
-    if (!steps.length) {
+    const events = eventsRef()
+    if (!events.length) {
       currentStepIndex.value = 0
       return
     }
 
-    currentStepIndex.value = Math.min(Math.max(index, 0), steps.length - 1)
+    currentStepIndex.value = Math.min(Math.max(index, 0), events.length - 1)
   }
 
   return {
     playing,
     currentStepIndex,
-    currentStep,
+    currentEvent,
     speed,
     finished,
     play,
