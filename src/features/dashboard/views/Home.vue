@@ -2,7 +2,7 @@
   <main class="home-page min-h-screen font-sans antialiased pb-16 bg-slate-50/30">
     <div class="home-shell max-w-7xl mx-auto px-6 py-8">
       
-      <div class="dashboard-content space-y-10" v-if="recommendationData && profileRadarData">
+      <div class="dashboard-content space-y-10" v-if="dataLoaded">
         
         <!-- Top Visual Row: Carousel + Radar (Cardless) -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
@@ -85,7 +85,7 @@
               </div>
               <!-- Radar Chart -->
               <div class="flex-1 h-[150px] relative min-w-0">
-                <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs">
+                <div v-if="!profileRadarData" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs">
                   <div class="w-4 h-4 rounded-full border border-teal-500 border-t-transparent animate-spin"></div>
                 </div>
                 <v-chart v-else class="chart" :option="radarOption" autoresize />
@@ -96,7 +96,7 @@
             <div class="diagnostic-advice pt-4 border-t border-slate-200/60">
               <div class="text-[10px] font-bold text-teal-800 uppercase tracking-wider mb-1">建议</div>
               <p class="text-xs text-slate-655 leading-relaxed text-left">
-                {{ profileRadarData.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
+                {{ profileRadarData?.radar?.note || `综合画像分 ${profileScore}，薄弱方向：${weakAreaText}` }}
               </p>
             </div>
           </div>
@@ -312,8 +312,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -349,17 +349,19 @@ import {
   FilesIcon as Files,
 } from '@lucide/vue'
 
+defineOptions({ name: 'Home' })
+
 use([CanvasRenderer, RadarChart, TooltipComponent])
 
 const router = useRouter()
-const route = useRoute()
 
 const recommendationData = ref<RecommendationData | null>(null)
 const profileRadarData = ref<ProfileRadarData | null>(null)
 const continueLearningData = ref<ContinueLearningData | null>(null)
 const quickActionsData = ref<QuickActionsData | null>(null)
 const recentResourcesData = ref<RecentResourceItem[]>([])
-const loading = ref(false)
+const loading = ref(true)
+const dataLoaded = ref(false)
 const loadError = ref('')
 
 // Carousel slides definition
@@ -535,7 +537,7 @@ const radarOption = computed(() => {
 
 const profileScore = computed(() => {
   const raw = profileRadarData.value as any
-  const candidate = raw?.overall_score ?? raw?.total_score ?? raw?.score ?? raw?.profile_score ?? raw?.composite_score
+  const candidate = raw?.score
   if (candidate !== undefined && candidate !== null) return clampPercent(candidate)
 
   const values = radarValues.value
@@ -646,36 +648,37 @@ const quickActions = computed<HomeActionItem[]>(() => {
 })
 
 const loadAllData = async () => {
-  loading.value = true
-  loadError.value = ''
-  try {
-    const [
-      recRes,
-      radarRes,
-      continueRes,
-      actionsRes,
-      resourcesRes,
-    ] = await Promise.all([
-      getRecommendation(),
-      getProfileRadar(),
-      getContinueLearning(),
-      getQuickActions(),
-      getRecentResources(),
-    ])
-
-    recommendationData.value = recRes.data.data
-    profileRadarData.value = radarRes.data.data
-    continueLearningData.value = continueRes.data.data
-    quickActionsData.value = actionsRes.data.data
-    recentResourcesData.value = resourcesRes.data.data ?? []
-  } catch (error) {
-    console.error('Failed to load dashboard data', error)
-    recommendationData.value = null
-    profileRadarData.value = null
-    loadError.value = '后端接口暂时不可用，请稍后重试。'
-  } finally {
-    loading.value = false
+  // 首次加载显示 loading 骨架，后续刷新保留旧数据
+  if (!dataLoaded.value) {
+    loading.value = true
   }
+  loadError.value = ''
+
+  const results = await Promise.allSettled([
+    getRecommendation(),
+    getProfileRadar(),
+    getContinueLearning(),
+    getQuickActions(),
+    getRecentResources(),
+  ])
+
+  const [recRes, radarRes, continueRes, actionsRes, resourcesRes] = results
+
+  if (recRes.status === 'fulfilled') recommendationData.value = recRes.value.data.data
+  if (radarRes.status === 'fulfilled') profileRadarData.value = radarRes.value.data.data
+  if (continueRes.status === 'fulfilled') continueLearningData.value = continueRes.value.data.data
+  if (actionsRes.status === 'fulfilled') quickActionsData.value = actionsRes.value.data.data
+  if (resourcesRes.status === 'fulfilled') recentResourcesData.value = resourcesRes.value.data.data ?? []
+
+  const failedCount = results.filter(r => r.status === 'rejected').length
+  if (failedCount === results.length) {
+    loadError.value = '后端接口暂时不可用，请稍后重试。'
+  } else if (failedCount > 0) {
+    console.warn(`${failedCount} 个首页接口请求失败，部分数据不可用`)
+  }
+
+  dataLoaded.value = true
+  loading.value = false
 }
 
 onMounted(() => {
@@ -683,18 +686,13 @@ onMounted(() => {
   startAutoplay()
 })
 
+onActivated(() => {
+  loadAllData()
+})
+
 onUnmounted(() => {
   stopAutoplay()
 })
-
-watch(
-  () => route.path,
-  (newPath) => {
-    if (newPath === '/dashboard') {
-      loadAllData()
-    }
-  }
-)
 </script>
 
 <style scoped>

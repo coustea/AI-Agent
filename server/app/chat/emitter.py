@@ -476,7 +476,7 @@ def _result_preview(value: Any, *, limit: int = 500) -> str:
 
 # 工具参数提取配置：工具名 -> 要显示的参数键列表
 _TOOL_CONTEXT_KEYS: dict[str, tuple[str, ...]] = {
-    "get_learner_profile": ("dimension", "course_name"),
+    "get_learner_profile": ("dimension",),
     "get_long_term_memory": ("category",),
     "search_knowledge_base": ("query", "course_name"),
     "research": ("query", "objective"),

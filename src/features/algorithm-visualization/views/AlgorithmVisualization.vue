@@ -1,5 +1,6 @@
 <template>
   <main class="algorithm-visualizer-page">
+    <!-- Design Read: IDE-style workspace for algorithm learners, with a high-density flat panel system, leaning toward LeetCode-style layout with zero border-radius controls, 1px borders. -->
     <section class="algorithm-visualizer-main">
       <section class="visualizer-left">
         <VisualizerCanvas
@@ -27,22 +28,16 @@
       </section>
 
       <aside class="visualizer-right">
-        <AlgorithmToolbar
+        <CodeEditorPanel
+          v-model:code="code"
           v-model:language="language"
           v-model:algorithm="algorithm"
           :languages="languages"
           :algorithms="algorithms"
-          :code="code"
-          :generating="generating"
-          @run="handleRun"
-          @reset-template="resetTemplate"
-        />
-
-        <CodeEditorPanel
-          v-model:code="code"
-          v-model:language="language"
           :loading="generating"
           :active-line="currentEvent?.line"
+          @run="handleRun"
+          @reset-template="resetTemplate"
         />
 
         <AlgorithmInfoPanel
@@ -62,7 +57,6 @@
 import { computed, onMounted } from 'vue'
 import VisualizerCanvas from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerCanvas.vue'
 import VisualizerControlBar from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerControlBar.vue'
-import AlgorithmToolbar from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmToolbar.vue'
 import CodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/CodeInputPanel.vue'
 import AlgorithmInfoPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmInfoPanel.vue'
 import { useTracePlayer } from '@/features/algorithm-visualization/composables/useTracePlayer'
@@ -138,12 +132,9 @@ function seek(value: number) { playback.seek(value) }
 <style scoped>
 .algorithm-visualizer-page {
   height: calc(100vh - 64px);
-  min-height: 680px;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(circle at 18% 16%, rgba(37, 99, 235, 0.06), transparent 28%),
-    linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+  background: #f8fafc;
   overflow: hidden;
 }
 
@@ -151,31 +142,30 @@ function seek(value: number) { playback.seek(value) }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(420px, 0.95fr);
-  gap: 16px;
-  padding: 20px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(420px, 1fr);
+  gap: 8px;
+  padding: 8px;
 }
 
 .visualizer-left {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .visualizer-right {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-rows: minmax(0, 1fr) 200px;
+  gap: 8px;
 }
 
 @media (max-width: 1100px) {
   .algorithm-visualizer-page {
     height: auto;
-    min-height: calc(100vh - 64px);
     overflow: visible;
   }
 
@@ -184,13 +174,7 @@ function seek(value: number) { playback.seek(value) }
   }
 
   .visualizer-left {
-    grid-template-rows: 520px auto;
-  }
-}
-
-@media (max-width: 640px) {
-  .algorithm-visualizer-main {
-    padding: 12px;
+    min-height: 600px;
   }
 }
 </style>

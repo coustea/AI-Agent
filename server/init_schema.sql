@@ -269,35 +269,33 @@ COMMENT ON COLUMN global_profiles.profile_json IS '画像JSON，包含能力评�
 COMMENT ON COLUMN global_profiles.profile_score_json IS '画像评分JSON，各维度得分';
 
 -- ============================================================
--- 9. course_profiles
+-- 9. weekly_learning_digests
 -- ============================================================
-CREATE TABLE IF NOT EXISTS course_profiles (
+CREATE TABLE IF NOT EXISTS weekly_learning_digests (
     id                 SERIAL PRIMARY KEY,
-    global_profile_id  INTEGER NOT NULL REFERENCES global_profiles(id) ON DELETE CASCADE,
     user_id            INTEGER NOT NULL,
     module             VARCHAR NOT NULL DEFAULT 'mentor',
-    course_key         VARCHAR(200) NOT NULL,
-    course_name        VARCHAR(200) NOT NULL,
-    aliases            JSONB NOT NULL DEFAULT '[]'::jsonb,
-    profile_markdown   TEXT NOT NULL DEFAULT '',
+    week_start         TIMESTAMPTZ NOT NULL,
+    week_end           TIMESTAMPTZ NOT NULL,
+    digest_markdown    TEXT NOT NULL,
+    courses_active     JSONB,
+    stats              JSONB,
     created_at         TIMESTAMPTZ DEFAULT NOW(),
     updated_at         TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_course_profile_global_course_key UNIQUE (global_profile_id, course_key)
+    CONSTRAINT uq_weekly_digest_user_module_week UNIQUE (user_id, module, week_start)
 );
 
-CREATE INDEX IF NOT EXISTS ix_course_profiles_global_profile_id ON course_profiles (global_profile_id);
-CREATE INDEX IF NOT EXISTS ix_course_profiles_user_id ON course_profiles (user_id);
-CREATE INDEX IF NOT EXISTS ix_course_profiles_module ON course_profiles (module);
-CREATE INDEX IF NOT EXISTS ix_course_profiles_course_key ON course_profiles (course_key);
-CREATE INDEX IF NOT EXISTS ix_course_profiles_course_name ON course_profiles (course_name);
+CREATE INDEX IF NOT EXISTS ix_weekly_digests_user_id ON weekly_learning_digests (user_id);
+CREATE INDEX IF NOT EXISTS ix_weekly_digests_module ON weekly_learning_digests (module);
+CREATE INDEX IF NOT EXISTS ix_weekly_digests_week_start ON weekly_learning_digests (week_start);
+CREATE INDEX IF NOT EXISTS ix_weekly_digests_user_week ON weekly_learning_digests (user_id, week_start);
 
-COMMENT ON TABLE course_profiles IS '课程画像表，按学科存储用户的细粒度学习画像';
-COMMENT ON COLUMN course_profiles.global_profile_id IS '关联全局画像ID，级联删除';
-COMMENT ON COLUMN course_profiles.user_id IS '用户ID';
-COMMENT ON COLUMN course_profiles.course_key IS '课程标识码，如math/physics';
-COMMENT ON COLUMN course_profiles.course_name IS '课程名称';
-COMMENT ON COLUMN course_profiles.aliases IS '课程别名JSON数组，用于模糊匹配';
-COMMENT ON COLUMN course_profiles.profile_markdown IS '课程画像Markdown内容';
+COMMENT ON TABLE weekly_learning_digests IS '周度学习摘要表，聚合用户本周跨系统学习行为，作为全局画像评分的缓冲证据层';
+COMMENT ON COLUMN weekly_learning_digests.week_start IS '本周一 00:00:00 UTC';
+COMMENT ON COLUMN weekly_learning_digests.week_end IS '本周日 23:59:59.999999 UTC';
+COMMENT ON COLUMN weekly_learning_digests.digest_markdown IS '周度摘要 Markdown（由 weekly_digest.md prompt 生成）';
+COMMENT ON COLUMN weekly_learning_digests.courses_active IS '本周活跃课程/主题列表 JSON 数组';
+COMMENT ON COLUMN weekly_learning_digests.stats IS '聚合统计快照 JSON（对话轮数、资源数、节点完成数、答题数与正确率、活跃分钟）';
 
 -- ============================================================
 -- 10. generated_resources
@@ -431,58 +429,39 @@ COMMENT ON COLUMN quiz_questions.tags IS '标签JSON数组';
 COMMENT ON COLUMN quiz_questions.language IS '题目语言';
 
 -- ============================================================
--- 13. learning_events
+-- 13. learning_events — unified 单表，module + entity_id 替代 6 个 FK
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learning_events (
-    id                  SERIAL          PRIMARY KEY,
-    user_id             INTEGER         NOT NULL,
-    session_id          VARCHAR(100),
-    resource_id         INTEGER,
-    resource_item_id    INTEGER,
-    path_id             INTEGER,
-    path_node_id        INTEGER,
-    node_id             VARCHAR(50),
-    event_type          VARCHAR(50)     NOT NULL,
-    course              VARCHAR(200),
-    topic               VARCHAR(200),
-    score               FLOAT,
-    feedback            TEXT,
-    metadata_json       JSONB,
-    created_at          TIMESTAMPTZ     DEFAULT NOW()
+    id              SERIAL          PRIMARY KEY,
+    user_id         INTEGER         NOT NULL,
+    module          VARCHAR(50)     NOT NULL,
+    entity_id       VARCHAR(255),
+    event_type      VARCHAR(50)     NOT NULL,
+    score           FLOAT,
+    course          VARCHAR(200),
+    topic           VARCHAR(200),
+    event_metadata  JSONB           DEFAULT '{}',
+    created_at      TIMESTAMPTZ     DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS ix_learning_events_user_id ON learning_events (user_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_session_id ON learning_events (session_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_resource_id ON learning_events (resource_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_resource_item_id ON learning_events (resource_item_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_path_id ON learning_events (path_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_path_node_id ON learning_events (path_node_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_node_id ON learning_events (node_id);
-CREATE INDEX IF NOT EXISTS ix_learning_events_event_type ON learning_events (event_type);
-CREATE INDEX IF NOT EXISTS ix_learning_events_created_at ON learning_events (created_at);
+CREATE INDEX IF NOT EXISTS ix_learning_events_user_module
+    ON learning_events (user_id, module);
+CREATE INDEX IF NOT EXISTS ix_learning_events_user_module_created
+    ON learning_events (user_id, module, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_learning_events_module_entity
+    ON learning_events (module, entity_id);
+CREATE INDEX IF NOT EXISTS ix_learning_events_event_metadata
+    ON learning_events USING GIN (event_metadata);
 
--- Composite indexes
-CREATE INDEX IF NOT EXISTS ix_learning_events_user_session_created_at
-    ON learning_events (user_id, session_id, created_at);
-CREATE INDEX IF NOT EXISTS ix_learning_events_user_type_created_at
-    ON learning_events (user_id, event_type, created_at);
-
--- GIN index for metadata_json
-CREATE INDEX IF NOT EXISTS ix_learning_events_metadata_json
-    ON learning_events USING GIN (metadata_json);
-
-COMMENT ON TABLE learning_events IS '学习事件表，记录用户的所有学习行为事件';
+COMMENT ON TABLE learning_events IS '学习事件表，单表 unified 结构，按 module 分域';
 COMMENT ON COLUMN learning_events.user_id IS '用户ID';
-COMMENT ON COLUMN learning_events.session_id IS '关联学习会话ID';
-COMMENT ON COLUMN learning_events.resource_id IS '关联资源ID';
-COMMENT ON COLUMN learning_events.resource_item_id IS '关联资源子项ID';
-COMMENT ON COLUMN learning_events.path_id IS '关联学习路径ID';
-COMMENT ON COLUMN learning_events.path_node_id IS '关联路径节点ID';
-COMMENT ON COLUMN learning_events.event_type IS '事件类型，如start_complete/quiz_submit/resource_view';
-COMMENT ON COLUMN learning_events.course IS '学科';
-COMMENT ON COLUMN learning_events.topic IS '知识点/主题';
-COMMENT ON COLUMN learning_events.score IS '得分，用于测验类事件';
-COMMENT ON COLUMN learning_events.feedback IS '用户反馈文本';
+COMMENT ON COLUMN learning_events.module IS '模块域：chat / resource / path / quiz / visualizer';
+COMMENT ON COLUMN learning_events.entity_id IS '模块内实体 ID（session_id / resource_id / path_node_id / …）';
+COMMENT ON COLUMN learning_events.event_type IS '模块内事件子类型';
+COMMENT ON COLUMN learning_events.score IS '得分 0–100，仅测验类事件';
+COMMENT ON COLUMN learning_events.course IS '课程/科目';
+COMMENT ON COLUMN learning_events.topic IS '知识点/主题/算法名';
+COMMENT ON COLUMN learning_events.event_metadata IS '模块特有扩展字段（JSONB）';
 
 -- ============================================================
 -- 13b. learning_sessions

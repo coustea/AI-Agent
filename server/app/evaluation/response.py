@@ -11,22 +11,17 @@ class LearningEventItem(BaseModel):
     """学习事件响应项 — 仅返回前端展示所需字段。"""
 
     id: int
+    module: str
+    entity_id: str | None = None
     event_type: str
+    score: float | None = None
     course: str | None = None
     topic: str | None = None
-    feedback: str | None = None
-    score: int | None = None
-    path_id: int | None = None
-    path_node_id: int | None = None
-    node_id: str | None = None
-    resource_id: int | None = None
-    resource_item_id: int | None = None
+    event_metadata: dict = Field(default_factory=dict)
     created_at: datetime
 
 
 class EvaluationSummaryResponse(BaseModel):
-    """评估摘要响应 — 仅返回前端展示所需字段。"""
-
     event_count: int
     average_score: float | None = None
     completed_resources: int = 0
@@ -38,15 +33,11 @@ class EvaluationSummaryResponse(BaseModel):
 
 
 class DailyTimeEntry(BaseModel):
-    """每日学习时长记录。"""
-
     date: str
     seconds: int = Field(default=0, ge=0)
 
 
 class LearningTimeStatsResponse(BaseModel):
-    """学习时长统计响应 — 仅返回前端展示所需字段。"""
-
     today_seconds: int = Field(default=0, ge=0)
     total_seconds: int = Field(default=0, ge=0)
     streak_days: int = Field(default=0, ge=0)

@@ -41,68 +41,74 @@ const difficultyLabel = computed(() => {
 
 <style scoped>
 .algorithm-info-panel {
-  padding: 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+  padding: 12px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .info-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .info-header h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 720;
+  font-size: 13px;
+  font-weight: 600;
   color: #0f172a;
 }
 
 .difficulty-badge {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .difficulty-badge.easy {
-  background: rgba(220, 252, 231, 0.92);
-  color: #059669;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
 }
 
 .difficulty-badge.medium {
-  background: rgba(254, 243, 199, 0.92);
-  color: #d97706;
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .difficulty-badge.hard {
-  background: rgba(254, 226, 226, 0.92);
-  color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .step-message {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  overflow-y: auto;
 }
 
 .step-index {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: #2563eb;
 }
 
 .step-message p {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #334155;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .step-message.empty p {
@@ -111,8 +117,8 @@ const difficultyLabel = computed(() => {
 
 .error-message p {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #dc2626;
-  font-weight: 600;
+  font-weight: 500;
 }
 </style>

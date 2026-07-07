@@ -22,7 +22,6 @@ logger = get_logger(__name__)
 
 class GetLearnerProfileArgs(BaseModel):
     dimension: str | None = Field(default=None, description="Profile dimension to read, such as goals or preferences.")
-    course_name: str | None = Field(default=None, description="Course-specific profile scope when available.")
     reason: str = Field(default="", description="Why the tutor needs the profile.")
 
 
@@ -34,7 +33,6 @@ def make_get_learner_profile(
 
     async def _impl(
         dimension: str | None = None,
-        course_name: str | None = None,
         reason: str = "",
     ) -> str:
         svc = profile_service or get_profile_service()

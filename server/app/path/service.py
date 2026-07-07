@@ -294,6 +294,24 @@ class PathService:
             await self.session.commit()
 
         path = await self._must_get_path(user_id, node.path_id)
+        try:
+            from app.path.events import record_node_started_event
+
+            await record_node_started_event(
+                db=self.session,
+                user_id=user_id,
+                path_id=path.id,
+                path_node_id=node.id,
+                node_id=node.node_id,
+                course=path.title,
+                topic=node.title,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to record node_started event: user_id=%s node_id=%s",
+                user_id,
+                node_id,
+            )
         return await self._build_response(path)
 
     async def generate_tutorial(self, user_id: int, node_id: int) -> LearningPathNodeWorkspaceResponse:
@@ -467,13 +485,13 @@ class PathService:
         """计算路径学习效果评估。"""
         path = await self._must_get_path(user_id, path_id)
         stmt = (
-            select(LearningEvent)
-            .where(
-                LearningEvent.user_id == user_id,
-                LearningEvent.path_id == path.id,
-            )
-            .order_by(col(LearningEvent.created_at).desc())
-            .limit(50)
+    select(LearningEvent)
+    .where(
+        LearningEvent.user_id == user_id,
+        LearningEvent.module == "path",
+    )
+    .order_by(col(LearningEvent.created_at).desc())
+    .limit(50)
         )
         events = list((await self.session.exec(stmt)).all())
         active_minutes = await self._get_path_active_minutes(
@@ -526,36 +544,23 @@ class PathService:
         user_id: int,
         path_id: int,
         payload: LearningEventCreate,
-    ) -> tuple[LearningEvent, dict[str, Any]]:
+    ) -> LearningEvent:
         path = await self._must_get_path(user_id, path_id)
-        updates: dict[str, Any] = {"path_id": path.id}
-        if payload.path_node_id is not None:
-            node = await self._must_get_node(user_id, payload.path_node_id)
+        meta = dict(payload.event_metadata or {})
+        meta["path_id"] = path.id
+        if payload.event_metadata and "path_node_id" in payload.event_metadata:
+            pnid = payload.event_metadata["path_node_id"]
+            node = await self._must_get_node(user_id, pnid)
             if node.path_id != path.id:
                 raise ValueError("学习事件节点不属于当前学习路径")
-            updates["path_node_id"] = node.id
-            updates["node_id"] = node.node_id
-        payload = payload.model_copy(update=updates)
-        event = await self.evaluation_service.record_event(
+            meta["path_node_id"] = node.id
+            meta["node_id"] = node.node_id
+        payload = payload.model_copy(update={"entity_id": str(path.id), "event_metadata": meta})
+        return await self.evaluation_service.record_event(
             self.session,
             user_id=user_id,
             payload=payload,
         )
-        profile_payload = {
-            "event_type": event.event_type,
-            "session_id": event.session_id,
-            "resource_id": event.resource_id,
-            "resource_item_id": event.resource_item_id,
-            "path_id": event.path_id,
-            "path_node_id": event.path_node_id,
-            "node_id": event.node_id,
-            "course": event.course,
-            "topic": event.topic,
-            "score": event.score,
-            "feedback": event.feedback,
-            "metadata": event.metadata_json or {},
-        }
-        return event, profile_payload
 
     # ── 共享内部方法 ────────────────────────────────────────────────────────
 
@@ -785,16 +790,13 @@ class PathService:
 def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
     return LearningEventItem(
         id=event.id or 0,
+        module=event.module,
+        entity_id=event.entity_id,
         event_type=event.event_type,
-        resource_id=event.resource_id,
-        resource_item_id=event.resource_item_id,
-        path_id=event.path_id,
-        path_node_id=event.path_node_id,
-        node_id=event.node_id,
         course=event.course,
         topic=event.topic,
         score=event.score,
-        feedback=event.feedback,
+        event_metadata=event.event_metadata,
         created_at=event.created_at,
     )
 

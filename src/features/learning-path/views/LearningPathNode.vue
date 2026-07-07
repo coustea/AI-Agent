@@ -511,12 +511,15 @@ async function startLearningTracking() {
   })
 
   await recordPathLearningEvent(workspace.value.path.id, {
+    module: 'path',
     event_type: 'resource_viewed',
-    path_id: workspace.value.path.id,
-    path_node_id: workspace.value.node.id,
-    node_id: workspace.value.node.node_id,
     course: workspace.value.path.title,
     topic: workspace.value.node.title,
+    event_metadata: {
+      path_id: workspace.value.path.id,
+      path_node_id: workspace.value.node.id,
+      node_id: workspace.value.node.node_id,
+    },
   })
 }
 
@@ -561,14 +564,15 @@ async function submitQuiz() {
     isQuizSubmitted.value = true
 
     await recordPathLearningEvent(workspace.value.path.id, {
+      module: 'path',
       event_type: 'quiz_submitted',
-      path_id: workspace.value.path.id,
-      path_node_id: workspace.value.node.id,
-      node_id: workspace.value.node.node_id,
       course: workspace.value.path.title,
       topic: workspace.value.node.title,
       score: Number(((quizResult.value.score / 5) * 100).toFixed(0)),
-      metadata: {
+      event_metadata: {
+        path_id: workspace.value.path.id,
+        path_node_id: workspace.value.node.id,
+        node_id: workspace.value.node.node_id,
         outcome: quizResult.value.outcome,
         weak_knowledge_points: quizResult.value.weak_knowledge_points,
       },

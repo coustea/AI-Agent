@@ -193,16 +193,9 @@ GLOBAL_PROFILE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"(实践|动手|写代码|做题|编程|实验|实战|练习|编码|Debug)"),
 )
 
-COURSE_PROFILE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
-    re.compile(r"(这门课|操作系统|数据库|计网|网络|计组|算法|数据结构|高数|线代)"),
-    re.compile(r"(进程|线程|锁|事务|索引|内存|虚拟内存|调度|TCP|IP|握手|矩阵|导数|概念)"),
-    re.compile(r"(薄弱|搞错|出错|卡住|记不住|混淆|搞不清|老是错|不会做|不懂|理解不了)"),
-    re.compile(r"(基础|掌握|熟悉|了解|懂了|不明白|难度|简单|困难|稍微深点)"),
-)
-
 
 def classify_turn_signals(user_message: str, assistant_reply: str) -> dict[str, bool]:
-    """统一信号分类 — 一次匹配返回 LTM、全局画像、课程画像三类信号。
+    """统一信号分类 — 一次匹配返回 LTM 与全局画像两类信号。
 
     避免同一段对话文本在 service.py 和 background.py 中被分别正则匹配两轮。
     """
@@ -214,5 +207,4 @@ def classify_turn_signals(user_message: str, assistant_reply: str) -> dict[str, 
     return {
         "ltm": ltm_signal,
         "global_profile": any(p.search(turn_text) for p in GLOBAL_PROFILE_PATTERNS),
-        "course_profile": any(p.search(turn_text) for p in COURSE_PROFILE_PATTERNS),
     }

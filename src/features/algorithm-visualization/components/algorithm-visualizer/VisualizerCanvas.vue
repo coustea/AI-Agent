@@ -73,12 +73,13 @@ defineProps<{
 <style scoped>
 .visualizer-canvas {
   position: relative;
+  flex: 1 1 0%;
   min-height: 0;
-  border-radius: 22px;
+  border-radius: 4px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: none;
 }
 
 .canvas-loading {
@@ -87,7 +88,7 @@ defineProps<{
   display: grid;
   place-content: center;
   gap: 14px;
-  background: rgba(248, 250, 252, 0.85);
+  background: rgba(248, 250, 252, 0.9);
   z-index: 2;
 }
 

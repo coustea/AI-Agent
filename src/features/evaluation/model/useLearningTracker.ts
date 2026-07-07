@@ -134,12 +134,14 @@ export function stopTracking() {
     started_at: startedAt.toISOString(),
     ended_at: now.toISOString(),
     duration_seconds: durationSeconds,
-    resource_id: context.resourceId,
-    path_id: context.pathId,
-    path_node_id: context.pathNodeId,
-    node_id: context.nodeId,
     course: context.course,
     topic: context.topic,
+    event_metadata: {
+      resource_id: context.resourceId,
+      path_id: context.pathId,
+      path_node_id: context.pathNodeId,
+      node_id: context.nodeId,
+    },
   }
 
   recordLearningSession(payload).catch(() => {

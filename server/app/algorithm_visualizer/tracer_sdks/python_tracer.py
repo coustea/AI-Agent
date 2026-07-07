@@ -156,3 +156,143 @@ class QueueTracer(VisualTracer):
 
     def finish(self, line: Optional[int] = None) -> None:
         self._record("finish", {"mode": "queue", "items": self._snapshot()}, message="队列模拟完成", line=line)
+
+
+class LinkedListTracer(VisualTracer):
+    """Linked list algorithm tracer."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._visualizer_type = "linked-list"
+        self._nodes: List[Dict[str, Any]] = []
+        self._pointers: List[Dict[str, Any]] = []
+
+    def init_list(self, nodes: List[Dict[str, Any]], pointers: Optional[List[Dict[str, Any]]] = None, line: Optional[int] = None) -> None:
+        self._nodes = [dict(n) for n in nodes]
+        self._pointers = [dict(p) for p in pointers] if pointers else []
+        self._record("init_list", {"nodes": list(self._nodes), "pointers": list(self._pointers)},
+                      message="初始化链表", line=line)
+
+    def set_visited(self, node_index: int, visited: bool = True, line: Optional[int] = None) -> None:
+        if 0 <= node_index < len(self._nodes):
+            self._nodes[node_index]["tone"] = "visited" if visited else "default"
+        self._record("set_visited", {"nodes": list(self._nodes), "pointers": list(self._pointers)},
+                      targets=[node_index], message=f"访问节点: {self._nodes[node_index]['label']}", line=line)
+
+    def move_pointer(self, label: str, node_index: int, tone: str = "accent", line: Optional[int] = None) -> None:
+        self._pointers = [p for p in self._pointers if p["label"] != label]
+        if node_index is not None:
+            self._pointers.append({"label": label, "nodeIndex": node_index, "tone": tone})
+        self._record("move_pointer", {"nodes": list(self._nodes), "pointers": list(self._pointers)},
+                      targets=[node_index] if node_index is not None else [],
+                      message=f"移动指针 {label} 指向节点 {node_index}", line=line)
+
+    def add_node(self, label: str, tone: str = "default", line: Optional[int] = None) -> int:
+        node_id = f"node-{len(self._nodes)}"
+        self._nodes.append({"id": node_id, "label": label, "tone": tone})
+        node_idx = len(self._nodes) - 1
+        self._record("add_node", {"nodes": list(self._nodes), "pointers": list(self._pointers)},
+                      targets=[node_idx], message=f"添加节点 {label}", line=line)
+        return node_idx
+
+    def remove_node(self, node_index: int, line: Optional[int] = None) -> None:
+        if 0 <= node_index < len(self._nodes):
+            removed = self._nodes.pop(node_index)
+            # Shift nodeIndex for all pointers referencing indexes after node_index
+            for p in self._pointers:
+                idx = p.get("nodeIndex")
+                if idx is not None and idx > node_index:
+                    p["nodeIndex"] = idx - 1
+                elif idx == node_index:
+                    p["nodeIndex"] = None
+            self._pointers = [p for p in self._pointers if p.get("nodeIndex") is not None]
+            self._record("remove_node", {"nodes": list(self._nodes), "pointers": list(self._pointers)},
+                          message=f"删除节点 {removed['label']}", line=line)
+
+    def finish(self, line: Optional[int] = None) -> None:
+        self._record("finish", {"nodes": list(self._nodes), "pointers": list(self._pointers)}, message="链表操作完成", line=line)
+
+
+class TreeTracer(VisualTracer):
+    """Tree algorithm tracer."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._visualizer_type = "tree"
+        self._nodes: List[Dict[str, Any]] = []
+
+    def init_tree(self, nodes: List[Dict[str, Any]], line: Optional[int] = None) -> None:
+        self._nodes = [dict(n) for n in nodes]
+        self._record("init_tree", {"nodes": list(self._nodes)}, message="初始化树结构", line=line)
+
+    def visit_node(self, node_id: str, visited: bool = True, line: Optional[int] = None) -> None:
+        for node in self._nodes:
+            if node["id"] == node_id:
+                node["tone"] = "visited" if visited else "default"
+                self._record("visit_node", {"nodes": list(self._nodes)}, targets=[node_id], message=f"访问节点: {node['label']}", line=line)
+                break
+
+    def finish(self, line: Optional[int] = None) -> None:
+        self._record("finish", {"nodes": list(self._nodes)}, message="树操作完成", line=line)
+
+
+class GraphTracer(VisualTracer):
+    """Graph algorithm tracer."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._visualizer_type = "graph"
+        self._nodes: List[Dict[str, Any]] = []
+
+    def init_graph(self, nodes: List[Dict[str, Any]], line: Optional[int] = None) -> None:
+        self._nodes = [dict(n) for n in nodes]
+        self._record("init_graph", {"nodes": list(self._nodes)}, message="初始化图结构", line=line)
+
+    def visit_node(self, node_id: str, visited: bool = True, line: Optional[int] = None) -> None:
+        for node in self._nodes:
+            if node["id"] == node_id:
+                node["tone"] = "visited" if visited else "default"
+                self._record("visit_node", {"nodes": list(self._nodes)}, targets=[node_id], message=f"访问节点: {node['label']}", line=line)
+                break
+
+    def finish(self, line: Optional[int] = None) -> None:
+        self._record("finish", {"nodes": list(self._nodes)}, message="图操作完成", line=line)
+
+
+class DpTableTracer(VisualTracer):
+    """DP table algorithm tracer."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._visualizer_type = "dp-table"
+        self._headers: List[str] = []
+        self._values: List[List[Any]] = []
+        self._highlighted: List[Dict[str, Any]] = []
+
+    def init_table(self, headers: List[str], rows: int, cols: int, fill_value: Any = 0, line: Optional[int] = None) -> None:
+        self._headers = list(headers)
+        self._values = [[fill_value] * cols for _ in range(rows)]
+        self._highlighted = []
+        self._record("init_table", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
+                      message="初始化 DP 表格", line=line)
+
+    def set_value(self, row: int, col: int, value: Any, line: Optional[int] = None) -> None:
+        if 0 <= row < len(self._values) and 0 <= col < len(self._values[row]):
+            self._values[row][col] = value
+        self._record("set_value", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
+                      message=f"更新表格值 dp[{row}][{col}] = {value}", line=line)
+
+    def highlight(self, row: int, col: int, tone: str = "active", line: Optional[int] = None) -> None:
+        self._highlighted = [item for item in self._highlighted if not (item["row"] == row and item["col"] == col)]
+        self._highlighted.append({"row": row, "col": col, "tone": tone})
+        self._record("highlight", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
+                      message=f"高亮单元格 dp[{row}][{col}] ({tone})", line=line)
+
+    def clear_highlights(self, line: Optional[int] = None) -> None:
+        self._highlighted = []
+        self._record("clear_highlights", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
+                      message="清除所有高亮", line=line)
+
+    def finish(self, line: Optional[int] = None) -> None:
+        self._record("finish", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
+                      message="DP 填表完成", line=line)

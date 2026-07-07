@@ -128,5 +128,142 @@ class QueueTracer extends VisualTracer {
   }
 }
 
-export { VisualTracer, ArrayTracer, StackTracer, QueueTracer };
+class LinkedListTracer extends VisualTracer {
+  constructor() {
+    super();
+    this._visualizerType = 'linked-list';
+    this._nodes = [];
+    this._pointers = [];
+  }
+  initList(nodes, pointers = [], opts = {}) {
+    this._nodes = nodes.map(n => ({ ...n }));
+    this._pointers = pointers.map(p => ({ ...p }));
+    this._record('init_list', { nodes: [...this._nodes], pointers: [...this._pointers] }, { message: '初始化链表', ...opts });
+  }
+  setVisited(nodeIndex, visited = true, opts = {}) {
+    if (nodeIndex >= 0 && nodeIndex < this._nodes.length) {
+      this._nodes[nodeIndex].tone = visited ? 'visited' : 'default';
+    }
+    this._record('set_visited', { nodes: [...this._nodes], pointers: [...this._pointers] }, { targets: [nodeIndex], message: `访问节点: ${this._nodes[nodeIndex]?.label}`, ...opts });
+  }
+  movePointer(label, nodeIndex, tone = 'accent', opts = {}) {
+    this._pointers = this._pointers.filter(p => p.label !== label);
+    if (nodeIndex !== null && nodeIndex !== undefined) {
+      this._pointers.push({ label, nodeIndex, tone });
+    }
+    this._record('move_pointer', { nodes: [...this._nodes], pointers: [...this._pointers] }, { targets: nodeIndex !== null ? [nodeIndex] : [], message: `移动指针 ${label} 指向节点 ${nodeIndex}`, ...opts });
+  }
+  addNode(label, tone = 'default', opts = {}) {
+    const nodeId = `node-${this._nodes.length}`;
+    this._nodes.push({ id: nodeId, label, tone });
+    const nodeIdx = this._nodes.length - 1;
+    this._record('add_node', { nodes: [...this._nodes], pointers: [...this._pointers] }, { targets: [nodeIdx], message: `添加节点 ${label}`, ...opts });
+    return nodeIdx;
+  }
+  removeNode(nodeIndex, opts = {}) {
+    if (nodeIndex >= 0 && nodeIndex < this._nodes.length) {
+      const removed = this._nodes.splice(nodeIndex, 1)[0];
+      for (const p of this._pointers) {
+        if (p.nodeIndex > nodeIndex) {
+          p.nodeIndex--;
+        } else if (p.nodeIndex === nodeIndex) {
+          p.nodeIndex = null;
+        }
+      }
+      this._pointers = this._pointers.filter(p => p.nodeIndex !== null);
+      this._record('remove_node', { nodes: [...this._nodes], pointers: [...this._pointers] }, { message: `删除节点 ${removed.label}`, ...opts });
+    }
+  }
+  finish(opts = {}) {
+    this._record('finish', { nodes: [...this._nodes], pointers: [...this._pointers] }, { message: '链表操作完成', ...opts });
+    this.dump();
+  }
+}
+
+class TreeTracer extends VisualTracer {
+  constructor() {
+    super();
+    this._visualizerType = 'tree';
+    this._nodes = [];
+  }
+  initTree(nodes, opts = {}) {
+    this._nodes = nodes.map(n => ({ ...n }));
+    this._record('init_tree', { nodes: [...this._nodes] }, { message: '初始化树结构', ...opts });
+  }
+  visitNode(nodeId, visited = true, opts = {}) {
+    for (const node of this._nodes) {
+      if (node.id === nodeId) {
+        node.tone = visited ? 'visited' : 'default';
+        this._record('visit_node', { nodes: [...this._nodes] }, { targets: [nodeId], message: `访问节点: ${node.label}`, ...opts });
+        break;
+      }
+    }
+  }
+  finish(opts = {}) {
+    this._record('finish', { nodes: [...this._nodes] }, { message: '树操作完成', ...opts });
+    this.dump();
+  }
+}
+
+class GraphTracer extends VisualTracer {
+  constructor() {
+    super();
+    this._visualizerType = 'graph';
+    this._nodes = [];
+  }
+  initGraph(nodes, opts = {}) {
+    this._nodes = nodes.map(n => ({ ...n }));
+    this._record('init_graph', { nodes: [...this._nodes] }, { message: '初始化图结构', ...opts });
+  }
+  visitNode(nodeId, visited = true, opts = {}) {
+    for (const node of this._nodes) {
+      if (node.id === nodeId) {
+        node.tone = visited ? 'visited' : 'default';
+        this._record('visit_node', { nodes: [...this._nodes] }, { targets: [nodeId], message: `访问节点: ${node.label}`, ...opts });
+        break;
+      }
+    }
+  }
+  finish(opts = {}) {
+    this._record('finish', { nodes: [...this._nodes] }, { message: '图操作完成', ...opts });
+    this.dump();
+  }
+}
+
+class DpTableTracer extends VisualTracer {
+  constructor() {
+    super();
+    this._visualizerType = 'dp-table';
+    this._headers = [];
+    this._values = [];
+    this._highlighted = [];
+  }
+  initTable(headers, rows, cols, fillValue = 0, opts = {}) {
+    this._headers = [...headers];
+    this._values = Array.from({ length: rows }, () => Array(cols).fill(fillValue));
+    this._highlighted = [];
+    this._record('init_table', { headers: [...this._headers], values: [...this._values], highlighted: [...this._highlighted] }, { message: '初始化 DP 表格', ...opts });
+  }
+  setValue(row, col, value, opts = {}) {
+    if (row >= 0 && row < this._values.length && col >= 0 && col < this._values[row].length) {
+      this._values[row][col] = value;
+    }
+    this._record('set_value', { headers: [...this._headers], values: [...this._values], highlighted: [...this._highlighted] }, { message: `更新表格值 dp[${row}][${col}] = ${value}`, ...opts });
+  }
+  highlight(row, col, tone = 'active', opts = {}) {
+    this._highlighted = this._highlighted.filter(item => !(item.row === row && item.col === col));
+    this._highlighted.push({ row, col, tone });
+    this._record('highlight', { headers: [...this._headers], values: [...this._values], highlighted: [...this._highlighted] }, { message: `高亮单元格 dp[${row}][${col}] (${tone})`, ...opts });
+  }
+  clearHighlights(opts = {}) {
+    this._highlighted = [];
+    this._record('clear_highlights', { headers: [...this._headers], values: [...this._values], highlighted: [...this._highlighted] }, { message: '清除所有高亮', ...opts });
+  }
+  finish(opts = {}) {
+    this._record('finish', { headers: [...this._headers], values: [...this._values], highlighted: [...this._highlighted] }, { message: 'DP 填表完成', ...opts });
+    this.dump();
+  }
+}
+
+export { VisualTracer, ArrayTracer, StackTracer, QueueTracer, LinkedListTracer, TreeTracer, GraphTracer, DpTableTracer };
 

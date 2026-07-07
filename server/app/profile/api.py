@@ -71,9 +71,9 @@ async def update_profile_onboarding(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """更新 onboarding 信息：同步保存基础信息 → 异步后台 LLM 推理 + 评分。
+    """更新 onboarding 信息：同步保存基础信息 → 立即返回 → 后台异步推理画像+评分。
 
-    保存基础资料到数据库后立即返回，由后台任务在后台完成画像构建。
+    前端调用后无需等待 LLM 推理完成，用户可立即进入首页。
     """
     payload_data = payload.model_dump()
     user_id = int(current_user.id)

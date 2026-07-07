@@ -6,7 +6,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate
-from app.evaluation.service import bg_apply_profile_update_from_learning_event
 from app.infra.database import get_session
 from app.infra.models import PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
@@ -424,24 +423,18 @@ async def get_path_by_id(
 # ── 学习事件与评估 ───────────────────────────────────────────────────────────
 
 
-@router.post("/{path_id}/events")  # POST 记录路径学习事件 — 前端上报学习行为
+@router.post("/{path_id}/events")
 async def record_path_learning_event(
     path_id: int,
     payload: LearningEventCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
     try:
-        event, profile_payload = await service.record_learning_event(current_user.id, path_id, payload)
+        event = await service.record_learning_event(current_user.id, path_id, payload)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
-    background_tasks.add_task(
-        bg_apply_profile_update_from_learning_event,
-        current_user.id,
-        profile_payload,
-    )
     return HttpResponse.success(data=build_learning_event_item(event).model_dump(mode="json"))
 
 

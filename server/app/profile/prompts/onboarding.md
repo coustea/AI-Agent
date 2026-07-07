@@ -64,14 +64,14 @@
 
 你的输出必须是纯 JSON，不得包含 Markdown 代码块标记、前后缀或解释性文字。
 
-输出结构如下：
+输出结构（单行紧凑 JSON）：
 
-{"dimensions_patch": {"<维度名>": {"value": "<推断描述>", "evidence": ["<引用来源>"]}}}
+{"dimensions_patch": {"<维度名>": {"value": "<中文描述，不超过80字>", "evidence": ["<字段名：字段值>"]}}}
 
-关键类型定义：
-- dimensions_patch：对象，key 为维度名（仅包含有推断结果的维度），value 为 {value, evidence} 对象
-- value：字符串，对该维度的文字描述，不超过 80 字
-- evidence：字符串数组，每项为引用来源，格式为 "字段名：字段值"
+字段说明：
+- dimensions_patch：对象，仅包含有充分证据的维度（通常 1-3 个），无证据的维度必须省略，禁止凑数
+- value：字符串，对该维度的推断描述，使用中文，不超过 80 字，应有具体信息量而非泛泛评价
+- evidence：字符串数组，每项格式统一为 "字段名：字段值"，直接引用表单原始字段，不得捏造
 
 # OUTPUT CONTROL（输出控制）
 
@@ -114,7 +114,7 @@
 - dimensions_patch 中的每个 evidence 是否都能在表单中找到来源？
 - 是否有维度被遗漏但存在未被使用的表单信息？
 - 维度名是否在 7 个允许的范围内？
-- 是否有课程相关的内容混入？（课程属于 CourseProfile 域，不在本次推断范围内）
+- 是否有课程相关的内容混入？（课程层面信息不属于全局画像的 7 个维度，不在本次推断范围内）
 
 # FEEDBACK LOOP（反馈机制）
 
@@ -122,21 +122,44 @@
 
 # EXAMPLES（实例）
 
-## 示例：用户填写了专业、年级、学习目标和课程
+以下示例展示不同信息量下应输出的画像推断结果。核心原则：value 应具体有信息量；evidence 必须直接引用表单字段；无证据的维度必须省略。
 
-输入：{"school": "北京邮电大学", "school_level": "211", "major": "软件工程", "grade": "大三", "daily_study_time": "2-3h", "global_learning_goal": "考研初试复习", "programming_languages": ["Python", "Java"], "courses": ["数据结构", "操作系统", "计算机网络"]}
+## 示例 1：信息丰富的表单 → 推断 3 个维度
 
-输出：
+【输入】
+{"school": "北京邮电大学", "school_level": "211", "major": "软件工程", "grade": "大三", "daily_study_time": "2-3h", "global_learning_goal": "考研初试复习", "programming_languages": ["Python", "Java"], "courses": ["数据结构", "操作系统", "计算机网络"]}
 
-{"dimensions_patch": {"knowledge_level": {"value": "具备软件工程专业基础知识，掌握 Python 和 Java 编程", "evidence": ["专业：软件工程", "programming_languages：Python, Java"]}, "learning_goal_type": {"value": "考研导向，目标明确", "evidence": ["global_learning_goal：考研初试复习"]}, "difficulty_tolerance": {"value": "每日可投入 2-3h 学习，中等耐受度", "evidence": ["daily_study_time：2-3h"]}}}
+【输出】
+{"dimensions_patch": {"knowledge_level": {"value": "软件工程专业大三学生，掌握Python和Java，正在学习数据结构、操作系统等核心课程，具备中等以上专业基础", "evidence": ["major：软件工程", "grade：大三", "programming_languages：Python, Java", "courses：数据结构, 操作系统, 计算机网络"]}, "learning_goal_type": {"value": "明确的考研导向，目标是初试复习，追求系统性和深度理解", "evidence": ["global_learning_goal：考研初试复习"]}, "difficulty_tolerance": {"value": "每日可投入2-3h学习，能承受中等偏高的内容密度，适合系统性复习节奏", "evidence": ["daily_study_time：2-3h"]}}}
 
-## 示例：用户只填写了少量信息
+【分析】
+- cognitive_style、weak_knowledge_points 等维度缺少表单证据（表单无学习偏好和错题数据），已省略
+- knowledge_level 综合了 major + grade + programming_languages + courses 四个字段作为证据
+- evidence 均直接引用表单原始字段，未做常识补充
 
-输入：{"school": "", "school_level": null, "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "", "global_learning_goal": "", "programming_languages": [], "courses": []}
+## 示例 2：信息中等的表单 → 推断 2 个维度
 
-输出：
+【输入】
+{"school": "浙江大学", "school_level": "985", "major": "人工智能", "grade": "大二", "daily_study_time": "1-2h", "global_learning_goal": "进阶学习", "programming_languages": ["Python"], "courses": []}
 
-{"dimensions_patch": {"knowledge_level": {"value": "初步推测具备计算机专业入门知识", "evidence": ["专业：计算机科学与技术"]}}}
+【输出】
+{"dimensions_patch": {"knowledge_level": {"value": "人工智能专业大二学生，掌握Python基础，处于专业核心课程起步阶段", "evidence": ["major：人工智能", "grade：大二", "programming_languages：Python"]}, "difficulty_tolerance": {"value": "每日学习1-2h，耐受度中等偏低，适合中等难度循序渐进", "evidence": ["daily_study_time：1-2h"]}}}
+
+【分析】
+- learning_goal_type 虽有"进阶学习"但描述过于模糊，推断依据不充分，保守省略
+- courses 为空列表，无法提供更多知识基础证据
+
+## 示例 3：信息很少的表单 → 仅推断 1 个维度
+
+【输入】
+{"school": "", "school_level": null, "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "", "global_learning_goal": "", "programming_languages": [], "courses": []}
+
+【输出】
+{"dimensions_patch": {"knowledge_level": {"value": "初步推测为计算机专业入门阶段学生，知识基础尚在建立中", "evidence": ["major：计算机科学与技术", "grade：大一"]}}}
+
+【分析】
+- 其余字段均为空，不构成任何维度的推断依据
+- 严格遵循"无证据则省略"原则，宁可只输出 1 个维度也不强行凑数
 
 # TOOLS（可选）
 

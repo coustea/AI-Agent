@@ -23,11 +23,6 @@ from loguru import logger as loguru_logger
 from sqlmodel import col, select
 
 from app.config import PATH_PASS_SCORE, PATH_QUIZ_SIZE
-from app.evaluation.request import LearningEventCreate
-from app.evaluation.service import (
-    EvaluationService,
-    bg_apply_profile_update_from_learning_event,
-)
 from app.infra.logging import get_logger
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
@@ -885,6 +880,27 @@ async def node_advance_state(state: LearnState) -> dict:
 
     await session.commit()
 
+    if outcome in ("completed", "completed_with_gaps"):
+        try:
+            from app.path.events import record_node_completed_event
+
+            path = state["path"]
+            await record_node_completed_event(
+                db=session,
+                user_id=state["user_id"],
+                path_id=path.id,
+                path_node_id=node.id,
+                node_id=node.node_id,
+                course=path.title,
+                topic=node.title,
+                score=float(state.get("score", 0) / PATH_QUIZ_SIZE * 100),
+                weak_knowledge_points=(
+                    weak_points if outcome == "completed_with_gaps" else None
+                ),
+            )
+        except Exception:
+            pass
+
     result: dict = {"outcome": outcome}
     if outcome == "remediation":
         result["tutorial_type"] = "remediation"
@@ -945,40 +961,20 @@ async def node_record_quiz_event(state: LearnState) -> dict:
     score = state.get("score", 0)
     weak_points = state.get("weak_knowledge_points", [])
 
-    payload = LearningEventCreate(
-        event_type="quiz_submitted",
+    from app.path.events import record_path_quiz_answered_event
+
+    await record_path_quiz_answered_event(
+        db=session,
+        user_id=user_id,
         path_id=path.id,
         path_node_id=node.id,
         node_id=node.node_id,
         course=path.title,
         topic=node.title,
         score=float(score / PATH_QUIZ_SIZE * 100),
-        feedback=None,
-        metadata={"weak_knowledge_points": weak_points, "outcome": outcome},
+        outcome=outcome,
+        weak_knowledge_points=weak_points,
     )
-    eval_service = EvaluationService()
-    event = await eval_service.record_event(session, user_id=user_id, payload=payload)
-
-    try:
-        await bg_apply_profile_update_from_learning_event(
-            user_id,
-            {
-                "event_type": event.event_type,
-                "session_id": event.session_id,
-                "resource_id": event.resource_id,
-                "resource_item_id": event.resource_item_id,
-                "path_id": event.path_id,
-                "path_node_id": event.path_node_id,
-                "node_id": event.node_id,
-                "course": event.course,
-                "topic": event.topic,
-                "score": event.score,
-                "feedback": event.feedback,
-                "metadata": event.metadata_json or {},
-            },
-        )
-    except Exception as exc:
-        logger.warning("Profile update from quiz event failed: %s", exc)
 
     return {}
 

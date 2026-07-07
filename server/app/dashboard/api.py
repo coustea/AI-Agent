@@ -173,10 +173,11 @@ def _weak_topics_from_events(
         topic = _event_topic(event)
         if not topic:
             continue
-        feedback = event.feedback or ""
+        metadata = event.event_metadata or {}
         if event.event_type == "quiz_submitted" and event.score is not None and event.score < 70:
             counter[topic] += 2
-        if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
+        feedback = (metadata.get("feedback_type") or metadata.get("feedback") or "")
+        if isinstance(feedback, str) and any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
             counter[topic] += 2
     return [topic for topic, _ in counter.most_common(5)]
 
@@ -364,7 +365,8 @@ async def get_continue_learning(
             select(LearningEvent)
             .where(
                 LearningEvent.user_id == current_user.id,
-                LearningEvent.path_id == path.id,
+                LearningEvent.module == "path",
+                LearningEvent.entity_id == str(path.id),
             )
             .order_by(col(LearningEvent.created_at).desc())
             .limit(1)

@@ -121,32 +121,37 @@ function handleSeek(event: Event) {
 <style scoped>
 .visualizer-control-bar {
   flex: 0 0 auto;
-  height: 66px;
-  padding: 0 20px;
+  height: 50px;
+  padding: 0 16px;
   display: grid;
-  grid-template-columns: auto auto auto auto minmax(280px, 1fr);
-  gap: 12px;
+  grid-template-columns: auto auto auto auto minmax(200px, 1fr);
+  gap: 8px;
   align-items: center;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 22px;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(14px);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  box-shadow: none;
 }
 
 .control-btn {
-  height: 36px;
-  min-width: 36px;
-  border-radius: 11px;
-  border: 1px solid #dbe3ef;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #334155;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: #f8fafc;
 }
 
 .control-btn:disabled {
@@ -155,60 +160,69 @@ function handleSeek(event: Event) {
 }
 
 .control-btn.primary {
-  min-width: 102px;
+  min-width: 80px;
   background: #0f172a;
   color: #ffffff;
   border-color: #0f172a;
 }
 
+.control-btn.primary:hover:not(:disabled) {
+  background: #1e293b;
+}
+
 .btn-icon {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
 }
 
 .progress-group {
   min-width: 0;
   display: grid;
-  gap: 8px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
 }
 
 .progress-topline {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .step-count {
-  font-size: 13px;
-  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  font-family: monospace;
 }
 
 .speed-group {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #475569;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
 }
 
 .speed-select {
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid #dbe3ef;
-  background: #f8fafc;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 11px;
 }
 
 .timeline-input {
   width: 100%;
   accent-color: #2563eb;
+  cursor: pointer;
 }
 
 @media (max-width: 1100px) {
   .visualizer-control-bar {
     height: auto;
-    padding: 14px 20px;
+    padding: 10px 16px;
     grid-template-columns: repeat(4, auto);
   }
 
@@ -226,9 +240,8 @@ function handleSeek(event: Event) {
     width: 100%;
   }
 
-  .progress-topline {
-    flex-direction: column;
-    align-items: flex-start;
+  .progress-group {
+    grid-template-columns: 1fr;
   }
 }
 </style>

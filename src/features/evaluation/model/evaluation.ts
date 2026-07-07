@@ -1,24 +1,27 @@
+export type ModuleType = 'chat' | 'resource' | 'path' | 'quiz' | 'visualizer'
+
 export type LearningEventType =
+  | 'chat_dialogue'
+  | 'resource_generated'
   | 'resource_viewed'
   | 'resource_completed'
-  | 'quiz_submitted'
-  | 'path_feedback'
-  | 'tutor_helpful'
   | 'resource_feedback'
+  | 'path_node_started'
+  | 'path_node_completed'
+  | 'path_quiz_answered'
+  | 'path_feedback'
+  | 'quiz_submitted'
+  | 'visualizer_run'
+  | 'tutor_helpful'
 
 export interface LearningEventCreate {
+  module: ModuleType
+  entity_id?: string | null
   event_type: LearningEventType
-  session_id?: string | null
-  resource_id?: number | null
-  resource_item_id?: number | null
-  path_id?: number | null
-  path_node_id?: number | null
-  node_id?: string | null
   course?: string | null
   topic?: string | null
   score?: number | null
-  feedback?: string | null
-  metadata?: Record<string, unknown>
+  event_metadata?: Record<string, unknown>
 }
 
 export interface LearningSessionCreate {
@@ -26,13 +29,9 @@ export interface LearningSessionCreate {
   started_at: string
   ended_at: string
   duration_seconds: number
-  resource_id?: number | null
-  path_id?: number | null
-  path_node_id?: number | null
-  node_id?: string | null
   course?: string | null
   topic?: string | null
-  metadata?: Record<string, unknown>
+  event_metadata?: Record<string, unknown>
 }
 
 export interface DailyTimeEntry {
@@ -50,10 +49,13 @@ export interface LearningTimeStats {
 
 export interface LearningEventItem {
   id: number
+  module: ModuleType
+  entity_id?: string | null
   event_type: LearningEventType
   course?: string | null
   topic?: string | null
-  feedback?: string | null
+  score?: number | null
+  event_metadata?: Record<string, unknown>
   created_at: string
 }
 

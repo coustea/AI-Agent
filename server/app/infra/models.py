@@ -16,7 +16,7 @@
 重构说明（v3）：
 - Chat 会话压缩使用 ChatSessionSummaryBlock
 - Chat 长期记忆使用 ChatLongTermMemory
-- Profile 独立为共享模块，但仍复用 global_profiles / course_profiles
+- Profile 独立为共享模块，复用 global_profiles / weekly_learning_digests
 """
 
 import uuid
@@ -363,21 +363,37 @@ class GlobalProfile(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
     )
 
-class CourseProfile(SQLModel, table=True):
-    """课程子画像表"""
-    __tablename__ = "course_profiles"
+
+class WeeklyLearningDigest(SQLModel, table=True):
+    """周度学习摘要表 — 以自然周为粒度聚合用户跨系统学习行为。
+
+    作为全局画像评分的缓冲证据层：score_profile 调用时懒加载本周摘要，
+    生成结构化 Markdown 注入评分 prompt 作为客观依据。
+
+    周范围约定：week_start = 周一 00:00:00 UTC，week_end = 周日 23:59:59.999999 UTC。
+    """
+    __tablename__ = "weekly_learning_digests"
     __table_args__ = (
-        UniqueConstraint("global_profile_id", "course_key", name="uq_course_profile_global_course_key"),
+        UniqueConstraint("user_id", "module", "week_start", name="uq_weekly_digest_user_module_week"),
+        Index("ix_weekly_digests_user_week", "user_id", "week_start"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    global_profile_id: int = Field(sa_column=Column(Integer, ForeignKey("global_profiles.id", ondelete="CASCADE"), index=True))
     user_id: int = Field(index=True)
     module: str = Field(default="mentor", index=True)
-    course_key: str = Field(max_length=200, index=True)
-    course_name: str = Field(max_length=200, index=True)
-    aliases: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
-    profile_markdown: str = Field(default="", sa_column=Column(Text))
+
+    # 周范围（UTC）— week_start 为周一 00:00:00，week_end 为周日 23:59:59.999999
+    week_start: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), index=True))
+    week_end: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+
+    # 摘要主体（纯 Markdown，由 weekly_digest.md prompt 生成）
+    digest_markdown: str = Field(sa_column=Column(Text))
+
+    # 本周活跃课程/主题列表（用于快速检索，不参与评分逻辑）
+    courses_active: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+
+    # 聚合统计快照（对话轮数、资源数、节点完成数、答题数与正确率、活跃分钟）
+    stats: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -515,28 +531,24 @@ class QuizQuestion(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class LearningEvent(SQLModel, table=True):
-    """学习行为事件表 — 记录资源使用、练习结果、路径反馈等评估信号。"""
+    """学习行为事件表 — 单表 unified 结构，module + entity_id 替代 6 个可空 FK 列。"""
     __tablename__ = "learning_events"
     __table_args__ = (
-        Index("ix_learning_events_user_session_created_at", "user_id", "session_id", "created_at"),
-        Index("ix_learning_events_user_type_created_at", "user_id", "event_type", "created_at"),
-        Index("ix_learning_events_metadata_json", "metadata_json", postgresql_using="gin"),
+        Index("ix_learning_events_user_module", "user_id", "module"),
+        Index("ix_learning_events_user_module_created", "user_id", "module", "created_at"),
+        Index("ix_learning_events_module_entity", "module", "entity_id"),
+        Index("ix_learning_events_event_metadata", "event_metadata", postgresql_using="gin"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    session_id: str | None = Field(default=None, max_length=100, index=True)
-    resource_id: int | None = Field(default=None, index=True)
-    resource_item_id: int | None = Field(default=None, index=True)
-    path_id: int | None = Field(default=None, index=True)
-    path_node_id: int | None = Field(default=None, index=True)
-    node_id: str | None = Field(default=None, max_length=50, index=True)
-    event_type: str = Field(max_length=50, index=True)
+    module: str = Field(max_length=50, description="模块: chat/resource/path/quiz/visualizer")
+    entity_id: str | None = Field(default=None, max_length=255, description="模块内实体 ID（session_id / resource_id / path_node_id / …）")
+    event_type: str = Field(max_length=50, description="模块内事件子类型")
+    score: float | None = Field(default=None, description="得分 0–100")
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
-    score: float | None = Field(default=None)
-    feedback: str | None = Field(default=None, sa_column=Column(Text))
-    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    event_metadata: dict[str, Any] = Field(default_factory=dict, sa_column=Column("event_metadata", JSONB))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
@@ -812,7 +824,7 @@ REGISTERED_MODELS = (
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
     GlobalProfile,
-    CourseProfile,
+    WeeklyLearningDigest,
     GeneratedResource,
     GeneratedResourceItem,
     GeneratedResourceAgentRun,

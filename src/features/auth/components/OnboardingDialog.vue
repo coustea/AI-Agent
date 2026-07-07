@@ -1105,6 +1105,8 @@ const submitForm = async () => {
   submitting.value = true
 
   try {
+    // 后端 PATCH /profile/onboarding 同步保存基本信息后立即返回，
+    // 画像推理和评分由后台任务异步完成，前端无需等待。
     await updateProfileOnboarding({
       school: form.school ? form.school.trim() : '',
       major: form.major ? form.major.trim() : '',
@@ -1115,10 +1117,13 @@ const submitForm = async () => {
       courses: form.courses as any,
     })
 
-    await updateMe({ is_first_login: true }).catch(() => {})
+    // 标记首次登录完成（非关键，失败不影响流程）
+    updateMe({ is_first_login: true }).catch(() => {})
+
     clearDraft()
 
     toast.success('基础资料已完成')
+    // 立即关闭弹窗，让用户进入首页
     visible.value = false
     emit('success')
 

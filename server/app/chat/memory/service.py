@@ -653,7 +653,7 @@ class ChatMemoryService:
         """Combined LTM + compression + profile token threshold check in a single DB session."""
         signals = classify_turn_signals(user_message, assistant_reply)
         ltm_signal = signals["ltm"]
-        profile_signal = signals["global_profile"] or signals["course_profile"]
+        profile_signal = signals["global_profile"]
 
         try:
             async with session_scope() as db:

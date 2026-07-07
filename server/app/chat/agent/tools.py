@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.rag.tools import as_tool as _knowledge_tool
+from app.rag.tools import build_knowledge_tool
 from app.chat.tools.user_context import as_tool as _user_context_tools
 from app.chat.schemas import EvidenceSet, TutorRequestContext
 from app.chat.schemas.diagram import TeachingDiagramGenerator
@@ -68,7 +68,7 @@ def build_tutor_tools(
         # 用户上下文工具（画像 + 长期记忆）
         *_user_context_tools(request),
         # 本地课程知识库仍属于 Chat。
-        _knowledge_tool(),
+        build_knowledge_tool(),
         # 普通网页搜索与抓取统一委托给共享 ResearchAgent。
         build_research_tool(
             event_handler=research_event_handler,

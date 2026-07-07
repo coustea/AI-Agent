@@ -14,6 +14,10 @@ export type {
   LearningTimeStats,
 }
 
+export function recordLearningEvent(payload: LearningEventCreate) {
+  return http.post<ApiResponse<{ id: number }>>('/ai/evaluation/events', payload)
+}
+
 export function recordLearningSession(payload: LearningSessionCreate) {
   return http.post<ApiResponse<{ id: number }>>('/ai/evaluation/sessions', payload)
 }

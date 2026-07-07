@@ -452,11 +452,13 @@ class Llm:
                 return result
             except Exception as exc:
                 error_msg = f"{type(exc).__name__}: {exc}"
+                # 截断过长的校验错误，避免 Pydantic ValidationError 淹没终端
+                error_msg_short = error_msg[:300] + "…" if len(error_msg) > 300 else error_msg
                 raw_output = raw_output or str(exc)[:500]
-                errors.append(f"{tier}(generate)={error_msg}")
+                errors.append(f"{tier}(generate)={error_msg_short}")
                 logger.warning(
                     "[LLM] ainvoke_json fail schema=%s tier=%s error=%s",
-                    schema.__name__, tier, exc,
+                    schema.__name__, tier, error_msg_short,
                 )
 
             # ── 第2步：携带原文 + 错误修正 1 次 ──
@@ -478,10 +480,12 @@ class Llm:
                     )
                     return parsed
                 except Exception as exc:
-                    errors.append(f"{tier}(repair)={type(exc).__name__}: {exc}")
+                    repair_err = f"{type(exc).__name__}: {exc}"
+                    repair_err_short = repair_err[:300] + "…" if len(repair_err) > 300 else repair_err
+                    errors.append(f"{tier}(repair)={repair_err_short}")
                     logger.warning(
                         "[LLM] ainvoke_json fail schema=%s tier=%s repair error=%s",
-                        schema.__name__, tier, exc,
+                        schema.__name__, tier, repair_err_short,
                     )
 
         raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")

@@ -1,4 +1,4 @@
-"""画像 API 请求模型 — 入门信息更新、全局辅导更新、课程辅导更新。"""
+"""画像 API 请求模型 — 入门信息更新、全局辅导更新。"""
 
 from __future__ import annotations
 
@@ -23,13 +23,4 @@ class GlobalTutoringProfileUpdate(BaseModel):
     """全局画像辅导增量更新请求。"""
 
     session_id: str
-    update_reason: str = "tutoring_inference"
-
-
-class CourseTutoringProfileUpdate(BaseModel):
-    """课程画像辅导增量更新请求。"""
-
-    session_id: str
-    course_name: str
-    active_topic: str | None = None
     update_reason: str = "tutoring_inference"

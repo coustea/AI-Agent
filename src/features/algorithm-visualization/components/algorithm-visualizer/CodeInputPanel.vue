@@ -1,33 +1,58 @@
 <template>
   <section class="code-input-panel">
     <div class="panel-header">
-      <div>
+      <div class="flex items-center gap-2">
         <h2>代码编辑</h2>
-        <p>编辑算法模板代码后点击运行可视化。</p>
-      </div>
-
-      <select v-model="localLanguage" class="language-select">
-        <option value="python">Python</option>
-        <option value="javascript">JavaScript</option>
-        <option value="cpp">C++</option>
-        <option value="java">Java</option>
-        <option value="c">C</option>
-      </select>
-    </div>
-
-    <div class="code-editor-shell">
-      <div class="editor-meta">
-        <span>算法代码</span>
         <span v-if="activeLine" class="line-indicator">执行到第 {{ activeLine }} 行</span>
       </div>
 
+      <div class="flex items-center gap-2">
+        <!-- 算法选择 -->
+        <Select v-model="localAlgorithm">
+          <SelectTrigger class="h-8 text-xs min-w-[120px] bg-white">
+            <SelectValue placeholder="选择算法" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="alg in algorithms" :key="alg.key" :value="alg.key">
+              {{ alg.name }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <!-- 语言选择 -->
+        <Select v-model="localLanguage">
+          <SelectTrigger class="h-8 text-xs min-w-[100px] bg-white">
+            <SelectValue placeholder="选择语言" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="lang in languages" :key="lang.key" :value="lang.key">
+              {{ lang.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    <div class="code-editor-shell">
       <div ref="editorContainer" class="code-editor-monaco" />
     </div>
 
     <div class="panel-actions">
-      <button class="secondary-action" @click="$emit('reset-template')">
+      <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs bg-white cursor-pointer" @click="$emit('reset-template')">
+        <RotateCcw class="w-3.5 h-3.5" />
         重置模板
-      </button>
+      </Button>
+
+      <Button
+        variant="default"
+        size="sm"
+        class="h-8 gap-1.5 text-xs ml-auto bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+        :disabled="loading || !code.trim()"
+        @click="$emit('run')"
+      >
+        <Play class="w-3.5 h-3.5 fill-current" />
+        {{ loading ? '运行中...' : '运行可视化' }}
+      </Button>
     </div>
   </section>
 </template>
@@ -35,11 +60,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as monaco from 'monaco-editor'
-import type { CodeLanguage } from '@/features/algorithm-visualization/types'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { Play, RotateCcw } from 'lucide-vue-next'
+import type { CodeLanguage, LanguageInfo, AlgorithmInfo } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
   code: string
   language: CodeLanguage
+  algorithm: string
+  languages: LanguageInfo[]
+  algorithms: AlgorithmInfo[]
   loading: boolean
   activeLine?: number
 }>()
@@ -47,7 +78,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:code': [value: string]
   'update:language': [value: CodeLanguage]
+  'update:algorithm': [value: string]
   'reset-template': []
+  'run': []
   dirty: []
 }>()
 
@@ -55,6 +88,13 @@ const localLanguage = computed({
   get: () => props.language,
   set: (value: CodeLanguage) => {
     emit('update:language', value)
+  },
+})
+
+const localAlgorithm = computed({
+  get: () => props.algorithm,
+  set: (value: string) => {
+    emit('update:algorithm', value)
   },
 })
 
@@ -182,112 +222,102 @@ onBeforeUnmount(() => {
 .code-input-panel {
   height: 100%;
   min-height: 0;
-  border-radius: 22px;
-  padding: 16px;
+  border-radius: 4px;
+  padding: 12px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: none;
 }
 
 .panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .panel-header h2 {
   margin: 0;
-  font-size: 17px;
-  font-weight: 720;
+  font-size: 14px;
+  font-weight: 600;
   color: #0f172a;
 }
 
 .panel-header p {
-  margin: 5px 0 0;
-  font-size: 12px;
+  margin: 2px 0 0;
+  font-size: 11px;
   color: #64748b;
 }
 
 .language-select {
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid #dbe3ef;
-  background: #f8fafc;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
   color: #0f172a;
   outline: none;
+  font-size: 12px;
 }
 
 .language-select:focus {
-  border-color: rgba(37, 99, 235, 0.7);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #3b82f6;
 }
 
 .code-editor-shell {
+  height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
-}
-
-.editor-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 650;
 }
 
 .line-indicator {
   color: #2563eb;
+  font-weight: 600;
 }
 
 .code-editor-monaco {
   width: 100%;
   height: 100%;
   min-height: 0;
-  border: 1px solid #dbe3ef;
-  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .panel-actions {
   display: flex;
   gap: 8px;
+  padding-top: 4px;
 }
 
 .secondary-action {
-  height: 36px;
-  border: none;
-  border-radius: 12px;
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 650;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #ffffff;
+  color: #334155;
+}
+
+.secondary-action:hover {
+  background: #f8fafc;
 }
 
 @media (max-width: 1100px) {
   .code-input-panel {
-    min-height: 480px;
-  }
-}
-
-@media (max-width: 640px) {
-  .panel-actions {
-    flex-direction: column;
+    min-height: 400px;
   }
 }
 
 :deep(.monaco-active-line-highlight) {
-  background-color: rgba(37, 99, 235, 0.12) !important;
-  border-left: 3.5px solid #2563eb !important;
+  background-color: rgba(37, 99, 235, 0.08) !important;
+  border-left: 3px solid #2563eb !important;
 }
 </style>

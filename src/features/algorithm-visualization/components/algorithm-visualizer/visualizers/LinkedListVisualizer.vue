@@ -34,25 +34,156 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
 </script>
 
 <style scoped>
-.linked-list-visualizer { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; padding: 18px; background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 26%), linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95)); }
-.visualizer-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.visualizer-meta h3 { margin: 0; font-size: 20px; font-weight: 760; color: #0f172a; }
-.visualizer-meta p { margin: 6px 0 0; font-size: 13px; color: #64748b; }
-.legend { display: flex; gap: 12px; }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-.legend-dot.default { background: #cbd5e1; border: 1px solid #94a3b8; }
-.legend-dot.visited { background: rgba(220, 252, 231, 0.95); border: 1px solid #10b981; }
-.chart-shell { min-height: 0; border-radius: 24px; background: rgba(241, 245, 249, 0.62); border: 1px solid rgba(226, 232, 240, 0.96); padding: 16px; }
-.linear-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 200px; justify-content: center; }
-.linear-node { min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 8px 10px; border-radius: 18px; background: rgba(248, 250, 252, 0.92); border: 1px solid rgba(226, 232, 240, 0.95); }
-.linear-node.visited { border-color: rgba(16, 185, 129, 0.35); background: rgba(236, 253, 245, 0.95); }
-.node-value { font-size: 16px; font-weight: 700; color: #0f172a; }
-.node-arrow { font-size: 18px; color: #94a3b8; align-self: center; }
-.pointer-stack { min-height: 24px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-.pointer-pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 800; }
-.pointer-pill.accent { background: rgba(219, 234, 254, 0.9); color: #2563eb; }
-.pointer-pill.warning { background: rgba(254, 243, 199, 0.92); color: #d97706; }
-.pointer-pill.success { background: rgba(220, 252, 231, 0.92); color: #059669; }
-.empty-state { height: 100%; min-height: 240px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #94a3b8; }
+.linked-list-visualizer {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.visualizer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.visualizer-meta h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.visualizer-meta p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.legend {
+  display: flex;
+  gap: 8px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.default {
+  background: #cbd5e1;
+  border: 1px solid #94a3b8;
+}
+
+.legend-dot.visited {
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+}
+
+.chart-shell {
+  min-height: 0;
+  border-radius: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+}
+
+.linear-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 200px;
+  justify-content: center;
+}
+
+.linear-node {
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.linear-node.visited {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.node-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.node-arrow {
+  font-size: 14px;
+  color: #94a3b8;
+  align-self: center;
+  margin: 0 4px;
+}
+
+.pointer-stack {
+  min-height: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.pointer-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.pointer-pill.accent {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.pointer-pill.warning {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.pointer-pill.success {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.empty-state {
+  height: 100%;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #94a3b8;
+}
 </style>

@@ -245,4 +245,249 @@ class QueueTracer : public VisualTracer {
   }
 };
 
+struct LinkedListNodeItem {
+    std::string id;
+    std::string label;
+    std::string tone;
+};
+
+struct LinkedListPointerItem {
+    std::string label;
+    int nodeIndex;
+    std::string tone;
+};
+
+static std::string list_nodes_to_json(const std::vector<LinkedListNodeItem> &nodes) {
+    std::ostringstream oss;
+    oss << "[";
+    for (size_t i = 0; i < nodes.size(); i++) {
+        oss << "{\"id\": \"" << nodes[i].id << "\", \"label\": \""
+            << nodes[i].label << "\", \"tone\": \"" << nodes[i].tone << "\"}";
+        if (i < nodes.size() - 1) oss << ", ";
+    }
+    oss << "]";
+    return oss.str();
+}
+
+static std::string list_pointers_to_json(const std::vector<LinkedListPointerItem> &pointers) {
+    std::ostringstream oss;
+    oss << "[";
+    for (size_t i = 0; i < pointers.size(); i++) {
+        oss << "{\"label\": \"" << pointers[i].label << "\", \"nodeIndex\": "
+            << pointers[i].nodeIndex << ", \"tone\": \"" << pointers[i].tone << "\"}";
+        if (i < pointers.size() - 1) oss << ", ";
+    }
+    oss << "]";
+    return oss.str();
+}
+
+class LinkedListTracer : public VisualTracer {
+ private:
+  std::vector<LinkedListNodeItem> _nodes;
+  std::vector<LinkedListPointerItem> _pointers;
+
+  std::string _state_json() const {
+      return "{\"nodes\": " + list_nodes_to_json(_nodes) + ", \"pointers\": " + list_pointers_to_json(_pointers) + "}";
+  }
+
+ public:
+  LinkedListTracer() { _visualizer_type = "linked-list"; }
+
+  void initList(const std::vector<LinkedListNodeItem> &nodes, const std::vector<LinkedListPointerItem> &pointers = {}) {
+    _nodes = nodes;
+    _pointers = pointers;
+    _record("init_list", _state_json(), "[]", "\"初始化链表\"");
+  }
+
+  void setVisited(int node_index, bool visited = true) {
+    if (node_index >= 0 && node_index < (int)_nodes.size()) {
+        _nodes[node_index].tone = visited ? "visited" : "default";
+    }
+    _record("set_visited", _state_json(), "[" + std::to_string(node_index) + "]",
+            "\"访问节点\"");
+  }
+
+  void movePointer(const std::string &label, int node_index, const std::string &tone = "accent") {
+    for (auto it = _pointers.begin(); it != _pointers.end(); ) {
+        if (it->label == label) {
+            it = _pointers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (node_index >= 0) {
+        _pointers.push_back({label, node_index, tone});
+    }
+    _record("move_pointer", _state_json(),
+            node_index >= 0 ? "[" + std::to_string(node_index) + "]" : "[]",
+            "\"移动指针 " + label + "\"");
+  }
+
+  void finish() {
+    _record("finish", _state_json(), "[]", "\"链表操作完成\"");
+    dump();
+  }
+};
+
+struct GraphNodeItem {
+    std::string id;
+    std::string label;
+    int x;
+    int y;
+    std::string tone;
+};
+
+static std::string graph_nodes_to_json(const std::vector<GraphNodeItem> &nodes) {
+    std::ostringstream oss;
+    oss << "[";
+    for (size_t i = 0; i < nodes.size(); i++) {
+        oss << "{\"id\": \"" << nodes[i].id << "\", \"label\": \""
+            << nodes[i].label << "\", \"x\": " << nodes[i].x
+            << ", \"y\": " << nodes[i].y << ", \"tone\": \""
+            << nodes[i].tone << "\"}";
+        if (i < nodes.size() - 1) oss << ", ";
+    }
+    oss << "]";
+    return oss.str();
+}
+
+class TreeTracer : public VisualTracer {
+ private:
+  std::vector<GraphNodeItem> _nodes;
+  std::string _nodes_json() const { return graph_nodes_to_json(_nodes); }
+
+ public:
+  TreeTracer() { _visualizer_type = "tree"; }
+
+  void initTree(const std::vector<GraphNodeItem> &nodes) {
+    _nodes = nodes;
+    _record("init_tree", "{\"nodes\": " + _nodes_json() + "}", "[]", "\"初始化树结构\"");
+  }
+
+  void visitNode(const std::string &node_id, bool visited = true) {
+    for (size_t i = 0; i < _nodes.size(); i++) {
+        if (_nodes[i].id == node_id) {
+            _nodes[i].tone = visited ? "visited" : "default";
+            std::string msg = "\"访问节点: " + _nodes[i].label + "\"";
+            _record("visit_node", "{\"nodes\": " + _nodes_json() + "}",
+                    "[\"" + node_id + "\"]", msg);
+            break;
+        }
+    }
+  }
+
+  void finish() {
+    _record("finish", "{\"nodes\": " + _nodes_json() + "}", "[]", "\"树操作完成\"");
+    dump();
+  }
+};
+
+class GraphTracer : public VisualTracer {
+ private:
+  std::vector<GraphNodeItem> _nodes;
+  std::string _nodes_json() const { return graph_nodes_to_json(_nodes); }
+
+ public:
+  GraphTracer() { _visualizer_type = "graph"; }
+
+  void initGraph(const std::vector<GraphNodeItem> &nodes) {
+    _nodes = nodes;
+    _record("init_graph", "{\"nodes\": " + _nodes_json() + "}", "[]", "\"初始化图结构\"");
+  }
+
+  void visitNode(const std::string &node_id, bool visited = true) {
+    for (size_t i = 0; i < _nodes.size(); i++) {
+        if (_nodes[i].id == node_id) {
+            _nodes[i].tone = visited ? "visited" : "default";
+            std::string msg = "\"访问节点: " + _nodes[i].label + "\"";
+            _record("visit_node", "{\"nodes\": " + _nodes_json() + "}",
+                    "[\"" + node_id + "\"]", msg);
+            break;
+        }
+    }
+  }
+
+  void finish() {
+    _record("finish", "{\"nodes\": " + _nodes_json() + "}", "[]", "\"图操作完成\"");
+    dump();
+  }
+};
+
+class DpTableTracer : public VisualTracer {
+ private:
+  std::vector<std::string> _headers;
+  std::vector<std::vector<int>> _values;
+  struct DpHighlight {
+      int row, col;
+      std::string tone;
+  };
+  std::vector<DpHighlight> _highlighted;
+
+  std::string _state_json() const {
+      std::ostringstream oss;
+      oss << "{\"headers\": [";
+      for (size_t i = 0; i < _headers.size(); i++) {
+          oss << "\"" << _headers[i] << "\"";
+          if (i < _headers.size() - 1) oss << ", ";
+      }
+      oss << "], \"values\": [";
+      for (size_t i = 0; i < _values.size(); i++) {
+          oss << "[";
+          for (size_t j = 0; j < _values[i].size(); j++) {
+              oss << _values[i][j];
+              if (j < _values[i].size() - 1) oss << ", ";
+          }
+          oss << "]";
+          if (i < _values.size() - 1) oss << ", ";
+      }
+      oss << "], \"highlighted\": [";
+      for (size_t i = 0; i < _highlighted.size(); i++) {
+          oss << "{\"row\": " << _highlighted[i].row << ", \"col\": " << _highlighted[i].col
+              << ", \"tone\": \"" << _highlighted[i].tone << "\"}";
+          if (i < _highlighted.size() - 1) oss << ", ";
+      }
+      oss << "]}";
+      return oss.str();
+  }
+
+ public:
+  DpTableTracer() { _visualizer_type = "dp-table"; }
+
+  void initTable(const std::vector<std::string> &headers, int rows, int cols, int fill_value = 0) {
+    _headers = headers;
+    _values.assign(rows, std::vector<int>(cols, fill_value));
+    _highlighted.clear();
+    _record("init_table", _state_json(), "[]", "\"初始化 DP 表格\"");
+  }
+
+  void setValue(int row, int col, int value) {
+    if (row >= 0 && row < (int)_values.size() && col >= 0 && col < (int)_values[row].size()) {
+        _values[row][col] = value;
+    }
+    _record("set_value", _state_json(), "[]", "\"更新表格值\"");
+  }
+
+  void highlight(int row, int col, const std::string &tone = "active") {
+    for (auto it = _highlighted.begin(); it != _highlighted.end(); ) {
+        if (it->row == row && it->col == col) {
+            it = _highlighted.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    _highlighted.push_back({row, col, tone});
+    _record("highlight", _state_json(), "[]", "\"高亮单元格\"");
+  }
+
+  void clearHighlights() {
+    _highlighted.clear();
+    _record("clear_highlights", _state_json(), "[]", "\"清除高亮\"");
+  }
+
+  void finish() {
+    _record("finish", _state_json(), "[]", "\"DP 填表完成\"");
+    dump();
+  }
+};
+
 #endif  // VISUAL_TRACER_HPP

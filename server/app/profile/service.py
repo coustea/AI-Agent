@@ -1,17 +1,23 @@
-"""学习者画像服务 — 全局画像 CRUD、课程画像管理、LLM 推理与评分。"""
+"""学习者画像服务 — 全局画像 CRUD、周度学习摘要、LLM 推理与评分。
+
+架构：全局画像 JSON 是面向前端展示的唯一权威数据；周度学习摘要（WeeklyLearningDigest）
+作为评分的缓冲证据层，先聚合本周跨系统学习行为，再由 score_profile 流程消费。
+"""
 
 from __future__ import annotations
 
 import json
 import re
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from langchain_core.messages import HumanMessage
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from sqlalchemy import func as sa_func
+from sqlalchemy import or_ as sa_or
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.infra.database import session_scope
@@ -19,9 +25,18 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
     ChatLongTermMemory,
-    CourseProfile,
+    ChatSession,
+    ChatSessionSummaryBlock,
+    GeneratedResource,
+    GeneratedResourceItem,
     GlobalProfile,
+    LearningEvent,
+    LearningPath,
+    LearningSession,
+    PathNode,
+    PathNodeQuestion,
     School,
+    WeeklyLearningDigest,
 )
 from app.profile.types import (
     ALL_DIMENSIONS,
@@ -42,48 +57,27 @@ logger = get_logger(__name__)
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
-def normalize_course_key(course_name: str) -> str:
-    """标准化课程名称为 Key：去除所有空白字符，并统一转为小写。"""
-    return re.sub(r"\s+", "", course_name.strip().lower())
+# 一周结束的边界 = 下周一 00:00 减去 1 微秒，即周日 23:59:59.999999 UTC。
+_NEXT_MONDAY_MINUS_ONE_MICRO: timedelta = timedelta(microseconds=1)
 
 
-_REQUIRED_COURSE_MARKDOWN_SECTIONS = (
-    "## 课程范围",
-    "## 当前学习状态",
-    "## 薄弱点",
-    "## 知识掌握线索",
-    "## 辅导建议",
-)
-
-_DEFAULT_COURSE_MARKDOWN_TEMPLATE = (
-    "# {course_name}\n\n"
-    "## 课程范围\n"
-    "暂无明确画像。\n\n"
-    "## 当前学习状态\n"
-    "暂无明确画像。\n\n"
-    "## 薄弱点\n"
-    "暂无明确画像。\n\n"
-    "## 知识掌握线索\n"
-    "暂无明确画像。\n\n"
-    "## 辅导建议\n"
-    "暂无明确画像。"
-)
+def _utc_week_range(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """计算给定时间所在自然周（周一 00:00 ~ 周日 23:59:59.999999）的 UTC 范围。"""
+    now = now or datetime.now(timezone.utc)
+    weekday = now.weekday()  # Monday=0, Sunday=6
+    week_start = (now - timedelta(days=weekday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_end = week_start + timedelta(days=7) - _NEXT_MONDAY_MINUS_ONE_MICRO
+    return week_start, week_end
 
 
-def validate_course_markdown(markdown_text: str, course_name: str) -> str:
-    """校验并规范化 LLM 生成的课程画像 Markdown 文本。"""
-    text = (markdown_text or "").strip()
-    if not text:
-        raise ValueError("课程画像 Markdown 为空")
-    if "```json" in text.lower() or "``` json" in text.lower():
-        raise ValueError("课程画像 Markdown 不允许包含 JSON 代码块")
-    first_line = text.splitlines()[0].strip() if text.splitlines() else ""
-    if first_line != f"# {course_name}":
-        raise ValueError(f"课程画像 Markdown 必须以 '# {course_name}' 开头")
-    for section in _REQUIRED_COURSE_MARKDOWN_SECTIONS:
-        if section not in text:
-            raise ValueError(f"课程画像 Markdown 缺少必要章节: {section.replace('## ', '')}")
-    return text
+def _format_week_label(week_start: datetime, week_end: datetime) -> str:
+    """生成 week_range 标签供 prompt 使用，如 '2026-W27: 2026-07-06 ~ 2026-07-12'。"""
+    iso_year, iso_week, _ = week_start.isocalendar()
+    start_str = week_start.strftime("%Y-%m-%d")
+    end_str = week_end.strftime("%Y-%m-%d")
+    return f"{iso_year}-W{iso_week:02d}: {start_str} ~ {end_str}"
 
 
 def merge_dimensions(profile_json: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
@@ -206,14 +200,316 @@ class ProfileService:
                 return await _upsert(db)
         return await _upsert(db)
 
-    async def get_course_profiles(self, *, user_id: int) -> list[CourseProfile]:
-        """获取用户的所有课程子画像。"""
-        async with session_scope() as db:
-            stmt = select(CourseProfile).where(
-                CourseProfile.user_id == user_id,
-                CourseProfile.module == self.module,
+    async def get_or_create_weekly_digest(
+        self,
+        *,
+        user_id: int,
+        db: AsyncSession,
+        now: datetime | None = None,
+    ) -> WeeklyLearningDigest:
+        """获取或生成本周学习摘要（懒加载）。
+
+        若本周摘要已存在则直接返回；否则聚合本周数据、调用 LLM 生成 Markdown、
+        持久化后返回。该方法是 score_profile 的证据缓冲层。
+
+        Args:
+            user_id: 用户 ID
+            db: 数据库会话（复用调用方会话，避免嵌套 session_scope）
+            now: 用于确定"本周"的基准时间（测试注入），默认当前 UTC 时间
+        """
+        week_start, week_end = _utc_week_range(now)
+
+        existing = (
+            await db.exec(
+                select(WeeklyLearningDigest).where(
+                    WeeklyLearningDigest.user_id == user_id,
+                    WeeklyLearningDigest.module == self.module,
+                    WeeklyLearningDigest.week_start == week_start,
+                )
             )
-            return list((await db.exec(stmt)).all())
+        ).first()
+        if existing:
+            return existing
+
+        logger.info(
+            "[ProfileService] 周摘要懒生成: user_id=%s week=%s",
+            user_id, _format_week_label(week_start, week_end),
+        )
+
+        data = await self._aggregate_week_data(
+            db=db, user_id=user_id, week_start=week_start, week_end=week_end,
+        )
+
+        prev_digest_row = (
+            await db.exec(
+                select(WeeklyLearningDigest)
+                .where(
+                    WeeklyLearningDigest.user_id == user_id,
+                    WeeklyLearningDigest.module == self.module,
+                    WeeklyLearningDigest.week_start < week_start,
+                )
+                .order_by(WeeklyLearningDigest.week_start.desc())
+                .limit(1)
+            )
+        ).first()
+        prev_digest = prev_digest_row.digest_markdown if prev_digest_row else "（本周为首周，无上周摘要）"
+
+        global_profile = await self.get_profile(user_id=user_id, db=db)
+
+        week_label = _format_week_label(week_start, week_end)
+        prompt = prompts.get("profile").render(
+            "weekly_digest",
+            week_range=week_label,
+            dialogue_summaries=data["dialogue_summaries"],
+            resource_activities=data["resource_activities"],
+            path_activities=data["path_activities"],
+            quiz_activities=data["quiz_activities"],
+            learning_events=data["learning_events"],
+            prev_digest=prev_digest,
+            long_term_memory=data["long_term_memory"],
+            current_profile_json=json.dumps(
+                global_profile.profile_json or {}, ensure_ascii=False,
+            ),
+        )
+
+        resp = await self.llm.ainvoke([HumanMessage(content=prompt)])
+        digest_markdown = str(resp.content or "").strip()
+        if not digest_markdown:
+            digest_markdown = f"# 周度学习摘要（{week_label}）\n\n本周无学习活动记录。"
+
+        # H1: 使用 ON CONFLICT DO NOTHING 保证并发安全。
+        # 两个并发 caller 可能同时穿过 lazy-cache 检查 → 都生成 digest → 都尝试 INSERT。
+        # UNIQUE(user_id, module, week_start) 保证仅一行落库；后插入者被静默忽略，
+        # 随后 SELECT 必然返回已存在的行（可能是自己写入的，也可能是竞争者写入的）。
+        now_utc = datetime.now(timezone.utc)
+        insert_stmt = pg_insert(WeeklyLearningDigest).values(
+            user_id=user_id,
+            module=self.module,
+            week_start=week_start,
+            week_end=week_end,
+            digest_markdown=digest_markdown,
+            courses_active=data["courses_active"],
+            stats=data["stats"],
+            created_at=now_utc,
+            updated_at=now_utc,
+        ).on_conflict_do_nothing(
+            constraint="uq_weekly_digest_user_module_week",
+        )
+        await db.exec(insert_stmt)  # type: ignore[arg-type]
+        await db.flush()
+
+        digest = (
+            await db.exec(
+                select(WeeklyLearningDigest).where(
+                    WeeklyLearningDigest.user_id == user_id,
+                    WeeklyLearningDigest.module == self.module,
+                    WeeklyLearningDigest.week_start == week_start,
+                )
+            )
+        ).first()
+
+        if digest is None:
+            # 理论不可达：INSERT ON CONFLICT + SELECT 必然返回一行。
+            # 防御性兜底：回退到内存对象（不持久化），保证 score_profile 仍可继续。
+            logger.warning(
+                "[ProfileService] 周摘要 upsert+select 意外返回 None: user_id=%s week=%s",
+                user_id, _format_week_label(week_start, week_end),
+            )
+            digest = WeeklyLearningDigest(
+                user_id=user_id,
+                module=self.module,
+                week_start=week_start,
+                week_end=week_end,
+                digest_markdown=digest_markdown,
+                courses_active=data["courses_active"],
+                stats=data["stats"],
+            )
+
+        logger.info(
+            "[ProfileService] 周摘要生成完成: user_id=%s stats=%s markdown长度=%s",
+            user_id, digest.stats, len(digest.digest_markdown),
+        )
+        return digest
+
+    async def _aggregate_week_data(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: int,
+        week_start: datetime,
+        week_end: datetime,
+    ) -> dict[str, Any]:
+        """聚合本周跨系统的学习行为数据，供 weekly_digest prompt 使用。"""
+        # 1. 辅导对话摘要（需 join ChatSession 过滤 user_id）
+        summary_stmt = (
+            select(ChatSessionSummaryBlock.summary_markdown)
+            .join(ChatSession, ChatSessionSummaryBlock.session_id == ChatSession.id)
+            .where(
+                ChatSession.user_id == user_id,
+                ChatSessionSummaryBlock.created_at >= week_start,
+                ChatSessionSummaryBlock.created_at <= week_end,
+            )
+            .order_by(ChatSessionSummaryBlock.created_at.asc())
+        )
+        summary_rows = (await db.exec(summary_stmt)).all()
+        dialogue_summaries = "\n\n".join(summary_rows) if summary_rows else "本周无辅导对话记录"
+
+        # 2. 资源生成记录
+        res_stmt = (
+            select(GeneratedResource)
+            .where(
+                GeneratedResource.user_id == user_id,
+                GeneratedResource.created_at >= week_start,
+                GeneratedResource.created_at <= week_end,
+            )
+            .order_by(GeneratedResource.created_at.asc())
+        )
+        resources = (await db.exec(res_stmt)).all()
+        if resources:
+            res_ids = [r.id for r in resources]
+            item_stmt = (
+                select(GeneratedResourceItem.agent_type, GeneratedResourceItem.title)
+                .where(GeneratedResourceItem.resource_id.in_(res_ids))
+            )
+            items = (await db.exec(item_stmt)).all()
+            resource_lines = [
+                f"- 学习需求：{r.learning_need or '未指定'}（状态：{r.status}）"
+                for r in resources
+            ]
+            if items:
+                agent_types = [i[0] for i in items]
+                resource_lines.append(f"- 生成的资源类型：{', '.join(agent_types)}")
+            resource_activities = "\n".join(resource_lines)
+        else:
+            resource_activities = "本周无资源生成"
+
+        # 3. 路径学习记录
+        # H2: 不能使用 updated_at（任何写操作都会刷新，例如 priority/current_tutorial_id 变更）。
+        # 改用 started_at/completed_at 区间，仅捕获本周有真实学习进度的节点。
+        # 命中条件：本周内首次开始 OR 本周内完成（含跨周开始本周完成的情形）。
+        node_stmt = (
+            select(PathNode)
+            .where(
+                PathNode.user_id == user_id,
+                sa_or(
+                    PathNode.started_at.is_not(None),
+                    PathNode.completed_at.is_not(None),
+                ),
+                sa_or(
+                    PathNode.started_at.between(week_start, week_end),
+                    PathNode.completed_at.between(week_start, week_end),
+                ),
+            )
+        )
+        nodes = (await db.exec(node_stmt)).all()
+        if nodes:
+            completed = [n for n in nodes if n.status == "completed"]
+            path_lines = [
+                f"- 节点「{n.title}」状态：{n.status}，难度：{n.difficulty or '未指定'}，尝试次数：{n.attempt_count}"
+                for n in nodes
+            ]
+            if completed:
+                path_lines.insert(0, f"- 本周完成节点数：{len(completed)}")
+            path_activities = "\n".join(path_lines)
+        else:
+            path_activities = "本周无路径学习"
+
+        # 4. 答题与错题
+        quiz_stmt = (
+            select(PathNodeQuestion)
+            .where(
+                PathNodeQuestion.user_id == user_id,
+                PathNodeQuestion.submitted_at >= week_start,
+                PathNodeQuestion.submitted_at <= week_end,
+            )
+        )
+        questions = (await db.exec(quiz_stmt)).all()
+        if questions:
+            total = len(questions)
+            correct = sum(1 for q in questions if q.is_correct)
+            wrong_kps: list[str] = []
+            for q in questions:
+                if q.is_correct is False and q.knowledge_points:
+                    wrong_kps.extend(q.knowledge_points)
+            wrong_kp_str = "、".join(sorted(set(wrong_kps))) if wrong_kps else "无"
+            accuracy = round(correct / total * 100) if total else 0
+            quiz_activities = (
+                f"- 本周答题：{total} 道，正确：{correct} 道，正确率：{accuracy}%\n"
+                f"- 错题涉及知识点：{wrong_kp_str}"
+            )
+        else:
+            quiz_activities = "本周无答题记录"
+
+        # 5. 学习事件与时长
+        event_stmt = (
+            select(
+                LearningEvent.event_type,
+                sa_func.count(LearningEvent.id),
+            )
+            .where(
+                LearningEvent.user_id == user_id,
+                LearningEvent.created_at >= week_start,
+                LearningEvent.created_at <= week_end,
+            )
+            .group_by(LearningEvent.event_type)
+        )
+        event_rows = (await db.exec(event_stmt)).all()
+        session_stmt = (
+            select(sa_func.sum(LearningSession.duration_seconds))
+            .where(
+                LearningSession.user_id == user_id,
+                LearningSession.started_at >= week_start,
+                LearningSession.started_at <= week_end,
+            )
+        )
+        total_seconds = (await db.exec(session_stmt)).one_or_none() or 0
+        active_minutes = int(total_seconds // 60) if total_seconds else 0
+        if event_rows:
+            event_lines = [f"- {et}：{cnt} 次" for et, cnt in event_rows]
+            event_lines.append(f"- 本周活跃总时长：约 {active_minutes} 分钟")
+            learning_events = "\n".join(event_lines)
+        else:
+            learning_events = f"本周无学习事件记录（活跃约 {active_minutes} 分钟）"
+
+        # 6. 长期记忆
+        ltm = (
+            await db.exec(
+                select(ChatLongTermMemory)
+                .where(ChatLongTermMemory.user_id == user_id)
+                .limit(1)
+            )
+        ).first()
+        long_term_memory = ltm.memory_markdown if ltm and ltm.memory_markdown else "暂无长期记忆"
+
+        # 7. 统计快照 + 活跃课程
+        courses_active = sorted({
+            n.title for n in nodes if n.title
+        } | {
+            str(r.learning_need or "")[:30]
+            for r in resources
+            if r.learning_need
+        } - {""})
+
+        stats = {
+            "dialogue_turns": len(summary_rows),
+            "resources_generated": len(resources),
+            "nodes_touched": len(nodes),
+            "nodes_completed": sum(1 for n in nodes if n.status == "completed"),
+            "quiz_total": len(questions),
+            "quiz_correct": sum(1 for q in questions if q.is_correct),
+            "active_minutes": active_minutes,
+        }
+
+        return {
+            "dialogue_summaries": dialogue_summaries,
+            "resource_activities": resource_activities,
+            "path_activities": path_activities,
+            "quiz_activities": quiz_activities,
+            "learning_events": learning_events,
+            "long_term_memory": long_term_memory,
+            "courses_active": courses_active,
+            "stats": stats,
+        }
 
     async def build_profile_markdown(self, *, user_id: int) -> str:
         """将 7 维度画像 JSON 转为结构化 Markdown，供 LLM 和智能体使用。
@@ -334,46 +630,50 @@ class ProfileService:
     async def infer_profile_from_onboarding(self, *, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         """从 onboarding 信息推理 7 维度画像并评分。
 
-        推理和评分全部在调用方请求内同步完成。
-        失败时抛出异常，由调用方决定如何处理。
+        作为后台任务调用，内部捕获异常避免未处理错误。
+        基础信息已在调用前同步保存，推理失败不影响用户正常使用。
         """
-        logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
+        try:
+            logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
 
-        async with session_scope() as db:
-            profile = await self.get_profile(user_id=user_id, db=db)
-            profile_json = profile.profile_json or deepcopy(default_profile_json)
-            base_info = profile_json.get("base_info", {})
+            async with session_scope() as db:
+                profile = await self.get_profile(user_id=user_id, db=db)
+                profile_json = profile.profile_json or deepcopy(default_profile_json)
+                base_info = profile_json.get("base_info", {})
 
-            logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
-            prompt = prompts.get("profile").render(
-                "onboarding",
-                onboarding_data=json.dumps(base_info, ensure_ascii=False),
-            )
-            resp = await self.llm.ainvoke_json(
-                ProfileDimensionsPatch,
-                [HumanMessage(content=prompt)],
-            )
+                logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
+                prompt = prompts.get("profile").render(
+                    "onboarding",
+                    onboarding_data=json.dumps(base_info, ensure_ascii=False),
+                )
+                resp = await self.llm.ainvoke_json(
+                    ProfileDimensionsPatch,
+                    [HumanMessage(content=prompt)],
+                )
 
-            dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
-                            for k, v in resp.dimensions_patch.items()}
-            logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
-                        user_id, dims_summary)
+                dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
+                                for k, v in resp.dimensions_patch.items()}
+                logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
+                            user_id, dims_summary)
 
-            profile = await self.get_profile(user_id=user_id, db=db)
+                profile = await self.get_profile(user_id=user_id, db=db)
 
-            profile_json = profile.profile_json or deepcopy(default_profile_json)
-            profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
-            profile.profile_json = profile_json
-            profile.updated_at = datetime.now(timezone.utc)
+                profile_json = profile.profile_json or deepcopy(default_profile_json)
+                profile_json = merge_dimensions(profile_json, resp.dimensions_patch)
+                profile.profile_json = profile_json
+                profile.updated_at = datetime.now(timezone.utc)
 
-            db.add(profile)
-            await db.flush()
+                db.add(profile)
+                await db.flush()
 
-        score_result = await self.score_profile(user_id=user_id)
-        logger.info("[ProfileService] onboarding 推理+评分完成: user_id=%s dimensions_updated=%s overall_score=%s",
-                     user_id, list(dims_summary.keys()), score_result.get("overall_score"))
+            score_result = await self.score_profile(user_id=user_id)
+            logger.info("[ProfileService] onboarding 推理+评分完成: user_id=%s dimensions_updated=%s overall_score=%s",
+                         user_id, list(dims_summary.keys()), score_result.get("overall_score"))
 
-        return score_result
+            return score_result
+        except Exception:
+            logger.exception("[ProfileService] onboarding 推理+评分失败: user_id=%s", user_id)
+            return {"inference_ok": False, "reason": "llm_error"}
 
     async def infer_profile_from_tutoring(self, *, user_id: int, session_id: str) -> dict[str, Any]:
         """从辅导对话推理更新全局画像。"""
@@ -449,149 +749,27 @@ class ProfileService:
             "updated_at": global_profile.updated_at,
         }
 
-    async def infer_course_profile_from_tutoring(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        course_name: str,
-        active_topic: str | None = None,
-    ) -> dict[str, Any]:
-        """从辅导对话推理并重写单一课程子画像 Markdown。"""
-        logger.info("[ProfileService] 课程画像更新开始: user_id=%s session_id=%s course_name=%s active_topic=%s",
-                     user_id, session_id, course_name, active_topic)
-        async with session_scope() as db:
-            global_profile = await self.get_profile(user_id=user_id, db=db)
-            global_profile_id = global_profile.id
-
-            course_profiles = await self.get_course_profiles(user_id=user_id)
-            target_key = normalize_course_key(course_name)
-
-            target_profile = None
-            for cp in course_profiles:
-                if cp.course_key == target_key or cp.course_name == course_name or course_name in cp.aliases:
-                    target_profile = cp
-                    break
-
-            is_new_course = target_profile is None
-            if not target_profile:
-                target_profile = CourseProfile(
-                    global_profile_id=global_profile_id,
-                    user_id=user_id,
-                    module=self.module,
-                    course_key=target_key,
-                    course_name=course_name,
-                    aliases=[],
-                    profile_markdown=_DEFAULT_COURSE_MARKDOWN_TEMPLATE.format(course_name=course_name),
-                )
-                db.add(target_profile)
-                await db.flush()
-                logger.info("[ProfileService] 课程画像新建: course_key=%s course_name=%s", target_key, course_name)
-            else:
-                target_profile = await db.merge(target_profile)
-                logger.info("[ProfileService] 课程画像已存在: course_key=%s course_name=%s", target_key, course_name)
-
-            course_list = [
-                {
-                    "course_name": cp.course_name,
-                    "course_key": cp.course_key,
-                    "aliases": cp.aliases,
-                    "preview": cp.profile_markdown[:200],
-                }
-                for cp in course_profiles
-            ]
-
-            # 获取最近对话
-            from app.chat.memory.service import get_chat_memory_service
-            memory_service = get_chat_memory_service()
-            recent_dialogue, _, _ = await memory_service._build_dialogue_since(
-                db=db, user_id=user_id, session_id=session_id, after_message_id=0, limit=20,
-            )
-
-            if not recent_dialogue or not recent_dialogue.strip():
-                logger.info("[ProfileService] 课程画像: 无对话内容可提取，跳过更新")
-                return {
-                    "profile_updated": False,
-                    "course_name": course_name,
-                    "profile_markdown": target_profile.profile_markdown,
-                    "updated_at": target_profile.updated_at,
-                    "reason": "no_dialogue",
-                }
-
-            # 获取长期记忆
-            ltm = (
-                await db.exec(
-                    select(ChatLongTermMemory).where(
-                        ChatLongTermMemory.user_id == user_id,
-                    )
-                )
-            ).first()
-            long_term_memory = ltm.memory_markdown if ltm and ltm.memory_markdown else ""
-
-            logger.info("[ProfileService] 课程画像: recent_dialogue长度=%s long_term_memory长度=%s",
-                         len(recent_dialogue), len(long_term_memory))
-
-            prompt = prompts.get("profile").render(
-                "course_update",
-                profile_json=json.dumps(global_profile.profile_json, ensure_ascii=False),
-                course_list=json.dumps(course_list, ensure_ascii=False),
-                target_course=course_name,
-                old_markdown=target_profile.profile_markdown,
-                recent_dialogue=recent_dialogue,
-                long_term_memory=long_term_memory,
-                active_topic=active_topic or "无",
-            )
-
-            resp = await self.llm.ainvoke(
-                [HumanMessage(content=prompt)],
-            )
-
-            raw_content = str(resp.content or "")
-            logger.info("[ProfileService] 课程画像 LLM生成Markdown: 长度=%s 前200字=%s",
-                         len(raw_content), raw_content[:200])
-
-            markdown_text = validate_course_markdown(raw_content, course_name)
-            logger.info("[ProfileService] 课程画像Markdown验证通过: course_name=%s", course_name)
-
-            updated = False
-            if markdown_text and markdown_text != target_profile.profile_markdown:
-                target_profile.profile_markdown = markdown_text
-                target_profile.updated_at = datetime.now(timezone.utc)
-                db.add(target_profile)
-                await db.flush()
-                updated = True
-
-            logger.info("[ProfileService] 课程画像更新结果: updated=%s markdown长度=%s",
-                         updated, len(target_profile.profile_markdown or ""))
-
-        if updated:
-            score_result = await self.score_profile(user_id=user_id)
-            logger.info("[ProfileService] 课程画像评分刷新完成: user_id=%s overall_score=%s",
-                         user_id, score_result.get("overall_score"))
-
-        return {
-            "profile_updated": updated,
-            "course_name": course_name,
-            "profile_markdown": target_profile.profile_markdown,
-            "updated_at": target_profile.updated_at,
-        }
-
     async def score_profile(self, *, user_id: int) -> dict[str, Any]:
-        """根据文字画像和课程画像重新计算全局评分。"""
+        """根据全局画像 JSON 和本周学习摘要重新计算评分。
+
+        本周摘要作为评分的缓冲证据层：聚合本周辅导对话、资源生成、路径学习、
+        答题行为等硬数据生成结构化 Markdown，注入评分 prompt 作为客观依据。
+        """
         logger.info("[ProfileService] 全局评分刷新开始: user_id=%s", user_id)
         async with session_scope() as db:
             global_profile = await self.get_profile(user_id=user_id, db=db)
 
-            course_profiles = await self.get_course_profiles(user_id=user_id)
-            course_markdown_list = [cp.profile_markdown for cp in course_profiles]
-            concatenated_markdown = "\n\n---\n\n".join(course_markdown_list)
-            logger.info("[ProfileService] 全局评分: course_profiles数量=%s markdown总长度=%s",
-                         len(course_profiles), len(concatenated_markdown))
+            digest = await self.get_or_create_weekly_digest(user_id=user_id, db=db)
+            weekly_digest = digest.digest_markdown
+            logger.info(
+                "[ProfileService] 全局评分: week=%s digest长度=%s",
+                _format_week_label(digest.week_start, digest.week_end), len(weekly_digest),
+            )
 
             prompt = prompts.get("profile").render(
                 "score",
                 profile_text=json.dumps(global_profile.profile_json, ensure_ascii=False),
-                course_markdown=concatenated_markdown,
+                weekly_digest=weekly_digest,
             )
 
             resp = await self.llm.ainvoke_json(
@@ -599,8 +777,10 @@ class ProfileService:
                 [HumanMessage(content=prompt)],
             )
 
-            logger.info("[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s dimension_evidence_keys=%s",
-                         resp.dimension_scores, list(resp.dimension_evidence.keys()))
+            logger.info(
+                "[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s dimension_evidence_keys=%s",
+                resp.dimension_scores, list(resp.dimension_evidence.keys()),
+            )
 
             scores = sanitize_score_output(resp)
             global_profile.profile_score_json = scores
@@ -609,8 +789,10 @@ class ProfileService:
             db.add(global_profile)
             await db.flush()
 
-            logger.info("[ProfileService] 全局评分刷新完成: user_id=%s overall_score=%s dimension_scores=%s",
-                         user_id, scores.get("overall_score"), scores.get("dimension_scores"))
+            logger.info(
+                "[ProfileService] 全局评分刷新完成: user_id=%s overall_score=%s dimension_scores=%s",
+                user_id, scores.get("overall_score"), scores.get("dimension_scores"),
+            )
 
             return scores
 
@@ -628,8 +810,6 @@ def get_profile_service(*, module: str = "mentor") -> ProfileService:
 __all__ = [
     "ProfileService",
     "get_profile_service",
-    "normalize_course_key",
     "merge_dimensions",
     "sanitize_score_output",
-    "validate_course_markdown",
 ]

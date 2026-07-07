@@ -18,11 +18,13 @@ from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
 from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
+from app.chat.events import record_dialogue_event
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.schemas import ChatMessageItem
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
+from app.infra.database import session_scope
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -325,6 +327,18 @@ async def run_chat_agent(
                 ),
             )
             await events.send(event="message.completed", message="回答完成", data={})
+            try:
+                async with session_scope() as db:
+                    await record_dialogue_event(
+                        db=db,
+                        user_id=user_id,
+                        session_id=session_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "[Chat] Failed to record dialogue event for session=%s",
+                    session_id,
+                )
     except Exception as e:
         logger.exception("chat_agent_failed: user_message_id=%s", user_message_id)
         await memory_svc.upsert_activity(

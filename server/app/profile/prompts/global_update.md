@@ -90,7 +90,7 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 
 ## Hard Constraints
 
-- 不得输出课程层面的画像内容（如课程薄弱点、知识点掌握度等，这些属于 CourseProfile 域）
+- 不得输出课程层面的画像内容（如课程薄弱点、知识点掌握度等，这些不属于全局画像的 7 个维度）
 - 不得编造对话中不存在的行为作为 evidence
 - 必须在 should_update 为 true 时提供至少一条具体 evidence
 - 维度名必须使用以下 7 个之一：knowledge_level, cognitive_style, weak_knowledge_points, knowledge_gap_pattern, learning_goal_type, difficulty_tolerance, self_correction_ability
@@ -112,7 +112,7 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 
 - should_update 的判断是否基于重复性/稳定性证据，而非单次对话？
 - evidence 是否均为对话观察，而非推断或常识？
-- dimensions_patch 中是否有内容属于课程画像而非全局画像？
+- dimensions_patch 中是否有内容属于课程层面而非全局画像的 7 个维度？
 - 维度名是否在 7 个允许的范围内？
 - 是否输出了纯 JSON，无代码块标记？
 

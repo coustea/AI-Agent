@@ -45,7 +45,6 @@ async def run_background_memory_jobs(
         should_compress = evaluation["should_compress"]
         signals = evaluation["signals"]
         should_update_global = signals["global_profile"]
-        should_update_course = signals["course_profile"]
         should_profile = evaluation.get("should_profile", False)
         payload["ltm_schedule"] = ltm_schedule
         logger.info(
@@ -70,7 +69,7 @@ async def run_background_memory_jobs(
 
         if should_profile:
             tasks.append(asyncio.create_task(
-                _run_profile_update(memory_service, user_id, session_id, should_update_global, should_update_course),
+                _run_profile_update(memory_service, user_id, session_id, should_update_global),
                 name="profile_update",
             ))
 
@@ -127,12 +126,10 @@ async def _run_profile_update(
     user_id: int,
     session_id: str,
     should_update_global: bool,
-    should_update_course: bool,
 ) -> dict[str, Any]:
     """执行学习者画像更新，完成后重置计数器。"""
     profile_service = get_profile_service()
     global_updated = False
-    course_updated = False
 
     if should_update_global:
         res_global = await profile_service.infer_profile_from_tutoring(
@@ -142,45 +139,15 @@ async def _run_profile_update(
         global_updated = res_global.get("profile_updated", False)
         logger.info("[background] 全局画像更新完成: global_updated=%s", global_updated)
 
-    if should_update_course:
-        global_profile = await profile_service.get_profile(user_id=user_id)
-        profile_json = global_profile.profile_json or {}
-        active_courses = profile_json.get("base_info", {}).get("courses", [])
-        course_name = ""
-        if active_courses and isinstance(active_courses, list):
-            first_course = active_courses[0]
-            if isinstance(first_course, dict):
-                course_name = first_course.get("course", "")
-            elif isinstance(first_course, str):
-                course_name = first_course
-
-        if isinstance(course_name, list):
-            course_name = course_name[0] if course_name else ""
-        course_name = str(course_name) if course_name else ""
-
-        if course_name:
-            res_course = await profile_service.infer_course_profile_from_tutoring(
-                user_id=user_id,
-                session_id=session_id,
-                course_name=course_name,
-            )
-            course_updated = res_course.get("profile_updated", False)
-            logger.info(
-                "[background] 课程画像更新完成: course_name=%s course_updated=%s",
-                course_name, course_updated,
-            )
-
-    # 更新完成后重置计数器
-    if global_updated or course_updated:
+    if global_updated:
         await memory_service.reset_profile_counters(user_id=user_id, session_id=session_id)
 
-    status = "completed" if (global_updated or course_updated) else "skipped"
+    status = "completed" if global_updated else "skipped"
     return {
         "job": "learner_profile",
         "status": status,
-        "profile_updated": global_updated or course_updated,
+        "profile_updated": global_updated,
         "global_updated": global_updated,
-        "course_updated": course_updated,
     }
 
 

@@ -118,9 +118,9 @@ function renderChart() {
     const x = xScale(d.index) ?? 0; const y = yScale(d.value)
     const bw = xScale.bandwidth(); const bh = innerHeight - y
     g.attr('transform', `translate(${x}, 0)`)
-    g.select('rect.bar-rect').attr('x', 0).attr('y', y).attr('rx', 18).attr('ry', 18).attr('width', bw).attr('height', Math.max(bh, 20))
-    g.select('text.bar-value').attr('x', bw / 2).attr('y', Math.max(y - 12, 14)).attr('text-anchor', 'middle').text(d.value)
-    g.select('text.bar-index').attr('x', bw / 2).attr('y', innerHeight + 28).attr('text-anchor', 'middle').text(d.index)
+    g.select('rect.bar-rect').attr('x', 0).attr('y', y).attr('rx', 3).attr('ry', 3).attr('width', bw).attr('height', Math.max(bh, 20))
+    g.select('text.bar-value').attr('x', bw / 2).attr('y', Math.max(y - 8, 12)).attr('text-anchor', 'middle').text(d.value)
+    g.select('text.bar-index').attr('x', bw / 2).attr('y', innerHeight + 20).attr('text-anchor', 'middle').text(d.index)
   })
 }
 
@@ -137,18 +137,18 @@ function animateStep() {
   gsap.killTweensOf(rects); gsap.set(rects, { clearProps: 'all' })
 
   if (props.currentEvent.type === 'init_array') {
-    gsap.fromTo(rects, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }); return
+    gsap.fromTo(rects, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', stagger: 0.04 }); return
   }
   if (props.currentEvent.type === 'compare' && targets.length) {
-    gsap.fromTo(targets, { y: 0, scaleY: 1 }, { y: -14, scaleY: 1.04, duration: 0.24, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' }); return
+    gsap.fromTo(targets, { y: 0, scaleY: 1 }, { y: -8, scaleY: 1.02, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' }); return
   }
   if (props.currentEvent.type === 'swap' && targets.length) {
     const [first, second] = targets
-    if (first) gsap.fromTo(first, { x: 0, y: 0 }, { x: -10, y: -18, duration: 0.22, yoyo: true, repeat: 1 })
-    if (second) gsap.fromTo(second, { x: 0, y: 0 }, { x: 10, y: -18, duration: 0.22, yoyo: true, repeat: 1 }); return
+    if (first) gsap.fromTo(first, { x: 0, y: 0 }, { x: -6, y: -10, duration: 0.18, yoyo: true, repeat: 1 })
+    if (second) gsap.fromTo(second, { x: 0, y: 0 }, { x: 6, y: -10, duration: 0.18, yoyo: true, repeat: 1 }); return
   }
   if (props.currentEvent.type === 'mark_sorted' && sortedTarget) {
-    gsap.fromTo(sortedTarget, { scale: 1 }, { scale: 1.08, duration: 0.28, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' })
+    gsap.fromTo(sortedTarget, { scale: 1 }, { scale: 1.04, duration: 0.22, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' })
   }
 }
 
@@ -158,23 +158,112 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
 </script>
 
 <style scoped>
-.array-bars-visualizer { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; padding: 18px; background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 26%), linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95)); }
-.visualizer-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.visualizer-meta h3 { margin: 0; font-size: 20px; font-weight: 760; color: #0f172a; }
-.visualizer-meta p { margin: 6px 0 0; font-size: 13px; color: #64748b; }
-.legend { display: flex; flex-wrap: wrap; gap: 8px; }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-.legend-dot.compare { background: #60a5fa; }
-.legend-dot.swap { background: #f59e0b; }
-.legend-dot.sorted { background: #10b981; }
-.chart-shell { min-height: 0; border-radius: 24px; background: rgba(241, 245, 249, 0.62); border: 1px solid rgba(226, 232, 240, 0.96); padding: 16px; }
-.chart-svg { width: 100%; height: 100%; min-height: 300px; }
-:deep(.bar-rect) { fill: #cbd5e1; transition: fill 0.2s ease, opacity 0.2s ease; filter: drop-shadow(0 12px 18px rgba(15, 23, 42, 0.08)); }
-:deep(.bar-value) { fill: #0f172a; font-size: 18px; font-weight: 700; }
-:deep(.bar-index) { fill: #64748b; font-size: 14px; font-weight: 600; }
-:deep(.bar-group[data-tone='compare'] .bar-rect) { fill: #60a5fa; }
-:deep(.bar-group[data-tone='swap'] .bar-rect) { fill: #f59e0b; }
-:deep(.bar-group[data-tone='sorted'] .bar-rect) { fill: #10b981; }
-@media (max-width: 900px) { .visualizer-meta { flex-direction: column; } }
+.array-bars-visualizer {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.visualizer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.visualizer-meta h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.visualizer-meta p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.legend {
+  display: flex;
+  gap: 8px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.compare {
+  background: #3b82f6;
+}
+
+.legend-dot.swap {
+  background: #f59e0b;
+}
+
+.legend-dot.sorted {
+  background: #10b981;
+}
+
+.chart-shell {
+  min-height: 0;
+  border-radius: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-svg {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+}
+
+:deep(.bar-rect) {
+  fill: #cbd5e1;
+  transition: fill 0.15s ease, opacity 0.15s ease;
+}
+
+:deep(.bar-value) {
+  fill: #334155;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:deep(.bar-index) {
+  fill: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+:deep(.bar-group[data-tone='compare'] .bar-rect) {
+  fill: #3b82f6;
+}
+
+:deep(.bar-group[data-tone='swap'] .bar-rect) {
+  fill: #f59e0b;
+}
+
+:deep(.bar-group[data-tone='sorted'] .bar-rect) {
+  fill: #10b981;
+}
 </style>

@@ -39,23 +39,136 @@ function getCellTone(row: number, col: number) {
 </script>
 
 <style scoped>
-.dp-table-visualizer { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; padding: 18px; background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 26%), linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95)); }
-.visualizer-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.visualizer-meta h3 { margin: 0; font-size: 20px; font-weight: 760; color: #0f172a; }
-.visualizer-meta p { margin: 6px 0 0; font-size: 13px; color: #64748b; }
-.legend { display: flex; flex-wrap: wrap; gap: 8px; }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-.legend-dot.default { background: #cbd5e1; border: 1px solid #94a3b8; }
-.legend-dot.active { background: #93c5fd; border: 1px solid #2563eb; }
-.legend-dot.success { background: rgba(220, 252, 231, 0.95); border: 1px solid #10b981; }
-.chart-shell { min-height: 0; border-radius: 24px; background: rgba(241, 245, 249, 0.62); border: 1px solid rgba(226, 232, 240, 0.96); padding: 16px; overflow: auto; }
-.dp-grid { display: flex; flex-direction: column; gap: 8px; }
-.dp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); gap: 8px; }
-.dp-row.header { margin-bottom: 4px; }
-.dp-cell { display: grid; place-items: center; min-height: 44px; border-radius: 12px; background: rgba(248, 250, 252, 0.96); border: 1px solid rgba(226, 232, 240, 0.95); color: #0f172a; font-weight: 700; }
-.dp-cell.header { background: transparent; border-color: transparent; color: #64748b; font-size: 12px; }
-.dp-cell.active { border-color: rgba(37, 99, 235, 0.45); background: rgba(219, 234, 254, 0.9); }
-.dp-cell.success { border-color: rgba(16, 185, 129, 0.35); background: rgba(220, 252, 231, 0.92); }
-.empty-state { height: 100%; min-height: 240px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #94a3b8; }
+.dp-table-visualizer {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.visualizer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.visualizer-meta h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.visualizer-meta p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.legend {
+  display: flex;
+  gap: 8px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.default {
+  background: #cbd5e1;
+  border: 1px solid #94a3b8;
+}
+
+.legend-dot.active {
+  background: #93c5fd;
+  border: 1px solid #2563eb;
+}
+
+.legend-dot.success {
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+}
+
+.chart-shell {
+  min-height: 0;
+  border-radius: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  overflow: auto;
+}
+
+.dp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dp-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 4px;
+}
+
+.dp-row.header {
+  margin-bottom: 2px;
+}
+
+.dp-cell {
+  display: grid;
+  place-items: center;
+  min-height: 38px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.dp-cell.header {
+  background: transparent;
+  border-color: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dp-cell.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.dp-cell.success {
+  border-color: #10b981;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.empty-state {
+  height: 100%;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #94a3b8;
+}
 </style>
