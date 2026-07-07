@@ -672,15 +672,28 @@ class PathService:
     async def _get_profile_dict(
         self, user_id: int
     ) -> dict[str, Any]:
+        """获取用户画像数据（维度 + 基础信息）。"""
         try:
-            profile = await self.profile_builder.get_profile(
-                user_id=user_id
+            from app.infra.models import User
+            user = (await self.session.exec(select(User).where(User.id == user_id))).first()
+            base_info = {
+                "school": user.school or "",
+                "school_level": user.school_level or "",
+                "major": user.major or "",
+                "grade": user.grade or "",
+                "daily_study_time": user.daily_study_time or "",
+                "global_learning_goal": user.global_learning_goal or "",
+                "programming_languages": user.programming_languages or [],
+                "courses": user.courses or [],
+            } if user else {}
+
+            dimensions = await self.profile_builder.get_dimensions(
+                user_id=user_id, db=self.session
             )
-            return (
-                profile.profile_json
-                if profile and profile.profile_json
-                else {}
-            )
+            return {
+                "base_info": base_info,
+                "dimensions": dimensions,
+            }
         except ProgrammingError as exc:
             logger.warning(
                 "[PathService] 画像表暂不可用，路径规划降级为空画像: "

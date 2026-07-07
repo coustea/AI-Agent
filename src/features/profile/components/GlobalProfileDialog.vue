@@ -1,81 +1,62 @@
 <template>
   <Teleport to="body">
-    <transition name="modal-fade">
-      <div v-if="isGlobalProfileVisible" class="custom-modal-overlay" @click="isGlobalProfileVisible = false">
-        <div class="custom-modal-content global-profile-modal" @click.stop>
-          <div class="modal-header border-b border-slate-100 pb-3 mb-4 flex justify-between items-start">
-            <div class="header-brand flex items-center gap-3">
-              <div class="brand-icon w-10 h-10 bg-blue text-white flex items-center justify-center rounded-xl">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </div>
-              <div>
-                <h2 class="text-lg font-bold text-slate-900">全局学习画像</h2>
-                <p class="text-xs text-slate-400 mt-0.5">
-                  基于学习行为推断的 7 个维度特征
-                  <span v-if="profile?.updated_at">· 最后更新 {{ formatTime(profile.updated_at) }}</span>
-                </p>
-              </div>
+    <transition name="modal">
+      <div v-if="isGlobalProfileVisible" class="modal-overlay" @click="isGlobalProfileVisible = false">
+        <div class="modal-container" @click.stop>
+          <!-- Header -->
+          <div class="modal-header">
+            <div>
+              <h2 class="text-sm font-bold tracking-wider text-slate-900 font-mono uppercase">全局特征画像</h2>
+              <p class="text-[9px] text-slate-400 font-mono mt-0.5" v-if="profile?.updated_at">
+                LAST UPDATED: {{ formatTime(profile.updated_at) }}
+              </p>
             </div>
-            <button class="modal-close-btn text-slate-400 hover:text-slate-600" @click="isGlobalProfileVisible = false">×</button>
+            <button class="modal-close-btn" @click="isGlobalProfileVisible = false">
+              <component :is="XIcon" class="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <div class="profile-panel py-2">
-            <!-- 维度列表 -->
-            <div class="dimensions-list" v-if="dimensionCards.length">
-              <article
-                v-for="(dim, idx) in dimensionCards"
-                :key="dim.key"
-                class="dimension-row"
-                :class="{ 'is-expanded': expandedKey === dim.key }"
-                @click="toggleExpand(dim.key)"
-              >
-                <div class="row-index">{{ String(idx + 1).padStart(2, '0') }}</div>
-
-                <div class="row-main">
-                  <div class="row-header flex justify-between items-center mb-1">
-                    <h4 class="font-bold text-slate-800 text-sm">{{ dim.label }}</h4>
-                    <span class="row-status text-xs text-green bg-green-50 px-2 py-0.5 rounded-full" v-if="dim.value">已推断</span>
-                    <span class="row-status pending text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full" v-else>待推断</span>
-                  </div>
-
-                  <p class="row-value text-xs text-slate-500 leading-relaxed">{{ dim.value || '系统尚未推断出此维度特征，继续学习后将自动生成' }}</p>
-
-                  <!-- 证据列表 -->
-                  <div class="row-evidence mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg" v-if="dim.evidence?.length && expandedKey === dim.key">
-                    <div class="evidence-label flex items-center gap-1.5 text-xs text-slate-400 mb-1 font-semibold">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                      </svg>
-                      <span>推断依据</span>
-                    </div>
-                    <ul class="evidence-list list-disc pl-4 text-xs text-slate-500 space-y-0.5">
-                      <li v-for="(ev, i) in dim.evidence" :key="i">{{ ev }}</li>
+          <!-- Body -->
+          <div class="modal-body" v-if="profile && dimensionCards.length">
+            <div class="dimensions-list">
+              <div v-for="(dim, idx) in dimensionCards" :key="dim.key" class="dimension-item">
+                <div class="dim-num font-mono">0{{ idx + 1 }}</div>
+                <div class="dim-content">
+                  <h3 class="dim-title font-bold text-slate-900 text-xs font-mono uppercase tracking-wide">
+                    {{ dim.label }}
+                  </h3>
+                  <p class="dim-value text-slate-700 text-xs mt-1.5 leading-relaxed font-sans">
+                    {{ dim.value }}
+                  </p>
+                  
+                  <div v-if="dim.evidence?.length" class="dim-evidence mt-3 p-3 bg-slate-50 border border-slate-100">
+                    <div class="evidence-title font-mono text-[9px] text-slate-400 tracking-wider font-bold">BEHAVIORAL EVIDENCE</div>
+                    <ul class="evidence-list font-mono text-slate-500 mt-1.5 space-y-1">
+                      <li v-for="(ev, i) in dim.evidence" :key="i" class="evidence-item text-xs flex items-start gap-1.5 leading-relaxed">
+                        <span class="text-slate-950 font-bold flex-shrink-0">•</span>
+                        <span>{{ ev }}</span>
+                      </li>
                     </ul>
                   </div>
                 </div>
-
-                <div class="row-expand-icon text-slate-400 self-center" v-if="dim.evidence?.length">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline :points="expandedKey === dim.key ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/>
-                  </svg>
-                </div>
-              </article>
-            </div>
-
-            <div class="empty-state py-12 flex flex-col items-center justify-center text-center text-slate-400" v-else>
-              <div class="empty-icon w-12 h-12 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-3">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 6v6l4 2"/>
-                </svg>
               </div>
-              <p class="text-sm">完成更多学习后，系统将自动推断你的画像维度</p>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div class="modal-body flex flex-col items-center justify-center text-center py-16 px-6" v-else-if="!loading">
+            <div class="w-10 h-10 border border-slate-200 flex items-center justify-center text-slate-400 font-mono text-sm mb-4">
+              ?
+            </div>
+            <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono mb-1">暂无画像特征记录</h3>
+            <p class="text-[10px] text-slate-400 max-w-[240px] leading-relaxed font-mono">系统将根据您后续的学习行为，自动提取并推断画像特性。</p>
+          </div>
+
+          <!-- Loading state skeleton -->
+          <div class="modal-body p-6 space-y-4" v-if="loading">
+            <div v-for="n in 3" :key="n" class="animate-pulse space-y-2 pb-4 border-b border-slate-100">
+              <div class="h-3.5 bg-slate-100 w-1/4"></div>
+              <div class="h-3 bg-slate-100 w-3/4"></div>
             </div>
           </div>
         </div>
@@ -88,43 +69,37 @@
 import { computed, ref, watch } from 'vue'
 import { getProfile, type ProfileData, type ProfileDimensionKey } from '@/features/profile/api/profile'
 import { isGlobalProfileVisible, profileRefreshTrigger } from '@/features/profile/model/useGlobalProfile'
+import type { DimensionValue } from '@/features/profile/model/profile'
+import { XIcon } from '@lucide/vue'
 
 const profile = ref<ProfileData | null>(null)
 const loading = ref(false)
-const expandedKey = ref<string | null>(null)
 
-/**
- * 7 维度画像
- * - 知识层: knowledge_level, weak_knowledge_points, knowledge_gap_pattern
- * - 认知层: cognitive_style, learning_goal_type, difficulty_tolerance, self_correction_ability
- */
-const DIMENSION_NAMES: Record<ProfileDimensionKey, string> = {
-  knowledge_level: '知识基础',
-  cognitive_style: '认知风格',
-  weak_knowledge_points: '易错点偏好',
-  knowledge_gap_pattern: '知识缺口模式',
-  learning_goal_type: '学习目标导向',
-  difficulty_tolerance: '难度耐受度',
-  self_correction_ability: '自纠能力水平',
-}
+const DIM_CONFIG = [
+  { key: 'knowledge_level', label: '知识基础' },
+  { key: 'cognitive_style', label: '认知风格' },
+  { key: 'weak_knowledge_points', label: '易错偏好' },
+  { key: 'knowledge_gap_pattern', label: '缺口模式' },
+  { key: 'learning_goal_type', label: '目标导向' },
+  { key: 'difficulty_tolerance', label: '难度耐受' },
+  { key: 'self_correction_ability', label: '自纠能力' }
+]
 
 const dimensionCards = computed(() => {
-  const dims = profile.value?.dimensions ?? {} as Record<ProfileDimensionKey, { value: string; evidence: string[] }>
-  const evidences = profile.value?.profile_score_json?.dimension_evidence ?? {} as Record<ProfileDimensionKey, string[]>
+  const dims = (profile.value?.dimensions ?? {}) as Record<ProfileDimensionKey, DimensionValue>
 
-  return Object.entries(DIMENSION_NAMES)
-    .map(([key, label]) => ({
+  return DIM_CONFIG.map(config => {
+    const key = config.key as ProfileDimensionKey
+    const valObj = dims[key] || { value: '', evidence: [] }
+    const evidenceList = valObj.evidence || []
+    return {
       key,
-      label,
-      value: dims[key as ProfileDimensionKey]?.value || '',
-      evidence: evidences[key as ProfileDimensionKey] || [],
-    }))
-    .filter(dim => dim.value)
+      label: config.label,
+      value: valObj.value || '',
+      evidence: evidenceList
+    }
+  }).filter(dim => dim.value)
 })
-
-const toggleExpand = (key: string) => {
-  expandedKey.value = expandedKey.value === key ? null : key
-}
 
 const formatTime = (time: string | null) => {
   if (!time) return ''
@@ -154,7 +129,6 @@ const fetchProfile = async () => {
 
 watch(isGlobalProfileVisible, (newVal) => {
   if (newVal) {
-    expandedKey.value = null
     fetchProfile()
   }
 })
@@ -167,56 +141,134 @@ watch(profileRefreshTrigger, () => {
 </script>
 
 <style scoped>
-.profile-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+/* Modal Transition */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.22s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
 }
 
-.dimensions-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+.modal-enter-active .modal-container {
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+}
+.modal-leave-active .modal-container {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
 }
 
-.dimension-row {
-  display: flex;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  cursor: pointer;
-  background: var(--color-surface);
-  transition: all var(--transition-base);
+.modal-enter-from .modal-container,
+.modal-leave-to .modal-container {
+  transform: scale(0.96);
+  opacity: 0;
 }
 
-.dimension-row:hover {
-  border-color: var(--color-border-hover);
-  background: var(--color-surface-hover);
-}
-
-.dimension-row.is-expanded {
-  border-color: var(--color-border-hover);
-  background: var(--color-surface-hover);
-}
-
-.row-index {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
+/* Overlay & White Container styling */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg);
-  border-radius: var(--radius-lg);
-  color: var(--color-text-muted);
-  font-size: var(--text-2xs);
-  font-family: var(--font-mono);
-  font-weight: var(--weight-bold);
+  padding: var(--space-4);
 }
 
-.row-main {
+.modal-container {
+  width: 100%;
+  max-width: 580px;
+  max-height: 85dvh;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0px !important;
+  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.08);
+}
+
+.modal-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: justify-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.modal-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  border-radius: 0px;
+  transition: all 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #0f172a;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.modal-body::-webkit-scrollbar {
+  width: 3px;
+}
+.modal-body::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 0px;
+}
+
+/* Dimensions List Styling */
+.dimensions-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dimension-item {
+  display: flex;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dimension-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.dim-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.dim-content {
   flex: 1;
   min-width: 0;
+}
+
+.dim-title {
+  height: 20px;
+  display: flex;
+  align-items: center;
 }
 </style>

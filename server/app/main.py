@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.config import WORKPLACE_DIR
+from app.config import KB_AUTO_BUILD, KB_ENABLED, KB_EMBED_MODEL, WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging, get_logger
@@ -46,55 +46,71 @@ async def lifespan(app: FastAPI):
     # 执行数据库连接检查，确保连接可用
     await check_all()
 
-    # 知识库索引健康检查 + 自动构建
-    try:
-        health = check_index_health()
-        if health.ready:
-            get_logger("main").info(
-                "Knowledge index ready: %d chunks", health.chunk_count
-            )
-        else:
-            from app.config import KB_AUTO_BUILD, KB_ENABLED
-            if KB_ENABLED and KB_AUTO_BUILD:
-                get_logger("main").info(
-                    "Knowledge index not ready (%s), auto-building in background...",
-                    health.reason,
+    # 知识库索引检查 + 自动构建
+    log = get_logger("main")
+    if not KB_ENABLED:
+        log.info("[KB] Knowledge base disabled by config")
+    else:
+        try:
+            health = check_index_health()
+            if health.ready:
+                log.info(
+                    "[KB] Index ready: %d chunks, embedding_model=%s",
+                    health.chunk_count,
+                    KB_EMBED_MODEL,
                 )
-                # 后台线程构建，不阻塞启动
-                import threading
-                from app.rag.indexing.build import build_index
-
-                def _bg_build() -> None:
-                    try:
-                        build_index()
-                        # 重置 BM25 懒加载单例，使后续检索能加载新索引
-                        from app.rag.bm25 import reset_bm25_index
-                        reset_bm25_index()
-                        # 验证构建结果
-                        post_health = check_index_health()
-                        if post_health.ready:
-                            get_logger("main").info(
-                                "Knowledge index auto-build completed: %d chunks",
-                                post_health.chunk_count,
-                            )
-                        else:
-                            get_logger("main").warning(
-                                "Knowledge index auto-build completed but health check failed: %s",
-                                post_health.reason,
-                            )
-                    except Exception as exc:
-                        get_logger("main").warning(
-                            "Knowledge index auto-build failed: %s", exc
-                        )
-
-                t = threading.Thread(target=_bg_build, daemon=True)
-                t.start()
             else:
-                get_logger("main").warning(
-                    "Knowledge index not ready: %s", health.reason
-                )
-    except Exception as exc:
-        get_logger("main").warning("Knowledge index check failed: %s", exc)
+                needs_rebuild = KB_AUTO_BUILD
+                # 嵌入模型变更 → 必须重建（即使 auto_build=False 也提示）
+                if "embedding_model_mismatch" in health.reason:
+                    log.warning(
+                        "[KB] Embedding model changed (config=%s), index needs rebuild (reason: %s)",
+                        KB_EMBED_MODEL,
+                        health.reason,
+                    )
+                    needs_rebuild = True
+                else:
+                    log.info(
+                        "[KB] Index not ready (reason: %s)%s",
+                        health.reason,
+                        ", auto-building in background..." if needs_rebuild else "",
+                    )
+
+                if needs_rebuild:
+                    import threading
+                    from app.rag.indexing.build import build_index
+
+                    def _bg_build() -> None:
+                        log.info("[KB] Auto-build started (embedding_model=%s)...", KB_EMBED_MODEL)
+                        try:
+                            build_index()
+                            # 重置 BM25 懒加载单例，使后续检索能加载新索引
+                            from app.rag.bm25 import reset_bm25_index
+                            reset_bm25_index()
+                            # 验证构建结果
+                            post_health = check_index_health()
+                            if post_health.ready:
+                                log.info(
+                                    "[KB] Auto-build succeeded: %d chunks, embedding_model=%s",
+                                    post_health.chunk_count,
+                                    KB_EMBED_MODEL,
+                                )
+                            else:
+                                log.error(
+                                    "[KB] Auto-build completed but health check failed: %s",
+                                    post_health.reason,
+                                )
+                        except Exception as exc:
+                            log.error("[KB] Auto-build failed: %s", exc, exc_info=True)
+
+                    t = threading.Thread(target=_bg_build, daemon=True)
+                    t.start()
+                else:
+                    log.warning(
+                        "[KB] Index not ready and auto_build disabled, knowledge retrieval unavailable"
+                    )
+        except Exception as exc:
+            log.error("[KB] Index check failed: %s", exc, exc_info=True)
 
     # yield 将控制权交给 FastAPI 应用，开始处理请求
     yield

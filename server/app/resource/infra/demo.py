@@ -32,7 +32,7 @@ class _TtsClient:
         self.api_secret = api_secret
         self.queue: Queue[Dict] = Queue()
         self.client = websocket
-        logger.info("TtsClient initialized")
+        logger.info("TtsClient 已初始化")
 
     def run(self, param: dict) -> None:
         """Run the WebSocket client synchronously."""
@@ -48,7 +48,7 @@ class _TtsClient:
             ws.param = param
             ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
         except Exception as e:
-            logger.error(f"WebSocket client error: {e}")
+            logger.error(f"WebSocket 客户端错误: {e}")
             self.queue.put({"error": str(e), "error_code": -1})
 
     def arun(self, param: dict) -> threading.Thread:
@@ -58,11 +58,11 @@ class _TtsClient:
         return thread
 
     def on_open(self, ws: websocket.WebSocketApp) -> None:
-        logger.info("WebSocket connection opened")
+        logger.info("WebSocket 连接已建立")
         try:
             ws.send(json.dumps(ws.param))
         except Exception as e:
-            logger.error(f"Failed to send initial message: {e}")
+            logger.error(f"发送初始消息失败: {e}")
             self.queue.put({"error": f"Failed to send initial message: {e}", "error_code": -1})
             ws.close()
 
@@ -72,7 +72,7 @@ class _TtsClient:
             code = data["code"]
             if code != 0:
                 error_msg = data.get('message', '')
-                logger.error(f"API error: Code {code}, Message: {error_msg}")
+                logger.error(f"API 错误: 代码 {code}, 消息: {error_msg}")
                 self.queue.put({"error": f"Error Code: {code}, Message: {error_msg}", "error_code": code})
                 ws.close()
                 return
@@ -82,17 +82,17 @@ class _TtsClient:
                 if result["status"] == 2:
                     self.queue.put({"done": True})
         except Exception as e:
-            logger.error(f"Failed to process message: {e}")
+            logger.error(f"处理消息失败: {e}")
             self.queue.put({"error": f"Failed to process message: {e}", "error_code": -1})
             ws.close()
 
     def on_error(self, ws: websocket.WebSocketApp, error: Any) -> None:
-        logger.error(f"WebSocket error: {error}")
+        logger.error(f"WebSocket 错误: {error}")
         self.queue.put({"error": str(error), "error_code": -1})
         ws.close()
 
     def on_close(self, ws: websocket.WebSocketApp, close_status_code: int, close_msg: str) -> None:
-        logger.info(f"WebSocket closed: code={close_status_code}, reason={close_msg}")
+        logger.info(f"WebSocket 已关闭: 代码={close_status_code}, 原因={close_msg}")
         self.queue.put({"done": True})
 
     def subscribe(self, timeout: int = DEFAULT_TIMEOUT) -> Generator[Dict, None, None]:
@@ -101,7 +101,7 @@ class _TtsClient:
             try:
                 content = self.queue.get(timeout=timeout)
             except queue.Empty:
-                logger.error(f"Response timeout after {timeout} seconds")
+                logger.error(f"响应超时, 超过 {timeout} 秒")
                 raise TimeoutError(f"TTSClient response timeout after {timeout} seconds.")
             if "error" in content:
                 raise TtsError(content["error"], content.get("error_code", -1))
@@ -116,7 +116,7 @@ class _TtsClient:
             try:
                 content = self.queue.get(timeout=timeout)
             except queue.Empty:
-                logger.error(f"Response timeout after {timeout} seconds")
+                logger.error(f"响应超时, 超过 {timeout} 秒")
                 raise TimeoutError(f"TTSClient response timeout after {timeout} seconds.")
             if "error" in content:
                 raise TtsError(content["error"], content.get("error_code", -1))
@@ -170,7 +170,7 @@ class TtsClient:
         self.request_timeout = request_timeout
         self.callback = callback
         self.client = _TtsClient(app_id, api_key, api_secret, host_url)
-        logger.info("TtsClient initialized with parameters")
+        logger.info("TtsClient 已初始化, 参数已配置")
 
     def _build_param(self, text: str) -> Dict[str, Any]:
         """Build request parameters for TTS API."""
@@ -196,16 +196,16 @@ class TtsClient:
                 "data": {"status": self.status, "text": encoded_text}
             }
             param = JsonUtils.remove_none_values(param)
-            logger.debug(f"TTS Request Parameters: {param}")
+            logger.debug(f"TTS 请求参数: {param}")
             return param
         except Exception as e:
-            logger.error(f"Failed to build parameters: {e}")
+            logger.error(f"构建参数失败: {e}")
             raise TtsError(f"Failed to build parameters: {e}")
 
     def stream(self, text: str) -> Generator[Any, None, None]:
         """Synchronously stream audio chunks for the given text."""
         try:
-            logger.info(f"Streaming audio for text: {text[:50]}...")
+            logger.info(f"正在为文本流式合成音频: {text[:50]}...")
             self.client.arun(self._build_param(text))
             for content in self.client.subscribe(timeout=self.request_timeout):
                 if "data" in content:
@@ -213,13 +213,13 @@ class TtsClient:
                         self.callback.chunk(content["data"])
                     yield content["data"]
         except Exception as e:
-            logger.error(f"Failed to stream audio: {e}")
+            logger.error(f"流式合成音频失败: {e}")
             raise TtsError(f"Failed to stream audio: {e}")
 
     async def astream(self, text: str) -> AsyncGenerator[Any, None]:
         """Asynchronously stream audio chunks for the given text."""
         try:
-            logger.info(f"Async streaming audio for text: {text[:50]}...")
+            logger.info(f"正在异步为文本流式合成音频: {text[:50]}...")
             self.client.arun(self._build_param(text))
             async for content in self.client.a_subscribe(timeout=self.request_timeout):
                 if "data" in content:
@@ -227,5 +227,5 @@ class TtsClient:
                         self.callback.chunk(content["data"])
                     yield content["data"]
         except Exception as e:
-            logger.error(f"Failed to stream audio: {e}")
+            logger.error(f"流式合成音频失败: {e}")
             raise TtsError(f"Failed to stream audio: {e}")

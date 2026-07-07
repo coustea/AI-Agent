@@ -224,14 +224,14 @@ async def analyze_documents(
         # 将 URL 解析为 (username, absolute_path)，失败则跳过
         resolved = resolve_uploaded_path(file_url)
         if resolved is None:
-            logger.warning("[DocumentAnalysis] failed to resolve %s", file_url)
+            logger.warning("[DocumentAnalysis] 解析路径失败: %s", file_url)
             continue
 
         owner_username, absolute_path = resolved
         # 安全校验：确保当前用户只能访问自己的文件
         if owner_username != current_username:
             logger.warning(
-                "[DocumentAnalysis] forbidden file access user=%s owner=%s",
+                "[DocumentAnalysis] 禁止访问文件: user=%s owner=%s",
                 current_username, owner_username,
             )
             continue

@@ -65,7 +65,7 @@ class ChatModel(ChatOpenAI):
                 )
                 object.__setattr__(message, "tool_calls", normalized)
         except Exception as exc:
-            logger.warning("[LLM] tool_calls normalization failed: %s", exc)
+            logger.warning("[LLM] tool_calls 规范化失败: %s", exc)
         return super()._create_chat_result(response, generation_info)
 
 
@@ -445,7 +445,7 @@ class Llm:
                 if not isinstance(result, schema):
                     raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
                 logger.info(
-                    "[LLM] ainvoke_json ok schema=%s tier=%s %dms",
+                    "[LLM] ainvoke_json 成功: schema=%s tier=%s %dms",
                     schema.__name__, tier,
                     round((time.perf_counter() - t0) * 1000),
                 )
@@ -457,7 +457,7 @@ class Llm:
                 raw_output = raw_output or str(exc)[:500]
                 errors.append(f"{tier}(generate)={error_msg_short}")
                 logger.warning(
-                    "[LLM] ainvoke_json fail schema=%s tier=%s error=%s",
+                    "[LLM] ainvoke_json 失败: schema=%s tier=%s error=%s",
                     schema.__name__, tier, error_msg_short,
                 )
 
@@ -474,7 +474,7 @@ class Llm:
                         raise ValueError("repair: empty response")
                     parsed = _parse_json(repair_content, schema)
                     logger.info(
-                        "[LLM] ainvoke_json ok schema=%s tier=%s repair %dms",
+                        "[LLM] ainvoke_json 成功（修复后）: schema=%s tier=%s %dms",
                         schema.__name__, tier,
                         round((time.perf_counter() - t0) * 1000),
                     )
@@ -484,7 +484,7 @@ class Llm:
                     repair_err_short = repair_err[:300] + "…" if len(repair_err) > 300 else repair_err
                     errors.append(f"{tier}(repair)={repair_err_short}")
                     logger.warning(
-                        "[LLM] ainvoke_json fail schema=%s tier=%s repair error=%s",
+                        "[LLM] ainvoke_json 失败（修复）: schema=%s tier=%s error=%s",
                         schema.__name__, tier, repair_err_short,
                     )
 

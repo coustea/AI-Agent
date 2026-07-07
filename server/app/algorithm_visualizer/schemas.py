@@ -1,11 +1,19 @@
 """算法可视化模块 Pydantic 请求/响应模型。
- * api.py 使用 RunRequest；service.py 返回 dict 自动序列化。"""
+
+当前设计：
+1. 前端必须选择语言 language。
+2. 前端必须选择算法模板 algorithm。
+3. 后端根据 algorithm + language 返回可视化模板代码。
+4. 用户基于模板修改代码和数据。
+5. 后端只负责编译运行、读取 trace.json、校验事件流。
+6. 当前阶段不接入 LLM，不自动插装普通代码。
+"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LanguageResponse(BaseModel):
@@ -22,9 +30,12 @@ class AlgorithmResponse(BaseModel):
     key: str
     name: str
     domain: str
-    visualizer_type: str
+    visualizerType: str = Field(..., alias="visualizer_type")
     difficulty: str
-    supported_languages: List[str]
+    supportedLanguages: List[str] = Field(..., alias="supported_languages")
+
+    class Config:
+        populate_by_name = True
 
 
 class TemplateResponse(BaseModel):
@@ -32,31 +43,40 @@ class TemplateResponse(BaseModel):
 
     domain: str
     algorithm: str
-    visualizer_type: str
+    visualizerType: str = Field(..., alias="visualizer_type")
     language: str
-    template_code: str
-    default_data: Dict[str, Any]
+    templateCode: str = Field(..., alias="template_code")
+    defaultData: Dict[str, Any] = Field(..., alias="default_data")
+    requiredEvents: List[str] = Field(..., alias="required_events")
+    supportedLanguages: List[str] = Field(..., alias="supported_languages")
+
+    class Config:
+        populate_by_name = True
 
 
 class RunRequest(BaseModel):
-    """运行可视化请求。api.py 直接使用。"""
+    """运行可视化请求。
 
-    domain: str = "data_structure"
+    注意：
+    当前阶段不做 LLM 自动插装。
+    code 必须是已经包含 tracer 调用的可视化代码，通常来自模板接口。
+    """
+
+    domain: str = "all"
     algorithm: str
-    visualizer_type: Optional[str] = None
     visualizerType: Optional[str] = None
     language: str
     code: str
-
+    inputData: Optional[str] = None
 
 
 class TraceEventResponse(BaseModel):
-    """TraceEvent 事件响应。run_result_parser.py 使用。"""
+    """TraceEvent 事件响应。"""
 
     id: str
     step: int
     domain: str
-    visualizer_type: str
+    visualizerType: Optional[str] = None
     type: str
     line: Optional[int] = None
     state: Dict[str, Any]
@@ -66,20 +86,27 @@ class TraceEventResponse(BaseModel):
 
 
 class RunSuccessResponse(BaseModel):
-    """运行成功响应。service.py 返回 dict 自动序列化。"""
+    """运行成功响应。"""
 
     domain: str
     algorithm: str
-    visualizer_type: str
+    visualizerType: str = Field(..., alias="visualizer_type")
     language: str
     events: List[TraceEventResponse]
     result: Any
     summary: str
+    stdout: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
 
 
 class RunErrorResponse(BaseModel):
-    """运行失败响应。service.py 返回 dict 自动序列化。"""
+    """运行失败响应。"""
 
-    error_type: str
+    errorType: str = Field(..., alias="error_type")
     message: str
     details: Optional[str] = None
+
+    class Config:
+        populate_by_name = True

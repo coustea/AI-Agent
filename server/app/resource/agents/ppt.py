@@ -178,7 +178,7 @@ class PPTAgent(BaseResourceAgent):
                 progress=progress,
             )
         except PPTGenerationError as exc:
-            logger.exception("PPT generation failed")
+            logger.exception("PPT 生成失败")
             return AgentResult(
                 success=False,
                 title="PPT 生成失败",

@@ -53,7 +53,7 @@ def _result_handler(handler, tool_name: str):
         try:
             return await handler(**kwargs)
         except Exception as exc:
-            logger.warning("[%s] failed: error=%s", tool_name, exc)
+            logger.warning("[%s] 失败: error=%s", tool_name, exc)
             raise
     return _wrapped
 
@@ -96,6 +96,6 @@ def _generate_diagram_handler(request: TutorRequestContext) -> Any:
             result = await generator.generate(request, answer_summary, evidence_set)
             return result or {"error": "图解生成失败"}
         except Exception as exc:
-            logger.warning("[generate_teaching_diagram] failed: %s", exc)
+            logger.warning("[generate_teaching_diagram] 失败: %s", exc)
             return {"error": str(exc)}
     return _handler

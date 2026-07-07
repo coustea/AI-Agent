@@ -28,22 +28,15 @@ export type ProfileDimensionKey =
   | 'difficulty_tolerance'
   | 'self_correction_ability'
 
-export interface ProfileJsonData {
-  base_info: BaseInfoData
-  dimensions: Record<ProfileDimensionKey, DimensionValue>
-}
-
 export interface ProfileData {
   user_id: number | null
   module: string | null
-  base_info: BaseInfoData
+  base_info: BaseInfoData  // 来源从 profile JSON 改为 User 表
   dimensions: Record<ProfileDimensionKey, DimensionValue>
-  profile_json: ProfileJsonData | null
   profile_score_json: {
     overall_score: number
     dimension_scores: Record<ProfileDimensionKey, number>
-    dimension_evidence: Record<ProfileDimensionKey, string[]>
-    scored_at: string
+    scored_at: string | null
   } | null
   updated_at: string | null
 }

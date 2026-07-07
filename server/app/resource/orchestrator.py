@@ -61,7 +61,11 @@ async def run_multi_agent_generation(
         success = bool(final_state.get("success", False))
 
         if not success:
-            logger.warning("LangGraph 未产生成功终态: resource_id=%s", resource_id)
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.warning(
+                "LangGraph 未产生成功终态: resource_id=%s elapsed_ms=%d",
+                resource_id, elapsed_ms,
+            )
             async with session_scope() as session:
                 service = ResourceService(session)
                 resource = await service.get_resource(user_id, resource_id)
@@ -75,11 +79,17 @@ async def run_multi_agent_generation(
             await events.send("global", "completed", "资源生成完成")
         else:
             await events.send("global", "failed", "资源生成未产生可用结果")
-        total_elapsed = time.perf_counter() - start_time
-        logger.info("资源生成结束: resource_id=%s, success=%s, 耗时=%.2fs", resource_id, success, total_elapsed)
+        total_elapsed = int((time.perf_counter() - start_time) * 1000)
+        logger.info(
+            "资源生成结束: resource_id=%s success=%s elapsed_ms=%d",
+            resource_id, success, total_elapsed,
+        )
     except Exception as exc:
-        total_elapsed = time.perf_counter() - start_time
-        logger.error("资源生成异常: resource_id=%s, 耗时=%.2fs", resource_id, total_elapsed, exc_info=True)
+        total_elapsed = int((time.perf_counter() - start_time) * 1000)
+        logger.error(
+            "资源生成异常: resource_id=%s error=%s elapsed_ms=%d",
+            resource_id, exc, total_elapsed, exc_info=True,
+        )
         async with session_scope() as session:
             service = ResourceService(session)
             await service.update_resource_status(

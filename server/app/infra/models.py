@@ -52,6 +52,16 @@ class User(SQLModel, table=True):
     # onboarding 是否已完成，True=已完成，False=未完成（需弹窗）
     is_first_login: bool = Field(default=False)
 
+    # ── 基础信息（原 profile_json.base_info，由 onboarding 填写）──
+    school: str | None = Field(default=None, max_length=200)
+    school_level: str | None = Field(default=None, max_length=50)
+    major: str | None = Field(default=None, max_length=200)
+    grade: str | None = Field(default=None, max_length=50)
+    daily_study_time: str | None = Field(default=None, max_length=50)
+    global_learning_goal: str | None = Field(default=None, sa_column=Column(Text))
+    programming_languages: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    courses: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -338,21 +348,60 @@ class ChatLongTermMemory(SQLModel, table=True):
     )
 
 
-class GlobalProfile(SQLModel, table=True):
-    """全局主画像表"""
-    __tablename__ = "global_profiles"
+class UserProfile(SQLModel, table=True):
+    """用户主画像表 — 每个用户一条主画像记录。
+
+    维度明细见 UserProfileDimension。
+    基础信息（school/major/grade 等）已移至 User 表。
+    """
+    __tablename__ = "user_profiles"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", name="uq_global_profile_user_module"),
-        Index("ix_global_profiles_profile_json", "profile_json", postgresql_using="gin"),
-        Index("ix_global_profiles_profile_score_json", "profile_score_json", postgresql_using="gin"),
+        UniqueConstraint("user_id", name="uq_user_profiles_user"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)
 
-    profile_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    profile_score_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    # 评分汇总（原 profile_score_json 顶层字段）
+    overall_score: int = Field(default=0)
+    scored_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
+
+
+class UserProfileDimension(SQLModel, table=True):
+    """用户画像维度明细表 — 原 profile_json.dimensions 与
+    profile_score_json.dimension_scores / dimension_evidence 的关系化存储。
+
+    每个 (user_id, dimension_key) 唯一，例如 dimension_key 可取
+    'knowledge_level' / 'learning_style' 等画像维度。
+    """
+    __tablename__ = "user_profile_dimensions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "dimension_key", name="uq_user_profile_dimensions_user_key"),
+        Index("ix_user_profile_dimensions_user_id", "user_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    dimension_key: str = Field(max_length=50, index=True)
+
+    # 维度正文描述（原 dimensions[*].value）
+    value: str = Field(sa_column=Column(Text))
+    # 支撑证据列表（原 dimensions[*].evidence / dimension_evidence[*]）
+    evidence: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
+    # 维度得分 0-100（原 dimension_scores[*]）
+    score: int | None = Field(default=None, ge=0, le=100)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -553,7 +602,6 @@ class LearningEvent(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
     )
-
 
 class LearningSession(SQLModel, table=True):
     """学习会话表 — 记录用户在某个学习页面上的实际活跃时长。"""
@@ -823,7 +871,8 @@ REGISTERED_MODELS = (
     ChatActivity,
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
-    GlobalProfile,
+    UserProfile,
+    UserProfileDimension,
     WeeklyLearningDigest,
     GeneratedResource,
     GeneratedResourceItem,

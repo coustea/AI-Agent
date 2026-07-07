@@ -30,7 +30,7 @@ async def run_process_with_logging(
     """
     proc_logger = get_logger(logger_name)
 
-    proc_logger.info(f"Starting process: {' '.join(command)} (cwd={cwd})")
+    proc_logger.info(f"启动进程: {' '.join(command)} (cwd={cwd})")
 
     process = await asyncio.create_subprocess_exec(
         *command,

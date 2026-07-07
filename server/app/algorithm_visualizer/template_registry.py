@@ -673,7 +673,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_all_algorithms(domain: str = "data_structure") -> List[Dict[str, Any]]:
+def get_all_algorithms(domain: str = "all") -> List[Dict[str, Any]]:
     """获取指定 domain 下的所有算法信息列表。支持 domain="all"。"""
     result = []
     for key, info in ALGORITHMS.items():
@@ -706,9 +706,3 @@ def get_template_code(algorithm_key: str, language: str) -> str:
 
     with open(filepath, "r", encoding="utf-8") as f:
         return f.read()
-
-
-def get_supported_languages(algorithm_key: str) -> List[str]:
-    """获取指定算法支持的语言列表。"""
-    info = get_algorithm_info(algorithm_key)
-    return info["supported_languages"]

@@ -40,3 +40,13 @@ class UserUpdate(BaseModel):
     avatar: str | None = None
     # 是否首次登录标记（可选，用于控制 onboarding 弹窗）
     is_first_login: bool | None = None
+
+    # ── 基础信息（原 profile base_info，onboarding 填写）──
+    school: str | None = None
+    school_level: str | None = None
+    major: str | None = None
+    grade: str | None = None
+    daily_study_time: str | None = None
+    global_learning_goal: str | None = None
+    programming_languages: list[str] | None = None
+    courses: list[str] | None = None

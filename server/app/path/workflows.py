@@ -206,7 +206,7 @@ class PathPlannerAgent:
         workflow = StateGraph(PathState)
 
         async def research_node(state: PathState) -> dict[str, Any]:
-            loguru_logger.info("LangGraph [Path Research] starting...")
+            loguru_logger.info("LangGraph [Path Research] 开始...")
             if state["request"].enable_search:
                 await emit_progress(
                     state.get("progress_callback"),
@@ -219,13 +219,13 @@ class PathPlannerAgent:
                 profile=state["profile"],
             )
             loguru_logger.info(
-                "LangGraph [Path Research] finished, context length=%d",
+                "LangGraph [Path Research] 完成, context_length=%d",
                 len(search_context),
             )
             return {"search_context": search_context}
 
         async def node_strategist_node(state: PathState) -> dict[str, Any]:
-            loguru_logger.info("LangGraph [Node Strategist] starting...")
+            loguru_logger.info("LangGraph [Node Strategist] 开始...")
             await emit_progress(
                 state.get("progress_callback"),
                 "analyzing",
@@ -269,7 +269,7 @@ class PathPlannerAgent:
                 request=state["request"],
             )
             loguru_logger.info(
-                "LangGraph [Node Strategist] finished with %d nodes.",
+                "LangGraph [Node Strategist] 完成, nodes=%d",
                 len(result.nodes),
             )
             return {"final_plan": result}
@@ -359,7 +359,7 @@ class PathPlannerAgent:
             )
         except Exception as exc:
             loguru_logger.warning(
-                "[PathPlannerAgent] ResearchAgent search failed: %s", exc
+                "[PathPlannerAgent] ResearchAgent 检索失败: %s", exc
             )
             return ""
 

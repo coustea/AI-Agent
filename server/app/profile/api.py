@@ -20,7 +20,7 @@ from app.profile import (
     OnboardingUpdate,
     StudentProfileData,
 )
-from app.profile.service import get_profile_service
+from app.profile.service import get_profile_service, _user_base_info_dict
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = get_logger(__name__)
@@ -32,20 +32,21 @@ async def get_profile(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取完整用户画像 — 聚合 base_info、dimensions 和 score。"""
+    """获取完整用户画像 — 聚合 User.base_info、UserProfileDimension 和 UserProfile.score。"""
     svc = get_profile_service()
     profile = await svc.get_profile(user_id=current_user.id, db=session)
-    profile_json = profile.profile_json or {}
-    score_json = profile.profile_score_json or {}
-    base_info = profile_json.get("base_info") or {}
+    dimensions = await svc.get_dimensions(user_id=current_user.id, db=session)
+    base_info = _user_base_info_dict(current_user)
 
     return HttpResponse.success(data={
         "user_id": profile.user_id,
-        "module": profile.module,
+        "module": "mentor",
         "base_info": BaseInfoData(**base_info).model_dump(),
-        "dimensions": profile_json.get("dimensions") or {},
-        "profile_json": profile_json,
-        "profile_score_json": score_json,
+        "dimensions": dimensions,
+        "profile_score_json": {
+            "overall_score": profile.overall_score,
+            "scored_at": profile.scored_at.isoformat() if profile.scored_at else None,
+        },
         "updated_at": profile.updated_at,
     })
 
@@ -54,13 +55,12 @@ async def get_profile(
 async def get_profile_onboarding(
     current_user: User = Depends(get_current_user),
 ):
-    svc = get_profile_service()
-    profile = await svc.get_profile(user_id=current_user.id)
-    base_info = profile.profile_json.get("base_info") or {}
+    """获取 onboarding 基本信息 — 直接从 User 表读取。"""
+    base_info = _user_base_info_dict(current_user)
     return HttpResponse.success(data=OnboardingResponse(
         base_info=BaseInfoData(**base_info),
         student_profile=StudentProfileData.from_base_info(base_info),
-        profile_initialized=bool(base_info.get("major")),
+        profile_initialized=bool(current_user.major),
     ).model_dump())
 
 
@@ -71,15 +71,12 @@ async def update_profile_onboarding(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """更新 onboarding 信息：同步保存基础信息 → 立即返回 → 后台异步推理画像+评分。
-
-    前端调用后无需等待 LLM 推理完成，用户可立即进入首页。
-    """
+    """更新 onboarding 信息：同步保存基础信息到 User 表 → 立即返回 → 后台异步推理画像+评分。"""
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
     svc = get_profile_service()
 
-    # 1. 同步保存基础信息到数据库，确保后续请求能获取到最新的基本资料
+    # 1. 同步保存基础信息到 User 表
     await svc.save_onboarding_info(
         user_id=user_id,
         payload=payload_data,

@@ -64,7 +64,7 @@ class ChatEventClosedError(RuntimeError):
 
 # ===================== 频道键 =====================
 
-ChannelKey = tuple[int, str, int]  # (user_id, session_id, user_message_id)
+ChannelKey = tuple[int, str, int]  # (user_id, session_id, user_message_id — 频道标识)
 
 
 # ===================== 模块私有注册表 =====================
@@ -124,7 +124,7 @@ class _ChatChannel:
                 except asyncio.QueueEmpty:
                     pass
                 logger.warning(
-                    "chat_event_queue_oldest_dropped: user_message_id=%s",
+                    "聊天事件队列丢弃最旧事件: user_message_id=%s",
                     self.user_message_id,
                 )
             queue.put_nowait(chat_event)

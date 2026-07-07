@@ -336,11 +336,11 @@ async def run_chat_agent(
                     )
             except Exception:
                 logger.exception(
-                    "[Chat] Failed to record dialogue event for session=%s",
+                    "[Chat] 记录对话事件失败: session=%s",
                     session_id,
                 )
     except Exception as e:
-        logger.exception("chat_agent_failed: user_message_id=%s", user_message_id)
+        logger.exception("聊天 Agent 执行失败: user_message_id=%s", user_message_id)
         await memory_svc.upsert_activity(
             user_id=user_id,
             session_id=session_id,

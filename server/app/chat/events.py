@@ -50,7 +50,7 @@ async def record_dialogue_event(
     )
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     logger.info(
-        "[Chat] dialogue event recorded: user_id=%s session=%s summary_len=%s",
+        "[Chat] 对话事件已记录: user_id=%s session=%s summary_len=%s",
         user_id,
         session_id,
         len(summary_md or ""),

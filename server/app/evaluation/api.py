@@ -30,7 +30,7 @@ async def record_learning_event(
         payload=payload,
     )
     logger.info(
-        "[EvalAPI] event recorded: user_id=%s event_type=%s event_id=%s",
+        "[EvalAPI] 事件已记录: user_id=%s event_type=%s event_id=%s",
         current_user.id,
         payload.event_type,
         event.id,
@@ -51,7 +51,7 @@ async def record_learning_session(
         payload=payload,
     )
     logger.info(
-        "[EvalAPI] session recorded: user_id=%s page=%s duration=%ss",
+        "[EvalAPI] 学习会话已记录: user_id=%s page=%s duration=%ss",
         current_user.id,
         payload.source_page,
         payload.duration_seconds,

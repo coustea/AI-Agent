@@ -95,12 +95,12 @@ class TtsService:
     ) -> float:
         """基础合成：文本 → MP3，返回音频时长（秒）。"""
         if not text or not text.strip():
-            logger.warning("Empty text passed to TtsService. Skip synthesis.")
+            logger.warning("传入空文本到 TtsService, 跳过合成")
             return 0.0
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info("Starting TTS synthesis for text (len=%d) to %s", len(text), file_path)
+        logger.info("开始 TTS 合成, 文本长度=%d, 输出=%s", len(text), file_path)
 
         communicate = edge_tts.Communicate(text, voice)
         await communicate.save(str(file_path))
@@ -110,7 +110,7 @@ class TtsService:
 
         audio = MP3(str(file_path))
         duration = audio.info.length
-        logger.info("TTS synthesis complete. Duration: %.2fs", duration)
+        logger.info("TTS 合成完成. 时长: %.2fs", duration)
         return duration
 
     @staticmethod
@@ -124,7 +124,7 @@ class TtsService:
         通过 edge-tts 的 WordBoundary 事件获取每个词的起止时间。
         """
         if not text or not text.strip():
-            logger.warning("Empty text passed to TtsService. Skip synthesis.")
+            logger.warning("传入空文本到 TtsService, 跳过合成")
             return TtsResult(duration=0.0, captions=[])
 
         import hashlib
@@ -160,14 +160,14 @@ class TtsService:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(str(cache_mp3_path), str(file_path))
                 
-                logger.info("TTS Cache Hit! Reused audio cache: %s", cache_mp3_path.name)
+                logger.info("命中 TTS 缓存! 复用音频缓存: %s", cache_mp3_path.name)
                 return TtsResult(duration=duration, captions=captions)
             except Exception as e:
-                logger.warning("Failed to load TTS cache, falling back to synthesis: %s", e)
+                logger.warning("加载 TTS 缓存失败, 回退到合成: %s", e)
 
         # 3. 缓存不存在，执行合成
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("Starting TTS+captions synthesis for text (len=%d)", len(text))
+        logger.info("开始 TTS+字幕合成, 文本长度=%d", len(text))
 
         communicate = edge_tts.Communicate(text, voice)
 
@@ -199,7 +199,7 @@ class TtsService:
 
         audio = MP3(str(file_path))
         duration = audio.info.length
-        logger.info("TTS+captions synthesis complete. Duration: %.2fs, %d caption words", duration, len(word_captions))
+        logger.info("TTS+字幕合成完成. 时长: %.2fs, 字幕词数: %d", duration, len(word_captions))
 
         # 4. 写入缓存
         try:
@@ -209,9 +209,9 @@ class TtsService:
                 "captions": [c.to_dict() for c in word_captions]
             }
             cache_meta_path.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
-            logger.info("TTS Cache Saved: %s", cache_mp3_path.name)
+            logger.info("TTS 缓存已保存: %s", cache_mp3_path.name)
         except Exception as e:
-            logger.warning("Failed to save TTS cache: %s", e)
+            logger.warning("保存 TTS 缓存失败: %s", e)
 
         return TtsResult(duration=duration, captions=word_captions)
 

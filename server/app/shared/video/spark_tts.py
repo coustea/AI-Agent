@@ -109,7 +109,7 @@ class SparkTtsService:
     ) -> float:
         """Synthesize text to MP3 file. Returns duration in seconds."""
         if not text or not text.strip():
-            logger.warning("Empty text passed to SparkTtsService. Skip synthesis.")
+            logger.warning("传入空文本到 SparkTtsService, 跳过合成")
             return 0.0
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +130,7 @@ class SparkTtsService:
         }
 
         import asyncio
-        logger.info("Connecting to Spark TTS WebSocket API...")
+        logger.info("正在连接讯飞 TTS WebSocket API...")
         audio_data = bytearray()
 
         max_retries = 3
@@ -138,7 +138,7 @@ class SparkTtsService:
             try:
                 async with websockets.connect(url, ssl=create_ssl_context()) as ws:
                     await ws.send(json.dumps(request_payload))
-                    logger.info("Spark TTS request sent, waiting for audio frames...")
+                    logger.info("讯飞 TTS 请求已发送, 等待音频帧...")
 
                     async for message in ws:
                         resp = json.loads(message)
@@ -154,7 +154,7 @@ class SparkTtsService:
 
                         status = data.get("status")
                         if status == 2:  # Last frame
-                            logger.info("Received last audio frame from Spark TTS")
+                            logger.info("已收到讯飞 TTS 最后一帧音频")
                             break
                 break  # Succeeded, exit retry loop
             except Exception as e:
@@ -162,14 +162,14 @@ class SparkTtsService:
                     raise
                 wait_time = attempt * 2.0
                 logger.warning(
-                    "Spark TTS connection failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                    "讯飞 TTS 连接失败 (第 %d/%d 次): %s. %.1f 秒后重试...",
                     attempt, max_retries, e, wait_time
                 )
                 audio_data.clear()
                 await asyncio.sleep(wait_time)
 
         file_path.write_bytes(bytes(audio_data))
-        logger.info("Saved Spark TTS output to %s", file_path)
+        logger.info("讯飞 TTS 输出已保存到 %s", file_path)
 
         # Parse duration from generated MP3
         audio = MP3(str(file_path))
@@ -218,10 +218,10 @@ class SparkTtsService:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(str(cache_mp3_path), str(file_path))
 
-                logger.info("Spark TTS Cache Hit! Reused audio cache: %s", cache_mp3_path.name)
+                logger.info("命中讯飞 TTS 缓存! 复用音频缓存: %s", cache_mp3_path.name)
                 return TtsResult(duration=duration, captions=captions)
             except Exception as e:
-                logger.warning("Failed to load Spark TTS cache: %s", e)
+                logger.warning("加载讯飞 TTS 缓存失败: %s", e)
 
         # 3. 缓存未置，执行合成
         duration = await cls.synthesize(text, file_path, voice)
@@ -235,9 +235,9 @@ class SparkTtsService:
                 "captions": [c.to_dict() for c in captions]
             }
             cache_meta_path.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
-            logger.info("Spark TTS Cache Saved: %s", cache_mp3_path.name)
+            logger.info("讯飞 TTS 缓存已保存: %s", cache_mp3_path.name)
         except Exception as e:
-            logger.warning("Failed to save Spark TTS cache: %s", e)
+            logger.warning("保存讯飞 TTS 缓存失败: %s", e)
 
         return TtsResult(duration=duration, captions=captions)
 

@@ -1,4 +1,4 @@
-"""SSE token event streaming helpers for chat responses."""
+"""SSE token 事件流辅助工具，用于聊天响应的流式分发。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 
 
 class ResponseStreamer:
-    """Split final answer text into paced token events for SSE delivery."""
+    """将最终回答文本拆分为节奏化的 token 事件，通过 SSE 投递。"""
 
     def __init__(self, chunk_size: int = 48, chunk_delay: float = 0.012) -> None:
         self.chunk_size = max(1, chunk_size)

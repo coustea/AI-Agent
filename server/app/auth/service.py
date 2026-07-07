@@ -38,6 +38,11 @@ class AuthResult:
     # 失败时：面向用户的精确错误提示
     error_message: str = ""
 
+    def __getitem__(self, key):
+        if self.data is not None and key in self.data:
+            return self.data[key]
+        raise KeyError(key)
+
 
 class UserAccountStore:
     """用户账号持久化 — 负责 CRUD 操作。"""

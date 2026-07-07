@@ -152,7 +152,7 @@ async def preprocess_node(
             else:
                 analysis_errors["image"] = "未提取到可用内容"
         except Exception as exc:
-            logger.warning("[preprocess_node] image analysis failed: %s", exc)
+            logger.warning("[preprocess_node] 图片分析失败: %s", exc)
             analysis_errors["image"] = str(exc)
         if "image" in analysis_errors:
             await agent.memory_service.finish_attachment_analysis(
@@ -178,7 +178,7 @@ async def preprocess_node(
             else:
                 analysis_errors["document"] = "未提取到可用内容"
         except Exception as exc:
-            logger.warning("[preprocess_node] document analysis failed: %s", exc)
+            logger.warning("[preprocess_node] 文档分析失败: %s", exc)
             analysis_errors["document"] = str(exc)
         if "document" in analysis_errors:
             await agent.memory_service.finish_attachment_analysis(
@@ -514,7 +514,7 @@ async def react_node(
             messages.append(accumulated_response)  # 添加完整的 AIMessage（含 tool_calls）
 
         except Exception as exc:
-            logger.exception("[react_node] LLM streaming failed")
+            logger.exception("[react_node] LLM 流式输出失败")
             return {
                 "final_answer": "",
                 "stream_events": node_events,
@@ -539,7 +539,7 @@ async def react_node(
                 messages.append(ToolMessage(content=tool_result_text, tool_call_id=tool_call_id))
 
             except Exception as exc:
-                logger.warning("[react_node] tool %s failed: %s", tool_name, exc)
+                logger.warning("[react_node] 工具 %s 失败: %s", tool_name, exc)
                 node_errors.append(f"{tool_name}: {exc}")
                 messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
 
@@ -580,7 +580,7 @@ async def react_node(
             )
             node_events.extend(await agent._emit_event(state, done_event))
         except Exception as exc:
-            logger.warning("[react_node] forced teaching diagram failed: %s", exc)
+            logger.warning("[react_node] 强制生成教学图失败: %s", exc)
             node_errors.append(f"generate_teaching_diagram: {exc}")
             base_seq += 1
             failed_event = TutorRuntimeEvent(

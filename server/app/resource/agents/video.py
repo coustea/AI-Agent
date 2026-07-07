@@ -179,7 +179,11 @@ class VideoAgent(BaseResourceAgent):
         try:
             artifact = await self.video_agent.generate(request)
         except Exception as exc:
-            logger.error("VideoAgent generation failed: %s", exc, exc_info=True)
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            logger.error(
+                "Agent[%s] 生成失败: error=%s elapsed_ms=%d",
+                self.agent_id, exc, elapsed_ms, exc_info=True,
+            )
             await self.emitter.send(
                 self.agent_id,
                 "failed",

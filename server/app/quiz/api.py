@@ -219,7 +219,7 @@ async def submit_quiz(
             subject=subject,
         )
     except Exception:
-        logger.exception("Failed to record quiz_submitted event: user_id=%s", user_id)
+        logger.exception("记录 quiz_submitted 事件失败: user_id=%s", user_id)
 
     return HttpResponse.success(data=ObjectiveSubmitResponse(
         processed_count=total,

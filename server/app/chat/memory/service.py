@@ -58,7 +58,7 @@ logger = get_logger(__name__)
 
 
 class ChatMemoryService:
-    """Chat-owned memory pipeline and persistence facade."""
+    """聊天模块的记忆管线与持久化外观。"""
 
     # -------------------------------------------------------------------
     # __init__: 初始化记忆管线的组件
@@ -201,7 +201,7 @@ class ChatMemoryService:
             raw_title = str(getattr(resp, "content", resp) or "")
             title = self._clean_session_title(raw_title) or fallback
         except Exception as exc:
-            logger.warning("[ChatMemoryService] generate title failed: user_id=%s session_id=%s err=%s", user_id, session_id, exc)
+            logger.warning("[ChatMemoryService] 生成标题失败: user_id=%s session_id=%s err=%s", user_id, session_id, exc)
         return await self.update_session_title(user_id=user_id, session_id=session_id, title=title)
 
     @staticmethod
@@ -628,7 +628,7 @@ class ChatMemoryService:
         user_id: int,
         session_id: str,
     ) -> bool:
-        """Check whether session needs compression without actually compressing."""
+        """检查会话是否需要压缩（不实际执行压缩）。"""
         try:
             async with session_scope() as db:
                 result = await self.compressor.needs_compression(
@@ -639,7 +639,7 @@ class ChatMemoryService:
                 logger.info("[ChatMemoryService] 压缩检查: user_id=%s session_id=%s needs_compression=%s", user_id, session_id, result)
                 return result
         except Exception as exc:
-            logger.error("[ChatMemoryService] compression need check failed: %s", exc)
+            logger.error("[ChatMemoryService] 压缩需求检查失败: %s", exc)
             return False
 
     async def evaluate_post_turn_jobs(
@@ -650,7 +650,7 @@ class ChatMemoryService:
         user_message: str,
         assistant_reply: str,
     ) -> dict[str, Any]:
-        """Combined LTM + compression + profile token threshold check in a single DB session."""
+        """在单个数据库会话中组合执行 LTM + 压缩 + 画像 token 阈值检查。"""
         signals = classify_turn_signals(user_message, assistant_reply)
         ltm_signal = signals["ltm"]
         profile_signal = signals["global_profile"]
@@ -724,7 +724,7 @@ class ChatMemoryService:
                     "signals": signals,
                 }
         except Exception as exc:
-            logger.error("[ChatMemoryService] evaluate_post_turn_jobs failed: %s", exc)
+            logger.error("[ChatMemoryService] evaluate_post_turn_jobs 失败: %s", exc)
             return {
                 "should_ltm": False,
                 "ltm_schedule": {"signal_detected": signal_detected},
@@ -754,7 +754,7 @@ class ChatMemoryService:
                     logger.info("[ChatMemoryService] 会话压缩跳过: user_id=%s session_id=%s", user_id, session_id)
                 return result
         except Exception as exc:
-            logger.error("[ChatMemoryService] compression failed: %s", exc)
+            logger.error("[ChatMemoryService] 压缩失败: %s", exc)
             return None
 
     # -------------------------------------------------------------------
@@ -827,7 +827,7 @@ class ChatMemoryService:
                 )
                 return {**result, "latest_message_id": latest_message_id}
         except Exception as exc:
-            logger.error("[ChatMemoryService] long-term update failed: %s", exc)
+            logger.error("[ChatMemoryService] 长期记忆更新失败: %s", exc)
             return {"updated": False, "analyzed": False, "error": str(exc)}
 
     # -------------------------------------------------------------------
@@ -863,7 +863,7 @@ class ChatMemoryService:
                     return True
                 return False
         except Exception as exc:
-            logger.error("[ChatMemoryService] reset_profile_counters failed: %s", exc)
+            logger.error("[ChatMemoryService] reset_profile_counters 失败: %s", exc)
             return False
 
     async def _build_dialogue_since(

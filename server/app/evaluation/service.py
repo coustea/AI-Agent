@@ -10,11 +10,13 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.evaluation.event_types import (
@@ -44,6 +46,27 @@ logger = get_logger(__name__)
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 WEAK_SCORE_THRESHOLD = 65.0
+
+
+@dataclass(frozen=True)
+class MemoryUpdateSignal:
+    """记忆更新信号类型（遗留类型，仅用于类型检查兼容）。"""
+    content: str
+    signal_type: str
+    dimension: str
+    course: str | None = None
+    topic: str | None = None
+
+
+def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
+    """从学习事件派生记忆信号（遗留方法，不再产生有效信号）。"""
+    return []
+
+
+def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> dict[str, Any] | None:
+    """构建画像更新负载（遗留方法，始终返回 None）。"""
+    return None
+
 
 
 async def aggregate_period_stats(
@@ -170,7 +193,9 @@ async def _query_weak_topics(
 
 
 
-def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryResponse:
+def build_summary_from_events(
+    events: list[LearningEvent], active_minutes: int = 0
+) -> EvaluationSummaryResponse:
     """从学习事件列表构建评估摘要（平均分、薄弱点、推荐等）。"""
     score_values = [e.score for e in events if e.score is not None]
     average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
@@ -185,6 +210,19 @@ def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryR
         is_scored_quiz = event.event_type in SCORED_EVENT_TYPES
         if is_scored_quiz and event.score is not None and event.score < WEAK_SCORE_THRESHOLD and topic:
             weak_counter[topic] += 1
+        meta = event.event_metadata or {}
+        feedback = meta.get("feedback") or ""
+        if any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")) and topic:
+            weak_counter[topic] += 1
+        for keyword, label in {
+            "图解": "图解材料",
+            "案例": "案例讲解",
+            "代码": "代码实操",
+            "视频": "视频讲解",
+            "题": "练习题库",
+        }.items():
+            if keyword in feedback:
+                preferred_counter[label] += 1
 
     recommendations = _build_recommendations(average_score, weak_counter, preferred_counter)
 
@@ -193,6 +231,7 @@ def build_summary_from_events(events: list[LearningEvent]) -> EvaluationSummaryR
         average_score=average_score,
         completed_resources=completed_resources,
         viewed_resources=viewed_resources,
+        active_minutes=active_minutes,
         weak_topics=[item for item, _ in weak_counter.most_common(5)],
         preferred_resources=[item for item, _ in preferred_counter.most_common(5)],
         recommendations=recommendations,
@@ -241,7 +280,7 @@ class EvaluationService:
         await session.commit()
         await session.refresh(event)
         logger.info(
-            "[Evaluation] event recorded user=%s module=%s type=%s event_id=%s",
+            "[Evaluation] 事件已记录: user=%s module=%s type=%s event_id=%s",
             user_id,
             payload.module,
             payload.event_type,
@@ -258,21 +297,33 @@ class EvaluationService:
     ) -> LearningSession:
         started_at = _parse_iso_datetime(payload.started_at)
         ended_at = _parse_iso_datetime(payload.ended_at)
-        metadata = payload.event_metadata or {}
-        # 前端将 resource_id / path_id / path_node_id / node_id 放在 event_metadata 中，
-        # 需从这里解析后写入数据库对应字段。
-        def _int_field(key: str) -> int | None:
-            val = metadata.get(key)
-            if val is None:
-                return None
-            try:
-                return int(val)
-            except (ValueError, TypeError):
-                return None
 
-        def _str_field(key: str) -> str | None:
-            val = metadata.get(key)
-            return str(val) if val is not None else None
+        metadata = payload.event_metadata or {}
+        
+        resource_id = metadata.get("resource_id")
+        if resource_id is not None:
+            try:
+                resource_id = int(resource_id)
+            except (ValueError, TypeError):
+                resource_id = None
+
+        path_id = metadata.get("path_id")
+        if path_id is not None:
+            try:
+                path_id = int(path_id)
+            except (ValueError, TypeError):
+                path_id = None
+
+        path_node_id = metadata.get("path_node_id")
+        if path_node_id is not None:
+            try:
+                path_node_id = int(path_node_id)
+            except (ValueError, TypeError):
+                path_node_id = None
+
+        node_id = metadata.get("node_id")
+        if node_id is not None:
+            node_id = str(node_id)
 
         learning_session = LearningSession(
             user_id=user_id,
@@ -280,19 +331,19 @@ class EvaluationService:
             started_at=started_at,
             ended_at=ended_at,
             duration_seconds=payload.duration_seconds,
-            resource_id=_int_field("resource_id"),
-            path_id=_int_field("path_id"),
-            path_node_id=_int_field("path_node_id"),
-            node_id=_str_field("node_id"),
+            resource_id=resource_id,
+            path_id=path_id,
+            path_node_id=path_node_id,
+            node_id=node_id,
             course=payload.course,
             topic=payload.topic,
-            metadata_json=metadata,
+            metadata_json=payload.event_metadata or None,
         )
         session.add(learning_session)
         await session.commit()
         await session.refresh(learning_session)
         logger.info(
-            "[Evaluation] session recorded user=%s page=%s duration=%ss session_id=%s",
+            "[Evaluation] 学习会话已记录: user=%s page=%s duration=%ss session_id=%s",
             user_id,
             payload.source_page,
             payload.duration_seconds,
@@ -315,7 +366,15 @@ class EvaluationService:
         )
         result = await session.exec(stmt)
         events = list(result.all())
-        return build_summary_from_events(events)
+        active_minutes = await self._get_active_minutes(session, user_id=user_id)
+        return build_summary_from_events(events, active_minutes=active_minutes)
+
+    async def _get_active_minutes(self, session: AsyncSession, *, user_id: int) -> int:
+        """获取用户总活跃分钟数。"""
+        stmt = select(LearningSession.duration_seconds).where(LearningSession.user_id == user_id)
+        result = await session.exec(stmt)
+        total_seconds = sum(s for s in result.all() if s is not None)
+        return int(total_seconds // 60) if total_seconds else 0
 
     async def get_time_stats(
         self,
@@ -391,13 +450,13 @@ def _parse_iso_datetime(value: str) -> datetime:
 def _to_item(event: LearningEvent) -> LearningEventItem:
     return LearningEventItem(
         id=event.id or 0,
-        module=event.module,
+        module=event.module or "mentor",
         entity_id=event.entity_id,
         event_type=event.event_type,
         course=event.course,
         topic=event.topic,
         score=event.score,
-        event_metadata=event.event_metadata,
+        event_metadata=event.event_metadata or {},
         created_at=event.created_at,
     )
 

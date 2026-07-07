@@ -248,9 +248,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { PhPaperPlaneRight as Position, PhArrowRight as Right } from '@phosphor-icons/vue'
 
-import { updateMe } from '@/features/auth/api/auth'
+import { updateMe, getMe } from '@/features/auth/api/auth'
 import { useCurrentUser } from '@/features/auth/model/currentUser'
-import { getProfileOnboarding, updateProfileOnboarding } from '@/features/profile/api/profile'
+import { updateProfileOnboarding } from '@/features/profile/api/profile'
 import type { ProfileOnboardingUpdate } from '@/features/profile/api/profile'
 import { searchSchools } from '@/features/profile/api/school'
 import type { SchoolItem } from '@/features/profile/model/school'
@@ -1084,18 +1084,19 @@ const loadStatus = async () => {
   if (!hasAuthToken()) return
 
   try {
-    const res = await getProfileOnboarding()
-    const baseInfo = res.data?.data?.base_info
+    // 基础信息现在从 User 表读取（通过 /users/me 接口）
+    const res = await getMe()
+    const user = res.data?.data
 
-    if (!baseInfo) return
+    if (!user) return
 
-    form.school = baseInfo.school || ''
-    form.major = baseInfo.major || ''
-    form.grade = baseInfo.grade || ''
-    form.daily_study_time = baseInfo.daily_study_time || ''
-    form.global_learning_goal = baseInfo.global_learning_goal || ''
-    form.programming_languages = Array.isArray(baseInfo.programming_languages) ? baseInfo.programming_languages : []
-    form.courses = Array.isArray(baseInfo.courses) ? baseInfo.courses : []
+    form.school = user.school || ''
+    form.major = user.major || ''
+    form.grade = user.grade || ''
+    form.daily_study_time = user.daily_study_time || ''
+    form.global_learning_goal = user.global_learning_goal || ''
+    form.programming_languages = Array.isArray(user.programming_languages) ? user.programming_languages : []
+    form.courses = Array.isArray(user.courses) ? user.courses : []
   } catch (error) {
     console.error('Failed to load onboarding data', error)
   }

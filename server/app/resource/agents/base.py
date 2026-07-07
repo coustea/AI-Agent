@@ -137,7 +137,10 @@ class BaseResourceAgent:
             )
             return report
         except Exception as exc:
-            logger.error("[BaseResourceAgent] ResearchAgent failed: %s", exc)
+            logger.error(
+                "Agent[%s] 搜索失败: elapsed_ms=%d error=%s",
+                getattr(self, "agent_id", "base"), duration, exc, exc_info=True,
+            )
             await self.emitter.send(
                 getattr(self, "agent_id", "base_resource"),
                 "running",

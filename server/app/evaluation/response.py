@@ -26,10 +26,12 @@ class EvaluationSummaryResponse(BaseModel):
     average_score: float | None = None
     completed_resources: int = 0
     viewed_resources: int = 0
+    active_minutes: int = 0
     weak_topics: list[str] = Field(default_factory=list)
     preferred_resources: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     recent_events: list[LearningEventItem] = Field(default_factory=list)
+
 
 
 class DailyTimeEntry(BaseModel):

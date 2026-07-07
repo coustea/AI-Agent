@@ -42,12 +42,12 @@ AGENT_TIMEOUTS: dict[str, float] = {
 }
 
 
-async def _observe(coro: Any) -> None:
+async def _observe(*, agent_id: str, coro: Any) -> None:
     """执行观察事件，失败只记录日志。"""
     try:
         await coro
     except Exception as e:
-        logger.warning(f"Event emission failed: {e}")
+        logger.warning("Agent[%s] 事件发送失败: %s", agent_id, e)
 
 
 async def execute_resource_agent(
@@ -84,13 +84,14 @@ async def execute_resource_agent(
 
     # 发送开始事件
     await _observe(
-        events.send(
+        agent_id=agent_id,
+        coro=events.send(
             agent_id,
             "running",
             "开始生成...",
             0,
             data={"phase": "generation"},
-        )
+        ),
     )
     logger.info(
         "Agent[%s] 开始执行: resource_id=%s timeout=%ds",
@@ -162,7 +163,8 @@ async def execute_resource_agent(
 
     # 发送成功事件
     await _observe(
-        events.send(
+        agent_id=agent_id,
+        coro=events.send(
             agent_id,
             "completed",
             result.title,
@@ -172,7 +174,7 @@ async def execute_resource_agent(
                 "artifact_id": str(item.id),
                 "elapsed_ms": elapsed_ms,
             },
-        )
+        ),
     )
     logger.info(
         "Agent[%s] 执行成功: resource_id=%s title=%s artifact_id=%s elapsed_ms=%d",
@@ -198,7 +200,7 @@ async def _record_failure(
 
     # 输出失败日志
     logger.error(
-        "Agent 执行失败: agent_id=%s resource_id=%s stage=%s error_type=%s error=%s elapsed_ms=%d",
+        "Agent[%s] 执行失败: resource_id=%s stage=%s error_type=%s error=%s elapsed_ms=%d",
         agent_id,
         resource_id,
         stage,
@@ -218,16 +220,17 @@ async def _record_failure(
                 elapsed_ms=elapsed_ms,
             )
     except Exception as e:
-        logger.error(f"Failed to record agent failure to database: {e}")
+        logger.error("Agent[%s] 记录失败状态到数据库失败: %s", agent_id, e)
 
     await _observe(
-        events.send(
+        agent_id=agent_id,
+        coro=events.send(
             agent_id,
             "failed",
             error_message,
             0,
             data={"phase": stage, "elapsed_ms": elapsed_ms},
-        )
+        ),
     )
 
     return {

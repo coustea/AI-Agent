@@ -104,7 +104,7 @@ class IatClient:
                 return result_text
 
         except Exception as e:
-            logger.error(f"Speech recognition failed: {e}")
+            logger.error(f"语音识别失败: {e}")
             raise RuntimeError(f"Speech recognition failed: {e}")
 
     async def _receive_results(self, ws):
@@ -119,7 +119,7 @@ class IatClient:
                 # 非零 code 表示 API 错误
                 if code != 0:
                     error_msg = data.get('message', 'Unknown error')
-                    logger.error(f"ASR error: code={code}, message={error_msg}")
+                    logger.error(f"ASR 错误: code={code}, message={error_msg}")
                     raise RuntimeError(f"ASR error: {error_msg}")
 
                 result = data.get('data', {}).get('result', {})
@@ -132,11 +132,11 @@ class IatClient:
                         result_text += word
 
                 if ws_list:
-                    logger.debug(f"Intermediate result: {result_text}")
+                    logger.debug(f"中间识别结果: {result_text}")
 
                 # status=2 表示最终结果，退出循环
                 if data.get('data', {}).get('status') == 2:
-                    logger.info(f"Final recognition result: {result_text}")
+                    logger.info(f"最终识别结果: {result_text}")
                     break
 
             return result_text
@@ -144,5 +144,5 @@ class IatClient:
         except RuntimeError:
             raise
         except Exception as e:
-            logger.error(f"Failed to receive recognition results: {e}")
+            logger.error(f"接收识别结果失败: {e}")
             raise RuntimeError(f"Failed to receive recognition results: {e}")

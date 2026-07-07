@@ -75,7 +75,7 @@ class TutorToolRunner:
                 )
                 assistant_message_id = getattr(assistant_message, "id", None)
             except Exception as exc:
-                logger.warning("[TutorToolRunner] save tool request failed: %s", exc)
+                logger.warning("[TutorToolRunner] 保存工具请求失败: %s", exc)
 
         try:
             raw_result = await tool_excute.execute(
@@ -107,7 +107,7 @@ class TutorToolRunner:
                 node_sources.extend(source.model_dump() for source in normalized.sources)
 
         except Exception as exc:
-            logger.warning("[TutorToolRunner] tool %s failed: %s", tool_name, exc)
+            logger.warning("[TutorToolRunner] 工具 %s 失败: %s", tool_name, exc)
             tool_status = "failed"
             node_errors.append(f"{tool_name}: {exc}")
             result_text = f"调用失败: {exc}"
@@ -124,7 +124,7 @@ class TutorToolRunner:
                 )
                 tool_message_id = getattr(tool_message, "id", None)
             except Exception as exc:
-                logger.warning("[TutorToolRunner] save tool result failed: %s", exc)
+                logger.warning("[TutorToolRunner] 保存工具结果失败: %s", exc)
 
         invocation: dict[str, Any] | None = {
             "tool_call_id": tool_call_id,

@@ -14,6 +14,7 @@
 - [API 参考](#api-参考)
 - [视频渲染子系统](#视频渲染子系统)
 - [记忆与画像](#记忆与画像)
+- [RAG 知识库](#rag-知识库)
 - [测试](#测试)
 - [项目结构](#项目结构)
 - [开发约定](#开发约定)
@@ -41,7 +42,7 @@
 | LLM 接入 | OpenAI 兼容 API · Anthropic · 智谱 AI |
 | 视频渲染 | Remotion 4 · HyperFrames · FFmpeg (NVENC) |
 | 语音合成 | Microsoft Edge-TTS · 讯飞星火 TTS |
-| 向量检索 | Ollama (bge-m3) · FAISS · ChromaDB |
+| 向量检索 | ChromaDB + BM25 (jieba) · RRF 融合 · bge-m3 (OpenAI 兼容 API) |
 | 包管理 | uv |
 
 ## 系统架构
@@ -199,7 +200,137 @@ systemctl --user enable --now ollama
 ollama pull bge-m3                               # 拉取向量模型
 ```
 
-随后确认 `config.yaml → knowledge.enabled: true` 即可生效。
+随后确认 `config.yaml → knowledge.enabled: true` 即可生效。首次启动时若索引不存在且 `auto_build: true`，后台自动构建。
+
+## RAG 知识库
+
+知识库采用 **ChromaDB（向量）+ BM25（关键词）混合检索 + RRF 融合**，嵌入模型通过 OpenAI 兼容 API 接入（默认 bge-m3，1024 维）。
+
+### 目录结构
+
+```
+server/app/rag/
+├── data/
+│   ├── source/              ← 源文档（按课程编号目录存放，只读）
+│   │   ├── 01-计算机基础/
+│   │   ├── 02-编程语言/
+│   │   ├── ...
+│   │   └── 11-通识与面试/
+│   └── index/               ← 构建产物（ChromaDB + BM25 + manifest，可随时删除重建）
+│       ├── chroma.sqlite3
+│       ├── bm25_index.pkl
+│       └── manifest.json
+├── load.py                  ← 文档加载（.md/.txt/.pdf）
+├── metadata.py              ← 元数据推断（课程名、标题、章节）
+├── splitter.py              ← 文档分割
+├── embeddings.py            ← 嵌入模型封装（含熔断器）
+├── retriever.py             ← 混合检索 + RRF 融合
+├── bm25.py                  ← BM25 索引（jieba 分词 + rank_bm25）
+└── indexing/
+    └── build.py             ← 离线索引构建器（唯一构建入口）
+```
+
+### 前提条件
+
+1. **嵌入服务在线** — 任何 OpenAI 兼容的嵌入 API 均可，默认使用 llama.cpp 本地部署 bge-m3：
+
+   ```bash
+   # 示例：llama.cpp 启动嵌入服务
+   /path/to/llama-server -m bge-m3-Q8_0.gguf \
+     --embedding --alias bge-m3:latest --port 10000 -ngl 999
+   ```
+
+   也可使用 Ollama 或远程 API，只需在 `config.yaml` 中配置对应的 `embed_base_url`。
+
+2. **源文档就位** — `app/rag/data/source/` 下按课程编号目录存放 `.md`/`.txt`/`.pdf` 文件。
+
+3. **config.yaml 配置正确** — `knowledge` 配置组与嵌入服务匹配：
+
+   ```yaml
+   knowledge:
+     enabled: true
+     embed_model: "bge-m3:latest"           # 嵌入模型名称（需与嵌入服务一致）
+     embed_base_url: "http://127.0.0.1:10000/v1"  # 嵌入服务地址
+     top_k: 4
+     max_context_chars: 6000
+     auto_build: true                        # 启动时索引不存在则自动构建
+   ```
+
+### 手动构建索引
+
+```bash
+cd server
+
+# 标准构建（batch-size=16）
+uv run python -m app.rag.indexing.build
+
+# GPU 加速构建（加大批量，约快 4 倍）
+uv run python -m app.rag.indexing.build --batch-size 64
+
+# 仅检查索引健康状态（不构建）
+uv run python -m app.rag.indexing.build --check-only
+```
+
+**可选参数**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--batch-size` | 16 | 嵌入批量大小，GPU 可用时建议 64 |
+| `--source-dir` | `app/rag/data/source` | 源文档目录 |
+| `--output-dir` | `app/rag/data/index` | 索引输出目录 |
+| `--check-only` | — | 只检查索引健康，不执行构建 |
+
+### 构建流程
+
+```
+加载文档 → 元数据推断 → 文档分割 → 重置熔断器 → ChromaDB 存储 → BM25 索引 → 写 manifest → 验证 → 原子替换
+```
+
+安全机制：先构建到临时目录 `index.building-<uuid>`，验证通过后原子替换正式目录；任一步失败则删除临时目录，现有索引不受影响。
+
+### 启动时自动检查
+
+应用启动时（`app/main.py` lifespan）自动执行索引健康检查，日志以 `[KB]` 前缀输出：
+
+| 状态 | 日志 | 行为 |
+|------|------|------|
+| 索引就绪 | `[KB] Index ready: N chunks, embedding_model=...` | 正常运行 |
+| 嵌入模型变更 | `[KB] Embedding model changed (config=...), index needs rebuild` | **自动触发后台重建**（即使 `auto_build: false`） |
+| 索引不存在 + `auto_build: true` | `[KB] Index not ready (reason: ...), auto-building in background...` | 后台自动构建 |
+| 索引不存在 + `auto_build: false` | `[KB] Index not ready and auto_build disabled` | 仅警告，检索不可用 |
+| 构建成功 | `[KB] Auto-build succeeded: N chunks, embedding_model=...` | 正常运行 |
+| 构建失败 | `[KB] Auto-build failed: ...` | 仅日志，不影响服务启动 |
+| 知识库禁用 | `[KB] Knowledge base disabled by config` | 跳过检查 |
+
+### 切换嵌入模型
+
+只需修改 `config.yaml` 中的 `knowledge.embed_model` 和 `knowledge.embed_base_url`，**无需改代码**：
+
+1. 修改 `config.yaml` → `knowledge.embed_model` 为新模型名称
+2. 重启服务 → 启动时检测到 `embedding_model_mismatch` → 自动触发重建
+3. 重建完成后日志输出 `[KB] Auto-build succeeded`
+
+> 嵌入客户端不使用缓存（`embeddings.py` 无 `lru_cache`），配置修改后立即生效。
+
+### 课程推断规则
+
+源文档的课程名从文件路径自动推断，支持编号目录格式：
+
+- `01-计算机基础/02-计算机网络/xxx.md` → `course="计算机网络"`
+- `03-人工智能/01-机器学习入门/xxx.md` → `course="机器学习"`
+
+路径片段 → 课程名映射定义在 `app/rag/metadata.py` 的 `_COURSE_DIR_MAP`。新增课程目录时需在此字典中添加对应条目。
+
+### 故障排查
+
+| 症状 | 排查方向 |
+|------|----------|
+| 构建报 "No matching documents found" | 确认 `app/rag/data/source/` 下有 `.md`/`.txt`/`.pdf` 文件 |
+| 构建报嵌入超时 / 连接拒绝 | 确认嵌入服务运行中：`curl http://127.0.0.1:10000/v1/models` |
+| 构建中断后再次构建失败 | 熔断器可能已打开，构建器会自动重置；若仍失败等待 5 分钟冷却 |
+| 检索返回 "unavailable" | 检查 `knowledge.enabled: true`；索引是否存在；嵌入服务是否在线 |
+| 检索结果课程名全为空 | 检查源文档路径是否在 `_COURSE_DIR_MAP` 覆盖的目录下 |
+| 索引体积过大 | 正常：65229 chunks ≈ 660MB（ChromaDB 530MB + BM25 129MB） |
 
 ## 配置
 
@@ -365,6 +496,6 @@ server/
 | 视频渲染失败 | 确认 FFmpeg 已安装；`video-render/` 已 `npm install`；Remotion 版本为 4.0.478 |
 | GPU 未生效 | `ffmpeg -encoders \| grep nvenc` 确认 NVENC；`nvidia-smi` 确认驱动；查看日志中 GL 后端选择记录 |
 | TTS 无声 | 检查 `spark_tts` 配置；Edge-TTS 需要联网 |
-| 向量检索失效 | 确认 Ollama 运行中、`bge-m3` 已下载、`knowledge.enabled: true` |
+| 向量检索失效 | 确认嵌入服务运行中（`curl <embed_base_url>/models`）；`knowledge.enabled: true`；索引已构建（`app/rag/data/index/manifest.json` 存在） |
 | 数字人连接失败 | 检查 `avatar.*` 配置完整、WebSocket 地址正确、JWT 有效 |
 | 前端 API 500 | 确认 Vite 代理端口（默认 9999）与后端一致 |

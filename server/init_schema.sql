@@ -21,6 +21,14 @@ CREATE TABLE IF NOT EXISTS users (
     email           VARCHAR(100),
     avatar          VARCHAR(500),
     is_first_login  BOOLEAN         DEFAULT FALSE,
+    school          VARCHAR(200),
+    school_level    VARCHAR(50),
+    major           VARCHAR(200),
+    grade           VARCHAR(50),
+    daily_study_time VARCHAR(50),
+    global_learning_goal TEXT,
+    programming_languages JSONB,
+    courses         JSONB,
     created_at      TIMESTAMPTZ     DEFAULT NOW(),
     updated_at      TIMESTAMPTZ     DEFAULT NOW()
 );
@@ -34,6 +42,14 @@ COMMENT ON COLUMN users.password IS '密码哈希值';
 COMMENT ON COLUMN users.email IS '邮箱';
 COMMENT ON COLUMN users.avatar IS '头像URL';
 COMMENT ON COLUMN users.is_first_login IS '是否首次登录';
+COMMENT ON COLUMN users.school IS '就读学校';
+COMMENT ON COLUMN users.school_level IS '学校层次';
+COMMENT ON COLUMN users.major IS '专业';
+COMMENT ON COLUMN users.grade IS '年级';
+COMMENT ON COLUMN users.daily_study_time IS '每日学习时长';
+COMMENT ON COLUMN users.global_learning_goal IS '全局学习目标';
+COMMENT ON COLUMN users.programming_languages IS '掌握的编程语言';
+COMMENT ON COLUMN users.courses IS '学习的课程';
 COMMENT ON COLUMN users.created_at IS '创建时间';
 COMMENT ON COLUMN users.updated_at IS '更新时间';
 
@@ -247,14 +263,6 @@ COMMENT ON COLUMN chat_long_term_memories.memory_markdown IS '记忆内容Markdo
 CREATE TABLE IF NOT EXISTS user_profiles (
     id                      SERIAL          PRIMARY KEY,
     user_id                 INTEGER         NOT NULL,
-    school                  VARCHAR(200),
-    school_level            VARCHAR(50),
-    major                   VARCHAR(200),
-    grade                   VARCHAR(50),
-    daily_study_time        VARCHAR(50),
-    global_learning_goal    TEXT,
-    programming_languages   JSONB,
-    courses                 JSONB,
     overall_score           INTEGER         DEFAULT 0,
     scored_at               TIMESTAMPTZ,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
@@ -266,14 +274,6 @@ CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles (user_id);
 
 COMMENT ON TABLE user_profiles IS '用户主画像表，每个用户一条';
 COMMENT ON COLUMN user_profiles.user_id IS '用户ID';
-COMMENT ON COLUMN user_profiles.school IS '就读学校';
-COMMENT ON COLUMN user_profiles.school_level IS '学校层次';
-COMMENT ON COLUMN user_profiles.major IS '专业';
-COMMENT ON COLUMN user_profiles.grade IS '年级';
-COMMENT ON COLUMN user_profiles.daily_study_time IS '每日学习时长';
-COMMENT ON COLUMN user_profiles.global_learning_goal IS '全局学习目标';
-COMMENT ON COLUMN user_profiles.programming_languages IS '掌握的编程语言';
-COMMENT ON COLUMN user_profiles.courses IS '学习的课程';
 COMMENT ON COLUMN user_profiles.overall_score IS '总体评分';
 COMMENT ON COLUMN user_profiles.scored_at IS '评分时间';
 

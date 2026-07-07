@@ -83,9 +83,10 @@ class PlanningAgent(BaseResourceAgent):
             except (ValueError, PlanValidationError) as exc:
                 if attempt + 1 >= _MAX_PLAN_ATTEMPTS:
                     raise
+                attempt_elapsed = int((time.perf_counter() - started) * 1000)
                 logger.warning(
-                    "Agent[planning] 规划校验失败，正在重试: %s",
-                    exc,
+                    "Agent[planning] 规划校验失败, 正在重试: attempt=%d error=%s elapsed_ms=%d",
+                    attempt + 1, exc, attempt_elapsed,
                 )
                 await self.emitter.send(
                     self.agent_id,

@@ -195,7 +195,7 @@ class VisionService:
                         spark_ok = False
                         break
                 except Exception as exc:
-                    logger.warning("[VisionService] spark failed, fallback to glm: %s", exc)
+                    logger.warning("[VisionService] spark 调用失败，回退到 GLM: %s", exc)
                     spark_ok = False
                     break
 

@@ -155,13 +155,13 @@ class XfTtsService:
     ) -> XfTtsResult:
         """带字幕合成：文本 → MP3 + 逐词时间戳。"""
         if not text or not text.strip():
-            logger.warning("Empty text passed to XfTtsService. Skip synthesis.")
+            logger.warning("传入空文本到 XfTtsService, 跳过合成")
             return XfTtsResult(duration=0.0, captions=[])
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "Starting Xunfei TTS synthesis: text_len=%d, voice=%s, output=%s",
+            "开始讯飞 TTS 合成: 文本长度=%d, 发音人=%s, 输出=%s",
             len(text), voice, file_path
         )
 
@@ -229,11 +229,11 @@ class XfTtsService:
                             break
 
                     except asyncio.TimeoutError:
-                        logger.warning("Xunfei TTS WebSocket timeout")
+                        logger.warning("讯飞 TTS WebSocket 超时")
                         break
 
         except Exception as e:
-            logger.error("Xunfei TTS synthesis failed: %s", e)
+            logger.error("讯飞 TTS 合成失败: %s", e)
             raise
 
         # 写入音频文件
@@ -258,7 +258,7 @@ class XfTtsService:
                 captions.append(CaptionWord(text=word, start_ms=start_ms, end_ms=end_ms))
 
         logger.info(
-            "Xunfei TTS synthesis complete. Duration: %.2fs, %d captions",
+            "讯飞 TTS 合成完成. 时长: %.2fs, 字幕数: %d",
             duration, len(captions)
         )
 

@@ -82,16 +82,6 @@ COGNITIVE_DIMENSIONS: Final[tuple[str, ...]] = (
 # ── 默认值 ──────────────────────────────────────────────────────────────
 
 default_profile_json: dict[str, Any] = {
-    "base_info": {
-        "school": "",
-        "school_level": "",
-        "major": "",
-        "grade": "",
-        "daily_study_time": "",
-        "global_learning_goal": "",
-        "programming_languages": [],
-        "courses": [],
-    },
     "dimensions": {
         dim: {
             "value": "",

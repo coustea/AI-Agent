@@ -153,15 +153,27 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
 
 
 async def _get_profile_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
-    """获取用户画像数据。"""
-    profile = await get_profile_service().get_profile(user_id=user_id, db=session)
-    return profile.profile_json or {}
+    """获取用户画像维度数据（不含 base_info，base_info 在 User 表）。"""
+    dimensions = await get_profile_service().get_dimensions(user_id=user_id, db=session)
+    return {"dimensions": dimensions}
 
 
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
     """获取用户评分数据。"""
     profile = await get_profile_service().get_profile(user_id=user_id, db=session)
-    return profile.profile_score_json or {}
+    from app.infra.models import UserProfileDimension
+    dim_rows = (await session.exec(
+        select(UserProfileDimension).where(UserProfileDimension.user_id == user_id)
+    )).all()
+    return {
+        "overall_score": profile.overall_score,
+        "dimension_scores": {
+            row.dimension_key: row.score
+            for row in dim_rows
+            if row.score is not None
+        },
+        "scored_at": profile.scored_at.isoformat() if profile.scored_at else None,
+    }
 
 
 def _weak_topics_from_events(
@@ -192,10 +204,9 @@ async def get_recommendation(
     session: AsyncSession = Depends(get_session),
 ):
     """获取首页推荐内容 — 根据用户状态返回个性化学习建议。"""
-    profile_json = await _get_profile_json(session, current_user.id)
-    base_info = profile_json.get("base_info") or {}
-    goal = _text(base_info.get("global_learning_goal"))
-    courses = base_info.get("courses") or []
+    # base_info 直接从 User 表读取
+    goal = _text(current_user.global_learning_goal)
+    courses = current_user.courses or []
     primary_course = courses[0] if courses else ""
 
     active_paths = await _get_active_paths(session, current_user.id)
@@ -223,7 +234,7 @@ async def get_recommendation(
     )).one()
 
     has_activity = any((chat_session_count, user_message_count, recent_resources, active_path, recent_events))
-    cold_start = not _text(base_info.get("major")) and not has_activity
+    cold_start = not _text(current_user.major) and not has_activity
     weak_topics = _weak_topics_from_events(recent_events)
     node = _current_node(path_nodes)
     latest_event = recent_events[0] if recent_events else None
@@ -311,10 +322,9 @@ async def get_profile_radar(
     session: AsyncSession = Depends(get_session),
 ):
     """获取用户画像雷达图数据 — 各维度得分。"""
-    profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
-    score_json = profile.profile_score_json or {}
+    score_dict = await _get_profile_score_json(session, current_user.id)
 
-    scores = score_json.get("dimension_scores") or {}
+    scores = score_dict.get("dimension_scores") or {}
     dimensions = [
         {
             "key": key,
@@ -324,10 +334,10 @@ async def get_profile_radar(
         for key in ALL_DIMENSIONS
     ]
 
-    weak_areas = _low_score_dimensions(score_json)
+    weak_areas = _low_score_dimensions(score_dict)
 
     return HttpResponse.success(data={
-        "score": score_json.get("overall_score"),
+        "score": score_dict.get("overall_score"),
         "dimensions": dimensions,
         "weak_areas": weak_areas,
         "metrics": {"dimension_scores": scores},
@@ -397,7 +407,6 @@ async def get_quick_actions(
     session: AsyncSession = Depends(get_session),
 ):
     """获取快捷操作和今日建议。"""
-    profile_json = await _get_profile_json(session, current_user.id)
     recent_events = await _get_recent_events(session, current_user.id, limit=30)
 
     chat_session_count = (await session.exec(

@@ -104,7 +104,7 @@ class TutorAgent:
                 timestamp=time.time(),
             )
         except Exception as exc:
-            logger.exception("[TutorAgent] graph execution failed")
+            logger.exception("[TutorAgent] graph 执行失败")
             if graph_task is not None and not graph_task.done():
                 graph_task.cancel()
             if sentinel_task is not None and not sentinel_task.done():
@@ -117,7 +117,7 @@ class TutorAgent:
             )
 
     # ------------------------------------------------------------------
-    # Event / persistence helpers
+    # 事件 / 持久化辅助方法
     # ------------------------------------------------------------------
 
     async def _emit_event(
@@ -127,11 +127,10 @@ class TutorAgent:
         *,
         persist: bool = True,
     ) -> list[TutorRuntimeEvent]:
-        """Emit a stream event to the SSE queue.
+        """向 SSE 队列发送流事件。
 
-        Returns a single-element list containing the event, for the caller
-        to return as ``{"stream_events": [event]}`` — the operator.add reducer
-        on stream_events will automatically append it to the accumulated list.
+        返回包含该事件的单元素列表，供调用者以 ``{"stream_events": [event]}`` 形式返回——
+        stream_events 上的 operator.add reducer 会自动将其追加到累积列表中。
         """
         if persist and event.type == "agent_status":
             try:
@@ -142,14 +141,14 @@ class TutorAgent:
                     payload=event.payload,
                 )
             except Exception as exc:
-                logger.warning("[TutorAgent] persist activity failed: %s", exc)
+                logger.warning("[TutorAgent] 持久化活动失败: %s", exc)
         queue = state.get("event_queue")
         if queue is not None:
             await queue.put(event)
         return [event]
 
     # ------------------------------------------------------------------
-    # Graph construction
+    # 图构建
     # ------------------------------------------------------------------
 
     def _build_graph(self) -> Any:

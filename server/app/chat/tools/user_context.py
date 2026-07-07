@@ -40,7 +40,7 @@ def make_get_learner_profile(
             markdown = await svc.build_profile_markdown(user_id=request.user_id)
             return compact_text(f"画像读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
-            logger.warning("[get_learner_profile] failed: %s", exc)
+            logger.warning("[get_learner_profile] 失败: %s", exc)
             return "暂时无法读取学习者画像。"
 
     return _impl
@@ -88,7 +88,7 @@ def make_get_long_term_memory(
             markdown = await svc.get_memory_markdown(request.user_id, category=category_value)
             return compact_text(f"长期记忆读取原因: {reason or '未提供'}\n{markdown}")
         except Exception as exc:
-            logger.warning("[get_long_term_memory] failed: %s", exc)
+            logger.warning("[get_long_term_memory] 失败: %s", exc)
             return "暂时无法读取长期学习记忆。"
 
     return _impl

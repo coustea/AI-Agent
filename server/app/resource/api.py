@@ -216,7 +216,7 @@ async def get_resource_events(
                     # 发送心跳
                     yield ": heartbeat\n\n"
         except Exception as e:
-            logger.error("SSE event generator error: %s", e)
+            logger.error("SSE 事件生成器错误: %s", e)
         finally:
             if queue is not None:
                 await events.unsubscribe(queue)
@@ -311,38 +311,51 @@ async def get_resource(
     return HttpResponse.success(data=bundle.model_dump(mode="json"))
 
 
-@router.get("/resources/public/{resource_id}/html")
-async def get_public_html(
-    resource_id: str,
+@router.get("/resources/public/{item_id}/html")
+async def get_public_item_html(
+    item_id: int,
     session: AsyncSession = Depends(get_session),
 ):
-    """公开获取 HTML 幻灯片内容，支持 iframe 直接加载。"""
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", resource_id):
-        return HttpResponse.error(code=400, message="非法幻灯片 ID")
-
-    # 从数据库查找 PPT item 的 metadata 获取文件路径
-    from sqlmodel import select, col
+    """公开获取 PPT/Cartoon 的 HTML 内容，支持 iframe 直接加载。"""
     from app.infra.models import GeneratedResourceItem as ItemModel
-    try:
-        rid = int(resource_id)
-    except ValueError:
-        rid = None
 
-    if rid is not None:
-        stmt = select(ItemModel).where(
-            ItemModel.resource_id == rid,
-            ItemModel.agent_type == "ppt",
-        )
-        item = (await session.exec(stmt)).one_or_none()
-        if item and item.metadata_json:
-            html_path = item.metadata_json.get("html_file_path")
-            if html_path and os.path.exists(html_path):
-                return FileResponse(
-                    path=html_path,
-                    media_type="text/html",
-                )
+    item = await session.get(ItemModel, item_id)
+    if not item or item.agent_type not in ("ppt", "cartoon"):
+        return HttpResponse.error(code=404, message="HTML 资源不存在")
 
-    return HttpResponse.error(code=404, message="HTML 幻灯片不存在")
+    html_path = None
+    if item.metadata_json:
+        html_path = item.metadata_json.get("html_file_path")
+
+    if not html_path or not os.path.exists(html_path):
+        return HttpResponse.error(code=404, message="HTML 文件未找到")
+
+    return FileResponse(path=html_path, media_type="text/html")
+
+
+@router.get("/resources/public/{item_id}/video")
+async def get_public_item_video(
+    item_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """公开获取 Video/Cartoon 的 MP4 视频文件。"""
+    from app.infra.models import GeneratedResourceItem as ItemModel
+
+    item = await session.get(ItemModel, item_id)
+    if not item or item.agent_type not in ("video", "cartoon"):
+        return HttpResponse.error(code=404, message="视频资源不存在")
+
+    video_path = None
+    if item.metadata_json:
+        if item.agent_type == "video":
+            video_path = item.metadata_json.get("file_path")
+        elif item.agent_type == "cartoon":
+            video_path = item.metadata_json.get("video_file_path")
+
+    if not video_path or not os.path.exists(video_path):
+        return HttpResponse.error(code=404, message="视频文件未找到")
+
+    return FileResponse(path=video_path, media_type="video/mp4")
 
 
 @router.get("/resources/{resource_id}/html")

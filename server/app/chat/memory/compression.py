@@ -89,7 +89,7 @@ class ChatSessionCompressor:
         )
 
     async def needs_compression(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
-        """Return whether the current session satisfies compression thresholds."""
+        """返回当前会话是否满足压缩阈值。"""
         return await self._should_compress(db=db, user_id=user_id, session_id=session_id)
 
     async def _should_compress(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
@@ -227,7 +227,7 @@ class ChatSessionCompressor:
                 user_id, session_id, len(summary_markdown),
             )
         except Exception as exc:
-            logger.warning("[ChatSessionCompressor._compress] LLM compression failed: %s", exc)
+            logger.warning("[ChatSessionCompressor._compress] LLM 压缩失败: %s", exc)
 
         # LLM 失败或返回空结果时，降级为简易行拼接摘要
         if not summary_markdown or not summary_markdown.strip():

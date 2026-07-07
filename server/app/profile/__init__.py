@@ -7,7 +7,7 @@ from app.profile.response import (
     StudentProfileData,
     GlobalProfileResponse,
 )
-from app.profile.service import ProfileService, get_profile_service
+from app.profile.service import ProfileService, get_profile_service, _user_base_info_dict
 from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
 
 __all__ = [
@@ -21,4 +21,5 @@ __all__ = [
     "ProfileService",
     "StudentProfileData",
     "get_profile_service",
+    "_user_base_info_dict",
 ]

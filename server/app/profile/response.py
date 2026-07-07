@@ -61,6 +61,5 @@ class GlobalProfileResponse(BaseModel):
     module: str
     base_info: BaseInfoData = Field(default_factory=BaseInfoData)
     dimensions: dict[str, Any] = Field(default_factory=dict)
-    profile_json: dict[str, Any] = Field(default_factory=dict)
     profile_score_json: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime | str | None = None

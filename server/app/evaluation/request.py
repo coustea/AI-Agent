@@ -19,7 +19,7 @@ LearningEventType = Literal[
 class LearningEventCreate(BaseModel):
     """学习事件创建请求 — unified 结构（module + entity_id + metadata）。"""
 
-    module: str = Field(description="模块: chat / resource / path / quiz / visualizer")
+    module: str = Field(default="mentor", description="模块: chat / resource / path / quiz / visualizer")
     entity_id: str | None = Field(default=None, max_length=255, description="模块内实体 ID")
     event_type: str = Field(description="事件子类型")
     score: float | None = Field(default=None, ge=0, le=100)
@@ -35,8 +35,7 @@ class LearningSessionCreate(BaseModel):
     started_at: str
     ended_at: str
     duration_seconds: int = Field(ge=1, le=86400)
-    module: str | None = Field(default=None, max_length=50)
-    entity_id: str | None = Field(default=None, max_length=255)
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
     event_metadata: dict[str, Any] = Field(default_factory=dict)
+
