@@ -8,8 +8,6 @@
         <div class="header-main">
           <div class="header-copy">
             <span class="header-eyebrow">学习画像初始化</span>
-            <h1>对话式构建基础资料</h1>
-            <p>每次只确认一个主题，填写完成后可在个人中心继续修改。</p>
           </div>
 
           <button class="skip-btn" type="button" @click="handleCompleteLater">
@@ -892,6 +890,8 @@ const streamAssistantMessage = async (content: string) => {
   }
 
   isAssistantStreaming.value = false
+  await nextTick()
+  await scrollToBottom({ force: true })
   await focusComposer()
 }
 
@@ -1213,12 +1213,12 @@ const handleCompleteLater = async () => {
 .conversation-header {
   position: relative;
   z-index: 1;
-  padding: 26px 34px 18px;
+  padding: 16px 34px 12px;
 }
 
 .header-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 28px;
 }
@@ -1922,7 +1922,8 @@ const handleCompleteLater = async () => {
 }
 
 .profile-note {
-  margin-top: auto;
+  margin-top: 24px;
+  flex-shrink: 0;
   color: #64748b;
 }
 

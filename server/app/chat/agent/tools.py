@@ -43,8 +43,8 @@ ResearchEventHandler = Callable[[ResearchEvent], Awaitable[None]]
 
 class GenerateDiagramArgs(BaseModel):
     """教学图解生成参数。"""
-    question: str = Field(description="学生问题，用于确定图解主题")
-    answer_summary: str = Field(description="回答摘要，用于提取图解核心内容")
+    question: str = Field(description="学生原始问题（必须完整复述，用于确定图解主题）")
+    answer_summary: str = Field(description="回答中与图解主题直接相关的核心内容摘要，用于提取图解核心内容")
 
 
 def _result_handler(handler, tool_name: str):
@@ -77,7 +77,9 @@ def build_tutor_tools(
         # 教学图解生成
         Tool(
             "generate_teaching_diagram",
-            "Generate a teaching diagram (JSON format) for complex processes, architectures, or protocols. Use when the question involves visualizable concepts.",
+            "Generate a teaching diagram (JSON format) for complex processes, architectures, or protocols. "
+            "Use when the question involves visualizable concepts that benefit from a diagram. "
+            "The diagram MUST be strictly about the student's question topic — never generate diagrams on unrelated subjects.",
             GenerateDiagramArgs,
             _result_handler(_generate_diagram_handler(request), "generate_teaching_diagram"),
         ),

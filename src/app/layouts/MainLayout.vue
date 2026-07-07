@@ -84,11 +84,24 @@
     <GlobalProfileDialog />
 
     <OnboardingDialog v-model="onboardingDialogVisible" @success="handleOnboardingSuccess" />
+
+    <!-- Logout Confirm/Success Dialog -->
+    <AuthStatusModal
+      :is-open="logoutModalState.isOpen"
+      :type="logoutModalState.type"
+      :title="logoutModalState.title"
+      :message="logoutModalState.message"
+      :countdown="logoutModalState.countdown"
+      :primary-button-text="logoutModalState.primaryButtonText"
+      :cancel-button-text="logoutModalState.cancelButtonText"
+      @confirm="logoutModalState.onConfirm"
+      @close="logoutModalState.isOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronDownIcon,
@@ -105,6 +118,7 @@ import {
 } from '@lucide/vue'
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
+import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 import { clearCurrentUser, ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import GlobalProfileDialog from '@/features/profile/components/GlobalProfileDialog.vue'
 import { isGlobalProfileVisible } from '@/features/profile/model/useGlobalProfile'
@@ -177,6 +191,20 @@ onMounted(() => {
   updateTime()
   timerId = window.setInterval(updateTime, 1000)
   ensureCurrentUser().catch(() => null)
+  
+  if (route.query.loginSuccess === 'true') {
+    logoutModalState.type = 'success'
+    logoutModalState.title = '登录成功'
+    logoutModalState.message = '欢迎回来！正在载入您的智能学习工作台...'
+    logoutModalState.countdown = 2
+    logoutModalState.primaryButtonText = '立即进入'
+    logoutModalState.onConfirm = () => {
+      logoutModalState.isOpen = false
+      router.replace({ path: route.path, query: { ...route.query, loginSuccess: undefined } })
+    }
+    logoutModalState.isOpen = true
+  }
+  
   if (route.query.onboarding === 'true') {
     onboardingDialogVisible.value = true
   }
@@ -209,16 +237,37 @@ const handleOnboardingSuccess = async () => {
   await ensureCurrentUser(true)
 }
 
-const handleLogout = async () => {
-  try {
-    await logout()
-  } catch (e) {
-    console.error('Logout error API request', e)
-  } finally {
-    clearAuthToken()
-    clearCurrentUser()
-    router.push('/login')
+const logoutModalState = reactive({
+  isOpen: false,
+  type: 'confirm' as 'success' | 'error' | 'confirm',
+  title: '',
+  message: '',
+  countdown: 0,
+  primaryButtonText: '',
+  cancelButtonText: '',
+  onConfirm: () => {}
+})
+
+const handleLogout = () => {
+  logoutModalState.type = 'confirm'
+  logoutModalState.title = '退出登录'
+  logoutModalState.message = '您确定要退出当前账号吗？'
+  logoutModalState.primaryButtonText = '确认退出'
+  logoutModalState.cancelButtonText = '取消'
+  logoutModalState.countdown = 0
+  logoutModalState.onConfirm = async () => {
+    try {
+      await logout()
+    } catch (e) {
+      console.error('Logout error API request', e)
+    } finally {
+      clearAuthToken()
+      clearCurrentUser()
+      logoutModalState.isOpen = false
+      router.push('/login')
+    }
   }
+  logoutModalState.isOpen = true
 }
 </script>
 

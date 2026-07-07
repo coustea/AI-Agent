@@ -290,7 +290,9 @@ class TeachingDiagramGenerator:
             f"学生问题：\n{request.user_input}\n\n"
             f"最终回答：\n{answer}\n\n"
             f"上下文：\n{context_text}\n\n"
-            "请生成一张能辅助学生理解答案的教学图解 JSON。"
+            "请生成一张能辅助学生理解答案的教学图解 JSON。\n"
+            "【关键约束】图解的主题、标题和所有内容必须严格来自学生问题和最终回答中的知识点，"
+            "绝不能生成与问题主题无关的图解。"
         )
         diagram = await self.llm.ainvoke_json(
             TeachingDiagram,

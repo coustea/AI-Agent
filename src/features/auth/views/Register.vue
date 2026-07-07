@@ -125,19 +125,41 @@
       </div>
     </section>
   </main>
+
+  <!-- Status Dialog -->
+  <AuthStatusModal
+    :is-open="modalState.isOpen"
+    :type="modalState.type"
+    :title="modalState.title"
+    :message="modalState.message"
+    :countdown="modalState.countdown"
+    :primary-button-text="modalState.primaryButtonText"
+    @confirm="modalState.onConfirm"
+    @close="modalState.isOpen = false"
+  />
 </template>
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { PhUser as User, PhEnvelope as Message, PhLock as Lock, PhCheck as Check } from '@phosphor-icons/vue'
-import { toast } from 'vue-sonner'
 import { register } from '@/features/auth/api/auth'
 import { getErrorMessage } from '@/shared/api/http'
 import AppLogo from '@/shared/ui/AppLogo.vue'
+import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 
 const router = useRouter()
 const isDeploying = ref(false)
+
+const modalState = reactive({
+  isOpen: false,
+  type: 'success' as 'success' | 'error',
+  title: '',
+  message: '',
+  countdown: 0,
+  primaryButtonText: '确定',
+  onConfirm: () => {}
+})
 
 const form = reactive({
   username: '',
@@ -201,8 +223,8 @@ const handleRegister = async () => {
       password: form.password,
       email: form.email || undefined,
     })
-    toast.success('注册成功，欢迎加入！')
-    router.push('/login')
+    
+    router.push('/login?registerSuccess=true')
   } catch (err: any) {
     const msg = getErrorMessage(err, '注册失败，请稍后重试')
     const field = err?.response?.data?.data?.field as string | undefined
@@ -214,7 +236,16 @@ const handleRegister = async () => {
     } else if (field === 'password') {
       errors.password = msg
     } else {
-      toast.error(msg)
+      // Trigger General Error Popup
+      modalState.type = 'error'
+      modalState.title = '注册失败'
+      modalState.message = msg
+      modalState.countdown = 0
+      modalState.primaryButtonText = '返回修改'
+      modalState.onConfirm = () => {
+        modalState.isOpen = false
+      }
+      modalState.isOpen = true
     }
   } finally {
     isDeploying.value = false

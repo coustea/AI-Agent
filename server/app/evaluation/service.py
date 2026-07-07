@@ -258,19 +258,35 @@ class EvaluationService:
     ) -> LearningSession:
         started_at = _parse_iso_datetime(payload.started_at)
         ended_at = _parse_iso_datetime(payload.ended_at)
+        metadata = payload.event_metadata or {}
+        # 前端将 resource_id / path_id / path_node_id / node_id 放在 event_metadata 中，
+        # 需从这里解析后写入数据库对应字段。
+        def _int_field(key: str) -> int | None:
+            val = metadata.get(key)
+            if val is None:
+                return None
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return None
+
+        def _str_field(key: str) -> str | None:
+            val = metadata.get(key)
+            return str(val) if val is not None else None
+
         learning_session = LearningSession(
             user_id=user_id,
             source_page=payload.source_page,
             started_at=started_at,
             ended_at=ended_at,
             duration_seconds=payload.duration_seconds,
-            resource_id=payload.resource_id,
-            path_id=payload.path_id,
-            path_node_id=payload.path_node_id,
-            node_id=payload.node_id,
+            resource_id=_int_field("resource_id"),
+            path_id=_int_field("path_id"),
+            path_node_id=_int_field("path_node_id"),
+            node_id=_str_field("node_id"),
             course=payload.course,
             topic=payload.topic,
-            metadata_json=payload.event_metadata or None,
+            metadata_json=metadata,
         )
         session.add(learning_session)
         await session.commit()
