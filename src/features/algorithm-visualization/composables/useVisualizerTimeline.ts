@@ -5,13 +5,14 @@ import type { TraceEvent } from '@/features/algorithm-visualization/types'
 interface UseVisualizerTimelineOptions {
   playing: Ref<boolean>
   currentEvent: ComputedRef<TraceEvent | null>
+  speed: Ref<number>
   next: () => void
   pause: () => void
 }
 
 /** 自动推进 TraceEvent 步骤的定时器。
  * AlgorithmVisualization.vue 使用。已从 VisualStep 改为 TraceEvent。
- * 固定速度：每步 1200ms */
+ * 基础速度：每步 1200ms，按 speed 比例缩放 */
 export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
   let timerId: number | null = null
 
@@ -29,8 +30,8 @@ export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
       return
     }
 
-    // 固定速度：每步 1200ms
-    const duration = 1200
+    // 根据倍速比例缩放，限制最小时间为 100ms 避免浏览器卡死
+    const duration = Math.max(100, Math.round(1200 / options.speed.value))
 
     timerId = window.setTimeout(() => {
       if (!options.playing.value) {
@@ -45,7 +46,7 @@ export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
   }
 
   watch(
-    [options.playing, options.currentEvent],
+    [options.playing, options.currentEvent, options.speed],
     () => {
       schedule()
     },

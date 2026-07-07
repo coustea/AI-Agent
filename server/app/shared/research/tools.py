@@ -9,7 +9,6 @@ from typing import Any
 
 from app.infra.tool_excute import Tool
 from app.infra.logging import get_logger
-from app.rag.tools import build_knowledge_tool
 from app.shared.research.search_tools import (
     SearchQueryArgs,
     CurlArgs,
@@ -30,7 +29,7 @@ from app.shared.research.search_tools import (
 logger = get_logger(__name__)
 
 
-# 工具名称常量（web 搜索 + 知识库检索）
+# 工具名称常量
 SEARCH_TOOL_NAMES = (
     "duckduckgo_search",
     "duckduckgo_instant_answer",
@@ -41,7 +40,6 @@ SEARCH_TOOL_NAMES = (
     "stackoverflow_search",
     "tavily_search",
     "spark_search",
-    "search_knowledge_base",       # 本地知识库检索
 )
 
 FETCH_TOOL_NAMES = (
@@ -59,7 +57,6 @@ RESEARCH_TOOL_ACTIONS: dict[str, str] = {
     "stackoverflow_search": "检索技术问答",
     "tavily_search": "检索深度资料",
     "spark_search": "检索中文资料",
-    "search_knowledge_base": "检索课程知识库",
 }
 
 
@@ -137,9 +134,6 @@ def build_search_tools() -> list[Tool]:
             SearchQueryArgs,
             _safe_handler(spark_search, "spark_search"),
         ),
-
-        # 本地知识库检索
-        build_knowledge_tool(),
     ]
 
 

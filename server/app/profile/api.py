@@ -38,6 +38,10 @@ async def get_profile(
     dimensions = await svc.get_dimensions(user_id=current_user.id, db=session)
     base_info = _user_base_info_dict(current_user)
 
+    dimension_scores = {
+        key: dim.get("score", 0) for key, dim in dimensions.items()
+    }
+
     return HttpResponse.success(data={
         "user_id": profile.user_id,
         "module": "mentor",
@@ -45,6 +49,7 @@ async def get_profile(
         "dimensions": dimensions,
         "profile_score_json": {
             "overall_score": profile.overall_score,
+            "dimension_scores": dimension_scores,
             "scored_at": profile.scored_at.isoformat() if profile.scored_at else None,
         },
         "updated_at": profile.updated_at,
@@ -75,7 +80,7 @@ async def update_profile_onboarding(
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
     svc = get_profile_service()
-
+    logger.info("[ProfileAPI] 用户信息: %s", payload_data)
     # 1. 同步保存基础信息到 User 表
     await svc.save_onboarding_info(
         user_id=user_id,

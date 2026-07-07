@@ -200,7 +200,7 @@ const filteredCategories = computed(() => {
 
 .select-trigger {
   height: 32px;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: #ffffff;
   font-size: 13px;
@@ -219,7 +219,7 @@ const filteredCategories = computed(() => {
 }
 
 .select-content {
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: #ffffff;
 }
@@ -232,6 +232,7 @@ const filteredCategories = computed(() => {
   font-size: 11px;
   padding: 1px 6px;
   margin-left: 6px;
+  border-radius: 4px;
 }
 
 .difficulty-tag.easy {
@@ -345,7 +346,7 @@ const filteredCategories = computed(() => {
 .run-btn {
   height: 32px;
   padding: 0 16px;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: #ffffff;
   font-size: 13px;
@@ -360,7 +361,7 @@ const filteredCategories = computed(() => {
 .reset-btn {
   height: 32px;
   padding: 0 12px;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: #ffffff;
   color: var(--color-text-secondary);

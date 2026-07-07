@@ -13,6 +13,7 @@ from app.resource.agents.common import (
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.rag.tools import build_knowledge_tool
 
 logger = get_logger(__name__)
 
@@ -60,8 +61,27 @@ class ContentAgent(BaseResourceAgent):
         input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
         started = time.perf_counter()
 
-        # 执行搜索以获取最新/更全面的参考信息以生成更高质量的文档
-        await self.emitter.send(self.agent_id, "running", "正在搜索相关课程讲解素材...", 30)
+        # 收集参考资料：本地知识库检索（教材）+ 联网搜索，两者独立进行
+        context_parts: list[str] = []
+
+        # 1. 本地知识库检索 —— 直接调用 RAG 工具，独立于联网搜索
+        await self.emitter.send(self.agent_id, "running", "正在检索本地教材资料...", 25)
+        try:
+            kb_result = await build_knowledge_tool().handler(query=title_prefix)
+            kb_text = (
+                kb_result.get("text")
+                if isinstance(kb_result, dict) and kb_result.get("status") == "ok"
+                else None
+            )
+        except Exception as exc:
+            logger.warning("Agent[%s] 知识库检索失败: %s", self.agent_id, exc)
+            kb_text = None
+        if kb_text:
+            context_parts.append(f"## 本地教材资料\n{kb_text}")
+            logger.info("Agent[%s] 知识库命中", self.agent_id)
+
+        # 2. 联网搜索 —— 获取最新/更全面的参考信息
+        await self.emitter.send(self.agent_id, "running", "正在搜索相关课程讲解素材...", 35)
         search_query = f"{title_prefix} 教程 概念"
         search_report = await self.search(search_query)
         search_text = self.format_search_result(search_report)
@@ -71,7 +91,10 @@ class ContentAgent(BaseResourceAgent):
             self.agent_id, search_query, len(search_report.sources), search_elapsed,
         )
         if search_text:
-            input_text = f"## 搜索到的参考背景信息\n{search_text}\n\n" + input_text
+            context_parts.append(f"## 联网参考资料\n{search_text}")
+
+        if context_parts:
+            input_text = "\n\n".join(context_parts) + "\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建课程讲解提示词...", 45)
         prompt = prompts.get("resource").get("content")

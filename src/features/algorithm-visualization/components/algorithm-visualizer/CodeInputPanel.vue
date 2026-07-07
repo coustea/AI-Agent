@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
 .run-btn {
   height: 32px;
   padding: 0 16px;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: #ffffff;
   font-size: 13px;
@@ -278,7 +278,7 @@ onBeforeUnmount(() => {
 .reset-btn {
   height: 32px;
   padding: 0 12px;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: #ffffff;
   color: var(--color-text-secondary);
@@ -304,8 +304,8 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monaco-active-line-highlight) {
-  background-color: rgba(37, 99, 235, 0.08) !important;
-  border-left: 3px solid #2563eb !important;
+  background-color: rgba(70, 184, 180, 0.08) !important;
+  border-left: 3px solid var(--color-primary) !important;
 }
 
 @media (max-width: 1100px) {

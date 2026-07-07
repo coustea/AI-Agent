@@ -66,17 +66,37 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 
 # OUTPUT FORMAT（输出格式）
 
-你的输出必须是纯 JSON，不得包含 Markdown 代码块标记、前后缀或解释性文字。
+你的输出必须是单个合法 JSON 对象。禁止包含 Markdown 代码围栏（```）、注释或任何解释性文字。
 
-输出结构如下：
+完整结构（should_update 为 true 时的形态）：
 
-{"should_update": true, "dimensions_patch": {"<维度名>": {"value": "<更新后描述>", "evidence": ["<行为证据>"]}}}
+{
+  "should_update": true,
+  "dimensions_patch": {
+    "<维度名>": {
+      "value": "<融合新旧证据后的更新描述，不超过 80 字>",
+      "evidence": ["<对话中观察到的具体行为证据>", "<长期记忆中的佐证>"]
+    }
+  }
+}
 
-关键类型定义：
-- should_update：布尔值，true 表示存在值得记录的画像变化
-- dimensions_patch：对象，key 为需要更新的维度名，value 为 {value, evidence} 对象
-- value：字符串，更新后的文字描述（合并新旧证据后的综合描述），不超过 80 字
-- evidence：字符串数组，每项为新发现的具体行为证据（引用自对话）
+should_update 为 false 时，输出固定为：
+{"should_update": false, "dimensions_patch": {}}
+
+字段说明：
+- should_update：布尔值。true = 存在重复/稳定的新证据值得记录；false = 无新发现或证据不足。
+- dimensions_patch：对象，key 为需要更新的维度名，value 为 {value, evidence}；should_update 为 false 时必须为空对象 {}。
+- value：字符串，融合新旧信息后的综合描述，不超过 80 字。
+- evidence：字符串数组，每项为对话/长期记忆中观察到的具体行为证据（非推断、非常识）。
+
+维度键白名单（必须逐字使用，禁止自创或拼写错误）：
+- knowledge_level（知识基础）
+- cognitive_style（认知风格）
+- weak_knowledge_points（易错点偏好）
+- knowledge_gap_pattern（知识缺口模式）
+- learning_goal_type（学习目标导向）
+- difficulty_tolerance（难度耐受度）
+- self_correction_ability（自纠能力水平）
 
 # OUTPUT CONTROL（输出控制）
 
@@ -122,12 +142,32 @@ CS/SE 领域学生，全局画像反映其跨课程的稳定学习特征。
 
 # EXAMPLES（实例）
 
-## 示例：检测到稳定认知风格，需要更新
+核心规则：should_update=true 仅当存在重复/稳定的新证据；evidence 必须来自对话/长期记忆的具体行为观察；无证据的维度整体省略。
 
-{"should_update": true, "dimensions_patch": {"cognitive_style": {"value": "更容易通过对比理解概念，倾向于视觉型学习", "evidence": ["用户多次要求用例题解释抽象概念并且喜欢对比表格", "用户偏好图解而非纯文字说明"]}}}
+## 示例 1：检测到稳定认知风格 → 需要更新
 
-## 示例：证据不足，不需要更新
+【背景】近期对话中用户多次要求用例题解释抽象概念、偏好对比表格与图解；长期记忆中也有类似记录。
 
+【输出】
+{
+  "should_update": true,
+  "dimensions_patch": {
+    "cognitive_style": {
+      "value": "更容易通过对比与图解理解概念，倾向视觉型学习",
+      "evidence": [
+        "近期对话：多次要求用例题解释抽象概念，并偏好对比表格",
+        "近期对话：偏好图解而非纯文字说明",
+        "长期记忆：以往也倾向可视化表达"
+      ]
+    }
+  }
+}
+
+## 示例 2：仅单次随口表达，证据不足 → 不更新
+
+【背景】用户偶尔提了一句"今天状态不好"，无重复模式，不构成稳定特征。
+
+【输出】
 {"should_update": false, "dimensions_patch": {}}
 
 # TOOLS（可选）

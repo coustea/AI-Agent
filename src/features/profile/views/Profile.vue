@@ -65,6 +65,29 @@
             </div>
 
             <div class="detail-group">
+              <span class="detail-label">年级阶段</span>
+              <strong class="detail-value">{{
+                studentProfile.grade || "未填写"
+              }}</strong>
+            </div>
+
+            <div class="detail-group">
+              <span class="detail-label">当前学习目标</span>
+              <strong class="detail-value">{{
+                profileMeta.globalLearningGoal ||
+                studentProfile.learning_goal ||
+                "未设置"
+              }}</strong>
+            </div>
+
+            <div class="detail-group">
+              <span class="detail-label">每日计划学习时间</span>
+              <strong class="detail-value">{{
+                profileMeta.dailyStudyTime || "未设置"
+              }}</strong>
+            </div>
+
+            <div class="detail-group">
               <span class="detail-label">正在学习课程</span>
               <div class="detail-badges vertical-badges">
                 <span

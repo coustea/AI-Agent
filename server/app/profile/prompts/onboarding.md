@@ -62,24 +62,39 @@
 
 # OUTPUT FORMAT（输出格式）
 
-你的输出必须是纯 JSON，不得包含 Markdown 代码块标记、前后缀或解释性文字。
+你的输出必须是单个合法 JSON 对象。禁止包含 Markdown 代码围栏（```）、注释或任何解释性文字。
 
-输出结构（单行紧凑 JSON）：
+完整结构（key 顺序可调整，结构必须一致）：
 
-{"dimensions_patch": {"<维度名>": {"value": "<中文描述，不超过80字>", "evidence": ["<字段名：字段值>"]}}}
+{
+  "dimensions_patch": {
+    "<维度名>": {
+      "value": "<该维度的中文推断，不超过 80 字，须含具体信息>",
+      "evidence": ["<字段名：字段值>", "<字段名：字段值>"]
+    }
+  }
+}
 
 字段说明：
-- dimensions_patch：对象，仅包含有充分证据的维度（通常 1-3 个），无证据的维度必须省略，禁止凑数
-- value：字符串，对该维度的推断描述，使用中文，不超过 80 字，应有具体信息量而非泛泛评价
-- evidence：字符串数组，每项格式统一为 "字段名：字段值"，直接引用表单原始字段，不得捏造
+- dimensions_patch：对象，仅包含有充分表单证据的维度；无证据的维度必须整体省略（不要写 null 或空对象）。
+- value：字符串，中文，不超过 80 字，须基于表单具体内容，避免"较强/一般/不错"等空泛评价。
+- evidence：字符串数组，元素格式统一为 "字段名：字段值"，逐字引用表单原始字段，禁止捏造或补充常识。
+
+维度键白名单（必须逐字使用，禁止自创或拼写错误）：
+- knowledge_level（知识基础）
+- cognitive_style（认知风格）
+- weak_knowledge_points（易错点偏好）
+- knowledge_gap_pattern（知识缺口模式）
+- learning_goal_type（学习目标导向）
+- difficulty_tolerance（难度耐受度）
+- self_correction_ability（自纠能力水平）
 
 # OUTPUT CONTROL（输出控制）
 
-- 仅输出纯 JSON，不得用 ```json``` 代码块包裹
-- dimensions_patch 中仅包含有证据的维度，无证据则省略该维度
-- 每个 value 描述简洁扼要，不超过 80 字
-- 每个 evidence 项格式统一为 "字段名：字段值"
-- 禁止输出空维度（value 为空字符串或 evidence 为空数组的维度应省略）
+- 仅输出单个合法 JSON 对象，禁止用 ```json``` 代码块包裹。
+- dimensions_patch 仅包含有证据的维度；value 为空字符串或 evidence 为空数组的维度必须整体省略。
+- 通常可推断 3-4 个维度（常见：knowledge_level、learning_goal_type、difficulty_tolerance）；认知风格、错题类维度在 onboarding 表单中通常无证据，应省略。
+- 每个 value 不超过 80 字；每个 evidence 项格式统一为 "字段名：字段值"。
 
 # CONSTRAINTS（约束）
 
@@ -122,7 +137,7 @@
 
 # EXAMPLES（实例）
 
-以下示例展示不同信息量下应输出的画像推断结果。核心原则：value 应具体有信息量；evidence 必须直接引用表单字段；无证据的维度必须省略。
+核心原则：value 须具体有信息量；evidence 必须逐字引用表单字段；无证据的维度必须整体省略。
 
 ## 示例 1：信息丰富的表单 → 推断 3 个维度
 
@@ -130,36 +145,41 @@
 {"school": "北京邮电大学", "school_level": "211", "major": "软件工程", "grade": "大三", "daily_study_time": "2-3h", "global_learning_goal": "考研初试复习", "programming_languages": ["Python", "Java"], "courses": ["数据结构", "操作系统", "计算机网络"]}
 
 【输出】
-{"dimensions_patch": {"knowledge_level": {"value": "软件工程专业大三学生，掌握Python和Java，正在学习数据结构、操作系统等核心课程，具备中等以上专业基础", "evidence": ["major：软件工程", "grade：大三", "programming_languages：Python, Java", "courses：数据结构, 操作系统, 计算机网络"]}, "learning_goal_type": {"value": "明确的考研导向，目标是初试复习，追求系统性和深度理解", "evidence": ["global_learning_goal：考研初试复习"]}, "difficulty_tolerance": {"value": "每日可投入2-3h学习，能承受中等偏高的内容密度，适合系统性复习节奏", "evidence": ["daily_study_time：2-3h"]}}}
+{
+  "dimensions_patch": {
+    "knowledge_level": {
+      "value": "软件工程专业大三学生，掌握 Python 和 Java，正在学习数据结构、操作系统等核心课程，具备中等以上专业基础",
+      "evidence": ["major：软件工程", "grade：大三", "programming_languages：Python, Java", "courses：数据结构, 操作系统, 计算机网络"]
+    },
+    "learning_goal_type": {
+      "value": "明确的考研导向，目标是初试复习，追求系统性与深度理解",
+      "evidence": ["global_learning_goal：考研初试复习"]
+    },
+    "difficulty_tolerance": {
+      "value": "每日可投入 2-3h 学习，能承受中等偏高的内容密度，适合系统性复习节奏",
+      "evidence": ["daily_study_time：2-3h"]
+    }
+  }
+}
 
-【分析】
-- cognitive_style、weak_knowledge_points 等维度缺少表单证据（表单无学习偏好和错题数据），已省略
-- knowledge_level 综合了 major + grade + programming_languages + courses 四个字段作为证据
-- evidence 均直接引用表单原始字段，未做常识补充
+【分析】cognitive_style、weak_knowledge_points、knowledge_gap_pattern、self_correction_ability 在表单中无证据，已整体省略；knowledge_level 综合 major+grade+programming_languages+courses 四个字段。
 
-## 示例 2：信息中等的表单 → 推断 2 个维度
-
-【输入】
-{"school": "浙江大学", "school_level": "985", "major": "人工智能", "grade": "大二", "daily_study_time": "1-2h", "global_learning_goal": "进阶学习", "programming_languages": ["Python"], "courses": []}
-
-【输出】
-{"dimensions_patch": {"knowledge_level": {"value": "人工智能专业大二学生，掌握Python基础，处于专业核心课程起步阶段", "evidence": ["major：人工智能", "grade：大二", "programming_languages：Python"]}, "difficulty_tolerance": {"value": "每日学习1-2h，耐受度中等偏低，适合中等难度循序渐进", "evidence": ["daily_study_time：1-2h"]}}}
-
-【分析】
-- learning_goal_type 虽有"进阶学习"但描述过于模糊，推断依据不充分，保守省略
-- courses 为空列表，无法提供更多知识基础证据
-
-## 示例 3：信息很少的表单 → 仅推断 1 个维度
+## 示例 2：信息很少的表单 → 仅推断 1 个维度
 
 【输入】
 {"school": "", "school_level": null, "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "", "global_learning_goal": "", "programming_languages": [], "courses": []}
 
 【输出】
-{"dimensions_patch": {"knowledge_level": {"value": "初步推测为计算机专业入门阶段学生，知识基础尚在建立中", "evidence": ["major：计算机科学与技术", "grade：大一"]}}}
+{
+  "dimensions_patch": {
+    "knowledge_level": {
+      "value": "初步推测为计算机专业入门阶段学生，知识基础尚在建立中",
+      "evidence": ["major：计算机科学与技术", "grade：大一"]
+    }
+  }
+}
 
-【分析】
-- 其余字段均为空，不构成任何维度的推断依据
-- 严格遵循"无证据则省略"原则，宁可只输出 1 个维度也不强行凑数
+【分析】其余字段均为空，不构成任何维度依据，严格遵循"无证据则省略"。
 
 # TOOLS（可选）
 

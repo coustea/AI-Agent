@@ -50,20 +50,20 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .visualizer-meta h3 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .visualizer-meta p {
   margin: 2px 0 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .legend {
@@ -76,7 +76,7 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .legend-dot {
@@ -86,20 +86,20 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
 }
 
 .legend-dot.default {
-  background: #cbd5e1;
-  border: 1px solid #94a3b8;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .legend-dot.visited {
-  background: #ecfdf5;
-  border: 1px solid #10b981;
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
 }
 
 .chart-shell {
   min-height: 0;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   padding: 12px;
 }
 
@@ -119,25 +119,25 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
   align-items: center;
   gap: 6px;
   padding: 8px;
-  border-radius: 4px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .linear-node.visited {
-  border-color: #10b981;
-  background: #ecfdf5;
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
 }
 
 .node-value {
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .node-arrow {
   font-size: 14px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
   align-self: center;
   margin: 0 4px;
 }
@@ -160,21 +160,21 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
 }
 
 .pointer-pill.accent {
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-primary-border);
 }
 
 .pointer-pill.warning {
-  background: #fffbeb;
-  color: #b45309;
-  border: 1px solid #fde68a;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
 }
 
 .pointer-pill.success {
-  background: #ecfdf5;
-  color: #047857;
-  border: 1px solid #a7f3d0;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
 }
 
 .empty-state {
@@ -184,6 +184,6 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
 }
 </style>

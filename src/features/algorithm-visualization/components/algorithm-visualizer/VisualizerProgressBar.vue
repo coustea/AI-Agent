@@ -35,7 +35,7 @@ defineProps<{
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #ffffff;
+  background: var(--color-surface);
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
 }

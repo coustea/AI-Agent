@@ -46,7 +46,7 @@ function getCellTone(row: number, col: number) {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
-  background: #ffffff;
+  background: var(--color-surface);
 }
 
 .visualizer-meta {
@@ -55,20 +55,20 @@ function getCellTone(row: number, col: number) {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .visualizer-meta h3 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .visualizer-meta p {
   margin: 2px 0 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .legend {
@@ -81,7 +81,7 @@ function getCellTone(row: number, col: number) {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .legend-dot {
@@ -91,25 +91,25 @@ function getCellTone(row: number, col: number) {
 }
 
 .legend-dot.default {
-  background: #cbd5e1;
-  border: 1px solid #94a3b8;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .legend-dot.active {
-  background: #93c5fd;
-  border: 1px solid #2563eb;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary);
 }
 
 .legend-dot.success {
-  background: #ecfdf5;
-  border: 1px solid #10b981;
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
 }
 
 .chart-shell {
   min-height: 0;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   padding: 12px;
   overflow: auto;
 }
@@ -134,32 +134,33 @@ function getCellTone(row: number, col: number) {
   display: grid;
   place-items: center;
   min-height: 38px;
-  border-radius: 4px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #334155;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   font-weight: 600;
   font-size: 13px;
+  font-family: var(--font-mono);
 }
 
 .dp-cell.header {
   background: transparent;
   border-color: transparent;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 500;
 }
 
 .dp-cell.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #2563eb;
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
 }
 
 .dp-cell.success {
-  border-color: #10b981;
-  background: #ecfdf5;
-  color: #047857;
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .empty-state {
@@ -169,6 +170,7 @@ function getCellTone(row: number, col: number) {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
 }
 </style>

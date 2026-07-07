@@ -36,6 +36,7 @@ from app.infra.models import (
 from app.profile.service import get_profile_service
 from app.resource.path_helpers import generate_path_node_resource
 from app.resource.schemas import NodeInput
+from app.rag.tools import build_knowledge_tool
 from app.shared.research import ResearchAgent, ResearchTask
 
 # 从本地合并后的 schemas 导入
@@ -450,6 +451,17 @@ class NodeLearningAgent:
         profile_section = (
             f"学习者画像:\n{profile_markdown[:2000]}" if profile_markdown else ""
         )
+        # 本地知识库检索 —— 直接调用 RAG 工具，为教程提供权威教材依据
+        try:
+            kb_result = await build_knowledge_tool().handler(query=node_title)
+            kb_section = (
+                kb_result.get("text")
+                if isinstance(kb_result, dict) and kb_result.get("status") == "ok"
+                else "无"
+            )
+        except Exception as exc:
+            logger.warning("[NodeLearningAgent] 知识库检索失败: %s", exc)
+            kb_section = "无"
         prompt = prompts.get("path").render(
             "tutorial",
             path_goal=path_goal,
@@ -458,8 +470,8 @@ class NodeLearningAgent:
             tutorial_type=tutorial_type,
             weak_points_section=weak_points_section,
             profile_section=profile_section,
+            kb_section=kb_section,
         )
-        prompt = prompt
         response = await self.llm.ainvoke(prompt)
         content = response.content if hasattr(response, "content") else str(response)
         return {

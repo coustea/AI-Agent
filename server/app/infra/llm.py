@@ -437,32 +437,40 @@ class Llm:
 
         for tier in tiers:
             # ── 第1步：生成 1 次 ──
+            # _invoke_tier 内部已将解析失败转为 (None, raw)：有原文则可修复，
+            # 无原文（function_calling 返回 None / 空响应）则 raw 为空，直接降级到下一 tier。
             raw_output = ""
             error_msg = ""
             t0 = time.perf_counter()
+            result: BaseModel | None = None
             try:
                 result, raw_output = await self._invoke_tier(model, tier, schema, messages)
-                if not isinstance(result, schema):
-                    raise ValueError(f"expected {schema.__name__}, got {type(result).__name__}")
+            except Exception as exc:
+                # 仅网络/基础设施异常会到达这里（解析失败已在 _invoke_tier 内转为 (None, raw)）
+                error_msg = f"{type(exc).__name__}: {exc}"
+                raw_output = ""
+
+            if isinstance(result, schema):
                 logger.info(
                     "[LLM] ainvoke_json 成功: schema=%s tier=%s %dms",
                     schema.__name__, tier,
                     round((time.perf_counter() - t0) * 1000),
                 )
                 return result
-            except Exception as exc:
-                error_msg = f"{type(exc).__name__}: {exc}"
-                # 截断过长的校验错误，避免 Pydantic ValidationError 淹没终端
-                error_msg_short = error_msg[:300] + "…" if len(error_msg) > 300 else error_msg
-                raw_output = raw_output or str(exc)[:500]
-                errors.append(f"{tier}(generate)={error_msg_short}")
-                logger.warning(
-                    "[LLM] ainvoke_json 失败: schema=%s tier=%s error=%s",
-                    schema.__name__, tier, error_msg_short,
-                )
+
+            if not error_msg:
+                got = type(result).__name__ if result is not None else "NoneType"
+                error_msg = f"ValueError: expected {schema.__name__}, got {got}"
+            error_msg_short = error_msg[:300] + "…" if len(error_msg) > 300 else error_msg
+            errors.append(f"{tier}(generate)={error_msg_short}")
+            logger.warning(
+                "[LLM] ainvoke_json 失败: schema=%s tier=%s error=%s",
+                schema.__name__, tier, error_msg_short,
+            )
 
             # ── 第2步：携带原文 + 错误修正 1 次 ──
-            # 只有校验类错误才值得修正，认证/连接等基础错误直接降级
+            # 仅当存在真实模型原文（raw_output 非空）且为可修复的校验类错误时才修复；
+            # 无原文情形（function_calling/json_mode 返回 None、空响应、基础设施异常）直接降级。
             if raw_output and _is_repairable_error(error_msg):
                 t0 = time.perf_counter()
                 repair_content = ""
@@ -500,29 +508,37 @@ class Llm:
         """调用单个 tier 模式，返回 (result, raw_output)。
 
         result 为 None 表示该模式无法产出可解析的结果。
-        raw_output 为原始输出文本，用于 self-repair 修正。
+        raw_output 为原始输出文本（用于 self-repair）；空字符串表示模型
+        没有产出任何可修复内容（如 function_calling 返回 None、空响应），
+        此时上层应直接降级到下一 tier，而不是去 "修复" 空内容再误判为成功。
         """
         if tier == "function_calling":
             runnable = model.with_structured_output(schema, method="function_calling")
             result = await runnable.ainvoke(messages)
-            # function_calling 返回的直接是 Pydantic 实例，序列化为 raw
-            raw = result.model_dump_json() if isinstance(result, BaseModel) else str(result)
-            return result, raw
+            if not isinstance(result, BaseModel):
+                # 模型未调用工具/返回 None —— 无原文可修复，返回空 raw 触发降级
+                return None, ""
+            return result, result.model_dump_json()
 
         if tier == "json_mode":
             runnable = model.with_structured_output(schema, method="json_mode")
             result = await runnable.ainvoke(messages)
-            raw = result.model_dump_json() if isinstance(result, BaseModel) else str(result)
-            return result, raw
+            if not isinstance(result, BaseModel):
+                return None, ""
+            return result, result.model_dump_json()
 
         # tier == "prompt"
         injected = _inject_json_instruction(messages, schema)
         resp = await model.ainvoke(injected)
         raw = getattr(resp, "content", "") or ""
         if not raw.strip():
-            raise ValueError("empty response")
-        result = _parse_json(raw, schema)
-        return result, raw
+            return None, ""
+        try:
+            result = _parse_json(raw, schema)
+            return result, raw
+        except Exception:
+            # 解析失败但有真实原文 —— 交给上层 self-repair 修正
+            return None, raw
 
     async def vision(self, input_data: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
         if self._vision_model is None:

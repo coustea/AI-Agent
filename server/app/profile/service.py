@@ -83,24 +83,15 @@ def _user_base_info_dict(user: User) -> dict[str, Any]:
 
 
 def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
-    """对打分输出进行后置验证与清洗。"""
+    """对打分输出进行后置验证与清洗 — 仅处理 7 维度分数，overall_score 取均值。"""
     scores = {}
-    evidence = {}
     for key in ALL_DIMENSIONS:
-        items = [str(item).strip() for item in raw.dimension_evidence.get(key, []) if str(item).strip()]
-        evidence[key] = items
-
-        if not items:
-            scores[key] = 0
-            continue
-
         raw_score = raw.dimension_scores.get(key, 0)
         if not isinstance(raw_score, (int, float)):
             try:
                 raw_score = float(raw_score)
             except (ValueError, TypeError):
                 raw_score = 0.0
-
         scores[key] = max(0, min(100, round(float(raw_score))))
 
     overall = round(sum(scores.values()) / len(ALL_DIMENSIONS))
@@ -108,7 +99,6 @@ def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
     return {
         "overall_score": overall,
         "dimension_scores": scores,
-        "dimension_evidence": evidence,
         "scored_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -163,6 +153,7 @@ class ProfileService:
                 db.add(profile)
                 await db.flush()
 
+            await db.commit()
             return profile
 
         if db is None:
@@ -189,6 +180,7 @@ class ProfileService:
                 row.dimension_key: {
                     "value": row.value or "",
                     "evidence": row.evidence or [],
+                    "score": row.score if row.score is not None else 0,
                 }
                 for row in rows
             }
@@ -237,6 +229,11 @@ class ProfileService:
                 db.add(new_dim)
 
         await db.flush()
+        await db.commit()
+        logger.info(
+            "[ProfileService] 画像维度持久化完成: user_id=%s 写入维度数=%s keys=%s",
+            user_id, len(dimensions_patch), list(dimensions_patch.keys()),
+        )
 
     async def get_or_create_weekly_digest(
         self,
@@ -381,19 +378,30 @@ class ProfileService:
         payload: dict[str, Any],
         db: AsyncSession,
     ) -> dict[str, Any]:
-        """保存 onboarding 基本信息 — 直接写入 User 表。"""
-        logger.info("[ProfileService] onboarding 写入开始: user_id=%s school=%s major=%s",
-                     user_id, payload.get("school"), payload.get("major"))
+        """保存 onboarding 基本信息 — 直接写入 User 表（同步提交）。"""
+        logger.info(
+            "[ProfileService] onboarding 写入开始: user_id=%s payload=%s",
+            user_id,
+            {k: payload.get(k) for k in (
+                "school", "major", "grade", "daily_study_time",
+                "global_learning_goal", "programming_languages", "courses",
+            )},
+        )
 
         user = (await db.exec(select(User).where(User.id == user_id))).first()
         if not user:
+            logger.error("[ProfileService] onboarding 写入失败，用户不存在: user_id=%s", user_id)
             raise ValueError(f"User {user_id} not found")
 
-        # 查询 school_level
+        # 查询 school_level（根据学校名反查院校层次）
         school_name = payload.get("school")
         if school_name:
             school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
             user.school_level = school.level if school and school.level else None
+            logger.info(
+                "[ProfileService] onboarding school_level 解析: user_id=%s school=%s school_level=%s",
+                user_id, school_name, user.school_level,
+            )
 
         # 写入 base_info 字段到 User 表
         if payload.get("school") is not None:
@@ -411,12 +419,34 @@ class ProfileService:
         if payload.get("courses") is not None:
             user.courses = payload["courses"]
 
-        # 确保 is_first_login = True
+        # 标记 onboarding 已完成
         user.is_first_login = True
         user.updated_at = datetime.now(timezone.utc)
 
         db.add(user)
         await db.flush()
+        await db.commit()
+        await db.refresh(user)
+
+        logger.info(
+            "[ProfileService] onboarding 基础信息已提交: user_id=%s school=%s major=%s grade=%s "
+            "daily_study_time=%s goal=%s courses_count=%s languages_count=%s is_first_login=%s",
+            user.id, user.school, user.major, user.grade,
+            user.daily_study_time, user.global_learning_goal,
+            len(user.courses or []), len(user.programming_languages or []), user.is_first_login,
+        )
+
+        # 提交后回读校验，确认真正落库（便于排查“没存进数据库”的问题）
+        reloaded = (await db.exec(select(User).where(User.id == user_id))).first()
+        if reloaded is None:
+            logger.error("[ProfileService] onboarding 落库校验失败，回读为空: user_id=%s", user_id)
+        else:
+            logger.info(
+                "[ProfileService] onboarding 落库校验通过: user_id=%s school=%s major=%s grade=%s "
+                "courses=%s programming_languages=%s is_first_login=%s",
+                user_id, reloaded.school, reloaded.major, reloaded.grade,
+                reloaded.courses, reloaded.programming_languages, reloaded.is_first_login,
+            )
 
         # 确保画像记录存在
         await self.get_profile(user_id=user_id, db=db)
@@ -427,18 +457,26 @@ class ProfileService:
             "major": user.major,
             "updated_at": user.updated_at,
         }
-        logger.info("[ProfileService] onboarding 写入完成: user_id=%s updated_at=%s",
-                     user.id, user.updated_at)
+        logger.info(
+            "[ProfileService] onboarding 写入完成: user_id=%s updated_at=%s",
+            user.id, user.updated_at,
+        )
         return result
 
     async def infer_profile_from_onboarding(self, *, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        """从 onboarding 信息推理 7 维度画像并评分。"""
+        """从 onboarding 信息推理 7 维度画像并评分（后台异步任务）。"""
         try:
             logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
 
             async with session_scope() as db:
                 user = (await db.exec(select(User).where(User.id == user_id))).first()
                 base_info = _user_base_info_dict(user) if user else payload.copy()
+                logger.info(
+                    "[ProfileService] onboarding 推理输入: user_id=%s school=%s major=%s "
+                    "courses_count=%s languages_count=%s",
+                    user_id, base_info.get("school"), base_info.get("major"),
+                    len(base_info.get("courses", [])), len(base_info.get("programming_languages", [])),
+                )
 
                 logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
                 prompt = prompts.get("profile").render(
@@ -459,6 +497,10 @@ class ProfileService:
                     user_id=user_id,
                     dimensions_patch=resp.dimensions_patch,
                     db=db,
+                )
+                logger.info(
+                    "[ProfileService] onboarding 画像维度已落库: user_id=%s 维度数=%s keys=%s",
+                    user_id, len(resp.dimensions_patch), list(resp.dimensions_patch.keys()),
                 )
 
             score_result = await self.score_profile(user_id=user_id)
@@ -505,7 +547,7 @@ class ProfileService:
 
             prompt = prompts.get("profile").render(
                 "global_update",
-                dimensions=json.dumps(dimensions, ensure_ascii=False),
+                profile_json=json.dumps(dimensions, ensure_ascii=False),
                 recent_dialogue=recent_dialogue,
                 long_term_memory=long_term_memory,
             )
@@ -540,23 +582,27 @@ class ProfileService:
         }
 
     async def score_profile(self, *, user_id: int) -> dict[str, Any]:
-        """根据画像维度和本周学习摘要重新计算评分。"""
+        """仅依据文字画像（base_info + dimensions）对 7 维度重新评分。"""
         logger.info("[ProfileService] 全局评分刷新开始: user_id=%s", user_id)
         async with session_scope() as db:
             profile = await self.get_profile(user_id=user_id, db=db)
             dimensions = await self.get_dimensions(user_id=user_id, db=db)
+            user = (await db.exec(select(User).where(User.id == user_id))).first()
+            base_info = _user_base_info_dict(user) if user else {}
 
-            digest = await self.get_or_create_weekly_digest(user_id=user_id, db=db)
-            weekly_digest = digest.digest_markdown
             logger.info(
-                "[ProfileService] 全局评分: week=%s digest长度=%s",
-                _format_week_label(digest.week_start, digest.week_end), len(weekly_digest),
+                "[ProfileService] 全局评分: dimensions数=%s",
+                len(dimensions),
             )
 
+            # score 模板仅依据文字画像（base_info + dimensions）打分
+            profile_text = json.dumps(
+                {"base_info": base_info, "dimensions": dimensions},
+                ensure_ascii=False,
+            )
             prompt = prompts.get("profile").render(
                 "score",
-                dimensions=json.dumps(dimensions, ensure_ascii=False),
-                weekly_digest=weekly_digest,
+                profile_text=profile_text,
             )
 
             resp = await self.llm.ainvoke_json(
@@ -565,8 +611,8 @@ class ProfileService:
             )
 
             logger.info(
-                "[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s dimension_evidence_keys=%s",
-                resp.dimension_scores, list(resp.dimension_evidence.keys()),
+                "[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s",
+                resp.dimension_scores,
             )
 
             scores = sanitize_score_output(resp)

@@ -24,6 +24,22 @@
           :generating="generating"
         />
 
+        <!-- 播放器控制栏 -->
+        <VisualizerControlBar
+          :events="events"
+          :playing="playback.playing.value"
+          :current-step-index="currentStepIndex"
+          :speed="playback.speed.value"
+          :finished="playback.finished.value"
+          @play="playback.play"
+          @pause="playback.pause"
+          @next="playback.next"
+          @prev="playback.prev"
+          @reset="playback.reset"
+          @speed-change="playback.setSpeed"
+          @seek="playback.seek"
+        />
+
         <!-- 极简进度条 -->
         <VisualizerProgressBar
           :current="currentStepIndex + 1"
@@ -51,6 +67,7 @@
 import { computed, onMounted } from 'vue'
 import VisualizerCanvas from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerCanvas.vue'
 import VisualizerProgressBar from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerProgressBar.vue'
+import VisualizerControlBar from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerControlBar.vue'
 import CodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/CodeInputPanel.vue'
 import AlgorithmSelectorBar from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmSelectorBar.vue'
 import { useTracePlayer } from '@/features/algorithm-visualization/composables/useTracePlayer'
@@ -82,6 +99,7 @@ const resolver = useVisualizerResolver(events)
 useVisualizerTimeline({
   playing: playback.playing,
   currentEvent: playback.currentEvent,
+  speed: playback.speed,
   next: playback.next,
   pause: playback.pause,
 })

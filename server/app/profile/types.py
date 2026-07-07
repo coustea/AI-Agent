@@ -94,7 +94,6 @@ default_profile_json: dict[str, Any] = {
 default_score_json: dict[str, Any] = {
     "overall_score": 0,
     "dimension_scores": {key: 0 for key in ALL_DIMENSIONS},
-    "dimension_evidence": {key: [] for key in ALL_DIMENSIONS},
     "scored_at": "",
 }
 
@@ -119,7 +118,5 @@ class GlobalTutoringInferenceOutput(BaseModel):
 
 
 class ProfileScoreOutput(BaseModel):
-    """画像评分推理输出 — 基于文字画像进行评分。"""
-    overall_score: int = 0
+    """画像评分推理输出 — 仅输出 7 维度分数，overall_score 由后端按均值计算。"""
     dimension_scores: dict[str, int] = Field(default_factory=dict)
-    dimension_evidence: dict[str, list[str]] = Field(default_factory=dict)

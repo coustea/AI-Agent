@@ -174,20 +174,20 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .visualizer-meta h3 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .visualizer-meta p {
   margin: 2px 0 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .legend {
@@ -200,7 +200,7 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .legend-dot {
@@ -210,22 +210,22 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
 }
 
 .legend-dot.compare {
-  background: #3b82f6;
+  background: var(--color-primary);
 }
 
 .legend-dot.swap {
-  background: #f59e0b;
+  background: var(--color-warning);
 }
 
 .legend-dot.sorted {
-  background: #10b981;
+  background: var(--color-success);
 }
 
 .chart-shell {
   min-height: 0;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   padding: 12px;
   display: flex;
   align-items: center;
@@ -239,31 +239,31 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
 }
 
 :deep(.bar-rect) {
-  fill: #cbd5e1;
+  fill: var(--color-border-hover);
   transition: fill 0.15s ease, opacity 0.15s ease;
 }
 
 :deep(.bar-value) {
-  fill: #334155;
+  fill: var(--color-text-strong);
   font-size: 14px;
   font-weight: 600;
 }
 
 :deep(.bar-index) {
-  fill: #64748b;
+  fill: var(--color-text-muted);
   font-size: 11px;
   font-weight: 500;
 }
 
 :deep(.bar-group[data-tone='compare'] .bar-rect) {
-  fill: #3b82f6;
+  fill: var(--color-primary);
 }
 
 :deep(.bar-group[data-tone='swap'] .bar-rect) {
-  fill: #f59e0b;
+  fill: var(--color-warning);
 }
 
 :deep(.bar-group[data-tone='sorted'] .bar-rect) {
-  fill: #10b981;
+  fill: var(--color-success);
 }
 </style>

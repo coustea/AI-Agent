@@ -127,19 +127,20 @@ function handleSeek(event: Event) {
   grid-template-columns: auto auto auto auto minmax(200px, 1fr);
   gap: 8px;
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
+  background: var(--color-surface);
+  border: none;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   box-shadow: none;
 }
 
 .control-btn {
   height: 28px;
   min-width: 28px;
-  border-radius: 4px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #334155;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -148,10 +149,12 @@ function handleSeek(event: Event) {
   padding: 0 10px;
   font-size: 12px;
   font-weight: 500;
+  transition: var(--btn-transition);
 }
 
 .control-btn:hover:not(:disabled) {
-  background: #f8fafc;
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
 }
 
 .control-btn:disabled {
@@ -161,13 +164,13 @@ function handleSeek(event: Event) {
 
 .control-btn.primary {
   min-width: 80px;
-  background: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
+  background: var(--color-primary);
+  color: var(--color-text-strong);
+  border-color: rgba(32, 95, 103, 0.12);
 }
 
 .control-btn.primary:hover:not(:disabled) {
-  background: #1e293b;
+  background: var(--color-primary-hover);
 }
 
 .btn-icon {
@@ -192,8 +195,8 @@ function handleSeek(event: Event) {
 .step-count {
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
-  font-family: monospace;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
 }
 
 .speed-group {
@@ -201,21 +204,22 @@ function handleSeek(event: Event) {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #64748b;
+  color: var(--color-text-muted);
 }
 
 .speed-select {
   height: 26px;
   padding: 0 4px;
-  border-radius: 4px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 11px;
 }
 
 .timeline-input {
   width: 100%;
-  accent-color: #2563eb;
+  accent-color: var(--color-primary);
   cursor: pointer;
 }
 

@@ -754,7 +754,7 @@ const {
   enableAudio: enableAvatarAudio,
   setPlayerContainer,
 } = useDigitalHuman({
-  onStatus: (status) => {
+  onStatus: (status: any) => {
     digitalHumanBackendStatus.value = status.message || ''
     // 将 agent_status 数据应用到当前 AI 消息的 agentActivities，
     // 使数字人模式也能显示和文本模式一样的思考过程卡片
