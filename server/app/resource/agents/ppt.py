@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from pathlib import Path
 
@@ -161,6 +162,12 @@ class PPTAgent(BaseResourceAgent):
         output_dir: Path,
         html_url: str,
     ) -> AgentResult:
+        logger.info(
+            "Agent[%s] 开始生成: learning_need=%s",
+            self.agent_id, request.learning_need[:50],
+        )
+        started = time.perf_counter()
+
         async def progress(message: str, percent: int) -> None:
             await self.emitter.send(self.agent_id, "running", message, percent)
 
@@ -185,6 +192,12 @@ class PPTAgent(BaseResourceAgent):
 
         title = artifact.plan.title
         path = artifact.path
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: slides=%d style=%s size_bytes=%d elapsed_ms=%d",
+            self.agent_id, artifact.slide_count, artifact.template_name,
+            path.stat().st_size, elapsed_ms,
+        )
         return AgentResult(
             success=True,
             title=f"{title} - 教学课件",

@@ -92,6 +92,10 @@ async def execute_resource_agent(
             data={"phase": "generation"},
         )
     )
+    logger.info(
+        "Agent[%s] 开始执行: resource_id=%s timeout=%ds",
+        agent_id, resource_id, int(timeout_seconds),
+    )
 
     # 执行 Agent（带超时）
     try:
@@ -170,6 +174,10 @@ async def execute_resource_agent(
             },
         )
     )
+    logger.info(
+        "Agent[%s] 执行成功: resource_id=%s title=%s artifact_id=%s elapsed_ms=%d",
+        agent_id, resource_id, result.title[:80], str(item.id), elapsed_ms,
+    )
 
     return {"results": {agent_id: True}}
 
@@ -186,7 +194,7 @@ async def _record_failure(
     """记录失败并返回失败结果字典供有向图状态合并。"""
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     error_type = type(exception).__name__
-    error_message = str(exception)[:500]
+    error_message = str(exception)[:300]
 
     # 输出失败日志
     logger.error(

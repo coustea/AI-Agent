@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from typing import Any
 
@@ -146,6 +147,12 @@ class VideoAgent(BaseResourceAgent):
         return await self._generate(request)
 
     async def _generate(self, request: VideoRequest) -> AgentResult:
+        logger.info(
+            "Agent[%s] 开始生成: learning_need=%s",
+            self.agent_id, request.topic[:50],
+        )
+        started = time.perf_counter()
+
         await self.emitter.send(
             self.agent_id,
             "running",
@@ -208,6 +215,12 @@ class VideoAgent(BaseResourceAgent):
             "completed",
             "讲解视频已完成",
             100,
+        )
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: scene_count=%d duration_ms=%d size_bytes=%d elapsed_ms=%d",
+            self.agent_id, len(artifact.plan.scenes), artifact.duration_ms,
+            artifact.size_bytes, elapsed_ms,
         )
         return AgentResult(
             success=True,

@@ -1,4 +1,8 @@
-"""Subprocess execution with real-time logging to both python logging and a file."""
+"""Subprocess execution with real-time logging to both python logging and a file.
+
+Stdout/stderr lines are truncated to 500 chars to prevent log flooding
+(e.g. Remotion render errors, Pydantic validation dumps).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,8 @@ from pathlib import Path
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+
+_MAX_LINE_LENGTH = 500
 
 
 async def run_process_with_logging(
@@ -19,6 +25,7 @@ async def run_process_with_logging(
     """Run a subprocess, streaming its stdout and stderr in real-time.
 
     Logs stdout/stderr lines to Python logging (logger_name).
+    Lines exceeding _MAX_LINE_LENGTH are truncated with "…(truncated)" suffix.
     Returns returncode, stdout string, and stderr string.
     """
     proc_logger = get_logger(logger_name)
@@ -49,12 +56,16 @@ async def run_process_with_logging(
                 break
             decoded = line.decode("utf-8", errors="replace")
             decoded_strip = decoded.rstrip("\r\n")
+            # 截断过长行，避免 ValidationError 等大段输出淹没日志
+            truncated = decoded_strip
+            if len(truncated) > _MAX_LINE_LENGTH:
+                truncated = truncated[:_MAX_LINE_LENGTH] + "…(truncated)"
             if is_stderr:
                 stderr_lines.append(decoded)
-                proc_logger.warning(f"[Render Stderr] {decoded_strip}")
+                proc_logger.warning(f"[Render Stderr] {truncated}")
             else:
                 stdout_lines.append(decoded)
-                proc_logger.info(f"[Render Stdout] {decoded_strip}")
+                proc_logger.info(f"[Render Stdout] {truncated}")
 
     try:
         await asyncio.wait_for(

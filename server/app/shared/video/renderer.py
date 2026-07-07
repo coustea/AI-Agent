@@ -198,8 +198,12 @@ class RemotionVideoRenderer:
         output_dir.mkdir(parents=True, exist_ok=True)
         job_dir = output_dir / f".render-{uuid.uuid4().hex}"
         job_dir.mkdir(parents=True)
+
+        # Remotion render.ts 使用 build/cached_bundle/ 作为 serve 根目录
+        # （缓存复用模式），音频资源必须放到 bundle 目录下才能被 serve 到。
+        bundle_dir = self.remotion_dir / "build" / "cached_bundle"
         public_asset_dir = (
-            self.remotion_dir / "public" / "render-assets" / job_dir.name
+            bundle_dir / "public" / "render-assets" / job_dir.name
         )
         public_asset_dir.mkdir(parents=True)
         plan_path = job_dir / "video-plan.json"
@@ -232,7 +236,7 @@ class RemotionVideoRenderer:
         )
 
         import platform
-        npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
+        npx_cmd = shutil.which("npx") or ("npx.cmd" if platform.system() == "Windows" else "npx")
 
         # 运行时探测 GPU 并选择最优 GL 后端（除非显式指定）
         # 与 cartoon 渲染器保持一致的 GPU 检测逻辑
@@ -261,8 +265,12 @@ class RemotionVideoRenderer:
                 logger_name="app.shared.video.render",
             )
             if code != 0:
+                # 截断 stderr 避免异常消息过长
+                err_summary = stderr_text[-800:].strip()
+                if len(stderr_text) > 800:
+                    err_summary = "…" + err_summary
                 raise VideoRenderError(
-                    f"Remotion render failed: {stderr_text[-1200:].strip()}"
+                    f"Remotion render failed: {err_summary}"
                 )
             if not temporary_output.is_file() or temporary_output.stat().st_size == 0:
                 raise VideoRenderError("Remotion did not produce an MP4 file")

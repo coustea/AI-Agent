@@ -22,6 +22,7 @@ from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.logging import get_module_logger
+from app.resource.events import record_resource_generated_event
 from app.infra.models import GeneratedResource, GeneratedResourceAgentRun, GeneratedResourceItem as ItemModel
 from app.resource.schemas import (
     AgentResult,
@@ -308,6 +309,20 @@ class ResourceService:
 
         resource.status = status
         await self._commit(resource)
+        try:
+            await record_resource_generated_event(
+                db=self.session,
+                user_id=user_id,
+                resource_id=resource_id,
+                status=status,
+                topic=resource.topic,
+                agent_types=list(successful),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to record resource_generated event: resource_id=%s",
+                resource_id,
+            )
         return status
 
     async def update_resource_status(

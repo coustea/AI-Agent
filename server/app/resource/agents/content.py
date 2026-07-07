@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -53,27 +55,43 @@ class ContentAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
-        """内部方法 — 调用 LLM 生成课程内容 Markdown。
-
-        agent_config 已由 build_resource_context / build_node_context 统一注入，
-        此处仅提取运行时需要的参数（如 search 关键词）。
-        """
+        """内部方法 — 调用 LLM 生成课程内容 Markdown。"""
+        logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
         input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
+        started = time.perf_counter()
 
         # 执行搜索以获取最新/更全面的参考信息以生成更高质量的文档
         await self.emitter.send(self.agent_id, "running", "正在搜索相关课程讲解素材...", 30)
         search_query = f"{title_prefix} 教程 概念"
         search_report = await self.search(search_query)
         search_text = self.format_search_result(search_report)
+        search_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
+            self.agent_id, search_query, len(search_report.sources), search_elapsed,
+        )
         if search_text:
             input_text = f"## 搜索到的参考背景信息\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建课程讲解提示词...", 45)
         prompt = prompts.get("resource").get("content")
         await self.emitter.send(self.agent_id, "running", "正在精解讲义内容...", 60)
-        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}")
+        full_prompt = f"{prompt}\n\n{input_text}"
+        logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
+        llm_started = time.perf_counter()
+        response = await self.llm.ainvoke(full_prompt)
         content = response.content if hasattr(response, "content") else str(response)
+        llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
+        logger.info(
+            "Agent[%s] LLM 完成: output_len=%d elapsed_ms=%d",
+            self.agent_id, len(content), llm_elapsed,
+        )
 
+        total_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: char_count=%d elapsed_ms=%d → %s",
+            self.agent_id, len(content), total_elapsed, content[:200].replace("\n", " "),
+        )
         return AgentResult(
             success=True,
             content=content,

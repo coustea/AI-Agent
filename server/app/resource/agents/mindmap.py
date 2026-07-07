@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -53,11 +55,10 @@ class MindmapAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
-        """内部方法 — 调用 LLM 生成 Markmap 思维导图 Markdown。
+        """内部方法 — 调用 LLM 生成 Markmap 思维导图 Markdown。"""
+        logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
+        started = time.perf_counter()
 
-        agent_config 已由 build_resource_context / build_node_context 统一注入，
-        此处仅提取运行时需要的参数。
-        """
         input_text += (
             "\n\n请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题 and 列表文本。"
@@ -68,14 +69,27 @@ class MindmapAgent(BaseResourceAgent):
         search_query = f"{title_prefix} 知识图谱 知识链路"
         search_report = await self.search(search_query)
         search_text = self.format_search_result(search_report)
+        search_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
+            self.agent_id, search_query, len(search_report.sources), search_elapsed,
+        )
         if search_text:
             input_text = f"## 搜索到的相关知识大纲参考\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)
         prompt = prompts.get("resource").get("mindmap")
         await self.emitter.send(self.agent_id, "running", "正在生成知识图谱结构...", 60)
-        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}")
+        full_prompt = f"{prompt}\n\n{input_text}"
+        logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
+        llm_started = time.perf_counter()
+        response = await self.llm.ainvoke(full_prompt)
         content = response.content if hasattr(response, "content") else str(response)
+        llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
+        logger.info(
+            "Agent[%s] LLM 完成: output_len=%d elapsed_ms=%d",
+            self.agent_id, len(content), llm_elapsed,
+        )
 
         branches: list[str] = []
         weak_points: list[str] = []
@@ -88,6 +102,12 @@ class MindmapAgent(BaseResourceAgent):
                 if any(token in item for token in ("易错", "误区", "难点", "薄弱")):
                     weak_points.append(item)
 
+        total_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: branches=%d weak_points=%d elapsed_ms=%d → %s",
+            self.agent_id, len(branches), len(weak_points), total_elapsed,
+            content[:200].replace("\n", " "),
+        )
         return AgentResult(
             success=True,
             content=content,

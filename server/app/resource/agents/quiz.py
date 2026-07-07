@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -74,6 +75,8 @@ class QuizAgent(BaseResourceAgent):
         """
         question_count = config.get("question_count", 5) if config else 5
         emphasis = config.get("emphasis", "foundations")
+        logger.info("Agent[%s] 开始生成: learning_need=%s question_count=%d", self.agent_id, title_prefix, question_count)
+        started = time.perf_counter()
         blueprint = build_quiz_blueprint(
             question_count=question_count,
             question_types=config.get("question_types"),
@@ -91,6 +94,11 @@ class QuizAgent(BaseResourceAgent):
         search_query = f"{title_prefix} 习题 题型"
         search_report = await self.search(search_query)
         search_text = self.format_search_result(search_report)
+        search_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
+            self.agent_id, search_query, len(search_report.sources), search_elapsed,
+        )
         if search_text:
             input_text = f"## 搜索到的出题参考背景\n{search_text}\n\n" + input_text
 
@@ -104,20 +112,30 @@ class QuizAgent(BaseResourceAgent):
 
         await self.emitter.send(self.agent_id, "running", "正在构建习题集提示词...", 45)
 
-        logger.info("Agent[quiz] 步骤: 调用 LLM 生成习题集, input_len=%d", len(full_prompt))
+        logger.info("Agent[%s] LLM 调用: input_len=%d blueprint=%d", self.agent_id, len(full_prompt), len(blueprint))
+        llm_started = time.perf_counter()
         await self.emitter.send(self.agent_id, "running", "正在生成测试题与解析...", 60)
         payload = await self._generate_payload(full_prompt, blueprint)
         questions = payload.questions
+        llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
 
         content = payload.model_dump_json(indent=2)
 
-        logger.info("Agent[quiz] 步骤: 习题解析完成, questions=%d", len(questions))
+        logger.info(
+            "Agent[%s] LLM 完成: questions=%d elapsed_ms=%d",
+            self.agent_id, len(questions), llm_elapsed,
+        )
         difficulty_dist: dict[str, int] = {}
         for question in questions:
             difficulty_dist[question.difficulty] = (
                 difficulty_dist.get(question.difficulty, 0) + 1
             )
 
+        total_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: total_count=%d difficulty=%s elapsed_ms=%d",
+            self.agent_id, len(questions), difficulty_dist, total_elapsed,
+        )
         return AgentResult(
             success=True,
             content=content,

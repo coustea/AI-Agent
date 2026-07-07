@@ -81,7 +81,7 @@ WORKPLACE_DIR_NAME = get("paths.workplace", "workplace")
 # 日志目录名称
 LOGS_DIR_NAME = get("paths.logs", "logs")
 # 知识库数据目录名称
-KB_DIR_NAME = get("paths.knowledge", "data")
+KB_DIR_NAME = get("paths.knowledge", "app/rag/data/index")
 
 # ============ 路径对象 ============
 # 项目根目录：server/
@@ -90,7 +90,7 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
 # 日志输出目录：server/logs/
 LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
-# 知识库目录：server/data/（KB_DIR 是别名，供其他模块引用）
+# 知识库目录：server/app/rag/data/index/（KB_DIR 是别名，供其他模块引用）
 KNOWLEDGE_BASE_DIR = SERVER_DIR / KB_DIR_NAME
 KB_DIR = KNOWLEDGE_BASE_DIR
 

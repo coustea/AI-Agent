@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.shared.video.schemas import VideoMaterialDigest, VideoRequest
+
+logger = get_logger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "material.md"
 
@@ -26,4 +30,12 @@ class VideoMaterialAgent:
                 indent=2,
             ),
         )
-        return await self.llm.ainvoke_json(VideoMaterialDigest, prompt)
+        logger.info("Video 素材 LLM 调用: topic=%s input_len=%d", request.topic[:50], len(prompt))
+        started = time.perf_counter()
+        digest = await self.llm.ainvoke_json(VideoMaterialDigest, prompt)
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Video 素材 LLM 完成: core_concepts=%d facts=%d elapsed_ms=%d",
+            len(digest.core_concepts), len(digest.facts), elapsed,
+        )
+        return digest

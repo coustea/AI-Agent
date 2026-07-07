@@ -132,9 +132,7 @@ class VisualElement(StrictModel):
     detail: str = Field(default="", max_length=1000)
     items: list[str] = Field(default_factory=list, max_length=30)
     value: str = Field(default="", max_length=1000)
-    # 绝对定位坐标（用于 tree/graph/state_diagram 等需要精确定位的布局）
-    x: int | None = None
-    y: int | None = None
+    # 坐标由编译器自动计算，LLM 不再提供 x/y
 
     @field_validator("id", mode="before")
     @classmethod

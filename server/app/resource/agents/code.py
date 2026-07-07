@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
@@ -60,15 +62,17 @@ class CodeAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict,
     ) -> AgentResult:
-        """内部方法 — 调用 LLM 生成教学代码示例。
-
-        agent_config 已由 build_resource_context / build_node_context 统一注入，
-        此处仅提取运行时需要的参数（如 search 关键词、metrics 统计）。
-        """
+        """内部方法 — 调用 LLM 生成教学代码示例。"""
         language = config.get("programming_language") or "python"
         output_style = config.get("output_style") or "tutorial"
         focus = config.get("focus") or "syntax"
         include_tests = config.get("include_tests", False)
+
+        logger.info(
+            "Agent[%s] 开始生成: learning_need=%s language=%s style=%s",
+            self.agent_id, title_prefix, language, output_style,
+        )
+        started = time.perf_counter()
 
         input_text += "\n\n请生成教学代码示例，包含代码注释和说明，输出为 Markdown 格式（代码块内为代码）。"
         if output_style == "tutorial":
@@ -86,14 +90,33 @@ class CodeAgent(BaseResourceAgent):
         search_query = f"{language} {title_prefix} 示例代码 best practice"
         search_report = await self.search(search_query)
         search_text = self.format_search_result(search_report)
+        search_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
+            self.agent_id, search_query, len(search_report.sources), search_elapsed,
+        )
         if search_text:
             input_text = f"## 搜索到的参考代码示例背景\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建代码示例提示词...", 45)
         prompt = prompts.get("resource").get("code")
         await self.emitter.send(self.agent_id, "running", "正在编写教学示例代码...", 60)
-        response = await self.llm.ainvoke(f"{prompt}\n\n{input_text}")
+        full_prompt = f"{prompt}\n\n{input_text}"
+        logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
+        llm_started = time.perf_counter()
+        response = await self.llm.ainvoke(full_prompt)
         content = response.content if hasattr(response, "content") else str(response)
+        llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
+        logger.info(
+            "Agent[%s] LLM 完成: output_len=%d elapsed_ms=%d",
+            self.agent_id, len(content), llm_elapsed,
+        )
+
+        total_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: language=%s elapsed_ms=%d → %s",
+            self.agent_id, language, total_elapsed, content[:200].replace("\n", " "),
+        )
 
         return AgentResult(
             success=True,

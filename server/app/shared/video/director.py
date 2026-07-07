@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.shared.video.schemas import (
     VideoMaterialDigest,
     VideoOutline,
@@ -12,6 +14,8 @@ from app.shared.video.schemas import (
     VideoStyleDecision,
     VideoStyleId,
 )
+
+logger = get_logger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "director.md"
 
@@ -102,5 +106,12 @@ class VideoDirectorAgent:
             scene_count=request.scene_count,
             narrative_focus=request.narrative_focus or "concept",
         )
+        logger.info("Video 导演 LLM 调用: scene_count=%d style=%s", request.scene_count, style.id)
+        started = time.perf_counter()
         outline = await self.llm.ainvoke_json(VideoOutline, prompt)
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Video 导演 LLM 完成: scenes=%d narrative=%s elapsed_ms=%d",
+            len(outline.scenes), outline.narrative, elapsed,
+        )
         return outline.model_copy(update={"style": style})

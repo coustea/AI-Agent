@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import re
-from html.parser import HTMLParser
 import json
+import re
+import shutil
+from html.parser import HTMLParser
 from pathlib import Path
 
+from app.infra.logging import get_logger
 from app.shared.cartoon.schemas import StaticAudit
+
+logger = get_logger(__name__)
 
 
 class _CompositionParser(HTMLParser):
@@ -183,6 +187,7 @@ class CartoonCliValidator:
 
     async def validate(self, output_dir: Path) -> StaticAudit:
         """Run the hyperframes lint command on the generated index.html file."""
+        logger.info("Cartoon 校验开始")
         html_file = output_dir / "index.html"
         if not html_file.is_file():
             return StaticAudit(
@@ -203,16 +208,21 @@ class CartoonCliValidator:
                 scene_count=scene_count,
             )
 
-        import platform
-        npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
+        npx_path = shutil.which("npx")
+        if not npx_path:
+            return StaticAudit(
+                passed=False,
+                problems=["npx 未安装或不在 PATH 中，无法运行 HyperFrames CLI"],
+                scene_count=scene_count,
+            )
+
         command = [
-            npx_cmd,
+            npx_path,
             "hyperframes",
             "lint",
             ".",
             "--json",
         ]
-
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
             return_code, stdout_str, stderr_str = await run_process_with_logging(
@@ -224,7 +234,7 @@ class CartoonCliValidator:
         except OSError as exc:
             return StaticAudit(
                 passed=False,
-                problems=[f"无法启动 HyperFrames CLI: {exc}"],
+                problems=[f"无法启动 HyperFrames CLI (npx={npx_path}): {exc}"],
                 scene_count=scene_count,
             )
         except asyncio.TimeoutError:
@@ -262,8 +272,13 @@ class CartoonCliValidator:
             if not problems:
                 problems.append(f"HyperFrames lint failed with exit code {return_code}")
 
-        return StaticAudit(
+        result = StaticAudit(
             passed=(return_code == 0),
             problems=problems,
             scene_count=scene_count,
         )
+        logger.info(
+            "Cartoon 校验完成: passed=%s scene_count=%d problems=%d",
+            result.passed, result.scene_count, len(result.problems),
+        )
+        return result

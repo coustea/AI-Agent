@@ -108,11 +108,26 @@ class PPTGenerator:
             markdown,
             title="",  # 由 Markdown 内 # 标题指定
             density=DENSITY_MODES[request.preferences.density],
-            template_family=request.preferences.template
-            if request.preferences.template != "auto"
-            else "auto",
+            template_family=self._resolve_template_family(
+                request.preferences.template
+            ),
         )
         return plan, markdown
+
+    def _resolve_template_family(self, template_id: str) -> str:
+        """从模板 ID 解析 family，用于 compile_ppt_plan。
+
+        PPTPreferences.template 存的是用户选择的模板 ID（如
+        "instructional-editorial"），而 compile_ppt_plan 需要的是
+        TemplateFamily（"auto" / "editorial" / "technical"）。
+        """
+        if template_id == "auto":
+            return "auto"
+        try:
+            template = self._templates.get(template_id)
+        except KeyError:
+            return "auto"
+        return template.manifest.family
 
     @classmethod
     def available_templates(cls) -> list[dict[str, object]]:

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 from app.shared.video.schemas import (
     SceneContract,
     SceneDraft,
@@ -14,6 +16,8 @@ from app.shared.video.schemas import (
     VideoStyleDecision,
 )
 from app.shared.video.visual_contracts import get_visual_contract
+
+logger = get_logger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "scene.md"
 
@@ -44,7 +48,17 @@ class SceneWriterAgent:
                 ensure_ascii=False,
             ),
         )
+        logger.info(
+            "Video 场景编写 LLM 调用: index=%d role=%s visual_type=%s",
+            contract.index, contract.role, contract.visual_type,
+        )
+        started = time.perf_counter()
         draft = await self.llm.ainvoke_json(SceneDraft, prompt)
+        elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Video 场景编写 LLM 完成: index=%d narration_len=%d visual_beats=%d elapsed_ms=%d",
+            contract.index, len(draft.narration), len(draft.visual_beats), elapsed,
+        )
         return draft.model_copy(
             update={
                 "scene_id": contract.scene_id,

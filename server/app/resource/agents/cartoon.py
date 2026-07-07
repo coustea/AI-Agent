@@ -8,6 +8,7 @@ can produce animated explanation videos with TTS narration.
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from typing import Any
 
@@ -177,6 +178,13 @@ class CartoonAgent(BaseResourceAgent):
         *,
         output_dir: Any,
     ) -> AgentResult:
+        logger.info(
+            "Agent[%s] 开始生成: learning_need=%s style=%s depth=%s pace=%s",
+            self.agent_id, request.learning_need[:50],
+            request.style, request.depth, request.pace,
+        )
+        started = time.perf_counter()
+
         pipeline = CartoonPipeline(renderer=CartoonVideoRenderer())
 
         async def progress(message: str, percent: int) -> None:
@@ -231,6 +239,13 @@ class CartoonAgent(BaseResourceAgent):
             artifact.video_path.stat().st_size
             if artifact.video_path.exists()
             else 0
+        )
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: scene_count=%d duration=%.1f video_size=%d elapsed_ms=%d",
+            self.agent_id, artifact.scene_count,
+            artifact.brief.total_duration, video_size, elapsed_ms,
         )
 
         return AgentResult(

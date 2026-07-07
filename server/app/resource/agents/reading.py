@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from pydantic import BaseModel, Field
 
@@ -105,13 +106,16 @@ class ReadingAgent(BaseResourceAgent):
         min_items = max(2, max_items // 2)  # 至少生成 max_items 的一半
         language_preference = config.get("language_preference") or "chinese"
 
+        logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
+        started = time.perf_counter()
+
         await self.emitter.send(self.agent_id, "running", "正在搜索相关阅读资源...", 25)
 
         # 步骤 1: 构建搜索查询
         search_queries = self._build_search_queries(input_text, title_prefix, language_preference)
         logger.info(
-            "Agent[reading] 步骤: 构建搜索查询 queries=%d min_items=%d",
-            len(search_queries), min_items
+            "Agent[%s] 步骤: 构建搜索查询 queries=%d min_items=%d",
+            self.agent_id, len(search_queries), min_items,
         )
 
         # 步骤 2: 执行搜索获取真实 URL
@@ -136,12 +140,14 @@ class ReadingAgent(BaseResourceAgent):
                         search_results.append(r)
                         existing_urls.add(r["url"])
                 logger.info(
-                    "Agent[reading] 重试: 合并搜索结果 total=%d", len(search_results)
+                    "Agent[%s] 重试: 合并搜索结果 total=%d elapsed_ms=%d",
+                    self.agent_id, len(search_results),
+                    int((time.perf_counter() - started) * 1000),
                 )
 
             if not search_results:
                 if attempt < MAX_RETRY_ATTEMPTS:
-                    logger.warning("Agent[reading] 搜索结果为空，准备重试")
+                    logger.warning("Agent[%s] 搜索结果为空，准备重试", self.agent_id)
                     continue
                 return AgentResult(
                     success=False,
@@ -159,19 +165,26 @@ class ReadingAgent(BaseResourceAgent):
             )
 
             logger.info(
-                "Agent[reading] 步骤: 调用 LLM 生成阅读推荐 (attempt=%d/%d), search_results=%d",
-                attempt, MAX_RETRY_ATTEMPTS, len(search_results),
+                "Agent[%s] LLM 调用: attempt=%d/%d search_results=%d input_len=%d",
+                self.agent_id, attempt, MAX_RETRY_ATTEMPTS, len(search_results),
+                len(f"{prompt}\n\n{enhanced_input}"),
             )
             await self.emitter.send(
                 self.agent_id, "running",
                 f"正在提炼拓展阅读推荐（第 {attempt} 次）...",
                 60 if not is_retry else 70,
             )
+            llm_started = time.perf_counter()
             result = await self.llm.ainvoke_json(
                 ReadingPayload,
                 f"{prompt}\n\n{enhanced_input}",
             )
             attempt_resources = result.resources
+            llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
+            logger.info(
+                "Agent[%s] LLM 完成: resources=%d elapsed_ms=%d",
+                self.agent_id, len(attempt_resources), llm_elapsed,
+            )
 
             if best_resources is None:
                 best_resources = list(attempt_resources)
@@ -181,8 +194,8 @@ class ReadingAgent(BaseResourceAgent):
 
             merged_count = len(best_resources)
             logger.info(
-                "Agent[reading] attempt=%d resources=%d merged_total=%d",
-                attempt, len(attempt_resources), merged_count,
+                "Agent[%s] attempt=%d resources=%d merged_total=%d",
+                self.agent_id, attempt, len(attempt_resources), merged_count,
             )
 
             # 资源充足则提前结束
@@ -216,9 +229,11 @@ class ReadingAgent(BaseResourceAgent):
             ensure_ascii=False,
             indent=2,
         )
+        total_elapsed = int((time.perf_counter() - started) * 1000)
         logger.info(
-            "Agent[reading] 步骤: 阅读资源生成完成, resources=%d",
-            len(best_resources),
+            "Agent[%s] 生成完成: resources=%d coverage=%s elapsed_ms=%d → %s",
+            self.agent_id, len(best_resources), coverage, total_elapsed,
+            content[:200].replace("\n", " "),
         )
 
         return AgentResult(
@@ -304,8 +319,8 @@ class ReadingAgent(BaseResourceAgent):
                     })
 
                 logger.info(
-                    "Agent[reading] 搜索完成: query=%s results=%d",
-                    query, len(report.sources)
+                    "Agent[%s] 搜索完成: query=%s results=%d",
+                    self.agent_id, query, len(report.sources),
                 )
 
                 # 如果已经获取足够的资源，停止搜索
@@ -313,7 +328,7 @@ class ReadingAgent(BaseResourceAgent):
                     break
 
             except Exception as e:
-                logger.warning("Agent[reading] 搜索异常: query=%s error=%s", query, e)
+                logger.warning("Agent[%s] 搜索异常: query=%s error=%s", self.agent_id, query, e)
                 continue
 
         # 去重（按 URL）

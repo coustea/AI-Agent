@@ -81,9 +81,9 @@
 
 # LAYOUT 语义
 
-- `tree`：树/层次结构，节点绝对定位（设 x/y），edges 连接父子。
-- `graph`：图/网络结构，节点绝对定位（设 x/y），edges 连接邻接。
-- `state_diagram`：状态机/自动机，状态节点绝对定位，transitions 带条件标注。
+- `tree`：树/层次结构，节点由编译器自动排列（不要设置 x/y），只需提供 connections 描述父子关系。
+- `graph`：图/网络结构，节点由编译器自动排列（不要设置 x/y），只需提供 connections 描述邻接关系。
+- `state_diagram`：状态机/自动机，节点由编译器自动排列（不要设置 x/y），transitions 带条件标注。
 - `array_view`：数组/矩阵视图，格子横向排列。
 - `queue_view`：队列视图，左入口右出口。
 - `table_view`：表格视图，行列结构。
@@ -172,9 +172,9 @@
   "narration": "3 比根节点 5 小，向左走；比 4 小，继续向左，找到空位插入。",
   "layout": "tree",
   "elements": [
-    {"id": "n5", "kind": "node", "label": "根", "value": "5", "x": 960, "y": 100},
-    {"id": "n4", "kind": "node", "label": "左子", "value": "4", "x": 600, "y": 280},
-    {"id": "n3", "kind": "node", "label": "新节点", "value": "3", "x": 400, "y": 460}
+    {"id": "n5", "kind": "node", "label": "根", "value": "5"},
+    {"id": "n4", "kind": "node", "label": "左子", "value": "4"},
+    {"id": "n3", "kind": "node", "label": "新节点", "value": "3"}
   ],
   "connections": [
     {"source": "n5", "target": "n4", "kind": "edge", "label": "左"},
@@ -197,10 +197,10 @@
   "narration": "NFA 的初始闭包包含状态 0、1、2，合并为 DFA 的状态 A。",
   "layout": "state_diagram",
   "elements": [
-    {"id": "s0", "kind": "state", "label": "NFA: q0", "value": "0", "x": 300, "y": 200},
-    {"id": "s1", "kind": "state", "label": "NFA: q1", "value": "1", "x": 600, "y": 200},
-    {"id": "s2", "kind": "state", "label": "NFA: q2", "value": "2", "x": 900, "y": 200},
-    {"id": "da", "kind": "state", "label": "DFA: A", "value": "{0,1,2}", "x": 600, "y": 500}
+    {"id": "s0", "kind": "state", "label": "NFA: q0", "value": "0"},
+    {"id": "s1", "kind": "state", "label": "NFA: q1", "value": "1"},
+    {"id": "s2", "kind": "state", "label": "NFA: q2", "value": "2"},
+    {"id": "da", "kind": "state", "label": "DFA: A", "value": "{0,1,2}"}
   ],
   "connections": [
     {"source": "s0", "target": "s1", "kind": "transition", "condition": "a"},
@@ -277,6 +277,7 @@
 - `scenes`：场景列表，第一个 role=hook，最后一个 role=recap
 
 运行时字段保持默认值，不要输出 start_time、duration、audio_path、words、total_duration。
+**不要输出 x/y 坐标**——节点位置由编译器自动计算，LLM 只需提供 connections 描述关系。
 
 
 # SAFETY（安全约束）

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any, Callable
 
+from app.infra.logging import get_logger
 from app.config import WORKPLACE_DIR
 from app.shared.video.director import VideoDirectorAgent
 from app.shared.video.material import VideoMaterialAgent
@@ -26,6 +28,9 @@ from app.shared.video.timeline import (
     build_scene_timing,
 )
 from app.shared.video.tts import VideoTtsService
+
+
+logger = get_logger(__name__)
 
 
 def _render_settings(aspect_ratio: str) -> RenderSettings:
@@ -104,19 +109,37 @@ class VideoAgent:
             return contract, draft, synthesis
 
     async def generate(self, request: VideoRequest) -> VideoArtifact:
+        pipeline_started = time.perf_counter()
+        logger.info(
+            "Video 管线开始: topic=%s style=%s scene_count=%d",
+            request.topic[:50], request.scene_count, request.scene_count,
+        )
         request.output_dir.mkdir(parents=True, exist_ok=True)
         audio_dir = request.output_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
 
         self._report_progress("正在提取教学素材...", 25)
+        stage_started = time.perf_counter()
         digest = await self.material_agent.extract(request)
+        stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
+        logger.info(
+            "Video 素材提取完成: elapsed_ms=%d → core_concepts=%d facts=%d",
+            stage_elapsed, len(digest.core_concepts), len(digest.facts),
+        )
 
         self._report_progress("正在规划场景结构与叙事节奏...", 40)
+        stage_started = time.perf_counter()
         outline = await self.director.plan(request, digest)
         if len(outline.scenes) != request.scene_count:
             raise ValueError("video director returned an unexpected scene count")
+        stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
+        logger.info(
+            "Video 场景规划完成: scenes=%d narrative=%s elapsed_ms=%d",
+            len(outline.scenes), outline.narrative, stage_elapsed,
+        )
 
         self._report_progress(f"正在编写 {len(outline.scenes)} 个场景脚本...", 55)
+        stage_started = time.perf_counter()
         completed = await asyncio.gather(
             *[
                 self._write_and_synthesize(
@@ -130,12 +153,18 @@ class VideoAgent:
             ]
         )
         completed.sort(key=lambda item: item[0].index)
+        stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
+        logger.info(
+            "Video 场景编写完成: scenes=%d elapsed_ms=%d",
+            len(completed), stage_elapsed,
+        )
         timings = build_scene_timing(
             [item[2].duration_ms for item in completed],
             tail_padding_ms=self.tail_padding_ms,
         )
 
         self._report_progress("正在合成字幕与视觉对齐...", 75)
+        stage_started = time.perf_counter()
         scenes: list[VideoScene] = []
         for (contract, draft, synthesis), timing in zip(
             completed,
@@ -199,4 +228,16 @@ class VideoAgent:
             },
         )
         self._report_progress("正在渲染视频...", 85)
-        return await self.renderer.render(plan, request.output_dir)
+        render_result = await self.renderer.render(plan, request.output_dir)
+        stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
+        logger.info(
+            "Video 渲染完成: size_bytes=%d elapsed_ms=%d",
+            render_result.size_bytes, stage_elapsed,
+        )
+
+        total_elapsed = int((time.perf_counter() - pipeline_started) * 1000)
+        logger.info(
+            "Video 管线完成: scenes=%d duration_ms=%d total_elapsed_ms=%d",
+            len(scenes), plan.duration_ms, total_elapsed,
+        )
+        return render_result

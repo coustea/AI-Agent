@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -36,6 +37,10 @@ class PlanningAgent(BaseResourceAgent):
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         """多智能体场景：分析学习需求，生成教学资源协同计划。"""
+        title_prefix = input_data.learning_need[:32]
+        logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
+        started = time.perf_counter()
+
         await self.emitter.send(self.agent_id, "running", "正在分析学习需求并构建协同计划", 10)
 
         prompt = prompts.get("resource").get("planning")
@@ -52,8 +57,11 @@ class PlanningAgent(BaseResourceAgent):
 
         for attempt in range(_MAX_PLAN_ATTEMPTS):
             try:
+                logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(attempt_prompt))
+                llm_started = time.perf_counter()
                 response = await self.llm.ainvoke(attempt_prompt)
                 content = response.content if hasattr(response, "content") else str(response)
+                llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
 
                 # 提取标题：取第一行 # 标题
                 title = ""
@@ -64,6 +72,10 @@ class PlanningAgent(BaseResourceAgent):
                         break
 
                 plan = ResourcePlan(content=content, title=title)
+                logger.info(
+                    "Agent[%s] LLM 完成: plan_len=%d agents=%s elapsed_ms=%d",
+                    self.agent_id, len(plan.content), plan.agent_ids, llm_elapsed,
+                )
 
                 # 后端校验：非空 + agent 覆盖
                 validate_resource_plan(plan, expected_agent_ids=agents if agents else None)
@@ -94,6 +106,12 @@ class PlanningAgent(BaseResourceAgent):
         await self.emitter.send(self.agent_id, "running", "协同计划已生成", 85)
 
         agent_ids = plan.agent_ids
+        total_elapsed = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: agent_count=%d plan_len=%d elapsed_ms=%d → %s",
+            self.agent_id, len(agent_ids), len(plan.content), total_elapsed,
+            plan.content[:200].replace("\n", " "),
+        )
         result = AgentResult(
             success=True,
             content=plan.content,

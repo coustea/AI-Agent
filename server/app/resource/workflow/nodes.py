@@ -14,13 +14,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 from typing import Any
 
 from langgraph.types import Send
 from app.infra.database import session_scope
 from app.infra.models import GeneratedResource as GeneratedResourceModel
+from app.infra.logging import get_logger
 from app.resource.agents import AGENT_REGISTRY
 from app.resource.service import ResourceService
 from app.resource.workflow.execution import execute_resource_agent
@@ -46,7 +46,7 @@ from app.resource.service import (
 )
 from app.resource.event import ResourceEvents
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _split_handoff_materials(content: str, *, limit: int = 12000) -> list[str]:
@@ -184,6 +184,7 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
 
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     started = time.perf_counter()
+    logger.info("规划节点开始: resource_id=%s agents=%s", resource_id, enabled_base_agents)
     try:
         async with session_scope() as session:
             service = ResourceService(session)
@@ -223,6 +224,10 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
             )
 
         elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.info(
+            "规划节点完成: resource_id=%s agents=%s plan_len=%d elapsed_ms=%d",
+            resource_id, list(assigned_agents), len(plan_markdown), elapsed_ms,
+        )
         async with session_scope() as session:
             service = ResourceService(session)
             await service.upsert_agent_run(
@@ -249,7 +254,10 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         }
     except Exception as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        logger.error("规划阶段失败: resource_id=%s error=%s", resource_id, exc)
+        logger.error(
+            "规划节点失败: resource_id=%s error=%s elapsed_ms=%d",
+            resource_id, exc, elapsed_ms,
+        )
         async with session_scope() as session:
             service = ResourceService(session)
             await service.upsert_agent_run(
@@ -341,6 +349,7 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
 
     started = time.perf_counter()
+    logger.info("合并节点开始: resource_id=%s", resource_id)
     await events.send(
         COORDINATOR_AGENT_ID,
         "running",
@@ -401,6 +410,10 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
                     await events.send(agent_id, "running", f"⚠️ {warning}", 70)
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
+    logger.info(
+        "合并节点完成: resource_id=%s success=%d failed=%d elapsed_ms=%d",
+        resource_id, success_count, fail_count, elapsed_ms,
+    )
     async with session_scope() as session:
         service = ResourceService(session)
         await service.upsert_agent_run(
@@ -447,6 +460,7 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
     user_id = state["user_id"]
     resource_id = state["resource_id"]
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+    logger.info("PPT 聚合节点开始: resource_id=%s", resource_id)
 
     await events.send(
         PPT_AGENT_ID,
@@ -489,6 +503,7 @@ async def video_node(state: ParentState) -> dict[str, Any]:
     user_id = state["user_id"]
     resource_id = state["resource_id"]
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+    logger.info("Video 聚合节点开始: resource_id=%s", resource_id)
 
     await events.send(
         VIDEO_AGENT_ID,
@@ -530,6 +545,7 @@ async def cartoon_node(state: ParentState) -> dict[str, Any]:
     user_id = state["user_id"]
     resource_id = state["resource_id"]
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+    logger.info("Cartoon 聚合节点开始: resource_id=%s", resource_id)
 
     await events.send(
         CARTOON_AGENT_ID,
@@ -583,6 +599,10 @@ async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
     agg_failures = {aid: f for aid, f in failures.items() if aid in AGGREGATION_AGENT_IDS}
     success_count = len(agg_results)
     fail_count = len(agg_failures)
+    logger.info(
+        "聚合合并节点: resource_id=%s success=%d failed=%d",
+        resource_id, success_count, fail_count,
+    )
     await events.send(
         BUNDLE_AGENT_ID,
         "running",
@@ -602,6 +622,7 @@ async def save_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
 
     started = time.perf_counter()
+    logger.info("保存节点开始: resource_id=%s", resource_id)
     await events.send(
         BUNDLE_AGENT_ID,
         "running",
@@ -623,6 +644,10 @@ async def save_node(state: ParentState) -> dict[str, Any]:
             )
             success = status in ("completed", "partial_completed")
             elapsed_ms = int((time.perf_counter() - started) * 1000)
+            logger.info(
+                "保存节点完成: resource_id=%s status=%s elapsed_ms=%d",
+                resource_id, status, elapsed_ms,
+            )
             await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id=BUNDLE_AGENT_ID,
@@ -641,6 +666,10 @@ async def save_node(state: ParentState) -> dict[str, Any]:
             return {"success": success}
     except Exception as exc:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.error(
+            "保存节点失败: resource_id=%s error=%s elapsed_ms=%d",
+            resource_id, exc, elapsed_ms,
+        )
         async with session_scope() as session:
             service = ResourceService(session)
             await service.upsert_agent_run(

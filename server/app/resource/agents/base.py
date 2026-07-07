@@ -92,6 +92,10 @@ class BaseResourceAgent:
             )
 
         try:
+            logger.info(
+                "Agent[%s] 搜索开始: query=%s",
+                getattr(self, "agent_id", "base"), query[:80],
+            )
             await self.emitter.send(
                 getattr(self, "agent_id", "base_resource"),
                 "running",
@@ -126,6 +130,10 @@ class BaseResourceAgent:
                     "tool_status": "completed",
                     "elapsed_ms": duration,
                 },
+            )
+            logger.info(
+                "Agent[%s] 搜索完成: sources=%d elapsed_ms=%d",
+                getattr(self, "agent_id", "base"), len(report.sources), duration,
             )
             return report
         except Exception as exc:

@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     # 执行数据库连接检查，确保连接可用
     await check_all()
 
-    # 知识库索引健康检查（非阻塞，不影响启动）
+    # 知识库索引健康检查 + 自动构建
     try:
         health = check_index_health()
         if health.ready:
@@ -54,9 +54,45 @@ async def lifespan(app: FastAPI):
                 "Knowledge index ready: %d chunks", health.chunk_count
             )
         else:
-            get_logger("main").warning(
-                "Knowledge index not ready: %s", health.reason
-            )
+            from app.config import KB_AUTO_BUILD, KB_ENABLED
+            if KB_ENABLED and KB_AUTO_BUILD:
+                get_logger("main").info(
+                    "Knowledge index not ready (%s), auto-building in background...",
+                    health.reason,
+                )
+                # 后台线程构建，不阻塞启动
+                import threading
+                from app.rag.indexing.build import build_index
+
+                def _bg_build() -> None:
+                    try:
+                        build_index()
+                        # 重置 BM25 懒加载单例，使后续检索能加载新索引
+                        from app.rag.bm25 import reset_bm25_index
+                        reset_bm25_index()
+                        # 验证构建结果
+                        post_health = check_index_health()
+                        if post_health.ready:
+                            get_logger("main").info(
+                                "Knowledge index auto-build completed: %d chunks",
+                                post_health.chunk_count,
+                            )
+                        else:
+                            get_logger("main").warning(
+                                "Knowledge index auto-build completed but health check failed: %s",
+                                post_health.reason,
+                            )
+                    except Exception as exc:
+                        get_logger("main").warning(
+                            "Knowledge index auto-build failed: %s", exc
+                        )
+
+                t = threading.Thread(target=_bg_build, daemon=True)
+                t.start()
+            else:
+                get_logger("main").warning(
+                    "Knowledge index not ready: %s", health.reason
+                )
     except Exception as exc:
         get_logger("main").warning("Knowledge index check failed: %s", exc)
 

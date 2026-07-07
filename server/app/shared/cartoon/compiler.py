@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import html
+import math
 from dataclasses import dataclass
 
+from app.infra.logging import get_logger
 from app.shared.cartoon.schemas import (
     AnimationCue,
     CartoonVideoRequest,
@@ -16,6 +18,8 @@ from app.shared.cartoon.schemas import (
     VideoBrief,
     VisualElement,
 )
+
+logger = get_logger(__name__)
 
 
 def _escape(value: str) -> str:
@@ -115,10 +119,171 @@ def _render_items(element: VisualElement) -> str:
     return f'<div class="object-items {item_class}">{items}</div>'
 
 
-def _render_element(element: VisualElement, scene_index: int) -> str:
+# ===================== Python-side Layout Computation =====================
+#
+# 编译时计算节点坐标，替代 LLM 生成的 x/y。
+# 每种需要绝对定位的布局有独立的算法；
+# flow/grid/recap/stack 等布局由 CSS 自动排列，不需要坐标。
+
+# visual-stage 的可用绘制区域（1920 - padding 144, 1080 - header/footer ~300）
+_STAGE_W = 1776
+_STAGE_H = 580
+
+
+def _compute_layout(scene: SceneBrief, width: int = _STAGE_W, height: int = _STAGE_H) -> dict[str, tuple[int, int]]:
+    """根据布局类型计算节点坐标。返回 {element_id: (x, y)}。"""
+    if scene.layout == "tree":
+        return _layout_tree(scene, width, height)
+    if scene.layout in ("graph", "state_diagram"):
+        return _layout_graph(scene, width, height)
+    if scene.layout == "compare":
+        return _layout_compare(scene, width, height)
+    return {}  # 其他布局用 CSS 自动排列
+
+
+def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[int, int]]:
+    """BFS 按层级排列 tree 布局的节点。孤立节点（辅助看板）放在左侧。"""
+    positions: dict[str, tuple[int, int]] = {}
+    element_ids = {e.id for e in scene.elements}
+
+    # 按 connections 构建 DAG
+    adj: dict[str, list[str]] = {eid: [] for eid in element_ids}
+    has_parent: set[str] = set()
+    for conn in scene.connections:
+        if conn.source in element_ids and conn.target in element_ids:
+            adj[conn.source].append(conn.target)
+            has_parent.add(conn.target)
+
+    # 根节点：没有入边的元素
+    roots = [eid for eid in element_ids if eid not in has_parent]
+
+    # 分离：有 connection 的节点 vs 孤立节点（辅助看板 step/metric/label）
+    connected_ids: set[str] = set()
+    for conn in scene.connections:
+        if conn.source in element_ids:
+            connected_ids.add(conn.source)
+        if conn.target in element_ids:
+            connected_ids.add(conn.target)
+
+    orphan_ids = [eid for eid in element_ids if eid not in connected_ids]
+
+    # BFS 分层（只排列有连接的根节点）
+    connected_roots = [r for r in roots if r in connected_ids]
+    if not connected_roots and roots:
+        connected_roots = roots[:1]  # fallback
+
+    levels: list[list[str]] = []
+    visited: set[str] = set()
+
+    def _bfs(start_ids: list[str]) -> None:
+        queue = list(start_ids)
+        for sid in start_ids:
+            if sid not in visited:
+                visited.add(sid)
+        while queue:
+            level_size = len(queue)
+            level = []
+            for _ in range(level_size):
+                nid = queue.pop(0)
+                level.append(nid)
+                for child in adj.get(nid, []):
+                    if child not in visited:
+                        visited.add(child)
+                        queue.append(child)
+            if level:
+                levels.append(level)
+
+    _bfs(connected_roots)
+
+    # 计算层级坐标
+    if levels:
+        level_gap = height / (len(levels) + 1)
+        for depth, level_nodes in enumerate(levels):
+            y = int(60 + (depth + 1) * level_gap)
+            node_gap = width / (len(level_nodes) + 1)
+            for idx, nid in enumerate(level_nodes):
+                x = int((idx + 1) * node_gap)
+                positions[nid] = (x, y)
+
+    # 孤立节点放在左侧，纵向等距
+    if orphan_ids:
+        orphan_gap = height / (len(orphan_ids) + 1)
+        for idx, oid in enumerate(orphan_ids):
+            x = 160
+            y = int(60 + (idx + 1) * orphan_gap)
+            positions[oid] = (x, y)
+
+    # 兜底：未被覆盖的元素放在随机安全位置
+    for e in scene.elements:
+        if e.id not in positions:
+            positions[e.id] = (width // 2, height // 2)
+
+    return positions
+
+
+def _layout_graph(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[int, int]]:
+    """圆形均匀分布 graph / state_diagram 布局的节点。"""
+    positions: dict[str, tuple[int, int]] = {}
+    elements = scene.elements
+
+    # 分离：有 connection 的节点 vs 孤立节点
+    connected_ids: set[str] = set()
+    for conn in scene.connections:
+        if conn.source in {e.id for e in elements}:
+            connected_ids.add(conn.source)
+        if conn.target in {e.id for e in elements}:
+            connected_ids.add(conn.target)
+
+    connected = [e for e in elements if e.id in connected_ids]
+    orphans = [e for e in elements if e.id not in connected_ids]
+
+    # 有连接的节点：圆形分布
+    if connected:
+        cx = width // 2
+        cy = height // 2 + 30
+        radius = min(width, height) * 0.32
+        for idx, e in enumerate(connected):
+            angle = (idx * 2 * math.pi) / len(connected)
+            x = int(cx + radius * math.cos(angle))
+            y = int(cy + radius * math.sin(angle))
+            positions[e.id] = (x, y)
+
+    # 孤立节点放在左侧
+    if orphans:
+        orphan_gap = height / (len(orphans) + 1)
+        for idx, e in enumerate(orphans):
+            positions[e.id] = (160, int(60 + (idx + 1) * orphan_gap))
+
+    return positions
+
+
+def _layout_compare(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[int, int]]:
+    """左右两列均匀分布 compare 布局的节点。"""
+    positions: dict[str, tuple[int, int]] = {}
+    mid = max(1, (len(scene.elements) + 1) // 2)
+    left_elements = scene.elements[:mid]
+    right_elements = scene.elements[mid:]
+
+    left_x = int(width * 0.25)
+    right_x = int(width * 0.75)
+
+    for idx, e in enumerate(left_elements):
+        y = int(80 + (idx + 1) * height / (len(left_elements) + 1))
+        positions[e.id] = (left_x, y)
+
+    for idx, e in enumerate(right_elements):
+        y = int(80 + (idx + 1) * height / (len(right_elements) + 1))
+        positions[e.id] = (right_x, y)
+
+    return positions
+
+
+def _render_element(element: VisualElement, scene_index: int, *, positions: dict[str, tuple[int, int]] | None = None) -> str:
+    """渲染单个可视化元素。positions 由编译器布局算法计算，不再从 LLM 输入读取。"""
     position_style = ""
-    if element.x is not None and element.y is not None:
-        position_style = f"left:{element.x}px;top:{element.y}px;"
+    if positions and element.id in positions:
+        x, y = positions[element.id]
+        position_style = f"left:{x}px;top:{y}px;"
     value = f'<strong class="object-value">{_escape(element.value)}</strong>' if element.value else ""
     detail = f'<p class="object-detail">{_escape(element.detail)}</p>' if element.detail else ""
     return (
@@ -173,7 +338,8 @@ def _render_svg_edges(scene: SceneBrief, scene_index: int) -> str:
 
 
 def _render_tree(scene: SceneBrief, scene_index: int) -> str:
-    nodes = "".join(_render_element(e, scene_index) for e in scene.elements if e.kind != "code")
+    positions = _compute_layout(scene)
+    nodes = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements if e.kind != "code")
     code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
     if code_elements:
@@ -183,7 +349,8 @@ def _render_tree(scene: SceneBrief, scene_index: int) -> str:
 
 
 def _render_graph(scene: SceneBrief, scene_index: int) -> str:
-    nodes = "".join(_render_element(e, scene_index) for e in scene.elements if e.kind != "code")
+    positions = _compute_layout(scene)
+    nodes = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements if e.kind != "code")
     code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
     if code_elements:
@@ -193,7 +360,8 @@ def _render_graph(scene: SceneBrief, scene_index: int) -> str:
 
 
 def _render_state_diagram(scene: SceneBrief, scene_index: int) -> str:
-    nodes = "".join(_render_element(e, scene_index) for e in scene.elements if e.kind != "code")
+    positions = _compute_layout(scene)
+    nodes = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements if e.kind != "code")
     code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
     if code_elements:
@@ -235,10 +403,14 @@ def _render_flow(scene: SceneBrief, scene_index: int) -> str:
 
 
 def _render_compare(scene: SceneBrief, scene_index: int) -> str:
+    positions = _compute_layout(scene)
     mid = max(1, (len(scene.elements) + 1) // 2)
-    left = "".join(_render_element(e, scene_index) for e in scene.elements[:mid])
-    right = "".join(_render_element(e, scene_index) for e in scene.elements[mid:])
-    return f'<div class="visual-stage compare-stage"><section class="compare-column"><span class="column-index">A</span>{left}</section><div class="versus">VS</div><section class="compare-column"><span class="column-index">B</span>{right}</section></div>'
+    left = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements[:mid])
+    right = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements[mid:])
+    vs = '<div class="versus" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">VS</div>'
+    idx_a = '<div class="column-index" style="position:absolute;left:calc(25% - 24px);top:10px">A</div>'
+    idx_b = '<div class="column-index" style="position:absolute;left:calc(75% - 24px);top:10px">B</div>'
+    return f'<div class="visual-stage compare-stage">{idx_a}{idx_b}{left}{right}{vs}</div>'
 
 
 def _render_stack_layout(scene: SceneBrief, scene_index: int) -> str:
@@ -371,7 +543,10 @@ def _cue_timeline(scene: SceneBrief, si: int, req: CartoonVideoRequest) -> list:
         elif cue.action == "transfer":
             from_node = cue.targets[0] if len(cue.targets) > 0 else ""
             to_node = cue.targets[1] if len(cue.targets) > 1 else ""
-            if from_node and to_node:
+            # transfer 依赖 SVG edges，仅 tree/graph/state_diagram 布局有；
+            # 其他布局自动降级为 focus
+            has_svg_edges = scene.layout in ("tree", "graph", "state_diagram")
+            if has_svg_edges and from_node and to_node:
                 lines.append(f"HF_Animator.transfer(tl, '{from_node}', '{to_node}', {si}, {at}, {bd:.2f});")
             else:
                 lines.append(f"HF_Animator.focus(tl, [{sel}], {at}, {bd:.2f});")
@@ -498,10 +673,10 @@ _CSS = """
     .flow-connector span { min-height: 22px; font-size: 14px; white-space: nowrap; }
     .flow-connector i { position: relative; width: 100%; height: 3px; background: var(--accent); }
     .flow-connector i::after { content: ""; position: absolute; right: -1px; top: -5px; width: 10px; height: 10px; border-top: 3px solid var(--accent); border-right: 3px solid var(--accent); transform: rotate(45deg); }
-    .compare-stage { grid-template-columns: 1fr 84px 1fr; align-items: stretch; }
-    .compare-column { position: relative; display: grid; gap: 18px; align-content: center; padding: 26px; border: 1px solid var(--line); border-radius: 24px; background: color-mix(in srgb, var(--surface) 68%, transparent); }
-    .column-index { position: absolute; top: -20px; left: 26px; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--caption-active-fg); font-weight: 900; }
-    .versus { align-self: center; text-align: center; color: var(--accent-two); font-size: 28px; font-weight: 950; }
+    .compare-stage {{ position: relative; }}
+    .compare-stage .visual-object {{ position: absolute; transform: translate(-50%, -50%); }}
+    .versus {{ align-self: center; text-align: center; color: var(--accent-two); font-size: 28px; font-weight: 950; }}
+    .column-index {{ display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--caption-active-fg); font-weight: 900; font-size: 18px; letter-spacing: .16em; text-transform: uppercase; }}
     .stack-stage { grid-template-columns: 1fr; max-width: 1180px; width: 100%; margin: auto; }
     .stack-stage .visual-object { padding: 18px 28px; }
     .code-stage { grid-template-columns: minmax(0, 1.4fr) minmax(300px, .6fr); }
@@ -543,12 +718,13 @@ _CSS = """
 
 class CartoonCompiler:
     def compile(self, request: CartoonVideoRequest, brief: VideoBrief) -> str:
+        logger.info("Cartoon 编译开始: scenes=%d style=%s", len(brief.scenes), request.style)
         theme = _THEMES[request.style]
         css = _CSS.replace("THEME_BACKGROUND", theme.background).replace("THEME_SURFACE_STRONG", theme.surface_strong).replace("THEME_SURFACE", theme.surface).replace("THEME_FOREGROUND", theme.foreground).replace("THEME_MUTED", theme.muted).replace("THEME_ACCENT_TWO", theme.accent_two).replace("THEME_ACCENT", theme.accent).replace("THEME_LINE", theme.line)
         scenes = "\n    ".join(_render_scene(s, i, len(brief.scenes), request) for i, s in enumerate(brief.scenes))
         audio = "\n    ".join(_render_audio(s, i) for i, s in enumerate(brief.scenes) if s.audio_path)
         timeline = _build_timeline(brief, request)
-        return f"""<!doctype html>
+        html_content = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -568,9 +744,13 @@ class CartoonCompiler:
     window.HF_Animator = {{
       getCenter: (el) => {{
         if (!el) return {{ x: 0, y: 0 }};
+        const stage = el.closest('.visual-stage');
+        if (!stage) return {{ x: el.offsetLeft, y: el.offsetTop }};
+        const sr = stage.getBoundingClientRect();
+        const er = el.getBoundingClientRect();
         return {{
-          x: el.offsetLeft,
-          y: el.offsetTop
+          x: er.left + er.width / 2 - sr.left,
+          y: er.top + er.height / 2 - sr.top
         }};
       }},
       
@@ -781,46 +961,41 @@ class CartoonCompiler:
       const svgLayer = stage.querySelector(".edges-layer");
       if (!svgLayer) return;
       const paths = svgLayer.querySelectorAll("path");
-      
+
       paths.forEach(path => {{
         const fromId = path.getAttribute("data-from");
         const toId = path.getAttribute("data-to");
         const sceneId = path.id.split("-")[1];
-        
+
         const fromEl = stage.querySelector("#s" + sceneId + "-" + fromId);
         const toEl = stage.querySelector("#s" + sceneId + "-" + toId);
-        
+
         if (fromEl && toEl) {{
-          const fromX = fromEl.offsetLeft;
-          const fromY = fromEl.offsetTop;
-          const toX = toEl.offsetLeft;
-          const toY = toEl.offsetTop;
-          
-          const fromW = fromEl.offsetWidth || 100;
-          const toW = toEl.offsetWidth || 100;
-          const r1 = fromW / 2;
-          const r2 = toW / 2;
-          
-          const dx = toX - fromX;
-          const dy = toY - fromY;
+          // 使用 getCenter 获取视觉中心（已处理 transform 偏移）
+          const from = HF_Animator.getCenter(fromEl);
+          const to = HF_Animator.getCenter(toEl);
+
+          // 圆形节点需要从边缘开始/结束
+          const fromR = Math.max(fromEl.offsetWidth, fromEl.offsetHeight) / 2 || 50;
+          const toR = Math.max(toEl.offsetWidth, toEl.offsetHeight) / 2 || 50;
+
+          const dx = to.x - from.x;
+          const dy = to.y - from.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          
-          let startX = fromX;
-          let startY = fromY;
-          let endX = toX;
-          let endY = toY;
-          
+
+          let startX = from.x, startY = from.y, endX = to.x, endY = to.y;
+
           if (dist > 0) {{
             const ux = dx / dist;
             const uy = dy / dist;
-            startX = fromX + r1 * ux;
-            startY = fromY + r1 * uy;
-            endX = toX - r2 * ux;
-            endY = toY - r2 * uy;
+            startX = from.x + fromR * ux;
+            startY = from.y + fromR * uy;
+            endX = to.x - toR * ux;
+            endY = to.y - toR * uy;
           }}
-          
+
           path.setAttribute("d", "M " + startX + " " + startY + " L " + endX + " " + endY);
-          
+
           const textEl = stage.querySelector('.edge-condition[data-from="' + fromId + '"][data-to="' + toId + '"]');
           if (textEl) {{
             textEl.setAttribute("x", (startX + endX) / 2);
@@ -830,107 +1005,14 @@ class CartoonCompiler:
       }});
     }}
 
-    function layoutTree(nodes, edges, width, height) {{
-      const nodeMap = new Map(nodes.map(n => [n.getAttribute("data-object"), n]));
-      const adj = new Map();
-      const inDegree = new Map();
-      
-      nodes.forEach(n => {{
-        const id = n.getAttribute("data-object");
-        adj.set(id, []);
-        inDegree.set(id, 0);
-      }});
-      
-      edges.forEach(e => {{
-        if (nodeMap.has(e.source) && nodeMap.has(e.target)) {{
-          adj.get(e.source).push(e.target);
-          inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
-        }}
-      }});
-      
-      const roots = nodes.filter(n => inDegree.get(n.getAttribute("data-object")) === 0)
-                         .map(n => n.getAttribute("data-object"));
-      if (roots.length === 0 && nodes.length > 0) {{
-        roots.push(nodes[0].getAttribute("data-object"));
-      }}
-      
-      const levels = [];
-      function traverse(nodeId, depth) {{
-        if (levels.length <= depth) levels.push([]);
-        if (!levels[depth].includes(nodeId)) levels[depth].push(nodeId);
-        adj.get(nodeId).forEach(childId => traverse(childId, depth + 1));
-      }}
-      roots.forEach(r => traverse(r, 0));
-      
-      const levelHeight = height / (levels.length || 1);
-      levels.forEach((levelNodes, depth) => {{
-        const levelY = 160 + depth * (levelHeight * 0.7);
-        const levelWidth = width / (levelNodes.length + 1);
-        levelNodes.forEach((nodeId, idx) => {{
-          const el = nodeMap.get(nodeId);
-          if (el && (!el.style.left || !el.style.top)) {{
-            const levelX = (idx + 1) * levelWidth;
-            el.style.left = `${{levelX}}px`;
-            el.style.top = `${{levelY}}px`;
-          }}
-        }});
-      }});
-    }}
-
-    function layoutGraph(nodes, edges, width, height) {{
-      const centerX = width / 2;
-      const centerY = height / 2 + 30;
-      const radius = Math.min(width, height) * 0.32;
-      const count = nodes.length;
-      nodes.forEach((n, idx) => {{
-        if (!n.style.left || !n.style.top) {{
-          const angle = (idx * 2 * Math.PI) / count;
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-          n.style.left = `${{x}}px`;
-          n.style.top = `${{y}}px`;
-        }}
-      }});
-    }}
-
     document.addEventListener("DOMContentLoaded", () => {{
-      const stages = document.querySelectorAll(".visual-stage");
-      stages.forEach(stage => {{
-        const parentComp = stage.closest("[data-composition-id]");
-        const stageWidth = stage.clientWidth || (parentComp ? parseInt(parentComp.getAttribute("data-width") || "1920") - 144 : 1776);
-        const stageHeight = stage.clientHeight || (parentComp ? parseInt(parentComp.getAttribute("data-height") || "1080") - 300 : 780);
-        
-        const objects = Array.from(stage.querySelectorAll(".visual-object"));
-        const svgLayer = stage.querySelector(".edges-layer");
-        
-        const edges = [];
-        if (svgLayer) {{
-          const paths = svgLayer.querySelectorAll("path");
-          paths.forEach(path => {{
-            edges.push({{
-              source: path.getAttribute("data-from"),
-              target: path.getAttribute("data-to")
-            }});
-          }});
-        }}
-        
-        const isTree = stage.classList.contains("tree-stage");
-        const isGraph = stage.classList.contains("graph-stage");
-        const isState = stage.classList.contains("state-diagram-stage");
-        
-        const needsLayout = objects.some(el => !el.style.left || !el.style.top);
-        if (needsLayout) {{
-          if (isTree) {{
-            layoutTree(objects, edges, stageWidth, stageHeight);
-          }} else if (isGraph || isState) {{
-            layoutGraph(objects, edges, stageWidth, stageHeight);
-          }}
-        }}
-        
+      // 所有坐标已在编译时由 Python 布局算法计算，无需客户端 auto-layout
+      // 只需初始化 SVG 边线
+      document.querySelectorAll(".visual-stage").forEach(stage => {{
         updateSvgEdges(stage);
       }});
-      
-      // Update SVG edges in real-time on every animation tick
+
+      // 动画 tick 中实时更新 SVG 边线（动画可能改变元素位置）
       gsap.ticker.add(() => {{
         document.querySelectorAll(".visual-stage").forEach(stage => {{
           updateSvgEdges(stage);
@@ -943,6 +1025,8 @@ class CartoonCompiler:
 </body>
 </html>
 """
+        logger.info("Cartoon 编译完成: html_size=%d", len(html_content))
+        return html_content
 
     @staticmethod
     def theme_name(style: str) -> str:
