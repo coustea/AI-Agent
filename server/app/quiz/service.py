@@ -197,7 +197,6 @@ class QuizBankService:
         return QuizQuestionRead(
             id=item.question_id,
             subject=item.subject,
-            subject_en=item.subject_en,
             type=item.question_type,
             difficulty=item.difficulty,
             content=self._normalize_math_text(item.content),

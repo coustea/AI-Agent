@@ -295,6 +295,11 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             digitalHumanState.value = state
             callbacks?.onDigitalHumanStateChange?.(state, turn_id)
             callbacks?.onStatus?.({ stage: state, message: data.message })
+            // 当后端报告 thinking 状态时，立即通知前端进入思考模式
+            // 这样用户可以在 LLM 推理阶段就看到思考动画，而不是等到 token 产出
+            if (state === 'thinking') {
+                callbacks?.onThinkingStart?.()
+            }
             return
         }
 
@@ -318,12 +323,20 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
             pendingAssistantComplete = true
+            // 后端回答已完成，立即通知前端结束思考动画（参照文本模式行为）
+            // 不再等 avatar_stopped — 文本已全部到达，思考阶段应立即结束
+            callbacks?.onThinkingEnd?.()
             clearAssistantFlushFallbackTimer()
             assistantFlushFallbackTimer = setTimeout(() => {
                 if (!isSpeaking.value) {
                     startAssistantReveal()
+                } else {
+                    // avatar_stopped 一直没来，强制 finalize 避免消息卡住
+                    console.warn('[DH] avatar_stopped not received after assistant_complete, force finalizing')
+                    isSpeaking.value = false
+                    finalizeBufferedAssistantTurn(true)
                 }
-            }, 1200)
+            }, 8000)
         } else if (type === 'avatar_speaking') {
             isSpeaking.value = true
             currentSpeechStartedAt = Date.now()
@@ -388,12 +401,16 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 }
             })
         } else {
-            // First connection
-            streamUrl.value = url || null
-            streamExtend.value = extend
-            isAvatarReady.value = true
-            callbacks?.onAvatarReady?.(true)
-            initPlayer(url, extend)
+            // First connection: use nextTick to ensure DigitalHumanCanvas is mounted
+            // and container element is available before initializing player
+            nextTick(() => {
+                streamUrl.value = url || null
+                streamExtend.value = extend
+                isAvatarReady.value = true
+                // Set container first, then init player
+                callbacks?.onAvatarReady?.(true)
+                initPlayer(url, extend)
+            })
         }
     }
 
@@ -638,10 +655,13 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
             audioContext = new AudioContext({ sampleRate: 16000 })
             const source = audioContext.createMediaStreamSource(audioStream)
-            const processor = audioContext.createScriptProcessor(4096, 1, 1)
+            // 使用 2048 buffer（128ms @ 16kHz）替代 4096（256ms）以降低采集延迟
+            const processor = audioContext.createScriptProcessor(2048, 1, 1)
+            // 缓存后端未就绪时的音频数据，等 backend 就绪后批量发送
+            const pendingAudioChunks: string[] = []
 
             processor.onaudioprocess = (e) => {
-                if (!vadActive || !backendVadReady || !ws || ws.readyState !== WebSocket.OPEN) return
+                if (!vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
 
                 const inputData = e.inputBuffer.getChannelData(0)
                 let sum = 0
@@ -676,6 +696,18 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                     binary += String.fromCharCode(uint8Array[i] ?? 0)
                 }
                 const base64 = btoa(binary)
+
+                if (!backendVadReady) {
+                    // 后端还没就绪，缓存音频数据
+                    pendingAudioChunks.push(base64)
+                    return
+                }
+
+                // 发送缓存的音频数据（如果有）
+                while (pendingAudioChunks.length > 0) {
+                    const chunk = pendingAudioChunks.shift()!
+                    ws.send(JSON.stringify({ type: 'audio_chunk', audio: chunk }))
+                }
 
                 ws.send(JSON.stringify({ type: 'audio_chunk', audio: base64 }))
             }

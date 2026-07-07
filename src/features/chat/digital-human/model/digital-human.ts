@@ -96,4 +96,6 @@ export interface DigitalHumanCallbacks {
   onSpeechDetectedChange?: (detected: boolean) => void
   onHistoryCleared?: (data: { session_id: string; deleted_count: number }) => void
   onDigitalHumanStateChange?: (state: DigitalHumanStateType, turn_id?: string) => void
+  onThinkingStart?: () => void
+  onThinkingEnd?: () => void
 }

@@ -47,7 +47,7 @@ async def avatar_websocket(websocket: WebSocket) -> None:
     # 接受 WebSocket 连接
     await websocket.accept()
     # 获取或创建当前用户的数字人桥接实例
-    bridge = await avatar_bridge_manager.get_or_create_bridge(user.id)
+    bridge = await avatar_bridge_manager.get_or_create_bridge(user.id, username=user.username)
     try:
         # 进入消息循环，处理前端语音数据并转发到 TTS/ASR 服务
         await bridge.handle_frontend(websocket)
