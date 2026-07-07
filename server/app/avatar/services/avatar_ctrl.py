@@ -104,6 +104,9 @@ class AvatarController:
     async def receive_messages(self, callback):
         """持续接收 Avatar 服务的事件消息（stream_info、tts_start、tts_end）。
 
+        当连接断开时，标记 is_ready=False 并通过回调通知桥接层，
+        以便桥接层可以触发自动重连。
+
         Args:
             callback: 回调函数，签名为 async (event_type: str, data: dict, turn_id: Optional[str])
         """
@@ -160,13 +163,41 @@ class AvatarController:
                     await callback("tts_end", avatar_data, turn_id)
                     logger.debug(f"Avatar finished speaking (turn_id: {turn_id})")
 
-            logger.warning("Avatar message loop exited normally (connection closed)")
+            # 循环正常退出 = 服务端关闭了连接
+            logger.warning("Avatar message loop exited normally (connection closed by server)")
+            self._handle_connection_lost(callback)
 
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"Avatar connection closed: {e}")
+            self._handle_connection_lost(callback)
+        except asyncio.CancelledError:
+            logger.info("Avatar message loop cancelled (intentional)")
+            raise
         except Exception as e:
             logger.error(f"Failed to receive avatar messages: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to receive avatar messages: {e}")
+            self._handle_connection_lost(callback)
+
+    def _handle_connection_lost(self, callback):
+        """处理 Avatar 连接丢失 — 标记不可用并通知桥接层。
+
+        关键：不在这里自动重连，而是通知桥接层由其决定是否重连。
+        桥接层会检查前端 WebSocket 是否仍然存活，避免无谓的重连。
+        """
+        was_ready = self.is_ready
+        self.is_ready = False
+        self.is_speaking = False
+        self.ws = None
+
+        if was_ready:
+            logger.warning("[AvatarCtrl] Connection lost while was ready — notifying bridge for reconnect")
+            # 通过回调通知桥接层连接已断开，桥接层会决定是否重连
+            try:
+                asyncio.get_event_loop().create_task(
+                    callback("connection_lost", {"reason": "avatar_ws_closed"}, None)
+                )
+            except RuntimeError:
+                # No event loop (e.g., during shutdown)
+                logger.debug("[AvatarCtrl] Cannot schedule connection_lost callback — no event loop")
 
     async def speak(self, text: str, speech_rate: float = 1.0, turn_id: Optional[str] = None):
         """将文本加入播报队列 — Avatar 就绪后自动开始播放。
@@ -276,7 +307,18 @@ class AvatarController:
     async def _speak_immediate(self, text: str, speech_rate: float = 1.0):
         """立即发送 TTS 播报指令（无重试）。"""
         if not self.ws or self._ws_closed:
+            was_ready = self.is_ready
             logger.warning("Avatar connection lost, skipping speech (no auto-reconnect)")
+            self.ws = None
+            self.is_ready = False
+            # 通知桥接层连接已丢失，以便触发重连
+            if was_ready and self._event_callback:
+                try:
+                    asyncio.get_event_loop().create_task(
+                        self._event_callback("connection_lost", {"reason": "speak_failed_ws_closed"}, None)
+                    )
+                except RuntimeError:
+                    pass
             raise RuntimeError("Avatar connection lost, cannot send speech command")
 
         # 构造 text_driver 指令 — 语速范围 40~75（对应 0.8~1.5 倍速）
@@ -303,6 +345,14 @@ class AvatarController:
             logger.error(f"Failed to send speech command: {e}")
             self.ws = None
             self.is_ready = False
+            # 通知桥接层连接已丢失
+            if self._event_callback:
+                try:
+                    asyncio.get_event_loop().create_task(
+                        self._event_callback("connection_lost", {"reason": "speak_send_failed"}, None)
+                    )
+                except RuntimeError:
+                    pass
             raise RuntimeError(f"Failed to send speech command: {e}")
 
     async def stop(self):
@@ -364,6 +414,22 @@ class AvatarController:
                         logger.warning("Heartbeat timeout, connection may be lost")
                     except Exception as e:
                         logger.warning(f"Heartbeat failed: {e}")
+                elif self.ws is not None:
+                    # ws 对象存在但已关闭 — 连接已断开
+                    logger.warning("[AvatarCtrl] Keepalive detected closed connection")
+                    was_ready = self.is_ready
+                    self.is_ready = False
+                    self.is_speaking = False
+                    self.ws = None
+                    if was_ready and self._event_callback:
+                        try:
+                            asyncio.get_event_loop().create_task(
+                                self._event_callback("connection_lost", {"reason": "heartbeat_failed"}, None)
+                            )
+                        except RuntimeError:
+                            pass
+                    # 心跳检测到连接断开，停止心跳循环
+                    return
         except asyncio.CancelledError:
             logger.info("Heartbeat task stopped")
         except Exception as e:

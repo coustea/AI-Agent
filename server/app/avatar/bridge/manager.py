@@ -36,8 +36,9 @@ logger = get_logger(__name__)
 class RealtimeBridge:
     """单用户数字人桥接 — 将前端 I/O 连接到共享的无状态辅导服务。"""
 
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int, username: str = ""):
         self.user_id = user_id
+        self.username = username
         # 当前会话 ID — 由首次对话时自动创建
         self.session_id: str = ""
         # 前端 WebSocket 连接引用
@@ -69,6 +70,13 @@ class RealtimeBridge:
         self._enable_search_default: bool = False  # 默认是否启用联网搜索
         # 对话锁 — 串行化 turn 处理，避免并发冲突
         self._turn_lock = asyncio.Lock()
+        # Pending ASR 文本缓冲区 — 当有 turn 在执行时，后续 ASR 片段追加到这里
+        # 当前 turn 完成后，会将 buffer 中的文本合并为下一个 turn 的输入
+        self._pending_asr_texts: list[str] = []
+        # 重连标志 — 为 True 时 stream_info 由 _reconnect_avatar 统一发送（带 reconnected 标记）
+        self._reconnecting: bool = False
+        # 重连锁 — 防止多个 connection_lost 回调同时触发多个重连流程
+        self._reconnect_lock = asyncio.Lock()
 
     @staticmethod
     def _repair_text_encoding(text: str) -> str:
@@ -145,13 +153,17 @@ class RealtimeBridge:
         """Avatar 事件回调。
 
         Args:
-            event_type: 事件类型 (stream_info, tts_start, tts_end)
+            event_type: 事件类型 (stream_info, tts_start, tts_end, connection_lost)
             data: 事件数据
             turn_id: 关联的 turn_id (tts_start/tts_end 会有, stream_info 没有)
         """
         if not self._frontend_ws_ready():
             return
         if event_type == "stream_info":
+            # 重连期间 stream_info 由 _reconnect_avatar 统一发送（带 reconnected 标记）
+            if self._reconnecting:
+                logger.debug("[Bridge] Skipping stream_info forward during reconnect (will be sent with reconnected flag)")
+                return
             await self._send_to_frontend({
                 "type": "stream_info",
                 "data": data,
@@ -177,6 +189,101 @@ class RealtimeBridge:
                 "data": data,
                 "turn_id": turn_id,
             })
+        elif event_type == "connection_lost":
+            # Avatar WebSocket 连接断开 — 尝试自动重连
+            reason = data.get("reason", "unknown") if isinstance(data, dict) else "unknown"
+            logger.warning("[Bridge] Avatar connection lost (reason=%s), attempting auto-reconnect", reason)
+            await self._send_digital_human_state("avatar_connecting", "数字人连接断开，正在重连...")
+            # 异步重连，不阻塞当前事件处理
+            # 使用锁防止多个 connection_lost 事件同时触发多个重连流程
+            if not self._reconnect_lock.locked():
+                asyncio.create_task(self._reconnect_avatar())
+            else:
+                logger.info("[Bridge] Reconnect already in progress, skipping duplicate trigger")
+
+    async def _reconnect_avatar(self):
+        """Avatar 连接断开后的自动重连 — 带退避重试。
+
+        重连条件：前端 WebSocket 仍然存活（用户还在页面上）。
+        如果前端已断开则放弃重连，等下次用户连接时重新初始化。
+
+        调用方应先检查 _reconnect_lock.locked() 避免重复触发。
+        """
+        async with self._reconnect_lock:
+            self._reconnecting = True
+            max_retries = 5
+            try:
+                for attempt in range(1, max_retries + 1):
+                    # 每次重试前检查前端是否还在线
+                    if not self._frontend_ws_ready():
+                        logger.info("[Bridge] Frontend disconnected, aborting avatar reconnect")
+                        return
+
+                    # 如果 turn 正在执行，等它完成再重连（避免打断正在进行的对话）
+                    if self._turn_lock.locked():
+                        logger.info("[Bridge] Turn in progress, waiting before reconnect attempt %d", attempt)
+                        await asyncio.sleep(2)
+                        continue
+
+                    delay = min(2 ** attempt, 30)  # 指数退避: 2, 4, 8, 16, 30
+                    logger.info(
+                        "[Bridge] Avatar reconnect attempt %d/%d (delay=%ds)",
+                        attempt, max_retries, delay,
+                    )
+                    await asyncio.sleep(delay)
+
+                    # 再次检查前端
+                    if not self._frontend_ws_ready():
+                        logger.info("[Bridge] Frontend disconnected during reconnect wait, aborting")
+                        return
+
+                    try:
+                        # 关闭旧的 controller
+                        if self._avatar_controller is not None:
+                            try:
+                                await self._avatar_controller.close()
+                            except Exception:
+                                logger.debug("[Bridge] close stale avatar controller failed", exc_info=True)
+
+                        # 创建新的 controller 并连接
+                        self._avatar_controller = AvatarController()
+                        await self._avatar_controller.connect(
+                            on_reconnect_callback=self._on_avatar_reconnect
+                        )
+                        # 启动消息接收循环
+                        asyncio.create_task(
+                            self._avatar_controller.receive_messages(self._on_avatar_event)
+                        )
+
+                        # 等待 Avatar 就绪（最多 20 秒）
+                        for _ in range(40):
+                            if self._avatar_controller.is_ready:
+                                break
+                            await asyncio.sleep(0.5)
+
+                        if self._avatar_controller.is_ready:
+                            logger.info("[Bridge] Avatar reconnected successfully on attempt %d", attempt)
+                            await self._send_digital_human_state("avatar_ready", "数字人重连成功")
+                            # 重连成功后发送带 reconnected 标记的 stream_info，
+                            # 让前端销毁旧播放器并重新初始化
+                            if self._avatar_controller._last_stream_info:
+                                await self._send_to_frontend({
+                                    "type": "stream_info",
+                                    "data": self._avatar_controller._last_stream_info,
+                                    "reconnected": True,
+                                })
+                            return
+                        else:
+                            logger.warning("[Bridge] Avatar reconnect attempt %d: ready timeout", attempt)
+
+                    except Exception as e:
+                        logger.warning("[Bridge] Avatar reconnect attempt %d failed: %s", attempt, e)
+
+                # 所有重试都失败
+                logger.error("[Bridge] Avatar reconnect failed after %d attempts", max_retries)
+                await self._send_digital_human_state("error", "数字人重连失败，请刷新页面重试")
+            finally:
+                self._reconnecting = False
 
     async def handle_frontend(self, ws):
         """处理前端 WebSocket 连接 — 主消息循环。"""
@@ -538,14 +645,23 @@ class RealtimeBridge:
                         self._last_asr_text = normalized
                         self._last_asr_at = now_ts
                         await self._send_to_frontend({"type": "asr_result", "content": normalized})
-                        # Keep ASR loop responsive: do not block next round on LLM pipeline.
-                        asyncio.create_task(
-                            self._handle_user_text(
-                                normalized,
-                                need_diagram=self._need_diagram_default,
-                                enable_search=self._enable_search_default,
+                        # 如果当前有 turn 正在执行（锁被持有），将文本追加到 pending buffer
+                        # 而不是创建新 turn，避免前端 turn_id 过滤导致事件丢失
+                        if self._turn_lock.locked():
+                            logger.info(
+                                "[Bridge] Turn in progress, buffering ASR text: '%s' (pending=%d)",
+                                normalized[:30], len(self._pending_asr_texts),
                             )
-                        )
+                            self._pending_asr_texts.append(normalized)
+                        else:
+                            # Keep ASR loop responsive: do not block next round on LLM pipeline.
+                            asyncio.create_task(
+                                self._handle_user_text(
+                                    normalized,
+                                    need_diagram=self._need_diagram_default,
+                                    enable_search=self._enable_search_default,
+                                )
+                            )
         except Exception as e:
             logger.error("[Bridge] ASR session failed: %s", e)
             await self._send_event_with_turn_id("error", content=f"语音识别异常: {e}")
@@ -557,22 +673,36 @@ class RealtimeBridge:
         need_diagram: bool = False,
         enable_search: bool = False,
     ):
-        """串行化 turn 处理 — 立即发送 turn_start，然后等待锁执行 turn。
+        """串行化 turn 处理 — 获取锁后再发送 turn_start，避免前端 turn_id 过滤问题。
 
-        关键改进：在等待 _turn_lock 前就发送 turn_start，
-        这样前端可以立即开始过滤旧 turn 的事件。
+        关键修复：在获取锁之后才发送 turn_start，确保前端 activeTurnId 与实际执行
+        的 turn 一致。之前的实现在等锁前就发送 turn_start，导致多个排队 turn 的
+        turn_start 覆盖前端的 activeTurnId，使正在执行的 turn 事件被前端过滤掉。
         """
-        # 立即生成并发送新 turn_id，让前端开始过滤旧事件
-        new_turn_id = str(uuid.uuid4())
-        await self._send_to_frontend({
-            "type": "turn_start",
-            "turn_id": new_turn_id,
-        })
-        logger.info("[Bridge] Sent turn_start turn_id=%s (before acquiring lock)", new_turn_id)
-
         async with self._turn_lock:
-            # 在锁内更新 current_turn_id（用于后续事件）
+            # 合并 pending ASR 文本缓冲区
+            merged_text = user_text
+            if self._pending_asr_texts:
+                # 检查是否与 pending 文本重复
+                for pending in self._pending_asr_texts:
+                    if pending not in merged_text:
+                        merged_text += pending
+                logger.info(
+                    "[Bridge] Merged %d pending ASR texts into turn (original='%s' merged='%s')",
+                    len(self._pending_asr_texts),
+                    user_text[:30],
+                    merged_text[:50],
+                )
+                self._pending_asr_texts.clear()
+
+            # 在锁内生成并发送 turn_id，确保前端 activeTurnId 与实际 turn 一致
+            new_turn_id = str(uuid.uuid4())
             self._current_turn_id = new_turn_id
+            await self._send_to_frontend({
+                "type": "turn_start",
+                "turn_id": new_turn_id,
+            })
+            logger.info("[Bridge] Sent turn_start turn_id=%s (after acquiring lock)", new_turn_id)
 
             # 新 turn 开始时打断旧播报
             # 检查多个状态：is_speaking、sentence_queue 非空、_playback_task 未完成
@@ -596,11 +726,21 @@ class RealtimeBridge:
             logger.info("[Bridge] Acquired lock, processing turn_id=%s", new_turn_id)
 
             await self._run_user_text_turn(
-                user_text=user_text,
+                user_text=merged_text,
                 attachments=attachments,
                 need_diagram=need_diagram,
                 enable_search=enable_search,
             )
+
+            # Turn 完成后清空 pending buffer — 这些文本只是 VAD 分片产生的噪音，
+            # 不应该自动创建新 turn。用户下一轮说话会触发新的 ASR 识别。
+            if self._pending_asr_texts:
+                logger.info(
+                    "[Bridge] Discarding %d pending ASR texts (VAD fragment noise): %s",
+                    len(self._pending_asr_texts),
+                    [t[:20] for t in self._pending_asr_texts],
+                )
+                self._pending_asr_texts.clear()
 
     async def _run_user_text_turn(
         self,
@@ -646,6 +786,7 @@ class RealtimeBridge:
                 async for event in chat(
                     user_message_id=user_message_id,
                     user_id=self.user_id,
+                    username=self.username or f"user_{self.user_id}",
                     session_id=self.session_id,
                     user_input=user_text,
                     attachments=merged_attachments,
@@ -673,6 +814,11 @@ class RealtimeBridge:
 
                     elif event_type == "status":
                         # 状态事件 → 转发给前端
+                        if self.frontend_ws and isinstance(payload, dict):
+                            await self._send_event_with_turn_id("status", data=payload)
+
+                    elif event_type == "agent_status":
+                        # Agent 思考过程事件 → 转发给前端显示思考进度
                         if self.frontend_ws and isinstance(payload, dict):
                             await self._send_event_with_turn_id("status", data=payload)
 
@@ -798,12 +944,12 @@ class AvatarBridgeManager:
             self._locks[user_id] = asyncio.Lock()
         return self._locks[user_id]
 
-    async def get_or_create_bridge(self, user_id: int) -> RealtimeBridge:
+    async def get_or_create_bridge(self, user_id: int, username: str = "") -> RealtimeBridge:
         """获取或创建用户的 Bridge 实例（线程安全）。"""
         lock = self._get_lock(user_id)
         async with lock:
             if user_id not in self._bridges:
-                bridge = RealtimeBridge(user_id=user_id)
+                bridge = RealtimeBridge(user_id=user_id, username=username)
                 self._bridges[user_id] = bridge
             return self._bridges[user_id]
 

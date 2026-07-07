@@ -756,6 +756,38 @@ const {
 } = useDigitalHuman({
   onStatus: (status) => {
     digitalHumanBackendStatus.value = status.message || ''
+    // 将 agent_status 数据应用到当前 AI 消息的 agentActivities，
+    // 使数字人模式也能显示和文本模式一样的思考过程卡片
+    if (status.activity_id && streamingMsgRef.value) {
+      applyAgentStatus(streamingMsgRef.value, {
+        activity_id: status.activity_id,
+        kind: status.kind || 'workflow',
+        stage: status.stage,
+        status: status.status || 'running',
+        tool_name: status.tool_name,
+        title: status.title || '正在处理',
+        summary: status.summary,
+        message: status.message,
+        detail: status.detail,
+      })
+    }
+  },
+  onThinkingStart: () => {
+    // 后端报告 thinking 状态时立即显示思考动画和 AI 消息占位
+    if (streamingMsgId.value === null) {
+      const aiMsgId = Date.now() + 1
+      messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
+      streamingMsgId.value = aiMsgId
+      streamingMsgRef.value = messages.value[messages.value.length - 1] || null
+    }
+    isAIThinking.value = true
+    startAvatarThinkingTimeout()
+  },
+  onThinkingEnd: () => {
+    // 后端回答已完成（assistant_complete），立即结束思考动画
+    // 参照文本模式行为：流完成即清除思考状态，不等 avatar_stopped
+    isAIThinking.value = false
+    clearAvatarThinkingTimeout()
   },
   onAssistantChunk: (chunk) => {
     digitalHumanBackendStatus.value = ''
@@ -890,6 +922,17 @@ const {
       }
     })
   },
+})
+
+// 兜底：当 canvasRef 变为可用时自动设置 player container
+// 解决首次连接时 stream_info 到达时 canvasRef 尚未挂载的问题
+watch(canvasRef, (newInstance) => {
+  if (newInstance && chatMode.value === 'digital_human') {
+    const container = newInstance.getContainer()
+    if (container) {
+      setPlayerContainer(container)
+    }
+  }
 })
 
 const uploadingFile = ref(false)

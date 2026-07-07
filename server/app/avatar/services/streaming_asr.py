@@ -49,9 +49,9 @@ class StreamingASRSession:
         Raises:
             RuntimeError: ASR 连接或处理失败
         """
-        # Wait for first audio chunk
+        # Wait for first audio chunk (reduced from 15s to 5s for faster VAD responsiveness)
         try:
-            first_item = await asyncio.wait_for(self.audio_queue.get(), timeout=15.0)
+            first_item = await asyncio.wait_for(self.audio_queue.get(), timeout=5.0)
         except asyncio.TimeoutError:
             logger.debug("[ASR] No audio chunk received within timeout")
             return None
@@ -126,12 +126,12 @@ class StreamingASRSession:
         await ws.send(json.dumps(start_params))
         chunk_count = 1
         timeout_hit = False
-        await asyncio.sleep(0.04)  # Inter-frame delay
+        await asyncio.sleep(0.01)  # Minimal inter-frame delay for first frame
 
         # Send middle frames
         while True:
             try:
-                item = await asyncio.wait_for(self.audio_queue.get(), timeout=5.0)
+                item = await asyncio.wait_for(self.audio_queue.get(), timeout=3.0)
             except asyncio.TimeoutError:
                 timeout_hit = True
                 logger.debug("[ASR] Audio queue timeout, sending end frame")
@@ -152,7 +152,8 @@ class StreamingASRSession:
             }
             await ws.send(json.dumps(frame))
             chunk_count += 1
-            await asyncio.sleep(0.04)
+            # No inter-frame sleep: send as fast as possible to minimize latency
+            # The audio queue naturally throttles based on real-time audio capture rate
 
         # Send end frame
         end_frame = {
