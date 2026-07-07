@@ -8,18 +8,14 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 RetrievalStatus = Literal["ok", "empty", "unavailable"]
+RetrievalType = Literal["vector", "bm25", "hybrid", ""]
 
 # ChromaDB collection 名（build 与 retriever 共享的索引契约，属实现细节，不暴露为运行时配置）
 CHROMA_COLLECTION = "langchain"
 
 
 class RetrievedChunk(BaseModel):
-    """单条检索结果。
-
-    Called by: app/rag/retriever.py _parse_chroma_results(), app/rag/tools.py _build_sources().
-    Schema change: added parent_id (links to source file) and heading_path (heading hierarchy).
-    Per user: "确保rag模块可以检索知识库，然后后期给我的chat模块使用".
-    """
+    """单条检索结果。"""
 
     chunk_id: str
     content: str
@@ -27,9 +23,23 @@ class RetrievedChunk(BaseModel):
     title: str
     section: str = ""
     course: str = ""
+
+    # 向量检索距离，越小越相似
     distance: float | None = None
+
+    # 统一相关性分数：BM25 / RRF / rerank 都可以写这里
+    score: float | None = None
+
+    # 结果来源：vector / bm25 / hybrid
+    retrieval_type: RetrievalType = ""
+
+    # 源文档关联信息
     parent_id: str = ""
     heading_path: str = ""
+    page: int | None = None
+
+    # 当前文档内的 chunk 序号，用于相邻 chunk 扩展
+    chunk_index: int | None = None
 
 
 class RetrievalResult(BaseModel):

@@ -18,8 +18,8 @@ logger = get_logger(__name__)
 
 # llama.cpp 嵌入服务不校验 api_key，占位即可
 _EMBED_API_KEY = "sk-placeholder"
-# 嵌入请求超时秒数
-_REQUEST_TIMEOUT = 8
+# 嵌入请求超时秒数（批量嵌入 32 条长文本时需较长等待）
+_REQUEST_TIMEOUT = 30
 
 # 熔断器：连续失败后暂时停止请求
 _BREAKER_COOLDOWN_SECONDS = 300.0

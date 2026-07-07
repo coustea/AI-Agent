@@ -1,7 +1,17 @@
-"""单路向量检索模块。
+"""混合检索模块（向量 + BM25，RRF 融合）。
 
 唯一公共接口：retrieve() 和 check_index_health()。
 ChatAgent 不感知 Chroma、embedding、distance 等细节。
+
+优化点（per user 要求）：
+  1. BM25 先执行，embedding 不可用时 BM25 兜底
+  2. course_name 软过滤，不足时放宽为全库检索
+  3. 扩大召回后融合截断
+  4. BM25 结果不再用 source 冒充正文
+
+Called by: app/rag/tools.py (retrieve), app/rag/indexing/build.py (check_index_health),
+           app/main.py lifespan (check_index_health).
+Per user: "retrieve() 里 embedding 失败就直接返回 unavailable，没有使用 BM25 兜底"
 """
 
 from __future__ import annotations
@@ -22,7 +32,7 @@ from app.config import (
     KB_TOP_K,
 )
 from app.infra.logging import get_logger
-from app.rag.bm25 import get_bm25_index  # hybrid search: BM25 keyword retrieval
+from app.rag.bm25 import get_bm25_index
 from app.rag.embeddings import embed_query
 from app.rag.models import CHROMA_COLLECTION, RetrievedChunk, RetrievalResult
 
@@ -34,9 +44,12 @@ _semaphore = asyncio.Semaphore(4)
 # Manifest 文件名
 _MANIFEST_FILENAME = "manifest.json"
 
-# 混合检索内部参数（实现细节，不暴露为运行时配置）
-_FETCH_K = 12          # 向量检索拉取数量，融合后截断到 top_k
-_RRF_K = 60            # RRF 融合常数（Cormack et al. 2009 推荐 60）
+# 混合检索内部参数
+_VECTOR_FETCH_K = 40       # 向量召回数量，先多召回
+_BM25_FETCH_K = 40         # BM25 召回数量
+_RRF_CANDIDATE_K = 20      # RRF 融合后保留候选
+_RRF_K = 60                # RRF 平滑常数
+_FINAL_TOP_K_LIMIT = 8     # 对外最多返回 8 条
 
 
 class IndexHealth(BaseModel):
@@ -46,6 +59,54 @@ class IndexHealth(BaseModel):
     reason: str
     document_count: int = 0
     chunk_count: int = 0
+
+
+# ============ 辅助函数 ============
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except Exception:
+        return None
+
+
+def _distance_to_score(distance: float | None) -> float | None:
+    """把向量距离转成 0~1 左右的相似度分数。
+
+    Chroma distance 越小越相似，这里只作为展示/排序辅助，不作为唯一依据。
+    """
+    if distance is None:
+        return None
+    try:
+        d = max(0.0, float(distance))
+        return 1.0 / (1.0 + d)
+    except Exception:
+        return None
+
+
+def _dedupe_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """按 chunk_id 去重，保留先出现的结果。"""
+    seen: set[str] = set()
+    deduped: list[RetrievedChunk] = []
+
+    for chunk in chunks:
+        key = chunk.chunk_id or f"{chunk.source}:{chunk.chunk_index}:{hash(chunk.content[:120])}"
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(chunk)
+
+    return deduped
+
+
+def _elapsed_ms(start: float) -> int:
+    return int((time.monotonic() - start) * 1000)
+
+
+# ============ 索引健康检查 ============
 
 
 def _load_manifest(kb_dir: Path) -> dict[str, Any] | None:
@@ -95,24 +156,28 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     return IndexHealth(ready=True, reason="ok", document_count=0, chunk_count=chunk_count)
 
 
-def check_index_health() -> IndexHealth:
+def check_index_health(kb_dir: Path | None = None) -> IndexHealth:
     """检查知识库索引健康状态（非阻塞，不请求嵌入服务）。
 
-    供 FastAPI lifespan 调用，异常不影响启动。
+    供 FastAPI lifespan 与 build.py --check-only 调用，异常不影响启动。
+    传入 kb_dir 时检查指定目录，否则回退到配置中的 KB_DIR。
     """
     if not KB_ENABLED:
         return IndexHealth(ready=False, reason="disabled_by_config")
 
-    kb_dir = Path(KB_DIR)
-    if not kb_dir.exists():
+    target_dir = Path(kb_dir) if kb_dir else Path(KB_DIR)
+    if not target_dir.exists():
         return IndexHealth(ready=False, reason="kb_dir_missing")
 
     try:
-        manifest = _load_manifest(kb_dir)
-        return _validate_manifest(manifest, kb_dir)
+        manifest = _load_manifest(target_dir)
+        return _validate_manifest(manifest, target_dir)
     except Exception as exc:
         logger.warning("[retriever] index health check failed: %s", exc)
         return IndexHealth(ready=False, reason=f"unexpected_error:{exc}")
+
+
+# ============ 查询构建 ============
 
 
 def _build_query_text(query: str, course_name: str | None) -> str:
@@ -126,6 +191,9 @@ def _build_query_text(query: str, course_name: str | None) -> str:
         parts.append(course_name.strip())
     parts.append(query.strip())
     return " ".join(parts)
+
+
+# ============ 向量检索 ============
 
 
 def _chroma_query(
@@ -147,9 +215,7 @@ def _chroma_query(
     return results
 
 
-def _parse_chroma_results(
-    results: dict[str, Any],
-) -> list[RetrievedChunk]:
+def _parse_chroma_results(results: dict[str, Any]) -> list[RetrievedChunk]:
     """解析 Chroma 查询结果为 RetrievedChunk 列表。"""
     chunks: list[RetrievedChunk] = []
     seen_ids: set[str] = set()
@@ -166,35 +232,84 @@ def _parse_chroma_results(
         if not text:
             continue
 
-        chunk_id = str(meta.get("chunk_id", "")) if meta else ""
-        source = str(meta.get("source", "")) if meta else ""
-        title = str(meta.get("title", "")) if meta else ""
-        section = str(meta.get("section", "")) if meta else ""
-        course = str(meta.get("course", "")) if meta else ""
-        parent_id = str(meta.get("parent_id", "")) if meta else ""
-        heading_path = str(meta.get("heading_path", "")) if meta else ""
+        meta = meta or {}
 
-        # chunk_id 去重
+        chunk_id = str(meta.get("chunk_id", ""))
         if chunk_id and chunk_id in seen_ids:
             continue
         if chunk_id:
             seen_ids.add(chunk_id)
 
+        distance = float(dist) if dist is not None else None
+
         chunks.append(
             RetrievedChunk(
                 chunk_id=chunk_id,
                 content=text,
-                source=source,
-                title=title,
-                section=section,
-                course=course,
-                distance=float(dist) if dist is not None else None,
-                parent_id=parent_id,
-                heading_path=heading_path,
+                source=str(meta.get("source", "")),
+                title=str(meta.get("title", "")),
+                section=str(meta.get("section", "")),
+                course=str(meta.get("course", "")),
+                distance=distance,
+                score=_distance_to_score(distance),
+                retrieval_type="vector",
+                parent_id=str(meta.get("parent_id", "")),
+                heading_path=str(meta.get("heading_path", "")),
+                page=_safe_int(meta.get("page")),
+                chunk_index=_safe_int(meta.get("chunk_index")),
             )
         )
 
     return chunks
+
+
+async def _vector_search_soft_course(
+    embedding: list[float],
+    course_name: str | None,
+    fetch_k: int,
+    min_results: int,
+) -> list[RetrievedChunk]:
+    """向量检索：优先课程过滤，不足时自动放宽。
+
+    避免 course metadata 推断不准导致直接查空。
+    """
+    where_filter: dict[str, Any] | None = None
+    if course_name and course_name.strip():
+        where_filter = {"course": {"$eq": course_name.strip()}}
+
+    chunks: list[RetrievedChunk] = []
+
+    if where_filter:
+        try:
+            filtered_results = await asyncio.to_thread(
+                _chroma_query,
+                embedding,
+                fetch_k,
+                where_filter,
+            )
+            chunks.extend(_parse_chroma_results(filtered_results))
+        except Exception as exc:
+            logger.warning("[retriever] chroma filtered query failed: %s", exc)
+
+        # 课程过滤结果不足时，放宽为全库检索
+        if len(chunks) >= min_results:
+            return _dedupe_chunks(chunks)
+
+    try:
+        broad_results = await asyncio.to_thread(
+            _chroma_query,
+            embedding,
+            fetch_k,
+            None,
+        )
+        chunks.extend(_parse_chroma_results(broad_results))
+    except Exception as exc:
+        logger.warning("[retriever] chroma broad query failed: %s", exc)
+
+    return _dedupe_chunks(chunks)
+
+
+# ============ BM25 检索 ============
 
 
 def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
@@ -204,7 +319,7 @@ def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
     if not index.is_ready:
         return []
 
-    results = index.search(query, top_k=top_k * 2)
+    results = index.search(query, top_k=top_k)
     chunks: list[RetrievedChunk] = []
     seen: set[str] = set()
 
@@ -215,21 +330,35 @@ def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
         if chunk_id:
             seen.add(chunk_id)
 
+        text = str(r.get("text", "")).strip()
+        if not text:
+            # 旧索引可能没有 text，直接跳过，避免把 source 当正文
+            continue
+
+        score = r.get("score", r.get("bm25_score"))
+
         chunks.append(
             RetrievedChunk(
                 chunk_id=chunk_id,
-                content=str(r.get("text", r.get("source", ""))),
+                content=text,
                 source=str(r.get("source", "")),
                 title=str(r.get("title", "")),
                 section=str(r.get("section", "")),
                 course=str(r.get("course", "")),
                 distance=None,
+                score=float(score) if score is not None else None,
+                retrieval_type="bm25",
                 parent_id=str(r.get("parent_id", "")),
                 heading_path=str(r.get("heading_path", "")),
+                page=_safe_int(r.get("page")),
+                chunk_index=_safe_int(r.get("chunk_index")),
             )
         )
 
     return chunks
+
+
+# ============ RRF 融合 ============
 
 
 def _rrf_fusion(
@@ -238,32 +367,45 @@ def _rrf_fusion(
     top_k: int,
     k: int = 60,
 ) -> list[RetrievedChunk]:
-    """Reciprocal Rank Fusion: score(d) = Σ 1/(k + rank_i)
-
-    Args:
-        vector_chunks: 向量检索结果（按相似度降序）
-        bm25_chunks: BM25 检索结果（按分数降序）
-        top_k: 返回数量
-        k: RRF 平滑常数（默认 60, Cormack et al. 2009）
-    """
+    """Reciprocal Rank Fusion: score(d) = Σ 1/(k + rank_i)。"""
     doc_scores: dict[str, float] = {}
     doc_objects: dict[str, RetrievedChunk] = {}
+    doc_sources: dict[str, set[str]] = {}
 
-    for rank, chunk in enumerate(vector_chunks, start=1):
-        key = chunk.chunk_id or f"v_{hash(chunk.content[:200])}"
-        doc_scores[key] = doc_scores.get(key, 0) + 1.0 / (k + rank)
-        if key not in doc_objects:
-            doc_objects[key] = chunk
+    def add_chunks(chunks: list[RetrievedChunk], retrieval_type: str) -> None:
+        for rank, chunk in enumerate(chunks, start=1):
+            key = chunk.chunk_id or f"{chunk.source}:{chunk.chunk_index}:{hash(chunk.content[:120])}"
 
-    for rank, chunk in enumerate(bm25_chunks, start=1):
-        key = chunk.chunk_id or f"b_{hash(chunk.content[:200])}"
-        doc_scores[key] = doc_scores.get(key, 0) + 1.0 / (k + rank)
-        if key not in doc_objects:
-            doc_objects[key] = chunk
+            doc_scores[key] = doc_scores.get(key, 0.0) + 1.0 / (k + rank)
+            doc_sources.setdefault(key, set()).add(retrieval_type)
+
+            if key not in doc_objects:
+                doc_objects[key] = chunk
+
+    add_chunks(vector_chunks, "vector")
+    add_chunks(bm25_chunks, "bm25")
 
     sorted_keys = sorted(doc_scores.keys(), key=lambda d: doc_scores[d], reverse=True)
 
-    return [doc_objects[k] for k in sorted_keys[:top_k]]
+    fused: list[RetrievedChunk] = []
+    for key in sorted_keys[:top_k]:
+        chunk = doc_objects[key]
+        chunk.score = doc_scores[key]
+
+        source_types = doc_sources.get(key, set())
+        if "vector" in source_types and "bm25" in source_types:
+            chunk.retrieval_type = "hybrid"
+        elif "bm25" in source_types:
+            chunk.retrieval_type = "bm25"
+        else:
+            chunk.retrieval_type = "vector"
+
+        fused.append(chunk)
+
+    return fused
+
+
+# ============ 公共接口 ============
 
 
 async def retrieve(
@@ -274,90 +416,98 @@ async def retrieve(
 ) -> RetrievalResult:
     """执行混合检索（向量 + BM25，RRF 融合）。
 
-    同时执行向量检索和 BM25 关键词检索，使用 RRF 融合两路结果；
-    BM25 无结果时退化为纯向量检索。
-
-    Args:
-        query: 用户查询文本。
-        course_name: 可选课程名称，用于 ChromaDB where 过滤 + 查询增强。
-        top_k: 返回结果数，默认从配置读取，限制 1~8。
-
-    Returns:
-        结构化检索结果，status 为 ok/empty/unavailable。
+    优化点：
+    1. BM25 先执行，embedding 不可用时可兜底。
+    2. course_name 使用软过滤，避免 metadata 不准导致查空。
+    3. 扩大召回，再融合截断。
     """
     normalized_query = (query or "").strip()
     if not normalized_query:
         return RetrievalResult(status="empty", query="")
 
     if not KB_ENABLED:
-        return RetrievalResult(status="unavailable", query=normalized_query, message="KB disabled")
+        return RetrievalResult(
+            status="unavailable",
+            query=normalized_query,
+            message="KB disabled",
+        )
 
-    # 校验 top_k 范围
-    effective_k = max(1, min(8, top_k or KB_TOP_K))
-    fetch_k = max(effective_k, _FETCH_K)
-
+    effective_k = max(1, min(_FINAL_TOP_K_LIMIT, top_k or KB_TOP_K))
+    query_text = _build_query_text(normalized_query, course_name)
     start = time.monotonic()
 
     async with _semaphore:
-        # 校验索引
         health = check_index_health()
+
+        # 先做 BM25：即使向量服务失败也能兜底
+        bm25_chunks = _bm25_query(query_text, _BM25_FETCH_K)
+
         if not health.ready:
+            if bm25_chunks:
+                return RetrievalResult(
+                    status="ok",
+                    query=normalized_query,
+                    chunks=bm25_chunks[:effective_k],
+                    elapsed_ms=_elapsed_ms(start),
+                    message=f"vector index not ready, bm25 fallback: {health.reason}",
+                )
+
             return RetrievalResult(
                 status="unavailable",
                 query=normalized_query,
+                elapsed_ms=_elapsed_ms(start),
                 message=f"index not ready: {health.reason}",
             )
 
-        # 构建查询文本
-        query_text = _build_query_text(normalized_query, course_name)
-
-        # 构建 ChromaDB where 过滤
-        where_filter: dict[str, Any] | None = None
-        if course_name and course_name.strip():
-            where_filter = {"course": {"$eq": course_name.strip()}}
-
-        # 请求 embedding
         embedding = embed_query(query_text)
         if embedding is None:
+            if bm25_chunks:
+                return RetrievalResult(
+                    status="ok",
+                    query=normalized_query,
+                    chunks=bm25_chunks[:effective_k],
+                    elapsed_ms=_elapsed_ms(start),
+                    message="embedding unavailable, bm25 fallback",
+                )
+
             return RetrievalResult(
                 status="unavailable",
                 query=normalized_query,
+                elapsed_ms=_elapsed_ms(start),
                 message="embedding unavailable",
             )
 
-        # Chroma 向量检索
-        try:
-            results = await asyncio.to_thread(_chroma_query, embedding, fetch_k, where_filter)
-        except Exception as exc:
-            logger.warning("[retriever] chroma query failed: %s", exc)
-            return RetrievalResult(
-                status="unavailable",
-                query=normalized_query,
-                message=f"chroma error: {exc}",
-            )
+        vector_chunks = await _vector_search_soft_course(
+            embedding=embedding,
+            course_name=course_name,
+            fetch_k=_VECTOR_FETCH_K,
+            min_results=effective_k,
+        )
 
-    # 解析向量检索结果
-    vector_chunks = _parse_chroma_results(results)
-
-    # 混合检索：向量 + BM25，RRF 融合（BM25 无结果时退化为纯向量）
-    bm25_chunks = _bm25_query(normalized_query, effective_k)
-    if bm25_chunks:
-        chunks = _rrf_fusion(vector_chunks, bm25_chunks, effective_k, k=_RRF_K)
+    if vector_chunks and bm25_chunks:
+        chunks = _rrf_fusion(
+            vector_chunks=vector_chunks,
+            bm25_chunks=bm25_chunks,
+            top_k=_RRF_CANDIDATE_K,
+            k=_RRF_K,
+        )
+    elif vector_chunks:
+        chunks = vector_chunks
     else:
-        chunks = vector_chunks[:effective_k]
+        chunks = bm25_chunks
+
+    chunks = _dedupe_chunks(chunks)[:effective_k]
 
     if not chunks:
-        elapsed = int((time.monotonic() - start) * 1000)
         return RetrievalResult(
             status="empty",
             query=normalized_query,
-            elapsed_ms=elapsed,
+            elapsed_ms=_elapsed_ms(start),
         )
 
-    elapsed = int((time.monotonic() - start) * 1000)
     return RetrievalResult(
         status="ok",
         query=normalized_query,
         chunks=chunks,
-        elapsed_ms=elapsed,
+        elapsed_ms=_elapsed_ms(start),
     )
