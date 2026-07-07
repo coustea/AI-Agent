@@ -80,21 +80,44 @@
       </div>
     </section>
   </main>
+
+  <!-- Status Dialog -->
+  <AuthStatusModal
+    :is-open="modalState.isOpen"
+    :type="modalState.type"
+    :title="modalState.title"
+    :message="modalState.message"
+    :countdown="modalState.countdown"
+    :primary-button-text="modalState.primaryButtonText"
+    @confirm="modalState.onConfirm"
+    @close="modalState.isOpen = false"
+  />
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { reactive, ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { PhUser as User, PhLock as Lock, PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
-import { toast } from 'vue-sonner'
 import { login } from '@/features/auth/api/auth'
 import { setCurrentUser } from '@/features/auth/model/currentUser'
 import { getErrorMessage } from '@/shared/api/http'
 import { setAuthToken } from '@/shared/auth/token'
 import AppLogo from '@/shared/ui/AppLogo.vue'
+import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 
 const router = useRouter()
+const route = useRoute()
 const isLoading = ref(false)
+
+const modalState = reactive({
+  isOpen: false,
+  type: 'success' as 'success' | 'error',
+  title: '',
+  message: '',
+  countdown: 0,
+  primaryButtonText: '确定',
+  onConfirm: () => {}
+})
 
 const form = reactive({
   username: '',
@@ -139,11 +162,10 @@ const handleLogin = async () => {
     if (data.token) {
       setAuthToken(data.token)
       setCurrentUser(data.user ?? null)
-      toast.success('登录成功！')
       if (!data.user?.is_first_login) {
-        router.push('/dashboard?onboarding=true')
+        router.push('/dashboard?onboarding=true&loginSuccess=true')
       } else {
-        router.push('/dashboard')
+        router.push('/dashboard?loginSuccess=true')
       }
     }
   } catch (err: any) {
@@ -155,12 +177,36 @@ const handleLogin = async () => {
     } else if (field === 'password') {
       errors.password = msg
     } else {
-      toast.error(msg)
+      // Trigger General Error Popup
+      modalState.type = 'error'
+      modalState.title = '登录失败'
+      modalState.message = msg
+      modalState.countdown = 0
+      modalState.primaryButtonText = '重新输入'
+      modalState.onConfirm = () => {
+        modalState.isOpen = false
+      }
+      modalState.isOpen = true
     }
   } finally {
     isLoading.value = false
   }
 }
+
+onMounted(() => {
+  if (route.query.registerSuccess === 'true') {
+    modalState.type = 'success'
+    modalState.title = '注册成功'
+    modalState.message = '您的学习账户已创建成功！请在下方输入凭据登录。'
+    modalState.countdown = 0
+    modalState.primaryButtonText = '立即登录'
+    modalState.onConfirm = () => {
+      modalState.isOpen = false
+      router.replace({ path: route.path, query: { ...route.query, registerSuccess: undefined } })
+    }
+    modalState.isOpen = true
+  }
+})
 </script>
 
 <style scoped>

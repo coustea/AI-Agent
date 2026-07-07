@@ -19,11 +19,41 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-# 课程分类目录名集合
-_COURSE_DIRS: set[str] = {
-    "高等数学", "概率论与数理统计", "数据结构", "算法设计与分析",
-    "计算机组成原理", "计算机网络", "操作系统", "数据库系统",
-    "软件工程", "程序设计基础",
+# 路径片段 → 课程名映射（覆盖编号目录格式如 "01-操作系统" 和旧格式 "操作系统"）
+_COURSE_DIR_MAP: dict[str, str] = {
+    "操作系统": "操作系统",
+    "计算机网络": "计算机网络",
+    "数据结构与算法": "数据结构与算法",
+    "计算机组成": "计算机组成原理",
+    "程序设计基础": "程序设计基础",
+    "Java": "Java",
+    "C-CPP": "C/C++",
+    "Python": "Python",
+    "机器学习入门": "机器学习",
+    "深度学习": "深度学习",
+    "AI入门": "AI入门",
+    "生成式AI": "生成式AI",
+    "AI-Agents": "AI-Agents",
+    "AI工程": "AI工程",
+    "前端全栈": "前端全栈",
+    "Web安全": "Web安全",
+    "二进制安全": "二进制安全",
+    "安全基础": "安全基础",
+    "MySQL": "MySQL",
+    "Redis": "Redis",
+    "数据库系统": "数据库系统",
+    "系统架构": "系统架构",
+    "分布式系统": "分布式系统",
+    "数学": "数学",
+    "理论CS": "理论CS",
+    "高等数学": "高等数学",
+    "统计学": "统计学",
+    "概率论与数理统计": "概率论与数理统计",
+    "软件工程": "软件工程",
+    "开发工具": "开发工具",
+    "面试": "面试",
+    "书单与杂项": "通识",
+    "其他": "通识",
 }
 
 # 标题关键词 → 课程名映射（回退推断）
@@ -80,13 +110,16 @@ def infer_title(source: str) -> str:
 def infer_course(source: str, title: str = "") -> str:
     """从相对路径推断课程名。
 
-    优先使用路径中的课程分类目录名（如 source/操作系统/xxx → 操作系统），
+    优先使用路径中的课程分类目录片段（如 "01-操作系统" → "操作系统"），
+    通过 _COURSE_DIR_MAP 匹配路径中每个片段的最后一段（去掉编号前缀），
     其次从标题关键词推断。
     """
     parts = Path(source).parts
-    for part in parts:
-        if part in _COURSE_DIRS:
-            return part
+    for part in reversed(parts):  # 从深到浅，优先细粒度匹配
+        # 去掉编号前缀（如 "01-操作系统" → "操作系统"）
+        segment = part.split("-", 1)[-1] if "-" in part and part[0].isdigit() else part
+        if segment in _COURSE_DIR_MAP:
+            return _COURSE_DIR_MAP[segment]
 
     text = title.lower()
     for keyword, course in _COURSE_KEYWORDS.items():

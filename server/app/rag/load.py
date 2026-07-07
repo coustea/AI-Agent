@@ -25,25 +25,24 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-# 支持的文件扩展名
-SUPPORTED_EXTENSIONS: set[str] = {".md", ".pdf"}
+# 支持的文件扩展名（.md/.txt 纯文本 + .pdf 版面解析）
+SUPPORTED_EXTENSIONS: set[str] = {".md", ".txt", ".pdf"}
 
-# 默认排除的文件名（非知识内容）
+# 默认排除的文件名。README/SUMMARY/INDEX 在净化后的 source/ 里是课程正文，
+# 不再作为元信息排除——噪声已由 curate_source.py 物理删除，loader 不再靠
+# 脆弱的文件名黑名单猜测内容。仅保留真正的仓库元文件。
 _EXCLUDE_NAMES: set[str] = {
-    "README.md", "readme.md",
-    "SUMMARY.md", "summary.md",
-    "INDEX.md", "index.md",
     "CONTRIBUTING.md",
     "LICENSE.md",
     "CHANGELOG.md",
 }
 
-# 默认排除的目录名
+# 默认排除的目录名（防御性：即便 curate 漏删，这些子树也不入库）
 _EXCLUDE_DIRS: frozenset[str] = frozenset({
     ".git", ".github",
     "node_modules", "__pycache__",
     ".idea", ".vscode",
-    "assets", "images", "imgs", "figures",
+    "assets", "images", "imgs", "figures", "figs",
     "scripts", "styles", "templates",
 })
 

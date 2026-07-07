@@ -242,31 +242,65 @@ COMMENT ON TABLE chat_long_term_memories IS '长期记忆表，每个用户一�
 COMMENT ON COLUMN chat_long_term_memories.memory_markdown IS '记忆内容Markdown';
 
 -- ============================================================
--- 8. global_profiles
+-- 8. user_profiles
 -- ============================================================
-CREATE TABLE IF NOT EXISTS global_profiles (
+CREATE TABLE IF NOT EXISTS user_profiles (
     id                      SERIAL          PRIMARY KEY,
     user_id                 INTEGER         NOT NULL,
-    module                  VARCHAR         NOT NULL DEFAULT 'mentor',
-    profile_json            JSONB,
-    profile_score_json      JSONB,
+    school                  VARCHAR(200),
+    school_level            VARCHAR(50),
+    major                   VARCHAR(200),
+    grade                   VARCHAR(50),
+    daily_study_time        VARCHAR(50),
+    global_learning_goal    TEXT,
+    programming_languages   JSONB,
+    courses                 JSONB,
+    overall_score           INTEGER         DEFAULT 0,
+    scored_at               TIMESTAMPTZ,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
-    CONSTRAINT uq_global_profile_user_module UNIQUE (user_id, module)
+    CONSTRAINT uq_user_profiles_user UNIQUE (user_id)
 );
 
-CREATE INDEX IF NOT EXISTS ix_global_profiles_user_id ON global_profiles (user_id);
-CREATE INDEX IF NOT EXISTS ix_global_profiles_module ON global_profiles (module);
-CREATE INDEX IF NOT EXISTS ix_global_profiles_profile_json
-    ON global_profiles USING GIN (profile_json);
-CREATE INDEX IF NOT EXISTS ix_global_profiles_profile_score_json
-    ON global_profiles USING GIN (profile_score_json);
+CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles (user_id);
 
-COMMENT ON TABLE global_profiles IS '用户全局画像表，每个用户每个模块一条';
-COMMENT ON COLUMN global_profiles.user_id IS '用户ID';
-COMMENT ON COLUMN global_profiles.module IS '模块标识';
-COMMENT ON COLUMN global_profiles.profile_json IS '画像JSON，包含能力评估、学习偏好等';
-COMMENT ON COLUMN global_profiles.profile_score_json IS '画像评分JSON，各维度得分';
+COMMENT ON TABLE user_profiles IS '用户主画像表，每个用户一条';
+COMMENT ON COLUMN user_profiles.user_id IS '用户ID';
+COMMENT ON COLUMN user_profiles.school IS '就读学校';
+COMMENT ON COLUMN user_profiles.school_level IS '学校层次';
+COMMENT ON COLUMN user_profiles.major IS '专业';
+COMMENT ON COLUMN user_profiles.grade IS '年级';
+COMMENT ON COLUMN user_profiles.daily_study_time IS '每日学习时长';
+COMMENT ON COLUMN user_profiles.global_learning_goal IS '全局学习目标';
+COMMENT ON COLUMN user_profiles.programming_languages IS '掌握的编程语言';
+COMMENT ON COLUMN user_profiles.courses IS '学习的课程';
+COMMENT ON COLUMN user_profiles.overall_score IS '总体评分';
+COMMENT ON COLUMN user_profiles.scored_at IS '评分时间';
+
+-- ============================================================
+-- 8b. user_profile_dimensions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_profile_dimensions (
+    id                      SERIAL          PRIMARY KEY,
+    user_id                 INTEGER         NOT NULL,
+    dimension_key           VARCHAR(50)     NOT NULL,
+    value                   TEXT            NOT NULL DEFAULT '',
+    evidence                JSONB,
+    score                   INTEGER         CHECK (score >= 0 AND score <= 100),
+    created_at              TIMESTAMPTZ     DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ     DEFAULT NOW(),
+    CONSTRAINT uq_user_profile_dimensions_user_key UNIQUE (user_id, dimension_key)
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_profile_dimensions_user_id ON user_profile_dimensions (user_id);
+CREATE INDEX IF NOT EXISTS ix_user_profile_dimensions_dimension_key ON user_profile_dimensions (dimension_key);
+
+COMMENT ON TABLE user_profile_dimensions IS '用户画像维度明细表';
+COMMENT ON COLUMN user_profile_dimensions.user_id IS '用户ID';
+COMMENT ON COLUMN user_profile_dimensions.dimension_key IS '维度键';
+COMMENT ON COLUMN user_profile_dimensions.value IS '维度描述';
+COMMENT ON COLUMN user_profile_dimensions.evidence IS '推断依据';
+COMMENT ON COLUMN user_profile_dimensions.score IS '维度得分';
 
 -- ============================================================
 -- 9. weekly_learning_digests
