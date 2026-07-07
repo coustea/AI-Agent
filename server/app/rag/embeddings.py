@@ -2,12 +2,16 @@
 
 使用 langchain_openai.OpenAIEmbeddings 通过 OpenAI 兼容 API 生成查询向量，
 嵌入模型配置独立于全局 LLM 配置。
+
+切换嵌入模型只需修改 config.yaml 中的 knowledge.embed_model 和
+knowledge.embed_base_url，下次启动时自动感知：
+  - manifest 中记录的 embedding_model 与当前配置不同 → 触发重建
+  - _get_embeddings_client() 每次读取最新配置，无缓存过时问题
 """
 
 from __future__ import annotations
 
 import time
-from functools import lru_cache
 
 from langchain_openai import OpenAIEmbeddings
 
@@ -50,9 +54,19 @@ def _record_success() -> None:
     _fail_count = 0
 
 
-@lru_cache(maxsize=1)
+def reset_breaker() -> None:
+    """重置熔断器状态（构建前调用，避免旧熔断阻止新构建）。"""
+    global _fail_count, _breaker_until
+    _fail_count = 0
+    _breaker_until = 0.0
+
+
 def _get_embeddings_client() -> OpenAIEmbeddings:
-    """创建嵌入客户端单例。"""
+    """创建嵌入客户端。每次读取最新配置，模型切换后无需重启。
+
+    不使用 lru_cache：config.yaml 修改 embed_model/embed_base_url 后
+    应立即生效，缓存会导致继续使用旧模型。
+    """
     return OpenAIEmbeddings(
         model=KB_EMBED_MODEL,
         api_key=_EMBED_API_KEY,

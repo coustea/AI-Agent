@@ -124,7 +124,7 @@ def build_index(
 ) -> None:
     """执行完整的安全构建流程。
 
-    管道编排：加载 → 元数据 → 分割 → 存储 → manifest → 验证 → 替换。
+    管道编排：加载 → 元数据 → 分割 → 重置熔断 → 存储 → BM25 → manifest → 验证 → 替换。
     """
     src_dir = source_dir or _SOURCE_DIR
     out_dir = output_dir or Path(KB_DIR)
@@ -146,25 +146,29 @@ def build_index(
         raise ValueError("No chunks produced from source documents")
     logger.info("[build] split into %d chunks", len(chunks))
 
-    # 4. 构建到临时目录
+    # 4. 重置嵌入熔断器，确保构建不受旧熔断影响
+    from app.rag.embeddings import reset_breaker
+    reset_breaker()
+
+    # 5. 构建到临时目录
     temp_dir = out_dir.parent / f"{out_dir.name}.building-{uuid.uuid4().hex[:8]}"
     try:
         logger.info("[build] building to temp dir: %s", temp_dir)
         doc_count, chunk_count = build_store(chunks, temp_dir, col_name, batch_size)
         logger.info("[build] indexed %d docs into %d chunks", doc_count, chunk_count)
 
-        # 5. 构建 BM25 索引
+        # 6. 构建 BM25 索引
         build_bm25(chunks, temp_dir)
 
-        # 6. 写 manifest
+        # 7. 写 manifest
         _write_manifest(temp_dir, col_name, chunk_count, doc_count)
         logger.info("[build] manifest written")
 
-        # 7. 验证
+        # 8. 验证
         verify_store(temp_dir, col_name, chunk_count)
         logger.info("[build] temp index verified")
 
-        # 8. 原子替换
+        # 9. 原子替换
         _swap_index(temp_dir, out_dir)
         logger.info("[build] index build complete")
 

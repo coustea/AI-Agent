@@ -71,7 +71,7 @@ search:
 paths:
   workplace: "static"
   logs: "logs"
-  knowledge: "app/rag/data/book/my_chroma_db"
+  knowledge: "app/rag/data/index"
 
 knowledge:
   enabled: true
