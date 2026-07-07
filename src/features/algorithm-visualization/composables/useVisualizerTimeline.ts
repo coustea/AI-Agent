@@ -4,14 +4,14 @@ import type { TraceEvent } from '@/features/algorithm-visualization/types'
 
 interface UseVisualizerTimelineOptions {
   playing: Ref<boolean>
-  speed: Ref<number>
   currentEvent: ComputedRef<TraceEvent | null>
   next: () => void
   pause: () => void
 }
 
 /** 自动推进 TraceEvent 步骤的定时器。
- * AlgorithmVisualization.vue 使用。已从 VisualStep 改为 TraceEvent。 */
+ * AlgorithmVisualization.vue 使用。已从 VisualStep 改为 TraceEvent。
+ * 固定速度：每步 1200ms */
 export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
   let timerId: number | null = null
 
@@ -29,8 +29,8 @@ export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
       return
     }
 
-    const duration = 700
-    const speed = options.speed.value > 0 ? options.speed.value : 1
+    // 固定速度：每步 1200ms
+    const duration = 1200
 
     timerId = window.setTimeout(() => {
       if (!options.playing.value) {
@@ -41,11 +41,11 @@ export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
       if (!options.playing.value) {
         options.pause()
       }
-    }, duration / speed)
+    }, duration)
   }
 
   watch(
-    [options.playing, options.speed, options.currentEvent],
+    [options.playing, options.currentEvent],
     () => {
       schedule()
     },

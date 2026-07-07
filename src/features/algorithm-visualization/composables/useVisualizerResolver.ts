@@ -1,7 +1,7 @@
 import { computed, type Ref } from 'vue'
 import type { TraceEvent, VisualizerType } from '@/features/algorithm-visualization/types'
 
-/** 从 TraceEvent 列表中提取 visualizerType 和 initialState。
+/** 从 TraceEvent 列表中提取 visualizerType。
  * AlgorithmVisualization.vue + VisualizerCanvas.vue 使用。 */
 export function useVisualizerResolver(events: Ref<TraceEvent[]>) {
   const visualizerType = computed<VisualizerType>(() => {
@@ -9,10 +9,5 @@ export function useVisualizerResolver(events: Ref<TraceEvent[]>) {
     return first?.visualizerType ?? 'array'
   })
 
-  const initialState = computed(() => {
-    const first = events.value[0]
-    return first?.state?.structure ?? {}
-  })
-
-  return { visualizerType, initialState }
+  return { visualizerType }
 }

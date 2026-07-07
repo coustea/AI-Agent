@@ -1,7 +1,20 @@
 <template>
   <main class="algorithm-visualizer-page">
-    <!-- Design Read: IDE-style workspace for algorithm learners, with a high-density flat panel system, leaning toward LeetCode-style layout with zero border-radius controls, 1px borders. -->
+    <!-- 顶部选择器栏 -->
+    <AlgorithmSelectorBar
+      v-model:algorithm="algorithm"
+      v-model:language="language"
+      :algorithms="algorithms"
+      :languages="languages"
+      :loading="generating"
+      :code-ready="!!code.trim()"
+      @run="handleRun"
+      @reset="resetTemplate"
+    />
+
+    <!-- 主内容区 -->
     <section class="algorithm-visualizer-main">
+      <!-- 左侧：算法可视化 -->
       <section class="visualizer-left">
         <VisualizerCanvas
           :events="events"
@@ -11,42 +24,23 @@
           :generating="generating"
         />
 
-        <VisualizerControlBar
-          :events="events"
-          :playing="playing"
-          :current-step-index="currentStepIndex"
-          :speed="speed"
-          :finished="finished"
-          @play="play"
-          @pause="pause"
-          @next="next"
-          @prev="prev"
-          @reset="resetPlayback"
-          @speed-change="setSpeed"
-          @seek="seek"
+        <!-- 极简进度条 -->
+        <VisualizerProgressBar
+          :current="currentStepIndex + 1"
+          :total="events.length"
+          :message="currentEvent?.message"
         />
       </section>
 
+      <!-- 右侧：代码编辑器 -->
       <aside class="visualizer-right">
         <CodeEditorPanel
           v-model:code="code"
-          v-model:language="language"
-          v-model:algorithm="algorithm"
-          :languages="languages"
-          :algorithms="algorithms"
+          :language="language"
           :loading="generating"
           :active-line="currentEvent?.line"
           @run="handleRun"
           @reset-template="resetTemplate"
-        />
-
-        <AlgorithmInfoPanel
-          :algorithm-name="currentAlgorithmName"
-          :difficulty="currentAlgorithmDifficulty"
-          :current-event="currentEvent"
-          :current-step-index="currentStepIndex"
-          :total-steps="events.length"
-          :run-error="runError"
         />
       </aside>
     </section>
@@ -56,9 +50,9 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import VisualizerCanvas from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerCanvas.vue'
-import VisualizerControlBar from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerControlBar.vue'
+import VisualizerProgressBar from '@/features/algorithm-visualization/components/algorithm-visualizer/VisualizerProgressBar.vue'
 import CodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/CodeInputPanel.vue'
-import AlgorithmInfoPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmInfoPanel.vue'
+import AlgorithmSelectorBar from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmSelectorBar.vue'
 import { useTracePlayer } from '@/features/algorithm-visualization/composables/useTracePlayer'
 import { useAlgorithmTemplate } from '@/features/algorithm-visualization/composables/useAlgorithmTemplate'
 import { useAlgorithmRun } from '@/features/algorithm-visualization/composables/useAlgorithmRun'
@@ -73,13 +67,11 @@ const {
   algorithms,
   loadMeta,
   resetTemplate,
-  getCurrentAlgorithmInfo,
   getCurrentVisualizerType,
 } = useAlgorithmTemplate()
 
 const {
   events,
-  runError,
   generating,
   run: runAlgorithm,
 } = useAlgorithmRun()
@@ -89,7 +81,6 @@ const resolver = useVisualizerResolver(events)
 
 useVisualizerTimeline({
   playing: playback.playing,
-  speed: playback.speed,
   currentEvent: playback.currentEvent,
   next: playback.next,
   pause: playback.pause,
@@ -97,13 +88,7 @@ useVisualizerTimeline({
 
 const currentEvent = computed(() => playback.currentEvent.value)
 const currentStepIndex = computed(() => playback.currentStepIndex.value)
-const playing = computed(() => playback.playing.value)
-const speed = computed(() => playback.speed.value)
-const finished = computed(() => playback.finished.value)
 const visualizerType = computed(() => resolver.visualizerType.value)
-
-const currentAlgorithmName = computed(() => getCurrentAlgorithmInfo()?.name ?? '算法可视化')
-const currentAlgorithmDifficulty = computed(() => getCurrentAlgorithmInfo()?.difficulty ?? '')
 
 onMounted(() => {
   loadMeta()
@@ -111,30 +96,25 @@ onMounted(() => {
 
 async function handleRun() {
   await runAlgorithm({
-    domain: 'data_structure',
     algorithm: algorithm.value,
     visualizerType: getCurrentVisualizerType(),
     language: language.value,
     code: code.value,
   })
   playback.reset()
+  // 运行成功后自动播放
+  if (events.value.length > 0) {
+    playback.play()
+  }
 }
-
-function play() { playback.play() }
-function pause() { playback.pause() }
-function next() { playback.next() }
-function prev() { playback.prev() }
-function resetPlayback() { playback.reset() }
-function setSpeed(value: number) { playback.setSpeed(value) }
-function seek(value: number) { playback.seek(value) }
 </script>
 
 <style scoped>
 .algorithm-visualizer-page {
-  height: calc(100vh - 64px);
+  height: calc(100vh - var(--navbar-height, 72px));
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: #ffffff;
   overflow: hidden;
 }
 
@@ -142,9 +122,9 @@ function seek(value: number) { playback.seek(value) }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(420px, 1fr);
-  gap: 8px;
-  padding: 8px;
+  grid-template-columns: 1fr 520px;
+  gap: 1px;
+  background: var(--color-border);
 }
 
 .visualizer-left {
@@ -152,15 +132,15 @@ function seek(value: number) { playback.seek(value) }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  background: #ffffff;
 }
 
 .visualizer-right {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) 200px;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
 }
 
 @media (max-width: 1100px) {
@@ -174,7 +154,7 @@ function seek(value: number) { playback.seek(value) }
   }
 
   .visualizer-left {
-    min-height: 600px;
+    min-height: 500px;
   }
 }
 </style>

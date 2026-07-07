@@ -6,13 +6,11 @@ import type {
   CodeLanguage,
   RunError,
   RunResult,
-  TraceDomain,
   TraceEvent,
   VisualizerType,
 } from '@/features/algorithm-visualization/types'
 
-/** 提交运行→获取 TraceEvent[]。AlgorithmVisualization.vue 使用。
- * 替代旧 useVisualizerPayload.ts。 */
+/** 提交运行→获取 TraceEvent[]。AlgorithmVisualization.vue 使用。 */
 export function useAlgorithmRun() {
   const events = ref<TraceEvent[]>([])
   const runResult = ref<RunResult | null>(null)
@@ -20,11 +18,11 @@ export function useAlgorithmRun() {
   const generating = ref(false)
 
   async function run(params: {
-    domain: TraceDomain
     algorithm: string
     visualizerType: VisualizerType
     language: CodeLanguage
     code: string
+    inputData?: string
   }) {
     generating.value = true
     runError.value = null
@@ -37,7 +35,7 @@ export function useAlgorithmRun() {
         toast.success('算法运行成功，可视化步骤已载入！')
       } else {
         runError.value = {
-          errorType: 'no_events',
+          errorType: 'TRACE_EVENT_EMPTY',
           message: '代码运行完毕，但未产生任何可视化追踪记录。',
         }
         toast.warning('运行完成但未产生可视化事件')
@@ -45,7 +43,7 @@ export function useAlgorithmRun() {
     } catch (err: unknown) {
       const msg = getErrorMessage(err, '运行失败，请检查后端服务状态。')
       runError.value = {
-        errorType: 'runtime_error',
+        errorType: 'RUNTIME_ERROR',
         message: msg,
       }
       toast.error(msg)

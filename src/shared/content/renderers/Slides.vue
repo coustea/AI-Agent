@@ -51,19 +51,19 @@ function toggleFullscreen() {
 }
 
 const htmlUrl = computed(() => {
-  const rawMeta = props.resource?.metadata_json || props.resource?.metadata
-  try {
-    const metadata = typeof rawMeta === 'string' ? JSON.parse(rawMeta) : rawMeta
-    const url = metadata?.html_url
-    if (
-      typeof url === 'string'
-      && /^\/api\/v1\/ai\/resources\/public\/[A-Za-z0-9_-]+\/html$/.test(url)
-    ) {
-      return url
-    }
-  } catch {
-    return ''
-  }
+  const raw = props.resource
+  if (!raw) return ''
+
+  const meta = raw.metadata_json || raw.metadata
+  const metadata = typeof meta === 'string' ? JSON.parse(meta) : meta
+  const url = metadata?.public_api_url
+  if (typeof url === 'string' && url) return url
+
+  const content = raw.content
+  const contentObj = typeof content === 'string' ? JSON.parse(content) : content
+  const contentUrl = contentObj?.public_api_url
+  if (typeof contentUrl === 'string' && contentUrl) return contentUrl
+
   return ''
 })
 

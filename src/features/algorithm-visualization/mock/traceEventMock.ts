@@ -1,7 +1,6 @@
 import type { TraceEvent, VisualizerType } from '@/features/algorithm-visualization/types'
 
-/** 创建冒泡排序 mock TraceEvent[] — 前端快速预览用。
- * 替代旧 algorithmVisualizerMock.ts。 */
+/** 创建冒泡排序 mock TraceEvent[] — 前端快速预览用。 */
 export function createBubbleSortEvents(inputArray: number[] = [5, 3, 8, 1, 2]): TraceEvent[] {
   const nums = [...inputArray]
   const events: TraceEvent[] = []
@@ -15,7 +14,7 @@ export function createBubbleSortEvents(inputArray: number[] = [5, 3, 8, 1, 2]): 
     const event: TraceEvent = {
       id: `evt-${step}`,
       step,
-      domain: 'data_structure',
+      domain: 'sorting',
       visualizerType: 'array' as VisualizerType,
       type,
       state: { structure },
@@ -78,7 +77,7 @@ export function createBracketMatchEvents(input: string = '{[()]}'): TraceEvent[]
     const event: TraceEvent = {
       id: `evt-${step}`,
       step,
-      domain: 'data_structure',
+      domain: 'string_structure',
       visualizerType: 'stack-queue' as VisualizerType,
       type,
       state: { structure },

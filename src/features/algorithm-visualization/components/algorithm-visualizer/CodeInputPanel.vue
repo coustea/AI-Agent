@@ -1,35 +1,11 @@
 <template>
   <section class="code-input-panel">
     <div class="panel-header">
-      <div class="flex items-center gap-2">
+      <div class="header-left">
         <h2>代码编辑</h2>
-        <span v-if="activeLine" class="line-indicator">执行到第 {{ activeLine }} 行</span>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <!-- 算法选择 -->
-        <Select v-model="localAlgorithm">
-          <SelectTrigger class="h-8 text-xs min-w-[120px] bg-white">
-            <SelectValue placeholder="选择算法" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem v-for="alg in algorithms" :key="alg.key" :value="alg.key">
-              {{ alg.name }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <!-- 语言选择 -->
-        <Select v-model="localLanguage">
-          <SelectTrigger class="h-8 text-xs min-w-[100px] bg-white">
-            <SelectValue placeholder="选择语言" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem v-for="lang in languages" :key="lang.key" :value="lang.key">
-              {{ lang.label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
+        <span v-if="activeLine" class="line-indicator">
+          执行到第 {{ activeLine }} 行
+        </span>
       </div>
     </div>
 
@@ -37,22 +13,28 @@
       <div ref="editorContainer" class="code-editor-monaco" />
     </div>
 
-    <div class="panel-actions">
-      <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs bg-white cursor-pointer" @click="$emit('reset-template')">
-        <RotateCcw class="w-3.5 h-3.5" />
-        重置模板
-      </Button>
-
-      <Button
-        variant="default"
-        size="sm"
-        class="h-8 gap-1.5 text-xs ml-auto bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-        :disabled="loading || !code.trim()"
-        @click="$emit('run')"
-      >
-        <Play class="w-3.5 h-3.5 fill-current" />
-        {{ loading ? '运行中...' : '运行可视化' }}
-      </Button>
+    <div class="panel-footer">
+      <span class="language-hint">{{ languageLabel }}</span>
+      <div class="footer-actions">
+        <Button
+          variant="outline"
+          size="sm"
+          class="reset-btn"
+          @click="$emit('reset-template')"
+        >
+          <RotateCcw class="btn-icon" />
+          重置模板
+        </Button>
+        <Button
+          class="run-btn"
+          :disabled="loading || !code.trim()"
+          @click="$emit('run')"
+        >
+          <Play v-if="!loading" class="btn-icon" />
+          <Loader2 v-else class="btn-icon spin" />
+          {{ loading ? '运行中...' : '运行可视化' }}
+        </Button>
+      </div>
     </div>
   </section>
 </template>
@@ -60,47 +42,38 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as monaco from 'monaco-editor'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Play, RotateCcw } from 'lucide-vue-next'
-import type { CodeLanguage, LanguageInfo, AlgorithmInfo } from '@/features/algorithm-visualization/types'
+import { Play, RotateCcw, Loader2 } from 'lucide-vue-next'
+import type { CodeLanguage } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
   code: string
   language: CodeLanguage
-  algorithm: string
-  languages: LanguageInfo[]
-  algorithms: AlgorithmInfo[]
   loading: boolean
   activeLine?: number
 }>()
 
 const emit = defineEmits<{
   'update:code': [value: string]
-  'update:language': [value: CodeLanguage]
-  'update:algorithm': [value: string]
-  'reset-template': []
   'run': []
+  'reset-template': []
   dirty: []
 }>()
-
-const localLanguage = computed({
-  get: () => props.language,
-  set: (value: CodeLanguage) => {
-    emit('update:language', value)
-  },
-})
-
-const localAlgorithm = computed({
-  get: () => props.algorithm,
-  set: (value: string) => {
-    emit('update:algorithm', value)
-  },
-})
 
 const editorContainer = ref<HTMLDivElement | null>(null)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
 let decorationsCollection: monaco.editor.IEditorDecorationsCollection | null = null
+
+const languageLabel = computed(() => {
+  const map: Record<CodeLanguage, string> = {
+    python: 'Python',
+    javascript: 'JavaScript',
+    cpp: 'C++',
+    java: 'Java',
+    c: 'C',
+  }
+  return map[props.language] ?? props.language
+})
 
 function mapLanguage(lang: CodeLanguage): string {
   const map: Record<CodeLanguage, string> = {
@@ -222,102 +195,122 @@ onBeforeUnmount(() => {
 .code-input-panel {
   height: 100%;
   min-height: 0;
-  border-radius: 4px;
-  padding: 12px;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: none;
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
 }
 
 .panel-header h2 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
-}
-
-.panel-header p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.language-select {
-  height: 28px;
-  padding: 0 6px;
-  border-radius: 4px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #0f172a;
-  outline: none;
-  font-size: 12px;
-}
-
-.language-select:focus {
-  border-color: #3b82f6;
-}
-
-.code-editor-shell {
-  height: 100%;
-  min-height: 0;
+  color: var(--color-text-strong);
 }
 
 .line-indicator {
-  color: #2563eb;
-  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.code-editor-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .code-editor-monaco {
   width: 100%;
   height: 100%;
-  min-height: 0;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  overflow: hidden;
+  border: none;
 }
 
-.panel-actions {
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.language-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.footer-actions {
   display: flex;
   gap: 8px;
-  padding-top: 4px;
 }
 
-.secondary-action {
-  height: 28px;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
+.run-btn {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 0;
+  background: var(--color-primary);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+}
+
+.run-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.reset-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 0;
+  border: 1px solid var(--color-border);
   background: #ffffff;
-  color: #334155;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
-.secondary-action:hover {
-  background: #f8fafc;
+.reset-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+:deep(.monaco-active-line-highlight) {
+  background-color: rgba(37, 99, 235, 0.08) !important;
+  border-left: 3px solid #2563eb !important;
 }
 
 @media (max-width: 1100px) {
   .code-input-panel {
     min-height: 400px;
   }
-}
-
-:deep(.monaco-active-line-highlight) {
-  background-color: rgba(37, 99, 235, 0.08) !important;
-  border-left: 3px solid #2563eb !important;
 }
 </style>

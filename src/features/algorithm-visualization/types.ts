@@ -1,6 +1,3 @@
-/** TraceEvent domain — 当前阶段只用 data_structure */
-export type TraceDomain = 'data_structure'
-
 /** 可视化器类型 — 小写 kebab-case */
 export type VisualizerType =
   | 'array'
@@ -17,7 +14,7 @@ export type CodeLanguage = 'python' | 'c' | 'cpp' | 'java' | 'javascript'
 export interface TraceEvent {
   id: string
   step: number
-  domain: TraceDomain
+  domain: string
   visualizerType: VisualizerType
   type: string
   line?: number
@@ -38,7 +35,7 @@ export interface TraceEventState {
 export interface AlgorithmInfo {
   key: string
   name: string
-  domain: TraceDomain
+  domain: string
   visualizerType: VisualizerType
   difficulty: 'easy' | 'medium' | 'hard'
   supportedLanguages: CodeLanguage[]
@@ -53,17 +50,19 @@ export interface LanguageInfo {
 
 /** 模板数据 (来自 GET /templates) */
 export interface TemplateData {
-  domain: TraceDomain
+  domain: string
   algorithm: string
   visualizerType: VisualizerType
   language: CodeLanguage
   templateCode: string
   defaultData: Record<string, unknown>
+  requiredEvents: string[]
+  supportedLanguages: CodeLanguage[]
 }
 
 /** 运行结果 (来自 POST /run 成功) */
 export interface RunResult {
-  domain: TraceDomain
+  domain: string
   algorithm: string
   visualizerType: VisualizerType
   language: CodeLanguage
@@ -75,20 +74,23 @@ export interface RunResult {
 /** 运行错误 (来自 POST /run 失败) */
 export interface RunError {
   errorType:
-    | 'compile_error'
-    | 'runtime_error'
-    | 'timeout'
-    | 'no_events'
-    | 'unsupported_language'
-    | 'unsupported_algorithm'
+    | 'MISSING_LANGUAGE'
+    | 'MISSING_ALGORITHM'
+    | 'MISSING_CODE'
+    | 'UNSUPPORTED_ALGORITHM'
+    | 'UNSUPPORTED_LANGUAGE'
+    | 'VISUALIZER_TYPE_MISMATCH'
+    | 'COMPILE_ERROR'
+    | 'RUNTIME_ERROR'
+    | 'TIMEOUT'
+    | 'TRACE_FILE_MISSING'
+    | 'TRACE_JSON_INVALID'
+    | 'TRACE_EVENT_EMPTY'
+    | 'TRACE_EVENT_INVALID'
+    | 'TRACE_VISUALIZER_TYPE_INVALID'
+    | 'RUNTIME_NOT_FOUND'
+    | 'TRACER_SDK_MISSING'
+    | 'VISUALIZER_RUN_ERROR'
   message: string
   details?: string
-}
-
-/** 播放状态 */
-export interface PlaybackState {
-  playing: boolean
-  currentStepIndex: number
-  speed: number
-  finished: boolean
 }

@@ -9,8 +9,7 @@ import type {
   VisualizerType,
 } from '@/features/algorithm-visualization/types'
 
-/** 算法+语言→模板代码加载。AlgorithmVisualization.vue 使用。
- * 替代旧 useVisualizerState.ts。 */
+/** 算法+语言→模板代码加载。AlgorithmVisualization.vue 使用。 */
 export function useAlgorithmTemplate() {
   const language = ref<CodeLanguage>('python')
   const algorithm = ref<string>('bubble_sort')
@@ -25,13 +24,32 @@ export function useAlgorithmTemplate() {
   async function loadMeta() {
     metaLoading.value = true
     try {
-      const [langsRes, algsRes] = await Promise.all([fetchLanguages(), fetchAlgorithms()])
+      const [langsRes, algsRes] = await Promise.all([
+        fetchLanguages(),
+        fetchAlgorithms('all', language.value),
+      ])
       languages.value = langsRes.data.data ?? []
       algorithms.value = algsRes.data.data ?? []
     } catch {
       toast.error('加载语言或算法列表失败')
     } finally {
       metaLoading.value = false
+    }
+  }
+
+  /** 切换语言时重新加载算法列表（只显示支持当前语言的算法） */
+  async function reloadAlgorithms() {
+    try {
+      const algsRes = await fetchAlgorithms('all', language.value)
+      algorithms.value = algsRes.data.data ?? []
+
+      // 如果当前算法不在新列表里，自动切换到第一个可用算法
+      const stillAvailable = algorithms.value.some((a) => a.key === algorithm.value)
+      if (!stillAvailable && algorithms.value.length > 0) {
+        algorithm.value = algorithms.value[0]!.key
+      }
+    } catch {
+      toast.error('加载算法列表失败')
     }
   }
 
@@ -48,13 +66,24 @@ export function useAlgorithmTemplate() {
     }
   }
 
-  /** 切换语言/算法时自动重载模板 */
+  /** 切换算法时自动重载模板 */
   watch(
-    [language, algorithm],
+    [algorithm],
     () => {
       loadTemplate()
     },
-    { immediate: true },
+    { immediate: false },
+  )
+
+  /** 切换语言时先更新算法列表，再加载模板 */
+  watch(
+    [language],
+    async () => {
+      await reloadAlgorithms()
+      // reloadAlgorithms 可能会更改 algorithm，后续的 algorithm watch 会触发 loadTemplate
+      // 但如果 algorithm 没变，也需要重新加载模板（因为语言变了）
+      loadTemplate()
+    },
   )
 
   /** 重置到默认模板 */

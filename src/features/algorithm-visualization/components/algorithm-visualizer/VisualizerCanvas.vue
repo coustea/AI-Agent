@@ -75,11 +75,8 @@ defineProps<{
   position: relative;
   flex: 1 1 0%;
   min-height: 0;
-  border-radius: 4px;
   overflow: hidden;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: none;
 }
 
 .canvas-loading {
@@ -88,22 +85,22 @@ defineProps<{
   display: grid;
   place-content: center;
   gap: 14px;
-  background: rgba(248, 250, 252, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   z-index: 2;
 }
 
 .canvas-loading p {
   margin: 0;
   font-size: 14px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .loading-spinner {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 3px solid rgba(37, 99, 235, 0.16);
-  border-top-color: #2563eb;
+  border: 3px solid rgba(70, 184, 180, 0.16);
+  border-top-color: var(--color-primary);
   animation: spin 0.9s linear infinite;
   margin: 0 auto;
 }

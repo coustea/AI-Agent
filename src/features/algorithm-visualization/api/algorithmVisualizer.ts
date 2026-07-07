@@ -6,7 +6,6 @@ import type {
   LanguageInfo,
   RunResult,
   TemplateData,
-  TraceDomain,
 } from '@/features/algorithm-visualization/types'
 
 /** 获取支持语言列表 — useAlgorithmTemplate 调用 */
@@ -14,10 +13,11 @@ export function fetchLanguages() {
   return http.get<ApiResponse<LanguageInfo[]>>('/ai/algorithm-visualizer/languages')
 }
 
-/** 获取算法列表 — useAlgorithmTemplate 调用 */
-export function fetchAlgorithms(domain: TraceDomain = 'data_structure') {
+/** 获取算法列表 — useAlgorithmTemplate 调用。
+ *  domain 默认 all；language 可选，传入后只返回支持该语言的算法。 */
+export function fetchAlgorithms(domain = 'all', language?: CodeLanguage) {
   return http.get<ApiResponse<AlgorithmInfo[]>>('/ai/algorithm-visualizer/algorithms', {
-    params: { domain },
+    params: { domain, ...(language ? { language } : {}) },
   })
 }
 
@@ -30,11 +30,11 @@ export function fetchTemplate(algorithm: string, language: CodeLanguage) {
 
 /** 运行可视化 — useAlgorithmRun 调用 */
 export function runVisualization(data: {
-  domain: TraceDomain
   algorithm: string
   visualizerType: string
   language: CodeLanguage
   code: string
+  inputData?: string
 }) {
   return http.post<ApiResponse<RunResult>>('/ai/algorithm-visualizer/run', data)
 }
