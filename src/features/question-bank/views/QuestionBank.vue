@@ -900,38 +900,21 @@ async function loadPracticePool() {
 async function loadQuestionBank() {
   bankLoading.value = true
   try {
-    const source = allQuestionPool.value.length ? allQuestionPool.value : await fetchAllQuestionPoolForSearch()
-    const filtered = source.filter((question) => {
-      if (bankFilters.subject && question.subject !== bankFilters.subject) return false
-      if (bankFilters.difficulty && question.difficulty !== bankFilters.difficulty) return false
-      if (bankFilters.type && question.type !== bankFilters.type) return false
-
-      const query = bankFilters.query.trim().toLowerCase()
-      if (!query) return true
-
-      return [
-        question.subject,
-        question.type,
-        question.difficulty,
-        question.content,
-        question.analysis,
-        question.answer,
-        ...(question.knowledge_points || []),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
+    const response = await fetchQuizBankQuestions({
+      query: bankFilters.query || undefined,
+      subject: bankFilters.subject || undefined,
+      difficulty: bankFilters.difficulty || undefined,
+      type: bankFilters.type || undefined,
+      page: bankPage.value,
+      page_size: bankPageSize.value,
     })
 
-    const dailyOrdered = shuffleBySeed(filtered, `bank:${formatDateKey(new Date())}`)
-    const start = (bankPage.value - 1) * bankPageSize.value
-    const end = start + bankPageSize.value
+    questions.value = response.items || []
+    totalQuestions.value = response.total || 0
 
-    questions.value = dailyOrdered.slice(start, end)
-    totalQuestions.value = filtered.length
-    subjects.value = uniqueKeepOrder(source.map((item) => item.subject).filter(Boolean))
-    difficulties.value = uniqueKeepOrder(source.map((item) => item.difficulty || '').filter(Boolean))
-    types.value = uniqueKeepOrder(source.map((item) => item.type).filter(Boolean))
+    if (response.subjects?.length) subjects.value = uniqueKeepOrder(response.subjects)
+    if (response.difficulties?.length) difficulties.value = uniqueKeepOrder(response.difficulties)
+    if (response.types?.length) types.value = uniqueKeepOrder(response.types)
   } catch (error) {
     toast.error(getErrorMessage(error, '加载题库失败'))
   } finally {
@@ -1674,61 +1657,11 @@ function formatUserAnswer(ans: AnswerValue) {
   return Array.isArray(ans) ? ans.join(',') : String(ans || '')
 }
 
-async function fetchAllQuestionPoolForSearch() {
-  const pageSize = 100
-  const allItems: Question[] = []
-  const seen = new Set<string>()
-  let page = 1
-  let total = 0
-
-  while (true) {
-    const result = await fetchQuizBankQuestions({
-      page,
-      page_size: pageSize,
-    })
-
-    const items = result.items || []
-    total = result.total || total
-
-    items.forEach((item) => {
-      if (item?.id && !seen.has(item.id)) {
-        seen.add(item.id)
-        allItems.push(item)
-      }
-    })
-
-    subjects.value = uniqueKeepOrder([...(result.subjects || []), ...subjects.value])
-    difficulties.value = uniqueKeepOrder([...(result.difficulties || []), ...difficulties.value])
-    types.value = uniqueKeepOrder([...(result.types || []), ...types.value])
-
-    if (!items.length || items.length < pageSize || (total > 0 && allItems.length >= total)) break
-    page += 1
-  }
-
-  allQuestionPool.value = allItems
-  return allItems
-}
-
 function shuffle<T>(array: T[]): T[] {
   const result = [...array]
 
   for (let i = result.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
-    const temp = result[i] as T
-    result[i] = result[j] as T
-    result[j] = temp
-  }
-
-  return result
-}
-
-function shuffleBySeed<T>(array: T[], seedText: string) {
-  const result = [...array]
-  let seed = seedText.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) || 1
-
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    seed = (seed * 9301 + 49297) % 233280
-    const j = Math.floor((seed / 233280) * (i + 1))
     const temp = result[i] as T
     result[i] = result[j] as T
     result[j] = temp

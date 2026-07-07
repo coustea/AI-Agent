@@ -1,7 +1,30 @@
 import http from '@/shared/api/http'
-import type { QuizBankQuestionListResponse } from '@/features/question-bank/model/quiz'
 
-export type { QuizBankQuestionListResponse }
+export interface QuizBankQuestion {
+  id: string
+  subject: string
+  subject_en?: string | null
+  type: string
+  difficulty?: string | null
+  content: string
+  options?: Record<string, string> | null
+  answer: string
+  analysis: string
+  knowledge_points: string[]
+  tags: string[]
+  language?: string | null
+  split?: string | null
+}
+
+export interface QuizBankQuestionListResponse {
+  items: QuizBankQuestion[]
+  total: number
+  page: number
+  page_size: number
+  subjects: string[]
+  difficulties: string[]
+  types: string[]
+}
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   single_choice: '单选题',
@@ -40,8 +63,10 @@ export async function fetchQuizBankQuestions(params?: {
 }): Promise<QuizBankQuestionListResponse> {
   const requestParams = {
     subject: params?.subject,
+    subjects: params?.subjects?.length ? params.subjects : undefined,
     difficulty: params?.difficulty,
     type: params?.type,
+    query: params?.query || undefined,
     page: params?.page,
     page_size: params?.page_size,
   }

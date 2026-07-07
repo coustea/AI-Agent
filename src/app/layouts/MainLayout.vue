@@ -73,7 +73,7 @@
     <main class="page-content">
       <router-view v-slot="{ Component }">
         <transition name="fade-slide" mode="out-in">
-          <keep-alive include="ResourceGenerator,Tutor,LearningPathOverview">
+          <keep-alive include="ResourceGenerator,Tutor,LearningPathOverview,Home">
             <component :is="Component" :key="route.path" />
           </keep-alive>
         </transition>

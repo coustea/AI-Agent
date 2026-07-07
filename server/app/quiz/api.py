@@ -9,7 +9,9 @@ from sqlalchemy import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
+from app.infra.logging import get_logger
 from app.infra.database import get_session
+from app.quiz.events import record_quiz_submit_event
 from app.infra.models import QuizQuestion, School, User, WrongQuestion
 from app.infra.response import HttpResponse
 from app.quiz.schemas import (
@@ -20,7 +22,9 @@ from app.quiz.schemas import (
     WrongQuestionListResponse,
     WrongQuestionRead,
 )
-from app.quiz.service import quiz_review_service
+from app.quiz.service import quiz_bank_service, quiz_review_service
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -97,7 +101,9 @@ async def get_quiz_stats(session: AsyncSession = Depends(get_session)):
 
 @router.get("/quiz")
 async def list_quiz(
+    query: str | None = Query(default=None, description="搜索关键词"),
     subject: str | None = Query(default=None, description="科目"),
+    subjects: list[str] | None = Query(default=None, description="科目列表"),
     type: str | None = Query(default=None, description="题型"),
     difficulty: str | None = Query(default=None, description="难度"),
     page: int = Query(default=1, ge=1),
@@ -105,44 +111,17 @@ async def list_quiz(
     session: AsyncSession = Depends(get_session),
 ):
     """获取题目列表。"""
-    stmt = select(QuizQuestion)
-    count_stmt = select(func.count()).select_from(QuizQuestion)
-
-    if subject:
-        stmt = stmt.where(QuizQuestion.subject == subject)
-        count_stmt = count_stmt.where(QuizQuestion.subject == subject)
-    if type:
-        stmt = stmt.where(QuizQuestion.question_type == type)
-        count_stmt = count_stmt.where(QuizQuestion.question_type == type)
-    if difficulty:
-        stmt = stmt.where(QuizQuestion.difficulty == difficulty)
-        count_stmt = count_stmt.where(QuizQuestion.difficulty == difficulty)
-
-    total = (await session.exec(count_stmt)).scalar() or 0
-    items = (await session.exec(
-        stmt.order_by(QuizQuestion.id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )).scalars().all()
-
-    return HttpResponse.success(data={
-        "items": [
-            {
-                "id": q.question_id,
-                "subject": q.subject,
-                "type": q.question_type,
-                "difficulty": q.difficulty,
-                "content": q.content,
-                "options": q.options_json,
-                "answer": q.answer,
-                "analysis": q.analysis,
-            }
-            for q in items
-        ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    result = await quiz_bank_service.list_questions(
+        session=session,
+        query=query,
+        subject=subject,
+        subjects=subjects,
+        difficulty=difficulty,
+        question_type=type,
+        page=page,
+        page_size=page_size,
+    )
+    return HttpResponse.success(data=result.model_dump())
 
 
 # ---------------------------------------------------------------------------
@@ -225,8 +204,25 @@ async def submit_quiz(
             wrong_count += 1
 
     await session.commit()
+
+    total = len(request.results)
+    correct_count = sum(1 for r in request.results if r.is_correct)
+    score = (correct_count / total * 100) if total > 0 else 0
+    subject = request.results[0].subject if request.results else None
+    try:
+        await record_quiz_submit_event(
+            db=session,
+            user_id=user_id,
+            total_count=total,
+            correct_count=correct_count,
+            score=score,
+            subject=subject,
+        )
+    except Exception:
+        logger.exception("Failed to record quiz_submitted event: user_id=%s", user_id)
+
     return HttpResponse.success(data=ObjectiveSubmitResponse(
-        processed_count=len(request.results),
+        processed_count=total,
         wrong_saved_count=wrong_count,
     ).model_dump())
 
