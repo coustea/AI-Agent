@@ -54,10 +54,10 @@
 
         <div class="question-foot">
           <div class="foot-status">
-            <span v-if="submitted[question.id]" :class="['status-pill', correct[question.id] ? 'success' : 'danger']">
-              {{ correct[question.id] ? '回答正确' : '回答错误，已加入错题本' }}
+            <span v-if="submitted[question.id]" :class="['status-pill', subjectiveScoreClass(question)]">
+              {{ subjectiveScoreText(question) }}
             </span>
-            <span v-if="submitted[question.id] && review[question.id]?.score != null" class="score-badge" :class="correct[question.id] ? 'success' : 'danger'">
+            <span v-if="submitted[question.id] && review[question.id]?.score != null" class="score-badge" :class="subjectiveScoreClass(question)">
               {{ review[question.id].score }}分
             </span>
           </div>
@@ -183,6 +183,22 @@ function hasAnswer(question: DailyQuestion) {
 
 function formatAnswer(ans: string | undefined) {
   return String(ans || '').replace(/,/g, '、')
+}
+
+function subjectiveScoreClass(question: DailyQuestion) {
+  const score = props.review[question.id]?.score
+  if (score == null) return props.correct[question.id] ? 'success' : 'danger'
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+function subjectiveScoreText(question: DailyQuestion) {
+  const score = props.review[question.id]?.score
+  if (score == null) return props.correct[question.id] ? '回答正确' : '回答错误，已加入错题本'
+  if (score >= 80) return '回答优秀'
+  if (score >= 60) return '基本正确，部分不足'
+  return '回答错误，已加入错题本'
 }
 
 function renderInline(text: string) {
@@ -387,6 +403,11 @@ function renderInline(text: string) {
   color: #047857;
 }
 
+.status-pill.warning {
+  background: rgba(254, 249, 195, 0.8);
+  color: #854d0e;
+}
+
 .status-pill.danger {
   background: rgba(254, 226, 226, 0.8);
   color: #b91c1c;
@@ -519,6 +540,11 @@ function renderInline(text: string) {
 .score-badge.success {
   background: #dcfce7;
   color: #166534;
+}
+
+.score-badge.warning {
+  background: #fef9c3;
+  color: #854d0e;
 }
 
 .score-badge.danger {

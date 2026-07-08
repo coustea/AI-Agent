@@ -132,10 +132,10 @@
           </div>
 
           <div v-if="submitted[question.id]" class="result-banner">
-            <span :class="['status-pill', correct[question.id] ? 'success' : 'danger']">
-              {{ correct[question.id] ? '回答正确' : '回答错误，已加入错题本' }}
+            <span :class="['status-pill', subjectiveScoreClass(question)]">
+              {{ subjectiveScoreText(question) }}
             </span>
-            <span v-if="review[question.id]?.score != null" class="score-badge" :class="correct[question.id] ? 'success' : 'danger'">
+            <span v-if="review[question.id]?.score != null" class="score-badge" :class="subjectiveScoreClass(question)">
               {{ review[question.id].score }}分
             </span>
           </div>
@@ -356,6 +356,22 @@ function statusClass(question: any) {
   return activeQuestionId.value === question.id ? 'active' : 'neutral'
 }
 
+function subjectiveScoreClass(question: any) {
+  const score = props.review[question.id]?.score
+  if (score == null) return props.correct[question.id] ? 'success' : 'danger'
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+function subjectiveScoreText(question: any) {
+  const score = props.review[question.id]?.score
+  if (score == null) return props.correct[question.id] ? '回答正确' : '回答错误，已加入错题本'
+  if (score >= 80) return '回答优秀'
+  if (score >= 60) return '基本正确，部分不足'
+  return '回答错误，已加入错题本'
+}
+
 function renderInline(text: string) {
   if (!text) return ''
   return text
@@ -532,13 +548,18 @@ function renderInline(text: string) {
 }
 
 .status-pill.success {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill.warning {
+  background: #fef9c3;
+  color: #854d0e;
 }
 
 .status-pill.danger {
-  background: #f8fafc;
-  color: #475569;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .status-pill.active {
@@ -828,6 +849,11 @@ function renderInline(text: string) {
 .score-badge.success {
   background: #dcfce7;
   color: #166534;
+}
+
+.score-badge.warning {
+  background: #fef9c3;
+  color: #854d0e;
 }
 
 .score-badge.danger {
