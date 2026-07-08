@@ -613,6 +613,8 @@ const parallelPoolNodes = computed(() => {
 
 // 连线组合式函数：基于工位卡片 DOM 实测坐标计算 SVG 连线路径
 const {
+  canvasRef: flowCanvasRef,
+  sourceRef: planningNodeRef,
   canvasSize: linkCanvasSize,
   links: agentLinkPaths,
   setCardRef: setStationCardRef,
@@ -1136,6 +1138,7 @@ const outputIcons: Record<string, Component> = {
   reading: ReadingIcon,
   ppt: SlidesIcon,
   cartoon: VideoIcon,
+  video: VideoIcon,
 }
 
 // 根据智能体 id 返回对应图标，缺省回退到文章图标

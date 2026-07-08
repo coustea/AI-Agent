@@ -21,6 +21,9 @@ export function useAlgorithmTemplate() {
   const algorithms = ref<AlgorithmInfo[]>([])
   const metaLoading = ref(false)
 
+  /** 去重：同一 (algorithm, language) 的并发 loadTemplate 只执行一次 */
+  let _loadSeq = 0
+
   async function loadMeta() {
     metaLoading.value = true
     try {
@@ -54,15 +57,22 @@ export function useAlgorithmTemplate() {
   }
 
   async function loadTemplate() {
+    // 递增序号，后续并发调用会因序号不匹配而跳过
+    const mySeq = ++_loadSeq
     loading.value = true
     try {
       const resp = await fetchTemplate(algorithm.value, language.value)
+      // 只有最新一次调用的结果才写入，避免竞态覆盖
+      if (mySeq !== _loadSeq) return
       templateData.value = resp.data.data
       code.value = templateData.value?.templateCode ?? ''
     } catch {
+      if (mySeq !== _loadSeq) return
       toast.error('加载模板失败')
     } finally {
-      loading.value = false
+      if (mySeq === _loadSeq) {
+        loading.value = false
+      }
     }
   }
 

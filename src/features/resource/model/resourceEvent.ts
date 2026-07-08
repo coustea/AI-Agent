@@ -29,12 +29,12 @@ export const RESOURCE_TERMINAL_EVENTS: Set<ResourceEventName> = new Set([
 
 // 单条资源事件的结构定义：携带序号、资源 id、事件名及负载数据
 export interface ResourceEvent {
-  sequence: number
-  resource_id: number
-  event: ResourceEventName
-  agent_id: string | null
-  message: string
-  progress: number | null
-  data: Record<string, unknown>
-  timestamp: number
+  sequence: number // 事件序号，用于排序与去重
+  resource_id: number // 关联的资源生成任务 id
+  event: ResourceEventName // 事件名称
+  agent_id: string | null // 触发事件的智能体 id，全局事件时为 null
+  message: string // 事件描述消息
+  progress: number | null // 整体进度百分比，无进度信息时为 null
+  data: Record<string, unknown> // 事件负载数据（状态、阶段、指标等）
+  timestamp: number // 事件时间戳（毫秒）
 }

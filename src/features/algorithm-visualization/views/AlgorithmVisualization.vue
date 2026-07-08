@@ -634,7 +634,7 @@ const editorLanguageModel = computed({
     if (generating.value) return
 
     language.value = value
-    refreshTemplateCode()
+    // language watch 会自动触发 reloadAlgorithms + loadTemplate
   },
 })
 
@@ -789,23 +789,25 @@ function normalizeInitialSelection() {
 function selectTemplate(item: AlgorithmTemplateItem) {
   if (generating.value) return
 
+  const algorithmChanged = algorithm.value !== item.key
+  const languageChanged = !item.supportedLanguages.includes(language.value)
+
   algorithm.value = item.key
 
-  if (!item.supportedLanguages.includes(language.value)) {
+  if (languageChanged) {
     const firstSupported = item.supportedLanguages[0]
     if (firstSupported) {
       language.value = firstSupported
     }
+    // language watch 会触发 reloadAlgorithms + loadTemplate
+  } else if (algorithmChanged) {
+    // algorithm watch 会触发 loadTemplate
+  } else {
+    // 同一算法同一语言，手动刷新（watch 不会触发）
+    loadTemplate()
   }
 
   templatePanelOpen.value = false
-  refreshTemplateCode()
-}
-
-function refreshTemplateCode() {
-  nextTick(() => {
-    resetTemplate()
-  })
 }
 
 function getCategoryKeyOfTemplate(templateKey: string) {
@@ -1005,27 +1007,9 @@ function createEditor() {
 }
 
 function configureMonaco() {
-  const ts = monaco.languages.typescript
-
-  ts.javascriptDefaults.setCompilerOptions({
-    noLib: true,
-    allowNonTsExtensions: true,
-  })
-
-  ts.javascriptDefaults.setDiagnosticsOptions({
-    noSemanticValidation: true,
-    noSyntaxValidation: true,
-  })
-
-  ts.typescriptDefaults.setCompilerOptions({
-    noLib: true,
-    allowNonTsExtensions: true,
-  })
-
-  ts.typescriptDefaults.setDiagnosticsOptions({
-    noSemanticValidation: true,
-    noSyntaxValidation: true,
-  })
+  // No TypeScript/JavaScript defaults configuration needed —
+  // the editor is used for Python/C++/Java, not TS/JS.
+  // The old monaco.languages.typescript API was deprecated.
 }
 
 function defineMonacoThemes() {

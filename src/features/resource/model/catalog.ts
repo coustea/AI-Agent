@@ -185,32 +185,32 @@ export const getAgentOutputFormat = (agentId: string) => {
 
 // 单个智能体事件日志的结构定义
 export type AgentEventLog = {
-  id: string
-  eventType?: string
-  phase?: string
-  message: string
-  status?: DagNodeState['status']
-  progress?: number
-  elapsedMs?: number
-  timestamp: number
+  id: string // 事件唯一标识
+  eventType?: string // 事件类型（agent.status / generation.started 等）
+  phase?: string // 事件发生时智能体所处阶段
+  message: string // 事件描述消息
+  status?: DagNodeState['status'] // 事件关联的节点状态
+  progress?: number // 事件发生时的进度百分比
+  elapsedMs?: number // 事件发生时已耗时（毫秒）
+  timestamp: number // 事件时间戳（毫秒）
 }
 
 // DAG 中单个智能体节点的运行时状态结构
 export interface DagNodeState {
-  id: string
-  label: string
-  icon: string
-  status: 'waiting' | 'running' | 'success' | 'failed' | 'skipped'
-  progress: number
-  currentMessage: string
-  stepHistory: string[]
-  eventLogs: AgentEventLog[]
-  isSystem: boolean
-  phase?: string
-  elapsedMs?: number
-  metrics?: Record<string, any>
-  artifactId?: string
-  lastUpdatedAt?: number
+  id: string // 节点对应智能体 id
+  label: string // 节点展示名称
+  icon: string // 节点展示图标（emoji）
+  status: 'waiting' | 'running' | 'success' | 'failed' | 'skipped' // 节点运行状态
+  progress: number // 节点进度百分比 0–100
+  currentMessage: string // 节点最新进度消息
+  stepHistory: string[] // 历史步骤消息列表
+  eventLogs: AgentEventLog[] // 事件日志列表
+  isSystem: boolean // 是否为系统内部节点（规划 / 协同中枢 / 汇编）
+  phase?: string // 当前执行阶段
+  elapsedMs?: number // 已耗时（毫秒）
+  metrics?: Record<string, any> // 运行指标
+  artifactId?: string // 产物 ID
+  lastUpdatedAt?: number // 最近更新时间戳（毫秒）
 }
 
 // 创建一个新的 DAG 节点，初始化为等待状态并填充展示信息

@@ -9,16 +9,16 @@ export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice'
 
 // 单个智能体的运行时快照结构
 export type ResourceAgentSnapshot = {
-  agent_id: string
-  event_type?: string
-  status?: string | null
-  message?: string | null
-  progress?: number
-  phase?: string | null
-  elapsed_ms?: number | null
-  metrics?: Record<string, any>
-  artifact_id?: string | null
-  timestamp?: number
+  agent_id: string // 智能体标识（content / mindmap / quiz …）
+  event_type?: string // 最近一次事件类型
+  status?: string | null // 智能体当前状态：pending / running / completed / failed
+  message?: string | null // 智能体最新进度消息
+  progress?: number // 进度百分比 0–100
+  phase?: string | null // 当前执行阶段（如 planning / generating / reviewing）
+  elapsed_ms?: number | null // 已耗时（毫秒）
+  metrics?: Record<string, any> // 运行指标（token 数、生成条数等）
+  artifact_id?: string | null // 产物 ID，生成完成后有值
+  timestamp?: number // 快照时间戳（毫秒）
 }
 
 // 发起资源生成任务的请求体：包含学习需求、场景、所选智能体及其详细配置
@@ -91,14 +91,14 @@ export interface ResourceGenerationRequest {
 
 // 资源生成任务的整体状态结构：包含进度、各智能体快照及产物列表
 export interface ResourceTaskStatus {
-  resource_id: number
-  learning_need?: string
-  status: 'pending' | 'planning' | 'generating' | 'completed' | 'partial_completed' | 'failed'
-  selected_agents?: string[]
-  agent_snapshots?: Record<string, ResourceAgentSnapshot>
-  overall_progress?: number
-  current_message?: string
-  resources?: any[]
-  started_at?: string | null
-  updated_at?: string | null
+  resource_id: number // 资源生成任务主键
+  learning_need?: string // 用户输入的学习需求
+  status: 'pending' | 'planning' | 'generating' | 'completed' | 'partial_completed' | 'failed' // 任务生命周期状态
+  selected_agents?: string[] // 参与生成的智能体 id 列表
+  agent_snapshots?: Record<string, ResourceAgentSnapshot> // 各智能体实时快照，键为 agent_id
+  overall_progress?: number // 整体进度百分比 0–100
+  current_message?: string // 当前阶段的汇总消息
+  resources?: any[] // 已完成产物列表
+  started_at?: string | null // 任务开始时间
+  updated_at?: string | null // 任务最近更新时间
 }

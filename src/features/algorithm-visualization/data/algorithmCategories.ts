@@ -123,6 +123,50 @@ export const algorithmCategories: AlgorithmCategory[] = [
       { key: 'two_d_dp', name: '二维 DP', difficulty: 'medium', supportedLanguages: ['python'] },
       { key: 'knapsack_dp', name: '0-1 背包', difficulty: 'medium', supportedLanguages: ['python'] },
       { key: 'interval_dp', name: '区间 DP', difficulty: 'hard', supportedLanguages: ['python'] },
+      { key: 'tree_dp', name: '树形 DP', difficulty: 'hard', supportedLanguages: ['python'] },
+      { key: 'state_compress_dp', name: '状态压缩 DP', difficulty: 'hard', supportedLanguages: ['python'] },
+    ],
+  },
+  {
+    key: 'greedy',
+    label: '贪心算法',
+    algorithms: [
+      { key: 'interval_greedy', name: '无重叠区间', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'stock_problem', name: '买卖股票最佳时机', difficulty: 'easy', supportedLanguages: ['python'] },
+      { key: 'jump_game', name: '跳跃游戏', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'huffman_coding', name: '哈夫曼树构建', difficulty: 'hard', supportedLanguages: ['python'] },
+      { key: 'covering_problem', name: '集合覆盖问题', difficulty: 'hard', supportedLanguages: ['python'] },
+    ],
+  },
+  {
+    key: 'divide_conquer',
+    label: '分治算法',
+    algorithms: [
+      { key: 'binary_divide', name: '二分思想分治', difficulty: 'easy', supportedLanguages: ['python'] },
+      { key: 'merge_divide', name: '归并排序分区', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'quick_partition', name: '快速选择', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'recursive_divide', name: '汉诺塔递归分解', difficulty: 'medium', supportedLanguages: ['python'] },
+    ],
+  },
+  {
+    key: 'bit_manipulation',
+    label: '位运算',
+    algorithms: [
+      { key: 'basic_bit', name: '二进制位提取/设置', difficulty: 'easy', supportedLanguages: ['python'] },
+      { key: 'xor_trick', name: '只出现一次的数字', difficulty: 'easy', supportedLanguages: ['python'] },
+      { key: 'bit_mask', name: '位掩码状态转换', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'subset_enum', name: '位运算枚举子集', difficulty: 'medium', supportedLanguages: ['python'] },
+    ],
+  },
+  {
+    key: 'math',
+    label: '数学算法',
+    algorithms: [
+      { key: 'gcd_euclidean', name: '最大公约数', difficulty: 'easy', supportedLanguages: ['python'] },
+      { key: 'quick_power', name: '数值快速幂', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'prime_sieve', name: '质数筛', difficulty: 'medium', supportedLanguages: ['python'] },
+      { key: 'combination_num', name: '组合数计算', difficulty: 'easy', supportedLanguages: ['python'] },
+      { key: 'mod_arithmetic', name: '同余幂运算', difficulty: 'medium', supportedLanguages: ['python'] },
     ],
   },
 ]

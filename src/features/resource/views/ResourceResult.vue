@@ -21,9 +21,9 @@
       <div class="error-card">
         <PhWarningCircle class="error-icon" />
         <h2>资源包加载失败</h2>
-        <p>请检查网络连接后重试，或返回个人中心。</p>
+        <p>请检查网络连接后重试，或返回上一页。</p>
         <div class="error-actions">
-          <button class="btn-outline" @click="goBack">返回个人中心</button>
+          <button class="btn-outline" @click="goBack">返回上一页</button>
           <button class="btn-primary" @click="loadResource">重新加载</button>
         </div>
       </div>
@@ -37,7 +37,7 @@
         <div class="header-inner">
           <button class="back-btn" type="button" @click="goBack" aria-label="返回">
             <PhArrowLeft class="w-4 h-4" />
-            <span>返回个人中心</span>
+            <span>返回</span>
           </button>
 
           <div class="header-title-row">

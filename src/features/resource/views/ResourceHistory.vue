@@ -87,51 +87,71 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 组合式 API：响应式状态与挂载钩子
 import { ref, onMounted } from 'vue'
+// 引入路由实例，用于跳转到资源详情页
 import { useRouter } from 'vue-router'
+// 引入界面所需的 Phosphor 图标：返回、时钟、右箭头
 import { PhArrowLeft as ArrowLeft, PhClock as Clock, PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
+// 引入历史资源列表查询接口
 import { getGeneratedResources } from '@/features/resource/api/history'
+// 引入历史资源条目的类型定义
 import type { GeneratedResourceItem } from '@/features/resource/api/history'
+// 引入共享的内容类型标签工具，用于展示资源类型中文名
 import { getArtifactLabel as getResourceTypeLabel } from '@/shared/content/kind'
 
+// 路由实例
 const router = useRouter()
+// 列表加载中状态
 const loading = ref(false)
+// 历史资源列表数据
 const historyList = ref<GeneratedResourceItem[]>([])
+// 当前分页页码
 const currentPage = ref(1)
+// 每页条数，默认 12
 const pageSize = ref(12)
+// 历史资源总数，用于分页计算
 const total = ref(0)
 
+// 拉取当前页的历史资源列表，统一处理成功/失败与加载态
 const fetchHistory = async () => {
   loading.value = true
   try {
     const res = await getGeneratedResources(currentPage.value, pageSize.value)
+    // 仅当后端返回成功（code 200）时写入列表与总数
     if (res.data?.code === 200) {
       historyList.value = res.data.data?.items || []
       total.value = res.data.data?.total || 0
     }
   } catch (err) {
+    // 加载失败仅打印错误，不阻断页面其余展示
     console.error('Failed to load history', err)
   } finally {
+    // 无论成功失败均关闭加载态
     loading.value = false
   }
 }
 
+// 每页条数变更：更新 pageSize 并重新拉取
 const handleSizeChange = (val: number) => {
   pageSize.value = val
   fetchHistory()
 }
 
+// 当前页码变更：更新 currentPage 并重新拉取
 const handleCurrentChange = (val: number) => {
   currentPage.value = val
   fetchHistory()
 }
 
+// 将 ISO 时间格式化为「年-月-日 时:分」，空值返回「未知时间」
 const formatTime = (time: string | null) => {
   if (!time) return '未知时间'
   const date = new Date(time)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+// 将后端状态映射为标签样式类型（success/danger/primary/info）
 const getStatusType = (status: string): any => {
   if (status === 'success' || status === 'completed') return 'success'
   if (status === 'failed' || status === 'error') return 'danger'
@@ -139,6 +159,7 @@ const getStatusType = (status: string): any => {
   return 'info'
 }
 
+// 将后端状态映射为中文展示文案
 const getStatusText = (status: string) => {
   if (status === 'success' || status === 'completed') return '已完成'
   if (status === 'failed' || status === 'error') return '失败'
@@ -146,10 +167,12 @@ const getStatusText = (status: string) => {
   return '待处理'
 }
 
+// 跳转到指定资源详情页
 const goToDetail = (id: number) => {
   router.push(`/resource-detail/${id}`)
 }
 
+// 组件挂载后首次拉取历史列表
 onMounted(() => {
   fetchHistory()
 })

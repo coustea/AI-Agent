@@ -28,7 +28,8 @@ export function fetchTemplate(algorithm: string, language: CodeLanguage) {
   })
 }
 
-/** 运行可视化 — useAlgorithmRun 调用 */
+/** 运行可视化 — useAlgorithmRun 调用。
+ *  超时 60s：后端可能需要 LLM 自动插装 + 沙箱执行。 */
 export function runVisualization(data: {
   algorithm: string
   visualizerType: string
@@ -36,5 +37,7 @@ export function runVisualization(data: {
   code: string
   inputData?: string
 }) {
-  return http.post<ApiResponse<RunResult>>('/ai/algorithm-visualizer/run', data)
+  return http.post<ApiResponse<RunResult>>('/ai/algorithm-visualizer/run', data, {
+    timeout: 60000,
+  })
 }
