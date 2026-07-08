@@ -8,8 +8,11 @@ from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.infra.logging import get_logger
 from app.infra.models import ChatSession, ChatSessionSummaryBlock
 from app.profile.weekly.types import SectionResult
+
+logger = get_logger(__name__)
 
 
 async def build_chat_section(
@@ -37,6 +40,8 @@ async def build_chat_section(
         .order_by(ChatSessionSummaryBlock.created_at.asc())
     )
     rows = (await db.exec(stmt)).all()
+
+    logger.info("Chat section — user=%d week=%s~%s summaries=%d", user_id, week_start.date(), week_end.date(), len(rows))
 
     if not rows:
         return SectionResult(

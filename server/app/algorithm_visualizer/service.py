@@ -1,16 +1,15 @@
 """算法可视化沙箱执行服务。
 
-当前阶段设计：
-1. 不接入 LLM。
-2. 不自动插装用户普通代码。
-3. 用户代码必须来自算法模板，或至少必须手动包含 tracer 调用。
-4. 后端只做：
-   - 校验语言和算法模板是否匹配
-   - 复制对应语言 SDK
-   - 编译运行
-   - 读取 trace.json
-   - 校验 required_events
-   - 返回事件流
+执行流程：
+1. 校验语言和算法模板是否匹配
+2. 读取干净模板代码
+3. LLM 自动插装（带缓存）
+4. 自动追加 tracer.dump() 调用
+5. 复制 SDK + 写入插装代码
+6. 编译运行
+7. 读取 trace.json
+8. 校验 required_events
+9. 返回事件流
 """
 
 from __future__ import annotations
@@ -25,7 +24,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.algorithm_visualizer.template_registry import get_algorithm_info
+from app.algorithm_visualizer.instrumenter import get_instrumenter
+from app.algorithm_visualizer.template_registry import get_algorithm_info, get_template_code
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
 
 SDK_DIR = Path(__file__).parent / "tracer_sdks"
 
@@ -58,8 +61,8 @@ async def run_visualization_in_sandbox(
 ) -> Dict[str, Any]:
     """运行用户提交的可视化代码，返回 TraceEvent[]。
 
-    当前阶段不做 LLM 插装。
-    code 必须已经包含 tracer 调用，并且正常生成 trace.json。
+    如果 code 不包含 tracer 调用，自动进行 LLM 插装。
+    如果 code 已包含 tracer 调用，直接执行。
     """
 
     language = (language or "").strip()
@@ -96,13 +99,25 @@ async def run_visualization_in_sandbox(
 
     visualizer_type = expected_visualizer_type
 
+    # ── 自动插装 ──────────────────────────────────────────────────────
+    # 如果代码不包含 tracer 调用，自动插装
+    instrumented_code = await _auto_instrument(
+        code=code,
+        algorithm=algorithm,
+        algorithm_info=algorithm_info,
+        language=language,
+    )
+
+    # ── 自动追加 tracer.dump() ────────────────────────────────────────
+    final_code = _ensure_dump_call(instrumented_code, language)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         run_dir = Path(temp_dir)
 
-        runtime = build_runtime_config(language=language, code=code)
+        runtime = build_runtime_config(language=language, code=final_code)
 
         copy_sdk(runtime=runtime, run_dir=run_dir)
-        write_user_code(runtime=runtime, run_dir=run_dir, code=code)
+        write_user_code(runtime=runtime, run_dir=run_dir, code=final_code)
 
         if runtime.compile_cmd:
             compile_result = await run_process(
@@ -178,6 +193,122 @@ async def run_visualization_in_sandbox(
             "stdout": run_result["stdout"],
         }
 
+
+# ---------------------------------------------------------------------------
+# 自动插装
+# ---------------------------------------------------------------------------
+
+async def _auto_instrument(
+    code: str,
+    algorithm: str,
+    algorithm_info: dict[str, Any],
+    language: str,
+) -> str:
+    """如果代码不包含 tracer 调用，自动进行 LLM 插装。
+
+    Returns:
+        插装后的代码（或原始代码，如果已包含 tracer 或插装失败）
+    """
+    # 检测代码是否已包含 tracer 调用
+    if _has_tracer_calls(code, language):
+        logger.info("[Visualizer] 代码已包含 tracer 调用，跳过插装: algorithm=%s", algorithm)
+        return code
+
+    # 仅 Python 支持自动插装
+    if language != "python":
+        logger.warning(
+            "[Visualizer] 代码缺少 tracer 调用，但 %s 暂不支持自动插装: algorithm=%s",
+            language,
+            algorithm,
+        )
+        return code
+
+    # 调用插装引擎
+    instrumenter = get_instrumenter()
+    result = await instrumenter.instrument(
+        clean_code=code,
+        algorithm_name=algorithm,
+        visualizer_type=algorithm_info.get("visualizer_type", "array"),
+        required_events=algorithm_info.get("required_events", []),
+        language=language,
+    )
+
+    if result.error:
+        logger.error(
+            "[Visualizer] 自动插装失败: algorithm=%s error=%s",
+            algorithm,
+            result.error,
+        )
+        raise VisualizerRunError(
+            f"自动插装失败：{result.error}。请手动添加 tracer 调用后重试。",
+            "INSTRUMENTATION_FAILED",
+        )
+
+    logger.info(
+        "[Visualizer] 自动插装成功: algorithm=%s cached=%s",
+        algorithm,
+        result.cached,
+    )
+    return result.code
+
+
+def _has_tracer_calls(code: str, language: str) -> bool:
+    """检测代码是否已包含 tracer 调用。"""
+    if language == "python":
+        # 检查 Python tracer 导入
+        return bool(
+            re.search(r"from\s+visual_tracer\s+import", code)
+            or re.search(r"import\s+visual_tracer", code)
+        )
+
+    if language == "javascript":
+        return "visualTracer" in code or "VisualTracer" in code
+
+    if language in ("cpp", "c"):
+        return "visual_tracer" in code or "vt_" in code
+
+    if language == "java":
+        return "VisualTracer" in code
+
+    return False
+
+
+def _ensure_dump_call(code: str, language: str) -> str:
+    """确保代码末尾有 tracer.dump() 调用。
+
+    LLM 插装时已被要求在代码末尾调用 tracer.dump()。
+    此函数作为兜底：如果 LLM 忘了加 dump,自动追加。
+    仅对模块级 tracer 变量有效。
+    """
+    if language != "python":
+        return code
+
+    # 如果已有 dump 调用，不追加
+    if ".dump(" in code:
+        return code
+
+    # 找到模块级 tracer 变量名
+    tracer_var = _find_tracer_var(code)
+    if not tracer_var:
+        return code
+
+    return code.rstrip() + f"\n\n{tracer_var}.dump()\n"
+
+
+def _find_tracer_var(code: str) -> str | None:
+    """从 Python 代码中找到 tracer 变量名。"""
+    tracer_classes = ("ArrayTracer", "StackTracer", "QueueTracer",
+                      "LinkedListTracer", "TreeTracer", "GraphTracer", "DpTableTracer")
+    for cls in tracer_classes:
+        match = re.search(rf"(\w+)\s*=\s*{cls}\s*\(", code)
+        if match:
+            return match.group(1)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# 运行时配置
+# ---------------------------------------------------------------------------
 
 def build_runtime_config(language: str, code: str) -> RuntimeConfig:
     """根据语言构建编译和运行配置。"""

@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user, get_current_user_flexible
@@ -433,3 +434,67 @@ async def download_html(
         filename=f"{ppt_item.title}.html",
         media_type="text/html",
     )
+
+
+# ---------------------------------------------------------------------------
+# 仪表盘端点（从 dashboard 模块迁移）
+# ---------------------------------------------------------------------------
+
+
+def _text(value: Any, fallback: str = "") -> str:
+    """安全提取文本值，空值时返回默认值。"""
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        return value.strip() or fallback
+    return str(value)
+
+
+def _status_label(value: str) -> str:
+    """将状态值转换为中文标签。"""
+    return {
+        "pending": "等待中",
+        "generating": "生成中",
+        "processing": "处理中",
+        "completed": "已完成",
+        "failed": "失败",
+    }.get(value, value or "待更新")
+
+
+def _resource_title(resource: Any) -> str:
+    """获取资源标题。"""
+    if not resource:
+        return ""
+    return _text(resource.learning_need, "最近生成的资源")
+
+
+@router.get("/dashboard/recent-resources")
+async def get_recent_resources(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取最近生成的学习资源列表。"""
+    from app.infra.models import GeneratedResource, GeneratedResourceItem
+
+    recent_resources = list((await session.exec(
+        select(GeneratedResource)
+        .where(GeneratedResource.user_id == current_user.id)
+        .order_by(col(GeneratedResource.updated_at).desc())
+        .limit(5)
+    )).all())
+
+    result: list[dict[str, Any]] = []
+    for r in recent_resources[:4]:
+        first_item = (await session.exec(
+            select(GeneratedResourceItem)
+            .where(GeneratedResourceItem.resource_id == r.id)
+            .limit(1)
+        )).first()
+        result.append({
+            "id": r.id,
+            "title": _resource_title(r),
+            "type": first_item.agent_type if first_item else _status_label(r.status),
+            "agent": first_item.agent_type or "资源生成智能体" if first_item else "资源生成智能体",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return HttpResponse.success(data=result)

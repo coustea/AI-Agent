@@ -3,14 +3,13 @@
 事件来源由各业务模块的 ``events.py`` 调用 ``EvaluationService.record_event`` 埋点。
 本模块不关心业务语义，只负责持久化和按时间窗口聚合统计。
 
-聚合策略：纯 SQL，零 LLM 调用。画像评分时由 ``score_profile`` 调用
-``aggregate_period_stats`` 拿到结构化数值后注入 prompt。
+聚合策略：纯 SQL，零 LLM 调用。学习者画像评分不在此处触发（画像更新由
+``app.profile.service.infer_profile_from_digest`` 基于周概要缓冲驱动）。
 """
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -20,13 +19,6 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.evaluation.event_types import (
-    MODULE_CHAT,
-    MODULE_PATH,
-    MODULE_QUIZ,
-    MODULE_RESOURCE,
-    MODULE_VISUALIZER,
-    PATH_QUIZ_ANSWERED,
-    QUIZ_SUBMITTED,
     RESOURCE_COMPLETED,
     RESOURCE_VIEWED,
     SCORED_EVENT_TYPES,
@@ -46,151 +38,6 @@ logger = get_logger(__name__)
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 WEAK_SCORE_THRESHOLD = 65.0
-
-
-@dataclass(frozen=True)
-class MemoryUpdateSignal:
-    """记忆更新信号类型（遗留类型，仅用于类型检查兼容）。"""
-    content: str
-    signal_type: str
-    dimension: str
-    course: str | None = None
-    topic: str | None = None
-
-
-def derive_memory_signals(event: LearningEventCreate) -> list[MemoryUpdateSignal]:
-    """从学习事件派生记忆信号（遗留方法，不再产生有效信号）。"""
-    return []
-
-
-def build_profile_update_payload(event: LearningEventCreate | LearningEvent) -> dict[str, Any] | None:
-    """构建画像更新负载（遗留方法，始终返回 None）。"""
-    return None
-
-
-
-async def aggregate_period_stats(
-    session: AsyncSession,
-    user_id: int,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[str, Any]:
-    """聚合指定 UTC 时间窗口内的学习统计 — 纯 SQL，无 LLM 调用。
-
-    返回 JSON 可序列化的统计字典，可直接注入画像评分 prompt。
-
-    Args:
-        session: 异步数据库会话。
-        user_id: 用户 ID。
-        start_utc: 窗口起点（UTC，含）。
-        end_utc: 窗口终点（UTC，不含）。
-
-    Returns:
-        统计字典，包含按 module 分桶的计数、平均分、薄弱知识点等。
-    """
-    counts_by_module = await _query_event_counts(session, user_id, start_utc, end_utc)
-    score_stats = await _query_score_stats(session, user_id, start_utc, end_utc)
-    weak_topics = await _query_weak_topics(session, user_id, start_utc, end_utc)
-
-    total_events = sum(counts_by_module.values())
-
-    return {
-        "window_start": start_utc.isoformat(),
-        "window_end": end_utc.isoformat(),
-        "total_events": total_events,
-        "by_module": counts_by_module,
-        "chat_dialogues": counts_by_module.get(MODULE_CHAT, 0),
-        "resources": counts_by_module.get(MODULE_RESOURCE, 0),
-        "path_events": counts_by_module.get(MODULE_PATH, 0),
-        "quizzes": counts_by_module.get(MODULE_QUIZ, 0),
-        "visualizer_runs": counts_by_module.get(MODULE_VISUALIZER, 0),
-        "average_score": score_stats.get("average_score"),
-        "quiz_average_score": score_stats.get("quiz_average_score"),
-        "path_quiz_average_score": score_stats.get("path_quiz_average_score"),
-        "weak_topics": weak_topics,
-    }
-
-
-async def _query_event_counts(
-    session: AsyncSession,
-    user_id: int,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[str, int]:
-    stmt = (
-        select(LearningEvent.module, func.count().label("cnt"))
-        .where(LearningEvent.user_id == user_id)
-        .where(LearningEvent.created_at >= start_utc)
-        .where(LearningEvent.created_at < end_utc)
-        .group_by(LearningEvent.module)
-    )
-    result = await session.exec(stmt)
-    return {row.module: int(row.cnt) for row in result.all()}
-
-
-async def _query_score_stats(
-    session: AsyncSession,
-    user_id: int,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[str, float | None]:
-    base_filter = (
-        LearningEvent.user_id == user_id,
-        LearningEvent.created_at >= start_utc,
-        LearningEvent.created_at < end_utc,
-        LearningEvent.score.is_not(None),
-    )
-
-    overall_avg = await _avg_score(session, base_filter)
-    quiz_avg = await _avg_score(
-        session,
-        base_filter + (LearningEvent.event_type == QUIZ_SUBMITTED,),
-    )
-    path_quiz_avg = await _avg_score(
-        session,
-        base_filter + (LearningEvent.event_type == PATH_QUIZ_ANSWERED,),
-    )
-
-    return {
-        "average_score": overall_avg,
-        "quiz_average_score": quiz_avg,
-        "path_quiz_average_score": path_quiz_avg,
-    }
-
-
-async def _avg_score(
-    session: AsyncSession, filters: tuple[Any, ...]
-) -> float | None:
-    stmt = select(func.avg(LearningEvent.score)).where(*filters)
-    result = await session.exec(stmt)
-    value = result.first()
-    if value is None:
-        return None
-    return round(float(value), 1)
-
-
-async def _query_weak_topics(
-    session: AsyncSession,
-    user_id: int,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> list[str]:
-    stmt = (
-        select(LearningEvent.topic)
-        .where(LearningEvent.user_id == user_id)
-        .where(LearningEvent.created_at >= start_utc)
-        .where(LearningEvent.created_at < end_utc)
-        .where(LearningEvent.score.is_not(None))
-        .where(LearningEvent.score < WEAK_SCORE_THRESHOLD)
-        .where(LearningEvent.topic.is_not(None))
-        .where(LearningEvent.event_type.in_(tuple(SCORED_EVENT_TYPES)))
-        .distinct()
-    )
-    result = await session.exec(stmt)
-    return [topic for topic in result.all() if topic]
-
-
-
 
 
 def build_summary_from_events(

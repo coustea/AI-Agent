@@ -9,8 +9,11 @@ from sqlalchemy import or_ as sa_or
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.infra.logging import get_logger
 from app.infra.models import PathNode
 from app.profile.weekly.types import SectionResult
+
+logger = get_logger(__name__)
 
 
 async def build_path_section(
@@ -42,6 +45,8 @@ async def build_path_section(
         )
     )
     nodes = (await db.exec(stmt)).all()
+
+    logger.info("Path section — user=%d week=%s~%s nodes=%d", user_id, week_start.date(), week_end.date(), len(nodes))
 
     if not nodes:
         return SectionResult(

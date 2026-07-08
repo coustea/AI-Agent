@@ -1,5 +1,6 @@
 from uuid import uuid4
 import asyncio
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -9,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
-from app.infra.models import PathNode, PathNodeResource, User
+from app.infra.models import LearningEvent, LearningPath, PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
 from app.path.event import PathEvents, encode_path_sse, get_path_channel
 from app.path.schemas import (
@@ -20,6 +21,8 @@ from app.path.schemas import (
 from app.path.service import PathService, build_learning_event_item, run_generation_bg
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
+# 单独的仪表盘路由（不带 prefix）
+dashboard_router = APIRouter(tags=["dashboard"])
 
 SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -499,5 +502,72 @@ async def get_path_learning_evaluation(
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=evaluation.model_dump(mode="json") if evaluation else None)
+
+
+# ── 仪表盘端点（从 dashboard 模块迁移）───────────────────────────────────
+
+
+def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
+    """获取当前学习路径节点（优先可用状态，其次已完成有缺陷状态）。"""
+    for status in ("available", "completed_with_gaps"):
+        for node in path_nodes:
+            if node.status == status:
+                return node
+    return path_nodes[0] if path_nodes else None
+
+
+@dashboard_router.get("/dashboard/continue-learning")
+async def get_continue_learning(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取继续学习数据 — 每条活跃路径的当前节点（一条路径只显示一个节点）。"""
+    active_paths = list((await session.exec(
+        select(LearningPath)
+        .where(LearningPath.user_id == current_user.id, LearningPath.status == "active")
+        .order_by(col(LearningPath.updated_at).desc())
+        .limit(5)
+    )).all())
+
+    if not active_paths:
+        return HttpResponse.success(data={"active_paths": []})
+
+    result = []
+    for path in active_paths:
+        # 获取每条路径的节点
+        path_nodes = list((await session.exec(
+            select(PathNode)
+            .where(PathNode.user_id == current_user.id, PathNode.path_id == path.id)
+            .order_by(col(PathNode.priority).asc(), col(PathNode.updated_at).desc())
+            .limit(12)
+        )).all())
+        current_node = _current_node(path_nodes)
+
+        # 获取该路径的最后学习时间
+        last_learned_at: datetime | None = None
+        last_event = (await session.exec(
+            select(LearningEvent)
+            .where(
+                LearningEvent.user_id == current_user.id,
+                LearningEvent.module == "path",
+                LearningEvent.entity_id == str(path.id),
+            )
+            .order_by(col(LearningEvent.created_at).desc())
+            .limit(1)
+        )).first()
+        if last_event:
+            last_learned_at = last_event.created_at
+
+        result.append({
+            "id": path.id,
+            "title": path.title,
+            "overall_progress": path.overall_progress,
+            "current_node_title": current_node.title if current_node else None,
+            "current_node_id": current_node.node_id if current_node else None,
+            "updated_at": path.updated_at.isoformat() if path.updated_at else None,
+            "last_learned_at": last_learned_at.isoformat() if last_learned_at else None,
+        })
+
+    return HttpResponse.success(data={"active_paths": result})
 
 

@@ -180,6 +180,6 @@ prompts.register("path", _APP_DIR / "path" / "prompts")
 prompts.register("profile", _APP_DIR / "profile" / "prompts")
 prompts.register("quiz", _APP_DIR / "quiz" / "prompts")
 prompts.register("ppt", _APP_DIR / "shared" / "ppt" / "prompts")
-prompts.register("cartoon", _APP_DIR / "shared" / "cartoon" / "prompts")
+prompts.register("cartoon", _APP_DIR / "shared" / "cartoon")
 
 __all__ = ["prompts", "PromptRegistry", "ModulePromptLoader", "PromptNotFoundError"]

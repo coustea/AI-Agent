@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,7 +39,15 @@ class CartoonArtifact:
 
 
 class CartoonPipeline:
-    """Generate a complete MP4 with one LLM call and deterministic authoring."""
+    """Generate a complete MP4 with deterministic authoring.
+
+    Main stages:
+        1. theory-mechanism storyboard planning
+        2. Edge TTS synthesis with word-boundary metadata
+        3. HyperFrames-compatible HTML compilation
+        4. static + CLI validation
+        5. MP4 rendering
+    """
 
     def __init__(
         self,
@@ -66,7 +75,9 @@ class CartoonPipeline:
         pipeline_started = time.perf_counter()
         logger.info(
             "Cartoon 管线开始: learning_need=%s style=%s depth=%s",
-            request.learning_need[:50], request.style, request.depth,
+            request.learning_need[:50],
+            request.style,
+            request.depth,
         )
 
         output_dir = request.output_dir
@@ -74,7 +85,7 @@ class CartoonPipeline:
         audio_dir.mkdir(parents=True, exist_ok=True)
 
         # ── 分镜规划 ──
-        await self._progress(progress, "正在规划教学分镜与语义动画...", 12)
+        await self._progress(progress, "正在规划计算机理论机制动画分镜...", 12)
         stage_started = time.perf_counter()
         logger.info("Cartoon 分镜规划开始")
         try:
@@ -82,10 +93,14 @@ class CartoonPipeline:
         except Exception as exc:
             logger.error("Cartoon 分镜规划失败: error=%s", exc)
             raise CartoonGenerationError(f"教学分镜生成失败: {exc}") from exc
+
         stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
         logger.info(
             "Cartoon 分镜规划完成: scenes=%d subject=%s total_duration=%.1fs elapsed_ms=%d",
-            len(brief.scenes), brief.subject, brief.total_duration, stage_elapsed,
+            len(brief.scenes),
+            brief.subject,
+            brief.total_duration,
+            stage_elapsed,
         )
         logger.info(
             "Cartoon 分镜内容: scenes=%s",
@@ -95,7 +110,11 @@ class CartoonPipeline:
         # ── 配音合成 ──
         await self._progress(progress, "正在合成配音与词级时间轴...", 30)
         stage_started = time.perf_counter()
-        logger.info("Cartoon 配音合成开始: scenes=%d concurrency=%d", len(brief.scenes), self.tts_concurrency)
+        logger.info(
+            "Cartoon 配音合成开始: scenes=%d concurrency=%d",
+            len(brief.scenes),
+            self.tts_concurrency,
+        )
         semaphore = asyncio.Semaphore(self.tts_concurrency)
 
         async def synthesize_scene(index: int) -> tuple[int, list]:
@@ -124,17 +143,25 @@ class CartoonPipeline:
             scene.duration = round(max(1.0, duration_ms / 1000 + 0.35), 3)
             current_time += scene.duration
         brief.total_duration = round(current_time, 3)
+
         stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
         logger.info(
             "Cartoon 配音合成完成: scenes=%d total_duration=%.1fs elapsed_ms=%d",
-            len(brief.scenes), brief.total_duration, stage_elapsed,
+            len(brief.scenes),
+            brief.total_duration,
+            stage_elapsed,
         )
 
         # ── HTML 编译 ──
-        await self._progress(progress, "正在编译教学图形、字幕与同步动画...", 58)
+        await self._progress(progress, "正在编译理论机制图形、字幕与同步动画...", 58)
         stage_started = time.perf_counter()
-        logger.info("Cartoon HTML 编译开始: scenes=%d style=%s", len(brief.scenes), request.style)
+        logger.info(
+            "Cartoon HTML 编译开始: scenes=%d style=%s",
+            len(brief.scenes),
+            request.style,
+        )
         try:
+            self._copy_vendor_assets(output_dir)
             html = self.compiler.compile(request, brief)
             html_file = output_dir / "index.html"
             html_file.write_text(html, encoding="utf-8")
@@ -146,7 +173,8 @@ class CartoonPipeline:
         stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
         logger.info(
             "Cartoon HTML 编译完成: html_size=%d elapsed_ms=%d",
-            html_size, stage_elapsed,
+            html_size,
+            stage_elapsed,
         )
 
         # ── 结构校验 ──
@@ -166,10 +194,13 @@ class CartoonPipeline:
                 f"HyperFrames 合成检查失败: {details}",
                 audit=audit,
             )
+
         stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
         logger.info(
             "Cartoon 结构校验完成: passed=%s scene_count=%d elapsed_ms=%d",
-            audit.passed, audit.scene_count, stage_elapsed,
+            audit.passed,
+            audit.scene_count,
+            stage_elapsed,
         )
 
         # ── MP4 渲染 ──
@@ -183,17 +214,24 @@ class CartoonPipeline:
             raise CartoonGenerationError(f"MP4 渲染失败: {exc}") from exc
 
         stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
-        video_size = render_result.video_path.stat().st_size if render_result.video_path.exists() else 0
+        video_size = (
+            render_result.video_path.stat().st_size
+            if render_result.video_path.exists()
+            else 0
+        )
         logger.info(
             "Cartoon MP4 渲染完成: size_bytes=%d elapsed_ms=%d",
-            video_size, stage_elapsed,
+            video_size,
+            stage_elapsed,
         )
 
         await self._progress(progress, "动画讲解视频已生成", 100)
         total_elapsed = int((time.perf_counter() - pipeline_started) * 1000)
         logger.info(
             "Cartoon 管线完成: scenes=%d duration=%.1fs total_elapsed_ms=%d",
-            audit.scene_count, brief.total_duration, total_elapsed,
+            audit.scene_count,
+            brief.total_duration,
+            total_elapsed,
         )
         return CartoonArtifact(
             html=html,
@@ -212,3 +250,26 @@ class CartoonPipeline:
     ) -> None:
         if callback is not None:
             await callback(message, percent)
+
+    @staticmethod
+    def _copy_vendor_assets(output_dir: Path) -> None:
+        """Copy local GSAP vendor assets into the render directory when present.
+
+        The generated HTML uses local assets first:
+            ./assets/vendor/gsap.min.js
+            ./assets/vendor/MotionPathPlugin.min.js
+
+        If the project has not provided these files yet, compilation still works
+        because compiler.py includes a CDN fallback.
+        """
+        source_dir = Path(__file__).resolve().parent / "assets" / "vendor"
+        if not source_dir.is_dir():
+            return
+
+        target_dir = output_dir / "assets" / "vendor"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        for filename in ("gsap.min.js", "MotionPathPlugin.min.js"):
+            source = source_dir / filename
+            if source.is_file():
+                shutil.copy2(source, target_dir / filename)

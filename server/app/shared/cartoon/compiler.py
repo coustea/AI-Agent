@@ -113,40 +113,131 @@ def _render_items(element: VisualElement) -> str:
         "code": "code-lines",
     }.get(element.kind, "horizontal")
     items = "".join(
-        f'<span class="object-item">{_escape(item)}</span>'
-        for item in element.items
+        f'<span class="object-item" data-index="{index}">{_escape(item)}</span>'
+        for index, item in enumerate(element.items)
     )
     return f'<div class="object-items {item_class}">{items}</div>'
 
 
 # ===================== Python-side Layout Computation =====================
-#
-# 编译时计算节点坐标，替代 LLM 生成的 x/y。
-# 每种需要绝对定位的布局有独立的算法；
-# flow/grid/recap/stack 等布局由 CSS 自动排列，不需要坐标。
 
-# visual-stage 的可用绘制区域（1920 - padding 144, 1080 - header/footer ~300）
 _STAGE_W = 1776
 _STAGE_H = 580
 
 
-def _compute_layout(scene: SceneBrief, width: int = _STAGE_W, height: int = _STAGE_H) -> dict[str, tuple[int, int]]:
+def _compute_layout(
+    scene: SceneBrief,
+    width: int = _STAGE_W,
+    height: int = _STAGE_H,
+) -> dict[str, tuple[int, int]]:
     """根据布局类型计算节点坐标。返回 {element_id: (x, y)}。"""
     if scene.layout == "tree":
+        if _looks_like_binary_tree(scene):
+            return _layout_binary_tree(scene, width, height)
         return _layout_tree(scene, width, height)
     if scene.layout in ("graph", "state_diagram"):
         return _layout_graph(scene, width, height)
     if scene.layout == "compare":
         return _layout_compare(scene, width, height)
-    return {}  # 其他布局用 CSS 自动排列
+    return {}
 
 
-def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[int, int]]:
-    """BFS 按层级排列 tree 布局的节点。孤立节点（辅助看板）放在左侧。"""
+def _relation_side(label: str) -> str:
+    """Return binary side from relation label if it is left/right-like."""
+    normalized = (label or "").strip().lower()
+    if normalized in {"左", "left", "l", "lt"} or "左" in normalized:
+        return "left"
+    if normalized in {"右", "right", "r", "rt"} or "右" in normalized:
+        return "right"
+    return ""
+
+
+def _looks_like_binary_tree(scene: SceneBrief) -> bool:
+    """Detect binary-tree semantics from connection labels.
+
+    BST / binary tree scenes need left/right child layout. The old BFS layout
+    only grouped nodes by depth and could place a left child directly below the
+    parent, which weakens theory-process animation.
+    """
+    if scene.layout != "tree" or not scene.connections:
+        return False
+    return any(_relation_side(conn.label or conn.condition) for conn in scene.connections)
+
+
+def _layout_binary_tree(
+    scene: SceneBrief,
+    width: int,
+    height: int,
+) -> dict[str, tuple[int, int]]:
+    """Layout binary tree by semantic left/right edges.
+
+    The connected tree is centered. Non-tree teaching aids such as metrics and
+    step labels are placed on the left as a compact operation panel.
+    """
+    element_ids = {element.id for element in scene.elements}
+    children: dict[str, dict[str, str]] = {eid: {} for eid in element_ids}
+    has_parent: set[str] = set()
+    connected_ids: set[str] = set()
+
+    for conn in scene.connections:
+        if conn.source not in element_ids or conn.target not in element_ids:
+            continue
+        side = _relation_side(conn.label or conn.condition)
+        if not side:
+            continue
+        children.setdefault(conn.source, {})[side] = conn.target
+        has_parent.add(conn.target)
+        connected_ids.add(conn.source)
+        connected_ids.add(conn.target)
+
+    roots = [eid for eid in connected_ids if eid not in has_parent]
+    if not roots:
+        return _layout_tree(scene, width, height)
+
+    root = roots[0]
+    positions: dict[str, tuple[int, int]] = {}
+    max_depth = max(2, min(5, len(connected_ids)))
+    root_x = width // 2 + 120
+    root_y = 95
+    initial_gap = max(220, min(430, width // 4))
+    vertical_gap = max(118, min(155, height // (max_depth + 1)))
+
+    def place(node_id: str, x: int, y: int, gap: int, depth: int) -> None:
+        if node_id in positions:
+            return
+        positions[node_id] = (x, y)
+        child_map = children.get(node_id, {})
+        next_y = y + vertical_gap
+        next_gap = max(95, gap // 2)
+        if "left" in child_map:
+            place(child_map["left"], x - gap, next_y, next_gap, depth + 1)
+        if "right" in child_map:
+            place(child_map["right"], x + gap, next_y, next_gap, depth + 1)
+
+    place(root, root_x, root_y, initial_gap, 0)
+
+    orphan_ids = [element.id for element in scene.elements if element.id not in positions]
+    panel_x = 165
+    panel_gap = (
+        max(92, min(132, height // (len(orphan_ids) + 1)))
+        if orphan_ids
+        else 110
+    )
+    for index, object_id in enumerate(orphan_ids):
+        positions[object_id] = (panel_x, 120 + index * panel_gap)
+
+    return positions
+
+
+def _layout_tree(
+    scene: SceneBrief,
+    width: int,
+    height: int,
+) -> dict[str, tuple[int, int]]:
+    """BFS 按层级排列 tree 布局的节点。孤立节点放在左侧。"""
     positions: dict[str, tuple[int, int]] = {}
     element_ids = {e.id for e in scene.elements}
 
-    # 按 connections 构建 DAG
     adj: dict[str, list[str]] = {eid: [] for eid in element_ids}
     has_parent: set[str] = set()
     for conn in scene.connections:
@@ -154,10 +245,8 @@ def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[
             adj[conn.source].append(conn.target)
             has_parent.add(conn.target)
 
-    # 根节点：没有入边的元素
     roots = [eid for eid in element_ids if eid not in has_parent]
 
-    # 分离：有 connection 的节点 vs 孤立节点（辅助看板 step/metric/label）
     connected_ids: set[str] = set()
     for conn in scene.connections:
         if conn.source in element_ids:
@@ -167,10 +256,9 @@ def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[
 
     orphan_ids = [eid for eid in element_ids if eid not in connected_ids]
 
-    # BFS 分层（只排列有连接的根节点）
     connected_roots = [r for r in roots if r in connected_ids]
     if not connected_roots and roots:
-        connected_roots = roots[:1]  # fallback
+        connected_roots = roots[:1]
 
     levels: list[list[str]] = []
     visited: set[str] = set()
@@ -195,7 +283,6 @@ def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[
 
     _bfs(connected_roots)
 
-    # 计算层级坐标
     if levels:
         level_gap = height / (len(levels) + 1)
         for depth, level_nodes in enumerate(levels):
@@ -205,7 +292,6 @@ def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[
                 x = int((idx + 1) * node_gap)
                 positions[nid] = (x, y)
 
-    # 孤立节点放在左侧，纵向等距
     if orphan_ids:
         orphan_gap = height / (len(orphan_ids) + 1)
         for idx, oid in enumerate(orphan_ids):
@@ -213,7 +299,6 @@ def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[
             y = int(60 + (idx + 1) * orphan_gap)
             positions[oid] = (x, y)
 
-    # 兜底：未被覆盖的元素放在随机安全位置
     for e in scene.elements:
         if e.id not in positions:
             positions[e.id] = (width // 2, height // 2)
@@ -221,23 +306,26 @@ def _layout_tree(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[
     return positions
 
 
-def _layout_graph(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[int, int]]:
+def _layout_graph(
+    scene: SceneBrief,
+    width: int,
+    height: int,
+) -> dict[str, tuple[int, int]]:
     """圆形均匀分布 graph / state_diagram 布局的节点。"""
     positions: dict[str, tuple[int, int]] = {}
     elements = scene.elements
 
-    # 分离：有 connection 的节点 vs 孤立节点
     connected_ids: set[str] = set()
+    element_ids = {e.id for e in elements}
     for conn in scene.connections:
-        if conn.source in {e.id for e in elements}:
+        if conn.source in element_ids:
             connected_ids.add(conn.source)
-        if conn.target in {e.id for e in elements}:
+        if conn.target in element_ids:
             connected_ids.add(conn.target)
 
     connected = [e for e in elements if e.id in connected_ids]
     orphans = [e for e in elements if e.id not in connected_ids]
 
-    # 有连接的节点：圆形分布
     if connected:
         cx = width // 2
         cy = height // 2 + 30
@@ -248,7 +336,6 @@ def _layout_graph(scene: SceneBrief, width: int, height: int) -> dict[str, tuple
             y = int(cy + radius * math.sin(angle))
             positions[e.id] = (x, y)
 
-    # 孤立节点放在左侧
     if orphans:
         orphan_gap = height / (len(orphans) + 1)
         for idx, e in enumerate(orphans):
@@ -257,7 +344,11 @@ def _layout_graph(scene: SceneBrief, width: int, height: int) -> dict[str, tuple
     return positions
 
 
-def _layout_compare(scene: SceneBrief, width: int, height: int) -> dict[str, tuple[int, int]]:
+def _layout_compare(
+    scene: SceneBrief,
+    width: int,
+    height: int,
+) -> dict[str, tuple[int, int]]:
     """左右两列均匀分布 compare 布局的节点。"""
     positions: dict[str, tuple[int, int]] = {}
     mid = max(1, (len(scene.elements) + 1) // 2)
@@ -278,14 +369,29 @@ def _layout_compare(scene: SceneBrief, width: int, height: int) -> dict[str, tup
     return positions
 
 
-def _render_element(element: VisualElement, scene_index: int, *, positions: dict[str, tuple[int, int]] | None = None) -> str:
-    """渲染单个可视化元素。positions 由编译器布局算法计算，不再从 LLM 输入读取。"""
+def _render_element(
+    element: VisualElement,
+    scene_index: int,
+    *,
+    positions: dict[str, tuple[int, int]] | None = None,
+) -> str:
+    """渲染单个可视化元素。positions 由编译器布局算法计算。"""
     position_style = ""
     if positions and element.id in positions:
         x, y = positions[element.id]
         position_style = f"left:{x}px;top:{y}px;"
-    value = f'<strong class="object-value">{_escape(element.value)}</strong>' if element.value else ""
-    detail = f'<p class="object-detail">{_escape(element.detail)}</p>' if element.detail else ""
+
+    value = (
+        f'<strong class="object-value">{_escape(element.value)}</strong>'
+        if element.value
+        else ""
+    )
+    detail = (
+        f'<p class="object-detail">{_escape(element.detail)}</p>'
+        if element.detail
+        else ""
+    )
+
     return (
         f'<article id="{_object_id(scene_index, element.id)}" '
         f'class="visual-object kind-{element.kind}" data-object="{_escape(element.id)}" '
@@ -302,6 +408,7 @@ def _render_svg_edges(scene: SceneBrief, scene_index: int) -> str:
     """Render SVG edges for tree/graph/state_diagram layouts."""
     if not scene.connections or scene.layout not in ("tree", "graph", "state_diagram"):
         return ""
+
     edges = []
     for conn in scene.connections:
         edge_id = f"edge-{scene_index}-{conn.source}-{conn.target}"
@@ -311,62 +418,96 @@ def _render_svg_edges(scene: SceneBrief, scene_index: int) -> str:
             dash = 'stroke-dasharray="6,3"'
         else:
             dash = ""
-        # transition 类型添加条件标注
+
+        label_text = conn.condition or conn.label
         cond_label = ""
-        if conn.kind == "transition" and conn.condition:
-            cond_label = f'<text class="edge-condition" data-from="{conn.source}" data-to="{conn.target}">{_escape(conn.condition)}</text>'
+        if label_text:
+            cond_label = (
+                f'<text class="edge-condition edge-label" '
+                f'data-from="{conn.source}" data-to="{conn.target}">'
+                f'{_escape(label_text)}</text>'
+            )
+
         edges.append(
             f'<path id="{edge_id}" class="scene-edge {conn.kind}" '
-            f'd="M 0 0 L 0 0" fill="none" stroke="var(--line)" stroke-width="2.5" {dash} '
+            f'd="M 0 0 L 0 0" fill="none" stroke="var(--line)" '
+            f'stroke-width="2.5" {dash} '
             f'marker-end="url(#arrow-marker-{scene_index})" '
             f'data-from="{conn.source}" data-to="{conn.target}"/>'
             f"{cond_label}"
         )
+
     defs = (
         '<defs>'
-        f'<marker id="arrow-marker-{scene_index}" viewBox="0 0 10 10" refX="6" refY="5" '
-        'markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
+        f'<marker id="arrow-marker-{scene_index}" viewBox="0 0 10 10" '
+        'refX="6" refY="5" markerWidth="5" markerHeight="5" '
+        'orient="auto-start-reverse">'
         '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--line)" />'
-        '</marker>'
-        f'<marker id="arrow-marker-active-{scene_index}" viewBox="0 0 10 10" refX="6" refY="5" '
-        'markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
+        "</marker>"
+        f'<marker id="arrow-marker-active-{scene_index}" viewBox="0 0 10 10" '
+        'refX="6" refY="5" markerWidth="5" markerHeight="5" '
+        'orient="auto-start-reverse">'
         '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" />'
-        '</marker>'
-        '</defs>'
+        "</marker>"
+        "</defs>"
     )
     return f'<svg class="edges-layer" aria-hidden="true">{defs}{"".join(edges)}</svg>'
 
 
 def _render_tree(scene: SceneBrief, scene_index: int) -> str:
     positions = _compute_layout(scene)
-    nodes = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements if e.kind != "code")
+    nodes = "".join(
+        _render_element(e, scene_index, positions=positions)
+        for e in scene.elements
+        if e.kind != "code"
+    )
     code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
     if code_elements:
         code_html = "".join(_render_element(e, scene_index) for e in code_elements)
-        return f'<div class="split-stage"><div class="visual-stage tree-stage">{edges}{nodes}</div><div class="sidebar-stage">{code_html}</div></div>'
+        return (
+            f'<div class="split-stage">'
+            f'<div class="visual-stage tree-stage">{edges}{nodes}</div>'
+            f'<div class="sidebar-stage">{code_html}</div></div>'
+        )
     return f'<div class="visual-stage tree-stage">{edges}{nodes}</div>'
 
 
 def _render_graph(scene: SceneBrief, scene_index: int) -> str:
     positions = _compute_layout(scene)
-    nodes = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements if e.kind != "code")
+    nodes = "".join(
+        _render_element(e, scene_index, positions=positions)
+        for e in scene.elements
+        if e.kind != "code"
+    )
     code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
     if code_elements:
         code_html = "".join(_render_element(e, scene_index) for e in code_elements)
-        return f'<div class="split-stage"><div class="visual-stage graph-stage">{edges}{nodes}</div><div class="sidebar-stage">{code_html}</div></div>'
+        return (
+            f'<div class="split-stage">'
+            f'<div class="visual-stage graph-stage">{edges}{nodes}</div>'
+            f'<div class="sidebar-stage">{code_html}</div></div>'
+        )
     return f'<div class="visual-stage graph-stage">{edges}{nodes}</div>'
 
 
 def _render_state_diagram(scene: SceneBrief, scene_index: int) -> str:
     positions = _compute_layout(scene)
-    nodes = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements if e.kind != "code")
+    nodes = "".join(
+        _render_element(e, scene_index, positions=positions)
+        for e in scene.elements
+        if e.kind != "code"
+    )
     code_elements = [e for e in scene.elements if e.kind == "code"]
     edges = _render_svg_edges(scene, scene_index)
     if code_elements:
         code_html = "".join(_render_element(e, scene_index) for e in code_elements)
-        return f'<div class="split-stage"><div class="visual-stage state-diagram-stage">{edges}{nodes}</div><div class="sidebar-stage">{code_html}</div></div>'
+        return (
+            f'<div class="split-stage">'
+            f'<div class="visual-stage state-diagram-stage">{edges}{nodes}</div>'
+            f'<div class="sidebar-stage">{code_html}</div></div>'
+        )
     return f'<div class="visual-stage state-diagram-stage">{edges}{nodes}</div>'
 
 
@@ -377,7 +518,12 @@ def _render_array_view(scene: SceneBrief, scene_index: int) -> str:
 
 def _render_queue_view(scene: SceneBrief, scene_index: int) -> str:
     cells = "".join(_render_element(e, scene_index) for e in scene.elements)
-    return f'<div class="visual-stage queue-view-stage"><div class="queue-label left">← 入队</div>{cells}<div class="queue-label right">出队 →</div></div>'
+    return (
+        f'<div class="visual-stage queue-view-stage">'
+        f'<div class="queue-label left">← 入队</div>'
+        f"{cells}"
+        f'<div class="queue-label right">出队 →</div></div>'
+    )
 
 
 def _render_table_view(scene: SceneBrief, scene_index: int) -> str:
@@ -398,24 +544,45 @@ def _render_flow(scene: SceneBrief, scene_index: int) -> str:
         if i < len(scene.elements) - 1:
             next_e = scene.elements[i + 1]
             label = labels.get((e.id, next_e.id), "")
-            parts.append(f'<div class="flow-connector"><span>{_escape(label)}</span><i></i></div>')
+            parts.append(
+                f'<div class="flow-connector"><span>{_escape(label)}</span><i></i></div>'
+            )
     return f'<div class="visual-stage flow-stage">{"".join(parts)}</div>'
 
 
 def _render_compare(scene: SceneBrief, scene_index: int) -> str:
     positions = _compute_layout(scene)
     mid = max(1, (len(scene.elements) + 1) // 2)
-    left = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements[:mid])
-    right = "".join(_render_element(e, scene_index, positions=positions) for e in scene.elements[mid:])
-    vs = '<div class="versus" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">VS</div>'
-    idx_a = '<div class="column-index" style="position:absolute;left:calc(25% - 24px);top:10px">A</div>'
-    idx_b = '<div class="column-index" style="position:absolute;left:calc(75% - 24px);top:10px">B</div>'
+    left = "".join(
+        _render_element(e, scene_index, positions=positions)
+        for e in scene.elements[:mid]
+    )
+    right = "".join(
+        _render_element(e, scene_index, positions=positions)
+        for e in scene.elements[mid:]
+    )
+    vs = (
+        '<div class="versus" '
+        'style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">'
+        "VS</div>"
+    )
+    idx_a = (
+        '<div class="column-index" '
+        'style="position:absolute;left:calc(25% - 24px);top:10px">A</div>'
+    )
+    idx_b = (
+        '<div class="column-index" '
+        'style="position:absolute;left:calc(75% - 24px);top:10px">B</div>'
+    )
     return f'<div class="visual-stage compare-stage">{idx_a}{idx_b}{left}{right}{vs}</div>'
 
 
 def _render_stack_layout(scene: SceneBrief, scene_index: int) -> str:
     cells = "".join(_render_element(e, scene_index) for e in scene.elements)
-    return f'<div class="visual-stage stack-layout-stage"><div class="stack-label top">← 出栈/入栈</div>{cells}</div>'
+    return (
+        f'<div class="visual-stage stack-layout-stage">'
+        f'<div class="stack-label top">← 出栈/入栈</div>{cells}</div>'
+    )
 
 
 def _render_standard(scene: SceneBrief, scene_index: int) -> str:
@@ -424,16 +591,26 @@ def _render_standard(scene: SceneBrief, scene_index: int) -> str:
 
 
 def _render_stage(scene: SceneBrief, scene_index: int) -> str:
-    if scene.layout == "tree": return _render_tree(scene, scene_index)
-    if scene.layout == "graph": return _render_graph(scene, scene_index)
-    if scene.layout == "state_diagram": return _render_state_diagram(scene, scene_index)
-    if scene.layout == "array_view": return _render_array_view(scene, scene_index)
-    if scene.layout == "queue_view": return _render_queue_view(scene, scene_index)
-    if scene.layout == "table_view": return _render_table_view(scene, scene_index)
-    if scene.layout == "derivation": return _render_derivation(scene, scene_index)
-    if scene.layout == "flow": return _render_flow(scene, scene_index)
-    if scene.layout == "compare": return _render_compare(scene, scene_index)
-    if scene.layout == "stack": return _render_stack_layout(scene, scene_index)
+    if scene.layout == "tree":
+        return _render_tree(scene, scene_index)
+    if scene.layout == "graph":
+        return _render_graph(scene, scene_index)
+    if scene.layout == "state_diagram":
+        return _render_state_diagram(scene, scene_index)
+    if scene.layout == "array_view":
+        return _render_array_view(scene, scene_index)
+    if scene.layout == "queue_view":
+        return _render_queue_view(scene, scene_index)
+    if scene.layout == "table_view":
+        return _render_table_view(scene, scene_index)
+    if scene.layout == "derivation":
+        return _render_derivation(scene, scene_index)
+    if scene.layout == "flow":
+        return _render_flow(scene, scene_index)
+    if scene.layout == "compare":
+        return _render_compare(scene, scene_index)
+    if scene.layout == "stack":
+        return _render_stack_layout(scene, scene_index)
     return _render_standard(scene, scene_index)
 
 
@@ -447,26 +624,46 @@ def _caption_groups(scene: SceneBrief) -> list:
         if w.text[-1:] in punct or cc >= 18 or em >= 2600:
             groups.append(current)
             current = []
-    if current: groups.append(current)
+    if current:
+        groups.append(current)
     return groups
 
 
 def _render_captions(scene: SceneBrief, scene_index: int) -> str:
     cues = []
     for ci, grp in enumerate(_caption_groups(scene)):
-        words = "".join(f'<span id="caption-{scene_index}-{wi}" class="caption-word">{_escape(w.text)}</span>' for wi, w in grp)
-        cues.append(f'<div id="caption-cue-{scene_index}-{ci}" class="caption-cue">{words}</div>')
+        words = "".join(
+            f'<span id="caption-{scene_index}-{wi}" class="caption-word">'
+            f"{_escape(w.text)}</span>"
+            for wi, w in grp
+        )
+        cues.append(
+            f'<div id="caption-cue-{scene_index}-{ci}" class="caption-cue">'
+            f"{words}</div>"
+        )
     return f'<div class="captions" aria-hidden="true">{"".join(cues)}</div>'
 
 
-def _render_scene(scene: SceneBrief, si: int, sc: int, req: CartoonVideoRequest) -> str:
-    callout = f'<aside class="scene-callout"><span>关键结论</span><strong>{_escape(scene.callout)}</strong></aside>' if scene.callout and req.visuals != "clean" else ""
+def _render_scene(
+    scene: SceneBrief,
+    si: int,
+    sc: int,
+    req: CartoonVideoRequest,
+) -> str:
+    callout = (
+        f'<aside class="scene-callout"><span>关键结论</span>'
+        f"<strong>{_escape(scene.callout)}</strong></aside>"
+        if scene.callout and req.visuals != "clean"
+        else ""
+    )
     prog = round((si + 1) / sc * 100, 2)
     return (
         f'<section id="scene-{si}" class="scene clip layout-{scene.layout}" '
-        f'data-start="{_seconds(scene.start_time)}" data-duration="{_seconds(scene.duration)}" data-track-index="0">'
+        f'data-start="{_seconds(scene.start_time)}" '
+        f'data-duration="{_seconds(scene.duration)}" data-track-index="0">'
         '<div class="scene-shell"><header class="scene-header">'
-        f'<div><span class="scene-role">{_escape(scene.role)}</span><h2 id="scene-title-{si}">{_escape(scene.title)}</h2></div>'
+        f'<div><span class="scene-role">{_escape(scene.role)}</span>'
+        f'<h2 id="scene-title-{si}">{_escape(scene.title)}</h2></div>'
         f'<span class="scene-number">{si + 1:02d} / {sc:02d}</span></header>'
         f"{_render_stage(scene, si)}{callout}"
         '<footer class="scene-footer"><span>ANIMATED EXPLAINER</span>'
@@ -476,30 +673,43 @@ def _render_scene(scene: SceneBrief, si: int, sc: int, req: CartoonVideoRequest)
 
 
 def _render_audio(scene: SceneBrief, si: int) -> str:
-    if not scene.audio_path: return ""
+    if not scene.audio_path:
+        return ""
     ad = max(0.1, scene.duration - 0.35)
-    return f'<audio id="scene-audio-{si}" data-start="{_seconds(scene.start_time)}" data-duration="{_seconds(ad)}" data-track-index="1" data-volume="1" src="{_escape(scene.audio_path)}"></audio>'
+    return (
+        f'<audio id="scene-audio-{si}" data-start="{_seconds(scene.start_time)}" '
+        f'data-duration="{_seconds(ad)}" data-track-index="1" data-volume="1" '
+        f'src="{_escape(scene.audio_path)}"></audio>'
+    )
 
 
 def _find_keyword_time(scene: SceneBrief, keyword: str) -> float | None:
     nk = "".join(keyword.split())
-    if not nk or not scene.words: return None
+    if not nk or not scene.words:
+        return None
+
     joined, offsets = "", []
     for w in scene.words:
         nw = "".join(w.text.split())
         s = len(joined)
         joined += nw
         offsets.append((s, len(joined), w.start_ms))
+
     pos = joined.find(nk)
-    if pos < 0: return None
+    if pos < 0:
+        return None
+
     for s, e, sm in offsets:
-        if s <= pos < e: return sm / 1000
+        if s <= pos < e:
+            return sm / 1000
     return None
 
 
 def _cue_time(scene: SceneBrief, cue: AnimationCue, idx: int) -> float:
     kt = _find_keyword_time(scene, cue.keyword)
-    if kt is not None: return scene.start_time + max(0.25, kt)
+    if kt is not None:
+        return scene.start_time + max(0.25, kt)
+
     usable = max(0.8, scene.duration - 1.0)
     return scene.start_time + 0.45 + usable * (idx + 1) / (len(scene.cues) + 1)
 
@@ -508,63 +718,129 @@ def _selectors(si: int, cue: AnimationCue) -> str:
     return ", ".join(f'"#s{si}-{t}"' for t in cue.targets)
 
 
-def _cue_timeline(scene: SceneBrief, si: int, req: CartoonVideoRequest) -> list:
+def _cue_timeline(
+    scene: SceneBrief,
+    si: int,
+    req: CartoonVideoRequest,
+) -> list:
     lines = []
     pc = _PACE_CONFIG.get(req.pace, _PACE_CONFIG["normal"])
     bd, st = pc["duration"], pc["stagger"]
+
     for ci, cue in enumerate(scene.cues):
         at = _seconds(_cue_time(scene, cue, ci))
         sel = _selectors(si, cue)
+
         if cue.action == "reveal":
-            lines.append(f"HF_Animator.reveal(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+            lines.append(
+                f"HF_Animator.reveal(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});"
+            )
+
         elif cue.action == "focus":
             lines.append(f"HF_Animator.focus(tl, [{sel}], {at}, {bd:.2f});")
+
+        elif cue.action == "compare":
+            lines.append(f"HF_Animator.compare(tl, [{sel}], {at}, {bd:.2f});")
+
         elif cue.action == "insert":
             parentId = ""
+            edge_to_show = ""
             for conn in scene.connections:
                 if conn.target in cue.targets:
                     parentId = f'"#s{si}-{conn.source}"'
+                    edge_to_show = f'"#edge-{si}-{conn.source}-{conn.target}"'
                     break
             p_val = parentId if parentId else "null"
-            lines.append(f"HF_Animator.insert(tl, [{sel}], '{cue.direction}', {p_val}, {at}, {bd:.2f}, {st:.2f});")
+            lines.append(
+                f"HF_Animator.insert(tl, [{sel}], '{cue.direction}', "
+                f"{p_val}, {at}, {bd:.2f}, {st:.2f});"
+            )
+            if edge_to_show:
+                lines.append(
+                    f"HF_Animator.showEdge(tl, {edge_to_show}, {at}, {bd:.2f});"
+                )
+
         elif cue.action == "remove":
-            lines.append(f"HF_Animator.remove(tl, [{sel}], '{cue.direction}', {at}, {bd:.2f}, {st:.2f});")
+            lines.append(
+                f"HF_Animator.remove(tl, [{sel}], '{cue.direction}', "
+                f"{at}, {bd:.2f}, {st:.2f});"
+            )
+
         elif cue.action == "swap":
             lines.append(f"HF_Animator.swap(tl, [{sel}], {at}, {bd:.2f});")
+
         elif cue.action == "traverse":
-            lines.append(f"HF_Animator.traverse(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+            lines.append(
+                f"HF_Animator.traverse(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});"
+            )
+
         elif cue.action == "state_change":
             lines.append(f"HF_Animator.stateChange(tl, [{sel}], {at}, {bd:.2f});")
+
         elif cue.action == "value_change":
-            lines.append(f"HF_Animator.valueChange(tl, [{sel}], '{_escape(cue.new_value)}', {at}, {bd:.2f});")
+            lines.append(
+                f"HF_Animator.valueChange(tl, [{sel}], "
+                f"'{_escape(cue.new_value)}', {at}, {bd:.2f});"
+            )
+
         elif cue.action == "highlight_path" and cue.path:
             path_list = ", ".join(f"'{n}'" for n in cue.path)
-            lines.append(f"HF_Animator.highlightPath(tl, [{path_list}], {si}, {at}, {bd:.2f});")
+            lines.append(
+                f"HF_Animator.highlightPath(tl, [{path_list}], {si}, {at}, {bd:.2f});"
+            )
+
         elif cue.action == "transfer":
-            from_node = cue.targets[0] if len(cue.targets) > 0 else ""
-            to_node = cue.targets[1] if len(cue.targets) > 1 else ""
-            # transfer 依赖 SVG edges，仅 tree/graph/state_diagram 布局有；
-            # 其他布局自动降级为 focus
-            has_svg_edges = scene.layout in ("tree", "graph", "state_diagram")
-            if has_svg_edges and from_node and to_node:
-                lines.append(f"HF_Animator.transfer(tl, '{from_node}', '{to_node}', {si}, {at}, {bd:.2f});")
+            if len(cue.targets) >= 3:
+                obj, src, dst = cue.targets[0], cue.targets[1], cue.targets[2]
+                lines.append(
+                    f"HF_Animator.transferBetween("
+                    f"tl, '#s{si}-{obj}', '#s{si}-{src}', '#s{si}-{dst}', "
+                    f"{at}, {bd:.2f});"
+                )
             else:
-                lines.append(f"HF_Animator.focus(tl, [{sel}], {at}, {bd:.2f});")
+                from_node = cue.targets[0] if len(cue.targets) > 0 else ""
+                to_node = cue.targets[1] if len(cue.targets) > 1 else ""
+                has_svg_edges = scene.layout in ("tree", "graph", "state_diagram")
+                if has_svg_edges and from_node and to_node:
+                    lines.append(
+                        f"HF_Animator.transfer("
+                        f"tl, '{from_node}', '{to_node}', {si}, {at}, {bd:.2f});"
+                    )
+                else:
+                    lines.append(f"HF_Animator.focus(tl, [{sel}], {at}, {bd:.2f});")
+
         elif cue.action == "branch":
-            lines.append(f"HF_Animator.branch(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+            lines.append(
+                f"HF_Animator.branch(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});"
+            )
+
         elif cue.action == "count":
             lines.append(f"HF_Animator.count(tl, [{sel}], {at}, {bd:.2f});")
+
         elif cue.action == "shift":
-            lines.append(f"HF_Animator.shift(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});")
+            lines.append(
+                f"HF_Animator.shift(tl, [{sel}], {at}, {bd:.2f}, {st:.2f});"
+            )
+
         elif cue.action == "derive":
             res_val = f'"#s{si}-{cue.result}"' if cue.result else "null"
-            lines.append(f"HF_Animator.derive(tl, [{sel}], {res_val}, {at}, {bd:.2f});")
+            lines.append(
+                f"HF_Animator.derive(tl, [{sel}], {res_val}, {at}, {bd:.2f});"
+            )
+
         elif cue.action == "transform":
             res_val = f'"#s{si}-{cue.result}"' if cue.result else "null"
-            lines.append(f"HF_Animator.transform(tl, [{sel}], {res_val}, {at}, {bd:.2f});")
+            lines.append(
+                f"HF_Animator.transform(tl, [{sel}], {res_val}, {at}, {bd:.2f});"
+            )
+
         elif cue.action == "highlight_code":
             line_idx = int(cue.new_value) if cue.new_value.isdigit() else 0
-            lines.append(f"HF_Animator.highlightCodeLine(tl, [{sel}], {line_idx}, {at}, {bd:.2f});")
+            lines.append(
+                f"HF_Animator.highlightCodeLine("
+                f"tl, [{sel}], {line_idx}, {at}, {bd:.2f});"
+            )
+
     return lines
 
 
@@ -573,37 +849,56 @@ def _caption_timeline(scene: SceneBrief, si: int) -> list:
     for ci, grp in enumerate(_caption_groups(scene)):
         fw, lw = grp[0][1], grp[-1][1]
         st = scene.start_time + fw.start_ms / 1000
-        en = min(scene.start_time + scene.duration - 0.08, scene.start_time + lw.end_ms / 1000 + 0.12)
+        en = min(
+            scene.start_time + scene.duration - 0.08,
+            scene.start_time + lw.end_ms / 1000 + 0.12,
+        )
         cs = f"#caption-cue-{si}-{ci}"
-        lines.append(f'tl.fromTo("{cs}", {{autoAlpha:0,y:14}}, {{autoAlpha:1,y:0,duration:.14}}, {_seconds(st)});')
-        lines.append(f'tl.to("{cs}", {{autoAlpha:0,y:-10,duration:.12}}, {_seconds(en)});')
+        lines.append(
+            f'tl.fromTo("{cs}", {{autoAlpha:0,y:14}}, '
+            f"{{autoAlpha:1,y:0,duration:.14}}, {_seconds(st)});"
+        )
+        lines.append(
+            f'tl.to("{cs}", {{autoAlpha:0,y:-10,duration:.12}}, {_seconds(en)});'
+        )
     return lines
 
 
 def _build_timeline(brief: VideoBrief, req: CartoonVideoRequest) -> str:
     lines = [
-        'const tl = gsap.timeline({paused:true});',
-        'gsap.registerPlugin(MotionPathPlugin);',
-        'window.__timelines = window.__timelines || {};'
+        "const tl = gsap.timeline({paused:true});",
+        "gsap.registerPlugin(MotionPathPlugin);",
+        "window.__timelines = window.__timelines || {};",
     ]
+
     for si, sc in enumerate(brief.scenes):
-        lines.append(f'tl.fromTo("#scene-title-{si}", {{autoAlpha:0,y:-22}},{{autoAlpha:1,y:0,duration:.48,ease:"power3.out"}},{_seconds(sc.start_time + 0.12)});')
-        
-        # Filter out elements that are targets of custom entry animations (insert, reveal, branch, derive, transform)
+        lines.append(
+            f'tl.fromTo("#scene-title-{si}", '
+            f"{{autoAlpha:0,y:-22}},"
+            f"{{autoAlpha:1,y:0,duration:.48,ease:\"power3.out\"}},"
+            f"{_seconds(sc.start_time + 0.12)});"
+        )
+
         entry_targets = set()
         for cue in sc.cues:
             if cue.action in ("reveal", "insert", "branch", "derive", "transform"):
                 entry_targets.update(cue.targets)
             if cue.action in ("derive", "transform") and cue.result:
                 entry_targets.add(cue.result)
-        
+
         default_reveal_elements = [e for e in sc.elements if e.id not in entry_targets]
         if default_reveal_elements:
             os = ", ".join(f'"#{_object_id(si, e.id)}"' for e in default_reveal_elements)
-            lines.append(f"tl.fromTo([{os}], {{autoAlpha:0,y:28}},{{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'}},{_seconds(sc.start_time + 0.35)});")
-            
+            lines.append(
+                f"tl.fromTo([{os}], "
+                f"{{autoAlpha:0,y:28}},"
+                f"{{autoAlpha:1,y:0,duration:.5,stagger:.1,ease:'power2.out'}},"
+                f"{_seconds(sc.start_time + 0.35)});"
+            )
+
         lines.extend(_cue_timeline(sc, si, req))
         lines.extend(_caption_timeline(sc, si))
+
     lines.append('window.__timelines["cartoon-explainer"] = tl;')
     return "\n    ".join(lines)
 
@@ -673,10 +968,10 @@ _CSS = """
     .flow-connector span { min-height: 22px; font-size: 14px; white-space: nowrap; }
     .flow-connector i { position: relative; width: 100%; height: 3px; background: var(--accent); }
     .flow-connector i::after { content: ""; position: absolute; right: -1px; top: -5px; width: 10px; height: 10px; border-top: 3px solid var(--accent); border-right: 3px solid var(--accent); transform: rotate(45deg); }
-    .compare-stage {{ position: relative; }}
-    .compare-stage .visual-object {{ position: absolute; transform: translate(-50%, -50%); }}
-    .versus {{ align-self: center; text-align: center; color: var(--accent-two); font-size: 28px; font-weight: 950; }}
-    .column-index {{ display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--caption-active-fg); font-weight: 900; font-size: 18px; letter-spacing: .16em; text-transform: uppercase; }}
+    .compare-stage { position: relative; }
+    .compare-stage .visual-object { position: absolute; transform: translate(-50%, -50%); }
+    .versus { align-self: center; text-align: center; color: var(--accent-two); font-size: 28px; font-weight: 950; }
+    .column-index { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--caption-active-fg); font-weight: 900; font-size: 18px; letter-spacing: .16em; text-transform: uppercase; }
     .stack-stage { grid-template-columns: 1fr; max-width: 1180px; width: 100%; margin: auto; }
     .stack-stage .visual-object { padding: 18px 28px; }
     .code-stage { grid-template-columns: minmax(0, 1.4fr) minmax(300px, .6fr); }
@@ -718,12 +1013,35 @@ _CSS = """
 
 class CartoonCompiler:
     def compile(self, request: CartoonVideoRequest, brief: VideoBrief) -> str:
-        logger.info("Cartoon 编译开始: scenes=%d style=%s", len(brief.scenes), request.style)
+        logger.info(
+            "Cartoon 编译开始: scenes=%d style=%s",
+            len(brief.scenes),
+            request.style,
+        )
+
         theme = _THEMES[request.style]
-        css = _CSS.replace("THEME_BACKGROUND", theme.background).replace("THEME_SURFACE_STRONG", theme.surface_strong).replace("THEME_SURFACE", theme.surface).replace("THEME_FOREGROUND", theme.foreground).replace("THEME_MUTED", theme.muted).replace("THEME_ACCENT_TWO", theme.accent_two).replace("THEME_ACCENT", theme.accent).replace("THEME_LINE", theme.line)
-        scenes = "\n    ".join(_render_scene(s, i, len(brief.scenes), request) for i, s in enumerate(brief.scenes))
-        audio = "\n    ".join(_render_audio(s, i) for i, s in enumerate(brief.scenes) if s.audio_path)
+        css = (
+            _CSS.replace("THEME_BACKGROUND", theme.background)
+            .replace("THEME_SURFACE_STRONG", theme.surface_strong)
+            .replace("THEME_SURFACE", theme.surface)
+            .replace("THEME_FOREGROUND", theme.foreground)
+            .replace("THEME_MUTED", theme.muted)
+            .replace("THEME_ACCENT_TWO", theme.accent_two)
+            .replace("THEME_ACCENT", theme.accent)
+            .replace("THEME_LINE", theme.line)
+        )
+
+        scenes = "\n    ".join(
+            _render_scene(s, i, len(brief.scenes), request)
+            for i, s in enumerate(brief.scenes)
+        )
+        audio = "\n    ".join(
+            _render_audio(s, i)
+            for i, s in enumerate(brief.scenes)
+            if s.audio_path
+        )
         timeline = _build_timeline(brief, request)
+
         html_content = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -737,8 +1055,10 @@ class CartoonCompiler:
     {scenes}
     {audio}
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"></script>
+  <script src="./assets/vendor/gsap.min.js"></script>
+  <script>if(!window.gsap){{document.write('<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"><\\/script>')}}</script>
+  <script src="./assets/vendor/MotionPathPlugin.min.js"></script>
+  <script>if(window.gsap && !window.MotionPathPlugin){{document.write('<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"><\\/script>')}}</script>
   <script>
     // === HyperFrames Client-Side Animator and Auto-Layout Engine ===
     window.HF_Animator = {{
@@ -755,23 +1075,128 @@ class CartoonCompiler:
       }},
       
       reveal: (tl, targets, startTime, duration, stagger = 0.12) => {{
-        tl.fromTo(targets, 
+        tl.fromTo(
+          targets, 
           {{ autoAlpha: 0, y: 30, scale: 0.92 }}, 
-          {{ autoAlpha: 1, y: 0, scale: 1, duration: duration, stagger: stagger, ease: "power3.out", immediateRender: false }}, 
+          {{
+            autoAlpha: 1,
+            y: 0,
+            scale: 1,
+            duration: duration,
+            stagger: stagger,
+            ease: "power3.out",
+            immediateRender: false
+          }}, 
           startTime
         );
       }},
       
       focus: (tl, targets, startTime, duration) => {{
-        tl.to(targets, {{ scale: 1.08, borderColor: "var(--accent)", boxShadow: "0 0 20px var(--accent-soft)", duration: duration * 0.4, ease: "power2.out" }}, startTime)
-          .to(targets, {{ scale: 1, borderColor: "var(--line)", boxShadow: "0 16px 40px rgba(0,0,0,0.08)", duration: duration * 0.6, ease: "power2.inOut" }}, startTime + duration * 0.4);
+        tl.to(
+          targets,
+          {{
+            scale: 1.08,
+            borderColor: "var(--accent)",
+            boxShadow: "0 0 20px var(--accent-soft)",
+            duration: duration * 0.4,
+            ease: "power2.out"
+          }},
+          startTime
+        ).to(
+          targets,
+          {{
+            scale: 1,
+            borderColor: "var(--line)",
+            boxShadow: "0 16px 40px rgba(0,0,0,0.08)",
+            duration: duration * 0.6,
+            ease: "power2.inOut"
+          }},
+          startTime + duration * 0.4
+        );
+      }},
+
+      compare: (tl, targets, startTime, duration) => {{
+        tl.to(
+          targets,
+          {{
+            scale: 1.08,
+            borderColor: "var(--accent-two)",
+            backgroundColor: "var(--accent-soft)",
+            boxShadow: "0 0 26px var(--accent-soft)",
+            duration: duration * 0.45,
+            ease: "power2.out"
+          }},
+          startTime
+        ).to(
+          targets,
+          {{
+            scale: 1,
+            borderColor: "var(--line)",
+            backgroundColor: "var(--surface)",
+            boxShadow: "0 16px 40px rgba(0,0,0,0.08)",
+            duration: duration * 0.55,
+            ease: "power2.inOut"
+          }},
+          startTime + duration * 0.45
+        );
+      }},
+
+      showEdge: (tl, edgeSelector, startTime, duration) => {{
+        tl.fromTo(
+          edgeSelector,
+          {{ autoAlpha: 0, strokeDasharray: "0 999" }},
+          {{
+            autoAlpha: 1,
+            strokeDasharray: "999 0",
+            stroke: "var(--accent)",
+            strokeWidth: 5,
+            duration: duration,
+            ease: "power2.out",
+            immediateRender: false
+          }},
+          startTime + duration * 0.25
+        );
+      }},
+
+      transferBetween: (tl, objectSel, sourceSel, destSel, startTime, duration) => {{
+        const obj = document.querySelector(objectSel);
+        const source = document.querySelector(sourceSel);
+        const dest = document.querySelector(destSel);
+        if (!obj || !source || !dest) return;
+
+        const objPos = HF_Animator.getCenter(obj);
+        const srcPos = HF_Animator.getCenter(source);
+        const startX = srcPos.x - objPos.x;
+        const startY = srcPos.y - objPos.y;
+
+        tl.fromTo(
+          objectSel,
+          {{
+            autoAlpha: 0,
+            x: startX,
+            y: startY,
+            scale: 0.72,
+            borderColor: "var(--accent-two)"
+          }},
+          {{
+            autoAlpha: 1,
+            x: 0,
+            y: 0,
+            scale: 1,
+            duration: duration,
+            ease: "power2.inOut",
+            immediateRender: false
+          }},
+          startTime
+        );
       }},
       
       insert: (tl, targets, direction, parentId, startTime, duration, stagger = 0.12) => {{
         targets.forEach((targetSel, idx) => {{
           const targetEl = document.querySelector(targetSel);
           const parentEl = parentId ? document.querySelector(parentId) : null;
-          let startX = 0, startY = 0;
+          let startX = 0;
+          let startY = 0;
           
           if (parentEl && targetEl) {{
             const tPos = HF_Animator.getCenter(targetEl);
@@ -783,9 +1208,19 @@ class CartoonCompiler:
             startY = direction === "top" ? -80 : direction === "bottom" ? 80 : 0;
           }}
           
-          tl.fromTo(targetSel,
+          tl.fromTo(
+            targetSel,
             {{ autoAlpha: 0, x: startX, y: startY, scale: 0.7 }},
-            {{ autoAlpha: 1, x: 0, y: 0, scale: 1, duration: duration, ease: "back.out(1.2)", delay: idx * stagger, immediateRender: false }},
+            {{
+              autoAlpha: 1,
+              x: 0,
+              y: 0,
+              scale: 1,
+              duration: duration,
+              ease: "back.out(1.2)",
+              delay: idx * stagger,
+              immediateRender: false
+            }},
             startTime
           );
         }});
@@ -796,8 +1231,17 @@ class CartoonCompiler:
           const destX = direction === "left" ? -120 : direction === "right" ? 120 : 0;
           const destY = direction === "top" ? -80 : direction === "bottom" ? 80 : 0;
           
-          tl.to(targetSel,
-            {{ autoAlpha: 0, x: destX, y: destY, scale: 0.6, duration: duration, ease: "power2.in", delay: idx * stagger }},
+          tl.to(
+            targetSel,
+            {{
+              autoAlpha: 0,
+              x: destX,
+              y: destY,
+              scale: 0.6,
+              duration: duration,
+              ease: "power2.in",
+              delay: idx * stagger
+            }},
             startTime
           );
         }});
@@ -814,37 +1258,86 @@ class CartoonCompiler:
         const dx = posB.x - posA.x;
         const dy = posB.y - posA.y;
         
-        tl.to(targets[0], {{ x: dx, y: dy, zIndex: 10, duration: duration * 0.5, ease: "power2.inOut" }}, startTime)
-          .to(targets[0], {{ x: dx, y: dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }}, startTime + duration * 0.5)
-          
-          .to(targets[1], {{ x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.inOut" }}, startTime)
-          .to(targets[1], {{ x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }}, startTime + duration * 0.5);
+        tl.to(
+          targets[0],
+          {{ x: dx, y: dy, zIndex: 10, duration: duration * 0.5, ease: "power2.inOut" }},
+          startTime
+        ).to(
+          targets[0],
+          {{ x: dx, y: dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }},
+          startTime + duration * 0.5
+        ).to(
+          targets[1],
+          {{ x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.inOut" }},
+          startTime
+        ).to(
+          targets[1],
+          {{ x: -dx, y: -dy, zIndex: 1, duration: duration * 0.5, ease: "power2.out" }},
+          startTime + duration * 0.5
+        );
       }},
       
       traverse: (tl, targets, startTime, duration, stagger = 0.24) => {{
         targets.forEach((targetSel, idx) => {{
           const t = startTime + idx * stagger;
-          tl.to(targetSel, {{ backgroundColor: "var(--accent-soft)", borderColor: "var(--accent)", scale: 1.04, duration: duration * 0.4 }}, t)
-            .to(targetSel, {{ backgroundColor: "var(--surface)", borderColor: "var(--line)", scale: 1, duration: duration * 0.6 }}, t + duration * 0.4);
+          tl.to(
+            targetSel,
+            {{
+              backgroundColor: "var(--accent-soft)",
+              borderColor: "var(--accent)",
+              scale: 1.04,
+              duration: duration * 0.4
+            }},
+            t
+          ).to(
+            targetSel,
+            {{
+              backgroundColor: "var(--surface)",
+              borderColor: "var(--line)",
+              scale: 1,
+              duration: duration * 0.6
+            }},
+            t + duration * 0.4
+          );
         }});
       }},
       
       stateChange: (tl, targets, startTime, duration) => {{
-        tl.to(targets, {{ backgroundColor: "var(--accent-soft)", borderColor: "var(--accent)", color: "var(--fg)", scale: 1.05, duration: duration * 0.5, ease: "power2.out" }}, startTime)
-          .to(targets, {{ scale: 1, duration: duration * 0.5, ease: "power2.inOut" }}, startTime + duration * 0.5);
+        tl.to(
+          targets,
+          {{
+            backgroundColor: "var(--accent-soft)",
+            borderColor: "var(--accent)",
+            color: "var(--fg)",
+            scale: 1.05,
+            duration: duration * 0.5,
+            ease: "power2.out"
+          }},
+          startTime
+        ).to(
+          targets,
+          {{ scale: 1, duration: duration * 0.5, ease: "power2.inOut" }},
+          startTime + duration * 0.5
+        );
       }},
       
       valueChange: (tl, targets, newValue, startTime, duration) => {{
         targets.forEach(targetSel => {{
-          tl.to(targetSel, {{ scale: 0.85, duration: duration * 0.3, ease: "power2.in" }}, startTime)
-            .call(() => {{
-              const el = document.querySelector(targetSel);
-              if (el) {{
-                const v = el.querySelector(".object-value");
-                if (v) v.textContent = newValue;
-              }}
-            }}, null, startTime + duration * 0.3)
-            .to(targetSel, {{ scale: 1, duration: duration * 0.7, ease: "back.out(1.5)" }}, startTime + duration * 0.3);
+          tl.to(
+            targetSel,
+            {{ scale: 0.85, duration: duration * 0.3, ease: "power2.in" }},
+            startTime
+          ).call(() => {{
+            const el = document.querySelector(targetSel);
+            if (el) {{
+              const v = el.querySelector(".object-value");
+              if (v) v.textContent = newValue;
+            }}
+          }}, null, startTime + duration * 0.3).to(
+            targetSel,
+            {{ scale: 1, duration: duration * 0.7, ease: "back.out(1.5)" }},
+            startTime + duration * 0.3
+          );
         }});
       }},
       
@@ -853,14 +1346,35 @@ class CartoonCompiler:
         pathNodes.forEach((nodeId, idx) => {{
           const t = startTime + idx * stepDuration;
           const ns = `#s${{sceneIndex}}-${{nodeId}}`;
-          tl.to(ns, {{ borderColor: "var(--accent)", boxShadow: "0 0 25px var(--accent-soft)", scale: 1.08, duration: stepDuration * 0.5 }}, t)
-            .to(ns, {{ scale: 1, duration: stepDuration * 0.5 }}, t + stepDuration * 0.5);
+
+          tl.to(
+            ns,
+            {{
+              borderColor: "var(--accent)",
+              boxShadow: "0 0 25px var(--accent-soft)",
+              scale: 1.08,
+              duration: stepDuration * 0.5
+            }},
+            t
+          ).to(
+            ns,
+            {{ scale: 1, duration: stepDuration * 0.5 }},
+            t + stepDuration * 0.5
+          );
           
           if (idx < pathNodes.length - 1) {{
             const nextId = pathNodes[idx + 1];
             const es = `#edge-${{sceneIndex}}-${{nodeId}}-${{nextId}}`;
-            tl.to(es, {{ stroke: "var(--accent)", strokeWidth: 5, duration: stepDuration }}, t);
-            tl.set(es, {{ markerEnd: "url(#arrow-marker-active-" + sceneIndex + ")" }}, t);
+            tl.to(
+              es,
+              {{ stroke: "var(--accent)", strokeWidth: 5, duration: stepDuration }},
+              t
+            );
+            tl.set(
+              es,
+              {{ markerEnd: "url(#arrow-marker-active-" + sceneIndex + ")" }},
+              t
+            );
           }}
         }});
       }},
@@ -914,43 +1428,104 @@ class CartoonCompiler:
       }},
       
       branch: (tl, targets, startTime, duration, stagger = 0.16) => {{
-        tl.fromTo(targets, 
+        tl.fromTo(
+          targets, 
           {{ autoAlpha: 0, scale: 0.7, transformOrigin: "50% 0%" }},
-          {{ autoAlpha: 1, scale: 1, duration: duration, stagger: stagger, ease: "back.out(1.4)", immediateRender: false }},
+          {{
+            autoAlpha: 1,
+            scale: 1,
+            duration: duration,
+            stagger: stagger,
+            ease: "back.out(1.4)",
+            immediateRender: false
+          }},
           startTime
         );
       }},
       
       count: (tl, targets, startTime, duration) => {{
-        tl.fromTo(targets, 
+        tl.fromTo(
+          targets, 
           {{ scale: 0.82, autoAlpha: 0.5 }},
-          {{ scale: 1, autoAlpha: 1, duration: duration, ease: "back.out(1.7)", immediateRender: false }},
+          {{
+            scale: 1,
+            autoAlpha: 1,
+            duration: duration,
+            ease: "back.out(1.7)",
+            immediateRender: false
+          }},
           startTime
         );
       }},
       
       shift: (tl, targets, startTime, duration, stagger = 0.06) => {{
-        tl.to(targets, {{ x: -120, duration: duration, ease: "power2.inOut", stagger: stagger }}, startTime);
+        tl.to(
+          targets,
+          {{ x: -120, duration: duration, ease: "power2.inOut", stagger: stagger }},
+          startTime
+        );
       }},
       
       derive: (tl, targets, resultSelector, startTime, duration) => {{
-        tl.to(targets, {{ autoAlpha: 0, scale: 0.8, y: -20, duration: duration * 0.5, ease: "power2.in" }}, startTime);
+        tl.to(
+          targets,
+          {{
+            autoAlpha: 0,
+            scale: 0.8,
+            y: -20,
+            duration: duration * 0.5,
+            ease: "power2.in"
+          }},
+          startTime
+        );
         if (resultSelector) {{
-          tl.fromTo(resultSelector,
+          tl.fromTo(
+            resultSelector,
             {{ autoAlpha: 0, scale: 0.8, y: 20 }},
-            {{ autoAlpha: 1, scale: 1, y: 0, duration: duration * 0.5, ease: "back.out(1.4)", immediateRender: false }},
+            {{
+              autoAlpha: 1,
+              scale: 1,
+              y: 0,
+              duration: duration * 0.5,
+              ease: "back.out(1.4)",
+              immediateRender: false
+            }},
             startTime + duration * 0.5
           );
         }}
       }},
       
       transform: (tl, targets, resultSelector, startTime, duration) => {{
-        tl.to(targets, {{ borderColor: "var(--accent-two)", boxShadow: "0 0 15px var(--accent-soft)", duration: duration * 0.3 }}, startTime)
-          .to(targets, {{ autoAlpha: 0, scale: 0.6, duration: duration * 0.3, ease: "power2.in" }}, startTime + duration * 0.3);
+        tl.to(
+          targets,
+          {{
+            borderColor: "var(--accent-two)",
+            boxShadow: "0 0 15px var(--accent-soft)",
+            duration: duration * 0.3
+          }},
+          startTime
+        ).to(
+          targets,
+          {{
+            autoAlpha: 0,
+            scale: 0.6,
+            duration: duration * 0.3,
+            ease: "power2.in"
+          }},
+          startTime + duration * 0.3
+        );
+
         if (resultSelector) {{
-          tl.fromTo(resultSelector,
+          tl.fromTo(
+            resultSelector,
             {{ autoAlpha: 0, scale: 0.5, transformOrigin: "50% 50%" }},
-            {{ autoAlpha: 1, scale: 1, duration: duration * 0.4, ease: "back.out(1.4)", immediateRender: false }},
+            {{
+              autoAlpha: 1,
+              scale: 1,
+              duration: duration * 0.4,
+              ease: "back.out(1.4)",
+              immediateRender: false
+            }},
             startTime + duration * 0.6
           );
         }}
@@ -971,11 +1546,9 @@ class CartoonCompiler:
         const toEl = stage.querySelector("#s" + sceneId + "-" + toId);
 
         if (fromEl && toEl) {{
-          // 使用 getCenter 获取视觉中心（已处理 transform 偏移）
           const from = HF_Animator.getCenter(fromEl);
           const to = HF_Animator.getCenter(toEl);
 
-          // 圆形节点需要从边缘开始/结束
           const fromR = Math.max(fromEl.offsetWidth, fromEl.offsetHeight) / 2 || 50;
           const toR = Math.max(toEl.offsetWidth, toEl.offsetHeight) / 2 || 50;
 
@@ -983,7 +1556,10 @@ class CartoonCompiler:
           const dy = to.y - from.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
 
-          let startX = from.x, startY = from.y, endX = to.x, endY = to.y;
+          let startX = from.x;
+          let startY = from.y;
+          let endX = to.x;
+          let endY = to.y;
 
           if (dist > 0) {{
             const ux = dx / dist;
@@ -996,7 +1572,9 @@ class CartoonCompiler:
 
           path.setAttribute("d", "M " + startX + " " + startY + " L " + endX + " " + endY);
 
-          const textEl = stage.querySelector('.edge-condition[data-from="' + fromId + '"][data-to="' + toId + '"]');
+          const textEl = stage.querySelector(
+            '.edge-condition[data-from="' + fromId + '"][data-to="' + toId + '"]'
+          );
           if (textEl) {{
             textEl.setAttribute("x", (startX + endX) / 2);
             textEl.setAttribute("y", (startY + endY) / 2 - 10);
@@ -1006,13 +1584,10 @@ class CartoonCompiler:
     }}
 
     document.addEventListener("DOMContentLoaded", () => {{
-      // 所有坐标已在编译时由 Python 布局算法计算，无需客户端 auto-layout
-      // 只需初始化 SVG 边线
       document.querySelectorAll(".visual-stage").forEach(stage => {{
         updateSvgEdges(stage);
       }});
 
-      // 动画 tick 中实时更新 SVG 边线（动画可能改变元素位置）
       gsap.ticker.add(() => {{
         document.querySelectorAll(".visual-stage").forEach(stage => {{
           updateSvgEdges(stage);

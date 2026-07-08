@@ -169,8 +169,7 @@ async def _seed_initial_data() -> None:
 
     分别检查学校、408题库数据是否为空，为空则导入。
     """
-    from app.importers.import_quiz import import_408_quiz
-    from app.importers.import_schools import import_schools
+    from app.infra.import_data import import_408_quiz, import_schools
 
     logger.info("[Database] 开始检查种子数据...")
 

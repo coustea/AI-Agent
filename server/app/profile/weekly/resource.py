@@ -8,8 +8,11 @@ from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.infra.logging import get_logger
 from app.infra.models import GeneratedResource, GeneratedResourceItem
 from app.profile.weekly.types import SectionResult
+
+logger = get_logger(__name__)
 
 
 async def build_resource_section(
@@ -37,6 +40,8 @@ async def build_resource_section(
         .order_by(GeneratedResource.created_at.asc())
     )
     resources = (await db.exec(res_stmt)).all()
+
+    logger.info("Resource section — user=%d week=%s~%s resources=%d", user_id, week_start.date(), week_end.date(), len(resources))
 
     if not resources:
         return SectionResult(

@@ -51,18 +51,20 @@ class _CompositionParser(HTMLParser):
             self.ids.append(values["id"])
         if values.get("data-composition-id"):
             self.compositions.append(values)
+
         is_clip = (
             "clip" in values.get("class", "").split()
-            or tag in {"audio", "video"}
-            and "data-start" in values
+            or tag in {"audio", "video"} and "data-start" in values
         )
         if is_clip:
             self.clips.append((tag, values))
+
         if tag == "audio" and any(
             "clip" in ancestor.get("class", "").split()
             for ancestor in self.stack
         ):
             self.audio_inside_clip = True
+
         if tag not in self._VOID_TAGS:
             self.stack.append(values)
 
@@ -96,6 +98,7 @@ def audit_hyperframes_html(content: str) -> list[str]:
         return [f"HTML 解析失败: {exc}"]
 
     problems: list[str] = []
+
     if len(parser.compositions) != 1:
         problems.append("必须且只能存在一个 data-composition-id 根元素")
         composition_id = ""
@@ -113,23 +116,28 @@ def audit_hyperframes_html(content: str) -> list[str]:
         problems.append(f"存在重复的 id: {', '.join(duplicates)}")
 
     tracks: dict[int, list[tuple[float, float, str]]] = {}
+
     for tag, attrs in parser.clips:
         clip_id = attrs.get("id", "")
         if not clip_id:
             problems.append(f"{tag} clip 缺少唯一 id")
+
         start = _number(attrs.get("data-start", ""))
         duration = _number(attrs.get("data-duration", ""))
         track = _number(attrs.get("data-track-index", ""))
+
         if start is None or start < 0:
             problems.append(f"clip {clip_id or tag} 的 data-start 无效")
         if duration is None or duration <= 0:
             problems.append(f"clip {clip_id or tag} 的 data-duration 无效")
         if track is None or not track.is_integer():
             problems.append(f"clip {clip_id or tag} 的 data-track-index 无效")
+
         if start is not None and duration and track is not None and track.is_integer():
             tracks.setdefault(int(track), []).append(
                 (start, start + duration, clip_id or tag)
             )
+
         if tag == "video" and (
             "muted" not in attrs or "playsinline" not in attrs
         ):
@@ -145,11 +153,13 @@ def audit_hyperframes_html(content: str) -> list[str]:
 
     if parser.audio_inside_clip:
         problems.append("audio 必须是 composition 的直接 clip，不能嵌套在场景 clip 内")
+
     if not re.search(
         r"gsap\.timeline\(\s*\{\s*paused\s*:\s*true\s*\}\s*\)",
         content,
     ):
         problems.append("GSAP 主时间线必须使用 paused: true")
+
     if composition_id and not re.search(
         rf'window\.__timelines\s*\[\s*["\']{re.escape(composition_id)}["\']\s*\]\s*=',
         content,
@@ -173,9 +183,11 @@ def audit_hyperframes_html(content: str) -> list[str]:
             "禁止对 .scene/.clip 使用 display: none",
         ),
     ]
+
     for pattern, message in banned_patterns:
         if re.search(pattern, content):
             problems.append(message)
+
     return problems
 
 
@@ -189,6 +201,7 @@ class CartoonCliValidator:
         """Run the hyperframes lint command on the generated index.html file."""
         logger.info("Cartoon 校验开始")
         html_file = output_dir / "index.html"
+
         if not html_file.is_file():
             return StaticAudit(
                 passed=False,
@@ -198,8 +211,13 @@ class CartoonCliValidator:
 
         html_content = html_file.read_text(encoding="utf-8")
         scene_count = len(
-            re.findall(r'class="[^"]*\bscene\b(?!-)[^"]*"', html_content, re.IGNORECASE)
+            re.findall(
+                r'class="[^"]*\bscene\b(?!-)[^"]*"',
+                html_content,
+                re.IGNORECASE,
+            )
         )
+
         static_problems = audit_hyperframes_html(html_content)
         if static_problems:
             return StaticAudit(
@@ -218,14 +236,16 @@ class CartoonCliValidator:
 
         command = [
             npx_path,
-            "--yes",
+            "--no-install",
             "hyperframes",
             "lint",
             ".",
             "--json",
         ]
+
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
+
             return_code, stdout_str, stderr_str = await run_process_with_logging(
                 command,
                 cwd=output_dir,
@@ -233,12 +253,11 @@ class CartoonCliValidator:
                 logger_name="app.shared.cartoon.validate",
             )
         except asyncio.TimeoutError:
-            # Python 3.11+ 中 asyncio.TimeoutError 是内置 TimeoutError 的别名，
-            # 而 TimeoutError 是 OSError 的子类。必须先捕获 TimeoutError，否则会被
-            # 下面的 except OSError 吞掉，超时被误报为“无法启动 CLI（空消息）”。
             return StaticAudit(
                 passed=False,
-                problems=[f"HyperFrames lint timed out after {self.timeout_seconds} seconds"],
+                problems=[
+                    f"HyperFrames lint timed out after {self.timeout_seconds} seconds"
+                ],
                 scene_count=0,
             )
         except OSError as exc:
@@ -252,12 +271,14 @@ class CartoonCliValidator:
         stderr_str = stderr_str.strip()
 
         problems: list[str] = []
+
         if return_code != 0:
             for raw_line in stdout_str.splitlines():
                 try:
                     payload = json.loads(raw_line)
                 except json.JSONDecodeError:
                     continue
+
                 for item in payload.get("errors", []):
                     if isinstance(item, dict):
                         location = ":".join(
@@ -269,6 +290,7 @@ class CartoonCliValidator:
                         problems.append(f"{prefix}{item.get('message', item)}")
                     else:
                         problems.append(str(item))
+
             if not problems and stderr_str:
                 problems.extend(stderr_str.splitlines())
             if not problems and stdout_str:
@@ -281,8 +303,11 @@ class CartoonCliValidator:
             problems=problems,
             scene_count=scene_count,
         )
+
         logger.info(
             "Cartoon 校验完成: passed=%s scene_count=%d problems=%d",
-            result.passed, result.scene_count, len(result.problems),
+            result.passed,
+            result.scene_count,
+            len(result.problems),
         )
         return result

@@ -14,12 +14,10 @@ from app.auth.api import router as auth_router
 from app.avatar.api import router as avatar_router
 # AI 聊天路由
 from app.chat.api import router as chat_router
-# 仪表盘路由
-from app.dashboard.api import router as dashboard_router
 # 评估路由
 from app.evaluation.api import router as evaluation_router
-# 学习路径路由
-from app.path.api import router as path_router
+# 学习路径路由（主路由 + 仪表盘端点）
+from app.path.api import router as path_router, dashboard_router as path_dashboard_router
 # 学习资源路由
 from app.resource.api import router as resource_router
 # 算法可视化路由
@@ -48,12 +46,12 @@ def install_routes(app: FastAPI) -> None:
     app.include_router(visualizer_router, prefix="/api/v1/ai", tags=["visualizer"])
     # AI 聊天模块：/api/v1/ai/chat/*
     app.include_router(chat_router, prefix="/api/v1/ai", tags=["ai"])
-    # 仪表盘模块：/api/v1/ai/dashboard/*
-    app.include_router(dashboard_router, prefix="/api/v1/ai", tags=["dashboard"])
     # 学习资源模块：/api/v1/ai/resource/*
     app.include_router(resource_router, prefix="/api/v1/ai", tags=["resource"])
     # 学习路径模块：/api/v1/ai/path/*
     app.include_router(path_router, prefix="/api/v1/ai", tags=["path"])
+    # 学习路径仪表盘端点：/api/v1/ai/dashboard/continue-learning
+    app.include_router(path_dashboard_router, prefix="/api/v1/ai", tags=["path"])
     # 学习评估模块：/api/v1/ai/evaluation/*
     app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
     # 数字人模块：/api/v1/ai/avatar/*

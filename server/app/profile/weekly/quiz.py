@@ -8,8 +8,11 @@ from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.infra.logging import get_logger
 from app.infra.models import PathNodeQuestion
 from app.profile.weekly.types import SectionResult
+
+logger = get_logger(__name__)
 
 
 async def build_quiz_section(
@@ -35,6 +38,8 @@ async def build_quiz_section(
         )
     )
     questions = (await db.exec(stmt)).all()
+
+    logger.info("Quiz section — user=%d week=%s~%s questions=%d", user_id, week_start.date(), week_end.date(), len(questions))
 
     if not questions:
         return SectionResult(

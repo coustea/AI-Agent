@@ -1,12 +1,17 @@
-"""算法可视化模块 API 路由。
+"""算法可视化模块 API 路由。 
 
 当前设计：
   GET  /algorithm-visualizer/languages   — 公开
   GET  /algorithm-visualizer/algorithms  — 公开
-  GET  /algorithm-visualizer/templates   — 需认证，返回可视化模板代码
-  POST /algorithm-visualizer/run         — 需认证，运行已包含 tracer 的代码
+  GET  /algorithm-visualizer/templates   — 需认证，返回干净模板代码（无 tracer）
+  POST /algorithm-visualizer/run         — 需认证，运行代码（自动插装 + 沙箱执行）
 
-当前阶段不接入 LLM，不自动插装普通代码。
+运行流程：
+  1. 前端获取干净模板代码展示在编辑器
+  2. 用户点击运行，提交代码
+  3. 后端检测代码是否包含 tracer 调用
+  4. 若无 tracer → LLM 自动插装 → 沙箱执行
+  5. 若已有 tracer → 直接沙箱执行
 """
 
 from __future__ import annotations
@@ -81,11 +86,10 @@ async def get_templates(
     language: str,
     current_user: User = Depends(get_current_user),
 ):
-    """获取算法可视化模板代码。
+    """获取算法可视化模板代码（干净代码，无 tracer 调用）。
 
-    注意：
-    当前阶段要求用户基于该模板修改代码和数据。
-    后端不会用 LLM 自动把普通代码转换为可视化代码。
+    返回的代码是纯算法实现，不包含任何 tracer 调用。
+    用户点击运行时，后端会自动插装 tracer 调用。
     """
     try:
         info = get_algorithm_info(algorithm)
@@ -100,7 +104,11 @@ async def get_templates(
         default_data = build_default_data(algorithm)
 
         payload = TemplateResponse(
-            **info,
+            algorithm=algorithm,
+            domain=info["domain"],
+            visualizer_type=info["visualizer_type"],
+            required_events=info.get("required_events", []),
+            supported_languages=info["supported_languages"],
             language=language,
             template_code=code,
             default_data=default_data,
@@ -123,8 +131,8 @@ async def run_visualization(
 ):
     """执行提交的可视化代码，返回 TraceEvent[]。
 
-    当前阶段不接入 LLM。
-    code 必须包含 tracer 调用，并生成 trace.json。
+    如果代码不包含 tracer 调用，后端自动进行 LLM 插装。
+    如果代码已包含 tracer 调用，直接执行。
     """
     algorithm = request_data.algorithm or ""
     language = request_data.language or ""
@@ -409,3 +417,4 @@ def build_default_data(algorithm: str) -> dict:
         return {"base": 2, "exp": 10, "mod": 1000}
 
     return {}
+

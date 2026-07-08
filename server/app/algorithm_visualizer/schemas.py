@@ -3,10 +3,9 @@
 当前设计：
 1. 前端必须选择语言 language。
 2. 前端必须选择算法模板 algorithm。
-3. 后端根据 algorithm + language 返回可视化模板代码。
+3. 后端根据 algorithm + language 返回干净模板代码（无 tracer）。
 4. 用户基于模板修改代码和数据。
-5. 后端只负责编译运行、读取 trace.json、校验事件流。
-6. 当前阶段不接入 LLM，不自动插装普通代码。
+5. 运行时后端自动插装 tracer 调用，编译运行，读取 trace.json，校验事件流。
 """
 
 from __future__ import annotations
@@ -56,9 +55,8 @@ class TemplateResponse(BaseModel):
 class RunRequest(BaseModel):
     """运行可视化请求。
 
-    注意：
-    当前阶段不做 LLM 自动插装。
-    code 必须是已经包含 tracer 调用的可视化代码，通常来自模板接口。
+    code 可以是干净算法代码（无 tracer），后端会自动插装。
+    也可以是已包含 tracer 调用的代码，后端直接执行。
     """
 
     domain: str = "all"

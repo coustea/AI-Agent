@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from time import perf_counter
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from langchain_core.messages import HumanMessage
 
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
 from app.profile.weekly.chat import build_chat_section
 from app.profile.weekly.path import build_path_section
 from app.profile.weekly.quiz import build_quiz_section
@@ -48,12 +52,24 @@ async def build_digest(
     Returns:
         ``DigestBuildResult``，包含最终 Markdown 和汇总统计。
     """
+    logger.info("Building weekly digest — user=%d week=%s~%s", user_id, week_start.date(), week_end.date())
+    _t0 = perf_counter()
+
     sections: list[SectionResult] = await asyncio.gather(
         build_chat_section(db, user_id, week_start, week_end),
         build_resource_section(db, user_id, week_start, week_end),
         build_path_section(db, user_id, week_start, week_end),
         build_quiz_section(db, user_id, week_start, week_end),
         build_visualizer_section(db, user_id, week_start, week_end),
+    )
+
+    _t1 = perf_counter()
+    logger.info(
+        "Sections built for user=%d in %.2fs — chat=%d resource=%d path=%d quiz=%d visualizer=%d",
+        user_id, _t1 - _t0,
+        sections[0].raw_length, sections[1].raw_length,
+        sections[2].raw_length, sections[3].raw_length,
+        sections[4].raw_length,
     )
 
     # 合并统计
@@ -106,8 +122,21 @@ async def build_digest(
     )
 
     # LLM 精炼（仅当内容过多时）
-    total_raw_length > LLM_CONDENSE_THRESHOLD and (
-        md := (await _condense_with_llm(md, username)) or md
+    condensed = False
+    if total_raw_length > LLM_CONDENSE_THRESHOLD:
+        logger.info("Raw digest length %d exceeds threshold %d — triggering LLM condense", total_raw_length, LLM_CONDENSE_THRESHOLD)
+        condensed_md = await _condense_with_llm(md, username)
+        if condensed_md:
+            md = condensed_md
+            condensed = True
+            logger.info("LLM condense succeeded — new length %d chars", len(md))
+        else:
+            logger.warning("LLM condense returned empty — keeping original digest")
+
+    _t2 = perf_counter()
+    logger.info(
+        "Digest built for user=%d in %.2fs — raw_length=%d final_length=%d condensed=%s",
+        user_id, _t2 - _t0, total_raw_length, len(md), condensed,
     )
 
     return DigestBuildResult(
@@ -179,6 +208,7 @@ async def _condense_with_llm(raw_md: str, username: str) -> str | None:
         f"请精炼以下 {username} 的周度学习摘要，保留结构和关键数据，使内容更紧凑：\n\n{raw_md}"
     )
 
+    logger.info("Condensing digest via LLM (input length=%d chars)", len(raw_md))
     try:
         llm = get_llm()
         resp = await llm.ainvoke(
@@ -189,8 +219,10 @@ async def _condense_with_llm(raw_md: str, username: str) -> str | None:
         content = str(resp.content or "").strip()
 
         if content and len(content) > 50:
+            logger.info("LLM condense successful — output length=%d chars", len(content))
             return content
-    except Exception:
-        pass
+        logger.warning("LLM condense produced too-short content (%d chars) — discarding", len(content))
+    except Exception as exc:
+        logger.exception("LLM condense failed: %s", exc)
 
     return None

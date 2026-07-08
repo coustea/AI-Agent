@@ -1,8 +1,15 @@
-"""学习评估 HTTP 路由。"""
+"""学习评估 HTTP 路由。
+
+包含首页仪表盘相关端点（从 dashboard 模块迁移）。
+"""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user, get_current_user_flexible
@@ -10,7 +17,7 @@ from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.evaluation.service import evaluation_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import User
+from app.infra.models import LearningSession, User
 from app.infra.response import HttpResponse
 
 router = APIRouter()
@@ -87,3 +94,26 @@ async def get_learning_time_stats(
         days=days,
     )
     return HttpResponse.success(data=stats)
+
+
+# ---------------------------------------------------------------------------
+# 仪表盘端点（从 dashboard 模块迁移）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/study-stats")
+async def get_study_stats(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取学习统计 — 本周活跃天数。"""
+    now = datetime.now(timezone.utc)
+    week_start = now - timedelta(days=now.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    weekly_days = (await session.exec(
+        select(func.count(func.distinct(func.date(col(LearningSession.started_at)))))
+        .where(LearningSession.user_id == current_user.id, LearningSession.started_at >= week_start)
+    )).one() or 0
+
+    return HttpResponse.success(data={"weekly_days": int(weekly_days)})

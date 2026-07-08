@@ -8,8 +8,11 @@ from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.infra.logging import get_logger
 from app.infra.models import LearningEvent
 from app.profile.weekly.types import SectionResult
+
+logger = get_logger(__name__)
 
 
 async def build_visualizer_section(
@@ -37,6 +40,8 @@ async def build_visualizer_section(
         .order_by(LearningEvent.created_at.asc())
     )
     events = (await db.exec(stmt)).all()
+
+    logger.info("Visualizer section — user=%d week=%s~%s events=%d", user_id, week_start.date(), week_end.date(), len(events))
 
     if not events:
         return SectionResult(

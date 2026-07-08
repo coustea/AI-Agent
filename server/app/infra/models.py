@@ -409,8 +409,9 @@ class UserProfileDimension(SQLModel, table=True):
 class WeeklyLearningDigest(SQLModel, table=True):
     """周度学习摘要表 — 以自然周为粒度聚合用户跨系统学习行为。
 
-    作为全局画像评分的缓冲证据层：score_profile 调用时懒加载本周摘要，
-    生成结构化 Markdown 注入评分 prompt 作为客观依据。
+    作为文字画像更新的缓冲层：infer_profile_from_digest 调用
+    get_or_create_weekly_digest 构建本周摘要，再据此推理更新文字画像，
+    避免逐事件频繁更新导致画像失准。评分不直接读本表，仅紧跟文字画像变更。
 
     周范围约定：week_start = 周一 00:00:00 UTC，week_end = 周日 23:59:59.999999 UTC。
     """
