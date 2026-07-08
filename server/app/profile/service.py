@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from sqlalchemy import case, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.infra.database import session_scope
@@ -23,6 +24,7 @@ from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
     ChatLongTermMemory,
+    LearningEvent,
     School,
     User,
     UserProfile,
@@ -101,6 +103,43 @@ def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
         "dimension_scores": scores,
         "scored_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── 懒加载触发阈值 ─────────────────────────────────────────────────────
+
+PROFILE_REFRESH_EVENT_THRESHOLD = 10
+"""文字画像懒加载刷新的加权事件阈值（点）。
+
+加权规则：quiz_submitted / path_node_completed / path_quiz_answered = 3，
+resource_generated = 2，其他 = 1。强信号事件少但权重大，弱信号事件多但权重小。
+"""
+
+_WEIGHT_3_EVENTS: tuple[str, ...] = (
+    "quiz_submitted",
+    "path_node_completed",
+    "path_quiz_answered",
+)
+
+
+async def weighted_new_event_points(
+    db: AsyncSession, user_id: int, since: datetime
+) -> int:
+    """计算 ``since`` 之后新增学习事件的加权点数。
+
+    用于 GET /profile 懒加载触发判据：当点数 ≥ PROFILE_REFRESH_EVENT_THRESHOLD
+    或 profile.updated_at 早于本周周一时，后台触发 infer_profile_from_digest。
+    """
+    weight_expr = case(
+        (LearningEvent.event_type.in_(_WEIGHT_3_EVENTS), 3),
+        (LearningEvent.event_type == "resource_generated", 2),
+        else_=1,
+    )
+    stmt = select(func.coalesce(func.sum(weight_expr), 0)).where(
+        LearningEvent.user_id == user_id,
+        LearningEvent.created_at > since,
+    )
+    result = (await db.exec(stmt)).one()
+    return int(result)
 
 
 # ── ProfileService ────────────────────────────────────────────────────
