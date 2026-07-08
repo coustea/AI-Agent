@@ -68,8 +68,8 @@
         </div>
 
         <div v-if="drillSubmitted" class="drill-result">
-          <strong>{{ drillCorrect ? '已掌握' : '仍需复习' }}</strong>
-          <span v-if="drillReview?.score != null" class="score-badge" :class="drillCorrect ? 'success' : 'danger'">
+          <strong>{{ drillScoreText }}</strong>
+          <span v-if="drillReview?.score != null" class="score-badge" :class="drillScoreClass">
             {{ drillReview.score }}分
           </span>
           <p>参考答案：{{ formatAnswer(drillQuestion.answer) }}</p>
@@ -204,6 +204,22 @@ const hasDrillAnswer = computed(() => {
   const ans = props.drillAnswer
   if (Array.isArray(ans)) return ans.length > 0
   return !!ans && String(ans).trim().length > 0
+})
+
+const drillScoreClass = computed(() => {
+  const score = props.drillReview?.score
+  if (score == null) return props.drillCorrect ? 'success' : 'danger'
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+})
+
+const drillScoreText = computed(() => {
+  const score = props.drillReview?.score
+  if (score == null) return props.drillCorrect ? '已掌握' : '仍需复习'
+  if (score >= 80) return '回答优秀'
+  if (score >= 60) return '基本正确，部分不足'
+  return '仍需复习'
 })
 
 function isDrillSelected(key: string) {
@@ -486,6 +502,11 @@ function renderInline(text: string) {
 .score-badge.success {
   background: #dcfce7;
   color: #166534;
+}
+
+.score-badge.warning {
+  background: #fef9c3;
+  color: #854d0e;
 }
 
 .score-badge.danger {

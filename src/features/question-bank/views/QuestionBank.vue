@@ -123,9 +123,9 @@
                     <div class="foot-status">
                       <span
                         v-if="portalSubmitted[portalQuestion.id]"
-                        :class="['status-pill', portalCorrect[portalQuestion.id] ? 'success' : 'danger']"
+                        :class="['status-pill', subjectiveScoreClass(portalQuestion.id, portalReview, portalCorrect)]"
                       >
-                        {{ portalCorrect[portalQuestion.id] ? '回答正确' : '回答错误，已加入错题本' }}
+                        {{ subjectiveScoreText(portalQuestion.id, portalReview, portalCorrect) }}
                       </span>
                     </div>
 
@@ -1579,6 +1579,22 @@ async function removeWrong(q: Question) {
   await loadWrongBook()
 }
 
+function subjectiveScoreClass(id: string, reviewMap: Record<string, QuizReviewResult | null>, correctMap: Record<string, boolean>) {
+  const score = reviewMap[id]?.score
+  if (score == null) return correctMap[id] ? 'success' : 'danger'
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+function subjectiveScoreText(id: string, reviewMap: Record<string, QuizReviewResult | null>, correctMap: Record<string, boolean>) {
+  const score = reviewMap[id]?.score
+  if (score == null) return correctMap[id] ? '回答正确' : '回答错误，已加入错题本'
+  if (score >= 80) return '回答优秀'
+  if (score >= 60) return '基本正确，部分不足'
+  return '回答错误，已加入错题本'
+}
+
 function evaluateAnswer(question: Question, answer: AnswerValue) {
   if (isOptionQuestion(question)) {
     const user = normalizeAnswer(answer).sort()
@@ -2354,6 +2370,31 @@ function scrollQuestionBankViewportToTop() {
   color: #172033;
   font-size: 18px;
   font-weight: 900;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill.warning {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.status-pill.danger {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .tag {

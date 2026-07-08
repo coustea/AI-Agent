@@ -175,10 +175,10 @@
             </div>
 
             <div class="answer-review-meta">
-              <span :class="['result-badge', isExamCorrect(question) ? 'success' : 'danger']">
-                {{ isExamCorrect(question) ? '正确' : '错误' }}
+              <span :class="['result-badge', examScoreClass(question)]">
+                {{ examScoreText(question) }}
               </span>
-              <span v-if="examReview[question.id]?.score != null" class="exam-score-badge" :class="isExamCorrect(question) ? 'success' : 'danger'">
+              <span v-if="examReview[question.id]?.score != null" class="exam-score-badge" :class="examScoreClass(question)">
                 {{ examReview[question.id].score }}分
               </span>
               <span v-if="examReview[question.id]?.feedback" class="review-feedback">
@@ -436,6 +436,22 @@ function evaluateAnswer(question: ExamQuestion, answer: AnswerValue) {
 
 function isExamCorrect(question: ExamQuestion) {
   return evaluateAnswer(question, props.examAnswers?.[question.id])
+}
+
+function examScoreClass(question: ExamQuestion) {
+  const score = props.examReview?.[question.id]?.score
+  if (score == null) return isExamCorrect(question) ? 'success' : 'danger'
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+function examScoreText(question: ExamQuestion) {
+  const score = props.examReview?.[question.id]?.score
+  if (score == null) return isExamCorrect(question) ? '正确' : '错误'
+  if (score >= 80) return '优秀'
+  if (score >= 60) return '部分正确'
+  return '错误'
 }
 
 function formatUserAnswer(answer: AnswerValue) {
@@ -1072,6 +1088,11 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   color: #059669;
 }
 
+.result-badge.warning {
+  background: rgba(254, 249, 195, 0.92);
+  color: #854d0e;
+}
+
 .result-badge.danger {
   background: rgba(254, 242, 242, 0.94);
   color: #dc2626;
@@ -1155,6 +1176,11 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
 .exam-score-badge.success {
   background: #dcfce7;
   color: #166534;
+}
+
+.exam-score-badge.warning {
+  background: #fef9c3;
+  color: #854d0e;
 }
 
 .exam-score-badge.danger {
