@@ -34,8 +34,7 @@
 
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
-import Article from './renderers/Article.vue'
-import Code from './renderers/Code.vue'
+import Markdown from './renderers/Markdown.vue'
 import MindMap from './renderers/MindMap.vue'
 import Quiz from './renderers/Quiz.vue'
 import Reading from './renderers/Reading.vue'
@@ -60,10 +59,10 @@ const normalizedType = computed(() => {
 })
 
 const rendererMap: Record<string, Component> = {
-  content: Article,
+  content: Markdown,
   mindmap: MindMap,
   quiz: Quiz,
-  code: Code,
+  code: Markdown,
   reading: Reading,
   ppt: Slides,
   video: Video,

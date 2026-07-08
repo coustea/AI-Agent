@@ -23,7 +23,7 @@
 
     <section class="tutorial-reader">
       <div v-if="tutorial" ref="contentEl" class="markdown-shell">
-        <Article :result-data="{ content: tutorial.content_markdown }" />
+        <Markdown :result-data="{ content: tutorial.content_markdown }" />
       </div>
 
       <div v-else class="tutorial-empty">
@@ -36,7 +36,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import Article from '@/shared/content/renderers/Article.vue'
+import Markdown from '@/shared/content/renderers/Markdown.vue'
 import type { LearningPathTutorial } from '../../model/path'
 
 defineProps<{

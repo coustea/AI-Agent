@@ -95,7 +95,7 @@
                   v-if="resource.resource_type === 'mindmap'"
                   :result-data="resourceContent"
                 />
-                <Code
+                <Markdown
                   v-else-if="resource.resource_type === 'code'"
                   :result-data="resourceContent"
                 />
@@ -111,7 +111,7 @@
                   v-else-if="resource.resource_type === 'quiz'"
                   :result-data="resourceContent"
                 />
-                <Article
+                <Markdown
                   v-else
                   :result-data="resourceContent"
                 />
@@ -245,10 +245,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import Article from '@/shared/content/renderers/Article.vue'
+import Markdown from '@/shared/content/renderers/Markdown.vue'
 import MindMap from '@/shared/content/renderers/MindMap.vue'
 import Quiz from '@/shared/content/renderers/Quiz.vue'
-import Code from '@/shared/content/renderers/Code.vue'
 import Reading from '@/shared/content/renderers/Reading.vue'
 import Slides from '@/shared/content/renderers/Slides.vue'
 import { getPathGeneratedResourceDetail } from '@/features/learning-path/api/resource'
