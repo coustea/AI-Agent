@@ -1,6 +1,6 @@
 <template>
   <div ref="graphContainerRef" class="path-graph-container">
-    <!-- 底层 SVG 画布 -->
+    <!-- 底层 SVG 画布 (z-index 提升至卡片背景上方，以防被白底遮挡) -->
     <svg class="connections-canvas">
       <defs>
         <!-- 渐变线定义 -->
@@ -24,7 +24,7 @@
           :key="idx"
           :d="link.path"
           :class="{ 'active-line': link.isActive, 'locked-line': link.isLocked }"
-          :stroke="link.isActive ? 'url(#active-grad)' : link.isCompleted ? '#10b981' : '#cbd5e1'"
+          :stroke="link.isActive ? 'url(#active-grad)' : link.isCompleted ? '#329a82' : '#cbd5e1'"
           fill="none"
           :stroke-width="link.isActive ? 2.5 : 1.5"
           :marker-end="link.isActive ? 'url(#arrow-active)' : 'url(#arrow)'"
@@ -74,7 +74,7 @@
               <div class="node-card-body">
                 <div class="node-card-meta">
                   <span class="priority-tag">P{{ node.priority }}</span>
-                  <span class="difficulty-tag">{{ node.difficulty || '常规' }}</span>
+                  <span class="difficulty-tag">{{ difficultyText(node.difficulty) }}</span>
                 </div>
                 <strong>{{ node.title }}</strong>
                 <div class="node-card-footer">
@@ -118,12 +118,12 @@ const emit = defineEmits<{
 const graphContainerRef = ref<HTMLElement | null>(null)
 const connectorPaths = ref<LinkPath[]>([])
 
-// 1. 自动计算网格深度位置 (拓扑深度计算列)
+// 1. 自动计算局部网格深度位置 (拓扑深度在单个 Stage 内进行局部计算，避免跨 Stage 依赖拉大列空白间距)
 const nodeColumnMap = computed(() => {
   const colMap = new Map<string, number>()
   const visiting = new Set<string>()
 
-  const getCol = (nodeKey: string): number => {
+  const getCol = (nodeKey: string, stageId: string): number => {
     if (colMap.has(nodeKey)) return colMap.get(nodeKey)!
     if (visiting.has(nodeKey)) {
       return 0
@@ -131,19 +131,33 @@ const nodeColumnMap = computed(() => {
     visiting.add(nodeKey)
 
     const node = props.nodes.find(n => n.node_id === nodeKey)
-    if (!node || !node.prerequisites || node.prerequisites.length === 0) {
+    // 如果节点不存在，或不属于当前 Stage，或者没有前置依赖
+    if (!node || node.stage_id !== stageId || !node.prerequisites || node.prerequisites.length === 0) {
       visiting.delete(nodeKey)
       colMap.set(nodeKey, 0)
       return 0
     }
-    const prevCols = node.prerequisites.map(p => getCol(p))
+
+    // 过滤出同样属于当前 Stage 的前置依赖
+    const localPrereqs = node.prerequisites.filter(p => {
+      const pNode = props.nodes.find(n => n.node_id === p)
+      return pNode && pNode.stage_id === stageId
+    })
+
+    if (localPrereqs.length === 0) {
+      visiting.delete(nodeKey)
+      colMap.set(nodeKey, 0)
+      return 0
+    }
+
+    const prevCols = localPrereqs.map(p => getCol(p, stageId))
     const col = Math.max(...prevCols) + 1
     visiting.delete(nodeKey)
     colMap.set(nodeKey, col)
     return col
   }
 
-  props.nodes.forEach(n => getCol(n.node_id))
+  props.nodes.forEach(n => getCol(n.node_id, n.stage_id))
   return colMap
 })
 
@@ -176,14 +190,21 @@ const getColumnNodes = (nodes: any[], colIdx: number) => {
 const statusText = (status: string) => {
   const map: Record<string, string> = {
     locked: '未解锁',
-    available: '可学习',
+    available: '可开始',
     in_progress: '学习中',
     remediation: '补救中',
     reinforced: '强化中',
-    completed: '已通关',
-    completed_with_gaps: '通关有缺口'
+    completed: '已完成',
+    completed_with_gaps: '带缺口完成'
   }
   return map[status] || status
+}
+
+const difficultyText = (diff: string | null) => {
+  if (diff === 'beginner') return '入门'
+  if (diff === 'intermediate') return '进阶'
+  if (diff === 'advanced') return '挑战'
+  return diff || '常规'
 }
 
 // 3. 计算贝塞尔连接线
@@ -223,13 +244,13 @@ const updateConnectorPaths = async () => {
 
       // 是否为活跃流向线 (通往当前学习节点)
       const isActive = node.status === 'in_progress' || node.status === 'remediation' || node.status === 'reinforced'
-      const isCompleted = sourceNode?.status === 'completed' && (node.status === 'completed' || node.status === 'completed_with_gaps')
+      const isCompleted = sourceNode && ['completed', 'completed_with_gaps'].includes(sourceNode.status) && ['completed', 'completed_with_gaps'].includes(node.status)
       const isLocked = node.status === 'locked'
 
       paths.push({
         path: pathStr,
         isActive,
-        isCompleted,
+        isCompleted: !!isCompleted,
         isLocked
       })
     })
@@ -258,7 +279,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.nodes, props.currentNode], () => {
-  setTimeout(updateConnectorPaths, 80)
+  updateConnectorPaths()
 }, { deep: true })
 </script>
 
@@ -275,7 +296,7 @@ watch(() => [props.nodes, props.currentNode], () => {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 0;
+  z-index: 2; /* 浮于卡片背景上方，解决 z-index 遮挡问题 */
 }
 .stages-flow {
   position: relative;
@@ -321,10 +342,11 @@ watch(() => [props.nodes, props.currentNode], () => {
 }
 .node-flow-card {
   position: relative;
+  z-index: 3; /* 确保卡片处于高层，不遮挡点击 */
   display: flex;
   text-align: left;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-state-locked-border, #e2e8f0);
   border-radius: 12px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.01);
@@ -333,24 +355,36 @@ watch(() => [props.nodes, props.currentNode], () => {
   overflow: hidden;
 }
 
-/* 状态边框定制 */
+/* 状态边框定制，使用语义化变量 */
 .node-flow-card.locked {
   opacity: 0.65;
   border-style: dashed;
+  border-color: var(--color-state-locked-border, #e2e8f0);
+  color: var(--color-state-locked, #94a3b8);
 }
 .node-flow-card.available {
-  border-color: var(--color-primary-border, #b9dedc);
+  border-color: var(--color-state-available-border, #b9dedc);
 }
 .node-flow-card.in_progress,
 .node-flow-card.remediation,
 .node-flow-card.reinforced {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 1px #6366f1, 0 8px 24px rgba(99, 102, 241, 0.08);
+  border-color: var(--color-state-active-border, #6366f1);
+  box-shadow: 0 0 0 1px var(--color-state-active-border, #6366f1), 0 8px 24px var(--color-state-active-glow, rgba(99, 102, 241, 0.08));
 }
 .node-flow-card.completed,
 .node-flow-card.completed_with_gaps {
-  border-color: #86efac;
-  background: var(--color-success-soft, #e8f7f2);
+  border-color: var(--color-state-completed-border, #86efac);
+  background: var(--color-state-completed-bg, #e8f7f2);
+}
+
+/* 选中高亮与活跃反馈 */
+.node-flow-card.active {
+  border-color: var(--color-state-active-border, #6366f1);
+  box-shadow: 0 0 0 1.5px var(--color-state-active-border, #6366f1), 0 8px 24px var(--color-state-active-glow, rgba(99, 102, 241, 0.08));
+}
+.node-flow-card.selected {
+  outline: 2px solid var(--color-state-active-border, #6366f1);
+  outline-offset: 2px;
 }
 
 .node-flow-card:hover:not(.locked) {
@@ -366,14 +400,14 @@ watch(() => [props.nodes, props.currentNode], () => {
   top: 0;
   bottom: 0;
   width: 4px;
-  background: #cbd5e1;
+  background: var(--color-state-locked, #cbd5e1);
 }
-.available .status-strip { background: var(--color-primary, #46b8b4); }
+.available .status-strip { background: var(--color-state-available, #46b8b4); }
 .in_progress .status-strip,
 .remediation .status-strip,
-.reinforced .status-strip { background: #6366f1; }
+.reinforced .status-strip { background: var(--color-state-active-border, #6366f1); }
 .completed .status-strip,
-.completed_with_gaps .status-strip { background: var(--color-success, #329a82); }
+.completed_with_gaps .status-strip { background: var(--color-state-completed, #329a82); }
 
 .node-card-body {
   flex: 1;
@@ -420,8 +454,8 @@ watch(() => [props.nodes, props.currentNode], () => {
   font-weight: 700;
   color: var(--color-text-secondary, #58747a);
 }
-.in_progress .status-label { color: #6366f1; }
-.completed .status-label { color: var(--color-success, #329a82); }
+.in_progress .status-label { color: var(--color-state-active-border, #6366f1); }
+.completed .status-label { color: var(--color-state-completed, #329a82); }
 
 .prereq-pill {
   font-size: 10px;
@@ -445,5 +479,15 @@ watch(() => [props.nodes, props.currentNode], () => {
 .locked-line {
   stroke-dasharray: 4, 4;
   opacity: 0.4;
+}
+
+/* 移动端降级折叠为单列 */
+@media (max-width: 1180px) {
+  .node-grid-flow {
+    grid-template-columns: 1fr !important;
+  }
+  .connections-canvas {
+    display: none;
+  }
 }
 </style>
