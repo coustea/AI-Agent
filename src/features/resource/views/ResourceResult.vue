@@ -349,7 +349,7 @@ function openPreview(card: ResourceCard) {
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-function goBack() { router.push({ name: 'Profile' }) }
+function goBack() { router.back() }
 
 function formatTime(time: string | null) {
   if (!time) return ''

@@ -30,7 +30,7 @@ export const routes: RouteRecordRaw[] = [
     component: MainLayout,
     children: [
       { path: 'dashboard', name: 'Dashboard', component: Home },
-      { path: 'resource-generator', name: 'ResourceGenerator.vue', component: ResourceGenerator },
+      { path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator },
       { path: 'path-planner', name: 'LearningPathEntry', component: LearningPathEntry },
       { path: 'path-planner/overview/:id?', name: 'LearningPathOverview', component: LearningPathOverview },
       { path: 'path-planner/node/:nodeId', name: 'LearningPathNode', component: LearningPathNode },

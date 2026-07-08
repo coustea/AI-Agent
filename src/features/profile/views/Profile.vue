@@ -1002,7 +1002,7 @@ const pathPlanningSeconds = computed(() =>
 const recommendationSeconds = computed(() =>
   secondsForContexts(
     "ResourceGenerator",
-    "ResourceGenerator.vue",
+    "ResourceGenerator",
     "ResourceResult",
     "ResourceHistory",
     "PathResourceDetail",
