@@ -57,6 +57,9 @@
             <span v-if="submitted[question.id]" :class="['status-pill', correct[question.id] ? 'success' : 'danger']">
               {{ correct[question.id] ? '回答正确' : '回答错误，已加入错题本' }}
             </span>
+            <span v-if="submitted[question.id] && review[question.id]?.score != null" class="score-badge" :class="correct[question.id] ? 'success' : 'danger'">
+              {{ review[question.id].score }}分
+            </span>
           </div>
 
           <div class="foot-actions">
@@ -66,7 +69,8 @@
               :disabled="submitted[question.id] || !hasAnswer(question)"
               @click="$emit('submit-daily', question)"
             >
-              {{ reviewing[question.id] ? '评阅中...' : '提交答案' }}
+              <span v-if="reviewing[question.id]" class="reviewing-spinner"></span>
+              {{ reviewing[question.id] ? 'AI 评阅中' : '提交答案' }}
             </button>
             <button
               v-if="submitted[question.id]"
@@ -79,10 +83,21 @@
           </div>
         </div>
 
+        <div v-if="reviewing[question.id]" class="reviewing-banner">
+          <span class="reviewing-spinner-lg"></span>
+          <span class="reviewing-text">AI 正在评阅你的答案，请稍候...</span>
+        </div>
+
         <div v-if="submitted[question.id] && openedAnalysis.has(question.id)" class="analysis-box">
           <div class="analysis-head">
             <strong>参考答案：{{ formatAnswer(question.answer) }}</strong>
-            <span v-if="review[question.id]?.feedback">{{ review[question.id].feedback }}</span>
+            <span v-if="review[question.id]?.feedback" class="review-feedback">{{ review[question.id].feedback }}</span>
+          </div>
+          <div v-if="review[question.id]?.improvement_hints?.length" class="improvement-hints">
+            <strong>改进建议</strong>
+            <ul>
+              <li v-for="hint in review[question.id].improvement_hints" :key="hint">{{ hint }}</li>
+            </ul>
           </div>
           <div class="analysis-body" v-html="renderInline(question.analysis || '暂无解析')"></div>
         </div>
@@ -414,6 +429,101 @@ function renderInline(text: string) {
   margin-top: 10px;
   color: #475569;
   line-height: 1.7;
+}
+
+.review-feedback {
+  color: #6366f1;
+  font-weight: 500;
+}
+
+.improvement-hints {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.improvement-hints strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #92400e;
+  font-size: 12px;
+}
+
+.improvement-hints ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #78350f;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.improvement-hints li + li {
+  margin-top: 4px;
+}
+
+.reviewing-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.reviewing-spinner-lg {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.reviewing-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.reviewing-text {
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-left: 8px;
+}
+
+.score-badge.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.score-badge.danger {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .daily-empty {

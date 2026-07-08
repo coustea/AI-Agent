@@ -89,7 +89,7 @@ export async function fetchQuizBankQuestions(params?: {
 }
 
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
-  const response = await http.post('/ai/quiz/review', request)
+  const response = await http.post('/ai/quiz/review', request, { timeout: 60000 })
   return response.data as QuizReviewResult
 }
 
@@ -144,7 +144,7 @@ function normalizeOptions(options: unknown): Record<string, string> | null {
   )
 }
 
-function toQuestionTypeLabel(value: unknown): string {
+export function toQuestionTypeLabel(value: unknown): string {
   const key = String(value || '').trim()
   return QUESTION_TYPE_LABELS[key] || key
 }

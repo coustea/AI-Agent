@@ -189,11 +189,15 @@ async def submit_quiz(
             ))
             wrong_count += 1
         elif r.content:
+            # 前端可能传中文标签，需转换为英文键以保持一致
+            from app.quiz.service import QuizBankService
+            raw_type = r.question_type or "客观题"
+            normalized_type = QuizBankService._TYPE_LABEL_TO_KEY.get(raw_type, raw_type)
             session.add(WrongQuestion(
                 user_id=user_id,
                 question_id=r.question_id,
                 subject=r.subject or "未知",
-                question_type=r.question_type or "客观题",
+                question_type=normalized_type,
                 content=r.content,
                 options_json=r.options,
                 standard_answer=r.answer,
@@ -253,7 +257,12 @@ async def list_wrong(
     if subject:
         stmt = stmt.where(WrongQuestion.subject == subject)
     if type:
-        stmt = stmt.where(WrongQuestion.question_type == type)
+        # 前端传中文标签，需兼容英文键和中文标签两种存储格式
+        from app.quiz.service import QuizBankService
+        db_type = QuizBankService._TYPE_LABEL_TO_KEY.get(type, type)
+        stmt = stmt.where(
+            (WrongQuestion.question_type == type) | (WrongQuestion.question_type == db_type)
+        )
 
     total = (await session.exec(
         select(func.count()).select_from(stmt.subquery())

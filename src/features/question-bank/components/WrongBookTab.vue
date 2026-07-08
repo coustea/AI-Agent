@@ -56,15 +56,30 @@
             :disabled="!hasDrillAnswer || drillReviewing"
             @click="$emit('submit-drill')"
           >
-            {{ drillReviewing ? '评阅中...' : '提交答案' }}
+            <span v-if="drillReviewing" class="reviewing-spinner"></span>
+            {{ drillReviewing ? 'AI 评阅中' : '提交答案' }}
           </button>
           <button v-else class="secondary-btn" type="button" @click="$emit('pick-drill')">再练一题</button>
         </div>
 
+        <div v-if="drillReviewing" class="reviewing-banner">
+          <span class="reviewing-spinner-lg"></span>
+          <span class="reviewing-text">AI 正在评阅你的答案，请稍候...</span>
+        </div>
+
         <div v-if="drillSubmitted" class="drill-result">
           <strong>{{ drillCorrect ? '已掌握' : '仍需复习' }}</strong>
+          <span v-if="drillReview?.score != null" class="score-badge" :class="drillCorrect ? 'success' : 'danger'">
+            {{ drillReview.score }}分
+          </span>
           <p>参考答案：{{ formatAnswer(drillQuestion.answer) }}</p>
-          <p v-if="drillReview?.feedback">{{ drillReview.feedback }}</p>
+          <p v-if="drillReview?.feedback" class="drill-feedback">{{ drillReview.feedback }}</p>
+          <div v-if="drillReview?.improvement_hints?.length" class="improvement-hints">
+            <strong>改进建议</strong>
+            <ul>
+              <li v-for="hint in drillReview.improvement_hints" :key="hint">{{ hint }}</li>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -449,6 +464,103 @@ function renderInline(text: string) {
   margin-top: 14px;
   color: #475569;
   line-height: 1.7;
+}
+
+.drill-feedback {
+  color: #6366f1;
+  font-weight: 500;
+}
+
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.score-badge.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.score-badge.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.improvement-hints {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.improvement-hints strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #92400e;
+  font-size: 12px;
+}
+
+.improvement-hints ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #78350f;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.improvement-hints li + li {
+  margin-top: 4px;
+}
+
+.reviewing-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.reviewing-spinner-lg {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.reviewing-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.reviewing-text {
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .filter-row {

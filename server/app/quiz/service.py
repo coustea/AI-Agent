@@ -21,6 +21,18 @@ logger = get_logger(__name__)
 class QuizBankService:
     """题库查询服务 — 题目列表、筛选、LaTeX 修复。"""
 
+    # 中文题型标签 → 数据库英文键 的反向映射
+    _TYPE_LABEL_TO_KEY: dict[str, str] = {
+        "单选题": "single_choice",
+        "多选题": "multiple_choice",
+        "判断题": "judge",
+        "填空题": "fill_blank",
+        "简答题": "short_answer",
+        "分析题": "analysis",
+        "综合题": "comprehensive",
+        "选择题": "single_choice",  # 兼容旧标签
+    }
+
     _MATH_COMMAND_PATTERN = re.compile(  # 匹配未转义的 LaTeX 命令（缺少 \ 前缀）
         r"(^|[^\\a-zA-Z])(int_|iint_|iiint_|oint_|sum_|prod_|lim_|frac|sqrt|sin|cos|tan|cot|sec|csc|ln|log|exp|to|rightarrow|infty|cdots|ldots|mathrm|mathbf|boldsymbol|operatorname\*?|left|right)\b"
     )
@@ -150,7 +162,9 @@ class QuizBankService:
         if difficulty:
             filters.append(QuizQuestion.difficulty == difficulty)
         if question_type:
-            filters.append(QuizQuestion.question_type == question_type)
+            # 前端传中文标签（如"单选题"），需转换为数据库英文键（如"single_choice"）
+            db_type = self._TYPE_LABEL_TO_KEY.get(question_type, question_type)
+            filters.append(QuizQuestion.question_type == db_type)
 
         safe_page = max(1, page)
         safe_page_size = max(1, min(page_size, 200))
@@ -220,7 +234,7 @@ class QuizReviewOutput(BaseModel):
 class QuizReviewService:
     """AI 答案审查服务 — 使用 LLM 评判主观题答案质量。"""
 
-    _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "quiz" / "review.md"  # 审查 prompt 模板路径
+    _PROMPT_PATH = Path(__file__).parent / "prompts" / "quiz_review.md"  # 审查 prompt 模板路径
 
     def __init__(self):
         self._prompt_template: str | None = None
@@ -241,9 +255,17 @@ class QuizReviewService:
 评判用户答案质量。
 
 # 输入
+- 题目类型: {{question_type}}
 - 题目: {{question_content}}
 - 标准答案: {{standard_answer}}
 - 用户答案: {{user_answer}}
+- 相关知识点: {{knowledge_points}}
+
+# 评分规则
+- 完全覆盖标准答案要点 → score >= 80
+- 覆盖大部分要点但有遗漏 → score 60-79
+- 严重偏离标准答案 → score < 60
+- 分析题：过程正确但结果有误 → score 60-75
 
 # 输出格式
 JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""

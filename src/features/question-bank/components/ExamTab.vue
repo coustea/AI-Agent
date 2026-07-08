@@ -178,6 +178,9 @@
               <span :class="['result-badge', isExamCorrect(question) ? 'success' : 'danger']">
                 {{ isExamCorrect(question) ? '正确' : '错误' }}
               </span>
+              <span v-if="examReview[question.id]?.score != null" class="exam-score-badge" :class="isExamCorrect(question) ? 'success' : 'danger'">
+                {{ examReview[question.id].score }}分
+              </span>
               <span v-if="examReview[question.id]?.feedback" class="review-feedback">
                 {{ examReview[question.id]?.feedback }}
               </span>
@@ -205,7 +208,12 @@
         <div class="panel">
           <h3>{{ examSubmitted ? '考试报告' : '答题卡' }}</h3>
 
-          <div v-if="examSubmitted" class="score-display">
+          <div v-if="examReviewing" class="reviewing-overlay">
+            <span class="reviewing-spinner-lg"></span>
+            <span class="reviewing-text">AI 正在评阅主观题...</span>
+          </div>
+
+          <div v-else-if="examSubmitted" class="score-display">
             <div class="score-value">{{ examScore }}%</div>
             <div class="score-label">{{ examResultLevel }}</div>
           </div>
@@ -279,6 +287,7 @@
 type AnswerValue = string | string[] | undefined
 
 interface ReviewResult {
+  score?: number
   feedback?: string
   improvement_hints?: string[]
 }
@@ -310,6 +319,7 @@ const props = defineProps<{
   examAnswers: Record<string, AnswerValue>
   examReview: Record<string, ReviewResult | null>
   examSubmitted: boolean
+  examReviewing: boolean
   examSubmitNoticeVisible: boolean
   currentExamIndex: number
   formattedExamTime: string
@@ -1130,6 +1140,54 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   color: #475569;
   font-size: 13px;
   font-weight: 600;
+}
+
+.exam-score-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.exam-score-badge.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.exam-score-badge.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.reviewing-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.reviewing-spinner-lg {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.reviewing-text {
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .review-hints {
