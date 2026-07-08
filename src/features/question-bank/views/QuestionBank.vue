@@ -583,7 +583,7 @@ const paperForm = reactive({
 })
 
 const paperTypeCounts = reactive([
-  { type: '选择题', label: '选择题', count: 5 },
+  { type: '单选题', label: '单选题', count: 5 },
   { type: '判断题', label: '判断题', count: 3 },
   { type: '填空题', label: '填空题', count: 2 },
   { type: '分析题', label: '分析题', count: 1 },
@@ -1592,11 +1592,11 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
 }
 
 function isObjectiveQuestion(q: Question) {
-  return ['选择题', '判断题', '填空题', '分析题'].includes(q.type)
+  return ['选择题', '单选题', '多选题', '判断题', '填空题', '分析题'].includes(q.type)
 }
 
 function isOptionQuestion(q: Question) {
-  return ['选择题', '判断题'].includes(q.type)
+  return ['选择题', '单选题', '多选题', '判断题'].includes(q.type)
 }
 
 function getOptions(q: Question) {
