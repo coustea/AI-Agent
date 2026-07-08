@@ -105,27 +105,11 @@
                 </div>
                 <em>{{ getNodeStatusLabel(getStageNode('planning')) }}</em>
               </div>
-              <!-- 内联 AgentMessageTicker：planning 节点 -->
+              <!-- 静态当前消息：planning 节点 -->
               <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]">
-                <div v-if="planningTicker.visibleMessages.value.length" class="live-message-queue">
-                  <TransitionGroup name="live-message" tag="div" class="live-message-list">
-                    <div
-                        v-for="(item, index) in planningTicker.visibleMessages.value"
-                        :key="item.id"
-                        class="live-message-row"
-                        :class="{
-                        'is-latest': index === planningTicker.visibleMessages.value.length - 1,
-                        'is-fresh': planningTicker.freshMessageId.value === item.id
-                      }"
-                    >
-                      <span class="station-live-dot" :class="getStageNode('planning').status"></span>
-                      <p class="live-message-only">{{ item.text }}</p>
-                    </div>
-                  </TransitionGroup>
-                </div>
-                <div v-else class="live-message-row fallback-row">
+                <div class="live-message-row">
                   <span class="station-live-dot" :class="getStageNode('planning').status"></span>
-                  <p class="live-message-only">{{ planningTicker.fallbackMessage.value }}</p>
+                  <p class="live-message-only">{{ getNodeMessage(getStageNode('planning')) }}</p>
                 </div>
               </div>
               <div class="station-footer">
@@ -188,27 +172,11 @@
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <!-- 内联 AgentMessageTicker：并行工位节点 -->
+              <!-- 静态当前消息：并行工位节点 -->
               <div class="station-live-log" :class="[`is-${node.status}`]">
-                <div v-if="getTickerState(node.id).visibleMessages.value.length" class="live-message-queue">
-                  <TransitionGroup name="live-message" tag="div" class="live-message-list">
-                    <div
-                        v-for="(item, index) in getTickerState(node.id).visibleMessages.value"
-                        :key="item.id"
-                        class="live-message-row"
-                        :class="{
-                        'is-latest': index === getTickerState(node.id).visibleMessages.value.length - 1,
-                        'is-fresh': getTickerState(node.id).freshMessageId.value === item.id
-                      }"
-                    >
-                      <span class="station-live-dot" :class="node.status"></span>
-                      <p class="live-message-only">{{ item.text }}</p>
-                    </div>
-                  </TransitionGroup>
-                </div>
-                <div v-else class="live-message-row fallback-row">
+                <div class="live-message-row">
                   <span class="station-live-dot" :class="node.status"></span>
-                  <p class="live-message-only">{{ getTickerState(node.id).fallbackMessage.value }}</p>
+                  <p class="live-message-only">{{ getNodeMessage(node) }}</p>
                 </div>
               </div>
               <div class="station-footer">
@@ -217,12 +185,12 @@
             </article>
           </transition-group>
 
-          <!-- 聚合阶段连接器装饰（仅在存在 PPT/动画 智能体时显示） -->
+          <!-- 聚合阶段连接器装饰（仅在存在 PPT/视频/动画 智能体时显示） -->
           <div v-if="showAggregationStage" class="dual-flow-connector" aria-hidden="true">
             <span></span><i></i><i></i>
           </div>
 
-          <!-- 聚合工位行：渲染 PPT / 动画 智能体卡片 -->
+          <!-- 聚合工位行：渲染 PPT / 视频 / 动画 智能体卡片 -->
           <div v-if="showAggregationStage" class="agent-station-row agent-station-row-v4 aggregation-agent-row">
             <article
               v-for="node in aggregationNodes"
@@ -237,31 +205,15 @@
                 </div>
                 <div>
                   <strong>{{ getWorkflowTitle(node.id) }}</strong>
-                  <span>{{ node.id === CARTOON_AGENT_ID ? 'Cartoon Agent' : 'PPT Agent' }}</span>
+                  <span>{{ node.id === CARTOON_AGENT_ID ? 'Cartoon Agent' : node.id === VIDEO_AGENT_ID ? 'Video Agent' : 'PPT Agent' }}</span>
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
-              <!-- 内联 AgentMessageTicker：聚合工位节点 -->
+              <!-- 静态当前消息：聚合工位节点 -->
               <div class="station-live-log" :class="[`is-${node.status}`]">
-                <div v-if="getTickerState(node.id).visibleMessages.value.length" class="live-message-queue">
-                  <TransitionGroup name="live-message" tag="div" class="live-message-list">
-                    <div
-                        v-for="(item, index) in getTickerState(node.id).visibleMessages.value"
-                        :key="item.id"
-                        class="live-message-row"
-                        :class="{
-                        'is-latest': index === getTickerState(node.id).visibleMessages.value.length - 1,
-                        'is-fresh': getTickerState(node.id).freshMessageId.value === item.id
-                      }"
-                    >
-                      <span class="station-live-dot" :class="node.status"></span>
-                      <p class="live-message-only">{{ item.text }}</p>
-                    </div>
-                  </TransitionGroup>
-                </div>
-                <div v-else class="live-message-row fallback-row">
+                <div class="live-message-row">
                   <span class="station-live-dot" :class="node.status"></span>
-                  <p class="live-message-only">{{ getTickerState(node.id).fallbackMessage.value }}</p>
+                  <p class="live-message-only">{{ getNodeMessage(node) }}</p>
                 </div>
               </div>
               <div class="station-footer">
@@ -454,7 +406,7 @@
 
 <script setup lang="ts">
 // 引入 Vue 响应式原语、计算属性、生命周期钩子与组件类型
-import { ref, computed, onScopeDispose, watch, type Component } from 'vue'
+import { ref, computed, type Component } from 'vue'
 // 引入 Phosphor 图标集，为各智能体匹配视觉图标
 import {
   PhTarget as Aim,
@@ -489,6 +441,7 @@ import {
   COORDINATOR_AGENT_ID,
   CARTOON_AGENT_ID,
   PPT_AGENT_ID,
+  VIDEO_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
@@ -562,7 +515,8 @@ const workflowIconMap: Record<string, Component> = {
   code: Cpu,
   reading: Reading,
   ppt: DataBoard,
-  cartoon: DataBoard,
+  video: VideoIcon,
+  cartoon: VideoIcon,
   bundle: Box,
 }
 
@@ -576,6 +530,7 @@ const workflowTitleMap: Record<string, string> = {
   code: '代码示例',
   reading: '拓展阅读',
   ppt: '教学课件',
+  video: '讲解视频',
   cartoon: '动画讲解',
   bundle: '资源包交付',
 }
@@ -601,9 +556,9 @@ function closeAgentDetail() {
   detailPanelVisible.value = false
 }
 
-// 基础资源智能体 ID 列表（排除 PPT 与动画等聚合阶段智能体）
+// 基础资源智能体 ID 列表（排除 PPT / 动画 / 视频等聚合阶段智能体）
 const baseGenerationAgentIds = computed(() => {
-  return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
+  return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID, VIDEO_AGENT_ID].includes(id))
 })
 
 // 基础资源并行工位的 DAG 节点状态数组
@@ -624,11 +579,14 @@ void flowCanvasRef; void planningNodeRef
 
 
 
-// 尾部聚合阶段节点（PPT / 动画智能体），仅当选中时纳入
+// 尾部聚合阶段节点（PPT / 动画 / 视频），仅当选中时纳入，进入页面即展示
 const trailingStageNodes = computed(() => {
   const nodes: DagNodeState[] = []
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(PPT_AGENT_ID))
+  }
+  if (props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId)) {
+    nodes.push(getStageNode(VIDEO_AGENT_ID))
   }
   if (props.dagSelectedAgentIds.includes(CARTOON_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(CARTOON_AGENT_ID))
@@ -805,6 +763,15 @@ function getNodeStatusLabel(node: DagNodeState) {
   return '就绪待命'
 }
 
+// 卡片正文静态消息：只展示当前进度文案，不轮播、不显示冗长的完成文案
+function getNodeMessage(node: DagNodeState): string {
+  if (node.status === 'success') return '已完成'
+  if (node.status === 'failed') return node.currentMessage?.trim() || '执行失败'
+  if (node.status === 'skipped') return '已跳过'
+  if (node.status === 'running') return node.currentMessage?.trim() || '运行中'
+  return '等待中'
+}
+
 // 节点阶段标签：根据节点类型与运行阶段给出中文进度描述
 function getNodeStageLabel(node: DagNodeState) {
   if (node.status === 'success') return node.id === BUNDLE_AGENT_ID ? '整合完成' : '已完成'
@@ -813,7 +780,7 @@ function getNodeStageLabel(node: DagNodeState) {
   if (node.status === 'running') {
     if (node.id === 'planning') return '计划生成中'
     if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
-    if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
+    if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
     if (node.phase === 'llm_generating') return '核心推演中'
     if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
     if (node.phase === 'validating') return '一致性校验中'
@@ -822,7 +789,7 @@ function getNodeStageLabel(node: DagNodeState) {
     return '工位执行中'
   }
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与课件'
-  if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '等待基础资源'
+  if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '等待基础资源'
   return '等待上游协同'
 }
 
@@ -847,7 +814,7 @@ function getNodePhaseLabel(node: DagNodeState) {
   if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
   if (node.id === 'planning' && node.status === 'running') return '计划生成'
   if (node.id === COORDINATOR_AGENT_ID && node.status === 'running') return '任务调度'
-  if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id) && node.status === 'running') return '聚合生成'
+  if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id) && node.status === 'running') return '聚合生成'
   if (node.id === BUNDLE_AGENT_ID && node.status === 'running') return '打包交付'
   if (node.status === 'waiting') return '等待上游'
   if (node.status === 'success') return '已完成'
@@ -878,6 +845,9 @@ function getNodeArtifactStatus(node: DagNodeState) {
   if (node.id === PPT_AGENT_ID) {
     return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
   }
+  if (node.id === VIDEO_AGENT_ID) {
+    return hasGeneratedResource(node.id) ? '讲解视频已交付' : '等待基础资源后生成'
+  }
   if (node.id === CARTOON_AGENT_ID) {
     return hasGeneratedResource(node.id) ? '动画视频已交付' : '等待基础资源后生成'
   }
@@ -890,6 +860,7 @@ function getNodeInputSummary(node: DagNodeState) {
   if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
   if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
   if (node.id === PPT_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
+  if (node.id === VIDEO_AGENT_ID) return '学习需求 / 基础资源 handoff / 视频个性化参数'
   if (node.id === CARTOON_AGENT_ID) return '学习需求 / 基础资源 handoff / 动画个性化参数'
   return '学习需求 / 用户画像 / 教学计划'
 }
@@ -901,6 +872,7 @@ function getNodeOutputSummary(node: DagNodeState) {
   if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
   if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
   if (node.id === PPT_AGENT_ID) return '聚合资源生成中 / 等待中'
+  if (node.id === VIDEO_AGENT_ID) return 'MP4 讲解视频生成中 / 等待中'
   if (node.id === CARTOON_AGENT_ID) return 'MP4 动画视频生成中 / 等待中'
   return '基础资源生成中 / 等待中'
 }
@@ -932,202 +904,6 @@ function getMetricChips(node: DagNodeState) {
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .slice(0, 4)
     .map(([key, value]) => `${key}: ${String(value)}`)
-}
-
-// ==================== 内联 AgentMessageTicker 逻辑 ====================
-// 消息条目内部结构：唯一 id、去重 key、展示文本
-type LiveMessage = {
-  id: string
-  key: string
-  text: string
-}
-
-// 同时最多展示的消息条数（超出滚动淘汰旧消息）
-const MAX_VISIBLE_MESSAGES = 2
-// 每条消息至少展示多久
-const MIN_DISPLAY_MS = 1400
-// 新消息高亮动画持续时间
-const FRESH_ANIMATION_MS = 420
-
-// 为每个节点创建独立的 Ticker 响应式状态
-function useTickerState(nodeGetter: () => DagNodeState) {
-  const visibleMessages = ref<LiveMessage[]>([])
-  const freshMessageId = ref<string | null>(null)
-
-  let pendingQueue: LiveMessage[] = []
-  let consumedKeys = new Set<string>()
-  let messageSeq = 0
-  let lastDisplayAt = 0
-  let drainTimer: ReturnType<typeof setTimeout> | null = null
-  let freshTimer: ReturnType<typeof setTimeout> | null = null
-
-  // 兜底消息：优先用后端消息，否则按状态给出简短标签
-  const fallbackMessage = computed(() => {
-    const node = nodeGetter()
-    if (node.currentMessage) return node.currentMessage
-    const statusLabels: Record<string, string> = {
-      waiting: '等待中',
-      running: '运行中',
-      success: '已完成',
-      failed: '执行失败',
-      skipped: '已跳过',
-    }
-    return statusLabels[node.status] || ''
-  })
-
-  function resetMessages() {
-    clearDrainTimer()
-    clearFreshTimer()
-    visibleMessages.value = []
-    pendingQueue = []
-    consumedKeys = new Set<string>()
-    freshMessageId.value = null
-    lastDisplayAt = 0
-  }
-
-  function hydrateInitialMessages() {
-    const sources = collectAllSources()
-    const latest = sources.slice(-MAX_VISIBLE_MESSAGES)
-    visibleMessages.value = latest.map(source => {
-      consumedKeys.add(source.key)
-      return createMessage(source.text, source.key)
-    })
-    lastDisplayAt = Date.now()
-  }
-
-  function enqueueNewBackendMessages() {
-    const sources = collectAllSources()
-    for (const source of sources) {
-      if (!source.text) continue
-      if (consumedKeys.has(source.key)) continue
-      if (pendingQueue.some(item => item.key === source.key)) continue
-      pendingQueue.push(createMessage(source.text, source.key))
-    }
-    drainQueue()
-  }
-
-  function collectAllSources(): Array<{ key: string; text: string }> {
-    const node = nodeGetter()
-    const result: Array<{ key: string; text: string }> = []
-
-    const logs = node.eventLogs || []
-    logs.forEach((log: any, index: number) => {
-      const text = String(log?.message || '').trim()
-      if (!text) return
-      result.push({ key: buildLogKey(log, index), text })
-    })
-
-    const history = node.stepHistory || []
-    history.forEach((message, index) => {
-      const text = String(message || '').trim()
-      if (!text) return
-      result.push({ key: `history:${node.id}:${index}:${text}`, text })
-    })
-
-    const current = node.currentMessage?.trim()
-    if (current) {
-      result.push({ key: `current:${node.id}:${node.status}:${current}`, text: current })
-    }
-
-    return dedupeSources(result)
-  }
-
-  function dedupeSources(sources: Array<{ key: string; text: string }>): Array<{ key: string; text: string }> {
-    const result: Array<{ key: string; text: string }> = []
-    const seenKeys = new Set<string>()
-    for (const source of sources) {
-      if (!source.text) continue
-      if (seenKeys.has(source.key)) continue
-      const last = result[result.length - 1]
-      if (last?.text === source.text) continue
-      seenKeys.add(source.key)
-      result.push(source)
-    }
-    return result
-  }
-
-  function drainQueue() {
-    if (!pendingQueue.length) return
-    const now = Date.now()
-    const elapsed = now - lastDisplayAt
-    if (lastDisplayAt > 0 && elapsed < MIN_DISPLAY_MS) {
-      scheduleDrain(MIN_DISPLAY_MS - elapsed)
-      return
-    }
-    const next = pendingQueue.shift()
-    if (!next) return
-    consumedKeys.add(next.key)
-    visibleMessages.value = [...visibleMessages.value, next].slice(-MAX_VISIBLE_MESSAGES)
-    freshMessageId.value = next.id
-    lastDisplayAt = Date.now()
-    resetFreshTimer()
-    if (pendingQueue.length) scheduleDrain(MIN_DISPLAY_MS)
-  }
-
-  function scheduleDrain(delay: number) {
-    if (drainTimer) return
-    drainTimer = setTimeout(() => { drainTimer = null; drainQueue() }, Math.max(0, delay))
-  }
-
-  function createMessage(text: string, key: string): LiveMessage {
-    messageSeq += 1
-    return { id: `${nodeGetter().id}-${Date.now()}-${messageSeq}`, key, text }
-  }
-
-  function buildLogKey(log: any, index: number) {
-    const node = nodeGetter()
-    const sequence = log?.sequence ?? log?.seq ?? log?.id
-    const timestamp = log?.timestamp ?? log?.createdAt ?? log?.created_at
-    const phase = log?.phase ?? ''
-    const status = log?.status ?? ''
-    const message = String(log?.message || '').trim()
-    if (sequence !== undefined && sequence !== null && sequence !== '') return `log:${node.id}:${sequence}`
-    if (timestamp) return `log:${node.id}:${timestamp}:${phase}:${status}:${message}`
-    return `log:${node.id}:${index}:${phase}:${status}:${message}`
-  }
-
-  function resetFreshTimer() {
-    clearFreshTimer()
-    freshTimer = setTimeout(() => { freshMessageId.value = null; freshTimer = null }, FRESH_ANIMATION_MS)
-  }
-
-  function clearDrainTimer() {
-    if (drainTimer) { clearTimeout(drainTimer); drainTimer = null }
-  }
-
-  function clearFreshTimer() {
-    if (freshTimer) { clearTimeout(freshTimer); freshTimer = null }
-  }
-
-  // 切换节点时重置消息状态并填充初始消息
-  watch(() => nodeGetter().id, () => { resetMessages(); hydrateInitialMessages() }, { immediate: true })
-
-  // 监听后端事件日志/步骤历史/当前消息的变化
-  watch(
-    () => [nodeGetter().eventLogs?.length || 0, nodeGetter().stepHistory?.length || 0, nodeGetter().currentMessage, nodeGetter().lastUpdatedAt || 0],
-    () => { enqueueNewBackendMessages() },
-    { deep: false }
-  )
-
-  onScopeDispose(() => { clearDrainTimer(); clearFreshTimer() })
-
-  return { visibleMessages, freshMessageId, fallbackMessage }
-}
-
-// 为 planning 节点创建 Ticker 状态
-const planningTicker = useTickerState(() => getStageNode('planning'))
-
-// 用一个普通 Map 来维护各节点的 Ticker 状态（响应性由 useTickerState 内部管理）
-const tickerStateMap = new Map<string, ReturnType<typeof useTickerState>>()
-
-// 获取或创建某节点的 Ticker 状态
-function getTickerState(nodeId: string): ReturnType<typeof useTickerState> {
-  let state = tickerStateMap.get(nodeId)
-  if (!state) {
-    state = useTickerState(() => getStageNode(nodeId))
-    tickerStateMap.set(nodeId, state)
-  }
-  return state
 }
 
 // ==================== 内联 Outputs 逻辑 ====================
@@ -1545,7 +1321,7 @@ function isOutputRunning(id: string) {
 
 .planning-core {
   width: min(280px, 90vw) !important;
-  min-height: 196px !important;
+  min-height: 132px !important;
 }
 
 .core-agent-node:hover,
@@ -1670,7 +1446,7 @@ function isOutputRunning(id: string) {
 }
 
 .agent-station-card-v4 {
-  min-height: 196px;
+  min-height: 132px;
   display: flex;
   flex-direction: column;
 }
@@ -1738,18 +1514,27 @@ function isOutputRunning(id: string) {
 }
 
 .station-live-log {
-  min-height: 78px;
-  margin: 12px 0 12px;
-  border-radius: 18px;
+  min-height: 44px;
+  margin: 10px 0;
+  border-radius: 14px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
   border: 1px solid rgba(226, 232, 240, 0.86);
-  padding: 11px 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 9px;
   overflow: hidden;
   flex: 1;
+}
+
+/* 静态单行消息：状态点 + 文案垂直居中 */
+.station-live-log .live-message-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
 }
 
 .station-live-log.is-running {
@@ -2667,12 +2452,12 @@ function isOutputRunning(id: string) {
 }
 
 .agent-station-card-v4 {
-  min-height: 196px;
+  min-height: 132px;
 }
 
 .station-live-log {
-  min-height: 78px;
-  margin: 12px 0 12px;
+  min-height: 44px;
+  margin: 10px 0;
 }
 
 .review-station-row-v4 {
