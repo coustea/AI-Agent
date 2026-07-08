@@ -13,6 +13,10 @@
 - [配置](#配置)
 - [API 参考](#api-参考)
 - [视频渲染子系统](#视频渲染子系统)
+  - [环境准备](#环境准备首次渲染前必做)
+  - [Remotion 讲解视频](#remotion-讲解视频)
+  - [HyperFrames 动画讲解](#hyperframes-动画讲解)
+  - [TTS 语音合成](#tts-语音合成)
 - [记忆与画像](#记忆与画像)
 - [RAG 知识库](#rag-知识库)
 - [测试](#测试)
@@ -40,7 +44,7 @@
 | 多智能体编排 | LangGraph · LangChain |
 | 数据库 | PostgreSQL · asyncpg |
 | LLM 接入 | OpenAI 兼容 API · Anthropic · 智谱 AI |
-| 视频渲染 | Remotion 4 · HyperFrames · FFmpeg (NVENC) |
+| 视频渲染 | Remotion 4.0.486 · HyperFrames 0.7 · FFmpeg (NVENC) |
 | 语音合成 | Microsoft Edge-TTS · 讯飞星火 TTS |
 | 向量检索 | ChromaDB + BM25 (jieba) · RRF 融合 · bge-m3 (OpenAI 兼容 API) |
 | 包管理 | uv |
@@ -95,7 +99,7 @@
 | PostgreSQL | ≥ 12 | 必需 | 主数据库 |
 | Python 构建工具链 | — | 必需 | 编译 `asyncpg` / `faiss-cpu` / `greenlet` 等 C 扩展 |
 | FFmpeg / FFprobe | ≥ 4.0 | 视频功能必需 | Remotion / HyperFrames 渲染（含软件编码） |
-| Node.js | ≥ 18 | 视频功能必需 | Remotion 渲染（`npx tsx`） |
+| Node.js | ≥ 22 | 视频功能必需 | Remotion 渲染 + HyperFrames CLI（`npx tsx` / `npx hyperframes`） |
 | Ollama + bge-m3 | — | 可选 | 向量检索（`knowledge.enabled: true` 时启用） |
 | NVIDIA 驱动 + NVENC | — | 可选 | GPU 加速视频编码（无则自动回退 CPU） |
 
@@ -130,12 +134,16 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 source "$HOME/.local/bin/env"     # 激活 uv 到当前 shell
 ```
 
-### 3. 安装 Node.js 18（视频渲染才需要）
+### 3. 安装 Node.js 22（视频渲染才需要）
+
+> **版本要求**：HyperFrames CLI 要求 Node.js ≥ 22，Remotion 4.0.486 兼容 Node 22。
+> 若系统已有 Node 18，需升级到 22 才能同时运行两条渲染管线。
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# 使用 NodeSource 安装 Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
-node -v   # 验证 ≥ 18
+node -v   # 验证 ≥ 22
 ```
 
 ### 4. 安装项目 Python 依赖
@@ -174,6 +182,10 @@ uv run python app/main.py                     # 生产模式
 
 ### 可选：启用视频 GPU 渲染（Ubuntu + NVIDIA）
 
+> **两条渲染管线共用 GPU 检测逻辑**：`renderer.py` 和 `cartoon/renderer.py` 均通过
+> `_ffmpeg_encoders()` + `_nvidia_gpu_available()` 检测 NVENC，检测到 NVIDIA GPU 时自动启用
+> GPU 加速，无需手动配置。
+
 ```bash
 # 1. 安装 NVIDIA 驱动（重启生效）
 sudo ubuntu-drivers autoinstall
@@ -186,11 +198,48 @@ nvidia-smi                                    # 确认驱动与显存
 # 3. 初始化 Remotion 前端依赖（首次渲染前一次性执行）
 cd video-render
 npm install
-npx remotion --version                        # 验证 4.0.478
+npx remotion --version                        # 验证 ≥ 4.0.486
 cd ..
+
+# 4. 验证 HyperFrames CLI 可用
+npx hyperframes --version                     # 验证 ≥ 0.7
+npx hyperframes doctor --json | jq '.ok'      # 环境健康检查
 ```
 
 无 GPU 环境无需任何额外操作，渲染管线会自动回退 `swiftshader` / CPU 软件渲染。
+
+#### NVENC 激活条件（Remotion 讲解视频）
+
+Remotion ≥ 4.0.484 在 Linux/Windows 上支持 NVENC 硬件编码，但激活条件严格：
+
+| 条件 | 说明 |
+|------|------|
+| `hardwareAcceleration: "if-possible"` | render.ts 已默认设置 |
+| `codec: "h264"` | render.ts 已默认设置 |
+| **不设** `crf` | NVENC 不支持 CRF 模式，设了会**静默回退** libx264 |
+| **不设** `encodingMaxRate` / `encodingBufferSize` | 同上，设了会静默回退 |
+| FFmpeg 编译含 `h264_nvenc` | `ffmpeg -encoders \| grep h264_nvenc` 确认 |
+| NVIDIA 驱动正常 | `nvidia-smi` 确认 |
+
+> **常见陷阱**：在 `renderMedia()` 中设置 `crf` 或 `encodingMaxRate` 不会报错，但会静默禁用 NVENC
+> 回退到 libx264 CPU 编码（速度慢 3-5 倍）。如需控制质量，使用 `videoBitrate`（例 `"8M"`）。
+
+#### Chromium GL 后端选择
+
+`renderer.py` 的 `detect_chromium_gl_backend()` 自动选择最优 GL 后端：
+
+| 环境 | 选择 | 说明 |
+|------|------|------|
+| NVIDIA GPU + Linux | `angle` | Remotion 官方推荐，经由 Vulkan/OpenGL 访问 GPU |
+| 无 GPU / headless | `swiftshader` | 纯软件渲染，保证出帧 |
+| 显式配置 | 以 `config.yaml → video.chromium_gl` 为准 | 用户手动设置时优先 |
+
+可在 `config.yaml` 中显式覆盖：
+
+```yaml
+video:
+  chromium_gl: "angle"    # 可选: angle / swiftshader / egl
+```
 
 ### 可选：启用向量检索（Ollama + bge-m3）
 
@@ -395,6 +444,38 @@ models:
 
 后端包含两条独立的视频渲染管线，均检测到 NVIDIA GPU 时自动启用 GPU 加速。
 
+### 环境准备（首次渲染前必做）
+
+两条管线共用 FFmpeg 和 Node.js，但各有独立的 npm 依赖。按以下步骤一次性准备：
+
+```bash
+# 1. 系统依赖（FFmpeg + Node.js 22 + NVIDIA 驱动，详见「快速开始」章节）
+ffmpeg -version          # 验证 FFmpeg ≥ 4.0
+node -v                  # 验证 Node.js ≥ 22
+nvidia-smi               # 验证 NVIDIA 驱动（无 GPU 可跳过）
+
+# 2. Remotion 讲解视频依赖
+cd video-render
+npm install
+npx remotion --version   # 验证 ≥ 4.0.486（4.0.484 起支持 NVENC）
+cd ..
+
+# 3. HyperFrames 动画讲解依赖
+cd video-render          # HyperFrames 依赖在同一 package.json 中
+npx hyperframes --version  # 验证 ≥ 0.7
+npx hyperframes doctor --json  # 环境健康检查（exit 0，检查 .ok 字段）
+cd ..
+
+# 4. 验证 NVENC 编码器（GPU 加速编码）
+ffmpeg -hide_banner -encoders | grep h264_nvenc  # 应输出一行
+```
+
+> **常见问题**：
+> - `npx hyperframes` 首次运行会下载 CLI，后续使用缓存。如需持久化避免每次下载，
+>   可 `npm install -g hyperframes` 全局安装。
+> - `npx hyperframes doctor --json` 报浏览器缺失时，运行 `npx hyperframes browser` 安装。
+> - Remotion 版本 **必须 ≥ 4.0.484**，4.0.478 及更早版本不含 NVENC 支持。
+
 ### Remotion 讲解视频
 
 - **入口**：`app/resource/agents/video.py` → `app/shared/video/agent.py`
@@ -403,12 +484,24 @@ models:
 - **GPU 路径**：Chromium GL 后端 `angle`（Remotion 官方推荐的 GPU 后端）+ FFmpeg `hardwareAcceleration` 启用 NVENC 硬件编码
 - **无 GPU 兜底**：自动回退 `swiftshader` 软件渲染，保证 headless 环境也能出帧
 
-首次渲染前需初始化前端依赖：
+#### 音频暂存架构
 
-```bash
-cd video-render
-npm install
-npx remotion --version    # 验证 Remotion 4.0.478
+渲染时 TTS 生成的音频文件需要被 Remotion serve 到浏览器。音频暂存采用 **manifest 合约** 架构：
+
+1. `renderer.py` 将场景音频信息写入 `audio-manifest.json`（`[{src: 绝对路径, dest: 相对路径}]`），不再直接复制音频到 bundle 目录
+2. `render.ts` 通过 `--audio-manifest` 参数读取清单，在 bundle 就绪（缓存复用或重建完成）**之后**再复制音频到 `bundle/public/`
+3. 这从根本上避免了 `render.ts` 检测到 bundle 过期时 `fs.rmSync(cached_bundle)` 删除已暂存音频的竞态条件
+
+```
+renderer.py                          render.ts
+───────────                          ────────
+写 audio-manifest.json ─────────→ 解析 --audio-manifest
+写 video-plan.json ─────────────→ 解析 --input
+                                      ↓
+                                  [1] bundle 就绪
+                                  [1.5] 按 manifest 复制音频到 public/
+                                  [2] selectComposition
+                                  [3] renderMedia → MP4
 ```
 
 ### HyperFrames 动画讲解
@@ -416,8 +509,21 @@ npx remotion --version    # 验证 Remotion 4.0.478
 - **入口**：`app/resource/agents/cartoon.py` → `app/shared/cartoon/pipeline.py`
 - **渲染器**：`app/shared/cartoon/renderer.py` → `npx hyperframes render`
 - **GPU 路径**：`--browser-gpu`（浏览器 GPU 合成）+ `--gpu`（NVENC 编码）
+- **浏览器模式**：优先 `chrome-headless-shell`（beginFrame 捕获模式，比系统 Chrome 截图模式快 2 倍）；不可用时回退系统 Chrome
 - **自动环境调优**：物理核心数、可用内存、NVIDIA 检测；低内存（≤ 8GB）自动降级为单 worker
 - **失败回退**：GPU 渲染失败时自动以 CPU 模式重试
+
+#### Worker 数量调优
+
+HyperFrames 渲染分 capture（CPU 密集）和 encode（GPU 密集）两个阶段。Worker 数量建议：
+
+| CPU 核心数 | 建议 Worker | 说明 |
+|-----------|-------------|------|
+| ≤ 4 | 2-3 | 避免 CPU 过度订阅 |
+| 6-8 | 5 | 实测最优（10 workers 反而慢 2×） |
+| ≥ 12 | 5-6 | capture 阶段仍是瓶颈，更多 worker 无收益 |
+
+> `renderer.py` 自动根据 CPU 核心数和内存计算 worker 数，通常无需手动调整。
 
 ### TTS 语音合成
 
@@ -493,8 +599,11 @@ server/
 | 启动数据库错误 | 检查 `config.yaml → database.url`；确认 PostgreSQL 运行中；确认已执行 `init_schema.sql` |
 | 首页 500 | 检查 dashboard 聚合查询是否访问了不存在的表或字段 |
 | 路径规划异常 | 检查 `learning_paths` 子表结构；确认节点资源未误走独立资源域 |
-| 视频渲染失败 | 确认 FFmpeg 已安装；`video-render/` 已 `npm install`；Remotion 版本为 4.0.478 |
-| GPU 未生效 | `ffmpeg -encoders \| grep nvenc` 确认 NVENC；`nvidia-smi` 确认驱动；查看日志中 GL 后端选择记录 |
+| 视频渲染失败 | 确认 FFmpeg 已安装；`video-render/` 已 `npm install`；Remotion 版本 ≥ 4.0.486；Node.js ≥ 22 |
+| GPU 未生效 / 编码慢 | ① `ffmpeg -encoders \| grep h264_nvenc` 确认 NVENC ② `nvidia-smi` 确认驱动 ③ 查看日志中 GL 后端选择记录 ④ 确认未设置 `crf`/`encodingMaxRate`（会静默禁用 NVENC） |
+| 音频 404 / 渲染报音频缺失 | 检查 `audio-manifest.json` 是否正确生成；确认 TTS 音频文件存在于 `WORKPLACE_DIR/static/` 下 |
+| 动画渲染慢 | ① 确认 `chrome-headless-shell` 可用（`npx hyperframes doctor`）② Worker 数是否合理（5 个最优，10 个反而慢）③ 查看日志中 browser_mode 和 encoding_mode |
+| HyperFrames doctor 报错 | 运行 `npx hyperframes browser` 安装浏览器；确认 Node.js ≥ 22 |
 | TTS 无声 | 检查 `spark_tts` 配置；Edge-TTS 需要联网 |
 | 向量检索失效 | 确认嵌入服务运行中（`curl <embed_base_url>/models`）；`knowledge.enabled: true`；索引已构建（`app/rag/data/index/manifest.json` 存在） |
 | 数字人连接失败 | 检查 `avatar.*` 配置完整、WebSocket 地址正确、JWT 有效 |

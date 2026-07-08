@@ -76,11 +76,15 @@ const titleMap: Record<string, string> = {
   code: '代码实操',
   reading: '拓展阅读',
   ppt: '演示幻灯',
-  video: '动画讲解视频',
+  video: '讲解视频',
+  cartoon: '动画讲解',
 }
 
 const renderer = computed(() => rendererMap[normalizedType.value] || null)
-const title = computed(() => titleMap[normalizedType.value] || '资源预览')
+const title = computed(() => {
+  const raw = (props.activeAgent || '').toLowerCase()
+  return titleMap[raw] || titleMap[normalizedType.value] || '资源预览'
+})
 const hasRenderableData = computed(() => (
   normalizedType.value === 'ppt'
     ? Boolean(props.resource || props.data)

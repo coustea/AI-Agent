@@ -128,7 +128,6 @@ class PlanningAgent(BaseResourceAgent):
                 "teaching_plan": plan.content,
             },
         )
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:

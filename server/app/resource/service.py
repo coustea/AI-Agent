@@ -315,7 +315,7 @@ class ResourceService:
                 user_id=user_id,
                 resource_id=resource_id,
                 status=status,
-                topic=resource.topic,
+                topic=resource.learning_need,
                 agent_types=list(successful),
             )
         except Exception:

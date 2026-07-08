@@ -290,11 +290,13 @@ def _extract_takeaway(content: str) -> str:
 
 
 def _extract_points(content: str) -> list[KeyPoint]:
-    """提取 - **标签**：detail 格式的要点。"""
+    """提取 - **标签**：detail 或 - **标签：** detail 格式的要点。"""
     points: list[KeyPoint] = []
     for line in content.splitlines():
         line = line.strip()
-        m = re.match(r"[-*]\s+\*\*(.+?)\*\*[:：]\s*(.+)", line)
+        # 同时接受两种写法：冒号在加粗外（**标签**：detail）
+        # 或加粗内（**标签：** detail，与 slide_outline.md 模板示例一致）
+        m = re.match(r"[-*]\s+\*\*(.+?)[:：]?\*\*[:：]?\s*(.+)", line)
         if m:
             label = m.group(1).strip()[:28]
             detail = m.group(2).strip()[:200]
@@ -311,11 +313,12 @@ def _extract_points(content: str) -> list[KeyPoint]:
 
 
 def _extract_steps(content: str) -> list[ProcessStep]:
-    """提取 1. **标题**：detail 格式的步骤。"""
+    """提取 1. **标题**：detail 或 1. **标题：** detail 格式的步骤。"""
     steps: list[ProcessStep] = []
     for line in content.splitlines():
         line = line.strip()
-        m = re.match(r"\d+\.\s+\*\*(.+?)\*\*[:：]\s*(.+)", line)
+        # 同 _extract_points：冒号可在加粗外或加粗内
+        m = re.match(r"\d+\.\s+\*\*(.+?)[:：]?\*\*[:：]?\s*(.+)", line)
         if m:
             steps.append(ProcessStep(
                 title=m.group(1).strip()[:32],
@@ -704,7 +707,8 @@ def _insert_section_markers(slides: list[PPTSlide]) -> list[PPTSlide]:
         result.append(slide)
 
         # 每 5 页且不是最后一页，插入 section
-        if since_section >= 5 and i < len(slides) - 1:
+        # 但当前页已是 summary/closing 时不再追加分隔，避免在总结与收尾之间插入无意义"第N部分"
+        if since_section >= 5 and i < len(slides) - 1 and slide.role not in ("summary", "closing"):
             result.append(PPTSlide(
                 role="section",
                 shape="statement",
@@ -736,7 +740,13 @@ def _dedup_adjacent_shapes(slides: list[PPTSlide]) -> list[PPTSlide]:
     }
 
     result = list(slides)
+    # 结构性页面（cover/section/summary/closing）按 role 渲染，shape 应保持声明的 statement：
+    # 否则"封面 + 首节"同为 statement 会把首节改成 concept，连锁把紧跟其后的真实 concept
+    # 内容页挤成 statement，并可能让 section 页错误地按 concept 布局渲染。
+    structural = {"cover", "section", "summary", "closing"}
     for i in range(1, len(result)):
+        if result[i].role in structural:
+            continue
         if result[i].shape == result[i - 1].shape:
             alts = alternative_shapes.get(result[i].shape, ["concept"])
             # 选一个和前页不同的

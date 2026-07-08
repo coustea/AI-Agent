@@ -38,13 +38,11 @@ class QuizAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
-        result = await self._generate_quiz(
+        return await self._generate_quiz(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
             config=input_data.agent_config,
         )
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
-        return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         parts = build_node_context(input_data)
@@ -56,7 +54,6 @@ class QuizAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_quiz(
@@ -115,7 +112,15 @@ class QuizAgent(BaseResourceAgent):
         logger.info("Agent[%s] LLM 调用: input_len=%d blueprint=%d", self.agent_id, len(full_prompt), len(blueprint))
         llm_started = time.perf_counter()
         await self.emitter.send(self.agent_id, "running", "正在生成测试题与解析...", 60)
-        payload = await self._generate_payload(full_prompt, blueprint)
+        payload = await self.run_with_heartbeat(
+            self._generate_payload(full_prompt, blueprint),
+            messages=[
+                "正在生成题目与选项...",
+                "正在补充答案解析与考点说明...",
+            ],
+            interval_seconds=12.0,
+            progress=70,
+        )
         questions = payload.questions
         llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
 

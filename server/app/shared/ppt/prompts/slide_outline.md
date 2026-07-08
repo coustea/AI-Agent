@@ -209,11 +209,11 @@ $$T_{{avg}} = \frac{{1}}{{n}}\sum_{{i=1}}^{{n}}T_{{wait\_i}}$$
 | shape | 必须包含 | 写法 |
 |---|---|---|
 | statement | 核心论点 + 要点列表 | `**核心论点：**...` + `- **标签：** detail` |
-| concept | 核心论点 + 3-5 个要点 | 同上，每个 detail 50-100 字 |
+| concept | 核心论点 + 4-6 个要点 | 同上，每个 detail 50-100 字 |
 | sequence | 核心论点 + 编号步骤 | `1. **步骤：** detail` |
-| comparison | 核心论点 + 两个 ### 分栏 | `### A标题` + `- 点` / `### B标题` + `- 点`，每栏至少 3 点 |
-| system | 核心论点 + 节点列表 | `- **id** \| 标签：detail`，3-6 个节点 |
-| code | 核心论点 + 代码块 + 要点 | ` ```python ``` ` + `- **要点：** detail` |
+| comparison | 核心论点 + 两个 ### 分栏 | `### A标题` + `- 点` / `### B标题` + `- 点`，每栏至少 3-4 点 |
+| system | 核心论点 + 节点列表 | `- **id** \| 标签：detail`，4-6 个节点 |
+| code | ⚠️默认禁用：仅编程语言/语法主题可用 | ` ```python ``` ` + `- **要点：** detail` |
 | formula | 核心论点 + 公式 + 要点 | `$$公式$$` + `- **变量：** 含义` |
 | quiz | 问题 + 选项 + 答案 | `**问题：**...` + `- **选项：**...` + `**答案：**...` |
 | misconception | 核心论点 + 两个 ### 分栏 | 同 comparison，左误区右正解 |
@@ -238,6 +238,21 @@ $$T_{{avg}} = \frac{{1}}{{n}}\sum_{{i=1}}^{{n}}T_{{wait\_i}}$$
 
 这两个字段保证每页内容充实、不空洞。
 
+## 信息密度（禁止稀疏页）
+
+每页正文必须填满画布，严禁出现"一个标题 + 一句话 + 一个卡片"的稀疏页：
+
+- `concept` / `explain`：**至少 4 个**要点
+- `sequence`：**至少 4 个**步骤
+- `comparison`：每栏**至少 3-4 个**对比点
+- `system`：**至少 4-6 个**节点
+- `hierarchy`：**至少 3 层**或 4+ 节点
+- `timeline`：**至少 4 个**事件
+- `summary`：**至少 4 个**要点
+- `statement` / `cover` / `section` / `closing`：可保持金句式简洁
+
+宁可把一个知识点拆成多个维度的要点铺满页面，也不要只留 1-2 个点。某页内容不足 3 个要点时应合并到相邻页，不单独成页。
+
 ## 讲稿
 
 每页末尾的 `> 讲稿内容` 行会作为演讲者备注，用于辅助讲解。写本页讲解顺序，不写视觉样式。
@@ -250,7 +265,9 @@ $$T_{{avg}} = \frac{{1}}{{n}}\sum_{{i=1}}^{{n}}T_{{wait\_i}}$$
 4. 相邻页面不要使用相同的 shape（编译器会自动纠正）
 5. 5 页以上时每 4-5 页插入一个 `[section]` 分隔（编译器会自动补插）
 6. 至少包含 1 页 `quiz` 和 1 页 `misconception`
-7. 系统/架构类内容用 `system`，过程/算法用 `sequence`，代码推演用 `code`，对比判断用 `comparison`
+7. 系统/架构类内容用 `system`，过程/算法用 `sequence`，对比判断用 `comparison`，层级关系用 `hierarchy`，演进历史用 `timeline`
+8. **默认不使用 `code` 形状**：课件面向理论理解，优先用文字、类比、`system`/`sequence`/`comparison`/`hierarchy` 讲解原理，而不是贴源代码。只有当学习主题本身是"编程语言语法 / 某语言 API / 必须手写代码的算法"时才可用 `code`，且代码尽量精简（≤10 行片段）。
+9. `explain` 页面应使用 `concept`/`sequence`/`comparison`/`system`/`formula`/`hierarchy`/`timeline`/`matrix` 等多要点形状；**不要对 `explain` 使用 `statement`**（单论点页对讲解页过于稀疏）。`statement` 仅用于 `cover`/`section`/`hook`/`closing`。
 
 # SOURCE MATERIAL USAGE
 
@@ -265,7 +282,7 @@ INPUT 中 `teaching_plan` 的 `### [ppt]` 段落是 PPT 必须遵循的内容指
 INPUT 中 `artifacts` 是基础 Agent 已生成的实际内容：
 - 课程讲解（content）：直接提取核心概念、定义、原理解释
 - 习题（quiz）：提取测验题目，改造为课件内的互动页
-- 代码示例（code）：直接使用代码片段，配合要点解释
+- 代码示例（code）：提取代码体现的机制与设计思路，转化为文字 / `sequence` / `comparison` 讲解；默认不要把源代码片段贴进课件（仅当学习主题是编程语言语法时才用 `code` 形状）
 - 阅读材料（reading）：提取关键引用和延伸知识
 
 你必须直接使用这些素材生成课件，不要凭空编造内容。

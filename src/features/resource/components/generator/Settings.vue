@@ -1,4 +1,5 @@
 <template>
+  <!-- 参数定制视图：场景选择 + 智能体配置工作台 + 预览 + 底部操作栏 -->
   <div class="phase-view personalize-view">
     <div class="personalize-container">
       <!-- Page Title Header -->
@@ -35,8 +36,9 @@
           @toggle="toggleAgent"
         />
 
-        <!-- 2-Column Split Workspace Body -->
-        <div class="workspace-body grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 min-h-[500px]">
+      <!-- 2-Column Split Workspace Body -->
+      <!-- 左右两栏布局：左侧参数表单(7列) + 右侧实时预览(5列) -->
+      <div class="workspace-body grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 min-h-[500px]">
           <!-- Left Column: Parameter Configurator form (7 columns span) -->
           <div class="lg:col-span-7 flex flex-col justify-between">
             <div class="form-content-area">
@@ -506,6 +508,7 @@
       </div>
 
       <!-- Footer: selected agents + action buttons -->
+      <!-- 底部区域：已选智能体标签条 + 返回/启动操作按钮 -->
       <div class="settings-footer">
         <!-- Selected agents pill bar -->
         <div class="agents-bar">
@@ -537,18 +540,26 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 响应式原语与生命周期钩子
 import { computed, onMounted, ref, watch } from 'vue'
+// 启动按钮图标
 import {
   PhPaperPlaneTilt as Position
 } from '@phosphor-icons/vue'
+// 轻量 toast 提示
 import { toast } from 'vue-sonner'
+// 智能体标签页切换子组件
 import AgentTabs from '../settings/AgentTabs.vue'
+// 参数预览子组件
 import Preview from '../settings/Preview.vue'
+// PPT 模板列表查询接口与类型
 import {
   getPptTemplates,
   type PptTemplateOption,
 } from '@/features/resource/api/resource'
+// 学习场景与资源智能体 ID 类型
 import type { LearningScenario, ResourceAgentId } from '@/features/resource/model/resource'
+// 智能体元信息、场景选项与场景默认配置
 import {
   MIN_AGENTS,
   getAgentMeta,
@@ -558,6 +569,7 @@ import {
   type AnyAgentConfigs,
 } from '../../model/catalog'
 
+// 组件 props：学习场景、已启用智能体、各智能体配置与自然语言输入
 const props = defineProps<{
   learningScenario: LearningScenario
   enabledAgentIds: ResourceAgentId[]
@@ -565,6 +577,7 @@ const props = defineProps<{
   naturalInput?: string
 }>()
 
+// 事件输出：双向更新场景/智能体列表/配置，以及返回与启动动作
 const emit = defineEmits<{
   'update:learningScenario': [value: LearningScenario]
   'update:enabledAgentIds': [value: ResourceAgentId[]]
@@ -576,23 +589,29 @@ const emit = defineEmits<{
 // Active Focused Agent Tab
 const activeAgentId = ref<ResourceAgentId>('content')
 
+// 学习场景双向计算属性：读 props、写时 emit 更新
 const learningScenario = computed({
   get: () => props.learningScenario,
   set: (v) => emit('update:learningScenario', v),
 })
 
+// 已启用智能体列表双向计算属性
 const enabledAgentIds = computed({
   get: () => props.enabledAgentIds,
   set: (v) => emit('update:enabledAgentIds', v),
 })
 
+// 本地配置深拷贝，避免直接修改父组件引用
 const localConfigs = ref<AnyAgentConfigs>(JSON.parse(JSON.stringify(props.agentConfigs)))
+// PPT 模板选项列表（onMounted 时从后端加载）
 const pptTemplates = ref<PptTemplateOption[]>([])
 
+// 当前激活智能体的元信息（名称、图标、颜色类）
 const getActiveAgentMeta = computed(() => {
   return getAgentMeta(activeAgentId.value)
 })
 
+// 当前激活智能体的产出物中文标签（用于未启用提示）
 const getActiveAgentOutputLabel = computed(() => {
   const map: Record<string, string> = {
     content: '课程讲解文档',
@@ -607,6 +626,7 @@ const getActiveAgentOutputLabel = computed(() => {
   return map[activeAgentId.value] || '学习资源'
 })
 
+// 当前选中 PPT 模板的描述文案（自动模式或具体模板）
 const selectedPptTemplateDescription = computed(() => {
   if (localConfigs.value.ppt.template === 'auto') {
     return '系统会根据知识类型自动匹配最合适的模板'
@@ -616,6 +636,7 @@ const selectedPptTemplateDescription = computed(() => {
   )?.description || '所选模板当前不可用，请重新选择'
 })
 
+// 组件挂载时从后端加载 PPT 模板列表
 onMounted(async () => {
   try {
     const response = await getPptTemplates()
@@ -630,17 +651,21 @@ onMounted(async () => {
 })
 
 // Watch parent prop changes (e.g. when scenario changes or is initialized)
+// 父组件配置变更时同步深拷贝到本地副本
 watch(() => props.agentConfigs, (newVal) => {
   localConfigs.value = JSON.parse(JSON.stringify(newVal))
 }, { deep: true })
 
 // Emit changes back to parent
+// 本地配置变更时同步 emit 回父组件
 watch(localConfigs, (newVal) => {
   emit('update:agentConfigs', JSON.parse(JSON.stringify(newVal)))
 }, { deep: true })
 
+// 判断指定智能体是否在已启用列表中
 const isAgentEnabled = (id: string) => enabledAgentIds.value.includes(id as ResourceAgentId)
 
+// 切换智能体启用/禁用，禁用时强制保留最低数量限制
 const toggleAgent = (id: string) => {
   const idx = enabledAgentIds.value.indexOf(id as ResourceAgentId)
   if (idx >= 0) {
@@ -656,6 +681,7 @@ const toggleAgent = (id: string) => {
   }
 }
 
+// 选择学习场景并合并该场景的默认配置到本地配置
 const selectScenario = (scenario: LearningScenario) => {
   emit('update:learningScenario', scenario)
   const defaults = SCENARIO_DEFAULTS[scenario]
@@ -667,6 +693,7 @@ const selectScenario = (scenario: LearningScenario) => {
   }
 }
 
+// 切换题型多选：至少保留一种题型
 function toggleQuestionType(type: any) {
   const types = [...localConfigs.value.quiz.question_types]
   const idx = types.indexOf(type)
@@ -682,6 +709,7 @@ function toggleQuestionType(type: any) {
   localConfigs.value.quiz.question_types = types
 }
 
+// 切换 PPT 大纲重点多选：至少保留一项
 function togglePptFocus(item: any) {
   const list = [...localConfigs.value.ppt.focus]
   const idx = list.indexOf(item)

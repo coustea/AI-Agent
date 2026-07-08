@@ -14,9 +14,11 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, TypedDict
 
+import yaml
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from loguru import logger as loguru_logger
@@ -32,6 +34,7 @@ from app.infra.models import (
     PathNodeQuestion,
     PathNodeResource,
     PathNodeTutorial,
+    User,
 )
 from app.profile.service import get_profile_service
 from app.resource.path_helpers import generate_path_node_resource
@@ -171,6 +174,53 @@ def build_fallback_plan(request: PathRequest) -> LearningPlan:
 
 
 # ======================================================================
+# 1.5 YAML Frontmatter 解析工具
+# ======================================================================
+
+
+def _parse_yaml_frontmatter(text: str) -> tuple[dict, str]:
+    """从 LLM 生成的 Markdown 中提取 YAML frontmatter。
+
+    期望格式：
+    ```
+    ---
+    title: ...
+    summary: ...
+    knowledge_points:
+      - ...
+    type: ...
+    ---
+    ...正文...
+    ```
+
+    Returns:
+        (metadata_dict, body_text) — 无法解析时返回 ({}, text)。
+    """
+    stripped = text.lstrip()
+    if not stripped.startswith("---"):
+        return {}, text
+
+    end_match = re.search(r"\n---\s*(\n|$)", stripped[3:])
+    if not end_match:
+        return {}, text
+
+    yaml_start = 3
+    yaml_end = yaml_start + end_match.start()
+    closing_end = yaml_start + end_match.end()
+
+    yaml_block = stripped[yaml_start:yaml_end]
+    body = stripped[closing_end:]
+
+    try:
+        meta = yaml.safe_load(yaml_block)
+        if not isinstance(meta, dict):
+            return {}, text
+        return meta, body
+    except yaml.YAMLError:
+        return {}, text
+
+
+# ======================================================================
 # 2. 路径规划智能体
 # ======================================================================
 
@@ -208,13 +258,12 @@ class PathPlannerAgent:
 
         async def research_node(state: PathState) -> dict[str, Any]:
             loguru_logger.info("LangGraph [Path Research] 开始...")
-            if state["request"].enable_search:
-                await emit_progress(
-                    state.get("progress_callback"),
-                    "researching",
-                    30,
-                    "正在检索高价值参考资料",
-                )
+            await emit_progress(
+                state.get("progress_callback"),
+                "researching",
+                30,
+                "正在检索高价值参考资料",
+            )
             search_context = await self._search(
                 request=state["request"],
                 profile=state["profile"],
@@ -335,8 +384,6 @@ class PathPlannerAgent:
         request: PathRequest,
         profile: dict[str, Any],
     ) -> str:
-        if not request.enable_search:
-            return ""
 
         try:
             query = f"{request.topic or request.goal} 学习路径 课程结构"
@@ -400,7 +447,6 @@ def _format_request(request: PathRequest) -> str:
     return (
         f"学习目标: {request.goal}\n"
         f"学习主题: {request.topic or '未提供'}\n"
-        f"所属模块: {request.module}\n"
         f"已掌握知识: {current_knowledge}\n"
         f"学习偏好:\n{preferences}"
     )
@@ -663,12 +709,16 @@ async def node_load_context(state: LearnState) -> dict:
     except Exception:
         profile_markdown = ""
 
+    user = await session.get(User, user_id)
+    username = user.username if user is not None else ""
+
     return {
         "node": node,
         "path": path,
         "tutorials": tutorials,
         "current_tutorial": current_tutorial,
         "profile_markdown": profile_markdown,
+        "username": username,
     }
 
 
@@ -709,6 +759,15 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
         prev_current.is_current = False
 
     existing = state.get("tutorials", [])
+    content_md = state["tutorial_content"]
+    meta, body = _parse_yaml_frontmatter(content_md)
+
+    if meta.get("type") and meta["type"] != tutorial_type:
+        logger.warning(
+            "Tutorial type mismatch: LLM output type=%r, expected type=%r for node=%s",
+            meta["type"], tutorial_type, node.title,
+        )
+
     tutorial = PathNodeTutorial(
         path_id=path.id,
         node_id=node.id,
@@ -717,10 +776,10 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
         version_no=len(existing) + 1,
         based_on_tutorial_id=state.get("based_on_tutorial_id"),
         is_current=True,
-        title=f"{node.title} - {tutorial_type}",
-        summary=tutorial_type,
-        content_markdown=state["tutorial_content"],
-        knowledge_points=[node.title],
+        title=meta.get("title", f"{node.title} - {tutorial_type}"),
+        summary=meta.get("summary", tutorial_type),
+        content_markdown=body,
+        knowledge_points=meta.get("knowledge_points", [node.title]),
         weak_knowledge_points=state.get("weak_knowledge_points", []),
     )
     session.add(tutorial)
@@ -756,6 +815,8 @@ async def node_generate_questions(state: LearnState) -> dict:
             profile_markdown=state.get("profile_markdown", ""),
         )
         session = state["session"]
+        content_md = result["content_markdown"]
+        meta, body = _parse_yaml_frontmatter(content_md)
         tutorial = PathNodeTutorial(
             path_id=path.id,
             node_id=node.id,
@@ -763,10 +824,10 @@ async def node_generate_questions(state: LearnState) -> dict:
             tutorial_type="primary",
             version_no=1,
             is_current=True,
-            title=f"{node.title} - primary",
-            summary="primary",
-            content_markdown=result["content_markdown"],
-            knowledge_points=[node.title],
+            title=meta.get("title", f"{node.title} - primary"),
+            summary=meta.get("summary", "primary"),
+            content_markdown=body,
+            knowledge_points=meta.get("knowledge_points", [node.title]),
             weak_knowledge_points=[],
         )
         session.add(tutorial)
@@ -1011,6 +1072,7 @@ async def node_generate_resource(state: LearnState) -> dict:
             weak_knowledge_points=[],
             profile_markdown=state.get("profile_markdown", ""),
         )
+        meta, body = _parse_yaml_frontmatter(result["content_markdown"])
         tutorial = PathNodeTutorial(
             path_id=path.id,
             node_id=node.id,
@@ -1018,10 +1080,10 @@ async def node_generate_resource(state: LearnState) -> dict:
             tutorial_type="primary",
             version_no=1,
             is_current=True,
-            title=f"{node.title} - primary",
-            summary="primary",
-            content_markdown=result["content_markdown"],
-            knowledge_points=[node.title],
+            title=meta.get("title", f"{node.title} - primary"),
+            summary=meta.get("summary", "primary"),
+            content_markdown=body,
+            knowledge_points=meta.get("knowledge_points", [node.title]),
             weak_knowledge_points=[],
         )
         session.add(tutorial)
@@ -1051,7 +1113,7 @@ async def node_generate_resource(state: LearnState) -> dict:
         tutorial_markdown=current_tutorial.content_markdown,
         profile={},
         agent_config={},
-        username="",
+        username=state.get("username", ""),
     )
     result = await generate_path_node_resource(resource_type, node_input)
     return {"resource_result": result, "resource_type": resource_type}

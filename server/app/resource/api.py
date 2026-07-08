@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query
@@ -28,9 +27,10 @@ from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.profile.service import ProfileService
-from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection, AgentConfigs
+from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection, AgentConfigs, NodeInput
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
+from app.resource.workflow.execution import execute_node_agent
 from app.infra.response import HttpResponse
 from app.resource.event import (
     RESOURCE_TERMINAL_EVENTS,
@@ -39,6 +39,11 @@ from app.resource.event import (
     get_resource_channel,
 )
 from app.shared.ppt import PPTGenerator
+
+
+# PPT/Cartoon 单独调用时走 generate_node（路径规划逻辑），
+# 通过 execute_node_agent 统一执行边界，保证消息/保存/校验一致。
+_NODE_AGENT_IDS = frozenset({"ppt", "cartoon"})
 
 
 router = APIRouter()
@@ -103,16 +108,22 @@ async def create_single_resource_task(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """启动单智能体资源生成后台任务（即调即用）。"""
+    """启动单智能体资源生成后台任务（即调即用）。
+
+    基础 Agent（content/mindmap/code/reading/quiz）走多智能体资源流程
+    （run_multi_agent_generation → execute_resource_agent）。
+
+    PPT/Cartoon 走 generate_node 逻辑（execute_node_agent），
+    只需要知识点和教程即可生成，通过统一执行边界保证消息/保存/校验一致。
+    """
+    agent_id_str = req.agent_id.value
     logger.info(
         "[ResourceAPI] 收到单智能体生成请求: user_id=%s agent_id=%s",
         current_user.id,
-        req.agent_id.value,
+        agent_id_str,
     )
 
     service = ResourceService(session)
-    # Single-agent 模式只有 1 个 Agent，不应受多 Agent 最少数量验证限制。
-    # 使用 model_construct 绕过 Pydantic 验证，因为 create_task 只需要 learning_need。
     request = ResourceGenerationRequest.model_construct(
         learning_need=req.learning_need,
         learning_scenario="self_study",
@@ -132,7 +143,37 @@ async def create_single_resource_task(
     )
     await events.open()
 
-    # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
+    # ── PPT/Cartoon：走 generate_node 统一执行边界 ──────────────────
+    if agent_id_str in _NODE_AGENT_IDS:
+        node_input = NodeInput(
+            path_id=resource_id,
+            node_id=resource_id,
+            node_key=str(resource_id),
+            path_title=req.learning_need,
+            path_goal=req.learning_need,
+            node_title=req.learning_need,
+            knowledge_points=req.knowledge_points,
+            tutorial_title=req.tutorial_title or req.learning_need,
+            tutorial_summary=req.learning_need,
+            tutorial_markdown=req.tutorial_markdown,
+            username=current_user.username,
+        )
+
+        asyncio.create_task(
+            execute_node_agent(
+                user_id=current_user.id,
+                resource_id=resource_id,
+                agent_id=agent_id_str,
+                node_input=node_input,
+            )
+        )
+
+        return HttpResponse.success(
+            data={"resource_id": resource_id, "status": "generating", "agent_id": agent_id_str},
+            status_code=201,
+        )
+
+    # ── 基础 Agent：走多智能体资源流程 ──────────────────────────────
     profile_service = ProfileService()
     profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
     asyncio.create_task(
@@ -144,6 +185,7 @@ async def create_single_resource_task(
                 "learning_need": req.learning_need,
                 "learning_scenario": "self_study",
                 "agent_configs": {},
+                "username": current_user.username,
             },
             profile={"markdown": profile_markdown},
         )

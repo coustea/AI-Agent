@@ -29,13 +29,11 @@ class MindmapAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        result = await self._generate_mindmap(
+        return await self._generate_mindmap(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:32],
             config=input_data.agent_config,
         )
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
-        return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         result = await self._generate_mindmap(
@@ -45,7 +43,6 @@ class MindmapAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_mindmap(
@@ -83,7 +80,15 @@ class MindmapAgent(BaseResourceAgent):
         full_prompt = f"{prompt}\n\n{input_text}"
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
         llm_started = time.perf_counter()
-        response = await self.llm.ainvoke(full_prompt)
+        response = await self.run_with_heartbeat(
+            self.llm.ainvoke(full_prompt),
+            messages=[
+                "正在生成知识导图主体结构...",
+                "正在补充知识层级与分支关系...",
+            ],
+            interval_seconds=12.0,
+            progress=70,
+        )
         content = response.content if hasattr(response, "content") else str(response)
         llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
         logger.info(

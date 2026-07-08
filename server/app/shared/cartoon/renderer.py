@@ -18,6 +18,8 @@ logger = get_logger(__name__)
 
 _GIB = 1024**3
 
+REPOSITORY_DIR = Path(__file__).resolve().parents[4]
+
 
 class CartoonRenderError(RuntimeError):
     pass
@@ -40,6 +42,7 @@ class CartoonRenderProfile:
     gpu_encoding: bool = False
     low_memory_mode: bool = False
     cpu_fallback: bool = False
+    browser_path: str | None = None
 
     def as_metadata(self) -> dict[str, object]:
         return asdict(self)
@@ -227,6 +230,33 @@ def _nvidia_gpu_available(encoders: str) -> bool:
     return result.returncode == 0 and bool(result.stdout.strip())
 
 
+def _find_chrome_headless_shell() -> str | None:
+    """定位 chrome-headless-shell 二进制，供 hyperframes 使用 beginFrame 优化捕获路径。
+
+    hyperframes 默认调用系统 Chrome，仅支持逐帧截图捕获（慢）；chrome-headless-shell
+    支持 HeadlessExperimental.beginFrame，逐帧捕获显著更快。优先复用 Remotion 已经下载
+    的 chrome-headless-shell，避免重复下载；同时尊重 HYPERFRAMES_BROWSER_PATH 显式覆盖。
+    找不到时返回 None，hyperframes 会回退系统 Chrome（功能正常但较慢）。
+    """
+    env_path = os.environ.get("HYPERFRAMES_BROWSER_PATH")
+    if env_path and Path(env_path).is_file() and os.access(env_path, os.X_OK):
+        return env_path
+
+    remotion_cache = REPOSITORY_DIR / "video-render" / "node_modules" / ".remotion"
+    if remotion_cache.is_dir():
+        for candidate in remotion_cache.rglob("chrome-headless-shell"):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+
+    puppeteer_cache = Path.home() / ".cache" / "puppeteer"
+    if puppeteer_cache.is_dir():
+        for candidate in puppeteer_cache.rglob("chrome-headless-shell"):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+
+    return None
+
+
 def _worker_count(
     physical_cores: int,
     available_memory_bytes: int,
@@ -257,6 +287,14 @@ def detect_cartoon_render_profile() -> CartoonRenderProfile:
         available_memory,
         low_memory_mode=low_memory_mode,
     )
+    browser_path = _find_chrome_headless_shell()
+    if browser_path:
+        logger.info("HyperFrames 复用 chrome-headless-shell 优化捕获路径: %s", browser_path)
+    else:
+        logger.warning(
+            "未找到 chrome-headless-shell，hyperframes 将回退系统 Chrome 截图模式（较慢）；"
+            "可运行 `npx @puppeteer/browsers install chrome-headless-shell` 或设置 HYPERFRAMES_BROWSER_PATH"
+        )
 
     profile = CartoonRenderProfile(
         platform=f"{platform.system().lower()}-{platform.machine().lower()}",
@@ -269,6 +307,7 @@ def detect_cartoon_render_profile() -> CartoonRenderProfile:
         browser_gpu=nvidia_gpu,
         gpu_encoding=nvidia_gpu,
         low_memory_mode=low_memory_mode,
+        browser_path=browser_path,
     )
     logger.info("HyperFrames 自动渲染配置: %s", profile.as_metadata())
     return profile
@@ -328,7 +367,27 @@ class CartoonVideoRenderer:
     ) -> str | None:
         final_output.unlink(missing_ok=True)
         command = self._command(profile)
-        logger.info("在 %s 启动 HyperFrames: %s", output_dir, " ".join(command))
+
+        # chrome-headless-shell 启用 beginFrame 优化捕获路径（替代系统 Chrome 的逐帧截图）。
+        # 传入 env 会整体替换父进程环境，必须合并 os.environ，否则子进程丢失 PATH 等关键变量。
+        env: dict[str, str] | None = None
+        if profile.browser_path:
+            env = {**os.environ, "HYPERFRAMES_BROWSER_PATH": profile.browser_path}
+
+        # 显式记录渲染命令与浏览器/编码模式，便于调试与性能排查。
+        # 浏览器模式不在命令行参数里（通过 env 注入），故单独标注。
+        browser_mode = (
+            f"chrome-headless-shell(beginFrame优化): {profile.browser_path}"
+            if profile.browser_path
+            else "系统Chrome(截图模式，较慢)"
+        )
+        encoding_mode = "GPU(NVENC)" if profile.gpu_encoding else "CPU(libx264)"
+        logger.info(
+            "HyperFrames 渲染启动 | 输出=%s | 浏览器=[%s] | 编码=[%s] | workers=%d | fps=%d | quality=%s",
+            final_output, browser_mode, encoding_mode,
+            profile.workers, profile.fps, profile.quality,
+        )
+        logger.info("HyperFrames 命令: %s", " ".join(command))
 
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
@@ -337,6 +396,7 @@ class CartoonVideoRenderer:
                 cwd=output_dir,
                 timeout_seconds=self.timeout_seconds,
                 logger_name="app.shared.cartoon.render",
+                env=env,
             )
         except asyncio.TimeoutError as exc:
             raise CartoonRenderError(

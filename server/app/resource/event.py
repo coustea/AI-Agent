@@ -80,8 +80,8 @@ class _ResourceChannel:
         *,
         user_id: int,
         resource_id: int,
-        queue_size: int = 256,
-        replay_size: int = 256,
+        queue_size: int = 1024,
+        replay_size: int = 1024,
         terminal_retention_seconds: float = 1800.0,
     ) -> None:
         self.user_id = user_id
@@ -119,16 +119,13 @@ class _ResourceChannel:
         self._buffer.append(resource_event)
 
         for queue in list(self._subscribers):
-            if queue.full():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
+            try:
+                await queue.put(resource_event)
+            except asyncio.QueueFull:
                 logger.warning(
-                    "resource_event_queue_oldest_dropped: resource_id=%s",
+                    "resource_event_queue_full_backpressure: resource_id=%s",
                     self.resource_id,
                 )
-            queue.put_nowait(resource_event)
 
         if event in RESOURCE_TERMINAL_EVENTS:
             self._is_terminal = True

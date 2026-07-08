@@ -1,5 +1,7 @@
 <template>
+  <!-- 生成进度主视图：顶部摘要 + 智能体流程画布 + 浮层详情 + 产物区 + 日志抽屉 -->
   <div class="phase-view generating-view workflow-stage-page workflow-stage-page-v4">
+    <!-- 顶部进度摘要栏：展示整体进度、运行中智能体数量、已交付产物数与路由步骤 -->
     <Summary
       :message="dagHeroMessage"
       :progress="overallProgress"
@@ -9,8 +11,11 @@
       :steps="routeSteps"
       @open-logs="workflowLogDrawerVisible = true"
     />
+    <!-- 主体区域：包含调度工作台面板与详情浮层 -->
     <main class="agent-stage-shell-v4">
+      <!-- 调度工作台面板：标题/状态/控制按钮 + 智能体流程画布 -->
       <section class="dispatch-workbench-panel dispatch-workbench-panel-v4">
+        <!-- 面板头部：执行流程标题、错误状态入口与日志按钮 -->
         <div class="workbench-header workbench-header-v4">
           <div>
             <span class="panel-eyebrow">执行流程</span>
@@ -18,6 +23,7 @@
             <p>教学计划完成后生成基础资源，再生成教学课件，最后完成资源整合。</p>
           </div>
           <div class="workbench-actions">
+            <!-- 生成出错时展示中断状态按钮，点击打开日志抽屉 -->
             <button
               v-if="generationError"
               class="workflow-error-status"
@@ -30,19 +36,25 @@
               <em>查看详情</em>
               <ArrowRight class='w-4 h-4 inline-block align-middle' />
             </button>
+            <!-- 正常状态下展示 SSE 实时流追踪标签 -->
             <span v-else class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
+            <!-- 教学计划生成状态标签 -->
             <span class="control-pill muted">计划 {{ planReady ? '已生成' : '生成中' }}</span>
-            <button v-if="!generationError" class="btn btn-outline btn-sm rounded-full" @click="workflowLogDrawerVisible = true">查看日志</button>
+            <button class="btn btn-outline btn-sm rounded-full" @click="workflowLogDrawerVisible = true">查看日志</button>
           </div>
         </div>
 
+        <!-- 智能体流程画布：包含计划核心、连接线 SVG、基础资源工位行、聚合工位行、整合卡片 -->
         <div ref="flowCanvasRef" class="agent-flow-canvas agent-flow-canvas-v4">
+          <!-- 装饰性背景：网格与三条轨道光晕 -->
           <div class="flow-grid-bg"></div>
           <div class="flow-orbit orbit-one"></div>
           <div class="flow-orbit orbit-two"></div>
           <div class="flow-orbit orbit-three"></div>
 
+          <!-- 核心区：教学计划智能体卡片 -->
           <div class="flow-core-stack flow-core-stack-v4">
+            <!-- Planning Agent 卡片，点击打开详情浮层 -->
             <article
               ref="planningNodeRef"
               class="agent-station-card agent-station-card-v4 planning-core"
@@ -62,13 +74,11 @@
               <AgentMessageTicker :node="getStageNode('planning')" />
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(getStageNode('planning')) }}</span>
-                <div class="station-progress-track">
-                  <i :style="{ width: `${getStageNode('planning').progress}%` }"></i>
-                </div>
               </div>
             </article>
           </div>
 
+          <!-- SVG 连接线层：根据各工位卡片实测坐标绘制贝塞尔连线与端点圆 -->
           <svg class="agent-link-svg" :viewBox="'0 0 ' + linkCanvasSize.width + ' ' + linkCanvasSize.height" preserveAspectRatio="none" aria-hidden="true">
             <defs>
               <linearGradient id="agentLinkGradient" x1="0" x2="1" y1="0" y2="1">
@@ -102,6 +112,7 @@
             />
           </svg>
 
+          <!-- 基础资源并行工位行：渲染各 Worker 智能体卡片 -->
           <transition-group name="agent-station" tag="div" class="agent-station-row agent-station-row-v4 base-agent-row">
             <article
               v-for="node in parallelPoolNodes"
@@ -124,17 +135,16 @@
               <AgentMessageTicker :node="node" />
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
-                <div class="station-progress-track">
-                  <i :style="{ width: `${node.progress}%` }"></i>
-                </div>
               </div>
             </article>
           </transition-group>
 
+          <!-- 聚合阶段连接器装饰（仅在存在 PPT/动画 智能体时显示） -->
           <div v-if="showAggregationStage" class="dual-flow-connector" aria-hidden="true">
             <span></span><i></i><i></i>
           </div>
 
+          <!-- 聚合工位行：渲染 PPT / 动画 智能体卡片 -->
           <div v-if="showAggregationStage" class="agent-station-row agent-station-row-v4 aggregation-agent-row">
             <article
               v-for="node in aggregationNodes"
@@ -156,18 +166,17 @@
               <AgentMessageTicker :node="node" />
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
-                <div class="station-progress-track">
-                  <i :style="{ width: `${node.progress}%` }"></i>
-                </div>
               </div>
             </article>
 
           </div>
 
+          <!-- 合并连接器：将聚合结果汇入资源整合卡片 -->
           <div v-if="showAggregationStage" class="dual-flow-connector is-merge" aria-hidden="true">
             <span></span><i></i><i></i>
           </div>
 
+          <!-- 资源整合（Bundle Agent）卡片：最终产物打包交付节点 -->
           <div class="bundle-stage-shell">
             <article
               class="review-station-card review-station-card-v4 bundle-stage-card"
@@ -181,19 +190,22 @@
                 <strong>资源整合</strong>
                 <span>{{ getNodeStageLabel(bundleNode) }}</span>
               </div>
-              <em>{{ bundleNode.progress }}%</em>
+              <em>{{ getNodeStatusLabel(bundleNode) }}</em>
             </article>
           </div>
         </div>
       </section>
 
+      <!-- 详情浮层：传送至 body，点击工位卡片时展示选中智能体的运行详情 -->
       <Teleport to="body">
         <transition name="detail-fade">
+          <!-- 遮罩层，点击关闭详情 -->
           <div
             v-if="detailPanelVisible && selectedDagNode"
             class="detail-overlay"
             @click="closeAgentDetail"
           >
+            <!-- 详情面板容器，按智能体类型应用主题色 -->
             <aside
               class="agent-detail-floating-panel"
               :class="[getResourceToneClass(selectedDagNode.id)]"
@@ -201,6 +213,7 @@
               aria-label="Agent 运行详情"
               @click.stop
             >
+              <!-- 详情面板头部：图标、标题、状态点、关闭按钮 -->
               <div class="detail-panel-title">
                 <div class="focus-agent-icon">
                   <component :is="getWorkflowIcon(selectedDagNode.id)" class='w-4 h-4' />
@@ -214,16 +227,15 @@
                 <button class="detail-close-btn" type="button" aria-label="关闭 Agent 详情" @click="closeAgentDetail">×</button>
               </div>
 
+              <!-- 详情主体卡片：当前任务、指标网格、输入输出、指标标签 -->
               <div class="selected-agent-detail-card">
+                <!-- 当前任务区：任务描述 -->
                 <div class="detail-current-task">
                   <span>当前任务</span>
                   <strong>{{ getNodeDisplayMessage(selectedDagNode) }}</strong>
-                  <div class="detail-progress-line">
-                    <i :style="{ width: `${selectedDagNode.progress}%` }"></i>
-                  </div>
-                  <em>{{ selectedDagNode.progress }}%</em>
                 </div>
 
+                <!-- 关键指标网格：阶段、耗时、更新时间、成果状态 -->
                 <dl class="focus-metrics detail-metrics-v3">
                   <div>
                     <dt>当前阶段</dt>
@@ -243,6 +255,7 @@
                   </div>
                 </dl>
 
+                <!-- 输入输出摘要网格 -->
                 <div class="detail-io-grid">
                   <div>
                     <span>输入</span>
@@ -254,30 +267,9 @@
                   </div>
                 </div>
 
+                <!-- 指标标签条：展示 metrics 中的前四项键值 -->
                 <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
                   <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
-                </div>
-
-                <div class="focus-history detail-history-v3">
-                  <span class="panel-eyebrow">SSE EVENT STREAM</span>
-                  <div class="timeline-stream-wrapper" v-if="getNodeLiveLogs(selectedDagNode, 8).length">
-                    <div
-                      v-for="log in getNodeLiveLogs(selectedDagNode, 8)"
-                      :key="log.id"
-                      class="detail-live-log-item"
-                      :class="`is-${log.status || selectedDagNode.status}`"
-                    >
-                      <i class="timeline-dot"></i>
-                      <div class="timeline-content">
-                        <div class="timeline-header">
-                          <span>{{ getLogPhaseLabel(log.phase) }}</span>
-                          <em>{{ log.elapsedMs ? formatElapsed(log.elapsedMs) : getNodeTimeLabel(selectedDagNode) }}</em>
-                        </div>
-                        <p>{{ log.message }}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else class="timeline-empty-msg">等待该智能体上报执行步骤</p>
                 </div>
               </div>
             </aside>
@@ -286,6 +278,7 @@
       </Teleport>
     </main>
 
+    <!-- 产物输出区：展示各智能体已生成的资源，支持点击预览 -->
     <Outputs
       :agent-ids="visibleOutputAgentIds"
       :generated-types="generatedResources.map(resource => resource.type)"
@@ -294,12 +287,14 @@
       @open="openResourcePreview"
     />
 
+    <!-- 工作流日志抽屉：汇总全局错误与各节点事件日志 -->
     <Logs
       :open="workflowLogDrawerVisible"
       :items="workflowLogItems"
       @close="workflowLogDrawerVisible = false"
     />
 
+    <!-- 资源预览弹窗：点击产物时打开 -->
     <PreviewDialog
       v-model:activeAgent="activePreviewAgent"
       :data="previewData"
@@ -309,7 +304,9 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 响应式原语、计算属性与组件类型
 import { ref, computed, type Component } from 'vue'
+// 引入 Phosphor 图标集，为各智能体匹配视觉图标
 import {
   PhTarget as Aim,
   PhArrowRight as ArrowRight,
@@ -322,13 +319,18 @@ import {
   PhBookOpen as Reading,
   PhShareNetwork as Share
 } from '@phosphor-icons/vue'
+// 资源智能体 ID 联合类型
 import type { ResourceAgentId } from '@/features/resource/model/resource'
+// 进度子组件：摘要栏、产物区、日志抽屉、预览弹窗
 import Summary from '../progress/Summary.vue'
 import Outputs from '../progress/Outputs.vue'
 import Logs from '../progress/Logs.vue'
 import PreviewDialog from '@/shared/content/PreviewDialog.vue'
+// 工位实时消息滚动组件
 import AgentMessageTicker from './AgentMessageTicker.vue'
+// 智能体工位连线坐标计算组合式函数
 import { useFlow } from '../../composables/useFlow'
+// 引入智能体常量、显示信息与 DAG 节点状态类型
 import {
   COORDINATOR_AGENT_ID,
   CARTOON_AGENT_ID,
@@ -337,16 +339,17 @@ import {
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
   getAgentOutputFormat,
-  getNodeFallbackMessage,
   getResourceToneClass,
   type DagNodeState,
 } from '../../model/catalog'
 
+// 已生成资源条目类型（含可选生成时间与排序字段）
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
   displayOrder?: number
 }
 
+// 组件 props：由父组件 ResourceGenerator 传入的 DAG 状态与生成数据
 const props = defineProps<{
   naturalInput: string
   dagNodeStates: Record<string, DagNodeState>
@@ -361,12 +364,15 @@ const props = defineProps<{
   visibleWorkflowNodes: DagNodeState[]
 }>()
 
+// 事件输出：选中节点与打开资源预览
 const emit = defineEmits<{
   selectNode: [id: string]
   openResource: [type: string]
 }>()
 
+// 日志抽屉显隐状态
 const workflowLogDrawerVisible = ref(false)
+// 详情浮层显隐状态
 const detailPanelVisible = ref(false)
 
 // Preview dialog state (for Outputs dock click-to-preview)
@@ -374,6 +380,7 @@ const activePreviewAgent = ref<string | null>(null)
 const previewData        = ref<any>(null)
 const previewResource    = ref<any>(null)
 
+// 点击产物时打开预览：数据已加载则直接展示，否则委托父组件从 API 获取
 function openResourcePreview(type: string) {
   const resource = props.generatedResources.find((r: any) => r.type === type)
   if (!resource) {
@@ -391,6 +398,7 @@ function openResourcePreview(type: string) {
   }
 }
 
+// 智能体 ID 到 Phosphor 图标组件的映射表
 const workflowIconMap: Record<string, Component> = {
   planning: Aim,
   coordinator: Connection,
@@ -404,6 +412,7 @@ const workflowIconMap: Record<string, Component> = {
   bundle: Box,
 }
 
+// 智能体 ID 到中文显示标题的映射表
 const workflowTitleMap: Record<string, string> = {
   planning: '教学计划',
   coordinator: '结果汇总',
@@ -417,31 +426,38 @@ const workflowTitleMap: Record<string, string> = {
   bundle: '资源包交付',
 }
 
+// 根据智能体 ID 获取对应图标，缺省返回文档图标
 function getWorkflowIcon(id: string) {
   return workflowIconMap[id] || Document
 }
 
+// 根据智能体 ID 获取中文标题，缺省返回 AGENT_DISPLAY 标签或原始 ID
 function getWorkflowTitle(id: string) {
   return workflowTitleMap[id] || AGENT_DISPLAY[id]?.label || id
 }
 
+// 点击工位卡片：打开详情浮层并通知父组件选中节点
 function handleAgentClick(id: string) {
   detailPanelVisible.value = true
   emit('selectNode', id)
 }
 
+// 关闭详情浮层
 function closeAgentDetail() {
   detailPanelVisible.value = false
 }
 
+// 基础资源智能体 ID 列表（排除 PPT 与动画等聚合阶段智能体）
 const baseGenerationAgentIds = computed(() => {
   return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
 })
 
+// 基础资源并行工位的 DAG 节点状态数组
 const parallelPoolNodes = computed(() => {
   return baseGenerationAgentIds.value.map(agentId => getStageNode(agentId))
 })
 
+// 连线组合式函数：基于工位卡片 DOM 实测坐标计算 SVG 连线路径
 const {
   canvasSize: linkCanvasSize,
   links: agentLinkPaths,
@@ -450,6 +466,7 @@ const {
 
 
 
+// 尾部聚合阶段节点（PPT / 动画智能体），仅当选中时纳入
 const trailingStageNodes = computed(() => {
   const nodes: DagNodeState[] = []
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
@@ -461,22 +478,28 @@ const trailingStageNodes = computed(() => {
   return nodes
 })
 
+// 聚合阶段节点（别名，指向尾部阶段）
 const aggregationNodes = computed(() => trailingStageNodes.value)
 
+// 是否展示聚合阶段（存在 PPT/动画 智能体时为 true）
 const showAggregationStage = computed(() => aggregationNodes.value.length > 0)
 
+// 资源整合节点状态
 const bundleNode = computed(() => getStageNode(BUNDLE_AGENT_ID))
 
+// 当前选中的 DAG 节点（用于详情浮层展示）
 const selectedDagNode = computed(() => {
   if (!props.selectedDagNodeId) return null
   if (props.selectedDagNodeId === COORDINATOR_AGENT_ID) return getStageNode(COORDINATOR_AGENT_ID)
   return props.dagNodeStates[props.selectedDagNodeId] || getStageNode(props.selectedDagNodeId)
 })
 
+// 当前运行中的智能体数量（排除协调器）
 const runningAgentCount = computed(() => {
   return props.visibleWorkflowNodes.filter(node => node.id !== COORDINATOR_AGENT_ID && node.status === 'running').length
 })
 
+// 顶部摘要文案：优先展示运行中消息，其次全局完成/最新工作流消息
 const dagHeroMessage = computed(() => {
   const running = Object.values(props.dagNodeStates).find(n => n.id !== COORDINATOR_AGENT_ID && n.status === 'running')
   if (running) return running.currentMessage || `${running.label}处理中...`
@@ -486,6 +509,7 @@ const dagHeroMessage = computed(() => {
   return props.latestWorkflowMessage || '多智能体协同生成中'
 })
 
+// 路由步骤数组：教学计划 → 基础资源 → 教学课件 → 资源整合四阶段进度状态
 const routeSteps = computed(() => {
   const planning = getStageNode('planning')
   const coordinator = getStageNode(COORDINATOR_AGENT_ID)
@@ -523,10 +547,13 @@ const routeSteps = computed(() => {
   ]
 })
 
+// 产物输出区需要展示的智能体 ID 列表
 const visibleOutputAgentIds = computed(() => {
   return props.dagSelectedAgentIds
 })
 
+// 工作流日志条目汇总：全局错误 + 各节点最近事件/步骤历史
+// 工作流日志条目汇总：全局错误 + 各节点最近事件/步骤历史
 const workflowLogItems = computed(() => {
   const items: Array<{ id: string; title: string; message: string; status: DagNodeState['status'] }> = []
 
@@ -569,41 +596,7 @@ const workflowLogItems = computed(() => {
   return items
 })
 
-type AgentLiveLog = {
-  id: string
-  eventType?: string
-  phase?: string
-  message: string
-  status?: DagNodeState['status']
-  progress?: number
-  elapsedMs?: number
-  timestamp?: number
-}
-
-function getNodeLiveLogs(node: DagNodeState, limit = 4): AgentLiveLog[] {
-  const richLogs = (node.eventLogs || []) as AgentLiveLog[]
-
-  if (richLogs.length) {
-    return richLogs
-      .filter(log => Boolean(log.message?.trim()))
-      .slice(-limit)
-      .reverse()
-  }
-
-  return (node.stepHistory || [])
-    .filter(Boolean)
-    .slice(-limit)
-    .reverse()
-    .map((message, index) => ({
-      id: `${node.id}-history-${index}-${message}`,
-      message,
-      phase: node.phase,
-      status: node.status,
-      elapsedMs: node.elapsedMs,
-      timestamp: node.lastUpdatedAt,
-    }))
-}
-
+// 将事件阶段英文名翻译为简短中文标签
 function getLogPhaseLabel(phase?: string) {
   const phaseMap: Record<string, string> = {
     planning_blueprint: '规划',
@@ -622,6 +615,7 @@ function getLogPhaseLabel(phase?: string) {
   return phase ? phaseMap[phase] || phase : '状态'
 }
 
+// 安全获取 DAG 节点状态：不存在时返回带默认值的占位节点
 function getStageNode(id: string): DagNodeState {
   return props.dagNodeStates[id] || {
     id,
@@ -636,12 +630,14 @@ function getStageNode(id: string): DagNodeState {
   }
 }
 
+// 判断某智能体是否已生成资源（资源列表或节点成功状态）
 function hasGeneratedResource(type: string) {
   const isReadyInResources = props.generatedResources.some(resource => resource.type === type)
   const isReadyInDag = props.dagNodeStates[type]?.status === 'success'
   return isReadyInResources || isReadyInDag
 }
 
+// 节点状态标签（受阻/跳过/就绪/执行中/就绪待命）
 function getNodeStatusLabel(node: DagNodeState) {
   if (node.status === 'failed') return '受阻'
   if (node.status === 'skipped') return '已跳过'
@@ -650,6 +646,7 @@ function getNodeStatusLabel(node: DagNodeState) {
   return '就绪待命'
 }
 
+// 节点阶段标签：根据节点类型与运行阶段给出中文进度描述
 function getNodeStageLabel(node: DagNodeState) {
   if (node.status === 'success') return node.id === BUNDLE_AGENT_ID ? '整合完成' : '已完成'
   if (node.status === 'failed') return '协作中断'
@@ -670,6 +667,7 @@ function getNodeStageLabel(node: DagNodeState) {
   return '等待上游协同'
 }
 
+// 节点阶段名称（详情面板用）：阶段英文 key 映射为中文短标签
 function getNodePhaseLabel(node: DagNodeState) {
   const phaseMap: Record<string, string> = {
     planning_blueprint: '蓝图构建',
@@ -698,17 +696,14 @@ function getNodePhaseLabel(node: DagNodeState) {
   return '工位状态'
 }
 
+// 节点展示消息：只展示后端发送的消息，无消息时返回空
 function getNodeDisplayMessage(node: DagNodeState) {
-  if (node.status === 'failed') return node.currentMessage || '工位执行受阻，请检查协同日志'
+  if (node.status === 'failed') return node.currentMessage || '执行失败'
   if (node.currentMessage) return node.currentMessage
-  if (node.id === 'planning') return '正在根据学习需求与画像生成教学计划'
-  if (node.id === COORDINATOR_AGENT_ID) return '等待基础资源完成后汇总成功、失败与大纲覆盖情况'
-  if (node.id === PPT_AGENT_ID) return '等待讲义要义就绪以重排宣讲幻灯'
-  if (node.id === CARTOON_AGENT_ID) return '等待基础知识素材就绪后生成同步动画、配音与字幕'
-  if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与聚合结果就绪后打包交付'
-  return getNodeFallbackMessage(node)
+  return ''
 }
 
+// 节点成果状态描述：按智能体类型返回产物就绪/生成中/等待状态文案
 function getNodeArtifactStatus(node: DagNodeState) {
   if (node.id === 'planning') {
     return node.status === 'success' ? '教学计划已生成' : '正在生成教学计划'
@@ -730,6 +725,7 @@ function getNodeArtifactStatus(node: DagNodeState) {
   return hasGeneratedResource(node.id) ? '基础资源已交付' : '工位响应中'
 }
 
+// 节点输入摘要：按智能体类型描述上游输入要素
 function getNodeInputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '学习需求 / 学习场景 / 用户画像 / 已选 Agent'
   if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
@@ -739,6 +735,7 @@ function getNodeInputSummary(node: DagNodeState) {
   return '学习需求 / 用户画像 / 教学计划'
 }
 
+// 节点输出摘要：按智能体类型描述产物格式与生成状态
 function getNodeOutputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '教学计划 / 大纲 / Agent 分工'
   if (node.id === COORDINATOR_AGENT_ID) return '成功失败统计 / 覆盖情况 / 基础资源 handoff'
@@ -749,6 +746,7 @@ function getNodeOutputSummary(node: DagNodeState) {
   return '基础资源生成中 / 等待中'
 }
 
+// 将毫秒耗时格式化为人类可读的 "Xs" / "Xm Ys" 文本
 function formatElapsed(ms?: number | null) {
   if (!ms || ms < 0) return '未开始'
   const seconds = Math.floor(ms / 1000)
@@ -758,6 +756,7 @@ function formatElapsed(ms?: number | null) {
   return `${minutes}m ${rest}s`
 }
 
+// 节点更新时间标签：刚刚/X秒前/X分钟前
 function getNodeTimeLabel(node: DagNodeState) {
   if (node.status === 'waiting') return '等待上游'
   if (!node.lastUpdatedAt) return formatElapsed(node.elapsedMs)
@@ -767,6 +766,7 @@ function getNodeTimeLabel(node: DagNodeState) {
   return `${Math.floor(seconds / 60)}m 前更新`
 }
 
+// 提取节点 metrics 中的前四项指标，格式化为 "key: value" 标签数组
 function getMetricChips(node: DagNodeState) {
   const metrics = node.metrics || {}
   return Object.entries(metrics)

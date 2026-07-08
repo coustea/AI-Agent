@@ -1,10 +1,13 @@
 <template>
+  <!-- 工作流顶部状态栏：标题、阶段进度条与统计卡片 -->
   <header class="stage-topbar stage-topbar-v4">
     <div class="stage-title-area">
+      <!-- 工作流标题与当前提示文案 -->
       <div class="stage-title-copy">
         <h2>资源生成工作流</h2>
         <p>{{ message }}</p>
       </div>
+      <!-- 生成阶段步骤条：遍历步骤并渲染连接线 -->
       <div class="stage-route-progress" aria-label="生成阶段">
         <template v-for="(step, index) in steps" :key="step.key">
           <span class="route-step" :class="step.state">{{ step.label }}</span>
@@ -17,6 +20,7 @@
       </div>
     </div>
 
+    <!-- 右侧统计区：进度、活跃数、已交付数与日志入口 -->
     <div class="stage-stat-group stage-stat-group-v4">
       <div class="stage-stat-card progress-stat-card">
         <span>生成进度</span>
@@ -31,6 +35,7 @@
         <span>已交付资源</span>
         <strong>{{ delivered }}<small> 项</small></strong>
       </div>
+      <!-- 点击打开运行日志抽屉 -->
       <button class="btn btn-outline rounded-full stage-log-btn" type="button" @click="emit('openLogs')">
         运行日志
         <ArrowRight class="h-4 w-4" />
@@ -40,8 +45,10 @@
 </template>
 
 <script setup lang="ts">
+// 引入箭头图标，用于“运行日志”按钮
 import { PhArrowRight as ArrowRight } from '@phosphor-icons/vue'
 
+// 阶段步骤的结构定义：标签与状态样式
 export type RouteStep = {
   key: string
   label: string
@@ -49,6 +56,7 @@ export type RouteStep = {
   lineState: string
 }
 
+// 组件入参：提示文案、进度、活跃/已选/已交付数量、步骤列表
 defineProps<{
   message: string
   progress: number
@@ -58,6 +66,7 @@ defineProps<{
   steps: RouteStep[]
 }>()
 
+// 组件事件：打开运行日志
 const emit = defineEmits<{
   openLogs: []
 }>()

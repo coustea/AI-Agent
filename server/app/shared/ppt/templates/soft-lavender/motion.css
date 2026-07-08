@@ -1,0 +1,19 @@
+[data-step] {
+  opacity: 0;
+  transform: translateY(24px);
+}
+.slide.visible [data-step] {
+  animation: editorial-reveal .58s var(--ease-teach) forwards;
+  animation-delay: calc(var(--step, 0) * 110ms + 80ms);
+}
+.slide[data-animation="focus"].visible .content-stage { animation: editorial-focus .8s var(--ease-teach) both; }
+.slide[data-animation="trace"].visible .step,
+.slide[data-animation="trace"].visible .system-node { animation-name: editorial-trace; }
+.slide[data-animation="compare"].visible .comparison-side:last-child { animation: editorial-compare .72s var(--ease-teach) .45s both; }
+.slide[data-animation="resolve"] .answer-panel { filter: blur(10px); }
+.slide[data-animation="resolve"].visible .answer-panel { animation: editorial-resolve .6s var(--ease-teach) 1.1s both; }
+@keyframes editorial-reveal { to { opacity: 1; transform: translateY(0); } }
+@keyframes editorial-focus { from { transform: scale(.965); } to { transform: scale(1); } }
+@keyframes editorial-trace { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes editorial-compare { from { opacity: .25; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes editorial-resolve { to { filter: blur(0); } }

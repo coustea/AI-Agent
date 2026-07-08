@@ -196,20 +196,21 @@ class RemotionVideoRenderer:
             raise VideoRenderError("video-render project is missing")
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        job_dir = output_dir / f".render-{uuid.uuid4().hex}"
-        job_dir.mkdir(parents=True)
 
         # Remotion render.ts 使用 build/cached_bundle/ 作为 serve 根目录
         # （缓存复用模式），音频资源必须放到 bundle 目录下才能被 serve 到。
-        bundle_dir = self.remotion_dir / "build" / "cached_bundle"
-        public_asset_dir = (
-            bundle_dir / "public" / "render-assets" / job_dir.name
-        )
-        public_asset_dir.mkdir(parents=True)
+        #
+        # 架构：renderer.py 写 audio manifest（清单），render.ts 在 bundle 就绪后
+        # 再复制音频到 bundle/public/。这从根本上避免了 render.ts 的
+        # fs.rmSync(cached_bundle) 清除已暂存音频的竞态条件。
+        job_dir = output_dir / f".render-{uuid.uuid4().hex}"
+        job_dir.mkdir(parents=True)
         plan_path = job_dir / "video-plan.json"
+        manifest_path = job_dir / "audio-manifest.json"
         temporary_output = job_dir / "output.mp4"
         final_output = output_dir / "video.mp4"
         render_payload = plan.model_dump(mode="json")
+        audio_manifest: list[dict[str, str]] = []
         for scene in render_payload["scenes"]:
             audio_src = str(scene["audio_src"])
             if not audio_src.startswith("/static/"):
@@ -226,10 +227,14 @@ class RemotionVideoRenderer:
             if not source_audio.is_file():
                 raise VideoRenderError(f"scene audio is missing: {source_audio}")
             staged_name = f"{scene['index']:02d}-{source_audio.name}"
-            shutil.copy2(source_audio, public_asset_dir / staged_name)
-            scene["audio_src"] = (
-                f"/render-assets/{job_dir.name}/{staged_name}"
-            )
+            # dest 是相对于 bundle public/ 的路径，render.ts 会复制到该位置
+            dest = f"render-assets/{job_dir.name}/{staged_name}"
+            audio_manifest.append({"src": str(source_audio), "dest": dest})
+            scene["audio_src"] = f"/render-assets/{job_dir.name}/{staged_name}"
+        manifest_path.write_text(
+            json.dumps(audio_manifest, ensure_ascii=False),
+            encoding="utf-8",
+        )
         plan_path.write_text(
             json.dumps(render_payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -255,6 +260,8 @@ class RemotionVideoRenderer:
             self.chromium_gl,
             "--concurrency",
             str(self.concurrency),
+            "--audio-manifest",
+            str(manifest_path),
         ]
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
@@ -289,7 +296,6 @@ class RemotionVideoRenderer:
             ) from exc
         finally:
             shutil.rmtree(job_dir, ignore_errors=True)
-            shutil.rmtree(public_asset_dir, ignore_errors=True)
 
         relative = final_output.resolve().relative_to(WORKPLACE_DIR.resolve())
         return VideoArtifact(

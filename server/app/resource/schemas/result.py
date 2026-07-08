@@ -1,13 +1,13 @@
 """Agent 运行时输入/输出模型。
 
 - AgentResult     — 统一的 Agent 输出结果（成功/失败、内容、元数据）
-- ResourceInput   — standalone 多智能体资源生成输入
+- ResourceInput   — 多智能体资源生成输入
 - NodeInput       — 路径规划节点资源生成输入
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,7 +16,7 @@ from app.resource.schemas.request import LearningScenario
 
 
 class AgentResult(BaseModel):
-    """统一 Agent 输出结果，用于 standalone resource 和 path node resource。"""
+    """统一 Agent 输出结果，用于多智能体资源和路径规划节点资源。"""
     model_config = ConfigDict(extra="forbid")
 
     success: bool = True
@@ -30,7 +30,7 @@ class AgentResult(BaseModel):
 
 
 class ResourceInput(BaseModel):
-    """standalone 多智能体资源生成输入。"""
+    """多智能体资源生成输入。"""
     model_config = ConfigDict(extra="forbid")
 
     resource_id: int | None = None

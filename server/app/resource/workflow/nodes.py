@@ -30,10 +30,9 @@ from app.resource.schemas import (
     DownstreamContext,
     ResourceInput,
     ResourcePlan,
-    PlanValidationError,
     validate_resource_plan,
 )
-from app.resource.workflow.state import ParentState, WorkerInputState, AgentFailure
+from app.resource.workflow.state import ParentState
 from app.resource.service import (
     AGGREGATION_AGENT_IDS,
     BASE_RESOURCE_AGENT_IDS,
@@ -84,6 +83,7 @@ def build_agent_resource_input(
     teaching_plan: str | None,
     profile: dict[str, Any],
     upstream_handoffs: dict[str, DownstreamContext],
+    username: str = "",
 ) -> ResourceInput:
     """为指定 agent 构建 ResourceInput 输入。"""
     agent_config = dict(agent_configs.get(agent_id, {}))
@@ -91,6 +91,7 @@ def build_agent_resource_input(
     return ResourceInput(
         resource_id=resource_id,
         user_id=user_id,
+        username=username,
         learning_need=learning_need,
         learning_scenario=learning_scenario,
         agent_name=agent_id,
@@ -135,8 +136,8 @@ async def get_handoffs(
     return handoffs
 
 
-def _extract_state_data(state: ParentState) -> tuple[str, str, dict[str, Any], dict[str, Any], str | None]:
-    """从 state 提取通用数据：learning_need, learning_scenario, agent_configs, profile, teaching_plan。"""
+def _extract_state_data(state: ParentState) -> tuple[str, str, dict[str, Any], dict[str, Any], str | None, str]:
+    """从 state 提取通用数据：learning_need, learning_scenario, agent_configs, profile, teaching_plan, username。"""
     request_data: dict[str, Any] = state.get("request_data") or {}
     profile: dict[str, Any] = state.get("profile") or {}
     teaching_plan: str | None = state.get("teaching_plan") or None
@@ -144,8 +145,9 @@ def _extract_state_data(state: ParentState) -> tuple[str, str, dict[str, Any], d
     learning_need = request_data.get("learning_need", "")
     learning_scenario = request_data.get("learning_scenario", "self_study")
     agent_configs = request_data.get("agent_configs", {})
+    username = str(request_data.get("username", ""))
 
-    return learning_need, learning_scenario, agent_configs, profile, teaching_plan
+    return learning_need, learning_scenario, agent_configs, profile, teaching_plan, username
 
 
 # ── Planning node ──────────────────────────────────────────────────────
@@ -162,7 +164,7 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
     resource_id = state["resource_id"]
 
     selected_agents: list[str] = state.get("selected_agents") or []
-    learning_need, learning_scenario, agent_configs, profile, _ = _extract_state_data(state)
+    learning_need, learning_scenario, agent_configs, profile, _, username = _extract_state_data(state)
 
     # 提取基础 Agent IDs
     enabled_base_agents = [
@@ -179,7 +181,7 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
         learning_scenario=learning_scenario,
         profile=profile,
         agent_config={"enabled_agents": enabled_base_agents, "agent_configs": agent_configs},
-        username=str(state.get("request_data", {}).get("username", "")),
+        username=username,
     )
 
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
@@ -316,7 +318,7 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
     resource_id = state["resource_id"]
     selected_agents = state.get("selected_agents") or []
 
-    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
+    learning_need, learning_scenario, agent_configs, profile, teaching_plan, username = _extract_state_data(state)
 
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
@@ -329,6 +331,7 @@ async def worker_node(state: ParentState) -> dict[str, Any]:
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs={},
+        username=username,
     )
 
     return await execute_resource_agent(
@@ -437,11 +440,22 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
 
 
 def route_after_merge(state: ParentState) -> list[str]:
-    """路由到聚合 Agent（PPT/Video）或直接保存。
+    """路由到聚合 Agent（PPT/Video/Cartoon）或直接保存。
 
     同步函数，从 state 读取 selected_agents。
+    如果选择了基础 Agent 但全部失败，跳过聚合 Agent 直接保存。
     """
     selected_agents = state.get("selected_agents") or []
+    results = state.get("results") or {}
+
+    # 如果选择了基础 Agent，但基础 Agent 全部失败，则不要继续生成聚合资源
+    selected_base_agents = [
+        aid for aid in selected_agents
+        if aid in BASE_RESOURCE_AGENT_IDS
+    ]
+    if selected_base_agents and not any(aid in results for aid in selected_base_agents):
+        return ["save_node"]
+
     destinations: list[str] = []
     if PPT_AGENT_ID in selected_agents:
         destinations.append("ppt_node")
@@ -455,32 +469,26 @@ def route_after_merge(state: ParentState) -> list[str]:
 # ── Aggregation nodes (PPT, Video) ────────────────────────────────────
 
 
-async def ppt_node(state: ParentState) -> dict[str, Any]:
-    """PPT 聚合节点 — 调用独立课件生成器并保存其发布引用。"""
+async def _aggregation_node(state: ParentState, agent_id: str) -> dict[str, Any]:
+    """聚合节点（PPT/Video/Cartoon）— 取基础资源交接并调用对应 Agent 生成。
+
+    三者逻辑完全一致，仅目标 agent_id 不同。
+    """
     user_id = state["user_id"]
     resource_id = state["resource_id"]
-    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
-    logger.info("PPT 聚合节点开始: resource_id=%s", resource_id)
-
-    await events.send(
-        PPT_AGENT_ID,
-        "running",
-        "正在生成 PPT",
-        80,
-    )
+    logger.info("%s 聚合节点开始: resource_id=%s", agent_id.upper(), resource_id)
 
     selected_agents = state.get("selected_agents") or []
-    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
+    learning_need, learning_scenario, agent_configs, profile, teaching_plan, username = _extract_state_data(state)
 
     base_handoffs = await get_handoffs(
         resource_id=resource_id,
         user_id=user_id,
     )
-
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
         user_id=user_id,
-        agent_id=PPT_AGENT_ID,
+        agent_id=agent_id,
         learning_need=learning_need,
         learning_scenario=learning_scenario,
         selected_agents=selected_agents,
@@ -488,111 +496,42 @@ async def ppt_node(state: ParentState) -> dict[str, Any]:
         teaching_plan=teaching_plan,
         profile=profile,
         upstream_handoffs=base_handoffs,
+        username=username,
     )
 
     return await execute_resource_agent(
         user_id=user_id,
         resource_id=resource_id,
-        agent_id=PPT_AGENT_ID,
+        agent_id=agent_id,
         input_data=resource_input,
     )
+
+
+async def ppt_node(state: ParentState) -> dict[str, Any]:
+    """PPT 聚合节点 — 调用独立课件生成器并保存其发布引用。"""
+    return await _aggregation_node(state, PPT_AGENT_ID)
 
 
 async def video_node(state: ParentState) -> dict[str, Any]:
     """Video 聚合节点 — 基于已保存的基础资源生成最终 MP4。"""
-    user_id = state["user_id"]
-    resource_id = state["resource_id"]
-    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
-    logger.info("Video 聚合节点开始: resource_id=%s", resource_id)
-
-    await events.send(
-        VIDEO_AGENT_ID,
-        "running",
-        "正在生成讲解视频",
-        80,
-    )
-
-    selected_agents = state.get("selected_agents") or []
-    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
-
-    base_handoffs = await get_handoffs(
-        resource_id=resource_id,
-        user_id=user_id,
-    )
-    resource_input = build_agent_resource_input(
-        resource_id=resource_id,
-        user_id=user_id,
-        agent_id=VIDEO_AGENT_ID,
-        learning_need=learning_need,
-        learning_scenario=learning_scenario,
-        selected_agents=selected_agents,
-        agent_configs=agent_configs,
-        teaching_plan=teaching_plan,
-        profile=profile,
-        upstream_handoffs=base_handoffs,
-    )
-
-    return await execute_resource_agent(
-        user_id=user_id,
-        resource_id=resource_id,
-        agent_id=VIDEO_AGENT_ID,
-        input_data=resource_input,
-    )
+    return await _aggregation_node(state, VIDEO_AGENT_ID)
 
 
 async def cartoon_node(state: ParentState) -> dict[str, Any]:
     """Cartoon 聚合节点 — 基于基础资源生成带配音与字幕的动画讲解 MP4。"""
-    user_id = state["user_id"]
-    resource_id = state["resource_id"]
-    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
-    logger.info("Cartoon 聚合节点开始: resource_id=%s", resource_id)
-
-    await events.send(
-        CARTOON_AGENT_ID,
-        "running",
-        "正在规划动画分镜与讲解节奏",
-        72,
-    )
-
-    request_data: dict[str, Any] = state.get("request_data") or {}
-    selected_agents = state.get("selected_agents") or []
-    learning_need, learning_scenario, agent_configs, profile, teaching_plan = _extract_state_data(state)
-
-    base_handoffs = await get_handoffs(
-        resource_id=resource_id,
-        user_id=user_id,
-    )
-    resource_input = build_agent_resource_input(
-        resource_id=resource_id,
-        user_id=user_id,
-        agent_id=CARTOON_AGENT_ID,
-        learning_need=learning_need,
-        learning_scenario=learning_scenario,
-        selected_agents=selected_agents,
-        agent_configs=agent_configs,
-        teaching_plan=teaching_plan,
-        profile=profile,
-        upstream_handoffs=base_handoffs,
-    )
-    resource_input.username = str(request_data.get("username", ""))
-
-    return await execute_resource_agent(
-        user_id=user_id,
-        resource_id=resource_id,
-        agent_id=CARTOON_AGENT_ID,
-        input_data=resource_input,
-    )
+    return await _aggregation_node(state, CARTOON_AGENT_ID)
 
 
 # ── Merge aggregation barrier ──────────────────────────────────────────
 
 
 async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
-    """聚合 Barrier 节点 — 等待 PPT/Video Agent 完成后再保存。"""
+    """聚合 Barrier 节点 — 等待 PPT/Video/Cartoon Agent 完成后汇总结果。"""
     user_id = state["user_id"]
     resource_id = state["resource_id"]
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
 
+    started = time.perf_counter()
     results = state.get("results") or {}
     failures = state.get("failures") or {}
     agg_results = {aid: r for aid, r in results.items() if aid in AGGREGATION_AGENT_IDS}
@@ -603,11 +542,25 @@ async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
         "聚合合并节点: resource_id=%s success=%d failed=%d",
         resource_id, success_count, fail_count,
     )
+    message = (
+        f"聚合资源已就绪：成功 {success_count} 个"
+        + (f"，失败 {fail_count} 个" if fail_count else "")
+        + "，开始组装资源包"
+    )
+    async with session_scope() as session:
+        service = ResourceService(session)
+        await service.upsert_agent_run(
+            resource_id=resource_id,
+            agent_id=BUNDLE_AGENT_ID,
+            status="running",
+            error_message=f"失败 {fail_count} 个" if fail_count else None,
+        )
     await events.send(
         BUNDLE_AGENT_ID,
         "running",
-        f"聚合资源生成完成：成功 {success_count} 个，失败 {fail_count} 个",
+        message,
         90,
+        data={"phase": "aggregation_ready", "success_count": success_count, "fail_count": fail_count},
     )
     return {}
 

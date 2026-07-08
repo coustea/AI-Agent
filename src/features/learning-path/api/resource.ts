@@ -13,6 +13,8 @@ export interface PathGeneratedResourceItem {
   resource_type: string | null
   resource_types: string[]
   status: string
+  error_message: string | null
+  summary: string | null
   created_at: string | null
   updated_at: string | null
 }

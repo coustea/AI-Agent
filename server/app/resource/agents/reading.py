@@ -65,13 +65,11 @@ class ReadingAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
-        result = await self._generate_reading(
+        return await self._generate_reading(
             input_text=input_text,
             title_prefix=input_data.learning_need[:32],
             config=input_data.agent_config,
         )
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
-        return result
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         parts = build_node_context(input_data)
@@ -83,7 +81,6 @@ class ReadingAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
-        await self.emitter.send(self.agent_id, "completed" if result.success else "failed", result.summary if result.success else (result.error or f"{self.agent_name}生成失败"), 100 if result.success else 0)
         return result
 
     async def _generate_reading(
@@ -175,9 +172,17 @@ class ReadingAgent(BaseResourceAgent):
                 60 if not is_retry else 70,
             )
             llm_started = time.perf_counter()
-            result = await self.llm.ainvoke_json(
-                ReadingPayload,
-                f"{prompt}\n\n{enhanced_input}",
+            result = await self.run_with_heartbeat(
+                self.llm.ainvoke_json(
+                    ReadingPayload,
+                    f"{prompt}\n\n{enhanced_input}",
+                ),
+                messages=[
+                    "正在提炼拓展阅读推荐...",
+                    "正在补充资源使用建议...",
+                ],
+                interval_seconds=12.0,
+                progress=70 if not is_retry else 80,
             )
             attempt_resources = result.resources
             llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
@@ -373,12 +378,12 @@ class ReadingAgent(BaseResourceAgent):
         max_items = config.get("max_items", 5)
         min_items = max(2, max_items // 2)
         coverage = config.get("coverage", "extended")
-        parts.append(f"\n**重要要求**：")
+        parts.append("\n**重要要求**：")
         parts.append(f"1. 必须生成至少 {min_items} 条阅读资源")
-        parts.append(f"2. 每条资源的 URL 必须来自上面的搜索结果（真实 URL）")
-        parts.append(f"3. 不要虚构或生成假的 URL")
-        parts.append(f"4. 资源类型要多样化：书籍、论文、文章、文档、实践项目等")
-        parts.append(f"5. 每条资源必须包含可点击跳转的完整 http/https URL")
+        parts.append("2. 每条资源的 URL 必须来自上面的搜索结果（真实 URL）")
+        parts.append("3. 不要虚构或生成假的 URL")
+        parts.append("4. 资源类型要多样化：书籍、论文、文章、文档、实践项目等")
+        parts.append("5. 每条资源必须包含可点击跳转的完整 http/https URL")
         parts.append(
             f"6. 【严禁】resources 为空数组 []。"
             f"你必须生成至少 {min_items} 条阅读资源，缺少任何一条都是错误。"

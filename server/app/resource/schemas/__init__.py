@@ -2,7 +2,6 @@
 
 # ── Meta ──────────────────────────────────────────────────────────────────
 from app.resource.schemas.meta import (
-    AGENT_DEFAULT_ENABLED,
     AGENT_DEFAULT_ORDER,
     AGENT_META,
 )
@@ -11,17 +10,7 @@ from app.resource.schemas.meta import (
 from app.resource.schemas.request import (
     AgentConfigs,
     AgentSelection,
-    CartoonConfig,
-    CodeConfig,
-    ContentConfig,
-    DEFAULT_SELECTED_AGENT_IDS,
-    LearningScenario,
-    MindmapConfig,
-    QuizConfig,
-    ReadingConfig,
-    ResourceAgentId,
     ResourceGenerationRequest,
-    VideoConfig,
 )
 
 # ── Plan ──────────────────────────────────────────────────────────────────
@@ -51,10 +40,11 @@ __all__ = [
     # Constants
     "AGENT_META",
     "AGENT_DEFAULT_ORDER",
-    "AGENT_DEFAULT_ENABLED",
     # Request models
     "ResourceGenerationRequest",
     "SingleResourceRequest",
+    "AgentConfigs",
+    "AgentSelection",
     # Planning
     "ResourcePlan",
     "PlanValidationError",

@@ -1,5 +1,7 @@
 <template>
+  <!-- 已交付资源停靠区：仅展示已完成并可预览的资源 -->
   <section class="output-dock-section output-dock-section-v4">
+    <!-- 区块标题与说明文案 -->
     <div class="output-dock-heading">
       <div>
         <span>READY RESOURCES</span>
@@ -8,7 +10,9 @@
       <p>这里仅展示已经完成并可预览的资源，不改变主流水线的阅读顺序。</p>
     </div>
 
+    <!-- 各智能体产出资源的按钮列表 -->
     <div class="output-dock-list">
+      <!-- 遍历智能体 id，根据就绪/执行中状态切换样式，点击就绪项打开预览 -->
       <button
         v-for="agentId in agentIds"
         :key="agentId"
@@ -21,11 +25,13 @@
         :disabled="!isReady(agentId)"
         @click="isReady(agentId) && emit('open', agentId)"
       >
+        <!-- 智能体类型对应的图标 -->
         <span class="output-icon"><component :is="getIcon(agentId)" class="h-4 w-4" /></span>
         <span class="output-copy">
           <strong>{{ getArtifactLabel(agentId) }}</strong>
           <small>{{ getAgentOutputFormat(agentId) }}</small>
         </span>
+        <!-- 右侧状态文案：已就绪/执行中/待命 -->
         <em class="output-status">
           <template v-if="isReady(agentId)">刚刚完成 ▶</template>
           <template v-else-if="isRunning(agentId)">执行中<span class="loading-dots">...</span></template>
@@ -37,7 +43,9 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 的组件类型，用于图标映射表
 import type { Component } from 'vue'
+// 引入各产出类型对应的 Phosphor 图标
 import {
   PhChartBar as SlidesIcon,
   PhCpu as CodeIcon,
@@ -47,11 +55,15 @@ import {
   PhBookOpen as ReadingIcon,
   PhShareNetwork as MindMapIcon,
 } from '@phosphor-icons/vue'
+// 引入智能体标识与 DAG 节点状态类型
 import type { ResourceAgentId } from '../../model/resource'
 import type { DagNodeState } from '../../model/catalog'
+// 引入产出格式描述工具函数
 import { getAgentOutputFormat } from '../../model/catalog'
+// 引入共享的内容类型标签工具
 import { getArtifactLabel } from '@/shared/content/kind'
 
+// 组件入参：智能体列表、已生成类型、各节点状态、最近完成 id
 const props = defineProps<{
   agentIds: ResourceAgentId[]
   generatedTypes: string[]
@@ -59,10 +71,12 @@ const props = defineProps<{
   latestId: string | null
 }>()
 
+// 组件事件：打开某类型资源的预览
 const emit = defineEmits<{
   open: [type: string]
 }>()
 
+// 智能体 id 到图标组件的映射表
 const icons: Record<string, Component> = {
   content: ArticleIcon,
   mindmap: MindMapIcon,
@@ -73,14 +87,17 @@ const icons: Record<string, Component> = {
   cartoon: VideoIcon,
 }
 
+// 根据智能体 id 返回对应图标，缺省回退到文章图标
 function getIcon(id: string) {
   return icons[id] || ArticleIcon
 }
 
+// 判断某智能体产出是否已就绪：已生成或节点状态为成功
 function isReady(id: string) {
   return props.generatedTypes.includes(id) || props.nodeStates[id]?.status === 'success'
 }
 
+// 判断某智能体是否正在执行中
 function isRunning(id: string) {
   return props.nodeStates[id]?.status === 'running'
 }

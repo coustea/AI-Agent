@@ -111,7 +111,7 @@ class VideoAgent(BaseResourceAgent):
         self.video_agent = video_agent or SharedVideoAgent()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        username = input_data.username or "anonymous"
+        username = input_data.username
         output_dir = user_resource_video_dir(username, str(input_data.resource_id or uuid.uuid4().hex))
         request = VideoRequest(
             topic=input_data.learning_need,
@@ -129,7 +129,7 @@ class VideoAgent(BaseResourceAgent):
         return await self._generate(request)
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        username = input_data.username or "anonymous"
+        username = input_data.username
         request = VideoRequest(
             topic=input_data.node_title,
             audience=_profile_text(input_data.profile),
@@ -177,18 +177,21 @@ class VideoAgent(BaseResourceAgent):
         self.video_agent = video_agent
 
         try:
-            artifact = await self.video_agent.generate(request)
+            artifact = await self.run_with_heartbeat(
+                self.video_agent.generate(request),
+                messages=[
+                    "正在规划讲解视频脚本...",
+                    "正在生成视频分镜与素材...",
+                    "正在渲染讲解视频，请稍候...",
+                ],
+                interval_seconds=15.0,
+                progress=70,
+            )
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.error(
                 "Agent[%s] 生成失败: error=%s elapsed_ms=%d",
                 self.agent_id, exc, elapsed_ms, exc_info=True,
-            )
-            await self.emitter.send(
-                self.agent_id,
-                "failed",
-                f"讲解视频生成失败: {exc}",
-                0,
             )
             return AgentResult(
                 success=False,
@@ -213,12 +216,6 @@ class VideoAgent(BaseResourceAgent):
                 "style": artifact.plan.style.id,
             },
             ensure_ascii=False,
-        )
-        await self.emitter.send(
-            self.agent_id,
-            "completed",
-            "讲解视频已完成",
-            100,
         )
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         logger.info(

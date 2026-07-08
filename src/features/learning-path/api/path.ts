@@ -30,20 +30,16 @@ export function createLearningPath(payload: PathRequest) {
   return http.post<ApiResponse<CreatePathResponse>>('/ai/path-plan', payload)
 }
 
-export function getCurrentLearningPath(module = 'mentor') {
-  return http.get<ApiResponse<PathOverview | null>>('/ai/path-plan/active', {
-    params: { module },
-  })
+export function getCurrentLearningPath() {
+  return http.get<ApiResponse<PathOverview | null>>('/ai/path-plan/active')
 }
 
 export function getLearningPathById(pathId: number) {
   return http.get<ApiResponse<PathOverview>>(`/ai/path-plan/${pathId}`)
 }
 
-export function getLearningPathHistory(module = 'mentor') {
-  return http.get<ApiResponse<LearningPathHistoryItem[]>>('/ai/path-plan/history', {
-    params: { module },
-  })
+export function getLearningPathHistory() {
+  return http.get<ApiResponse<LearningPathHistoryItem[]>>('/ai/path-plan/history')
 }
 
 export function activateLearningPath(pathId: number) {

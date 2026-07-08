@@ -168,6 +168,7 @@ import codeCover     from '@/features/resource/assets/result-covers/web-develope
 import readingCover  from '@/features/resource/assets/result-covers/open-book.svg'
 import pptCover      from '@/features/resource/assets/result-covers/presentation.svg'
 import cartoonCover  from '@/features/resource/assets/result-covers/video-tutorial.svg'
+import videoCover    from '@/features/resource/assets/result-covers/video-tutorial.svg'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type ResourceCard = {
@@ -222,7 +223,7 @@ const isPartial     = computed(() => bundle.value?.status === 'partial_completed
 const createdAt     = computed(() => formatTime(bundle.value?.created_at || null))
 
 // ── Resource card normalization ───────────────────────────────────────────────
-const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'cartoon']
+const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'cartoon', 'video']
 const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
 
 const rawResources = computed<any[]>(() => {
@@ -295,13 +296,14 @@ function getDefaultSummary(type: string) {
     reading: '补充可靠的课程资料与延伸阅读，便于继续深入学习。',
     ppt:     '整合基础资源形成结构化教学课件，适合快速复习和演示。',
     cartoon: '通过知识图形、同步动画、配音和字幕讲清概念与执行过程。',
+    video:   '基于基础资源生成讲解视频，以场景叙事方式呈现核心知识。',
   })[type] ?? '根据本次学习需求生成的个性化学习资源。'
 }
 
 function getFormat(r: any, type: string) {
   const raw = r.format || r.file_type || r.fileType
   if (typeof raw === 'string' && raw.trim()) return raw.trim().toUpperCase()
-  return ({ content: 'MARKDOWN', mindmap: 'MARKMAP', quiz: 'JSON', code: 'CODE', reading: 'LINKS', ppt: 'SLIDES', cartoon: 'MP4' })[type] ?? 'RESOURCE'
+  return ({ content: 'MARKDOWN', mindmap: 'MARKMAP', quiz: 'JSON', code: 'CODE', reading: 'LINKS', ppt: 'SLIDES', cartoon: 'MP4', video: 'MP4' })[type] ?? 'RESOURCE'
 }
 
 function getHighlights(metadata: any, metrics: any): string[] {
@@ -331,11 +333,11 @@ function isPlainObj(v: unknown): v is Record<string, any> {
 // ── Cover / icon / label helpers ──────────────────────────────────────────────
 const coverMap: Record<string, string> = {
   content: contentCover, mindmap: mindmapCover, quiz: quizCover,
-  code: codeCover, reading: readingCover, ppt: pptCover, cartoon: cartoonCover,
+  code: codeCover, reading: readingCover, ppt: pptCover, cartoon: cartoonCover, video: videoCover,
 }
 function getCoverImage(type: string) { return coverMap[type] ?? contentCover }
 function getIcon(type: string) {
-  return ({ content: '📘', mindmap: '🧠', quiz: '✅', code: '💻', reading: '📚', ppt: '📊', cartoon: '🎬' })[type] ?? '✨'
+  return ({ content: '📘', mindmap: '🧠', quiz: '✅', code: '💻', reading: '📚', ppt: '📊', cartoon: '🎬', video: '🎥' })[type] ?? '✨'
 }
 function getLabel(type: string) { return getArtifactLabel(type) }
 

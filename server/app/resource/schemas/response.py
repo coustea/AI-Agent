@@ -5,11 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from uuid import uuid4
 
 from app.resource.schemas.request import ResourceAgentId
-from app.resource.schemas.result import AgentResult
 
 
 class GeneratedResourceItem(BaseModel):
@@ -54,11 +53,30 @@ class ResourceBundle(BaseModel):
 
 
 class SingleResourceRequest(BaseModel):
-    """单智能体资源生成请求（路径规划 / 即调即用）。"""
+    """单智能体资源生成请求（路径规划 / 即调即用）。
+
+    PPT/Cartoon 是聚合 Agent，在多智能体模式下依赖上游素材；
+    但在单智能体模式下可直接调用，走路径规划的 generate_node 逻辑，
+    只需要传入知识点和教程即可生成，保存到 paths/ 路径下。
+    """
     model_config = ConfigDict(extra="forbid")
 
     agent_id: ResourceAgentId
     learning_need: str
+
+    # ── PPT/Cartoon 单独调用所需字段 ──────────────────────────────────
+    knowledge_points: list[str] = Field(
+        default_factory=list,
+        description="知识点列表 — PPT/Cartoon 单独调用时必填",
+    )
+    tutorial_markdown: str = Field(
+        default="",
+        description="教程 Markdown 内容 — PPT/Cartoon 单独调用时必填",
+    )
+    tutorial_title: str = Field(
+        default="",
+        description="教程标题 — PPT/Cartoon 单独调用时选填，默认取 learning_need",
+    )
 
     @field_validator("learning_need")
     @classmethod
@@ -70,7 +88,18 @@ class SingleResourceRequest(BaseModel):
 
     @field_validator("agent_id")
     @classmethod
-    def reject_aggregation_agent(cls, value: ResourceAgentId) -> ResourceAgentId:
-        if value in {ResourceAgentId.PPT, ResourceAgentId.VIDEO, ResourceAgentId.CARTOON}:
-            raise ValueError("PPT/Video/Cartoon 是聚合 Agent，不能作为单智能体任务运行")
+    def validate_aggregation_agent(cls, value: ResourceAgentId) -> ResourceAgentId:
+        """PPT/Cartoon 单独调用时必须提供知识点和教程；Video 仍不支持单独调用。"""
+        if value == ResourceAgentId.VIDEO:
+            raise ValueError("Video Agent 不支持单独调用")
         return value
+
+    @model_validator(mode="after")
+    def validate_path_node_fields(self) -> "SingleResourceRequest":
+        """PPT/Cartoon 单独调用时，knowledge_points 和 tutorial_markdown 必填。"""
+        if self.agent_id in {ResourceAgentId.PPT, ResourceAgentId.CARTOON}:
+            if not self.knowledge_points:
+                raise ValueError("PPT/Cartoon 单独调用时必须提供 knowledge_points")
+            if not self.tutorial_markdown.strip():
+                raise ValueError("PPT/Cartoon 单独调用时必须提供 tutorial_markdown")
+        return self

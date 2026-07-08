@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from typing import Any, Annotated, Literal, TypedDict
 
-from app.resource.schemas import AgentResult
-
 
 def merge_results_dict(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any]:
     """合并两个 Agent 结果字典（LangGraph Send 并行后的归约器）。"""
@@ -37,7 +35,7 @@ def merge_failures_dict(left: dict[str, "AgentFailure"] | None, right: dict[str,
 class AgentFailure(TypedDict):
     """Agent 执行失败记录。"""
     agent_id: str
-    stage: Literal["generation", "validation", "persistence"]
+    stage: Literal["generation", "validation", "persistence", "timeout"]
     error_type: str
     message: str
 

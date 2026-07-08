@@ -56,7 +56,9 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 计算属性
 import { computed } from 'vue'
+// 引入预览面板所需的 Phosphor 图标
 import {
   PhGear,
   PhSparkle,
@@ -70,8 +72,10 @@ import {
   PhPresentationChart as Presentation,
   PhShareNetwork as ShareNetwork,
 } from '@phosphor-icons/vue'
+// 引入智能体标识类型与配置联合类型
 import type { ResourceAgentId } from '../../model/resource'
 import type { AnyAgentConfigs } from '../../model/catalog'
+// 引入各智能体对应的内容预览子组件
 import Doc      from './preview/Doc.vue'
 import MapView  from './preview/Map.vue'
 import CodeView from './preview/Code.vue'
@@ -80,6 +84,7 @@ import Read     from './preview/Read.vue'
 import Slide    from './preview/Slide.vue'
 import Video    from './preview/Video.vue'
 
+// 组件入参：当前激活智能体、配置、是否启用、自然语言输入
 const props = defineProps<{
   activeId: ResourceAgentId
   configs: AnyAgentConfigs
@@ -87,13 +92,15 @@ const props = defineProps<{
   naturalInput?: string
 }>()
 
+// 预览主题：优先使用用户输入，缺省为示例主题
 const topic = computed(() =>
   props.naturalInput?.trim() || '零基础学习 Python 多线程：底层原理与代码实践'
 )
 
+// 当前激活智能体的配置对象
 const activeConfig = computed(() => props.configs[props.activeId])
 
-// Agent metadata
+// 根据激活智能体返回对应的名称、图标与预览子组件
 const agentMeta = computed(() => ({
   content:  { name: '课程讲解文档',  icon: FileText,     view: Doc      },
   mindmap:  { name: '知识思维导图',  icon: ShareNetwork,  view: MapView  },
@@ -105,7 +112,7 @@ const agentMeta = computed(() => ({
   video:    { name: '讲解视频',      icon: VideoCamera,   view: Video    },
 })[props.activeId])
 
-// ── Impact lines ──────────────────────────────────────────────────────────────
+// 根据当前智能体配置生成“当前参数将影响”的中文说明列表
 const impactLines = computed((): string[] => {
   const id = props.activeId
   const c  = props.configs

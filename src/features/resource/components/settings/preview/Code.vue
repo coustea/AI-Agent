@@ -1,12 +1,15 @@
 <template>
+  <!-- 代码实操预览：展示文件名标签与一段示例代码 -->
   <div class="code">
     <header>
+      <!-- 文件标签与输出风格说明 -->
       <div class="tabs">
         <span class="tab active">{{ filename }}</span>
         <span class="tab">输出</span>
       </div>
       <small>{{ outputStyle }} · {{ focus }}</small>
     </header>
+    <!-- 示例代码正文 -->
     <pre><code><i># {{ topic }}</i>
 <b>{{ keyword }}</b> <em>learn_step</em>(concept):
     <b>if</b> <em>understood</em>(concept):
@@ -14,6 +17,7 @@
 
     example = <em>build_example</em>(concept)
     <b>return</b> <em>explain</em>(example)</code></pre>
+    <!-- 运行输出占位 -->
     <footer>
       <small>OUTPUT</small>
       <p>✓ 示例运行完成，下一步将逐行解释关键逻辑</p>
@@ -22,12 +26,19 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 计算属性
 import { computed } from 'vue'
+// 引入各智能体配置联合类型
 import type { AnyAgentConfigs } from '../../../model/catalog'
+// 组件入参：代码智能体配置与主题
 const props = defineProps<{ config: AnyAgentConfigs['code']; topic: string }>()
+// 根据编程语言推导文件名后缀
 const filename = computed(() => `practice.${({ python: 'py', c: 'c', cpp: 'cpp', java: 'java', go: 'go', javascript: 'js', typescript: 'ts' })[props.config.programming_language]}`)
+// 根据语言选择函数定义关键字
 const keyword = computed(() => props.config.programming_language === 'python' ? 'def' : 'function')
+// 输出风格中文标签
 const outputStyle = computed(() => ({ tutorial: '教学演示', reference: '参考实现', challenge: '挑战练习' })[props.config.output_style])
+// 关注点中文标签
 const focus = computed(() => ({ syntax: '语法讲解', application: '工程应用', debugging: '调试分析' })[props.config.focus])
 </script>
 

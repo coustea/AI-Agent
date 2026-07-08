@@ -26,6 +26,7 @@ function parseArgs(): {
   output: string;
   gl: "angle" | "swiftshader" | "egl";
   concurrency: number;
+  audioManifest?: string;
   remote?: string;
 } {
   const args = process.argv.slice(2);
@@ -34,6 +35,7 @@ function parseArgs(): {
     output: "",
     gl: "angle" as "angle" | "swiftshader" | "egl",
     concurrency: 4,
+    audioManifest: undefined as string | undefined,
     remote: undefined as string | undefined,
   };
 
@@ -50,6 +52,11 @@ function parseArgs(): {
         break;
       case "--concurrency":
         result.concurrency = parseInt(args[++i], 10);
+        break;
+      case "--audio-manifest":
+        // JSON 清单 [{src, dest}]：src=绝对路径音频文件，dest=相对 public/ 的目标路径。
+        // 由 renderer.py 提供；本脚本在 bundle 就绪后复制，避免 bundle 重建时被 fs.rmSync 清除。
+        result.audioManifest = args[++i];
         break;
       case "--remote":
         result.remote = args[++i];
@@ -160,6 +167,23 @@ async function main() {
     );
   }
 
+  // Step 1.5: Stage audio assets from manifest (after bundle is confirmed valid)
+  // renderer.py 不再直接将音频复制到 cached_bundle/public/（会被本脚本的
+  // fs.rmSync 清除），而是通过 --audio-manifest 传入 [{src, dest}] 清单。
+  // 本脚本在 bundle 就绪后复制，从根本上避免竞态条件。
+  if (config.audioManifest) {
+    const manifestEntries: Array<{ src: string; dest: string }> = JSON.parse(
+      fs.readFileSync(config.audioManifest, "utf-8"),
+    );
+    for (const entry of manifestEntries) {
+      const destPath = path.join(bundleLocation, "public", entry.dest);
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      fs.copyFileSync(entry.src, destPath);
+      console.log(`  Staged audio: ${entry.dest}`);
+    }
+    console.log(`Staged ${manifestEntries.length} audio asset(s) into bundle`);
+  }
+
   // Step 2: Select the composition
   console.log("\n[2/3] Selecting composition...");
   const composition = await selectComposition({
@@ -172,7 +196,14 @@ async function main() {
   );
 
   // Step 3: Render with GPU acceleration
+  // Remotion ≥ 4.0.484 在 Linux/Windows NVIDIA 上支持 NVENC（h264_nvenc）。
+  // 硬件编码激活条件：hardwareAcceleration=if-possible 且 **不设 crf / encodingMaxRate /
+  // encodingBufferSize**（这些选项与硬件编码器不兼容，设了会静默回退 libx264）。
+  // NVENC 不支持 crf；如需控质量用 videoBitrate（例 "8M"），这里保留默认。
   console.log("\n[3/3] Rendering video (GPU accelerated)...");
+  console.log(
+    "Hardware acceleration: if-possible → NVENC h264_nvenc (NVIDIA Linux/Windows)",
+  );
   const renderStart = Date.now();
 
   await renderMedia({
@@ -187,6 +218,12 @@ async function main() {
       gl: config.gl,
     },
     hardwareAcceleration: "if-possible",
+    onLog: ({ level, message }) => {
+      // 显式输出编码器选择 / 硬件加速相关日志，便于确认 NVENC 是否真正生效。
+      if (/encoder|nvenc|h264|hardware|codec/i.test(message)) {
+        console.log(`  [Remotion:${level}] ${message}`);
+      }
+    },
     onProgress: ({ progress }) => {
       const pct = (progress * 100).toFixed(1);
       if (Number(pct) % 5 < 0.5) {

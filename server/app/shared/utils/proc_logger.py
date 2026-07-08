@@ -21,12 +21,17 @@ async def run_process_with_logging(
     cwd: Path | None = None,
     timeout_seconds: int,
     logger_name: str = "app.shared.render",
+    env: dict[str, str] | None = None,
 ) -> tuple[int, str, str]:
     """Run a subprocess, streaming its stdout and stderr in real-time.
 
     Logs stdout/stderr lines to Python logging (logger_name).
     Lines exceeding _MAX_LINE_LENGTH are truncated with "…(truncated)" suffix.
     Returns returncode, stdout string, and stderr string.
+
+    Args:
+        env: 子进程环境变量覆盖。``None`` 表示继承父进程环境（默认）。
+            传入时会**整体替换**父进程环境，调用方需自行合并所需变量。
     """
     proc_logger = get_logger(logger_name)
 
@@ -35,6 +40,7 @@ async def run_process_with_logging(
     process = await asyncio.create_subprocess_exec(
         *command,
         cwd=str(cwd) if cwd else None,
+        env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

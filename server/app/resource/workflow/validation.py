@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from app.infra.logging import get_logger
 from app.resource.schemas.quiz import (
@@ -19,7 +19,6 @@ from app.resource.schemas.quiz import (
     validate_quiz_payload,
 )
 from app.resource.service import (
-    AGGREGATION_AGENT_IDS,
     BASE_RESOURCE_AGENT_IDS,
 )
 
@@ -154,9 +153,7 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
     if not resources:
         raise ValidationError("Reading must have at least one resource")
 
-    import urllib.parse
     url_pattern = re.compile(r"^https?://")
-    modified = False
 
     for i, item in enumerate(resources, start=1):
         if not isinstance(item, dict):
@@ -164,17 +161,7 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
 
         url = item.get("url", "")
         if not url or not url.strip() or not url_pattern.match(url):
-            title = item.get("title", "unknown")
-            search_query = urllib.parse.quote(title)
-            item["url"] = f"https://www.bing.com/search?q={search_query}"
-            modified = True
-
-    if modified:
-        if isinstance(data, dict):
-            data["resources"] = resources
-            result.content = json.dumps(data, ensure_ascii=False)
-        else:
-            result.content = json.dumps(resources, ensure_ascii=False)
+            raise ValidationError(f"Reading resource #{i} has invalid URL: {url!r}")
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:

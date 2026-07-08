@@ -31,10 +31,8 @@ class PathRequest(BaseModel):
 
     goal: str = Field(description="学习目标")
     topic: str = Field(default="", description="学习主题")
-    module: str = Field(default="mentor", description="模块名称")
     current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
     preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
-    enable_search: bool = Field(default=False, description="是否允许规划阶段检索外部资料")
 
 
 # ======================================================================
@@ -190,7 +188,7 @@ class PathResponse(BaseModel):
     overall_progress: int
     status: str
     current_node_key: str | None = None
-    stages: list[dict[str, Any]] = Field(default_factory=list)
+    stages: list[AgentStage] = Field(default_factory=list)
     nodes: list[LearningPathNodeDTO] = Field(default_factory=list)
     created_at: str
     updated_at: str
@@ -243,7 +241,7 @@ class PathQuizSubmitResponse(BaseModel):
     round_no: int
     score: int
     passed: bool
-    outcome: str
+    outcome: Literal["completed", "remediation", "completed_with_gaps"]
     weak_knowledge_points: list[str] = Field(default_factory=list)
     next_node_id: int | None = None
     current_tutorial_id: int | None = None
@@ -346,6 +344,8 @@ class LearnState(TypedDict, total=False):
     """当前激活的 PathNodeTutorial，不存在时为 None。"""
     profile_markdown: str
     """预渲染的学习者画像 Markdown 文本。"""
+    username: str
+    """当前用户名 — 由 ``node_load_context`` 从 ``User`` 解析，用于构建节点资源文件保存路径。"""
 
     # ── 阶段输入字段 ──────────────────────────────────────────────
     quiz_answers: list[dict]

@@ -1,4 +1,8 @@
-"""HTML PPT agent for standalone resources and learning-path nodes."""
+"""HTML PPT agent — 多智能体资源生成与路径规划节点资源生成。
+
+generate_resource: 多智能体资源流程，保存到 static/{username}/resources/{id}/ppt/
+generate_node: 路径规划节点流程，保存到 static/{username}/paths/{path_id}/nodes/{node_id}/ppt/
+"""
 
 from __future__ import annotations
 
@@ -122,7 +126,7 @@ class PPTAgent(BaseResourceAgent):
     research_enabled = False
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        username = input_data.username or "anonymous"
+        username = input_data.username
         output_dir = user_path_node_ppt_dir(
             username, str(input_data.path_id), str(input_data.node_id)
         )
@@ -138,16 +142,14 @@ class PPTAgent(BaseResourceAgent):
 
     async def generate_resource(
         self,
-        input_data: ResourceInput | NodeInput,
+        input_data: ResourceInput,
     ) -> AgentResult:
-        if isinstance(input_data, NodeInput):
-            return await self.generate_node(input_data)
         resource_key = (
             str(input_data.resource_id)
             if input_data.resource_id is not None
             else uuid.uuid4().hex
         )
-        username = input_data.username or str(input_data.user_id or "anonymous")
+        username = input_data.username
         output_dir = user_resource_ppt_dir(username, resource_key)
         return await self._generate(
             build_resource_ppt_request(input_data),
@@ -172,10 +174,19 @@ class PPTAgent(BaseResourceAgent):
             await self.emitter.send(self.agent_id, "running", message, percent)
 
         try:
-            artifact = await PPTGenerator().generate(
-                request,
-                output_dir=output_dir,
-                progress=progress,
+            artifact = await self.run_with_heartbeat(
+                PPTGenerator().generate(
+                    request,
+                    output_dir=output_dir,
+                    progress=progress,
+                ),
+                messages=[
+                    "正在规划课件大纲与版式...",
+                    "正在生成教学课件页面...",
+                    "正在渲染 HTML 课件，请稍候...",
+                ],
+                interval_seconds=15.0,
+                progress=70,
             )
         except PPTGenerationError as exc:
             logger.exception("PPT 生成失败")

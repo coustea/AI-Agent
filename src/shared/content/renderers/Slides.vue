@@ -35,7 +35,6 @@ import { PhDownload as Download, PhArrowsOut as Expand } from '@phosphor-icons/v
 
 const props = defineProps<{
   resource?: any
-  documentData?: any
   compact?: boolean
 }>()
 
@@ -54,14 +53,17 @@ const htmlUrl = computed(() => {
   const raw = props.resource
   if (!raw) return ''
 
+  // 后端 PPT agent 将 HTML 课件发布引用写入 metadata.html_url
+  // （server/app/resource/agents/ppt.py），_item_to_dto 把 metadata_json
+  // 同时放入 content 与 metadata，因此两处都需读取 html_url。
   const meta = raw.metadata_json || raw.metadata
   const metadata = typeof meta === 'string' ? JSON.parse(meta) : meta
-  const url = metadata?.public_api_url
+  const url = metadata?.html_url
   if (typeof url === 'string' && url) return url
 
   const content = raw.content
   const contentObj = typeof content === 'string' ? JSON.parse(content) : content
-  const contentUrl = contentObj?.public_api_url
+  const contentUrl = contentObj?.html_url
   if (typeof contentUrl === 'string' && contentUrl) return contentUrl
 
   return ''

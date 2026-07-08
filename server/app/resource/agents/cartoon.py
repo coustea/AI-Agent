@@ -1,8 +1,11 @@
 """Resource-domain adapter for the shared cartoon animation capability.
 
 Wraps CartoonPipeline into the resource-agent protocol so that
-standalone resource generation and path-node resource generation
+多智能体资源生成 and 路径规划节点资源生成
 can produce animated explanation videos with TTS narration.
+
+generate_resource: 多智能体资源流程，保存到 static/{username}/resources/{id}/cartoon/
+generate_node: 路径规划节点流程，保存到 static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/
 """
 
 from __future__ import annotations
@@ -112,7 +115,7 @@ class CartoonAgent(BaseResourceAgent):
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         cfg = _agent_config_defaults(input_data.agent_config)
-        username = input_data.username or str(input_data.user_id or "anonymous")
+        username = input_data.username
         resource_key = str(input_data.resource_id or uuid.uuid4().hex)
         output_dir = user_resource_cartoon_dir(username, resource_key)
 
@@ -137,7 +140,7 @@ class CartoonAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         cfg = _agent_config_defaults(input_data.agent_config)
-        username = input_data.username or "anonymous"
+        username = input_data.username
         output_dir = user_path_node_cartoon_dir(username, str(input_data.path_id), str(input_data.node_id))
 
         artifacts: list[SourceArtifact] = []
@@ -191,18 +194,21 @@ class CartoonAgent(BaseResourceAgent):
             await self.emitter.send(self.agent_id, "running", message, percent)
 
         try:
-            artifact = await pipeline.generate(request, progress=progress)
+            artifact = await self.run_with_heartbeat(
+                pipeline.generate(request, progress=progress),
+                messages=[
+                    "正在生成动画分镜内容...",
+                    "正在合成配音与字幕...",
+                    "正在渲染动画讲解视频...",
+                ],
+                interval_seconds=15.0,
+                progress=75,
+            )
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.error(
                 "Agent[%s] 生成失败: error=%s elapsed_ms=%d",
                 self.agent_id, exc, elapsed_ms, exc_info=True,
-            )
-            await self.emitter.send(
-                self.agent_id,
-                "failed",
-                f"动画讲解视频生成失败: {exc}",
-                0,
             )
             return AgentResult(
                 success=False,
@@ -230,13 +236,6 @@ class CartoonAgent(BaseResourceAgent):
                 "style": artifact.theme,
             },
             ensure_ascii=False,
-        )
-
-        await self.emitter.send(
-            self.agent_id,
-            "completed",
-            "动画讲解视频已完成",
-            100,
         )
 
         video_size = (

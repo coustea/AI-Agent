@@ -130,8 +130,19 @@ class VideoAgent:
         self._report_progress("正在规划场景结构与叙事节奏...", 40)
         stage_started = time.perf_counter()
         outline = await self.director.plan(request, digest)
-        if len(outline.scenes) != request.scene_count:
-            raise ValueError("video director returned an unexpected scene count")
+        actual_scene_count = len(outline.scenes)
+        # scene_count 是目标值而非硬性契约：导演返回的场景已由 Pydantic 校验结构，
+        # 下游（场景编写、时间轴、字幕）全部基于 outline.scenes 实际值，不依赖精确匹配。
+        # LLM 偶尔返回 ±1 个场景属正常，不应据此废弃整段视频。
+        if actual_scene_count != request.scene_count:
+            logger.warning(
+                "Video 导演返回场景数与请求不一致，按实际数量继续: requested=%d actual=%d",
+                request.scene_count, actual_scene_count,
+            )
+        if actual_scene_count < 2:
+            raise ValueError(
+                f"video director returned too few scenes: {actual_scene_count}"
+            )
         stage_elapsed = int((time.perf_counter() - stage_started) * 1000)
         logger.info(
             "Video 场景规划完成: scenes=%d narrative=%s elapsed_ms=%d",

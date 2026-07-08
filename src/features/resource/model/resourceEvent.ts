@@ -14,17 +14,20 @@
 //   elapsed_ms?: number
 //   artifact_id?: string
 
+// 资源生成相关的事件名称联合类型：全局任务事件与统一的智能体状态事件
 export type ResourceEventName =
   | 'generation.started'
   | 'generation.completed'
   | 'generation.failed'
   | 'agent.status'
 
+// 终态事件集合：任务完成或失败即代表整轮生成结束，用于判断是否停止监听
 export const RESOURCE_TERMINAL_EVENTS: Set<ResourceEventName> = new Set([
   'generation.completed',
   'generation.failed',
 ])
 
+// 单条资源事件的结构定义：携带序号、资源 id、事件名及负载数据
 export interface ResourceEvent {
   sequence: number
   resource_id: number

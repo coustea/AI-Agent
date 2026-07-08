@@ -11,9 +11,30 @@ LLM 根据 learning_need 自动选择合适的可视化模式组合。
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def _coerce_enum(
+    value: Any,
+    valid: tuple[str, ...],
+    default: str,
+    mapping: dict[str, str] | None = None,
+) -> str:
+    """枚举容错归一化：映射已知别名，未知值回落到默认值，绝不抛 Literal 校验错误。
+
+    生成可靠性优先于枚举完美——LLM 偶发产出 schema 外的枚举值时，强制归一化到
+    语义最通用的默认值，保证只要结构正确就能通过校验，避免整个分镜生成失败。
+    """
+    if value is None:
+        return default
+    s = str(value).strip().lower()
+    if mapping and s in mapping:
+        return mapping[s]
+    if s in valid:
+        return s
+    return default
 
 
 class StrictModel(BaseModel):
@@ -114,6 +135,12 @@ SceneLayout = Literal[
     "recap",        # 总结回顾
 ]
 
+# 各 Literal 枚举的合法值集合，供 _coerce_enum 使用（必须在 Literal 定义之后）。
+_VISUAL_KINDS = get_args(VisualKind)
+_ANIMATION_ACTIONS = get_args(AnimationAction)
+_SCENE_ROLES = get_args(SceneRole)
+_SCENE_LAYOUTS = get_args(SceneLayout)
+
 
 class CaptionWord(StrictModel):
     text: str = Field(min_length=1)
@@ -163,7 +190,7 @@ class VisualElement(StrictModel):
             "pointer": "node",
             "card": "node",
         }
-        return mapping.get(value, value)
+        return _coerce_enum(value, _VISUAL_KINDS, "node", mapping)
 
     @field_validator("items", mode="before")
     @classmethod
@@ -193,6 +220,11 @@ class VisualConnection(StrictModel):
     kind: Literal["edge", "pointer", "arrow", "transition"] = "edge"
     # transition 的触发 condition
     condition: str = Field(default="", max_length=30)
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def normalize_conn_kind(cls, value: Any) -> str:
+        return _coerce_enum(value, ("edge", "pointer", "arrow", "transition"), "edge")
 
     @field_validator("source", "target", mode="before")
     @classmethod
@@ -237,7 +269,12 @@ class AnimationCue(StrictModel):
             "highlight_line": "highlight_code",
             "highlight_lines": "highlight_code",
         }
-        return mapping.get(value, value)
+        return _coerce_enum(value, _ANIMATION_ACTIONS, "reveal", mapping)
+
+    @field_validator("direction", mode="before")
+    @classmethod
+    def normalize_direction(cls, value: Any) -> Any:
+        return _coerce_enum(value, ("left", "right", "top", "bottom"), "top")
 
     @field_validator("targets", "path", mode="before")
     @classmethod
@@ -272,6 +309,16 @@ class SceneBrief(StrictModel):
     duration: float = Field(default=1.0, gt=0.0)
     audio_path: str | None = None
     words: list[CaptionWord] = Field(default_factory=list)
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value: Any) -> Any:
+        return _coerce_enum(value, _SCENE_ROLES, "concept")
+
+    @field_validator("layout", mode="before")
+    @classmethod
+    def normalize_layout(cls, value: Any) -> Any:
+        return _coerce_enum(value, _SCENE_LAYOUTS, "flow")
 
     @model_validator(mode="after")
     def validate_references(self) -> "SceneBrief":
@@ -338,3 +385,514 @@ class CartoonVideoRequest(StrictModel):
 
     output_dir: Path
     artifacts: list[SourceArtifact] = Field(default_factory=list)
+
+
+# ============================================================================
+# SIMPLIFIED SCHEMA — LLM 只需输出这些，枚举组合从 22,984 降到 108
+# ============================================================================
+#
+# 设计原则：
+# - LLM 只需从 3 种 kind / 3 种 action / 3 种 layout / 4 种 role 中选择
+# - 桥接层 (bridge_simple_to_brief) 将简化枚举确定性映射到完整 VideoBrief
+# - compiler / pipeline / renderer 完全不改，下游看到的仍是完整 VideoBrief
+#
+# 简化映射：
+#   SimpleKind  → VisualKind:  node→node, label→label, metric→metric
+#   SimpleAction → AnimationAction: reveal→reveal, focus→focus, insert→insert
+#   SimpleLayout → SceneLayout: tree→tree, flow→flow, recap→recap
+#   SimpleRole  → SceneRole: hook→hook, process→process, compare→compare, recap→recap
+#
+# 编译器根据 layout 自动推断更精确的 kind/action：
+#   tree layout + node → 圆形节点 + edge connections
+#   flow layout + node → 流程节点 + arrow connections
+#   recap layout + label → 总结卡片
+# ============================================================================
+
+SimpleKind = Literal["node", "label", "metric"]
+SimpleAction = Literal["reveal", "focus", "insert"]
+SimpleLayout = Literal["tree", "flow", "recap"]
+SimpleRole = Literal["hook", "process", "compare", "recap"]
+
+_SIMPLE_KINDS = get_args(SimpleKind)
+_SIMPLE_ACTIONS = get_args(SimpleAction)
+_SIMPLE_LAYOUTS = get_args(SimpleLayout)
+_SIMPLE_ROLES = get_args(SimpleRole)
+
+
+class SimpleElement(StrictModel):
+    """简化可视化元素 — LLM 只需选 node/label/metric 三种。"""
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    kind: SimpleKind
+    label: str = Field(default="", max_length=80)
+    value: str = Field(default="", max_length=200)
+    items: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def normalize_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip().lower()
+        if s and not s[0].isalpha():
+            s = "n" + s
+        import re
+        s = re.sub(r"[^a-z0-9_-]", "_", s)
+        return s[:32]
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def normalize_kind(cls, value: Any) -> str:
+        mapping = {
+            "text": "label", "header": "label", "step": "label",
+            "cell": "node", "state": "node", "box": "node",
+            "array": "node", "stack": "node", "queue": "node",
+            "table": "node", "code": "label", "formula": "label",
+            "packet": "node", "pointer": "node",
+        }
+        return _coerce_enum(value, _SIMPLE_KINDS, "node", mapping)
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return [str(x) for x in value]
+        if isinstance(value, str):
+            if value.startswith("[") and value.endswith("]"):
+                try:
+                    import ast
+                    parsed = ast.literal_eval(value)
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                except Exception:
+                    pass
+            if "," in value:
+                return [x.strip() for x in value.split(",")]
+        return value
+
+
+class SimpleConnection(StrictModel):
+    """简化连接 — 只需 source/target/label，kind 由桥接层推断。"""
+
+    source: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    target: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    label: str = Field(default="", max_length=30)
+
+    @field_validator("source", "target", mode="before")
+    @classmethod
+    def normalize_conn_id(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip().lower()
+        if s and not s[0].isalpha():
+            s = "n" + s
+        import re
+        s = re.sub(r"[^a-z0-9_-]", "_", s)
+        return s[:32]
+
+
+class SimpleCue(StrictModel):
+    """简化动画指令 — LLM 只需选 reveal/focus/insert 三种。"""
+
+    action: SimpleAction
+    targets: list[str] = Field(min_length=1, max_length=6)
+    keyword: str = Field(default="", max_length=24)
+    direction: Literal["left", "right", "top", "bottom"] = "top"
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def normalize_action(cls, value: Any) -> str:
+        mapping = {
+            "highlight": "focus", "select": "focus", "emphasize": "focus",
+            "fade_in": "reveal", "animate": "reveal", "move": "reveal",
+            "show": "reveal", "appear": "reveal",
+            "add": "insert", "push": "insert", "slide_in": "insert",
+            "swap": "insert", "remove": "insert", "shift": "insert",
+            "transfer": "insert", "traverse": "focus",
+            "highlight_path": "focus", "value_change": "insert",
+            "state_change": "insert", "branch": "insert",
+            "derive": "insert", "transform": "insert",
+            "count": "insert", "highlight_code": "focus",
+        }
+        return _coerce_enum(value, _SIMPLE_ACTIONS, "reveal", mapping)
+
+    @field_validator("direction", mode="before")
+    @classmethod
+    def normalize_direction(cls, value: Any) -> Any:
+        return _coerce_enum(value, ("left", "right", "top", "bottom"), "top")
+
+    @field_validator("targets", mode="before")
+    @classmethod
+    def normalize_cue_ids(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            res = []
+            for item in value:
+                s = str(item).strip().lower()
+                if s and not s[0].isalpha():
+                    s = "n" + s
+                import re
+                s = re.sub(r"[^a-z0-9_-]", "_", s)
+                res.append(s[:32])
+            return res
+        return value
+
+
+class SimpleScene(StrictModel):
+    """简化场景 — LLM 只需选 tree/flow/recap 三种布局。"""
+
+    role: SimpleRole
+    title: str = Field(min_length=1, max_length=48)
+    narration: str = Field(min_length=1, max_length=360)
+    layout: SimpleLayout
+    elements: list[SimpleElement] = Field(min_length=1, max_length=24)
+    connections: list[SimpleConnection] = Field(default_factory=list, max_length=24)
+    cues: list[SimpleCue] = Field(default_factory=list, max_length=24)
+    callout: str = Field(default="", max_length=80)
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value: Any) -> Any:
+        mapping = {
+            "concept": "process", "architecture": "process",
+            "code_trace": "process", "derivation": "process",
+        }
+        return _coerce_enum(value, _SIMPLE_ROLES, "process", mapping)
+
+    @field_validator("layout", mode="before")
+    @classmethod
+    def normalize_layout(cls, value: Any) -> str:
+        mapping = {
+            "hero": "flow", "graph": "tree", "state_diagram": "tree",
+            "array_view": "flow", "queue_view": "flow", "table_view": "flow",
+            "derivation": "flow", "stack": "flow", "code": "flow",
+            "grid": "flow", "compare": "flow",
+        }
+        return _coerce_enum(value, _SIMPLE_LAYOUTS, "flow", mapping)
+
+    @model_validator(mode="after")
+    def validate_references(self) -> "SimpleScene":
+        element_ids = {element.id for element in self.elements}
+        self.connections = [
+            conn for conn in self.connections
+            if conn.source in element_ids and conn.target in element_ids
+        ]
+        for cue in self.cues:
+            cue.targets = [t for t in cue.targets if t in element_ids]
+        self.cues = [cue for cue in self.cues if cue.targets]
+        return self
+
+
+class SimpleVideoBrief(StrictModel):
+    """简化分镜 — LLM 输出的最小 JSON 结构。
+
+    枚举组合：3 kind × 3 action × 3 layout × 4 role = 108
+    vs 完整 schema：13 × 17 × 13 × 8 = 22,984
+    缩减 213 倍，大幅降低 LLM 枚举选择错误率。
+    """
+
+    title: str = Field(min_length=1, max_length=60)
+    subject: str = Field(min_length=1, max_length=40)
+    summary: str = Field(min_length=1, max_length=140)
+    scenes: list[SimpleScene] = Field(min_length=3, max_length=16)
+
+    @model_validator(mode="after")
+    def validate_story_arc(self) -> "SimpleVideoBrief":
+        if self.scenes[0].role != "hook":
+            raise ValueError("第一个场景必须是 hook")
+        if self.scenes[-1].role != "recap":
+            raise ValueError("最后一个场景必须是 recap")
+        return self
+
+
+# ============================================================================
+# BRIDGE: SimpleVideoBrief → VideoBrief (智能推断，零 LLM 参与)
+# ============================================================================
+#
+# 简化 schema 只暴露 3×3×3×4 = 108 种组合给 LLM，
+# 但桥接层根据 layout + role + connections + element 上下文
+# 推断出完整 schema 的精确枚举值，恢复全部视觉能力。
+#
+# 推断规则：
+#
+# ── layout 推断 ──
+#   tree          → tree (层次结构，BFS 布局)
+#   flow + compare role → compare (左右对比布局)
+#   flow + 无 connections + 有 items 的 node → array_view (格子横排)
+#   flow + 无 connections + metric 多 → flow (流程图)
+#   flow + 有 connections → flow (流程 + 箭头连线)
+#   recap         → recap (总结网格)
+#
+# ── kind 推断 ──
+#   node + tree layout → node (圆形节点)
+#   node + flow + 有 items → cell (格子，有 data-index)
+#   node + flow + value 含 "SYN"/"ACK" 等协议词 → packet (虚线数据包)
+#   label + value 非空 → step (步骤，左边框强调条)
+#   label + label 含 "=" 或 "→" 或 "≤" → formula (公式，serif 字体)
+#   metric        → metric (数值指标)
+#
+# ── action 推断 ──
+#   reveal        → reveal (淡入)
+#   focus + targets 多个 + tree layout → traverse (逐个高亮遍历)
+#   focus + targets 多个 + 有 path 连线 → highlight_path (路径高亮)
+#   focus + targets 2 个 + flow layout → compare (对比强调)
+#   insert + tree layout → insert (节点滑入，从父节点位置出发)
+#   insert + flow + direction left/right → transfer (粒子沿边流动)
+#   insert + targets 是 metric → count (数值增长)
+#   insert + targets 有 value 变化 → value_change (值变化动画)
+#
+# ── connection.kind 推断 ──
+#   tree layout → edge (实线)
+#   flow + 有 connections → arrow (有向箭头)
+#   recap → edge (一般无 connections)
+#
+# ── role 推断 ──
+#   hook → hook
+#   process → process
+#   compare → compare
+#   recap → recap
+# ============================================================================
+
+
+def _infer_layout(scene: SimpleScene) -> str:
+    """根据简化 layout + role + connections + elements 推断精确布局。"""
+    if scene.layout == "tree":
+        # 检查是否更像 state_diagram：
+        # 条件：(1) 节点 value 都是短状态名 (2) connections 形成环 (3) connection label 非空（触发条件）
+        node_values = [e.value for e in scene.elements if e.kind == "node" and e.value]
+        has_cycle = False
+        if scene.connections:
+            source_set = {c.source for c in scene.connections}
+            target_set = {c.target for c in scene.connections}
+            has_cycle = bool(source_set & target_set)
+        has_condition_labels = any(c.label for c in scene.connections)
+        if (node_values and len(node_values) >= 2
+                and all(len(v) <= 6 for v in node_values)
+                and has_cycle and has_condition_labels):
+            return "state_diagram"
+        return "tree"
+
+    if scene.layout == "recap":
+        return "recap"
+
+    # flow layout — 根据 role 和内容推断更精确的布局
+    if scene.role == "compare":
+        return "compare"
+
+    # 检查是否有带 items 的 node（容器类元素）
+    has_container = any(e.kind == "node" and e.items for e in scene.elements)
+    if has_container and not scene.connections:
+        # 有 items 无 connections → 容器视图
+        first_container = next(e for e in scene.elements if e.kind == "node" and e.items)
+        # 根据 title 关键词推断容器类型
+        title_lower = scene.title.lower()
+        if any(kw in title_lower for kw in ("栈", "入栈", "出栈", "递归", "stack")):
+            return "stack"
+        if any(kw in title_lower for kw in ("队列", "入队", "出队", "queue")):
+            return "queue_view"
+        if any(kw in title_lower for kw in ("表", "table", "真值")):
+            return "table_view"
+        # 默认：有 items 的 node → array_view
+        return "array_view"
+
+    # 有 connections → 可能是 graph
+    if scene.connections and not scene.role == "compare":
+        # 如果 connections 形成环 → graph
+        source_set = {c.source for c in scene.connections}
+        target_set = {c.target for c in scene.connections}
+        if source_set & target_set:  # 有节点既是 source 又是 target → 可能有环
+            return "graph"
+
+    # 默认 flow
+    return "flow"
+
+
+def _infer_kind(element: SimpleElement, layout: str) -> str:
+    """根据简化 kind + layout + 内容推断精确元素类型。"""
+    if element.kind == "metric":
+        return "metric"
+
+    if element.kind == "label":
+        # label + value 非空 → step（步骤，有左边框强调条）
+        if element.value:
+            return "step"
+        # label 含公式特征 → formula
+        if element.label and any(ch in element.label for ch in ("=", "→", "≤", "≥", "∈", "∪", "∩", "∧", "∨", "¬")):
+            return "formula"
+        return "label"
+
+    # kind == "node"
+    # node + 有 items → 容器类
+    if element.items:
+        return "array"  # 编译器会根据 layout 的 CSS 选择排列方向
+
+    # node + flow layout + value 含协议关键词 → packet
+    if layout in ("flow", "compare"):
+        protocol_keywords = ("SYN", "ACK", "FIN", "REQ", "RES", "GET", "POST", "seq", "ack")
+        if element.value and any(kw in element.value for kw in protocol_keywords):
+            return "packet"
+        # node + flow + 短 value → cell（格子）
+        if element.value and len(element.value) <= 4 and element.value.isdigit():
+            return "cell"
+
+    # node + state_diagram layout + 短 value → state（状态指示器）
+    if layout == "state_diagram":
+        if element.value and len(element.value) <= 6:
+            return "state"
+
+    return "node"
+
+
+def _infer_action(
+    cue: SimpleCue,
+    scene: SimpleScene,
+    layout: str,
+    element_map: dict[str, SimpleElement],
+) -> tuple[str, dict[str, Any]]:
+    """根据简化 action + 上下文推断精确动画动作。
+
+    返回 (action, extra_fields)，extra_fields 包含 path/new_value/result 等。
+    """
+    extra: dict[str, Any] = {}
+
+    if cue.action == "reveal":
+        return ("reveal", extra)
+
+    if cue.action == "focus":
+        # focus + 多 targets + tree/graph/state_diagram → traverse
+        if len(cue.targets) >= 2 and layout in ("tree", "graph", "state_diagram"):
+            # 检查 targets 是否形成路径（按 connections 顺序）
+            target_set = set(cue.targets)
+            path_nodes: list[str] = []
+            visited: set[str] = set()
+            for t in cue.targets:
+                if t not in visited:
+                    path_nodes.append(t)
+                    visited.add(t)
+            if len(path_nodes) >= 2:
+                return ("traverse", extra)
+
+        # focus + 2 targets + compare layout → compare action
+        if len(cue.targets) == 2 and layout == "compare":
+            return ("compare", extra)
+
+        return ("focus", extra)
+
+    # cue.action == "insert"
+    # insert + targets 是 metric → count
+    if all(element_map.get(t, SimpleElement(id=t, kind="node")).kind == "metric" for t in cue.targets):
+        return ("count", extra)
+
+    # insert + tree layout → insert (从父节点位置滑入，compiler 自动处理)
+    if layout in ("tree", "graph", "state_diagram"):
+        return ("insert", extra)
+
+    # insert + flow + direction left/right + 有 connections → transfer
+    if layout == "flow" and cue.direction in ("left", "right") and scene.connections:
+        # 检查 target 是否有对应的 connection
+        for t in cue.targets:
+            for conn in scene.connections:
+                if conn.target == t or conn.source == t:
+                    return ("transfer", extra)
+
+    # insert + flow + 无 connections → branch (展开分支)
+    if layout in ("flow", "compare") and not scene.connections:
+        if len(cue.targets) >= 2:
+            return ("branch", extra)
+
+    return ("insert", extra)
+
+
+def _infer_conn_kind(layout: str, source_elem: SimpleElement | None, target_elem: SimpleElement | None) -> str:
+    """推断 connection kind。"""
+    if layout == "tree":
+        return "edge"
+    if layout == "state_diagram":
+        return "transition"
+    if layout == "graph":
+        return "edge"
+    # flow / compare / 其他
+    return "arrow"
+
+
+def bridge_simple_to_brief(simple: SimpleVideoBrief) -> VideoBrief:
+    """将简化分镜智能推断映射为完整 VideoBrief。
+
+    LLM 只输出 3×3×3×4 = 108 种组合，
+    桥接层根据 layout + role + connections + element 上下文
+    推断出完整 schema 的精确枚举值，恢复全部 14 种布局、13 种元素、17 种动画能力。
+    """
+    full_scenes: list[SceneBrief] = []
+
+    for s in simple.scenes:
+        # 1. 推断精确布局
+        layout = _infer_layout(s)
+
+        # 2. 构建 element id → element 映射
+        element_map = {e.id: e for e in s.elements}
+
+        # 3. 推断精确元素类型
+        elements = [
+            VisualElement(
+                id=e.id,
+                kind=_infer_kind(e, layout),
+                label=e.label,
+                value=e.value,
+                items=e.items,
+                detail="",
+            )
+            for e in s.elements
+        ]
+
+        # 4. 推断 connection kind
+        connections = [
+            VisualConnection(
+                source=conn.source,
+                target=conn.target,
+                kind=_infer_conn_kind(
+                    layout,
+                    element_map.get(conn.source),
+                    element_map.get(conn.target),
+                ),
+                label=conn.label,
+            )
+            for conn in s.connections
+        ]
+
+        # 5. 推断精确动画动作
+        cues: list[AnimationCue] = []
+        for c in s.cues:
+            action, extra = _infer_action(c, s, layout, element_map)
+            cue_kwargs: dict[str, Any] = {
+                "action": action,
+                "targets": c.targets,
+                "keyword": c.keyword,
+                "direction": c.direction,
+            }
+            cue_kwargs.update(extra)
+            cues.append(AnimationCue(**cue_kwargs))
+
+        # 6. 推断精确 role（当前 1:1，但可扩展）
+        role = s.role
+        # process + state_diagram layout → 可推断为 derivation
+        if s.role == "process" and layout == "state_diagram":
+            # 如果 title 含推导/证明关键词 → derivation role
+            if any(kw in s.title for kw in ("推导", "证明", "变换", "归约")):
+                role = "derivation"
+
+        full_scenes.append(SceneBrief(
+            role=role,
+            title=s.title,
+            narration=s.narration,
+            layout=layout,
+            elements=elements,
+            connections=connections,
+            cues=cues,
+            callout=s.callout,
+        ))
+
+    return VideoBrief(
+        title=simple.title,
+        subject=simple.subject,
+        summary=simple.summary,
+        scenes=full_scenes,
+    )

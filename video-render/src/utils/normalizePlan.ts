@@ -170,6 +170,33 @@ function normalizeVisual(
       v.code = v.code || "";
       v.output = v.output || "";
       v.error_or_misconception = v.error_or_misconception || "";
+      // steps 已由通用 ensureObjectArray 处理，但 steps[].variables
+      // 可能被 LLM 输出为对象而非数组，必须在此规范化，
+      // 否则 VariableTable.tsx 调用 variables.map() 会崩溃。
+      if (Array.isArray(v.steps)) {
+        v.steps = (v.steps as Array<Record<string, unknown>>).map(
+          (step, idx) => {
+            const s = { ...step };
+            if ("variables" in s && !Array.isArray(s.variables)) {
+              // LLM 输出对象 {x: "1", y: "2"} → 转为 [{name:"x",value:"1"}, ...]
+              if (s.variables && typeof s.variables === "object") {
+                const obj = s.variables as Record<string, unknown>;
+                s.variables = Object.entries(obj).map(([name, value], vi) => ({
+                  name,
+                  value: String(value),
+                  type: typeof value === "number" ? "number" : "string",
+                  id: `var_${idx}_${vi}`,
+                }));
+              } else {
+                s.variables = [];
+              }
+            } else if (!("variables" in s)) {
+              s.variables = [];
+            }
+            return s;
+          },
+        );
+      }
       break;
     }
     case "data_structure": {

@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Awaitable, Sequence, TypeVar
 
 from app.infra.logging import get_logger
 
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
     from app.resource.event import ResourceEvents
     from app.resource.schemas import AgentResult, NodeInput, ResourceInput
 
+
+_T = TypeVar("_T")
 
 AGENT_REGISTRY: dict[str, type[BaseResourceAgent]] = {}
 
@@ -47,6 +50,97 @@ class BaseResourceAgent:
                     return noop
 
             self.emitter = NoopEvents()
+
+    async def _heartbeat_loop(
+        self,
+        *,
+        messages: Sequence[str],
+        stop_event: asyncio.Event,
+        interval_seconds: float,
+        progress: int | None,
+        send_first: bool = True,
+    ) -> None:
+        """长时间任务心跳：只发送 running，不发送 completed / failed。"""
+        if not messages:
+            return
+
+        index = 0
+
+        # 立即发送第一条心跳，避免 LLM 调用前长时间无消息
+        if send_first:
+            try:
+                await self.emitter.send(
+                    self.agent_id,
+                    "running",
+                    messages[0],
+                    progress,
+                    data={
+                        "phase": "heartbeat",
+                        "heartbeat": True,
+                    },
+                )
+            except Exception:
+                logger.debug(
+                    "Agent[%s] 首条心跳发送被忽略（频道可能已关闭）",
+                    self.agent_id,
+                )
+            index = 1
+
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+                break
+            except asyncio.TimeoutError:
+                message = messages[index % len(messages)]
+                index += 1
+
+                try:
+                    await self.emitter.send(
+                        self.agent_id,
+                        "running",
+                        message,
+                        progress,
+                        data={
+                            "phase": "heartbeat",
+                            "heartbeat": True,
+                        },
+                    )
+                except Exception:
+                    logger.debug(
+                        "Agent[%s] 心跳发送被忽略（频道可能已关闭）",
+                        self.agent_id,
+                    )
+
+    async def run_with_heartbeat(
+        self,
+        awaitable: Awaitable[_T],
+        *,
+        messages: Sequence[str],
+        interval_seconds: float = 12.0,
+        progress: int | None = None,
+        send_first: bool = True,
+    ) -> _T:
+        """包装长耗时 awaitable，期间定时向前端发送 running 心跳。"""
+        stop_event = asyncio.Event()
+        heartbeat_task = asyncio.create_task(
+            self._heartbeat_loop(
+                messages=messages,
+                stop_event=stop_event,
+                interval_seconds=interval_seconds,
+                progress=progress,
+                send_first=send_first,
+            )
+        )
+
+        try:
+            return await awaitable
+        finally:
+            stop_event.set()
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
 
     async def search(self, query: str) -> "ResearchReport":
         """通过共享 research 工具把网页研究委托给 ResearchAgent。
@@ -91,6 +185,8 @@ class BaseResourceAgent:
                 },
             )
 
+        started_at = time.perf_counter()
+        duration = 0
         try:
             logger.info(
                 "Agent[%s] 搜索开始: query=%s",
@@ -107,7 +203,6 @@ class BaseResourceAgent:
                     "tool_status": "running",
                 },
             )
-            started_at = time.perf_counter()
             report = await ResearchAgent(
                 event_handler=handle_research_event,
             ).run(
@@ -137,6 +232,7 @@ class BaseResourceAgent:
             )
             return report
         except Exception as exc:
+            duration = int((time.perf_counter() - started_at) * 1000)
             logger.error(
                 "Agent[%s] 搜索失败: elapsed_ms=%d error=%s",
                 getattr(self, "agent_id", "base"), duration, exc, exc_info=True,
@@ -186,7 +282,7 @@ class BaseResourceAgent:
     # -- 子类必须实现的入口 ----------------------------------------------------
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        """独立资源生成入口（standalone 模式）。子类必须实现。"""
+        """多智能体资源生成入口。子类必须实现。"""
         raise NotImplementedError(f"{self.__class__.__name__}.generate_resource is required")
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:

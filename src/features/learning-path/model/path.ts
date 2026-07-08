@@ -10,7 +10,7 @@ export interface LearningPathNode {
   node_id: string
   stage_id: string
   title: string
-  status: 'locked' | 'available' | 'completed' | 'completed_with_gaps' | string
+  status: 'locked' | 'available' | 'in_progress' | 'remediation' | 'reinforced' | 'completed' | 'completed_with_gaps'
   priority: number
   attempt_count: number
   difficulty: string | null
@@ -117,7 +117,7 @@ export interface PathQuizSubmitResponse {
   round_no: number
   score: number
   passed: boolean
-  outcome: 'passed' | 'remediation' | 'reinforced' | 'completed_with_gaps' | string
+  outcome: 'completed' | 'remediation' | 'completed_with_gaps'
   weak_knowledge_points: string[]
   next_node_id: number | null
   current_tutorial_id: number | null
@@ -126,10 +126,8 @@ export interface PathQuizSubmitResponse {
 export interface PathRequest {
   goal: string
   topic?: string
-  module?: string
   current_knowledge?: string[]
   preferences?: Record<string, unknown>
-  enable_search?: boolean
 }
 
 export interface CreatePathResponse {

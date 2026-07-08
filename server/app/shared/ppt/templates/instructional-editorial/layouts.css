@@ -1,5 +1,5 @@
 .content-stage { position: absolute; left: 92px; right: 92px; top: 250px; bottom: 100px; }
-.points-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.points-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 24px; }
 .point { 
   padding: 32px 34px; 
   border-radius: 20px;
@@ -106,7 +106,7 @@
   font-size: 56px; 
   box-shadow: 0 15px 40px rgba(23,32,43,0.03);
 }
-[data-layout="concept-annotated"] .points-grid { grid-template-columns: 1fr; }
+[data-layout="concept-annotated"] .points-grid { grid-template-columns: repeat(2, 1fr); }
 
 .steps { height: 100%; display: flex; gap: 24px; align-items: stretch; }
 .step { 
@@ -243,7 +243,7 @@
   text-align: center; 
   box-shadow: 0 20px 40px rgba(23,32,43,0.12);
 }
-.formula-stage .points-grid { grid-template-columns: repeat(3, 1fr); }
+.formula-stage .points-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
 [data-layout="misconception-reveal"] .comparison-side:first-child { border-color: var(--signal); border-top: 6px solid var(--signal); }
 [data-layout="misconception-reveal"] .comparison-side:first-child .comparison-title { color: var(--signal); }

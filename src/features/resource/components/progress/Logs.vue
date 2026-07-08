@@ -1,13 +1,20 @@
 <template>
+  <!-- 将日志抽屉挂载到 body，避免被父级样式裁剪 -->
   <Teleport to="body">
+    <!-- 抽屉式滑入/滑出过渡动画 -->
     <transition name="slide-over">
+      <!-- 仅当 open 为 true 时渲染遮罩层，点击遮罩关闭抽屉 -->
       <div v-if="open" class="custom-modal-overlay" @click="emit('close')">
+        <!-- 右侧日志抽屉主体，点击内部不触发遮罩关闭 -->
         <aside class="log-drawer" aria-label="实时调度日志" @click.stop>
+          <!-- 抽屉头部：标题与关闭按钮 -->
           <header>
             <h3>实时调度日志</h3>
             <button type="button" aria-label="关闭日志" @click="emit('close')">×</button>
           </header>
+          <!-- 日志条目列表 -->
           <div class="drawer-log-list">
+            <!-- 遍历日志项，按状态着色显示圆点 -->
             <div
               v-for="item in items"
               :key="item.id"
@@ -20,6 +27,7 @@
                 <p>{{ item.message }}</p>
               </div>
             </div>
+            <!-- 无日志时的占位提示 -->
             <p v-if="!items.length" class="empty-log">等待智能体上报运行日志</p>
           </div>
         </aside>
@@ -29,8 +37,10 @@
 </template>
 
 <script setup lang="ts">
+// 引入 DAG 节点状态类型，用于约束日志项的状态字段
 import type { DagNodeState } from '../../model/catalog'
 
+// 单条工作流日志项的结构定义
 export type WorkflowLogItem = {
   id: string
   title: string
@@ -38,11 +48,13 @@ export type WorkflowLogItem = {
   status: DagNodeState['status']
 }
 
+// 组件入参：是否打开抽屉、日志条目列表
 defineProps<{
   open: boolean
   items: WorkflowLogItem[]
 }>()
 
+// 组件事件：关闭抽屉
 const emit = defineEmits<{
   close: []
 }>()

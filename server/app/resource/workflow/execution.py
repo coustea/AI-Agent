@@ -7,13 +7,16 @@
 - 立即提交
 - 记录运行状态
 - 观察事件（best-effort）
+
+execute_resource_agent 与 execute_node_agent 共享同一生命周期，
+仅调用 generate_resource / generate_node 的不同入口。
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
@@ -24,7 +27,7 @@ from app.resource.workflow.state import AgentFailure
 from app.resource.workflow.validation import validate_agent_result
 
 if TYPE_CHECKING:
-    from app.resource.schemas import ResourceInput
+    from app.resource.schemas import ResourceInput, NodeInput, AgentResult
 
 logger = get_module_logger("resource", sub="execution")
 
@@ -41,6 +44,18 @@ AGENT_TIMEOUTS: dict[str, float] = {
     "cartoon": 1800.0,
 }
 
+# Agent 开始执行时面向用户的文案（统一由 execute_resource_agent 发送开始消息）
+AGENT_START_MESSAGES: dict[str, str] = {
+    "content": "开始生成课程讲解资源...",
+    "mindmap": "开始生成知识结构导图...",
+    "quiz": "开始生成随堂练习题...",
+    "code": "开始生成代码实操案例...",
+    "reading": "开始生成拓展阅读资源...",
+    "ppt": "开始生成教学课件...",
+    "video": "开始生成讲解视频...",
+    "cartoon": "开始生成动画讲解视频...",
+}
+
 
 async def _observe(*, agent_id: str, coro: Any) -> None:
     """执行观察事件，失败只记录日志。"""
@@ -50,14 +65,18 @@ async def _observe(*, agent_id: str, coro: Any) -> None:
         logger.warning("Agent[%s] 事件发送失败: %s", agent_id, e)
 
 
-async def execute_resource_agent(
+async def _run_agent_lifecycle(
     *,
     user_id: int,
     resource_id: int,
     agent_id: str,
-    input_data: ResourceInput,
+    input_data: "ResourceInput | NodeInput",
+    generate_fn: Callable[["Any"], Awaitable["AgentResult"]],
 ) -> dict[str, Any]:
-    """执行单个资源 Agent，包含完整的生命周期管理、状态变更、数据持久化及 SSE 事件分发。"""
+    """单个资源 Agent 的完整生命周期：运行态持久���、SSE 事件、超时、校验、保存。
+
+    generate_fn 决定调用 generate_resource 还是 generate_node，二者共享其余逻辑。
+    """
     started = time.perf_counter()
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     agent = AGENT_REGISTRY[agent_id](events)
@@ -88,9 +107,9 @@ async def execute_resource_agent(
         coro=events.send(
             agent_id,
             "running",
-            "开始生成...",
+            AGENT_START_MESSAGES.get(agent_id, "开始生成资源..."),
             0,
-            data={"phase": "generation"},
+            data={"phase": "generation_started"},
         ),
     )
     logger.info(
@@ -101,7 +120,7 @@ async def execute_resource_agent(
     # 执行 Agent（带超时）
     try:
         async with asyncio.timeout(timeout_seconds):
-            result = await agent.generate_resource(input_data)
+            result = await generate_fn(agent)
     except TimeoutError as exc:
         return await _record_failure(
             resource_id=resource_id,
@@ -122,6 +141,16 @@ async def execute_resource_agent(
         )
 
     # 校验结果
+    await _observe(
+        agent_id=agent_id,
+        coro=events.send(
+            agent_id,
+            "running",
+            "正在校验资源结构与内容完整性...",
+            88,
+            data={"phase": "validation"},
+        ),
+    )
     try:
         validate_agent_result(agent_id, result, input_data)
     except Exception as exc:
@@ -135,6 +164,16 @@ async def execute_resource_agent(
         )
 
     # 持久化结果
+    await _observe(
+        agent_id=agent_id,
+        coro=events.send(
+            agent_id,
+            "running",
+            "正在保存资源成果...",
+            94,
+            data={"phase": "persistence"},
+        ),
+    )
     try:
         async with session_scope() as session:
             service = ResourceService(session)
@@ -167,7 +206,7 @@ async def execute_resource_agent(
         coro=events.send(
             agent_id,
             "completed",
-            result.title,
+            f"{result.title} 已保存",
             100,
             data={
                 "phase": "artifact_saved",
@@ -182,6 +221,40 @@ async def execute_resource_agent(
     )
 
     return {"results": {agent_id: True}}
+
+
+async def execute_resource_agent(
+    *,
+    user_id: int,
+    resource_id: int,
+    agent_id: str,
+    input_data: "ResourceInput",
+) -> dict[str, Any]:
+    """执行单个资源 Agent 的 generate_resource 入口。"""
+    return await _run_agent_lifecycle(
+        user_id=user_id,
+        resource_id=resource_id,
+        agent_id=agent_id,
+        input_data=input_data,
+        generate_fn=lambda a: a.generate_resource(input_data),
+    )
+
+
+async def execute_node_agent(
+    *,
+    user_id: int,
+    resource_id: int,
+    agent_id: str,
+    node_input: "NodeInput",
+) -> dict[str, Any]:
+    """执行单个资源 Agent 的 generate_node 入口（单智能体 PPT/Cartoon 调用、路径节点资源）。"""
+    return await _run_agent_lifecycle(
+        user_id=user_id,
+        resource_id=resource_id,
+        agent_id=agent_id,
+        input_data=node_input,
+        generate_fn=lambda a: a.generate_node(node_input),
+    )
 
 
 async def _record_failure(

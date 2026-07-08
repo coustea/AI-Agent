@@ -103,10 +103,9 @@ class PathService:
     async def create_path(self, user_id: int, request: PathRequest) -> int:
         """创建学习路径任务，返回路径 ID。"""
         logger.info("[PathService] 创建路径任务: user_id=%s goal=%s", user_id, request.goal[:50])
-        await self._archive_active(user_id, request.module)
+        await self._archive_active(user_id, "mentor")
         path = LearningPath(
             user_id=user_id,
-            module=request.module,
             title=request.topic or "学习路径",
             goal=request.goal,
             topic=request.topic or None,

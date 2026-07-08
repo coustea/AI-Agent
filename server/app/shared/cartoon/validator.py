@@ -218,6 +218,7 @@ class CartoonCliValidator:
 
         command = [
             npx_path,
+            "--yes",
             "hyperframes",
             "lint",
             ".",
@@ -231,17 +232,20 @@ class CartoonCliValidator:
                 timeout_seconds=self.timeout_seconds,
                 logger_name="app.shared.cartoon.validate",
             )
+        except asyncio.TimeoutError:
+            # Python 3.11+ 中 asyncio.TimeoutError 是内置 TimeoutError 的别名，
+            # 而 TimeoutError 是 OSError 的子类。必须先捕获 TimeoutError，否则会被
+            # 下面的 except OSError 吞掉，超时被误报为“无法启动 CLI（空消息）”。
+            return StaticAudit(
+                passed=False,
+                problems=[f"HyperFrames lint timed out after {self.timeout_seconds} seconds"],
+                scene_count=0,
+            )
         except OSError as exc:
             return StaticAudit(
                 passed=False,
                 problems=[f"无法启动 HyperFrames CLI (npx={npx_path}): {exc}"],
                 scene_count=scene_count,
-            )
-        except asyncio.TimeoutError:
-            return StaticAudit(
-                passed=False,
-                problems=[f"HyperFrames lint timed out after {self.timeout_seconds} seconds"],
-                scene_count=0,
             )
 
         stdout_str = stdout_str.strip()

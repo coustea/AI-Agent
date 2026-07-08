@@ -1,6 +1,8 @@
 from uuid import uuid4
+import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -9,7 +11,7 @@ from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
 from app.infra.models import PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
-from app.path.event import PathEvents
+from app.path.event import PathEvents, encode_path_sse, get_path_channel
 from app.path.schemas import (
     PathRequest,
     LearningPathResourceDTO,
@@ -18,6 +20,12 @@ from app.path.schemas import (
 from app.path.service import PathService, build_learning_event_item, run_generation_bg
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
+
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
 # ── 路径创建 ───────────────────────────────────────────────────────────
@@ -45,6 +53,47 @@ async def create_path(
     return HttpResponse.success(
         data={"id": path_id, "run_id": run_id, "status": "generating"},
         status_code=201,
+    )
+
+
+# ── SSE 事件流 ─────────────────────────────────────────────────────────
+
+
+@router.get("/{path_id}/runs/{run_id}/events")  # SSE 路径规划实时事件流
+async def stream_path_plan_events(
+    path_id: int,
+    run_id: str,
+    after_sequence: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+):
+    """订阅路径规划实时事件流 — 前端 usePathEvents 通过此端点接收生成进度。"""
+    events = await get_path_channel(current_user.id, path_id, run_id)
+    if events is None:
+        return HttpResponse.error(code=410, message="事件流已过期或不存在")
+
+    async def event_stream():
+        queue, replay = await events.subscribe(after_sequence)
+        try:
+            for event in replay:
+                yield encode_path_sse(event)
+            if replay and replay[-1].event in {"planning.completed", "planning.failed"}:
+                return
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
+                yield encode_path_sse(event)
+                if event.event in {"planning.completed", "planning.failed"}:
+                    return
+        finally:
+            await events.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
     )
 
 
