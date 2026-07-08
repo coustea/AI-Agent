@@ -101,13 +101,9 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     created_at              TIMESTAMPTZ      DEFAULT NOW(),
     updated_at              TIMESTAMPTZ      DEFAULT NOW(),
     summary_token_count     INTEGER          DEFAULT 0,
-    profile_token_count     INTEGER          DEFAULT 0,
-    profile_message_count   INTEGER          DEFAULT 0,
     ltm_token_count         INTEGER          DEFAULT 0,
     ltm_message_count       INTEGER          DEFAULT 0,
-    last_profile_message_id INTEGER,
     last_ltm_message_id     INTEGER,
-    last_profile_updated_at TIMESTAMPTZ,
     last_ltm_updated_at     TIMESTAMPTZ
 );
 
@@ -121,9 +117,7 @@ COMMENT ON COLUMN chat_sessions.user_id IS '用户ID';
 COMMENT ON COLUMN chat_sessions.title IS '会话标题，默认"新对话"';
 COMMENT ON COLUMN chat_sessions.is_archived IS '是否已归档';
 COMMENT ON COLUMN chat_sessions.summary_token_count IS '会话摘要占用的Token数';
-COMMENT ON COLUMN chat_sessions.profile_token_count IS '用户画像占用的Token数';
 COMMENT ON COLUMN chat_sessions.ltm_token_count IS '长期记忆占用的Token数';
-COMMENT ON COLUMN chat_sessions.last_profile_message_id IS '最后更新画像的消息ID';
 COMMENT ON COLUMN chat_sessions.last_ltm_message_id IS '最后更新长期记忆的消息ID';
 
 

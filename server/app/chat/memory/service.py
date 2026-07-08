@@ -275,9 +275,6 @@ class ChatMemoryService:
             # 递增 ltm_token_count 和 ltm_message_count（长期记忆触发）
             chat_session.ltm_token_count = int(chat_session.ltm_token_count or 0) + token_count
             chat_session.ltm_message_count = int(chat_session.ltm_message_count or 0) + 1
-            # 递增 profile_token_count 和 profile_message_count（画像更新触发）
-            chat_session.profile_token_count = int(chat_session.profile_token_count or 0) + token_count
-            chat_session.profile_message_count = int(chat_session.profile_message_count or 0) + 1
             db.add(chat_session)
 
             await db.commit()
@@ -650,10 +647,12 @@ class ChatMemoryService:
         user_message: str,
         assistant_reply: str,
     ) -> dict[str, Any]:
-        """在单个数据库会话中组合执行 LTM + 压缩 + 画像 token 阈值检查。"""
+        """在单个数据库会话中组合执行 LTM + 压缩 token 阈值检查。
+
+        学习者画像不再在此处触发（改为 GET /profile 懒加载 + 周概要缓冲）。
+        """
         signals = classify_turn_signals(user_message, assistant_reply)
         ltm_signal = signals["ltm"]
-        profile_signal = signals["global_profile"]
 
         try:
             async with session_scope() as db:
@@ -668,19 +667,13 @@ class ChatMemoryService:
 
                 if not chat_session:
                     should_ltm = ltm_signal
-                    should_profile = profile_signal
                     ltm_schedule: dict[str, Any] = {
                         "signal_detected": ltm_signal,
                         "ltm_token_count": 0,
                         "ltm_message_count": 0,
                     }
-                    profile_schedule: dict[str, Any] = {
-                        "signal_detected": profile_signal,
-                        "profile_token_count": 0,
-                        "profile_message_count": 0,
-                    }
                 else:
-                    # 画像/长期记忆更新阈值判断（统一阈值）
+                    # 长期记忆更新阈值判断
                     ltm_token = int(chat_session.ltm_token_count or 0)
                     ltm_msg = int(chat_session.ltm_message_count or 0)
                     ltm_threshold_due = ltm_token >= UPDATE_MIN_TOKENS or ltm_msg >= UPDATE_MIN_MESSAGES
@@ -693,18 +686,6 @@ class ChatMemoryService:
                         "last_ltm_message_id": int(chat_session.last_ltm_message_id or 0),
                     }
 
-                    # 画像阈值判断（与 LTM 共用统一阈值）
-                    profile_token = int(chat_session.profile_token_count or 0)
-                    profile_msg = int(chat_session.profile_message_count or 0)
-                    profile_threshold_due = profile_token >= UPDATE_MIN_TOKENS or profile_msg >= UPDATE_MIN_MESSAGES
-                    should_profile = profile_signal or profile_threshold_due
-                    profile_schedule = {
-                        "signal_detected": profile_signal,
-                        "threshold_due": profile_threshold_due,
-                        "profile_token_count": profile_token,
-                        "profile_message_count": profile_msg,
-                    }
-
                 should_compress = await self.compressor.needs_compression(
                     db=db,
                     user_id=user_id,
@@ -712,14 +693,12 @@ class ChatMemoryService:
                 )
 
                 logger.info(
-                    "[ChatMemoryService] evaluate_post_turn_jobs: should_ltm=%s should_profile=%s should_compress=%s",
-                    should_ltm, should_profile, should_compress,
+                    "[ChatMemoryService] evaluate_post_turn_jobs: should_ltm=%s should_compress=%s",
+                    should_ltm, should_compress,
                 )
                 return {
                     "should_ltm": should_ltm,
                     "ltm_schedule": ltm_schedule,
-                    "should_profile": should_profile,
-                    "profile_schedule": profile_schedule,
                     "should_compress": should_compress,
                     "signals": signals,
                 }
@@ -727,7 +706,7 @@ class ChatMemoryService:
             logger.error("[ChatMemoryService] evaluate_post_turn_jobs 失败: %s", exc)
             return {
                 "should_ltm": False,
-                "ltm_schedule": {"signal_detected": signal_detected},
+                "ltm_schedule": {"signal_detected": ltm_signal},
                 "should_compress": False,
                 "signals": signals,
             }
@@ -829,42 +808,6 @@ class ChatMemoryService:
         except Exception as exc:
             logger.error("[ChatMemoryService] 长期记忆更新失败: %s", exc)
             return {"updated": False, "analyzed": False, "error": str(exc)}
-
-    # -------------------------------------------------------------------
-    # reset_profile_counters: 重置画像更新计数器
-    # -------------------------------------------------------------------
-    async def reset_profile_counters(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-    ) -> bool:
-        """画像更新完成后重置 profile_token_count 和 profile_message_count。"""
-        try:
-            async with session_scope() as db:
-                chat_session = (
-                    await db.exec(
-                        select(ChatSession).where(
-                            ChatSession.id == session_id,
-                            ChatSession.user_id == user_id,
-                        )
-                    )
-                ).first()
-                if chat_session:
-                    chat_session.profile_token_count = 0
-                    chat_session.profile_message_count = 0
-                    chat_session.last_profile_updated_at = now()
-                    chat_session.updated_at = now()
-                    db.add(chat_session)
-                    logger.info(
-                        "[ChatMemoryService] 画像计数器已重置: user_id=%s session_id=%s",
-                        user_id, session_id,
-                    )
-                    return True
-                return False
-        except Exception as exc:
-            logger.error("[ChatMemoryService] reset_profile_counters 失败: %s", exc)
-            return False
 
     async def _build_dialogue_since(
         self,

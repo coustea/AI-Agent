@@ -186,25 +186,16 @@ def extract_content_text(content: list[dict[str, Any]] | str | None) -> str:
     return str(content or "").strip()
 
 
-# 画像更新触发模式 — 用于检测对话中是否包含画像更新信号
-GLOBAL_PROFILE_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
-    re.compile(r"(喜欢|习惯|偏好|擅长|感兴趣|反感|讨厌|更愿意|认知|风格|学习方式)"),
-    re.compile(r"(节奏|速度|时间|每天|太快|太慢|稍微|快一点|慢一点|进度|频繁)"),
-    re.compile(r"(实践|动手|写代码|做题|编程|实验|实战|练习|编码|Debug)"),
-)
-
-
 def classify_turn_signals(user_message: str, assistant_reply: str) -> dict[str, bool]:
-    """统一信号分类 — 一次匹配返回 LTM 与全局画像两类信号。
+    """统一信号分类 — 返回 LTM 信号。
 
-    避免同一段对话文本在 service.py 和 background.py 中被分别正则匹配两轮。
+    学习者画像不再由对话信号实时触发更新（改为 GET /profile 懒加载 + 周概要缓冲），
+    故仅保留 LTM 信号。
     """
-    turn_text = f"{user_message}\n{assistant_reply}"
     ltm_signal = has_stable_signal(user_message) or (
         has_stable_signal(assistant_reply)
         and any(kw in assistant_reply for kw in ("以后", "下次", "记住", "偏好", "纠正"))
     )
     return {
         "ltm": ltm_signal,
-        "global_profile": any(p.search(turn_text) for p in GLOBAL_PROFILE_PATTERNS),
     }
