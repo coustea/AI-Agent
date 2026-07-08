@@ -619,6 +619,8 @@ const {
   links: agentLinkPaths,
   setCardRef: setStationCardRef,
 } = useFlow(parallelPoolNodes)
+// flowCanvasRef / planningNodeRef 由模板 ref 绑定使用，vue-tsc 无法识别模板引用
+void flowCanvasRef; void planningNodeRef
 
 
 
