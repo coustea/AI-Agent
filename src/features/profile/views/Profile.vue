@@ -1003,7 +1003,7 @@ const recommendationSeconds = computed(() =>
   secondsForContexts(
     "ResourceGenerator",
     "ResourceGenerator.vue",
-    "ResourceDetail",
+    "ResourceResult",
     "ResourceHistory",
     "PathResourceDetail",
     "PathResourceHistory",

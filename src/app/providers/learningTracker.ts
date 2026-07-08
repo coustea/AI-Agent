@@ -13,7 +13,7 @@ function toNumber(value: unknown): number | undefined {
 function getContextFromRoute(route: Router['currentRoute']['value']): TrackingContext {
   const name = String(route.name || '')
 
-  if (name === 'ResourceDetail') {
+  if (name === 'ResourceResult') {
     return {
       sourcePage: 'resource-detail',
       resourceId: toNumber(route.params.id),

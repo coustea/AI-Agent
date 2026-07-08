@@ -130,8 +130,11 @@
 </template>
 
 <script setup lang="ts">
+// 引入 Vue 组合式 API：响应式、侦听与生命周期钩子
 import { ref, watch, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
+// 引入路由（当前路由与跳转）
 import { useRoute, useRouter } from 'vue-router'
+// 引入界面所需的 Phosphor 图标
 import {
   PhClockAfternoon as HistoryIcon,
   PhArrowUp as TopIcon,
@@ -140,21 +143,28 @@ import {
   PhGauge as OdometerIcon
 } from '@phosphor-icons/vue'
 
+// 引入生成流程相关的子组件
 import Settings from '../components/generator/Settings.vue'
 import Progress from '../components/generator/Progress.vue'
 
+// 引入生成编排组合式函数与资源包查询接口
 import { useGeneration } from '../composables/useGeneration'
 import { getResourceBundle } from '../api/resource'
 
+// 当前路由对象与路由实例
 const route  = useRoute()
 const router = useRouter()
 
 // ── Input state (merged from Input.vue) ─────────────────────────────────────
+// 输入框是否聚焦
 const isInputFocused = ref(false)
+// 是否处于输入法合成中（避免回车误触发提交）
 const isComposing = ref(false)
+// 输入表单引用，用于程序化提交
 const formRef = ref<HTMLFormElement | null>(null)
 
 // ── Generation state (from useGeneration) ──────────────────────────────────
+// 从生成编排组合式函数解构所需状态与操作
 const {
   currentPhase,
   naturalInput,
@@ -182,31 +192,39 @@ const {
 } = useGeneration()
 
 // ── Input handlers (merged from Input.vue) ──────────────────────────────────
+// 回车提交：合成中或组合键不触发，否则阻止默认行为并程序化提交表单
 function handleEnter(event: KeyboardEvent) {
   if (isComposing.value || event.isComposing) return
   event.preventDefault()
   formRef.value?.requestSubmit()
 }
 
+// 点击示例卡片：将示例文本填入输入框
 function fillExample(text: string) {
   naturalInput.value = text
 }
 
-// ── When generation completes, redirect to ResourceDetail ─────────────────────
+// ── When generation completes, redirect to ResourceResult ─────────────────────
+// 监听阶段变化：进入结果页时携带资源 id 跳转到详情页
 watch(currentPhase, (phase) => {
   if (phase === 'result' && activeResourceId.value) {
-    router.push({ name: 'ResourceDetail', params: { id: activeResourceId.value } })
+    router.push({ name: 'ResourceResult', params: { id: activeResourceId.value } })
   }
 })
 
 // ── Preview for in-progress resources (Progress stage only) ──────────────────
+// 当前预览中的智能体类型
 const activePreviewAgent = ref<string | null>(null)
+// 预览内容数据
 const previewData        = ref<any>(null)
+// 预览对应的完整资源对象
 const previewResource    = ref<any>(null)
 
+// 按类型打开资源预览：若内容缺失则先拉取完整资源包补齐
 async function openResourceByType(type: string) {
   let resource = generatedResources.value.find((item: any) => item.type === type)
 
+  // 已生成但内容为空时，从资源包接口补齐完整内容
   if (resource && !resource.content && activeResourceId.value) {
     try {
       const bundle = (await getResourceBundle(activeResourceId.value)).data?.data
@@ -218,10 +236,12 @@ async function openResourceByType(type: string) {
         resource = full
       }
     } catch (err) {
+      // 补齐失败不影响已有预览
       console.error('Failed to fetch resource content for preview:', err)
     }
   }
 
+  // 有内容则设置预览状态，触发预览面板
   if (resource?.content) {
     activePreviewAgent.value = resource.type || resource.agent_type
     previewData.value        = resource.content
@@ -229,6 +249,7 @@ async function openResourceByType(type: string) {
   }
 }
 
+// 组件挂载：从 URL 恢复输入与进行中的生成任务
 onMounted(() => {
   const prompt = route.query.prompt
   if (prompt) naturalInput.value = String(prompt)
@@ -238,6 +259,7 @@ onMounted(() => {
   }
 })
 
+// 路由缓存激活/失活/卸载时的连接管理：恢复、暂停、释放
 onActivated(()      => { void resume() })
 onDeactivated(()    => { pause() })
 onBeforeUnmount(()  => { dispose() })

@@ -15,7 +15,7 @@ const PathResourceDetail = () => import('@/features/learning-path/views/PathReso
 const PathResourceHistory = () => import('@/features/learning-path/views/PathResourceHistory.vue')
 const Tutor = () => import('@/features/chat/views/Tutor.vue')
 const Profile = () => import('@/features/profile/views/Profile.vue')
-const ResourceDetail = () => import('@/features/resource/views/ResourceDetail.vue')
+const ResourceResult = () => import('@/features/resource/views/ResourceResult.vue')
 const QuestionBank = () => import('@/features/question-bank/views/QuestionBank.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
 const AlgorithmVisualizer = () => import('@/features/algorithm-visualization/views/AlgorithmVisualization.vue')
@@ -37,7 +37,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'path-planner/history', name: 'LearningPathHistory', component: LearningPathHistory },
       { path: 'tutor', name: 'Tutor', component: Tutor },
       { path: 'profile', name: 'Profile', component: Profile },
-      { path: 'resource-detail/:id', name: 'ResourceDetail', component: ResourceDetail },
+      { path: 'resource-detail/:id', name: 'ResourceResult', component: ResourceResult },
       { path: '/ai/resources/history', name: 'ResourceHistory', component: ResourceHistory },
       { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
       { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
