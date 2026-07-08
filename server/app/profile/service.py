@@ -551,6 +551,65 @@ class ProfileService:
             logger.exception("[ProfileService] onboarding 推理+评分失败: user_id=%s", user_id)
             return {"inference_ok": False, "reason": "llm_error"}
 
+    async def infer_profile_from_digest(self, *, user_id: int) -> dict[str, Any]:
+        """从本周周概要推理更新文字画像（懒加载触发）。
+
+        流程：构建本周周概要 → 加载当前画像 → LLM 推理（digest_update）→
+        若 should_update 则 save_dimensions + score_profile（唯一评分通道之一）；
+        否则轻量 bump updated_at 避免重复触发，不动 scored_at 以保持不变式。
+        """
+        try:
+            logger.info("[ProfileService] 周概要画像推理开始: user_id=%s", user_id)
+            should_update = False
+            async with session_scope() as db:
+                digest = await self.get_or_create_weekly_digest(user_id=user_id, db=db)
+                dimensions = await self.get_dimensions(user_id=user_id, db=db)
+
+                prompt = prompts.get("profile").render(
+                    "digest_update",
+                    current_profile_json=json.dumps(dimensions, ensure_ascii=False),
+                    weekly_digest_markdown=digest.digest_markdown,
+                )
+                resp = await self.llm.ainvoke_json(
+                    GlobalTutoringInferenceOutput,
+                    [HumanMessage(content=prompt)],
+                )
+                logger.info(
+                    "[ProfileService] 周概要推理结果: should_update=%s",
+                    resp.should_update,
+                )
+
+                if resp.should_update and resp.dimensions_patch:
+                    await self.save_dimensions(
+                        user_id=user_id,
+                        dimensions_patch=resp.dimensions_patch,
+                        db=db,
+                    )
+                    should_update = True
+
+            if should_update:
+                score_result = await self.score_profile(user_id=user_id)
+                logger.info(
+                    "[ProfileService] 周概要推理+评分完成: user_id=%s overall_score=%s",
+                    user_id, score_result.get("overall_score"),
+                )
+            else:
+                # 无变更：bump updated_at，避免重复触发（不动 scored_at，保持"分数仅随文字变更"不变式）
+                async with session_scope() as db:
+                    profile = await self.get_profile(user_id=user_id, db=db)
+                    profile.updated_at = datetime.now(timezone.utc)
+                    db.add(profile)
+                    await db.commit()
+                logger.info(
+                    "[ProfileService] 周概要推理无变更，已 bump updated_at: user_id=%s",
+                    user_id,
+                )
+
+            return {"profile_updated": should_update}
+        except Exception:
+            logger.exception("[ProfileService] 周概要推理失败: user_id=%s", user_id)
+            return {"profile_updated": False, "reason": "error"}
+
     async def infer_profile_from_tutoring(self, *, user_id: int, session_id: str) -> dict[str, Any]:
         """从辅导对话推理更新全局画像。"""
         logger.info("[ProfileService] 全局画像更新开始: user_id=%s session_id=%s", user_id, session_id)
