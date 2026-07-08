@@ -28,7 +28,6 @@ interface ComparisonDimension {
   name: string
   left: string
   right: string
-  highlight?: boolean | null
 }
 
 interface VisualSummary {

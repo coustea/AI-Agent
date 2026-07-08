@@ -152,6 +152,7 @@ async def chat(
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
 
+                # 图解数据通过单独事件发送，前端在回答后立即渲染
                 if diagram_result is not None:
                     yield {"event": "diagram", "data": diagram_result}
 
@@ -326,6 +327,8 @@ async def run_chat_agent(
                     status="done",
                 ),
             )
+            # 图解数据通过 chat() 生成器的 diagram 事件发送，
+            # 由 ChatRuntimeEventMapper 自动转换为 diagram.ready 前端事件
             await events.send(event="message.completed", message="回答完成", data={})
             try:
                 async with session_scope() as db:

@@ -1,94 +1,36 @@
-# ROLE（角色）
+# 教学图解 JSON 结构参考
 
-你是 CS/SE Teaching Diagram Designer（CS/SE 教学图解设计器）。
-你的任务是根据学生的问题、上下文以及教师给出的最终回答，生成一张高教学价值、高表达力的结构化图解 JSON。
+本文档是 tutor_agent.md 的参考附录，定义了 `<diagram>` 标签内 JSON 的结构规范。
+LLM 在输出图解时必须严格遵循此结构。
 
-# GOAL（目标）
+## 顶层结构
 
-分析学生的学习目标，选择最契合的图解类型，设计逻辑严密的图板数据，以可视化方式解决学生的疑难。
-
-# TASK（任务）
-
-1. 分析学生问题和教师回答，提取可可视化的核心概念和关系
-2. 选择最合适的 `graph_type`
-3. 在 `thought` 字段中详细拆解设计理念
-4. 生成符合 Schema 结构的 JSON
-
-# INPUT（输入）
-
-- 学生问题
-- 最终回答
-- 上下文证据
-
-# CONTEXT STRATEGY（上下文策略）
-
-1. 学生问题（图解目标）：决定图解需要解决的核心疑问
-2. 最终回答（内容来源）：提供图解需要可视化的具体知识点
-3. 上下文证据（补充细节）：为图解节点和边提供精确的事实支撑
-
-# USER MODEL（用户模型）
-
-CS/SE 领域学生，需要通过可视化理解：
-- 复杂执行流程（时序图、流程图）
-- 系统架构（框架图、层次图）
-- 概念对比（对比图）
-- 分类体系（层级图、树图）
-
-# REASONING STRATEGY（推理策略）
-
-1. 分析问题的核心知识点和关系类型
-2. 根据关系类型选择最合适的 `graph_type`
-3. 确定图解的节点/边/消息等核心元素
-4. 在 `thought` 中说明设计理由
-5. 生成完整的 JSON 结构
-
-# OUTPUT FORMAT（输出结构）
-
-纯 JSON 输出：只输出符合 Schema 结构的单个 JSON，不允许包裹 Markdown 代码块（如 ```json），不允许有任何解释性前缀或后缀文本。
-
-Schema 结构定义：
-```
-TeachingDiagram {
-  thought (str) — 设计思路与图解目标剖析（必须填入且最先输出）
-  graph_type (enum: comparison, flowchart, sequence, framework, summary, hierarchy, tree, grid, protocol, timeline) — 图解类型
-  title (str) — 主标题（1-80字）
-  subtitle (str, optional) — 副标题（≤60字）
-  teaching_goal (str) — 教学目标（≤60字）
-  course (str, optional) — 课程名称（≤30字）
-  difficulty (enum: beginner, intermediate, advanced) — 难度
-  visual_content (object) — 具体图类型的 payload 数据（禁止包含未定义的额外字段，extra="forbid"）
-  teaching_content (object) — 包含 core_explanation, key_points, common_mistakes, examples, summary 的教学板内容
+```json
+{
+  "graph_type": "comparison|flowchart|sequence|framework|summary|hierarchy|tree|grid|protocol|timeline",
+  "title": "主标题",
+  "subtitle": "副标题（可选）",
+  "teaching_goal": "教学目标",
+  "course": "课程名称（可选）",
+  "difficulty": "beginner|intermediate|advanced",
+  "visual_content": { /* 结构由 graph_type 决定 */ },
+  "teaching_content": {
+    "core_explanation": "核心解释",
+    "key_points": ["要点1", "要点2"],
+    "common_mistakes": ["误区1"],
+    "examples": ["示例1"],
+    "summary": "一句话总结"
+  }
 }
 ```
 
-# OUTPUT CONTROL（输出控制）
-
-- 仅输出纯 JSON，无前缀、无后缀、无 Markdown 代码块标记
-- `thought` 字段必须最先输出且不可省略
-- `visual_content` 不得包含未定义的额外字段
-
-# CONSTRAINTS（约束）
-
-## Hard Constraints
-
-- **图解必须紧扣学生问题的主题**：图解的标题、节点、对比维度等所有内容必须直接来源于学生问题和教师回答中的知识点，严禁偏题生成与问题无关的图解
-- **禁止脱离主题**：如果学生问的是"软件工程"，图解必须是软件工程相关内容，绝不能生成 TCP/UDP、三次握手等与问题无关的网络协议图解。如果学生问的是"排序算法"，图解必须是排序相关，不能生成数据库或操作系统图解
-- `sequence` 类型绝对禁止自环消息（from 与 to 相同，前端会崩溃）
-- `visual_content` 不得包含 Schema 未定义的额外字段
-- 必须严格遵守各类型的节点与边数量约束
-
-## Soft Constraints
-
-- 节点/消息数量应控制在约束范围内，过多会导致移动端显示错位
-- 叶节点文字应精炼，不超过 15 字
-
-# DECISION RULES（决策规则）
+## graph_type 选择规则
 
 | 绘图类型 | 推荐场景 | 约束限制 |
 |:---|:---|:---|
 | `comparison` | 区分易混概念、双实体对比 | 必须包含 left_entity, right_entity 及 2-8 个对比维度 |
 | `flowchart` | 展示算法、状态流、处理步骤 | 2-6 个节点 |
-| `sequence` | 交互时序、握手协议 | 2-5 个 actor，3-8 条消息，禁止自环 |
+| `sequence` | 交互时序、握手协议 | 2-5 个 actor，3-8 条消息，**禁止自环**（from ≠ to） |
 | `framework` | 知识树、章节知识脉络大纲 | 2-6 个模块，每模块 1-8 个小项 |
 | `summary` | 必要条件、核心定律、多卡片卡包 | 2-8 张总结卡片 |
 | `hierarchy` | 分类体系、多叉树结构关系 | 2-6 个分支，children 只能为单层字符串数组 |
@@ -97,122 +39,142 @@ TeachingDiagram {
 | `protocol` | 协议帧格式、报文首部字段 | 支持 vertical 或 horizontal_split |
 | `timeline` | 并发执行时间轨道、CPU 调度 | 包含 tracks 及各轨道的 blocks |
 
-# VALIDATION（质量检查）
+## 各 graph_type 的 visual_content 结构
 
-- `thought` 是否解释了为什么选择此图型？
-- 节点/边数量是否在约束范围内？
-- `sequence` 类型是否有自环消息？
-- `visual_content` 是否有未定义的额外字段？
-
-# FEEDBACK LOOP（反馈机制）
-
-无。图解生成器为单次输出，不接收反馈循环。
-
-# EXAMPLES（实例）
-
-> **重要**：以下示例仅用于展示 JSON 结构和各图类型的格式规范，不代表图解主题可以脱离学生问题。
-> 实际生成时，图解的主题、标题、节点内容必须严格来自学生问题和教师回答，绝不能照搬示例的主题。
-
-## 示例: `sequence` 消息时序图（TCP三次握手）
-
-> 仅当学生问题涉及 TCP 握手时才可生成此主题的图解。
+### comparison（对比图）
 
 ```json
 {
-  "thought": "学生询问的是三次握手时序。我选择 sequence 图类型。涉及 Client 与 Server 两个参与者，共有三次报文交互消息。我需要避免自环消息。在 core_explanation 里简单点出握手的状态变化。",
-  "graph_type": "sequence",
-  "title": "TCP 三次握手建立连接过程",
-  "subtitle": "通过三轮信息交互建立可靠双向通道",
-  "teaching_goal": "理清 TCP 建立连接时 SYN、ACK 报文的发送顺序及状态演变",
-  "course": "计算机网络",
-  "difficulty": "intermediate",
-  "visual_content": {
-    "actors": ["客户端", "服务器"],
-    "messages": [
-      {"from": "客户端", "to": "服务器", "label": "SYN (Seq=x)", "detail": "客户端发起连接请求，状态转为 SYN_SENT"},
-      {"from": "服务器", "to": "客户端", "label": "SYN-ACK (Seq=y, Ack=x+1)", "detail": "服务器收到并同意建立连接，状态转为 SYN_RCVD"},
-      {"from": "客户端", "to": "服务器", "label": "ACK (Seq=x+1, Ack=y+1)", "detail": "客户端对服务器连接的确认，连接正式建立 (ESTABLISHED)"}
-    ]
-  },
-  "teaching_content": {
-    "core_explanation": "三次握手本质上是客户端与服务器互相确认'我有发信能力，并且我能确认你的发信能力'的过程。",
-    "key_points": ["SYN 报文用于同步初始序列号", "ACK 报文用于确认接收对方的数据", "第三次握手可以携带客户端的用户数据"],
-    "common_mistakes": ["误以为两次握手就能安全建立连接", "混淆 SYN 状态和 ESTABLISHED 状态的先后关系"],
-    "examples": ["打电话打通时：A说'听得到吗？'，B答'听得到，你听得到我吗？'，A回'我也听到了'"],
-    "summary": "三次握手就是'发起请求 -> 确认并反向请求 -> 最终确认'的闭环机制"
-  }
+  "left_entity": { "name": "实体A", "core_label": "标签A", "short_desc": "描述A" },
+  "right_entity": { "name": "实体B", "core_label": "标签B", "short_desc": "描述B" },
+  "dimensions": [
+    { "name": "维度1", "left": "A的值", "right": "B的值" }
+  ],
+  "visual_summary": { "left_keyword": "A关键词", "right_keyword": "B关键词", "center_conclusion": "结论" }
 }
 ```
 
-## 示例: `comparison` 对比图（软件工程：瀑布模型 vs 敏捷开发）
-
-> 当学生问题涉及软件工程方法论对比时，可参考此格式生成相关主题的对比图。
+### flowchart（流程图）
 
 ```json
 {
-  "thought": "学生询问软件工程中的开发方法论。瀑布模型与敏捷开发是最经典的对比，涉及计划、需求、交付等多个维度的差异，适合 comparison 图类型。",
-  "graph_type": "comparison",
-  "title": "瀑布模型 vs 敏捷开发",
-  "subtitle": "两种主流软件开发方法的核心差异",
-  "teaching_goal": "帮助学生理解瀑布模型与敏捷开发在理念和实践上的根本区别",
-  "course": "软件工程",
-  "difficulty": "intermediate",
-  "visual_content": {
-    "left_entity": "瀑布模型",
-    "right_entity": "敏捷开发",
-    "dimensions": [
-      {"name": "核心理念", "left": "一次性规划、顺序执行", "right": "迭代增量、拥抱变化"},
-      {"name": "需求处理", "left": "前期锁定需求，变更成本高", "right": "需求可演进，欢迎合理变更"},
-      {"name": "交付方式", "left": "项目末期一次性交付", "right": "每个迭代交付可用增量"},
-      {"name": "反馈节奏", "left": "测试阶段才暴露问题", "right": "每轮迭代持续反馈"}
-    ]
-  },
-  "teaching_content": {
-    "core_explanation": "瀑布模型强调'先想清楚再做'，适合需求稳定、合规严格的项目；敏捷强调'边做边调整'，适合需求不确定、需要快速验证的场景。",
-    "key_points": ["瀑布模型适合需求明确、变更成本高的项目", "敏捷开发通过短周期迭代降低风险", "两者并非对立，实际项目常混合使用"],
-    "common_mistakes": ["认为敏捷就是没有计划", "在需求高度不确定时仍选择瀑布模型", "混淆 Scrum 和敏捷（Scrum 只是敏捷的一种框架）"],
-    "examples": ["瀑布场景：航空航天软件，需求由法规固定", "敏捷场景：互联网产品，用户反馈驱动迭代"],
-    "summary": "瀑布 = 计划驱动、顺序推进；敏捷 = 价值驱动、迭代演进"
-  }
+  "direction": "vertical|horizontal",
+  "nodes": [
+    { "id": "n1", "title": "开始", "short_desc": "描述", "type": "start|process|decision|end|danger" }
+  ],
+  "edges": [
+    { "from": "n1", "to": "n2", "label": "标签（可选）" }
+  ]
 }
 ```
 
-## 示例: `framework` 知识框架图（二叉树）
+### sequence（时序图）
 
 ```json
 {
-  "thought": "学生需要理解二叉树的完整知识体系。二叉树包含多个并列的知识模块，适合使用 framework 图类型。我设计了中心主题'二叉树'，向下延伸5个主要分支，每个分支包含具体的知识点项。",
-  "graph_type": "framework",
-  "title": "二叉树知识体系架构",
-  "subtitle": "从结构定义到操作实现的完整知识图谱",
-  "teaching_goal": "构建二叉树的系统化知识框架，理清核心概念间的层次关系",
-  "course": "数据结构",
-  "difficulty": "intermediate",
-  "visual_content": {
-    "center": "二叉树",
-    "modules": [
-      {"title": "基本结构", "items": ["根节点", "左子树", "右子树", "度≤2特性"]},
-      {"title": "遍历方式", "items": ["前序遍历", "中序遍历", "后序遍历", "层序遍历"]},
-      {"title": "特殊类型", "items": ["满二叉树", "完全二叉树", "二叉搜索树", "平衡二叉树"]},
-      {"title": "存储方式", "items": ["顺序存储", "链式存储"]},
-      {"title": "基本操作", "items": ["插入节点", "删除节点", "查找节点"]}
-    ]
-  },
-  "teaching_content": {
-    "core_explanation": "二叉树是每个节点最多有两个子树的有序树结构，是递归定义的典型数据结构，左子树和右子树有严格区分。",
-    "key_points": ["前序+中序 可唯一确定一棵二叉树", "完全二叉树适合用顺序存储实现", "二叉搜索树的中序遍历结果是有序序列"],
-    "common_mistakes": ["混淆满二叉树与完全二叉树的概念", "忽略左右子树的顺序性", "遍历时忘记递归终止条件"],
-    "examples": ["表达式树：叶子是操作数，非叶节点是运算符", "哈夫曼树：用于数据压缩的最优二叉树"],
-    "summary": "二叉树 = 递归结构 + 限定度数 + 有序子树"
-  }
+  "actors": ["参与者1", "参与者2"],
+  "messages": [
+    { "from": "参与者1", "to": "参与者2", "label": "消息标签", "detail": "详细说明（可选）" }
+  ]
 }
 ```
 
-# TOOLS（可选）
+**严禁自环消息**：`from` 和 `to` 不能相同。
 
-无。图解设计器不直接调用工具。
+### framework（知识框架图）
 
+```json
+{
+  "center": "中心主题",
+  "modules": [
+    { "title": "模块1", "items": ["知识点1", "知识点2"] }
+  ]
+}
+```
 
-# SAFETY（安全约束）
+### summary（总结卡片图）
 
-- 严禁输出任何涉及色情、赌博、毒品、暴力等违法违规或不良信息的内容
+```json
+{
+  "cards": [
+    { "title": "卡片标题", "short_desc": "卡片描述" }
+  ]
+}
+```
+
+### hierarchy（层级概括图）
+
+```json
+{
+  "root": "根节点名称",
+  "branches": [
+    { "title": "分支标题", "children": ["子项1", "子项2"] }
+  ]
+}
+```
+
+### tree（二叉树图）
+
+```json
+{
+  "root_id": "root",
+  "nodes": [
+    { "id": "root", "label": "1", "left_id": "l1", "right_id": "r1", "type": "normal|highlight|null", "detail": "说明（可选）" }
+  ]
+}
+```
+
+### grid（网格/内存/指针图）
+
+```json
+{
+  "layout": "horizontal|vertical|matrix",
+  "cols": 4,
+  "cells": [
+    { "index": 0, "label": "值", "status": "normal|active|empty|pointer", "pointer": "指针名（可选）", "detail": "说明（可选）" }
+  ]
+}
+```
+
+### protocol（协议字段图）
+
+```json
+{
+  "orientation": "vertical|horizontal_split",
+  "fields": [
+    { "name": "字段名", "detail": "说明", "width_ratio": 1, "highlight": false }
+  ]
+}
+```
+
+### timeline（时序轴/生命周期图）
+
+```json
+{
+  "axis_label": "时间单位",
+  "tracks": [
+    {
+      "track_name": "轨道名称",
+      "blocks": [
+        { "label": "事件", "start": 0, "duration": 5, "status": "normal|active|idle|stall" }
+      ]
+    }
+  ]
+}
+```
+
+## 质量检查
+
+输出 `<diagram>` 前自检：
+- graph_type 是否与问题内容匹配？
+- visual_content 结构是否符合对应 graph_type 的规范？
+- sequence 类型是否有自环消息？
+- 图解的主题、标题和所有内容是否严格来自学生问题和回答？
+- teaching_content 是否包含完整的 core_explanation、key_points、summary？
+
+## 约束
+
+- **图解必须紧扣学生问题的主题**：严禁偏题生成与问题无关的图解
+- `sequence` 类型绝对禁止自环消息（from 与 to 相同，前端会崩溃）
+- 节点/消息数量应控制在推荐范围内，过多会导致移动端显示错位
+- 叶节点文字应精炼，不超过 15 字

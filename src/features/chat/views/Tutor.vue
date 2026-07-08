@@ -1097,12 +1097,7 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
     || event.event === 'activity.completed'
     || event.event === 'activity.failed'
   ) {
-    const stage = data.stage as string | undefined
     const toolName = typeof data.tool_name === 'string' ? data.tool_name : undefined
-    // 图解生成通过 generate_teaching_diagram 工具调用
-    if (toolName === 'generate_teaching_diagram' || stage === 'teaching_diagram_generate') {
-      aiMsg.teachingDiagramGenerating = true
-    }
     const activityId = String(data.activity_id || '').trim()
     const kind = data.kind === 'agent' || data.kind === 'tool' || data.kind === 'attachment' || data.kind === 'workflow'
       ? data.kind

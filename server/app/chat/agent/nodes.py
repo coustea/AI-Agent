@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from datetime import datetime
@@ -22,8 +23,8 @@ from app.chat.emitter import (
     build_workflow_activity_payload,
 )
 from app.chat.agent.tool_runner import ToolExecutionContext, TutorToolRunner
-from app.chat.schemas import EvidenceSet, TutorRequestContext, TutorRuntimeEvent
-from app.chat.schemas.diagram import TeachingDiagramGenerator
+from app.chat.schemas import TutorRequestContext, TutorRuntimeEvent
+from app.chat.schemas.diagram import validate_diagram_json
 from app.chat.streaming import ResponseStreamer
 from app.chat.agent.tools import build_tutor_tools
 from app.chat.utils import normalize_message_content
@@ -43,6 +44,11 @@ def _current_date_text() -> str:
 _ANSWER_BLOCK_RE = re.compile(
     r"^\s*(?P<reasoning>.*?)\s*"
     r"<answer>\s*(?P<answer>.*?)\s*</answer>\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
+
+_DIAGRAM_TAG_RE = re.compile(
+    r"<diagram>\s*(?P<json>.*?)\s*</diagram>",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -68,6 +74,36 @@ def split_reasoning_and_answer(text: str) -> tuple[str, str]:
         return "", ""
 
     return _normalize_reasoning_summary(text), ""
+
+
+def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] | None]:
+    """从 <answer> 内容中提取 <diagram> 标签的 JSON。
+
+    返回 (cleaned_answer, diagram_dict)。
+    - 如果找到 <diagram> 标签且 JSON 合法，返回去除 <diagram> 的回答和解析后的 dict
+    - 如果未找到 <diagram> 标签，返回原回答和 None
+    - 如果 JSON 解析失败，返回原回答和 None（由调用方处理修复重试）
+    """
+    match = _DIAGRAM_TAG_RE.search(answer_body)
+    if not match:
+        return answer_body, None
+
+    json_text = match.group("json").strip()
+    # 移除可能的 markdown 代码块包裹
+    if json_text.startswith("```"):
+        json_text = re.sub(r"^```(?:json)?\s*\n?", "", json_text)
+        json_text = re.sub(r"\n?```\s*$", "", json_text)
+        json_text = json_text.strip()
+
+    try:
+        parsed = json.loads(json_text)
+    except json.JSONDecodeError as exc:
+        logger.warning("[extract_diagram] JSON 解析失败: %s", exc)
+        return answer_body, None
+
+    # 从回答中移除 <diagram> 标签
+    cleaned = _DIAGRAM_TAG_RE.sub("", answer_body).strip()
+    return cleaned, parsed
 
 
 def _thinking_summary(reasoning: str, iteration: int, decision_text: str = "") -> str:
@@ -237,6 +273,7 @@ async def react_node(
     2. 构建 system prompt（统一 tutor_agent.md）
     3. ReAct loop: LLM → tool_call → tool_result → LLM → ... → 最终回答
     4. 流式输出 answer_token（进入 SafetyBuffer）
+    5. 从 <answer> 中提取 <diagram> 标签内容，校验并持久化
     """
     question = state.get("question", "")
     history = state.get("history_messages", [])
@@ -314,7 +351,6 @@ async def react_node(
         arguments: dict[str, Any],
         tool_call_id: str,
     ) -> Any:
-        nonlocal node_diagram_result
         runner = TutorToolRunner()
         result = await runner.execute(
             tool_name=tool_name,
@@ -325,10 +361,6 @@ async def react_node(
         )
         if result.invocation:
             node_tool_invocations.append(result.invocation)
-            if tool_name == "generate_teaching_diagram":
-                payload = result.invocation.get("result_payload")
-                if isinstance(payload, dict) and not payload.get("error"):
-                    node_diagram_result = payload
         node_sources.extend(result.sources)
         node_errors.extend(result.errors)
         return result
@@ -355,6 +387,11 @@ async def react_node(
         file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
         attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
         current_date=_current_date_text(),
+        diagram_mode=(
+            "开启（学生已在前端勾选“图解”开关，你必须在 <answer> 中包含 <diagram> 标签输出图解 JSON）"
+            if need_teaching_diagram
+            else "关闭"
+        ),
     )
 
     # ── 3. 初始化消息和事件收集 ──
@@ -377,6 +414,7 @@ async def react_node(
         else llm.model
     )
     format_repair_used = False
+    diagram_repair_used = False
 
     while iteration < max_iterations:
         iteration += 1
@@ -484,7 +522,37 @@ async def react_node(
                     )))
                     continue
 
-                # 无工具调用 → 这是最终回答。思考 activity 完成后才发送纯正文。
+                # ── 无工具调用 → 这是最终回答 ──
+
+                # 提取 <diagram> 标签内容
+                cleaned_answer, raw_diagram = extract_diagram_from_answer(answer_body)
+
+                if raw_diagram is not None:
+                    # 校验图解 JSON
+                    validated = validate_diagram_json(raw_diagram)
+                    if validated is not None:
+                        node_diagram_result = validated
+                        answer_body = cleaned_answer
+                    elif not diagram_repair_used:
+                        # 校验失败 → 修复重试
+                        diagram_repair_used = True
+                        logger.info("[react_node] 图解 JSON 校验失败，发起修复重试")
+                        if accumulated_response is not None:
+                            messages.append(accumulated_response)
+                        messages.append(HumanMessage(content=(
+                            "[DIAGRAM REPAIR]\n"
+                            f"上一次图解 JSON 校验失败：graph_type 或 visual_content 结构不合法。\n"
+                            f"已生成内容：{json.dumps(raw_diagram, ensure_ascii=False)[:2000]}\n"
+                            "请修复并重新输出完整的 <answer>，包含修复后的 <diagram>...</diagram>。"
+                            "确保 graph_type 是合法类型，visual_content 结构与 graph_type 匹配。"
+                        )))
+                        continue
+                    else:
+                        # 修复重试已用完，放弃图解
+                        logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解")
+                        answer_body = cleaned_answer
+
+                # 流式输出最终回答
                 streamer = ResponseStreamer()
                 async for chunk_event in streamer.stream_answer(answer_body, skip_blank=False):
                     chunk_token = chunk_event.get("data", "")
@@ -542,61 +610,6 @@ async def react_node(
                 logger.warning("[react_node] 工具 %s 失败: %s", tool_name, exc)
                 node_errors.append(f"{tool_name}: {exc}")
                 messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
-
-    if need_teaching_diagram and full_answer and node_diagram_result is None:
-        diagram_activity_id = "forced-teaching-diagram"
-        base_seq += 1
-        running_event = TutorRuntimeEvent(
-            type="agent_status",
-            payload=build_workflow_activity_payload(
-                stage="teaching_diagram",
-                activity_id=diagram_activity_id,
-                title="生成图解",
-                message="正在生成教学图解",
-                status="running",
-            ),
-            sequence=base_seq,
-            timestamp=time.time(),
-        )
-        node_events.extend(await agent._emit_event(state, running_event))
-        try:
-            node_diagram_result = await TeachingDiagramGenerator().generate(
-                request_context,
-                full_answer,
-                EvidenceSet(items=[]),
-            )
-            base_seq += 1
-            done_event = TutorRuntimeEvent(
-                type="agent_status",
-                payload=build_workflow_activity_payload(
-                    stage="teaching_diagram",
-                    activity_id=diagram_activity_id,
-                    title="生成图解",
-                    message="教学图解已生成",
-                    status="done",
-                ),
-                sequence=base_seq,
-                timestamp=time.time(),
-            )
-            node_events.extend(await agent._emit_event(state, done_event))
-        except Exception as exc:
-            logger.warning("[react_node] 强制生成教学图失败: %s", exc)
-            node_errors.append(f"generate_teaching_diagram: {exc}")
-            base_seq += 1
-            failed_event = TutorRuntimeEvent(
-                type="agent_status",
-                payload=build_workflow_activity_payload(
-                    stage="teaching_diagram",
-                    activity_id=diagram_activity_id,
-                    title="生成图解",
-                    message="教学图解生成失败",
-                    summary=str(exc),
-                    status="failed",
-                ),
-                sequence=base_seq,
-                timestamp=time.time(),
-            )
-            node_events.extend(await agent._emit_event(state, failed_event))
 
     # ── 5. 返回 state 更新 ──
     return {
