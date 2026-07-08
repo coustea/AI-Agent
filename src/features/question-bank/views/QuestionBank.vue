@@ -279,6 +279,7 @@
                     :examAnswers="examAnswers"
                     :examReview="examReview"
                     :examSubmitted="examSubmitted"
+                    :examReviewing="examReviewing"
                     :examSubmitNoticeVisible="examSubmitNoticeVisible"
                     :currentExamIndex="currentExamIndex"
                     :formattedExamTime="formattedExamTime"
@@ -414,6 +415,7 @@
         :examAnswers="examAnswers"
         :examReview="examReview"
         :examSubmitted="examSubmitted"
+        :examReviewing="examReviewing"
         :examSubmitNoticeVisible="examSubmitNoticeVisible"
         :currentExamIndex="currentExamIndex"
         :formattedExamTime="formattedExamTime"
@@ -440,7 +442,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
-import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
+import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
 import {
   archiveWrongQuestion,
   fetchRandomWrongQuestion,
@@ -596,6 +598,7 @@ const examPaper = shallowRef<Question[]>([])
 const examAnswers = ref<Record<string, AnswerValue>>({})
 const examReview = ref<Record<string, QuizReviewResult | null>>({})
 const examSubmitted = ref(false)
+const examReviewing = ref(false)
 const examSubmitNoticeVisible = ref(false)
 const currentExamIndex = ref(0)
 const examTime = ref(0)
@@ -979,7 +982,7 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
     id: item.question_id,
     wrong_id: item.id,
     subject: item.subject,
-    type: item.question_type,
+    type: toQuestionTypeLabel(item.question_type),
     content: item.content,
     options: item.options,
     answer: item.standard_answer || '',
@@ -1410,6 +1413,10 @@ async function submitExam() {
 
   examSubmitNoticeVisible.value = false
   stopExamTimer()
+
+  const hasSubjective = examPaper.value.some((q) => !isObjectiveQuestion(q))
+  if (hasSubjective) examReviewing.value = true
+
   let correctCount = 0
   const batchResults: Array<Record<string, unknown>> = []
 
@@ -1454,6 +1461,7 @@ async function submitExam() {
       })
 
   await Promise.all(subjectiveTasks)
+  examReviewing.value = false
 
   if (batchResults.length > 0) {
     await submitObjectiveResults({ results: batchResults as any[] })
@@ -1592,7 +1600,7 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
 }
 
 function isObjectiveQuestion(q: Question) {
-  return ['选择题', '单选题', '多选题', '判断题', '填空题', '分析题'].includes(q.type)
+  return ['选择题', '单选题', '多选题', '判断题', '填空题'].includes(q.type)
 }
 
 function isOptionQuestion(q: Question) {
