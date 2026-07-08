@@ -256,11 +256,13 @@ import { searchSchools } from '@/features/profile/api/school'
 import type { SchoolItem } from '@/features/profile/model/school'
 import { hasAuthToken } from '@/shared/auth/token'
 
+// 弹窗是否可见，支持 v-model（modelValue），standalone 表示独立落地页形态
 const props = withDefaults(defineProps<{ modelValue?: boolean; standalone?: boolean }>(), {
   modelValue: true,
   standalone: false,
 })
 
+// 向父组件回传可见状态变化与提交成功事件
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'success'): void
@@ -270,6 +272,7 @@ const route = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
 
+// 弹窗可见性的双向绑定封装
 const visible = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value),
@@ -309,32 +312,39 @@ type ProfileOnboardingDraftState = {
   form: ProfileOnboardingUpdate
 }
 
+// 对话消息列表
 const messages = ref<ChatMessage[]>([])
 const submitting = ref(false)
 const messageListRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 
+// 当前步骤（1-7 为采集步骤，>7 表示完成）、用户输入与各阶段状态
 const currentStep = ref(1)
 const userInput = ref('')
 const isThinking = ref(false)
 const isAssistantStreaming = ref(false)
 const schoolSuggestions = ref<SchoolItem[]>([])
+// 用户是否正在向上翻看历史消息（决定是否自动滚动到底部）
 const isUserReadingHistory = ref(false)
 
+// 判定“接近底部”的像素阈值
 const MESSAGE_BOTTOM_THRESHOLD = 88
 
+// 学校搜索防抖定时器、流式渲染运行号（用于中断旧流）、草稿水合标记、滚动锁存档
 let schoolSearchTimer: ReturnType<typeof setTimeout> | null = null
 let streamRunId = 0
 let isDraftHydrating = false
 let previousBodyOverflow = ''
 let previousHtmlOverflow = ''
 
+// 草稿本地存储 key，按用户隔离
 const onboardingDraftKey = computed(() =>
   currentUser.value?.id
     ? `onboarding-dialog-draft:${currentUser.value.id}`
     : 'onboarding-dialog-draft',
 )
 
+// 收集到的学习画像表单数据
 const form = reactive<ProfileOnboardingUpdate>({
   school: '',
   major: '',
@@ -379,6 +389,7 @@ const PRESET_GRADES = ['大一', '大二', '大三', '大四', '研一', '研二
 const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
 const PRESET_PROGRAMMING_LANGUAGES = ['Python', 'Java', 'C++', 'JavaScript', 'Go', 'Rust']
 
+// 7 步引导的元数据定义（专业→年级→目标→学校→时间→语言→课程）
 const ONBOARDING_STEPS: StepMeta[] = [
   {
     key: 1,
@@ -441,6 +452,7 @@ const coursesValue = computed<string[]>(() => {
   return Array.isArray(form.courses) ? (form.courses as string[]).map(String) : []
 })
 
+// 是否已收集完所有必填项（或步骤超过 7）
 const isComplete = computed(() => {
   return currentStep.value > 7 || Boolean(
     form.school &&
@@ -596,6 +608,7 @@ const showAssistantActions = computed(() => {
   return currentStep.value === 4 && schoolSuggestions.value.length > 0
 })
 
+// 页面滚动锁定：打开时禁掉 body/html 滚动
 const lockPageScroll = () => {
   previousBodyOverflow = document.body.style.overflow
   previousHtmlOverflow = document.documentElement.style.overflow
@@ -618,6 +631,7 @@ const cloneFormState = (): ProfileOnboardingUpdate => ({
   courses: Array.isArray(form.courses) ? [...form.courses] : [],
 })
 
+// 将当前进度持久化到 localStorage（水合中或 key 缺失时跳过）
 const persistDraft = () => {
   if (isDraftHydrating || !onboardingDraftKey.value) return
 
@@ -637,6 +651,7 @@ const clearDraft = () => {
   localStorage.removeItem(onboardingDraftKey.value)
 }
 
+// 从 localStorage 恢复草稿（含步骤、消息、表单）
 const loadDraft = () => {
   if (!onboardingDraftKey.value) return false
 
@@ -671,6 +686,7 @@ const loadDraft = () => {
   }
 }
 
+// 切换可见时锁定/解锁页面滚动，并在打开时初始化对话
 watch(visible, async open => {
   if (!open) {
     streamRunId += 1
@@ -705,6 +721,7 @@ watch(form, () => {
   persistDraft()
 }, { deep: true })
 
+// 打开弹窗的初始化入口：重置状态→拉取已有资料→优先恢复草稿，否则发送开场白
 const initializeDialog = async () => {
   resetState()
   await loadStatus()
@@ -834,6 +851,7 @@ const getChunkDelay = (chunk: string) => {
   return 18
 }
 
+// 以打字机效果逐段渲染助手消息（按 runId 支持中途中断）
 const streamAssistantMessage = async (content: string) => {
   const runId = streamRunId
   isAssistantStreaming.value = true
@@ -1006,6 +1024,7 @@ const extractMultiple = (text: string, presets: string[]) => {
   return result
 }
 
+// 发送消息：按当前步骤（1-7）解析用户输入写入表单并推进到下一步
 const handleSend = async () => {
   if (!canSend.value) return
 
@@ -1080,6 +1099,7 @@ const handleSend = async () => {
   }
 }
 
+// 从 /users/me 预填已保存的基础信息到表单
 const loadStatus = async () => {
   if (!hasAuthToken()) return
 
@@ -1102,6 +1122,7 @@ const loadStatus = async () => {
   }
 }
 
+// 提交引导结果：PATCH /profile/onboarding 保存并标记首次登录完成，随后关闭弹窗
 const submitForm = async () => {
   submitting.value = true
 
@@ -1139,6 +1160,7 @@ const submitForm = async () => {
   }
 }
 
+// “稍后完善”：保留 onboarding 待完成状态并保存草稿，然后关闭弹窗
 const handleCompleteLater = async () => {
   try {
     await updateMe({ is_first_login: false }).catch(() => {})

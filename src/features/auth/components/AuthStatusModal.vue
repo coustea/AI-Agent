@@ -117,9 +117,11 @@ const props = defineProps({
 
 const emit = defineEmits(['confirm', 'close'])
 
+// 倒计时剩余秒数
 const timeLeft = ref(0)
 let timerId: number | null = null
 
+// 启动倒计时：归零后自动触发 confirm
 const startCountdown = () => {
   if (timerId) {
     clearInterval(timerId)
@@ -139,6 +141,7 @@ const startCountdown = () => {
   }
 }
 
+// 清除计时器
 const clearTimer = () => {
   if (timerId) {
     clearInterval(timerId)
@@ -146,6 +149,7 @@ const clearTimer = () => {
   }
 }
 
+// 监听弹窗开关：打开时按需在成功态启动倒计时，关闭时清定时器
 watch(
   () => props.isOpen,
   (newVal) => {
@@ -160,22 +164,26 @@ watch(
   { immediate: true }
 )
 
+// 确认按钮：清定时器并通知父组件
 const handleConfirm = () => {
   clearTimer()
   emit('confirm')
 }
 
+// 关闭按钮：清定时器并通知父组件
 const handleClose = () => {
   clearTimer()
   emit('close')
 }
 
+// 点击遮罩层：仅错误或确认态允许关闭
 const handleOverlayClick = () => {
   if (props.type === 'error' || props.type === 'confirm') {
     handleClose()
   }
 }
 
+// 组件卸载前清理定时器，避免内存泄漏
 onBeforeUnmount(() => {
   clearTimer()
 })

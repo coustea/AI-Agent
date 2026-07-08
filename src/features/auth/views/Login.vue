@@ -107,8 +107,10 @@ import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 
 const router = useRouter()
 const route = useRoute()
+// 登录请求进行中的加载状态
 const isLoading = ref(false)
 
+// 状态弹窗的状态机（成功/错误/确认）
 const modalState = reactive({
   isOpen: false,
   type: 'success' as 'success' | 'error',
@@ -119,16 +121,19 @@ const modalState = reactive({
   onConfirm: () => {}
 })
 
+// 表单双向绑定数据
 const form = reactive({
   username: '',
   password: ''
 })
 
+// 字段级错误信息
 const errors = reactive({
   username: '',
   password: ''
 })
 
+// 表单校验：校验用户名（3-50）与密码（6-50）长度
 const validateForm = () => {
   let isValid = true
   errors.username = ''
@@ -153,6 +158,7 @@ const validateForm = () => {
   return isValid
 }
 
+// 登录主流程
 const handleLogin = async () => {
   if (!validateForm()) return
   isLoading.value = true
@@ -162,6 +168,7 @@ const handleLogin = async () => {
     if (data.token) {
       setAuthToken(data.token)
       setCurrentUser(data.user ?? null)
+      // 首次登录用户跳转后触发 onboarding 引导
       if (!data.user?.is_first_login) {
         router.push('/dashboard?onboarding=true&loginSuccess=true')
       } else {
@@ -177,7 +184,7 @@ const handleLogin = async () => {
     } else if (field === 'password') {
       errors.password = msg
     } else {
-      // Trigger General Error Popup
+      // 通用错误：弹出错误提示框
       modalState.type = 'error'
       modalState.title = '登录失败'
       modalState.message = msg
@@ -193,6 +200,7 @@ const handleLogin = async () => {
   }
 }
 
+// 注册成功后由 /login 的 query 触发“注册成功”弹窗
 onMounted(() => {
   if (route.query.registerSuccess === 'true') {
     modalState.type = 'success'

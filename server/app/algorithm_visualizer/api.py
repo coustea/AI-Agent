@@ -65,7 +65,9 @@ async def get_algorithms(domain: str = "all", language: str | None = None):
             if language and language not in supported_languages:
                 continue
 
-            algorithms.append(AlgorithmResponse(**alg))
+            alg_response = AlgorithmResponse(**alg)
+            # 使用 by_alias=False 确保序列化时使用字段名（camelCase）
+            algorithms.append(alg_response.model_dump(by_alias=False))
 
         return HttpResponse.success(data=algorithms)
 
@@ -104,7 +106,8 @@ async def get_templates(
             default_data=default_data,
         )
 
-        return HttpResponse.success(data=payload)
+        # 使用 by_alias=False 确保序列化时使用字段名（camelCase）而不是别名（snake_case）
+        return HttpResponse.success(data=payload.model_dump(by_alias=False))
 
     except ValueError as ve:
         return HttpResponse.error(code=400, message=str(ve))
@@ -176,7 +179,8 @@ async def run_visualization(
         success=True,
     )
 
-    return HttpResponse.success(data=RunSuccessResponse(**result))
+    # 使用 by_alias=False 确保序列化时使用字段名（camelCase）
+    return HttpResponse.success(data=RunSuccessResponse(**result).model_dump(by_alias=False))
 
 
 async def _safe_record_event(

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LanguageResponse(BaseModel):
@@ -50,8 +50,7 @@ class TemplateResponse(BaseModel):
     requiredEvents: List[str] = Field(..., alias="required_events")
     supportedLanguages: List[str] = Field(..., alias="supported_languages")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class RunRequest(BaseModel):

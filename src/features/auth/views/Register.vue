@@ -149,8 +149,10 @@ import AppLogo from '@/shared/ui/AppLogo.vue'
 import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 
 const router = useRouter()
+// 注册请求进行中的加载状态
 const isDeploying = ref(false)
 
+// 状态弹窗的状态机（成功/错误/确认）
 const modalState = reactive({
   isOpen: false,
   type: 'success' as 'success' | 'error',
@@ -161,6 +163,7 @@ const modalState = reactive({
   onConfirm: () => {}
 })
 
+// 表单双向绑定数据
 const form = reactive({
   username: '',
   email: '',
@@ -168,6 +171,7 @@ const form = reactive({
   confirmPassword: ''
 })
 
+// 字段级错误信息
 const errors = reactive({
   username: '',
   email: '',
@@ -175,6 +179,7 @@ const errors = reactive({
   confirmPassword: ''
 })
 
+// 表单校验：用户名、邮箱格式、密码长度及两次密码一致性
 const validateForm = () => {
   let isValid = true
   errors.username = ''
@@ -214,6 +219,7 @@ const validateForm = () => {
   return isValid
 }
 
+// 注册主流程：成功后跳转登录页并带 registerSuccess 标记
 const handleRegister = async () => {
   if (!validateForm()) return
   isDeploying.value = true
@@ -236,7 +242,7 @@ const handleRegister = async () => {
     } else if (field === 'password') {
       errors.password = msg
     } else {
-      // Trigger General Error Popup
+      // 通用错误：弹出错误提示框
       modalState.type = 'error'
       modalState.title = '注册失败'
       modalState.message = msg
