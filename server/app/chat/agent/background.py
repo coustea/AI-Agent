@@ -1,9 +1,12 @@
-"""TutorAgent 后台任务 — 长期记忆、画像更新和会话压缩。
+"""TutorAgent 后台任务 — 长期记忆和会话压缩。
 
 职责：
   - run_background_memory_jobs: 对话轮次结束后的后台记忆管线
-  - 检查并执行：长期记忆更新、学习者画像更新、会话压缩
-  - 三个任务独立触发，根据 token 阈值判断
+  - 检查并执行：长期记忆更新、会话压缩
+  - 两个任务独立触发，根据 token 阈值判断
+
+注：学习者画像不再在对话后实时更新。画像改由 GET /profile 懒加载触发
+infer_profile_from_digest（基于周概要缓冲），见 app/profile/service.py。
 """
 
 from __future__ import annotations
@@ -12,7 +15,6 @@ import asyncio
 from typing import Any
 
 from app.infra.logging import get_logger
-from app.profile.service import get_profile_service
 
 logger = get_logger(__name__)
 
@@ -25,7 +27,7 @@ async def run_background_memory_jobs(
     user_message: str = "",
     assistant_reply: str = "",
 ) -> None:
-    """后台记忆管线：长期记忆、画像更新、会话压缩，根据 token 阈值独立触发。"""
+    """后台记忆管线：长期记忆、会话压缩，根据 token 阈值独立触发。"""
     logger.info(
         "[background] 后台记忆任务开始: user_id=%s session_id=%s",
         user_id, session_id,
@@ -43,16 +45,13 @@ async def run_background_memory_jobs(
         should_ltm = evaluation["should_ltm"]
         ltm_schedule = evaluation["ltm_schedule"]
         should_compress = evaluation["should_compress"]
-        signals = evaluation["signals"]
-        should_update_global = signals["global_profile"]
-        should_profile = evaluation.get("should_profile", False)
         payload["ltm_schedule"] = ltm_schedule
         logger.info(
-            "[background] 调度检查: should_ltm=%s should_profile=%s should_compress=%s",
-            should_ltm, should_profile, should_compress,
+            "[background] 调度检查: should_ltm=%s should_compress=%s",
+            should_ltm, should_compress,
         )
 
-        # ── 三个任务独立执行，根据 token 阈值触发 ──
+        # ── 两个任务独立执行，根据 token 阈值触发 ──
         tasks: list[asyncio.Task] = []
 
         if should_compress:
@@ -65,12 +64,6 @@ async def run_background_memory_jobs(
             tasks.append(asyncio.create_task(
                 _run_ltm_update(memory_service, user_id, session_id, user_message, assistant_reply, ltm_schedule),
                 name="ltm_update",
-            ))
-
-        if should_profile:
-            tasks.append(asyncio.create_task(
-                _run_profile_update(memory_service, user_id, session_id, should_update_global),
-                name="profile_update",
             ))
 
         if not tasks:
@@ -119,36 +112,6 @@ async def _run_ltm_update(
         status, ltm_result.get("updated"), ltm_result.get("analyzed"),
     )
     return {"job": "long_term_memory", "status": status, "ltm_result": ltm_result}
-
-
-async def _run_profile_update(
-    memory_service: Any,
-    user_id: int,
-    session_id: str,
-    should_update_global: bool,
-) -> dict[str, Any]:
-    """执行学习者画像更新，完成后重置计数器。"""
-    profile_service = get_profile_service()
-    global_updated = False
-
-    if should_update_global:
-        res_global = await profile_service.infer_profile_from_tutoring(
-            user_id=user_id,
-            session_id=session_id,
-        )
-        global_updated = res_global.get("profile_updated", False)
-        logger.info("[background] 全局画像更新完成: global_updated=%s", global_updated)
-
-    if global_updated:
-        await memory_service.reset_profile_counters(user_id=user_id, session_id=session_id)
-
-    status = "completed" if global_updated else "skipped"
-    return {
-        "job": "learner_profile",
-        "status": status,
-        "profile_updated": global_updated,
-        "global_updated": global_updated,
-    }
 
 
 async def _run_compress(

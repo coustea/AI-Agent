@@ -23,7 +23,6 @@ from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
-    ChatLongTermMemory,
     LearningEvent,
     School,
     User,
@@ -609,75 +608,6 @@ class ProfileService:
         except Exception:
             logger.exception("[ProfileService] 周概要推理失败: user_id=%s", user_id)
             return {"profile_updated": False, "reason": "error"}
-
-    async def infer_profile_from_tutoring(self, *, user_id: int, session_id: str) -> dict[str, Any]:
-        """从辅导对话推理更新全局画像。"""
-        logger.info("[ProfileService] 全局画像更新开始: user_id=%s session_id=%s", user_id, session_id)
-        async with session_scope() as db:
-            dimensions = await self.get_dimensions(user_id=user_id, db=db)
-
-            from app.chat.memory.service import get_chat_memory_service
-            memory_service = get_chat_memory_service()
-            recent_dialogue, _, _ = await memory_service._build_dialogue_since(
-                db=db, user_id=user_id, session_id=session_id, after_message_id=0, limit=20,
-            )
-
-            if not recent_dialogue or not recent_dialogue.strip():
-                logger.info("[ProfileService] 全局画像: 无对话内容可提取，跳过更新")
-                profile = await self.get_profile(user_id=user_id, db=db)
-                return {
-                    "profile_updated": False,
-                    "updated_at": profile.updated_at,
-                    "reason": "no_dialogue",
-                }
-
-            ltm = (
-                await db.exec(
-                    select(ChatLongTermMemory).where(
-                        ChatLongTermMemory.user_id == user_id,
-                    )
-                )
-            ).first()
-            long_term_memory = ltm.memory_markdown if ltm and ltm.memory_markdown else ""
-
-            logger.info("[ProfileService] 全局画像: recent_dialogue长度=%s long_term_memory长度=%s",
-                         len(recent_dialogue), len(long_term_memory))
-
-            prompt = prompts.get("profile").render(
-                "global_update",
-                profile_json=json.dumps(dimensions, ensure_ascii=False),
-                recent_dialogue=recent_dialogue,
-                long_term_memory=long_term_memory,
-            )
-            resp = await self.llm.ainvoke_json(
-                GlobalTutoringInferenceOutput,
-                [HumanMessage(content=prompt)],
-            )
-
-            dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
-                            for k, v in resp.dimensions_patch.items()}
-            logger.info("[ProfileService] 全局画像 LLM推理结果: should_update=%s dimensions_patch=%s",
-                         resp.should_update, dims_summary)
-
-            updated = False
-            if resp.should_update and resp.dimensions_patch:
-                await self.save_dimensions(
-                    user_id=user_id,
-                    dimensions_patch=resp.dimensions_patch,
-                    db=db,
-                )
-                updated = True
-
-        if updated:
-            score_result = await self.score_profile(user_id=user_id)
-            logger.info("[ProfileService] 全局画像评分刷新完成: user_id=%s overall_score=%s",
-                         user_id, score_result.get("overall_score"))
-
-        profile = await self.get_profile(user_id=user_id)
-        return {
-            "profile_updated": updated,
-            "updated_at": profile.updated_at,
-        }
 
     async def score_profile(self, *, user_id: int) -> dict[str, Any]:
         """仅依据文字画像（base_info + dimensions）对 7 维度重新评分。"""
