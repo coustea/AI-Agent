@@ -815,11 +815,26 @@ onMounted(loadPath)
 
 <style scoped>
 .path-overview-page {
+  /* 引入色彩体系 */
+  --color-state-locked: #94a3b8;
+  --color-state-locked-border: #e2e8f0;
+  
+  --color-state-available: var(--color-primary-text, #205f67);
+  --color-state-available-border: var(--color-primary-border, #b9dedc);
+  
+  --color-state-active: #4f46e5;
+  --color-state-active-border: #6366f1;
+  --color-state-active-glow: rgba(99, 102, 241, 0.15);
+  
+  --color-state-alert: #d97706;
+  --color-state-alert-border: #fbbf24;
+  
+  --color-state-completed: var(--color-success, #329a82);
+  --color-state-completed-bg: var(--color-success-soft, #e8f7f2);
+  --color-state-completed-border: #86efac;
+  
   min-height: calc(100vh - var(--navbar-height, 72px));
-  background:
-      radial-gradient(circle at 10% 6%, rgba(216, 241, 240, 0.28), transparent 28%),
-      radial-gradient(circle at 86% 8%, rgba(245, 243, 255, 0.24), transparent 26%),
-      #fbfefe;
+  background: #fafbfc;
   color: var(--color-text, #173b42);
 }
 
