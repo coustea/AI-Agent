@@ -18,7 +18,22 @@ SlideRole = Literal[
     "summary",
     "closing",
 ]
+SlideType = Literal[
+    "cover",
+    "agenda",
+    "learning_goals",
+    "hook_question",
+    "definition",
+    "concept_boundary",
+    "mechanism_overview",
+    "knowledge_explain",
+    "comparison",
+    "misconception",
+    "knowledge_map",
+    "closing",
+]
 ContentShape = Literal[
+
     "statement",
     "concept",
     "sequence",
@@ -203,7 +218,41 @@ class PPTSlide(PPTModel):
     animation: AnimationKind = "reveal"
     preferred_layout: str = Field(default="", max_length=40)
 
+    @property
+    def type(self) -> SlideType:
+        role = self.role
+        shape = self.shape
+        title = self.title.lower()
+
+        if role == "cover":
+            return "cover"
+        if role in ("summary", "closing"):
+            return "closing"
+        if role == "hook" or shape == "quiz":
+            return "hook_question"
+
+        if "路径" in title or "大纲" in title or "目录" in title or "agenda" in title:
+            return "agenda"
+        if "目标" in title or "能够" in title or "goal" in title:
+            return "learning_goals"
+
+        if shape == "concept":
+            return "definition"
+        if shape == "sequence":
+            return "mechanism_overview"
+        if shape == "comparison":
+            return "comparison"
+        if shape == "misconception":
+            return "misconception"
+        if shape in ("system", "hierarchy"):
+            return "knowledge_map"
+        if shape in ("timeline", "matrix"):
+            return "concept_boundary"
+
+        return "knowledge_explain"
+
     # 新增字段
+
     hierarchy: list[HierarchyNode] = Field(default_factory=list, max_length=10)
     timeline: list[TimelineEvent] = Field(default_factory=list, max_length=8)
     matrix: list[MatrixCell] = Field(default_factory=list, max_length=20)
