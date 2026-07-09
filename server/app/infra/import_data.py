@@ -30,7 +30,7 @@ QUIZ_DIR = _DATA_DIR / "quiz"
 TYPE_MAP = {
     "选择题": "single_choice", "单选题": "single_choice", "多选题": "multiple_choice",
     "判断题": "judge", "填空题": "fill_blank", "简答题": "short_answer",
-    "分析题": "analysis", "综合题": "comprehensive",
+    "分析题": "analysis", "综合题": "comprehensive", "编程题": "analysis",
 }
 
 
@@ -89,7 +89,7 @@ def _load_quiz_file(session, f: Path, subj: str) -> int:
         qid = item.get("id")
         if not qid:
             continue
-        t = TYPE_MAP.get(item.get("type", "选择题"), "single_choice")
+        t = TYPE_MAP.get(item.get("type"), "single_choice")
         qs.append(QuizQuestion(
             question_id=qid, source="408", subject=item.get("subject", subj),
             question_type=t, difficulty=item.get("difficulty"),

@@ -117,7 +117,14 @@
           v-for="(question, index) in examPaper"
           :key="question.id"
           :id="'exam-q-' + index"
-          :class="['exam-question', { active: currentExamIndex === index }]"
+          :class="[
+            'exam-question',
+            {
+              active: currentExamIndex === index,
+              submitted: examSubmitted,
+              'analysis-question': isSubjectiveQuestion(question),
+            },
+          ]"
         >
           <div class="question-header">
             <span class="q-number">第 {{ index + 1 }} 题 / 共 {{ examPaper.length }} 题</span>
@@ -125,8 +132,16 @@
               <span class="tag outline">{{ question.subject }}</span>
               <span class="tag type">{{ question.type }}</span>
             </div>
-            <div v-if="examSubmitted" :class="['result-badge', isExamCorrect(question) ? 'success' : 'danger']">
-              {{ isExamCorrect(question) ? '正确' : '错误' }}
+            <div
+              v-if="examSubmitted"
+              :class="[
+                'result-badge',
+                isSubjectiveQuestion(question)
+                  ? examScoreClass(question)
+                  : (isExamCorrect(question) ? 'success' : 'danger'),
+              ]"
+            >
+              {{ isSubjectiveQuestion(question) ? examScoreText(question) : (isExamCorrect(question) ? '正确' : '错误') }}
             </div>
           </div>
 
@@ -162,7 +177,120 @@
             @input="$emit('update-exam-answer', question.id, ($event.target as HTMLTextAreaElement).value)"
           ></textarea>
 
-          <div v-if="examSubmitted" :class="['exam-answer-review', isExamCorrect(question) ? 'success' : 'danger']">
+          <section
+            v-if="examSubmitted && isSubjectiveQuestion(question)"
+            :class="['analysis-review-report', examScoreClass(question)]"
+          >
+            <header class="analysis-report-header">
+              <div class="analysis-report-heading">
+                <span class="analysis-report-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 3.75h7.2L18.25 7.8V20.25H7V3.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                    <path d="M14 3.75V8h4.25M9.75 11.25h5.75M9.75 14.5h5.75M9.75 17.75h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                <div>
+                  <span class="analysis-report-kicker">AI 智能评阅</span>
+                  <h3>分析题作答报告</h3>
+                  <p>结合答案完整度、关键论点与表达逻辑生成</p>
+                </div>
+              </div>
+
+              <div class="analysis-score-card">
+                <span class="analysis-score-label">本题得分</span>
+                <strong>{{ normalizedReviewScore(question) }}</strong>
+                <span class="analysis-score-unit">/ 100</span>
+                <div class="analysis-score-track" aria-hidden="true">
+                  <span :style="{ width: `${normalizedReviewScore(question)}%` }"></span>
+                </div>
+                <em>{{ examScoreText(question) }}</em>
+              </div>
+            </header>
+
+            <div class="analysis-report-body">
+              <section class="analysis-answer-panel user-answer-panel">
+                <div class="analysis-panel-title">
+                  <span class="panel-order">01</span>
+                  <div>
+                    <strong>你的作答</strong>
+                    <small>完整保留提交内容，便于对照复盘</small>
+                  </div>
+                </div>
+                <div :class="['analysis-answer-content', { empty: !hasAnswerData(examAnswers[question.id]) }]">
+                  {{ formatExamAnswer(question, examAnswers[question.id]) }}
+                </div>
+              </section>
+
+              <section class="analysis-answer-panel reference-answer-panel">
+                <div class="analysis-panel-title">
+                  <span class="panel-order">02</span>
+                  <div>
+                    <strong>参考答案</strong>
+                    <small>建议重点比较论点覆盖与论证顺序</small>
+                  </div>
+                </div>
+                <div class="analysis-answer-content reference">
+                  {{ formatExamReferenceAnswer(question) || '暂无参考答案。' }}
+                </div>
+              </section>
+
+              <section class="analysis-feedback-panel">
+                <div class="analysis-panel-title">
+                  <span class="panel-order">03</span>
+                  <div>
+                    <strong>AI 评语</strong>
+                    <small>针对本次回答给出的综合判断</small>
+                  </div>
+                </div>
+                <p>{{ examReview[question.id]?.feedback || defaultAnalysisFeedback(question) }}</p>
+              </section>
+
+              <section
+                v-if="examReview[question.id]?.improvement_hints?.length"
+                class="analysis-improvement-panel"
+              >
+                <div class="analysis-panel-title">
+                  <span class="panel-order">04</span>
+                  <div>
+                    <strong>改进建议</strong>
+                    <small>下次作答时可直接套用的优化方向</small>
+                  </div>
+                </div>
+                <ol class="analysis-improvement-list">
+                  <li
+                    v-for="(hint, hintIndex) in examReview[question.id]?.improvement_hints || []"
+                    :key="`${question.id}-${hintIndex}-${hint}`"
+                  >
+                    <span>{{ String(hintIndex + 1).padStart(2, '0') }}</span>
+                    <p>{{ hint }}</p>
+                  </li>
+                </ol>
+              </section>
+
+              <section class="analysis-detail-panel">
+                <div class="analysis-panel-title">
+                  <span class="panel-order">{{ examReview[question.id]?.improvement_hints?.length ? '05' : '04' }}</span>
+                  <div>
+                    <strong>题目解析</strong>
+                    <small>梳理本题的关键思路与作答依据</small>
+                  </div>
+                </div>
+                <div class="analysis-detail-content" v-html="renderInline(question.analysis || '暂无解析。')"></div>
+
+                <div v-if="question.knowledge_points?.length" class="analysis-knowledge-row">
+                  <span class="analysis-knowledge-label">涉及知识点</span>
+                  <div class="analysis-knowledge-tags">
+                    <span v-for="point in question.knowledge_points" :key="point">{{ point }}</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <div
+            v-else-if="examSubmitted"
+            :class="['exam-answer-review', isExamCorrect(question) ? 'success' : 'danger']"
+          >
             <div class="answer-review-grid">
               <div class="answer-review-card">
                 <span class="answer-review-label">你的答案</span>
@@ -372,6 +500,10 @@ function isOptionQuestion(question: ExamQuestion) {
   return ['选择题', '单选题', '多选题', '判断题'].includes(question.type)
 }
 
+function isSubjectiveQuestion(question: ExamQuestion) {
+  return ['分析题', '简答题', '综合题'].includes(question.type)
+}
+
 function getOptions(question: ExamQuestion) {
   if (question.type === '判断题') return { A: '正确', B: '错误' }
   return question.options || {}
@@ -435,6 +567,8 @@ function evaluateAnswer(question: ExamQuestion, answer: AnswerValue) {
 }
 
 function isExamCorrect(question: ExamQuestion) {
+  const review = props.examReview?.[question.id]
+  if (review?.score != null) return review.score >= 60
   return evaluateAnswer(question, props.examAnswers?.[question.id])
 }
 
@@ -452,6 +586,20 @@ function examScoreText(question: ExamQuestion) {
   if (score >= 80) return '优秀'
   if (score >= 60) return '部分正确'
   return '错误'
+}
+
+function normalizedReviewScore(question: ExamQuestion) {
+  const score = props.examReview?.[question.id]?.score
+  if (score == null) return isExamCorrect(question) ? 100 : 0
+  return Math.min(100, Math.max(0, Math.round(Number(score) || 0)))
+}
+
+function defaultAnalysisFeedback(question: ExamQuestion) {
+  const score = normalizedReviewScore(question)
+  if (!hasAnswerData(props.examAnswers?.[question.id])) return '本题未作答，建议先围绕题目要求列出核心观点，再补充分析依据。'
+  if (score >= 80) return '整体作答较完整，关键观点覆盖充分，论证结构也比较清晰。'
+  if (score >= 60) return '已覆盖部分关键内容，但论点之间的衔接和论证深度仍可进一步加强。'
+  return '当前回答与参考要点存在较大差距，建议重新梳理题干要求并按要点分层作答。'
 }
 
 function formatUserAnswer(answer: AnswerValue) {
@@ -1098,6 +1246,392 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   color: #dc2626;
 }
 
+.analysis-review-report {
+  --analysis-accent: #2563eb;
+  --analysis-accent-soft: rgba(37, 99, 235, 0.1);
+  --analysis-accent-border: rgba(37, 99, 235, 0.2);
+  margin-top: 28px;
+  overflow: hidden;
+  border: 1px solid var(--analysis-accent-border);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 20px 46px rgba(15, 23, 42, 0.08);
+}
+
+.analysis-review-report.success {
+  --analysis-accent: #059669;
+  --analysis-accent-soft: rgba(5, 150, 105, 0.1);
+  --analysis-accent-border: rgba(5, 150, 105, 0.22);
+}
+
+.analysis-review-report.warning {
+  --analysis-accent: #d97706;
+  --analysis-accent-soft: rgba(217, 119, 6, 0.11);
+  --analysis-accent-border: rgba(217, 119, 6, 0.23);
+}
+
+.analysis-review-report.danger {
+  --analysis-accent: #dc2626;
+  --analysis-accent-soft: rgba(220, 38, 38, 0.09);
+  --analysis-accent-border: rgba(220, 38, 38, 0.2);
+}
+
+.analysis-report-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 26px;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  background:
+    radial-gradient(circle at 92% 0%, var(--analysis-accent-soft), transparent 36%),
+    linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.analysis-report-header::after {
+  content: '';
+  position: absolute;
+  right: -56px;
+  bottom: -74px;
+  width: 190px;
+  height: 190px;
+  border: 24px solid var(--analysis-accent-soft);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.analysis-report-heading {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.analysis-report-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--analysis-accent-soft);
+  color: var(--analysis-accent);
+  box-shadow: inset 0 0 0 1px var(--analysis-accent-border);
+}
+
+.analysis-report-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.analysis-report-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--analysis-accent);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.analysis-report-heading h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.analysis-report-heading p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.analysis-score-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  column-gap: 5px;
+  min-width: 166px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.analysis-score-label {
+  grid-column: 1 / -1;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.analysis-score-card strong {
+  color: var(--analysis-accent);
+  font-size: 34px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.analysis-score-unit {
+  padding-bottom: 3px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.analysis-score-track {
+  grid-column: 1 / -1;
+  height: 6px;
+  margin-top: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.analysis-score-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--analysis-accent);
+  transition: width 0.4s ease;
+}
+
+.analysis-score-card em {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  color: var(--analysis-accent);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.analysis-report-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 22px;
+  background: #f8fafc;
+}
+
+.analysis-answer-panel,
+.analysis-feedback-panel,
+.analysis-improvement-panel,
+.analysis-detail-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.94);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.analysis-feedback-panel,
+.analysis-improvement-panel,
+.analysis-detail-panel {
+  grid-column: 1 / -1;
+}
+
+.user-answer-panel {
+  border-top: 3px solid #64748b;
+}
+
+.reference-answer-panel {
+  border-top: 3px solid var(--analysis-accent);
+}
+
+.analysis-panel-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 14px;
+}
+
+.panel-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--analysis-accent-soft);
+  color: var(--analysis-accent);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.analysis-panel-title strong {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.analysis-panel-title small {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.analysis-answer-content {
+  min-height: 96px;
+  padding: 14px 15px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.analysis-answer-content.reference {
+  background: var(--analysis-accent-soft);
+}
+
+.analysis-answer-content.empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.analysis-feedback-panel {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--analysis-accent-border);
+  background: linear-gradient(135deg, #fff, var(--analysis-accent-soft));
+}
+
+.analysis-feedback-panel::after {
+  content: '“';
+  position: absolute;
+  right: 18px;
+  bottom: -24px;
+  color: var(--analysis-accent-soft);
+  font-family: Georgia, serif;
+  font-size: 110px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.analysis-feedback-panel p {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 4px 4px 2px 41px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.85;
+}
+
+.analysis-feedback-panel p::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 7px;
+  width: 3px;
+  height: calc(100% - 10px);
+  border-radius: 999px;
+  background: var(--analysis-accent);
+}
+
+.analysis-improvement-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis-improvement-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.analysis-improvement-list li > span {
+  flex: 0 0 auto;
+  color: var(--analysis-accent);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1.8;
+}
+
+.analysis-improvement-list p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.analysis-detail-content {
+  padding: 2px 4px 0 41px;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.analysis-detail-content :deep(code) {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.92em;
+}
+
+.analysis-knowledge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px 0 0 41px;
+  border-top: 1px dashed rgba(203, 213, 225, 0.9);
+}
+
+.analysis-knowledge-label {
+  flex: 0 0 auto;
+  padding-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.analysis-knowledge-tags {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.analysis-knowledge-tags span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--analysis-accent-soft);
+  color: var(--analysis-accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .exam-answer-review {
   display: flex;
   flex-direction: column;
@@ -1351,6 +1885,17 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   .answer-review-grid {
     grid-template-columns: 1fr;
   }
+
+  .analysis-report-body,
+  .analysis-improvement-list {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-feedback-panel,
+  .analysis-improvement-panel,
+  .analysis-detail-panel {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1375,6 +1920,47 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
 
   .submit-inline-actions {
     flex-direction: column;
+  }
+
+  .exam-question {
+    padding: 20px 16px;
+  }
+
+  .analysis-report-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .analysis-score-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .analysis-report-body {
+    padding: 14px;
+  }
+
+  .analysis-answer-panel,
+  .analysis-feedback-panel,
+  .analysis-improvement-panel,
+  .analysis-detail-panel {
+    padding: 15px;
+  }
+
+  .analysis-detail-content,
+  .analysis-feedback-panel p,
+  .analysis-knowledge-row {
+    padding-left: 0;
+  }
+
+  .analysis-feedback-panel p::before {
+    display: none;
+  }
+
+  .analysis-knowledge-row {
+    flex-direction: column;
+    gap: 8px;
   }
 }
 </style>

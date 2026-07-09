@@ -30,6 +30,7 @@ class QuizBankService:
         "简答题": "short_answer",
         "分析题": "analysis",
         "综合题": "comprehensive",
+        "编程题": "analysis",
         "选择题": "single_choice",  # 兼容旧标签
     }
 
