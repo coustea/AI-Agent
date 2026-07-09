@@ -6,13 +6,13 @@
 # GOAL（目标）
 
 根据节点的掌握目标、教程类型和学习者画像，生成一份结构清晰、可直接用于学习的中文 Markdown 教程。
-教程必须包含 YAML frontmatter 元数据和按类型调整的章节结构。
+教程以 Markdown 元数据标题块开头，不使用 YAML frontmatter。
 
 # TASK（任务）
 
 1. 分析节点的掌握目标和教程类型
 2. 根据学习者画像调整内容深度、讲解风格和侧重点
-3. 生成包含 YAML frontmatter 的结构化中文 Markdown 教程
+3. 生成结构化的中文 Markdown 教程（以 Markdown 元数据标题块开头，不使用 YAML frontmatter）
 4. 遵循本 prompt OUTPUT FORMAT 中对应教程类型的章节结构
 
 # INPUT（输入）
@@ -47,27 +47,27 @@
 
 # OUTPUT FORMAT（输出结构）
 
-输出必须包含 YAML frontmatter 的中文 Markdown 教程。整个输出分为两部分：
+输出为纯中文 Markdown 教程，不使用 YAML frontmatter。教程开头以 Markdown 标题块提供元数据，然后按教程类型选择对应的章节结构：
 
-## 第一部分：YAML Frontmatter
+## 第一部分：元数据标题块
 
-```yaml
----
-title: <教程标题 — 概括本教程核心内容，如"Python 变量与数据类型详解">
-summary: <一句话摘要 — 20 字以内>
-knowledge_points:
-  - <知识点 1>
-  - <知识点 2>
-  - <知识点 N>
-type: <primary | remediation | reinforced>
----
+教程开头必须包含以下 Markdown 格式的元数据块：
+
+```markdown
+# <教程标题 — 概括本教程核心内容，如"Python 变量与数据类型详解">
+
+> **摘要**：<一句话摘要 — 20 字以内>
+>
+> **知识点**：<知识点 1>、<知识点 2>、<知识点 N>
+>
+> **类型**：<primary | remediation | reinforced>
 ```
 
-frontmatter 字段含义：
-- `title`: 教程标题，简明扼要，含节点名称
-- `summary`: 一句话摘要，让学习者快速了解本教程覆盖范围
-- `knowledge_points`: 本教程覆盖的知识点列表（3~6 个），用于持久化到数据库
-- `type`: 与输入 `{tutorial_type}` 一致
+元数据字段含义：
+- **教程标题**：一级标题，简明扼要，含节点名称
+- **摘要**：一句话摘要，让学习者快速了解本教程覆盖范围
+- **知识点**：本教程覆盖的知识点列表（3~6 个），用顿号分隔，用于持久化到数据库
+- **类型**：与输入 `{tutorial_type}` 一致
 
 ## 第二部分：正文（按教程类型选择对应结构）
 
@@ -101,9 +101,6 @@ frontmatter 字段含义：
 ## 5. 总结回顾
    - 核心要点列表
    - 易错点提醒
-
-## 6. 思考与练习
-   - 2~3 道自测题或思考题
 ```
 
 ### 结构 B — remediation（薄弱点巩固）
@@ -122,11 +119,7 @@ frontmatter 字段含义：
    - 错误代码/理解 ← 对比 → 正确代码/理解
    - 强调关键区别
 
-## 4. 变式练习
-   - 针对每个薄弱点给出 1~2 道同类变式题
-   - 提供简要解析
-
-## 5. 总结
+## 4. 总结
    - 强化记忆的正确模式
 ```
 
@@ -159,7 +152,8 @@ frontmatter 字段含义：
 - 基础薄弱者多用类比和分步拆解
 - 有基础者侧重进阶技巧和边界情况
 - 严格遵循所选教程类型的章节结构
-- YAML frontmatter 必须出现在第一行，以 `---` 包裹
+- 教程开头必须包含 Markdown 格式的元数据标题块（标题、摘要、知识点、类型）
+- 不要使用 YAML frontmatter（`---` 包裹的块）
 
 # CONSTRAINTS（约束）
 
@@ -167,8 +161,8 @@ frontmatter 字段含义：
 
 - 必须覆盖掌握目标中描述的所有能力点
 - 必须使用中文
-- 输出必须以 YAML frontmatter 开头（`---\ntitle: ...`)
-- YAML frontmatter 的 `type` 字段必须与输入的 `{tutorial_type}` 一致
+- 教程开头必须包含 Markdown 格式的元数据标题块（标题、摘要、知识点、类型）
+- 不要使用 YAML frontmatter（`---` 包裹的块）
 
 ## Soft Constraints
 
@@ -189,7 +183,7 @@ frontmatter 字段含义：
 - 是否覆盖了掌握目标中的所有能力点？
 - 讲解深度是否与学习者画像匹配？
 - 薄弱领域是否有额外的解释和示例？
-- YAML frontmatter 是否完整（title、summary、knowledge_points、type）？
+- 元数据标题块是否完整（标题、摘要、知识点、类型）？
 - 正文结构是否与教程类型匹配？
 
 # FEEDBACK LOOP（反馈机制）

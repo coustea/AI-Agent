@@ -17,8 +17,6 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, TypedDict
-
-import yaml
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from loguru import logger as loguru_logger
@@ -174,50 +172,79 @@ def build_fallback_plan(request: PathRequest) -> LearningPlan:
 
 
 # ======================================================================
-# 1.5 YAML Frontmatter 解析工具
+# 1.5 Markdown 元数据标题块解析工具
 # ======================================================================
 
 
-def _parse_yaml_frontmatter(text: str) -> tuple[dict, str]:
-    """从 LLM 生成的 Markdown 中提取 YAML frontmatter。
+def _parse_markdown_metadata(text: str) -> tuple[dict, str]:
+    """从 LLM 生成的 Markdown 中提取元数据标题块。
 
     期望格式：
     ```
-    ---
-    title: ...
-    summary: ...
-    knowledge_points:
-      - ...
-    type: ...
-    ---
-    ...正文...
+    # 教程标题
+
+    > **摘要**：一句话摘要
+    >
+    > **知识点**：知识点1、知识点2
+    >
+    > **类型**：primary
+
+    ## 1. 正文...
     ```
 
     Returns:
         (metadata_dict, body_text) — 无法解析时返回 ({}, text)。
     """
     stripped = text.lstrip()
-    if not stripped.startswith("---"):
+    meta: dict = {}
+
+    # 1. 提取一级标题作为 title
+    title_match = re.match(r"^#\s+(.+?)\s*\n", stripped)
+    if not title_match:
         return {}, text
 
-    end_match = re.search(r"\n---\s*(\n|$)", stripped[3:])
-    if not end_match:
-        return {}, text
+    meta["title"] = title_match.group(1).strip()
+    rest = stripped[title_match.end():]
 
-    yaml_start = 3
-    yaml_end = yaml_start + end_match.start()
-    closing_end = yaml_start + end_match.end()
+    # 2. 提取 blockquote 中的元数据字段
+    bq_lines: list[str] = []
+    for line in rest.split("\n"):
+        stripped_line = line.strip()
+        if stripped_line.startswith(">"):
+            bq_lines.append(stripped_line[1:].strip())
+        elif stripped_line == "" and bq_lines:
+            continue
+        else:
+            break
 
-    yaml_block = stripped[yaml_start:yaml_end]
-    body = stripped[closing_end:]
+    bq_text = " ".join(bq_lines)
 
-    try:
-        meta = yaml.safe_load(yaml_block)
-        if not isinstance(meta, dict):
-            return {}, text
-        return meta, body
-    except yaml.YAMLError:
-        return {}, text
+    # 提取摘要
+    summary_match = re.search(r"\*\*摘要\*\*[：:]\s*(.+?)(?=\s*\*\*|$)", bq_text)
+    if summary_match:
+        meta["summary"] = summary_match.group(1).strip()
+
+    # 提取知识点
+    kp_match = re.search(r"\*\*知识点\*\*[：:]\s*(.+?)(?=\s*\*\*|$)", bq_text)
+    if kp_match:
+        kp_raw = kp_match.group(1).strip()
+        meta["knowledge_points"] = [
+            k.strip() for k in re.split(r"[、,，;；]", kp_raw) if k.strip()
+        ]
+
+    # 提取类型
+    type_match = re.search(r"\*\*类型\*\*[：:]\s*(\w+)", bq_text)
+    if type_match:
+        meta["type"] = type_match.group(1).strip()
+
+    # 3. 找到正文起始位置（第一个 ## 标题）
+    body_match = re.search(r"\n##\s", rest)
+    if body_match:
+        body = rest[body_match.start() + 1:]
+    else:
+        body = rest
+
+    return meta, body
 
 
 # ======================================================================
@@ -760,7 +787,7 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
 
     existing = state.get("tutorials", [])
     content_md = state["tutorial_content"]
-    meta, body = _parse_yaml_frontmatter(content_md)
+    meta, body = _parse_markdown_metadata(content_md)
 
     if meta.get("type") and meta["type"] != tutorial_type:
         logger.warning(
@@ -797,7 +824,7 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
 
 
 async def node_generate_questions(state: LearnState) -> dict:
-    """生成测验题目 — 若无教程则先自动生成主教程。"""
+    """生成测验题目 — 需要先有教程，不自创建。"""
     if state.get("error"):
         return {}
     node = state["node"]
@@ -805,39 +832,7 @@ async def node_generate_questions(state: LearnState) -> dict:
     current_tutorial = state.get("current_tutorial")
 
     if current_tutorial is None:
-        agent = NodeLearningAgent()
-        result = await agent.generate_tutorial(
-            path_goal=path.goal,
-            node_title=node.title,
-            mastery_target="掌握该节点核心能力",
-            tutorial_type="primary",
-            weak_knowledge_points=[],
-            profile_markdown=state.get("profile_markdown", ""),
-        )
-        session = state["session"]
-        content_md = result["content_markdown"]
-        meta, body = _parse_yaml_frontmatter(content_md)
-        tutorial = PathNodeTutorial(
-            path_id=path.id,
-            node_id=node.id,
-            user_id=state["user_id"],
-            tutorial_type="primary",
-            version_no=1,
-            is_current=True,
-            title=meta.get("title", f"{node.title} - primary"),
-            summary=meta.get("summary", "primary"),
-            content_markdown=body,
-            knowledge_points=meta.get("knowledge_points", [node.title]),
-            weak_knowledge_points=[],
-        )
-        session.add(tutorial)
-        await session.flush()
-        node.current_tutorial_id = tutorial.id
-        if node.started_at is None:
-            node.started_at = datetime.now(timezone.utc)
-        await session.commit()
-        await session.refresh(tutorial)
-        current_tutorial = tutorial
+        return {"error": "当前节点还没有教程，请先生成主教程再生成测验"}
 
     round_no = await _latest_round(state["session"], node.id) + 1
     agent = NodeLearningAgent()
@@ -1053,7 +1048,7 @@ async def node_record_quiz_event(state: LearnState) -> dict:
 
 
 async def node_generate_resource(state: LearnState) -> dict:
-    """生成节点辅助资源 — 通过 path_helpers 调用 resource 模块 agent。"""
+    """生成节点辅助资源 — 需要先有教程，不自创建。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -1063,37 +1058,7 @@ async def node_generate_resource(state: LearnState) -> dict:
     current_tutorial = state.get("current_tutorial")
 
     if current_tutorial is None:
-        agent = NodeLearningAgent()
-        result = await agent.generate_tutorial(
-            path_goal=path.goal,
-            node_title=node.title,
-            mastery_target="掌握该节点核心能力",
-            tutorial_type="primary",
-            weak_knowledge_points=[],
-            profile_markdown=state.get("profile_markdown", ""),
-        )
-        meta, body = _parse_yaml_frontmatter(result["content_markdown"])
-        tutorial = PathNodeTutorial(
-            path_id=path.id,
-            node_id=node.id,
-            user_id=state["user_id"],
-            tutorial_type="primary",
-            version_no=1,
-            is_current=True,
-            title=meta.get("title", f"{node.title} - primary"),
-            summary=meta.get("summary", "primary"),
-            content_markdown=body,
-            knowledge_points=meta.get("knowledge_points", [node.title]),
-            weak_knowledge_points=[],
-        )
-        session.add(tutorial)
-        await session.flush()
-        node.current_tutorial_id = tutorial.id
-        if node.started_at is None:
-            node.started_at = datetime.now(timezone.utc)
-        await session.commit()
-        await session.refresh(tutorial)
-        current_tutorial = tutorial
+        return {"error": "当前节点还没有教程，请先生成主教程再生成辅助资源"}
 
     node_input = NodeInput(
         path_id=path.id,
