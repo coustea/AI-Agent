@@ -76,6 +76,58 @@ def split_reasoning_and_answer(text: str) -> tuple[str, str]:
     return _normalize_reasoning_summary(text), ""
 
 
+def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> str:
+    """根据校验错误生成具体的修复建议，帮助 LLM 理解哪里出错。"""
+    graph_type = raw_diagram.get("graph_type", "")
+    visual_content = raw_diagram.get("visual_content", {})
+    hints: list[str] = []
+
+    if "root" in error_msg.lower() and graph_type == "hierarchy":
+        root = visual_content.get("root")
+        if isinstance(root, dict):
+            hints.append(
+                "hierarchy 的 root 字段必须是字符串（根节点名称），不能是嵌套对象。"
+                "例如：\"root\": \"数据结构\" 而非 \"root\": {\"id\": \"ds\", ...}。"
+                "嵌套树结构请使用 tree 类型。"
+            )
+
+    if "children" in error_msg.lower() and graph_type == "hierarchy":
+        branches = visual_content.get("branches", [])
+        for i, branch in enumerate(branches if isinstance(branches, list) else []):
+            children = branch.get("children", []) if isinstance(branch, dict) else []
+            if any(isinstance(c, dict) for c in children):
+                hints.append(
+                    f"hierarchy 的 branches[{i}].children 必须是字符串数组，不能包含嵌套对象。"
+                    "例如：\"children\": [\"排序\", \"查找\"] 而非 \"children\": [{\"label\": \"排序\"}]。"
+                )
+                break
+
+    if "index" in error_msg.lower() and graph_type == "grid":
+        hints.append("grid 的 cells[].index 必须是整数，不能是字符串。")
+
+    if "visual_content must match" in error_msg.lower() or "完整校验失败" in error_msg:
+        # graph_type 与 visual_content 不匹配，建议重新选择
+        type_hints = {
+            "comparison": "root 应包含 left_entity, right_entity, dimensions, visual_summary",
+            "flowchart": "root 应包含 direction, nodes, edges；edges 使用 'from'（非 'from_'）",
+            "sequence": "root 应包含 actors, messages；messages 使用 'from'（非 'from_'）",
+            "framework": "root 应包含 center, modules",
+            "summary": "root 应包含 cards",
+            "hierarchy": "root 是字符串（非嵌套对象），branches 是数组",
+            "tree": "root 应包含 root_id, nodes",
+            "grid": "root 应包含 layout, cells",
+            "protocol": "root 应包含 orientation, fields",
+            "timeline": "root 应包含 axis_label, tracks",
+        }
+        if graph_type in type_hints:
+            hints.append(f"{graph_type} 类型要求：{type_hints[graph_type]}")
+
+    if not hints:
+        hints.append("请仔细检查 visual_content 结构是否与 graph_type 对应的 schema 完全匹配。")
+
+    return "；".join(hints)
+
+
 def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] | None]:
     """从 <answer> 内容中提取 <diagram> 标签的 JSON。
 
@@ -529,27 +581,29 @@ async def react_node(
 
                 if raw_diagram is not None:
                     # 校验图解 JSON
-                    validated = validate_diagram_json(raw_diagram)
+                    validated, diagram_error = validate_diagram_json(raw_diagram)
                     if validated is not None:
                         node_diagram_result = validated
                         answer_body = cleaned_answer
                     elif not diagram_repair_used:
                         # 校验失败 → 修复重试
                         diagram_repair_used = True
-                        logger.info("[react_node] 图解 JSON 校验失败，发起修复重试")
+                        logger.info("[react_node] 图解 JSON 校验失败，发起修复重试: %s", diagram_error)
                         if accumulated_response is not None:
                             messages.append(accumulated_response)
+                        repair_hint = _build_diagram_repair_hint(raw_diagram, diagram_error)
                         messages.append(HumanMessage(content=(
                             "[DIAGRAM REPAIR]\n"
-                            f"上一次图解 JSON 校验失败：graph_type 或 visual_content 结构不合法。\n"
+                            f"上一次图解 JSON 校验失败：{diagram_error}\n"
                             f"已生成内容：{json.dumps(raw_diagram, ensure_ascii=False)[:2000]}\n"
+                            f"修复建议：{repair_hint}\n"
                             "请修复并重新输出完整的 <answer>，包含修复后的 <diagram>...</diagram>。"
-                            "确保 graph_type 是合法类型，visual_content 结构与 graph_type 匹配。"
+                            "确保 graph_type 是合法类型，visual_content 结构与 graph_type 严格匹配。"
                         )))
                         continue
                     else:
                         # 修复重试已用完，放弃图解
-                        logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解")
+                        logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解: %s", diagram_error)
                         answer_body = cleaned_answer
 
                 # 流式输出最终回答

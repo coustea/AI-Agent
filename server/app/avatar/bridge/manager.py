@@ -33,6 +33,93 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _clean_text_for_tts(text: str) -> str:
+    """清理 LLM 输出文本，去除 Markdown 格式标记，使其适合 TTS 朗读。
+
+    讯飞 TTS 引擎不理解 Markdown，如果直接发送：
+    - **加粗** → 朗读"星号星号加粗星号星号"
+    - ### 标题 → 朗读"井号井号井号标题"
+    - `代码` → 朗读"反引号代码反引号"
+    - [链接](url) → 朗读"左方括号链接右方括号左圆括号url右圆括号"
+    - 多个换行 → 可能导致播报断裂（"跳段说"）
+
+    同时去除可能导致"重音"（重复朗读）的字符：
+    - 重复标点（！！！→ ！）
+    - 省略号（……→ 。）
+    - 波浪号、星号等特殊符号
+    """
+    if not text:
+        return ""
+
+    # 1. 去除图片语法 ![alt](url)
+    text = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', text)
+
+    # 2. 去除链接语法 [text](url)，保留文本
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+
+    # 3. 去除加粗/斜体标记 **text** / __text__ / *text* / _text_
+    # 先处理 ** 和 __（加粗）
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    # 再处理 * 和 _（斜体）
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'(?<![\\])_(.+?)_(?![\w])', r'\1', text)
+
+    # 4. 去除标题标记 # ## ### 等
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+
+    # 5. 去除行内代码 `code`
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+
+    # 6. 去除代码块 ```...```
+    text = re.sub(r'```[\s\S]*?```', '', text)
+
+    # 7. 去除列表标记（- / * / 1. 等），保留文本
+    text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    # 8. 去除引用标记 >
+    text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+
+    # 9. 去除水平分割线 --- / *** / ___
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+
+    # 10. 去除 HTML 标签
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # 11. 去除残留的 Markdown 特殊符号（可能导致 TTS 朗读特殊字符）
+    # 去除独立的星号（不是乘号语境）
+    text = re.sub(r'(?<!\w)\*+(?!\w)', '', text)
+    # 去除波浪号
+    text = re.sub(r'~+', '', text)
+    # 去除反引号残留
+    text = re.sub(r'`+', '', text)
+
+    # 12. 去除可能导致重音的重复标点
+    # 重复的感叹号/问号 → 只保留一个（中英文都处理）
+    text = re.sub(r'([!！?？])\1+', r'\1', text)
+    # 中文省略号 → 句号
+    text = re.sub(r'……+', '。', text)
+    # 英文省略号 → 句号
+    text = re.sub(r'\.{3,}', '。', text)
+    # 重复的句号 → 单个
+    text = re.sub(r'。+', '。', text)
+
+    # 13. 多个换行合并为一个，单个换行替换为逗号
+    # 讯飞 TTS 对换行符处理不稳定，可能导致重音或跳段
+    # 用逗号替代换行，让 TTS 在段落间自然停顿
+    text = re.sub(r'\n{2,}', '，', text)
+    text = re.sub(r'\n', '，', text)
+
+    # 14. 去除首尾空白
+    text = text.strip()
+
+    # 15. 合并多余空格（连续空格可能导致 TTS 异常停顿或重音）
+    text = re.sub(r' {2,}', ' ', text)
+
+    return text
+
+
 class RealtimeBridge:
     """单用户数字人桥接 — 将前端 I/O 连接到共享的无状态辅导服务。"""
 
@@ -189,6 +276,13 @@ class RealtimeBridge:
                 "data": data,
                 "turn_id": turn_id,
             })
+        elif event_type == "avatar_error":
+            code = data.get("code", "unknown") if isinstance(data, dict) else "unknown"
+            message = data.get("message", "Avatar service error") if isinstance(data, dict) else "Avatar service error"
+            error_message = f"Avatar service error {code}: {message}"
+            logger.error("[Bridge] Avatar service returned error: %s", error_message)
+            await self._send_digital_human_state("error", error_message)
+            await self._send_event_with_turn_id("error", content=error_message)
         elif event_type == "connection_lost":
             # Avatar WebSocket 连接断开 — 尝试自动重连
             reason = data.get("reason", "unknown") if isinstance(data, dict) else "unknown"
@@ -295,6 +389,12 @@ class RealtimeBridge:
             await self._ensure_avatar_controller()
         except Exception as e:
             logger.warning("[Bridge] AvatarController 初始化失败: %s", e)
+            # 通知前端 Avatar 服务不可用，避免黑屏
+            await self._send_digital_human_state("error", "数字人服务暂时不可用，请稍后重试")
+            await self._send_to_frontend({
+                "type": "error",
+                "content": "数字人服务连接失败，请检查网络后刷新页面重试",
+            })
 
         # 发送已缓存的流信息（Avatar 重连场景）
         if self._avatar_controller and self._avatar_controller._last_stream_info:
@@ -490,7 +590,7 @@ class RealtimeBridge:
     async def _handle_audio_chunk(self, data: dict):
         """Handle audio chunk from frontend."""
         audio_b64 = data.get("audio", "")
-        if not audio_b64 or not self.current_audio_queue:
+        if not self.is_listening or not audio_b64 or not self.current_audio_queue:
             return
         pcm_bytes = base64.b64decode(audio_b64)
         self._audio_chunk_counter += 1
@@ -579,18 +679,32 @@ class RealtimeBridge:
 
     async def _handle_stop_vad(self):
         """Stop VAD listening mode."""
-        self.is_listening = False
-        if self.current_audio_queue:
-            await self.current_audio_queue.put(None)
-        if self._asr_loop_task and not self._asr_loop_task.done():
-            self._asr_loop_task.cancel()
-        await self._send_to_frontend({"type": "vad_state", "data": {"listening": False}})
+        await self._stop_vad_input()
         await self._send_digital_human_state("idle", "Stopped listening")
 
+    async def _stop_vad_input(self):
+        """Stop accepting microphone audio for the current VAD session."""
+        self.is_listening = False
+        audio_queue = self.current_audio_queue
+        self.current_audio_queue = None
+        if audio_queue:
+            await audio_queue.put(None)
+        if self._asr_loop_task and not self._asr_loop_task.done():
+            current_task = asyncio.current_task()
+            if self._asr_loop_task is not current_task:
+                self._asr_loop_task.cancel()
+        await self._send_to_frontend({"type": "vad_state", "data": {"listening": False}})
+
     async def _continuous_listen_loop(self):
-        """Continuous ASR loop."""
+        """Continuous ASR loop — pauses while avatar is speaking to avoid echo."""
         while self.is_listening:
             try:
+                # 如果数字人正在说话，暂停 ASR 识别
+                # 避免麦克风拾取到 TTS 回声导致错误识别
+                if self._avatar_controller and self._avatar_controller.is_speaking:
+                    await asyncio.sleep(0.3)
+                    continue
+
                 await self._single_recognition_round()
             except asyncio.CancelledError:
                 break
@@ -600,9 +714,29 @@ class RealtimeBridge:
                 await asyncio.sleep(0.5)
 
     async def _single_recognition_round(self):
-        """Run one ASR recognition round using StreamingASRSession."""
+        """Run one ASR recognition round using StreamingASRSession.
+
+        如果数字人正在说话，跳过本轮识别以避免拾取 TTS 回声。
+        """
         if not self.current_audio_queue:
             return
+
+        # 如果数字人正在说话，跳过本轮识别
+        if self._avatar_controller and self._avatar_controller.is_speaking:
+            logger.debug("[Bridge] Skipping ASR round: avatar is speaking")
+            await asyncio.sleep(0.3)
+            return
+
+        # 清理队列中积压的旧音频数据，避免发送过时的音频给 ASR
+        drained = 0
+        while not self.current_audio_queue.empty():
+            try:
+                self.current_audio_queue.get_nowait()
+                drained += 1
+            except asyncio.QueueEmpty:
+                break
+        if drained > 0:
+            logger.debug("[Bridge] Drained %d stale audio chunks before ASR round", drained)
 
         # 发送 recognizing 状态
         await self._send_digital_human_state("recognizing", "Processing speech")
@@ -642,26 +776,31 @@ class RealtimeBridge:
                     is_dup = normalized == self._last_asr_text
                     recent_dup = is_dup and (now_ts - self._last_asr_at < 1.6)
                     if not recent_dup:
-                        self._last_asr_text = normalized
-                        self._last_asr_at = now_ts
-                        await self._send_to_frontend({"type": "asr_result", "content": normalized})
-                        # 如果当前有 turn 正在执行（锁被持有），将文本追加到 pending buffer
-                        # 而不是创建新 turn，避免前端 turn_id 过滤导致事件丢失
-                        if self._turn_lock.locked():
-                            logger.info(
-                                "[Bridge] Turn in progress, buffering ASR text: '%s' (pending=%d)",
-                                normalized[:30], len(self._pending_asr_texts),
-                            )
-                            self._pending_asr_texts.append(normalized)
+                        # 过滤过短的误识别（噪音）——单字或极短文本通常是误触发
+                        if len(normalized) <= 1:
+                            logger.debug("[Bridge] Ignoring too-short ASR result: '%s'", normalized)
                         else:
-                            # Keep ASR loop responsive: do not block next round on LLM pipeline.
-                            asyncio.create_task(
-                                self._handle_user_text(
-                                    normalized,
-                                    need_diagram=self._need_diagram_default,
-                                    enable_search=self._enable_search_default,
+                            self._last_asr_text = normalized
+                            self._last_asr_at = now_ts
+                            await self._send_to_frontend({"type": "asr_result", "content": normalized})
+                            await self._stop_vad_input()
+                            # 如果当前有 turn 正在执行（锁被持有），将文本追加到 pending buffer
+                            # 而不是创建新 turn，避免前端 turn_id 过滤导致事件丢失
+                            if self._turn_lock.locked():
+                                logger.info(
+                                    "[Bridge] Turn in progress, buffering ASR text: '%s' (pending=%d)",
+                                    normalized[:30], len(self._pending_asr_texts),
                                 )
-                            )
+                                self._pending_asr_texts.append(normalized)
+                            else:
+                                # Keep ASR loop responsive: do not block next round on LLM pipeline.
+                                asyncio.create_task(
+                                    self._handle_user_text(
+                                        normalized,
+                                        need_diagram=self._need_diagram_default,
+                                        enable_search=self._enable_search_default,
+                                    )
+                                )
         except Exception as e:
             logger.error("[Bridge] ASR session failed: %s", e)
             await self._send_event_with_turn_id("error", content=f"语音识别异常: {e}")
@@ -892,16 +1031,20 @@ class RealtimeBridge:
                 await self._send_event_with_turn_id("assistant_complete")
 
             # 触发数字人 TTS 播报（异步执行，不阻塞响应）
-            if full_response.strip() and self._avatar_controller:
+            # 清理 Markdown 格式标记，避免 TTS 朗读特殊字符或跳段
+            tts_text = _clean_text_for_tts(full_response.strip())
+            if tts_text and self._avatar_controller:
                 logger.info(
-                    "[Bridge] trigger avatar speak len=%s ws_alive=%s",
+                    "[Bridge] trigger avatar speak len=%s (original=%s, cleaned=%s) ws_alive=%s",
+                    len(tts_text),
                     len(full_response.strip()),
+                    len(tts_text),
                     bool(self.frontend_ws),
                 )
                 # 不在这里发送 speaking 状态，等 tts_start 回调时再发送
                 asyncio.create_task(
                     self._avatar_controller.speak(
-                        full_response.strip(),
+                        tts_text,
                         speech_rate=self._speech_rate,
                         turn_id=self._current_turn_id,
                     )

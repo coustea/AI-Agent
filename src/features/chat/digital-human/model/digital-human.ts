@@ -98,4 +98,5 @@ export interface DigitalHumanCallbacks {
   onDigitalHumanStateChange?: (state: DigitalHumanStateType, turn_id?: string) => void
   onThinkingStart?: () => void
   onThinkingEnd?: () => void
+  onAvatarStopped?: () => void
 }

@@ -7,12 +7,10 @@ const Register = () => import('@/features/auth/views/Register.vue')
 const MainLayout = () => import('@/app/layouts/MainLayout.vue')
 const Home = () => import('@/features/dashboard/views/Home.vue')
 const ResourceGenerator = () => import('@/features/resource/views/ResourceGenerator.vue')
-const LearningPathEntry = () => import('@/features/learning-path/views/LearningPathEntry.vue')
-const LearningPathOverview = () => import('@/features/learning-path/views/LearningPathOverview.vue')
-const LearningPathNode = () => import('@/features/learning-path/views/LearningPathNode.vue')
-const LearningPathHistory = () => import('@/features/learning-path/views/LearningPathHistory.vue')
-const PathResourceDetail = () => import('@/features/learning-path/views/PathResourceDetail.vue')
-const PathResourceHistory = () => import('@/features/learning-path/views/PathResourceHistory.vue')
+const LearningPathEntry = () => import('@/features/learning-path/views/PathPlanCreate.vue')
+const LearningPathOverview = () => import('@/features/learning-path/views/PathPlanOverview.vue')
+const LearningPathNode = () => import('@/features/learning-path/views/PathNodeStudy.vue')
+const LearningPathHistory = () => import('@/features/learning-path/views/PathPlanHistory.vue')
 const Tutor = () => import('@/features/chat/views/Tutor.vue')
 const Profile = () => import('@/features/profile/views/Profile.vue')
 const ResourceResult = () => import('@/features/resource/views/ResourceResult.vue')
@@ -39,8 +37,6 @@ export const routes: RouteRecordRaw[] = [
       { path: 'profile', name: 'Profile', component: Profile },
       { path: 'resource-detail/:id', name: 'ResourceResult', component: ResourceResult },
       { path: '/ai/resources/history', name: 'ResourceHistory', component: ResourceHistory },
-      { path: 'path-resource-history', name: 'PathResourceHistory', component: PathResourceHistory },
-      { path: 'path-resource/:id', name: 'PathResourceDetail', component: PathResourceDetail },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },
       {
         path: 'algorithm-visualizer',

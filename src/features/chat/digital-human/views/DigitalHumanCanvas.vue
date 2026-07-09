@@ -1,10 +1,23 @@
 <template>
   <div class="digital-human-canvas">
-    <div ref="videoContainer" class="video-container"></div>
+    <div class="avatar-background"></div>
+    <div ref="videoContainer" :class="['video-container', { 'is-chroma-active': chromaReady }]"></div>
+    <canvas ref="chromaCanvas" :class="['chroma-canvas', { active: chromaReady }]"></canvas>
 
     <!-- Not ready states (connecting / disconnected) -->
     <div v-if="!isReady" class="placeholder">
-      <template v-if="isConnected">
+      <template v-if="state === 'error'">
+        <Avatar class="placeholder-icon error-icon" />
+        <p class="error-message">{{ errorMessage || '数字人服务连接失败' }}</p>
+        <button class="reconnect-btn" @click="$emit('reconnect')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          重新连接
+        </button>
+      </template>
+      <template v-else-if="isConnected">
         <div class="spinner"></div>
         <p>等待数字人上线...</p>
       </template>
@@ -50,12 +63,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { PhUser as Avatar } from '@phosphor-icons/vue'
+import { applyGreenScreenAlpha } from '../model/chromaKey'
+import type { DigitalHumanStateType } from '../model/digital-human'
 
 const props = defineProps<{
   isReady: boolean
   isConnected: boolean
+  state: DigitalHumanStateType
+  errorMessage?: string | null
   audioEnabled: boolean
   idleCountdown: number
 }>()
@@ -67,13 +84,92 @@ defineEmits<{
 }>()
 
 const videoContainer = ref<HTMLElement | null>(null)
+const chromaCanvas = ref<HTMLCanvasElement | null>(null)
+const chromaReady = ref(false)
+let chromaObserver: MutationObserver | null = null
+let chromaFrameId: number | null = null
+let sourceVideo: HTMLVideoElement | null = null
+let workCanvas: HTMLCanvasElement | null = null
+let workContext: CanvasRenderingContext2D | null = null
+
+const ensureWorkCanvas = () => {
+  if (!workCanvas) {
+    workCanvas = document.createElement('canvas')
+    workContext = workCanvas.getContext('2d', { willReadFrequently: true })
+  }
+  return workContext
+}
+
+const resizeCanvas = (canvas: HTMLCanvasElement, width: number, height: number) => {
+  if (canvas.width !== width) canvas.width = width
+  if (canvas.height !== height) canvas.height = height
+  if (workCanvas && workCanvas.width !== width) workCanvas.width = width
+  if (workCanvas && workCanvas.height !== height) workCanvas.height = height
+}
+
+const renderChromaFrame = () => {
+  const video = sourceVideo
+  const canvas = chromaCanvas.value
+  const context = canvas?.getContext('2d')
+  const work = ensureWorkCanvas()
+
+  if (video && canvas && context && work && video.readyState >= 2) {
+    const width = video.videoWidth || 720
+    const height = video.videoHeight || 1280
+    resizeCanvas(canvas, width, height)
+
+    try {
+      work.drawImage(video, 0, 0, width, height)
+      const frame = work.getImageData(0, 0, width, height)
+      applyGreenScreenAlpha(frame.data)
+      work.putImageData(frame, 0, 0)
+      context.clearRect(0, 0, width, height)
+      context.drawImage(work.canvas, 0, 0)
+      chromaReady.value = true
+    } catch (error) {
+      chromaReady.value = false
+      console.warn('[DH] chroma key rendering failed:', error)
+    }
+  }
+
+  chromaFrameId = window.requestAnimationFrame(renderChromaFrame)
+}
+
+const startChromaKey = () => {
+  const video = videoContainer.value?.querySelector('video')
+  if (!(video instanceof HTMLVideoElement)) return
+  if (sourceVideo !== video) {
+    sourceVideo = video
+    sourceVideo.playsInline = true
+  }
+  if (chromaFrameId === null) {
+    chromaFrameId = window.requestAnimationFrame(renderChromaFrame)
+  }
+}
 
 // Expose the container ref so parent can pass it to composable.setPlayerContainer
 defineExpose({
   getContainer: () => videoContainer.value,
 })
 
+onMounted(() => {
+  nextTick(() => {
+    startChromaKey()
+    if (videoContainer.value) {
+      chromaObserver = new MutationObserver(startChromaKey)
+      chromaObserver.observe(videoContainer.value, { childList: true, subtree: true })
+    }
+  })
+})
+
 onBeforeUnmount(() => {
+  if (chromaFrameId !== null) {
+    window.cancelAnimationFrame(chromaFrameId)
+    chromaFrameId = null
+  }
+  chromaObserver?.disconnect()
+  chromaObserver = null
+  sourceVideo = null
   if (videoContainer.value) {
     while (videoContainer.value.firstChild) {
       videoContainer.value.removeChild(videoContainer.value.firstChild)
@@ -93,17 +189,45 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.avatar-background {
+  position: absolute;
+  inset: 0;
+  background: url('/static/avatar-background-bookshelf.jpg') center / cover no-repeat;
+  z-index: 0;
+}
+
 .video-container {
   width: 100%;
   height: 100%;
   position: absolute;
   inset: 0;
+  z-index: 1;
+}
+
+.video-container.is-chroma-active {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .video-container :deep(video) {
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
+}
+
+.chroma-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.chroma-canvas.active {
+  opacity: 1;
 }
 
 .placeholder {
@@ -114,12 +238,26 @@ onBeforeUnmount(() => {
   gap: var(--space-3);
   color: var(--color-text-faint);
   font-size: var(--text-sm);
-  z-index: 1;
+  z-index: 3;
 }
 
 .placeholder-icon {
   font-size: 3rem;
   opacity: 0.4;
+}
+
+.error-icon {
+  color: var(--color-danger);
+  opacity: 0.75;
+}
+
+.error-message {
+  max-width: min(520px, 78vw);
+  margin: 0;
+  color: var(--color-danger);
+  text-align: center;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .spinner {

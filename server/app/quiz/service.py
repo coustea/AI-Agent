@@ -24,13 +24,9 @@ class QuizBankService:
     # 中文题型标签 → 数据库英文键 的反向映射
     _TYPE_LABEL_TO_KEY: dict[str, str] = {
         "单选题": "single_choice",
-        "多选题": "multiple_choice",
         "判断题": "judge",
         "填空题": "fill_blank",
-        "简答题": "short_answer",
         "分析题": "analysis",
-        "综合题": "comprehensive",
-        "编程题": "analysis",
         "选择题": "single_choice",  # 兼容旧标签
     }
 

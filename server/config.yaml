@@ -61,6 +61,9 @@ avatar:
   anchor_id: "111204004"
   vcn: "x5_lingxiaoyue_flow"
   iat_url: "wss://iat-api.xfyun.cn/v2/iat"
+  background_source: "image"
+  background_image: "../public/static/avatar-background-bookshelf.jpg"
+  background_encoding: "jpg"
 
 # 搜索服务
 search:
@@ -76,7 +79,7 @@ paths:
 knowledge:
   enabled: true
   embed_model: "bge-m3:latest"
-  embed_base_url: "http://127.0.0.1:10000/v1"
+  embed_base_url: "http://127.0.0.1:11434/v1"
   top_k: 4
   max_context_chars: 6000
   # 启动时索引不存在则自动构建（需要 embedding 服务可用）

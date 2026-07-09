@@ -8,8 +8,11 @@ AvatarController 职责：
 """
 
 import asyncio
+import base64
+import binascii
 import json
 import uuid
+from pathlib import Path
 from typing import Optional
 
 import websockets
@@ -20,12 +23,164 @@ from app.config import (
     AVATAR_API_KEY,
     AVATAR_API_SECRET,
     AVATAR_APP_ID,
+    AVATAR_BACKGROUND_ENCODING,
+    AVATAR_BACKGROUND_IMAGE,
+    AVATAR_BACKGROUND_SOURCE,
     AVATAR_URL,
     AVATAR_VCN,
 )
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+SERVER_DIR = Path(__file__).resolve().parents[3]
+
+
+def _normalize_background_encoding(value: str | None) -> str:
+    encoding = (value or "jpg").strip().lower().lstrip(".")
+    if encoding == "jpeg":
+        return "jpg"
+    return encoding
+
+
+def _normalize_background_source(value: str | None) -> str:
+    return (value or "auto").strip().lower()
+
+
+def _validated_background_res_key() -> tuple[str, str] | None:
+    if _normalize_background_source(AVATAR_BACKGROUND_SOURCE) != "res_key":
+        return None
+
+    res_key = "".join((AVATAR_BACKGROUND_IMAGE or "").split())
+    if not res_key:
+        logger.warning("Avatar background res_key ignored: empty value")
+        return None
+
+    return res_key, _normalize_background_encoding(AVATAR_BACKGROUND_ENCODING)
+
+
+def _extract_background_base64(image: str, encoding: str) -> tuple[str, str]:
+    content = image.strip()
+    if not content.startswith("data:"):
+        return content, encoding
+
+    header, separator, payload = content.partition(",")
+    if not separator:
+        return content, encoding
+
+    if "image/png" in header:
+        encoding = "png"
+    elif "image/jpeg" in header or "image/jpg" in header:
+        encoding = "jpg"
+    return payload.strip(), encoding
+
+
+def _read_background_file(image: str, encoding: str) -> tuple[str, str] | None:
+    path = Path(image).expanduser()
+    if not path.is_absolute():
+        path = SERVER_DIR / path
+    if not path.is_file():
+        return None
+
+    suffix = path.suffix.lower().lstrip(".")
+    if suffix == "jpeg":
+        suffix = "jpg"
+    if suffix in {"jpg", "png"}:
+        encoding = suffix
+
+    raw = path.read_bytes()
+    return base64.b64encode(raw).decode("ascii"), encoding
+
+
+def _is_supported_background_image(raw: bytes, encoding: str) -> bool:
+    if encoding in {"jpg", "jpeg"}:
+        return raw.startswith(b"\xff\xd8")
+    if encoding == "png":
+        return raw.startswith(b"\x89PNG\r\n\x1a\n")
+    return False
+
+
+def _validated_background_config() -> tuple[str, str] | None:
+    if not AVATAR_BACKGROUND_IMAGE:
+        return None
+
+    encoding = _normalize_background_encoding(AVATAR_BACKGROUND_ENCODING)
+    image, encoding = _read_background_file(AVATAR_BACKGROUND_IMAGE, encoding) or _extract_background_base64(
+        AVATAR_BACKGROUND_IMAGE,
+        encoding,
+    )
+    compact_image = "".join(image.split())
+
+    try:
+        raw = base64.b64decode(compact_image, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        logger.warning(
+            "Avatar background ignored: invalid base64 (encoding=%s, length=%d, error=%s)",
+            encoding,
+            len(compact_image),
+            exc,
+        )
+        return None
+
+    if not _is_supported_background_image(raw, encoding):
+        logger.warning(
+            "Avatar background ignored: decoded data is not a %s image (bytes=%d, magic=%s)",
+            encoding,
+            len(raw),
+            raw[:8].hex(),
+        )
+        return None
+
+    return compact_image, encoding
+
+
+def build_avatar_params() -> dict:
+    """Build Avatar start parameters and include only a valid background image."""
+    avatar_params = {
+        "stream": {"protocol": "xrtc"},
+        "avatar_id": AVATAR_ANCHOR,
+        "width": 720,
+        "height": 1280,
+    }
+
+    background_res_key = _validated_background_res_key()
+    if background_res_key:
+        res_key, encoding = background_res_key
+        avatar_params["res_Key"] = res_key
+        avatar_params["encoding"] = encoding
+        logger.info(
+            "Avatar background resource configured (encoding=%s, res_key_len=%d)",
+            encoding,
+            len(res_key),
+        )
+        return avatar_params
+
+    background = _validated_background_config()
+    if background:
+        image, encoding = background
+        avatar_params["image"] = image
+        avatar_params["encoding"] = encoding
+        logger.info(
+            "Avatar background image configured (encoding=%s, bytes_base64=%d)",
+            encoding,
+            len(image),
+        )
+
+    return avatar_params
+
+
+def build_avatar_start_message() -> dict:
+    """Build the Avatar service start command."""
+    return {
+        "header": {
+            "app_id": AVATAR_APP_ID,
+            "request_id": str(uuid.uuid4()),
+            "ctrl": "start",
+        },
+        "parameter": {
+            "tts": {"vcn": AVATAR_VCN},
+            "avatar": build_avatar_params(),
+        },
+    }
 
 
 class AvatarController:
@@ -37,6 +192,8 @@ class AvatarController:
     RETRY_DELAY = 0.5
     # 心跳保活间隔（秒）
     KEEPALIVE_INTERVAL = 10
+    # Avatar WebSocket 初始化重试次数
+    CONNECT_MAX_RETRIES = 3
 
     def __init__(self):
         self.ws = None
@@ -66,40 +223,50 @@ class AvatarController:
         """连接到讯飞 Avatar 服务 — 发送启动指令并启动心跳。"""
         self._on_reconnect_callback = on_reconnect_callback
 
-        try:
-            # 生成带签名的鉴权 URL
-            auth_url = xfyun_auth.assemble_auth_url(
-                AVATAR_URL, "GET", AVATAR_API_KEY, AVATAR_API_SECRET
-            )
-            self.ws = await websockets.connect(auth_url)
+        auth_url = xfyun_auth.assemble_auth_url(
+            AVATAR_URL, "GET", AVATAR_API_KEY, AVATAR_API_SECRET
+        )
+        last_error: Exception | None = None
 
-            # 发送启动指令（含虚拟人 ID、TTS 声音、视频分辨率等参数）
-            start_msg = {
-                "header": {
-                    "app_id": AVATAR_APP_ID,
-                    "request_id": str(uuid.uuid4()),
-                    "ctrl": "start",
-                },
-                "parameter": {
-                    "tts": {"vcn": AVATAR_VCN},
-                    "avatar": {
-                        "stream": {"protocol": "xrtc"},
-                        "avatar_id": AVATAR_ANCHOR,
-                        "width": 720,
-                        "height": 1280,
-                    },
-                },
-            }
-            await self.ws.send(json.dumps(start_msg))
-            logger.info("Avatar service connected")
+        for attempt in range(1, self.CONNECT_MAX_RETRIES + 1):
+            try:
+                self.ws = await websockets.connect(auth_url, open_timeout=10)
+                start_msg = build_avatar_start_message()
+                await self.ws.send(json.dumps(start_msg))
+                logger.info("Avatar service connected (attempt %d)", attempt)
 
-            # 启动心跳保活任务
-            if self._keepalive_task is None or self._keepalive_task.done():
-                self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+                # 启动心跳保活任务
+                if self._keepalive_task is None or self._keepalive_task.done():
+                    self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+                return
 
-        except Exception as e:
-            logger.error(f"Failed to connect to avatar service: {e}")
-            raise RuntimeError(f"Failed to connect to avatar service: {e}")
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "Failed to connect to avatar service (attempt %d/%d, error_type=%s, error=%r)",
+                    attempt,
+                    self.CONNECT_MAX_RETRIES,
+                    type(e).__name__,
+                    e,
+                    exc_info=True,
+                )
+                if self.ws:
+                    try:
+                        await self.ws.close()
+                    except Exception:
+                        logger.debug("Failed to close failed avatar websocket", exc_info=True)
+                    finally:
+                        self.ws = None
+
+                if attempt < self.CONNECT_MAX_RETRIES:
+                    await asyncio.sleep(self.RETRY_DELAY * attempt)
+
+        error_type = type(last_error).__name__ if last_error else "UnknownError"
+        error_repr = repr(last_error) if last_error else "unknown"
+        raise RuntimeError(
+            f"Failed to connect to avatar service after {self.CONNECT_MAX_RETRIES} attempts: "
+            f"{error_type}: {error_repr}"
+        )
 
     async def receive_messages(self, callback):
         """持续接收 Avatar 服务的事件消息（stream_info、tts_start、tts_end）。
@@ -124,7 +291,9 @@ class AvatarController:
                 # 非零 code 表示 API 错误
                 if data["header"]["code"] != 0:
                     logger.error(f"Avatar error: {data}")
-                    continue
+                    header = data.get("header", {})
+                    await callback("avatar_error", header, None)
+                    break
 
                 payload = data.get("payload", {})
                 if "avatar" not in payload:
@@ -211,13 +380,23 @@ class AvatarController:
             logger.warning("Empty text, skipping speech")
             return
 
+        # 如果正在播报或队列中还有内容，先清空
+        # 避免旧播报和新播报重叠导致"两个声音"
+        if self.is_speaking or not self.sentence_queue.empty():
+            logger.warning(
+                "[AvatarCtrl] speak() called while speaking=%s queue=%d — clearing old speech first",
+                self.is_speaking, self.sentence_queue.qsize(),
+            )
+            await self.stop()
+
         # 限制语速在 0.8~1.5 范围内
         safe_rate = max(0.8, min(1.5, float(speech_rate)))
         # 将 turn_id 存入队列，但不在入队时设置 _current_speak_turn_id
         # _current_speak_turn_id 只在 _process_queue() 取出当前项时设置
         await self.sentence_queue.put((text, safe_rate, turn_id))
-        logger.debug(
-            f"Sentence queued: {text[:30]}... (queue size: {self.sentence_queue.qsize()}, turn_id: {turn_id})"
+        logger.info(
+            "[AvatarCtrl] Sentence queued: %s... (queue size: %d, turn_id: %s)",
+            text[:30], self.sentence_queue.qsize(), turn_id,
         )
 
         # Avatar 未就绪时仅入队，等待 stream_info 事件后自动播放
@@ -233,8 +412,8 @@ class AvatarController:
         """串行处理播报队列 — 逐句发送 TTS 指令并等待播报完成。
 
         改进的等待机制：
-        1. 发送 text_driver 后等待 tts_start 事件（最长 3 秒超时）
-        2. 收到 tts_start 后等待 tts_end 事件（最长 30 秒超时）
+        1. 发送 text_driver 后等待 tts_start 事件（最长 5 秒超时）
+        2. 收到 tts_start 后等待 tts_end 事件（最长 60 秒超时）
         3. 未收到 tts_start 时也不立即发送下一句，避免重叠
         """
         logger.info("Starting to process sentence queue")
@@ -244,6 +423,16 @@ class AvatarController:
             # 设置当前播报的 turn_id
             self._current_speak_turn_id = turn_id
 
+            # 安全检查：如果还在播报中，先等待结束（最多 5 秒）
+            # 防止两个 TTS 重叠导致"两个声音"
+            wait_safety = 50  # 5 seconds
+            while self.is_speaking and wait_safety > 0:
+                await asyncio.sleep(0.1)
+                wait_safety -= 1
+            if self.is_speaking:
+                logger.warning("[AvatarCtrl] Previous speech still active, forcing stop before new sentence")
+                self.is_speaking = False
+
             # 带重试的 TTS 发送
             success = await self._speak_with_retry(sentence, speech_rate)
 
@@ -251,12 +440,13 @@ class AvatarController:
                 logger.error(
                     f"Sentence failed after {self.MAX_RETRIES} retries: {sentence[:30]}..."
                 )
+                self._current_speak_turn_id = None
                 continue
 
             logger.debug(f"Avatar speech dispatched: {sentence[:30]}... (turn_id: {turn_id})")
 
-            # Wait for tts_start event (max 3 seconds)
-            wait_start_count = 30  # 3 seconds at 0.1s per iteration
+            # Wait for tts_start event (max 5 seconds)
+            wait_start_count = 50  # 5 seconds at 0.1s per iteration
             while not self.is_speaking and wait_start_count > 0:
                 await asyncio.sleep(0.1)
                 wait_start_count -= 1
@@ -264,22 +454,22 @@ class AvatarController:
             if not self.is_speaking:
                 # tts_start not received within timeout
                 logger.warning(
-                    f"tts_start timeout (3s) for: {sentence[:30]}... - waiting extra 1.5s before next sentence"
+                    f"tts_start timeout (5s) for: {sentence[:30]}... - skipping sentence"
                 )
                 # Don't immediately send next sentence - wait to avoid overlap
                 await asyncio.sleep(1.5)
                 self._current_speak_turn_id = None
                 continue
 
-            # Wait for tts_end event (max 30 seconds)
-            wait_end_timeout = 300  # 30 seconds at 0.1s per iteration
+            # Wait for tts_end event (max 60 seconds)
+            wait_end_timeout = 600  # 60 seconds at 0.1s per iteration
             while self.is_speaking and wait_end_timeout > 0:
                 await asyncio.sleep(0.1)
                 wait_end_timeout -= 1
 
             if self.is_speaking:
                 logger.warning(
-                    f"Avatar speech timeout (30s), forcing end: {sentence[:30]}..."
+                    f"Avatar speech timeout (60s), forcing end: {sentence[:30]}..."
                 )
                 self.is_speaking = False
 
@@ -290,7 +480,12 @@ class AvatarController:
         logger.info("Sentence queue processing completed")
 
     async def _speak_with_retry(self, text: str, speech_rate: float = 1.0) -> bool:
-        """带重试机制的 TTS 发送。"""
+        """带重试机制的 TTS 发送。
+
+        注意：只在发送失败时重试。如果发送成功但 TTS 没有响应，
+        不在这里重试（由 _process_queue 的超时机制处理），
+        避免重复发送 text_driver 导致两个声音。
+        """
         for attempt in range(self.MAX_RETRIES):
             try:
                 await self._speak_immediate(text, speech_rate)

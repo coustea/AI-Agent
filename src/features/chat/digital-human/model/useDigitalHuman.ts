@@ -32,6 +32,46 @@ export function shouldPauseIdleDisconnect({ state, isSpeaking, isListening }: Id
         || state === 'listening'
 }
 
+export function shouldCleanupLocalVadOnBackendState(listening: boolean): boolean {
+    return !listening
+}
+
+export function shouldStopVadForDigitalHumanState(state: DigitalHumanStateType): boolean {
+    // "recognizing" 是 VAD 正常流程的一部分（识别用户语音），不应停止麦克风
+    // 只有 thinking/speaking 状态才需要停止 VAD（LLM 推理和数字人播报期间不需要录音）
+    return state === 'thinking' || state === 'speaking'
+}
+
+export function digitalHumanStateErrorMessage(state: DigitalHumanStateType, message?: string): string {
+    if (state !== 'error') return ''
+    return message?.trim() || '数字人服务连接失败'
+}
+
+export interface AvatarAudioOutputs {
+    audible: HTMLMediaElement | null
+    muted: HTMLMediaElement[]
+}
+
+function hasAudioTrack(media: HTMLMediaElement): boolean {
+    const stream = media.srcObject
+    return stream instanceof MediaStream && stream.getAudioTracks().length > 0
+}
+
+export function selectAvatarAudioOutputs(elements: Iterable<Element>): AvatarAudioOutputs {
+    const mediaElements = Array.from(elements).filter(
+        (element): element is HTMLMediaElement => element instanceof HTMLMediaElement,
+    )
+    const audible = mediaElements.find((element) => element instanceof HTMLAudioElement)
+        ?? mediaElements.find(hasAudioTrack)
+        ?? mediaElements[0]
+        ?? null
+
+    return {
+        audible,
+        muted: mediaElements.filter((element) => element !== audible),
+    }
+}
+
 // ==========================================
 // Composable
 // ==========================================
@@ -104,6 +144,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let speechDetected = false
     let speechHangTimer: ReturnType<typeof setTimeout> | null = null
     let playerContainer: HTMLElement | null = null
+    // 当数字人说话时尝试启动 VAD，会暂存参数，等播报结束后自动重启
+    let _pendingVadRestart: { needDiagram: boolean; capabilities: DigitalHumanCapabilities } | null = null
     // Pending stream data: saved when stream_info arrives before container is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let pendingStreamData: { url: string; extend: Record<string, any> } | null = null
@@ -242,6 +284,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         pendingStreamData = null
         bufferedAssistantText = ''
         pendingAssistantComplete = false
+        _pendingVadRestart = null
         clearAssistantFlushFallbackTimer()
         clearAssistantRevealTimer()
         callbacks?.onConnectionChange?.(false)
@@ -293,6 +336,15 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         if (type === 'digital_human_state') {
             const state = data.state as DigitalHumanStateType
             digitalHumanState.value = state
+            if (shouldStopVadForDigitalHumanState(state) && vadActive) {
+                stopVad()
+            }
+            const stateError = digitalHumanStateErrorMessage(state, data.message)
+            if (stateError) {
+                error.value = stateError
+                isAvatarReady.value = false
+                callbacks?.onError?.(stateError)
+            }
             callbacks?.onDigitalHumanStateChange?.(state, turn_id)
             callbacks?.onStatus?.({ stage: state, message: data.message })
             // 当后端报告 thinking 状态时，立即通知前端进入思考模式
@@ -316,37 +368,36 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         } else if (type === 'assistant_chunk') {
             updateCache(data.content || '', true) // 实时追加到缓存
             bufferedAssistantText += data.content || ''
-            if (isSpeaking.value) {
-                startAssistantReveal()
-            }
+            // 收到文本就立即开始 reveal，不等 avatar_speaking
+            // 后端是 LLM 全部输出完才发 TTS，如果等 avatar_speaking 才 reveal，
+            // 字幕会比语音延迟 3-4 秒
+            startAssistantReveal()
         } else if (type === 'status') {
             callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
             pendingAssistantComplete = true
-            // 后端回答已完成，立即通知前端结束思考动画（参照文本模式行为）
-            // 不再等 avatar_stopped — 文本已全部到达，思考阶段应立即结束
+            // 后端回答已完成，立即通知前端结束思考动画
             callbacks?.onThinkingEnd?.()
+            // 确保所有缓冲文本都开始 reveal
+            startAssistantReveal()
             clearAssistantFlushFallbackTimer()
             assistantFlushFallbackTimer = setTimeout(() => {
-                if (!isSpeaking.value) {
-                    startAssistantReveal()
-                } else {
-                    // avatar_stopped 一直没来，强制 finalize 避免消息卡住
+                // avatar_stopped 一直没来，强制 finalize 避免消息卡住
+                if (isSpeaking.value) {
                     console.warn('[DH] avatar_stopped not received after assistant_complete, force finalizing')
                     isSpeaking.value = false
-                    finalizeBufferedAssistantTurn(true)
                 }
+                finalizeBufferedAssistantTurn(true)
             }, 8000)
         } else if (type === 'avatar_speaking') {
             isSpeaking.value = true
             currentSpeechStartedAt = Date.now()
             currentSpeechReleasedCost = 0
-            const estimatedCost = estimateBufferedTextCost(bufferedAssistantText)
-            const baselineRate = calibratedRevealCharsPerSecond > 0
-                ? calibratedRevealCharsPerSecond
-                : (3.1 + (Math.max(0.8, Math.min(1.5, Number(speechRate.value) || 1.0)) - 0.8) * 2.6)
-            const estimatedDurationSec = Math.max(1.2, estimatedCost / Math.max(2.2, baselineRate))
-            targetRevealCharsPerSecond = Math.max(2.2, Math.min(7.5, estimatedCost / estimatedDurationSec))
+            // 数字人开始说话时，立即结束思考动画
+            // avatar_speaking 可能在 assistant_complete 之前到达（TTS 先于 LLM 流完成）
+            callbacks?.onThinkingEnd?.()
+            // 数字人开始说话，立即开始字幕 reveal
+            // 不再延迟，让字幕和语音同步出现
             startAssistantReveal()
         } else if (type === 'diagram') {
             callbacks?.onDiagram?.(data.data, turn_id)
@@ -355,10 +406,12 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             if (currentSpeechStartedAt > 0 && currentSpeechReleasedCost > 0) {
                 const elapsedSec = Math.max(0.25, (Date.now() - currentSpeechStartedAt) / 1000)
                 const actualRate = currentSpeechReleasedCost / elapsedSec
-                const clampedActualRate = Math.max(2.2, Math.min(7.5, actualRate))
+                const clampedActualRate = Math.max(1.5, Math.min(7.0, actualRate))
                 if (calibratedRevealCharsPerSecond <= 0) {
-                    calibratedRevealCharsPerSecond = clampedActualRate
+                    // 首次校准：使用实测速率 × 0.9 补偿系数
+                    calibratedRevealCharsPerSecond = clampedActualRate * 0.9
                 } else {
+                    // 后续校准：平滑更新
                     calibratedRevealCharsPerSecond =
                         calibratedRevealCharsPerSecond * 0.7 + clampedActualRate * 0.3
                 }
@@ -367,10 +420,29 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             currentSpeechReleasedCost = 0
             targetRevealCharsPerSecond = 0
             finalizeBufferedAssistantTurn()
+            // 数字人播报结束后，通知前端可以安全重启 VAD
+            // 之前在 assistant_complete 时就重启 VAD，导致麦克风拾取到 TTS 回声
+            callbacks?.onAvatarStopped?.()
+            // 如果在播报期间有 VAD 重启请求，现在安全地执行
+            if (_pendingVadRestart) {
+                const { needDiagram: pendingDiagram, capabilities: pendingCaps } = _pendingVadRestart
+                _pendingVadRestart = null
+                // 延迟一小段时间确保 TTS 音频完全停止播放
+                setTimeout(() => {
+                    if (!isSpeaking.value && !vadActive && ws && ws.readyState === WebSocket.OPEN) {
+                        startVad(pendingDiagram, pendingCaps)
+                    }
+                }, 500)
+            }
         } else if (type === 'vad_state') {
             const state = data.data?.listening ?? (data.state === 'listening' || data.state === 'speaking')
-            backendVadReady = !!state
-            isListening.value = !!state
+            const listening = !!state
+            backendVadReady = listening
+            isListening.value = listening
+            if (shouldCleanupLocalVadOnBackendState(listening)) {
+                vadActive = false
+                cleanupAudioInput()
+            }
             callbacks?.onVadStateChange?.(!!state)
         } else if (type === 'history_cleared') {
             callbacks?.onHistoryCleared?.(data.data)
@@ -508,6 +580,9 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     function enableAudio(): void {
         if (!playerContainer) return
 
+        // 立即标记为已启用，让 UI 按钮消失
+        audioEnabled.value = true
+
         const mediaElements = playerContainer.querySelectorAll('video, audio')
         if (mediaElements.length === 0) {
             // Retry after a short delay (player may still be initializing)
@@ -515,36 +590,41 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 if (!playerContainer) return
                 const retry = playerContainer.querySelectorAll('video, audio')
                 if (retry.length > 0) {
-                    unmuteElements(retry)
+                    applyAudioOutputSelection(retry)
                     startAudioMonitor()
-                    audioEnabled.value = true
                 }
             }, 500)
             return
         }
 
-        unmuteElements(mediaElements)
+        applyAudioOutputSelection(mediaElements)
         startAudioMonitor()
-        audioEnabled.value = true
     }
 
-    function unmuteElements(elements: NodeListOf<Element>): void {
-        elements.forEach((media) => {
-            const el = media as HTMLMediaElement
+    function applyAudioOutputSelection(elements: Iterable<Element>): void {
+        const { audible, muted } = selectAvatarAudioOutputs(elements)
+
+        muted.forEach((el) => {
+            el.muted = true
+            el.volume = 0
+        })
+
+        if (audible) {
+            const el = audible
             el.muted = false
             el.volume = 1.0
-            el.play().catch(() => {})
-        })
+            // 只对暂停的元素调用 play()，避免对已播放的元素重复调用导致音频重叠
+            if (el.paused) {
+                el.play().catch(() => {})
+            }
+        }
     }
 
     function startAudioMonitor(): void {
         if (audioMonitor) return
         audioMonitor = setInterval(() => {
             if (!playerContainer) return
-            playerContainer.querySelectorAll('video, audio').forEach((media) => {
-                const el = media as HTMLMediaElement
-                if (el.volume !== 1.0) el.volume = 1.0
-            })
+            applyAudioOutputSelection(playerContainer.querySelectorAll('video, audio'))
         }, 2000)
     }
 
@@ -622,10 +702,15 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onError?.(error.value)
             return
         }
-
-        // If already speaking, stop first (interrupt)
+        // 数字人正在说话时，不允许开启语音识别
+        // 避免麦克风拾取到 TTS 回声导致错误识别
         if (isSpeaking.value) {
-            ws.send(JSON.stringify({ type: 'stop_speaking' }))
+            console.warn('[DH] Cannot start VAD while avatar is speaking, will auto-restart after speech ends')
+            _pendingVadRestart = { needDiagram, capabilities }
+            return
+        }
+        if (shouldStopVadForDigitalHumanState(digitalHumanState.value)) {
+            return
         }
 
         // Clear turn state
@@ -827,41 +912,35 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     function getRevealCharsPerSecond(): number {
         const rate = Math.max(0.8, Math.min(1.5, Number(speechRate.value) || 1.0))
-        const estimated = 1.7 + (rate - 0.8) * 3.2
+        // 基础估算速率：保守估计，字幕跟在语音后面
+        const estimated = 2.0 + (rate - 0.8) * 2.5
         if (targetRevealCharsPerSecond > 0) {
-            return Math.max(1.2, Math.min(7.2, targetRevealCharsPerSecond * (0.78 + (rate - 0.8) * 0.95)))
+            return Math.max(1.2, Math.min(7.0, targetRevealCharsPerSecond * (0.85 + (rate - 0.8) * 0.3)))
         }
         if (calibratedRevealCharsPerSecond > 0) {
-            return Math.max(1.2, Math.min(7.2, calibratedRevealCharsPerSecond * (0.78 + (rate - 0.8) * 0.95)))
+            return Math.max(1.2, Math.min(7.0, calibratedRevealCharsPerSecond * (0.85 + (rate - 0.8) * 0.3)))
         }
         return estimated
     }
 
     function getRevealUnitCost(unit: string): number {
         const trimmed = unit.trim()
-        if (!trimmed) return 0.55
-        if (/^[。！？!?]$/.test(trimmed)) return 5.4
-        if (/^[，,；;：:]$/.test(trimmed)) return 5.4
+        if (!trimmed) return 0.5
+        // 句末标点：较长停顿
+        if (/^[。！？!?]$/.test(trimmed)) return 5.0
+        // 分句标点：中等停顿
+        if (/^[，,；;]$/.test(trimmed)) return 3.0
+        // 冒号、引号：短停顿
+        if (/^[：:""''（）()《》【】]$/.test(trimmed)) return 1.5
+        // 英文单词
         if (/^[A-Za-z0-9_]+(?:['-][A-Za-z0-9_]+)*$/.test(trimmed)) {
-            return Math.max(1.5, Math.min(2.8, trimmed.length * 0.38 + 0.9))
+            return Math.max(1.2, Math.min(2.5, trimmed.length * 0.35 + 0.8))
         }
         return 1
     }
 
     function getRevealTickDelayMs(): number {
         return 64
-    }
-
-    function estimateBufferedTextCost(text: string): number {
-        let remaining = text
-        let total = 0
-        while (remaining) {
-            const unit = takeNextRevealUnit(remaining)
-            if (!unit) break
-            total += getRevealUnitCost(unit)
-            remaining = remaining.slice(unit.length)
-        }
-        return total
     }
 
     function revealBufferedAssistantTextStep(): void {
@@ -926,8 +1005,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         if (revealingAssistantText || !bufferedAssistantText) return
         revealingAssistantText = true
         assistantRevealLastTickAt = Date.now()
-        assistantRevealBudget = Math.max(assistantRevealBudget, 0.2)
-        assistantRevealTimer = setTimeout(revealBufferedAssistantTextStep, getRevealTickDelayMs() + 180)
+        // 初始预算，让前几个字能快速出现
+        assistantRevealBudget = Math.max(assistantRevealBudget, 0.3)
+        // 首个 reveal 延迟 80ms
+        assistantRevealTimer = setTimeout(revealBufferedAssistantTextStep, getRevealTickDelayMs() + 80)
     }
 
     function flushBufferedAssistantTextImmediately(): void {

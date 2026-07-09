@@ -298,6 +298,12 @@ AVATAR_ANCHOR = get("avatar.anchor_id", "")
 AVATAR_VCN = get("avatar.vcn", "")
 # 图片转动画（IAT）服务地址
 AVATAR_IAT_URL = get("avatar.iat_url", "")
+# 数字人背景图（base64 编码）
+AVATAR_BACKGROUND_IMAGE = get("avatar.background_image", "")
+# 数字人背景来源：res_key / image / auto
+AVATAR_BACKGROUND_SOURCE = get("avatar.background_source", "")
+# 数字人背景图编码格式（如 jpg、png）
+AVATAR_BACKGROUND_ENCODING = get("avatar.background_encoding", "")
 
 # ASR 配置（回退到通用 Avatar 配置）
 ASR_APP_ID = get("avatar.app_id", AVATAR_APP_ID)

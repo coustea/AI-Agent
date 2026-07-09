@@ -28,9 +28,8 @@ _DATA_DIR = Path(__file__).parent / "data"
 QUIZ_DIR = _DATA_DIR / "quiz"
 
 TYPE_MAP = {
-    "选择题": "single_choice", "单选题": "single_choice", "多选题": "multiple_choice",
-    "判断题": "judge", "填空题": "fill_blank", "简答题": "short_answer",
-    "分析题": "analysis", "综合题": "comprehensive", "编程题": "analysis",
+    "选择题": "single_choice", "单选题": "single_choice",
+    "判断题": "judge", "填空题": "fill_blank", "分析题": "analysis",
 }
 
 

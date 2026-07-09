@@ -90,7 +90,7 @@
                 <div class="popover-session-scroll">
                   <div class="popover-title">历史记录</div>
                   <div
-                      v-for="s in sessions"
+                      v-for="s in visibleSessions"
                       :key="s.id"
                       :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
                       @click="switchSession(s.id)"
@@ -105,6 +105,12 @@
                     </button>
                   </div>
                   <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
+                  <div v-if="hasMoreSessions && !historyExpanded" class="session-expand-btn nav-text" @click="historyExpanded = true">
+                    展开全部（{{ sessions.length }} 条）
+                  </div>
+                  <div v-if="historyExpanded" class="session-expand-btn nav-text" @click="historyExpanded = false">
+                    收起
+                  </div>
                 </div>
               </PopoverContent>
             </PopoverPortal>
@@ -117,7 +123,7 @@
 
         <div class="session-list" v-show="!sessionSidebarCollapsed">
           <div
-              v-for="s in sessions"
+              v-for="s in visibleSessions"
               :key="s.id"
               :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
               @click="switchSession(s.id)"
@@ -133,6 +139,12 @@
             </button>
           </div>
           <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
+          <div v-if="hasMoreSessions && !historyExpanded" class="session-expand-btn nav-text" @click="historyExpanded = true">
+            展开全部（{{ sessions.length }} 条）
+          </div>
+          <div v-if="historyExpanded" class="session-expand-btn nav-text" @click="historyExpanded = false">
+            收起
+          </div>
         </div>
       </aside>
 
@@ -142,6 +154,8 @@
           <DigitalHumanCanvas
               :is-ready="isAvatarReady"
               :is-connected="isAvatarConnected"
+              :state="digitalHumanState"
+              :error-message="avatarError || digitalHumanBackendStatus"
               :audio-enabled="avatarAudioEnabled"
               :idle-countdown="avatarIdleCountdown"
               ref="canvasRef"
@@ -151,8 +165,11 @@
           />
 
           <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening || isAsrProcessing }">
-            <div class="speech-wave" v-if="isAIThinking || isAvatarSpeaking">
+            <div class="speech-wave" v-if="isAvatarSpeaking">
               <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="thinking-dots" v-else-if="isAIThinking">
+              <span></span><span></span><span></span>
             </div>
             <div class="asr-processing-dot" v-else-if="isAsrProcessing"></div>
             <div class="listening-dot" v-else-if="isVadListening"></div>
@@ -689,6 +706,7 @@ import {
   formatFileSize,
   formatRelativeTime,
   finalizeRunningAgentActivities,
+  shouldAutoRestartVadAfterAssistantComplete,
   isInsideOpenFence,
   takeNextStreamUnit,
 } from './tutorUtils'
@@ -741,6 +759,8 @@ const {
   isAvatarReady,
   isSpeaking: isAvatarSpeaking,
   isListening: isVadListening,
+  error: avatarError,
+  digitalHumanState,
   audioEnabled: avatarAudioEnabled,
   speechRate: avatarSpeechRate,
   idleCountdown: avatarIdleCountdown,
@@ -756,30 +776,13 @@ const {
 } = useDigitalHuman({
   onStatus: (status: any) => {
     digitalHumanBackendStatus.value = status.message || ''
-    // 将 agent_status 数据应用到当前 AI 消息的 agentActivities，
-    // 使数字人模式也能显示和文本模式一样的思考过程卡片
-    if (status.activity_id && streamingMsgRef.value) {
-      applyAgentStatus(streamingMsgRef.value, {
-        activity_id: status.activity_id,
-        kind: status.kind || 'workflow',
-        stage: status.stage,
-        status: status.status || 'running',
-        tool_name: status.tool_name,
-        title: status.title || '正在处理',
-        summary: status.summary,
-        message: status.message,
-        detail: status.detail,
-      })
-    }
+    // 数字人模式下不显示 agent activity 卡片
+    // 数字人有语音播报，用户通过听就能知道进度，不需要文本模式的复杂步骤卡片
+    // 这些卡片反而会和语音播报不同步，造成视觉干扰
   },
   onThinkingStart: () => {
-    // 后端报告 thinking 状态时立即显示思考动画和 AI 消息占位
-    if (streamingMsgId.value === null) {
-      const aiMsgId = Date.now() + 1
-      messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
-      streamingMsgId.value = aiMsgId
-      streamingMsgRef.value = messages.value[messages.value.length - 1] || null
-    }
+    // 数字人模式下简化思考动画：只显示状态覆盖层，不创建 AI 消息占位
+    // AI 消息占位在 onAssistantChunk 首次到达时创建
     isAIThinking.value = true
     startAvatarThinkingTimeout()
   },
@@ -802,7 +805,9 @@ const {
       messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
       streamingMsgId.value = aiMsgId
       streamingMsgRef.value = messages.value[messages.value.length - 1] || null
-      isAIThinking.value = true
+      // 数字人模式下不设置 isAIThinking
+      // 思考状态完全由 onThinkingStart/onThinkingEnd 控制
+      // avatar_speaking 已经触发 onThinkingEnd，不应再设回 true
     }
     if (streamingMsgId.value !== null) {
       enqueueStreamChunk(streamingMsgId.value, chunk)
@@ -838,13 +843,9 @@ const {
     streamingMsgId.value = null
     streamingMsgRef.value = null
     triggerGlobalProfileRefresh()
-    if (isVoiceChatting.value && chatMode.value === 'digital_human' && isAvatarConnected.value) {
-      window.setTimeout(async () => {
-        if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
-        await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-        isRecording.value = isVadListening.value
-      }, 350)
-    }
+    // 不再在 assistant_complete 时重启 VAD
+    // 因为此时数字人可能还在说话（TTS 播报中），麦克风会拾取到回声
+    // VAD 重启逻辑已移至 onAvatarStopped 回调中
   },
   onAsrResult: (text) => {
     if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
@@ -879,7 +880,8 @@ const {
           : null
         if (aiMsg) aiMsg.teachingDiagramGenerating = true
       }
-      isAIThinking.value = true
+      // 数字人模式下不设置 isAIThinking
+      // 思考状态由后端 digital_human_state 事件驱动，不在此处设置
       scrollToBottom()
     }
   },
@@ -922,6 +924,23 @@ const {
       }
     })
   },
+  onAvatarStopped: () => {
+    // 数字人播报结束后，如果处于语音通话模式，自动重启 VAD
+    // 之前在 assistant_complete 时重启，但那时 TTS 可能还在播放，
+    // 导致麦克风拾取到 TTS 回声产生错误识别
+    if (shouldAutoRestartVadAfterAssistantComplete({
+      isVoiceChatting: isVoiceChatting.value,
+      chatMode: chatMode.value,
+      isAvatarConnected: isAvatarConnected.value,
+    })) {
+      window.setTimeout(async () => {
+        if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
+        if (isAvatarSpeaking.value) return // 安全检查：确保确实已停止说话
+        await startVad(needTeachingDiagram.value, getAvatarCapabilities())
+        isRecording.value = isVadListening.value
+      }, 600) // 600ms 延迟确保 TTS 音频完全停止
+    }
+  },
 })
 
 // 兜底：当 canvasRef 变为可用时自动设置 player container
@@ -946,6 +965,8 @@ const digitalHumanSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
 const searchPopoverVisible = ref(false)
 const searchKeyword = ref('')
+const historyExpanded = ref(false)
+const HISTORY_COLLAPSED_COUNT = 5
 
 const messages = ref<ChatMsg[]>([])
 const streamingMsgId = ref<number | null>(null)
@@ -1235,7 +1256,20 @@ const filteredSessions = computed(() => {
   })
 })
 
-const isStreamingMessage = (msg: ChatMsg) => msg.id === streamingMsgId.value && isAIThinking.value
+const visibleSessions = computed(() => {
+  if (historyExpanded.value) return sessions.value
+  return sessions.value.slice(0, HISTORY_COLLAPSED_COUNT)
+})
+
+const hasMoreSessions = computed(() => sessions.value.length > HISTORY_COLLAPSED_COUNT)
+
+const isStreamingMessage = (msg: ChatMsg) => {
+  if (msg.id !== streamingMsgId.value) return false
+  // 数字人模式下：只要还在流式输出（streamingMsgId 存在）就算 streaming
+  // 不依赖 isAIThinking，因为数字人说话时 isAIThinking 已经是 false
+  if (chatMode.value === 'digital_human') return true
+  return isAIThinking.value
+}
 const getDisplayContent = (msg: ChatMsg) => {
   if (msg.id === streamingMsgId.value && streamDisplayText.value) {
     return streamDisplayText.value
@@ -1283,8 +1317,8 @@ const voiceAsrStage = computed<VoiceAsrStage>(() => {
 })
 
 const digitalHumanStatusText = computed(() => {
-  if (isAIThinking.value && digitalHumanBackendStatus.value) return digitalHumanBackendStatus.value
-  if (isAIThinking.value || isAvatarSpeaking.value) return '正在多模态解答中...'
+  if (isAvatarSpeaking.value) return '正在播报中...'
+  if (isAIThinking.value) return '正在思考中...'
   if (voiceAsrStage.value === 'no_voice') return '未识别到声音'
   if (voiceAsrStage.value === 'heard_voice') return '已识别到声音'
   if (voiceAsrStage.value === 'transcribing') return '正在转文字'
@@ -1541,6 +1575,19 @@ const enqueueStreamChunk = (messageId: number, chunk: string) => {
   if (!chunk) return
   if (streamingMsgRef.value?.id !== messageId) return
   lastChunkArrivedAt = Date.now()
+
+  // 数字人模式下：useDigitalHuman 的 reveal 系统已经按 TTS 语速节流了
+  // 这里直接渲染，不再做二次节流，避免字幕延迟
+  if (isDigitalHumanPacedStream()) {
+    const aiMsg = streamingMsgRef.value
+    if (aiMsg) {
+      streamRenderedChunks.push(chunk)
+      streamDisplayText.value += chunk
+      scrollToBottomThrottled(true)
+    }
+    return
+  }
+
   pendingRenderQueue.push(chunk)
   pendingRenderChars += chunk.length
   const shouldPrimeFirstPaint =
@@ -2819,6 +2866,21 @@ onBeforeUnmount(() => {
   margin-top: 2rem;
 }
 
+.session-expand-btn {
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  text-align: center;
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  transition: color var(--transition-base);
+  user-select: none;
+}
+
+.session-expand-btn:hover {
+  color: var(--color-primary-hover, var(--color-primary));
+  text-decoration: underline;
+}
+
 .session-sidebar.collapsed {
   width: 64px;
 }
@@ -2953,6 +3015,34 @@ onBeforeUnmount(() => {
 
 .speech-wave span:nth-child(3) {
   animation-delay: 0.2s;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+  height: 12px;
+  align-items: center;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  background: #94A3B8;
+  border-radius: 50%;
+  animation: thinking-bounce 1.2s infinite ease-in-out;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
 }
 
 .listening-dot,
