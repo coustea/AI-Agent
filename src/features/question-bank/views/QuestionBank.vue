@@ -432,6 +432,25 @@
         @scroll-to-question="scrollToQuestion"
         @exit-exam="handleExamExit"
         @back-workspace="backWorkspace"
+        @open-analysis-review="openAnalysisReview"
+      />
+
+      <AnalysisReviewPage
+        v-else-if="viewMode === 'analysis-review' && activeAnalysisQuestion"
+        :key="activeAnalysisQuestion.id"
+        :question="activeAnalysisQuestion"
+        :answer="activeAnalysisAnswer"
+        :review="activeAnalysisReview"
+        :score-value="activeAnalysisScore"
+        :result-text="activeAnalysisResultText"
+        :question-number="activeAnalysisQuestionNumber"
+        :analysis-index="activeAnalysisQuestionIndex"
+        :analysis-total="analysisQuestions.length"
+        :previous-disabled="activeAnalysisQuestionIndex <= 0"
+        :next-disabled="activeAnalysisQuestionIndex >= analysisQuestions.length - 1"
+        @close="closeAnalysisReview"
+        @previous="showPreviousAnalysisReview"
+        @next="showNextAnalysisReview"
       />
     </div>
   </div>
@@ -453,10 +472,11 @@ import {
 import DailyPracticeTab from '@/features/question-bank/components/DailyPracticeTab.vue'
 import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
+import AnalysisReviewPage from '@/features/question-bank/components/AnalysisReviewPage.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
 import { getErrorMessage } from '@/shared/api/http'
 
-type ViewMode = 'workspace' | 'exam'
+type ViewMode = 'workspace' | 'exam' | 'analysis-review'
 type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong'
 type AnswerValue = string | string[] | undefined
 
@@ -603,7 +623,51 @@ const examSubmitNoticeVisible = ref(false)
 const currentExamIndex = ref(0)
 const examTime = ref(0)
 const examCorrectCount = ref(0)
+const activeAnalysisQuestionId = ref<string | null>(null)
+const analysisReturnQuestionIndex = ref(0)
 let examTimer: number | null = null
+
+const analysisQuestions = computed(() => examPaper.value.filter((question) => question.type === '分析题'))
+
+const activeAnalysisQuestion = computed(() => {
+  if (!activeAnalysisQuestionId.value) return null
+  return examPaper.value.find((question) => question.id === activeAnalysisQuestionId.value) || null
+})
+
+const activeAnalysisQuestionIndex = computed(() => {
+  if (!activeAnalysisQuestion.value) return -1
+  return analysisQuestions.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id)
+})
+
+const activeAnalysisQuestionNumber = computed(() => {
+  if (!activeAnalysisQuestion.value) return 0
+  return examPaper.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id) + 1
+})
+
+const activeAnalysisAnswer = computed<AnswerValue>(() => {
+  if (!activeAnalysisQuestion.value) return undefined
+  return examAnswers.value[activeAnalysisQuestion.value.id]
+})
+
+const activeAnalysisReview = computed<QuizReviewResult | null>(() => {
+  if (!activeAnalysisQuestion.value) return null
+  return examReview.value[activeAnalysisQuestion.value.id] || null
+})
+
+const activeAnalysisScore = computed(() => {
+  const question = activeAnalysisQuestion.value
+  if (!question) return 0
+  const score = examReview.value[question.id]?.score
+  if (score != null) return Math.min(100, Math.max(0, Math.round(Number(score) || 0)))
+  return evaluateAnswer(question, examAnswers.value[question.id]) ? 100 : 0
+})
+
+const activeAnalysisResultText = computed(() => {
+  const score = activeAnalysisScore.value
+  if (score >= 80) return '优秀'
+  if (score >= 60) return '部分正确'
+  return '需要改进'
+})
 
 const weekLabels = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -1360,6 +1424,8 @@ function startExam(paper: Question[], title: string) {
   examSubmitNoticeVisible.value = false
   examCorrectCount.value = 0
   currentExamIndex.value = 0
+  activeAnalysisQuestionId.value = null
+  analysisReturnQuestionIndex.value = 0
   examTime.value = 0
   viewMode.value = 'exam'
   startExamTimer()
@@ -1492,8 +1558,50 @@ async function submitExam() {
   }
 }
 
+function openAnalysisReview(questionId: string) {
+  if (!examSubmitted.value) return
+
+  const questionIndex = examPaper.value.findIndex((question) => question.id === questionId)
+  const question = examPaper.value[questionIndex]
+  if (!question || question.type !== '分析题') return
+
+  analysisReturnQuestionIndex.value = questionIndex
+  activeAnalysisQuestionId.value = questionId
+  viewMode.value = 'analysis-review'
+  void nextTick(() => scrollQuestionBankViewportToTop())
+}
+
+function closeAnalysisReview() {
+  const returnIndex = analysisReturnQuestionIndex.value
+  viewMode.value = 'exam'
+  activeAnalysisQuestionId.value = null
+
+  void nextTick(() => {
+    scrollToQuestion(returnIndex)
+  })
+}
+
+function showPreviousAnalysisReview() {
+  const previous = analysisQuestions.value[activeAnalysisQuestionIndex.value - 1]
+  if (!previous) return
+
+  activeAnalysisQuestionId.value = previous.id
+  analysisReturnQuestionIndex.value = examPaper.value.findIndex((question) => question.id === previous.id)
+  void nextTick(() => scrollQuestionBankViewportToTop())
+}
+
+function showNextAnalysisReview() {
+  const next = analysisQuestions.value[activeAnalysisQuestionIndex.value + 1]
+  if (!next) return
+
+  activeAnalysisQuestionId.value = next.id
+  analysisReturnQuestionIndex.value = examPaper.value.findIndex((question) => question.id === next.id)
+  void nextTick(() => scrollQuestionBankViewportToTop())
+}
+
 function backWorkspace() {
   stopExamTimer()
+  activeAnalysisQuestionId.value = null
   viewMode.value = 'workspace'
   activeModule.value = 'daily'
   triggerChartAnimations()
