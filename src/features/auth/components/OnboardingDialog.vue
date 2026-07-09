@@ -233,8 +233,7 @@
           </div>
 
           <div class="profile-note">
-            <strong>填写后可继续修改</strong>
-            <p>这里仅用于初始化学习路径、资源推荐和题库偏好。</p>
+            <strong>填写后可在个人中心继续修改</strong>
           </div>
         </aside>
       </section>
