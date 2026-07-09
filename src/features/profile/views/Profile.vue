@@ -989,10 +989,10 @@ const questionBankSeconds = computed(() =>
 const tutorSeconds = computed(() => secondsForContexts("Tutor", "tutor"));
 const pathPlanningSeconds = computed(() =>
   secondsForContexts(
-    "LearningPathEntry",
-    "LearningPathOverview",
-    "LearningPathHistory",
-    "LearningPathNode",
+    "PathPlanCreate",
+    "PathPlanOverview",
+    "PathPlanHistory",
+    "PathNodeStudy",
     "path-planner",
     "path-planner-overview",
     "path-planner-history",
@@ -1005,13 +1005,9 @@ const recommendationSeconds = computed(() =>
     "ResourceGenerator",
     "ResourceResult",
     "ResourceHistory",
-    "PathResourceDetail",
-    "PathResourceHistory",
     "resource-generator",
     "resource-detail",
     "ai/resources/history",
-    "path-resource-detail",
-    "path-resource-history",
   ),
 );
 

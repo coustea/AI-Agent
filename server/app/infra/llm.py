@@ -3,16 +3,19 @@
 提供统一的异步 LLM 调用接口，支持：
 - 普通文本生成（ainvoke / astream）
 - 自研工具调用执行器创建
-- 结构化 JSON 输出（ainvoke_json），带 self-repair 自修正 + 跨模式降级
-- 视觉模型调用（vision）
+- 结构化 JSON 输出（ainvoke_json）
 
-内部使用 langchain_openai.ChatOpenAI 作为底层实现。
+关键设计：
+- ainvoke_json 不再默认依赖 LangChain with_structured_output(function_calling)。
+- 结构化输出统一走“纯文本 JSON → 本地提取 → Pydantic 校验 → 一次修复”。
+- 这样可以兼容不稳定的 OpenAI-compatible 服务，避免模型把 JSON 放入 tool_calls 后
+  LangChain 解析成 None，导致业务侧无原文可修复。
 """
 
 from __future__ import annotations
 
-import copy
 import json
+import re
 import time
 import uuid
 from functools import lru_cache
@@ -22,7 +25,13 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from app.config import DEFAULT_TEMPERATURE, JSON_TEMPERATURE, STREAM_TEMPERATURE, STRUCTURED_OUTPUT_STRATEGY, VISION_TEMPERATURE, get
+from app.config import (
+    DEFAULT_TEMPERATURE,
+    JSON_TEMPERATURE,
+    STREAM_TEMPERATURE,
+    VISION_TEMPERATURE,
+    get,
+)
 from app.infra.logging import get_logger
 from app.infra.utils import ServiceError, parse_first_json_object
 
@@ -34,6 +43,7 @@ logger = get_logger(__name__)
 
 class ChatModelConfig(BaseModel):
     """LLM 模型配置项。"""
+
     base_url: str
     api_key: str
     model_name: str
@@ -47,7 +57,11 @@ class ChatModelConfig(BaseModel):
 
 
 class ChatModel(ChatOpenAI):
-    """带有防御性 tool_calls 规范化的 ChatOpenAI 子类。"""
+    """带有防御性 tool_calls 规范化的 ChatOpenAI 子类。
+
+    这个类主要服务普通工具调用链路。ainvoke_json 已不再依赖工具调用，
+    但系统其他地方仍可能需要 tool_calls，因此保留并加强防御性规范化。
+    """
 
     def _create_chat_result(self, response: Any, generation_info: Any | None = None) -> Any:
         try:
@@ -55,51 +69,79 @@ class ChatModel(ChatOpenAI):
                 message = getattr(choice, "message", None)
                 if message is None or not hasattr(message, "tool_calls"):
                     continue
+
                 tool_calls = getattr(message, "tool_calls")
                 if tool_calls is None:
                     continue
-                # 处理 dict 和 object 两种格式的 tool_calls
+
                 normalized = (
-                    [_fix_tool_call(tool_calls)] if isinstance(tool_calls, dict)
+                    [_fix_tool_call(tool_calls)]
+                    if isinstance(tool_calls, dict)
                     else [_fix_tool_call(_to_dict(tc)) for tc in tool_calls]
                 )
                 object.__setattr__(message, "tool_calls", normalized)
         except Exception as exc:
             logger.warning("[LLM] tool_calls 规范化失败: %s", exc)
+
         return super()._create_chat_result(response, generation_info)
 
 
 def _to_dict(tc: Any) -> dict[str, Any]:
-    """将 tool_call 对象转为 dict（兼容 OpenAI SDK 的对象格式）。"""
+    """将 tool_call 对象转为 dict，兼容 OpenAI SDK 对象格式。"""
     if isinstance(tc, dict):
         return tc
-    # OpenAI SDK 返回 ChatCompletionMessageToolCall / FunctionToolCall 对象
-    d: dict[str, Any] = {}
+
+    data: dict[str, Any] = {}
     for attr in ("id", "type", "function"):
-        val = getattr(tc, attr, None)
-        if val is not None:
-            d[attr] = val
-    # function 可能也是对象，需要转 dict
-    fn = d.get("function")
-    if fn is not None and not isinstance(fn, dict):
-        fn_dict: dict[str, Any] = {}
+        value = getattr(tc, attr, None)
+        if value is not None:
+            data[attr] = value
+
+    function = data.get("function")
+    if function is not None and not isinstance(function, dict):
+        function_data: dict[str, Any] = {}
         for attr in ("name", "arguments"):
-            val = getattr(fn, attr, None)
-            if val is not None:
-                fn_dict[attr] = val
-        d["function"] = fn_dict
-    return d
+            value = getattr(function, attr, None)
+            if value is not None:
+                function_data[attr] = value
+        data["function"] = function_data
+
+    return data
+
+
+def _safe_tool_name(name: Any) -> str:
+    """保证 tool/function name 符合 OpenAI 兼容接口常见约束。"""
+    candidate = str(name or "tool_call").strip()
+    candidate = re.sub(r"[^a-zA-Z0-9_-]", "_", candidate)
+    candidate = candidate.strip("_") or "tool_call"
+    return candidate[:64]
 
 
 def _fix_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
-    """修复单个 tool_call 的格式：补充缺失 id，序列化 arguments。"""
-    if not tc.get("id"):
-        tc = {**tc, "id": f"call_{uuid.uuid4().hex[:12]}"}
-    fn = tc.get("function")
-    if isinstance(fn, dict) and isinstance(fn.get("arguments"), (dict, list)):
-        fn = {**fn, "arguments": json.dumps(fn["arguments"], ensure_ascii=False)}
-        tc = {**tc, "function": fn}
-    return tc
+    """修复单个 tool_call 的格式：补 id、补 type、序列化 arguments。"""
+    fixed = dict(tc)
+
+    if not fixed.get("id"):
+        fixed["id"] = f"call_{uuid.uuid4().hex[:12]}"
+    if not fixed.get("type"):
+        fixed["type"] = "function"
+
+    function = fixed.get("function")
+    if isinstance(function, dict):
+        function = dict(function)
+        function["name"] = _safe_tool_name(function.get("name"))
+
+        arguments = function.get("arguments")
+        if isinstance(arguments, (dict, list)):
+            function["arguments"] = json.dumps(arguments, ensure_ascii=False)
+        elif arguments is None:
+            function["arguments"] = "{}"
+        else:
+            function["arguments"] = str(arguments)
+
+        fixed["function"] = function
+
+    return fixed
 
 
 def _normalize_base_url(base_url: str) -> str:
@@ -115,9 +157,11 @@ def _load_config(path: str) -> ChatModelConfig | None:
     raw = get(path, {}) or {}
     if not isinstance(raw, dict) or not raw.get("model_name"):
         return None
-    data = {k: v for k, v in raw.items() if k != "vision"}
+
+    data = {key: value for key, value in raw.items() if key != "vision"}
     if not data.get("base_url") or not data.get("api_key"):
         raise ServiceError(f"{path} 模型配置缺少 base_url 或 api_key")
+
     return ChatModelConfig(
         base_url=_normalize_base_url(str(data["base_url"])),
         api_key=str(data["api_key"]),
@@ -134,7 +178,7 @@ def _load_config(path: str) -> ChatModelConfig | None:
 
 def _create_model(cfg: ChatModelConfig, *, streaming: bool = False) -> ChatModel:
     """根据配置创建 ChatModel 实例。"""
-    kw: dict[str, Any] = {
+    kwargs: dict[str, Any] = {
         "model": cfg.model_name,
         "api_key": cfg.api_key,
         "base_url": cfg.base_url,
@@ -144,27 +188,34 @@ def _create_model(cfg: ChatModelConfig, *, streaming: bool = False) -> ChatModel
         "max_retries": cfg.max_retries,
         "model_kwargs": cfg.model_kwargs,
     }
+
     if cfg.max_tokens is not None:
-        kw["max_tokens"] = cfg.max_tokens
+        kwargs["max_tokens"] = cfg.max_tokens
     if cfg.extra_body:
-        kw["extra_body"] = cfg.extra_body
+        kwargs["extra_body"] = cfg.extra_body
     if cfg.default_headers:
-        kw["default_headers"] = cfg.default_headers
-    return ChatModel(**kw)
+        kwargs["default_headers"] = cfg.default_headers
+
+    return ChatModel(**kwargs)
 
 
-def _bind(model: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
-    """为模型绑定运行时参数（temperature / max_tokens）。"""
-    kw: dict[str, Any] = {}
+def _bind(
+    model: Any,
+    *,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> Any:
+    """为模型绑定运行时参数。"""
+    kwargs: dict[str, Any] = {}
     if temperature is not None:
-        kw["temperature"] = temperature
+        kwargs["temperature"] = temperature
     if max_tokens is not None:
-        kw["max_tokens"] = max_tokens
-    return model.bind(**kw) if kw else model
+        kwargs["max_tokens"] = max_tokens
+    return model.bind(**kwargs) if kwargs else model
 
 
 def _parse_json(text: str, schema: type[BaseModel]) -> BaseModel:
-    """从 LLM 输出文本中严格解析 JSON 并校验为指定 schema。"""
+    """从 LLM 输出文本中解析第一个 JSON 对象并校验为指定 schema。"""
     return schema.model_validate(parse_first_json_object(text))
 
 
@@ -174,6 +225,7 @@ def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
     defs = full_schema.get("$defs", {})
     required = set(full_schema.get("required") or [])
     props = full_schema.get("properties", {})
+
     lines: list[str] = []
     for name, prop in props.items():
         marker = " (required)" if name in required else ""
@@ -183,46 +235,55 @@ def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
         if desc:
             line += f" — {desc}"
         lines.append(line)
+
     return schema.__name__ + " {\n" + "\n".join(lines) + "\n}"
 
 
-def _describe_property(prop: dict[str, Any], defs: dict[str, Any], depth: int = 0) -> str:
+def _describe_property(
+    prop: dict[str, Any],
+    defs: dict[str, Any],
+    depth: int = 0,
+) -> str:
     """以人类可读形式描述 JSON schema 属性，包含关键约束。"""
-    if depth > 3:
+    if depth > 4:
         return "..."
+
     if "enum" in prop:
-        return "enum(" + ", ".join(str(v) for v in prop["enum"]) + ")"
+        return "enum(" + ", ".join(str(value) for value in prop["enum"]) + ")"
     if "const" in prop:
         return f"const({prop['const']})"
-    t = prop.get("type", "")
-    # String with constraints
-    if t == "string":
+
+    prop_type = prop.get("type", "")
+
+    if prop_type == "string":
         parts: list[str] = ["str"]
         if "pattern" in prop:
             parts.append(f"pattern={prop['pattern']}")
         if "minLength" in prop or "maxLength" in prop:
-            mn = prop.get("minLength", "")
-            mx = prop.get("maxLength", "")
-            if mn and mx:
-                parts.append(f"len={mn}-{mx}")
-            elif mx:
-                parts.append(f"max {mx} chars")
-            elif mn:
-                parts.append(f"min {mn} chars")
+            min_len = prop.get("minLength", "")
+            max_len = prop.get("maxLength", "")
+            if min_len and max_len:
+                parts.append(f"len={min_len}-{max_len}")
+            elif max_len:
+                parts.append(f"max {max_len} chars")
+            elif min_len:
+                parts.append(f"min {min_len} chars")
         return " (".join(parts) + ")" if len(parts) > 1 else "str"
-    if t == "integer":
+
+    if prop_type == "integer":
         parts = ["int"]
         if "minimum" in prop:
             parts.append(f"min={prop['minimum']}")
         if "maximum" in prop:
             parts.append(f"max={prop['maximum']}")
         return " (".join(parts) + ")" if len(parts) > 1 else "int"
-    if t == "number":
+
+    if prop_type == "number":
         return "float"
-    if t == "boolean":
+    if prop_type == "boolean":
         return "bool"
-    # Array with item constraints
-    if t == "array":
+
+    if prop_type == "array":
         items = prop.get("items", {})
         item_desc = _describe_property(items, defs, depth + 1)
         parts = [f"list[{item_desc}]"]
@@ -231,59 +292,98 @@ def _describe_property(prop: dict[str, Any], defs: dict[str, Any], depth: int = 
         if "maxItems" in prop:
             parts.append(f"max={prop['maxItems']}")
         return " (".join(parts) + ")" if len(parts) > 1 else f"list[{item_desc}]"
-    if t == "object" and "properties" in prop:
-        inner = prop["properties"]
-        fields = ", ".join(inner.keys())
+
+    if prop_type == "object" and "properties" in prop:
+        fields = ", ".join(prop["properties"].keys())
         return f"object({fields})"
-    # Reference to another type - expand with required fields
+
     if "$ref" in prop:
         ref_name = prop["$ref"].split("/")[-1]
         ref_def = defs.get(ref_name, {})
         ref_props = ref_def.get("properties", {})
         ref_required = set(ref_def.get("required", []))
+
         if ref_props:
-            # Build field descriptions with required marker
             field_descs: list[str] = []
-            for fname in ref_props:
-                ftype = _describe_property(ref_props[fname], defs, depth + 1)
-                marker = "*" if fname in ref_required else ""
-                field_descs.append(f"{fname}{marker}: {ftype}")
+            for field_name, field_prop in ref_props.items():
+                field_type = _describe_property(field_prop, defs, depth + 1)
+                marker = "*" if field_name in ref_required else ""
+                field_descs.append(f"{field_name}{marker}: {field_type}")
             return f"{ref_name}({'; '.join(field_descs)})"
+
         return ref_name
+
     if "anyOf" in prop:
-        parts = [_describe_property(p, defs, depth + 1) for p in prop["anyOf"] if isinstance(p, dict)]
+        parts = [
+            _describe_property(item, defs, depth + 1)
+            for item in prop["anyOf"]
+            if isinstance(item, dict)
+        ]
         return " | ".join(parts) if parts else "Any"
-    return t or "Any"
+
+    if "allOf" in prop:
+        parts = [
+            _describe_property(item, defs, depth + 1)
+            for item in prop["allOf"]
+            if isinstance(item, dict)
+        ]
+        return " & ".join(parts) if parts else "Any"
+
+    return prop_type or "Any"
 
 
-def _inject_json_instruction(input_data: Any, schema: type[BaseModel]) -> list[BaseMessage]:
-    """向消息列表注入 JSON 输出格式指令，确保 LLM 返回符合 schema 的 JSON。"""
+def _normalize_messages(input_data: Any) -> list[BaseMessage]:
+    """将字符串、BaseMessage 或消息列表统一为 LangChain messages。"""
     if isinstance(input_data, str):
-        msgs: list[BaseMessage] = [HumanMessage(content=input_data)]
-    elif isinstance(input_data, BaseMessage):
-        msgs = [input_data]
-    elif isinstance(input_data, list):
-        msgs = list(input_data)
-    else:
-        raise ValueError(f"Unsupported input_data type: {type(input_data)}")
+        return [HumanMessage(content=input_data)]
 
+    if isinstance(input_data, BaseMessage):
+        return [input_data]
+
+    if isinstance(input_data, list):
+        messages: list[BaseMessage] = []
+        for item in input_data:
+            if isinstance(item, BaseMessage):
+                messages.append(item)
+            elif isinstance(item, str):
+                messages.append(HumanMessage(content=item))
+            elif isinstance(item, dict):
+                role = str(item.get("role", "user")).lower()
+                content = item.get("content", "")
+                if role == "system":
+                    messages.append(SystemMessage(content=str(content)))
+                else:
+                    messages.append(HumanMessage(content=str(content)))
+            else:
+                messages.append(HumanMessage(content=str(item)))
+        return messages
+
+    raise ValueError(f"Unsupported input_data type: {type(input_data)}")
+
+
+def _build_json_generation_messages(
+    schema: type[BaseModel],
+    messages: list[BaseMessage],
+) -> list[BaseMessage]:
     schema_desc = _simplify_schema_for_prompt(schema)
-    required = schema.model_json_schema().get("required", []) or []
-    instruction = (
-        "\n\n[FORMAT INSTRUCTION]\n"
-        "Return exactly one valid JSON object. Do not include markdown fences or explanatory text.\n"
-        f"The root object must contain these required fields: {', '.join(required)}.\n"
-        f"Schema:\n{schema_desc}\n"
-    )
-    for i in range(len(msgs) - 1, -1, -1):
-        m = msgs[i]
-        if isinstance(m, (HumanMessage, SystemMessage)):
-            c = copy.copy(m)
-            c.content = str(m.content or "") + instruction
-            msgs[i] = c
-            return msgs
-    msgs.insert(0, SystemMessage(content=instruction.strip()))
-    return msgs
+    return [
+        SystemMessage(
+            content=(
+                "你是严格 JSON 生成器。\n"
+                "必须只输出一个完整 JSON 对象，不要 Markdown，不要代码围栏，不要解释。\n"
+                "不要调用工具，不要输出 tool_calls，不要输出 function_call。\n"
+                "输出必须能被 Python json.loads 直接解析，并且必须符合给定 Pydantic schema。"
+            )
+        ),
+        *messages,
+        HumanMessage(
+            content=(
+                "请根据以上任务输出 JSON。\n\n"
+                f"目标 schema:\n{schema_desc}\n\n"
+                "再次强调：只输出 JSON object 本体，不要任何额外文本。"
+            )
+        ),
+    ]
 
 
 def _build_repair_prompt(
@@ -291,61 +391,310 @@ def _build_repair_prompt(
     raw_output: str,
     error_msg: str,
 ) -> list[BaseMessage]:
-    """构造 self-repair 修正 prompt：将失败输出和错误原因喂回模型。
-
-    核心思路：不是从零重新生成，而是让模型看到自己哪里错了，在已有输出基础上修正。
-    """
+    """构造 self-repair 修正 prompt。"""
     schema_desc = _simplify_schema_for_prompt(schema)
     return [
-        SystemMessage(content=(
-            "你是一个 JSON 修正助手。上一次生成的 JSON 存在错误，请根据错误信息修正。\n"
-            "规则：\n"
-            "- 只输出修正后的完整 JSON 对象\n"
-            "- 不要包含 markdown 代码围栏或解释文字\n"
-            f"- 必须符合以下 schema:\n{schema_desc}"
-        )),
-        HumanMessage(content=(
-            f"上一次输出（有错误）:\n```\n{raw_output}\n```\n\n"
-            f"错误信息:\n{error_msg}\n\n"
-            "请输出修正后的完整 JSON。"
-        )),
+        SystemMessage(
+            content=(
+                "你是 JSON 修正助手。上一次输出无法被后端解析或无法通过 Pydantic 校验。\n"
+                "规则：\n"
+                "- 只输出修正后的完整 JSON 对象\n"
+                "- 不要 Markdown 代码围栏\n"
+                "- 不要解释文字\n"
+                "- 不要调用工具或 function_call\n"
+                f"- 必须符合以下 schema:\n{schema_desc}"
+            )
+        ),
+        HumanMessage(
+            content=(
+                f"上一次输出：\n```\n{raw_output}\n```\n\n"
+                f"错误信息：\n{error_msg}\n\n"
+                "请输出修正后的完整 JSON。"
+            )
+        ),
     ]
 
 
-# 不可重试的错误关键词 — 认证、权限、连接等基础性问题
-_UNREPAIRABLE_KEYWORDS = (
-    "authorization",
-    "PermissionDenied",
-    "AuthenticationError",
-    "APIConnectionError",
-    "RateLimitError",
-    "NotFound",
-    "401",
-    "403",
-    "404",
-    "429",
-)
+# ============================================================================
+# 错误分类 — 按异常类型判断是否可修复
+# ============================================================================
+
+_INFRA_EXCEPTIONS: tuple[type[Exception], ...] = ()
 
 
-def _is_repairable_error(error_msg: str) -> bool:
-    """判断错误是否值得 self-repair。
+def _register_infra_exceptions() -> None:
+    """延迟注册基础设施异常类型。"""
+    global _INFRA_EXCEPTIONS
 
-    校验类错误（ValidationError、字段缺失、类型不匹配等）是模型输出的问题，
-    喂回模型让它在已有输出上修正是有效的。
-    认证/权限/连接类错误是基础设施问题，repair 无意义，直接降级。
-    """
-    msg = error_msg.lower()
-    return not any(kw.lower() in msg for kw in _UNREPAIRABLE_KEYWORDS)
+    types: list[type[Exception]] = []
+    for module_name, class_names in (
+        (
+            "openai",
+            (
+                "AuthenticationError",
+                "PermissionDeniedError",
+                "RateLimitError",
+                "APIConnectionError",
+                "APITimeoutError",
+                "InternalServerError",
+                "NotFoundError",
+            ),
+        ),
+        (
+            "httpx",
+            (
+                "HTTPStatusError",
+                "ConnectError",
+                "ReadTimeout",
+                "TimeoutException",
+            ),
+        ),
+    ):
+        try:
+            import importlib
+
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+
+        for class_name in class_names:
+            cls = getattr(module, class_name, None)
+            if isinstance(cls, type) and issubclass(cls, Exception):
+                types.append(cls)
+
+    _INFRA_EXCEPTIONS = tuple(types)
+
+
+_register_infra_exceptions()
+
+
+def _is_infra_error(exc: Exception) -> bool:
+    """判断异常是否为基础设施问题。"""
+    if isinstance(exc, _INFRA_EXCEPTIONS):
+        return True
+
+    msg = str(exc).lower()
+    infra_keywords = (
+        "authentication",
+        "permissiondenied",
+        "rate limit",
+        "api connection",
+        "timeout",
+        "connecterror",
+        "connection refused",
+        "connection reset",
+        "network",
+    )
+    if any(keyword in msg for keyword in infra_keywords):
+        return True
+
+    if any(code in msg for code in ("401", "403", "408", "429", "500", "502", "503", "504")):
+        if "validation" in msg or "field required" in msg or "json" in msg:
+            return False
+        return True
+
+    return False
+
+
+def _extract_text_from_response(value: Any) -> str:
+    """从常见 LLM 响应结构中提取文本或 tool/function arguments。"""
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value.strip()
+
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="ignore").strip()
+
+    if isinstance(value, BaseMessage):
+        content = value.content
+        text = _extract_content_text(content)
+        if text:
+            return text
+
+        tool_text = _extract_tool_call_arguments(getattr(value, "tool_calls", None))
+        if tool_text:
+            return tool_text
+
+        additional_kwargs = getattr(value, "additional_kwargs", None)
+        if isinstance(additional_kwargs, dict):
+            tool_text = _extract_tool_call_arguments(additional_kwargs.get("tool_calls"))
+            if tool_text:
+                return tool_text
+
+            function_call = additional_kwargs.get("function_call")
+            if isinstance(function_call, dict):
+                arguments = function_call.get("arguments")
+                if isinstance(arguments, str) and arguments.strip():
+                    return arguments.strip()
+
+        return ""
+
+    if isinstance(value, dict):
+        for key in ("content", "text", "output", "response"):
+            text = _extract_content_text(value.get(key))
+            if text:
+                return text
+
+        message = value.get("message")
+        if message is not None:
+            text = _extract_text_from_response(message)
+            if text:
+                return text
+
+        choices = value.get("choices")
+        if isinstance(choices, list):
+            for choice in choices:
+                text = _extract_text_from_response(choice)
+                if text:
+                    return text
+
+        tool_text = _extract_tool_call_arguments(value.get("tool_calls"))
+        if tool_text:
+            return tool_text
+
+        function_call = value.get("function_call")
+        if isinstance(function_call, dict):
+            arguments = function_call.get("arguments")
+            if isinstance(arguments, str) and arguments.strip():
+                return arguments.strip()
+
+        return ""
+
+    if isinstance(value, list):
+        for item in value:
+            text = _extract_text_from_response(item)
+            if text:
+                return text
+        return ""
+
+    for attr in ("content", "text", "output", "response"):
+        if hasattr(value, attr):
+            text = _extract_content_text(getattr(value, attr, None))
+            if text:
+                return text
+
+    tool_text = _extract_tool_call_arguments(getattr(value, "tool_calls", None))
+    if tool_text:
+        return tool_text
+
+    choices = getattr(value, "choices", None)
+    if choices is not None:
+        text = _extract_text_from_response(list(choices))
+        if text:
+            return text
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            text = _extract_text_from_response(model_dump())
+            if text:
+                return text
+        except Exception:
+            return ""
+
+    return ""
+
+
+def _extract_content_text(content: Any) -> str:
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                if item.get("type") in {"text", "output_text"} and item.get("text"):
+                    parts.append(str(item["text"]))
+                elif item.get("content"):
+                    parts.append(str(item["content"]))
+        return "\n".join(part.strip() for part in parts if part and part.strip())
+
+    return str(content).strip()
+
+
+def _extract_tool_call_arguments(tool_calls: Any) -> str:
+    if not tool_calls:
+        return ""
+
+    if not isinstance(tool_calls, list):
+        tool_calls = [tool_calls]
+
+    for call in tool_calls:
+        if isinstance(call, dict):
+            function = call.get("function") or {}
+            if isinstance(function, dict):
+                arguments = function.get("arguments")
+                if isinstance(arguments, str) and arguments.strip():
+                    return arguments.strip()
+                if isinstance(arguments, (dict, list)):
+                    return json.dumps(arguments, ensure_ascii=False)
+
+            arguments = call.get("arguments") or call.get("args")
+            if isinstance(arguments, str) and arguments.strip():
+                return arguments.strip()
+            if isinstance(arguments, (dict, list)):
+                return json.dumps(arguments, ensure_ascii=False)
+
+        function = getattr(call, "function", None)
+        if function is not None:
+            arguments = getattr(function, "arguments", None)
+            if isinstance(arguments, str) and arguments.strip():
+                return arguments.strip()
+            if isinstance(arguments, (dict, list)):
+                return json.dumps(arguments, ensure_ascii=False)
+
+        arguments = getattr(call, "arguments", None) or getattr(call, "args", None)
+        if isinstance(arguments, str) and arguments.strip():
+            return arguments.strip()
+        if isinstance(arguments, (dict, list)):
+            return json.dumps(arguments, ensure_ascii=False)
+
+    return ""
+
+
+def _extract_raw_from_exception(exc: Exception) -> str:
+    """从异常中尝试提取模型原始输出文本。"""
+    for attr in ("output", "tool_output", "text", "message"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        text = _extract_text_from_response(response)
+        if text:
+            return text
+
+    return ""
+
+
+def _short_error(exc: Exception | str, limit: int = 300) -> str:
+    text = str(exc)
+    return text[:limit] + "…" if len(text) > limit else text
+
+
+def _safe_log_text(text: str | None, limit: int = 2000) -> str:
+    if not text:
+        return ""
+    compact = re.sub(r"\s+", " ", text).strip()
+    return compact[:limit]
 
 
 class Llm:
     """统一异步 LLM 网关。
 
-    结构化输出策略由 config.yaml 的 models.structured_output_strategy 控制：
-    - function_calling_first：优先 function_calling，失败后先 self-repair 修正，
-      仍失败再降级 json_mode → prompt
-    - json_mode_first：跳过 function_calling，直接 json_mode，同上降级逻辑
-    - prompt_first：仅 prompt 注入 + 手动解析
+    普通文本：ainvoke / astream
+    结构化 JSON：ainvoke_json
+
+    ainvoke_json 的策略是 prompt JSON，而不是 function_calling。
+    这样更适合多家 OpenAI-compatible 服务，尤其是工具调用不完全兼容的网关。
     """
 
     def __init__(self) -> None:
@@ -353,7 +702,6 @@ class Llm:
         self.vision_config = _load_config("models.vision")
         self._text_model = _create_model(self.text_config) if self.text_config else None
         self._vision_model = _create_model(self.vision_config) if self.vision_config else None
-        self._strategy = STRUCTURED_OUTPUT_STRATEGY
 
     @property
     def model(self) -> Any:
@@ -361,13 +709,35 @@ class Llm:
             raise ServiceError("文本模型配置缺失")
         return self._text_model
 
-    async def ainvoke(self, input_data: Any, *, model: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+    async def ainvoke(
+        self,
+        input_data: Any,
+        *,
+        model: Any | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> Any:
         temp = temperature if temperature is not None else DEFAULT_TEMPERATURE
-        return await _bind(model or self.model, temperature=temp, max_tokens=max_tokens).ainvoke(input_data)
+        return await _bind(
+            model or self.model,
+            temperature=temp,
+            max_tokens=max_tokens,
+        ).ainvoke(input_data)
 
-    async def astream(self, input_data: Any, *, model: Any | None = None, temperature: float | None = None, max_tokens: int | None = None) -> AsyncIterator[Any]:
+    async def astream(
+        self,
+        input_data: Any,
+        *,
+        model: Any | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[Any]:
         temp = temperature if temperature is not None else STREAM_TEMPERATURE
-        async for chunk in _bind(model or self.model, temperature=temp, max_tokens=max_tokens).astream(input_data):
+        async for chunk in _bind(
+            model or self.model,
+            temperature=temp,
+            max_tokens=max_tokens,
+        ).astream(input_data):
             yield chunk
 
     def create_tool_excute(
@@ -379,10 +749,6 @@ class Llm:
 
         return ToolExcute(tools, event_handler=event_handler)
 
-    # ------------------------------------------------------------------ #
-    #  结构化输出：self-repair 自修正 + 跨模式降级
-    # ------------------------------------------------------------------ #
-
     async def ainvoke_json(
         self,
         schema: type[BaseModel],
@@ -391,160 +757,116 @@ class Llm:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> BaseModel:
-        """结构化 JSON 输出：1次生成 → 1次修正 → 降级下一模式。
+        """结构化 JSON 输出：生成一次，失败后带原文修复一次。
 
-        流程（每种模式）：
-        1. 用首选模式生成 JSON（1 次）
-        2. 如果失败，携带真实原文 + 校验错误喂回模型修正（1 次）
-        3. 修正仍失败，降级到下一模式，重复 1-2
-        4. 所有模式都失败则抛出 ServiceError
-
-        Args:
-            schema: Pydantic 模型类，定义输出结构
-            input_data: 输入消息（字符串、BaseMessage 或消息列表）
-            temperature: 采样温度，默认 0.1（低温度确保结构化输出稳定）
-            max_tokens: 最大输出长度
-
-        Returns:
-            校验后的 Pydantic 模型实例
-
-        Raises:
-            ServiceError: 所有模式 + 修正都失败时抛出
+        不使用 with_structured_output(function_calling)，避免 OpenAI-compatible
+        网关把结果塞进 tool_calls 后解析成 None。
         """
-        # 将输入转换为消息列表
-        if isinstance(input_data, str):
-            messages: list[BaseMessage] = [HumanMessage(content=input_data)]
-        elif isinstance(input_data, BaseMessage):
-            messages = [input_data]
-        elif isinstance(input_data, list):
-            messages = list(input_data)
-        else:
-            raise ValueError(f"Unsupported input_data type: {type(input_data)}")
-
-        # JSON 结构化输出使用低温度确保稳定性和确定性
+        messages = _normalize_messages(input_data)
         json_temp = temperature if temperature is not None else JSON_TEMPERATURE
         model = _bind(self.model, temperature=json_temp, max_tokens=max_tokens)
-        errors: list[str] = []
-        strategy = self._strategy
 
-        # 按策略确定模式优先级
-        if strategy == "function_calling_first":
-            tiers = ["function_calling", "json_mode", "prompt"]
-        elif strategy == "json_mode_first":
-            tiers = ["json_mode", "prompt"]
-        else:  # prompt_first
-            tiers = ["prompt"]
+        t0 = time.perf_counter()
+        raw_output = ""
+        error_msg = ""
 
-        for tier in tiers:
-            # ── 第1步：生成 1 次 ──
-            # _invoke_tier 内部已将解析失败转为 (None, raw)：有原文则可修复，
-            # 无原文（function_calling 返回 None / 空响应）则 raw 为空，直接降级到下一 tier。
-            raw_output = ""
-            error_msg = ""
-            t0 = time.perf_counter()
-            result: BaseModel | None = None
-            try:
-                result, raw_output = await self._invoke_tier(model, tier, schema, messages)
-            except Exception as exc:
-                # 仅网络/基础设施异常会到达这里（解析失败已在 _invoke_tier 内转为 (None, raw)）
-                error_msg = f"{type(exc).__name__}: {exc}"
-                raw_output = ""
+        try:
+            generation_messages = _build_json_generation_messages(schema, messages)
+            response = await model.ainvoke(generation_messages)
+            raw_output = _extract_text_from_response(response)
 
-            if isinstance(result, schema):
-                logger.info(
-                    "[LLM] ainvoke_json 成功: schema=%s tier=%s %dms",
-                    schema.__name__, tier,
-                    round((time.perf_counter() - t0) * 1000),
-                )
-                return result
+            if not raw_output:
+                raise ValueError("empty response")
 
-            if not error_msg:
-                got = type(result).__name__ if result is not None else "NoneType"
-                error_msg = f"ValueError: expected {schema.__name__}, got {got}"
-            error_msg_short = error_msg[:300] + "…" if len(error_msg) > 300 else error_msg
-            errors.append(f"{tier}(generate)={error_msg_short}")
-            logger.warning(
-                "[LLM] ainvoke_json 失败: schema=%s tier=%s error=%s",
-                schema.__name__, tier, error_msg_short,
+            parsed = _parse_json(raw_output, schema)
+            logger.info(
+                "[LLM] ainvoke_json 成功: schema=%s %dms raw_len=%d",
+                schema.__name__,
+                round((time.perf_counter() - t0) * 1000),
+                len(raw_output),
             )
+            return parsed
 
-            # ── 第2步：携带原文 + 错误修正 1 次 ──
-            # 仅当存在真实模型原文（raw_output 非空）且为可修复的校验类错误时才修复；
-            # 无原文情形（function_calling/json_mode 返回 None、空响应、基础设施异常）直接降级。
-            if raw_output and _is_repairable_error(error_msg):
-                t0 = time.perf_counter()
-                repair_content = ""
-                try:
-                    repair_msgs = _build_repair_prompt(schema, raw_output, error_msg)
-                    resp = await model.ainvoke(repair_msgs)
-                    repair_content = getattr(resp, "content", "") or ""
-                    if not repair_content.strip():
-                        raise ValueError("repair: empty response")
-                    parsed = _parse_json(repair_content, schema)
-                    logger.info(
-                        "[LLM] ainvoke_json 成功（修复后）: schema=%s tier=%s %dms",
-                        schema.__name__, tier,
-                        round((time.perf_counter() - t0) * 1000),
-                    )
-                    return parsed
-                except Exception as exc:
-                    repair_err = f"{type(exc).__name__}: {exc}"
-                    repair_err_short = repair_err[:300] + "…" if len(repair_err) > 300 else repair_err
-                    errors.append(f"{tier}(repair)={repair_err_short}")
-                    logger.warning(
-                        "[LLM] ainvoke_json 失败（修复）: schema=%s tier=%s error=%s",
-                        schema.__name__, tier, repair_err_short,
-                    )
+        except Exception as exc:
+            if _is_infra_error(exc):
+                raise
+            error_msg = f"{type(exc).__name__}: {exc}"
+            raw_output = raw_output or _extract_raw_from_exception(exc)
 
-        raise ServiceError(f"[{schema.__name__}] 结构化输出失败: {'; '.join(errors)}")
+        error_msg_short = _short_error(error_msg)
+        logger.warning(
+            "[LLM] ainvoke_json 首次失败: schema=%s error=%s raw_len=%d raw=%s",
+            schema.__name__,
+            error_msg_short,
+            len(raw_output or ""),
+            _safe_log_text(raw_output),
+        )
 
-    async def _invoke_tier(
+        # 修复阶段即使 raw_output 为空也执行：让模型基于原任务重新输出 JSON。
+        # 这样不会再出现“无原文可修复”导致业务直接失败。
+        t0 = time.perf_counter()
+        try:
+            repair_messages = _build_repair_prompt(
+                schema,
+                raw_output or "<empty response>",
+                error_msg,
+            )
+            response = await model.ainvoke(repair_messages)
+            repair_content = _extract_text_from_response(response)
+
+            if not repair_content:
+                raise ValueError("repair: empty response")
+
+            parsed = _parse_json(repair_content, schema)
+            logger.info(
+                "[LLM] ainvoke_json 成功（修复后）: schema=%s %dms raw_len=%d",
+                schema.__name__,
+                round((time.perf_counter() - t0) * 1000),
+                len(repair_content),
+            )
+            return parsed
+
+        except Exception as exc:
+            if _is_infra_error(exc):
+                raise
+            repair_err = f"{type(exc).__name__}: {exc}"
+            raise ServiceError(
+                f"[{schema.__name__}] 结构化输出失败: "
+                f"generate={error_msg_short}; repair={_short_error(repair_err)}"
+            ) from exc
+
+    async def _invoke_structured(
         self,
         model: Any,
-        tier: str,
         schema: type[BaseModel],
         messages: list[BaseMessage],
     ) -> tuple[BaseModel | None, str]:
-        """调用单个 tier 模式，返回 (result, raw_output)。
+        """保留兼容入口，但不再被 ainvoke_json 默认使用。
 
-        result 为 None 表示该模式无法产出可解析的结果。
-        raw_output 为原始输出文本（用于 self-repair）；空字符串表示模型
-        没有产出任何可修复内容（如 function_calling 返回 None、空响应），
-        此时上层应直接降级到下一 tier，而不是去 "修复" 空内容再误判为成功。
+        仅供少量确实需要 function_calling 的内部实验调用。
         """
-        if tier == "function_calling":
-            runnable = model.with_structured_output(schema, method="function_calling")
-            result = await runnable.ainvoke(messages)
-            if not isinstance(result, BaseModel):
-                # 模型未调用工具/返回 None —— 无原文可修复，返回空 raw 触发降级
-                return None, ""
-            return result, result.model_dump_json()
-
-        if tier == "json_mode":
-            runnable = model.with_structured_output(schema, method="json_mode")
-            result = await runnable.ainvoke(messages)
-            if not isinstance(result, BaseModel):
-                return None, ""
-            return result, result.model_dump_json()
-
-        # tier == "prompt"
-        injected = _inject_json_instruction(messages, schema)
-        resp = await model.ainvoke(injected)
-        raw = getattr(resp, "content", "") or ""
-        if not raw.strip():
+        runnable = model.with_structured_output(schema, method="function_calling")
+        result = await runnable.ainvoke(messages)
+        if not isinstance(result, BaseModel):
             return None, ""
-        try:
-            result = _parse_json(raw, schema)
-            return result, raw
-        except Exception:
-            # 解析失败但有真实原文 —— 交给上层 self-repair 修正
-            return None, raw
+        return result, result.model_dump_json()
 
-    async def vision(self, input_data: Any, *, temperature: float | None = None, max_tokens: int | None = None) -> Any:
+    async def vision(
+        self,
+        input_data: Any,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> Any:
         if self._vision_model is None:
             raise ServiceError("图片理解模型配置缺失")
+
         temp = temperature if temperature is not None else VISION_TEMPERATURE
-        return await _bind(self._vision_model, temperature=temp, max_tokens=max_tokens).ainvoke(input_data)
+        return await _bind(
+            self._vision_model,
+            temperature=temp,
+            max_tokens=max_tokens,
+        ).ainvoke(input_data)
 
 
 @lru_cache(maxsize=1)
