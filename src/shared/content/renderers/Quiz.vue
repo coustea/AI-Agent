@@ -158,30 +158,16 @@ const showAnswers = ref<Record<number, boolean>>({})
 
 const isChoiceType = (q: any) => {
   const type = (q.type || q.question_type)?.toLowerCase() || ''
-  return ['choice', 'single_choice', 'multiple_choice', 'true_false'].includes(type)
+  return ['choice', 'single_choice', 'true_false'].includes(type)
 }
 
-const isMultipleChoice = (q: any) => {
-  const type = (q.type || q.question_type)?.toLowerCase() || ''
-  return type === 'multiple_choice'
-}
-
-const toggleOption = (qIndex: number, option: any, question: any) => {
+const toggleOption = (qIndex: number, option: any, _question: any) => {
   const val = option.label || (typeof option === 'string' ? option : option.content)
-  if (isMultipleChoice(question)) {
-    const current = userAnswers.value[qIndex] || []
-    const idx = current.indexOf(val)
-    userAnswers.value[qIndex] = idx > -1 ? current.filter((v: any) => v !== val) : [...current, val]
-    return
-  }
   userAnswers.value[qIndex] = val
 }
 
-const isSelected = (qIndex: number, option: any, question: any) => {
+const isSelected = (qIndex: number, option: any, _question: any) => {
   const val = option.label || (typeof option === 'string' ? option : option.content)
-  if (isMultipleChoice(question)) {
-    return (userAnswers.value[qIndex] || []).includes(val)
-  }
   return userAnswers.value[qIndex] === val
 }
 
@@ -226,15 +212,11 @@ const getQuestionTypeText = (questionType?: string) => {
     case 'single_choice':
     case 'choice':
       return '单选'
-    case 'multiple_choice':
-      return '多选'
     case 'true_false':
       return '判断'
     case 'fill_blank':
     case 'blank':
       return '填空'
-    case 'short_answer':
-      return '简答'
     default:
       return '题目'
   }

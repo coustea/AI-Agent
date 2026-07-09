@@ -105,7 +105,7 @@
           </svg>
           <span>{{ formattedExamTime }}</span>
         </div>
-        <button class="btn-secondary" type="button" @click="$emit('exit-exam')">
+        <button class="btn-secondary" type="button" :disabled="examReviewing" @click="$emit('exit-exam')">
           {{ examSubmitted ? '返回题库' : '退出考试' }}
         </button>
       </div>
@@ -160,7 +160,7 @@
                   wrong: examSubmitted && isSelected(examAnswers[question.id], String(key)) && !isCorrectOption(question, String(key)),
                 },
               ]"
-              :disabled="examSubmitted"
+              :disabled="examSubmitted || examReviewing"
               @click="$emit('select-exam-option', question, String(key))"
             >
               <span class="opt-key">{{ key }}</span>
@@ -174,116 +174,62 @@
             class="text-area-input"
             rows="4"
             placeholder="请输入你的答案..."
+            :disabled="examReviewing"
             @input="$emit('update-exam-answer', question.id, ($event.target as HTMLTextAreaElement).value)"
           ></textarea>
 
           <section
-            v-if="examSubmitted && isSubjectiveQuestion(question)"
-            :class="['analysis-review-report', examScoreClass(question)]"
+            v-if="examSubmitted && question.type === '分析题'"
+            :class="['analysis-review-summary', examScoreClass(question)]"
           >
-            <header class="analysis-report-header">
-              <div class="analysis-report-heading">
-                <span class="analysis-report-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7 3.75h7.2L18.25 7.8V20.25H7V3.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                    <path d="M14 3.75V8h4.25M9.75 11.25h5.75M9.75 14.5h5.75M9.75 17.75h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </span>
-                <div>
-                  <span class="analysis-report-kicker">AI 智能评阅</span>
-                  <h3>分析题作答报告</h3>
-                  <p>结合答案完整度、关键论点与表达逻辑生成</p>
-                </div>
-              </div>
+            <div class="analysis-summary-copy">
+              <span class="analysis-summary-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M7 3.75h7.2L18.25 7.8V20.25H7V3.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                  <path d="M14 3.75V8h4.25M9.75 11.25h5.75M9.75 14.5h5.75M9.75 17.75h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
 
-              <div class="analysis-score-card">
-                <span class="analysis-score-label">本题得分</span>
-                <strong>{{ normalizedReviewScore(question) }}</strong>
-                <span class="analysis-score-unit">/ 100</span>
-                <div class="analysis-score-track" aria-hidden="true">
-                  <span :style="{ width: `${normalizedReviewScore(question)}%` }"></span>
-                </div>
-                <em>{{ examScoreText(question) }}</em>
-              </div>
-            </header>
+              <div class="analysis-summary-content">
+                <span class="analysis-summary-kicker">AI 智能评阅已完成</span>
+                <h3>分析题评阅结果</h3>
+                <p>
+                  {{
+                    summarize(
+                      examReview[question.id]?.feedback
+                        || defaultAnalysisFeedback(question),
+                    )
+                  }}
+                </p>
 
-            <div class="analysis-report-body">
-              <section class="analysis-answer-panel user-answer-panel">
-                <div class="analysis-panel-title">
-                  <span class="panel-order">01</span>
-                  <div>
-                    <strong>你的作答</strong>
-                    <small>完整保留提交内容，便于对照复盘</small>
-                  </div>
-                </div>
-                <div :class="['analysis-answer-content', { empty: !hasAnswerData(examAnswers[question.id]) }]">
-                  {{ formatExamAnswer(question, examAnswers[question.id]) }}
-                </div>
-              </section>
-
-              <section class="analysis-answer-panel reference-answer-panel">
-                <div class="analysis-panel-title">
-                  <span class="panel-order">02</span>
-                  <div>
-                    <strong>参考答案</strong>
-                    <small>建议重点比较论点覆盖与论证顺序</small>
-                  </div>
-                </div>
-                <div class="analysis-answer-content reference">
-                  {{ formatExamReferenceAnswer(question) || '暂无参考答案。' }}
-                </div>
-              </section>
-
-              <section class="analysis-feedback-panel">
-                <div class="analysis-panel-title">
-                  <span class="panel-order">03</span>
-                  <div>
-                    <strong>AI 评语</strong>
-                    <small>针对本次回答给出的综合判断</small>
-                  </div>
-                </div>
-                <p>{{ examReview[question.id]?.feedback || defaultAnalysisFeedback(question) }}</p>
-              </section>
-
-              <section
-                v-if="examReview[question.id]?.improvement_hints?.length"
-                class="analysis-improvement-panel"
-              >
-                <div class="analysis-panel-title">
-                  <span class="panel-order">04</span>
-                  <div>
-                    <strong>改进建议</strong>
-                    <small>下次作答时可直接套用的优化方向</small>
-                  </div>
-                </div>
-                <ol class="analysis-improvement-list">
-                  <li
-                    v-for="(hint, hintIndex) in examReview[question.id]?.improvement_hints || []"
-                    :key="`${question.id}-${hintIndex}-${hint}`"
+                <div v-if="question.knowledge_points?.length" class="analysis-summary-tags">
+                  <span
+                    v-for="point in question.knowledge_points.slice(0, 4)"
+                    :key="point"
                   >
-                    <span>{{ String(hintIndex + 1).padStart(2, '0') }}</span>
-                    <p>{{ hint }}</p>
-                  </li>
-                </ol>
-              </section>
-
-              <section class="analysis-detail-panel">
-                <div class="analysis-panel-title">
-                  <span class="panel-order">{{ examReview[question.id]?.improvement_hints?.length ? '05' : '04' }}</span>
-                  <div>
-                    <strong>题目解析</strong>
-                    <small>梳理本题的关键思路与作答依据</small>
-                  </div>
+                    {{ point }}
+                  </span>
                 </div>
-                <div class="analysis-detail-content" v-html="renderInline(question.analysis || '暂无解析。')"></div>
+              </div>
+            </div>
 
-                <div v-if="question.knowledge_points?.length" class="analysis-knowledge-row">
-                  <span class="analysis-knowledge-label">涉及知识点</span>
-                  <div class="analysis-knowledge-tags">
-                    <span v-for="point in question.knowledge_points" :key="point">{{ point }}</span>
-                  </div>
-                </div>
-              </section>
+            <div class="analysis-summary-actions">
+              <div class="analysis-summary-score">
+                <span>本题得分</span>
+                <strong>{{ normalizedReviewScore(question) }}</strong>
+                <small>/ 100 · {{ examScoreText(question) }}</small>
+              </div>
+
+              <button
+                class="analysis-review-button"
+                type="button"
+                @click="$emit('open-analysis-review', question.id)"
+              >
+                <span>查看完整解析</span>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
           </section>
 
@@ -307,7 +253,7 @@
                 {{ examScoreText(question) }}
               </span>
               <span v-if="examReview[question.id]?.score != null" class="exam-score-badge" :class="examScoreClass(question)">
-                {{ examReview[question.id].score }}分
+                {{ examReview[question.id]?.score }}分
               </span>
               <span v-if="examReview[question.id]?.feedback" class="review-feedback">
                 {{ examReview[question.id]?.feedback }}
@@ -336,9 +282,9 @@
         <div class="panel">
           <h3>{{ examSubmitted ? '考试报告' : '答题卡' }}</h3>
 
-          <div v-if="examReviewing" class="reviewing-overlay">
+          <div v-if="examReviewing" class="reviewing-overlay" aria-live="polite">
             <span class="reviewing-spinner-lg"></span>
-            <span class="reviewing-text">AI 正在评阅主观题...</span>
+            <span class="reviewing-text">试卷已提交，AI 正在评阅...</span>
           </div>
 
           <div v-else-if="examSubmitted" class="score-display">
@@ -350,7 +296,7 @@
             <div class="progress-label">已作答</div>
           </div>
 
-          <div v-if="!examSubmitted && examSubmitNoticeVisible && examUnansweredCount > 0" class="submit-inline-notice">
+          <div v-if="!examSubmitted && !examReviewing && examSubmitNoticeVisible && examUnansweredCount > 0" class="submit-inline-notice">
             <strong>还有 {{ examUnansweredCount }} 道题未作答</strong>
             <p>可以继续完成未答题目，或直接提交当前试卷。</p>
             <div class="submit-inline-actions">
@@ -398,8 +344,15 @@
             </div>
           </div>
 
-          <button v-if="!examSubmitted" class="btn-primary full-width sidebar-submit" type="button" @click="$emit('request-submit-exam')">
-            交卷
+          <button
+            v-if="!examSubmitted"
+            class="btn-primary full-width sidebar-submit"
+            type="button"
+            :disabled="examReviewing"
+            :aria-busy="examReviewing"
+            @click="$emit('request-submit-exam')"
+          >
+            {{ examReviewing ? '评阅中，请稍候...' : '交卷' }}
           </button>
           <button v-else class="btn-secondary full-width sidebar-submit" type="button" @click="$emit('back-workspace')">
             完成查看
@@ -470,6 +423,7 @@ defineEmits<{
   (e: 'scroll-to-question', index: number): void
   (e: 'exit-exam'): void
   (e: 'back-workspace'): void
+  (e: 'open-analysis-review', questionId: string): void
 }>()
 
 function difficultyClass(diff: string | null | undefined) {
@@ -497,11 +451,11 @@ function renderInline(text: string) {
 }
 
 function isOptionQuestion(question: ExamQuestion) {
-  return ['选择题', '单选题', '多选题', '判断题'].includes(question.type)
+  return ['选择题', '单选题', '判断题'].includes(question.type)
 }
 
 function isSubjectiveQuestion(question: ExamQuestion) {
-  return ['分析题', '简答题', '综合题'].includes(question.type)
+  return ['分析题'].includes(question.type)
 }
 
 function getOptions(question: ExamQuestion) {
@@ -1219,6 +1173,18 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
 
 .sidebar-submit {
   margin-top: 22px;
+}
+
+.sidebar-submit:disabled {
+  opacity: 0.58;
+  box-shadow: none;
+  transform: none;
+}
+
+.text-area-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  background: #f8fafc;
 }
 
 .result-badge {
@@ -1963,4 +1929,216 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
     gap: 8px;
   }
 }
+
+.analysis-review-summary {
+  --analysis-summary-accent: #2563eb;
+  --analysis-summary-soft: rgba(37, 99, 235, 0.08);
+  --analysis-summary-border: rgba(37, 99, 235, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin-top: 24px;
+  padding: 24px 26px;
+  overflow: hidden;
+  border: 1px solid var(--analysis-summary-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, var(--analysis-summary-soft), transparent 42%),
+    linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+}
+
+.analysis-review-summary.success {
+  --analysis-summary-accent: #059669;
+  --analysis-summary-soft: rgba(5, 150, 105, 0.1);
+  --analysis-summary-border: rgba(5, 150, 105, 0.22);
+}
+
+.analysis-review-summary.warning {
+  --analysis-summary-accent: #d97706;
+  --analysis-summary-soft: rgba(217, 119, 6, 0.1);
+  --analysis-summary-border: rgba(217, 119, 6, 0.22);
+}
+
+.analysis-review-summary.danger {
+  --analysis-summary-accent: #dc2626;
+  --analysis-summary-soft: rgba(220, 38, 38, 0.09);
+  --analysis-summary-border: rgba(220, 38, 38, 0.2);
+}
+
+.analysis-summary-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.analysis-summary-icon {
+  display: inline-flex;
+  flex: 0 0 52px;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--analysis-summary-border);
+  border-radius: 16px;
+  background: var(--analysis-summary-soft);
+  color: var(--analysis-summary-accent);
+}
+
+.analysis-summary-icon svg {
+  width: 25px;
+  height: 25px;
+}
+
+.analysis-summary-content {
+  min-width: 0;
+}
+
+.analysis-summary-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--analysis-summary-accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.analysis-summary-content h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.analysis-summary-content p {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.analysis-summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.analysis-summary-tags span {
+  padding: 5px 9px;
+  border: 1px solid var(--analysis-summary-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--analysis-summary-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analysis-summary-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.analysis-summary-score {
+  min-width: 112px;
+  text-align: right;
+}
+
+.analysis-summary-score span,
+.analysis-summary-score small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analysis-summary-score strong {
+  display: block;
+  margin: 1px 0;
+  color: var(--analysis-summary-accent);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.analysis-review-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--analysis-summary-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 22px var(--analysis-summary-soft);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.analysis-review-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px var(--analysis-summary-soft);
+}
+
+.analysis-review-button:active {
+  transform: translateY(0);
+}
+
+.analysis-review-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 900px) {
+  .analysis-review-summary {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .analysis-summary-actions {
+    justify-content: space-between;
+    padding-top: 18px;
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+  }
+
+  .analysis-summary-score {
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .analysis-review-summary {
+    padding: 20px;
+  }
+
+  .analysis-summary-copy {
+    gap: 12px;
+  }
+
+  .analysis-summary-icon {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+  }
+
+  .analysis-summary-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-review-button {
+    width: 100%;
+  }
+}
+
 </style>

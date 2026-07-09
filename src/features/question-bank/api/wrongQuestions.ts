@@ -2,12 +2,9 @@ import http from '@/shared/api/http'
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   single_choice: '单选题',
-  multiple_choice: '多选题',
   judge: '判断题',
   fill_blank: '填空题',
-  short_answer: '简答题',
   analysis: '分析题',
-  comprehensive: '综合题',
 }
 
 export interface WrongQuestion {

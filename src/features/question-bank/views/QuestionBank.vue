@@ -620,7 +620,7 @@ const examReview = ref<Record<string, QuizReviewResult | null>>({})
 const examSubmitted = ref(false)
 const examReviewing = ref(false)
 const examSubmitNoticeVisible = ref(false)
-const currentExamIndex = ref(0)
+const currentExamIndex = ref(-1)
 const examTime = ref(0)
 const examCorrectCount = ref(0)
 const activeAnalysisQuestionId = ref<string | null>(null)
@@ -1121,7 +1121,7 @@ function resetPortalState(question: Question | null) {
   openedPortalAnalysis.value = new Set()
 
   if (!question) return
-  portalAnswers.value[question.id] = question.type === '多选题' ? [] : ''
+  portalAnswers.value[question.id] = ''
 }
 
 function resetDailyState(selected: Question[]) {
@@ -1132,7 +1132,7 @@ function resetDailyState(selected: Question[]) {
   const nextReview: Record<string, QuizReviewResult | null> = {}
 
   selected.forEach((question) => {
-    nextAnswers[question.id] = question.type === '多选题' ? [] : ''
+    nextAnswers[question.id] = ''
     nextSubmitted[question.id] = false
     nextCorrect[question.id] = false
     nextReviewing[question.id] = false
@@ -1417,13 +1417,14 @@ function startExam(paper: Question[], title: string) {
   examAnswers.value = {}
   examReview.value = {}
   paper.forEach((q) => {
-    examAnswers.value[q.id] = q.type === '多选题' ? [] : ''
+    examAnswers.value[q.id] = ''
     examReview.value[q.id] = null
   })
   examSubmitted.value = false
+  examReviewing.value = false
   examSubmitNoticeVisible.value = false
   examCorrectCount.value = 0
-  currentExamIndex.value = 0
+  currentExamIndex.value = -1
   activeAnalysisQuestionId.value = null
   analysisReturnQuestionIndex.value = 0
   examTime.value = 0
@@ -1449,6 +1450,8 @@ function stopExamTimer() {
 }
 
 function handleExamExit() {
+  if (examReviewing.value) return
+
   if (examSubmitted.value) {
     backWorkspace()
     return
@@ -1460,7 +1463,7 @@ function handleExamExit() {
 }
 
 function requestSubmitExam() {
-  if (examSubmitted.value) return
+  if (examSubmitted.value || examReviewing.value) return
 
   if (examUnansweredCount.value > 0 && !examSubmitNoticeVisible.value) {
     examSubmitNoticeVisible.value = true
@@ -1475,37 +1478,36 @@ function cancelSubmitExam() {
 }
 
 async function submitExam() {
-  if (examSubmitted.value) return
+  if (examSubmitted.value || examReviewing.value) return
 
   examSubmitNoticeVisible.value = false
+  examReviewing.value = true
   stopExamTimer()
 
-  const hasSubjective = examPaper.value.some((q) => !isObjectiveQuestion(q))
-  if (hasSubjective) examReviewing.value = true
+  try {
+    let correctCount = 0
+    const batchResults: Array<Record<string, unknown>> = []
 
-  let correctCount = 0
-  const batchResults: Array<Record<string, unknown>> = []
+    examPaper.value.forEach((q) => {
+      if (isObjectiveQuestion(q)) {
+        const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
+        if (isCorrect) correctCount += 1
 
-  examPaper.value.forEach((q) => {
-    if (isObjectiveQuestion(q)) {
-      const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
-      if (isCorrect) correctCount += 1
+        batchResults.push({
+          question_id: q.id,
+          user_answer: formatUserAnswer(examAnswers.value[q.id]),
+          is_correct: isCorrect,
+          subject: q.subject,
+          question_type: q.type,
+          content: q.content,
+          options: q.options || {},
+          answer: q.answer,
+          analysis: q.analysis,
+        })
+      }
+    })
 
-      batchResults.push({
-        question_id: q.id,
-        user_answer: formatUserAnswer(examAnswers.value[q.id]),
-        is_correct: isCorrect,
-        subject: q.subject,
-        question_type: q.type,
-        content: q.content,
-        options: q.options || {},
-        answer: q.answer,
-        analysis: q.analysis,
-      })
-    }
-  })
-
-  const subjectiveTasks = examPaper.value
+    const subjectiveTasks = examPaper.value
       .filter((q) => !isObjectiveQuestion(q))
       .map(async (q) => {
         const result = await gradeQuestion(q, examAnswers.value[q.id])
@@ -1526,35 +1528,40 @@ async function submitExam() {
         })
       })
 
-  await Promise.all(subjectiveTasks)
-  examReviewing.value = false
+    await Promise.all(subjectiveTasks)
 
-  if (batchResults.length > 0) {
-    await submitObjectiveResults({ results: batchResults as any[] })
-  }
-
-  examCorrectCount.value = correctCount
-  examSubmitted.value = true
-  saveAttempt(examPaper.value.length, correctCount)
-
-  if (examTitle.value === '每日一题') {
-    markDailyCompleted(new Date())
-
-    const lastStreak = Number(localStorage.getItem('question_hub_streak') || '3')
-    localStorage.setItem('question_hub_streak', String(lastStreak + 1))
-
-    dailyStateSeed.value += 1
-    localStatsSeed.value += 1
-  } else if (examPaper.value.length > 0) {
-    const pct = Math.round((correctCount / examPaper.value.length) * 100)
-    localStorage.setItem('question_hub_last_mock', String(pct))
-
-    if (activeModule.value === 'paper') {
-      const prevCount = Number(localStorage.getItem('question_hub_mock_exams_count') || '0')
-      const newCount = prevCount + 1
-      localStorage.setItem('question_hub_mock_exams_count', String(newCount))
-      mockExamsCount.value = newCount
+    if (batchResults.length > 0) {
+      await submitObjectiveResults({ results: batchResults as any[] })
     }
+
+    examCorrectCount.value = correctCount
+    examSubmitted.value = true
+    saveAttempt(examPaper.value.length, correctCount)
+
+    if (examTitle.value === '每日一题') {
+      markDailyCompleted(new Date())
+
+      const lastStreak = Number(localStorage.getItem('question_hub_streak') || '3')
+      localStorage.setItem('question_hub_streak', String(lastStreak + 1))
+
+      dailyStateSeed.value += 1
+      localStatsSeed.value += 1
+    } else if (examPaper.value.length > 0) {
+      const pct = Math.round((correctCount / examPaper.value.length) * 100)
+      localStorage.setItem('question_hub_last_mock', String(pct))
+
+      if (activeModule.value === 'paper') {
+        const prevCount = Number(localStorage.getItem('question_hub_mock_exams_count') || '0')
+        const newCount = prevCount + 1
+        localStorage.setItem('question_hub_mock_exams_count', String(newCount))
+        mockExamsCount.value = newCount
+      }
+    }
+  } catch (error) {
+    toast.error(getErrorMessage(error) || '交卷失败，请稍后重试')
+    startExamTimer()
+  } finally {
+    examReviewing.value = false
   }
 }
 
@@ -1601,6 +1608,7 @@ function showNextAnalysisReview() {
 
 function backWorkspace() {
   stopExamTimer()
+  examReviewing.value = false
   activeAnalysisQuestionId.value = null
   viewMode.value = 'workspace'
   activeModule.value = 'daily'
@@ -1724,11 +1732,11 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
 }
 
 function isObjectiveQuestion(q: Question) {
-  return ['选择题', '单选题', '多选题', '判断题', '填空题'].includes(q.type)
+  return ['选择题', '单选题', '判断题', '填空题'].includes(q.type)
 }
 
 function isOptionQuestion(q: Question) {
-  return ['选择题', '单选题', '多选题', '判断题'].includes(q.type)
+  return ['选择题', '单选题', '判断题'].includes(q.type)
 }
 
 function getOptions(q: Question) {
@@ -1740,11 +1748,8 @@ function isSelected(ans: AnswerValue, key: string) {
   return Array.isArray(ans) ? ans.includes(key) : ans === key
 }
 
-function updateOptionAnswer(q: Question, ans: AnswerValue, key: string) {
-  if (q.type !== '多选题') return key
-
-  const selected = normalizeAnswer(ans)
-  return selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]
+function updateOptionAnswer(_q: Question, _ans: AnswerValue, key: string) {
+  return key
 }
 
 function correctKeys(q: Question) {

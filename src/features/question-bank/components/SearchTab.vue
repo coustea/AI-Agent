@@ -265,7 +265,7 @@ function submitAnswer(question: any) {
 }
 
 function isOptionQuestion(question: any) {
-  return ['选择题', '单选题', '多选题', '判断题'].includes(question.type)
+  return ['选择题', '单选题', '判断题'].includes(question.type)
 }
 
 function getOptions(question: any) {
