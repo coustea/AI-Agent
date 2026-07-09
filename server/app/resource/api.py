@@ -30,8 +30,7 @@ from app.infra.models import User
 from app.profile.service import ProfileService
 from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection, AgentConfigs, NodeInput
 from app.resource.service import ResourceService
-from app.resource.orchestrator import run_multi_agent_generation
-from app.resource.workflow.execution import execute_node_agent
+from app.resource.orchestrator import run_multi_agent_generation, run_node_agent_generation
 from app.infra.response import HttpResponse
 from app.resource.event import (
     RESOURCE_TERMINAL_EVENTS,
@@ -161,7 +160,7 @@ async def create_single_resource_task(
         )
 
         asyncio.create_task(
-            execute_node_agent(
+            run_node_agent_generation(
                 user_id=current_user.id,
                 resource_id=resource_id,
                 agent_id=agent_id_str,

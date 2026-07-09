@@ -1,22 +1,27 @@
+// 路径节点内可生成的辅助资源类型
 export type PathResourceType = 'content' | 'mindmap' | 'code' | 'reading' | 'ppt' | 'cartoon'
 
+// 路径的阶段结构（如：基础篇 → 进阶篇 → 实战篇）
 export interface LearningPathStage {
   stage_id: string
   title: string
 }
 
+// 路径的单个学习节点：包含状态流转和前置依赖关系
 export interface LearningPathNode {
   id: number
   node_id: string
   stage_id: string
   title: string
+  // 状态流转：locked → available → in_progress → (completed | remediation | reinforced | completed_with_gaps)
   status: 'locked' | 'available' | 'in_progress' | 'remediation' | 'reinforced' | 'completed' | 'completed_with_gaps'
-  priority: number
-  attempt_count: number
+  priority: number       // 阶段内排序优先级
+  attempt_count: number   // 已学习轮次（测验→巩固→再测验）
   difficulty: string | null
-  prerequisites: string[]
+  prerequisites: string[] // 前置节点 node_key 列表
 }
 
+// 路径概览：包含 stages + nodes 树形结构，用于路径总览页面
 export interface PathOverview {
   id: number
   module: string
@@ -42,25 +47,27 @@ export interface LearningPathHistoryItem {
   updated_at: string
 }
 
+// 节点教程：primary(首次生成) / remediation(薄弱补救) / reinforced(强化学习)
 export interface LearningPathTutorial {
   id: number
   tutorial_type: 'primary' | 'remediation' | 'reinforced' | string
-  version_no: number
-  based_on_tutorial_id: number | null
+  version_no: number           // 递增版本号，每次重新生成 +1
+  based_on_tutorial_id: number | null  // 基于哪个旧版本生成的
   title: string
   summary: string | null
-  content_markdown: string
-  knowledge_points: string[]
-  weak_knowledge_points: string[]
+  content_markdown: string     // 教程正文（Markdown 格式）
+  knowledge_points: string[]   // 覆盖的知识点列表
+  weak_knowledge_points: string[]  // 本轮待巩固的薄弱点（remediation/reinforced 时使用）
   created_at: string
 }
 
+// 辅助资源（思维导图/代码/PPT/阅读/动画讲解）
 export interface LearningPathResource {
   id: number
   resource_type: PathResourceType | string
   version_no: number
   title: string
-  content_format: string
+  content_format: string      // markdown / json / html 等
   content_text: string | null
   content_json: Record<string, unknown> | null
   summary: string | null
@@ -71,6 +78,7 @@ export interface LearningPathResource {
   created_at: string
 }
 
+// 节点测验题目（每轮固定 5 道选择题）
 export interface LearningPathQuestion {
   id: number
   question_no: number
@@ -78,24 +86,26 @@ export interface LearningPathQuestion {
   mode: string
   type: string
   question: string
-  choice: Record<string, string>
-  answer: string
-  response: string | null
+  choice: Record<string, string>  // {A: "...", B: "...", C: "...", D: "..."}
+  answer: string                   // 正确答案（如 "A"）
+  response: string | null          // 用户的作答
   analysis: string | null
   knowledge_points: string[]
   is_correct: boolean | null
 }
 
+// 节点学习空间：页面加载时一次性获取的完整状态
 export interface LearningPathWorkspace {
   path: PathOverview
   node: LearningPathNode
-  current_tutorial: LearningPathTutorial | null
-  tutorials: LearningPathTutorial[]
-  resources: LearningPathResource[]
+  current_tutorial: LearningPathTutorial | null  // 当前要展示的教程（最新版本）
+  tutorials: LearningPathTutorial[]               // 该节点所有历史/版本的教程
+  resources: LearningPathResource[]               // 辅助资源列表
   current_round: number
   quiz_available: boolean
 }
 
+// 节点测验轮次：每次生成返回 5 道题
 export interface PathQuizRound {
   node_id: number
   tutorial_id: number | null
@@ -103,15 +113,18 @@ export interface PathQuizRound {
   questions: LearningPathQuestion[]
 }
 
+// 单题作答
 export interface PathQuizAnswerItem {
   question_id: number
   response: string
 }
 
+// 提交 5 道题的答案
 export interface PathQuizSubmitRequest {
   answers: PathQuizAnswerItem[]
 }
 
+// 判分结果：outcome 决定节点状态的下一步流转
 export interface PathQuizSubmitResponse {
   node_id: number
   round_no: number
@@ -119,10 +132,11 @@ export interface PathQuizSubmitResponse {
   passed: boolean
   outcome: 'completed' | 'remediation' | 'completed_with_gaps'
   weak_knowledge_points: string[]
-  next_node_id: number | null
-  current_tutorial_id: number | null
+  next_node_id: number | null        // 如果通过了，指向下一节点 ID
+  current_tutorial_id: number | null  // 如果进入巩固模式，指向新生成的教程
 }
 
+// 创建路径时的表单请求体
 export interface PathRequest {
   goal: string
   topic?: string
@@ -130,12 +144,14 @@ export interface PathRequest {
   preferences?: Record<string, unknown>
 }
 
+// 创建路径的即时响应（完整规划异步通过 SSE 返回）
 export interface CreatePathResponse {
   id: number
-  run_id: string
+  run_id: string   // SSE 事件流的 run_id，前端用此建立 EventSource 连接
   status: string
 }
 
+// 从学习画像模块聚合的用户学习信号快照
 interface LearningSignalSnapshot {
   average_score: number | null
   weak_topics: string[]
@@ -147,6 +163,7 @@ interface LearningSignalSnapshot {
   recommendations: string[]
 }
 
+// 路径学习评估：后端根据学习画像+路径进度生成
 export interface PathLearningEvaluationResponse {
   path_id: number
   overall_progress: number
@@ -156,6 +173,7 @@ export interface PathLearningEvaluationResponse {
   optimization_tips: string[]
 }
 
+// 辅助资源详情（用于路径资源详情页）
 export interface PathResourceDetail {
   id: number
   resource_type: PathResourceType | string

@@ -314,7 +314,12 @@ class PathService:
         return await self._build_response(path)
 
     async def generate_tutorial(self, user_id: int, node_id: int) -> LearningPathNodeWorkspaceResponse:
-        """为节点生成教程（耗时操作，独立 API）。"""
+        """为节点生成教程（耗时操作，独立 API）。
+
+        幂等保证：如果该节点已有 current tutorial，直接返回工作区而不会重复生成。
+        这防止了前端重复点击、页面刷新重入、或 PathPlanOverview + PathNodeStudy
+        同时触发生成时产生重复教程。
+        """
         logger.info("[PathService] 生成节点教程: user_id=%s node_id=%s", user_id, node_id)
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
@@ -322,17 +327,23 @@ class PathService:
         tutorials = await self._get_node_tutorials(node.id)
         current = next((t for t in tutorials if t.is_current), None)
 
-        if current is None:
-            state = LearnState(
-                user_id=user_id,
-                node_id=node_id,
-                phase="start",
-                session=self.session,
-                tutorial_type="primary",
+        if current is not None:
+            logger.info(
+                "[PathService] 节点已有教程(id=%d)，跳过生成，直接返回工作区",
+                current.id,
             )
-            result = await self.learn_graph.ainvoke(state)
-            if result.get("error"):
-                raise ValueError(result["error"])
+            return await self._build_workspace_response(node)
+
+        state = LearnState(
+            user_id=user_id,
+            node_id=node_id,
+            phase="start",
+            session=self.session,
+            tutorial_type="primary",
+        )
+        result = await self.learn_graph.ainvoke(state)
+        if result.get("error"):
+            raise ValueError(result["error"])
 
         node = await self._must_get_node(user_id, node_id)
         return await self._build_workspace_response(node)

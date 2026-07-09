@@ -113,14 +113,14 @@ class SequencePayload(BaseModel):
 # ---- 4. 知识框架图 ----
 
 class FrameworkModule(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
-    title: str = Field(alias="name", default="", description="模块标题")
+    model_config = ConfigDict(extra="ignore")
+    title: str = Field(default="", description="模块标题")
     items: list[str] = Field(default_factory=list, description="知识点列表")
 
 
 class FrameworkPayload(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
-    center: str = Field(alias="root", default="", description="中心主题")
+    model_config = ConfigDict(extra="ignore")
+    center: str = Field(default="", description="中心主题")
     modules: list[FrameworkModule] = Field(default_factory=list, description="模块列表")
 
 
@@ -251,7 +251,7 @@ def validate_visual(graph_type: str, visual_content: dict[str, Any]) -> dict[str
         return visual_content
     try:
         validated = payload_cls.model_validate(visual_content)
-        return validated.model_dump(mode="json")
+        return validated.model_dump(mode="json", by_alias=True)
     except Exception as exc:
         logger.warning("[validate_visual] visual_content 校验失败: graph_type=%s error=%s", graph_type, exc)
         return visual_content
@@ -323,7 +323,7 @@ def validate_diagram_json(raw: dict[str, Any]) -> dict[str, Any] | None:
     # 校验 teaching_content
     try:
         tc = TeachingContent.model_validate(teaching_content)
-        validated_tc = tc.model_dump(mode="json")
+        validated_tc = tc.model_dump(mode="json", by_alias=True)
     except Exception as exc:
         logger.warning("[validate_diagram_json] teaching_content 校验失败: %s", exc)
         return None
@@ -343,7 +343,7 @@ def validate_diagram_json(raw: dict[str, Any]) -> dict[str, Any] | None:
     # 最终用 TeachingDiagram 做完整校验
     try:
         diagram = TeachingDiagram.model_validate(result)
-        return diagram.model_dump(mode="json")
+        return diagram.model_dump(mode="json", by_alias=True)
     except Exception as exc:
         logger.warning("[validate_diagram_json] 完整校验失败: %s", exc)
         return None

@@ -1,6 +1,7 @@
 import { readonly, ref, shallowRef } from 'vue'
 import type { PathEvent, PathEventName } from '@/features/learning-path/model/pathEvent'
 
+// 路径规划 SSE 连接状态：idle → connecting → (running | reconnecting) → completed | failed
 export type PathConnectionStatus =
   | 'idle'
   | 'connecting'
@@ -10,14 +11,15 @@ export type PathConnectionStatus =
   | 'failed'
 
 export interface PathEventHandlers {
-  onEvent?: (event: PathEvent) => void
-  onNodeReady?: (event: PathEvent) => void
-  onCompleted?: (event: PathEvent) => void
+  onEvent?: (event: PathEvent) => void        // 每次收到事件都会触发
+  onNodeReady?: (event: PathEvent) => void     // 节点生成完成事件
+  onCompleted?: (event: PathEvent) => void     // 路径规划完成
   onFailed?: (error: Error, event: PathEvent) => void
 }
 
 const API_BASE = '/api/v1/ai'
 
+// 解析后端推送的 SSE 消息（JSON 格式），过滤无效/重复消息
 function parsePathEvent(raw: MessageEvent): PathEvent | null {
   try {
     const data = JSON.parse(raw.data)
@@ -51,6 +53,7 @@ export function usePathEvents() {
     source.value = null
   }
 
+  // 重置所有连接状态（关闭旧连接、清空事件队列）
   const reset = () => {
     close()
     runId.value = null
@@ -61,6 +64,7 @@ export function usePathEvents() {
     lastSequence.value = 0
   }
 
+  // 建立 SSE 连接：监听后端多智能体路径规划/教程生成的实时事件流
   const connect = (nextPathId: number, nextRunId: string, handlers: PathEventHandlers = {}) => {
     reset()
     runId.value = nextRunId
@@ -70,13 +74,15 @@ export function usePathEvents() {
     const url = `${API_BASE}/path-plan/${nextPathId}/runs/${nextRunId}/events`
     const eventSource = new EventSource(url)
 
+    // 监听自定义事件 'path.event'（非标准 MessageEvent，需用 addEventListener）
     eventSource.addEventListener('path.event', (raw: MessageEvent) => {
       const event = parsePathEvent(raw)
       if (!event) return
-      if (event.sequence <= lastSequence.value) return
+      if (event.sequence <= lastSequence.value) return  // 去重：丢弃已处理过的旧序号
       lastSequence.value = event.sequence
       events.value = [...events.value, event]
 
+      // 按事件类型分派：node.ready(节点生成完成) / planning.completed(规划完成) / planning.failed(失败)
       if (event.event === 'node.ready') {
         handlers.onNodeReady?.(event)
       }
@@ -95,6 +101,7 @@ export function usePathEvents() {
       handlers.onEvent?.(event)
     })
 
+    // 连接异常处理：EventSource 会自动重连，区分重连中 vs 彻底失败
     eventSource.onerror = () => {
       const willRetry = eventSource.readyState !== EventSource.CLOSED
       if (connectionStatus.value !== 'completed' && connectionStatus.value !== 'failed') {
