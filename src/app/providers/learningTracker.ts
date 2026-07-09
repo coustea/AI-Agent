@@ -20,17 +20,7 @@ function getContextFromRoute(route: Router['currentRoute']['value']): TrackingCo
     }
   }
 
-  if (name === 'PathResourceDetail') {
-    return {
-      sourcePage: 'path-resource-detail',
-      resourceId: toNumber(route.params.id),
-      pathId: toNumber(route.query.pathId),
-      pathNodeId: toNumber(route.query.pathNodeId),
-      nodeId: route.query.nodeId ? String(route.query.nodeId) : undefined,
-    }
-  }
-
-  if (name === 'LearningPathNode') {
+  if (name === 'PathNodeStudy') {
     return {
       sourcePage: 'learning-path-node',
       pathNodeId: toNumber(route.params.nodeId),

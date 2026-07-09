@@ -130,17 +130,17 @@
             </div>
           </section>
 
-          <!-- 💡 课后诊断评估：化身为自然融入正文的“第6章”，采用主动触发机制 -->
+          <!-- 💡 课后诊断评估：弹窗式主动触发 -->
           <section class="tutorial-native-quiz">
             <div class="divider"></div>
 
             <header class="quiz-native-head">
               <h2>6. 知识掌握度诊断评估</h2>
-              <p>核心讲义学习完毕。点击下方触发诊断，智能体将原地为您构建 5 道多维考频映射题，精准捕获您的盲区隐患。</p>
+              <p>核心讲义学习完毕。点击下方触发诊断，智能体将为您构建 5 道多维考频映射题，精准捕获您的盲区隐患。</p>
             </header>
 
-            <!-- 主动触发入口：剥离了任何系统大卡片，采用极简流式学术维度标线加纯粹按钮 -->
-            <div v-if="!quizRound" class="quiz-native-preload">
+            <!-- 主动触发入口 -->
+            <div class="quiz-native-preload">
               <div class="diagnostic-flow-text">
                 <span class="dim-label">评估覆盖维度：</span>
                 <span class="dim-tag c-tutor">概念理解</span>·
@@ -161,100 +161,7 @@
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                   </svg>
-                  {{ quizLoading ? '智能体正在加密组织诊断维度...' : '激活本节课后诊断评测' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- 测验答题流（完全平铺于正文之下，无外衬卡片包裹） -->
-            <div v-else class="quiz-native-core">
-              <div class="quiz-native-banner">
-                <span class="agent-eyebrow">Diagnostic Assessment</span>
-                <p>第 {{ quizRound.round_no }} 轮评测体系已加载。请完成以下单项选择以提交多智能体画像感知：</p>
-              </div>
-
-              <div class="native-question-list">
-                <article v-for="(question, index) in quizRound.questions" :key="question.id" class="native-question-node">
-                  <h4 class="native-question-title">
-                    <span class="native-q-num">{{ index + 1 }}.</span>
-                    {{ question.question }}
-                  </h4>
-
-                  <div class="native-choices-stack">
-                    <label
-                        for="choice"
-                        v-for="choice in choiceEntries(question.choice)"
-                        :key="choice[0]"
-                        :class="['native-choice-row', { selected: answers[question.id] === choice[0] }]"
-                    >
-                      <input
-                          v-model="answers[question.id]"
-                          type="radio"
-                          :name="`q-${question.id}`"
-                          :value="choice[0]"
-                          :disabled="isQuizSubmitted"
-                      />
-                      <span class="native-choice-box">{{ choice[0] }}</span>
-                      <span class="native-choice-content">{{ choice[1] }}</span>
-                    </label>
-                  </div>
-
-                  <!-- 原地错题溯源深度解析 -->
-                  <div v-if="isQuizSubmitted" class="native-analysis-box">
-                    <div class="native-analysis-meta">
-                      <span>正确基准答案: <strong>{{ question.answer }}</strong></span>
-                    </div>
-                    <p v-if="question.analysis" class="cognitive-note">{{ question.analysis }}</p>
-                  </div>
-                </article>
-              </div>
-
-              <!-- 答题提交控制 -->
-              <div class="native-quiz-submit-bar">
-                <button
-                    v-if="!isQuizSubmitted"
-                    class="btn btn-primary"
-                    style="height: 40px; padding: 0 var(--space-6);"
-                    type="button"
-                    :disabled="submitLoading"
-                    @click="submitQuiz"
-                >
-                  {{ submitLoading ? '多维诊断认知聚合中...' : '提交测试并获取诊断结论' }}
-                </button>
-              </div>
-
-              <!-- 测验评估反馈成绩单 -->
-              <div v-if="quizResult" class="native-result-report">
-                <div class="report-top">
-                  <div class="report-score">
-                    <span class="agent-eyebrow">Diagnostic Score</span>
-                    <strong>{{ quizResult.score }} <small>/ 5</small></strong>
-                  </div>
-                  <div class="report-text">
-                    <h4>EduAgent 认知诊断结论</h4>
-                    <p>{{ resultText(quizResult.outcome) }}</p>
-                  </div>
-                </div>
-
-                <!-- 薄弱点反馈 -->
-                <div v-if="quizResult.weak_knowledge_points?.length" class="report-weak-zone">
-                  <label>知识隐患点感知</label>
-                  <div class="report-weak-tags">
-                    <span v-for="point in quizResult.weak_knowledge_points" :key="point" class="tag-pill">
-                      {{ point }}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                    v-if="quizResult.next_node_id"
-                    class="btn btn-secondary"
-                    style="width: 100%; height: 40px;"
-                    type="button"
-                    @click="goToNextNode(quizResult.next_node_id)"
-                >
-                  推进至下一个推荐知识节点
-                  <svg viewBox="0 0 24 24" style="width:1.1em;height:1.1em;margin-left:4px;"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-8.29-1.42 1.42L16.86 11H5v2z"/></svg>
+                  {{ quizLoading ? '智能体正在加密组织诊断维度...' : (quizRound ? '查看诊断评测' : '激活本节课后诊断评测') }}
                 </button>
               </div>
             </div>
@@ -370,6 +277,118 @@
         </div>
       </transition>
     </Teleport>
+
+    <!-- ~ 题目弹窗：诊断评估答题流 ~ -->
+    <Teleport to="body">
+      <transition name="quiz-fade">
+        <div v-if="showQuizOverlay && quizRound" class="quiz-overlay" @click.self="closeQuiz">
+          <section class="quiz-shell">
+            <nav class="quiz-nav">
+              <div class="quiz-nav-left">
+                <span class="agent-eyebrow">Diagnostic Assessment</span>
+                <strong>第 {{ quizRound.round_no }} 轮评测</strong>
+              </div>
+              <button class="nav-back-btn" type="button" @click="closeQuiz">
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px">
+                  <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2Z" />
+                </svg>
+                返回教程
+              </button>
+            </nav>
+
+            <section class="quiz-body">
+              <div class="quiz-banner">
+                <p>请完成以下单项选择以提交多智能体画像感知：</p>
+              </div>
+
+              <div class="quiz-question-list">
+                <article v-for="(question, index) in quizRound.questions" :key="question.id" class="quiz-question-node">
+                  <h4 class="quiz-question-title">
+                    <span class="quiz-q-num">{{ index + 1 }}.</span>
+                    {{ question.question }}
+                  </h4>
+
+                  <div class="quiz-choices-stack">
+                    <label
+                        v-for="choice in choiceEntries(question.choice)"
+                        :key="choice[0]"
+                        :class="['quiz-choice-row', { selected: answers[question.id] === choice[0] }]"
+                    >
+                      <input
+                          v-model="answers[question.id]"
+                          type="radio"
+                          :name="`q-${question.id}`"
+                          :value="choice[0]"
+                          :disabled="isQuizSubmitted"
+                      />
+                      <span class="quiz-choice-box">{{ choice[0] }}</span>
+                      <span class="quiz-choice-content">{{ choice[1] }}</span>
+                    </label>
+                  </div>
+
+                  <!-- 错题溯源深度解析 -->
+                  <div v-if="isQuizSubmitted" class="quiz-analysis-box">
+                    <div class="quiz-analysis-meta">
+                      <span>正确基准答案: <strong>{{ question.answer }}</strong></span>
+                    </div>
+                    <p v-if="question.analysis" class="cognitive-note">{{ question.analysis }}</p>
+                  </div>
+                </article>
+              </div>
+
+              <!-- 答题提交控制 -->
+              <div class="quiz-submit-bar">
+                <button
+                    v-if="!isQuizSubmitted"
+                    class="btn btn-primary"
+                    style="height: 40px; padding: 0 var(--space-6);"
+                    type="button"
+                    :disabled="submitLoading"
+                    @click="submitQuiz"
+                >
+                  {{ submitLoading ? '多维诊断认知聚合中...' : '提交测试并获取诊断结论' }}
+                </button>
+              </div>
+
+              <!-- 测验评估反馈成绩单 -->
+              <div v-if="quizResult" class="quiz-result-report">
+                <div class="report-top">
+                  <div class="report-score">
+                    <span class="agent-eyebrow">Diagnostic Score</span>
+                    <strong>{{ quizResult.score }} <small>/ 5</small></strong>
+                  </div>
+                  <div class="report-text">
+                    <h4>EduAgent 认知诊断结论</h4>
+                    <p>{{ resultText(quizResult.outcome) }}</p>
+                  </div>
+                </div>
+
+                <!-- 薄弱点反馈 -->
+                <div v-if="quizResult.weak_knowledge_points?.length" class="report-weak-zone">
+                  <label>知识隐患点感知</label>
+                  <div class="report-weak-tags">
+                    <span v-for="point in quizResult.weak_knowledge_points" :key="point" class="tag-pill">
+                      {{ point }}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                    v-if="quizResult.next_node_id"
+                    class="btn btn-secondary"
+                    style="width: 100%; height: 40px;"
+                    type="button"
+                    @click="goToNextNode(quizResult.next_node_id)"
+                >
+                  推进至下一个推荐知识节点
+                  <svg viewBox="0 0 24 24" style="width:1.1em;height:1.1em;margin-left:4px;"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-8.29-1.42 1.42L16.86 11H5v2z"/></svg>
+                </button>
+              </div>
+            </section>
+          </section>
+        </div>
+      </transition>
+    </Teleport>
   </main>
 </template>
 
@@ -390,6 +409,7 @@ import {
   generateReading,
   generateCartoon,
   generateNodeQuestions,
+  getNodeQuestions,
   generateTutorial,
   getLearningNodeWorkspace,
   startLearning,
@@ -435,6 +455,7 @@ const quizRound = ref<PathQuizRound | null>(null)
 const quizResult = ref<PathQuizSubmitResponse | null>(null)
 const answers = ref<Record<number, string>>({})
 const hasStartedTracking = ref(false)
+const showQuizOverlay = ref(false)
 
 const selectedTutorialId = ref<number | null>(null)
 const isGeneratingTutorial = ref(false)
@@ -460,6 +481,11 @@ function closeViewer() {
     viewerResource.value = null
     viewerContent.value = ''
   }, 200)
+}
+
+function closeQuiz() {
+  // 仅关闭弹窗，保留 quizRound 数据以便再次点击按钮时直接打开
+  showQuizOverlay.value = false
 }
 
 function resourceTypeLabel(type: string) {
@@ -775,13 +801,42 @@ async function startLearningTracking() {
 
 async function loadQuiz() {
   if (!workspace.value) return
+
+  // 如果弹窗已打开（quizRound 有数据且 overlay 可见），不做任何操作
+  if (showQuizOverlay.value && quizRound.value) return
+
+  // 如果 quizRound 已有数据（用户之前关闭了弹窗），直接重新打开
+  if (quizRound.value) {
+    showQuizOverlay.value = true
+    return
+  }
+
   quizLoading.value = true
   quizResult.value = null
   isQuizSubmitted.value = false
+
   try {
+    // 如果后端已有题目（current_round > 0），GET 获取已有题目
+    if (workspace.value.current_round > 0) {
+      const res = await getNodeQuestions(workspace.value.node.id)
+      const data = res.data.data
+      if (data) {
+        quizRound.value = data
+        answers.value = {}
+        showQuizOverlay.value = true
+        return
+      }
+    }
+
+    // 首次生成题目
     const res = await generateNodeQuestions(workspace.value.node.id)
     quizRound.value = res.data.data
     answers.value = {}
+    showQuizOverlay.value = true
+
+    // 刷新 workspace 以更新 current_round 和 quiz_available
+    const resWorkspace = await getLearningNodeWorkspace(nodeId.value)
+    workspace.value = resWorkspace.data.data
   } catch (error) {
     toast.error(getErrorMessage(error, '生成节点测验失败'))
   } finally {
@@ -915,6 +970,7 @@ watch(() => route.params.nodeId, (newId) => {
   answers.value = {}
   selectedTutorialId.value = null
   isQuizSubmitted.value = false
+  showQuizOverlay.value = false
   hasStartedTracking.value = false
   loadWorkspace()
 })
@@ -1335,34 +1391,84 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-sm);
 }
 
-.quiz-native-core {
-  margin-top: var(--space-4);
+/* ============================================================
+   💡 题目弹窗：诊断评估答题流
+   ============================================================ */
+.quiz-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  place-items: center;
+  background: rgba(23, 59, 66, 0.32);
+  backdrop-filter: blur(8px);
+  padding: var(--space-6);
 }
 
-.quiz-native-banner {
+.quiz-shell {
+  width: min(800px, 100%);
+  max-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.quiz-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.quiz-nav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.quiz-nav-left strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
+}
+
+.quiz-body {
+  padding: var(--space-6) var(--space-7) var(--space-8);
+  overflow-y: auto;
+}
+
+.quiz-banner {
   margin-bottom: var(--space-5);
 }
-.quiz-native-banner p {
-  margin: var(--space-1) 0 0 0;
+
+.quiz-banner p {
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
 }
 
-.native-question-list {
+.quiz-question-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
 }
 
-.native-question-node {
+.quiz-question-node {
   padding-bottom: var(--space-5);
   border-bottom: 1px dashed var(--color-border-light);
 }
-.native-question-node:last-child {
+.quiz-question-node:last-child {
   border-bottom: none;
 }
 
-.native-question-title {
+.quiz-question-title {
   font-size: var(--text-base);
   font-weight: var(--weight-bold);
   color: var(--color-text-strong);
@@ -1372,19 +1478,19 @@ onBeforeUnmount(() => {
   gap: var(--space-2);
 }
 
-.native-q-num {
+.quiz-q-num {
   font-family: var(--font-mono);
   color: var(--color-primary-text);
 }
 
-.native-choices-stack {
+.quiz-choices-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding-left: var(--space-4);
 }
 
-.native-choice-row {
+.quiz-choice-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -1396,22 +1502,22 @@ onBeforeUnmount(() => {
   transition: var(--btn-transition);
 }
 
-.native-choice-row:hover {
+.quiz-choice-row:hover {
   background: var(--color-surface-hover);
   border-color: var(--color-border);
 }
 
-.native-choice-row.selected {
+.quiz-choice-row.selected {
   background: var(--color-primary-soft);
   border-color: var(--color-primary-border);
 }
 
-.native-choice-row input {
+.quiz-choice-row input {
   margin: 0;
   accent-color: var(--color-primary-text);
 }
 
-.native-choice-box {
+.quiz-choice-box {
   height: 22px;
   width: 22px;
   display: grid;
@@ -1426,44 +1532,44 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.native-choice-row.selected .native-choice-box {
+.quiz-choice-row.selected .quiz-choice-box {
   background: var(--color-primary-text);
   color: var(--color-surface);
   border-color: var(--color-primary-text);
 }
 
-.native-choice-content {
+.quiz-choice-content {
   color: var(--color-text);
   font-size: var(--text-sm);
   line-height: 1.4;
 }
 
-.native-analysis-box {
+.quiz-analysis-box {
   margin: var(--space-4) 0 0 var(--space-4);
   padding: var(--space-2) var(--space-4);
   background-color: var(--color-bg);
   border-left: 3px solid var(--color-success);
 }
 
-.native-analysis-meta {
+.quiz-analysis-meta {
   font-size: var(--text-sm);
   color: var(--color-text-strong);
 }
-.native-analysis-meta strong {
+.quiz-analysis-meta strong {
   color: var(--color-success);
   font-family: var(--font-mono);
   font-size: var(--text-md);
 }
 
-.native-quiz-submit-bar {
+.quiz-submit-bar {
   display: flex;
   justify-content: flex-start;
   margin-top: var(--space-5);
   padding-left: var(--space-4);
 }
 
-/* 独立的测试结果报告单 */
-.native-result-report {
+/* 测试结果报告单 */
+.quiz-result-report {
   margin-top: var(--space-6);
   padding: var(--space-5);
   border-radius: var(--radius-sm);
@@ -1914,6 +2020,11 @@ onBeforeUnmount(() => {
 .viewer-fade-enter-active .viewer-shell, .viewer-fade-leave-active .viewer-shell { transition: transform 0.15s ease; }
 .viewer-fade-enter-from, .viewer-fade-leave-to { opacity: 0; }
 .viewer-fade-enter-from .viewer-shell, .viewer-fade-leave-to .viewer-shell { transform: scale(0.99); }
+
+.quiz-fade-enter-active, .quiz-fade-leave-active { transition: opacity 0.2s ease; }
+.quiz-fade-enter-active .quiz-shell, .quiz-fade-leave-active .quiz-shell { transition: transform 0.2s ease; }
+.quiz-fade-enter-from, .quiz-fade-leave-to { opacity: 0; }
+.quiz-fade-enter-from .quiz-shell, .quiz-fade-leave-to .quiz-shell { transform: scale(0.97) translateY(8px); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulseRing { 0% { opacity: 0.5; transform: scale(0.85); } 100% { opacity: 0; transform: scale(1.1); } }

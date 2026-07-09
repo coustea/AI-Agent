@@ -13,19 +13,6 @@ import type {
   PathLearningEvaluationResponse,
 } from '@/features/learning-path/model/path'
 
-export type {
-  PathRequest,
-  CreatePathResponse,
-  LearningPathHistoryItem,
-  PathOverview,
-  LearningPathWorkspace,
-  PathQuizRound,
-  PathQuizSubmitRequest,
-  PathQuizSubmitResponse,
-  PathResourceDetail,
-  PathLearningEvaluationResponse,
-}
-
 // 创建新学习路径：提交 topic/goal/current_knowledge/preferences → 后端启动多智能体规划
 export function createLearningPath(payload: PathRequest) {
   return http.post<ApiResponse<CreatePathResponse>>('/ai/path-plan', payload)
@@ -68,6 +55,11 @@ export function generateTutorial(nodeId: number) {
   })
 }
 
+// 获取已有测验题目（GET，不重新生成，无题目时返回 null）
+export function getNodeQuestions(nodeId: number) {
+  return http.get<ApiResponse<PathQuizRound | null>>(`/ai/path-plan/nodes/${nodeId}/questions`)
+}
+
 // 生成节点测验（固定 5 道选择题，围绕当前教程知识点）
 export function generateNodeQuestions(nodeId: number) {
   return http.post<ApiResponse<PathQuizRound>>(`/ai/path-plan/nodes/${nodeId}/questions`, null, {
@@ -105,10 +97,6 @@ export function generateReading(nodeId: number) {
   })
 }
 
-export function generateContent(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/content`)
-}
-
 export function generateCartoon(nodeId: number) {
   return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/cartoon`, null, {
     timeout: 120000,
@@ -130,10 +118,6 @@ export function getPpt(nodeId: number) {
 
 export function getReading(nodeId: number) {
   return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/reading`)
-}
-
-export function getContent(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/content`)
 }
 
 export function getCartoon(nodeId: number) {

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import subprocess
 import xml.etree.ElementTree as ET
 
@@ -22,6 +23,16 @@ class SearchQueryArgs(BaseModel):
     query: str = Field(description="Search query")
 
 
+def _sanitize_query(query: str) -> str:
+    """清理搜索查询：去除特殊字符，防止注入和解析错误。"""
+    # 去除控制字符
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", query)
+    # 去除多余空白
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    # 截断过长查询
+    return cleaned[:200]
+
+
 # ============================================================================
 # DuckDuckGo 搜索（免费）
 # ============================================================================
@@ -33,6 +44,7 @@ async def duckduckgo_search(query: str) -> str:
     """
     from ddgs import DDGS
 
+    query = _sanitize_query(query)
     try:
         client = DDGS()
         rows = await asyncio.to_thread(client.text, query, max_results=5)
@@ -62,6 +74,7 @@ async def duckduckgo_instant_answer(query: str) -> str:
     """
     import urllib.parse
 
+    query = _sanitize_query(query)
     encoded_query = urllib.parse.quote(query)
     url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json"
 
@@ -106,49 +119,6 @@ async def duckduckgo_instant_answer(query: str) -> str:
 
 
 # ============================================================================
-# SearXNG 搜索（免费 - 开源聚合引擎）
-# ============================================================================
-
-async def searxng_search(query: str) -> str:
-    """SearXNG 搜索 - 开源聚合搜索引擎，免费。
-
-    聚合 Google、Bing、DuckDuckGo、Wikipedia 等多个引擎。
-    """
-    # 使用公共 SearXNG 实例
-    url = "https://searx.be/search"
-    params = {
-        "q": query,
-        "format": "json",
-        "engines": "google,bing,duckduckgo,wikipedia",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-        results = data.get("results", [])
-        if not results:
-            return "SearXNG 搜索未找到结果"
-
-        output = []
-        for item in results[:5]:
-            output.append(
-                f"{item.get('title', '无标题')}\n"
-                f"引擎: {item.get('engine', '')}\n"
-                f"链接: {item.get('url', '')}\n"
-                f"摘要: {item.get('content', '无摘要')}"
-            )
-
-        return "\n\n".join(output)
-
-    except Exception as exc:
-        logger.warning("[searxng_search] failed: query=%r error=%s", query, exc)
-        return f"SearXNG 搜索失败: {exc}"
-
-
-# ============================================================================
 # Wikipedia 搜索（免费）
 # ============================================================================
 
@@ -157,6 +127,7 @@ async def wikipedia_search(query: str) -> str:
 
     支持英文和中文 Wikipedia。
     """
+    query = _sanitize_query(query)
     url_en = "https://en.wikipedia.org/w/api.php"
     params = {
         "action": "query",
@@ -170,12 +141,20 @@ async def wikipedia_search(query: str) -> str:
         async with httpx.AsyncClient(timeout=10.0) as client:
             # 英文搜索
             response_en = await client.get(url_en, params=params)
-            data_en = response_en.json()
+            if response_en.status_code != 200:
+                logger.warning("[wikipedia_search] EN status=%d", response_en.status_code)
+                data_en = {}
+            else:
+                data_en = response_en.json()
 
             # 中文搜索
             url_zh = "https://zh.wikipedia.org/w/api.php"
             response_zh = await client.get(url_zh, params=params)
-            data_zh = response_zh.json()
+            if response_zh.status_code != 200:
+                logger.warning("[wikipedia_search] ZH status=%d", response_zh.status_code)
+                data_zh = {}
+            else:
+                data_zh = response_zh.json()
 
         results = []
 
@@ -214,6 +193,7 @@ async def arxiv_search(query: str) -> str:
 
     用于搜索学术论文、研究资料。
     """
+    query = _sanitize_query(query)
     url = "http://export.arxiv.org/api/query"
     params = {
         "search_query": f"all:{query}",
@@ -224,6 +204,8 @@ async def arxiv_search(query: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(url, params=params)
+            if response.status_code != 200:
+                return f"ArXiv 搜索失败: HTTP {response.status_code}"
             root = ET.fromstring(response.text)
 
         entries = root.findall("entry")
@@ -258,12 +240,15 @@ async def github_search(query: str) -> str:
 
     用于搜索代码仓库、开源项目。
     """
+    query = _sanitize_query(query)
     url = "https://api.github.com/search/repositories"
     params = {"q": query, "per_page": 3, "sort": "relevance"}
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, params=params)
+            if response.status_code != 200:
+                return f"GitHub 搜索失败: HTTP {response.status_code}"
             data = response.json()
 
         items = data.get("items", [])
@@ -295,6 +280,7 @@ async def stackoverflow_search(query: str) -> str:
 
     用于搜索技术问题、编程解答。
     """
+    query = _sanitize_query(query)
     url = "https://api.stackexchange.com/2.3/search"
     params = {
         "order": "desc",
@@ -307,6 +293,8 @@ async def stackoverflow_search(query: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, params=params)
+            if response.status_code != 200:
+                return f"StackOverflow 搜索失败: HTTP {response.status_code}"
             data = response.json()
 
         items = data.get("items", [])

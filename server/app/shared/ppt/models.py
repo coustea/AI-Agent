@@ -33,7 +33,6 @@ SlideType = Literal[
     "closing",
 ]
 ContentShape = Literal[
-
     "statement",
     "concept",
     "sequence",
@@ -206,7 +205,7 @@ class PPTSlide(PPTModel):
     statement: str = Field(default="", max_length=150)
     points: list[KeyPoint] = Field(default_factory=list, max_length=6)
     steps: list[ProcessStep] = Field(default_factory=list, max_length=6)
-    comparison: list[ComparisonSide] = Field(default_factory=list, max_length=2)
+    comparison: list[ComparisonSide] = Field(default_factory=list, max_length=4)
     nodes: list[SystemNode] = Field(default_factory=list, max_length=8)
     code: str = Field(default="", max_length=1800)
     code_language: str = Field(default="", max_length=20)

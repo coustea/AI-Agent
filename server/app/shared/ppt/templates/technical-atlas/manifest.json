@@ -1,0 +1,95 @@
+{
+  "id": "technical-atlas",
+  "name": "深色技术链路",
+  "version": "5.0.0",
+  "description": "非卡片化深色技术 PPT 模板，以终端标题、路径链路、机制拓扑、参数矩阵、诊断流程和知识网络组织内容，适合算法、系统、网络、数据库和工程机制讲解。",
+  "family": "technical",
+  "scheme": "dark",
+  "tags": ["技术", "算法", "系统", "链路", "拓扑", "机制", "工程", "计算机理论"],
+  "layouts": [
+    {
+      "id": "ta-cover",
+      "name": "技术封面",
+      "type": "cover",
+      "animation": "reveal",
+      "skeleton": "ta-cover"
+    },
+    {
+      "id": "ta-agenda",
+      "name": "技术路线链路",
+      "type": "agenda",
+      "animation": "trace",
+      "skeleton": "ta-route-line"
+    },
+    {
+      "id": "ta-learning-goals",
+      "name": "能力递进链",
+      "type": "learning_goals",
+      "animation": "build",
+      "skeleton": "ta-goal-ladder"
+    },
+    {
+      "id": "ta-hook-question",
+      "name": "问题终端",
+      "type": "hook_question",
+      "animation": "focus",
+      "skeleton": "ta-question"
+    },
+    {
+      "id": "ta-definition",
+      "name": "定义规格表",
+      "type": "definition",
+      "animation": "reveal",
+      "skeleton": "ta-definition"
+    },
+    {
+      "id": "ta-concept-boundary",
+      "name": "边界诊断线",
+      "type": "concept_boundary",
+      "animation": "compare",
+      "skeleton": "ta-boundary-lanes"
+    },
+    {
+      "id": "ta-mechanism-overview",
+      "name": "机制拓扑链",
+      "type": "mechanism_overview",
+      "animation": "trace",
+      "skeleton": "ta-topology-chain"
+    },
+    {
+      "id": "ta-knowledge-explain",
+      "name": "知识分层线",
+      "type": "knowledge_explain",
+      "animation": "reveal",
+      "skeleton": "ta-module-lines"
+    },
+    {
+      "id": "ta-comparison",
+      "name": "参数对照矩阵",
+      "type": "comparison",
+      "animation": "compare",
+      "skeleton": "ta-param-table"
+    },
+    {
+      "id": "ta-misconception",
+      "name": "误区诊断路径",
+      "type": "misconception",
+      "animation": "resolve",
+      "skeleton": "ta-debug-path"
+    },
+    {
+      "id": "ta-knowledge-map",
+      "name": "知识网络图",
+      "type": "knowledge_map",
+      "animation": "build",
+      "skeleton": "ta-map-network"
+    },
+    {
+      "id": "ta-closing",
+      "name": "最终信号",
+      "type": "closing",
+      "animation": "focus",
+      "skeleton": "ta-final-output"
+    }
+  ]
+}

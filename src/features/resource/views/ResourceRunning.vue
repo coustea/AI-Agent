@@ -579,9 +579,10 @@ void flowCanvasRef; void planningNodeRef
 
 
 
-// 尾部聚合阶段节点（PPT / 动画 / 视频），仅当选中时纳入，进入页面即展示
-const trailingStageNodes = computed(() => {
+// 聚合阶段节点：根据用户选中的智能体 ID 直接判断，确保进入页面即展示
+const aggregationNodes = computed(() => {
   const nodes: DagNodeState[] = []
+  // 直接使用 dagSelectedAgentIds 判断，不再依赖 DAG 节点是否已进入工作流
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(PPT_AGENT_ID))
   }
@@ -594,10 +595,7 @@ const trailingStageNodes = computed(() => {
   return nodes
 })
 
-// 聚合阶段节点（别名，指向尾部阶段）
-const aggregationNodes = computed(() => trailingStageNodes.value)
-
-// 是否展示聚合阶段（存在 PPT/动画 智能体时为 true）
+// 是否展示聚合阶段：只要用户选择了 PPT/动画/视频 中任意一个即为 true
 const showAggregationStage = computed(() => aggregationNodes.value.length > 0)
 
 // 资源整合节点状态
@@ -764,11 +762,19 @@ function getNodeStatusLabel(node: DagNodeState) {
 }
 
 // 卡片正文静态消息：只展示当前进度文案，不轮播、不显示冗长的完成文案
+// 过滤掉后端发送的 "X completed" / "X finished" 类冗余消息，只保留有意义的运行时消息
 function getNodeMessage(node: DagNodeState): string {
   if (node.status === 'success') return '已完成'
   if (node.status === 'failed') return node.currentMessage?.trim() || '执行失败'
   if (node.status === 'skipped') return '已跳过'
-  if (node.status === 'running') return node.currentMessage?.trim() || '运行中'
+  if (node.status === 'running') {
+    const msg = node.currentMessage?.trim()
+    // 过滤掉 "planning completed" / "content finished" 等冗余完成消息
+    if (msg && /^(planning|content|mindmap|quiz|code|reading|ppt|video|cartoon|bundle)\s+(completed|finished|done)/i.test(msg)) {
+      return '运行中'
+    }
+    return msg || '运行中'
+  }
   return '等待中'
 }
 
@@ -1437,7 +1443,7 @@ function isOutputRunning(id: string) {
 
 .agent-station-card {
   border-radius: var(--radius-card);
-  padding: 13px;
+  padding: 10px 11px;
   background: var(--generator-card-bg);
   border: var(--generator-card-border);
   cursor: pointer;
@@ -1446,7 +1452,7 @@ function isOutputRunning(id: string) {
 }
 
 .agent-station-card-v4 {
-  min-height: 132px;
+  min-height: 116px;
   display: flex;
   flex-direction: column;
 }
@@ -1476,16 +1482,17 @@ function isOutputRunning(id: string) {
 
 .station-header {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .station-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 13px;
-  background: rgba(219, 234, 254, 0.82);
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #f1f5fa;
+  border: 1px solid #d8e2ef;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1514,17 +1521,16 @@ function isOutputRunning(id: string) {
 }
 
 .station-live-log {
-  min-height: 44px;
-  margin: 10px 0;
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
-  border: 1px solid rgba(226, 232, 240, 0.86);
-  padding: 10px 12px;
+  min-height: 36px;
+  margin: 8px 0;
+  border-radius: 9px;
+  background: var(--workflow-surface-subtle);
+  border: 1px solid var(--workflow-border);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 9px;
+  gap: 6px;
   overflow: hidden;
   flex: 1;
 }
@@ -1538,24 +1544,18 @@ function isOutputRunning(id: string) {
 }
 
 .station-live-log.is-running {
-  border-color: rgba(59, 130, 246, 0.34);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, 0.08), transparent 42%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.82));
+  border-color: rgba(59, 130, 246, 0.22);
+  background: rgba(239, 246, 255, 0.5);
 }
 
 .station-live-log.is-success {
-  border-color: rgba(16, 185, 129, 0.34);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(16, 185, 129, 0.08), transparent 42%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 250, 0.84));
+  border-color: rgba(16, 185, 129, 0.22);
+  background: rgba(240, 253, 250, 0.5);
 }
 
 .station-live-log.is-failed {
-  border-color: rgba(239, 68, 68, 0.28);
-  background:
-    radial-gradient(circle at 12% 0%, rgba(239, 68, 68, 0.08), transparent 42%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(254, 242, 242, 0.86));
+  border-color: rgba(239, 68, 68, 0.22);
+  background: rgba(254, 242, 242, 0.5);
 }
 
 .station-live-current {
@@ -2452,12 +2452,12 @@ function isOutputRunning(id: string) {
 }
 
 .agent-station-card-v4 {
-  min-height: 132px;
+  min-height: 116px;
 }
 
 .station-live-log {
-  min-height: 44px;
-  margin: 10px 0;
+  min-height: 36px;
+  margin: 8px 0;
 }
 
 .review-station-row-v4 {
@@ -2719,7 +2719,7 @@ function isOutputRunning(id: string) {
 
 .agent-station-row-v4.base-agent-row,
 .agent-station-row-v4.aggregation-agent-row {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .agent-station-card,
@@ -2752,6 +2752,9 @@ function isOutputRunning(id: string) {
   border-color: var(--workflow-border);
   border-radius: 9px;
   background: var(--workflow-surface-subtle);
+  min-height: 36px;
+  margin: 8px 0;
+  padding: 8px 10px;
 }
 
 .station-live-dot {
@@ -2853,9 +2856,9 @@ function isOutputRunning(id: string) {
 .dual-flow-connector {
   position: relative;
   width: 50%;
-  height: 30px;
-  margin: 6px auto 0;
-  color: #aebccc;
+  height: 22px;
+  margin: 4px auto 0;
+  color: #c8ced6;
 }
 
 .dual-flow-connector::before,
@@ -3737,11 +3740,11 @@ function isOutputRunning(id: string) {
 .live-message-only {
   margin: 0 !important;
   color: var(--color-text);
-  font-size: 0.76rem !important;
+  font-size: 0.74rem !important;
   font-weight: var(--weight-bold) !important;
   line-height: 1.4 !important;
   display: -webkit-box;
-  -webkit-line-clamp: 3 !important;
+  -webkit-line-clamp: 2 !important;
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-family: var(--agent-body-font);

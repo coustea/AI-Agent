@@ -15,7 +15,7 @@
         <div class="header-action-group">
           <button class="btn-outline btn-sm" type="button" :disabled="isPlanning" @click="goHistory">
             <span>历史路径记录</span>
-            <span class="arrow-symbol">→</span>
+            <ph-arrow-right class="arrow-symbol" :size="12" weight="bold" />
           </button>
         </div>
       </header>
@@ -45,7 +45,7 @@
               ]"
             >
               <div class="node-geometric-dot">
-                <span v-if="currentPlanningIndex > index">✓</span>
+                <ph-check v-if="currentPlanningIndex > index" :size="14" weight="bold" />
                 <span v-else>{{ index + 1 }}</span>
               </div>
               <strong class="node-label">{{ step.title }}</strong>
@@ -122,7 +122,10 @@
             <div class="row-meta-pane">
               <span class="row-badge-num">01</span>
               <div class="row-headline-group">
-                <h3>学习主题</h3>
+                <h3 class="row-title-group">
+                  <ph-tag :size="16" class="title-icon" />
+                  <span>学习主题</span>
+                </h3>
                 <p>确定您要攻克或深入探究的核心科目或特定技术方向。</p>
               </div>
             </div>
@@ -144,7 +147,10 @@
             <div class="row-meta-pane">
               <span class="row-badge-num">02</span>
               <div class="row-headline-group">
-                <h3>学习目标</h3>
+                <h3 class="row-title-group">
+                  <ph-target :size="16" class="title-icon" />
+                  <span>学习目标</span>
+                </h3>
                 <p>说明您的学习动机、考察或应用重点以及期望达到的熟练度。</p>
               </div>
             </div>
@@ -172,7 +178,10 @@
             <div class="row-meta-pane">
               <span class="row-badge-num">03</span>
               <div class="row-headline-group">
-                <h3>当前基础</h3>
+                <h3 class="row-title-group">
+                  <ph-brain :size="16" class="title-icon" />
+                  <span>当前基础</span>
+                </h3>
                 <p>添加已掌握的先修知识，使规划出的路线起点更平滑贴合。</p>
               </div>
             </div>
@@ -185,7 +194,9 @@
                       class="custom-tag-node"
                   >
                     {{ item }}
-                    <button type="button" class="tag-close-trigger" @click="removeKnowledge(item)">×</button>
+                    <button type="button" class="tag-close-trigger" @click="removeKnowledge(item)">
+                      <ph-x :size="10" />
+                    </button>
                   </span>
                   <input
                       v-model.trim="knowledgeInput"
@@ -218,7 +229,10 @@
             <div class="row-meta-pane">
               <span class="row-badge-num">04</span>
               <div class="row-headline-group">
-                <h3>学习偏好</h3>
+                <h3 class="row-title-group">
+                  <ph-sliders :size="16" class="title-icon" />
+                  <span>学习偏好</span>
+                </h3>
                 <p>个性化偏好参数将被注入生成算法以调校路径走向。</p>
               </div>
             </div>
@@ -311,13 +325,17 @@
             </div>
 
             <div class="footer-buttons-cluster">
-              <button class="btn-outline" type="button" @click="resetForm">重置</button>
+              <button class="btn-outline" type="button" @click="resetForm">
+                <ph-arrow-clockwise :size="14" />
+                <span>重置</span>
+              </button>
               <button
                   class="btn-primary custom-premium-action"
                   type="button"
                   :disabled="!canSubmit || isSubmitting"
                   @click="handleSubmit"
               >
+                <ph-sparkle v-if="!isSubmitting" :size="14" weight="fill" />
                 <span v-if="!isSubmitting">生成学习路径</span>
                 <span v-else>正在规划结构...</span>
               </button>
@@ -531,30 +549,6 @@ const canSubmit = computed(() => {
   return form.topic.trim().length > 0 && form.goal.trim().length >= 8
 })
 
-const sceneLabel = computed(() => {
-  return sceneOptions.find(item => item.value === form.scene)?.label || '通用学习'
-})
-
-const paceLabel = computed(() => {
-  return paceOptions.find(item => item.value === form.pace)?.label || '正常节奏'
-})
-
-const granularityLabel = computed(() => {
-  return granularityOptions.find(item => item.value === form.granularity)?.label || '标准路径'
-})
-
-const knowledgeLabel = computed(() => {
-  return form.currentKnowledge.length ? `${form.currentKnowledge.length} 个知识点` : '未填写'
-})
-
-const previewTitle = computed(() => {
-  return form.topic || '等待填写学习主题'
-})
-
-const previewGoal = computed(() => {
-  return form.goal || '填写学习目标后，这里会显示本次路径规划意图。'
-})
-
 const submitStateTitle = computed(() => {
   if (!form.topic.trim()) return '请先填写学习主题'
   if (form.goal.trim().length < 8) return '请补充学习目标'
@@ -562,7 +556,7 @@ const submitStateTitle = computed(() => {
 })
 
 const submitStateDesc = computed(() => {
-  if (!form.topic.trim()) return '核心主题用作算法推演和确定路径大纲。'
+  if (!form.topic.trim()) return '核心主题用作算法推演 and 确定路径大纲。'
   if (form.goal.trim().length < 8) return '请至少输入 8 个字以上的目标诉求描述。'
   return '点击提交后，智能引擎将调取您的学术画像数据并实时输出骨架方案。'
 })
@@ -585,10 +579,6 @@ const currentPlanningStep = computed(() => {
 
 const currentPlanningTitle = computed(() => {
   return currentPlanningStep.value.title
-})
-
-const currentPlanningDesc = computed(() => {
-  return currentPlanningStep.value.desc
 })
 
 function autoResize() {
@@ -858,7 +848,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 /* 一体化顶层头部 */
@@ -866,10 +856,18 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: var(--space-2) var(--space-1) var(--space-1);
+  padding: var(--space-4) var(--space-1) var(--space-2);
 }
 .header-headline-group {
   max-width: 75%;
+}
+.agent-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 .workspace-brand-header h1 {
   font-size: var(--text-2xl);
@@ -885,7 +883,11 @@ onBeforeUnmount(() => {
 }
 .arrow-symbol {
   font-weight: var(--weight-extrabold);
-  margin-left: 2px;
+  margin-left: var(--space-1);
+  transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.header-action-group button:hover .arrow-symbol {
+  transform: translateX(3px);
 }
 
 /* ============================================================
@@ -916,11 +918,11 @@ onBeforeUnmount(() => {
 .templates-horizontal-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 .micro-template-gallery-card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1.5px solid var(--color-border-light);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   display: flex;
@@ -929,14 +931,19 @@ onBeforeUnmount(() => {
   text-align: left;
   cursor: pointer;
   box-sizing: border-box;
-  transition: var(--transition-fast);
-  height: 58px;
+  transition: var(--transition-base);
+  height: 64px;
 }
-.micro-template-gallery-card:hover:not(:disabled),
+.micro-template-gallery-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+}
 .micro-template-gallery-card.active {
   border-color: currentColor;
-  box-shadow: var(--shadow-sm);
-  background: #ffffff;
+  box-shadow: var(--shadow-md), 0 0 12px var(--color-primary-soft);
+  background: var(--color-surface);
+  transform: translateY(-2px);
 }
 .category-glow-dot {
   width: 6px;
@@ -944,6 +951,10 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
+}
+.micro-card-meta {
+  min-width: 0;
+  flex: 1;
 }
 .micro-card-meta strong {
   display: block;
@@ -957,13 +968,16 @@ onBeforeUnmount(() => {
   display: block;
   font-size: 11px;
   color: var(--color-text-secondary);
-  margin-top: 1px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .micro-template-gallery-card.teal { color: var(--color-primary); }
-.micro-template-gallery-card.blue { color: #5b6ee1; }
-.micro-template-gallery-card.amber { color: var(--color-warning); }
-.micro-template-gallery-card.violet { color: #8b5cf6; }
+.micro-template-gallery-card.blue { color: var(--cat-tutor); }
+.micro-template-gallery-card.amber { color: var(--cat-path); }
+.micro-template-gallery-card.violet { color: var(--cat-eval); }
 
 /* ============================================================
    核心工作表单面板
@@ -971,6 +985,11 @@ onBeforeUnmount(() => {
 .structured-form-panel {
   display: flex;
   flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-sm);
 }
 
 .form-grid-row {
@@ -987,13 +1006,15 @@ onBeforeUnmount(() => {
   gap: var(--space-3);
 }
 .row-badge-num {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   background: var(--color-primary-soft);
+  border: 1.5px solid var(--color-primary-border);
   color: var(--color-primary-text);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
   flex-shrink: 0;
@@ -1004,11 +1025,21 @@ onBeforeUnmount(() => {
   color: var(--color-text-strong);
   margin: 2px 0 0;
 }
+.row-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+.title-icon {
+  color: var(--color-primary-text);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
 .row-headline-group p {
-  margin: var(--space-1_5) 0 0;
+  margin: var(--space-2) 0 0;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  line-height: var(--leading-tight);
+  line-height: var(--leading-normal);
 }
 
 /* 控制台输入域 */
@@ -1016,14 +1047,14 @@ onBeforeUnmount(() => {
 .textarea-container-box textarea {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--text-sm);
   outline: none;
-  transition: var(--transition-fast);
+  transition: var(--transition-base);
 }
 .input-container-box input {
   height: 42px;
@@ -1032,14 +1063,14 @@ onBeforeUnmount(() => {
 .textarea-container-box textarea {
   padding: var(--space-3) var(--space-4);
   resize: none;
-  min-height: 90px;
+  min-height: 96px;
   line-height: var(--leading-normal);
 }
 .input-container-box input:focus,
 .textarea-container-box textarea:focus {
   border-color: var(--color-primary);
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(70, 184, 180, 0.12);
+  background: var(--color-page-bg);
+  box-shadow: 0 0 0 3px rgba(70, 184, 180, 0.15);
 }
 .textarea-info-bar {
   display: flex;
@@ -1051,12 +1082,18 @@ onBeforeUnmount(() => {
 
 /* 先修基础标签盒 */
 .tag-input-bezel-box {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
   padding: var(--space-1_5) var(--space-3);
   min-height: 42px;
   box-sizing: border-box;
+  transition: var(--transition-base);
+}
+.tag-input-bezel-box:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-page-bg);
+  box-shadow: 0 0 0 3px rgba(70, 184, 180, 0.15);
 }
 .tag-inner-flex {
   display: flex;
@@ -1076,28 +1113,58 @@ onBeforeUnmount(() => {
 }
 .custom-tag-node {
   background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-border);
   color: var(--color-primary-text);
-  padding: 2px var(--space-2);
+  padding: var(--space-0_5) var(--space-2_5);
   border-radius: 6px;
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  transition: var(--transition-fast);
+}
+.custom-tag-node:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
 }
 .tag-close-trigger {
   background: none;
   border: none;
   color: inherit;
   cursor: pointer;
-  font-size: var(--text-sm);
   padding: 0;
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+}
+.tag-close-trigger:hover {
+  opacity: 1;
+  transform: scale(1.1);
 }
 .quick-tags-container {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
+}
+.quick-tags-container .btn-pill {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-pill);
+  height: 28px;
+  padding: 0 var(--space-3);
+  cursor: pointer;
+  transition: var(--transition-base);
+}
+.quick-tags-container .btn-pill:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-strong);
+  transform: translateY(-1px);
 }
 .quick-tags-container .btn-pill.active {
   background-color: var(--color-primary-soft) !important;
@@ -1110,7 +1177,7 @@ onBeforeUnmount(() => {
 .preferences-matrix {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 .preference-flex-line {
   display: grid;
@@ -1124,37 +1191,85 @@ onBeforeUnmount(() => {
   color: var(--color-text-strong);
 }
 .segmented-pill-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  display: inline-flex;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  gap: 4px;
+}
+.segmented-pill-group .btn-pill {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  height: 28px;
+  transition: var(--transition-fast);
+  cursor: pointer;
+}
+.segmented-pill-group .btn-pill:hover {
+  color: var(--color-text-strong);
 }
 .segmented-pill-group .btn-pill.active {
-  background-color: var(--color-primary-soft) !important;
-  border-color: var(--color-primary) !important;
+  background-color: var(--color-surface) !important;
+  border: 1px solid var(--color-primary-border) !important;
   color: var(--color-primary-text) !important;
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-bold);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 多选重点专属高亮 */
+.focus-accent-group {
+  display: flex;
+  flex-wrap: wrap;
+  background: transparent;
+  border: none;
+  padding: 0;
+  gap: var(--space-2_5);
+}
+.focus-accent-group .btn-pill {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  height: auto;
+  cursor: pointer;
+  transition: var(--transition-base);
+}
+.focus-accent-group .btn-pill:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-strong);
+  transform: translateY(-1px);
+}
 .focus-accent-group .btn-pill.foundation.active {
   background-color: var(--cat-tutor-soft) !important;
   border-color: var(--cat-tutor) !important;
   color: var(--cat-tutor) !important;
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.08);
 }
 .focus-accent-group .btn-pill.key_points.active {
-  background-color: #EEF2FF !important;
-  border-color: #4F46E5 !important;
-  color: #4F46E5 !important;
+  background-color: var(--cat-path-soft) !important;
+  border-color: var(--cat-path) !important;
+  color: var(--cat-path) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.08);
 }
 .focus-accent-group .btn-pill.practice.active {
-  background-color: var(--color-warning-soft) !important;
-  border-color: var(--color-warning) !important;
-  color: var(--color-warning) !important;
+  background-color: var(--cat-resource-soft) !important;
+  border-color: var(--cat-resource) !important;
+  color: var(--cat-resource) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
 }
 .focus-accent-group .btn-pill.weakness.active {
-  background-color: var(--color-danger-soft) !important;
-  border-color: var(--color-danger) !important;
-  color: var(--color-danger) !important;
+  background-color: var(--cat-rose-soft) !important;
+  border-color: var(--cat-rose) !important;
+  color: var(--cat-rose) !important;
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.08);
 }
 
 /* ============================================================
@@ -1175,10 +1290,11 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
-  background: var(--color-bg);
+  background: rgba(242, 248, 247, 0.6);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3_5) var(--space-4);
   flex-grow: 1;
   max-width: 60%;
   transition: var(--transition-base);
@@ -1211,13 +1327,13 @@ onBeforeUnmount(() => {
   display: block;
   font-size: var(--text-sm);
   color: var(--color-text-strong);
-  margin-bottom: 2px;
+  margin-bottom: var(--space-1);
 }
 .dashboard-inline-meta p {
   margin: 0;
   font-size: 11.5px;
   color: var(--color-text-secondary);
-  line-height: 1.35;
+  line-height: var(--leading-tight);
 }
 .dashboard-inline-meta .lack {
   color: var(--color-danger);
@@ -1227,8 +1343,10 @@ onBeforeUnmount(() => {
 
 /* 引擎就绪动态高亮（清透冰川工作室质感） */
 .ai-readiness-inline-dashboard.is-ready {
-  background: var(--color-primary-soft);
+  background: rgba(216, 241, 240, 0.7);
+  backdrop-filter: blur(8px);
   border-color: var(--color-primary-border);
+  box-shadow: 0 4px 16px rgba(70, 184, 180, 0.1);
 }
 .ai-readiness-inline-dashboard.is-ready .pulse-ring {
   background: var(--color-primary);
@@ -1258,21 +1376,22 @@ onBeforeUnmount(() => {
 
 /* 生成路径主行动按钮 */
 .custom-premium-action {
-  background: linear-gradient(135deg, #46B8B4, #36A7E0) !important;
-  color: #FFFFFF !important;
+  background: linear-gradient(135deg, var(--color-text-strong), var(--color-primary-text)) !important;
+  color: #FCFFFF !important;
   font-weight: var(--weight-bold) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-shadow: 0 6px 16px rgba(54, 167, 224, 0.25) !important;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 6px 16px rgba(32, 95, 103, 0.16) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  transition: var(--transition-base) !important;
 }
 .custom-premium-action:hover:not(:disabled) {
-  background: linear-gradient(135deg, #4FC7C3, #43B4ED) !important;
-  box-shadow: 0 8px 20px rgba(54, 167, 224, 0.35) !important;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, var(--color-primary-text), var(--color-primary-hover)) !important;
+  box-shadow: 0 8px 24px rgba(32, 95, 103, 0.24) !important;
+  transform: translateY(-1.5px);
 }
 .custom-premium-action:active:not(:disabled) {
   transform: translateY(0.5px);
-  box-shadow: 0 4px 10px rgba(54, 167, 224, 0.2) !important;
+  box-shadow: 0 4px 10px rgba(32, 95, 103, 0.12) !important;
 }
 
 /* ============================================================
@@ -1306,19 +1425,29 @@ onBeforeUnmount(() => {
 /* ============================================================
    智能引擎构建动画状态卡片
    ============================================================ */
+.planning-card-wrapper {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-md);
+  max-width: 860px;
+  margin: var(--space-4) auto;
+}
 .planning-engine-head {
   text-align: center;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-8);
 }
 .status-badge {
   display: inline-block;
-  padding: 4px var(--space-2_5);
+  padding: 4px var(--space-3);
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: var(--weight-bold);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-primary-border);
 }
 .status-badge.pulse-animation {
   animation: pulseOpacity 2s infinite ease-in-out;
@@ -1330,7 +1459,7 @@ onBeforeUnmount(() => {
 .planning-engine-head h2 {
   font-size: var(--text-xl);
   color: var(--color-text-strong);
-  margin: var(--space-2) 0 4px;
+  margin: var(--space-3) 0 var(--space-1);
 }
 .planning-engine-head p {
   margin: 0;
@@ -1342,14 +1471,14 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--space-6);
-  padding: 0 var(--space-4);
+  margin-bottom: var(--space-8);
+  padding: 0 var(--space-6);
 }
 .orbit-line-track {
   position: absolute;
-  top: 15px;
-  left: var(--space-8);
-  right: var(--space-8);
+  top: 18px;
+  left: var(--space-10);
+  right: var(--space-10);
   height: 2px;
   background: var(--color-border-light);
   z-index: 1;
@@ -1360,18 +1489,19 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2_5);
   flex: 1;
 }
 .node-geometric-dot {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   background: var(--color-surface);
   border: 2px solid var(--color-border);
   border-radius: 50%;
   display: grid;
   place-items: center;
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
   font-weight: var(--weight-bold);
   color: var(--color-text-faint);
   transition: var(--transition-base);
@@ -1384,6 +1514,7 @@ onBeforeUnmount(() => {
 .orbit-node-item.active .node-geometric-dot {
   border-color: currentColor;
   box-shadow: 0 0 0 4px var(--color-primary-soft);
+  transform: scale(1.05);
 }
 .orbit-node-item.done .node-geometric-dot,
 .orbit-node-item.active .node-geometric-dot {
@@ -1393,15 +1524,15 @@ onBeforeUnmount(() => {
 .orbit-node-item.done .node-label,
 .orbit-node-item.active .node-label {
   color: var(--color-text-strong);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-bold);
 }
 .orbit-node-item.teal { color: var(--color-primary); }
-.orbit-node-item.blue { color: #5b6ee1; }
-.orbit-node-item.amber { color: var(--color-warning); }
-.orbit-node-item.violet { color: #8b5cf6; }
+.orbit-node-item.blue { color: var(--cat-tutor); }
+.orbit-node-item.amber { color: var(--cat-path); }
+.orbit-node-item.violet { color: var(--cat-eval); }
 
 .progress-bar-block {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-6);
 }
 .progress-bar-header {
   display: flex;
@@ -1419,24 +1550,24 @@ onBeforeUnmount(() => {
 }
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), #5b6ee1);
+  background: linear-gradient(90deg, var(--color-primary), var(--cat-tutor));
   border-radius: var(--radius-pill);
   transition: width 0.4s ease;
 }
 
 .planning-logs-area {
-  background: var(--color-bg);
+  background: #0f2427;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  padding: var(--space-4);
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-2_5);
 }
 .log-row-item {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2_5);
 }
 .log-dot-indicator {
   width: 5px;
@@ -1445,8 +1576,9 @@ onBeforeUnmount(() => {
   border-radius: 50%;
 }
 .log-message-text {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--color-text-secondary);
+  color: #a4cbd1;
 }
 .log-slide-enter-active, .log-slide-leave-active { transition: all 0.25s ease; }
 .log-slide-enter-from { opacity: 0; transform: translateY(5px); }
