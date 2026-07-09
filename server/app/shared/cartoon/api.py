@@ -1,66 +1,132 @@
-"""FastAPI routes for cartoon video generation.
+"""HTTP API for CartoonAgent video generation.
 
-This router is used by the frontend to generate a HyperFrames-based animated
-teaching video for a learning-path node.
+接口：
+  POST /generate
+  GET  /{task_id}/markdown
+  GET  /{task_id}/html
+  GET  /{task_id}/video
+  GET  /{task_id}/audit
 
-The request is intentionally aligned with CartoonVideoRequest:
-    style / depth / pace / visuals
-
-Deprecated parameters such as voice, focus and video_length_seconds are removed.
+完整路径（通过 routes.py 挂载）：
+  POST /api/v1/ai/cartoon/generate
+  GET  /api/v1/ai/cartoon/{task_id}/markdown
+  GET  /api/v1/ai/cartoon/{task_id}/html
+  GET  /api/v1/ai/cartoon/{task_id}/video
+  GET  /api/v1/ai/cartoon/{task_id}/audit
 """
 
 from __future__ import annotations
 
-from typing import Literal
+import json
+from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.auth.security import get_current_user
-from app.infra.models import User
-from app.infra.response import HttpResponse
-from app.shared.cartoon.service import CartoonService
+from app.infra.logging import get_logger
+from app.shared.cartoon.cartoon_agent import CartoonGenerationError
+from app.shared.cartoon.service import CartoonVideoService
 
-router = APIRouter()
+logger = get_logger(__name__)
+
+router = APIRouter(tags=["cartoon-video"])
+service = CartoonVideoService()
 
 
-class PathCartoonRequest(BaseModel):
-    learning_need: str = Field(
-        min_length=1,
-        description="学习需求或要讲解的高校计算机理论知识点",
+class CartoonGeneratePayload(BaseModel):
+    learning_need: str = Field(min_length=1, description="用户要讲解的知识点或学习问题")
+    profile: dict[str, Any] | str | None = Field(default=None, description="用户画像或学习偏好")
+    duration: int | None = Field(default=None, ge=60, le=600, description="目标视频时长（秒）")
+
+
+class CartoonGenerateResult(BaseModel):
+    task_id: str
+    title: str
+    duration: float
+    scene_count: int
+    markdown_url: str
+    html_url: str
+    video_url: str
+    audit_url: str
+
+
+@router.post("/generate", response_model=CartoonGenerateResult)
+async def generate_cartoon_video(payload: CartoonGeneratePayload) -> CartoonGenerateResult:
+    task_id = uuid4().hex
+
+    try:
+        result = await service.generate(
+            task_id=task_id,
+            learning_need=payload.learning_need,
+            profile=payload.profile,
+            duration=payload.duration,
+        )
+    except CartoonGenerationError as exc:
+        logger.warning("Cartoon 生成失败: task_id=%s error=%s", task_id, exc)
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": str(exc),
+                "problems": exc.audit.problems if exc.audit else [],
+            },
+        ) from exc
+    except Exception as exc:
+        logger.exception("Cartoon 生成异常: task_id=%s", task_id)
+        raise HTTPException(status_code=500, detail=f"动画视频生成失败: {exc}") from exc
+
+    return CartoonGenerateResult(
+        task_id=task_id,
+        title=result.title,
+        duration=result.duration,
+        scene_count=result.scene_count,
+        markdown_url=f"/api/v1/ai/cartoon/{task_id}/markdown",
+        html_url=f"/api/v1/ai/cartoon/{task_id}/html",
+        video_url=f"/api/v1/ai/cartoon/{task_id}/video",
+        audit_url=f"/api/v1/ai/cartoon/{task_id}/audit",
     )
-    path_id: str = Field(min_length=1, description="学习路径的唯一标识")
-    node_id: str = Field(min_length=1, description="路径中具体节点/步骤的唯一标识")
-    style: Literal["diagram", "minimal", "dark_tech", "chalkboard"] = "diagram"
-    depth: Literal["overview", "standard", "deep"] = "standard"
-    pace: Literal["fast", "normal", "slow"] = "normal"
-    visuals: Literal["clean", "balanced", "detailed"] = "balanced"
 
 
-@router.post("/path", summary="为学习路径节点生成计算机理论知识动画讲解视频")
-async def generate_path_cartoon(
-    req: PathCartoonRequest,
-    current_user: User = Depends(get_current_user),
-) -> dict:
-    """为路径规划模块生成 HyperFrames 动画 HTML 和 MP4 视频。
-
-    输出目录：
-        static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/
-
-    生成目标：
-        面向高校计算机本科理论课程，优先展示机制变化过程，
-        例如状态转移、表格变换、结构构建、数据流动、调度时间线。
-    """
-    service = CartoonService()
-    result = await service.generate_path_video(
-        username=current_user.username,
-        path_id=req.path_id,
-        node_id=req.node_id,
-        learning_need=req.learning_need,
-        style=req.style,
-        depth=req.depth,
-        pace=req.pace,
-        visuals=req.visuals,
-        user_id=current_user.id,
+@router.get("/{task_id}/markdown")
+async def get_cartoon_markdown(task_id: str) -> FileResponse:
+    path = service.resolve_markdown(task_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Markdown 文件不存在")
+    return FileResponse(
+        path=path,
+        filename="cartoon.md",
+        media_type="text/markdown; charset=utf-8",
     )
-    return HttpResponse.success(data=result)
+
+
+@router.get("/{task_id}/html")
+async def get_cartoon_html(task_id: str) -> FileResponse:
+    path = service.resolve_html(task_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="HTML 文件不存在")
+    return FileResponse(
+        path=path,
+        filename="index.html",
+        media_type="text/html; charset=utf-8",
+    )
+
+
+@router.get("/{task_id}/video")
+async def get_cartoon_video(task_id: str) -> FileResponse:
+    path = service.resolve_video(task_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+    return FileResponse(
+        path=path,
+        filename=path.name,
+        media_type="video/mp4",
+    )
+
+
+@router.get("/{task_id}/audit")
+async def get_cartoon_audit(task_id: str) -> dict[str, Any]:
+    path = service.resolve_audit(task_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Audit 文件不存在")
+    return json.loads(path.read_text(encoding="utf-8"))

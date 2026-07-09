@@ -11,7 +11,7 @@ class VisualTracer {
     this._events.push({
       id: `evt-${this._step}`, step: this._step, domain: this._domain,
       visualizerType: this._visualizerType, type: eventType,
-      state: { structure: stateStructure }, targets: opts.targets || [],
+      state: { structure: structuredClone(stateStructure) }, targets: opts.targets ? structuredClone(opts.targets) : [],
       message: opts.message || null, line: opts.line || null, formula: opts.formula || null,
     });
     this._step++;

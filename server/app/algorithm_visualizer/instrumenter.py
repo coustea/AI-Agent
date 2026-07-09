@@ -124,6 +124,9 @@ _SYSTEM_PROMPT = """\
 4. **代码必须可执行** — 无语法错误，import 正确
 5. **tracer 必须在模块级创建** — 不要在函数内部创建 tracer 实例
 6. **代码末尾必须调用 tracer.dump()** — 输出 trace.json
+7. **完整保留测试数据** — 如果原始代码中有 `root = TreeNode(...)` 等测试数据，绝不允许对其进行任何删减或修改！大模型禁止为了节省篇幅而缩短测试数据。
+8. **树结构处理策略** — 使用 `TreeTracer` 时，必须定义如 `build_tree_nodes(root)` 的辅助函数完整遍历树结构，生成包含 `id`, `label`, `children` 属性的节点列表再传入 `init_tree`。对于基于数组的树（如堆），需通过循环按父子索引（2*i+1等）构造包含 `children` 的 `nodes`。
+9. **图结构处理策略** — 使用 `GraphTracer` 时，必须通过辅助逻辑将图转为带 `edges` 的 `nodes` 列表（如 `{"id":"0", "label":"0", "edges":[{"to":"1"}]}`）。
 
 ## 输出格式
 将插装后的完整代码放在 markdown 代码块中：

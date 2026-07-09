@@ -15,7 +15,6 @@ from app.shared.research.search_tools import (
     WebFetchArgs,
     duckduckgo_search,
     duckduckgo_instant_answer,
-    searxng_search,
     wikipedia_search,
     arxiv_search,
     github_search,
@@ -33,7 +32,6 @@ logger = get_logger(__name__)
 SEARCH_TOOL_NAMES = (
     "duckduckgo_search",
     "duckduckgo_instant_answer",
-    "searxng_search",
     "wikipedia_search",
     "arxiv_search",
     "github_search",
@@ -50,7 +48,6 @@ FETCH_TOOL_NAMES = (
 RESEARCH_TOOL_ACTIONS: dict[str, str] = {
     "duckduckgo_search": "检索公开网页",
     "duckduckgo_instant_answer": "查询百科摘要",
-    "searxng_search": "检索聚合搜索源",
     "wikipedia_search": "检索百科资料",
     "arxiv_search": "检索学术论文",
     "github_search": "检索开源项目",
@@ -89,12 +86,6 @@ def build_search_tools() -> list[Tool]:
             "DuckDuckGo 即时答案和定义（免费）",
             SearchQueryArgs,
             _safe_handler(duckduckgo_instant_answer, "duckduckgo_instant_answer"),
-        ),
-        Tool(
-            "searxng_search",
-            "SearXNG 聚合搜索（免费，聚合多个引擎）",
-            SearchQueryArgs,
-            _safe_handler(searxng_search, "searxng_search"),
         ),
         Tool(
             "wikipedia_search",

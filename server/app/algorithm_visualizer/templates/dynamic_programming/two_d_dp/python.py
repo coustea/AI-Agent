@@ -1,19 +1,96 @@
 def min_path_sum(grid):
+    if not grid or not grid[0]:
+        return 0, [], []
     m, n = len(grid), len(grid[0])
     dp = [[0] * n for _ in range(m)]
     dp[0][0] = grid[0][0]
     for i in range(1, m):
-        dp[i][0] = dp[i-1][0] + grid[i][0]
+        dp[i][0] = dp[i - 1][0] + grid[i][0]
     for j in range(1, n):
-        dp[0][j] = dp[0][j-1] + grid[0][j]
+        dp[0][j] = dp[0][j - 1] + grid[0][j]
     for i in range(1, m):
         for j in range(1, n):
-            dp[i][j] = min(dp[i-1][j], dp[i][j-1]) + grid[i][j]
-    return dp[m-1][n-1]
+            dp[i][j] = min(dp[i - 1][j], dp[i][j - 1]) + grid[i][j]
+    path = []
+    i, j = m - 1, n - 1
+    while i > 0 or j > 0:
+        path.append((i, j))
+        if i == 0:
+            j -= 1
+        elif j == 0:
+            i -= 1
+        elif dp[i - 1][j] <= dp[i][j - 1]:
+            i -= 1
+        else:
+            j -= 1
+    path.append((0, 0))
+    path.reverse()
+    return dp[m - 1][n - 1], dp, path
+
+def max_path_sum(grid):
+    if not grid or not grid[0]:
+        return 0
+    m, n = len(grid), len(grid[0])
+    dp = [[0] * n for _ in range(m)]
+    dp[0][0] = grid[0][0]
+    for i in range(1, m):
+        dp[i][0] = dp[i - 1][0] + grid[i][0]
+    for j in range(1, n):
+        dp[0][j] = dp[0][j - 1] + grid[0][j]
+    for i in range(1, m):
+        for j in range(1, n):
+            dp[i][j] = max(dp[i - 1][j], dp[i][j - 1]) + grid[i][j]
+    return dp[m - 1][n - 1]
+
+def unique_paths(m, n):
+    dp = [[0] * n for _ in range(m)]
+    for i in range(m):
+        dp[i][0] = 1
+    for j in range(n):
+        dp[0][j] = 1
+    for i in range(1, m):
+        for j in range(1, n):
+            dp[i][j] = dp[i - 1][j] + dp[i][j - 1]
+    return dp[m - 1][n - 1]
+
+def unique_paths_with_obstacles(obstacle_grid):
+    m, n = len(obstacle_grid), len(obstacle_grid[0])
+    dp = [[0] * n for _ in range(m)]
+    dp[0][0] = 1 if obstacle_grid[0][0] == 0 else 0
+    for i in range(1, m):
+        dp[i][0] = dp[i - 1][0] if obstacle_grid[i][0] == 0 else 0
+    for j in range(1, n):
+        dp[0][j] = dp[0][j - 1] if obstacle_grid[0][j] == 0 else 0
+    for i in range(1, m):
+        for j in range(1, n):
+            if obstacle_grid[i][j] == 0:
+                dp[i][j] = dp[i - 1][j] + dp[i][j - 1]
+            else:
+                dp[i][j] = 0
+    return dp[m - 1][n - 1]
 
 grid = [
-    [1, 3, 1],
-    [1, 5, 1],
-    [4, 2, 1]
+    [1, 3, 5, 9, 2, 1],
+    [2, 1, 3, 4, 8, 3],
+    [5, 2, 6, 7, 1, 4],
+    [3, 4, 1, 2, 3, 5],
+    [2, 1, 4, 1, 2, 1]
 ]
-min_path_sum(grid)
+result, dp_table, path = min_path_sum(grid)
+assert result > 0
+
+max_result = max_path_sum(grid)
+assert max_result >= result
+
+assert unique_paths(3, 7) == 28
+assert unique_paths(1, 1) == 1
+
+obstacle_grid = [
+    [0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 0, 0, 1],
+    [0, 0, 0, 0, 0, 0]
+]
+paths = unique_paths_with_obstacles(obstacle_grid)
+assert paths >= 1

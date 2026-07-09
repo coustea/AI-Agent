@@ -18,13 +18,18 @@ LANGUAGES: List[Dict[str, str]] = [
     {"key": "c", "label": "C", "extension": "c"},
 ]
 
-# 语言 key → 模板文件名
+# 语言 key → 干净模板文件名
 _LANGUAGE_FILE_MAP: Dict[str, str] = {
     "python": "python.py",
     "javascript": "js.js",
     "cpp": "cpp.cpp",
     "java": "java.java",
     "c": "c.c",
+}
+
+# 语言 key → 预插装模板文件名（仅 Python 支持）
+_INSTRUMENTED_FILE_MAP: Dict[str, str] = {
+    "python": "python_instrumented.py",
 }
 
 # 算法元信息注册表
@@ -691,7 +696,7 @@ def get_algorithm_info(algorithm_key: str) -> Dict[str, Any]:
 
 
 def get_template_code(algorithm_key: str, language: str) -> str:
-    """读取并返回指定算法+语言的模板代码。"""
+    """读取并返回指定算法+语言的干净模板代码（无 tracer 调用）。"""
     info = get_algorithm_info(algorithm_key)
     if language not in info["supported_languages"]:
         raise ValueError(f"算法 {algorithm_key} 不支持语言 {language}")
@@ -703,6 +708,27 @@ def get_template_code(algorithm_key: str, language: str) -> str:
     filepath = os.path.join(_TEMPLATES_DIR, info["domain"], algorithm_key, filename)
     if not os.path.isfile(filepath):
         raise ValueError(f"模板文件不存在: {algorithm_key}/{language}")
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def get_instrumented_template_code(algorithm_key: str, language: str) -> str | None:
+    """读取预插装模板代码（含 tracer 调用）。
+
+    如果预插装文件不存在，返回 None（调用方应回退到 LLM 插装）。
+    """
+    info = get_algorithm_info(algorithm_key)
+    if language not in info["supported_languages"]:
+        return None
+
+    filename = _INSTRUMENTED_FILE_MAP.get(language)
+    if not filename:
+        return None
+
+    filepath = os.path.join(_TEMPLATES_DIR, info["domain"], algorithm_key, filename)
+    if not os.path.isfile(filepath):
+        return None
 
     with open(filepath, "r", encoding="utf-8") as f:
         return f.read()

@@ -14,6 +14,7 @@ from app.shared.video.schemas import (
     VideoMaterialDigest,
     VideoRequest,
     VideoStyleDecision,
+    scene_draft_for,
 )
 from app.shared.video.visual_contracts import get_visual_contract
 
@@ -34,6 +35,9 @@ class SceneWriterAgent:
         contract: SceneContract,
         style: VideoStyleDecision,
     ) -> SceneDraft:
+        # 根据 visual_type 获取强类型 schema
+        typed_schema = scene_draft_for(contract.visual_type)
+
         prompt = _PROMPT_PATH.read_text(encoding="utf-8").format(
             request=request.model_dump_json(indent=2),
             digest=digest.model_dump_json(indent=2),
@@ -53,16 +57,20 @@ class SceneWriterAgent:
             contract.index, contract.role, contract.visual_type,
         )
         started = time.perf_counter()
-        draft = await self.llm.ainvoke_json(SceneDraft, prompt)
+        draft = await self.llm.ainvoke_json(typed_schema, prompt)
         elapsed = int((time.perf_counter() - started) * 1000)
         logger.info(
             "Video 场景编写 LLM 完成: index=%d narration_len=%d visual_beats=%d elapsed_ms=%d",
             contract.index, len(draft.narration), len(draft.visual_beats), elapsed,
         )
-        return draft.model_copy(
-            update={
-                "scene_id": contract.scene_id,
-                "index": contract.index,
-                "visual_type": contract.visual_type,
-            }
+        # 统一转为 SceneDraft（visual 已是强类型实例，model_dump 后可赋给 dict 字段）
+        visual_data = draft.visual.model_dump() if hasattr(draft.visual, "model_dump") else draft.visual
+        return SceneDraft(
+            scene_id=contract.scene_id,
+            index=contract.index,
+            title=draft.title,
+            narration=draft.narration,
+            visual_type=contract.visual_type,
+            visual=visual_data,
+            visual_beats=draft.visual_beats,
         )

@@ -1,5 +1,5 @@
 // 路径节点内可生成的辅助资源类型
-export type PathResourceType = 'content' | 'mindmap' | 'code' | 'reading' | 'ppt' | 'cartoon'
+export type PathResourceType = 'mindmap' | 'code' | 'reading' | 'ppt' | 'cartoon'
 
 // 路径的阶段结构（如：基础篇 → 进阶篇 → 实战篇）
 export interface LearningPathStage {

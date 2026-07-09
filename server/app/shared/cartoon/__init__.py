@@ -1,8 +1,5 @@
-"""Deterministic animated teaching videos rendered with HyperFrames.
+"""Cartoon video generation module — CartoonAgent pipeline."""
 
-Pipeline:
-    one structured storyboard
-    → concurrent Edge TTS with word boundaries
-    → deterministic HTML/SVG/GSAP compiler
-    → HyperFrames lint and MP4 render
-"""
+from app.shared.cartoon.cartoon_agent import CartoonGenerationError
+
+__all__ = ["CartoonGenerationError"]

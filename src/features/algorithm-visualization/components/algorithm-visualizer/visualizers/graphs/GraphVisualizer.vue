@@ -63,6 +63,22 @@ const edgesList = computed(() => {
 
   const connections: Array<{ u: string; v: string }> = []
   
+  let hasExplicitEdges = false
+  nodes.forEach(n => {
+    if (Array.isArray(n.edges)) {
+      hasExplicitEdges = true
+      n.edges.forEach((edge: any) => {
+        if (edge && edge.to !== undefined) {
+          connections.push({ u: String(n.id), v: String(edge.to) })
+        }
+      })
+    }
+  })
+
+  if (hasExplicitEdges) {
+    return connections
+  }
+
   // If node count is 6 (standard search graph size), define the default cyclic test graph edges:
   if (nodes.length === 6) {
     const defaultEdges = [

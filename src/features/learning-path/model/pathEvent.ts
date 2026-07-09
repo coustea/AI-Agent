@@ -21,9 +21,3 @@ export interface PathEvent {
   data: Record<string, unknown>
   timestamp: number
 }
-
-// 规划结束的终态事件集合（completed 或 failed 后停止监听）
-export const PATH_TERMINAL_EVENTS: Set<PathEventName> = new Set([
-  'planning.completed',
-  'planning.failed',
-])

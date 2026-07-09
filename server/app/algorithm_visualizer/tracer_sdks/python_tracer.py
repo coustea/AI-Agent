@@ -3,6 +3,7 @@
  * 替代旧 PYTHON_TRACER_SDK 字符串常量。
  * 输出 trace.json 而非 __TRACER__: stdout 协议。"""
 
+import copy
 import json
 from typing import Any, Dict, List, Optional
 
@@ -31,8 +32,8 @@ class VisualTracer:
             "domain": self._domain,
             "visualizerType": self._visualizer_type,
             "type": event_type,
-            "state": {"structure": state_structure},
-            "targets": targets or [],
+            "state": {"structure": copy.deepcopy(state_structure)},
+            "targets": copy.deepcopy(targets) if targets else [],
             "message": message,
             "line": line,
             "formula": formula,

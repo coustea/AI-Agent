@@ -1,35 +1,95 @@
 {
   "id": "technical-atlas",
-  "name": "技术图谱",
-  "version": "2.0.0",
-  "description": "暗色网格、路径信号与工程标注构成的克制技术教学模板",
+  "name": "深色技术链路",
+  "version": "5.0.0",
+  "description": "非卡片化深色技术 PPT 模板，以终端标题、路径链路、机制拓扑、参数矩阵、诊断流程和知识网络组织内容，适合算法、系统、网络、数据库和工程机制讲解。",
   "family": "technical",
   "scheme": "dark",
-  "tags": ["架构", "代码", "协议", "数据流", "系统", "工程"],
-  "fallback_layout": "statement-split",
+  "tags": ["技术", "算法", "系统", "链路", "拓扑", "机制", "工程", "计算机理论"],
   "layouts": [
-    {"id":"cover-orbit","name":"坐标封面","shapes":["statement"],"roles":["cover"],"skeleton":"hero","animation":"build","point_capacity":3,"step_capacity":0},
-    {"id":"cover-index","name":"系统索引","shapes":["concept"],"roles":["cover"],"skeleton":"hero-index","animation":"reveal","point_capacity":4,"step_capacity":0},
-    {"id":"section-marker","name":"模块切换","shapes":["statement","concept"],"roles":["section"],"skeleton":"section","animation":"focus","point_capacity":3,"step_capacity":0},
-    {"id":"question-stage","name":"问题终端","shapes":["statement","quiz"],"roles":["hook","practice"],"skeleton":"question","animation":"resolve","point_capacity":4,"step_capacity":0},
-    {"id":"statement-poster","name":"状态大字","shapes":["statement"],"roles":["explain","hook"],"skeleton":"poster","animation":"focus","point_capacity":4,"step_capacity":0},
-    {"id":"statement-split","name":"信号分栏","shapes":["statement"],"roles":["explain","case"],"skeleton":"split","animation":"reveal","point_capacity":6,"step_capacity":0},
-    {"id":"concept-lens","name":"核心节点","shapes":["concept"],"roles":["explain"],"skeleton":"lens","animation":"focus","point_capacity":5,"step_capacity":0},
-    {"id":"concept-annotated","name":"工程批注","shapes":["concept"],"roles":["explain","derive"],"skeleton":"annotated","animation":"reveal","point_capacity":6,"step_capacity":0},
-    {"id":"sequence-path","name":"请求链路","shapes":["sequence"],"roles":["explain","derive"],"skeleton":"path","animation":"trace","point_capacity":0,"step_capacity":6},
-    {"id":"sequence-stair","name":"状态递进","shapes":["sequence"],"roles":["derive","case"],"skeleton":"stair","animation":"build","point_capacity":0,"step_capacity":5},
-    {"id":"comparison-split","name":"方案对照","shapes":["comparison"],"roles":["explain","case"],"skeleton":"compare","animation":"compare","point_capacity":4,"step_capacity":0},
-    {"id":"comparison-axis","name":"权衡坐标","shapes":["comparison"],"roles":["derive","summary"],"skeleton":"axis","animation":"compare","point_capacity":4,"step_capacity":0},
-    {"id":"system-map","name":"拓扑地图","shapes":["system"],"roles":["explain","case"],"skeleton":"map","animation":"trace","point_capacity":0,"step_capacity":0},
-    {"id":"system-layers","name":"系统分层","shapes":["system"],"roles":["derive","case"],"skeleton":"layers","animation":"build","point_capacity":0,"step_capacity":0},
-    {"id":"code-trace","name":"执行追踪","shapes":["code"],"roles":["derive","case"],"skeleton":"code-trace","animation":"trace","point_capacity":5,"step_capacity":5},
-    {"id":"code-terminal","name":"终端结果","shapes":["code"],"roles":["explain","practice"],"skeleton":"code-output","animation":"build","point_capacity":5,"step_capacity":4},
-    {"id":"formula-build","name":"模型推导","shapes":["formula"],"roles":["derive","explain"],"skeleton":"formula","animation":"build","point_capacity":6,"step_capacity":5},
-    {"id":"misconception-reveal","name":"故障诊断","shapes":["comparison","quiz"],"roles":["practice","case"],"skeleton":"misconception","animation":"resolve","point_capacity":4,"step_capacity":0},
-    {"id":"summary-map","name":"系统复盘","shapes":["concept","sequence","statement"],"roles":["summary"],"skeleton":"summary","animation":"reveal","point_capacity":6,"step_capacity":5},
-    {"id":"closing-line","name":"链路收束","shapes":["statement"],"roles":["closing"],"skeleton":"closing","animation":"focus","point_capacity":3,"step_capacity":0},
-    {"id":"hierarchy-tree","name":"层级树","shapes":["hierarchy"],"roles":["explain","derive"],"skeleton":"hierarchy","animation":"build","point_capacity":0,"step_capacity":0},
-    {"id":"timeline-horizontal","name":"时间线","shapes":["timeline"],"roles":["explain","case"],"skeleton":"timeline","animation":"trace","point_capacity":0,"step_capacity":0},
-    {"id":"matrix-grid","name":"矩阵表","shapes":["matrix"],"roles":["explain","derive"],"skeleton":"matrix","animation":"reveal","point_capacity":0,"step_capacity":0}
+    {
+      "id": "ta-cover",
+      "name": "技术封面",
+      "type": "cover",
+      "animation": "reveal",
+      "skeleton": "ta-cover"
+    },
+    {
+      "id": "ta-agenda",
+      "name": "技术路线链路",
+      "type": "agenda",
+      "animation": "trace",
+      "skeleton": "ta-route-line"
+    },
+    {
+      "id": "ta-learning-goals",
+      "name": "能力递进链",
+      "type": "learning_goals",
+      "animation": "build",
+      "skeleton": "ta-goal-ladder"
+    },
+    {
+      "id": "ta-hook-question",
+      "name": "问题终端",
+      "type": "hook_question",
+      "animation": "focus",
+      "skeleton": "ta-question"
+    },
+    {
+      "id": "ta-definition",
+      "name": "定义规格表",
+      "type": "definition",
+      "animation": "reveal",
+      "skeleton": "ta-definition"
+    },
+    {
+      "id": "ta-concept-boundary",
+      "name": "边界诊断线",
+      "type": "concept_boundary",
+      "animation": "compare",
+      "skeleton": "ta-boundary-lanes"
+    },
+    {
+      "id": "ta-mechanism-overview",
+      "name": "机制拓扑链",
+      "type": "mechanism_overview",
+      "animation": "trace",
+      "skeleton": "ta-topology-chain"
+    },
+    {
+      "id": "ta-knowledge-explain",
+      "name": "知识分层线",
+      "type": "knowledge_explain",
+      "animation": "reveal",
+      "skeleton": "ta-module-lines"
+    },
+    {
+      "id": "ta-comparison",
+      "name": "参数对照矩阵",
+      "type": "comparison",
+      "animation": "compare",
+      "skeleton": "ta-param-table"
+    },
+    {
+      "id": "ta-misconception",
+      "name": "误区诊断路径",
+      "type": "misconception",
+      "animation": "resolve",
+      "skeleton": "ta-debug-path"
+    },
+    {
+      "id": "ta-knowledge-map",
+      "name": "知识网络图",
+      "type": "knowledge_map",
+      "animation": "build",
+      "skeleton": "ta-map-network"
+    },
+    {
+      "id": "ta-closing",
+      "name": "最终信号",
+      "type": "closing",
+      "animation": "focus",
+      "skeleton": "ta-final-output"
+    }
   ]
 }

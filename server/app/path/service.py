@@ -76,7 +76,7 @@ from app.profile.service import get_profile_service
 logger = get_logger(__name__)
 
 # 辅助资源类型集合
-AUX_RESOURCE_TYPES = {"content", "mindmap", "code", "reading", "ppt", "cartoon"}
+AUX_RESOURCE_TYPES = {"mindmap", "code", "reading", "ppt", "cartoon"}
 
 # 节点状态常量
 STARTED_NODE_STATUSES = {"in_progress", "remediation", "reinforced"}
@@ -371,7 +371,7 @@ class PathService:
                 LearningPathResourceDTO.from_model(r) for r in resources
             ],
             current_round=await self._get_latest_round(node.id),
-            quiz_available=current is not None,
+            quiz_available=await self._has_quiz_questions(node.id),
         )
 
     async def generate_node_resource(self, user_id: int, node_id: int, resource_type: str) -> LearningPathResourceDTO:
@@ -419,6 +419,28 @@ class PathService:
         return LearningPathResourceDTO.from_model(resource)
 
     # ── 测验 ────────────────────────────────────────────────────────────────
+
+    async def get_node_questions(self, user_id: int, node_id: int) -> PathQuizRoundResponse | None:
+        """获取最新一轮已有测验题目（不重新生成）。无题目时返回 None。"""
+        logger.info("[PathService] 获取已有测验题目: user_id=%s node_id=%s", user_id, node_id)
+        node = await self._must_get_node(user_id, node_id)
+        self._ensure_node_accessible(node)
+
+        round_no = await self._get_latest_round(node.id)
+        if round_no == 0:
+            return None
+
+        questions = await self._get_round_questions(node.id, round_no)
+        if not questions:
+            return None
+
+        current_tutorial = await self._get_current_tutorial(node.id)
+        return PathQuizRoundResponse(
+            node_id=node.id,
+            tutorial_id=current_tutorial.id if current_tutorial else None,
+            round_no=round_no,
+            questions=[LearningPathQuestionDTO.from_model(q) for q in questions],
+        )
 
     async def generate_node_questions(self, user_id: int, node_id: int) -> PathQuizRoundResponse:
         """生成节点测验题目 — 5 道选择题。"""
@@ -665,6 +687,14 @@ class PathService:
         )
         questions = list((await self.session.exec(stmt)).all())
         return max((q.round_no for q in questions), default=0)
+
+    async def _has_quiz_questions(self, node_id: int) -> bool:
+        """检查节点是否已有测验题目（至少一轮完整 5 道题）。"""
+        round_no = await self._get_latest_round(node_id)
+        if round_no == 0:
+            return False
+        questions = await self._get_round_questions(node_id, round_no)
+        return len(questions) >= PATH_QUIZ_SIZE
 
     async def _get_round_questions(
         self, node_id: int, round_no: int

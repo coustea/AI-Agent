@@ -73,7 +73,7 @@
     <main class="page-content">
       <router-view v-slot="{ Component }">
         <transition name="fade-slide" mode="out-in">
-          <keep-alive include="ResourceGenerator,Tutor,LearningPathOverview,Home">
+          <keep-alive include="ResourceGenerator,Tutor,PathPlanOverview,Home">
             <component :is="Component" :key="route.path" />
           </keep-alive>
         </transition>
@@ -161,7 +161,7 @@ const activePath = computed(() => {
   if (current.startsWith('/resource-generator') || current.startsWith('/resource-detail') || current.startsWith('/ai/resources/history')) {
     return '/resource-generator'
   }
-  if (current.startsWith('/path-planner') || current.startsWith('/path-resource') || current.startsWith('/path-resource-history')) {
+  if (current.startsWith('/path-planner')) {
     return '/path-planner'
   }
   if (current.startsWith('/tutor')) {

@@ -1,0 +1,84 @@
+[data-step] {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.slide.visible [data-step] {
+  animation: tw-reveal 0.54s var(--ease-teach) forwards;
+  animation-delay: calc(var(--step, 0) * 72ms + 50ms);
+}
+
+.slide[data-animation="focus"].visible .tw-question-focus,
+.slide[data-animation="focus"].visible .tw-closing-statement {
+  animation: tw-focus 0.72s var(--ease-teach) both;
+}
+
+.slide[data-animation="trace"].visible .tw-route-step,
+.slide[data-animation="trace"].visible .tw-flow-step {
+  animation: tw-trace 0.58s var(--ease-teach) forwards;
+  animation-delay: calc(var(--step, 0) * 82ms + 50ms);
+}
+
+.slide[data-animation="compare"].visible .tw-table,
+.slide[data-animation="compare"].visible .tw-boundary-row,
+.slide[data-animation="compare"].visible .tw-mis-step {
+  animation: tw-build 0.58s var(--ease-teach) both;
+  animation-delay: calc(var(--step, 0) * 72ms + 50ms);
+}
+
+.slide[data-animation="build"].visible .tw-map-branch,
+.slide[data-animation="build"].visible .tw-goal-step {
+  animation: tw-build 0.58s var(--ease-teach) both;
+  animation-delay: calc(var(--step, 0) * 72ms + 50ms);
+}
+
+@keyframes tw-reveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tw-focus {
+  from {
+    opacity: 0.82;
+    transform: translateX(-14px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes tw-trace {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tw-build {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-step],
+  .slide.visible [data-step],
+  .slide[data-animation] * {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}

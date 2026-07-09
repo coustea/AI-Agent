@@ -1054,7 +1054,7 @@ async def node_generate_resource(state: LearnState) -> dict:
     session = state["session"]
     node = state["node"]
     path = state["path"]
-    resource_type = state.get("resource_type", "content")
+    resource_type = state.get("resource_type", "mindmap")
     current_tutorial = state.get("current_tutorial")
 
     if current_tutorial is None:
@@ -1093,7 +1093,7 @@ async def node_persist_resource(state: LearnState) -> dict:
     path = state["path"]
     user_id = state["user_id"]
     current_tutorial = state.get("current_tutorial")
-    resource_type = state.get("resource_type", "content")
+    resource_type = state.get("resource_type", "mindmap")
     result = state["resource_result"]
 
     existing_count = await _count_resources(session, node.id, resource_type)

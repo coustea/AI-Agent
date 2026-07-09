@@ -1,0 +1,95 @@
+{
+  "id": "teaching-white",
+  "name": "清晰教学白板",
+  "version": "5.0.0",
+  "description": "非卡片化教学 PPT 模板，以白板板书、路径轴、能力阶梯、机制链路、对比矩阵和知识结构图组织内容，适合高校课程知识点讲解。",
+  "family": "teaching",
+  "scheme": "light",
+  "tags": ["教学", "白板", "板书", "讲义", "理论", "概念", "机制", "知识结构"],
+  "layouts": [
+    {
+      "id": "tw-cover",
+      "name": "白板封面",
+      "type": "cover",
+      "animation": "reveal",
+      "skeleton": "tw-cover"
+    },
+    {
+      "id": "tw-agenda",
+      "name": "学习路线轴",
+      "type": "agenda",
+      "animation": "trace",
+      "skeleton": "tw-route"
+    },
+    {
+      "id": "tw-learning-goals",
+      "name": "能力阶梯",
+      "type": "learning_goals",
+      "animation": "build",
+      "skeleton": "tw-ladder"
+    },
+    {
+      "id": "tw-hook-question",
+      "name": "课堂大问题",
+      "type": "hook_question",
+      "animation": "focus",
+      "skeleton": "tw-question"
+    },
+    {
+      "id": "tw-definition",
+      "name": "定义板书",
+      "type": "definition",
+      "animation": "reveal",
+      "skeleton": "tw-definition"
+    },
+    {
+      "id": "tw-concept-boundary",
+      "name": "概念边界轴",
+      "type": "concept_boundary",
+      "animation": "compare",
+      "skeleton": "tw-boundary-axis"
+    },
+    {
+      "id": "tw-mechanism-overview",
+      "name": "机制链路",
+      "type": "mechanism_overview",
+      "animation": "trace",
+      "skeleton": "tw-flow-chain"
+    },
+    {
+      "id": "tw-knowledge-explain",
+      "name": "讲义分层展开",
+      "type": "knowledge_explain",
+      "animation": "reveal",
+      "skeleton": "tw-explain-lines"
+    },
+    {
+      "id": "tw-comparison",
+      "name": "对比矩阵",
+      "type": "comparison",
+      "animation": "compare",
+      "skeleton": "tw-matrix"
+    },
+    {
+      "id": "tw-misconception",
+      "name": "误区修正路径",
+      "type": "misconception",
+      "animation": "resolve",
+      "skeleton": "tw-debug-path"
+    },
+    {
+      "id": "tw-knowledge-map",
+      "name": "知识结构图",
+      "type": "knowledge_map",
+      "animation": "build",
+      "skeleton": "tw-knowledge-map"
+    },
+    {
+      "id": "tw-closing",
+      "name": "结论收束",
+      "type": "closing",
+      "animation": "focus",
+      "skeleton": "tw-closing"
+    }
+  ]
+}

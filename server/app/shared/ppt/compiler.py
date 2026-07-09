@@ -409,7 +409,7 @@ def _extract_comparison(content: str) -> list[ComparisonSide]:
             points=current_points[:6],
         ))
 
-    return sides[:2]
+    return sides[:4]
 
 
 def _extract_nodes(content: str) -> list[SystemNode]:
