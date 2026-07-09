@@ -1,179 +1,164 @@
-"""动画服务 — 处理视频生成的内部 Python 调用。
+"""Application service for CartoonAgent video generation.
 
-提供 CartoonService 类，封装 CartoonPipeline 供不同模块
-（path、resource、chat）使用，提供简化接口和一致的输出目录管理。
-
-注意：
-- 返回给前端的结果只包含 URL 和元信息。
-- 不返回服务端本地 Path，避免暴露服务器目录结构。
+service 负责：
+1. 创建输出目录；
+2. 调用 CartoonAgent；
+3. 调用 HyperFrames lint/render；
+4. 暴露产物路径。
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import json
+import os
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from app.config import (
-    chat_video_url,
-    path_node_cartoon_url,
-    resource_cartoon_url,
-    user_chat_videos_dir,
-    user_path_node_cartoon_dir,
-    user_resource_cartoon_dir,
+from app.infra.logging import get_logger
+from app.shared.cartoon.cartoon_agent import (
+    CartoonAgent,
+    CartoonGenerationError,
+    CartoonGenerationResult,
 )
-from app.shared.cartoon.pipeline import CartoonPipeline
-from app.shared.cartoon.schemas import CartoonVideoRequest
+from app.shared.cartoon.renderer import CartoonVideoRenderer
+
+logger = get_logger(__name__)
 
 
-StyleOption = Literal["diagram", "minimal", "dark_tech", "chalkboard"]
-DepthOption = Literal["overview", "standard", "deep"]
-PaceOption = Literal["fast", "normal", "slow"]
-VisualsOption = Literal["clean", "balanced", "detailed"]
+@dataclass(frozen=True)
+class CartoonVideoResult:
+    task_id: str
+    title: str
+    duration: float
+    scene_count: int
+    output_dir: Path
+    markdown_path: Path
+    html_path: Path
+    video_path: Path | None
+    audit_path: Path
 
 
-class CartoonService:
-    """处理 HyperFrames 动画内部生成的服务。"""
-
-    def __init__(self, pipeline: CartoonPipeline | None = None) -> None:
-        self.pipeline = pipeline or CartoonPipeline()
-
-    async def generate_path_video(
+class CartoonVideoService:
+    def __init__(
         self,
         *,
-        username: str,
-        path_id: str,
-        node_id: str,
-        learning_need: str,
-        style: StyleOption = "diagram",
-        depth: DepthOption = "standard",
-        pace: PaceOption = "normal",
-        visuals: VisualsOption = "balanced",
-        profile: dict[str, Any] | str | None = None,
-        user_id: int | None = None,
-    ) -> dict[str, str | float]:
-        """为学习路径节点生成动画视频。
-
-        输出目录:
-            static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/
-        """
-        output_dir = user_path_node_cartoon_dir(username, path_id, node_id)
-
-        req = CartoonVideoRequest(
-            learning_need=learning_need,
-            profile=profile
-            or f"用户 {user_id or 0} 学习路径 {path_id} 节点 {node_id}",
-            style=style,
-            depth=depth,
-            pace=pace,
-            visuals=visuals,
-            output_dir=output_dir,
+        base_output_dir: Path | None = None,
+        agent: CartoonAgent | None = None,
+        renderer: CartoonVideoRenderer | None = None,
+    ) -> None:
+        self.base_output_dir = base_output_dir or Path(
+            os.getenv("CARTOON_OUTPUT_DIR", "storage/cartoon")
         )
+        self.agent = agent or CartoonAgent()
+        self.renderer = renderer or CartoonVideoRenderer()
 
-        artifact = await self.pipeline.generate(req)
-
-        return {
-            "title": artifact.brief.title,
-            "subject": artifact.brief.subject,
-            "total_duration": artifact.brief.total_duration,
-            "html_url": path_node_cartoon_url(
-                username,
-                path_id,
-                node_id,
-                "index.html",
-            ),
-            "video_url": path_node_cartoon_url(
-                username,
-                path_id,
-                node_id,
-                "video.mp4",
-            ),
-            "theme": artifact.theme,
-            "scene_count": str(artifact.scene_count),
-        }
-
-    async def generate_resource_video(
+    async def generate(
         self,
         *,
-        username: str,
-        resource_id: str,
+        task_id: str,
         learning_need: str,
-        style: StyleOption = "diagram",
-        depth: DepthOption = "standard",
-        pace: PaceOption = "normal",
-        visuals: VisualsOption = "balanced",
         profile: dict[str, Any] | str | None = None,
-        user_id: int | None = None,
-    ) -> dict[str, str | float]:
-        """为多智能体资源包生成动画视频。
+        duration: int | None = None,
+    ) -> CartoonVideoResult:
+        output_dir = self.resolve_output_dir(task_id)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        输出目录:
-            static/{username}/resources/{resource_id}/cartoon/
-        """
-        output_dir = user_resource_cartoon_dir(username, resource_id)
+        logger.info("Cartoon 生成开始: task_id=%s", task_id)
 
-        req = CartoonVideoRequest(
+        # Step 1: Generate via CartoonAgent
+        result = await self.agent.generate(
             learning_need=learning_need,
-            profile=profile or f"用户 {user_id or 0} 生成资源 {resource_id}",
-            style=style,
-            depth=depth,
-            pace=pace,
-            visuals=visuals,
             output_dir=output_dir,
+            profile=profile,
         )
 
-        artifact = await self.pipeline.generate(req)
+        # Step 2: Run HyperFrames lint
+        lint_result = await self.renderer.lint(output_dir)
+        if not lint_result.passed:
+            logger.warning(
+                "HyperFrames lint 失败: %s",
+                "; ".join(lint_result.problems[:5]),
+            )
+            audit_data = {
+                "passed": False,
+                "problems": lint_result.problems,
+                "stage": "hyperframes_lint",
+            }
+            (output_dir / "audit.json").write_text(
+                json.dumps(audit_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            raise CartoonGenerationError(
+                f"HyperFrames lint 失败: {'; '.join(lint_result.problems[:5])}",
+                audit=lint_result,
+            )
 
-        return {
-            "title": artifact.brief.title,
-            "subject": artifact.brief.subject,
-            "total_duration": artifact.brief.total_duration,
-            "html_url": resource_cartoon_url(username, resource_id, "index.html"),
-            "video_url": resource_cartoon_url(username, resource_id, "video.mp4"),
-            "theme": artifact.theme,
-            "scene_count": str(artifact.scene_count),
-        }
+        # Step 3: Render MP4
+        video_path: Path | None = None
+        try:
+            render_result = await self.renderer.render(output_dir)
+            video_path = render_result.video_path
+        except Exception as exc:
+            logger.exception("Cartoon MP4 渲染失败")
+            raise CartoonGenerationError(f"MP4 渲染失败: {exc}") from exc
 
-    async def generate_chat_video(
-        self,
-        *,
-        username: str,
-        session_id: str,
-        message_id: str,
-        learning_need: str,
-        style: StyleOption = "diagram",
-        depth: DepthOption = "standard",
-        pace: PaceOption = "normal",
-        visuals: VisualsOption = "balanced",
-        profile: dict[str, Any] | str | None = None,
-        user_id: int | None = None,
-    ) -> dict[str, str | float]:
-        """在聊天机器人辅导对话中内联生成动画视频。
-
-        输出目录:
-            static/{username}/chat/{session_id}/videos/{message_id}/
-        """
-        output_dir = user_chat_videos_dir(username, session_id, message_id)
-
-        req = CartoonVideoRequest(
-            learning_need=learning_need,
-            profile=profile
-            or f"用户 {user_id or 0} 在会话 {session_id} 消息 {message_id}",
-            style=style,
-            depth=depth,
-            pace=pace,
-            visuals=visuals,
-            output_dir=output_dir,
+        logger.info(
+            "Cartoon 生成完成: task_id=%s title=%s duration=%.1fs video=%s",
+            task_id,
+            result.title,
+            result.duration,
+            video_path,
         )
 
-        artifact = await self.pipeline.generate(req)
+        return CartoonVideoResult(
+            task_id=task_id,
+            title=result.title,
+            duration=result.duration,
+            scene_count=result.scene_count,
+            output_dir=output_dir,
+            markdown_path=result.markdown_path,
+            html_path=result.html_path,
+            video_path=video_path,
+            audit_path=result.audit_path,
+        )
 
-        return {
-            "title": artifact.brief.title,
-            "subject": artifact.brief.subject,
-            "total_duration": artifact.brief.total_duration,
-            "html_url": (
-                f"/static/{username}/chat/{session_id}/videos/{message_id}/index.html"
-            ),
-            "video_url": chat_video_url(username, session_id, message_id),
-            "theme": artifact.theme,
-            "scene_count": str(artifact.scene_count),
-        }
+    def resolve_output_dir(self, task_id: str) -> Path:
+        clean_id = self._safe_task_id(task_id)
+        return self.base_output_dir / clean_id
+
+    def resolve_markdown(self, task_id: str) -> Path:
+        return self.resolve_output_dir(task_id) / "cartoon.md"
+
+    def resolve_html(self, task_id: str) -> Path:
+        return self.resolve_output_dir(task_id) / "index.html"
+
+    def resolve_video(self, task_id: str) -> Path:
+        output_dir = self.resolve_output_dir(task_id)
+        candidates = [
+            output_dir / "output.mp4",
+            output_dir / "video.mp4",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        mp4_files = sorted(output_dir.rglob("*.mp4"))
+        return mp4_files[0] if mp4_files else output_dir / "output.mp4"
+
+    def resolve_audit(self, task_id: str) -> Path:
+        return self.resolve_output_dir(task_id) / "audit.json"
+
+    def delete_task(self, task_id: str) -> bool:
+        output_dir = self.resolve_output_dir(task_id)
+        if not output_dir.exists():
+            return False
+        shutil.rmtree(output_dir)
+        return True
+
+    @staticmethod
+    def _safe_task_id(task_id: str) -> str:
+        value = "".join(ch for ch in task_id if ch.isalnum() or ch in {"-", "_"})
+        if not value:
+            raise ValueError("task_id 无效")
+        return value[:80]
