@@ -25,7 +25,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.algorithm_visualizer.instrumenter import get_instrumenter
-from app.algorithm_visualizer.template_registry import get_algorithm_info, get_template_code
+from app.algorithm_visualizer.template_registry import (
+    get_algorithm_info,
+    get_instrumented_template_code,
+    get_template_code,
+)
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -99,14 +103,27 @@ async def run_visualization_in_sandbox(
 
     visualizer_type = expected_visualizer_type
 
-    # ── 自动插装 ──────────────────────────────────────────────────────
-    # 如果代码不包含 tracer 调用，自动插装
-    instrumented_code = await _auto_instrument(
+    # ── 快速路径：用户代码与模板一致 → 直接使用预插装代码 ──────────────
+    instrumented_code = _try_pre_instrumented(
         code=code,
         algorithm=algorithm,
-        algorithm_info=algorithm_info,
         language=language,
     )
+
+    if instrumented_code is not None:
+        logger.info(
+            "[Visualizer] 用户代码与模板一致，使用预插装代码: algorithm=%s",
+            algorithm,
+        )
+    else:
+        # ── 自动插装 ──────────────────────────────────────────────────
+        # 如果代码不包含 tracer 调用，自动插装
+        instrumented_code = await _auto_instrument(
+            code=code,
+            algorithm=algorithm,
+            algorithm_info=algorithm_info,
+            language=language,
+        )
 
     # ── 自动追加 tracer.dump() ────────────────────────────────────────
     final_code = _ensure_dump_call(instrumented_code, language)
@@ -192,6 +209,45 @@ async def run_visualization_in_sandbox(
             "summary": f"执行成功，共产生 {len(events)} 步可视化操作。",
             "stdout": run_result["stdout"],
         }
+
+
+# ---------------------------------------------------------------------------
+# 快速路径：预插装模板
+# ---------------------------------------------------------------------------
+
+def _try_pre_instrumented(
+    code: str,
+    algorithm: str,
+    language: str,
+) -> str | None:
+    """如果用户代码与模板干净代码一致，返回预插装代码；否则返回 None。
+
+    这使得内置模板可以零等待直接运行，无需 LLM 插装。
+    """
+    # 仅 Python 支持预插装
+    if language != "python":
+        return None
+
+    # 读取模板干净代码
+    try:
+        clean_template = get_template_code(algorithm, language)
+    except ValueError:
+        return None
+
+    # 比较用户提交的代码与模板干净代码（去除首尾空白后比较）
+    if code.strip() != clean_template.strip():
+        return None
+
+    # 代码一致，读取预插装版本
+    instrumented = get_instrumented_template_code(algorithm, language)
+    if instrumented is None:
+        logger.info(
+            "[Visualizer] 用户代码与模板一致，但无预插装文件: algorithm=%s",
+            algorithm,
+        )
+        return None
+
+    return instrumented
 
 
 # ---------------------------------------------------------------------------

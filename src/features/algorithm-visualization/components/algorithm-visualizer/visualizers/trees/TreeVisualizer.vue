@@ -65,7 +65,7 @@ const treeData = computed(() => {
   const links: Array<{ from: string; to: string; tone?: string }> = []
   const hasParent = new Set<string>()
 
-  // 1. Try to find links using left/right properties
+  // 1. Try to find links using left/right/children properties
   nodes.forEach(n => {
     const idStr = String(n.id)
     if (n.left !== undefined && n.left !== null && String(n.left) !== '') {
@@ -77,6 +77,13 @@ const treeData = computed(() => {
       const rightId = String(n.right)
       links.push({ from: idStr, to: rightId, tone: n.tone === 'visited' && nodeMap.get(rightId)?.tone === 'visited' ? 'visited' : 'default' })
       hasParent.add(rightId)
+    }
+    if (Array.isArray(n.children)) {
+      n.children.forEach((childId: any) => {
+        const cId = String(childId)
+        links.push({ from: idStr, to: cId, tone: n.tone === 'visited' && nodeMap.get(cId)?.tone === 'visited' ? 'visited' : 'default' })
+        hasParent.add(cId)
+      })
     }
   })
 

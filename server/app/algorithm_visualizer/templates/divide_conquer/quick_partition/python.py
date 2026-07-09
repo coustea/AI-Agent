@@ -1,29 +1,54 @@
-def quick_select(nums, k):
-    def partition(left, right, pivot_idx):
-        pivot = nums[pivot_idx]
-        # Move pivot to end
-        nums[pivot_idx], nums[right] = nums[right], nums[pivot_idx]
-        store_idx = left
-        for i in range(left, right):
-            if nums[i] < pivot:
-                nums[store_idx], nums[i] = nums[i], nums[store_idx]
-                store_idx += 1
-        # Move pivot to its final place
-        nums[right], nums[store_idx] = nums[store_idx], nums[right]
-        return store_idx
-        
-    def select(left, right, k_smallest):
-        if left == right:
-            return nums[left]
-        pivot_idx = left
-        pivot_idx = partition(left, right, pivot_idx)
-        if k_smallest == pivot_idx:
-            return nums[k_smallest]
-        elif k_smallest < pivot_idx:
-            return select(left, pivot_idx - 1, k_smallest)
-        else:
-            return select(pivot_idx + 1, right, k_smallest)
-            
-    return select(0, len(nums) - 1, len(nums) - k)
+def partition(arr, lo, hi):
+    pivot = arr[hi]
+    i = lo
+    for j in range(lo, hi):
+        if arr[j] <= pivot:
+            arr[i], arr[j] = arr[j], arr[i]
+            i += 1
+    arr[i], arr[hi] = arr[hi], arr[i]
+    return i
 
-quick_select([3, 2, 1, 5, 6, 4], 2)
+def three_way_partition(arr, lo, hi):
+    pivot = arr[lo]
+    lt, i, gt = lo, lo, hi
+    while i <= gt:
+        if arr[i] < pivot:
+            arr[lt], arr[i] = arr[i], arr[lt]
+            lt += 1
+            i += 1
+        elif arr[i] > pivot:
+            arr[gt], arr[i] = arr[i], arr[gt]
+            gt -= 1
+        else:
+            i += 1
+    return lt, gt
+
+def quickselect(arr, k):
+    lo, hi = 0, len(arr) - 1
+    while lo <= hi:
+        if lo == hi:
+            return arr[lo]
+        pivot_idx = partition(arr, lo, hi)
+        if k == pivot_idx:
+            return arr[k]
+        elif k < pivot_idx:
+            hi = pivot_idx - 1
+        else:
+            lo = pivot_idx + 1
+    return arr[lo]
+
+def find_median(arr):
+    n = len(arr)
+    if n % 2 == 1:
+        return quickselect(arr[:], n // 2)
+    return (quickselect(arr[:], n // 2 - 1) + quickselect(arr[:], n // 2)) / 2
+
+arr = [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60]
+pivot_idx = partition(arr[:], 0, len(arr) - 1)
+
+arr2 = [5, 3, 8, 3, 9, 3, 2, 3, 7]
+lt, gt = three_way_partition(arr2, 0, len(arr2) - 1)
+
+kth = quickselect([89, 45, 23, 78, 12, 56, 91, 34, 67, 3], 4)
+
+median = find_median([89, 45, 23, 78, 12, 56, 91, 34, 67])
