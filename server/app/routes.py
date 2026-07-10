@@ -3,6 +3,7 @@
 集中管理所有 API 路由的注册，按业务模块分组挂载到不同的 URL 前缀下。
 """
 
+# 本模块统一注册所有业务路由到 FastAPI 应用，并挂载到对应 URL 前缀
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -31,6 +32,7 @@ from app.quiz.api import router as quiz_router
 from app.shared.cartoon.api import router as cartoon_router
 
 
+# 将各业务模块的路由挂载到 FastAPI 应用，按前缀与标签分组
 def install_routes(app: FastAPI) -> None:
     """向 FastAPI 应用注册所有业务路由。
 

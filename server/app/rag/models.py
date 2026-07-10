@@ -14,6 +14,7 @@ RetrievalType = Literal["vector", "bm25", "hybrid", ""]
 CHROMA_COLLECTION = "langchain"
 
 
+# 单条检索结果的数据模型
 class RetrievedChunk(BaseModel):
     """单条检索结果。"""
 
@@ -42,6 +43,7 @@ class RetrievedChunk(BaseModel):
     chunk_index: int | None = None
 
 
+# 检索结果容器（含状态、查询、chunk 列表与耗时）
 class RetrievalResult(BaseModel):
     """检索结果容器。
 

@@ -52,6 +52,7 @@ _CHINESE_SEPARATORS = [
 ]
 
 
+# 将代码块替换为占位符，避免被切分破坏
 def _protect_code_blocks(text: str) -> tuple[str, dict[str, str]]:
     """保护代码块：替换为占位符，分割后恢复。
 
@@ -74,6 +75,7 @@ def _protect_code_blocks(text: str) -> tuple[str, dict[str, str]]:
     return safe_text, placeholder_map
 
 
+# 将占位符还原为原始代码块
 def _restore_code_blocks(text: str, placeholder_map: dict[str, str]) -> str:
     """恢复代码块占位符为原始代码。"""
     for placeholder, code in placeholder_map.items():
@@ -84,6 +86,7 @@ def _restore_code_blocks(text: str, placeholder_map: dict[str, str]) -> str:
 # ============ Markdown 分割 ============
 
 
+# Markdown 切分：保护代码 → 标题分割 → 递归切分 → 恢复 → 合并短块
 def _split_markdown(doc: Document) -> list[Document]:
     """Markdown 文档分割：标题结构分割 + 递归字符分割。
 
@@ -98,10 +101,10 @@ def _split_markdown(doc: Document) -> list[Document]:
     if not text or not text.strip():
         return []
 
-    # 1. 保护代码块
+    # 1. 保护代码块为占位符
     safe_text, placeholder_map = _protect_code_blocks(text)
 
-    # 2. 标题分割
+    # 2. 按 h1/h2/h3 标题结构分割
     headers_to_split_on = [
         ("#", "h1"),
         ("##", "h2"),
@@ -115,13 +118,13 @@ def _split_markdown(doc: Document) -> list[Document]:
     try:
         md_chunks = md_splitter.split_text(safe_text)
     except Exception:
-        # 回退：按段落分割
+        # 标题分割失败时回退按段落切分
         md_chunks = []
         for para in safe_text.split("\n\n"):
             if para.strip():
                 md_chunks.append(Document(page_content=para.strip(), metadata={}))
 
-    # 3. 构建 heading_path
+    # 3. 还原代码块并构建 heading_path 章节路径
     chunks_with_heading: list[tuple[str, str]] = []
     for chunk in md_chunks:
         content = chunk.page_content
@@ -140,7 +143,7 @@ def _split_markdown(doc: Document) -> list[Document]:
 
         chunks_with_heading.append((content, heading_path))
 
-    # 4. 递归字符分割处理超长块
+    # 4. 用递归字符切分器处理超长块（中文分隔符）
     char_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_MAX_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
@@ -168,12 +171,13 @@ def _split_markdown(doc: Document) -> list[Document]:
                 )
             )
 
-    # 5. 合并过短块（仅同 source + 同 heading_path）
+    # 5. 合并同章节相邻短块
     final_chunks = _merge_short_chunks(final_chunks)
 
     return final_chunks
 
 
+# 合并相邻短块（仅同 source 同 heading_path，避免跨章节）
 def _merge_short_chunks(chunks: list[Document]) -> list[Document]:
     """合并过短块。
 
@@ -230,6 +234,7 @@ def _merge_short_chunks(chunks: list[Document]) -> list[Document]:
 # ============ PDF 分割 ============
 
 
+# PDF 切分：递归字符切分（中文分隔符），heading_path 置空
 def _split_pdf(doc: Document) -> list[Document]:
     """PDF 文档分割：递归字符分割（中文分隔符）。"""
     splitter = RecursiveCharacterTextSplitter(
@@ -246,6 +251,7 @@ def _split_pdf(doc: Document) -> list[Document]:
 
 # ============ 分割器注册表 ============
 
+# 按扩展名分派的切分器注册表
 _SPLITTERS: dict[str, Any] = {
     ".md": _split_markdown,
     ".pdf": _split_pdf,
@@ -255,6 +261,7 @@ _SPLITTERS: dict[str, Any] = {
 # ============ 公共接口 ============
 
 
+# 公共接口：按文件类型选择切分器并补充 chunk 元数据
 def split_documents(docs: list[Document]) -> list[Document]:
     """批量切分文档列表，按文件类型自动选择分割策略。
 
@@ -271,6 +278,7 @@ def split_documents(docs: list[Document]) -> list[Document]:
             source = doc.metadata.get("source", "")
             file_type = Path(source).suffix.lower() if source else ""
 
+        # 取对应类型切分器，无则回退默认递归切分
         splitter = _SPLITTERS.get(file_type)
         if splitter is None:
             logger.warning(
@@ -294,10 +302,11 @@ def split_documents(docs: list[Document]) -> list[Document]:
             source = str(chunk.metadata.get("source", ""))
             local_index = source_chunk_counters.get(source, 0)
 
+            # 写入文档内与全局 chunk 序号
             chunk.metadata["chunk_index"] = local_index
             chunk.metadata["global_chunk_index"] = global_chunk_counter
 
-            # PyMuPDFLoader 通常会提供 page，这里只保证字段存在
+            # 规范 page 字段为 int（PDF loader 可能缺省）
             if "page" in chunk.metadata:
                 try:
                     chunk.metadata["page"] = int(chunk.metadata["page"])

@@ -52,6 +52,7 @@ _RRF_K = 60                # RRF 平滑常数
 _FINAL_TOP_K_LIMIT = 8     # 对外最多返回 8 条
 
 
+# 索引健康状态模型
 class IndexHealth(BaseModel):
     """索引健康状态。"""
 
@@ -64,6 +65,7 @@ class IndexHealth(BaseModel):
 # ============ 辅助函数 ============
 
 
+# 安全将值转为 int，失败返回 None
 def _safe_int(value: Any) -> int | None:
     try:
         if value is None or value == "":
@@ -73,6 +75,7 @@ def _safe_int(value: Any) -> int | None:
         return None
 
 
+# 将向量距离转换为 0~1 相似度分数（距离越小越相似）
 def _distance_to_score(distance: float | None) -> float | None:
     """把向量距离转成 0~1 左右的相似度分数。
 
@@ -87,6 +90,7 @@ def _distance_to_score(distance: float | None) -> float | None:
         return None
 
 
+# 按 chunk_id 去重，保留首次出现的结果
 def _dedupe_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     """按 chunk_id 去重，保留先出现的结果。"""
     seen: set[str] = set()
@@ -102,6 +106,7 @@ def _dedupe_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     return deduped
 
 
+# 计算自 start 起的耗时（毫秒）
 def _elapsed_ms(start: float) -> int:
     return int((time.monotonic() - start) * 1000)
 
@@ -109,6 +114,7 @@ def _elapsed_ms(start: float) -> int:
 # ============ 索引健康检查 ============
 
 
+# 读取索引 manifest，失败返回 None
 def _load_manifest(kb_dir: Path) -> dict[str, Any] | None:
     manifest_path = kb_dir / _MANIFEST_FILENAME
     if not manifest_path.exists():
@@ -119,6 +125,7 @@ def _load_manifest(kb_dir: Path) -> dict[str, Any] | None:
         return None
 
 
+# 校验 manifest 与实际 Chroma 索引的一致性
 def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHealth:
     """校验 Manifest 和实际索引一致性。"""
     if manifest is None:
@@ -156,12 +163,14 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     return IndexHealth(ready=True, reason="ok", document_count=0, chunk_count=chunk_count)
 
 
+# 非阻塞检查索引健康状态（不请求嵌入服务）
 def check_index_health(kb_dir: Path | None = None) -> IndexHealth:
     """检查知识库索引健康状态（非阻塞，不请求嵌入服务）。
 
     供 FastAPI lifespan 与 build.py --check-only 调用，异常不影响启动。
     传入 kb_dir 时检查指定目录，否则回退到配置中的 KB_DIR。
     """
+    # 配置未启用或目录缺失直接返回不健康
     if not KB_ENABLED:
         return IndexHealth(ready=False, reason="disabled_by_config")
 
@@ -173,6 +182,7 @@ def check_index_health(kb_dir: Path | None = None) -> IndexHealth:
         manifest = _load_manifest(target_dir)
         return _validate_manifest(manifest, target_dir)
     except Exception as exc:
+        # 健康检查异常不影响服务启动
         logger.warning("[retriever] index health check failed: %s", exc)
         return IndexHealth(ready=False, reason=f"unexpected_error:{exc}")
 
@@ -180,6 +190,7 @@ def check_index_health(kb_dir: Path | None = None) -> IndexHealth:
 # ============ 查询构建 ============
 
 
+# 拼接课程名与查询文本，引导向量检索聚焦相关教材
 def _build_query_text(query: str, course_name: str | None) -> str:
     """构建实际查询文本。
 
@@ -196,6 +207,7 @@ def _build_query_text(query: str, course_name: str | None) -> str:
 # ============ 向量检索 ============
 
 
+# 同步执行 Chroma 向量检索（在线程池中调用）
 def _chroma_query(
     query_embedding: list[float],
     fetch_k: int,
@@ -209,17 +221,20 @@ def _chroma_query(
         n_results=fetch_k,
         include=["documents", "metadatas", "distances"],
     )
+    # 传入课程过滤条件
     if where_filter:
         query_kwargs["where"] = where_filter
     results = collection.query(**query_kwargs)
     return results
 
 
+# 将 Chroma 原始查询结果解析为 RetrievedChunk 列表
 def _parse_chroma_results(results: dict[str, Any]) -> list[RetrievedChunk]:
     """解析 Chroma 查询结果为 RetrievedChunk 列表。"""
     chunks: list[RetrievedChunk] = []
     seen_ids: set[str] = set()
 
+    # 无结果直接返回空
     if not results:
         return chunks
 
@@ -235,6 +250,7 @@ def _parse_chroma_results(results: dict[str, Any]) -> list[RetrievedChunk]:
         meta = meta or {}
 
         chunk_id = str(meta.get("chunk_id", ""))
+        # 同一结果集内按 chunk_id 去重
         if chunk_id and chunk_id in seen_ids:
             continue
         if chunk_id:
@@ -263,6 +279,7 @@ def _parse_chroma_results(results: dict[str, Any]) -> list[RetrievedChunk]:
     return chunks
 
 
+# 向量检索：优先课程过滤，结果不足时自动放宽到全库
 async def _vector_search_soft_course(
     embedding: list[float],
     course_name: str | None,
@@ -279,6 +296,7 @@ async def _vector_search_soft_course(
 
     chunks: list[RetrievedChunk] = []
 
+    # 先尝试课程过滤检索
     if where_filter:
         try:
             filtered_results = await asyncio.to_thread(
@@ -291,10 +309,11 @@ async def _vector_search_soft_course(
         except Exception as exc:
             logger.warning("[retriever] chroma filtered query failed: %s", exc)
 
-        # 课程过滤结果不足时，放宽为全库检索
+        # 课程过滤结果已足够则直接返回
         if len(chunks) >= min_results:
             return _dedupe_chunks(chunks)
 
+    # 课程过滤不足或失败，放宽到全库检索
     try:
         broad_results = await asyncio.to_thread(
             _chroma_query,
@@ -312,6 +331,7 @@ async def _vector_search_soft_course(
 # ============ BM25 检索 ============
 
 
+# BM25 关键词检索（内存操作，无 IO 阻塞）
 def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
     """BM25 关键词检索（内存操作，无 IO 阻塞）。"""
     kb_dir = Path(KB_DIR)
@@ -332,7 +352,7 @@ def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
 
         text = str(r.get("text", "")).strip()
         if not text:
-            # 旧索引可能没有 text，直接跳过，避免把 source 当正文
+            # 旧索引可能缺正文，跳过避免把 source 当正文返回
             continue
 
         score = r.get("score", r.get("bm25_score"))
@@ -361,6 +381,7 @@ def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
 # ============ RRF 融合 ============
 
 
+# RRF 倒数排名融合：score = Σ 1/(k + rank)
 def _rrf_fusion(
     vector_chunks: list[RetrievedChunk],
     bm25_chunks: list[RetrievedChunk],
@@ -382,9 +403,11 @@ def _rrf_fusion(
             if key not in doc_objects:
                 doc_objects[key] = chunk
 
+    # 分别把向量与 BM25 结果加入融合打分
     add_chunks(vector_chunks, "vector")
     add_chunks(bm25_chunks, "bm25")
 
+    # 按融合分数降序排列
     sorted_keys = sorted(doc_scores.keys(), key=lambda d: doc_scores[d], reverse=True)
 
     fused: list[RetrievedChunk] = []
@@ -392,6 +415,7 @@ def _rrf_fusion(
         chunk = doc_objects[key]
         chunk.score = doc_scores[key]
 
+        # 根据命中来源标注检索类型
         source_types = doc_sources.get(key, set())
         if "vector" in source_types and "bm25" in source_types:
             chunk.retrieval_type = "hybrid"
@@ -408,6 +432,7 @@ def _rrf_fusion(
 # ============ 公共接口 ============
 
 
+# 混合检索公共接口：BM25 兜底 + 向量检索 + RRF 融合
 async def retrieve(
     query: str,
     *,
@@ -421,10 +446,12 @@ async def retrieve(
     2. course_name 使用软过滤，避免 metadata 不准导致查空。
     3. 扩大召回，再融合截断。
     """
+    # 空查询直接返回 empty
     normalized_query = (query or "").strip()
     if not normalized_query:
         return RetrievalResult(status="empty", query="")
 
+    # 知识库未启用返回 unavailable
     if not KB_ENABLED:
         return RetrievalResult(
             status="unavailable",
@@ -432,6 +459,7 @@ async def retrieve(
             message="KB disabled",
         )
 
+    # 计算最终返回条数并构造查询文本
     effective_k = max(1, min(_FINAL_TOP_K_LIMIT, top_k or KB_TOP_K))
     query_text = _build_query_text(normalized_query, course_name)
     start = time.monotonic()
@@ -442,6 +470,7 @@ async def retrieve(
         # 先做 BM25：即使向量服务失败也能兜底
         bm25_chunks = _bm25_query(query_text, _BM25_FETCH_K)
 
+        # 索引未就绪时尝试用 BM25 兜底
         if not health.ready:
             if bm25_chunks:
                 return RetrievalResult(
@@ -459,6 +488,7 @@ async def retrieve(
                 message=f"index not ready: {health.reason}",
             )
 
+        # 向量检索需嵌入查询；嵌入失败则用 BM25 兜底
         embedding = embed_query(query_text)
         if embedding is None:
             if bm25_chunks:
@@ -484,6 +514,7 @@ async def retrieve(
             min_results=effective_k,
         )
 
+    # 双路均有结果则做 RRF 融合，否则取单边
     if vector_chunks and bm25_chunks:
         chunks = _rrf_fusion(
             vector_chunks=vector_chunks,
@@ -496,8 +527,10 @@ async def retrieve(
     else:
         chunks = bm25_chunks
 
+    # 去重并按最终条数截断
     chunks = _dedupe_chunks(chunks)[:effective_k]
 
+    # 无任何结果返回 empty
     if not chunks:
         return RetrievalResult(
             status="empty",
@@ -505,6 +538,7 @@ async def retrieve(
             elapsed_ms=_elapsed_ms(start),
         )
 
+    # 返回检索成功结果
     return RetrievalResult(
         status="ok",
         query=normalized_query,

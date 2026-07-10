@@ -14,6 +14,7 @@
   indexing/     索引构建管道
 """
 
+# 对外导出：知识库检索工具实例构建函数及其参数模型
 from app.rag.tools import SearchKnowledgeBaseArgs, build_knowledge_tool
 
 __all__ = [

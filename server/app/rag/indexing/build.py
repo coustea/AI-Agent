@@ -53,6 +53,7 @@ _SOURCE_DIR = SERVER_DIR / "app/rag/data/source"
 # ============ Manifest ============
 
 
+# 写入索引 manifest（记录 schema 版本、模型、距离度量与数量）
 def _write_manifest(output_dir: Path, collection: str, chunk_count: int, doc_count: int) -> None:
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -69,6 +70,7 @@ def _write_manifest(output_dir: Path, collection: str, chunk_count: int, doc_cou
     )
 
 
+# 读取并解析索引 manifest，失败返回 None
 def _read_manifest(output_dir: Path) -> dict[str, Any] | None:
     p = output_dir / _MANIFEST_FILENAME
     if not p.exists():
@@ -82,18 +84,21 @@ def _read_manifest(output_dir: Path) -> dict[str, Any] | None:
 # ============ 原子替换 ============
 
 
+# 原子替换正式索引目录（先备份，失败则回滚）
 def _swap_index(temp_dir: Path, final_dir: Path) -> None:
     """原子替换正式索引目录。
 
     首次构建时 final_dir 不存在，没有 backup 可恢复；异常时仅在确有 backup 的情况下恢复，
     避免对不存在的 backup_dir 执行 rename 造成二次报错。
     """
+    # 首次构建时无旧索引，仅在有备份时才重命名保留
     backup_dir = final_dir.parent / f"{final_dir.name}.backup-{uuid.uuid4().hex[:8]}"
     had_backup = final_dir.exists()
 
     if had_backup:
         final_dir.rename(backup_dir)
 
+    # 用临时目录原子替换正式目录
     temp_dir.rename(final_dir)
 
     try:
@@ -103,9 +108,11 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
     except Exception as exc:
         logger.error("[build] verification of swapped index failed: %s", exc)
 
+        # 验证失败则删除新目录
         if final_dir.exists():
             shutil.rmtree(final_dir)
 
+        # 存在备份则回滚恢复
         if had_backup and backup_dir.exists():
             backup_dir.rename(final_dir)
             logger.info("[build] restored backup index")
@@ -116,6 +123,7 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
 # ============ 主构建流程 ============
 
 
+# 离线索引主构建流程（加载→元数据→切分→存储→BM25→manifest→验证→替换）
 def build_index(
     source_dir: Path | None = None,
     output_dir: Path | None = None,
@@ -130,17 +138,17 @@ def build_index(
     out_dir = output_dir or Path(KB_DIR)
     col_name = collection or CHROMA_COLLECTION
 
-    # 1. 加载文档
+    # 1. 加载源文档
     logger.info("[build] loading from %s", src_dir)
     docs = load_directory(src_dir)
     if not docs:
         raise ValueError(f"No matching documents found in {src_dir}")
     logger.info("[build] found %d documents", len(docs))
 
-    # 2. 元数据推断
+    # 2. 推断文档元数据（课程/章节/标题等）
     docs = enrich_metadata(docs)
 
-    # 3. 文档分割
+    # 3. 按文档类型切分为 chunk
     chunks = split_documents(docs)
     if not chunks:
         raise ValueError("No chunks produced from source documents")
@@ -150,35 +158,37 @@ def build_index(
     from app.rag.embeddings import reset_breaker
     reset_breaker()
 
-    # 5. 构建到临时目录
+    # 5. 构建到临时目录，失败可整体丢弃
     temp_dir = out_dir.parent / f"{out_dir.name}.building-{uuid.uuid4().hex[:8]}"
     try:
         logger.info("[build] building to temp dir: %s", temp_dir)
         doc_count, chunk_count = build_store(chunks, temp_dir, col_name, batch_size)
         logger.info("[build] indexed %d docs into %d chunks", doc_count, chunk_count)
 
-        # 6. 构建 BM25 索引
+        # 6. 构建并持久化 BM25 索引
         build_bm25(chunks, temp_dir)
 
-        # 7. 写 manifest
+        # 7. 写 manifest 元数据
         _write_manifest(temp_dir, col_name, chunk_count, doc_count)
         logger.info("[build] manifest written")
 
-        # 8. 验证
+        # 8. 校验向量库 chunk 数量
         verify_store(temp_dir, col_name, chunk_count)
         logger.info("[build] temp index verified")
 
-        # 9. 原子替换
+        # 9. 原子替换正式索引目录
         _swap_index(temp_dir, out_dir)
         logger.info("[build] index build complete")
 
     except Exception:
+        # 任一步失败则清理临时目录，正式目录保持不变
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
         logger.error("[build] build failed, temp dir cleaned up")
         raise
 
 
+# 仅检查索引健康状态，不修改磁盘
 def check_index(output_dir: Path | None = None) -> bool:
     """仅检查索引健康，不修改磁盘。"""
     from app.rag.retriever import check_index_health
@@ -196,6 +206,7 @@ def check_index(output_dir: Path | None = None) -> bool:
     return False
 
 
+# 命令行入口：解析参数，执行构建或仅健康检查
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build local knowledge index")
     parser.add_argument("--source-dir", type=str, default=None)
@@ -205,6 +216,7 @@ def main() -> None:
     parser.add_argument("--check-only", action="store_true", help="Only check index health")
     args = parser.parse_args()
 
+    # 仅健康检查模式
     if args.check_only:
         ok = check_index(Path(args.output_dir) if args.output_dir else None)
         sys.exit(0 if ok else 1)

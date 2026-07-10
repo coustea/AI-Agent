@@ -32,10 +32,12 @@ _fail_count: int = 0
 _breaker_until: float = 0.0
 
 
+# 熔断器是否处于打开（冷却）状态
 def _breaker_open() -> bool:
     return _breaker_until > time.monotonic()
 
 
+# 记录一次失败，连续失败达阈值则开启熔断
 def _record_failure(reason: str) -> None:
     global _fail_count, _breaker_until
     _fail_count += 1
@@ -49,11 +51,13 @@ def _record_failure(reason: str) -> None:
         )
 
 
+# 记录一次成功，重置连续失败计数
 def _record_success() -> None:
     global _fail_count
     _fail_count = 0
 
 
+# 重置熔断器状态（构建索引前调用，避免旧熔断阻塞新构建）
 def reset_breaker() -> None:
     """重置熔断器状态（构建前调用，避免旧熔断阻止新构建）。"""
     global _fail_count, _breaker_until
@@ -61,6 +65,7 @@ def reset_breaker() -> None:
     _breaker_until = 0.0
 
 
+# 创建嵌入客户端（每次读取最新配置，模型切换无需重启）
 def _get_embeddings_client() -> OpenAIEmbeddings:
     """创建嵌入客户端。每次读取最新配置，模型切换后无需重启。
 
@@ -76,12 +81,14 @@ def _get_embeddings_client() -> OpenAIEmbeddings:
     )
 
 
+# 请求嵌入模型生成单条查询向量
 def embed_query(query: str) -> list[float] | None:
     """请求嵌入模型生成查询向量。
 
     Returns:
         嵌入向量列表，失败时返回 None。
     """
+    # 熔断中则直接返回失败
     if _breaker_open():
         return None
 
@@ -91,17 +98,20 @@ def embed_query(query: str) -> list[float] | None:
         _record_success()
         return result
     except Exception as exc:
+        # 嵌入失败则记录并触发熔断计数
         _record_failure(exc.__class__.__name__)
         logger.warning("[embeddings] embed_query failed: %s", exc)
         return None
 
 
+# 批量请求嵌入模型生成文档向量
 def embed_documents(texts: list[str]) -> list[list[float]] | None:
     """批量嵌入文档文本。
 
     Returns:
         嵌入向量列表，失败时返回 None。
     """
+    # 熔断中则直接返回失败
     if _breaker_open():
         return None
 
@@ -111,6 +121,7 @@ def embed_documents(texts: list[str]) -> list[list[float]] | None:
         _record_success()
         return result
     except Exception as exc:
+        # 批量嵌入失败则记录并触发熔断计数
         _record_failure(exc.__class__.__name__)
         logger.warning("[embeddings] embed_documents failed: %s", exc)
         return None

@@ -29,6 +29,7 @@ logger = get_logger(__name__)
 SCHEMA_VERSION = "1"
 
 
+# 基于来源与内容生成稳定的 chunk 哈希 ID
 def _stable_chunk_id(doc: Document) -> str:
     """生成稳定的 chunk 哈希 ID。"""
     source = doc.metadata.get("source", "")
@@ -39,6 +40,7 @@ def _stable_chunk_id(doc: Document) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+# 确保每个 chunk 具备稳定唯一 ID（Chroma 与 BM25 共用，保证对齐）
 def _ensure_chunk_ids(chunks: list[Document]) -> None:
     """确保每个 chunk 都有稳定且唯一的 chunk_id。
 
@@ -50,9 +52,11 @@ def _ensure_chunk_ids(chunks: list[Document]) -> None:
 
     for chunk in chunks:
         chunk_id = str(chunk.metadata.get("chunk_id", "")).strip()
+        # 缺失则重新生成稳定 ID
         if not chunk_id:
             chunk_id = _stable_chunk_id(chunk)
 
+        # 冲突时追加后缀保证唯一
         if chunk_id in seen_ids:
             dup_count += 1
             chunk_id = f"{chunk_id}_{dup_count}"
@@ -65,6 +69,7 @@ def _ensure_chunk_ids(chunks: list[Document]) -> None:
         logger.warning("[store] %d duplicate chunk IDs resolved by suffix", dup_count)
 
 
+# 构建 ChromaDB 向量库，返回 (文档数, chunk 数)
 def build_store(
     chunks: list[Document],
     output_dir: Path,
@@ -87,13 +92,13 @@ def build_store(
     if not chunks:
         raise ValueError("No chunks to index")
 
-    # 统计唯一文档数
+    # 统计唯一来源文档数
     unique_sources: set[str] = set()
     for chunk in chunks:
         unique_sources.add(chunk.metadata.get("source", ""))
     doc_count = len(unique_sources)
 
-    # 统一分配 chunk_id（与 build_bm25 共用 _ensure_chunk_ids，保证 Chroma 与 BM25 对齐）
+    # 统一分配 chunk_id（与 BM25 对齐，便于融合与去重）
     _ensure_chunk_ids(chunks)
 
     all_ids: list[str] = []
@@ -112,21 +117,21 @@ def build_store(
     if total_chunks == 0:
         raise ValueError("No chunks produced after deduplication")
 
-    # 使用 ChromaDB PersistentClient 直接构建
-    # 显式声明 cosine 距离，与 manifest.json 的 distance_metric 保持一致
+    # 创建 Chroma 集合，显式声明 cosine 距离（与 manifest 一致）
     client = chromadb.PersistentClient(path=str(output_dir))
     col = client.create_collection(
         name=collection,
         metadata={"hnsw:space": "cosine"},
     )
 
-    # 批量嵌入并写入
+    # 分批嵌入文本并写入向量库
     for start in range(0, total_chunks, batch_size):
         end = min(start + batch_size, total_chunks)
         batch_texts = all_texts[start:end]
         batch_ids = all_ids[start:end]
         batch_metas = all_metas[start:end]
 
+        # 嵌入失败则中断构建
         embeddings = embed_documents(batch_texts)
         if embeddings is None:
             raise RuntimeError(
@@ -135,6 +140,7 @@ def build_store(
             )
 
         col.add(ids=batch_ids, documents=batch_texts, embeddings=embeddings, metadatas=batch_metas)
+        # 批次间短暂停顿，缓解嵌入服务压力
         if end < total_chunks:
             time.sleep(0.1)
 
@@ -142,6 +148,7 @@ def build_store(
     return doc_count, total_chunks
 
 
+# 构建 BM25 索引并持久化（失败不致命）
 def build_bm25(chunks: list[Document], output_dir: Path) -> None:
     """构建 BM25 索引并持久化。
 
@@ -149,7 +156,7 @@ def build_bm25(chunks: list[Document], output_dir: Path) -> None:
         chunks: 切分后的 Document 列表。
         output_dir: 索引输出目录。
     """
-    # 复用 build_store 的 chunk_id 分配逻辑，保证 BM25 与 Chroma 的 chunk_id 完全对齐
+    # 复用同一 chunk_id 分配逻辑，保证 BM25 与 Chroma 对齐
     _ensure_chunk_ids(chunks)
 
     texts = [chunk.page_content for chunk in chunks]
@@ -161,9 +168,11 @@ def build_bm25(chunks: list[Document], output_dir: Path) -> None:
         bm25.save(output_dir)
         logger.info("[store] BM25 index built and saved")
     except Exception as exc:
+        # BM25 构建失败不影响向量库可用性
         logger.warning("[store] BM25 index build failed (non-fatal): %s", exc)
 
 
+# 重新打开索引并校验 chunk 数量完整性
 def verify_store(
     output_dir: Path,
     collection: str = CHROMA_COLLECTION,
@@ -186,6 +195,7 @@ def verify_store(
         col = client.get_collection(name=collection)
         actual = col.count()
 
+        # 实际数量与期望不符则校验失败
         if expected_count is not None and actual != expected_count:
             raise RuntimeError(
                 f"Verification failed: expected {expected_count} chunks, found {actual}"
@@ -193,6 +203,8 @@ def verify_store(
 
         logger.info("[store] verification passed: %d chunks", actual)
     except RuntimeError:
+        # 已明确的校验错误直接上抛
         raise
     except Exception as exc:
+        # 其它异常包装为 RuntimeError 上抛
         raise RuntimeError(f"Store verification failed: {exc}") from exc

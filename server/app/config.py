@@ -4,6 +4,7 @@
 不包含任何业务逻辑，所有配置项在模块加载时一次性读取并缓存。
 """
 
+# 本模块负责加载并暴露全局配置：从 config.yaml 读取，提供嵌套取值与路径/URL 工具函数
 from pathlib import Path
 
 import yaml
@@ -14,6 +15,7 @@ _CONFIG_FILE = Path(__file__).parent.parent / "config.yaml"
 _config: dict = {}
 
 
+# 加载并解析 YAML 配置文件
 def _load() -> dict:
     """加载配置文件。
 
@@ -31,6 +33,7 @@ def _load() -> dict:
 _config = _load()
 
 
+# 按点号分隔的嵌套路径获取配置值，路径不存在时返回默认值
 def get(path: str, default=None):
     """获取配置值，支持点号分隔的嵌套路径。
 
@@ -96,6 +99,7 @@ KB_DIR = KNOWLEDGE_BASE_DIR
 
 
 # ============ 用户路径构建函数 ============
+# 获取用户静态文件根目录：static/{username}/
 def user_dir(username: str) -> Path:
     """获取用户静态文件根目录。
 
@@ -108,82 +112,98 @@ def user_dir(username: str) -> Path:
     return WORKPLACE_DIR / username
 
 
+# 获取用户头像目录
 def user_avatar_dir(username: str) -> Path:
     """获取用户头像目录：static/{username}/avatar/"""
     return user_dir(username) / "avatar"
 
 
+# 获取用户聊天会话目录
 def user_chat_dir(username: str, session_id: str) -> Path:
     """获取用户聊天会话目录：static/{username}/chat/{session_id}/"""
     return user_dir(username) / "chat" / session_id
 
 
+# 获取用户聊天附件目录
 def user_chat_uploads_dir(username: str, session_id: str) -> Path:
     """获取用户聊天附件目录：static/{username}/chat/{session_id}/uploads/"""
     return user_chat_dir(username, session_id) / "uploads"
 
 
+# 获取用户聊天视频目录
 def user_chat_videos_dir(username: str, session_id: str, message_id: str) -> Path:
     """获取用户聊天视频目录：static/{username}/chat/{session_id}/videos/{message_id}/"""
     return user_chat_dir(username, session_id) / "videos" / message_id
 
 
+# 获取用户资源目录
 def user_resources_dir(username: str) -> Path:
     """获取用户资源目录：static/{username}/resources/"""
     return user_dir(username) / "resources"
 
 
+# 获取单个资源目录
 def user_resource_dir(username: str, resource_id: str) -> Path:
     """获取单个资源目录：static/{username}/resources/{resource_id}/"""
     return user_resources_dir(username) / str(resource_id)
 
 
+# 获取资源 PPT 目录
 def user_resource_ppt_dir(username: str, resource_id: str) -> Path:
     """获取资源 PPT 目录：static/{username}/resources/{resource_id}/ppt/"""
     return user_resource_dir(username, resource_id) / "ppt"
 
 
+# 获取资源视频目录
 def user_resource_video_dir(username: str, resource_id: str) -> Path:
     """获取资源视频目录：static/{username}/resources/{resource_id}/video/"""
     return user_resource_dir(username, resource_id) / "video"
 
 
+# 获取用户学习路径目录
 def user_paths_dir(username: str) -> Path:
     """获取用户学习路径目录：static/{username}/paths/"""
     return user_dir(username) / "paths"
 
 
+# 获取单个学习路径目录
 def user_path_dir(username: str, path_id: str) -> Path:
     """获取单个学习路径目录：static/{username}/paths/{path_id}/"""
     return user_paths_dir(username) / str(path_id)
 
 
+# 获取路径节点目录
 def user_path_node_dir(username: str, path_id: str, node_id: str) -> Path:
     """获取路径节点目录：static/{username}/paths/{path_id}/nodes/{node_id}/"""
     return user_path_dir(username, path_id) / "nodes" / str(node_id)
 
 
+# 获取路径节点 PPT 目录
 def user_path_node_ppt_dir(username: str, path_id: str, node_id: str) -> Path:
     """获取路径节点 PPT 目录：static/{username}/paths/{path_id}/nodes/{node_id}/ppt/"""
     return user_path_node_dir(username, path_id, node_id) / "ppt"
 
 
+# 获取路径节点视频目录
 def user_path_node_video_dir(username: str, path_id: str, node_id: str) -> Path:
     """获取路径节点视频目录：static/{username}/paths/{path_id}/nodes/{node_id}/video/"""
     return user_path_node_dir(username, path_id, node_id) / "video"
 
 
+# 获取资源动画目录
 def user_resource_cartoon_dir(username: str, resource_id: str) -> Path:
     """获取资源动画目录：static/{username}/resources/{resource_id}/cartoon/"""
     return user_resource_dir(username, resource_id) / "cartoon"
 
 
+# 获取路径节点动画目录
 def user_path_node_cartoon_dir(username: str, path_id: str, node_id: str) -> Path:
     """获取路径节点动画目录：static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/"""
     return user_path_node_dir(username, path_id, node_id) / "cartoon"
 
 
 # ============ URL 构建函数 ============
+# 将本地路径转换为 /static/ 开头的静态文件 URL
 def static_url(path: Path) -> str:
     """将本地路径转换为静态文件 URL。
 
@@ -201,47 +221,56 @@ def static_url(path: Path) -> str:
         return str(path)
 
 
+# 构建用户头像 URL
 def avatar_url(username: str, ext: str) -> str:
     """构建头像 URL：/static/{username}/avatar/avatar.{ext}"""
     return f"/static/{username}/avatar/avatar.{ext}"
 
 
+# 构建聊天附件 URL
 def chat_upload_url(username: str, session_id: str, filename: str) -> str:
     """构建聊天附件 URL：/static/{username}/chat/{session_id}/uploads/{filename}"""
     return f"/static/{username}/chat/{session_id}/uploads/{filename}"
 
 
 
+# 构建聊天视频 URL
 def chat_video_url(username: str, session_id: str, message_id: str) -> str:
     """构建聊天视频 URL：/static/{username}/chat/{session_id}/videos/{message_id}/video.mp4"""
     return f"/static/{username}/chat/{session_id}/videos/{message_id}/video.mp4"
 
 
+# 构建资源 PPT URL
 def resource_ppt_url(username: str, resource_id: str) -> str:
     """构建资源 PPT URL：/static/{username}/resources/{resource_id}/ppt/slides.html"""
     return f"/static/{username}/resources/{resource_id}/ppt/slides.html"
 
 
+# 构建资源视频 URL
 def resource_video_url(username: str, resource_id: str) -> str:
     """构建资源视频 URL：/static/{username}/resources/{resource_id}/video/video.mp4"""
     return f"/static/{username}/resources/{resource_id}/video/video.mp4"
 
 
+# 构建路径节点 PPT URL
 def path_node_ppt_url(username: str, path_id: str, node_id: str) -> str:
     """构建路径节点 PPT URL：/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"""
     return f"/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"
 
 
+# 构建路径节点视频 URL
 def path_node_video_url(username: str, path_id: str, node_id: str) -> str:
     """构建路径节点视频 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/video/video.mp4"""
     return f"/static/{username}/paths/{path_id}/nodes/{node_id}/video/video.mp4"
 
 
+# 构建资源动画 URL
 def resource_cartoon_url(username: str, resource_id: str, filename: str = "index.html") -> str:
     """构建资源动画 URL：/static/{username}/resources/{resource_id}/cartoon/{filename}"""
     return f"/static/{username}/resources/{resource_id}/cartoon/{filename}"
 
 
+# 构建路径节点动画 URL
 def path_node_cartoon_url(username: str, path_id: str, node_id: str, filename: str = "index.html") -> str:
     """构建路径节点动画 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"""
     return f"/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"

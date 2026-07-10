@@ -30,9 +30,11 @@ _CHINESE_STOPWORDS: set[str] = set(
     "之 其 此 该 即 各 每 些 种 类 时 后 前 里 外 内 间 已经 正在 一些 一下".split()
 )
 
+# BM25 索引持久化文件名
 _BM25_INDEX_FILENAME = "bm25_index.pkl"
 
 
+# jieba 精确分词 + 停用词过滤
 def _tokenize(text: str) -> list[str]:
     """jieba 精确分词 + 停用词过滤。"""
     if not text:
@@ -44,18 +46,22 @@ def _tokenize(text: str) -> list[str]:
     ]
 
 
+# 内存 BM25 索引类，支持持久化到磁盘
 class BM25Index:
     """内存 BM25 索引，支持持久化。"""
 
+    # 初始化索引对象与对齐的文档信息列表
     def __init__(self) -> None:
         self._bm25: BM25Okapi | None = None
         # 与 BM25 索引对齐的文档信息列表（含 text 字段）
         self._docs: list[dict[str, Any]] = []
 
+    # 索引是否已成功构建并可用
     @property
     def is_ready(self) -> bool:
         return self._bm25 is not None and len(self._docs) > 0
 
+    # 构建 BM25 索引（同时保存 chunk 正文，避免检索结果只有路径）
     def build(self, texts: list[str], metadatas: list[dict[str, Any]]) -> None:
         """构建 BM25 索引。
 
@@ -63,10 +69,12 @@ class BM25Index:
             texts: 文档文本列表，与 ChromaDB 中的 chunk 顺序一致。
             metadatas: 对应的元数据列表。
         """
+        # 空文本直接跳过构建
         if not texts:
             logger.warning("[bm25] empty texts, skip build")
             return
 
+        # 文本与元数据数量不一致时告警
         if len(texts) != len(metadatas):
             logger.warning(
                 "[bm25] texts/metadatas length mismatch: texts=%d, metadatas=%d",
@@ -74,11 +82,14 @@ class BM25Index:
                 len(metadatas),
             )
 
+        # 对所有文本执行分词
         tokenized_corpus = [_tokenize(t) for t in texts]
+        # 分词后全部为空则跳过
         if not any(tokenized_corpus):
             logger.warning("[bm25] all tokenized documents are empty, skip build")
             return
 
+        # 用分词语料初始化 BM25 模型
         self._bm25 = BM25Okapi(tokenized_corpus)
 
         # 关键修复：保存 chunk 正文，避免检索结果只有 source 路径
@@ -92,6 +103,7 @@ class BM25Index:
         avg_tokens = sum(len(t) for t in tokenized_corpus) / max(1, len(tokenized_corpus))
         logger.info("[bm25] index built: %d docs, avg tokens=%.1f", len(self._docs), avg_tokens)
 
+    # 执行 BM25 检索并按最大分数归一化相关性
     def search(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
         """BM25 检索。
 
@@ -105,14 +117,17 @@ class BM25Index:
         if not tokenized_query:
             return []
 
+        # 计算查询与各文档的 BM25 分数
         scores = self._bm25.get_scores(tokenized_query)
         if len(scores) == 0:
             return []
 
+        # 取分数最高的 top_k 文档下标
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[
             : max(1, top_k)
         ]
 
+        # 取最大分数用于归一化，最大分为 0 则无有效结果
         max_score = max(float(scores[i]) for i in top_indices) if top_indices else 0.0
         if max_score <= 0:
             return []
@@ -130,6 +145,7 @@ class BM25Index:
 
         return results
 
+    # 将 BM25 模型与文档 pickle 持久化到磁盘
     def save(self, kb_dir: Path) -> None:
         """持久化 BM25 索引到磁盘。"""
         if self._bm25 is None:
@@ -142,6 +158,7 @@ class BM25Index:
         path.write_bytes(pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
         logger.info("[bm25] index saved: %s (%d docs)", path, len(self._docs))
 
+    # 从磁盘加载已持久化的 BM25 索引
     @classmethod
     def load(cls, kb_dir: Path) -> BM25Index:
         """从磁盘加载 BM25 索引。"""
@@ -150,6 +167,7 @@ class BM25Index:
             logger.warning("[bm25] index file not found: %s", path)
             return cls()
 
+        # 反序列化索引文件
         try:
             data = pickle.loads(path.read_bytes())
             idx = cls()
@@ -157,6 +175,7 @@ class BM25Index:
             idx._docs = data["docs"]
             logger.info("[bm25] index loaded: %d docs", len(idx._docs))
             return idx
+        # 加载失败则降级返回空索引
         except Exception as exc:
             logger.warning("[bm25] load failed: %s", exc)
             return cls()
@@ -167,6 +186,7 @@ _bm25_index: BM25Index | None = None
 _bm25_loaded = False
 
 
+# 获取 BM25 索引单例（懒加载，不可用则尝试重新加载）
 def get_bm25_index(kb_dir: Path) -> BM25Index:
     """获取 BM25 索引单例（懒加载）。
 
@@ -184,6 +204,7 @@ def get_bm25_index(kb_dir: Path) -> BM25Index:
     return _bm25_index
 
 
+# 重置单例状态，下次访问时强制重新加载索引
 def reset_bm25_index() -> None:
     """重置 BM25 索引单例，下次访问时重新加载。
 

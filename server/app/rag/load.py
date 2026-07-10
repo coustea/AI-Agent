@@ -47,6 +47,7 @@ _EXCLUDE_DIRS: frozenset[str] = frozenset({
 })
 
 
+# 按扩展名分派加载单个文件（PDF 用 PyMuPDF，纯文本直接读取）
 def _load_file(path: Path) -> list[Document]:
     """加载单个文件为 Document 列表。
 
@@ -64,25 +65,28 @@ def _load_file(path: Path) -> list[Document]:
         Document 列表（纯文本恒为 0 或 1 条；PDF 可能多条，每页一条）。
     """
     suffix = path.suffix.lower()
+    # PDF 需版面/分页解析
     if suffix == ".pdf":
         return PyMuPDFLoader(str(path)).load()
 
+    # 纯文本直接用 pathlib 读取，errors="replace" 容忍坏字节
     text = path.read_text(encoding="utf-8", errors="replace")
     if not text or not text.strip():
         return []
     return [Document(page_content=text, metadata={"source": str(path)})]
 
 
+# 根据相对路径判断文件是否应被跳过（排除目录/文件名/隐藏文件）
 def _should_skip(source: str) -> bool:
     """判断文件是否应跳过（基于相对路径）。"""
     parts = Path(source).parts
 
-    # 跳过排除目录下的文件
+    # 命中排除目录则跳过
     for part in parts:
         if part in _EXCLUDE_DIRS:
             return True
 
-    # 跳过排除文件名
+    # 命中排除文件名则跳过
     filename = Path(source).name
     if filename in _EXCLUDE_NAMES:
         return True
@@ -94,6 +98,7 @@ def _should_skip(source: str) -> bool:
     return False
 
 
+# 遍历目录加载所有受支持文档，统一元数据后返回
 def load_directory(
     source_dir: Path,
     *,
@@ -109,6 +114,7 @@ def load_directory(
     exts = extensions or SUPPORTED_EXTENSIONS
     all_docs: list[Document] = []
 
+    # 递归遍历目录下所有文件
     for path in sorted(source_dir.rglob("*")):
         if not path.is_file():
             continue
@@ -122,9 +128,11 @@ def load_directory(
         except ValueError:
             rel_path = path.name
 
+        # 跳过排除项
         if _should_skip(rel_path):
             continue
 
+        # 单文件加载失败不影响整体
         try:
             docs = _load_file(path)
         except Exception as exc:
@@ -135,7 +143,7 @@ def load_directory(
             if not doc.page_content or not doc.page_content.strip():
                 continue
 
-            # 保留 PDF loader 产生的 page 等元数据，同时统一 source/file_type
+            # 统一补充 source 与 file_type 元数据
             doc.metadata["source"] = rel_path
             doc.metadata["file_type"] = suffix
             all_docs.append(doc)

@@ -4,6 +4,7 @@
 支持通过命令行直接运行开发服务器。
 """
 
+# 本模块是服务入口：定义应用生命周期、创建 FastAPI 实例并挂载路由/中间件/静态资源
 from __future__ import annotations
 
 import sys
@@ -28,6 +29,7 @@ from app.rag.retriever import check_index_health
 
 
 @asynccontextmanager
+# 应用生命周期管理器：启动阶段预热提示词、初始化数据库与知识库，关闭阶段暂留空
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理器。
 
@@ -49,13 +51,13 @@ async def lifespan(app: FastAPI):
     # 知识库索引检查 + 自动构建
     log = get_logger("main")
     if not KB_ENABLED:
-        log.info("[KB] Knowledge base disabled by config")
+        log.info("[KB] 知识库已在配置中禁用")
     else:
         try:
             health = check_index_health()
             if health.ready:
                 log.info(
-                    "[KB] Index ready: %d chunks, embedding_model=%s",
+                    "[KB] 索引就绪: %d 个分块, 嵌入模型=%s",
                     health.chunk_count,
                     KB_EMBED_MODEL,
                 )
@@ -64,24 +66,37 @@ async def lifespan(app: FastAPI):
                 # 嵌入模型变更 → 必须重建（即使 auto_build=False 也提示）
                 if "embedding_model_mismatch" in health.reason:
                     log.warning(
-                        "[KB] Embedding model changed (config=%s), index needs rebuild (reason: %s)",
+                        "[KB] 嵌入模型已变更 (配置=%s), 索引需要重建 (原因: %s)",
                         KB_EMBED_MODEL,
                         health.reason,
                     )
                     needs_rebuild = True
                 else:
                     log.info(
-                        "[KB] Index not ready (reason: %s)%s",
+                        "[KB] 索引未就绪 (原因: %s)%s",
                         health.reason,
-                        ", auto-building in background..." if needs_rebuild else "",
+                        ", 正在后台自动构建..." if needs_rebuild else "",
                     )
 
                 if needs_rebuild:
                     import threading
                     from app.rag.indexing.build import build_index
 
+                    # 后台线程：检查嵌入模型可用后构建知识库索引并重置检索缓存
                     def _bg_build() -> None:
-                        log.info("[KB] Auto-build started (embedding_model=%s)...", KB_EMBED_MODEL)
+                        log.info("[KB] 自动构建开始 (嵌入模型=%s)...", KB_EMBED_MODEL)
+
+                        # 先检查嵌入模型是否可用，不可用则跳过构建
+                        from app.rag.embeddings import embed_query
+
+                        test_embedding = embed_query("test")
+                        if test_embedding is None:
+                            log.error(
+                                "[KB] 自动构建已跳过: 嵌入模型不可用。"
+                                "请检查嵌入服务配置 (knowledge.embed_base_url)。"
+                            )
+                            return
+
                         try:
                             build_index()
                             # 重置 BM25 懒加载单例，使后续检索能加载新索引
@@ -91,26 +106,26 @@ async def lifespan(app: FastAPI):
                             post_health = check_index_health()
                             if post_health.ready:
                                 log.info(
-                                    "[KB] Auto-build succeeded: %d chunks, embedding_model=%s",
+                                    "[KB] 自动构建成功: %d 个分块, 嵌入模型=%s",
                                     post_health.chunk_count,
                                     KB_EMBED_MODEL,
                                 )
                             else:
                                 log.error(
-                                    "[KB] Auto-build completed but health check failed: %s",
+                                    "[KB] 自动构建完成但健康检查失败: %s",
                                     post_health.reason,
                                 )
                         except Exception as exc:
-                            log.error("[KB] Auto-build failed: %s", exc, exc_info=True)
+                            log.error("[KB] 自动构建失败: %s", exc, exc_info=True)
 
                     t = threading.Thread(target=_bg_build, daemon=True)
                     t.start()
                 else:
                     log.warning(
-                        "[KB] Index not ready and auto_build disabled, knowledge retrieval unavailable"
+                        "[KB] 索引未就绪且自动构建已禁用, 知识检索不可用"
                     )
         except Exception as exc:
-            log.error("[KB] Index check failed: %s", exc, exc_info=True)
+            log.error("[KB] 索引检查失败: %s", exc, exc_info=True)
 
     # yield 将控制权交给 FastAPI 应用，开始处理请求
     yield
@@ -118,6 +133,7 @@ async def lifespan(app: FastAPI):
     # 应用关闭时的清理逻辑（暂未实现）
 
 
+# 创建并配置 FastAPI 应用实例：日志、CORS、异常处理器、静态目录与路由注册
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用实例。
 
@@ -157,5 +173,6 @@ def create_app() -> FastAPI:
 
 
 # 创建 FastAPI 应用实例（供 uvicorn / gunicorn 等 ASGI 服务器加载）
+# 模块级应用实例，作为 ASGI 入口被服务器加载
 app = create_app()
 

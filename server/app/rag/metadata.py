@@ -88,6 +88,7 @@ _COURSE_KEYWORDS: dict[str, str] = {
 }
 
 
+# 从相对路径推断教材标题（章节目录名优先，其次文件名）
 def infer_title(source: str) -> str:
     """从相对路径推断教材标题。
 
@@ -107,6 +108,7 @@ def infer_title(source: str) -> str:
     return name
 
 
+# 从路径课程目录或标题关键词推断课程名
 def infer_course(source: str, title: str = "") -> str:
     """从相对路径推断课程名。
 
@@ -115,12 +117,14 @@ def infer_course(source: str, title: str = "") -> str:
     其次从标题关键词推断。
     """
     parts = Path(source).parts
-    for part in reversed(parts):  # 从深到浅，优先细粒度匹配
+    # 从深到浅优先细粒度匹配课程目录
+    for part in reversed(parts):
         # 去掉编号前缀（如 "01-操作系统" → "操作系统"）
         segment = part.split("-", 1)[-1] if "-" in part and part[0].isdigit() else part
         if segment in _COURSE_DIR_MAP:
             return _COURSE_DIR_MAP[segment]
 
+    # 回退：用标题关键词匹配课程
     text = title.lower()
     for keyword, course in _COURSE_KEYWORDS.items():
         if keyword.lower() in text:
@@ -129,6 +133,7 @@ def infer_course(source: str, title: str = "") -> str:
     return ""
 
 
+# 取首个 Markdown 标题行作为章节信息
 def infer_section(text: str) -> str:
     """提取第一行标题作为章节信息。"""
     for line in text.split("\n"):
@@ -138,6 +143,7 @@ def infer_section(text: str) -> str:
     return ""
 
 
+# 批量为文档填充 title/course/section/parent_id 等元数据
 def enrich_metadata(docs: list[Document]) -> list[Document]:
     """批量为 Document 填充 title/course/section/heading_path/parent_id。
 
@@ -155,6 +161,7 @@ def enrich_metadata(docs: list[Document]) -> list[Document]:
         title = infer_title(source)
         course = infer_course(source, title)
         section = infer_section(doc.page_content)
+        # 用源路径 MD5 生成稳定父文档 ID
         parent_id = hashlib.md5(source.encode("utf-8")).hexdigest()[:16]
 
         doc.metadata["title"] = title

@@ -4,6 +4,7 @@
 确保前端始终收到结构一致的错误信息。
 """
 
+# 本模块定义全局异常处理器，将 AuthError 与 HTTPException 统一包装为标准响应
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Request
@@ -13,6 +14,7 @@ from app.auth.security import AuthError
 from app.infra.response import HttpResponse
 
 
+# 处理认证错误，将 AuthError 转换为 HTTP 401 标准响应
 async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
     """处理认证错误：将 AuthError 转换为 HTTP 401 标准响应。
 
@@ -21,6 +23,7 @@ async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
     return HttpResponse.error(code=401, message=exc.message)
 
 
+# 处理 FastAPI 内置 HTTPException，映射到统一错误响应格式
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """处理 FastAPI 内置 HTTPException。
 
@@ -29,6 +32,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     return HttpResponse.error(code=exc.status_code, message=str(exc.detail))
 
 
+# 向 FastAPI 应用注册全局异常处理器
 def install_exception_handlers(app: FastAPI) -> None:
     """向 FastAPI 应用注册全局异常处理器。
 

@@ -19,6 +19,7 @@ from typing import Any
 from app.rag.retriever import retrieve
 
 
+# 从 jsonl 文件逐行加载评测用例
 def _load_cases(path: Path) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -29,6 +30,7 @@ def _load_cases(path: Path) -> list[dict[str, Any]]:
     return cases
 
 
+# 拼接 chunk 的文本字段用于命中判定
 def _chunk_text(chunk: Any) -> str:
     return " ".join(
         [
@@ -41,9 +43,11 @@ def _chunk_text(chunk: Any) -> str:
     )
 
 
+# 判定单个 chunk 是否满足评测用例的命中条件
 def _is_hit(chunk: Any, case: dict[str, Any]) -> bool:
     text = _chunk_text(chunk)
 
+    # 关键词命中模式：宽松 any / 严格 all（默认）
     must_contain = case.get("must_contain") or []
     if must_contain:
         # match_mode: "all"(默认,严格,避免单关键词命中虚高指标) / "any"(宽松)
@@ -59,6 +63,7 @@ def _is_hit(chunk: Any, case: dict[str, Any]) -> bool:
     return False
 
 
+# 对单条评测用例执行检索并统计命中排名与指标
 async def _eval_one(case: dict[str, Any], top_k: int) -> dict[str, Any]:
     query = str(case["query"])
     course = case.get("course")
@@ -97,18 +102,21 @@ async def _eval_one(case: dict[str, Any], top_k: int) -> dict[str, Any]:
     }
 
 
+# 评测主流程：加载用例、逐条评测、汇总输出指标
 async def main() -> None:
     parser = argparse.ArgumentParser(description="RAG retrieval evaluation")
     parser.add_argument("--cases", required=True, help="Path to rag_eval_cases.jsonl")
     parser.add_argument("--top-k", type=int, default=5)
     args = parser.parse_args()
 
+    # 加载评测用例，为空则直接退出
     cases = _load_cases(Path(args.cases))
     if not cases:
         print("No eval cases found.")
         return
 
     rows = []
+    # 逐条执行评测并打印结果
     for case in cases:
         row = await _eval_one(case, args.top_k)
         rows.append(row)

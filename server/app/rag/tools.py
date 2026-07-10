@@ -30,6 +30,7 @@ logger = get_logger(__name__)
 _MAX_SNIPPET_CHARS = 1200
 
 
+# 知识库搜索工具参数模型
 class SearchKnowledgeBaseArgs(BaseModel):
     """知识库搜索工具参数。"""
 
@@ -57,6 +58,7 @@ class SearchKnowledgeBaseArgs(BaseModel):
 # ============ 格式化工具 ============
 
 
+# 在语义边界（句号/换行）截断过长片段
 def _truncate_snippet(text: str, max_chars: int = _MAX_SNIPPET_CHARS) -> str:
     """在语义边界截断过长片段。"""
     if len(text) <= max_chars:
@@ -67,13 +69,16 @@ def _truncate_snippet(text: str, max_chars: int = _MAX_SNIPPET_CHARS) -> str:
     return text[:max_chars].rstrip() + "..."
 
 
+# 将检索结果格式化为带来源标注的上下文文本
 def _format_context(result: RetrievalResult, max_chars: int = KB_MAX_CONTEXT_CHARS) -> str:
     """将检索结果格式化为可消费的上下文文本。
 
     可被 ChatAgent、ResourceAgent 等任何消费者使用。
     """
+    # 空结果提示
     if result.status == "empty":
         return "本地知识库没有检索到相关内容。"
+    # 不可用提示
     if result.status == "unavailable":
         return "本地知识库当前不可用，请基于已有知识回答。"
 
@@ -83,6 +88,7 @@ def _format_context(result: RetrievalResult, max_chars: int = KB_MAX_CONTEXT_CHA
     ]
 
     total_chars = 0
+    # 逐条拼接资料，超出字符上限则停止
     for idx, chunk in enumerate(result.chunks, 1):
         snippet = _truncate_snippet(chunk.content)
 
@@ -116,11 +122,13 @@ def _format_context(result: RetrievalResult, max_chars: int = KB_MAX_CONTEXT_CHA
     return "\n".join(parts)
 
 
+# 构建与上下文对应的来源列表（含元数据，便于前端引用）
 def _build_sources(result: RetrievalResult) -> list[dict[str, Any]]:
     """构建来源列表，与上下文资料一一对应。"""
     sources: list[dict[str, Any]] = []
     seen: set[str] = set()
 
+    # 按 source+chunk_id 去重构建来源
     for idx, chunk in enumerate(result.chunks, 1):
         dedup_key = f"{chunk.source}:{chunk.chunk_id}"
         if dedup_key in seen:
@@ -151,12 +159,14 @@ def _build_sources(result: RetrievalResult) -> list[dict[str, Any]]:
 # ============ 工具处理器 ============
 
 
+# 知识库搜索工具实际处理函数（调用混合检索并格式化）
 async def _search_knowledge_base_handler(
     query: str,
     course_name: str | None = None,
     top_k: int = 4,
 ) -> dict[str, Any]:
     """知识库搜索工具的实际处理函数。"""
+    # 调用底层混合检索，异常降级为不可用
     try:
         result = await retrieve(query, course_name=course_name, top_k=top_k)
     except Exception as exc:
@@ -170,6 +180,7 @@ async def _search_knowledge_base_handler(
             "elapsed_ms": 0,
         }
 
+    # 格式化上下文与来源列表
     context = _format_context(result)
     sources = _build_sources(result) if result.status == "ok" else []
 
@@ -186,6 +197,7 @@ async def _search_knowledge_base_handler(
 # ============ 公共接口 ============
 
 
+# 构建知识库搜索工具实例，供任意 Agent 注册使用
 def build_knowledge_tool() -> Tool:
     """构建知识库搜索工具实例。
 

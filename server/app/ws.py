@@ -3,6 +3,7 @@
 提供数字人语音对话的 WebSocket 端点。
 """
 
+# 本模块提供数字人语音对话的 WebSocket 端点，处理鉴权、桥接与资源清理
 from __future__ import annotations
 
 from fastapi import APIRouter, WebSocket
@@ -12,11 +13,12 @@ from app.auth.security import AuthError, _resolve_current_user_from_token
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.infra.database import session_scope
 
-# 创建路由实例
+# 创建 WebSocket 路由实例
 router = APIRouter()
 
 
 # WebSocket 端点：数字人语音对话
+# WebSocket 端点：数字人语音对话，负责鉴权、连接桥接与断开清理
 @router.websocket("/ws/avatar")
 async def avatar_websocket(websocket: WebSocket) -> None:
     """数字人语音对话 WebSocket 端点。
