@@ -1,5 +1,10 @@
+# 应用配置
+app:
+  host: "127.0.0.1"
+  port: 9999
+
 database:
-  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 20
   max_overflow: 30
@@ -80,10 +85,9 @@ knowledge:
   enabled: true
   embed_model: "bge-m3:latest"
   embed_base_url: "http://127.0.0.1:11434/v1"
+  embed_api_key: "sk-placeholder"
   top_k: 4
   max_context_chars: 6000
-  # 启动时索引不存在则自动构建（需要 embedding 服务可用）
-  auto_build: true
 
 # Memory 压缩与长期记忆
 memory:
@@ -125,12 +129,6 @@ paths_config:
   quiz_size: 5
   # 通过测验的最低分数
   pass_score: 3
-
-# Remotion 讲解视频渲染
-video:
-  render_timeout_seconds: 900
-  concurrency: 4
-  chromium_gl: angle
 
 # ASR 语音识别配置
 asr:
