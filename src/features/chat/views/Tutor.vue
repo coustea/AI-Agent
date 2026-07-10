@@ -609,7 +609,7 @@
                 <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
               </div>
               <div class="preview-footer">
-                <span>图解可保存为高清图片，便于复习和整理笔记。</span>
+                <span>图解可保存为高清图片，便于复习。</span>
                 <div class="footer-actions">
                   <button class="btn btn-outline" :disabled="isCapturing" @click="handleDownloadDiagram">
                     <span v-if="isCapturing" class="spinner mr-2"></span>

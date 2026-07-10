@@ -80,7 +80,6 @@
       </router-view>
     </main>
 
-    <GlobalNoteFab />
     <GlobalProfileDialog />
 
     <OnboardingDialog v-model="onboardingDialogVisible" @success="handleOnboardingSuccess" />
@@ -129,7 +128,6 @@ import { isGlobalProfileVisible } from '@/features/profile/model/useGlobalProfil
 // 认证轮询、Token 清除、UI 组件
 import { useAuthPolling } from '@/features/auth/model/useAuthPolling'
 import { clearAuthToken } from '@/shared/auth/token'
-import GlobalNoteFab from '@/shared/ui/GlobalNoteFab.vue'
 import AppLogo from '@/shared/ui/AppLogo.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
