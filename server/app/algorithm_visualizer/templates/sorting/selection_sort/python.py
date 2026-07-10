@@ -18,6 +18,7 @@ def bidirectional_selection_sort(arr):
         hi -= 1
     return arr
 
+# 定义 selection_sort 函数
 def selection_sort(arr):
     n = len(arr)
     for i in range(n):
@@ -29,7 +30,9 @@ def selection_sort(arr):
             arr[i], arr[min_idx] = arr[min_idx], arr[i]
     return arr
 
+# 定义 count_inversions 函数
 def count_inversions(arr):
+# 定义 merge_count 函数
     def merge_count(left, right):
         result = []
         i = j = inv = 0
@@ -45,6 +48,7 @@ def count_inversions(arr):
         result.extend(right[j:])
         return result, inv
 
+# 定义 sort_count 函数
     def sort_count(arr):
         if len(arr) <= 1:
             return arr, 0

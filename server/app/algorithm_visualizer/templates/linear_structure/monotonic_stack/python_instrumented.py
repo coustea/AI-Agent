@@ -14,8 +14,10 @@ def next_greater_element(nums):
     stack = []
     tracer.init_stack(line=15)
 
+# 循环遍历处理
     for i in range(n):
         tracer.highlight_input(i, line=17)
+# 循环条件判断
         while stack and nums[stack[-1]] < nums[i]:
             prev_idx = stack.pop()
             tracer.pop(line=20)
@@ -38,7 +40,9 @@ def next_greater_element_circular(nums):
     res = [-1] * n
     stack = []
 
+# 循环遍历处理
     for i in range(2 * n):
+# 循环条件判断
         while stack and nums[stack[-1]] < nums[i % n]:
             prev_idx = stack.pop()
             if res[prev_idx] == -1:

@@ -1,5 +1,6 @@
 """资源生成模块 — 周摘要章节构建。"""
 
+# 聚合本周生成的资源及其项目，生成章节统计
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,6 +16,7 @@ from app.profile.weekly.types import SectionResult
 logger = get_logger(__name__)
 
 
+# 构建周摘要的「资源生成」章节
 async def build_resource_section(
     db: AsyncSession,
     user_id: int,
@@ -50,6 +52,7 @@ async def build_resource_section(
             raw_length=0,
         )
 
+    # 查询资源对应的资源项目（含 agent 类型）
     res_ids = [r.id for r in resources]
     item_stmt = (
         select(GeneratedResourceItem.resource_id, GeneratedResourceItem.agent_type)
@@ -57,6 +60,7 @@ async def build_resource_section(
     )
     items = (await db.exec(item_stmt)).all()
 
+    # 按资源 ID 归并 agent 类型
     type_by_res: dict[int, list[str]] = {}
     for item in items:
         rid, atype = item[0], item[1]
@@ -64,6 +68,7 @@ async def build_resource_section(
             type_by_res[rid] = []
         type_by_res[rid].append(atype)
 
+    # 统计已完成资源数量
     completed = sum(1 for r in resources if r.status == "completed")
 
     lines: list[str] = []

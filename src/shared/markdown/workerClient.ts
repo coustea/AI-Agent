@@ -6,6 +6,8 @@ import type {
   MarkdownTheme,
 } from './types'
 
+// Markdown Worker 客户端：管理 Web Worker 生命周期，支持超时降级和自动重建
+
 export interface WorkerLike {
   onmessage: ((event: MessageEvent<MarkdownRenderResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null

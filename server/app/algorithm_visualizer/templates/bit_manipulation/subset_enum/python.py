@@ -1,3 +1,4 @@
+# subset_enum 算法实现 — domain: bit_manipulation
 def enumerate_subsets(n):
     subsets = []
     for mask in range(1 << n):
@@ -8,12 +9,14 @@ def enumerate_subsets(n):
         subsets.append(subset)
     return subsets
 
+# 定义 gray_code 函数
 def gray_code(n):
     if n == 0:
         return [0]
     smaller = gray_code(n - 1)
     return smaller + [x | (1 << (n - 1)) for x in reversed(smaller)]
 
+# 定义 subset_sum 函数
 def subset_sum(nums, target):
     n = len(nums)
     results = []
@@ -28,6 +31,7 @@ def subset_sum(nums, target):
             results.append(subset)
     return results
 
+# 定义 count_subsets_with_sum 函数
 def count_subsets_with_sum(nums, target):
     n = len(nums)
     count = 0

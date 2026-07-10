@@ -163,6 +163,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+// 组件属性：错题列表、再练题状态、筛选过滤
 const props = defineProps<{
   questions: any[]
   total: number
@@ -186,6 +187,7 @@ const props = defineProps<{
   drillReview: any | null
 }>()
 
+// 事件：搜索、翻页、再练操作、归档、移除
 defineEmits<{
   (e: 'search-wrong'): void
   (e: 'page-change', page: number): void
@@ -200,12 +202,14 @@ defineEmits<{
   (e: 'remove-wrong', question: any): void
 }>()
 
+// 再练题是否已有答案
 const hasDrillAnswer = computed(() => {
   const ans = props.drillAnswer
   if (Array.isArray(ans)) return ans.length > 0
   return !!ans && String(ans).trim().length > 0
 })
 
+// 再练题得分对应颜色样式
 const drillScoreClass = computed(() => {
   const score = props.drillReview?.score
   if (score == null) return props.drillCorrect ? 'success' : 'danger'
@@ -214,6 +218,7 @@ const drillScoreClass = computed(() => {
   return 'danger'
 })
 
+// 再练题得分对应文本
 const drillScoreText = computed(() => {
   const score = props.drillReview?.score
   if (score == null) return props.drillCorrect ? '已掌握' : '仍需复习'

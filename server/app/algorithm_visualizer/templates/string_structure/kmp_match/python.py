@@ -1,4 +1,5 @@
 """KMP 字符串匹配算法 (Knuth-Morris-Pratt Algorithm)
+# kmp_match 算法实现 — domain: string_structure
 
 KMP 算法是一种高效的字符串匹配算法，核心思想是利用已匹配的信息避免主串指针回溯。
 

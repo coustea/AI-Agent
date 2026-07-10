@@ -1,18 +1,12 @@
 <template>
   <div class="array-bars-visualizer">
-    <div class="visualizer-meta">
-      <div>
-        <h3>数组排序可视化</h3>
-        <p>使用 D3 渲染柱状图，GSAP 播放比较、交换和归位动画。</p>
-      </div>
+    <div class="chart-shell">
       <div class="legend">
         <span class="legend-item"><i class="legend-dot compare"></i>比较</span>
         <span class="legend-item"><i class="legend-dot swap"></i>交换</span>
         <span class="legend-item"><i class="legend-dot sorted"></i>已归位</span>
       </div>
-    </div>
 
-    <div class="chart-shell">
       <svg ref="svgRef" class="chart-svg" viewBox="0 0 860 420" preserveAspectRatio="xMidYMid meet" />
     </div>
   </div>
@@ -39,6 +33,7 @@ interface BarDatum {
 
 const props = defineProps<Props>()
 
+// SVG 容器引用、当前步骤的数组数据（降级到初始事件）
 const svgRef = ref<SVGSVGElement | null>(null)
 
 const activeArray = computed(() => {
@@ -53,12 +48,14 @@ const activeArray = computed(() => {
   return []
 })
 
+// 从事件 targets 中提取索引数组
 function getIndices(event: TraceEvent | null): number[] {
   const raw = event?.targets
   if (!Array.isArray(raw)) return []
   return raw.map(Number).filter((item: number) => Number.isInteger(item))
 }
 
+// 从 mark_sorted 事件中提取已排序索引
 function getSortedIndex(event: TraceEvent | null): number | null {
   if (event?.type === 'mark_sorted') {
     const raw = event.targets
@@ -67,6 +64,7 @@ function getSortedIndex(event: TraceEvent | null): number | null {
   return null
 }
 
+// 根据事件类型确定柱状图的颜色主题
 function getTone(index: number): string {
   const event = props.currentEvent
   const indices = getIndices(event)
@@ -77,12 +75,14 @@ function getTone(index: number): string {
   return 'default'
 }
 
+// 构建 D3 数据数组（包含值、索引、颜色主题）
 function buildData(): BarDatum[] {
   return activeArray.value.map((value: number, index: number) => ({
     id: `bar-${index}`, index, value, tone: getTone(index),
   }))
 }
 
+// 用 D3 渲染柱状图（创建/更新 bar-group）
 function renderChart() {
   if (!svgRef.value) return
   const svg = d3.select(svgRef.value)
@@ -124,6 +124,7 @@ function renderChart() {
   })
 }
 
+// 根据事件类型执行 GSAP 动画（比较/交换/归位/初始化）
 function animateStep() {
   if (!svgRef.value || !props.currentEvent) return
   const svg = svgRef.value
@@ -152,8 +153,11 @@ function animateStep() {
   }
 }
 
+// 步骤索引或数组变化时重新渲染并运行动画
 watch(() => [props.currentStepIndex, activeArray.value.join(',')], async () => { await nextTick(); renderChart(); animateStep() }, { immediate: true })
+// 初始渲染
 onMounted(() => { renderChart(); animateStep() })
+// 销毁前清理 GSAP 动画
 onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySelectorAll<SVGGElement>('g.bar-group')) })
 </script>
 
@@ -161,38 +165,23 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
 .array-bars-visualizer {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.visualizer-meta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.visualizer-meta h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-strong);
-}
-
-.visualizer-meta p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  padding: 12px;
+  background: transparent;
 }
 
 .legend {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
   display: flex;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .legend-item {
@@ -222,11 +211,13 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
 }
 
 .chart-shell {
+  position: relative;
+  flex: 1;
   min-height: 0;
   border-radius: var(--radius-sm);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  padding: 12px;
+  padding: 18px 12px 12px;
   display: flex;
   align-items: center;
   justify-content: center;

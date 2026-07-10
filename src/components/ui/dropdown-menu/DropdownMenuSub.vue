@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单子菜单
 import type { DropdownMenuSubEmits, DropdownMenuSubProps } from "reka-ui"
 import {
   DropdownMenuSub,

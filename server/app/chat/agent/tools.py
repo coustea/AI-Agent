@@ -27,6 +27,7 @@ from app.shared.research import (
 
 logger = get_logger(__name__)
 
+# 工具名称到证据类型的映射，用于构建对话证据与来源
 TOOL_EVIDENCE_TYPES: dict[str, str] = {
     "get_learner_profile": "learner_profile",
     "get_long_term_memory": "long_term_memory",
@@ -34,9 +35,11 @@ TOOL_EVIDENCE_TYPES: dict[str, str] = {
     "research": "web_search",
 }
 
+# 联网搜索事件处理函数类型
 ResearchEventHandler = Callable[[ResearchEvent], Awaitable[None]]
 
 
+# 装配当前辅导请求可用的业务工具（用户上下文/知识库/联网搜索）
 def build_tutor_tools(
     request: TutorRequestContext,
     *,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单单选项
 import { CheckIcon } from '@lucide/vue';
 
 import type { DropdownMenuRadioItemEmits, DropdownMenuRadioItemProps } from "reka-ui"

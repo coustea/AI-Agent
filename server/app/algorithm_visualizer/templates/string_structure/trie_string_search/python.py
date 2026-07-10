@@ -1,12 +1,17 @@
+# trie_string_search 算法实现 — domain: string_structure
 class TrieNode:
+# 定义 __init__ 函数
     def __init__(self):
         self.children = {}
         self.is_word = False
 
+# Trie 类定义
 class Trie:
+# 定义 __init__ 函数
     def __init__(self):
         self.root = TrieNode()
 
+# 定义 insert 函数
     def insert(self, word):
         if not word:
             self.root.is_word = True
@@ -18,6 +23,7 @@ class Trie:
             curr = curr.children[char]
         curr.is_word = True
 
+# 定义 search 函数
     def search(self, word):
         if not word:
             return self.root.is_word

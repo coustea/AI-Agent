@@ -1,3 +1,4 @@
+# jump_game 算法实现 — domain: greedy
 def can_jump(nums):
     max_reach = 0
     for i, jump in enumerate(nums):
@@ -6,6 +7,7 @@ def can_jump(nums):
         max_reach = max(max_reach, i + jump)
     return True
 
+# 定义 min_jumps 函数
 def min_jumps(nums):
     if len(nums) <= 1:
         return 0
@@ -26,6 +28,7 @@ def min_jumps(nums):
             steps = max_reach - i
     return -1
 
+# 定义 can_reach 函数
 def can_reach(arr, start):
     n = len(arr)
     visited = set()

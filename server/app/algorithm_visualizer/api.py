@@ -44,15 +44,18 @@ from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
+# 算法可视化模块的 API 路由与日志实例
 router = APIRouter()
 logger = get_logger(__name__)
 
 
+# 公开接口：返回所有支持的可视化编程语言列表
 @router.get("/algorithm-visualizer/languages")
 async def get_languages():
     return HttpResponse.success(data=[LanguageResponse(**lang) for lang in LANGUAGES])
 
 
+# 公开接口：按 domain / language 过滤并列出算法模板
 @router.get("/algorithm-visualizer/algorithms")
 async def get_algorithms(domain: str = "all", language: str | None = None):
     """获取算法模板列表。
@@ -67,6 +70,7 @@ async def get_algorithms(domain: str = "all", language: str | None = None):
         for alg in raw_algorithms:
             supported_languages = alg["supported_languages"]
 
+            # 仅保留当前所选语言支持的算法
             if language and language not in supported_languages:
                 continue
 
@@ -80,6 +84,7 @@ async def get_algorithms(domain: str = "all", language: str | None = None):
         return HttpResponse.error(code=400, message=str(e))
 
 
+# 需认证接口：返回干净的模板代码及前端默认输入数据（不含 tracer 调用）
 @router.get("/algorithm-visualizer/templates")
 async def get_templates(
     algorithm: str,
@@ -94,6 +99,7 @@ async def get_templates(
     try:
         info = get_algorithm_info(algorithm)
 
+        # 校验该算法是否支持请求的语言
         if language not in info["supported_languages"]:
             return HttpResponse.error(
                 code=400,
@@ -123,6 +129,7 @@ async def get_templates(
         return HttpResponse.error(code=400, message=f"加载模板失败: {str(e)}")
 
 
+# 需认证接口：运行提交的可视化代码（自动插装 tracer + 沙箱执行）
 @router.post("/algorithm-visualizer/run")
 async def run_visualization(
     request_data: RunRequest,
@@ -139,6 +146,7 @@ async def run_visualization(
 
     vis_type = request_data.visualizerType or ""
 
+    # 在沙箱中运行用户代码（缺失 tracer 时自动插装）
     try:
         result = await run_visualization_in_sandbox(
             language=language,
@@ -149,6 +157,7 @@ async def run_visualization(
             input_data=request_data.inputData,
         )
 
+    # 插装或执行失败，记录失败事件并返回错误
     except VisualizerRunError as e:
         await _safe_record_event(
             session,
@@ -164,6 +173,7 @@ async def run_visualization(
             message=e.message,
         )
 
+    # 未预期异常，同样记录失败事件
     except Exception as e:
         await _safe_record_event(
             session,
@@ -179,6 +189,7 @@ async def run_visualization(
             message=str(e),
         )
 
+    # 运行成功，记录成功事件
     await _safe_record_event(
         session,
         current_user.id,
@@ -191,6 +202,7 @@ async def run_visualization(
     return HttpResponse.success(data=RunSuccessResponse(**result).model_dump(by_alias=False))
 
 
+# 安全地记录可视化运行事件：埋点异常时仅告警，不影响主流程
 async def _safe_record_event(
     session: AsyncSession,
     user_id: int,
@@ -218,6 +230,7 @@ async def _safe_record_event(
         )
 
 
+# 根据算法类型返回前端默认输入数据（仅用于模板展示与填充）
 def build_default_data(algorithm: str) -> dict:
     """根据算法模板返回前端默认数据。
 
@@ -417,4 +430,3 @@ def build_default_data(algorithm: str) -> dict:
         return {"base": 2, "exp": 10, "mod": 1000}
 
     return {}
-

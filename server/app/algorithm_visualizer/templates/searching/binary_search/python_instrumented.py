@@ -2,9 +2,11 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 binary_search 函数
 def binary_search(arr, target):
     tracer.init_array(arr, line=1)
     lo, hi = 0, len(arr) - 1
+# 循环条件判断
     while lo <= hi:
         mid = (lo + hi) // 2
         tracer.move_pointer({"lo": lo, "hi": hi, "mid": mid}, line=5)
@@ -19,8 +21,10 @@ def binary_search(arr, target):
     tracer.finish(line=14)
     return -1
 
+# 定义 lower_bound 函数
 def lower_bound(arr, target):
     lo, hi = 0, len(arr)
+# 循环条件判断
     while lo < hi:
         mid = (lo + hi) // 2
         if arr[mid] < target:
@@ -29,8 +33,10 @@ def lower_bound(arr, target):
             hi = mid
     return lo
 
+# 定义 upper_bound 函数
 def upper_bound(arr, target):
     lo, hi = 0, len(arr)
+# 循环条件判断
     while lo < hi:
         mid = (lo + hi) // 2
         if arr[mid] <= target:
@@ -39,8 +45,10 @@ def upper_bound(arr, target):
             hi = mid
     return lo
 
+# 定义 search_rotated 函数
 def search_rotated(arr, target):
     lo, hi = 0, len(arr) - 1
+# 循环条件判断
     while lo <= hi:
         mid = (lo + hi) // 2
         if arr[mid] == target:

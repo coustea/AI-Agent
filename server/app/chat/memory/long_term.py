@@ -26,6 +26,7 @@ from app.infra.models import ChatLongTermMemory, ChatSession, ChatSessionSummary
 logger = get_logger(__name__)
 
 
+# ChatLongTermMemoryService：跨会话提取与增量更新稳定的学习特征
 class ChatLongTermMemoryService:
     """长期记忆服务 — 跨会话提取和更新稳定的学习特征。
 
@@ -37,6 +38,7 @@ class ChatLongTermMemoryService:
     避免低质量对话污染长期记忆。记忆格式为分类 Markdown。
     """
 
+    # 初始化置信度阈值、冷却时间与 LLM
     def __init__(
         self,
         *,
@@ -46,6 +48,7 @@ class ChatLongTermMemoryService:
         self.cooldown_seconds = 0  # 冷却时间由外层 evaluate_post_turn_jobs 控制
         self.llm = get_llm()
 
+    # 判断当前轮次是否含值得持久化的稳定学习信号（用户或助手触发）
     def should_consider_update(
         self,
         *,
@@ -67,6 +70,7 @@ class ChatLongTermMemoryService:
             keyword in assistant_reply for keyword in ("以后", "下次", "记住", "偏好", "纠正")
         )
 
+    # 条件更新长期记忆：信号/周期触发 → LLM 判断 → 置信度校验 → 写入
     async def maybe_update(
         self,
         *,
@@ -192,7 +196,7 @@ class ChatLongTermMemoryService:
             )
             return {"updated": False, "analyzed": True}
 
-        # 写入更新后的长期记忆
+        # 写入更新后的长期记忆并刷新更新时间
         memory = existing or old_memory
         memory.memory_markdown = resp.memory_markdown
         memory.updated_at = now()

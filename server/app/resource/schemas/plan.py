@@ -45,6 +45,7 @@ class ResourcePlan(BaseModel):
 
         匹配格式：### [content] 或 ### [mindmap] 等
         """
+        # 用正则提取所有 ### [agent_id] 标题中的 agent_id
         return re.findall(r"^###\s*\[(\w+)\]", self.content, re.MULTILINE)
 
     def has_agent(self, agent_id: str) -> bool:
@@ -61,6 +62,7 @@ class ResourcePlan(BaseModel):
         in_section = False
         section_lines: list[str] = []
 
+        # 从匹配标题开始收集，直到下一个 ### 段落为止
         for line in lines:
             if re.match(pattern, line.strip()):
                 in_section = True
@@ -105,9 +107,11 @@ def validate_resource_plan(plan: ResourcePlan, expected_agent_ids: list[str] | N
     """
     errors: list[str] = []
 
+    # 计划体必须非空
     if not plan.content.strip():
         errors.append("计划内容为空")
 
+    # 若提供了预期 agent，校验计划是否覆盖全部
     if expected_agent_ids:
         plan_ids = set(plan.agent_ids)
         expected_ids = set(expected_agent_ids)
@@ -115,6 +119,7 @@ def validate_resource_plan(plan: ResourcePlan, expected_agent_ids: list[str] | N
         if missing:
             errors.append(f"计划缺少以下 Agent 的协同任务段落: {sorted(missing)}")
 
+    # 存在错误则抛出，否则原样返回
     if errors:
         raise PlanValidationError("; ".join(errors))
 

@@ -21,6 +21,7 @@ def fibonacci_search(arr, target):
         return offset + 1
     return -1
 
+# 定义 fibonacci_search_range 函数
 def fibonacci_search_range(arr, target):
     idx = fibonacci_search(arr, target)
     if idx == -1:
@@ -33,6 +34,7 @@ def fibonacci_search_range(arr, target):
         right += 1
     return left, right
 
+# 定义 build_fibonacci_sequence 函数
 def build_fibonacci_sequence(n):
     if n <= 0:
         return [0]

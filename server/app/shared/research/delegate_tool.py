@@ -18,6 +18,7 @@ from app.shared.research.schemas import (
 ResearchEventHandler = Callable[[ResearchEvent], Awaitable[None]]
 
 
+# ResearchAgent 委托工具的入参模型
 class ResearchToolArgs(BaseModel):
     """ResearchAgent 委托参数。"""
 
@@ -26,6 +27,7 @@ class ResearchToolArgs(BaseModel):
     depth: ResearchDepth = Field(default="standard", description="研究深度")
 
 
+# 构建供上层 Agent 注册的 ResearchAgent 委托工具
 def build_research_tool(
     *,
     event_handler: ResearchEventHandler | None = None,
@@ -33,11 +35,13 @@ def build_research_tool(
 ) -> Tool:
     """构建供上层 Agent 注册的 ResearchAgent 委托工具。"""
 
+    # 委托工具的具体执行逻辑
     async def research(
         query: str,
         objective: str = "",
         depth: ResearchDepth = "standard",
     ) -> dict[str, Any]:
+        # 工具未启用时直接返回提示，不再执行搜索
         if not enabled:
             return {
                 "text": "当前任务未启用联网研究。",
@@ -57,7 +61,7 @@ def build_research_tool(
             )
         )
 
-        # 将搜索结果拼接为文本摘要
+        # 将搜索结果拼接为可读文本摘要
         result_text = ""
         if report.sources:
             parts = []
@@ -70,6 +74,7 @@ def build_research_tool(
                 parts.append(entry)
             result_text = "\n\n".join(parts)
 
+        # 无有效结果时附带错误摘要，便于上层判断是否重试
         if not result_text:
             error_summary = "；".join(error.message for error in report.errors[:3])
             result_text = "联网研究未获得可用于回答的证据。"
@@ -83,6 +88,7 @@ def build_research_tool(
             "errors": [error.model_dump() for error in report.errors],
         }
 
+    # 包装为统一的 Tool 对象供 Agent 注册
     return Tool(
         "research",
         "Delegate web search, page research, source verification, and time-sensitive fact checking to ResearchAgent.",

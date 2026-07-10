@@ -1,3 +1,4 @@
+// 将画像评分数据转换为 ECharts 雷达图配置
 export function getRadarChartData(scoreData: any) {
   const scores = scoreData?.metrics?.dimension_scores || {}
   const backendDimensions = Array.isArray(scoreData?.dimensions) ? scoreData.dimensions : []

@@ -1,3 +1,4 @@
+# trie_tree 算法实现 — domain: tree_structure
 class TrieNode:
     """字典树节点 — 每个节点包含子节点映射和单词结束标记"""
     def __init__(self):
@@ -5,6 +6,7 @@ class TrieNode:
         self.is_end = False
 
 
+# Trie 类定义
 class Trie:
     """字典树实现 — 支持插入、精确搜索、前缀搜索、删除"""
 
@@ -88,6 +90,7 @@ class Trie:
     def list_words(self):
         """列出字典树中所有单词 — DFS 遍历收集"""
         result = []
+# 定义 dfs 函数
         def dfs(node, prefix):
             if node.is_end:
                 result.append(prefix)

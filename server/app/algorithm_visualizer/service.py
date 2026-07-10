@@ -34,9 +34,11 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Tracer SDK 文件目录
 SDK_DIR = Path(__file__).parent / "tracer_sdks"
 
 
+# 算法可视化运行自定义异常
 class VisualizerRunError(Exception):
     """算法可视化运行错误。"""
 
@@ -46,6 +48,7 @@ class VisualizerRunError(Exception):
         self.error_type = error_type
 
 
+# 运行时编译/运行配置数据结构
 @dataclass
 class RuntimeConfig:
     sdk_source_filename: str
@@ -55,6 +58,7 @@ class RuntimeConfig:
     run_cmd: List[str]
 
 
+# 沙箱执行入口：校验输入 → 插装 → 编译运行 → 解析 trace → 校验事件流
 async def run_visualization_in_sandbox(
     language: str,
     code: str,
@@ -128,14 +132,18 @@ async def run_visualization_in_sandbox(
     # ── 自动追加 tracer.dump() ────────────────────────────────────────
     final_code = _ensure_dump_call(instrumented_code, language)
 
+    # 创建临时沙箱目录，在其中编译执行代码
     with tempfile.TemporaryDirectory() as temp_dir:
         run_dir = Path(temp_dir)
 
+        # 根据语言获取编译/运行配置
         runtime = build_runtime_config(language=language, code=final_code)
 
+        # 复制 Tracer SDK 并写入用户代码到临时目录
         copy_sdk(runtime=runtime, run_dir=run_dir)
         write_user_code(runtime=runtime, run_dir=run_dir, code=final_code)
 
+        # 对有编译需求的语言（C++/Java/C）执行编译
         if runtime.compile_cmd:
             compile_result = await run_process(
                 cmd=runtime.compile_cmd,
@@ -144,12 +152,14 @@ async def run_visualization_in_sandbox(
                 timeout=15.0,
             )
 
+            # 编译失败则抛出异常
             if compile_result["returncode"] != 0:
                 raise VisualizerRunError(
                     "代码编译错误：\n" + pick_error_message(compile_result),
                     "COMPILE_ERROR",
                 )
 
+        # 执行用户代码（Python/JS 直接运行，C++/Java/C 运行编译产物）
         run_result = await run_process(
             cmd=runtime.run_cmd,
             cwd=run_dir,
@@ -157,12 +167,14 @@ async def run_visualization_in_sandbox(
             timeout=3.0,
         )
 
+        # 运行时错误检查
         if run_result["returncode"] != 0:
             raise VisualizerRunError(
                 "代码运行出错：\n" + pick_error_message(run_result),
                 "RUNTIME_ERROR",
             )
 
+        # 验证 trace.json 文件是否存在
         trace_file = run_dir / "trace.json"
         if not trace_file.exists():
             raise VisualizerRunError(
@@ -170,6 +182,7 @@ async def run_visualization_in_sandbox(
                 "TRACE_FILE_MISSING",
             )
 
+        # 读取 trace.json 并检查文件大小
         raw = trace_file.read_text(encoding="utf-8")
         if len(raw) > 10 * 1024 * 1024:
             raise VisualizerRunError(
@@ -177,6 +190,7 @@ async def run_visualization_in_sandbox(
                 "TRACE_JSON_INVALID",
             )
 
+        # 解析 JSON 事件流
         try:
             events = json.loads(raw)
         except Exception as e:
@@ -185,12 +199,14 @@ async def run_visualization_in_sandbox(
                 "TRACE_JSON_INVALID",
             ) from e
 
+        # 校验事件流非空
         if not isinstance(events, list) or len(events) == 0:
             raise VisualizerRunError(
                 "可视化追踪事件流为空，没有录制到有效步骤。",
                 "TRACE_EVENT_EMPTY",
             )
 
+        # 兼容 visualizer_type 字段命名并校验事件完整性
         normalize_event_visualizer_type(events)
 
         validate_event_stream(

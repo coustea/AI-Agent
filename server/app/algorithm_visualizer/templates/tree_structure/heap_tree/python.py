@@ -1,3 +1,4 @@
+# heap_tree 算法实现 — domain: tree_structure
 def max_heapify(arr, n, i):
     """下沉调整 (sift down) — 维护最大堆性质
     比较节点 i 与其左右子节点，将最大值交换到父位置

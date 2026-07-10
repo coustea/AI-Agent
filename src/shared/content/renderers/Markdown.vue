@@ -60,6 +60,8 @@
 </template>
 
 <script setup lang="ts">
+// Markdown 渲染器：统一处理普通 markdown 和代码资源（含复杂度、调试建议、练习序列）
+
 import { computed } from 'vue'
 import {
   PhClock as Timer,
@@ -80,6 +82,7 @@ function toText(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
 }
 
+// 检测文本是否看起来像 Markdown 文档（而非纯代码）
 function looksLikeMarkdownDocument(text: string): boolean {
   if (!text.trim()) return false
   const fenceCount = text.match(/```/g)?.length ?? 0
@@ -90,6 +93,7 @@ function looksLikeMarkdownDocument(text: string): boolean {
   return hasMarkdownTitle && hasMarkdownList && !hasCodeSignals
 }
 
+// 用反引号包裹代码块，自动选择足够长的 fence 长度
 function toFencedMarkdown(code: string, language: unknown): string {
   const longestFence = Math.max(0, ...Array.from(code.matchAll(/`+/g), (match) => match[0].length))
   const fence = '`'.repeat(Math.max(3, longestFence + 1))
@@ -108,6 +112,7 @@ const parsedData = computed(() => {
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   let data = raw as Record<string, any>
+  // 解包嵌套的 resource 字段
   if (data.resource && typeof data.resource === 'object' && !Array.isArray(data.resource)) {
     data = data.resource
   }
@@ -148,6 +153,7 @@ const content = computed(() =>
   isCodeArtifact.value ? codeMarkdown.value : getMarkdownContent(props.resultData),
 )
 
+// 是否显示额外元数据面板
 const hasExtraInfo = computed(() => {
   const data = parsedData.value
   return !!(data?.complexity?.time || data?.complexity?.space || data?.debug_tips?.length || data?.exercises?.length)

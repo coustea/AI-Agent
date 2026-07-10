@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板对话框
 import type { DialogRootEmits, DialogRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { useForwardPropsEmits } from "reka-ui"

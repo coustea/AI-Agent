@@ -23,8 +23,7 @@ from app.config import (
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
-from app.shared.cartoon.cartoon_agent import CartoonGenerationError
-from app.shared.cartoon.service import CartoonVideoService
+from app.shared.cartoon import CartoonGenerationError, CartoonVideoService
 
 logger = get_logger(__name__)
 
@@ -45,6 +44,7 @@ class CartoonAgent(BaseResourceAgent):
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         username = input_data.username
         resource_key = str(input_data.resource_id or uuid.uuid4().hex)
+        # 多智能体资源场景：输出到 resources/{id}/cartoon/
         output_dir = user_resource_cartoon_dir(username, resource_key)
 
         return await self._generate(
@@ -57,6 +57,7 @@ class CartoonAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         username = input_data.username
+        # 路径节点场景：输出到 paths/{path_id}/nodes/{node_id}/cartoon/
         output_dir = user_path_node_cartoon_dir(
             username, str(input_data.path_id), str(input_data.node_id)
         )
@@ -73,7 +74,7 @@ class CartoonAgent(BaseResourceAgent):
         self,
         *,
         learning_need: str,
-        profile: dict[str, Any] | str | None,
+        profile: dict[str, Any],
         output_dir: Any,
     ) -> AgentResult:
         logger.info(
@@ -86,6 +87,7 @@ class CartoonAgent(BaseResourceAgent):
         task_id = uuid.uuid4().hex
 
         try:
+            # 调用共享动画管线生成带音频的 MP4，期间发送心跳
             result = await self.run_with_heartbeat(
                 self._service.generate(
                     task_id=task_id,
@@ -100,6 +102,7 @@ class CartoonAgent(BaseResourceAgent):
                 progress=75,
             )
         except CartoonGenerationError as exc:
+            # 业务校验失败：带审计问题返回
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.error(
                 "Agent[%s] 生成失败: error=%s elapsed_ms=%d",
@@ -118,6 +121,7 @@ class CartoonAgent(BaseResourceAgent):
                 },
             )
         except Exception as exc:
+            # 其它异常：记录堆栈并返回失败
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.error(
                 "Agent[%s] 生成异常: error=%s elapsed_ms=%d",
@@ -134,7 +138,7 @@ class CartoonAgent(BaseResourceAgent):
                 metadata={"agent_id": self.agent_id},
             )
 
-        # Compute relative paths from WORKPLACE_DIR for static serving
+        # 将绝对路径转换为 /static/ 相对 URL 供前端访问
         video_path = result.video_path
         html_path = result.html_path
         video_url = f"/static/{video_path.relative_to(WORKPLACE_DIR)}" if video_path and video_path.exists() else ""

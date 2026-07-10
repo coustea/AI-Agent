@@ -123,29 +123,7 @@ import GridDiagram from './diagrams/GridDiagram.vue'
 import ProtocolDiagram from './diagrams/ProtocolDiagram.vue'
 import TimelineDiagram from './diagrams/TimelineDiagram.vue'
 
-import type {
-  ComparisonPayload,
-  FlowchartPayload,
-  FrameworkPayload,
-  HierarchyPayload,
-  SequencePayload,
-  SummaryPayload,
-  TeachingDiagram,
-  TreePayload,
-  GridPayload,
-  ProtocolPayload,
-  TimelinePayload,
-} from '@/features/chat/types/chat'
-
-const props = defineProps<{
-  diagram: TeachingDiagram
-  compact?: boolean
-}>()
-
-const emit = defineEmits<{
-  (e: 'expand', diagram: TeachingDiagram): void
-}>()
-
+// 卡片的类型标签映射
 const typeLabel: Record<string, string> = {
   comparison: '对比图解',
   flowchart: '流程图解',
@@ -178,11 +156,36 @@ const difficultyLabel: Record<string, string> = {
   advanced: '高级',
 }
 
+import type {
+  ComparisonPayload,
+  FlowchartPayload,
+  FrameworkPayload,
+  HierarchyPayload,
+  SequencePayload,
+  SummaryPayload,
+  TeachingDiagram,
+  TreePayload,
+  GridPayload,
+  ProtocolPayload,
+  TimelinePayload,
+} from '@/features/chat/types/chat'
+
+const props = defineProps<{
+  diagram: TeachingDiagram
+  compact?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'expand', diagram: TeachingDiagram): void
+}>()
+
+// 当前图解的视觉提示文本
 const visualHint = computed(() => visualHintMap[props.diagram.graph_type] || '结合图形理解知识结构')
 const keyPoints = computed(() => props.diagram.teaching_content?.key_points || [])
 const commonMistakes = computed(() => props.diagram.teaching_content?.common_mistakes || [])
 const examples = computed(() => props.diagram.teaching_content?.examples || [])
 
+// compact 模式下点击展开完整图解
 const handleExpand = () => {
   if (props.compact) emit('expand', props.diagram)
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单多选项
 import { CheckIcon } from '@lucide/vue';
 
 import type { DropdownMenuCheckboxItemEmits, DropdownMenuCheckboxItemProps } from "reka-ui"

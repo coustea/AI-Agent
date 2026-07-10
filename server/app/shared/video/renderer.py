@@ -33,6 +33,7 @@ ALLOWED_GL_BACKENDS = {"angle", "swiftshader", "egl"}
 # ---------------------------------------------------------------------------
 
 
+# 探测本机 FFmpeg 支持的编码器列表（小写）
 def _ffmpeg_encoders() -> str:
     """探测本机 FFmpeg 支持的编码器列表（小写）。"""
     ffmpeg = shutil.which("ffmpeg")
@@ -51,6 +52,7 @@ def _ffmpeg_encoders() -> str:
     return f"{result.stdout}\n{result.stderr}".lower()
 
 
+# 判断 Linux/Windows 是否存在可用的 NVIDIA GPU 与 NVENC 编码器
 def _nvidia_gpu_available(encoders: str) -> bool:
     """判断 Linux/Windows 是否存在可用的 NVIDIA GPU 与 NVENC 编码器。"""
     system = platform.system()
@@ -78,6 +80,7 @@ def _nvidia_gpu_available(encoders: str) -> bool:
     return result.returncode == 0 and bool(result.stdout.strip())
 
 
+# 探测 GPU 并选择最合适的 Chromium GL 后端（Ubuntu Linux 优先）
 @lru_cache(maxsize=1)
 def detect_chromium_gl_backend(configured: str | None = None) -> str:
     """探测 GPU 并选择最合适的 Chromium GL 后端（针对 Ubuntu Linux 优化）。
@@ -99,6 +102,7 @@ def detect_chromium_gl_backend(configured: str | None = None) -> str:
         合法的 GL 后端名称，必定属于 ALLOWED_GL_BACKENDS。
     """
     # 显式配置优先（用户在 config.yaml 中手动设置时尊重其选择）
+    # 配置值非法时回退到 angle
     explicit = configured if configured is not None else VIDEO_RENDER_CHROMIUM_GL
     if explicit not in ALLOWED_GL_BACKENDS:
         explicit = "angle"
@@ -108,6 +112,7 @@ def detect_chromium_gl_backend(configured: str | None = None) -> str:
 
     # Ubuntu Linux + NVIDIA GPU：使用 Remotion 官方推荐的 angle 后端
     # 无 GPU 时退回 swiftshader，保证 headless 环境也能完成渲染
+    # 依据 GPU 检测结果选择最终 GL 后端
     chosen = "angle" if has_gpu else "swiftshader"
 
     logger.info(
@@ -119,10 +124,12 @@ def detect_chromium_gl_backend(configured: str | None = None) -> str:
     return chosen
 
 
+# 渲染失败时抛出的异常类型
 class VideoRenderError(RuntimeError):
     """Raised when Remotion fails or produces an invalid media artifact."""
 
 
+# 通用子进程运行封装：解析命令、设置超时并返回标准输出/错误
 async def _run_process(
     command: list[str],
     *,
@@ -131,6 +138,7 @@ async def _run_process(
 ) -> tuple[int, str, str]:
     import platform
     cmd = command.copy()
+    # 解析相对命令路径，Windows 下 npx 需使用 npx.cmd
     if cmd and not Path(cmd[0]).is_absolute():
         resolved = shutil.which(cmd[0])
         if resolved:
@@ -144,11 +152,13 @@ async def _run_process(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+    # 等待子进程完成，超时则强制终止
     try:
         stdout, stderr = await asyncio.wait_for(
             process.communicate(),
             timeout=timeout_seconds,
         )
+    # 超时处理：杀掉进程并向上抛出
     except asyncio.TimeoutError:
         process.kill()
         await process.communicate()
@@ -160,6 +170,7 @@ async def _run_process(
     )
 
 
+# Remotion 渲染器：将视频计划交给 render.ts 渲染为 MP4
 class RemotionVideoRenderer:
     def __init__(
         self,
@@ -186,12 +197,15 @@ class RemotionVideoRenderer:
         self._explicit_gl = chromium_gl
         self.auto_detect_gl = auto_detect_gl
         # 初始值：优先显式参数，其次配置默认值；运行时可能被自动检测覆盖
+        # 校验显式 GL 后端合法性，非法则报错
         initial_gl = chromium_gl or VIDEO_RENDER_CHROMIUM_GL
         if initial_gl not in ALLOWED_GL_BACKENDS:
             raise ValueError(f"unsupported Chromium GL backend: {initial_gl}")
         self.chromium_gl = initial_gl
 
+    # 渲染主流程：校验环境、准备音频清单、调用 Remotion 并校验产物
     async def render(self, plan: VideoPlan, output_dir: Path) -> VideoArtifact:
+        # 检查 video-render 项目是否就绪
         if not (self.remotion_dir / "package.json").is_file():
             raise VideoRenderError("video-render project is missing")
 
@@ -203,6 +217,7 @@ class RemotionVideoRenderer:
         # 架构：renderer.py 写 audio manifest（清单），render.ts 在 bundle 就绪后
         # 再复制音频到 bundle/public/。这从根本上避免了 render.ts 的
         # fs.rmSync(cached_bundle) 清除已暂存音频的竞态条件。
+        # 创建本次渲染的临时作业目录
         job_dir = output_dir / f".render-{uuid.uuid4().hex}"
         job_dir.mkdir(parents=True)
         plan_path = job_dir / "video-plan.json"
@@ -210,9 +225,11 @@ class RemotionVideoRenderer:
         temporary_output = job_dir / "output.mp4"
         final_output = output_dir / "video.mp4"
         render_payload = plan.model_dump(mode="json")
+        # 构建音频清单：校验每个场景音频 URL 合法性并映射到 bundle 目录
         audio_manifest: list[dict[str, str]] = []
         for scene in render_payload["scenes"]:
             audio_src = str(scene["audio_src"])
+            # 音频必须使用 /static/ URL，否则视为非法
             if not audio_src.startswith("/static/"):
                 raise VideoRenderError(
                     f"scene audio must use a /static/ URL: {audio_src}"
@@ -224,8 +241,10 @@ class RemotionVideoRenderer:
                 source_audio.relative_to(WORKPLACE_DIR.resolve())
             except ValueError as exc:
                 raise VideoRenderError("scene audio escapes WORKPLACE_DIR") from exc
+            # 音频文件缺失时直接报错
             if not source_audio.is_file():
                 raise VideoRenderError(f"scene audio is missing: {source_audio}")
+            # 构造重命名后的暂存文件名
             staged_name = f"{scene['index']:02d}-{source_audio.name}"
             # dest 是相对于 bundle public/ 的路径，render.ts 会复制到该位置
             dest = f"render-assets/{job_dir.name}/{staged_name}"
@@ -245,6 +264,7 @@ class RemotionVideoRenderer:
 
         # 运行时探测 GPU 并选择最优 GL 后端（除非显式指定）
         # 与 cartoon 渲染器保持一致的 GPU 检测逻辑
+        # 未显式指定时自动探测 GPU 选择 GL 后端
         if self.auto_detect_gl and self._explicit_gl is None:
             self.chromium_gl = await asyncio.to_thread(detect_chromium_gl_backend)
 
@@ -263,6 +283,7 @@ class RemotionVideoRenderer:
             "--audio-manifest",
             str(manifest_path),
         ]
+        # 调用 Remotion 渲染脚本，失败时记录截断的报错信息
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
             code, stdout_text, stderr_text = await run_process_with_logging(
@@ -271,6 +292,7 @@ class RemotionVideoRenderer:
                 timeout_seconds=self.timeout_seconds,
                 logger_name="app.shared.video.render",
             )
+            # 非零退出码表示渲染失败，收集错误信息后抛异常
             if code != 0:
                 # 截断 stderr 避免异常消息过长
                 err_summary = stderr_text[-800:].strip()
@@ -279,24 +301,31 @@ class RemotionVideoRenderer:
                 raise VideoRenderError(
                     f"Remotion render failed: {err_summary}"
                 )
+            # 产物缺失或为空时直接报错
             if not temporary_output.is_file() or temporary_output.stat().st_size == 0:
                 raise VideoRenderError("Remotion did not produce an MP4 file")
 
+            # 探测音视频流，确保产物包含视频与音频轨道
             streams = await self._probe_streams(temporary_output)
             stream_types = {stream.get("codec_type") for stream in streams}
+            # 缺少视频或音频轨道均视为渲染失败
             if "video" not in stream_types:
                 raise VideoRenderError("rendered MP4 has no video stream")
             if "audio" not in stream_types:
                 raise VideoRenderError("rendered MP4 has no audio stream")
 
+            # 渲染成功，将临时文件替换为最终输出
             temporary_output.replace(final_output)
+        # 渲染超时时转换为可读的渲染超时错误
         except asyncio.TimeoutError as exc:
             raise VideoRenderError(
                 f"Remotion render timed out after {self.timeout_seconds}s"
             ) from exc
+        # 无论成功失败都清理临时作业目录
         finally:
             shutil.rmtree(job_dir, ignore_errors=True)
 
+        # 计算对外的静态资源 URL 并返回视频产物描述
         relative = final_output.resolve().relative_to(WORKPLACE_DIR.resolve())
         return VideoArtifact(
             plan=plan,
@@ -313,6 +342,7 @@ class RemotionVideoRenderer:
             },
         )
 
+    # 使用 ffprobe 探测媒体文件的音视频流信息
     async def _probe_streams(self, path: Path) -> list[dict[str, object]]:
         command = [
             "ffprobe",
@@ -327,12 +357,14 @@ class RemotionVideoRenderer:
             command,
             timeout_seconds=30,
         )
+        # ffprobe 失败或返回非法 JSON 时抛出渲染错误
         if code != 0:
             raise VideoRenderError(f"ffprobe failed: {stderr[-600:].strip()}")
         try:
             payload = json.loads(stdout)
         except json.JSONDecodeError as exc:
             raise VideoRenderError("ffprobe returned invalid JSON") from exc
+        # 校验并返回流列表
         streams = payload.get("streams")
         if not isinstance(streams, list):
             raise VideoRenderError("ffprobe returned no stream list")

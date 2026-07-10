@@ -94,7 +94,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
     code: { programming_language: 'python', output_style: 'reference', focus: 'application', include_tests: true },
     reading: { coverage: 'broad', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
-    ppt: { template: 'technical-atlas', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
+    ppt: { template: 'tech-blueprint', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
     cartoon: { style: 'dark_tech', depth: 'deep', pace: 'slow', visuals: 'detailed' },
     video: { style: 'systems_dark', focus: 'practice', voice: 'coach', aspect_ratio: '16:9' },
   },

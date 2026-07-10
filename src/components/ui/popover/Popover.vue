@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 弹出框根容器
 import type { PopoverRootEmits, PopoverRootProps } from "reka-ui"
 import { PopoverRoot, useForwardPropsEmits } from "reka-ui"
 

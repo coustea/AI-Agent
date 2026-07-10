@@ -17,6 +17,7 @@ export interface RecommendationData {
   }
 }
 
+// 获取首页推荐卡片数据（冷启动/活跃态）
 export function getRecommendation() {
   return http.get<ApiResponse<RecommendationData>>('/ai/dashboard/recommendation')
 }
@@ -38,6 +39,7 @@ export interface ProfileRadarData {
   }
 }
 
+// 获取用户能力画像雷达图数据
 export function getProfileRadar() {
   return http.get<ApiResponse<ProfileRadarData>>('/ai/dashboard/profile-radar')
 }
@@ -58,6 +60,7 @@ export interface ContinueLearningData {
   }[]
 }
 
+// 获取继续学习列表（进行中的学习路径）
 export function getContinueLearning() {
   return http.get<ApiResponse<ContinueLearningData>>('/ai/dashboard/continue-learning')
 }
@@ -78,6 +81,7 @@ export interface QuickActionsData {
   actions: HomeActionItem[]
 }
 
+// 获取快捷操作列表
 export function getQuickActions() {
   return http.get<ApiResponse<QuickActionsData>>('/ai/dashboard/quick-actions')
 }
@@ -94,6 +98,7 @@ export interface RecentResourceItem {
   created_at: string | null
 }
 
+// 获取最近生成的资源列表
 export function getRecentResources() {
   return http.get<ApiResponse<RecentResourceItem[]>>('/ai/dashboard/recent-resources')
 }
@@ -106,6 +111,7 @@ export interface StudyStatsData {
   weekly_days: number
 }
 
+// 获取学习统计数据（如周学习天数）
 export function getStudyStats() {
   return http.get<ApiResponse<StudyStatsData>>('/ai/dashboard/study-stats')
 }

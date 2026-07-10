@@ -1,5 +1,6 @@
 """算法可视化模块 — 周摘要章节构建。"""
 
+# 聚合本周算法可视化运行记录，生成章节统计与明细
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,6 +16,7 @@ from app.profile.weekly.types import SectionResult
 logger = get_logger(__name__)
 
 
+# 构建周摘要的「算法可视化」章节
 async def build_visualizer_section(
     db: AsyncSession,
     user_id: int,
@@ -43,6 +45,7 @@ async def build_visualizer_section(
 
     logger.info("Visualizer section — user=%d week=%s~%s events=%d", user_id, week_start.date(), week_end.date(), len(events))
 
+    # 无记录时返回空章节
     if not events:
         return SectionResult(
             markdown="本周无算法可视化记录。",
@@ -60,6 +63,7 @@ async def build_visualizer_section(
         success = meta.get("success", True)
         error_msg = meta.get("error_message", "")
 
+        # 统计失败次数并生成状态文案
         if not success:
             failures += 1
             status = f"失败：{error_msg}" if error_msg else "失败"

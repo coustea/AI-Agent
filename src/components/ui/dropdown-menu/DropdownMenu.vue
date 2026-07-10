@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单根容器
 import type { DropdownMenuRootEmits, DropdownMenuRootProps } from "reka-ui"
 import { DropdownMenuRoot, useForwardPropsEmits } from "reka-ui"
 

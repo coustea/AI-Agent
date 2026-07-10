@@ -16,6 +16,7 @@ ResearchSource = Literal["web"]
 ResearchDepth = Literal["quick", "standard", "deep"]
 
 
+# 搜索任务定义：描述一次研究检索的查询、来源、深度等
 class ResearchTask(BaseModel):
     """搜索任务定义。"""
 
@@ -28,6 +29,7 @@ class ResearchTask(BaseModel):
     depth: ResearchDepth = Field(default="standard", description="搜索深度")
     context: str = Field(default="", description="额外上下文")
 
+    # 校验器：去除首尾空白并确保 query 非空
     @model_validator(mode="after")
     def validate_query(self) -> "ResearchTask":
         self.query = self.query.strip()
@@ -40,6 +42,7 @@ class ResearchTask(BaseModel):
 # 搜索结果定义
 # ============================================================================
 
+# 单条搜索来源项（标题、链接、摘要等）
 class ResearchSourceItem(BaseModel):
     """搜索来源项。"""
 
@@ -50,6 +53,7 @@ class ResearchSourceItem(BaseModel):
     published_at: str | None = Field(default=None, description="发布时间")
 
 
+# 错误记录：标注错误阶段、代码、是否可恢复
 class ResearchError(BaseModel):
     """错误记录。"""
 
@@ -59,6 +63,7 @@ class ResearchError(BaseModel):
     recoverable: bool = Field(default=True, description="是否可恢复")
 
 
+# 搜索结果报告：聚合来源项与错误列表
 class ResearchReport(BaseModel):
     """搜索结果报告。"""
 
@@ -66,6 +71,7 @@ class ResearchReport(BaseModel):
     sources: list[ResearchSourceItem] = Field(default_factory=list, description="搜索结果列表")
     errors: list[ResearchError] = Field(default_factory=list, description="错误记录")
 
+    # 判断报告是否含有有效搜索结果
     @property
     def has_results(self) -> bool:
         """是否有有效搜索结果。"""
@@ -76,6 +82,7 @@ class ResearchReport(BaseModel):
 # 事件定义
 # ============================================================================
 
+# 搜索生命周期事件：用于向上层回调进度与状态
 class ResearchEvent(TypedDict):
     """搜索事件。"""
 

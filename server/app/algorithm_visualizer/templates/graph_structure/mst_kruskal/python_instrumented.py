@@ -20,16 +20,20 @@ labels = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G"}
 num_nodes = 7
 
 
+# DSU 类定义
 class DSU:
+# 定义 __init__ 函数
     def __init__(self, n):
         self.parent = list(range(n))
         self.rank = [0] * n
 
+# 定义 find 函数
     def find(self, x):
         if self.parent[x] != x:
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
 
+# 定义 union 函数
     def union(self, x, y):
         root_x = self.find(x)
         root_y = self.find(y)
@@ -45,10 +49,13 @@ class DSU:
         return True
 
 
+# 定义 kruskal 函数
 def kruskal(num_nodes, edges):
     nodes = []
+# 循环遍历处理
     for i in range(num_nodes):
         node_edges = []
+# 循环遍历处理
         for u, v, w in edges:
             if u == i:
                 node_edges.append({"to": str(v), "weight": w})
@@ -64,6 +71,7 @@ def kruskal(num_nodes, edges):
     mst = []
     mst_weight = 0
 
+# 循环遍历处理
     for u, v, weight in edges_sorted:
         tracer.visit_node(str(u), line=136)
         tracer.visit_node(str(v), line=136)

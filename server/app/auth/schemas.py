@@ -1,3 +1,4 @@
+# 认证数据模型汇总：统一从 request/response 导出 Schema，作为其他模块的单一导入入口
 """认证模块数据模型汇总。
 
 从 request.py 和 response.py 统一导出请求/响应 Schema，

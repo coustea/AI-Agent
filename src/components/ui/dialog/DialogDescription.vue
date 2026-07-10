@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 对话框描述
 import type { DialogDescriptionProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

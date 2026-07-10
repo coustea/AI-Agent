@@ -143,7 +143,7 @@ interface LayoutEdge {
   length: number
 }
 
-// Map node IDs to nodes for fast lookup
+// 节点 ID → 原始数据的快速查找表
 const nodeMap = computed(() => {
   const map = new Map<string, TreeDiagramNode>()
   if (props.payload?.nodes) {
@@ -154,7 +154,7 @@ const nodeMap = computed(() => {
   return map
 })
 
-// Traverse and calculate (x, y) coordinates for all reachable nodes
+// 递归遍历树结构，计算每个节点的 (x, y) 坐标
 const layoutNodes = computed(() => {
   const result: LayoutNode[] = []
   if (!props.payload || !props.payload.root_id) return result
@@ -192,7 +192,7 @@ const layoutNodes = computed(() => {
   return result
 })
 
-// Calculate connection lines (x1, y1, x2, y2) between parent nodes and child nodes
+// 计算父子节点之间的连接线坐标
 const layoutEdges = computed(() => {
   const edges: LayoutEdge[] = []
   const map = new Map<string, LayoutNode>()
@@ -240,6 +240,7 @@ const layoutEdges = computed(() => {
   return edges
 })
 
+// 树的最大深度
 const maxDepth = computed(() => {
   if (layoutNodes.value.length === 0) return 0
   return Math.max(...layoutNodes.value.map(n => n.level))

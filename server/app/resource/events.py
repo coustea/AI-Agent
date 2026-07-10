@@ -50,6 +50,7 @@ async def record_resource_generated_event(
             "agent_types": list(agent_types) if agent_types else [],
         },
     )
+    # 将资源生成事件写入 learning_events 供画像评分聚合
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     logger.info(
         "[Resource] event recorded: user_id=%s resource_id=%s status=%s",

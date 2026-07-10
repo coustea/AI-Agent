@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板搜索输入
 import { SearchIcon } from '@lucide/vue';
 
 import type { ListboxFilterProps } from "reka-ui"

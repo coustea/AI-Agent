@@ -2,6 +2,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import { hasAuthToken } from '@/shared/auth/token'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
 
+// 懒加载所有路由组件，实现代码分割
 const Login = () => import('@/features/auth/views/Login.vue')
 const Register = () => import('@/features/auth/views/Register.vue')
 const MainLayout = () => import('@/app/layouts/MainLayout.vue')
@@ -18,14 +19,19 @@ const QuestionBank = () => import('@/features/question-bank/views/QuestionBank.v
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
 const AlgorithmVisualizer = () => import('@/features/algorithm-visualization/views/AlgorithmVisualization.vue')
 
+// 路由配置表
 export const routes: RouteRecordRaw[] = [
+  // 根路径根据登录状态自动重定向
   { path: '/', redirect: () => (hasAuthToken() ? '/dashboard' : '/login') },
+  // 认证路由（无需登录即可访问）
   { path: '/login', name: 'Login', component: Login },
   { path: '/register', name: 'Register', component: Register },
   { path: '/onboarding', name: 'Onboarding', component: OnboardingDialog, props: { standalone: true } },
+  // 主布局路由容器，所有已登录页面为其子路由
   {
     path: '/',
     component: MainLayout,
+    // 已登录子路由：仪表盘、资源引擎、路径规划、智能辅导、题库等
     children: [
       { path: 'dashboard', name: 'Dashboard', component: Home },
       { path: 'resource-generator', name: 'ResourceGenerator', component: ResourceGenerator },

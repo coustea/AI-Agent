@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 对话框根容器
 import type { DialogRootEmits, DialogRootProps } from "reka-ui"
 import { DialogRoot, useForwardPropsEmits } from "reka-ui"
 

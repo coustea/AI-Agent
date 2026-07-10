@@ -70,6 +70,7 @@
 <script setup lang="ts">
 import type { ComparisonPayload } from '@/features/chat/types/chat'
 
+// 对比图组件：左右实体 + 多维对比 + 可视化总结
 defineProps<{
   payload: ComparisonPayload
 }>()

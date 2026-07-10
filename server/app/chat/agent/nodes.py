@@ -37,6 +37,7 @@ from app.infra.tool_excute import ToolExcute, ToolRuntimeEvent
 logger = get_logger(__name__)
 
 
+# 返回当前日期字符串，用于注入 system prompt 的“今日日期”上下文
 def _current_date_text() -> str:
     return datetime.now().date().isoformat()
 
@@ -60,8 +61,10 @@ def _normalize_reasoning_summary(text: str) -> str:
     return re.sub(r"\s+", " ", summary).strip()[:200]
 
 
+# 拆分可公开的进度摘要与严格包裹在 <answer> 标签内的正式回答
 def split_reasoning_and_answer(text: str) -> tuple[str, str]:
     """拆分可公开的进度摘要与严格包裹的正式回答。"""
+    # 匹配标准 <answer> 协议：前半段为推理摘要，后半段为正式回答
     match = _ANSWER_BLOCK_RE.match(text)
     if match:
         return (
@@ -73,15 +76,18 @@ def split_reasoning_and_answer(text: str) -> tuple[str, str]:
     if re.search(r"</?answer\b", text, re.IGNORECASE):
         return "", ""
 
+    # 无标准标签：整段作为推理摘要，不产出正式回答
     return _normalize_reasoning_summary(text), ""
 
 
+# 根据图解 JSON 校验错误，生成针对性的修复建议，帮助 LLM 理解出错原因
 def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> str:
     """根据校验错误生成具体的修复建议，帮助 LLM 理解哪里出错。"""
     graph_type = raw_diagram.get("graph_type", "")
     visual_content = raw_diagram.get("visual_content", {})
     hints: list[str] = []
 
+    # hierarchy 类型 root 字段类型错误的修复提示
     if "root" in error_msg.lower() and graph_type == "hierarchy":
         root = visual_content.get("root")
         if isinstance(root, dict):
@@ -91,6 +97,7 @@ def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> s
                 "嵌套树结构请使用 tree 类型。"
             )
 
+    # hierarchy 类型 children 字段应为字符串数组的修复提示
     if "children" in error_msg.lower() and graph_type == "hierarchy":
         branches = visual_content.get("branches", [])
         for i, branch in enumerate(branches if isinstance(branches, list) else []):
@@ -102,9 +109,11 @@ def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> s
                 )
                 break
 
+    # grid 类型 cells index 字段必须为整数的修复提示
     if "index" in error_msg.lower() and graph_type == "grid":
         hints.append("grid 的 cells[].index 必须是整数，不能是字符串。")
 
+    # graph_type 与 visual_content 不匹配时，给出各类图结构的字段要求
     if "visual_content must match" in error_msg.lower() or "完整校验失败" in error_msg:
         # graph_type 与 visual_content 不匹配，建议重新选择
         type_hints = {
@@ -122,12 +131,15 @@ def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> s
         if graph_type in type_hints:
             hints.append(f"{graph_type} 类型要求：{type_hints[graph_type]}")
 
+    # 没有更具体的提示时，给出通用校验建议
     if not hints:
         hints.append("请仔细检查 visual_content 结构是否与 graph_type 对应的 schema 完全匹配。")
 
+    # 将修复提示拼接为单行中文说明
     return "；".join(hints)
 
 
+# 从 <answer> 内容中提取 <diagram> 标签内的 JSON，返回去除标签后的回答与解析结果
 def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] | None]:
     """从 <answer> 内容中提取 <diagram> 标签的 JSON。
 
@@ -136,10 +148,12 @@ def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] |
     - 如果未找到 <diagram> 标签，返回原回答和 None
     - 如果 JSON 解析失败，返回原回答和 None（由调用方处理修复重试）
     """
+    # 未找到 <diagram> 标签则直接返回原回答，无图解
     match = _DIAGRAM_TAG_RE.search(answer_body)
     if not match:
         return answer_body, None
 
+    # 提取 JSON 文本
     json_text = match.group("json").strip()
     # 移除可能的 markdown 代码块包裹
     if json_text.startswith("```"):
@@ -147,17 +161,19 @@ def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] |
         json_text = re.sub(r"\n?```\s*$", "", json_text)
         json_text = json_text.strip()
 
+    # 解析 JSON，失败则保留原回答交由调用方决定是否重试
     try:
         parsed = json.loads(json_text)
     except json.JSONDecodeError as exc:
         logger.warning("[extract_diagram] JSON 解析失败: %s", exc)
         return answer_body, None
 
-    # 从回答中移除 <diagram> 标签
+    # 从回答中移除 <diagram> 标签并清理空白
     cleaned = _DIAGRAM_TAG_RE.sub("", answer_body).strip()
     return cleaned, parsed
 
 
+# 生成思考卡片的降级摘要：优先用推理文本，其次用决策文本，最后用默认模板
 def _thinking_summary(reasoning: str, iteration: int, decision_text: str = "") -> str:
     return (
         reasoning
@@ -171,6 +187,7 @@ def _thinking_summary(reasoning: str, iteration: int, decision_text: str = "") -
 # -----------------------------------------------------------------------
 
 
+# 预处理节点：分析附件（图片 OCR / 文档解析），填充 attachment_context 供后续回答使用
 async def preprocess_node(
     agent: Any,
     state: TutorAgentState,
@@ -185,9 +202,11 @@ async def preprocess_node(
     session_id = state.get("session_id", "")
     user_message_id = state.get("user_message_id", 0)
 
+    # 无附件则直接返回空上下文
     if not attachments:
         return {"attachment_context": ""}
 
+    # 按扩展名将附件分为图片与文档两类
     image_urls, file_urls = [], []
     for url in attachments:
         ext = url.rsplit(".", 1)[-1].lower().split("?")[0] if "." in url else ""
@@ -196,12 +215,15 @@ async def preprocess_node(
         else:
             file_urls.append(url)
 
+    # 收集附件分析事件与持久化记录
     events: list[TutorRuntimeEvent] = []
     analysis_records: dict[str, Any] = {}
+    # 遍历图片、文档两类附件，分别创建分析记录并发送 running 事件
     activity_groups = (("image", image_urls), ("document", file_urls))
     for index, (analysis_type, urls) in enumerate(activity_groups):
         if not urls:
             continue
+        # 为本次附件分析在记忆中创建一条记录
         analysis_records[analysis_type] = await agent.memory_service.create_attachment_analysis(
             user_id=user_id,
             session_id=session_id,
@@ -224,6 +246,7 @@ async def preprocess_node(
     analysis_results: dict[str, str] = {}
     analysis_errors: dict[str, str] = {}
 
+    # 图片附件：调用视觉服务进行 OCR / 图表分析
     if image_urls:
         try:
             vision_result = await VisionService().analyze_images(
@@ -239,9 +262,11 @@ async def preprocess_node(
                 )
             else:
                 analysis_errors["image"] = "未提取到可用内容"
+        # 图片分析失败则记录错误，不阻断流程
         except Exception as exc:
             logger.warning("[preprocess_node] 图片分析失败: %s", exc)
             analysis_errors["image"] = str(exc)
+        # 分析失败时更新附件分析记录的错误信息
         if "image" in analysis_errors:
             await agent.memory_service.finish_attachment_analysis(
                 analysis_id=str(analysis_records["image"].id),
@@ -249,6 +274,7 @@ async def preprocess_node(
                 error_message=analysis_errors["image"],
             )
 
+    # 文档附件：调用文档解析服务提取内容
     if file_urls:
         try:
             analysis = await analyze_documents(
@@ -265,9 +291,11 @@ async def preprocess_node(
                 )
             else:
                 analysis_errors["document"] = "未提取到可用内容"
+        # 文档分析失败则记录错误，不阻断流程
         except Exception as exc:
             logger.warning("[preprocess_node] 文档分析失败: %s", exc)
             analysis_errors["document"] = str(exc)
+        # 分析失败时更新文档分析记录的错误信息
         if "document" in analysis_errors:
             await agent.memory_service.finish_attachment_analysis(
                 analysis_id=str(analysis_records["document"].id),
@@ -275,15 +303,18 @@ async def preprocess_node(
                 error_message=analysis_errors["document"],
             )
 
+    # 将图片/文档分析结果拼接为附件上下文文本
     attachment_context = "\n".join(
         f"[{'图片' if analysis_type == 'image' else '文档'}] {content}"
         for analysis_type, content in analysis_results.items()
     )
 
+    # 为每个附件类型发送完成/失败事件
     done_events: list[TutorRuntimeEvent] = []
     for index, (analysis_type, urls) in enumerate(activity_groups):
         if not urls:
             continue
+        # 根据分析结果判定状态
         status = "done" if analysis_results.get(analysis_type) else "failed"
         event = TutorRuntimeEvent(
             type="agent_status",
@@ -300,6 +331,7 @@ async def preprocess_node(
         )
         done_events.extend(await agent._emit_event(state, event))
 
+    # 返回附件上下文与全部流式事件，供状态图累积
     return {
         "attachment_context": attachment_context,
         "stream_events": events + done_events,
@@ -311,6 +343,7 @@ async def preprocess_node(
 # -----------------------------------------------------------------------
 
 
+# ReAct 节点：LLM 自主决策工具调用并流式输出回答，处理图解提取与格式修复
 async def react_node(
     agent: Any,
     state: TutorAgentState,
@@ -346,6 +379,7 @@ async def react_node(
     full_answer = ""
     base_seq = len(state.get("stream_events", [])) + 1
 
+    # 联网搜索状态事件发射器：转发研究状态为 agent_status 事件
     async def emit_research_status(event: Any) -> None:
         nonlocal base_seq
         base_seq += 1
@@ -361,6 +395,7 @@ async def react_node(
         node_events.extend(emitted)
 
     # ── 1. 构建工具集 ──
+    # 组装本轮请求上下文（用户、附件、联网搜索、图解开关）
     request_context = TutorRequestContext(
         user_id=user_id,
         username=state.get("username", ""),
@@ -375,6 +410,7 @@ async def react_node(
         research_event_handler=emit_research_status,
     )
 
+    # 工具调用状态事件发射器：转发工具运行时事件为 agent_status 事件
     async def emit_tool_status(event: ToolRuntimeEvent) -> None:
         nonlocal base_seq
         base_seq += 1
@@ -397,6 +433,7 @@ async def react_node(
         memory_service=memory_service,
     )
 
+    # 统一的工具执行封装：调用 TutorToolRunner 并收集调用记录、来源与错误
     async def execute_tutor_tool(
         *,
         tool_name: str,
@@ -417,6 +454,7 @@ async def react_node(
         node_errors.extend(result.errors)
         return result
 
+    # 若开启联网搜索，强制先执行 research 工具并将结果注入上下文
     forced_context_blocks: list[str] = []
     if enable_web_search:
         search_result = await execute_tutor_tool(
@@ -432,7 +470,7 @@ async def react_node(
         if search_text:
             forced_context_blocks.append(f"[联网搜索结果]\n{search_text}")
 
-    # ── 2. 构建 system prompt ──
+    # ── 2. 构建 system prompt（统一 tutor_agent 模板，注入会话概要/附件/日期等）──
     system_prompt = prompts.get("chat").render(
         "tutor_agent",
         session_summary_context=session_summary,
@@ -447,6 +485,7 @@ async def react_node(
     )
 
     # ── 3. 初始化消息和事件收集 ──
+    # 组装用户消息，依次拼接附件分析结果与强制搜索上下文
     human_content = question
     if attachment_context:
         human_content = f"{question}\n\n[附件分析结果]\n{attachment_context}"
@@ -454,9 +493,10 @@ async def react_node(
     if forced_context_blocks:
         human_content = f"{human_content}\n\n" + "\n\n".join(forced_context_blocks)
 
+    # 构建完整消息列表：system + 历史 + 本轮 human
     messages: list[AnyMessage] = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
 
-    # ── 4. ReAct 循环 ──
+    # ── 4. ReAct 循环（最多 8 轮：LLM → 工具 / 回答）──
     max_iterations = 8
     iteration = 0
 
@@ -471,7 +511,7 @@ async def react_node(
     while iteration < max_iterations:
         iteration += 1
 
-        # ── 4.1 发送"正在思考"状态 ──
+        # ── 4.1 发送"正在思考"状态事件 ──
         thinking_event = TutorRuntimeEvent(
             type="agent_status",
             payload=build_workflow_activity_payload(
@@ -487,8 +527,8 @@ async def react_node(
         await agent._emit_event(state, thinking_event)
 
         # ── 4.2 流式调用 LLM（支持工具调用）──
+        # 先收集完整一轮。只有流结束后才能可靠判断该轮是工具决策还是最终回答，
         try:
-            # 先收集完整一轮。只有流结束后才能可靠判断该轮是工具决策还是最终回答，
             # 因此不能在这里提前把文本作为 answer_token 发给前端。
             answer_text = ""
             seq = base_seq + iteration * 10
@@ -498,7 +538,7 @@ async def react_node(
                 messages,
                 model=tool_model,
             ):
-                # 累积响应（用于最终获取完整的 tool_calls）
+                # 累积完整响应（流式结束后用于提取 tool_calls）
                 accumulated_response = chunk if accumulated_response is None else accumulated_response + chunk
 
                 # 文本可能是思考摘要、工具决策说明或最终回答，暂不对外发送。
@@ -515,9 +555,11 @@ async def react_node(
                     pass
 
             # ── 4.3 从累积的响应中获取完整的 tool_calls ──
+            # 提取工具调用并拆分推理摘要与正式回答
             tool_calls = getattr(accumulated_response, "tool_calls", None) if accumulated_response else None
             reasoning_summary, answer_body = split_reasoning_and_answer(answer_text)
 
+            # 判断本轮是否产出最终回答或需要格式修复
             has_final_answer = bool(answer_body)
             needs_format_repair = not tool_calls and not has_final_answer
 
@@ -545,10 +587,14 @@ async def react_node(
                 sequence=base_seq + iteration * 10,
                 timestamp=time.time(),
             )
+            # 发送本轮思考完成事件
             await agent._emit_event(state, thinking_done_event)
 
+            # 本轮没有工具调用 → 可能是最终回答或需要格式修复
             if not tool_calls:
+                # 无工具调用且无正式回答 → 触发格式修复（仅一次）
                 if needs_format_repair:
+                    # 已修复过仍失败 → 报错并终止循环
                     if format_repair_used:
                         error_message = "模型未按 <answer>...</answer> 协议返回正式回答"
                         node_errors.append(error_message)
@@ -563,6 +609,7 @@ async def react_node(
                         )
                         break
 
+                    # 首次触发：将本轮响应与修复提示追加到消息列表并重试
                     format_repair_used = True
                     if accumulated_response is not None:
                         messages.append(accumulated_response)
@@ -576,17 +623,20 @@ async def react_node(
 
                 # ── 无工具调用 → 这是最终回答 ──
 
-                # 提取 <diagram> 标签内容
+                # 提取回答中的 <diagram> 标签内容
                 cleaned_answer, raw_diagram = extract_diagram_from_answer(answer_body)
 
+                # 存在图解 JSON 则进行校验与修复处理
                 if raw_diagram is not None:
-                    # 校验图解 JSON
+                    # 校验图解 JSON 结构是否合法
                     validated, diagram_error = validate_diagram_json(raw_diagram)
                     if validated is not None:
+                        # 校验通过：保存图解结果并去除标签
                         node_diagram_result = validated
                         answer_body = cleaned_answer
                     elif not diagram_repair_used:
                         # 校验失败 → 修复重试
+                        # 校验失败且未重试过：生成修复提示并重试一次
                         diagram_repair_used = True
                         logger.info("[react_node] 图解 JSON 校验失败，发起修复重试: %s", diagram_error)
                         if accumulated_response is not None:
@@ -602,15 +652,16 @@ async def react_node(
                         )))
                         continue
                     else:
-                        # 修复重试已用完，放弃图解
+                        # 修复重试已用完，放弃图解，仅保留文字回答
                         logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解: %s", diagram_error)
                         answer_body = cleaned_answer
 
-                # 流式输出最终回答
+                # 流式输出最终回答（逐 token 发送 answer_token 事件）
                 streamer = ResponseStreamer()
                 async for chunk_event in streamer.stream_answer(answer_body, skip_blank=False):
                     chunk_token = chunk_event.get("data", "")
                     if chunk_token:
+                        # 累积完整回答并实时推送 token
                         full_answer += chunk_token
                         event = TutorRuntimeEvent(
                             type="answer_token",
@@ -628,13 +679,16 @@ async def react_node(
                     sequence=seq,
                     timestamp=time.time(),
                 )
+                # 发送回答完成事件并跳出循环
                 await agent._emit_event(state, answer_done_event)
 
                 break  # 跳出循环
 
-            # ── 4.4 有 tool_calls → 执行工具 ──
+            # ── 4.4 有 tool_calls → 执行工具，将结果回灌给 LLM ──
+            # 将本轮含 tool_calls 的 AI 消息加入上下文
             messages.append(accumulated_response)  # 添加完整的 AIMessage（含 tool_calls）
 
+        # 捕获 LLM 流式调用异常，返回空回答与错误信息
         except Exception as exc:
             logger.exception("[react_node] LLM 流式输出失败")
             return {
@@ -643,29 +697,31 @@ async def react_node(
                 "errors": [f"LLM streaming failed: {exc}"],
             }
 
+        # 逐个执行 LLM 请求的工具调用
         for tool_call in tool_calls:
             tool_call_id = str(tool_call.get("id", ""))
             tool_name = str(tool_call.get("name", ""))
             tool_args = tool_call.get("args", {}) if isinstance(tool_call.get("args"), dict) else {}
 
             try:
+                # 执行工具并收集结果
                 result = await execute_tutor_tool(
                     tool_name=tool_name,
                     arguments=tool_args,
                     tool_call_id=tool_call_id,
                 )
 
-                # 收集结果
-                # 添加 ToolMessage
+                # 将工具返回文本封装为 ToolMessage 加入上下文
                 tool_result_text = str((result.invocation or {}).get("result_text", "") or "")
                 messages.append(ToolMessage(content=tool_result_text, tool_call_id=tool_call_id))
 
+            # 单个工具执行失败则记录错误并回灌失败消息，避免中断循环
             except Exception as exc:
                 logger.warning("[react_node] 工具 %s 失败: %s", tool_name, exc)
                 node_errors.append(f"{tool_name}: {exc}")
                 messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
 
-    # ── 5. 返回 state 更新 ──
+    # ── 5. 返回 state 更新（最终回答、图解、消息、事件、调用记录、来源、错误）──
     return {
         "final_answer": full_answer,
         "diagram_result": node_diagram_result,

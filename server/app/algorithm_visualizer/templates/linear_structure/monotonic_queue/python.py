@@ -1,3 +1,4 @@
+# monotonic_queue 算法实现 — domain: linear_structure
 from collections import deque
 
 def max_sliding_window(nums, k):

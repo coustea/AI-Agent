@@ -10,6 +10,7 @@ def binary_search(arr, target):
             hi = mid - 1
     return -1
 
+# 定义 lower_bound 函数
 def lower_bound(arr, target):
     lo, hi = 0, len(arr)
     while lo < hi:
@@ -20,6 +21,7 @@ def lower_bound(arr, target):
             hi = mid
     return lo
 
+# 定义 upper_bound 函数
 def upper_bound(arr, target):
     lo, hi = 0, len(arr)
     while lo < hi:
@@ -30,6 +32,7 @@ def upper_bound(arr, target):
             hi = mid
     return lo
 
+# 定义 search_rotated 函数
 def search_rotated(arr, target):
     lo, hi = 0, len(arr) - 1
     while lo <= hi:

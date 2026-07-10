@@ -391,8 +391,10 @@ interface PlanningStep {
 }
 
 const router = useRouter()
+// 表单 DOM 引用与输入状态
 const goalRef = ref<HTMLTextAreaElement | null>(null)
 const knowledgeInput = ref('')
+// 提交/规划流程状态
 const isSubmitting = ref(false)
 const isPlanning = ref(false)
 const planningPathId = ref<number | null>(null)
@@ -401,9 +403,11 @@ const planningProgress = ref(0)
 const planningLogs = ref<string[]>([])
 const planningError = ref('')
 
+// 轮播进度定时器与轮询停止标识
 let progressTimer: number | null = null
 let pollingStopped = false
 
+// 表单响应式数据：主题、目标、已有知识、偏好参数
 const form = reactive({
   topic: '',
   goal: '',
@@ -545,10 +549,12 @@ const examples: ExampleItem[] = [
   },
 ]
 
+// 表单是否可提交：主题非空且目标至少 8 个字
 const canSubmit = computed(() => {
   return form.topic.trim().length > 0 && form.goal.trim().length >= 8
 })
 
+// 提交按钮状态的标题和描述文案
 const submitStateTitle = computed(() => {
   if (!form.topic.trim()) return '请先填写学习主题'
   if (form.goal.trim().length < 8) return '请补充学习目标'
@@ -561,6 +567,7 @@ const submitStateDesc = computed(() => {
   return '点击提交后，智能引擎将调取您的学术画像数据并实时输出骨架方案。'
 })
 
+// 根据进度百分比计算当前处于规划流程的第几步
 const currentPlanningIndex = computed(() => {
   for (let i = planningSteps.length - 1; i >= 0; i -= 1) {
     const step = planningSteps[i]
@@ -581,12 +588,14 @@ const currentPlanningTitle = computed(() => {
   return currentPlanningStep.value.title
 })
 
+// 自动调整 textarea 高度
 function autoResize() {
   if (!goalRef.value) return
   goalRef.value.style.height = 'auto'
   goalRef.value.style.height = `${Math.min(goalRef.value.scrollHeight, 150)}px`
 }
 
+// 添加已有知识标签
 function addKnowledge() {
   const value = knowledgeInput.value.trim()
   if (!value) return
@@ -598,15 +607,18 @@ function addKnowledge() {
   knowledgeInput.value = ''
 }
 
+// 删除指定知识标签
 function removeKnowledge(value: string) {
   form.currentKnowledge = form.currentKnowledge.filter(item => item !== value)
 }
 
+// 按退格键删除最后一个标签
 function removeLastKnowledge() {
   if (knowledgeInput.value || !form.currentKnowledge.length) return
   form.currentKnowledge.pop()
 }
 
+// 切换知识标签（选中/取消）
 function toggleKnowledge(value: string) {
   if (form.currentKnowledge.includes(value)) {
     removeKnowledge(value)
@@ -616,6 +628,7 @@ function toggleKnowledge(value: string) {
   form.currentKnowledge.push(value)
 }
 
+// 切换规划重点（至少保留一个）
 function toggleFocus(value: Focus) {
   if (form.focus.includes(value)) {
     if (form.focus.length === 1) {
@@ -646,6 +659,7 @@ function applyExample(item: ExampleItem) {
   nextTick(autoResize)
 }
 
+// 重置表单到初始状态
 function resetForm() {
   form.topic = ''
   form.goal = ''
@@ -659,10 +673,12 @@ function resetForm() {
   nextTick(autoResize)
 }
 
+// 跳转到历史路径页
 function goHistory() {
   router.push('/path-planner/history')
 }
 
+// 构建提交给后端的请求 payload
 function buildPayload(): PathRequest {
   return {
     goal: form.goal.trim(),
@@ -680,6 +696,7 @@ function buildPayload(): PathRequest {
   }
 }
 
+// 清除进度轮播定时器
 function clearProgressTimer() {
   if (progressTimer !== null) {
     window.clearInterval(progressTimer)
@@ -687,11 +704,13 @@ function clearProgressTimer() {
   }
 }
 
+// 添加 SSE 规划日志（去重并限制最多 6 条）
 function addPlanningLog(message: string) {
   if (planningLogs.value.includes(message)) return
   planningLogs.value = [...planningLogs.value, message].slice(-6)
 }
 
+// 启动前端模拟进度动画，逐步展示各阶段的提示文案
 function startProgressAnimation() {
   clearProgressTimer()
 
@@ -717,6 +736,7 @@ function startProgressAnimation() {
   }, 700)
 }
 
+// 重置规划状态以便用户重新提交
 function resetPlanningState() {
   clearProgressTimer()
   pollingStopped = true
@@ -735,6 +755,7 @@ function delay(ms: number) {
   })
 }
 
+// 轮询等待后端路径生成完成（超时 3 分钟），完成后跳转至总览页
 async function waitForPathReady(pathId: number, runId: string) {
   const startedAt = Date.now()
   const timeoutMs = 180_000
@@ -776,6 +797,7 @@ async function waitForPathReady(pathId: number, runId: string) {
   }
 }
 
+// 提交路径创建：校验表单、调用 API、启动进度轮播并等待生成完成
 async function handleSubmit() {
   if (isSubmitting.value || isPlanning.value) return
 
@@ -827,6 +849,8 @@ async function handleSubmit() {
     isSubmitting.value = false
   }
 }
+
+// 组件卸载时停止轮询与定时器
 
 onBeforeUnmount(() => {
   pollingStopped = true

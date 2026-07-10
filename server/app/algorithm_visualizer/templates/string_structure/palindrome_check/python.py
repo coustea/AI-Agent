@@ -1,4 +1,5 @@
 """回文字符串检测 (Palindrome Check) — 双指针法
+# palindrome_check 算法实现 — domain: string_structure
 
 回文 (Palindrome) 是指正读和反读都相同的字符串。
 例如 "racecar"、"A man, a plan, a canal: Panama" 清洗后都是回文。

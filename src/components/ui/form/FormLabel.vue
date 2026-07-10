@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+// 表单字段标签
 import type { LabelProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"

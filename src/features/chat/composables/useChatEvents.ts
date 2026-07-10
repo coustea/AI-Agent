@@ -26,6 +26,7 @@ export interface ChatEventHandlers {
 
 const API_BASE = '/api/v1/ai'
 
+// 解析 SSE 原始消息为 ChatEvent 结构
 function parseChatEvent(raw: MessageEvent): ChatEvent | null {
   try {
     const data = JSON.parse(raw.data)
@@ -43,6 +44,7 @@ function parseChatEvent(raw: MessageEvent): ChatEvent | null {
   }
 }
 
+// SSE 事件订阅 composable：管理与后端的事件流连接
 export function useChatEvents() {
   const userMessageId = ref<number | null>(null)
   const sessionId = ref<string | null>(null)
@@ -53,11 +55,13 @@ export function useChatEvents() {
   const source = shallowRef<EventSource | null>(null)
   const lastSequence = ref(0)
 
+  // 关闭当前 EventSource 连接
   const close = () => {
     source.value?.close()
     source.value = null
   }
 
+  // 重置所有状态到初始值
   const reset = () => {
     close()
     userMessageId.value = null
@@ -69,6 +73,7 @@ export function useChatEvents() {
     lastSequence.value = 0
   }
 
+  // 建立 SSE 连接，监听 chat.event 事件
   const connect = (
     nextSessionId: string,
     nextUserMessageId: number,
@@ -84,6 +89,7 @@ export function useChatEvents() {
     const url = `${API_BASE}/chat/sessions/${nextSessionId}/messages/${nextUserMessageId}/events${query}`
     const eventSource = new EventSource(url)
 
+    // 监听服务端推送的 chat.event 事件
     eventSource.addEventListener('chat.event', (raw: MessageEvent) => {
       const event = parseChatEvent(raw)
       if (!event) return
@@ -136,6 +142,7 @@ export function useChatEvents() {
       handlers.onEvent?.(event)
     })
 
+    // SSE 连接错误处理（含自动重连逻辑）
     eventSource.onerror = (connectionEvent: Event) => {
       const willRetry = eventSource.readyState !== EventSource.CLOSED
       if (

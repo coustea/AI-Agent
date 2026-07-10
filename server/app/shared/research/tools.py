@@ -28,7 +28,7 @@ from app.shared.research.search_tools import (
 logger = get_logger(__name__)
 
 
-# 工具名称常量
+# 工具名称常量：所有搜索引擎名称
 SEARCH_TOOL_NAMES = (
     "duckduckgo_search",
     "duckduckgo_instant_answer",
@@ -40,11 +40,13 @@ SEARCH_TOOL_NAMES = (
     "spark_search",
 )
 
+# 内容抓取工具名称
 FETCH_TOOL_NAMES = (
     "curl_fetch",
     "webfetch",
 )
 
+# 各搜索工具对应的中文展示动作（用于进度事件语义）
 RESEARCH_TOOL_ACTIONS: dict[str, str] = {
     "duckduckgo_search": "检索公开网页",
     "duckduckgo_instant_answer": "查询百科摘要",
@@ -57,6 +59,7 @@ RESEARCH_TOOL_ACTIONS: dict[str, str] = {
 }
 
 
+# 包装工具处理器：捕获异常并记录日志后向上抛出
 def _safe_handler(handler: Any, name: str) -> Any:
     """包装工具处理器，捕获异常并记录日志。"""
     async def wrapped(**kwargs: Any) -> Any:
@@ -68,13 +71,14 @@ def _safe_handler(handler: Any, name: str) -> Any:
     return wrapped
 
 
+# 构建搜索工具列表（免费 + 已配置）
 def build_search_tools() -> list[Tool]:
     """构建搜索工具列表。
 
     返回所有可用的搜索工具，包括免费工具和已配置的工具。
     """
     return [
-        # 免费搜索引擎
+        # 免费搜索引擎：逐个注册为统一 Tool
         Tool(
             "duckduckgo_search",
             "DuckDuckGo 通用搜索（免费）",
@@ -112,7 +116,7 @@ def build_search_tools() -> list[Tool]:
             _safe_handler(stackoverflow_search, "stackoverflow_search"),
         ),
 
-        # 已配置的搜索引擎
+        # 已配置的搜索引擎：需 API Key 的工具
         Tool(
             "tavily_search",
             "Tavily AI 优化搜索（已配置 Key）",
@@ -128,6 +132,7 @@ def build_search_tools() -> list[Tool]:
     ]
 
 
+# 构建内容抓取工具列表
 def build_fetch_tools() -> list[Tool]:
     """构建内容抓取工具列表。
 
@@ -149,6 +154,7 @@ def build_fetch_tools() -> list[Tool]:
     ]
 
 
+# 构建全部工具（搜索 + 抓取）供 Agent 使用
 def build_all_tools() -> list[Tool]:
     """构建所有工具列表（搜索 + 抓取）。
 

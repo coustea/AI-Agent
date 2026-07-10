@@ -1,3 +1,4 @@
+# 认证模块响应模型：定义返回给前端的用户信息格式（已排除密码等敏感字段）
 """认证模块响应数据模型。
 
 定义用户信息的响应格式，用于序列化返回给前端。
@@ -10,6 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+# 用户信息响应体模型（从 ORM 对象安全映射，不含敏感字段）
 class UserRead(BaseModel):
     """用户信息响应体。
 

@@ -1,15 +1,20 @@
+# basic_bit 算法实现 — domain: bit_manipulation
 def get_bit(n, i):
     return (n >> i) & 1
 
+# 定义 set_bit 函数
 def set_bit(n, i):
     return n | (1 << i)
 
+# 定义 clear_bit 函数
 def clear_bit(n, i):
     return n & ~(1 << i)
 
+# 定义 toggle_bit 函数
 def toggle_bit(n, i):
     return n ^ (1 << i)
 
+# 定义 count_bits 函数
 def count_bits(n):
     count = 0
     while n:
@@ -17,6 +22,7 @@ def count_bits(n):
         n >>= 1
     return count
 
+# 定义 reverse_bits 函数
 def reverse_bits(n, bit_len=32):
     result = 0
     for i in range(bit_len):
@@ -24,6 +30,7 @@ def reverse_bits(n, bit_len=32):
         n >>= 1
     return result
 
+# 定义 is_power_of_two 函数
 def is_power_of_two(n):
     return n > 0 and (n & (n - 1)) == 0
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板列表
 import type { ListboxContentProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

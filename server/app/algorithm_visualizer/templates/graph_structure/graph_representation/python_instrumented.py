@@ -2,6 +2,7 @@ from visual_tracer import GraphTracer
 
 tracer = GraphTracer()
 
+# 定义 build_graph 函数
 def build_graph():
     labels = ["A", "B", "C", "D", "E", "F", "G"]
     num_nodes = len(labels)
@@ -22,13 +23,16 @@ def build_graph():
     if self_loops:
         edges = [(u, v, w) for u, v, w in edges if u != v]
 
+# 循环遍历处理
     for u, v, w in edges:
         assert 0 <= u < num_nodes, f"节点编号越界：{u}"
         assert 0 <= v < num_nodes, f"节点编号越界：{v}"
 
     nodes = []
+# 循环遍历处理
     for i in range(num_nodes):
         node_edges = []
+# 循环遍历处理
         for u, v, w in edges:
             if u == i:
                 node_edges.append({"to": str(v), "weight": w})
@@ -38,6 +42,7 @@ def build_graph():
     tracer.init_graph(nodes, line=29)
 
     matrix = [[0] * num_nodes for _ in range(num_nodes)]
+# 循环遍历处理
     for u, v, w in edges:
         matrix[u][v] = w
         matrix[v][u] = w
@@ -45,6 +50,7 @@ def build_graph():
         tracer.visit_node(str(v), line=59)
 
     adj = {i: [] for i in range(num_nodes)}
+# 循环遍历处理
     for u, v, w in edges:
         adj[u].append((v, w))
         adj[v].append((u, w))
@@ -52,6 +58,7 @@ def build_graph():
         tracer.visit_node(str(v), line=67)
 
     edge_list = []
+# 循环遍历处理
     for u, v, w in edges:
         if u < v:
             edge_list.append((u, v, w))
@@ -59,6 +66,7 @@ def build_graph():
         tracer.visit_node(str(v), line=74)
 
     degree = [0] * num_nodes
+# 循环遍历处理
     for u, v, w in edges:
         degree[u] += 1
         degree[v] += 1
@@ -70,12 +78,15 @@ def build_graph():
         print("所有节点均连通，无孤立节点")
 
     matrix_ok = True
+# 循环遍历处理
     for u in range(num_nodes):
+# 循环遍历处理
         for v, w in adj[u]:
             if matrix[u][v] != w:
                 matrix_ok = False
 
     edge_list_ok = True
+# 循环遍历处理
     for u, v, w in edge_list:
         if matrix[u][v] != w or matrix[v][u] != w:
             edge_list_ok = False
@@ -88,19 +99,23 @@ def build_graph():
     print("\n--- 邻接矩阵 ---")
     header = "    " + "  ".join(f"{l:>3}" for l in labels)
     print(header)
+# 循环遍历处理
     for i, row in enumerate(matrix):
         print(f"{labels[i]:>3} " + "  ".join(f"{val:>3}" for val in row))
 
     print("\n--- 邻接表 ---")
+# 循环遍历处理
     for i in range(num_nodes):
         neighbors = ", ".join(f"{labels[v]}({w})" for v, w in adj[i])
         print(f"  {labels[i]}: [{neighbors}]")
 
     print("\n--- 边列表 ---")
+# 循环遍历处理
     for u, v, w in edge_list:
         print(f"  {labels[u]} — {labels[v]}, 权重 {w}")
 
     print("\n--- 度数统计 ---")
+# 循环遍历处理
     for i in range(num_nodes):
         print(f"  节点 {labels[i]}: 度数 {degree[i]}")
 

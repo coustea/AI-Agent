@@ -10,6 +10,7 @@ vis_edges = {i: [] for i in range(7)}
 def build_vis_nodes():
     """根据当前 vis_edges 构建可视化节点列表"""
     nodes = []
+# 循环遍历处理
     for i in range(7):
         nodes.append({
             "id": str(i),
@@ -19,9 +20,11 @@ def build_vis_nodes():
     return nodes
 
 
+# DSU 类定义
 class DSU:
     """并查集类，支持路径压缩与按秩合并"""
 
+# 定义 __init__ 函数
     def __init__(self, n):
         self.parent = list(range(n))
         self.rank = [0] * n

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板快捷键
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 

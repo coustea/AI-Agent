@@ -10,6 +10,7 @@ const DEFAULT_OPTIONS: Required<GreenScreenOptions> = {
   maxRedGreenGap: 80,
 }
 
+// 判断单个像素是否为绿幕背景像素
 export function isGreenScreenPixel(
   red: number,
   green: number,
@@ -27,6 +28,7 @@ export function isGreenScreenPixel(
   )
 }
 
+// 将 RGBA 像素数据中绿幕像素的 alpha 通道置为 0
 export function applyGreenScreenAlpha(
   pixels: Uint8ClampedArray,
   options: GreenScreenOptions = {},

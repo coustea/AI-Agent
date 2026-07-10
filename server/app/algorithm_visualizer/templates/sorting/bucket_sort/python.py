@@ -1,3 +1,4 @@
+# bucket_sort 算法实现 — domain: sorting
 def insertion_sort_for_buckets(bucket):
     for i in range(1, len(bucket)):
         key = bucket[i]
@@ -8,6 +9,7 @@ def insertion_sort_for_buckets(bucket):
         bucket[j + 1] = key
     return bucket
 
+# 定义 bucket_sort 函数
 def bucket_sort(arr):
     if not arr:
         return arr
@@ -30,6 +32,7 @@ def bucket_sort(arr):
             result.extend(b)
     return result
 
+# 定义 bucket_sort_with_negatives 函数
 def bucket_sort_with_negatives(arr):
     if not arr:
         return arr
@@ -41,6 +44,7 @@ def bucket_sort_with_negatives(arr):
         pos = bucket_sort(pos)
     return neg + pos
 
+# 定义 bucket_sort_custom_buckets 函数
 def bucket_sort_custom_buckets(arr, num_buckets):
     if not arr:
         return arr

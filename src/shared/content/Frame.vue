@@ -5,6 +5,8 @@
 </template>
 
 <script setup lang="ts">
+// Frame 组件：资源卡片外层容器，提供圆角边框、阴影和悬停效果
+
 defineProps<{
   compact?: boolean
 }>()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器向上滚动按钮
 import { ChevronUpIcon } from '@lucide/vue';
 
 import type { SelectScrollUpButtonProps } from "reka-ui"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 对话框遮罩
 import type { DialogOverlayProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

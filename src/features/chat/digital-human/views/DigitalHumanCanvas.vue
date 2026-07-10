@@ -77,6 +77,7 @@ const props = defineProps<{
   idleCountdown: number
 }>()
 
+// 事件：启用音频 / 断开 / 重连
 defineEmits<{
   'enable-audio': []
   'disconnect': []
@@ -92,6 +93,7 @@ let sourceVideo: HTMLVideoElement | null = null
 let workCanvas: HTMLCanvasElement | null = null
 let workContext: CanvasRenderingContext2D | null = null
 
+// 确保绿幕抠像用的离屏 Canvas 已创建
 const ensureWorkCanvas = () => {
   if (!workCanvas) {
     workCanvas = document.createElement('canvas')
@@ -107,6 +109,7 @@ const resizeCanvas = (canvas: HTMLCanvasElement, width: number, height: number) 
   if (workCanvas && workCanvas.height !== height) workCanvas.height = height
 }
 
+// 逐帧渲染绿幕抠像：读取视频帧 → 去绿 → 绘制到输出 Canvas
 const renderChromaFrame = () => {
   const video = sourceVideo
   const canvas = chromaCanvas.value
@@ -135,6 +138,7 @@ const renderChromaFrame = () => {
   chromaFrameId = window.requestAnimationFrame(renderChromaFrame)
 }
 
+// 查找 video 元素并启动绿幕渲染循环
 const startChromaKey = () => {
   const video = videoContainer.value?.querySelector('video')
   if (!(video instanceof HTMLVideoElement)) return
@@ -152,6 +156,7 @@ defineExpose({
   getContainer: () => videoContainer.value,
 })
 
+// 组件挂载后：启动绿幕 + 监听 DOM 变化
 onMounted(() => {
   nextTick(() => {
     startChromaKey()
@@ -162,6 +167,7 @@ onMounted(() => {
   })
 })
 
+// 组件卸载前：取消动画帧、断开 MutationObserver、销毁子元素
 onBeforeUnmount(() => {
   if (chromaFrameId !== null) {
     window.cancelAnimationFrame(chromaFrameId)

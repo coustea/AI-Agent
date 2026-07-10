@@ -65,6 +65,8 @@
 </template>
 
 <script setup lang="ts">
+// 全局笔记 FAB 组件：浮动笔记按钮，支持拖拽定位、面板展开/收起、自动吸附避让
+
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -101,6 +103,7 @@ type StoredState = {
   savedNotes?: StoredNote[]
 }
 
+// 面板位置候选方案
 type PanelPlacement = {
   left: number
   top: number
@@ -123,6 +126,7 @@ const layerRef = ref<HTMLElement | null>(null)
 const fabRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
+// 只有登录用户才显示笔记
 const visible = computed(() => Boolean(currentUser.value))
 const storageKey = computed(() => currentUser.value ? `global-note-fab:${currentUser.value.id}` : '')
 
@@ -133,7 +137,10 @@ const editorText = ref('')
 const savedNotes = ref<StoredNote[]>([])
 const panelStyle = ref<Record<string, string>>({})
 
+// 判断 FAB 停在屏幕左半还是右半（用于面板展开方向）
 const isStickRight = computed(() => fabPos.value.x + FAB_SIZE / 2 >= window.innerWidth / 2)
+
+// 面板副标题与草稿状态标签
 const panelSubtitle = computed(() => editorText.value.trim() ? '当前是未保存草稿，收起后会自动保留' : '保存后会清空草稿，下次打开是新的空白页')
 const draftStatusLabel = computed(() => editorText.value.trim() ? '草稿已恢复' : '空白新页')
 const lastSavedLabel = computed(() => {
@@ -188,6 +195,7 @@ function createRect(left: number, top: number, width: number, height: number): R
   return { left, top, width, height }
 }
 
+// 计算两个矩形重叠面积（用于避让评分）
 function getOverlapArea(a: Rect, b: Rect | null) {
   if (!b) return 0
   const overlapWidth = Math.max(0, Math.min(rectRight(a), rectRight(b)) - Math.max(a.left, b.left))
@@ -211,6 +219,7 @@ function getViewportBounds() {
   }
 }
 
+// 获取 tutor 页面的 FAB 按钮位置（用于避让）
 function getTutorFabRect(): Rect | null {
   if (!route.path.startsWith('/tutor')) return null
   const tutorFab = document.querySelector('.fab-container') as HTMLElement | null
@@ -228,6 +237,7 @@ function getPointerPosition(event: MouseEvent | TouchEvent) {
   return touch ? { x: touch.clientX, y: touch.clientY } : null
 }
 
+// 持久化 FAB 位置、草稿和笔记到 localStorage
 function persistState() {
   if (isHydrating || !storageKey.value) return
   const state: StoredState = {
@@ -496,6 +506,7 @@ function endDrag() {
   persistState()
 }
 
+// 保存当前笔记：生成唯一 ID，写入 localStorage 并清空草稿
 function saveNote() {
   const content = editorText.value.trim()
   if (!content) {
@@ -543,6 +554,7 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   }
 }
 
+// 定时避让 tutor 页面的 FAB 按钮（避免重叠）
 function startTutorAvoidLoop() {
   stopTutorAvoidLoop()
   tutorAvoidTimer = window.setInterval(() => {

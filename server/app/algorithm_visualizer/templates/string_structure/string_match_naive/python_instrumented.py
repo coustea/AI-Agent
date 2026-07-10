@@ -3,6 +3,7 @@ from visual_tracer import ArrayTracer
 tracer = ArrayTracer()
 
 
+# 定义 naive_match 函数
 def naive_match(text, pattern):
     if not pattern:
         return list(range(len(text) + 1))
@@ -14,8 +15,10 @@ def naive_match(text, pattern):
     tracer.init_array(text_arr, line=26)
     indices = []
 
+# 循环遍历处理
     for i in range(n - m + 1):
         match = True
+# 循环遍历处理
         for j in range(m):
             tracer.move_pointer({"i": i, "j": i + j}, line=33)
             tracer.compare(i + j, i + j, line=34)

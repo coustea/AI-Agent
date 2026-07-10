@@ -21,11 +21,14 @@ async def generate_path_node_resource(
 
     从 AGENT_REGISTRY 查找对应 agent，调用 generate_node 方法。
     """
+    # 校验请求的 agent_id 是否已注册
     if agent_id not in AGENT_REGISTRY:
         raise ValueError(f"Agent '{agent_id}' not found in AGENT_REGISTRY")
 
+    # 实例化并调用该 Agent 的节点生成入口
     agent = AGENT_REGISTRY[agent_id]()
     result = await agent.generate_node(node_input)
+    # 失败时记录告警但不中断调用方
     if not result.success:
         logger.warning(
             "path_node_resource agent %s failed: %s",

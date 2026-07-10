@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器下拉内容
 import type { SelectContentEmits, SelectContentProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

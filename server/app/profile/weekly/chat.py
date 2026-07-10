@@ -1,5 +1,6 @@
 """辅导对话模块 — 周摘要章节构建。"""
 
+# 聚合本周辅导对话摘要块，生成章节内容
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,6 +16,7 @@ from app.profile.weekly.types import SectionResult
 logger = get_logger(__name__)
 
 
+# 构建周摘要的「辅导对话」章节
 async def build_chat_section(
     db: AsyncSession,
     user_id: int,
@@ -50,16 +52,19 @@ async def build_chat_section(
             raw_length=0,
         )
 
+    # 统计摘要数量并准备原始文本
     summary_count = len(rows)
     raw_text = "\n\n".join(str(r) for r in rows)
     parts = list(rows)
 
     markdown_parts: list[str] = []
+    # 取前 5 条摘要作为正文
     for i, summary in enumerate(parts[:5]):
         summary_str = str(summary).strip()
         if summary_str:
             markdown_parts.append(summary_str)
 
+    # 超出的摘要以省略提示呈现
     if summary_count > 5:
         markdown_parts.append(f"... 及其他 {summary_count - 5} 轮对话摘要")
 

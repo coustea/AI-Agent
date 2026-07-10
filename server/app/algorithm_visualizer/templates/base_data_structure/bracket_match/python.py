@@ -1,3 +1,4 @@
+# bracket_match 算法实现 — domain: base_data_structure
 def is_valid_brackets(s):
     pairs = {')': '(', ']': '[', '}': '{'}
     stack = []
@@ -10,6 +11,7 @@ def is_valid_brackets(s):
             stack.pop()
     return len(stack) == 0
 
+# 定义 score_of_brackets 函数
 def score_of_brackets(s):
     stack = [0]
     for ch in s:
@@ -20,8 +22,10 @@ def score_of_brackets(s):
             stack[-1] += max(2 * v, 1)
     return stack[0]
 
+# 定义 generate_valid_brackets 函数
 def generate_valid_brackets(n):
     result = []
+# 定义 backtrack 函数
     def backtrack(current, open_count, close_count):
         if len(current) == 2 * n:
             result.append(current)
@@ -33,6 +37,7 @@ def generate_valid_brackets(n):
     backtrack('', 0, 0)
     return result
 
+# 定义 longest_valid_brackets 函数
 def longest_valid_brackets(s):
     stack = [-1]
     max_len = 0

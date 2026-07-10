@@ -1,9 +1,11 @@
+# combinations 算法实现 — domain: recursion_backtrack
 def combination_sum(candidates, target):
     if not candidates or target <= 0:
         return []
     candidates = sorted(candidates)
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, remain, path):
         if remain == 0:
             res.append(path[:])
@@ -20,12 +22,14 @@ def combination_sum(candidates, target):
     backtrack(0, target, [])
     return res
 
+# 定义 combination_sum2 函数
 def combination_sum2(candidates, target):
     if not candidates or target <= 0:
         return []
     candidates.sort()
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, remain, path):
         if remain == 0:
             res.append(path[:])
@@ -44,9 +48,11 @@ def combination_sum2(candidates, target):
     backtrack(0, target, [])
     return res
 
+# 定义 combination_sum_k 函数
 def combination_sum_k(k, n):
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, remain, path, depth):
         if depth == k and remain == 0:
             res.append(path[:])

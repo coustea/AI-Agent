@@ -2,12 +2,14 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 interpolation_search 函数
 def interpolation_search(arr, target):
     if not arr:
         return -1
     low, high = 0, len(arr) - 1
     tracer.init_array(arr, line=4)
     tracer.move_pointer({"low": low, "high": high}, line=6)
+# 循环条件判断
     while low <= high and target >= arr[low] and target <= arr[high]:
         if low == high:
             tracer.compare(low, low, line=9)
@@ -32,21 +34,25 @@ def interpolation_search(arr, target):
     tracer.finish(line=26)
     return -1
 
+# 定义 interpolation_search_all 函数
 def interpolation_search_all(arr, target):
     idx = interpolation_search(arr, target)
     if idx == -1:
         return []
     result = [idx]
     left = idx - 1
+# 循环条件判断
     while left >= 0 and arr[left] == target:
         result.append(left)
         left -= 1
     right = idx + 1
+# 循环条件判断
     while right < len(arr) and arr[right] == target:
         result.append(right)
         right += 1
     return sorted(result)
 
+# 定义 interpolation_insert_pos 函数
 def interpolation_insert_pos(arr, target):
     if not arr:
         return 0
@@ -55,6 +61,7 @@ def interpolation_insert_pos(arr, target):
         return low
     if target > arr[high]:
         return high + 1
+# 循环条件判断
     while low <= high and target >= arr[low] and target <= arr[high]:
         if low == high:
             return low + (1 if arr[low] < target else 0)

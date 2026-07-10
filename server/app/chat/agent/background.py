@@ -19,6 +19,7 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
+# 对话轮次结束后的后台记忆管线：长期记忆更新与会话压缩，按 token 阈值独立触发
 async def run_background_memory_jobs(
     memory_service: Any,
     *,
@@ -33,8 +34,10 @@ async def run_background_memory_jobs(
         user_id, session_id,
     )
 
+    # 收集后台任务的执行结果负载
     payload: dict[str, Any] = {}
 
+    # 评估本轮对话后需要执行哪些后台记忆任务（长期记忆、会话压缩）
     try:
         evaluation = await memory_service.evaluate_post_turn_jobs(
             user_id=user_id,
@@ -52,27 +55,32 @@ async def run_background_memory_jobs(
         )
 
         # ── 两个任务独立执行，根据 token 阈值触发 ──
+        # 收集需要执行的后台任务
         tasks: list[asyncio.Task] = []
 
+        # 若达到压缩阈值，创建会话压缩任务
         if should_compress:
             tasks.append(asyncio.create_task(
                 _run_compress(memory_service, user_id, session_id),
                 name="compress",
             ))
 
+        # 若检测到长期记忆信号，创建长期记忆更新任务
         if should_ltm:
             tasks.append(asyncio.create_task(
                 _run_ltm_update(memory_service, user_id, session_id, user_message, assistant_reply, ltm_schedule),
                 name="ltm_update",
             ))
 
+        # 没有需要执行的任务则直接返回
         if not tasks:
             logger.info("[background] 无后台任务需要执行，全部跳过")
             return
 
-        # 并行执行
+        # 并行执行所有后台任务，异常不中断其他任务
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # 汇总每个任务的执行结果或异常信息
         for task, result in zip(tasks, results):
             if isinstance(result, Exception):
                 logger.error("[background] 任务 %s 失败: %s", task.get_name(), result)
@@ -82,10 +90,12 @@ async def run_background_memory_jobs(
 
         logger.info("[background] 后台记忆任务完成: tasks=%d", len(tasks))
 
+    # 捕获评估阶段的异常，记录日志但不向上抛出
     except Exception as exc:
         logger.error("[background] 后台记忆任务失败: %s", exc)
 
 
+# 执行长期记忆更新：调用记忆服务评估并写入长期记忆
 async def _run_ltm_update(
     memory_service: Any,
     user_id: int,
@@ -95,6 +105,7 @@ async def _run_ltm_update(
     ltm_schedule: dict[str, Any],
 ) -> dict[str, Any]:
     """执行长期记忆更新。"""
+    # 调用记忆服务更新长期记忆，传入是否检测到更新信号
     ltm_result = await memory_service.update_long_term_memory(
         user_id=user_id,
         session_id=session_id,
@@ -102,6 +113,7 @@ async def _run_ltm_update(
         assistant_reply=assistant_reply,
         signal_detected=bool(ltm_schedule.get("signal_detected")),
     )
+    # 根据返回结果确定长期记忆更新状态
     status = (
         "completed" if ltm_result.get("updated")
         else "analyzed" if ltm_result.get("analyzed")
@@ -114,17 +126,20 @@ async def _run_ltm_update(
     return {"job": "long_term_memory", "status": status, "ltm_result": ltm_result}
 
 
+# 执行会话压缩：调用记忆服务将历史消息压缩为会话摘要
 async def _run_compress(
     memory_service: Any,
     user_id: int,
     session_id: str,
 ) -> dict[str, Any]:
     """执行会话压缩。"""
+    # 调用记忆服务压缩会话（原因标记为 post_turn 即对话轮后触发）
     result = await memory_service.compress_session(
         user_id=user_id,
         session_id=session_id,
         reason="post_turn",
     )
+    # 根据压缩结果判断任务状态
     status = "completed" if result else "skipped"
     logger.info(
         "[background] 会话压缩完成: status=%s",

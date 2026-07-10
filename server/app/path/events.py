@@ -26,6 +26,7 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
+# 记录路径节点启动事件到 learning_events 表
 async def record_node_started_event(
     db: AsyncSession,
     user_id: int,
@@ -67,6 +68,7 @@ async def record_node_started_event(
     )
 
 
+# 记录路径节点完成事件（含得分和薄弱知识点）
 async def record_node_completed_event(
     db: AsyncSession,
     user_id: int,
@@ -116,6 +118,7 @@ async def record_node_completed_event(
     )
 
 
+# 记录节点测验答题事件到评估系统
 async def record_path_quiz_answered_event(
     db: AsyncSession,
     user_id: int,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 徽标
 import type { PrimitiveProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import type { BadgeVariants } from "."

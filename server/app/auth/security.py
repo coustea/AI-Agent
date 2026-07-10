@@ -1,3 +1,4 @@
+# 认证安全核心层：负责 JWT 签发/校验/撤销、密码哈希及当前用户身份解析，是整个鉴权体系的基础
 """认证安全模块。
 
 负责 JWT Token 的签发、验证、撤销，以及密码哈希和用户身份解析。
@@ -31,6 +32,7 @@ bearer_scheme = HTTPBearer()
 optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 
+# 认证错误异常：统一封装鉴权失败原因
 class AuthError(Exception):
     """认证错误异常。
 
@@ -38,12 +40,14 @@ class AuthError(Exception):
     会被全局异常处理器捕获并转换为标准 JSON 响应。
     """
 
+    # 初始化异常，保存错误消息
     def __init__(self, message: str) -> None:
         # 错误消息，会被全局异常处理器读取并返回给前端
         self.message = message
         super().__init__(message)
 
 
+# 使用 bcrypt 对密码进行哈希（自动加盐）
 def hash_password(password: str) -> str:
     """使用 bcrypt 对密码进行哈希，自动加盐。
 
@@ -57,6 +61,7 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
+# 验证明文密码与哈希密码是否匹配
 def verify_password(plain: str, hashed: str) -> bool:
     """验证明文密码与哈希密码是否匹配。
 
@@ -71,16 +76,20 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+# 将 datetime 统一转换为 UTC 时区
 def _as_utc(value: datetime) -> datetime:
     """将 datetime 对象统一转为 UTC 时区。
 
     如果输入没有时区信息，假设为 UTC；如果有时区信息则转换为 UTC。
     """
+    # 无时区信息时假定为 UTC
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
+    # 有时区信息时转换为 UTC
     return value.astimezone(timezone.utc)
 
 
+# 检查给定时间是否已过期（None 视为已过期）
 def _is_expired(expires_at: datetime | None) -> bool:
     """检查给定时间是否已过期。
 
@@ -90,12 +99,14 @@ def _is_expired(expires_at: datetime | None) -> bool:
     Returns:
         已过期返回 True
     """
+    # 过期时间为空直接视为已过期
     if expires_at is None:
         return True
     # 将过期时间转为 UTC 后与当前 UTC 时间比较
     return _as_utc(expires_at) <= datetime.now(timezone.utc)
 
 
+# 签发 JWT Token 并写入白名单表
 async def create_token(user_id: int, session: AsyncSession) -> str:
     """签发 JWT Token 并写入白名单表。
 
@@ -127,9 +138,12 @@ async def create_token(user_id: int, session: AsyncSession) -> str:
     session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
     # 持久化 Token 记录到数据库
     await session.commit()
+    # 返回签发的 Token 字符串
+    # 返回签发的 Token
     return token
 
 
+# 解码并验证 JWT Token，返回用户 ID
 def decode_token(token: str) -> int:
     """解码并验证 JWT Token，返回用户 ID。
 
@@ -142,6 +156,7 @@ def decode_token(token: str) -> int:
     Raises:
         AuthError: Token 过期或无效时抛出
     """
+    # 捕获解码异常，转换为统一的 AuthError
     try:
         # 使用密钥和算法验证 Token 签名并解码 Payload
         payload = jwt.decode(
@@ -150,6 +165,7 @@ def decode_token(token: str) -> int:
             algorithms=[JWT_ALGO],
         )
         # 从 Payload 中提取用户 ID（sub 字段）
+        # 提取并返回用户 ID
         return int(payload["sub"])
     except jwt.ExpiredSignatureError as exc:
         # Token 签名已过期
@@ -161,6 +177,7 @@ def decode_token(token: str) -> int:
         raise AuthError("无效 Token") from exc
 
 
+# 检查 Token 是否在白名单中且未过期
 async def is_token_valid(token: str, session: AsyncSession) -> bool:
     """检查 Token 是否在白名单中且未过期。
 
@@ -184,9 +201,11 @@ async def is_token_valid(token: str, session: AsyncSession) -> bool:
         await session.delete(active_token)
         await session.commit()
         return False
+    # Token 在白名单中且未过期，视为有效
     return True
 
 
+# 撤销 Token：从白名单表中删除，使其立即失效（用于登出）
 async def revoke_token(token: str, session: AsyncSession) -> None:
     """撤销 Token：从白名单表中删除，使其立即失效。
 
@@ -204,6 +223,7 @@ async def revoke_token(token: str, session: AsyncSession) -> None:
         await session.commit()
 
 
+# 内部方法：从 Token 解析当前用户（校验白名单 → 解码用户 ID → 查询用户记录）
 async def _resolve_current_user_from_token(
     token: str, session: AsyncSession
 ) -> User:
@@ -235,6 +255,7 @@ async def _resolve_current_user_from_token(
     return user
 
 
+# FastAPI 依赖：获取当前登录用户（要求必须携带有效 Bearer Token）
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     session: AsyncSession = Depends(get_session),
@@ -259,6 +280,7 @@ async def get_current_user(
     return await _resolve_current_user_from_token(credentials.credentials, session)
 
 
+# FastAPI 依赖：灵活获取当前用户（Token 可来自 Header 或 Query 参数，用于 WebSocket 等场景）
 async def get_current_user_flexible(
     credentials: HTTPAuthorizationCredentials | None = Depends(optional_bearer_scheme),
     token: str | None = Query(default=None),

@@ -52,6 +52,7 @@ _SYSTEM_TERMS = {
 }
 
 
+# 根据主题与概念选择最匹配的视觉风格（支持调用方显式覆盖）
 def select_style(
     topic: str,
     concepts: list[str],
@@ -59,6 +60,7 @@ def select_style(
     style_hint: VideoStyleId | None = None,
 ) -> VideoStyleDecision:
     """Choose one visual system from the teaching subject, with explicit override."""
+    # 调用方明确指定风格时直接采用，不再自动推断
     if style_hint is not None:
         return VideoStyleDecision(
             id=style_hint,
@@ -69,11 +71,13 @@ def select_style(
     precision_score = sum(term in corpus for term in _PRECISION_TERMS)
     systems_score = sum(term in corpus for term in _SYSTEM_TERMS)
 
+    # 算法/代码类主题偏向精确明亮的演算视图
     if precision_score > systems_score:
         return VideoStyleDecision(
             id="precision_light",
             rationale="主题以算法、代码或数据操作为核心，适合精确明亮的演算视图",
         )
+    # 系统/组件类主题偏向深色系统图谱
     if systems_score > 0:
         return VideoStyleDecision(
             id="systems_dark",
@@ -85,10 +89,12 @@ def select_style(
     )
 
 
+# 导演 Agent：调用 LLM 规划视频场景大纲与叙事
 class VideoDirectorAgent:
     def __init__(self, llm=None) -> None:
         self.llm = llm or get_llm()
 
+    # 规划：选择风格后填充导演提示词并调用 LLM 生成大纲
     async def plan(
         self,
         request: VideoRequest,
@@ -99,6 +105,7 @@ class VideoDirectorAgent:
             digest.core_concepts + digest.visual_opportunities,
             style_hint=request.style_hint,
         )
+        # 读取并格式化导演提示词模板
         prompt = _PROMPT_PATH.read_text(encoding="utf-8").format(
             request=request.model_dump_json(indent=2),
             digest=digest.model_dump_json(indent=2),
@@ -108,6 +115,7 @@ class VideoDirectorAgent:
         )
         logger.info("Video 导演 LLM 调用: scene_count=%d style=%s", request.scene_count, style.id)
         started = time.perf_counter()
+        # 调用 LLM 生成结构化场景大纲
         outline = await self.llm.ainvoke_json(VideoOutline, prompt)
         elapsed = int((time.perf_counter() - started) * 1000)
         logger.info(

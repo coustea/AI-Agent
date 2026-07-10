@@ -33,6 +33,7 @@ logger = get_module_logger("resource", sub="execution")
 
 # Agent 超时配置（秒）
 # 基础 Agent 需要搜索+LLM 生成，300s LLM 超时加上搜索耗时容易触发 agent 级超时。
+# 聚合/视频类耗时更长，超时依次放宽
 AGENT_TIMEOUTS: dict[str, float] = {
     "content": 600.0,
     "mindmap": 600.0,
@@ -59,6 +60,7 @@ AGENT_START_MESSAGES: dict[str, str] = {
 
 async def _observe(*, agent_id: str, coro: Any) -> None:
     """执行观察事件，失败只记录日志。"""
+    # best-effort 发送事件，异常不影响主流程
     try:
         await coro
     except Exception as e:
@@ -79,6 +81,7 @@ async def _run_agent_lifecycle(
     """
     started = time.perf_counter()
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+    # 从注册表取出该 agent 的实例（注入事件通道）
     agent = AGENT_REGISTRY[agent_id](events)
     timeout_seconds = AGENT_TIMEOUTS.get(agent_id, 300.0)
 
@@ -92,6 +95,7 @@ async def _run_agent_lifecycle(
                 status="running",
             )
     except Exception as exc:
+        # 持久化失败直接进入失败流程
         return await _record_failure(
             resource_id=resource_id,
             agent_id=agent_id,
@@ -117,11 +121,12 @@ async def _run_agent_lifecycle(
         agent_id, resource_id, int(timeout_seconds),
     )
 
-    # 执行 Agent（带超时）
+    # 执行 Agent（带超时保护）
     try:
         async with asyncio.timeout(timeout_seconds):
             result = await generate_fn(agent)
     except TimeoutError as exc:
+        # 超时失败
         return await _record_failure(
             resource_id=resource_id,
             agent_id=agent_id,
@@ -131,6 +136,7 @@ async def _run_agent_lifecycle(
             events=events,
         )
     except Exception as exc:
+        # 生成过程异常
         return await _record_failure(
             resource_id=resource_id,
             agent_id=agent_id,
@@ -154,6 +160,7 @@ async def _run_agent_lifecycle(
     try:
         validate_agent_result(agent_id, result, input_data)
     except Exception as exc:
+        # 校验失败
         return await _record_failure(
             resource_id=resource_id,
             agent_id=agent_id,
@@ -177,6 +184,7 @@ async def _run_agent_lifecycle(
     try:
         async with session_scope() as session:
             service = ResourceService(session)
+            # 保存成功产物并建立资源项
             item = await service.save_agent_result(
                 resource_id=resource_id,
                 user_id=user_id,
@@ -184,6 +192,7 @@ async def _run_agent_lifecycle(
                 result=result,
             )
             elapsed_ms = int((time.perf_counter() - started) * 1000)
+            # 标记该 agent 运行完成并记录耗时
             await service.upsert_agent_run(
                 resource_id=resource_id,
                 agent_id=agent_id,
@@ -191,6 +200,7 @@ async def _run_agent_lifecycle(
                 elapsed_ms=elapsed_ms,
             )
     except Exception as exc:
+        # 保存失败
         return await _record_failure(
             resource_id=resource_id,
             agent_id=agent_id,
@@ -220,6 +230,7 @@ async def _run_agent_lifecycle(
         agent_id, resource_id, result.title[:80], str(item.id), elapsed_ms,
     )
 
+    # 以成功结果字典返回，供图状态合并
     return {"results": {agent_id: True}}
 
 
@@ -231,6 +242,7 @@ async def execute_resource_agent(
     input_data: "ResourceInput",
 ) -> dict[str, Any]:
     """执行单个资源 Agent 的 generate_resource 入口。"""
+    # 走多智能体资源流程（generate_resource）
     return await _run_agent_lifecycle(
         user_id=user_id,
         resource_id=resource_id,
@@ -248,6 +260,7 @@ async def execute_node_agent(
     node_input: "NodeInput",
 ) -> dict[str, Any]:
     """执行单个资源 Agent 的 generate_node 入口（单智能体 PPT/Cartoon 调用、路径节点资源）。"""
+    # 走路径节点流程（generate_node）
     return await _run_agent_lifecycle(
         user_id=user_id,
         resource_id=resource_id,
@@ -271,7 +284,7 @@ async def _record_failure(
     error_type = type(exception).__name__
     error_message = str(exception)[:300]
 
-    # 输出失败日志
+    # 记录结构化失败日志
     logger.error(
         "Agent[%s] 执行失败: resource_id=%s stage=%s error_type=%s error=%s elapsed_ms=%d",
         agent_id,

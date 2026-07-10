@@ -52,12 +52,14 @@ LTM_CATEGORY_NAMES: Final[dict[str, str]] = {
 }
 
 
+# 返回当前 UTC 时间（数据库写入统一用 UTC）
 def now() -> datetime:
     """返回当前 UTC 时间。"""
 
     return datetime.now(timezone.utc)
 
 
+# 估算文本 token 数：优先 tiktoken，否则中英文分段粗略估算
 def estimate_token_count(text: str) -> int:
     """估算文本 token 数 — 分段策略，中英文混合更精确。
 
@@ -66,6 +68,7 @@ def estimate_token_count(text: str) -> int:
     - 非中文部分按词数估算
     - 若已安装 tiktoken，优先使用精确计数
     """
+    # 空文本直接返回 0
     stripped = (text or "").strip()
     if not stripped:
         return 0
@@ -88,6 +91,7 @@ def estimate_token_count(text: str) -> int:
 from app.chat.utils import compact_text
 
 
+# LLM 不可用时的降级摘要：取前 N 行拼接为简易 Markdown 摘要
 def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_budget: int = 1200) -> str:
     """LLM 不可用时的降级摘要 — 取前 N 行拼接为简易 Markdown 摘要。
 
@@ -97,6 +101,7 @@ def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_b
 
     # 清理空行，保留有效内容
     normalized_lines = [line.strip() for line in str(chat_text or "").splitlines() if line.strip()]
+    # 无有效内容返回空摘要占位
     if not normalized_lines:
         return "# 会话摘要\n\n- 暂无可压缩的历史对话。"
 
@@ -107,9 +112,11 @@ def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_b
     if len(normalized_lines) > max_lines:
         bullets.append(f"- 其余 {len(normalized_lines) - max_lines} 条对话已省略。")
     body = "\n".join(bullets)
+    # 整体压缩到字符预算内返回
     return compact_text(f"# 会话摘要\n\n{body}", limit=char_budget)
 
 
+# 生成空白长期记忆 Markdown 模板（含 7 个分类空占位，首次创建时使用）
 def make_default_memory_markdown() -> str:
     """生成空白长期记忆 Markdown 模板 — 包含所有7个分类的空占位。
 
@@ -120,9 +127,11 @@ def make_default_memory_markdown() -> str:
     # 遍历剩余6个分类，添加空的 Markdown 小节
     for key in LTM_CATEGORIES[1:]:
         lines.extend(["", f"## {LTM_CATEGORY_NAMES[key]}", "暂无信息。"])
+    # 拼接为完整模板
     return "\n".join(lines)
 
 
+# MemoryUpdateOutput：长期记忆更新结果（LLM 结构化输出校验模型）
 class MemoryUpdateOutput(BaseModel):
     """长期记忆更新结果 — LLM 结构化输出的 Pydantic 模型。
 
@@ -160,6 +169,7 @@ NON_SIGNIFICANT_TEXTS: Final[frozenset[str]] = frozenset(
 )
 
 
+# 检测文本是否包含稳定学习信号（正则匹配偏好/纠正/背景等）
 def has_stable_signal(text: str) -> bool:
     """检测文本是否包含稳定的学习特征信号 — 通过正则模式匹配。
 
@@ -167,12 +177,15 @@ def has_stable_signal(text: str) -> bool:
     用于触发长期记忆的更新流程。
     """
 
+    # 归一化并剔除无意义短回复
     normalized = " ".join((text or "").strip().split())
     if not normalized or normalized in NON_SIGNIFICANT_TEXTS:
         return False
+    # 任一稳定信号模式命中即返回 True
     return any(pattern.search(normalized) for pattern in STABLE_SIGNAL_PATTERNS)
 
 
+# 从 OpenAI Content Parts 列表或纯字符串中提取文本（兼容旧格式）
 def extract_content_text(content: list[dict[str, Any]] | str | None) -> str:
     """从 OpenAI Content Parts 或纯字符串中提取文本。
 
@@ -186,6 +199,7 @@ def extract_content_text(content: list[dict[str, Any]] | str | None) -> str:
     return str(content or "").strip()
 
 
+# 统一信号分类：返回是否触发长期记忆更新（画像改为懒加载，故仅 LTM 信号）
 def classify_turn_signals(user_message: str, assistant_reply: str) -> dict[str, bool]:
     """统一信号分类 — 返回 LTM 信号。
 

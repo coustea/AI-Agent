@@ -1,5 +1,6 @@
 """路径学习模块 — 周摘要章节构建。"""
 
+# 聚合本周路径节点的接触与完成情况，生成章节统计
 from __future__ import annotations
 
 from datetime import datetime
@@ -16,6 +17,7 @@ from app.profile.weekly.types import SectionResult
 logger = get_logger(__name__)
 
 
+# 构建周摘要的「路径学习」章节
 async def build_path_section(
     db: AsyncSession,
     user_id: int,
@@ -55,6 +57,7 @@ async def build_path_section(
             raw_length=0,
         )
 
+    # 统计已完成的节点
     completed = [n for n in nodes if n.status == "completed"]
 
     lines: list[str] = []
@@ -75,7 +78,7 @@ async def build_path_section(
         + "\n".join(lines)
     )
 
-    # courses_active: unique node titles
+    # courses_active：去重后的节点标题集合
     course_titles = sorted({str(n.title) for n in nodes if n.title})
 
     return SectionResult(

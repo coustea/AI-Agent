@@ -182,6 +182,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 
+// 组件属性：题库列表、筛选、答题状态
 const props = defineProps<{
   questions: any[]
   total: number
@@ -202,6 +203,7 @@ const props = defineProps<{
   highlightVersion?: number
 }>()
 
+// 事件：搜索、翻页、选择选项、提交、切换解析
 const emit = defineEmits<{
   (e: 'search'): void
   (e: 'page-change', page: number): void
@@ -210,8 +212,10 @@ const emit = defineEmits<{
   (e: 'toggle-analysis', id: string): void
 }>()
 
+// 当前展开作答的题目 ID
 const activeQuestionId = ref<string | null>(null)
 
+// 监听高亮题目 ID，自动展开并滚动到目标位置
 watch(
   () => [props.highlightQuestionId, props.highlightVersion, props.questions.length],
   async () => {
@@ -229,6 +233,7 @@ watch(
   { immediate: true },
 )
 
+// 题目列表变化时，清除已不存在的展开项
 watch(
   () => props.questions.map((question) => question.id).join(','),
   () => {
@@ -238,16 +243,19 @@ watch(
   },
 )
 
+// 执行搜索
 function handleSearch() {
   activeQuestionId.value = null
   emit('search')
 }
 
+// 翻页
 function changePage(page: number) {
   activeQuestionId.value = null
   emit('page-change', page)
 }
 
+// 展开/收起题目作答面板
 function toggleQuestion(id: string) {
   activeQuestionId.value = activeQuestionId.value === id ? null : id
 }

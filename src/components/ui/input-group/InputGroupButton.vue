@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 输入框组按钮
 import type { InputGroupButtonProps } from "."
 import { cn } from "@/lib/utils"
 import { Button } from '@/components/ui/button'

@@ -35,6 +35,7 @@ ChatEventName = Literal[
 CHAT_TERMINAL_EVENTS: set[ChatEventName] = {"message.completed", "message.failed"}
 
 
+# Chat 模块的 SSE 事件数据模型（sequence/事件名/消息/负载）
 class ChatEvent(BaseModel):
     """Chat 模块的 SSE 数据结构。"""
 
@@ -73,9 +74,11 @@ _chat_channels: dict[ChannelKey, "_ChatChannel"] = {}
 _chat_lock = asyncio.Lock()
 
 
+# _ChatChannel：单条用户消息在内存中的事件频道（缓冲区 + 订阅者队列）
 class _ChatChannel:
     """单条 UserMessage 的内存事件频道。"""
 
+    # 初始化频道：环形缓冲区、订阅者列表、序列号与终态标志
     def __init__(
         self,
         *,
@@ -98,13 +101,16 @@ class _ChatChannel:
         self._is_terminal = False
         self._cleanup_task: asyncio.TimerHandle | None = None
 
+    # 发送事件：写入缓冲区并广播给所有订阅者，终态事件触发延迟清理
     async def send(
         self, event: ChatEventName, message: str, data: dict[str, Any] | None
     ) -> ChatEvent:
+        # 终态后禁止继续发送
         if self._is_terminal:
             raise ChatEventClosedError(
                 f"Chat channel closed for user_message_id={self.user_message_id}"
             )
+        # 自增序列号并构造事件
         self._sequence += 1
         chat_event = ChatEvent(
             sequence=self._sequence,
@@ -116,7 +122,7 @@ class _ChatChannel:
         )
         self._buffer.append(chat_event)
 
-        # 广播给所有订阅者
+        # 广播给所有订阅者（队列满则丢弃最旧事件）
         for queue in list(self._subscribers):
             if queue.full():
                 try:
@@ -129,7 +135,7 @@ class _ChatChannel:
                 )
             queue.put_nowait(chat_event)
 
-        # 终态处理
+        # 终态处理：标记终态并安排保留期后清理
         if event in CHAT_TERMINAL_EVENTS:
             self._is_terminal = True
             self._cleanup_task = asyncio.get_running_loop().call_later(
@@ -139,6 +145,7 @@ class _ChatChannel:
 
         return chat_event
 
+    # 订阅频道：返回新队列与 after_sequence 之后的回放事件
     async def subscribe(
         self, after_sequence: int
     ) -> tuple[asyncio.Queue[ChatEvent], list[ChatEvent]]:
@@ -147,12 +154,14 @@ class _ChatChannel:
         replay = [e for e in self._buffer if e.sequence > after_sequence]
         return queue, replay
 
+    # 取消订阅：终态且无订阅者时清理频道
     async def unsubscribe(self, queue: asyncio.Queue[ChatEvent]) -> None:
         """取消订阅，终态且无订阅者时清理频道。"""
         self._subscribers = [q for q in self._subscribers if q is not queue]
         if self._is_terminal and not self._subscribers:
             await self._cleanup()
 
+    # 终态保留期结束后清理频道（仍有订阅者则跳过）
     async def _cleanup(self) -> None:
         """终态保留期结束后清理频道。"""
         if self._subscribers:
@@ -166,6 +175,7 @@ class _ChatChannel:
 # ===================== 公开 API =====================
 
 
+# ChatEvents：业务层使用的实时事件流管理器（围绕 _ChatChannel 包装）
 class ChatEvents:
     """Chat 模块的实时事件流管理器。
 
@@ -173,6 +183,7 @@ class ChatEvents:
     然后通过 send() 发布事件，前端通过 SSE 订阅。
     """
 
+    # 初始化事件流管理器，记录用户/会话/消息标识与缓存参数
     def __init__(
         self,
         *,
@@ -192,6 +203,7 @@ class ChatEvents:
         self._channel: _ChatChannel | None = None
         self._key: ChannelKey = (user_id, session_id, user_message_id)
 
+    # 注册频道：复用已存在频道或新建并加入注册表
     async def open(self) -> None:
         """注册频道，必须在调度后台任务之前调用。"""
         async with _chat_lock:
@@ -209,6 +221,7 @@ class ChatEvents:
                 )
                 _chat_channels[self._key] = self._channel
 
+    # 向频道发送事件（未 open 则抛异常）
     async def send(
         self,
         *,
@@ -228,6 +241,7 @@ class ChatEvents:
             )
         return await self._channel.send(event, message, data)
 
+    # 订阅频道：找不到频道则尝试从注册表恢复，失败抛异常
     async def subscribe(
         self, after_sequence: int = 0
     ) -> tuple[asyncio.Queue[ChatEvent], list[ChatEvent]]:
@@ -241,12 +255,14 @@ class ChatEvents:
             )
         return await self._channel.subscribe(after_sequence)
 
+    # 取消订阅
     async def unsubscribe(self, queue: asyncio.Queue[ChatEvent]) -> None:
         """取消订阅。"""
         if self._channel is None:
             return
         await self._channel.unsubscribe(queue)
 
+    # 手动关闭频道（通常由终态事件自动触发）
     async def close(self) -> None:
         """手动关闭频道（通常由终态事件自动触发）。"""
         if self._channel is None:
@@ -274,6 +290,7 @@ class ChatEvents:
 # ===================== SSE 编码 =====================
 
 
+# 将 ChatEvent 编码为 SSE 文本（id/event/data 格式）
 def encode_chat_sse(event: ChatEvent) -> str:
     """将 ChatEvent 编码为 SSE 格式。
 
@@ -289,6 +306,7 @@ def encode_chat_sse(event: ChatEvent) -> str:
 # ===================== 辅助函数 =====================
 
 
+# 从注册表获取已存在的聊天频道（不存在返回 None）
 async def get_chat_channel(
     user_id: int, session_id: str, user_message_id: int
 ) -> ChatEvents | None:
@@ -307,6 +325,7 @@ async def get_chat_channel(
         return events
 
 
+# 判断同一会话是否已有进行中的频道（避免并发处理）
 async def has_active_chat_channel(user_id: int, session_id: str) -> bool:
     """同一会话只允许处理一条用户消息。"""
     async with _chat_lock:
@@ -341,9 +360,11 @@ def runtime_status(value: Any) -> str:
     }.get(status, status if status in {"pending", "running", "completed", "failed", "skipped"} else "running")
 
 
+# ChatRuntimeEventMapper：将内部字典事件统一转换为 ChatEvent 并发布
 class ChatRuntimeEventMapper:
     """统一转换器：内部字典事件 → ChatEvent → SSE。"""
 
+    # 根据状态归一化结果映射为活动事件名
     def _activity_event_name(self, status: Any) -> ChatEventName:
         normalized = runtime_status(status)
         if normalized == "failed":
@@ -352,6 +373,7 @@ class ChatRuntimeEventMapper:
             return "activity.completed"
         return "activity.running"
 
+    # 从负载中提取活动数据（activity_id/kind/stage/status 等）
     def _activity_data(self, payload: Mapping[str, Any], *, kind: str) -> dict[str, Any]:
         stage = str(payload.get("stage") or "").strip()
         title = str(payload.get("title") or payload.get("message") or "").strip()
@@ -371,6 +393,7 @@ class ChatRuntimeEventMapper:
             "detail": payload.get("detail") if isinstance(payload.get("detail"), Mapping) else {},
         }
 
+    # 发布内部事件：按事件名映射为 SSE 事件并返回是否失败
     async def publish(
         self,
         events: ChatEvents,
@@ -381,10 +404,12 @@ class ChatRuntimeEventMapper:
         data = event.get("data")
         payload = data if isinstance(data, dict) else {}
 
+        # 增量 token 事件 → content.delta
         if event_name == "token":
             await events.send(event="content.delta", message="", data={"delta": str(data or "")})
             return False
 
+        # 内容替换事件
         if event_name == "content_replace":
             await events.send(
                 event="content.replace",
@@ -393,6 +418,7 @@ class ChatRuntimeEventMapper:
             )
             return False
 
+        # 工具/附件状态事件 → activity.*
         if event_name == "agent_status":
             # agent_status 包含所有工具调用状态（包括附件分析）
             kind = payload.get("kind", "tool")
@@ -404,6 +430,7 @@ class ChatRuntimeEventMapper:
             )
             return False
 
+        # 图解就绪事件
         if event_name == "diagram" and payload:
             await events.send(
                 event="diagram.ready",
@@ -412,9 +439,11 @@ class ChatRuntimeEventMapper:
             )
             return False
 
+        # 错误事件 → 返回失败标记
         if event_name == "error":
             return True
 
+        # 工作流状态事件（answer_done 无需单独推送）
         if event_name == "status":
             if str(payload.get("stage") or "") == "answer_done":
                 return False
@@ -436,6 +465,7 @@ class ChatRuntimeEventMapper:
 
 # ===================== 工具状态构建 =====================
 
+# 构建回答前工作流活动负载，仅展示后端真实步骤
 def build_workflow_activity_payload(
     *,
     stage: str,
@@ -460,6 +490,7 @@ def build_workflow_activity_payload(
         "detail": {},
     }
 
+# 截断预览工具（超长文本加省略号）
 def _preview(value: Any, *, limit: int = 50) -> str:
     text = str(value or "").strip()
     if len(text) <= limit:
@@ -467,6 +498,7 @@ def _preview(value: Any, *, limit: int = 50) -> str:
     return text[:limit].rstrip() + "..."
 
 
+# 提取工具结果的可读摘要，避免直接展示整个 JSON
 def _result_preview(value: Any, *, limit: int = 500) -> str:
     if isinstance(value, Mapping):
         # 提取可读字段作为结果摘要，避免展示整个 JSON
@@ -482,7 +514,7 @@ _TOOL_CONTEXT_KEYS: dict[str, tuple[str, ...]] = {
     "research": ("query", "objective"),
 }
 
-# 工具动作描述：工具名 -> "正在{动作}" 格式
+# 工具动作描述：工具名 -> "正在{动作}" 格式（用于前端展示）
 _TOOL_ACTIONS: dict[str, str] = {
     "get_learner_profile": "正在了解你的学习情况",
     "get_long_term_memory": "正在回顾学习记录",
@@ -490,6 +522,7 @@ _TOOL_ACTIONS: dict[str, str] = {
     "research": "正在研究资料",
 }
 
+# 从工具参数中提取用于展示的关键上下文（如查询词/类别）
 def _tool_context(tool_name: str, arguments: Mapping[str, Any]) -> str:
     """从工具参数中提取关键信息用于展示。"""
     for key in _TOOL_CONTEXT_KEYS.get(tool_name, ()):
@@ -499,6 +532,7 @@ def _tool_context(tool_name: str, arguments: Mapping[str, Any]) -> str:
     return ""
 
 
+# 构建不带敏感参数的前端工具状态负载
 def build_agent_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     """构建单条、无敏感参数的前端工具状态。"""
     status = str(event.get("status") or "running")
@@ -511,6 +545,7 @@ def build_agent_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     action = _TOOL_ACTIONS.get(tool_name, "正在调用工具")
     title = action.removeprefix("正在")
 
+    # 根据状态拼装前端展示文案
     if status == "done":
         message = f"{title}已完成"
     elif status == "failed":
@@ -518,6 +553,7 @@ def build_agent_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     else:
         message = f"{action}{context}..."
 
+    # 返回工具状态负载
     return {
         "activity_id": str(event.get("activity_id") or "").strip(),
         "kind": "tool",
@@ -537,6 +573,7 @@ def build_agent_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# 将共享 ResearchAgent 的内部动作转换为 Chat 研究活动事件
 def build_research_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     """把共享 ResearchAgent 的内部动作转换为 Chat 活动事件。"""
     status = str(event.get("status") or "running")
@@ -547,6 +584,7 @@ def build_research_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     action = str(event.get("action") or "核验研究资料").strip()
     error = _preview(event.get("error"), limit=200)
 
+    # 根据状态拼装研究活动文案
     if status == "done":
         message = f"{action}已完成"
     elif status == "failed":
@@ -554,6 +592,7 @@ def build_research_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     else:
         message = f"正在{action}{f'「{query}」' if query else ''}..."
 
+    # 返回研究活动负载
     return {
         "activity_id": f"research:{event.get('activity_id') or tool_name}",
         "kind": "agent",
@@ -572,6 +611,7 @@ def build_research_status_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# 构建附件分析活动负载（图片/文档分析状态），供实时事件与历史复用
 def build_attachment_status_payload(
     *,
     activity_id: str,

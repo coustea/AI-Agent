@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 滑块
 import type { SliderRootEmits, SliderRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

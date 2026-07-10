@@ -678,6 +678,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
 }
 
 
+# 按 domain 过滤并返回所有算法信息列表
 def get_all_algorithms(domain: str = "all") -> List[Dict[str, Any]]:
     """获取指定 domain 下的所有算法信息列表。支持 domain="all"。"""
     result = []
@@ -687,6 +688,7 @@ def get_all_algorithms(domain: str = "all") -> List[Dict[str, Any]]:
     return result
 
 
+# 根据算法 key 获取单个算法的元信息
 def get_algorithm_info(algorithm_key: str) -> Dict[str, Any]:
     """获取单个算法的元信息，不存在则抛出 ValueError。"""
     info = ALGORITHMS.get(algorithm_key)
@@ -695,6 +697,7 @@ def get_algorithm_info(algorithm_key: str) -> Dict[str, Any]:
     return {"key": algorithm_key, **info}
 
 
+# 读取干净模板代码（不含 tracer 调用）
 def get_template_code(algorithm_key: str, language: str) -> str:
     """读取并返回指定算法+语言的干净模板代码（无 tracer 调用）。"""
     info = get_algorithm_info(algorithm_key)
@@ -713,6 +716,7 @@ def get_template_code(algorithm_key: str, language: str) -> str:
         return f.read()
 
 
+# 读取预插装模板代码（含 tracer 调用），不存在则返回 None
 def get_instrumented_template_code(algorithm_key: str, language: str) -> str | None:
     """读取预插装模板代码（含 tracer 调用）。
 

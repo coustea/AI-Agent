@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 头像组剩余计数
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 

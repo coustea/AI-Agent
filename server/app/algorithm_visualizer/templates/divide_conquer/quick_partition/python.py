@@ -1,3 +1,4 @@
+# quick_partition 算法实现 — domain: divide_conquer
 def partition(arr, lo, hi):
     pivot = arr[hi]
     i = lo
@@ -8,6 +9,7 @@ def partition(arr, lo, hi):
     arr[i], arr[hi] = arr[hi], arr[i]
     return i
 
+# 定义 three_way_partition 函数
 def three_way_partition(arr, lo, hi):
     pivot = arr[lo]
     lt, i, gt = lo, lo, hi
@@ -23,6 +25,7 @@ def three_way_partition(arr, lo, hi):
             i += 1
     return lt, gt
 
+# 定义 quickselect 函数
 def quickselect(arr, k):
     lo, hi = 0, len(arr) - 1
     while lo <= hi:
@@ -37,6 +40,7 @@ def quickselect(arr, k):
             lo = pivot_idx + 1
     return arr[lo]
 
+# 定义 find_median 函数
 def find_median(arr):
     n = len(arr)
     if n % 2 == 1:

@@ -1,3 +1,4 @@
+# prime_sieve 算法实现 — domain: math
 def sieve_of_eratosthenes(n):
     is_prime = [True] * (n + 1)
     is_prime[0] = is_prime[1] = False
@@ -7,6 +8,7 @@ def sieve_of_eratosthenes(n):
                 is_prime[j] = False
     return [i for i in range(n + 1) if is_prime[i]]
 
+# 定义 linear_sieve 函数
 def linear_sieve(n):
     is_prime = [True] * (n + 1)
     primes = []
@@ -22,9 +24,11 @@ def linear_sieve(n):
                 break
     return primes
 
+# 定义 count_primes 函数
 def count_primes(n):
     return len(sieve_of_eratosthenes(n))
 
+# 定义 is_prime_check 函数
 def is_prime_check(n):
     if n < 2:
         return False

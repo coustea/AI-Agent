@@ -1,3 +1,4 @@
+# binary_tree_recursion 算法实现 — domain: tree_structure
 class TreeNode:
     """二叉树节点定义"""
     def __init__(self, val=0, left=None, right=None):
@@ -52,6 +53,7 @@ def is_balanced(root):
     """判断是否为平衡二叉树 (左右子树高度差 <= 1)
     利用辅助函数同时返回高度和平衡状态，避免重复计算
     时间复杂度: O(n)"""
+# 定义 check 函数
     def check(node):
         if not node:
             return 0, True

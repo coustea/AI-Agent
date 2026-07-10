@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 输入框组输入
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 import { Input } from '@/components/ui/input'

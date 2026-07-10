@@ -9,6 +9,7 @@ def compute_lps(pattern):
     lps = [0] * m
     length = 0
     i = 1
+# 循环条件判断
     while i < m:
         tracer.move_pointer({"i": i, "length": length}, line=54)
         tracer.compare(i, length, line=55)
@@ -46,6 +47,7 @@ def kmp_search(text, pattern):
     j = 0
     n, m = len(text), len(pattern)
 
+# 循环条件判断
     while i < n:
         tracer.move_pointer({"i": i, "j": j}, line=105)
         if text[i] == pattern[j]:

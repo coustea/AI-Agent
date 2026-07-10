@@ -1,17 +1,11 @@
 <template>
   <div class="stack-queue-visualizer">
-    <div class="visualizer-meta">
-      <div>
-        <h3>{{ modeLabel }}可视化</h3>
-        <p>展示{{ modeLabel }}的入队/出队过程，支持指针标注。</p>
-      </div>
+    <div class="chart-shell">
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>默认</span>
         <span class="legend-item"><i class="legend-dot visited"></i>已处理</span>
       </div>
-    </div>
 
-    <div class="chart-shell">
       <div v-if="items.length" :class="['linear-strip', mode]">
         <div
           v-for="(item, index) in items"
@@ -48,22 +42,24 @@ const props = defineProps<{
   events: TraceEvent[]
 }>()
 
+// 栈/队列模式（降级为 stack）
 const mode = computed<'stack' | 'queue'>(() => {
   const m = props.currentEvent?.state?.structure?.mode
   return m === 'stack' || m === 'queue' ? m : 'stack'
 })
 const modeLabel = computed(() => mode.value === 'queue' ? '队列' : '栈')
 
+// 当前步骤的数据项和指针
 const items = computed(() => {
   const raw = props.currentEvent?.state?.structure?.items
   return Array.isArray(raw) ? raw : []
 })
-
 const pointers = computed(() => {
   const raw = props.currentEvent?.state?.structure?.pointers
   return Array.isArray(raw) ? raw : []
 })
 
+// 获取特定索引上的指针标签
 function getPointers(index: number) {
   return pointers.value.filter((p: any) => p.nodeIndex === index || p.itemIndex === index)
 }
@@ -73,38 +69,23 @@ function getPointers(index: number) {
 .stack-queue-visualizer {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.visualizer-meta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.visualizer-meta h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.visualizer-meta p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #64748b;
+  padding: 12px;
+  background: transparent;
 }
 
 .legend {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
   display: flex;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .legend-item {
@@ -132,10 +113,12 @@ function getPointers(index: number) {
 }
 
 .chart-shell {
+  position: relative;
+  flex: 1;
   min-height: 0;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   padding: 12px;
 }
 

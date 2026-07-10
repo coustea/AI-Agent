@@ -115,10 +115,12 @@ const props = defineProps({
   }
 })
 
+// 向父组件发出确认或关闭事件
 const emit = defineEmits(['confirm', 'close'])
 
 // 倒计时剩余秒数
 const timeLeft = ref(0)
+// 倒计时定时器 ID，用于清理
 let timerId: number | null = null
 
 // 启动倒计时：归零后自动触发 confirm

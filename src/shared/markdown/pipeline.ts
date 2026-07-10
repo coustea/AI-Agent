@@ -22,6 +22,8 @@ import {
 import { markdownSanitizeSchema } from './schema'
 import type { MarkdownTheme } from './types'
 
+// Markdown 渲染管道：统一 remark → rehype → Shiki 高亮 → 净化 → HTML
+
 let highlighterPromise: Promise<HighlighterCore> | undefined
 
 function getHighlighter(): Promise<HighlighterCore> {

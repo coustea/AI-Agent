@@ -33,6 +33,8 @@
 </template>
 
 <script setup lang="ts">
+// PreviewDialog 组件：资源预览模态框，根据资源类型动态选择渲染器
+
 import { computed, type Component } from 'vue'
 import Markdown from './renderers/Markdown.vue'
 import MindMap from './renderers/MindMap.vue'
@@ -51,6 +53,7 @@ const emit = defineEmits<{
   'update:activeAgent': [value: string | null]
 }>()
 
+// 标准化资源类型别名（markdown → content, cartoon → video）
 const normalizedType = computed(() => {
   const type = props.activeAgent?.toLowerCase() || ''
   if (type === 'markdown') return 'content'
@@ -58,6 +61,7 @@ const normalizedType = computed(() => {
   return type
 })
 
+// 类型到渲染器的映射表
 const rendererMap: Record<string, Component> = {
   content: Markdown,
   mindmap: MindMap,
@@ -68,6 +72,7 @@ const rendererMap: Record<string, Component> = {
   video: Video,
 }
 
+// 类型到中文标题的映射表
 const titleMap: Record<string, string> = {
   content: '核心精要',
   mindmap: '思维导图',
@@ -79,11 +84,16 @@ const titleMap: Record<string, string> = {
   cartoon: '动画讲解',
 }
 
+// 当前类型对应的渲染器组件
 const renderer = computed(() => rendererMap[normalizedType.value] || null)
+
+// 当前类型对应的中文标题
 const title = computed(() => {
   const raw = (props.activeAgent || '').toLowerCase()
   return titleMap[raw] || titleMap[normalizedType.value] || '资源预览'
 })
+
+// PPT 需要额外传入 resource，其余只用 data
 const hasRenderableData = computed(() => (
   normalizedType.value === 'ppt'
     ? Boolean(props.resource || props.data)

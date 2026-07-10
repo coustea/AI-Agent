@@ -33,11 +33,14 @@ def quick_sort(nums, left, right):
     i, j = left + 1, right
     tracer.move_pointer({"left": left, "right": right, "i": i, "j": j}, line=20)
 
+# 循环条件判断
     while i < j:
+# 循环条件判断
         while i < j and nums[j] >= pivot:
             tracer.compare(i, j, line=23)
             j -= 1
             tracer.move_pointer({"left": left, "right": right, "i": i, "j": j}, line=25)
+# 循环条件判断
         while i < j and nums[i] <= pivot:
             tracer.compare(i, j, line=26)
             i += 1
@@ -58,6 +61,7 @@ def insertion_sort_small(nums, left, right):
     for i in range(left + 1, right + 1):
         key = nums[i]
         j = i - 1
+# 循环条件判断
         while j >= left and key < nums[j]:
             nums[j + 1] = nums[j]
             tracer.assign(j + 1, nums[j + 1], line=42)
@@ -69,6 +73,7 @@ def insertion_sort_small(nums, left, right):
 arr = [64, 34, 25, 12, 22, 12, 22, 90, 55, 43, 28, 73, 16]
 tracer.init_array(arr, line=48)
 quick_sort(arr, 0, len(arr) - 1)
+# 循环遍历处理
 for idx in range(len(arr)):
     tracer.mark_sorted(idx, line=51)
 tracer.finish(line=52)

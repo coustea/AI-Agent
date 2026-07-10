@@ -6,6 +6,7 @@ def merge_sort(arr):
     right = merge_sort(arr[mid:])
     return merge(left, right)
 
+# 定义 merge 函数
 def merge(left, right):
     result = []
     i = j = 0
@@ -20,6 +21,7 @@ def merge(left, right):
     result.extend(right[j:])
     return result
 
+# 定义 merge_sort_inplace 函数
 def merge_sort_inplace(arr, temp, left, right):
     if left >= right:
         return
@@ -28,6 +30,7 @@ def merge_sort_inplace(arr, temp, left, right):
     merge_sort_inplace(arr, temp, mid + 1, right)
     merge_inplace(arr, temp, left, mid, right)
 
+# 定义 merge_inplace 函数
 def merge_inplace(arr, temp, left, mid, right):
     for k in range(left, right + 1):
         temp[k] = arr[k]
@@ -46,7 +49,9 @@ def merge_inplace(arr, temp, left, mid, right):
             arr[k] = temp[j]
             j += 1
 
+# 定义 count_inversions 函数
 def count_inversions(arr):
+# 定义 sort_count 函数
     def sort_count(arr):
         if len(arr) <= 1:
             return arr, 0
@@ -56,6 +61,7 @@ def count_inversions(arr):
         merged, inv_m = merge_count(left, right)
         return merged, inv_l + inv_r + inv_m
 
+# 定义 merge_count 函数
     def merge_count(left, right):
         result = []
         i = j = inv = 0

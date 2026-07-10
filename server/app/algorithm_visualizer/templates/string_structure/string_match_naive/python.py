@@ -1,4 +1,5 @@
 """朴素字符串匹配算法（Brute-Force / Naive String Matching）
+# string_match_naive 算法实现 — domain: string_structure
 
 核心思想：从主串的每个起始位置 i 逐字符与模式串比较，
 若全部匹配则记录该位置，否则回溯到 i+1 重新开始。
@@ -15,6 +16,7 @@
 """
 
 
+# 定义 naive_match 函数
 def naive_match(text, pattern):
     if not pattern:
         return list(range(len(text) + 1))

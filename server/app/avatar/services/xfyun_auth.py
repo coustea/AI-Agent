@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 from wsgiref.handlers import format_date_time
 
 
+# 鉴权头构造失败异常
 class AssembleHeaderException(Exception):
     """鉴权头构造失败异常。"""
 
@@ -20,6 +21,7 @@ class AssembleHeaderException(Exception):
         self.message = msg
 
 
+# 解析后的 URL 组件（host / path / schema）
 class Url:
     """解析后的 URL 组件。"""
 
@@ -29,6 +31,7 @@ class Url:
         self.schema = schema
 
 
+# 将完整 WebSocket URL 解析为 host、path、schema 三部分
 def _parse_url(request_url: str) -> Url:
     """将完整 URL 解析为 host、path、schema 组件。"""
     stidx = request_url.index("://")
@@ -42,6 +45,7 @@ def _parse_url(request_url: str) -> Url:
     return Url(host, path, schema)
 
 
+# 构建带 HMAC-SHA256 鉴权参数的讯飞 WebSocket URL
 def assemble_auth_url(request_url: str, method: str = "GET", api_key: str = "", api_secret: str = "") -> str:
     """构建带鉴权参数的讯飞 WebSocket URL。
 
@@ -67,26 +71,29 @@ def assemble_auth_url(request_url: str, method: str = "GET", api_key: str = "", 
     # 获取当前时间并格式化为 HTTP 日期格式
     now = datetime.now()
     date = format_date_time(mktime(now.timetuple()))
-    # 构造签名原文
+    # 按讯飞规范构造签名原文：host + date + HTTP 方法行
     signature_origin = f"host: {host}\ndate: {date}\n{method} {path} HTTP/1.1"
-    # HMAC-SHA256 签名
+    # 使用 api_secret 对签名原文做 HMAC-SHA256 签名
     signature_sha = hmac.new(
         api_secret.encode("utf-8"),
         signature_origin.encode("utf-8"),
         digestmod=hashlib.sha256,
     ).digest()
+    # 将签名结果 Base64 编码
     signature_sha = base64.b64encode(signature_sha).decode(encoding="utf-8")
-    # 构造 authorization 头
+    # 拼装 authorization 头（含 api_key、算法、签名）
     authorization_origin = (
         f'api_key="{api_key}", algorithm="hmac-sha256", '
         f'headers="host date request-line", signature="{signature_sha}"'
     )
+    # 将 authorization 头整体再 Base64 编码
     authorization = base64.b64encode(authorization_origin.encode("utf-8")).decode(encoding="utf-8")
-    # 拼接查询参数
+    # 将 host/date/authorization 作为查询参数追加到原始 URL
     values = {
         "host": host,
         "date": date,
         "authorization": authorization,
     }
 
+    # 返回带鉴权参数的完整 WebSocket 连接 URL
     return request_url + "?" + urlencode(values)

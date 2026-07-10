@@ -4,11 +4,13 @@ tracer = StackTracer()
 
 
 
+# 定义 stack_operations 函数
 def stack_operations():
     stack = []
     tracer.init_stack(line=8)
 
     pages = ["首页", "列表页", "详情页", "评论页", "编辑页"]
+# 循环遍历处理
     for page in pages:
         stack.append(page)
         tracer.push(page, line=13)
@@ -26,6 +28,7 @@ def stack_operations():
     stack.append("推荐页")
     tracer.push("推荐页", line=30)
 
+# 循环条件判断
     while stack:
         stack.pop()
         tracer.pop(line=35)
@@ -33,6 +36,7 @@ def stack_operations():
     if not stack:
         pass
 
+# 循环遍历处理
     for i in range(1, 7):
         stack.append(f"层级{i}")
         tracer.push(f"层级{i}", line=45)

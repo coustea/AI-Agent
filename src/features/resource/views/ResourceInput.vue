@@ -36,7 +36,7 @@
             :disabled="!text.trim()"
             aria-label="进入参数配置"
           >
-            <TopIcon class='w-4 h-4 inline-block align-middle' />
+            <TopIcon class='w-[22px] h-[22px] inline-block align-middle' />
           </button>
         </div>
       </form>
@@ -77,11 +77,16 @@ import {
   PhGauge as OdometerIcon,
 } from '@phosphor-icons/vue'
 
+// 组件 props：父组件传递的当前输入文本
 const props = defineProps<{ naturalInput: string }>()
+// 事件：更新输入文本、触发提交
 const emit = defineEmits<{ 'update:naturalInput': [value: string]; submit: [] }>()
 
+// 输入框是否获得焦点（控制样式）
 const isInputFocused = ref(false)
+// 是否处于中文输入法组合状态（防回车误提交）
 const isComposing = ref(false)
+// 表单 DOM 引用，用于调用 requestSubmit
 const formRef = ref<HTMLFormElement | null>(null)
 
 // 本地双向绑定桥接：父组件用 v-model:naturalInput
@@ -91,15 +96,18 @@ function onInput(e: Event) {
   emit('update:naturalInput', text.value)
 }
 
+// 回车键提交：组合输入期间不触发
 function handleEnter(event: KeyboardEvent) {
   if (isComposing.value || event.isComposing) return
   event.preventDefault()
   formRef.value?.requestSubmit()
 }
+// 表单提交：输入不为空时触发父组件 submit 事件
 function submit() {
   if (!text.value.trim()) return
   emit('submit')
 }
+// 点击示例卡片填充输入框
 function fillExample(t: string) {
   text.value = t
   emit('update:naturalInput', t)
@@ -186,6 +194,7 @@ function fillExample(t: string) {
   border: none;
   background: transparent;
   box-shadow: none !important;
+  outline: none !important;
   font-size: 1.15rem;
   color: var(--color-text-strong);
   padding: 18px 20px 8px;

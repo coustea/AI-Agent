@@ -220,6 +220,7 @@ import { computed } from 'vue'
 
 type AnswerValue = string | string[] | undefined
 
+// 分析题评阅结果接口
 interface ReviewResult {
   score?: number
   feedback?: string
@@ -238,6 +239,7 @@ interface ExamQuestion {
   knowledge_points: string[]
 }
 
+// 组件属性：题目信息、评阅结果、翻页状态
 const props = defineProps<{
   question: ExamQuestion
   answer: AnswerValue
@@ -251,22 +253,26 @@ const props = defineProps<{
   nextDisabled: boolean
 }>()
 
+// 事件：关闭/上一道/下一道
 defineEmits<{
   (e: 'close'): void
   (e: 'previous'): void
   (e: 'next'): void
 }>()
 
+// 计算标准化得分（0-100）
 const score = computed(() => {
   return Math.min(100, Math.max(0, Math.round(Number(props.scoreValue) || 0)))
 })
 
+// 根据分数确定颜色样式类
 const scoreClass = computed(() => {
   if (score.value >= 80) return 'success'
   if (score.value >= 60) return 'warning'
   return 'danger'
 })
 
+// 得分文本描述
 const scoreText = computed(() => {
   if (props.resultText === '优秀') return '表现优秀'
   if (props.resultText === '部分正确') return '部分正确'
@@ -274,16 +280,19 @@ const scoreText = computed(() => {
   return props.resultText || '仍需加强'
 })
 
+// 得分详细评语
 const scoreDescription = computed(() => {
   if (score.value >= 80) return '核心观点较完整，作答逻辑清晰。'
   if (score.value >= 60) return '已覆盖部分要点，仍需加强论证。'
   return hasAnswer.value ? '关键要点覆盖不足，建议系统复盘。' : '请先完成作答，再结合解析进行复盘。'
 })
 
+// 是否有作答、格式化后的用户答案和参考答案
 const hasAnswer = computed(() => normalizeAnswer(props.answer).length > 0)
 const formattedUserAnswer = computed(() => formatUserAnswer(props.answer).trim() || '本题未作答。')
 const formattedReferenceAnswer = computed(() => String(props.question.answer || '').replace(/,/g, '、'))
 
+// 默认 AI 评语（根据得分动态生成）
 const defaultFeedback = computed(() => {
   if (!hasAnswer.value) return '本题未作答。建议先从题干中提取核心任务，再按照“观点—依据—结论”的结构组织答案。'
   if (score.value >= 80) return '整体作答较完整，关键观点覆盖充分，论证结构也比较清晰。'
@@ -291,13 +300,14 @@ const defaultFeedback = computed(() => {
   return '当前回答与参考要点存在较大差距，建议重新梳理题干要求并按要点分层作答。'
 })
 
+// 改进建议列表（优先取 API 返回，无则用默认提示）
 const improvementHints = computed(() => {
   const hints = props.review?.improvement_hints?.filter(Boolean) || []
   if (hints.length) return hints
   if (!hasAnswer.value) {
     return [
       '先圈出题干中的分析对象、限定条件和作答任务，避免偏离问题核心。',
-      '按照“核心观点、分析依据、最终结论”的顺序组织答案。',
+      '按照"核心观点、分析依据、最终结论"的顺序组织答案。',
     ]
   }
   return [
@@ -311,6 +321,7 @@ function hintTitle(index: number) {
   return titles[index] || `改进方向 ${index + 1}`
 }
 
+// 标准化用户答案为数组
 function normalizeAnswer(answer: AnswerValue): string[] {
   if (Array.isArray(answer)) return answer.map((item) => String(item).trim()).filter(Boolean)
   const text = String(answer || '').trim()
@@ -321,6 +332,7 @@ function formatUserAnswer(answer: AnswerValue) {
   return Array.isArray(answer) ? answer.join('、') : String(answer || '')
 }
 
+// 将纯文本中的 markdown 标记渲染为 HTML
 function renderInline(text: string) {
   if (!text) return ''
   return text

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 头像加载失败占位
 import type { AvatarFallbackProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

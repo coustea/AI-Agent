@@ -2,8 +2,10 @@
 # 数组(Array)：连续内存空间中存储相同类型元素的线性数据结构
 # 特性：随机访问 O(1)，插入/删除 O(n)，查找 O(n)
 # 适用场景：需要频繁按索引访问、数据量已知且较少插入删除的场景
+# array_base 算法实现 — domain: base_data_structure
 
 
+# 定义 array_operations 函数
 def array_operations():
     # 初始化数组 — 包含12个元素的整数数组
     arr = [3, 7, 1, 9, 4, 6, 2, 8, 5, 10, 0, 11]

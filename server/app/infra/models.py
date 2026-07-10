@@ -19,6 +19,7 @@
 - Profile 独立为共享模块，复用 global_profiles / weekly_learning_digests
 """
 
+# 本文件集中定义所有 SQLModel 数据库表，新表需加入底部 REGISTERED_MODELS 元组以便自动建表
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -857,6 +858,7 @@ class WrongQuestion(SQLModel, table=True):
 # Model registration — init_db() 通过此元组获取所有需要建表的模型类
 # ---------------------------------------------------------------------------
 
+# 所有需要建表的模型类注册表，init_db() 据此创建或更新表结构
 REGISTERED_MODELS = (
     ActiveToken,
     ChatSession,

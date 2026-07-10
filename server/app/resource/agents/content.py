@@ -42,6 +42,7 @@ class ContentAgent(BaseResourceAgent):
             title_prefix=input_data.node_title,
             config=input_data.agent_config,
         )
+        # 记录路径节点归属，便于后续关联
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
         return result
@@ -65,6 +66,7 @@ class ContentAgent(BaseResourceAgent):
         await self.emitter.send(self.agent_id, "running", "正在检索本地教材资料...", 25)
         try:
             kb_result = await build_knowledge_tool().handler(query=title_prefix)
+            # 仅当返回状态为 ok 时取正文
             kb_text = (
                 kb_result.get("text")
                 if isinstance(kb_result, dict) and kb_result.get("status") == "ok"
@@ -90,6 +92,7 @@ class ContentAgent(BaseResourceAgent):
         if search_text:
             context_parts.append(f"## 联网参考资料\n{search_text}")
 
+        # 将检索到的参考资料前置拼入提示词
         if context_parts:
             input_text = "\n\n".join(context_parts) + "\n\n" + input_text
 
@@ -99,6 +102,7 @@ class ContentAgent(BaseResourceAgent):
         full_prompt = f"{prompt}\n\n{input_text}"
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
         llm_started = time.perf_counter()
+        # 长耗时生成，期间定时发送心跳
         response = await self.run_with_heartbeat(
             self.llm.ainvoke(full_prompt),
             messages=[

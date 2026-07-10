@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器触发器
 import { ChevronDownIcon } from '@lucide/vue';
 
 import type { SelectTriggerProps } from "reka-ui"

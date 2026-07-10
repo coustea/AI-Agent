@@ -1,3 +1,4 @@
+// 选择器组件集
 export { default as Select } from "./Select.vue"
 export { default as SelectContent } from "./SelectContent.vue"
 export { default as SelectGroup } from "./SelectGroup.vue"

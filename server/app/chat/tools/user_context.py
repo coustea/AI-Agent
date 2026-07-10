@@ -20,17 +20,20 @@ logger = get_logger(__name__)
 # ── 学习者画像 ──
 
 
+# GetLearnerProfileArgs：学习者画像查询工具的输入参数
 class GetLearnerProfileArgs(BaseModel):
     dimension: str | None = Field(default=None, description="Profile dimension to read, such as goals or preferences.")
     reason: str = Field(default="", description="Why the tutor needs the profile.")
 
 
+# 工厂函数：创建绑定当前请求的画像查询工具闭包
 def make_get_learner_profile(
     request: TutorRequestContext,
     profile_service: Any | None = None,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的画像查询工具。"""
 
+    # 工具实现：读取学习者画像 Markdown 并压缩返回
     async def _impl(
         dimension: str | None = None,
         reason: str = "",
@@ -59,29 +62,34 @@ LongTermMemoryCategory = Literal[
 ]
 
 
+# GetLongTermMemoryArgs：长期记忆查询工具的输入参数
 class GetLongTermMemoryArgs(BaseModel):
     """长期记忆查询工具的输入参数模型。"""
     category: LongTermMemoryCategory | None = Field(default=None, description="Canonical long-term-memory category.")
     reason: str = Field(default="", description="Why the tutor needs durable memory.")
 
 
+# 长期记忆分类别名映射（外部别名 → 规范分类）
 LONG_TERM_MEMORY_CATEGORY_ALIASES: dict[str, str] = {
     "goals_progress": "long_term_goals",
 }
 
 
+# 工厂函数：创建绑定当前请求的长期记忆查询工具闭包
 def make_get_long_term_memory(
     request: TutorRequestContext,
     memory_service: Any | None = None,
 ) -> Callable[..., Awaitable[str]]:
     """工厂函数：创建闭包绑定当前请求的长期记忆查询工具。"""
 
+    # 工具实现：校验分类后读取长期记忆 Markdown
     async def _impl(
         category: LongTermMemoryCategory | None = None,
         reason: str = "",
     ) -> str:
         svc = memory_service or get_chat_memory_service()
         category_value = str(category or "").strip() or None
+        # 分类非法时直接返回错误提示
         if category_value and category_value not in LTM_CATEGORIES:
             return f"长期记忆分类无效: {category_value}"
         try:
@@ -94,6 +102,7 @@ def make_get_long_term_memory(
     return _impl
 
 
+# 装配画像与长期记忆两类工具为 Tool 对象列表
 def as_tool(request: TutorRequestContext) -> list[Tool]:
     """返回画像和长期记忆工具的 Tool 对象列表。"""
     return [

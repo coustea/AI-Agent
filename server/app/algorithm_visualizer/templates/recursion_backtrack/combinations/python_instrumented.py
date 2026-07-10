@@ -2,6 +2,7 @@ from visual_tracer import TreeTracer
 
 tracer = TreeTracer()
 
+# 定义 combination_sum 函数
 def combination_sum(candidates, target):
     if not candidates or target <= 0:
         return []
@@ -9,11 +10,13 @@ def combination_sum(candidates, target):
     nodes = []
     counter = [0]
 
+# 定义 make_node 函数
     def make_node(label):
         nid = f"node-{counter[0]}"
         counter[0] += 1
         return nid, {"id": nid, "label": label, "children": []}
 
+# 定义 backtrack_build 函数
     def backtrack_build(start, remain, path):
         nid, node = make_node(str(path[:]))
         nodes.append(node)
@@ -21,6 +24,7 @@ def combination_sum(candidates, target):
             return nid
         if remain < 0:
             return nid
+# 循环遍历处理
         for i in range(start, len(candidates)):
             if candidates[i] > remain:
                 break
@@ -35,6 +39,7 @@ def combination_sum(candidates, target):
 
     visit_idx = [0]
 
+# 定义 backtrack_visit 函数
     def backtrack_visit(start, remain, path):
         nid = f"node-{visit_idx[0]}"
         visit_idx[0] += 1
@@ -43,6 +48,7 @@ def combination_sum(candidates, target):
             return
         if remain < 0:
             return
+# 循环遍历处理
         for i in range(start, len(candidates)):
             if candidates[i] > remain:
                 break
@@ -54,12 +60,14 @@ def combination_sum(candidates, target):
     tracer.finish(line=34)
 
     res = []
+# 定义 collect 函数
     def collect(start, remain, path):
         if remain == 0:
             res.append(path[:])
             return
         if remain < 0:
             return
+# 循环遍历处理
         for i in range(start, len(candidates)):
             if candidates[i] > remain:
                 break
@@ -69,17 +77,20 @@ def combination_sum(candidates, target):
     collect(0, target, [])
     return res
 
+# 定义 combination_sum2 函数
 def combination_sum2(candidates, target):
     if not candidates or target <= 0:
         return []
     candidates.sort()
     res = []
+# 定义 backtrack 函数
     def backtrack(start, remain, path):
         if remain == 0:
             res.append(path[:])
             return
         if remain < 0:
             return
+# 循环遍历处理
         for i in range(start, len(candidates)):
             if i > start and candidates[i] == candidates[i - 1]:
                 continue
@@ -91,14 +102,17 @@ def combination_sum2(candidates, target):
     backtrack(0, target, [])
     return res
 
+# 定义 combination_sum_k 函数
 def combination_sum_k(k, n):
     res = []
+# 定义 backtrack 函数
     def backtrack(start, remain, path, depth):
         if depth == k and remain == 0:
             res.append(path[:])
             return
         if depth >= k or remain <= 0:
             return
+# 循环遍历处理
         for i in range(start, 10):
             path.append(i)
             backtrack(i + 1, remain - i, path, depth + 1)

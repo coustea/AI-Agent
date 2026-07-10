@@ -1,3 +1,4 @@
+# quick_power 算法实现 — domain: math
 def quick_pow(base, exp):
     result = 1
     while exp > 0:
@@ -7,6 +8,7 @@ def quick_pow(base, exp):
         base *= base
     return result
 
+# 定义 mod_pow 函数
 def mod_pow(base, exp, m):
     result = 1
     base %= m
@@ -17,6 +19,7 @@ def mod_pow(base, exp, m):
         base = base * base % m
     return result
 
+# 定义 mat_mul 函数
 def mat_mul(A, B, m=None):
     n = len(A)
     C = [[0] * n for _ in range(n)]
@@ -28,6 +31,7 @@ def mat_mul(A, B, m=None):
                 C[i][j] %= m
     return C
 
+# 定义 mat_pow 函数
 def mat_pow(M, exp, m=None):
     n = len(M)
     result = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
@@ -38,6 +42,7 @@ def mat_pow(M, exp, m=None):
         M = mat_mul(M, M, m)
     return result
 
+# 定义 fib_matrix 函数
 def fib_matrix(n, m=None):
     if n <= 1:
         return n

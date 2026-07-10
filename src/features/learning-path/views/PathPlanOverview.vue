@@ -386,25 +386,26 @@ type NodeWorkspaceLike = {
 const router = useRouter()
 const route = useRoute()
 
-// 路径总览页状态
+// 路径数据与评估状态
 const loading = ref(false)
 const path = ref<PathOverview | null>(null)
 const evaluation = ref<PathLearningEvaluationResponse | null>(null)
 const activeDetailNode = ref<LearningPathNode | null>(null)
 
+// 从评估报告中计算测验平均分
 const averageScore = computed(() => {
   if (!evaluation.value || evaluation.value.signal_snapshot.average_score === null) return 0
   return Math.round(evaluation.value.signal_snapshot.average_score)
 })
 
-// 路径规划中（通过 SSE 实时接收后端多智能体生成进度）
+// 路径规划中：通过 SSE 实时接收后端多智能体生成进度
 const isGenerating = ref(false)
 const generatingProgress = ref(12)
 const generatingMessages = ref<string[]>([])
 const pathEvents = usePathEvents()
 const activeRunId = ref<string | null>(null)
 
-// 节点教程生成中（点击节点后首次生成教程时的状态）
+// 节点教程生成中：点击未生成教程的节点时的弹窗状态
 const isGeneratingTutorial = ref(false)
 const openingNodeId = ref<number | null>(null)
 const tutorialNodeId = ref<number | null>(null)
@@ -421,6 +422,7 @@ const enterableStatuses = new Set([
   'completed_with_gaps',
 ])
 
+// 计算当前学习节点：优先使用后端返回的 current_node_key，否则取第一个可学节点
 const currentNode = computed(() => {
   if (!path.value) return null
 
@@ -429,19 +431,23 @@ const currentNode = computed(() => {
       ?? null
 })
 
+// 右侧面板展示的节点（悬停或当前节点）
 const displayedNode = computed(() => activeDetailNode.value || currentNode.value)
 
 const selectedNodeId = computed(() => displayedNode.value?.id ?? null)
 
+// 展示节点的所属阶段标题
 const displayedStageTitle = computed(() => {
   if (!displayedNode.value) return ''
   return stageTitleById(displayedNode.value.stage_id)
 })
 
+// 展示节点的前置依赖名称列表
 const displayedPrerequisites = computed(() => {
   return displayedNode.value?.prerequisites?.map(prerequisiteLabel) ?? []
 })
 
+// 路径概览数字汇总：可学习 / 学习中 / 已完成 / 未解锁
 const summary = computed(() => {
   const nodes = path.value?.nodes ?? []
 
@@ -453,6 +459,7 @@ const summary = computed(() => {
   }
 })
 
+// 节点 ID → 标题的映射表，用于前置依赖显示
 const nodeTitleMap = computed(() => {
   const map = new Map<string, string>()
 
@@ -463,6 +470,7 @@ const nodeTitleMap = computed(() => {
   return map
 })
 
+// 按阶段分组节点：每个阶段下节点按 priority 排序，未归属节点单独成组
 const stageSections = computed<StageSection[]>(() => {
   if (!path.value) return []
 
@@ -508,6 +516,7 @@ const stageTitleById = (stageId: string) => {
   return stage?.title || stageId
 }
 
+// 阶段维度统计：已完成数、可学数、进度百分比
 const stageCompletedCount = (stage: StageSection) => {
   return stage.nodes.filter((node) => completedStatuses.has(node.status)).length
 }
@@ -577,10 +586,12 @@ const prerequisiteLabel = (nodeKey: string) => {
   return nodeTitleMap.value.get(nodeKey) || nodeKey
 }
 
+// 节点是否可进入（available / in_progress / remediation 等状态）
 const canEnterNode = (node: LearningPathNode) => {
   return enterableStatuses.has(node.status)
 }
 
+// 通用解包：处理嵌套的 ApiResponse 结构，提取 data
 function unwrapResponseData<T>(response: unknown): T {
   const maybeResponse = response as {
     data?: {
@@ -605,6 +616,7 @@ function unwrapResponseData<T>(response: unknown): T {
   return response as T
 }
 
+// 鼠标悬停/聚焦节点时更新右侧面板显示
 const previewNode = (node: LearningPathNode) => {
   activeDetailNode.value = node
 }
@@ -621,7 +633,7 @@ const handleNodeClick = async (node: LearningPathNode) => {
   await openNodeLearning(node)
 }
 
-// 检查节点工作空间：如有教程直接进入，否则调用生成流程
+// 检查节点工作空间：有教程直接跳转学习页，无教程则调用生成流程
 const openNodeLearning = async (node: LearningPathNode) => {
   if (openingNodeId.value || isGeneratingTutorial.value) return
 
@@ -651,7 +663,7 @@ const openNodeLearning = async (node: LearningPathNode) => {
   }
 }
 
-// 生成教程并进入节点页：在 startLearning + generateTutorial 期间展示轮播日志动画
+// 生成教程并进入节点页：调用 startLearning + generateTutorial，期间展示轮播日志动画
 const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
   isGeneratingTutorial.value = true
   tutorialNodeId.value = node.id
@@ -697,11 +709,12 @@ const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
   }
 }
 
+// 关闭 SSE 连接
 const stopSSE = () => {
   pathEvents.close()
 }
 
-// 处理 SSE 推来的实时事件：更新进度百分比 + 轮播日志消息
+// 处理 SSE 推来的实时事件：更新进度百分比 + 轮播日志消息（去重）
 const handlePathEvent = (event: PathEvent) => {
   if (typeof event.progress === 'number') {
     generatingProgress.value = Math.max(generatingProgress.value, Math.min(event.progress, 100))
@@ -722,12 +735,14 @@ const startSSE = (pathId: number, runId: string) => {
   stopSSE()
   pathEvents.connect(pathId, runId, {
     onEvent: handlePathEvent,
+    // 完成时：进度设为 100%，延迟后刷新路径
     onCompleted: () => {
       generatingProgress.value = 100
       setTimeout(() => {
         loadPath()
       }, 700)
     },
+    // 失败时：提示错误并刷新
     onFailed: (error) => {
       toast.error(error.message || '路径规划失败')
       isGenerating.value = false
@@ -736,7 +751,7 @@ const startSSE = (pathId: number, runId: string) => {
   })
 }
 
-const loadEvaluation = async (pathId: number) => {
+// 加载路径学习评估报告
   try {
     const res = await getLearningEvaluation(pathId)
     evaluation.value = res.data.data
@@ -745,6 +760,7 @@ const loadEvaluation = async (pathId: number) => {
   }
 }
 
+// 加载路径数据：处理新建（路径 planning）、查看指定 ID、查看最新路径三种场景
 const loadPath = async () => {
   const rawId = String(route.params.id || '')
 
@@ -809,6 +825,7 @@ const loadPath = async () => {
     return
   }
 
+  // 非 new 分支：加载已有路径（latest 或指定 ID）
   loading.value = true
 
   try {
@@ -845,6 +862,7 @@ const loadPath = async () => {
     const loaded = path.value
     if (!loaded) return
 
+    // 路径还在生成中：建立 SSE 监听进度
     if (loaded.status === 'generating') {
       isGenerating.value = true
       generatingProgress.value = Math.max(generatingProgress.value, 18)
@@ -859,6 +877,7 @@ const loadPath = async () => {
       activeRunId.value = String(route.query.run_id || activeRunId.value || '') || null
       if (activeRunId.value && currentPathId) startSSE(currentPathId, activeRunId.value)
     } else {
+      // 路径已就绪：停止 SSE，加载评估报告
       isGenerating.value = false
       generatingProgress.value = 100
       stopSSE()
@@ -874,6 +893,7 @@ const loadPath = async () => {
   }
 }
 
+// 路径 ID 变化时切换加载逻辑（从新建态过渡到查看态）
 watch(
     () => route.params.id,
     (newId, oldId) => {
@@ -892,16 +912,19 @@ watch(
     },
 )
 
+// 页面激活时恢复 SSE（keep-alive 场景）
 onActivated(() => {
   if (isGenerating.value && activeRunId.value && path.value?.id) {
     startSSE(path.value.id, activeRunId.value)
   }
 })
 
+// 离开页面时关闭 SSE 连接
 onBeforeUnmount(() => {
   stopSSE()
 })
 
+// 页面挂载加载路径
 onMounted(loadPath)
 </script>
 

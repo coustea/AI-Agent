@@ -10,10 +10,12 @@ from typing import Any, Annotated, Literal, TypedDict
 
 def merge_results_dict(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any]:
     """合并两个 Agent 结果字典（LangGraph Send 并行后的归约器）。"""
+    # 以空字典兜底缺失分支
     if left is None:
         left = {}
     if right is None:
         right = {}
+    # 检测到同一 agent 出现两次则违反不变量
     overlap = set(left.keys()) & set(right.keys())
     if overlap:
         raise RuntimeError(f"workflow invariant violated: duplicate agent results for {sorted(overlap)}")
@@ -26,6 +28,7 @@ def merge_failures_dict(left: dict[str, "AgentFailure"] | None, right: dict[str,
         left = {}
     if right is None:
         right = {}
+    # 同一 agent 失败记录重复则违反不变量
     overlap = set(left.keys()) & set(right.keys())
     if overlap:
         raise RuntimeError(f"workflow invariant violated: duplicate agent failures for {sorted(overlap)}")

@@ -16,6 +16,7 @@ graph = {
 labels = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G", 7: "H"}
 
 nodes = []
+# 循环遍历处理
 for node_id in sorted(graph.keys()):
     node_edges = [{"to": str(neighbor)} for neighbor in graph[node_id]]
     nodes.append({"id": str(node_id), "label": labels[node_id], "edges": node_edges})
@@ -32,11 +33,13 @@ def bfs(graph, start, visited, distance, parent):
     queue = [start]
     order = []
 
+# 循环条件判断
     while queue:
         node = queue.pop(0)
         order.append(node)
         tracer.visit_node(str(node), line=55)
 
+# 循环遍历处理
         for neighbor in graph.get(node, []):
             if neighbor not in visited:
                 visited.add(neighbor)
@@ -55,6 +58,7 @@ def bfs_all_components(graph):
     parent = {}
     components = []
 
+# 循环遍历处理
     for node in graph:
         if node not in visited:
             component = bfs(graph, node, visited, distance, parent)
@@ -66,11 +70,13 @@ def bfs_all_components(graph):
 components, distance, parent = bfs_all_components(graph)
 
 print(f"连通分量数量: {len(components)}")
+# 循环遍历处理
 for i, comp in enumerate(components):
     labels_str = ", ".join(labels[n] for n in comp)
     print(f"  分量 {i + 1}: [{labels_str}] (节点编号: {comp})")
 
 print("\n节点距离与前驱信息:")
+# 循环遍历处理
 for node in sorted(graph.keys()):
     p = labels.get(parent[node], "无") if parent.get(node) is not None else "无"
     if parent.get(node) == -1:
@@ -79,6 +85,7 @@ for node in sorted(graph.keys()):
 
 print("\nBFS 层级结构（按距离分组）:")
 max_dist = max(distance.values())
+# 循环遍历处理
 for d in range(max_dist + 1):
     level_nodes = [n for n in sorted(graph.keys()) if distance[n] == d]
     labels_str = ", ".join(labels[n] for n in level_nodes)

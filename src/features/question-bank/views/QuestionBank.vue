@@ -457,6 +457,7 @@
 </template>
 
 <script setup lang="ts">
+// 导入 Vue 组合式 API 及路由/通知/接口模块
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -522,23 +523,30 @@ interface CalendarCell {
   isCompleted: boolean
 }
 
+// 每日练习题量
 const DAILY_QUESTION_COUNT = 10
 
+// 视图模式（工作台/考试/分析评阅）
 const viewMode = ref<ViewMode>('workspace')
 const activeModule = ref<ModuleKey>('portal')
 const route = useRoute()
 
+// 筛选条件可选值
 const subjects = ref<string[]>([])
 const difficulties = ref<string[]>([])
 const types = ref<string[]>([])
+// 用户课程列表
 const learnerCourses = ref<string[]>([])
+// 全部/推荐题目池
 const practicePool = shallowRef<Question[]>([])
 const allQuestionPool = shallowRef<Question[]>([])
 
+// 首页推荐题目 & 每日练习列表 & 右侧每日挑战
 const portalQuestion = ref<Question | null>(null)
 const dailyQuestions = shallowRef<Question[]>([])
 const dailyChallengeQuestion = ref<Question | null>(null)
 
+// 题库搜索状态
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
 const bankLoading = ref(false)
@@ -546,6 +554,7 @@ const bankPage = ref(1)
 const bankPageSize = ref(8)
 const bankFilters = reactive({ query: '', subject: '', difficulty: '', type: '' })
 
+// 错题本状态
 const wrongQuestions = shallowRef<Question[]>([])
 const wrongTotal = ref(0)
 const wrongLoading = ref(false)
@@ -553,6 +562,7 @@ const wrongPage = ref(1)
 const wrongPageSize = ref(8)
 const wrongFilters = reactive({ query: '', subject: '', type: '' })
 
+// 题库答题状态
 const bankAnswers = ref<Record<string, AnswerValue>>({})
 const bankSubmitted = ref<Record<string, boolean>>({})
 const bankCorrect = ref<Record<string, boolean>>({})
@@ -562,6 +572,7 @@ const openedAnalysis = ref<Set<string>>(new Set())
 const highlightQuestionId = ref<string | null>(null)
 const highlightVersion = ref(0)
 
+// 错题答题状态
 const wrongAnswers = ref<Record<string, AnswerValue>>({})
 const wrongSubmitted = ref<Record<string, boolean>>({})
 const wrongCorrect = ref<Record<string, boolean>>({})
@@ -569,6 +580,7 @@ const wrongReviewing = ref<Record<string, boolean>>({})
 const wrongReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedWrongAnalysis = ref<Set<string>>(new Set())
 
+// 错题再练状态
 const wrongDrillQuestion = ref<Question | null>(null)
 const wrongDrillAnswer = ref<AnswerValue>('')
 const wrongDrillSubmitted = ref(false)
@@ -576,6 +588,7 @@ const wrongDrillCorrect = ref(false)
 const wrongDrillReviewing = ref(false)
 const wrongDrillReview = ref<QuizReviewResult | null>(null)
 
+// 首页推荐答题状态
 const portalAnswers = ref<Record<string, AnswerValue>>({})
 const portalSubmitted = ref<Record<string, boolean>>({})
 const portalCorrect = ref<Record<string, boolean>>({})
@@ -583,6 +596,7 @@ const portalReviewing = ref<Record<string, boolean>>({})
 const portalReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedPortalAnalysis = ref<Set<string>>(new Set())
 
+// 每日练习答题状态
 const dailyAnswers = ref<Record<string, AnswerValue>>({})
 const dailySubmitted = ref<Record<string, boolean>>({})
 const dailyCorrect = ref<Record<string, boolean>>({})
@@ -590,13 +604,16 @@ const dailyReviewing = ref<Record<string, boolean>>({})
 const dailyReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedDailyAnalysis = ref<Set<string>>(new Set())
 
+// 答题统计（本地持久化）
 const stats = reactive({ totalAttempted: 0, totalCorrect: 0 })
 const localStatsSeed = ref(0)
 const dailyStateSeed = ref(0)
 
+// 模考次数 & 已归档错题数
 const mockExamsCount = ref(Number(localStorage.getItem('question_hub_mock_exams_count') || '0'))
 const archivedWrongTotal = ref(0)
 
+// 试卷表单配置
 const paperForm = reactive({
   title: '模拟试卷',
   subject: '',
@@ -604,6 +621,7 @@ const paperForm = reactive({
   duration: 45,
 })
 
+// 各题型数量配置
 const paperTypeCounts = reactive([
   { type: '单选题', label: '单选题', count: 5 },
   { type: '判断题', label: '判断题', count: 3 },
@@ -613,6 +631,7 @@ const paperTypeCounts = reactive([
 const paperPreview = shallowRef<Question[]>([])
 const paperLoading = ref(false)
 
+// 考试状态
 const examTitle = ref('')
 const examPaper = shallowRef<Question[]>([])
 const examAnswers = ref<Record<string, AnswerValue>>({})
@@ -627,33 +646,40 @@ const activeAnalysisQuestionId = ref<string | null>(null)
 const analysisReturnQuestionIndex = ref(0)
 let examTimer: number | null = null
 
+// 分析题列表（用于评阅翻页）
 const analysisQuestions = computed(() => examPaper.value.filter((question) => question.type === '分析题'))
 
+// 当前评阅的分析题对象
 const activeAnalysisQuestion = computed(() => {
   if (!activeAnalysisQuestionId.value) return null
   return examPaper.value.find((question) => question.id === activeAnalysisQuestionId.value) || null
 })
 
+// 当前评阅的分析题在列表中的索引
 const activeAnalysisQuestionIndex = computed(() => {
   if (!activeAnalysisQuestion.value) return -1
   return analysisQuestions.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id)
 })
 
+// 当前评阅的分析题在试卷中的题号
 const activeAnalysisQuestionNumber = computed(() => {
   if (!activeAnalysisQuestion.value) return 0
   return examPaper.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id) + 1
 })
 
+// 当前评阅的用户答案
 const activeAnalysisAnswer = computed<AnswerValue>(() => {
   if (!activeAnalysisQuestion.value) return undefined
   return examAnswers.value[activeAnalysisQuestion.value.id]
 })
 
+// 当前评阅的 AI 评阅结果
 const activeAnalysisReview = computed<QuizReviewResult | null>(() => {
   if (!activeAnalysisQuestion.value) return null
   return examReview.value[activeAnalysisQuestion.value.id] || null
 })
 
+// 当前评阅的得分
 const activeAnalysisScore = computed(() => {
   const question = activeAnalysisQuestion.value
   if (!question) return 0
@@ -662,6 +688,7 @@ const activeAnalysisScore = computed(() => {
   return evaluateAnswer(question, examAnswers.value[question.id]) ? 100 : 0
 })
 
+// 当前评阅结果文本
 const activeAnalysisResultText = computed(() => {
   const score = activeAnalysisScore.value
   if (score >= 80) return '优秀'
@@ -695,6 +722,7 @@ const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark:
   { key: 'wrong', label: '错题本', desc: '薄弱复习', mark: '05' },
 ]
 
+// 首页功能卡片配置（动态显示每日/错题/模考状态）
 const portalCards = computed(() => [
   {
     key: 'daily' as ModuleKey,
@@ -719,14 +747,17 @@ const portalCards = computed(() => [
   },
 ])
 
+// 试卷期望题目总数
 const paperExpectedCount = computed(() => {
   return paperTypeCounts.reduce((sum, item) => sum + Number(item.count || 0), 0)
 })
 
+// 是否可以开始考试
 const canStartPaperExam = computed(() => {
   return paperExpectedCount.value > 0 && paperPreview.value.length === paperExpectedCount.value
 })
 
+// 每日练习已提交数和正确数
 const dailySubmittedCount = computed(() => {
   return dailyQuestions.value.filter((question) => dailySubmitted.value[question.id]).length
 })
@@ -735,6 +766,7 @@ const dailyCorrectCount = computed(() => {
   return dailyQuestions.value.filter((question) => dailyCorrect.value[question.id]).length
 })
 
+// 错题列表（客户端关键词过滤）
 const filteredWrongQuestions = computed(() => {
   const keyword = wrongFilters.query.trim().toLowerCase()
   if (!keyword) return wrongQuestions.value
@@ -752,19 +784,23 @@ const topSubjects = computed(() => {
     .slice(0, 5)
 })
 
+// 格式化考试倒计时
 const formattedExamTime = computed(() => formatDuration(examTime.value))
 
+// 考试已答/未答/错误数
 const examAnsweredCount = computed(() => examPaper.value.filter((item) => hasAnswerData(examAnswers.value[item.id])).length)
 
 const examUnansweredCount = computed(() => examPaper.value.length - examAnsweredCount.value)
 
 const examWrongCount = computed(() => Math.max(examPaper.value.length - examCorrectCount.value - examUnansweredCount.value, 0))
 
+// 考试成绩百分比
 const examScore = computed(() => {
   if (!examPaper.value.length) return 0
   return Math.round((examCorrectCount.value / examPaper.value.length) * 100)
 })
 
+// 考试等级评定
 const examResultLevel = computed(() => {
   if (examScore.value >= 90) return '优秀'
   if (examScore.value >= 75) return '良好'
@@ -775,10 +811,12 @@ const examResultLevel = computed(() => {
 const animatedAccuracy = ref(0)
 const radarAnimationScale = ref(0.1)
 
+// 日历标题（当前年月）
 const calendarMonthLabel = computed(() => {
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(new Date())
 })
 
+// 生成日历网格（42 格，含完成标记）
 const calendarDays = computed<CalendarCell[]>(() => {
   dailyStateSeed.value
   const completionMap = readDailyCompletionMap()
@@ -811,6 +849,7 @@ const calendarDays = computed<CalendarCell[]>(() => {
   return result
 })
 
+// 连续打卡天数（本地存储）
 const localStreak = computed(() => {
   localStatsSeed.value
   const streak = localStorage.getItem('question_hub_streak')
@@ -821,6 +860,7 @@ const localStreak = computed(() => {
   return Number(streak)
 })
 
+// 今日是否已完成每日练习
 const isDailyCompleted = computed(() => {
   dailyStateSeed.value
   const todayKey = formatDateKey(new Date())
@@ -828,6 +868,7 @@ const isDailyCompleted = computed(() => {
   return completionMap[todayKey] === true
 })
 
+// 触发首页图表动画（延迟更新数值实现入场效果）
 function triggerChartAnimations() {
   radarAnimationScale.value = 0.1
   animatedAccuracy.value = 0
@@ -839,6 +880,7 @@ function triggerChartAnimations() {
   }, 100)
 }
 
+// 页面挂载：读取本地统计、解析路由参数、加载数据
 onMounted(() => {
   readLocalStats()
 
@@ -851,6 +893,7 @@ onMounted(() => {
   void bootstrap()
 })
 
+// 试卷表单变化时清除旧预览
 watch(
   () => [
     paperForm.subject,
@@ -864,10 +907,12 @@ watch(
   },
 )
 
+// 组件卸载时停止考试计时器
 onUnmounted(() => {
   stopExamTimer()
 })
 
+// 滚动到指定考试题号
 function scrollToQuestion(index: number) {
   currentExamIndex.value = index
   const el = document.getElementById(`exam-q-${index}`)
@@ -876,6 +921,7 @@ function scrollToQuestion(index: number) {
   }
 }
 
+// 初始化加载所有数据
 async function bootstrap() {
   try {
     const profile = await getProfileOnboarding()
@@ -892,6 +938,7 @@ async function bootstrap() {
   refreshDailySelections()
 }
 
+// 切换左侧导航模块
 function switchModule(key: string) {
   activeModule.value = key as ModuleKey
 
@@ -907,6 +954,7 @@ function switchModule(key: string) {
   }
 }
 
+// 重置题库搜索筛选条件
 function resetQuestionBankFilters() {
   bankFilters.query = ''
   bankFilters.subject = ''
@@ -915,6 +963,7 @@ function resetQuestionBankFilters() {
   bankPage.value = 1
 }
 
+// 点击学科标签跳转到搜索
 function selectSubject(subject: string) {
   bankFilters.subject = bankFilters.subject === subject ? '' : subject
   activeModule.value = 'search'
@@ -922,6 +971,7 @@ function selectSubject(subject: string) {
   void loadQuestionBank()
 }
 
+// 加载全部题目到内存池（用于随机推荐）
 async function loadPracticePool() {
   try {
     const pageSize = 100
@@ -964,6 +1014,7 @@ async function loadPracticePool() {
   }
 }
 
+// 根据筛选条件加载题库分页
 async function loadQuestionBank() {
   bankLoading.value = true
   try {
@@ -989,6 +1040,7 @@ async function loadQuestionBank() {
   }
 }
 
+// 触发题库搜索（重置到第一页）
 function searchBank() {
   bankPage.value = 1
   clearQuestionHighlight()
@@ -996,11 +1048,13 @@ function searchBank() {
   void loadQuestionBank()
 }
 
+// 题库翻页
 function handleBankPageChange(page: number) {
   bankPage.value = page
   void loadQuestionBank()
 }
 
+// 加载错题本列表
 async function loadWrongBook() {
   wrongLoading.value = true
   try {
@@ -1030,17 +1084,20 @@ async function loadWrongBook() {
   }
 }
 
+// 搜索错题（重置到第一页）
 function searchWrong() {
   wrongPage.value = 1
   openedWrongAnalysis.value = new Set()
   void loadWrongBook()
 }
 
+// 错题本翻页
 function handleWrongPageChange(page: number) {
   wrongPage.value = page
   void loadWrongBook()
 }
 
+// 将后端错题格式转为通用 Question 格式
 function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
   return {
     id: item.question_id,
@@ -1058,6 +1115,7 @@ function normalizeWrongQuestion(item: WrongQuestionDTO): Question {
   }
 }
 
+// 从题库随机选一道首页推荐题（排除已在其他模块的题目）
 function pickPortalQuestion() {
   const excluded = [
     ...dailyQuestions.value.map((item) => item.id),
@@ -1068,6 +1126,7 @@ function pickPortalQuestion() {
   resetPortalState(nextQuestion)
 }
 
+// 随机选一道每日挑战题
 function pickDailyChallengeQuestion() {
   const excluded = [
     ...(portalQuestion.value ? [portalQuestion.value.id] : []),
@@ -1076,6 +1135,7 @@ function pickDailyChallengeQuestion() {
   dailyChallengeQuestion.value = pickQuestionExcluding(excluded)
 }
 
+// 刷新每日练习 10 题（打乱抽取）
 function refreshDailyQuestions() {
   const excluded = new Set<string>([
     ...(portalQuestion.value ? [portalQuestion.value.id] : []),
@@ -1089,6 +1149,7 @@ function refreshDailyQuestions() {
   resetDailyState(selected)
 }
 
+// 重新选取首页推荐、每日练习、每日挑战
 function refreshDailySelections() {
   portalQuestion.value = null
   dailyQuestions.value = []
@@ -1098,6 +1159,7 @@ function refreshDailySelections() {
   pickDailyChallengeQuestion()
 }
 
+// 从题目池中排除指定 ID 后随机选取
 function pickQuestionExcluding(excludedIds: string[]) {
   const source = allQuestionPool.value.length ? allQuestionPool.value : practicePool.value.length ? practicePool.value : questions.value
   if (!source.length) return null
@@ -1112,6 +1174,7 @@ function clearQuestionHighlight() {
   highlightQuestionId.value = null
 }
 
+// 重置首页推荐题的答题状态
 function resetPortalState(question: Question | null) {
   portalAnswers.value = {}
   portalSubmitted.value = {}
@@ -1124,6 +1187,7 @@ function resetPortalState(question: Question | null) {
   portalAnswers.value[question.id] = ''
 }
 
+// 重置每日练习的答题状态
 function resetDailyState(selected: Question[]) {
   const nextAnswers: Record<string, AnswerValue> = {}
   const nextSubmitted: Record<string, boolean> = {}
@@ -1147,6 +1211,7 @@ function resetDailyState(selected: Question[]) {
   openedDailyAnalysis.value = new Set()
 }
 
+// 从每日挑战跳转到搜索模块并高亮对应题目
 async function jumpToChallengeQuestion() {
   if (!dailyChallengeQuestion.value) {
     toast.warning('暂无可跳转的每日挑战')
@@ -1172,6 +1237,7 @@ async function jumpToChallengeQuestion() {
   }
 }
 
+// 随机抽取一道错题用于再练
 async function pickWrongQuestion() {
   try {
     const result = await fetchRandomWrongQuestion()
@@ -1187,16 +1253,19 @@ async function pickWrongQuestion() {
   wrongDrillReview.value = null
 }
 
+// 题库选项选择
 function selectBankOption(question: Question, key: string) {
   if (bankSubmitted.value[question.id]) return
   bankAnswers.value[question.id] = updateOptionAnswer(question, bankAnswers.value[question.id], key)
 }
 
+// 首页推荐题选项选择
 function selectPortalOption(question: Question, key: string) {
   if (portalSubmitted.value[question.id]) return
   portalAnswers.value[question.id] = updateOptionAnswer(question, portalAnswers.value[question.id], key)
 }
 
+// 提交首页推荐题（调用 AI 评阅 or 自动判题）
 async function submitPortalAnswer(question: Question) {
   if (portalSubmitted.value[question.id]) return
 
@@ -1213,6 +1282,7 @@ async function submitPortalAnswer(question: Question) {
   portalReviewing.value[question.id] = false
 }
 
+// 提交题库搜索中的题目答案
 async function submitBankAnswer(question: Question) {
   if (bankSubmitted.value[question.id]) return
 
@@ -1230,11 +1300,13 @@ async function submitBankAnswer(question: Question) {
   bankReviewing.value[question.id] = false
 }
 
+// 每日练习选项选择
 function selectDailyOption(question: Question, key: string) {
   if (dailySubmitted.value[question.id]) return
   dailyAnswers.value[question.id] = updateOptionAnswer(question, dailyAnswers.value[question.id], key)
 }
 
+// 提交每日练习答案
 async function submitDailyAnswer(question: Question) {
   if (dailySubmitted.value[question.id]) return
 
@@ -1250,6 +1322,7 @@ async function submitDailyAnswer(question: Question) {
 
   dailyReviewing.value[question.id] = false
 
+  // 全部完成后标记今日达标并更新连续打卡
   if (dailySubmittedCount.value === dailyQuestions.value.length && dailyQuestions.value.length > 0 && !isDailyCompleted.value) {
     markDailyCompleted(new Date())
 
@@ -1261,11 +1334,13 @@ async function submitDailyAnswer(question: Question) {
   }
 }
 
+// 错题本选项选择
 function selectWrongOption(question: Question, key: string) {
   if (wrongSubmitted.value[question.id]) return
   wrongAnswers.value[question.id] = updateOptionAnswer(question, wrongAnswers.value[question.id], key)
 }
 
+// 提交错题本中的题目
 async function submitWrongAnswer(question: Question) {
   if (wrongSubmitted.value[question.id]) return
 
@@ -1279,6 +1354,7 @@ async function submitWrongAnswer(question: Question) {
   wrongReviewing.value[question.id] = false
 }
 
+// 提交错题再练的答案
 async function submitWrongDrill() {
   if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
 
@@ -1291,29 +1367,34 @@ async function submitWrongDrill() {
   wrongDrillReviewing.value = false
 }
 
+// 错题再练选项选择
 function selectWrongDrillOption(key: string) {
   if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
   wrongDrillAnswer.value = updateOptionAnswer(wrongDrillQuestion.value, wrongDrillAnswer.value, key)
 }
 
+// 切换题库题目的解析展开/收起
 function toggleBankAnalysis(id: string) {
   const next = new Set(openedAnalysis.value)
   next.has(id) ? next.delete(id) : next.add(id)
   openedAnalysis.value = next
 }
 
+// 切换每日练习的解析展开/收起
 function toggleDailyAnalysis(id: string) {
   const next = new Set(openedDailyAnalysis.value)
   next.has(id) ? next.delete(id) : next.add(id)
   openedDailyAnalysis.value = next
 }
 
+// 切换错题本解析展开/收起
 function toggleWrongAnalysis(id: string) {
   const next = new Set(openedWrongAnalysis.value)
   next.has(id) ? next.delete(id) : next.add(id)
   openedWrongAnalysis.value = next
 }
 
+// 重置试卷配置表单
 function resetPaperForm() {
   paperForm.title = '模拟试卷'
   paperForm.subject = subjects.value[0] || ''
@@ -1328,6 +1409,7 @@ function resetPaperForm() {
   paperPreview.value = []
 }
 
+// 分页加载试卷题目池
 async function fetchPaperQuestionPool() {
   const pageSize = 100
   const allItems: Question[] = []
@@ -1360,6 +1442,7 @@ async function fetchPaperQuestionPool() {
   return allItems
 }
 
+// 根据配置生成试卷预览（按题型随机抽题）
 async function generatePaperPreview() {
   const targetCount = paperExpectedCount.value
   if (targetCount <= 0) return toast.warning('请至少选择 1 道题目')
@@ -1403,6 +1486,7 @@ async function generatePaperPreview() {
   }
 }
 
+// 从预览进入考试模式
 function startPreviewExam() {
   if (!canStartPaperExam.value) {
     toast.warning('试卷题量与配置不一致，请重新生成或调整题型数量')
@@ -1411,6 +1495,7 @@ function startPreviewExam() {
   startExam(paperPreview.value, paperForm.title)
 }
 
+// 启动考试模式（初始化答题状态、开始计时）
 function startExam(paper: Question[], title: string) {
   examTitle.value = title
   examPaper.value = paper
@@ -1435,6 +1520,7 @@ function startExam(paper: Question[], title: string) {
   })
 }
 
+// 启动考试计时器（每秒 +1）
 function startExamTimer() {
   stopExamTimer()
   examTimer = window.setInterval(() => {
@@ -1442,6 +1528,7 @@ function startExamTimer() {
   }, 1000)
 }
 
+// 停止考试计时器
 function stopExamTimer() {
   if (examTimer) {
     window.clearInterval(examTimer)
@@ -1449,6 +1536,7 @@ function stopExamTimer() {
   }
 }
 
+// 处理退出考试（已提交直接返回，未提交弹出确认）
 function handleExamExit() {
   if (examReviewing.value) return
 
@@ -1462,6 +1550,7 @@ function handleExamExit() {
   }
 }
 
+// 请求交卷（先显示未答提示，确认后提交）
 function requestSubmitExam() {
   if (examSubmitted.value || examReviewing.value) return
 
@@ -1477,6 +1566,7 @@ function cancelSubmitExam() {
   examSubmitNoticeVisible.value = false
 }
 
+// 执行交卷：判客观题 + AI 评阅主观题 + 提交记录
 async function submitExam() {
   if (examSubmitted.value || examReviewing.value) return
 
@@ -1565,6 +1655,7 @@ async function submitExam() {
   }
 }
 
+// 打开分析题评阅详情页面
 function openAnalysisReview(questionId: string) {
   if (!examSubmitted.value) return
 
@@ -1578,6 +1669,7 @@ function openAnalysisReview(questionId: string) {
   void nextTick(() => scrollQuestionBankViewportToTop())
 }
 
+// 关闭分析题评阅，返回答题位置
 function closeAnalysisReview() {
   const returnIndex = analysisReturnQuestionIndex.value
   viewMode.value = 'exam'
@@ -1588,6 +1680,7 @@ function closeAnalysisReview() {
   })
 }
 
+// 切换到上一道分析题评阅
 function showPreviousAnalysisReview() {
   const previous = analysisQuestions.value[activeAnalysisQuestionIndex.value - 1]
   if (!previous) return
@@ -1597,6 +1690,7 @@ function showPreviousAnalysisReview() {
   void nextTick(() => scrollQuestionBankViewportToTop())
 }
 
+// 切换到下一道分析题评阅
 function showNextAnalysisReview() {
   const next = analysisQuestions.value[activeAnalysisQuestionIndex.value + 1]
   if (!next) return
@@ -1606,6 +1700,7 @@ function showNextAnalysisReview() {
   void nextTick(() => scrollQuestionBankViewportToTop())
 }
 
+// 返回工作台首页
 function backWorkspace() {
   stopExamTimer()
   examReviewing.value = false
@@ -1621,16 +1716,19 @@ function backWorkspace() {
   })
 }
 
+// 选择考试选项
 function selectExamOption(q: Question, key: string) {
   if (examSubmitted.value) return
   examAnswers.value[q.id] = updateOptionAnswer(q, examAnswers.value[q.id], key)
 }
 
+// 更新考试文本答案
 function updateExamAnswer(id: string, value: string) {
   if (examSubmitted.value) return
   examAnswers.value[id] = value
 }
 
+// 评阅单道题目（客观题自动判，主观题调 AI）
 async function gradeQuestion(question: Question, answer: AnswerValue) {
   if (isObjectiveQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
 
@@ -1659,6 +1757,7 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
   }
 }
 
+// 提交错题记录到服务器
 async function saveWrongQuestion(question: Question, answer: AnswerValue) {
   try {
     await submitObjectiveResults({
@@ -1683,12 +1782,14 @@ async function saveWrongQuestion(question: Question, answer: AnswerValue) {
   }
 }
 
+// 归档错题（标记已掌握）
 async function archiveWrong(q: Question) {
   if (!q.wrong_id) return
   await archiveWrongQuestion(q.wrong_id)
   await loadWrongBook()
 }
 
+// 删除错题记录
 async function removeWrong(q: Question) {
   if (!q.wrong_id) return
   await removeWrongQuestion(q.wrong_id)
@@ -1711,6 +1812,7 @@ function subjectiveScoreText(id: string, reviewMap: Record<string, QuizReviewRes
   return '回答错误，已加入错题本'
 }
 
+// 评估答案是否正确（客观题精确匹配，主观题包容匹配）
 function evaluateAnswer(question: Question, answer: AnswerValue) {
   if (isOptionQuestion(question)) {
     const user = normalizeAnswer(answer).sort()
@@ -1794,6 +1896,7 @@ function formatUserAnswer(ans: AnswerValue) {
   return Array.isArray(ans) ? ans.join(',') : String(ans || '')
 }
 
+// Fisher-Yates 洗牌算法
 function shuffle<T>(array: T[]): T[] {
   const result = [...array]
 
@@ -1811,6 +1914,7 @@ function uniqueKeepOrder(items: string[]) {
   return Array.from(new Set(items.filter(Boolean)))
 }
 
+// 从 localStorage 读取答题统计数据
 function readLocalStats() {
   try {
     const saved = JSON.parse(localStorage.getItem('question_hub_stats') || '{}')
@@ -1822,6 +1926,7 @@ function readLocalStats() {
   }
 }
 
+// 保存答题记录到 localStorage 并触发图表动画
 function saveAttempt(attempted: number, correct: number) {
   stats.totalAttempted += attempted
   stats.totalCorrect += correct

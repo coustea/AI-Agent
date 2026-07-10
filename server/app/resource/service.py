@@ -40,10 +40,13 @@ COORDINATOR_AGENT_ID = "coordinator"
 VIDEO_AGENT_ID = "video"
 CARTOON_AGENT_ID = "cartoon"
 BUNDLE_AGENT_ID = "bundle"
+# 基础资源 Agent（为聚合 Agent 提供素材）
 BASE_RESOURCE_AGENT_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
+# 聚合型 Agent（依赖基础资源）
 AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID)
 
 # agent_type → content_format 映射（不再存 content_format 列）
+# 不同 Agent 产物的存储格式：json/html/mp4/markdown
 AGENT_CONTENT_FORMAT: dict[str, str] = {
     "content": "markdown",
     "mindmap": "markdown",
@@ -67,13 +70,16 @@ def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | No
     严格分流：不创建 envelope 包装，不降级非法 JSON。
     HTML/MP4 文件型资源仅在 metadata_json 中保存发布引用。
     """
+    # JSON 类型：解析后存入 content_json
     if result.file_type == "json":
         value = json.loads(result.content) if isinstance(result.content, str) else result.content
         if not isinstance(value, (dict, list)):
             raise ValueError("JSON resource content must be an object or array")
         return value, None
+    # 文件型（html/mp4）正文为空，引用见 metadata
     if result.file_type in {"html", "mp4"}:
         return None, None
+    # 文本型：存入 content_text
     if result.file_type in {"markdown", "mermaid", "text", "code"}:
         if not isinstance(result.content, str) or not result.content.strip():
             raise ValueError("Text resource content must be non-empty")
@@ -89,6 +95,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
     """
     content_format = _infer_content_format(item.agent_type)
 
+    # 按格式从数据库对应字段取回内容
     if include_content:
         if content_format == "json":
             content = item.content_json
@@ -126,9 +133,11 @@ class ResourceService:
     async def _commit(self, model: Any) -> None:
         """提交并刷新模型。"""
         try:
+            # 提交事务并刷新模型，使生成的主键等字段可用
             await self.session.commit()
             await self.session.refresh(model)
         except Exception:
+            # 提交失败回滚，避免悬挂事务
             await self.session.rollback()
             raise
 
@@ -151,6 +160,7 @@ class ResourceService:
         self.session.add(resource)
         await self.session.flush()
         resource_id = int(getattr(resource, "id", 0) or 0)
+        # 落库并返回新任务 ID
         await self._commit(resource)
         return {"resource_id": resource_id, "status": "pending"}
 
@@ -168,6 +178,7 @@ class ResourceService:
         elapsed_ms: int | None = None,
     ) -> None:
         """Upsert Agent 运行记录。存在则更新，不存在则创建。"""
+        # 按 resource_id + agent_id 查找既有运行记录
         run = await self.session.exec(
             select(GeneratedResourceAgentRun).where(
                 GeneratedResourceAgentRun.resource_id == resource_id,
@@ -175,6 +186,7 @@ class ResourceService:
             )
         )
         run_obj = run.one_or_none()
+        # 已存在则原地更新状态/错误/耗时
         if run_obj:
             run_obj.status = status
             if error_message is not None:
@@ -206,15 +218,18 @@ class ResourceService:
         result: AgentResult,
     ) -> ItemModel:
         """保存成功 Agent 的结果。"""
+        # 仅保存成功结果，且必须有标题
         if not result.success:
             raise ValueError("仅能保存成功的结果")
         if not result.title.strip():
             raise ValueError(f"Agent {agent_id} 缺少资源标题")
 
         resource = await self.session.get(GeneratedResource, resource_id)
+        # 校验资源存在且归属当前用户
         if resource is None or resource.user_id != user_id:
             raise ValueError("资源不存在或无权限")
 
+        # 按格式拆分内容为 JSON / 文本存储
         content_json, content_text = _split_content(result)
 
         item = ItemModel(
@@ -250,6 +265,7 @@ class ResourceService:
             .order_by(col(ItemModel.resource_id).asc())
         )
         summary: dict[int, list[str]] = {rid: [] for rid in resource_ids}
+        # 收集每个资源包含的 agent_type（去重）
         for rid, atype in (await self.session.exec(stmt)).all():
             if atype not in summary[rid]:
                 summary[rid].append(atype)
@@ -283,12 +299,15 @@ class ResourceService:
             .where(GeneratedResourceAgentRun.resource_id == resource_id)
             .where(GeneratedResourceAgentRun.status.in_(["failed", "interrupted"]))
         )
+        # 失败集合与预期取交集，排除非本次预期 agent
         failed = set((await self.session.exec(failed_stmt)).all()) & expected_agent_ids
 
+        # 计算三种不一致情况用于终态判定
         unresolved = expected_agent_ids - successful - failed
         overlap = successful & failed
         unexpected = (successful | failed) - expected_agent_ids
 
+        # 存在不一致则判为失败，否则按成功数量分流
         if unresolved or overlap or unexpected:
             logger.warning(
                 "finalize_generation invariant check",
@@ -309,6 +328,7 @@ class ResourceService:
 
         resource.status = status
         await self._commit(resource)
+        # 记录资源生成事件供画像评分（失败不影响主流程）
         try:
             await record_resource_generated_event(
                 db=self.session,
@@ -332,6 +352,7 @@ class ResourceService:
     ) -> None:
         """更新资源任务状态。"""
         resource = await self.session.get(GeneratedResource, resource_id)
+        # 仅在资源存在时更新状态
         if resource:
             resource.status = status
             await self._commit(resource)
@@ -342,6 +363,7 @@ class ResourceService:
 
     async def get_resource(self, user_id: int, resource_id: int) -> GeneratedResource | None:
         resource = await self.session.get(GeneratedResource, resource_id)
+        # 校验归属后返回，否则视为不可见
         if resource and resource.user_id == user_id:
             return resource
         return None
@@ -373,7 +395,7 @@ class ResourceService:
         runs_result = await self.session.exec(runs_stmt)
         runs_by_agent = {run.agent_id: run for run in runs_result.all()}
 
-        # 从 items 和 runs 推导 selected_agents
+        # 从 items 和 runs 推导 selected_agents（取并集并限定已知 agent）
         agent_ids_from_items = {item.agent_type for item in db_items}
         agent_ids_from_runs = {run.agent_id for run in runs_by_agent.values()}
         selected_agents = sorted(

@@ -385,6 +385,7 @@ interface ExamQuestion {
   knowledge_points: string[]
 }
 
+// 组件属性：考试配置 / 考试模式所有状态
 const props = defineProps<{
   mode: 'config' | 'exam'
   form: { title: string; subject: string; difficulty: string; duration: number }
@@ -412,6 +413,7 @@ const props = defineProps<{
   examResultLevel: string
 }>()
 
+// 事件：表单操作、答题、交卷、翻页
 defineEmits<{
   (e: 'reset-form'): void
   (e: 'generate-preview'): void
@@ -426,6 +428,7 @@ defineEmits<{
   (e: 'open-analysis-review', questionId: string): void
 }>()
 
+// 难度等级对应 CSS 类名
 function difficultyClass(diff: string | null | undefined) {
   if (diff === '简单') return 'text-success'
   if (diff === '中等') return 'text-warning'
@@ -433,6 +436,7 @@ function difficultyClass(diff: string | null | undefined) {
   return 'text-danger'
 }
 
+// 截取文本摘要
 function summarize(text: string) {
   return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 120)
 }
@@ -450,24 +454,29 @@ function renderInline(text: string) {
     .replace(/\n/g, '<br>')
 }
 
+// 判断是否选择题/判断题
 function isOptionQuestion(question: ExamQuestion) {
   return ['选择题', '单选题', '判断题'].includes(question.type)
 }
 
+// 判断是否分析题
 function isSubjectiveQuestion(question: ExamQuestion) {
   return ['分析题'].includes(question.type)
 }
 
+// 获取选项映射表
 function getOptions(question: ExamQuestion) {
   if (question.type === '判断题') return { A: '正确', B: '错误' }
   return question.options || {}
 }
 
+// 检查选项是否被选中
 function isSelected(answer: AnswerValue, key: string) {
   if (!answer) return false
   return Array.isArray(answer) ? answer.includes(key) : answer === key
 }
 
+// 解析正确答案键名数组
 function correctKeys(question: ExamQuestion) {
   let ansText = String(question.answer || '').trim()
 
@@ -483,6 +492,7 @@ function correctKeys(question: ExamQuestion) {
     .filter(Boolean)
 }
 
+// 判断选项是否为正确答案
 function isCorrectOption(question: ExamQuestion, key: string) {
   return correctKeys(question).includes(key)
 }
@@ -502,6 +512,7 @@ function hasAnswerData(answer: AnswerValue) {
   return normalizeAnswer(answer).length > 0
 }
 
+// 评估客观题答案是否正确
 function evaluateAnswer(question: ExamQuestion, answer: AnswerValue) {
   if (isOptionQuestion(question)) {
     const user = normalizeAnswer(answer).sort()
@@ -520,12 +531,14 @@ function evaluateAnswer(question: ExamQuestion, answer: AnswerValue) {
   return userText.includes(stdText) || stdText.includes(userText)
 }
 
+// 综合判断题目是否正确（AI 评阅优先）
 function isExamCorrect(question: ExamQuestion) {
   const review = props.examReview?.[question.id]
   if (review?.score != null) return review.score >= 60
   return evaluateAnswer(question, props.examAnswers?.[question.id])
 }
 
+// 题目得分对应颜色样式
 function examScoreClass(question: ExamQuestion) {
   const score = props.examReview?.[question.id]?.score
   if (score == null) return isExamCorrect(question) ? 'success' : 'danger'
@@ -534,6 +547,7 @@ function examScoreClass(question: ExamQuestion) {
   return 'danger'
 }
 
+// 题目得分对应文本
 function examScoreText(question: ExamQuestion) {
   const score = props.examReview?.[question.id]?.score
   if (score == null) return isExamCorrect(question) ? '正确' : '错误'
@@ -542,12 +556,14 @@ function examScoreText(question: ExamQuestion) {
   return '错误'
 }
 
+// 标准化得分（0-100）
 function normalizedReviewScore(question: ExamQuestion) {
   const score = props.examReview?.[question.id]?.score
   if (score == null) return isExamCorrect(question) ? 100 : 0
   return Math.min(100, Math.max(0, Math.round(Number(score) || 0)))
 }
 
+// 默认分析题评语
 function defaultAnalysisFeedback(question: ExamQuestion) {
   const score = normalizedReviewScore(question)
   if (!hasAnswerData(props.examAnswers?.[question.id])) return '本题未作答，建议先围绕题目要求列出核心观点，再补充分析依据。'

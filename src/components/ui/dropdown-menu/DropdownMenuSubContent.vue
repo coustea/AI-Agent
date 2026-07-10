@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单子菜单内容
 import type { DropdownMenuSubContentEmits, DropdownMenuSubContentProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

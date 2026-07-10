@@ -117,6 +117,7 @@
 
 <script setup lang="ts">
 
+// 每日练习题目类型
 interface DailyQuestion {
   id: string
   subject: string
@@ -129,6 +130,7 @@ interface DailyQuestion {
   knowledge_points: string[]
 }
 
+// 组件属性：题目列表、答题状态、评阅结果
 const props = defineProps<{
   questions: DailyQuestion[]
   answers: Record<string, any>
@@ -141,6 +143,7 @@ const props = defineProps<{
   correctCount: number
 }>()
 
+// 事件：换题、选择选项、提交、切换解析
 defineEmits<{
   (e: 'refresh-daily'): void
   (e: 'select-daily-option', question: DailyQuestion, key: string): void
@@ -148,15 +151,18 @@ defineEmits<{
   (e: 'toggle-daily-analysis', id: string): void
 }>()
 
+// 判断是否选择题/判断题
 function isOptionQuestion(question: DailyQuestion) {
   return ['选择题', '单选题', '判断题'].includes(question.type)
 }
 
+// 获取选项映射表（判断题特殊处理）
 function getOptions(question: DailyQuestion) {
   if (question.type === '判断题') return { A: '正确', B: '错误' }
   return question.options || {}
 }
 
+// 检查选项是否被选中
 function isSelected(question: DailyQuestion, key: string) {
   const ans = props.answers[question.id]
   if (!ans) return false
@@ -164,6 +170,7 @@ function isSelected(question: DailyQuestion, key: string) {
   return ans === key
 }
 
+// 判断选项是否为正确答案
 function isCorrectOption(question: DailyQuestion, key: string) {
   let ansText = String(question.answer || '').trim()
   if (question.type === '判断题') {
@@ -175,6 +182,7 @@ function isCorrectOption(question: DailyQuestion, key: string) {
   return correctKeys.includes(key)
 }
 
+// 判断题目是否已有答案
 function hasAnswer(question: DailyQuestion) {
   const ans = props.answers[question.id]
   if (Array.isArray(ans)) return ans.length > 0
@@ -185,6 +193,7 @@ function formatAnswer(ans: string | undefined) {
   return String(ans || '').replace(/,/g, '、')
 }
 
+// 主观题得分对应颜色样式
 function subjectiveScoreClass(question: DailyQuestion) {
   const score = props.review[question.id]?.score
   if (score == null) return props.correct[question.id] ? 'success' : 'danger'
@@ -193,6 +202,7 @@ function subjectiveScoreClass(question: DailyQuestion) {
   return 'danger'
 }
 
+// 主观题得分对应文本描述
 function subjectiveScoreText(question: DailyQuestion) {
   const score = props.review[question.id]?.score
   if (score == null) return props.correct[question.id] ? '回答正确' : '回答错误，已加入错题本'

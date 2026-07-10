@@ -2,12 +2,14 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 activity_selection 函数
 def activity_selection(intervals):
     arr = [e for s, e in intervals]
     tracer.init_array(arr, line=1)
     sorted_intervals = sorted(intervals, key=lambda x: x[1])
     selected = [sorted_intervals[0]]
     tracer.assign(0, sorted_intervals[0][1], line=5)
+# 循环遍历处理
     for idx, interval in enumerate(sorted_intervals[1:], 1):
         tracer.move_pointer({"idx": idx}, line=8)
         if interval[0] >= selected[-1][1]:
@@ -16,11 +18,13 @@ def activity_selection(intervals):
     tracer.finish(line=13)
     return selected
 
+# 定义 min_meeting_rooms 函数
 def min_meeting_rooms(intervals):
     starts = sorted(s for s, e in intervals)
     ends = sorted(e for s, e in intervals)
     rooms = 0
     end_ptr = 0
+# 循环遍历处理
     for start in starts:
         if start < ends[end_ptr]:
             rooms += 1
@@ -28,12 +32,14 @@ def min_meeting_rooms(intervals):
             end_ptr += 1
     return rooms
 
+# 定义 erase_overlap 函数
 def erase_overlap(intervals):
     if not intervals:
         return 0
     sorted_intervals = sorted(intervals, key=lambda x: x[1])
     count = 0
     end = sorted_intervals[0][1]
+# 循环遍历处理
     for interval in sorted_intervals[1:]:
         if interval[0] < end:
             count += 1
@@ -41,10 +47,12 @@ def erase_overlap(intervals):
             end = interval[1]
     return count
 
+# 定义 partition_labels 函数
 def partition_labels(s):
     last = {c: i for i, c in enumerate(s)}
     result = []
     start = end = 0
+# 循环遍历处理
     for i, c in enumerate(s):
         end = max(end, last[c])
         if i == end:

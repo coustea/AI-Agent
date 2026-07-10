@@ -1,3 +1,4 @@
+// 头像组件集（Avatar、AvatarBadge、AvatarFallback、AvatarGroup、AvatarGroupCount、AvatarImage）
 import type { VariantProps } from "class-variance-authority"
 import { cva } from "class-variance-authority"
 

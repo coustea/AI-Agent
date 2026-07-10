@@ -1,4 +1,6 @@
+# queue_simulation 算法实现 — domain: base_data_structure
 class CircularQueue:
+# 定义 __init__ 函数
     def __init__(self, capacity):
         self.capacity = capacity
         self.queue = [None] * capacity
@@ -6,6 +8,7 @@ class CircularQueue:
         self.rear = -1
         self.size = 0
 
+# 定义 enqueue 函数
     def enqueue(self, value):
         if self.size == self.capacity:
             return False
@@ -14,6 +17,7 @@ class CircularQueue:
         self.size += 1
         return True
 
+# 定义 dequeue 函数
     def dequeue(self):
         if self.size == 0:
             return None
@@ -22,17 +26,21 @@ class CircularQueue:
         self.size -= 1
         return value
 
+# 定义 peek 函数
     def peek(self):
         if self.size == 0:
             return None
         return self.queue[self.front]
 
+# 定义 is_empty 函数
     def is_empty(self):
         return self.size == 0
 
+# 定义 is_full 函数
     def is_full(self):
         return self.size == self.capacity
 
+# 定义 simulate_bank_queue 函数
 def simulate_bank_queue(customers, num_counters):
     from collections import deque
     counters = [0] * num_counters

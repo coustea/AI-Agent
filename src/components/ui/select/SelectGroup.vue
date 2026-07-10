@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器选项分组
 import type { SelectGroupProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

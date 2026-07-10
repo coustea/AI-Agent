@@ -2,6 +2,7 @@ from visual_tracer import QueueTracer
 
 tracer = QueueTracer()
 
+# 定义 queue_operations 函数
 def queue_operations():
     queue = []
     tracer.init_queue(line=2)

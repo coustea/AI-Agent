@@ -758,6 +758,7 @@ import type {
   StudentProfileData,
 } from "@/features/profile/api/profile";
 
+// 注册 ECharts 渲染器与图表组件
 use([
   CanvasRenderer,
   LineChart,
@@ -770,10 +771,12 @@ use([
 const route = useRoute();
 const { currentUser, userName } = useCurrentUser();
 
+// 时间范围（7天/30天）
 const timeRange = ref("7");
 const userEmail = ref<string | null>(null);
 const userAvatar = ref<string | null>(null);
 const avatarUploading = ref(false);
+// 编辑弹窗显隐
 const profileEditorVisible = ref(false);
 const profileSubmitting = ref(false);
 const learningStats = ref<LearningTimeStats | null>(null);
@@ -799,6 +802,7 @@ const studentProfile = ref<
   learning_duration_total: 0,
 });
 
+// 画像元数据（学习时间/目标/编程语言），从 base_info 提取
 const profileMeta = reactive({
   dailyStudyTime: "",
   globalLearningGoal: "",
@@ -815,6 +819,7 @@ interface ProfileFormData {
   programming_languages: string[];
 }
 
+// 编辑表单绑定的响应式数据
 const profileForm = reactive<ProfileFormData>({
   grade: "",
   major: "",
@@ -912,6 +917,7 @@ const PRESET_LANGUAGES = [
   "HTML/CSS",
 ];
 
+// 组合专业/年级/目标生成个性签名
 const profileHeadline = computed(() => {
   const parts = [
     studentProfile.value.major,
@@ -921,6 +927,7 @@ const profileHeadline = computed(() => {
   return parts.length ? parts.join(" · ") : "学习资料待完善";
 });
 
+// 优先取 profileMeta 中的语言列表，fallback 到 studentProfile.preferred_language
 const preferredLanguages = computed(() => {
   if (profileMeta.programmingLanguages.length > 0) {
     return profileMeta.programmingLanguages.filter(Boolean);
@@ -931,6 +938,7 @@ const preferredLanguages = computed(() => {
     .filter(Boolean);
 });
 
+// 将秒数格式化为可读时长（如 "2h" / "45m"）
 const formatStudyDuration = (seconds?: number | null) => {
   if (!seconds || seconds <= 0) return "0m";
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
@@ -938,14 +946,17 @@ const formatStudyDuration = (seconds?: number | null) => {
   return `${Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}h`;
 };
 
+// 展示用（最多取前 5 项）
 const displayLanguages = computed(() => preferredLanguages.value.slice(0, 5));
 const displayCourses = computed(() =>
   (studentProfile.value.courses || []).filter(Boolean).slice(0, 5),
 );
 
+// 将数值限定在 0-100 之间
 const boundedPercent = (value: number) =>
   Math.min(100, Math.max(0, Math.round(value)));
 
+// 根据各字段填写情况计算资料完整度百分比
 const profileCompletionPercent = computed(() => {
   const checks = [
     studentProfile.value.school,
@@ -960,6 +971,7 @@ const profileCompletionPercent = computed(() => {
   return boundedPercent((completed / checks.length) * 100);
 });
 
+// 收集所有已生成资源的类型集合
 const resourceTypeSet = computed(() => {
   const types = new Set<string>();
   resourceHistory.value.forEach((item) => {
@@ -970,6 +982,7 @@ const resourceTypeSet = computed(() => {
   return types;
 });
 
+// 已覆盖的资源类型数量和已完成资源数
 const resourceTypeCoverage = computed(() => resourceTypeSet.value.size);
 const completedResourceCount = computed(
   () =>
@@ -978,11 +991,13 @@ const completedResourceCount = computed(
     0,
 );
 
+// 统计指定场景的学习时长总和
 const secondsForContexts = (...keys: string[]) => {
   const context = learningStats.value?.context_breakdown || {};
   return keys.reduce((sum, key) => sum + (context[key] || 0), 0);
 };
 
+// 各场景累计时长（题库/AI 辅导/路径规划/智能推荐）
 const questionBankSeconds = computed(() =>
   secondsForContexts("QuestionBank", "question-bank"),
 );
@@ -1011,6 +1026,7 @@ const recommendationSeconds = computed(() =>
   ),
 );
 
+// 顶部学习概览卡片数据（活跃/产出/时间/错题）
 const learningSummaryCards = computed(() => [
   {
     label: "本周活跃",
@@ -1044,6 +1060,7 @@ const learningSummaryCards = computed(() => [
   },
 ]);
 
+// 学习状态速览卡片（完整度/覆盖/样本/连续）
 const learningStatusCards = computed(() => [
   {
     label: "资料完整度",
@@ -1083,6 +1100,7 @@ const learningStatusCards = computed(() => [
   },
 ]);
 
+// 薄弱点（最多 4 个），偏好资源类型（最多 4 个），首要学习建议
 const displayedWeakTopics = computed(() =>
   (evaluationSummary.value?.weak_topics || []).slice(0, 4),
 );
@@ -1116,6 +1134,7 @@ const resourceGradients: Record<string, string> = {
   video: "linear-gradient(90deg, #DB2777, #F472B6)",
 };
 
+// 统计各资源类型的产出数量及占比，取前 5
 const resourceMixRows = computed(() => {
   const counts = new Map<string, number>();
   resourceHistory.value.forEach((item) => {
@@ -1163,6 +1182,7 @@ const resourceMixRows = computed(() => {
       ];
 });
 
+// 计算各学习场景的时长占比
 const scenarioBreakdown = computed(() => {
   const items = [
     { name: "题库练习", seconds: questionBankSeconds.value, color: "#818CF8" },
@@ -1181,6 +1201,7 @@ const scenarioBreakdown = computed(() => {
   }));
 });
 
+// 判断图表是否有数据可展示
 const hasLineChartData = computed(() =>
   (learningStats.value?.daily_breakdown || []).some((item) => item.seconds > 0),
 );
@@ -1188,6 +1209,7 @@ const hasScenarioData = computed(() =>
   scenarioBreakdown.value.some((item) => item.seconds > 0),
 );
 
+// 学习专注走势折线图 ECharts 配置
 const lineOption = computed(() => {
   const dailyBreakdown = learningStats.value?.daily_breakdown || [];
   const dates = dailyBreakdown.map((item) => {
@@ -1249,6 +1271,7 @@ const lineOption = computed(() => {
   };
 });
 
+// 功能使用占比环形图 ECharts 配置
 const pieOption = computed(() => {
   return {
     tooltip: {
@@ -1284,6 +1307,7 @@ const pieOption = computed(() => {
   };
 });
 
+// 课程列表变化时自动选择第一个作为趋势筛选课程
 watch(
   () => studentProfile.value.courses,
   (newCourses) => {
@@ -1298,6 +1322,7 @@ watch(
   { immediate: true },
 );
 
+// URL 参数携带 ?action=edit-profile 时打开编辑弹窗
 watch(
   () => route.query.action,
   () => {
@@ -1305,10 +1330,12 @@ watch(
   },
 );
 
+// 时间范围切换时重新加载学习时长数据
 watch(timeRange, () => {
   loadLearningStats();
 });
 
+// 进入 /profile 页面时并行加载所有数据
 watch(
   () => route.path,
   (newPath) => {
@@ -1326,6 +1353,7 @@ watch(
 );
 
 let profileMotionContext: ReturnType<typeof gsap.context> | null = null;
+// 页面挂载时加载数据，执行入场动画
 onMounted(async () => {
   await Promise.all([
     loadProfileInfo(),
@@ -1351,15 +1379,18 @@ onMounted(async () => {
   });
 });
 
+// 组件销毁时还原 GSAP 动画上下文
 onBeforeUnmount(() => {
   profileMotionContext?.revert();
 });
 
 const avatarInput = ref<HTMLInputElement>();
+// 模拟点击隐藏的文件输入以触发选择头像
 const triggerAvatarUpload = () => {
   avatarInput.value?.click();
 };
 
+// 头像文件选择后校验格式/大小并上传
 const onAvatarFileChange = async (e: Event) => {
   const target = e.target as HTMLInputElement;
   const file = target.files?.[0];
@@ -1397,6 +1428,7 @@ const onAvatarFileChange = async (e: Event) => {
 };
 
 const newCourseInput = ref("");
+// 添加课程（去重）
 const addCourse = () => {
   const course = newCourseInput.value.trim();
   if (course && !profileForm.courses.includes(course)) {
@@ -1408,6 +1440,7 @@ const removeCourse = (index: number) => {
   profileForm.courses.splice(index, 1);
 };
 
+// 切换编程语言选中状态
 const toggleLanguage = (lang: string) => {
   const index = profileForm.programming_languages.indexOf(lang);
   if (index > -1) {
@@ -1420,6 +1453,7 @@ const toggleLanguage = (lang: string) => {
 const majorFocus = ref(false);
 const schoolFocus = ref(false);
 
+// 根据输入过滤预设专业列表
 const majorSuggestions = computed(() => {
   const query = profileForm.major.trim().toLowerCase();
   if (!query) return PRESET_MAJORS.map((m) => ({ value: m }));
@@ -1429,6 +1463,7 @@ const majorSuggestions = computed(() => {
 });
 
 const schoolSuggestions = ref<{ value: string; level?: string | null }[]>([]);
+// 根据输入关键词异步搜索学校
 const querySearchSchool = async (query: string) => {
   if (!query.trim()) {
     schoolSuggestions.value = [];
@@ -1447,6 +1482,7 @@ const querySearchSchool = async (query: string) => {
   }
 };
 
+// 学校输入变化时自动搜索建议
 watch(
   () => profileForm.school,
   (newVal) => {
@@ -1472,6 +1508,7 @@ const profileErrors = reactive({
   grade: "",
 });
 
+// 表单校验：学校/年级/专业/目标/课程至少一项
 const validateProfile = () => {
   let valid = true;
   profileErrors.major = "";
@@ -1503,6 +1540,7 @@ const validateProfile = () => {
   return valid;
 };
 
+// 将服务端数据回填到编辑表单
 const fillProfileForm = (payload: StudentProfileData) => {
   profileForm.grade = payload.grade || "";
   profileForm.major = payload.major || "";
@@ -1526,6 +1564,7 @@ const fillProfileForm = (payload: StudentProfileData) => {
 
 const fullProfileData = ref<any>(null);
 
+// 加载用户信息 + 画像数据，填充 studentProfile 和 profileMeta
 const loadProfileInfo = async () => {
   try {
     const [userRes, profileRes] = await Promise.allSettled([
@@ -1573,6 +1612,7 @@ const loadProfileInfo = async () => {
   }
 };
 
+// 加载学习时长统计数据
 const loadLearningStats = async () => {
   try {
     const days = parseInt(timeRange.value) || 7;
@@ -1586,6 +1626,7 @@ const loadLearningStats = async () => {
   }
 };
 
+// 加载资源生成历史
 const loadResourceHistory = async () => {
   resourceHistoryLoading.value = true;
   try {
@@ -1599,6 +1640,7 @@ const loadResourceHistory = async () => {
   }
 };
 
+// 加载学习概览和最近资源数据
 const loadDashboardStats = async () => {
   dashboardStatsLoading.value = true;
   try {
@@ -1621,6 +1663,7 @@ const loadDashboardStats = async () => {
   }
 };
 
+// 加载学习评估摘要（薄弱点/偏好/建议等）
 const loadEvaluationSummary = async () => {
   evaluationLoading.value = true;
   try {
@@ -1634,6 +1677,7 @@ const loadEvaluationSummary = async () => {
   }
 };
 
+// 加载错题概览（仅统计总数）
 const loadWrongOverview = async () => {
   wrongLoading.value = true;
   try {
@@ -1651,6 +1695,7 @@ const loadWrongOverview = async () => {
   }
 };
 
+// 打开编辑弹窗，填充表单并清空错误
 const openProfileEditor = () => {
   fillProfileForm(studentProfile.value);
   profileErrors.major = "";
@@ -1661,16 +1706,19 @@ const openProfileEditor = () => {
   profileEditorVisible.value = true;
 };
 
+// 检测路由参数 ?action=edit-profile 触发弹窗
 const openProfileEditorFromRoute = () => {
   if (route.query.action === "edit-profile") {
     openProfileEditor();
   }
 };
 
+// 设置时间范围（7天/30天）
 const setTimeRange = (val: any) => {
   if (typeof val === "string" && val) timeRange.value = val;
 };
 
+// 提交编辑表单，更新 onboarding 数据并刷新展示
 const submitProfile = async () => {
   if (!validateProfile()) {
     toast.warning("请先完善所有必填项");

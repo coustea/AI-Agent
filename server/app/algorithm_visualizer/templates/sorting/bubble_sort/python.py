@@ -1,3 +1,4 @@
+# bubble_sort 算法实现 — domain: sorting
 def cocktail_sort(arr):
     n = len(arr)
     start, end = 0, n - 1
@@ -19,6 +20,7 @@ def cocktail_sort(arr):
         start += 1
     return arr
 
+# 定义 bubble_sort_with_bounds 函数
 def bubble_sort_with_bounds(arr):
     n = len(arr)
     lo, hi = 0, n - 1
@@ -37,6 +39,7 @@ def bubble_sort_with_bounds(arr):
         lo = last_swap
     return arr
 
+# 定义 is_sorted 函数
 def is_sorted(arr):
     return all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1))
 

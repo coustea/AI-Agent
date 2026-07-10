@@ -8,13 +8,20 @@
 </head>
 <body>
   <main
-    data-composition-id="cartoon-explainer"
+    data-composition-id="{{ composition_id }}"
     data-start="0"
     data-duration="{{ duration }}"
     data-width="1920"
     data-height="1080"
     data-fps="30"
   >
+    <div class="composition-grain"></div>
+    <div class="composition-brand">
+      <div class="brand-mark">▶</div>
+      <span>{{ title }}</span>
+    </div>
+    <div class="composition-topic">{{ course }} · {{ topic }}</div>
+
     {{ scenes_html }}
     {{ audio_html }}
   </main>
@@ -32,7 +39,7 @@
 
     {{ timeline_js }}
 
-    window.__timelines["cartoon-explainer"] = tl;
+    window.__timelines["{{ composition_id }}"] = tl;
   </script>
 </body>
 </html>

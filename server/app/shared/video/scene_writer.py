@@ -23,10 +23,12 @@ logger = get_logger(__name__)
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "scene.md"
 
 
+# 场景编写 Agent：基于契约生成带旁白与视觉节拍的场景脚本
 class SceneWriterAgent:
     def __init__(self, llm=None) -> None:
         self.llm = llm or get_llm()
 
+    # 编写：按视觉类型选择强类型 schema 并调用 LLM 生成场景草稿
     async def write(
         self,
         *,
@@ -35,7 +37,7 @@ class SceneWriterAgent:
         contract: SceneContract,
         style: VideoStyleDecision,
     ) -> SceneDraft:
-        # 根据 visual_type 获取强类型 schema
+        # 根据 visual_type 获取强类型 schema，确保 LLM 输出结构正确
         typed_schema = scene_draft_for(contract.visual_type)
 
         prompt = _PROMPT_PATH.read_text(encoding="utf-8").format(
@@ -57,6 +59,7 @@ class SceneWriterAgent:
             contract.index, contract.role, contract.visual_type,
         )
         started = time.perf_counter()
+        # 调用 LLM 生成强类型场景草稿
         draft = await self.llm.ainvoke_json(typed_schema, prompt)
         elapsed = int((time.perf_counter() - started) * 1000)
         logger.info(
@@ -65,6 +68,7 @@ class SceneWriterAgent:
         )
         # 统一转为 SceneDraft（visual 已是强类型实例，model_dump 后可赋给 dict 字段）
         visual_data = draft.visual.model_dump() if hasattr(draft.visual, "model_dump") else draft.visual
+        # 组装并返回标准 SceneDraft
         return SceneDraft(
             scene_id=contract.scene_id,
             index=contract.index,

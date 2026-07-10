@@ -1,13 +1,17 @@
+# tree_dp 算法实现 — domain: dynamic_programming
 class TreeNode:
+# 定义 __init__ 函数
     def __init__(self, val=0, left=None, right=None):
         self.val = val
         self.left = left
         self.right = right
 
+# 定义 rob 函数
 def rob(root):
     if not root:
         return 0
 
+# 定义 dfs 函数
     def dfs(node):
         if not node:
             return (0, 0)
@@ -20,10 +24,12 @@ def rob(root):
     result = max(dfs(root))
     return result
 
+# 定义 rob_with_path 函数
 def rob_with_path(root):
     if not root:
         return 0, []
 
+# 定义 dfs 函数
     def dfs(node):
         if not node:
             return (0, 0), []
@@ -36,9 +42,11 @@ def rob_with_path(root):
     result, path = dfs(root)
     return max(result), path
 
+# 定义 max_path_sum 函数
 def max_path_sum(root):
     max_sum = float('-inf')
 
+# 定义 dfs 函数
     def dfs(node):
         nonlocal max_sum
         if not node:

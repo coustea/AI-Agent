@@ -1,4 +1,4 @@
-/** 可视化器类型 — 小写 kebab-case */
+// 可视化器类型 — 小写 kebab-case
 export type VisualizerType =
   | 'array'
   | 'stack-queue'
@@ -7,10 +7,10 @@ export type VisualizerType =
   | 'graph'
   | 'dp-table'
 
-/** 支持的代码语言 */
+// 支持的代码语言
 export type CodeLanguage = 'python' | 'c' | 'cpp' | 'java' | 'javascript'
 
-/** TraceEvent 事件协议 — 所有语言统一输出 */
+// TraceEvent 事件协议 — 所有语言统一输出
 export interface TraceEvent {
   id: string
   step: number
@@ -24,14 +24,14 @@ export interface TraceEvent {
   formula?: string
 }
 
-/** TraceEvent 中的状态快照 */
+// TraceEvent 中的状态快照
 export interface TraceEventState {
   structure: Record<string, unknown>
   variables?: Record<string, unknown>
   auxiliary?: Record<string, unknown>
 }
 
-/** 算法信息 (来自 GET /algorithms) */
+// 算法信息 (来自 GET /algorithms)
 export interface AlgorithmInfo {
   key: string
   name: string
@@ -41,14 +41,14 @@ export interface AlgorithmInfo {
   supportedLanguages: CodeLanguage[]
 }
 
-/** 语言信息 (来自 GET /languages) */
+// 语言信息 (来自 GET /languages)
 export interface LanguageInfo {
   key: CodeLanguage
   label: string
   extension: string
 }
 
-/** 模板数据 (来自 GET /templates) */
+// 模板数据 (来自 GET /templates)
 export interface TemplateData {
   domain: string
   algorithm: string
@@ -60,7 +60,7 @@ export interface TemplateData {
   supportedLanguages: CodeLanguage[]
 }
 
-/** 运行结果 (来自 POST /run 成功) */
+// 运行结果 (来自 POST /run 成功)
 export interface RunResult {
   domain: string
   algorithm: string
@@ -69,9 +69,10 @@ export interface RunResult {
   events: TraceEvent[]
   result: unknown
   summary: string
+  stdout?: string
 }
 
-/** 运行错误 (来自 POST /run 失败) */
+// 运行错误 (来自 POST /run 失败)
 export interface RunError {
   errorType:
     | 'MISSING_LANGUAGE'

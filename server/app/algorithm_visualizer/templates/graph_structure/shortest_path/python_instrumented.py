@@ -8,6 +8,7 @@ def dijkstra(graph, source, num_nodes):
 
     labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
     nodes = []
+# 循环遍历处理
     for node_id in range(num_nodes):
         node_edges = [{"to": str(v), "weight": w} for v, w in graph.get(node_id, [])]
         nodes.append({"id": str(node_id), "label": labels[node_id], "edges": node_edges})
@@ -20,6 +21,7 @@ def dijkstra(graph, source, num_nodes):
     pq = [(0, source)]
     tracer.visit_node(str(source), line=39)
 
+# 循环条件判断
     while pq:
         curr_dist, u = heapq.heappop(pq)
 
@@ -28,6 +30,7 @@ def dijkstra(graph, source, num_nodes):
 
         tracer.visit_node(str(u), line=51)
 
+# 循环遍历处理
         for v, weight in graph.get(u, []):
             new_dist = curr_dist + weight
 
@@ -52,6 +55,7 @@ def reconstruct_path(predecessors, source, target):
 
     path = []
     node = target
+# 循环条件判断
     while node is not None:
         path.append(node)
         node = predecessors[node]
@@ -73,12 +77,14 @@ distances, predecessors = dijkstra(graph, 0, 7)
 
 labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
 print("最短距离:")
+# 循环遍历处理
 for i in range(7):
     d = distances[i]
     d_str = str(d) if d != float('inf') else "∞"
     print(f"  {labels[i]}({i}): {d_str}")
 
 print("\n最短路径:")
+# 循环遍历处理
 for i in range(7):
     path = reconstruct_path(predecessors, 0, i)
     if path:

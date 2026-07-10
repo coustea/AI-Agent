@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单分隔线
 import type { DropdownMenuSeparatorProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

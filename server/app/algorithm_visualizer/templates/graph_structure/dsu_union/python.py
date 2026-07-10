@@ -1,4 +1,5 @@
 """并查集（Disjoint Set Union, DSU）—— 路径压缩 + 按秩合并
+# dsu_union 算法实现 — domain: graph_structure
 
 并查集是一种用于管理不相交集合的数据结构，核心操作：
   - find(x)：查找元素 x 所属集合的代表（根节点）
@@ -21,9 +22,11 @@
 """
 
 
+# DSU 类定义
 class DSU:
     """并查集类，支持路径压缩与按秩合并"""
 
+# 定义 __init__ 函数
     def __init__(self, n):
         self.parent = list(range(n))
         self.rank = [0] * n

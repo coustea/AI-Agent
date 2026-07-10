@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 弹出框定位锚点
 import type { PopoverAnchorProps } from "reka-ui"
 import { PopoverAnchor } from "reka-ui"
 

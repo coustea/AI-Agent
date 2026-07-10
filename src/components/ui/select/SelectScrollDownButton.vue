@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器向下滚动按钮
 import { ChevronDownIcon } from '@lucide/vue';
 
 import type { SelectScrollDownButtonProps } from "reka-ui"

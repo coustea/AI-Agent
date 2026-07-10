@@ -136,6 +136,7 @@ class AgentConfigs(BaseModel):
         return value.model_dump(mode="json")
 
 
+# 按默认顺序为 Agent 选择项计算排序键，未知 agent 排末尾
 def _agent_sort_key(item: AgentSelection) -> int:
     return AGENT_DEFAULT_ORDER.index(item.agent_id.value) if item.agent_id.value in AGENT_DEFAULT_ORDER else 999
 
@@ -159,33 +160,40 @@ class ResourceGenerationRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_selection(self) -> "ResourceGenerationRequest":
+        # 未选择时默认全部启用
         if not self.selected_agents:
             self.selected_agents = [
                 AgentSelection(agent_id=agent_id, enabled=True)
                 for agent_id in DEFAULT_SELECTED_AGENT_IDS
             ]
         agent_ids = [item.agent_id.value for item in self.selected_agents]
+        # 检测重复选择的 Agent
         duplicate_agent_ids = sorted({agent_id for agent_id in agent_ids if agent_ids.count(agent_id) > 1})
         if duplicate_agent_ids:
             raise ValueError(f"selected_agents 包含重复 Agent: {duplicate_agent_ids}")
+        # 仅统计启用的 Agent
         enabled_agent_ids = {
             item.agent_id.value for item in self.selected_agents if item.enabled
         }
+        # 启用数量不得低于下限
         if len(enabled_agent_ids) < MIN_SELECTED_AGENTS:
             raise ValueError(
                 f"selected_agents 过滤 enabled=true 后至少需要 {MIN_SELECTED_AGENTS} 个 Agent"
             )
         aggregation_agent_ids = enabled_agent_ids & {"ppt", "video", "cartoon"}
         base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
+        # 聚合 Agent 必须至少有一个基础 Agent 提供素材
         if aggregation_agent_ids and not base_agent_ids:
             raise ValueError(
                 "PPT/Video/Cartoon 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
             )
+        # 按默认顺序排序后返回
         self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
         return self
 
     def enabled_agent_ids(self) -> list[str]:
         """获取启用的 Agent ID 列表，按前端优先级和默认顺序排序。"""
+        # 仅返回排序后启用的 agent_id
         return [
             item.agent_id.value
             for item in sorted(self.selected_agents, key=_agent_sort_key)

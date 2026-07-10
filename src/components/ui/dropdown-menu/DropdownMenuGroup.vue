@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单分组
 import type { DropdownMenuGroupProps } from "reka-ui"
 import { DropdownMenuGroup } from "reka-ui"
 

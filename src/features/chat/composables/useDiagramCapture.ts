@@ -8,9 +8,11 @@ interface CaptureOptions {
   style?: Record<string, string>
 }
 
+// 图解截图 composable（html-to-image 封装）
 export function useDiagramCapture() {
   const isCapturing = ref(false)
 
+  // 将指定 DOM 元素渲染为 PNG DataURL
   const captureToDataUrl = async (elementId: string, options: CaptureOptions = {}) => {
     const el = document.getElementById(elementId)
     if (!el) {
@@ -43,6 +45,7 @@ export function useDiagramCapture() {
     }
   }
 
+  // 触发浏览器下载截图
   const downloadImage = (dataUrl: string, filename: string) => {
     const link = document.createElement('a')
     link.download = `${filename}.png`

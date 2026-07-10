@@ -21,6 +21,7 @@ from langgraph.graph.message import add_messages
 from app.chat.schemas import TutorRuntimeEvent
 
 
+# LangGraph 图状态：贯穿预处理节点与 ReAct 节点的共享数据流（输入/上下文/循环/运行时/输出）
 class TutorAgentState(TypedDict, total=False):
     """LangGraph 图状态定义 — 统一 Agent 架构。"""
 

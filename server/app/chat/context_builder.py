@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 
 
 
+# 构建用户消息的 LangChain content：文本段 + 图片/文件附件段
 def build_user_content(text: str, attachments: list[Any]) -> list[dict[str, Any]]:
     """构建用户消息；原始附件展示信息直接保存在 content 中。"""
     content: list[dict[str, Any]] = []
@@ -55,6 +56,7 @@ def build_user_content(text: str, attachments: list[Any]) -> list[dict[str, Any]
     return content
 
 
+# 标准化工具调用格式，确保 id/name/args/type 字段齐全且类型正确
 def normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
     """标准化工具调用格式，确保字段存在且类型正确。"""
     normalized: list[dict] = []
@@ -70,6 +72,7 @@ def normalize_tool_calls(tool_calls: list[dict] | None) -> list[dict]:
     return normalized
 
 
+# 将单条数据库消息转换为对应的 LangChain Message（孤立/空消息返回 None）
 def convert_stored_message(message: Any) -> AnyMessage | None:
     """将单条数据库消息转换为 LangChain Message。
 
@@ -80,6 +83,7 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
     tool_calls = getattr(message, "tool_calls", None)
     tool_call_id = getattr(message, "tool_call_id", None)
 
+    # 用户消息：将结构化 content 转为 HumanMessage（文本/图片/文件）
     if role == "user":
         if isinstance(raw_content, list) and raw_content:
             model_content: list[dict[str, Any]] = []
@@ -96,6 +100,7 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
             return HumanMessage(content=model_content) if model_content else None
         text = str(raw_content or "").strip()
         return HumanMessage(content=text) if text else None
+    # 助手消息：含工具调用则转 AIMessage（带 tool_calls），否则转纯文本
     if role in {"assistant", "ai"}:
         text_content = extract_content_text(raw_content).strip()
         if tool_calls:
@@ -108,9 +113,11 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
         if text_content:
             return AIMessage(content=text_content)
         return None
+    # 系统消息：转 SystemMessage
     if role == "system":
         text_content = extract_content_text(raw_content).strip()
         return SystemMessage(content=text_content) if text_content else None
+    # 工具消息：转 ToolMessage（需有 tool_call_id）
     if role == "tool" and tool_call_id:
         text_content = extract_content_text(raw_content).strip()
         tc_id_str = str(tool_call_id)
@@ -118,8 +125,10 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
     return None
 
 
+# 校验 tool_calls 与 ToolMessage 的对应关系，剔除孤立/无效的工具链
 def sanitize_tool_message_chain(messages: list[AnyMessage]) -> list[AnyMessage]:
     """校验 tool_calls 与 ToolMessage 的对应关系，清理无效工具链。"""
+    # 收集所有合法 tool_call 的 ID
     result: list[AnyMessage] = []
     valid_tool_call_ids: set[str] = set()
 
@@ -143,12 +152,15 @@ def sanitize_tool_message_chain(messages: list[AnyMessage]) -> list[AnyMessage]:
         else:
             result.append(msg)
 
+    # 返回清理后的消息链
     return result
 
 
+# ChatContextBuilder：从数据库读取并组装对话历史为 LangChain Message 列表
 class ChatContextBuilder:
     """从数据库构建对话上下文（LangChain Message 列表）。"""
 
+    # 构建历史消息列表，自动排除本轮用户消息并注入附件分析上下文
     async def build_history(
         self,
         user_id: int,
@@ -157,6 +169,7 @@ class ChatContextBuilder:
         exclude_message_id: int | None = None,
     ) -> list[AnyMessage]:
         """构建历史消息列表，自动排除本轮用户消息。"""
+        # 读取原始消息、压缩摘要块与附件分析
         svc = get_chat_memory_service()
         raw_messages = await svc.list_messages(
             user_id=user_id, session_id=session_id, limit=CHAT_HISTORY_LIMIT,
@@ -165,6 +178,7 @@ class ChatContextBuilder:
             user_id=user_id,
             session_id=session_id,
         )
+        # 计算已压缩到的消息 ID，跳过被压缩覆盖的早期消息
         summarized_through_id = max(
             (int(block.end_message_id or 0) for block in summary_blocks),
             default=0,
@@ -175,6 +189,7 @@ class ChatContextBuilder:
                 for message in raw_messages
                 if int(getattr(message, "id", 0) or 0) > summarized_through_id
             ]
+        # 仅保留未被压缩且属于会话的附件分析，按消息 ID 分组
         analyses = await svc.list_attachment_analyses(
             user_id=user_id,
             session_id=session_id,
@@ -186,10 +201,12 @@ class ChatContextBuilder:
                 continue
             analyses_by_message_id.setdefault(analysis.user_message_id, []).append(analysis)
 
+        # 排除本轮用户消息及其附件分析
         if exclude_message_id is not None:
             raw_messages = [m for m in raw_messages if getattr(m, "id", None) != exclude_message_id]
             analyses_by_message_id.pop(exclude_message_id, None)
 
+        # 若历史不以用户消息开头，截断到首个用户消息
         if raw_messages and getattr(raw_messages[0], "role", "") != "user":
             first_user_index = next(
                 (i for i, m in enumerate(raw_messages) if getattr(m, "role", "") == "user"),
@@ -197,6 +214,7 @@ class ChatContextBuilder:
             )
             raw_messages = raw_messages[first_user_index:]
 
+        # 转换每条消息，并为带附件分析的用户消息注入上下文 SystemMessage
         messages: list[AnyMessage] = []
         for msg in raw_messages:
             converted = convert_stored_message(msg)
@@ -219,4 +237,5 @@ class ChatContextBuilder:
                         )
                     )
 
+        # 清理无效工具链后返回历史消息
         return sanitize_tool_message_chain(messages)

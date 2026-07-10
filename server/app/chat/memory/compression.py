@@ -21,6 +21,7 @@ from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
 logger = get_logger(__name__)
 
 
+# ChatSessionCompressor：将会话旧消息压缩为时序摘要块，保留最近消息与原始历史
 class ChatSessionCompressor:
     """会话压缩器 — 将旧的原始消息压缩为时序摘要块。
 
@@ -34,6 +35,7 @@ class ChatSessionCompressor:
       7. 重置 summary_token_count 计数器
     """
 
+    # 初始化压缩参数（保留条数/消息阈值/Token 阈值）与 LLM
     def __init__(
         self,
         *,
@@ -46,6 +48,7 @@ class ChatSessionCompressor:
         self.min_tokens = min_tokens
         self.llm = get_llm()
 
+    # 条件压缩入口：根据阈值或 force 决定是否压缩
     async def maybe_compress(
         self,
         *,
@@ -77,10 +80,12 @@ class ChatSessionCompressor:
             user_id=user_id,
             session_id=session_id,
         )
+        # 不满足阈值则跳过
         if not should_compress:
             logger.info("[ChatSessionCompressor] 不满足压缩条件，跳过: user_id=%s session_id=%s", user_id, session_id)
             return None
         logger.info("[ChatSessionCompressor] 满足压缩条件，开始压缩: user_id=%s session_id=%s", user_id, session_id)
+        # 执行实际压缩
         return await self._compress(
             db=db,
             user_id=user_id,
@@ -88,26 +93,31 @@ class ChatSessionCompressor:
             reason=reason,
         )
 
+    # 暴露阈值判断给外部查询
     async def needs_compression(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
         """返回当前会话是否满足压缩阈值。"""
         return await self._should_compress(db=db, user_id=user_id, session_id=session_id)
 
+    # 判断是否需要压缩：token 或消息数任一达到阈值即触发
     async def _should_compress(self, *, db: AsyncSession, user_id: int, session_id: str) -> bool:
         """判断是否需要压缩 — 满足任一条件即触发。
 
         条件1: summary_token_count ≥ min_tokens（累积 token 达到阈值）
         条件2: 消息条数 ≥ min_messages（消息数量达到阈值）
         """
+        # 读取当前会话的累积 token 数
         chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
         token_count = chat_session.summary_token_count if chat_session else 0
         logger.info(
             "[ChatSessionCompressor._should_compress] user_id=%s session_id=%s token_count=%s min_tokens=%s",
             user_id, session_id, token_count, self.min_tokens,
         )
+        # 条件1：累积 token 达到阈值即触发
         if token_count >= self.min_tokens:
             logger.info("[ChatSessionCompressor._should_compress] token_count >= min_tokens, 触发压缩")
             return True
 
+        # 查询最近一个摘要块的覆盖边界
         latest_block = (
             await db.exec(
                 select(ChatSessionSummaryBlock)
@@ -139,8 +149,10 @@ class ChatSessionCompressor:
             "[ChatSessionCompressor._should_compress] user_id=%s session_id=%s message_count=%s min_messages=%s",
             user_id, session_id, count_result, self.min_messages,
         )
+        # 条件2：新消息数达到阈值即触发
         return count_result >= self.min_messages
 
+    # 执行实际压缩：提取旧消息 → 生成摘要 → 保存摘要块 → 重置计数器
     async def _compress(
         self,
         *,
@@ -194,6 +206,7 @@ class ChatSessionCompressor:
             "[ChatSessionCompressor._compress] user_id=%s session_id=%s total_messages=%s dialogue_count=%s target_count=%s keep_recent=%s",
             user_id, session_id, len(messages), len(dialogue), max(0, len(dialogue) - self.keep_recent), self.keep_recent,
         )
+        # 对话数不超过保留数则无需压缩
         if len(dialogue) <= self.keep_recent:
             logger.info("[ChatSessionCompressor._compress] dialogue_count <= keep_recent, 无需压缩")
             return None
@@ -204,6 +217,7 @@ class ChatSessionCompressor:
             logger.info("[ChatSessionCompressor._compress] target为空, 无需压缩")
             return None
 
+        # 将目标消息格式化为带时间戳的文本
         chat_text = "\n".join(
             f"[{msg.created_at:%m-%d %H:%M}] {msg.role}: {extract_content_text(msg.content)[:500]}"
             for msg in target
@@ -237,8 +251,10 @@ class ChatSessionCompressor:
                 user_id, session_id, len(summary_markdown),
             )
 
+        # 计算下一个摘要块索引
         next_block_index = (latest_block.block_index if latest_block else 0) + 1
 
+        # 创建摘要块记录（标记覆盖的消息边界）
         summary_block = ChatSessionSummaryBlock(
             session_id=session_id,
             block_index=next_block_index,
@@ -267,4 +283,5 @@ class ChatSessionCompressor:
                 "[ChatSessionCompressor._compress] 重置token计数器: user_id=%s session_id=%s",
                 user_id, session_id,
             )
+        # 返回新建的摘要块
         return summary_block

@@ -67,6 +67,7 @@ class LearningPathTutorialDTO(BaseModel):
     weak_knowledge_points: list[str] = Field(default_factory=list)
     created_at: str
 
+    # 从 ORM 模型构建教程 DTO
     @classmethod
     def from_model(cls, tutorial: PathNodeTutorial) -> LearningPathTutorialDTO:
         return cls(
@@ -98,6 +99,7 @@ class LearningPathQuestionDTO(BaseModel):
     knowledge_points: list[str] = Field(default_factory=list)
     is_correct: bool | None = None
 
+    # 从 ORM 模型构建题目 DTO
     @classmethod
     def from_model(cls, question: PathNodeQuestion) -> LearningPathQuestionDTO:
         return cls(
@@ -132,6 +134,7 @@ class LearningPathResourceDTO(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str
 
+    # 从 ORM 模型构建资源 DTO
     @classmethod
     def from_model(cls, resource: PathNodeResource) -> LearningPathResourceDTO:
         return cls(
@@ -163,6 +166,7 @@ class LearningPathNodeDTO(BaseModel):
     difficulty: str | None = None
     prerequisites: list[str] = Field(default_factory=list)
 
+    # 从 ORM 模型构建节点 DTO
     @classmethod
     def from_model(cls, node: PathNode) -> LearningPathNodeDTO:
         return cls(
@@ -405,6 +409,7 @@ class PathPlanValidationError(ValueError):
     """路径规划结构校验失败 — LLM 输出不安全，不应持久化。"""
 
 
+# 校验路径规划结构完整性，不通过则拒绝持久化
 def validate_path_plan(plan: LearningPlan) -> None:
     """校验生成的路径规划，不合格时抛出 PathPlanValidationError。
 
@@ -470,6 +475,7 @@ def validate_path_plan(plan: LearningPlan) -> None:
     _validate_stage_node_coverage(plan, stage_ids)
 
 
+# 校验每个阶段至少包含一个节点
 def _validate_stage_node_coverage(plan: LearningPlan, stage_ids: set[str]) -> None:
     """校验每个阶段至少包含一个节点。"""
     stages_with_nodes: set[str] = set()
@@ -482,11 +488,13 @@ def _validate_stage_node_coverage(plan: LearningPlan, stage_ids: set[str]) -> No
         )
 
 
+# DFS 检测依赖环，发现环时抛出异常
 def _assert_no_dependency_cycle(adjacency: dict[str, list[str]]) -> None:
     """DFS 检测依赖环，发现环时抛出异常。"""
     visiting: set[str] = set()
     visited: set[str] = set()
 
+    # 递归 DFS 访问节点，检测环
     def visit(node_id: str, trail: list[str]) -> None:
         if node_id in visited:
             return

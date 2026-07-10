@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板根容器（基于 Listbox）
 import type { ListboxRootEmits, ListboxRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

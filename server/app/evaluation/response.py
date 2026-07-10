@@ -1,5 +1,6 @@
 """评估响应模式定义。"""
 
+# 定义评估摘要、学习事件项与学习时长统计的响应模型
 from __future__ import annotations
 
 from datetime import datetime

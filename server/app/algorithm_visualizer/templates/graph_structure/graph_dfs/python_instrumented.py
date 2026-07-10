@@ -15,6 +15,7 @@ graph = {
 labels = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G"}
 
 nodes = []
+# 循环遍历处理
 for node_id in sorted(graph.keys()):
     node_edges = [{"to": str(neighbor)} for neighbor in graph[node_id]]
     nodes.append({"id": str(node_id), "label": labels[node_id], "edges": node_edges})
@@ -39,6 +40,7 @@ def dfs(node):
     discovery[node] = time
     tracer.visit_node(str(node), line=75)
 
+# 循环遍历处理
     for neighbor in graph[node]:
         if color[neighbor] == WHITE:
             dfs(neighbor)
@@ -50,6 +52,7 @@ def dfs(node):
     time += 1
     finish[node] = time
 
+# 循环遍历处理
 for node in range(7):
     if color[node] == WHITE:
         dfs(node)

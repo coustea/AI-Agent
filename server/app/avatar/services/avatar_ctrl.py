@@ -35,6 +35,7 @@ logger = get_logger(__name__)
 SERVER_DIR = Path(__file__).resolve().parents[3]
 
 
+# 标准化背景图编码格式：移除点号前缀，jpeg 统一为 jpg
 def _normalize_background_encoding(value: str | None) -> str:
     encoding = (value or "jpg").strip().lower().lstrip(".")
     if encoding == "jpeg":
@@ -42,10 +43,12 @@ def _normalize_background_encoding(value: str | None) -> str:
     return encoding
 
 
+# 标准化背景图来源字符串
 def _normalize_background_source(value: str | None) -> str:
     return (value or "auto").strip().lower()
 
 
+# 验证并从配置中提取背景图资源 key（res_key 模式）
 def _validated_background_res_key() -> tuple[str, str] | None:
     if _normalize_background_source(AVATAR_BACKGROUND_SOURCE) != "res_key":
         return None
@@ -58,6 +61,7 @@ def _validated_background_res_key() -> tuple[str, str] | None:
     return res_key, _normalize_background_encoding(AVATAR_BACKGROUND_ENCODING)
 
 
+# 从 data: URI 格式的 base64 中提取图片数据和编码
 def _extract_background_base64(image: str, encoding: str) -> tuple[str, str]:
     content = image.strip()
     if not content.startswith("data:"):
@@ -74,6 +78,7 @@ def _extract_background_base64(image: str, encoding: str) -> tuple[str, str]:
     return payload.strip(), encoding
 
 
+# 从本地文件读取背景图片，返回 base64 编码和实际编码格式
 def _read_background_file(image: str, encoding: str) -> tuple[str, str] | None:
     path = Path(image).expanduser()
     if not path.is_absolute():
@@ -91,6 +96,7 @@ def _read_background_file(image: str, encoding: str) -> tuple[str, str] | None:
     return base64.b64encode(raw).decode("ascii"), encoding
 
 
+# 检查图片二进制数据的魔数是否匹配声明的编码格式
 def _is_supported_background_image(raw: bytes, encoding: str) -> bool:
     if encoding in {"jpg", "jpeg"}:
         return raw.startswith(b"\xff\xd8")
@@ -99,6 +105,7 @@ def _is_supported_background_image(raw: bytes, encoding: str) -> bool:
     return False
 
 
+# 综合验证背景图配置：读取文件/解析 base64 → 验证格式 → 返回最终图片数据
 def _validated_background_config() -> tuple[str, str] | None:
     if not AVATAR_BACKGROUND_IMAGE:
         return None
@@ -133,8 +140,8 @@ def _validated_background_config() -> tuple[str, str] | None:
     return compact_image, encoding
 
 
+# 构建 Avatar 启动参数：优先使用 res_key，否则使用 base64 图片
 def build_avatar_params() -> dict:
-    """Build Avatar start parameters and include only a valid background image."""
     avatar_params = {
         "stream": {"protocol": "xrtc"},
         "avatar_id": AVATAR_ANCHOR,
@@ -168,8 +175,8 @@ def build_avatar_params() -> dict:
     return avatar_params
 
 
+# 构建 Avatar 服务启动指令：包含 app_id、TTS 参数、Avatar 参数
 def build_avatar_start_message() -> dict:
-    """Build the Avatar service start command."""
     return {
         "header": {
             "app_id": AVATAR_APP_ID,
@@ -183,6 +190,7 @@ def build_avatar_start_message() -> dict:
     }
 
 
+# 讯飞虚拟人控制器 — 管理 WebSocket 连接和 TTS 播报队列
 class AvatarController:
     """讯飞虚拟人控制器 — 管理 WebSocket 连接和 TTS 播报队列。"""
 
@@ -195,6 +203,7 @@ class AvatarController:
     # Avatar WebSocket 初始化重试次数
     CONNECT_MAX_RETRIES = 3
 
+    # 初始化控制器：WebSocket、播报队列、心跳任务、回调绑定
     def __init__(self):
         self.ws = None
         self.is_ready = False
@@ -209,9 +218,9 @@ class AvatarController:
         # 当前播报的 turn_id — 用于回调时绑定正确的 turn
         self._current_speak_turn_id: Optional[str] = None
 
+    # 检查 WebSocket 是否已关闭（兼容不同 websockets 版本）
     @property
     def _ws_closed(self) -> bool:
-        """检查 WebSocket 是否已关闭（兼容不同 websockets 版本）。"""
         if self.ws is None:
             return True
         if hasattr(self.ws, "state"):
@@ -219,8 +228,8 @@ class AvatarController:
             return self.ws.state != State.OPEN
         return getattr(self.ws, "closed", True)
 
+    # 连接到讯飞 Avatar 服务：发送启动指令并启动心跳保活
     async def connect(self, on_reconnect_callback=None):
-        """连接到讯飞 Avatar 服务 — 发送启动指令并启动心跳。"""
         self._on_reconnect_callback = on_reconnect_callback
 
         auth_url = xfyun_auth.assemble_auth_url(
@@ -268,6 +277,7 @@ class AvatarController:
             f"{error_type}: {error_repr}"
         )
 
+    # 持续接收 Avatar 服务的事件消息，处理 stream_info、tts_start/end 等
     async def receive_messages(self, callback):
         """持续接收 Avatar 服务的事件消息（stream_info、tts_start、tts_end）。
 
@@ -346,6 +356,7 @@ class AvatarController:
             logger.error(f"Failed to receive avatar messages: {e}", exc_info=True)
             self._handle_connection_lost(callback)
 
+    # 处理 Avatar 连接丢失：标记不可用并通过回调通知桥接层
     def _handle_connection_lost(self, callback):
         """处理 Avatar 连接丢失 — 标记不可用并通知桥接层。
 
@@ -368,6 +379,7 @@ class AvatarController:
                 # No event loop (e.g., during shutdown)
                 logger.debug("[AvatarCtrl] Cannot schedule connection_lost callback — no event loop")
 
+    # 将文本加入播报队列：清空旧播报、限制语速、自动启动队列处理
     async def speak(self, text: str, speech_rate: float = 1.0, turn_id: Optional[str] = None):
         """将文本加入播报队列 — Avatar 就绪后自动开始播放。
 
@@ -408,6 +420,7 @@ class AvatarController:
         if self._playback_task is None or self._playback_task.done():
             self._playback_task = asyncio.create_task(self._process_queue())
 
+    # 串行处理播报队列：逐句发送 TTS 指令，等待 tts_start/tts_end 事件
     async def _process_queue(self):
         """串行处理播报队列 — 逐句发送 TTS 指令并等待播报完成。
 
@@ -479,6 +492,7 @@ class AvatarController:
 
         logger.info("Sentence queue processing completed")
 
+    # 带重试机制的 TTS 发送：发送失败时重试，成功后不重试
     async def _speak_with_retry(self, text: str, speech_rate: float = 1.0) -> bool:
         """带重试机制的 TTS 发送。
 
@@ -499,6 +513,7 @@ class AvatarController:
 
         return False
 
+    # 立即发送 TTS 播报指令（无重试），连接丢失时通知桥接层重连
     async def _speak_immediate(self, text: str, speech_rate: float = 1.0):
         """立即发送 TTS 播报指令（无重试）。"""
         if not self.ws or self._ws_closed:
@@ -550,8 +565,8 @@ class AvatarController:
                     pass
             raise RuntimeError(f"Failed to send speech command: {e}")
 
+    # 停止播报：清空队列、取消播放任务、发送 stop 控制指令
     async def stop(self):
-        """停止播报并清空队列 — 发送 stop 控制指令。"""
         # 清空播报队列
         while not self.sentence_queue.empty():
             try:
@@ -585,8 +600,8 @@ class AvatarController:
         except Exception as e:
             logger.error(f"Failed to stop avatar: {e}")
 
+    # 关闭 Avatar WebSocket 连接并停止心跳保活
     async def close(self):
-        """关闭 Avatar WebSocket 连接并停止心跳。"""
         if self._keepalive_task and not self._keepalive_task.done():
             self._keepalive_task.cancel()
 
@@ -594,8 +609,8 @@ class AvatarController:
             await self.ws.close()
             logger.info("Avatar connection closed")
 
+    # 心跳保活循环：定期 ping 检测连接是否存活，断开时触发回调
     async def _keepalive_loop(self):
-        """心跳保活循环 — 定期 ping 检测连接是否存活。"""
         try:
             while True:
                 await asyncio.sleep(self.KEEPALIVE_INTERVAL)

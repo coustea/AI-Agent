@@ -14,6 +14,7 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+# 类型检查阶段才引入的别名，避免运行时循环依赖
 if TYPE_CHECKING:
     from app.resource.event import ResourceEvents
     from app.resource.schemas import AgentResult, NodeInput, ResourceInput
@@ -21,11 +22,13 @@ if TYPE_CHECKING:
 
 _T = TypeVar("_T")
 
+# 全局 Agent 注册表：按 agent_id 索引所有已注册的 Agent 类
 AGENT_REGISTRY: dict[str, type[BaseResourceAgent]] = {}
 
 
 def register_agent(cls: type[BaseResourceAgent]) -> type[BaseResourceAgent]:
     """装饰器：将 Agent 类注册到全局注册表，按 agent_id 索引。"""
+    # 以 agent_id 为键写入注册表，供路径/资源服务按 id 查找
     AGENT_REGISTRY[cls.agent_id] = cls
     return cls
 
@@ -61,12 +64,13 @@ class BaseResourceAgent:
         send_first: bool = True,
     ) -> None:
         """长时间任务心跳：只发送 running，不发送 completed / failed。"""
+        # 没有心跳文案则直接退出，不做任何操作
         if not messages:
             return
 
         index = 0
 
-        # 立即发送第一条心跳，避免 LLM 调用前长时间无消息
+        # 可选先发送首条心跳，避免 LLM 调用前长时间无反馈
         if send_first:
             try:
                 await self.emitter.send(
@@ -86,11 +90,13 @@ class BaseResourceAgent:
                 )
             index = 1
 
+        # 周期性发送心跳，直到任务结束或被取消
         while not stop_event.is_set():
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
                 break
             except asyncio.TimeoutError:
+                # 超时未结束则取出下一条循环文案继续心跳
                 message = messages[index % len(messages)]
                 index += 1
 
@@ -121,6 +127,7 @@ class BaseResourceAgent:
         send_first: bool = True,
     ) -> _T:
         """包装长耗时 awaitable，期间定时向前端发送 running 心跳。"""
+        # 用事件通知心跳任务何时停止
         stop_event = asyncio.Event()
         heartbeat_task = asyncio.create_task(
             self._heartbeat_loop(
@@ -133,8 +140,10 @@ class BaseResourceAgent:
         )
 
         try:
+            # 执行实际任务，心跳在后台并发运行
             return await awaitable
         finally:
+            # 任务结束，停止并取消心跳任务
             stop_event.set()
             heartbeat_task.cancel()
             try:
@@ -148,6 +157,7 @@ class BaseResourceAgent:
         Returns:
             ResearchReport: 包含 sources 列表的搜索结果报告
         """
+        # 联网研究被关闭时直接返回带错误信息的空报告
         if not self.research_enabled:
             from app.shared.research.schemas import ResearchReport, ResearchError
             return ResearchReport(
@@ -155,6 +165,7 @@ class BaseResourceAgent:
                 errors=[ResearchError(stage="search", code="disabled", message="联网研究已关闭")],
             )
 
+        # 懒加载 ResearchAgent，避免顶层导入造成循环依赖
         from app.shared.research.agent import ResearchAgent
         from app.shared.research.schemas import ResearchTask
 
@@ -162,6 +173,7 @@ class BaseResourceAgent:
             status = str(event.get("status") or "running")
             action = str(event.get("action") or "核验网页资料")
             duration = event.get("duration_ms")
+            # 根据子 Agent 状态映射前端事件文案与工具状态
             if status == "done":
                 message = f"ResearchAgent：{action}已完成"
                 tool_status = "completed"
@@ -185,6 +197,7 @@ class BaseResourceAgent:
                 },
             )
 
+        # 记录开始时间用于耗时统计
         started_at = time.perf_counter()
         duration = 0
         try:
@@ -231,6 +244,7 @@ class BaseResourceAgent:
                 getattr(self, "agent_id", "base"), len(report.sources), duration,
             )
             return report
+        # 研究失败不影响主流程，返回带错误信息的空报告
         except Exception as exc:
             duration = int((time.perf_counter() - started_at) * 1000)
             logger.error(
@@ -266,9 +280,11 @@ class BaseResourceAgent:
         Returns:
             格式化后的文本，如果搜索无有效结果则返回 None。
         """
+        # 无有效搜索结果则不注入
         if not report.has_results:
             return None
         parts: list[str] = []
+        # 逐条拼接来源标题/链接/摘要
         for src in report.sources:
             entry = f"- {src.title}"
             if src.url:
@@ -281,6 +297,7 @@ class BaseResourceAgent:
 
     # -- 子类必须实现的入口 ----------------------------------------------------
 
+    # 子类必须实现以下两个入口：多智能体资源与路径节点资源
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         """多智能体资源生成入口。子类必须实现。"""
         raise NotImplementedError(f"{self.__class__.__name__}.generate_resource is required")

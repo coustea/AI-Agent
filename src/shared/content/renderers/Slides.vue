@@ -29,6 +29,8 @@
 </template>
 
 <script setup lang="ts">
+// 幻灯片渲染器：展示 HTML 课件（iframe），支持全屏和下载
+
 import { computed } from 'vue'
 import Frame from '../Frame.vue'
 import { PhDownload as Download, PhArrowsOut as Expand } from '@phosphor-icons/vue'
@@ -38,6 +40,7 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
+// 全屏切换（iframe 全屏 API）
 function toggleFullscreen() {
   const iframe = document.querySelector('.slides-iframe') as HTMLIFrameElement | null
   if (!iframe) return
@@ -49,13 +52,11 @@ function toggleFullscreen() {
   }
 }
 
+// 从 resource 的 metadata 或 content 中提取 html_url
 const htmlUrl = computed(() => {
   const raw = props.resource
   if (!raw) return ''
 
-  // 后端 PPT agent 将 HTML 课件发布引用写入 metadata.html_url
-  // （server/app/resource/agents/ppt.py），_item_to_dto 把 metadata_json
-  // 同时放入 content 与 metadata，因此两处都需读取 html_url。
   const meta = raw.metadata_json || raw.metadata
   const metadata = typeof meta === 'string' ? JSON.parse(meta) : meta
   const url = metadata?.html_url

@@ -1,3 +1,4 @@
+// 卡片组件集（Card、CardAction、CardContent、CardDescription、CardFooter、CardHeader、CardTitle）
 export { default as Card } from "./Card.vue"
 export { default as CardAction } from "./CardAction.vue"
 export { default as CardContent } from "./CardContent.vue"

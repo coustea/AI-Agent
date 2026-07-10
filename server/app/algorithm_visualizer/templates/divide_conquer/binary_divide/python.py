@@ -1,3 +1,4 @@
+# binary_divide 算法实现 — domain: divide_conquer
 def binary_search_first(arr, target):
     lo, hi = 0, len(arr) - 1
     result = -1
@@ -12,6 +13,7 @@ def binary_search_first(arr, target):
             hi = mid - 1
     return result
 
+# 定义 binary_search_last 函数
 def binary_search_last(arr, target):
     lo, hi = 0, len(arr) - 1
     result = -1
@@ -26,6 +28,7 @@ def binary_search_last(arr, target):
             hi = mid - 1
     return result
 
+# 定义 sqrt_binary 函数
 def sqrt_binary(n, precision=1e-7):
     if n < 0:
         return None
@@ -38,6 +41,7 @@ def sqrt_binary(n, precision=1e-7):
             hi = mid
     return (lo + hi) / 2
 
+# 定义 search_rotated 函数
 def search_rotated(arr, target):
     lo, hi = 0, len(arr) - 1
     while lo <= hi:

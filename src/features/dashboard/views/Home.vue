@@ -351,10 +351,12 @@ import {
 
 defineOptions({ name: 'Home' })
 
+// 注册 ECharts 雷达图组件
 use([CanvasRenderer, RadarChart, TooltipComponent])
 
 const router = useRouter()
 
+// 响应式状态：各模块数据、加载态、错误信息
 const recommendationData = ref<RecommendationData | null>(null)
 const profileRadarData = ref<ProfileRadarData | null>(null)
 const continueLearningData = ref<ContinueLearningData | null>(null)
@@ -365,6 +367,7 @@ const dataLoaded = ref(false)
 const loadError = ref('')
 
 // Carousel slides definition
+// Banner 轮播：当前索引与幻灯片定义
 const activeSlide = ref(0)
 const carouselSlides = [
   {
@@ -392,6 +395,7 @@ const carouselSlides = [
 
 let carouselInterval: ReturnType<typeof setInterval> | null = null
 
+// 切换到下一张/上一张幻灯片
 const nextSlide = () => {
   activeSlide.value = (activeSlide.value + 1) % carouselSlides.length
 }
@@ -400,11 +404,13 @@ const prevSlide = () => {
   activeSlide.value = (activeSlide.value - 1 + carouselSlides.length) % carouselSlides.length
 }
 
+// 跳转到指定幻灯片并重置自动播放
 const setSlide = (index: number) => {
   activeSlide.value = index
   resetAutoplay()
 }
 
+// 启动/停止轮播自动播放
 const startAutoplay = () => {
   carouselInterval = setInterval(nextSlide, 6000)
 }
@@ -421,10 +427,12 @@ const resetAutoplay = () => {
   startAutoplay()
 }
 
+// 路由跳转封装
 const goTo = (path: string) => {
   if (path) router.push(path)
 }
 
+// 根据图标名映射 Lucide 图标组件
 const getIconComponent = (iconName: string) => {
   switch (iconName) {
     case 'chat': return ChatDotRound
@@ -479,19 +487,23 @@ const formatDateTime = (value?: string | null) => {
   return `${formatDate(value)} ${time}`
 }
 
+// 雷达图跳转路径
 const profilePath = computed(() => profileRadarData.value?.radar?.path || '/profile')
 
+// 将原始数据转换为 ECharts 雷达图格式
 const radarSource = computed<any>(() => {
   if (!profileRadarData.value) return null
   return getRadarChartData(profileRadarData.value)
 })
 
+// 提取各维度数值并归一化到百分比
 const radarValues = computed<number[]>(() => {
   const rawValues = radarSource.value?.series?.[0]?.data?.[0]?.value
   if (!Array.isArray(rawValues)) return []
   return rawValues.map((item: unknown) => clampPercent(item))
 })
 
+// 雷达图 ECharts option 配置
 const radarOption = computed(() => {
   const rawData = radarSource.value
   if (!rawData?.radar) return {}
@@ -535,6 +547,7 @@ const radarOption = computed(() => {
   }
 })
 
+// 综合画像得分：优先取后端总分，无则取各维度均值
 const profileScore = computed(() => {
   const raw = profileRadarData.value as any
   const candidate = raw?.score
@@ -545,6 +558,7 @@ const profileScore = computed(() => {
   return clampPercent(values.reduce((sum, value) => sum + value, 0) / values.length)
 })
 
+// 雷达各维度名称与得分映射
 const profileDimensions = computed(() => {
   const indicators = radarSource.value?.radar?.indicator
   const values = radarValues.value
@@ -559,6 +573,7 @@ const profileDimensions = computed(() => {
   }))
 })
 
+// 薄弱方向：优先取后端标记，否则从低分维度推导
 const weakAreas = computed(() => {
   const backendWeakAreas = profileRadarData.value?.weak_areas
   if (Array.isArray(backendWeakAreas) && backendWeakAreas.length) {
@@ -573,11 +588,12 @@ const weakAreas = computed(() => {
   return lowDimensions.length ? lowDimensions.slice(0, 2) : []
 })
 
+// 薄弱方向展示文案
 const weakAreaText = computed(() => weakAreas.value.join(' / '))
 
+// 最近资源：按创建时间倒序排序后格式化
 const recentResources = computed(() => {
   const list = [...(recentResourcesData.value || [])]
-  // Sort by created_at descending (time sort)
   list.sort((a, b) => {
     const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
     const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
@@ -595,9 +611,9 @@ const recentResources = computed(() => {
   })
 })
 
+// 活跃学习路径：按最后学习时间倒序排序后格式化
 const activePaths = computed(() => {
   const paths = [...(continueLearningData.value?.active_paths || [])]
-  // Sort by last_learned_at or updated_at descending (time sort)
   paths.sort((a, b) => {
     const timeA = new Date(a.last_learned_at || a.updated_at || 0).getTime()
     const timeB = new Date(b.last_learned_at || b.updated_at || 0).getTime()
@@ -617,14 +633,16 @@ const activePaths = computed(() => {
   })
 })
 
-// Pagination logic
+// 分页逻辑：每页4项，资源与路径分页独立
 const ITEMS_PER_PAGE = 4
 const resourcePage = ref(1)
 const pathPage = ref(1)
 
+// 计算总页数
 const totalResourcePages = computed(() => Math.ceil(recentResources.value.length / ITEMS_PER_PAGE) || 1)
 const totalPathPages = computed(() => Math.ceil(activePaths.value.length / ITEMS_PER_PAGE) || 1)
 
+// 当前页切片数据
 const paginatedResources = computed(() => {
   const start = (resourcePage.value - 1) * ITEMS_PER_PAGE
   return recentResources.value.slice(start, start + ITEMS_PER_PAGE)
@@ -635,6 +653,7 @@ const paginatedPaths = computed(() => {
   return activePaths.value.slice(start, start + ITEMS_PER_PAGE)
 })
 
+// 数据刷新时重置分页到第一页
 watch(recentResources, () => {
   resourcePage.value = 1
 })
@@ -642,13 +661,14 @@ watch(activePaths, () => {
   pathPage.value = 1
 })
 
+// 快捷操作：最多取前6项
 const quickActions = computed<HomeActionItem[]>(() => {
   const actions = quickActionsData.value?.actions || []
   return actions.slice(0, 6)
 })
 
+// 并行加载所有首页数据，各接口独立容错
 const loadAllData = async () => {
-  // 首次加载显示 loading 骨架，后续刷新保留旧数据
   if (!dataLoaded.value) {
     loading.value = true
   }
@@ -670,6 +690,7 @@ const loadAllData = async () => {
   if (actionsRes.status === 'fulfilled') quickActionsData.value = actionsRes.value.data.data
   if (resourcesRes.status === 'fulfilled') recentResourcesData.value = resourcesRes.value.data.data ?? []
 
+  // 全部失败时显示错误提示，部分失败仅打印警告
   const failedCount = results.filter(r => r.status === 'rejected').length
   if (failedCount === results.length) {
     loadError.value = '后端接口暂时不可用，请稍后重试。'
@@ -681,15 +702,18 @@ const loadAllData = async () => {
   loading.value = false
 }
 
+// 生命周期：挂载时加载数据并启动轮播
 onMounted(() => {
   loadAllData()
   startAutoplay()
 })
 
+// keep-alive 激活时重新加载数据
 onActivated(() => {
   loadAllData()
 })
 
+// 组件卸载时清理轮播定时器
 onUnmounted(() => {
   stopAutoplay()
 })

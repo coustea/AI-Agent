@@ -445,11 +445,13 @@ type ResourcePushItem = {
 const route = useRoute()
 const router = useRouter()
 
+// 页面全局加载状态与生成/提交加载标识
 const loading = ref(false)
 const quizLoading = ref(false)
 const submitLoading = ref(false)
 const resourceLoading = ref<ResourceKind | ''>('')
 
+// 核心数据：节点工作空间、测验轮次、判分结果、用户答案
 const workspace = ref<LearningPathWorkspace | null>(null)
 const quizRound = ref<PathQuizRound | null>(null)
 const quizResult = ref<PathQuizSubmitResponse | null>(null)
@@ -457,6 +459,7 @@ const answers = ref<Record<number, string>>({})
 const hasStartedTracking = ref(false)
 const showQuizOverlay = ref(false)
 
+// 教程与目录导航状态
 const selectedTutorialId = ref<number | null>(null)
 const isGeneratingTutorial = ref(false)
 const generatingLogs = ref<string[]>([])
@@ -464,17 +467,20 @@ const contentEl = ref<HTMLElement | null>(null)
 const activeHeadingId = ref('')
 const isQuizSubmitted = ref(false)
 
+// 资源查看器弹窗状态
 const showViewer = ref(false)
 const viewerLoading = ref(false)
 const viewerResource = ref<LearningPathResource | null>(null)
 const viewerContent = ref<string>('')
 
+// 打开辅助资源查看器
 function openViewer(resource: LearningPathResource) {
   viewerResource.value = resource
   viewerContent.value = resource.content_text || (resource.content_json ? JSON.stringify(resource.content_json, null, 2) : '')
   showViewer.value = true
 }
 
+// 关闭资源查看器（延迟清空数据以保留过渡动画）
 function closeViewer() {
   showViewer.value = false
   setTimeout(() => {
@@ -483,8 +489,8 @@ function closeViewer() {
   }, 200)
 }
 
+// 关闭测验弹窗，保留题目数据以便重新打开
 function closeQuiz() {
-  // 仅关闭弹窗，保留 quizRound 数据以便再次点击按钮时直接打开
   showQuizOverlay.value = false
 }
 
@@ -512,8 +518,10 @@ function formatTime(iso: string | undefined | null) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// 从路由参数获取当前节点 ID
 const nodeId = computed(() => Number(route.params.nodeId || 0))
 
+// 当前展示的教程（按用户选择的版本或最新的 current_tutorial）
 const displayedTutorial = computed<LearningPathTutorial | null>(() => {
   if (!workspace.value) return null
   if (selectedTutorialId.value) {
@@ -523,6 +531,7 @@ const displayedTutorial = computed<LearningPathTutorial | null>(() => {
   return workspace.value.current_tutorial
 })
 
+// 预处理后的 Markdown 教程内容
 const tutorialMarkdown = computed(() => preprocessTutorialMarkdown(displayedTutorial.value?.content_markdown || ''))
 
 /**
@@ -597,6 +606,7 @@ function preprocessTutorialMarkdown(raw: string): string {
   return text
 }
 
+// 从 Markdown 正文中解析 h2/h3 标题，生成教程目录导航
 const tutorialToc = computed<TocItem[]>(() => {
   const markdown = tutorialMarkdown.value
   if (!markdown) return []
@@ -667,6 +677,7 @@ const resourcePushItems = computed<ResourcePushItem[]>(() => [
   },
 ])
 
+// 根据资源类型获取最新版本的辅助资源
 function latestResourceByType(type: string) {
   if (!workspace.value) return null
   const matched = workspace.value.resources
@@ -683,6 +694,7 @@ function slugify(value: string) {
       || `heading-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// 同步目录锚点：为 Markdown 中的 h2/h3 元素注入 id，支持滚动定位
 async function syncHeadingAnchors() {
   await nextTick()
   window.setTimeout(() => {
@@ -700,6 +712,8 @@ async function syncHeadingAnchors() {
   }, 80)
 }
 
+// 点击目录项时平滑滚动到对应标题
+
 function scrollToHeading(id: string) {
   activeHeadingId.value = id
   const root = contentEl.value
@@ -709,6 +723,7 @@ function scrollToHeading(id: string) {
   }
 }
 
+// 加载节点学习空间：获取工作区数据，无教程则自动生成
 async function loadWorkspace() {
   if (!nodeId.value) return
   loading.value = true
@@ -732,6 +747,8 @@ async function loadWorkspace() {
     isGeneratingTutorial.value = false
   }
 }
+
+// 调用后端生成主教程（首次生成），含轮播日志动画提示用户等待
 
 async function generatePrimaryTutorial() {
   isGeneratingTutorial.value = true
@@ -773,6 +790,7 @@ async function generatePrimaryTutorial() {
   }
 }
 
+// 开始学习行为追踪：记录进入节点的时间与上下文
 async function startLearningTracking() {
   if (!workspace.value || hasStartedTracking.value) return
   hasStartedTracking.value = true
@@ -799,6 +817,7 @@ async function startLearningTracking() {
   })
 }
 
+// 加载或重新打开节点测验题目
 async function loadQuiz() {
   if (!workspace.value) return
 
@@ -844,6 +863,7 @@ async function loadQuiz() {
   }
 }
 
+// 提交节点测验答案：判分后刷新 workspace 并记录学习事件
 async function submitQuiz() {
   if (!workspace.value || !quizRound.value) return
   const payload = {
@@ -899,6 +919,7 @@ const resourceApiMap: Record<ResourceKind, (nodeId: number) => Promise<any>> = {
   cartoon: generateCartoon,
 }
 
+// 调用后端生成辅助资源（如思维导图、代码、PPT 等），生成后打开查看器
 async function createResource(type: ResourceKind) {
   if (!workspace.value) return
   resourceLoading.value = type
@@ -962,6 +983,7 @@ function resultText(outcome: string) {
   }
 }
 
+// 路由节点 ID 变化时重置状态并重新加载工作空间
 watch(() => route.params.nodeId, (newId) => {
   if (!newId) return
   workspace.value = null
@@ -975,10 +997,12 @@ watch(() => route.params.nodeId, (newId) => {
   loadWorkspace()
 })
 
+// 教程 Markdown 变化时重新同步锚点
 watch(tutorialMarkdown, () => {
   syncHeadingAnchors()
 })
 
+// 页面挂载时加载工作空间，卸载时停止追踪
 onMounted(loadWorkspace)
 onBeforeUnmount(() => {
   stopTracking()

@@ -69,6 +69,8 @@
 </template>
 
 <script setup lang="ts">
+// 拓展阅读渲染器：展示推荐资源列表（书籍/论文/文章），含摘要、难度、链接
+
 import { computed } from 'vue'
 import {
   PhUser as User,
@@ -83,6 +85,7 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
+// 规范化后的阅读推荐数据
 const readingData = computed<Record<string, any> | null>(() => {
   return normalizeReadingArtifact(props.resultData)
 })
@@ -91,6 +94,7 @@ const resources = computed<any[]>(() => {
   return readingData.value?.resources || []
 })
 
+// 紧凑模式只显示前 3 条
 const visibleResources = computed(() => {
   return props.compact ? resources.value.slice(0, 3) : resources.value
 })
@@ -103,6 +107,7 @@ const getDescription = (resource: Record<string, any>) => {
   return resource.description || resource.content || resource.abstract || resource.summary || ''
 }
 
+// 从 URL 中提取域名作为显示文本
 const getDisplayDomain = (urlStr?: string) => {
   if (!urlStr) return ''
   try {
@@ -113,6 +118,7 @@ const getDisplayDomain = (urlStr?: string) => {
   }
 }
 
+// 资源类型的中文映射
 const getResourceTypeText = (type?: string) => {
   const map: Record<string, string> = {
     book: '书籍',

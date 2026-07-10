@@ -335,19 +335,25 @@ type ResourceCard = {
 const route = useRoute()
 const router = useRouter()
 
+// 页面加载态与错误态
 const loading = ref(true)
 const error = ref(false)
+// 资源包完整数据（shallowRef 避免深度监听大对象）
 const bundle = shallowRef<GeneratedResourceBundle | null>(null)
 
+// 资源类型筛选与预览弹窗状态
 const activeFilter = ref('all')
 const activePreviewAgent = ref<string | null>(null)
 const previewData = ref<any>(null)
 const previewResource = ref<any>(null)
 
+// 从路由参数中读取资源 id
 const resourceId = computed(() => Number(route.params.id) || null)
 
+// 挂载时自动加载资源详情
 onMounted(loadResource)
 
+// 从后端拉取资源包完整详情，成功写入 bundle，失败设 error
 async function loadResource() {
   if (!resourceId.value) {
     loading.value = false
@@ -371,13 +377,16 @@ async function loadResource() {
   }
 }
 
+// 资源包标题、部分完成状态与创建时间
 const bundleTitle = computed(() => String(bundle.value?.title || '个性化学习资源包'))
 const isPartial = computed(() => bundle.value?.status === 'partial_completed')
 const createdAt = computed(() => formatTime(bundle.value?.created_at || null))
 
+// 资源类型的定义顺序（用于排序）与有效集合
 const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'cartoon', 'video']
 const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
 
+// 原始资源列表：优先从 bundle.resources 读取，兼容 items 字段
 const rawResources = computed<any[]>(() => {
   const r = bundle.value?.resources ?? (bundle.value as any)?.items
   return Array.isArray(r) ? r : []
@@ -410,10 +419,12 @@ const availableFilters = computed(() =>
         .filter(f => f.count > 0)
 )
 
+// 将后端原始资源项归一化为前端 ResourceCard 结构，无效项返回 null
 function normalizeCard(r: any): ResourceCard | null {
   const type = String(r.type || r.agent_type || r.agentId || '').trim().toLowerCase()
   const status = String(r.status || 'completed').toLowerCase()
 
+  // 过滤无效类型、未完成状态和无内容项
   if (!RESOURCE_TYPES.has(type)) return null
   if (!['finished', 'completed', 'success'].includes(status)) return null
   if (!hasContent(r.content, type)) return null
@@ -438,11 +449,13 @@ function normalizeCard(r: any): ResourceCard | null {
   }
 }
 
+// 提取资源标题：优先使用 r.title，缺失时拼接类型标签与包名
 function getTitle(r: any, type: string) {
   const t = typeof r.title === 'string' ? r.title.trim() : ''
   return t || `${getArtifactLabel(type)} · ${bundleTitle.value}`
 }
 
+// 提取资源摘要：从多字段候选，兜底返回类型默认描述
 function getSummary(r: any, type: string) {
   const candidates = [r.summary, r.description, r.metadata?.summary]
   const found = candidates.find(v => typeof v === 'string' && v.trim())
@@ -462,6 +475,7 @@ function getDefaultSummary(type: string) {
   })[type] ?? '根据本次学习需求生成的个性化学习资源。'
 }
 
+// 提取资源格式：优先取 r.format，缺失时按类型返回默认格式
 function getFormat(r: any, type: string) {
   const raw = r.format || r.file_type || r.fileType
 
@@ -481,6 +495,7 @@ function getFormat(r: any, type: string) {
   })[type] ?? 'Resource'
 }
 
+// 将后端原始格式字符串归一化为统一展示名
 function normalizeFormat(raw: string) {
   const value = raw.trim().toLowerCase()
 
@@ -496,6 +511,7 @@ function normalizeFormat(raw: string) {
   return raw.trim()
 }
 
+// 从指标和元数据中提取高亮标签，取前三项
 function getHighlights(metadata: any, metrics: any): string[] {
   const candidates = [
     metrics.question_count ? `${metrics.question_count} 道题` : '',
@@ -514,6 +530,7 @@ function getHighlights(metadata: any, metrics: any): string[] {
   return ['重点梳理', '个性化生成', '可直接学习']
 }
 
+// 判断资源是否有实质内容：PPT/视频等始终视为有效，其余检查字符串/数组/对象
 function hasContent(value: unknown, type?: string) {
   if (type === 'ppt' || type === 'cartoon' || type === 'video') return true
   if (typeof value === 'string') return value.trim().length > 0
@@ -521,6 +538,7 @@ function hasContent(value: unknown, type?: string) {
   return isPlainObj(value) && Object.keys(value).length > 0
 }
 
+// 判断值是否为普通对象（非 null、非数组）
 function isPlainObj(v: unknown): v is Record<string, any> {
   return !!v && typeof v === 'object' && !Array.isArray(v)
 }
@@ -555,16 +573,19 @@ function getActionText(type: string) {
   })[type] ?? '查看内容'
 }
 
+// 打开资源预览弹窗：注入卡片类型、内容与原始数据
 function openPreview(card: ResourceCard) {
   activePreviewAgent.value = card.type
   previewData.value = card.content
   previewResource.value = card.resource
 }
 
+// 返回上一页
 function goBack() {
   router.back()
 }
 
+// 将 ISO 时间戳格式化为中文可读时间
 function formatTime(time: string | null) {
   if (!time) return ''
 

@@ -3,6 +3,7 @@ from visual_tracer import ArrayTracer
 tracer = ArrayTracer()
 
 
+# 定义 rabin_karp 函数
 def rabin_karp(text, pattern):
     if not pattern:
         return list(range(len(text) + 1))
@@ -19,14 +20,17 @@ def rabin_karp(text, pattern):
     t = 0
     h = 1
 
+# 循环遍历处理
     for i in range(m - 1):
         h = (h * d) % q
 
+# 循环遍历处理
     for i in range(m):
         p = (d * p + ord(pattern[i])) % q
         t = (d * t + ord(text[i])) % q
 
     res = []
+# 循环遍历处理
     for i in range(n - m + 1):
         tracer.move_pointer({"i": i, "j": i + m - 1}, line=59)
         tracer.compare(i, i + m - 1, line=61)

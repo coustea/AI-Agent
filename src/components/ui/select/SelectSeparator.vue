@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器分隔线
 import type { SelectSeparatorProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

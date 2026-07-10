@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+// 表单控件包装
 import { Slot } from "reka-ui"
 import { useFormField } from "./useFormField"
 

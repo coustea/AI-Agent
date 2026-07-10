@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 切换按钮组项
 import type { VariantProps } from "class-variance-authority"
 import type { ToggleGroupItemProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"

@@ -2,6 +2,7 @@ from visual_tracer import DpTableTracer
 
 tracer = DpTableTracer()
 
+# 定义 knapsack 函数
 def knapsack(weights, values, capacity):
     if not weights or capacity <= 0:
         return 0, [], []
@@ -11,7 +12,9 @@ def knapsack(weights, values, capacity):
     headers = ["dp"] + [f"w{j}" for j in range(capacity + 1)]
     tracer.init_table(headers, rows=n + 1, cols=capacity + 1, fill_value=0, line=4)
     dp = [[0] * (capacity + 1) for _ in range(n + 1)]
+# 循环遍历处理
     for i in range(1, n + 1):
+# 循环遍历处理
         for w in range(1, capacity + 1):
             if weights[i - 1] <= w:
                 tracer.highlight(i - 1, w, tone="dep", line=10)
@@ -27,6 +30,7 @@ def knapsack(weights, values, capacity):
             tracer.clear_highlights(line=16)
     selected = []
     w = capacity
+# 循环遍历处理
     for i in range(n, 0, -1):
         if dp[i][w] != dp[i - 1][w]:
             selected.append(i - 1)
@@ -35,30 +39,38 @@ def knapsack(weights, values, capacity):
     tracer.finish(line=24)
     return dp[n][capacity], dp, selected
 
+# 定义 knapsack_optimized 函数
 def knapsack_optimized(weights, values, capacity):
     if not weights or capacity <= 0:
         return 0
     n = len(weights)
     dp = [0] * (capacity + 1)
+# 循环遍历处理
     for i in range(n):
+# 循环遍历处理
         for w in range(capacity, weights[i] - 1, -1):
             dp[w] = max(dp[w], dp[w - weights[i]] + values[i])
     return dp[capacity]
 
+# 定义 knapsack_unbounded 函数
 def knapsack_unbounded(weights, values, capacity):
     if not weights or capacity <= 0:
         return 0
     dp = [0] * (capacity + 1)
+# 循环遍历处理
     for w in range(1, capacity + 1):
+# 循环遍历处理
         for i in range(len(weights)):
             if weights[i] <= w:
                 dp[w] = max(dp[w], dp[w - weights[i]] + values[i])
     return dp[capacity]
 
+# 定义 knapsack_fractional 函数
 def knapsack_fractional(items, capacity):
     items = sorted(items, key=lambda x: x[1] / x[0], reverse=True)
     total_value = 0.0
     remaining = capacity
+# 循环遍历处理
     for weight, value in items:
         if remaining >= weight:
             total_value += value

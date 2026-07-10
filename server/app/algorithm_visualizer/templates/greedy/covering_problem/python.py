@@ -1,3 +1,4 @@
+# covering_problem 算法实现 — domain: greedy
 def min_interval_cover(points, interval_len):
     if not points:
         return 0
@@ -10,6 +11,7 @@ def min_interval_cover(points, interval_len):
             cover_end = p + interval_len
     return count
 
+# 定义 set_cover_greedy 函数
 def set_cover_greedy(universe, subsets):
     uncovered = set(universe)
     selected = []
@@ -19,6 +21,7 @@ def set_cover_greedy(universe, subsets):
         uncovered -= best
     return selected
 
+# 定义 disk_covering 函数
 def disk_covering(points, radius):
     if not points:
         return []

@@ -4,6 +4,7 @@
 包含首页仪表盘相关端点（从 dashboard 模块迁移）。
 """
 
+# 提供画像查询/更新接口与首页仪表盘（推荐、雷达、快捷操作）端点
 from __future__ import annotations
 
 from collections import Counter
@@ -53,6 +54,7 @@ router = APIRouter()
 # ── 共享懒加载刷新触发 ───────────────────────────────────────────────
 
 
+# 条件满足时后台触发画像刷新（周兜底 OR 加权新事件达阈值）
 async def maybe_trigger_profile_refresh(
     background_tasks: BackgroundTasks,
     session: AsyncSession,
@@ -61,10 +63,13 @@ async def maybe_trigger_profile_refresh(
 ) -> None:
     """当条件满足时后台触发画像刷新（周兜底 OR 加权新事件达阈值）。"""
     week_start, _ = _utc_week_range()
+    # 本周已超一周未刷新则触发
     need_refresh = profile.updated_at < week_start
     if not need_refresh:
+        # 否则按加权新事件点数判断是否达到阈值
         points = await weighted_new_event_points(session, user_id, profile.updated_at)
         need_refresh = points >= PROFILE_REFRESH_EVENT_THRESHOLD
+    # 满足任一条件则后台启动文字画像刷新
     if need_refresh:
         background_tasks.add_task(
             get_profile_service().infer_profile_from_digest, user_id=user_id
@@ -75,6 +80,7 @@ async def maybe_trigger_profile_refresh(
         )
 
 
+# 获取完整用户画像（懒加载触发后台刷新）
 @router.get("/profile")
 async def get_profile(
     background_tasks: BackgroundTasks,
@@ -95,10 +101,12 @@ async def get_profile(
 
     await maybe_trigger_profile_refresh(background_tasks, session, current_user.id, profile)
 
+    # 组装各维度得分映射
     dimension_scores = {
         key: dim.get("score", 0) for key, dim in dimensions.items()
     }
 
+    # 返回完整画像数据
     return HttpResponse.success(data={
         "user_id": profile.user_id,
         "module": "mentor",
@@ -113,6 +121,7 @@ async def get_profile(
     })
 
 
+# 获取 onboarding 基本信息（直接从 User 表读取）
 @router.get("/profile/onboarding")
 async def get_profile_onboarding(
     current_user: User = Depends(get_current_user),
@@ -126,6 +135,7 @@ async def get_profile_onboarding(
     ).model_dump())
 
 
+# 更新 onboarding 信息（同步存库 + 后台异步推理画像）
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
@@ -164,6 +174,7 @@ async def update_profile_onboarding(
 # ---------------------------------------------------------------------------
 
 
+# 安全提取文本值：空值或非字符串返回默认值
 def _text(value: Any, fallback: str = "") -> str:
     """安全提取文本值，空值时返回默认值。"""
     if value is None:
@@ -173,11 +184,13 @@ def _text(value: Any, fallback: str = "") -> str:
     return str(value)
 
 
+# 将评分数据统一转换为字典（非字典则返回空字典）
 def _score_json(profile_json_or_score: dict[str, Any]) -> dict[str, Any]:
     """将评分数据转换为字典格式，非字典类型返回空字典。"""
     return profile_json_or_score if isinstance(profile_json_or_score, dict) else {}
 
 
+# 取低分维度（<60 分）列表，按分数升序返回前 limit 个
 def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list[str]:
     """获取低分维度列表（得分低于60分）。"""
     scores = _score_json(score_json).get("dimension_scores") or {}
@@ -189,6 +202,7 @@ def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list
     return [DIMENSION_NAMES.get(key, key) for key, _ in items[:limit]]
 
 
+# 将资源/路径等状态值映射为中文标签
 def _status_label(value: str) -> str:
     """将状态值转换为中文标签。"""
     return {
@@ -211,6 +225,7 @@ def _status_label(value: str) -> str:
     }.get(value, value or "待更新")
 
 
+# 从学习事件中提取主题（topic 优先，其次 course）
 def _event_topic(event: LearningEvent | None) -> str:
     """从学习事件中提取主题。"""
     if not event:
@@ -218,6 +233,7 @@ def _event_topic(event: LearningEvent | None) -> str:
     return _text(event.topic) or _text(event.course)
 
 
+# 获取资源标题，缺省返回默认文案
 def _resource_title(resource: GeneratedResource | None) -> str:
     """获取资源标题。"""
     if not resource:
@@ -225,6 +241,7 @@ def _resource_title(resource: GeneratedResource | None) -> str:
     return _text(resource.learning_need, "最近生成的资源")
 
 
+# 选取当前学习路径节点（优先 available，其次 completed_with_gaps）
 def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     """获取当前学习路径节点（优先可用状态，其次已完成有缺陷状态）。"""
     for status in ("available", "completed_with_gaps"):
@@ -234,6 +251,7 @@ def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     return path_nodes[0] if path_nodes else None
 
 
+# 查询用户活跃学习路径（最多 limit 条，按更新时间倒序）
 async def _get_active_paths(session: AsyncSession, user_id: int, limit: int = 5) -> list[LearningPath]:
     """获取用户所有活跃的学习路径列表。"""
     return list((await session.exec(
@@ -244,6 +262,7 @@ async def _get_active_paths(session: AsyncSession, user_id: int, limit: int = 5)
     )).all())
 
 
+# 查询某路径下所有节点（按优先级升序、更新时间倒序，上限 12）
 async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> list[PathNode]:
     """获取学习路径的所有节点（按优先级排序）。"""
     return list((await session.exec(
@@ -254,6 +273,7 @@ async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> 
     )).all())
 
 
+# 查询用户最近的学习事件（按时间倒序）
 async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 50) -> list[LearningEvent]:
     """获取用户最近的学习事件列表。"""
     return list((await session.exec(
@@ -264,6 +284,7 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
     )).all())
 
 
+# 聚合用户评分数据（总体分 + 各维度分 + 评分时间）
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
     """获取用户评分数据。"""
     profile = await get_profile_service().get_profile(user_id=user_id, db=session)
@@ -281,6 +302,7 @@ async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[s
     }
 
 
+# 从学习事件中提取薄弱知识点（按测验低分与困难反馈加权计数）
 def _weak_topics_from_events(events: list[LearningEvent]) -> list[str]:
     """从学习事件中提取薄弱知识点。"""
     counter: Counter[str] = Counter()
@@ -297,6 +319,7 @@ def _weak_topics_from_events(events: list[LearningEvent]) -> list[str]:
     return [topic for topic, _ in counter.most_common(5)]
 
 
+# 获取首页推荐内容（根据用户状态返回个性化下一步建议）
 @router.get("/dashboard/recommendation")
 async def get_recommendation(
     background_tasks: BackgroundTasks,
@@ -333,13 +356,16 @@ async def get_recommendation(
         .where(ChatSession.user_id == current_user.id, ChatMessage.role == "user")
     )).one()
 
+    # 判断是否存在任何使用信号
     has_activity = any((chat_session_count, user_message_count, recent_resources, active_path, recent_events))
+    # 无专业信息且无任何活动则判定为冷启动
     cold_start = not _text(current_user.major) and not has_activity
     weak_topics = _weak_topics_from_events(recent_events)
     node = _current_node(path_nodes)
     latest_event = recent_events[0] if recent_events else None
     latest_resource = recent_resources[0] if recent_resources else None
 
+    # 冷启动：引导先完善画像
     if cold_start and not has_activity:
         recommendation = {
             "label": "推荐下一步",
@@ -349,6 +375,7 @@ async def get_recommendation(
             "path": "/profile",
             "icon": "monitor",
         }
+    # 最近低分测验：引导复盘错因
     elif latest_event and latest_event.event_type == "quiz_submitted" and latest_event.score is not None and latest_event.score < 70:
         topic = _event_topic(latest_event) or (weak_topics[0] if weak_topics else "最近测验")
         recommendation = {
@@ -359,6 +386,7 @@ async def get_recommendation(
             "path": "/tutor",
             "icon": "chat",
         }
+    # 有当前路径节点：建议继续推进
     elif node:
         recommendation = {
             "label": "今日建议",
@@ -368,6 +396,7 @@ async def get_recommendation(
             "path": "/path-planner",
             "icon": "path",
         }
+    # 有薄弱点：建议针对生成资源
     elif weak_topics:
         fallback_text = goal or f"建议继续围绕「{primary_course}」推进" if primary_course else "建议先补充学习目标和课程信息"
         recommendation = {
@@ -378,6 +407,7 @@ async def get_recommendation(
             "path": "/resource-generator",
             "icon": "resource",
         }
+    # 最近资源仍在处理中：提示查看进度
     elif latest_resource and latest_resource.status in {"pending", "generating", "processing"}:
         recommendation = {
             "label": "资源进度",
@@ -387,6 +417,7 @@ async def get_recommendation(
             "path": f"/resource-detail/{latest_resource.id}" if latest_resource.id else "/resource-generator",
             "icon": "resource",
         }
+    # 最近资源已完成：建议回看并练习
     elif latest_resource and latest_resource.id:
         recommendation = {
             "label": "最近资源",
@@ -396,6 +427,7 @@ async def get_recommendation(
             "path": f"/resource-detail/{latest_resource.id}",
             "icon": "resource",
         }
+    # 兜底：建议生成第一条学习路径
     else:
         recommendation = {
             "label": "推荐下一步",
@@ -406,12 +438,14 @@ async def get_recommendation(
             "icon": "path",
         }
 
+    # 返回首页推荐状态与推荐内容
     return HttpResponse.success(data={
         "state": "cold_start" if cold_start else "active",
         "recommendation": recommendation,
     })
 
 
+# 获取用户画像雷达图数据（各维度得分与薄弱区域）
 @router.get("/dashboard/profile-radar")
 async def get_profile_radar(
     background_tasks: BackgroundTasks,
@@ -436,6 +470,7 @@ async def get_profile_radar(
 
     weak_areas = _low_score_dimensions(score_dict)
 
+    # 返回雷达图所需的总体分、维度分与薄弱区域
     return HttpResponse.success(data={
         "score": score_dict.get("overall_score"),
         "dimensions": dimensions,
@@ -448,6 +483,7 @@ async def get_profile_radar(
     })
 
 
+# 获取快捷操作和今日建议（按权重排序）
 @router.get("/dashboard/quick-actions")
 async def get_quick_actions(
     background_tasks: BackgroundTasks,
@@ -520,9 +556,11 @@ async def get_quick_actions(
             "tag": f"{sum(1 for event in recent_events if event.event_type == 'quiz_submitted')} 次测验",
         },
     ]
+    # 按 score 降序排序并剔除 score 字段，生成最终快捷操作列表
     actions = [
         {key: _text(value) for key, value in item.items() if key != "score"}
         for item in sorted(action_defs, key=lambda value: value["score"], reverse=True)
     ]
 
+    # 返回排序后的快捷操作
     return HttpResponse.success(data={"actions": actions})

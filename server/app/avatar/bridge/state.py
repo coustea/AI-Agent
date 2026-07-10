@@ -1,6 +1,7 @@
 """Bridge 服务状态管理 — 定义数字人 WebSocket 通信的消息类型常量。"""
 
 
+# 定义数字人 WebSocket 通信的消息类型常量（客户端与服务端双向）
 class MessageType:
     """WebSocket 消息类型常量。"""
     # ── 客户端 → 服务端 ──

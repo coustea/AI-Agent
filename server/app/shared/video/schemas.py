@@ -57,23 +57,27 @@ VisualCueKind = Literal[
 # 替代原来的 visual: dict[str, Any]，让 function_calling 看到完整 schema。
 # ============================================================================
 
+# 流程步骤子项模型（供 process_flow 等视觉类型复用）
 class _StepItem(BaseModel):
     id: str = Field(min_length=1)
     label: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
 
+# 流程失败点子项模型
 class _FailurePointItem(BaseModel):
     step_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
 
 
+# 状态机状态子项模型
 class _StateItem(BaseModel):
     id: str = Field(min_length=1)
     label: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
 
+# 带别名的转移子项模型（from 字段需 alias 映射）
 class _TransitionItem(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
@@ -82,18 +86,21 @@ class _TransitionItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# 事件序列子项模型
 class _EventSequenceItem(BaseModel):
     time: int
     event: str = Field(min_length=1)
     active_state: str = Field(min_length=1)
 
 
+# 数据结构节点子项模型
 class _DataNode(BaseModel):
     id: str = Field(min_length=1)
     label: str = Field(min_length=1)
     value: str = ""
 
 
+# 数据结构边子项模型
 class _EdgeItem(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
@@ -102,6 +109,7 @@ class _EdgeItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# 数据结构操作子项模型
 class _OperationItem(BaseModel):
     action: str = Field(min_length=1)
     target: str = ""
@@ -113,11 +121,13 @@ class _OperationItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# 指针标签子项模型
 class _PointerLabelItem(BaseModel):
     name: str = Field(min_length=1)
     target: str = Field(min_length=1)
 
 
+# 算法追踪步骤子项模型
 class _TraceStepItem(BaseModel):
     line: int
     description: str = Field(min_length=1)
@@ -125,6 +135,7 @@ class _TraceStepItem(BaseModel):
     highlight_indices: list[int] = Field(default_factory=list)
 
 
+# 内存区域子项模型
 class _MemoryRegionItem(BaseModel):
     name: str = Field(min_length=1)
     start: str = Field(min_length=1)
@@ -132,6 +143,7 @@ class _MemoryRegionItem(BaseModel):
     color_hint: str = ""
 
 
+# 内存操作子项模型
 class _MemoryActionItem(BaseModel):
     step: int
     action: str = Field(min_length=1)
@@ -139,6 +151,7 @@ class _MemoryActionItem(BaseModel):
     detail: str = Field(min_length=1)
 
 
+# CPU 模块子项模型
 class _CpuModuleItem(BaseModel):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -146,6 +159,7 @@ class _CpuModuleItem(BaseModel):
     description: str = Field(min_length=1)
 
 
+# CPU 数据通路子项模型
 class _DataPathItem(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
@@ -155,18 +169,21 @@ class _DataPathItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# CPU 执行步骤子项模型
 class _CpuStepItem(BaseModel):
     phase: str = Field(min_length=1)
     description: str = Field(min_length=1)
     active_modules: list[str] = Field(default_factory=list)
 
 
+# CPU 寄存器子项模型
 class _RegisterItem(BaseModel):
     name: str = Field(min_length=1)
     value: str = Field(min_length=1)
     size: str = Field(min_length=1)
 
 
+# 协议消息子项模型
 class _MessageItem(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
@@ -176,12 +193,14 @@ class _MessageItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# 报文子字段模型
 class _PacketFieldItem(BaseModel):
     name: str = Field(min_length=1)
     value: str = Field(min_length=1)
     size: str = Field(min_length=1)
 
 
+# 状态变化子项模型
 class _StateChangeItem(BaseModel):
     entity: str = Field(min_length=1)
     from_state: str = Field(min_length=1)
@@ -189,6 +208,7 @@ class _StateChangeItem(BaseModel):
     trigger: str = Field(min_length=1)
 
 
+# 架构层级子项模型
 class _LayerItem(BaseModel):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -196,6 +216,7 @@ class _LayerItem(BaseModel):
     protocols: list[str] = Field(default_factory=list)
 
 
+# 代码执行步骤子项模型
 class _ExecStepItem(BaseModel):
     line: int
     description: str = Field(min_length=1)
@@ -203,28 +224,33 @@ class _ExecStepItem(BaseModel):
     output: str = ""
 
 
+# 对比左右两侧数据模型
 class _CompareSide(BaseModel):
     title: str = Field(min_length=1)
     points: list[str] = Field(min_length=1)
 
 
+# 对比差异维度模型
 class _DiffDimensionItem(BaseModel):
     dimension: str = Field(min_length=1)
     left: str = Field(min_length=1)
     right: str = Field(min_length=1)
 
 
+# 检测题选项模型
 class _OptionItem(BaseModel):
     id: str = Field(min_length=1)
     text: str = Field(min_length=1)
 
 
+# 数组/链表节点模型
 class _ArrayNodeItem(BaseModel):
     id: str = Field(min_length=1)
     value: str = Field(min_length=1)
     index: int
 
 
+# 数组/链表操作模型
 class _ArrayOperationItem(BaseModel):
     type: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -232,17 +258,20 @@ class _ArrayOperationItem(BaseModel):
     value: str = ""
 
 
+# 栈/队列元素模型
 class _StackQueueItem(BaseModel):
     value: str = Field(min_length=1)
     status: str = Field(min_length=1)
 
 
+# 栈/队列操作模型
 class _StackQueueOperationItem(BaseModel):
     type: str = Field(min_length=1)
     value: str = ""
     description: str = Field(min_length=1)
 
 
+# 进程状态子项模型
 class _ProcessStateItem(BaseModel):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -250,6 +279,7 @@ class _ProcessStateItem(BaseModel):
     color_hint: str = ""
 
 
+# 进程状态转移模型
 class _ProcessTransitionItem(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
@@ -259,6 +289,7 @@ class _ProcessTransitionItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# 存储层级子项模型
 class _StorageLevelItem(BaseModel):
     name: str = Field(min_length=1)
     speed: str = Field(min_length=1)
@@ -267,6 +298,7 @@ class _StorageLevelItem(BaseModel):
     examples: list[str] = Field(default_factory=list)
 
 
+# 存储传输子项模型
 class _StorageTransferItem(BaseModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
@@ -276,6 +308,7 @@ class _StorageTransferItem(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# 关联概念子项模型
 class _RelatedConceptItem(BaseModel):
     name: str = Field(min_length=1)
     relation: str = Field(min_length=1)
@@ -283,6 +316,7 @@ class _RelatedConceptItem(BaseModel):
 
 # ── 17 个 visual data model ──
 
+# 视觉数据模型：标题引入页
 class TitleIntroVisual(BaseModel):
     course: str = Field(min_length=1)
     chapter: str = Field(min_length=1)
@@ -292,6 +326,7 @@ class TitleIntroVisual(BaseModel):
     hero_center: str = ""
 
 
+# 视觉数据模型：概念讲解
 class ConceptExplainVisual(BaseModel):
     main_concept: str = Field(min_length=1)
     definition: str = Field(min_length=1)
@@ -301,6 +336,7 @@ class ConceptExplainVisual(BaseModel):
     common_misconception: str = ""
 
 
+# 视觉数据模型：流程图
 class ProcessFlowVisual(BaseModel):
     process_name: str = Field(min_length=1)
     inputs: list[str] = Field(default_factory=list)
@@ -309,6 +345,7 @@ class ProcessFlowVisual(BaseModel):
     failure_points: list[_FailurePointItem] = Field(default_factory=list)
 
 
+# 视觉数据模型：状态机
 class StateMachineVisual(BaseModel):
     machine_name: str = Field(min_length=1)
     initial_state: str = Field(min_length=1)
@@ -318,6 +355,7 @@ class StateMachineVisual(BaseModel):
     explanation_map: dict[str, str] = Field(default_factory=dict)
 
 
+# 视觉数据模型：数据结构
 class DataStructureVisual(BaseModel):
     structure_type: str = Field(min_length=1)
     initial_state: dict[str, Any] = Field(min_length=1)
@@ -327,6 +365,7 @@ class DataStructureVisual(BaseModel):
     invariant: str = ""
 
 
+# 视觉数据模型：算法追踪
 class AlgorithmTraceVisual(BaseModel):
     algorithm_name: str = Field(min_length=1)
     problem: str = Field(min_length=1)
@@ -337,6 +376,7 @@ class AlgorithmTraceVisual(BaseModel):
     result: str = ""
 
 
+# 视觉数据模型：内存布局
 class MemoryLayoutVisual(BaseModel):
     layout_type: str = Field(min_length=1)
     code: str = Field(min_length=1)
@@ -345,6 +385,7 @@ class MemoryLayoutVisual(BaseModel):
     explanation: str = Field(min_length=1)
 
 
+# 视觉数据模型：CPU 架构
 class CpuArchitectureVisual(BaseModel):
     architecture_name: str = Field(min_length=1)
     current_instruction: str = Field(min_length=1)
@@ -355,6 +396,7 @@ class CpuArchitectureVisual(BaseModel):
     explanation: str = Field(min_length=1)
 
 
+# 视觉数据模型：网络协议
 class NetworkProtocolVisual(BaseModel):
     protocol_name: str = Field(min_length=1)
     messages: list[_MessageItem] = Field(min_length=1)
@@ -363,6 +405,7 @@ class NetworkProtocolVisual(BaseModel):
     key_point: str = Field(min_length=1)
 
 
+# 视觉数据模型：分层架构
 class LayeredArchitectureVisual(BaseModel):
     architecture_name: str = Field(min_length=1)
     layers: list[_LayerItem] = Field(min_length=1)
@@ -370,6 +413,7 @@ class LayeredArchitectureVisual(BaseModel):
     examples: list[str] = Field(default_factory=list)
 
 
+# 视觉数据模型：代码执行
 class CodeExecutionVisual(BaseModel):
     language: str = Field(min_length=1)
     code: str = Field(min_length=1)
@@ -378,6 +422,7 @@ class CodeExecutionVisual(BaseModel):
     error_or_misconception: str = ""
 
 
+# 视觉数据模型：对比总结
 class CompareSummaryVisual(BaseModel):
     compare_title: str = Field(min_length=1)
     left: _CompareSide
@@ -388,6 +433,7 @@ class CompareSummaryVisual(BaseModel):
     exam_hint: str = ""
 
 
+# 视觉数据模型：知识检测
 class KnowledgeCheckVisual(BaseModel):
     question: str = Field(min_length=1)
     options: list[_OptionItem] = Field(min_length=1)
@@ -397,6 +443,7 @@ class KnowledgeCheckVisual(BaseModel):
     review_points: list[str] = Field(default_factory=list)
 
 
+# 视觉数据模型：数组与链表
 class ArrayLinkedListVisual(BaseModel):
     structure_type: str = Field(min_length=1)
     nodes: list[_ArrayNodeItem] = Field(min_length=1)
@@ -405,17 +452,20 @@ class ArrayLinkedListVisual(BaseModel):
     space_complexity: str = ""
 
 
+# 视觉数据模型：栈与队列
 class StackQueueVisual(BaseModel):
     structure_type: str = Field(min_length=1)
     items: list[_StackQueueItem] = Field(min_length=1)
     operations: list[_StackQueueOperationItem] = Field(default_factory=list)
 
 
+# 视觉数据模型：进程状态
 class ProcessStateVisual(BaseModel):
     states: list[_ProcessStateItem] = Field(min_length=1)
     transitions: list[_ProcessTransitionItem] = Field(min_length=1)
 
 
+# 视觉数据模型：存储层次
 class StorageHierarchyVisual(BaseModel):
     levels: list[_StorageLevelItem] = Field(min_length=1)
     transfers: list[_StorageTransferItem] = Field(default_factory=list)
@@ -445,6 +495,7 @@ _VISUAL_TYPE_MODELS: dict[str, type[BaseModel]] = {
 }
 
 
+# 根据 visual_type 动态生成带强类型 visual 的 SceneDraft 子类
 def scene_draft_for(visual_type: VisualType) -> type[BaseModel]:
     """根据 visual_type 返回对应的 SceneDraft 子类。
 
@@ -453,12 +504,14 @@ def scene_draft_for(visual_type: VisualType) -> type[BaseModel]:
     """
     from pydantic import create_model
 
+    # 未知 visual_type 时回退到默认 SceneDraft
     visual_model = _VISUAL_TYPE_MODELS.get(visual_type)
     if visual_model is None:
         return SceneDraft
 
     # 用 create_model 动态创建带强类型 visual 的 SceneDraft 子类
     # 继承 SceneDraft 的所有字段，但将 visual 从 dict[str, Any] 替换为具体类型
+    # 动态创建 SceneDraft 子类，将 visual 替换为具体视觉模型
     return create_model(
         f"SceneDraft_{visual_type}",
         __base__=SceneDraft,
@@ -466,6 +519,7 @@ def scene_draft_for(visual_type: VisualType) -> type[BaseModel]:
     )
 
 
+# 视频来源素材模型
 class SourceMaterial(BaseModel):
     source_id: str = Field(min_length=1)
     source_type: str = Field(min_length=1)
@@ -474,6 +528,7 @@ class SourceMaterial(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+# 视频生成请求模型：描述主题、受众、风格与输出配置
 class VideoRequest(BaseModel):
     topic: str = Field(min_length=1)
     audience: str = ""
@@ -491,11 +546,13 @@ class VideoRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+# 视觉风格决策模型（含选择理由）
 class VideoStyleDecision(BaseModel):
     id: VideoStyleId
     rationale: str = Field(min_length=1)
 
 
+# 教学素材摘要模型：聚合核心概念、事实、示例等
 class VideoMaterialDigest(BaseModel):
     topic: str = Field(min_length=1)
     audience: str = ""
@@ -510,6 +567,7 @@ class VideoMaterialDigest(BaseModel):
     source_map: dict[str, list[str]] = Field(default_factory=dict)
 
 
+# 场景契约模型：导演规划出的单个场景规格
 class SceneContract(BaseModel):
     scene_id: str = Field(min_length=1)
     index: int = Field(ge=1)
@@ -521,6 +579,7 @@ class SceneContract(BaseModel):
     source_ids: list[str] = Field(min_length=1)
 
 
+# 视频大纲模型：场景序列与叙事
 class VideoOutline(BaseModel):
     title: str = Field(min_length=1)
     topic: str = Field(min_length=1)
@@ -528,18 +587,23 @@ class VideoOutline(BaseModel):
     style: VideoStyleDecision
     scenes: list[SceneContract] = Field(min_length=1)
 
+    # 校验器：场景索引须连续，且以 hook 开头、recap 结尾
     @model_validator(mode="after")
     def validate_scenes(self) -> "VideoOutline":
         indexes = [scene.index for scene in self.scenes]
+        # 索引必须连续递增
         if indexes != list(range(1, len(self.scenes) + 1)):
             raise ValueError("outline scene indexes must be contiguous")
+        # 首场景必须为 hook
         if self.scenes[0].role != "hook":
             raise ValueError("outline must begin with a hook")
+        # 尾场景必须为 recap
         if self.scenes[-1].role != "recap":
             raise ValueError("outline must end with a recap")
         return self
 
 
+# 视觉节拍草稿模型（编写阶段产出）
 class VisualBeatDraft(BaseModel):
     id: str = Field(min_length=1)
     kind: VisualCueKind
@@ -548,6 +612,7 @@ class VisualBeatDraft(BaseModel):
     summary: str = ""
 
 
+# 场景草稿模型：旁白 + 视觉数据 + 视觉节拍
 class SceneDraft(BaseModel):
     scene_id: str = Field(min_length=1)
     index: int = Field(ge=1)
@@ -558,6 +623,7 @@ class SceneDraft(BaseModel):
     visual_beats: list[VisualBeatDraft] = Field(default_factory=list)
 
 
+# 渲染设置模型：分辨率、帧率、编码格式
 class RenderSettings(BaseModel):
     width: int = Field(gt=0)
     height: int = Field(gt=0)
@@ -567,11 +633,13 @@ class RenderSettings(BaseModel):
     format: Literal["mp4"] = "mp4"
 
 
+# 逐词字幕模型：文本与起止时间戳
 class CaptionWord(BaseModel):
     text: str = Field(min_length=1)
     start_ms: int = Field(ge=0)
     end_ms: int = Field(gt=0)
 
+    # 校验字幕词时间戳合法性
     @model_validator(mode="after")
     def validate_timing(self) -> "CaptionWord":
         if self.end_ms <= self.start_ms:
@@ -579,17 +647,20 @@ class CaptionWord(BaseModel):
         return self
 
 
+# 音频合成结果模型：路径、时长与逐词时间戳
 class AudioSynthesis(BaseModel):
     path: Path
     duration_ms: int = Field(gt=0)
     words: list[CaptionWord] = Field(default_factory=list)
 
 
+# 字幕片段模型（短语级）
 class CaptionChunk(BaseModel):
     text: str = Field(min_length=1)
     start_ms: int = Field(ge=0)
     end_ms: int = Field(gt=0)
 
+    # 校验字幕片段时间戳合法性
     @model_validator(mode="after")
     def validate_timing(self) -> "CaptionChunk":
         if self.end_ms <= self.start_ms:
@@ -597,6 +668,7 @@ class CaptionChunk(BaseModel):
         return self
 
 
+# 视觉线索模型：带时间段的视觉强调
 class VisualCue(BaseModel):
     id: str = Field(min_length=1)
     kind: VisualCueKind
@@ -606,6 +678,7 @@ class VisualCue(BaseModel):
     end_ms: int = Field(gt=0)
     caption_text: str | None = None
 
+    # 校验视觉线索时间戳合法性
     @model_validator(mode="after")
     def validate_timing(self) -> "VisualCue":
         if self.end_ms <= self.start_ms:
@@ -613,6 +686,7 @@ class VisualCue(BaseModel):
         return self
 
 
+# 视频场景模型：组装旁白、音频、字幕与视觉线索
 class VideoScene(BaseModel):
     scene_id: str = Field(min_length=1)
     index: int = Field(ge=1)
@@ -630,19 +704,25 @@ class VideoScene(BaseModel):
     captions: list[CaptionChunk] = Field(default_factory=list)
     visual_cues: list[VisualCue] = Field(default_factory=list)
 
+    # 校验器：音频与各类时间轴均不得超出实测音频时长
     @model_validator(mode="after")
     def validate_timeline(self) -> "VideoScene":
+        # 音频时长不得超出场景总时长
         if self.audio_duration_ms > self.duration_ms:
             raise ValueError("audio duration exceeds scene duration")
+        # 逐词字幕时间不得超过音频
         if any(word.end_ms > self.audio_duration_ms for word in self.caption_words):
             raise ValueError("caption word timing exceeds measured audio")
+        # 字幕片段时间不得超过音频
         if any(chunk.end_ms > self.audio_duration_ms for chunk in self.captions):
             raise ValueError("caption timing exceeds measured audio")
+        # 视觉线索时间不得超过音频
         if any(cue.end_ms > self.audio_duration_ms for cue in self.visual_cues):
             raise ValueError("visual cue timing exceeds measured audio")
         return self
 
 
+# 视频计划模型：完整渲染输入（场景序列 + 渲染设置）
 class VideoPlan(BaseModel):
     schema_version: Literal["video/v2"] = "video/v2"
     title: str = Field(min_length=1)
@@ -654,22 +734,27 @@ class VideoPlan(BaseModel):
     scenes: list[VideoScene] = Field(min_length=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    # 校验器：场景索引与起始时间必须连续衔接
     @model_validator(mode="after")
     def validate_scene_sequence(self) -> "VideoPlan":
         expected_start = 0
         for expected_index, scene in enumerate(self.scenes, start=1):
+            # 索引必须连续
             if scene.index != expected_index:
                 raise ValueError("scene indexes must be contiguous")
+            # 起始时间必须紧接上一场景
             if scene.start_ms != expected_start:
                 raise ValueError("scene starts must be contiguous")
             expected_start += scene.duration_ms
         return self
 
+    # 计算整段视频总时长
     @property
     def duration_ms(self) -> int:
         return sum(scene.duration_ms for scene in self.scenes)
 
 
+# 视频产物模型：最终 MP4 及其元信息
 class VideoArtifact(BaseModel):
     plan: VideoPlan
     mp4_path: Path

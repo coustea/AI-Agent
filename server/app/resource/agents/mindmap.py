@@ -41,6 +41,7 @@ class MindmapAgent(BaseResourceAgent):
             title_prefix=input_data.node_title,
             config=input_data.agent_config,
         )
+        # 记录路径节点归属
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
         return result
@@ -71,6 +72,7 @@ class MindmapAgent(BaseResourceAgent):
             "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
             self.agent_id, search_query, len(search_report.sources), search_elapsed,
         )
+        # 将搜索到的参考大纲前置拼入提示词
         if search_text:
             input_text = f"## 搜索到的相关知识大纲参考\n{search_text}\n\n" + input_text
 
@@ -98,12 +100,14 @@ class MindmapAgent(BaseResourceAgent):
 
         branches: list[str] = []
         weak_points: list[str] = []
+        # 解析导图中的二级分支与薄弱点关键词
         for line in content.splitlines():
             stripped = line.strip()
             if stripped.startswith("## "):
                 branches.append(stripped.lstrip("#").strip())
             elif stripped.startswith("- "):
                 item = stripped[2:].strip()
+                # 命中易错/难点等标记则归入薄弱点
                 if any(token in item for token in ("易错", "误区", "难点", "薄弱")):
                     weak_points.append(item)
 

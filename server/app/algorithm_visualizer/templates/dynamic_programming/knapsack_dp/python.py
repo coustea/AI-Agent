@@ -1,3 +1,4 @@
+# knapsack_dp 算法实现 — domain: dynamic_programming
 def knapsack(weights, values, capacity):
     if not weights or capacity <= 0:
         return 0, [], []
@@ -20,6 +21,7 @@ def knapsack(weights, values, capacity):
     selected.reverse()
     return dp[n][capacity], dp, selected
 
+# 定义 knapsack_optimized 函数
 def knapsack_optimized(weights, values, capacity):
     if not weights or capacity <= 0:
         return 0
@@ -30,6 +32,7 @@ def knapsack_optimized(weights, values, capacity):
             dp[w] = max(dp[w], dp[w - weights[i]] + values[i])
     return dp[capacity]
 
+# 定义 knapsack_unbounded 函数
 def knapsack_unbounded(weights, values, capacity):
     if not weights or capacity <= 0:
         return 0
@@ -40,6 +43,7 @@ def knapsack_unbounded(weights, values, capacity):
                 dp[w] = max(dp[w], dp[w - weights[i]] + values[i])
     return dp[capacity]
 
+# 定义 knapsack_fractional 函数
 def knapsack_fractional(items, capacity):
     items = sorted(items, key=lambda x: x[1] / x[0], reverse=True)
     total_value = 0.0

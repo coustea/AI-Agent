@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器根容器
 import type { SelectRootEmits, SelectRootProps } from "reka-ui"
 import { SelectRoot, useForwardPropsEmits } from "reka-ui"
 

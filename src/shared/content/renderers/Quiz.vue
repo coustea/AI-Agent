@@ -136,6 +136,8 @@
 </template>
 
 <script setup lang="ts">
+// 测验渲染器：展示选择题/判断题，支持用户交互、提交答案和查看解析
+
 import { computed, ref } from 'vue'
 import {
   PhCheck as CheckIcon,
@@ -150,33 +152,40 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
+// 标准化题目列表，紧凑模式只显示前 2 题
 const questions = computed<Record<string, any>[]>(() => normalizeQuizQuestions(props.resultData))
 const visibleQuestions = computed(() => (props.compact ? questions.value.slice(0, 2) : questions.value))
 
+// 用户答案与提交状态的响应式存储
 const userAnswers = ref<Record<number, any>>({})
 const showAnswers = ref<Record<number, boolean>>({})
 
+// 判断是否为选择题类型
 const isChoiceType = (q: any) => {
   const type = (q.type || q.question_type)?.toLowerCase() || ''
   return ['choice', 'single_choice', 'true_false'].includes(type)
 }
 
+// 切换选项选择状态
 const toggleOption = (qIndex: number, option: any, _question: any) => {
   const val = option.label || (typeof option === 'string' ? option : option.content)
   userAnswers.value[qIndex] = val
 }
 
+// 检查选项是否被选中
 const isSelected = (qIndex: number, option: any, _question: any) => {
   const val = option.label || (typeof option === 'string' ? option : option.content)
   return userAnswers.value[qIndex] === val
 }
 
+// 检查用户是否已对该题作答
 const hasSelected = (qIndex: number) => {
   const ans = userAnswers.value[qIndex]
   if (Array.isArray(ans)) return ans.length > 0
   return ans !== undefined && ans !== null && ans !== ''
 }
 
+// 判断选项是否为正确答案（支持判断题布尔答案和数组答案）
 const isCorrectOption = (option: any, question: any) => {
   if (question.answer === undefined || question.answer === null) return false
   const val = option.label || (typeof option === 'string' ? option : option.content)
@@ -190,6 +199,7 @@ const isCorrectOption = (option: any, question: any) => {
   return String(question.answer).toLowerCase() === String(val).toLowerCase()
 }
 
+// 难度等级的本地化显示
 const getDifficultyText = (difficulty?: string) => {
   switch (difficulty?.toLowerCase()) {
     case 'easy':
@@ -207,6 +217,7 @@ const getDifficultyText = (difficulty?: string) => {
   }
 }
 
+// 题型的中文显示
 const getQuestionTypeText = (questionType?: string) => {
   switch (questionType?.toLowerCase()) {
     case 'single_choice':

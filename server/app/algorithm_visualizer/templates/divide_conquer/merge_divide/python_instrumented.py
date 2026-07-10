@@ -2,6 +2,7 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 merge_sort 函数
 def merge_sort(arr):
     if len(arr) <= 1:
         return arr
@@ -10,10 +11,12 @@ def merge_sort(arr):
     right = merge_sort(arr[mid:])
     return merge(left, right)
 
+# 定义 merge 函数
 def merge(left, right):
     result = []
     i = j = 0
     tracer.init_array(left + [0] * len(right), line=14)
+# 循环条件判断
     while i < len(left) and j < len(right):
         tracer.compare(i, len(left) + j - 1 if j > 0 else i, line=16)
         if left[i] <= right[j]:
@@ -27,6 +30,7 @@ def merge(left, right):
     tracer.finish(line=24)
     return result
 
+# 定义 count_inversions 函数
 def count_inversions(arr):
     if len(arr) <= 1:
         return arr, 0
@@ -36,9 +40,11 @@ def count_inversions(arr):
     merged, inv_m = merge_count(left, right)
     return merged, inv_l + inv_r + inv_m
 
+# 定义 merge_count 函数
 def merge_count(left, right):
     result = []
     i = j = inv = 0
+# 循环条件判断
     while i < len(left) and j < len(right):
         if left[i] <= right[j]:
             result.append(left[i])
@@ -51,13 +57,16 @@ def merge_count(left, right):
     result.extend(right[j:])
     return result, inv
 
+# 定义 merge_k_sorted 函数
 def merge_k_sorted(arrays):
     import heapq
     heap = []
+# 循环遍历处理
     for arr_idx, arr in enumerate(arrays):
         if arr:
             heapq.heappush(heap, (arr[0], arr_idx, 0))
     result = []
+# 循环条件判断
     while heap:
         val, arr_idx, elem_idx = heapq.heappop(heap)
         result.append(val)

@@ -15,6 +15,7 @@ from app.infra.tool_excute import ToolExcute
 logger = get_logger(__name__)
 
 
+# 单次工具执行的上下文信息（用户/会话/消息标识及记忆服务）
 @dataclass(slots=True)
 class ToolExecutionContext:
     user_id: int
@@ -23,6 +24,7 @@ class ToolExecutionContext:
     memory_service: Any | None = None
 
 
+# 单次工具执行的结果（调用记录、证据、来源、错误）
 @dataclass(slots=True)
 class ToolExecutionResult:
     invocation: dict[str, Any] | None = None
@@ -31,9 +33,11 @@ class ToolExecutionResult:
     errors: list[str] = field(default_factory=list)
 
 
+# 辅导工具执行器：负责真正调用工具、持久化消息、构造证据与来源
 class TutorToolRunner:
     """辅导工具执行器。"""
 
+    # 执行单个工具调用，归一化结果并收集调用记录/证据/来源/错误
     async def execute(
         self,
         *,
@@ -43,12 +47,14 @@ class TutorToolRunner:
         context: ToolExecutionContext | None = None,
         tool_excute: ToolExcute | None = None,
     ) -> ToolExecutionResult:
+        # 复制入参并归一化：长期记忆工具需将类别名映射为规范分类
         normalized_payload = dict(arguments)
         if tool_name == "get_long_term_memory":
             category = str(normalized_payload.get("category") or "").strip()
             if category:
                 normalized_payload["category"] = LONG_TERM_MEMORY_CATEGORY_ALIASES.get(category, category)
 
+        # 无 tool_call_id 时生成唯一标识
         tool_call_id = tool_call_id or f"call-{uuid4().hex}"
         result_text = ""
         node_evidence: list[dict[str, Any]] = []
@@ -63,6 +69,7 @@ class TutorToolRunner:
         tool_status = "success"
         raw_result: Any = None
 
+        # 执行前先持久化 assistant 的工具调用占位消息
         if memory_service:
             try:
                 assistant_message = await memory_service.save_message(
@@ -77,10 +84,12 @@ class TutorToolRunner:
             except Exception as exc:
                 logger.warning("[TutorToolRunner] 保存工具请求失败: %s", exc)
 
+        # 真正执行工具并获取原始结果
         try:
             raw_result = await tool_excute.execute(
                 {"id": tool_call_id, "name": tool_name, "args": normalized_payload}
             )
+            # 归一化工具结果文本，并根据 RAG 状态字段判定工具状态
             normalized = normalize_tool_result(raw_result)
             result_text = normalized.text
             # RAG 工具返回 status 字段：ok/empty/unavailable
@@ -92,6 +101,7 @@ class TutorToolRunner:
             else:
                 tool_status = "success" if result_text else "ignored"
 
+            # 仅在有效结果下构建证据条目
             evidence_type = TOOL_EVIDENCE_TYPES.get(tool_name)
             # empty 和 unavailable 不建立 Evidence 和收集 sources
             if evidence_type and result_text and tool_status_value != "empty" and tool_status_value != "unavailable":
@@ -103,15 +113,18 @@ class TutorToolRunner:
                 ).model_dump()
                 node_evidence.append(evidence_entry)
 
+            # 收集结果的引用来源
             if evidence_type and result_text and tool_status_value != "empty" and tool_status_value != "unavailable":
                 node_sources.extend(source.model_dump() for source in normalized.sources)
 
+        # 工具执行异常则标记失败并记录错误信息
         except Exception as exc:
             logger.warning("[TutorToolRunner] 工具 %s 失败: %s", tool_name, exc)
             tool_status = "failed"
             node_errors.append(f"{tool_name}: {exc}")
             result_text = f"调用失败: {exc}"
 
+        # 持久化 tool 角色的结果消息
         if memory_service:
             try:
                 tool_message = await memory_service.save_message(
@@ -126,6 +139,7 @@ class TutorToolRunner:
             except Exception as exc:
                 logger.warning("[TutorToolRunner] 保存工具结果失败: %s", exc)
 
+        # 组装工具调用记录
         invocation: dict[str, Any] | None = {
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
@@ -138,6 +152,7 @@ class TutorToolRunner:
             "tool_message_id": tool_message_id,
         }
 
+        # 返回执行结果（调用记录/证据/来源/错误）
         return ToolExecutionResult(
             invocation=invocation,
             evidence=node_evidence,

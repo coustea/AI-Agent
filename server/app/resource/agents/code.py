@@ -36,7 +36,7 @@ class CodeAgent(BaseResourceAgent):
         )
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        # Path node context: merge difficulty → output_style mapping
+        # 路径节点：将难度映射为代码输出风格
         node_difficulty = input_data.difficulty or "beginner"
         output_style_map = {"beginner": "tutorial", "intermediate": "reference", "advanced": "challenge"}
         config = {
@@ -72,6 +72,7 @@ class CodeAgent(BaseResourceAgent):
         started = time.perf_counter()
 
         input_text += "\n\n请生成教学代码示例，包含代码注释和说明，输出为 Markdown 格式（代码块内为代码）。"
+        # 按输出风格注入不同生成指引
         if output_style == "tutorial":
             input_text += "\n请提供完整可运行的代码，包含逐步注释和运行说明。"
         elif output_style == "reference":
@@ -92,6 +93,7 @@ class CodeAgent(BaseResourceAgent):
             "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
             self.agent_id, search_query, len(search_report.sources), search_elapsed,
         )
+        # 将搜索参考前置拼入提示词
         if search_text:
             input_text = f"## 搜索到的参考代码示例背景\n{search_text}\n\n" + input_text
 

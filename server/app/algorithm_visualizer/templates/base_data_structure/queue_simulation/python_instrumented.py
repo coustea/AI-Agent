@@ -2,7 +2,9 @@ from visual_tracer import QueueTracer
 
 tracer = QueueTracer()
 
+# CircularQueue 类定义
 class CircularQueue:
+# 定义 __init__ 函数
     def __init__(self, capacity):
         self.capacity = capacity
         self.queue = [None] * capacity
@@ -10,6 +12,7 @@ class CircularQueue:
         self.rear = -1
         self.size = 0
 
+# 定义 enqueue 函数
     def enqueue(self, value):
         if self.size == self.capacity:
             return False
@@ -18,6 +21,7 @@ class CircularQueue:
         self.size += 1
         return True
 
+# 定义 dequeue 函数
     def dequeue(self):
         if self.size == 0:
             return None
@@ -26,17 +30,21 @@ class CircularQueue:
         self.size -= 1
         return value
 
+# 定义 peek 函数
     def peek(self):
         if self.size == 0:
             return None
         return self.queue[self.front]
 
+# 定义 is_empty 函数
     def is_empty(self):
         return self.size == 0
 
+# 定义 is_full 函数
     def is_full(self):
         return self.size == self.capacity
 
+# 定义 simulate_bank_queue 函数
 def simulate_bank_queue(customers, num_counters):
     from collections import deque
     tracer.init_queue(line=35)
@@ -45,11 +53,14 @@ def simulate_bank_queue(customers, num_counters):
     queue = deque()
     time = 0
     ci = 0
+# 循环条件判断
     while ci < len(customers) or queue:
+# 循环条件判断
         while ci < len(customers) and customers[ci][0] <= time:
             queue.append(customers[ci])
             tracer.enqueue(f"P{ci}", line=43)
             ci += 1
+# 循环遍历处理
         for i in range(num_counters):
             if counters[i] <= time and queue:
                 arrival, duration = queue.popleft()
@@ -63,6 +74,7 @@ def simulate_bank_queue(customers, num_counters):
     return avg_wait, wait_times
 
 cq = CircularQueue(5)
+# 循环遍历处理
 for v in [10, 20, 30, 40, 50]:
     cq.enqueue(v)
 assert cq.is_full()

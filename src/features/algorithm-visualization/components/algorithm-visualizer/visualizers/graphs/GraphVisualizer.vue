@@ -1,18 +1,12 @@
 <template>
   <div class="graph-visualizer">
-    <div class="visualizer-meta">
-      <div class="flex flex-col">
-        <h3>图结构可视化</h3>
-        <p>展示图论算法的遍历搜索路径，包含节点与边状态的高亮变化。</p>
-      </div>
+    <div class="chart-shell">
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>未访问</span>
         <span class="legend-item"><i class="legend-dot visited"></i>已访问</span>
       </div>
-    </div>
-    <div class="chart-shell">
+
       <div v-if="layoutNodes.length" class="graph-container">
-        <!-- SVG Connecting Edges -->
         <svg class="graph-links-svg">
           <line
             v-for="(edge, idx) in graphEdges"
@@ -25,7 +19,6 @@
           />
         </svg>
 
-        <!-- Graph Nodes -->
         <div
           v-for="node in layoutNodes"
           :key="node.id"
@@ -50,13 +43,13 @@ const props = defineProps<{
   events: TraceEvent[]
 }>()
 
-// Parse nodes from step trace
+// 从 trace step 解析图节点
 const rawNodes = computed(() => {
   const raw = props.currentEvent?.state?.structure?.nodes
   return Array.isArray(raw) ? raw : []
 })
 
-// Adjacency connections definition (fallback for general graph traversals)
+// 构建图的边列表（优先使用节点声明的 edges，否则用默认拓扑）
 const edgesList = computed(() => {
   const nodes = rawNodes.value
   if (nodes.length <= 1) return []
@@ -79,7 +72,7 @@ const edgesList = computed(() => {
     return connections
   }
 
-  // If node count is 6 (standard search graph size), define the default cyclic test graph edges:
+  // 6 节点默认图：标准搜索测试图的环形+交叉边
   if (nodes.length === 6) {
     const defaultEdges = [
       { u: '0', v: '1' },
@@ -95,7 +88,7 @@ const edgesList = computed(() => {
     })
   }
 
-  // Generic fallback: Connect adjacent numerical indices to form a ring, and cross-links
+  // 通用降级：按索引构建环形+交叉边
   for (let i = 0; i < nodes.length; i++) {
     const next = (i + 1) % nodes.length
     connections.push({ u: String(nodes[i].id), v: String(nodes[next].id) })
@@ -106,7 +99,7 @@ const edgesList = computed(() => {
   return connections
 })
 
-// Circular layout mapping to prevent layout overlap
+// 使用圆形布局计算节点坐标（防止重叠）
 const layoutNodes = computed(() => {
   const nodes = rawNodes.value
   if (nodes.length === 0) return []
@@ -115,10 +108,11 @@ const layoutNodes = computed(() => {
   const canvasHeight = 240
   const centerX = canvasWidth / 2
   const centerY = canvasHeight / 2
-  const radius = 84 // Circle radius for graph layout
+  // 圆形布局半径
+  const radius = 84
 
   return nodes.map((n, idx) => {
-    // If backend already specified custom coordinates (not 0), respect them
+    // 如果后端已提供自定义坐标，优先使用
     if (n.x && n.y) {
       return {
         ...n,
@@ -127,7 +121,7 @@ const layoutNodes = computed(() => {
       }
     }
 
-    // Circular layout math
+    // 圆形分布角度计算
     const angle = (idx * 2 * Math.PI) / nodes.length - Math.PI / 2
     const px = centerX + radius * Math.cos(angle)
     const py = centerY + radius * Math.sin(angle)
@@ -140,7 +134,7 @@ const layoutNodes = computed(() => {
   })
 })
 
-// Edges position calculator
+// 计算图边的起点/终点 SVG 坐标
 const graphEdges = computed(() => {
   const nodes = layoutNodes.value
   const edges = edgesList.value
@@ -151,7 +145,7 @@ const graphEdges = computed(() => {
     const uPos = posMap.get(e.u) || { px: 0, py: 0, tone: 'default' }
     const vPos = posMap.get(e.v) || { px: 0, py: 0, tone: 'default' }
     
-    // Highlight the edge if both adjacent nodes are visited (representing traversal route)
+    // 两端节点都已访问时高亮该边（表示遍历路径）
     const isVisitedPath = uPos.tone === 'visited' && vPos.tone === 'visited'
 
     return {
@@ -169,38 +163,23 @@ const graphEdges = computed(() => {
 .graph-visualizer {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.visualizer-meta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.visualizer-meta h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.visualizer-meta p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #64748b;
+  padding: 12px;
+  background: transparent;
 }
 
 .legend {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
   display: flex;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .legend-item {
@@ -228,13 +207,14 @@ const graphEdges = computed(() => {
 }
 
 .chart-shell {
+  position: relative;
+  flex: 1;
   min-height: 0;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   padding: 12px;
   overflow: hidden;
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;

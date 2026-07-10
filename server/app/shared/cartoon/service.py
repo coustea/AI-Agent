@@ -1,11 +1,4 @@
-"""Application service for CartoonAgent video generation.
-
-service 负责：
-1. 创建输出目录；
-2. 调用 CartoonAgent；
-3. 调用 HyperFrames lint/render；
-4. 暴露产物路径。
-"""
+"""Application service for theory animation video generation."""
 
 from __future__ import annotations
 
@@ -17,11 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.infra.logging import get_logger
-from app.shared.cartoon.cartoon_agent import (
-    CartoonAgent,
-    CartoonGenerationError,
-    CartoonGenerationResult,
-)
+from app.shared.cartoon.cartoon import CartoonVideoAgent, CartoonGenerationError
 from app.shared.cartoon.renderer import CartoonVideoRenderer
 
 logger = get_logger(__name__)
@@ -45,13 +34,11 @@ class CartoonVideoService:
         self,
         *,
         base_output_dir: Path | None = None,
-        agent: CartoonAgent | None = None,
+        agent: CartoonVideoAgent | None = None,
         renderer: CartoonVideoRenderer | None = None,
     ) -> None:
-        self.base_output_dir = base_output_dir or Path(
-            os.getenv("CARTOON_OUTPUT_DIR", "storage/cartoon")
-        )
-        self.agent = agent or CartoonAgent()
+        self.base_output_dir = base_output_dir or Path(os.getenv("CARTOON_VIDEO_OUTPUT_DIR", "storage/cartoon_video"))
+        self.agent = agent or CartoonVideoAgent()
         self.renderer = renderer or CartoonVideoRenderer()
 
     async def generate(
@@ -59,87 +46,108 @@ class CartoonVideoService:
         *,
         task_id: str,
         learning_need: str,
-        profile: dict[str, Any] | str | None = None,
+        profile: dict[str, Any] | None = None,
         duration: int | None = None,
+        render_mp4: bool = True,
     ) -> CartoonVideoResult:
-        output_dir = self.resolve_output_dir(task_id)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        final_dir = self.resolve_output_dir(task_id)
+        temp_dir = self.base_output_dir / f".{self._safe_task_id(task_id)}.tmp"
 
-        logger.info("Cartoon 生成开始: task_id=%s", task_id)
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        final_dir.parent.mkdir(parents=True, exist_ok=True)
 
-        # Step 1: Generate via CartoonAgent
-        result = await self.agent.generate(
-            learning_need=learning_need,
-            output_dir=output_dir,
-            profile=profile,
-        )
+        logger.info("Theory video 生成开始: task_id=%s render_mp4=%s", task_id, render_mp4)
 
-        # Step 2: Run HyperFrames lint
-        lint_result = await self.renderer.lint(output_dir)
-        if not lint_result.passed:
-            logger.warning(
-                "HyperFrames lint 失败: %s",
-                "; ".join(lint_result.problems[:5]),
-            )
-            audit_data = {
-                "passed": False,
-                "problems": lint_result.problems,
-                "stage": "hyperframes_lint",
-            }
-            (output_dir / "audit.json").write_text(
-                json.dumps(audit_data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            raise CartoonGenerationError(
-                f"HyperFrames lint 失败: {'; '.join(lint_result.problems[:5])}",
-                audit=lint_result,
-            )
-
-        # Step 3: Render MP4
-        video_path: Path | None = None
         try:
-            render_result = await self.renderer.render(output_dir)
-            video_path = render_result.video_path
-        except Exception as exc:
-            logger.exception("Cartoon MP4 渲染失败")
-            raise CartoonGenerationError(f"MP4 渲染失败: {exc}") from exc
+            result = await self.agent.generate(
+                learning_need=learning_need,
+                output_dir=temp_dir,
+                profile=profile or {},
+                target_duration=duration,
+            )
 
-        logger.info(
-            "Cartoon 生成完成: task_id=%s title=%s duration=%.1fs video=%s",
-            task_id,
-            result.title,
-            result.duration,
-            video_path,
-        )
+            lint_result = await self.renderer.lint(temp_dir)
+            self._update_audit(
+                result.audit_path,
+                "hyperframes_lint",
+                {"passed": lint_result.passed, "problems": lint_result.problems},
+            )
+            if not lint_result.passed:
+                raise CartoonGenerationError(
+                    f"HyperFrames lint 失败: {'; '.join(lint_result.problems[:6])}",
+                    audit=lint_result,
+                )
 
-        return CartoonVideoResult(
-            task_id=task_id,
-            title=result.title,
-            duration=result.duration,
-            scene_count=result.scene_count,
-            output_dir=output_dir,
-            markdown_path=result.markdown_path,
-            html_path=result.html_path,
-            video_path=video_path,
-            audit_path=result.audit_path,
-        )
+            video_path: Path | None = None
+            if render_mp4:
+                render_result = await self.renderer.render(temp_dir)
+                video_path = render_result.video_path
+                self._update_audit(
+                    result.audit_path,
+                    "render",
+                    {
+                        "passed": True,
+                        "problems": [],
+                        "video_path": str(video_path),
+                        "duration": render_result.duration,
+                        "width": render_result.width,
+                        "height": render_result.height,
+                        "fps": render_result.fps,
+                    },
+                    overall_passed=True,
+                )
+            else:
+                self._update_audit(
+                    result.audit_path,
+                    "render",
+                    {"passed": True, "skipped": True, "problems": []},
+                    overall_passed=True,
+                )
+
+            if final_dir.exists():
+                shutil.rmtree(final_dir)
+            temp_dir.rename(final_dir)
+
+            final_video_path = final_dir / video_path.name if video_path is not None else None
+
+            logger.info(
+                "Theory video 生成完成: task_id=%s title=%s duration=%.1fs video=%s",
+                task_id,
+                result.title,
+                result.duration,
+                final_video_path,
+            )
+
+            return CartoonVideoResult(
+                task_id=task_id,
+                title=result.title,
+                duration=result.duration,
+                scene_count=result.scene_count,
+                output_dir=final_dir,
+                markdown_path=final_dir / result.markdown_path.name,
+                html_path=final_dir / result.html_path.name,
+                video_path=final_video_path,
+                audit_path=final_dir / result.audit_path.name,
+            )
+        except Exception:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            raise
 
     def resolve_output_dir(self, task_id: str) -> Path:
-        clean_id = self._safe_task_id(task_id)
-        return self.base_output_dir / clean_id
+        return self.base_output_dir / self._safe_task_id(task_id)
 
     def resolve_markdown(self, task_id: str) -> Path:
-        return self.resolve_output_dir(task_id) / "cartoon.md"
+        return self.resolve_output_dir(task_id) / "theory_video.md"
 
     def resolve_html(self, task_id: str) -> Path:
         return self.resolve_output_dir(task_id) / "index.html"
 
     def resolve_video(self, task_id: str) -> Path:
         output_dir = self.resolve_output_dir(task_id)
-        candidates = [
-            output_dir / "output.mp4",
-            output_dir / "video.mp4",
-        ]
+        candidates = [output_dir / "output.mp4", output_dir / "video.mp4"]
         for candidate in candidates:
             if candidate.is_file():
                 return candidate
@@ -158,7 +166,33 @@ class CartoonVideoService:
 
     @staticmethod
     def _safe_task_id(task_id: str) -> str:
-        value = "".join(ch for ch in task_id if ch.isalnum() or ch in {"-", "_"})
+        value = "".join(ch for ch in str(task_id) if ch.isalnum() or ch in {"-", "_"})
         if not value:
             raise ValueError("task_id 无效")
         return value[:80]
+
+    @staticmethod
+    def _update_audit(
+        audit_path: Path,
+        stage: str,
+        stage_payload: dict[str, Any],
+        *,
+        overall_passed: bool | None = None,
+    ) -> None:
+        if audit_path.is_file():
+            try:
+                audit_data = json.loads(audit_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                audit_data = {}
+        else:
+            audit_data = {}
+
+        stages = audit_data.setdefault("stages", {})
+        stages[stage] = stage_payload
+
+        if overall_passed is not None:
+            audit_data["passed"] = overall_passed
+        elif not stage_payload.get("passed", False):
+            audit_data["passed"] = False
+
+        audit_path.write_text(json.dumps(audit_data, ensure_ascii=False, indent=2), encoding="utf-8")

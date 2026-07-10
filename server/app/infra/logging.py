@@ -1,5 +1,6 @@
 """集中日志配置模块（Loguru 版本，异步写入）。
 
+
 兼容性目标：
 - 代码侧仍然可以继续使用 `logger = get_logger(__name__)` 与 logging 风格的 `%s` 占位符
 - 底层输出统一由 Loguru 负责（文件 + 控制台）
@@ -12,6 +13,7 @@
 - error.log：ERROR+，异步写入，保留 10 个文件
 """
 
+# 本模块基于 Loguru 统一日志输出，并拦截标准 logging 与第三方库日志到同一管线
 from __future__ import annotations
 
 import logging
@@ -48,6 +50,7 @@ _CONSOLE_NOISY_PREFIXES = (
 )
 
 
+# 终端日志过滤器：丢弃第三方库噪音，仅保留业务日志
 def _console_filter(record: "loguru.Message") -> bool:
     """终端过滤器：只保留业务日志，过滤第三方噪音。"""
     name = record["extra"].get("logger_name", "")
@@ -58,9 +61,11 @@ def _console_filter(record: "loguru.Message") -> bool:
     return True
 
 
+# 标准库 logging 到 loguru 的拦截处理器
 class _InterceptHandler(logging.Handler):
     """把标准 logging.Record 转发到 loguru。"""
 
+    # 将标准 logging 记录转发到 loguru，并定位真实调用点
     def emit(self, record: logging.LogRecord) -> None:
         try:
             level = _loguru_logger.level(record.levelname).name
@@ -83,6 +88,7 @@ class _InterceptHandler(logging.Handler):
         ).log(level, msg)
 
 
+# 项目统一 logger 代理：兼容 logging 与 loguru 两种调用风格，并支持异步落盘
 class LoguruLoggerProxy:
     """项目内统一 logger 对象。
 
@@ -92,17 +98,20 @@ class LoguruLoggerProxy:
     - loguru 风格： logger.info("x={}", x)
     """
 
+    # 初始化：分别持有标准库 logger 与 loguru 绑定对象
     def __init__(self, name: str):
         self._name = name
         self._stdlib_logger = logging.getLogger(name)
         self._logger = _loguru_logger.bind(logger_name=name) if _HAS_LOGURU else None
 
+    # 返回绑定了额外上下文的新 logger 代理
     def bind(self, **kwargs: Any) -> "LoguruLoggerProxy":
         proxy = LoguruLoggerProxy(self._name)
         if _HAS_LOGURU and self._logger is not None:
             proxy._logger = self._logger.bind(**kwargs)  # type: ignore[attr-defined]
         return proxy
 
+    # 兼容 loguru 的 {} 与 logging 的 %-style 两种消息格式化
     def _format_message(self, message: Any, args: tuple[Any, ...]) -> tuple[str, tuple[Any, ...]]:
         if not args:
             return (str(message), ())
@@ -121,6 +130,7 @@ class LoguruLoggerProxy:
             # 兜底：不让日志调用因为格式问题崩掉
             return (f"{message} args={args!r}", ())
 
+    # 统一日志入口：优先走 loguru，缺失时回退到标准库 logging
     def _log(self, level: str, message: Any, *args: Any, **kwargs: Any) -> None:
         exc_info = kwargs.pop("exc_info", None)
         msg, fmt_args = self._format_message(message, args)
@@ -153,6 +163,7 @@ class LoguruLoggerProxy:
     def error(self, message: Any, *args: Any, **kwargs: Any) -> None:
         self._log("ERROR", message, *args, **kwargs)
 
+    # 记录异常堆栈（需在 except 块内调用），与 logging 行为一致
     def exception(self, message: Any, *args: Any, **kwargs: Any) -> None:
         # 与 logging 行为一致：记录当前异常堆栈（需要在 except 块内调用）
         msg, fmt_args = self._format_message(message, args)
@@ -162,12 +173,13 @@ class LoguruLoggerProxy:
         self._logger.opt(exception=True).error(msg, *fmt_args, **kwargs)
 
 
+# 获取项目统一 logger（返回 LoguruLoggerProxy 而非标准库 Logger）
 def get_logger(name: str) -> LoguruLoggerProxy:
     """获取项目 logger（不再返回标准库 logging.Logger）。"""
     return LoguruLoggerProxy(name)
 
 
-# Module-level logger factory for structured [Module][Sub] prefixes
+# 获取带 [Module][Sub] 前缀的结构化模块 logger
 def get_module_logger(module: str, *, sub: str = "") -> LoguruLoggerProxy:
     """Get a logger with [Module][Sub] prefix format.
 
@@ -184,6 +196,7 @@ def get_module_logger(module: str, *, sub: str = "") -> LoguruLoggerProxy:
     return LoguruLoggerProxy(name)
 
 
+# 配置日志系统：统一输出关键日志到终端、app.log 与 error.log
 def configure_logging() -> None:
     """Configure logging - unified output of key logs.
 
@@ -195,15 +208,18 @@ def configure_logging() -> None:
     setup_logging(level="INFO", force=True)
 
 
+# 解析日志级别字符串，非法值回退为 INFO
 def _parse_level(raw: str) -> str:
     value = (raw or "").strip().upper()
     return value if value in {"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
 
 
+# 判断是否启用了任意框架的调试日志
 def _debug_logging_enabled() -> bool:
     return LANGCHAIN_DEBUG or LANGGRAPH_DEBUG or DEEPAGENTS_DEBUG
 
 
+# 设置 LangChain / LangGraph 的 debug/verbose 全局开关
 def _configure_langchain_debug_flags() -> None:
     try:
         from langchain_core.globals import set_debug, set_verbose
@@ -217,6 +233,7 @@ def _configure_langchain_debug_flags() -> None:
     set_verbose(LANGCHAIN_VERBOSE)
 
 
+# 根据调试开关设置外部框架（langchain 等）的日志级别
 def _configure_external_logger_levels() -> None:
     debug_names = {
         "langchain",
@@ -236,6 +253,7 @@ def _configure_external_logger_levels() -> None:
 _CONFIGURED = False
 
 
+# 初始化 Loguru 与标准库日志拦截，并配置各输出 sink（应用启动时调用一次）
 def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
     """初始化 Loguru + 标准库 logging 拦截。
 

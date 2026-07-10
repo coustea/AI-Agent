@@ -10,14 +10,17 @@ import type {
   VisualizerType,
 } from '@/features/algorithm-visualization/types'
 
-/** 提交运行→获取 TraceEvent[]。AlgorithmVisualization.vue 使用。 */
+// 提交运行→获取 TraceEvent[]
 export function useAlgorithmRun() {
+  // 可视化事件列表、运行结果、错误信息、加载状态
   const events = ref<TraceEvent[]>([])
   const runResult = ref<RunResult | null>(null)
   const runError = ref<RunError | null>(null)
   const generating = ref(false)
 
+  // 提交代码到后端运行，获取可视化追踪事件
   async function run(params: {
+    domain: string
     algorithm: string
     visualizerType: VisualizerType
     language: CodeLanguage
@@ -26,6 +29,7 @@ export function useAlgorithmRun() {
   }) {
     generating.value = true
     runError.value = null
+    runResult.value = null
     events.value = []
     try {
       const resp = await runVisualization(params)
@@ -52,6 +56,7 @@ export function useAlgorithmRun() {
     }
   }
 
+  // 清空运行结果与事件
   function clear() {
     events.value = []
     runResult.value = null

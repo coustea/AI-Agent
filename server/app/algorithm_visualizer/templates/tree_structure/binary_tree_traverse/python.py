@@ -1,3 +1,4 @@
+# binary_tree_traverse 算法实现 — domain: tree_structure
 class TreeNode:
     """二叉树节点定义"""
     def __init__(self, val=0, left=None, right=None):

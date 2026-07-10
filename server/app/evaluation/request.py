@@ -1,5 +1,6 @@
 """学习事件请求模式定义。"""
 
+# 定义学习事件上报的统一请求数据结构与合法事件类型
 from __future__ import annotations
 
 from typing import Any, Literal

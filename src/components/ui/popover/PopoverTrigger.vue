@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 弹出框触发器
 import type { PopoverTriggerProps } from "reka-ui"
 import { PopoverTrigger } from "reka-ui"
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 卡片页脚
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 

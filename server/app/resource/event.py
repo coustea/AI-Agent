@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 
 # ===================== 事件类型定义 =====================
 
+# 资源模块支持的事件名称字面量类型
 ResourceEventName = Literal[
     "generation.started",
     "generation.completed",
@@ -30,6 +31,7 @@ ResourceEventName = Literal[
     "agent.status",
 ]
 
+# 终态事件集合：收到后即关闭频道、停止推送
 RESOURCE_TERMINAL_EVENTS: set[ResourceEventName] = {"generation.completed", "generation.failed"}
 
 
@@ -63,12 +65,15 @@ class ResourceEventExpiredError(RuntimeError):
 
 # ===================== 频道键 =====================
 
+# 频道键：(user_id, resource_id) 唯一标识一个资源事件流
 ChannelKey = tuple[int, int]  # (user_id, resource_id)
 
 
 # ===================== 模块私有注册表 =====================
 
+# 进程内频道注册表，按频道键缓存活跃频道
 _resource_channels: dict[ChannelKey, "_ResourceChannel"] = {}
+# 保护注册表读写的全局锁
 _resource_lock = asyncio.Lock()
 
 
@@ -102,6 +107,7 @@ class _ResourceChannel:
         agent_id: str | None = None,
         progress: int | None = None,
     ) -> ResourceEvent:
+        # 终态后禁止继续发送消息
         if self._is_terminal:
             raise ResourceEventClosedError(
                 f"Resource channel closed for resource_id={self.resource_id}"
@@ -118,15 +124,18 @@ class _ResourceChannel:
         )
         self._buffer.append(resource_event)
 
+        # 向所有订阅者推送事件
         for queue in list(self._subscribers):
             try:
                 await queue.put(resource_event)
             except asyncio.QueueFull:
+                # 队列满时记录背压告警并丢弃该消息
                 logger.warning(
                     "resource_event_queue_full_backpressure: resource_id=%s",
                     self.resource_id,
                 )
 
+        # 收到终态事件：关闭频道并延迟清理
         if event in RESOURCE_TERMINAL_EVENTS:
             self._is_terminal = True
             asyncio.get_running_loop().call_later(
@@ -141,6 +150,7 @@ class _ResourceChannel:
     ) -> tuple[asyncio.Queue[ResourceEvent], list[ResourceEvent]]:
         queue: asyncio.Queue[ResourceEvent] = asyncio.Queue(maxsize=self.queue_size)
         self._subscribers.append(queue)
+        # 回放指定序号之后的历史事件
         replay = [e for e in self._buffer if e.sequence > after_sequence]
         return queue, replay
 
@@ -148,10 +158,12 @@ class _ResourceChannel:
         self._subscribers = [q for q in self._subscribers if q is not queue]
 
     async def _cleanup(self) -> None:
+        # 仍有订阅者则不清理
         if self._subscribers:
             return
         key = (self.user_id, self.resource_id)
         async with _resource_lock:
+            # 从注册表中移除频道
             _resource_channels.pop(key, None)
 
 
@@ -184,8 +196,10 @@ class ResourceEvents:
         """获取或创建频道。根据 auto_create 决定是否自动创建。"""
         async with _resource_lock:
             channel = _resource_channels.get(self._key)
+            # 频道已存在直接复用
             if channel is not None:
                 return channel
+            # 不允许自动创建（如订阅端）则报错
             if not self._auto_create:
                 raise ResourceEventExpiredError(
                     f"Resource channel not found for resource_id={self._resource_id}"
@@ -217,6 +231,7 @@ class ResourceEvents:
         """
         channel = await self._get_or_create_channel()
 
+        # 全局事件：将状态映射为 generation.* 事件
         if agent_id == "global":
             event_map = {
                 "running": "generation.started",
@@ -231,7 +246,7 @@ class ResourceEvents:
                 data=data or {},
             )
 
-        # Agent 事件统一为 agent.status
+        # 普通 Agent 事件统一映射为 agent.status
         event_data = {"status": status}
         if data:
             event_data.update(data)
@@ -250,6 +265,7 @@ class ResourceEvents:
         """订阅频道。频道必须已存在，否则抛出 ResourceEventExpiredError。"""
         async with _resource_lock:
             channel = _resource_channels.get(self._key)
+            # 频道不存在（可能已过期）则报错
             if channel is None:
                 raise ResourceEventExpiredError(
                     f"Resource channel not found for resource_id={self._resource_id}"
@@ -279,6 +295,7 @@ class ResourceEvents:
 
 
 def encode_resource_sse(event: ResourceEvent) -> str:
+    # 将事件编码为标准 SSE 文本（id/event/data 三段）
     return f"id: {event.sequence}\nevent: resource.event\ndata: {event.model_dump_json()}\n\n"
 
 
@@ -292,6 +309,7 @@ async def get_resource_channel(
     key = (user_id, resource_id)
     async with _resource_lock:
         channel = _resource_channels.get(key)
+        # 频道不存在则视为已过期
         if channel is None:
             return None
         events = ResourceEvents(

@@ -17,16 +17,16 @@
         </div>
 
         <!-- Cell Card (with title if detail is present) -->
-        <div 
+        <div
           v-if="cell.detail"
-          class="cell-card" 
-          :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]"
+          class="cell-card"
+          :class="[cell.status ? `cell-${cell.status}` : 'cell-normal', { 'has-detail': cell.detail }]"
           :title="cell.detail"
         >
           <span class="cell-label">{{ cell.label }}</span>
           <div class="detail-indicator"></div>
         </div>
-        <div v-else class="cell-card" :class="`cell-${cell.status}`">
+        <div v-else class="cell-card" :class="cell.status ? `cell-${cell.status}` : 'cell-normal'">
           <span class="cell-label">{{ cell.label }}</span>
         </div>
 
@@ -52,16 +52,16 @@
 
         <!-- Center: Cell Card (with inline detail + title if detail present) -->
         <div class="cell-col">
-          <div 
+          <div
             v-if="cell.detail"
-            class="cell-card-vertical" 
-            :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]"
+            class="cell-card-vertical"
+            :class="[cell.status ? `cell-${cell.status}` : 'cell-normal', { 'has-detail': cell.detail }]"
             :title="cell.detail"
           >
             <span class="cell-label">{{ cell.label }}</span>
             <span class="cell-detail-inline">- {{ cell.detail }}</span>
           </div>
-          <div v-else class="cell-card-vertical" :class="`cell-${cell.status}`">
+          <div v-else class="cell-card-vertical" :class="cell.status ? `cell-${cell.status}` : 'cell-normal'">
             <span class="cell-label">{{ cell.label }}</span>
           </div>
         </div>
@@ -88,10 +88,10 @@
         class="matrix-cell-wrapper animate-cell"
         :style="{ '--idx': idx }"
       >
-        <div 
+        <div
           v-if="cell.detail"
-          class="cell-card-matrix" 
-          :class="[`cell-${cell.status}`, { 'has-detail': cell.detail }]"
+          class="cell-card-matrix"
+          :class="[cell.status ? `cell-${cell.status}` : 'cell-normal', { 'has-detail': cell.detail }]"
           :title="cell.detail"
         >
           <span class="matrix-cell-index">{{ cell.index }}</span>
@@ -100,7 +100,7 @@
             {{ cell.pointer }}
           </div>
         </div>
-        <div v-else class="cell-card-matrix" :class="`cell-${cell.status}`">
+        <div v-else class="cell-card-matrix" :class="cell.status ? `cell-${cell.status}` : 'cell-normal'">
           <span class="matrix-cell-index">{{ cell.index }}</span>
           <span class="matrix-cell-label">{{ cell.label }}</span>
           <div v-if="cell.pointer" class="matrix-cell-pointer-badge">
@@ -115,6 +115,7 @@
 <script setup lang="ts">
 import type { GridPayload } from '@/features/chat/types/chat'
 
+// 网格/内存/指针图：horizontal/vertical/matrix 三种布局
 defineProps<{
   payload: GridPayload
 }>()

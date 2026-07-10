@@ -1,3 +1,4 @@
+# dp_fibonacci 算法实现 — domain: dynamic_programming
 def fibonacci(n):
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -12,6 +13,7 @@ def fibonacci(n):
         dp[i] = dp[i - 1] + dp[i - 2]
     return dp[n]
 
+# 定义 fibonacci_optimized 函数
 def fibonacci_optimized(n):
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -25,13 +27,16 @@ def fibonacci_optimized(n):
         prev2, prev1 = prev1, curr
     return prev1
 
+# 定义 fibonacci_matrix 函数
 def fibonacci_matrix(n):
+# 定义 mat_mul 函数
     def mat_mul(A, B):
         return [
             [A[0][0] * B[0][0] + A[0][1] * B[1][0], A[0][0] * B[0][1] + A[0][1] * B[1][1]],
             [A[1][0] * B[0][0] + A[1][1] * B[1][0], A[1][0] * B[0][1] + A[1][1] * B[1][1]],
         ]
 
+# 定义 mat_pow 函数
     def mat_pow(M, p):
         result = [[1, 0], [0, 1]]
         while p > 0:
@@ -47,6 +52,7 @@ def fibonacci_matrix(n):
     result = mat_pow(base, n - 1)
     return result[0][0]
 
+# 定义 fibonacci_range 函数
 def fibonacci_range(start, end):
     dp = [0, 1]
     for i in range(2, end + 1):

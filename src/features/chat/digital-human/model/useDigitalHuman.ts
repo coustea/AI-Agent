@@ -23,6 +23,7 @@ export interface IdleDisconnectState {
     isListening: boolean
 }
 
+// 判断是否应暂停空闲自动断开（正在交互中不自动断开）
 export function shouldPauseIdleDisconnect({ state, isSpeaking, isListening }: IdleDisconnectState): boolean {
     if (isSpeaking || isListening) return true
     return state === 'avatar_connecting'
@@ -36,6 +37,7 @@ export function shouldCleanupLocalVadOnBackendState(listening: boolean): boolean
     return !listening
 }
 
+// 判断数字人状态是否应停止 VAD（thinking/speaking 期间不采集麦克风）
 export function shouldStopVadForDigitalHumanState(state: DigitalHumanStateType): boolean {
     // "recognizing" 是 VAD 正常流程的一部分（识别用户语音），不应停止麦克风
     // 只有 thinking/speaking 状态才需要停止 VAD（LLM 推理和数字人播报期间不需要录音）
@@ -76,8 +78,9 @@ export function selectAvatarAudioOutputs(elements: Iterable<Element>): AvatarAud
 // Composable
 // ==========================================
 
+// 数字人引擎：WebSocket + RTCPlayer + VAD 语音活动检测
 export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
-    // --- Reactive state ---
+    // --- 响应式状态 ---
     const isConnected = ref(false)
     const isAvatarReady = ref(false)
     const isSpeaking = ref(false)
@@ -91,7 +94,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     const speechRate = ref(1.0)
     const digitalHumanState = ref<DigitalHumanStateType>('idle')
 
-    // --- Turn ID tracking ---
+    // --- 轮次 ID 追踪（过滤过期事件） ---
     let activeTurnId: string | null = null
 
     // --- 实时生成缓存 (应对不可抗力断开) ---
@@ -110,6 +113,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let targetRevealCharsPerSecond = 0
 
     let cacheDebounceTimer: ReturnType<typeof setTimeout> | null = null
+    // 更新 localStorage 缓存（断线重连后恢复字幕）
     function updateCache(text: string, append = true) {
         if (append) {
             generationCache.value += text
@@ -154,7 +158,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Idle auto-disconnect timer
     // ==========================================
 
-    /** Reset the idle countdown to 60s. Call on any user interaction or server message. */
+    // 重置空闲倒计时（用户交互或服务端消息后调用）
     function resetIdleTimer(): void {
         if (idleTimer) clearInterval(idleTimer)
         idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
@@ -191,6 +195,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // WebSocket connection
     // ==========================================
 
+    // 构建 WebSocket URL（支持环境变量配置）
     function buildWsUrl(): string {
         const token = getAuthToken() || ''
         const explicitWsBase = (import.meta.env.VITE_BACKEND_WS_BASE as string | undefined)?.trim()
@@ -211,6 +216,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         return `${wsBase}/ws/avatar?token=${encodeURIComponent(token)}`
     }
 
+    // 建立 WebSocket 连接
     async function connect(): Promise<void> {
         if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
             return
@@ -253,6 +259,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 断开 WebSocket + 停止 VAD + 销毁播放器
     function disconnect(): void {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'stop_speaking' }))
@@ -294,6 +301,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Server message handler
     // ==========================================
 
+    // 服务端消息分发：按 type 路由到不同处理逻辑
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function handleMessage(data: Record<string, any>): void {
         const { type, turn_id } = data
@@ -309,7 +317,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             return
         }
 
-        // Filter stale events (skip if turn_id mismatch)
+        // 过滤过期轮次的事件（turn_id 不匹配则丢弃）
+        // 在 digital_human_state 处理前过滤，防止旧轮次状态污染
         // Apply this filter BEFORE handling digital_human_state to prevent old turn pollution
         const turnDependentTypes = [
             'assistant_chunk', 'assistant_complete',
@@ -332,7 +341,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             }
         }
 
-        // Handle digital_human_state events (after stale filter)
+        // 处理数字人状态变更事件（经过过期过滤后）
         if (type === 'digital_human_state') {
             const state = data.state as DigitalHumanStateType
             digitalHumanState.value = state
@@ -452,6 +461,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 处理流信息（首次连接 / 重连时播放 RTC 流）
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function handleStreamInfo(data: Record<string, any>): void {
         const url = data.stream_url || data.data?.stream_url
@@ -490,6 +500,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // RTCPlayer
     // ==========================================
 
+    // 解析 xrtcs:// 协议 URL 为 RTC 连接参数
     function parseXrtcsUrl(url: string): { host: string; roomId: string } {
         const withoutScheme = url.replace('xrtcs://', '').replace('xrtc://', '')
         const firstSlash = withoutScheme.indexOf('/')
@@ -499,6 +510,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 初始化 RTC 播放器渲染数字人画面
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function initPlayer(url: string, extend: Record<string, any>): void {
         if (!url) {
@@ -542,6 +554,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 销毁 RTC 播放器并清空渲染容器
     function destroyPlayer(): void {
         if (player) {
             try {
@@ -577,6 +590,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Audio enable (unmute player output)
     // ==========================================
 
+    // 启用数字人音频输出（取消静音）
     function enableAudio(): void {
         if (!playerContainer) return
 
@@ -632,6 +646,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Text messaging
     // ==========================================
 
+    // 发送文本消息到数字人（中断当前播报，开始新轮次）
     function sendText(params: TextMessageParams): void {
         if (!ws || ws.readyState !== WebSocket.OPEN) return
 
@@ -671,6 +686,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // Voice Activity Detection (VAD) + mic capture
     // ==========================================
 
+    // 清理麦克风音频资源（停止轨道、关闭 AudioContext）
     function cleanupAudioInput(): void {
         // Stop mic tracks - does NOT depend on vadActive
         if (audioStream) {
@@ -695,6 +711,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 启动语音活动检测（VAD）：采集麦克风音频 → PCM → base64 → WebSocket 发送
     async function startVad(needDiagram = false, capabilities: DigitalHumanCapabilities = {}): Promise<void> {
         if (vadActive) return
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -830,6 +847,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 停止语音活动检测并通知后端
     function stopVad(): void {
         // Always cleanup audio resources, even if vadActive is false
         // (e.g., if vad failed during startup but audioStream/audioContext were created)
@@ -886,6 +904,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         targetRevealCharsPerSecond = 0
     }
 
+    // 取下一个字幕展示单元（支持 CJK、英文单词、标点）
     function takeNextRevealUnit(text: string): string {
         if (!text) return ''
         if (text.startsWith('\r\n')) return '\r\n'
@@ -943,6 +962,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         return 64
     }
 
+    // 逐步 reveal 缓冲文本（按语速节流展示字幕）
     function revealBufferedAssistantTextStep(): void {
         assistantRevealTimer = null
 
@@ -1017,6 +1037,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         bufferedAssistantText = ''
     }
 
+    // 结束当前轮次：强制刷出剩余文本或启动 reveal
     function finalizeBufferedAssistantTurn(forceImmediate = false): void {
         if (forceImmediate) {
             clearAssistantRevealTimer()

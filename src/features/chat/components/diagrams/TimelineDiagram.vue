@@ -155,6 +155,7 @@ const currentStep = ref(0)
 const isPlaying = ref(false)
 let timerInterval: any = null
 
+// 计算时间轴最大刻度值
 const maxTime = computed(() => {
   let maxVal = 0
   props.payload.tracks.forEach(track => {
@@ -187,6 +188,7 @@ const getActiveColorRgb = (status: 'normal' | 'active' | 'idle' | 'stall') => {
   }
 }
 
+// 开始自动播放（每秒步进一次）
 const startPlayback = () => {
   if (isPlaying.value) return
   isPlaying.value = true
@@ -207,6 +209,7 @@ const pausePlayback = () => {
   }
 }
 
+// 切换播放/暂停
 const togglePlay = () => {
   if (isPlaying.value) {
     pausePlayback()
@@ -218,6 +221,7 @@ const togglePlay = () => {
   }
 }
 
+// 重置回起点
 const resetPlayback = () => {
   pausePlayback()
   currentStep.value = 0
@@ -230,10 +234,12 @@ const nextStep = () => {
   }
 }
 
+// payload 变化时重置播放状态
 watch(() => props.payload, () => {
   resetPlayback()
 }, { deep: true })
 
+// 组件卸载时清理定时器
 onUnmounted(() => {
   if (timerInterval) {
     clearInterval(timerInterval)

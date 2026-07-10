@@ -19,6 +19,7 @@ from app.shared.video.schemas import VisualType
 # We use human-readable descriptions rather than formal JSON Schema because
 # the LLM produces better output with natural-language constraints.
 
+# 各 visual_type 对应的视觉契约：规定 visual 字典的键名与值形状，注入场景编写提示词
 VISUAL_CONTRACTS: dict[VisualType, dict] = {
     "title_intro": {
         "course": "string — 课程名称",
@@ -145,6 +146,7 @@ VISUAL_CONTRACTS: dict[VisualType, dict] = {
 }
 
 
+# 返回指定 visual_type 的视觉契约，未知类型回退为空 dict
 def get_visual_contract(visual_type: VisualType) -> dict:
     """Return the visual contract for a given visual_type.
 

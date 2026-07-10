@@ -1,76 +1,135 @@
 :root {
-  --stage-bg: #e7edf5;
-  --slide-bg: #f8fafc;
+  --stage-bg: #edf1f7;
+  --slide-bg: #ffffff;
 
-  --ink: #101828;
-  --ink-soft: #344054;
+  --text: #111827;
+  --ink: #111827;
+  --ink-soft: #374151;
   --muted: #667085;
-  --muted-light: #98a2b3;
+  --muted-light: #9ca3af;
 
-  --line: rgba(16, 24, 40, 0.13);
-  --line-soft: rgba(16, 24, 40, 0.08);
-  --line-strong: rgba(37, 99, 235, 0.32);
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #eef4ff;
+  --accent-cyan: #0891b2;
 
-  --primary: #2563eb;
-  --primary-strong: #1d4ed8;
-  --primary-soft: rgba(37, 99, 235, 0.11);
+  --line: #d9e2ef;
+  --line-soft: #edf2f7;
+  --line-strong: #aebfd8;
 
-  --accent: #7c3aed;
-  --accent-soft: rgba(124, 58, 237, 0.11);
+  --danger: #b42318;
+  --danger-soft: #fff1f1;
+  --success: #047857;
+  --success-soft: #edfdf5;
 
-  --success: #16a34a;
-  --success-soft: rgba(22, 163, 74, 0.12);
+  --font-family:
+    "Inter",
+    "Noto Sans SC",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
 
-  --warning: #d97706;
-  --warning-soft: rgba(217, 119, 6, 0.12);
+  --font-display:
+    "Inter",
+    "Noto Sans SC",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
 
-  --danger: #dc2626;
-  --danger-soft: rgba(220, 38, 38, 0.10);
-
-  --chalk: rgba(255, 255, 255, 0.64);
-  --marker-blue: rgba(37, 99, 235, 0.18);
-  --marker-purple: rgba(124, 58, 237, 0.16);
-  --marker-green: rgba(22, 163, 74, 0.14);
-  --marker-orange: rgba(217, 119, 6, 0.14);
-
-  --font-display: "Inter", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-body: "Inter", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --font-mono:
+    "JetBrains Mono",
+    "SFMono-Regular",
+    Consolas,
+    monospace;
 
   --ease-teach: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .slide {
-  color: var(--ink);
-  font-family: var(--font-body);
+  color: var(--text);
   background:
-    radial-gradient(circle at 86% 8%, rgba(37, 99, 235, 0.08), transparent 27%),
-    radial-gradient(circle at 9% 82%, rgba(124, 58, 237, 0.055), transparent 24%),
-    linear-gradient(rgba(15, 23, 42, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.025) 1px, transparent 1px),
-    var(--slide-bg);
-  background-size: 100% 100%, 100% 100%, 56px 56px, 56px 56px, 100% 100%;
+    radial-gradient(
+      circle at 88% 12%,
+      rgba(37, 99, 235, 0.07),
+      transparent 30%
+    ),
+    linear-gradient(
+      180deg,
+      #ffffff 0%,
+      #fbfdff 100%
+    );
+  font-family: var(--font-family);
 }
 
 .slide::before {
   content: "";
   position: absolute;
   left: 58px;
-  top: 58px;
-  bottom: 58px;
-  width: 4px;
+  top: 66px;
+  bottom: 66px;
+  width: 1px;
   background: linear-gradient(
     to bottom,
-    var(--primary),
-    rgba(124, 58, 237, 0.46),
-    rgba(37, 99, 235, 0.08)
+    transparent,
+    rgba(37, 99, 235, 0.32),
+    transparent
   );
+  pointer-events: none;
 }
 
 .slide::after {
   content: "";
   position: absolute;
-  inset: 28px;
-  border: 1px solid rgba(15, 23, 42, 0.055);
+  right: 68px;
+  bottom: 58px;
+  width: 180px;
+  height: 180px;
+  border-right: 1px solid rgba(37, 99, 235, 0.14);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.14);
   pointer-events: none;
+}
+
+.slide-shell {
+  padding: 68px 86px 62px 116px;
+}
+
+.slide-index {
+  right: 86px;
+  top: 74px;
+  color: var(--muted);
+  font: 650 15px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font: 760 15px/1.2 var(--font-family);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.slide-title {
+  max-width: 1400px;
+  margin-top: 16px;
+  color: var(--text);
+  font: 780 52px/1.16 var(--font-display);
+  letter-spacing: -0.045em;
+}
+
+[data-title-size="compact"] .slide-title {
+  font-size: 43px;
+  line-height: 1.18;
+}
+
+.slide-subtitle {
+  max-width: 1160px;
+  margin-top: 13px;
+  color: var(--muted);
+  font-size: 23px;
+  line-height: 1.48;
+}
+
+.slide-content {
+  height: 774px;
+  margin-top: 30px;
 }

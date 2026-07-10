@@ -34,6 +34,7 @@ class NormalizedToolResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+# 将任意工具返回值标准化为 NormalizedToolResult（字符串/Mapping/模型统一处理）
 def normalize_tool_result(raw_result: Any) -> NormalizedToolResult:
     """将任意工具返回值标准化为 NormalizedToolResult。
 
@@ -45,6 +46,7 @@ def normalize_tool_result(raw_result: Any) -> NormalizedToolResult:
     - Pydantic 模型先 model_dump()
     - None 返回空结果
     """
+    # None / 字符串 / Pydantic 模型 / Mapping 的逐步归一化
     if raw_result is None:
         return NormalizedToolResult()
     if isinstance(raw_result, str):
@@ -61,11 +63,13 @@ def normalize_tool_result(raw_result: Any) -> NormalizedToolResult:
                     sources.append(SourceItem(**s))
                 elif isinstance(s, SourceItem):
                     sources.append(s)
+        # 其余字段归入 metadata
         metadata = {k: v for k, v in raw_result.items() if k not in ("text", "message", "sources")}
         return NormalizedToolResult(text=text, sources=sources, metadata=metadata)
     return NormalizedToolResult(text=str(raw_result).strip())
 
 
+# Evidence：统一证据模型，承载各阶段产出的信息（类型/摘要/置信度等）
 class Evidence(BaseModel):
     """统一证据模型 — 各阶段产出的信息载体。"""
     evidence_type: EvidenceType
@@ -78,14 +82,17 @@ class Evidence(BaseModel):
     usable_for_diagram: bool = True
 
 
+# EvidenceSet：证据汇总容器，可扩展追加证据
 class EvidenceSet(BaseModel):
     """证据集合 — 编排流水线中各阶段产出的证据汇总容器。"""
     items: list[Evidence] = Field(default_factory=list)
 
+    # 将一批证据追加到集合
     def extend(self, items: list[Evidence]) -> None:
         self.items.extend(items)
 
 
+# UploadResponse：文件上传成功后的响应 DTO
 class UploadResponse(BaseModel):
     """文件上传成功后的响应 DTO。"""
     url: str = Field(..., description="文件访问 URL")
@@ -98,6 +105,7 @@ class UploadResponse(BaseModel):
 # ── 消息数据模型 ──
 
 
+# ChatMessageItem：对话消息数据模型（OpenAI 格式，用于历史 API 响应）
 class ChatMessageItem:
     """对话消息数据模型（OpenAI 格式）。
 
@@ -137,6 +145,7 @@ class ChatMessageItem:
         self.diagram = diagram
         self.created_at = created_at
 
+    # 序列化为字典，仅输出非空可选字段
     def model_dump(self) -> dict[str, Any]:
         """序列化为字典，用于 JSON API 响应。"""
         data: dict[str, Any] = {

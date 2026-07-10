@@ -10,11 +10,13 @@ def topological_sort(num_nodes, edges, trace=True):
 
     if trace:
         nodes = []
+# 循环遍历处理
         for i in range(num_nodes):
             node_edges = [{"to": str(v)} for u, v in edges if u == i]
             nodes.append({"id": str(i), "label": labels[i], "edges": node_edges})
         tracer.init_graph(nodes, line=39)
 
+# 循环遍历处理
     for u, v in edges:
         adj[u].append(v)
         in_degree[v] += 1
@@ -23,15 +25,18 @@ def topological_sort(num_nodes, edges, trace=True):
     order = []
 
     if trace:
+# 循环遍历处理
         for node_id in queue:
             tracer.visit_node(str(node_id), line=50)
 
+# 循环条件判断
     while queue:
         u = queue.pop(0)
         order.append(u)
         if trace:
             tracer.visit_node(str(u), line=57)
 
+# 循环遍历处理
         for v in adj[u]:
             in_degree[v] -= 1
             if in_degree[v] == 0:

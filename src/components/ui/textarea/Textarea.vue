@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 文本域
 import type { HTMLAttributes } from "vue"
 import { useVModel } from "@vueuse/core"
 import { cn } from "@/lib/utils"

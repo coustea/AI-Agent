@@ -37,6 +37,7 @@ export interface PathOverview {
   updated_at: string
 }
 
+// 路径历史记录列表项：概览中的缩略信息
 export interface LearningPathHistoryItem {
   id: number
   title: string

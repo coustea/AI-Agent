@@ -34,6 +34,7 @@ SSE_HEADERS = {
 # ── 路径创建 ───────────────────────────────────────────────────────────
 
 
+# POST /api/v1/ai/path-plan — 创建学习路径，返回 path_id 和 run_id
 @router.post("")  # POST /api/v1/ai/path-plan — 创建学习路径
 async def create_path(
     request: PathRequest,
@@ -62,6 +63,7 @@ async def create_path(
 # ── SSE 事件流 ─────────────────────────────────────────────────────────
 
 
+# SSE 端点：订阅路径规划实时事件流
 @router.get("/{path_id}/runs/{run_id}/events")  # SSE 路径规划实时事件流
 async def stream_path_plan_events(
     path_id: int,
@@ -74,6 +76,7 @@ async def stream_path_plan_events(
     if events is None:
         return HttpResponse.error(code=410, message="事件流已过期或不存在")
 
+    # SSE 事件流生成器：先重放历史事件，再持续推送新事件
     async def event_stream():
         queue, replay = await events.subscribe(after_sequence)
         try:
@@ -103,6 +106,7 @@ async def stream_path_plan_events(
 # ── 路径查询 ───────────────────────────────────────────────────────────
 
 
+# 获取当前用户激活的学习路径概览
 @router.get("/active")  # GET /api/v1/ai/path-plan/active — 获取当前激活的学习路径
 async def get_active_path(
     module: str = "mentor",
@@ -114,6 +118,7 @@ async def get_active_path(
     return HttpResponse.success(data=response.model_dump(mode="json") if response else None)
 
 
+# 获取用户路径历史列表
 @router.get("/history")  # GET /api/v1/ai/path-plan/history — 获取路径历史列表
 async def get_path_history(
     module: str = "mentor",
@@ -125,6 +130,7 @@ async def get_path_history(
     return HttpResponse.success(data=[item.model_dump(mode="json") for item in items])
 
 
+# 激活历史路径，同时归档其他激活路径
 @router.post("/{path_id}/activate")  # POST /api/v1/ai/path-plan/{id}/activate — 激活历史路径
 async def activate_history_path(
     path_id: int,
@@ -142,6 +148,7 @@ async def activate_history_path(
 # ── 节点工作区 ───────────────────────────────────────────────────────────
 
 
+# 获取节点学习工作区（教程、资源、测验状态）
 @router.get("/nodes/{node_id}/workspace")  # GET /api/v1/ai/path-plan/nodes/{id}/workspace — 获取节点学习区
 async def get_node_workspace(
     node_id: int,
@@ -161,6 +168,7 @@ async def get_node_workspace(
 # ── 节点学习流程 ───────────────────────────────────────────────────────────
 
 
+# 标记节点开始学习（轻量，仅改状态）
 @router.post("/nodes/{node_id}/start-learning")  # POST 标记节点开始学习（轻量）
 async def start_learning(
     node_id: int,
@@ -175,6 +183,7 @@ async def start_learning(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# 为节点生成教程内容（耗时，调用 LLM）
 @router.post("/nodes/{node_id}/tutorial")  # POST 为节点生成教程（耗时）
 async def generate_tutorial(
     node_id: int,
@@ -192,6 +201,7 @@ async def generate_tutorial(
 # ── 测验流程 ───────────────────────────────────────────────────────────
 
 
+# 获取最新一轮已有测验题（不重新生成）
 @router.get("/nodes/{node_id}/questions")  # GET 获取最新一轮已有测验题（不重新生成）
 async def get_node_questions(
     node_id: int,
@@ -206,6 +216,7 @@ async def get_node_questions(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
+# 生成节点测验题，LLM 根据教程生成 5 道选择题
 @router.post("/nodes/{node_id}/questions")  # POST 生成节点测验题 — LLM 根据教程生成 5 道题
 async def generate_node_questions(
     node_id: int,
@@ -220,6 +231,7 @@ async def generate_node_questions(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# 提交测验答案并自动评分，决定节点下一步状态
 @router.post("/nodes/{node_id}/quiz-submit")  # POST 提交节点测验 — 自动评分并决定下一步
 async def submit_node_quiz(
     node_id: int,
@@ -238,6 +250,7 @@ async def submit_node_quiz(
 # ── 辅助资源生成 ───────────────────────────────────────────────────────────
 
 
+# 生成节点思维导图资源
 @router.post("/nodes/{node_id}/mindmap")  # POST 生成思维导图
 async def generate_mindmap(
     node_id: int,
@@ -252,6 +265,7 @@ async def generate_mindmap(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# 生成节点代码实操资源
 @router.post("/nodes/{node_id}/code")  # POST 生成代码实操
 async def generate_code(
     node_id: int,
@@ -266,6 +280,7 @@ async def generate_code(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# 生成节点 PPT 课件资源
 @router.post("/nodes/{node_id}/ppt")  # POST 生成 PPT 课件
 async def generate_ppt(
     node_id: int,
@@ -280,6 +295,7 @@ async def generate_ppt(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# 生成节点拓展阅读资源
 @router.post("/nodes/{node_id}/reading")  # POST 生成拓展阅读
 async def generate_reading(
     node_id: int,
@@ -294,6 +310,7 @@ async def generate_reading(
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
+# 生成节点动画讲解资源
 @router.post("/nodes/{node_id}/cartoon")  # POST 生成动画讲解资源
 async def generate_cartoon(
     node_id: int,
@@ -311,6 +328,7 @@ async def generate_cartoon(
 # ── 辅助资源获取 ───────────────────────────────────────────────────────────
 
 
+# 获取节点思维导图（最新版本）
 @router.get("/nodes/{node_id}/mindmap")  # GET 获取节点思维导图（最新版本）
 async def get_mindmap(
     node_id: int,
@@ -325,6 +343,7 @@ async def get_mindmap(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
+# 获取节点代码实操资源
 @router.get("/nodes/{node_id}/code")  # GET 获取节点代码实操
 async def get_code(
     node_id: int,
@@ -339,6 +358,7 @@ async def get_code(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
+# 获取节点 PPT 课件
 @router.get("/nodes/{node_id}/ppt")  # GET 获取节点 PPT 课件
 async def get_ppt(
     node_id: int,
@@ -353,6 +373,7 @@ async def get_ppt(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
+# 获取节点拓展阅读
 @router.get("/nodes/{node_id}/reading")  # GET 获取节点拓展阅读
 async def get_reading(
     node_id: int,
@@ -367,6 +388,7 @@ async def get_reading(
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
 
+# 获取节点动画讲解资源
 @router.get("/nodes/{node_id}/cartoon")  # GET 获取节点动画讲解资源
 async def get_cartoon(
     node_id: int,
@@ -384,6 +406,7 @@ async def get_cartoon(
 # ── 资源列表与详情 ───────────────────────────────────────────────────────────
 
 
+# 获取路径资源列表（支持分页）
 @router.get("/resources")  # GET /api/v1/ai/path-plan/resources — 获取路径资源列表
 async def list_path_resources(
     limit: int = Query(default=20, ge=1, le=100),
@@ -430,6 +453,7 @@ async def list_path_resources(
     })
 
 
+# 获取单个路径资源详情
 @router.get("/resources/{resource_id}")  # GET 路径资源详情
 async def get_path_resource(
     resource_id: int,
@@ -442,6 +466,7 @@ async def get_path_resource(
     return HttpResponse.success(data=LearningPathResourceDTO.from_model(resource).model_dump(mode="json"))
 
 
+# 获取路径详情（含所有节点）
 @router.get("/{path_id}")  # GET /api/v1/ai/path-plan/{id} — 获取路径详情（含所有节点）
 async def get_path_by_id(
     path_id: int,
@@ -459,6 +484,7 @@ async def get_path_by_id(
 # ── 学习事件与评估 ───────────────────────────────────────────────────────────
 
 
+# 记录路径学习事件
 @router.post("/{path_id}/events")
 async def record_path_learning_event(
     path_id: int,
@@ -474,6 +500,7 @@ async def record_path_learning_event(
     return HttpResponse.success(data=build_learning_event_item(event).model_dump(mode="json"))
 
 
+# 获取路径学习评估（学习信号 + 优化建议）
 @router.get("/{path_id}/evaluation")  # GET 路径学习评估 — 汇总学习信号和优化建议
 async def get_path_learning_evaluation(
     path_id: int,
@@ -491,6 +518,7 @@ async def get_path_learning_evaluation(
 # ── 仪表盘端点（从 dashboard 模块迁移）───────────────────────────────────
 
 
+# 获取当前学习节点：优先可用状态，其次有缺陷完成状态
 def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     """获取当前学习路径节点（优先可用状态，其次已完成有缺陷状态）。"""
     for status in ("available", "completed_with_gaps"):
@@ -500,6 +528,7 @@ def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     return path_nodes[0] if path_nodes else None
 
 
+# 仪表盘：获取继续学习数据（每条活跃路径的当前节点）
 @dashboard_router.get("/dashboard/continue-learning")
 async def get_continue_learning(
     current_user: User = Depends(get_current_user),

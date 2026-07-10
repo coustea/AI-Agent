@@ -1,3 +1,4 @@
+# combination_num 算法实现 — domain: math
 def pascals_triangle(n):
     triangle = []
     for i in range(n):
@@ -7,6 +8,7 @@ def pascals_triangle(n):
         triangle.append(row)
     return triangle
 
+# 定义 nCr 函数
 def nCr(n, r):
     if r < 0 or r > n:
         return 0
@@ -18,6 +20,7 @@ def nCr(n, r):
         result = result * (n - i) // (i + 1)
     return result
 
+# 定义 nCr_mod 函数
 def nCr_mod(n, r, p):
     if r < 0 or r > n:
         return 0
@@ -30,6 +33,7 @@ def nCr_mod(n, r, p):
         inv_fact[i] = inv_fact[i + 1] * (i + 1) % p
     return fact[n] * inv_fact[r] % p * inv_fact[n - r] % p
 
+# 定义 lucas_theorem 函数
 def lucas_theorem(n, r, p):
     if r == 0:
         return 1

@@ -148,6 +148,7 @@ import { getErrorMessage } from '@/shared/api/http'
 import AppLogo from '@/shared/ui/AppLogo.vue'
 import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 
+// Vue Router 实例，注册成功后跳转登录页
 const router = useRouter()
 // 注册请求进行中的加载状态
 const isDeploying = ref(false)
@@ -224,12 +225,14 @@ const handleRegister = async () => {
   if (!validateForm()) return
   isDeploying.value = true
   try {
+    // 调用注册 API 创建用户
     await register({
       username: form.username,
       password: form.password,
       email: form.email || undefined,
     })
     
+    // 注册成功跳转登录页，附带标记触发成功弹窗
     router.push('/login?registerSuccess=true')
   } catch (err: any) {
     const msg = getErrorMessage(err, '注册失败，请稍后重试')

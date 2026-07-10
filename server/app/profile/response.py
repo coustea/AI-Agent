@@ -1,5 +1,6 @@
 """画像 API 响应模型 — 入门信息、全局画像及评分响应。"""
 
+# 定义基础信息、学生画像摘要、入门响应与全局画像的响应模型
 from __future__ import annotations
 
 from typing import Any
@@ -33,6 +34,7 @@ class StudentProfileData(BaseModel):
     preferred_language: str | None = None
 
     @classmethod
+    # 从 base_info 字典构造精简版学生画像
     def from_base_info(cls, base_info: dict[str, Any]) -> "StudentProfileData":
         """从 base_info 字典构造 StudentProfileData。"""
         return cls(

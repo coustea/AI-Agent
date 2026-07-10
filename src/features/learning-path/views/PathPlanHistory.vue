@@ -225,10 +225,11 @@ type StatusTab = {
 
 const router = useRouter()
 
+// 历史路径列表与筛选分页状态
 const loading = ref(false)
 const items = ref<LearningPathHistoryItem[]>([])
-const keyword = ref('')
-const statusFilter = ref('all')
+const keyword = ref('')           // 搜索关键词
+const statusFilter = ref('all')   // 状态筛选标签
 const currentPage = ref(1)
 const pageSize = ref(5)
 
@@ -241,6 +242,7 @@ const statusTabs: StatusTab[] = [
   { label: '发生编译阻断', value: 'failed' },
 ]
 
+// 根据状态筛选和关键词搜索过滤历史记录
 const filteredItems = computed(() => {
   const key = keyword.value.toLowerCase()
   return items.value
@@ -254,6 +256,7 @@ const filteredItems = computed(() => {
       })
 })
 
+// 总页数与当前页起止索引（分页逻辑）
 const totalPages = computed(() => {
   return Math.max(1, Math.ceil(filteredItems.value.length / pageSize.value))
 })
@@ -266,6 +269,7 @@ const pageEndIndex = computed(() => {
   return Math.min(pageStartIndex.value + pageSize.value, filteredItems.value.length)
 })
 
+// 当前页展示的数据切片
 const pagedItems = computed(() => {
   return filteredItems.value.slice(pageStartIndex.value, pageEndIndex.value)
 })
@@ -287,6 +291,7 @@ const activeStatusLabel = computed(() => {
   return statusTabs.find((tab) => tab.value === statusFilter.value)?.label || '全部'
 })
 
+// 加载历史路径列表
 const loadHistory = async () => {
   loading.value = true
   try {
@@ -299,6 +304,7 @@ const loadHistory = async () => {
   }
 }
 
+// 继续学习：激活并跳转到指定历史路径
 const continueLearning = async (item: LearningPathHistoryItem) => {
   if (!canActivate(item)) return
   try {
@@ -309,10 +315,12 @@ const continueLearning = async (item: LearningPathHistoryItem) => {
   }
 }
 
+// 切换分页
 const goPage = (page: number) => {
   currentPage.value = Math.min(Math.max(1, page), totalPages.value)
 }
 
+// 判断路径是否可以激活（失败/生成中不可激活）
 const canActivate = (item: LearningPathHistoryItem) => {
   return item.status !== 'failed' && item.status !== 'generating'
 }
@@ -381,16 +389,19 @@ const formatTime = (value: string) => {
   })
 }
 
+// 筛选条件变化时重置到第一页
 watch([keyword, statusFilter, pageSize], () => {
   currentPage.value = 1
 })
 
+// 总页数变化时自动修正当前页
 watch(totalPages, (value) => {
   if (currentPage.value > value) {
     currentPage.value = value
   }
 })
 
+// 页面挂载时加载历史记录
 onMounted(loadHistory)
 </script>
 

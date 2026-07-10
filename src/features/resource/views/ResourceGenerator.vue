@@ -76,6 +76,7 @@ import { getResourceBundle } from '../api/resource'
 const route = useRoute()
 const router = useRouter()
 
+// 解构 useGeneration 组合式函数，获取全部状态与操作方法
 const {
   currentPhase, naturalInput, learningScenario, enabledAgentIds, agentConfigs,
   dagNodeStates, selectedDagNodeId, overallProgress, latestWorkflowMessage,
@@ -84,6 +85,7 @@ const {
   submitInput, start, restore, pause, resume, dispose, selectDagNode,
 } = useGeneration()
 
+// 监听阶段变化：进入 result 阶段后自动跳转到资源结果详情页
 watch(currentPhase, (phase) => {
   if (phase === 'result' && activeResourceId.value) {
     router.push({ name: 'ResourceResult', params: { id: activeResourceId.value } })
@@ -95,6 +97,7 @@ const activePreviewAgent = ref<string | null>(null)
 const previewData = ref<any>(null)
 const previewResource = ref<any>(null)
 
+// 按资源类型打开预览：若 content 为空则尝试从资源包拉取完整数据
 async function openResourceByType(type: string) {
   let resource = generatedResources.value.find((item: any) => item.type === type)
   if (resource && !resource.content && activeResourceId.value) {
@@ -118,6 +121,7 @@ async function openResourceByType(type: string) {
   }
 }
 
+// 组件挂载：从 URL query 恢复 prompt 或 resourceId 并恢复生成状态
 onMounted(() => {
   const prompt = route.query.prompt
   if (prompt) naturalInput.value = String(prompt)
@@ -126,8 +130,10 @@ onMounted(() => {
     void restore(resourceId)
   }
 })
+// keep-alive 激活时恢复事件流，停用时暂停
 onActivated(() => { void resume() })
 onDeactivated(() => { pause() })
+// 组件销毁时释放 SSE 连接与轮询定时器
 onBeforeUnmount(() => { dispose() })
 </script>
 

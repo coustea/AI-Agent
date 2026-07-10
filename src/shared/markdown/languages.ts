@@ -1,5 +1,7 @@
 import type { LanguageInput } from 'shiki/core'
 
+// 代码高亮语言模块：支持的语言列表、别名规范化及高亮阈值控制
+
 export const MAX_HIGHLIGHT_CHARS = 50_000
 export const MAX_HIGHLIGHT_LINES = 2_000
 

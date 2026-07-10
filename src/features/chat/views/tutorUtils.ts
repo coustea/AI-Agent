@@ -65,6 +65,7 @@ export interface ChatMsg {
   sources?: KnowledgeSource[]  // 知识库来源
 }
 
+// 将活动中所有 running 状态统一标记为 done/failed
 export const finalizeRunningAgentActivities = (
   activities: AgentActivity[] | undefined,
   status: Extract<AgentActivity['status'], 'done' | 'failed'>,
@@ -83,6 +84,7 @@ export interface AutoRestartVadDecision {
   continuousVoiceConversation?: boolean
 }
 
+// 判断数字人回复完成后是否应自动重启 VAD（语音通话模式）
 export const shouldAutoRestartVadAfterAssistantComplete = ({
   isVoiceChatting,
   chatMode,
@@ -108,6 +110,7 @@ const SUPPORTED_DIAGRAM_TYPES = new Set([
   'timeline',
 ])
 
+// 校验教学图解结构完整性和类型支持
 export const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {
   if (!diagram || typeof diagram !== 'object') return null
   if (!SUPPORTED_DIAGRAM_TYPES.has(diagram.graph_type)) return null
@@ -115,6 +118,7 @@ export const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undef
   return diagram
 }
 
+// 根据文件名获取文档类型分类
 export const getDocumentType = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
   if (['doc', 'docx'].includes(ext)) return 'word'
@@ -141,6 +145,7 @@ export const formatFileSize = (size?: number) => {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+// 格式化相对时间显示（如"3分钟前"）
 export const formatRelativeTime = (dateStr: string) => {
   if (!dateStr) return ''
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -171,6 +176,7 @@ const takeAsciiWordUnit = (text: string): number => {
   return take
 }
 
+// 流式渲染：取下一个渲染单元的长度（支持 CJK、英文单词、代码块）
 export const takeNextStreamUnit = (text: string, inCodeBlock: boolean): number => {
   if (!text) return 0
   if (text.startsWith('\r\n')) return 2

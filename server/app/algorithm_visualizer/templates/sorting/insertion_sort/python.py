@@ -14,6 +14,7 @@ def binary_insertion_sort(arr):
         arr[lo] = key
     return arr
 
+# 定义 insertion_sort 函数
 def insertion_sort(arr):
     n = len(arr)
     for i in range(1, n):
@@ -25,6 +26,7 @@ def insertion_sort(arr):
         arr[j + 1] = key
     return arr
 
+# 定义 shell_insertion 函数
 def shell_insertion(arr, gap):
     n = len(arr)
     for i in range(gap, n):

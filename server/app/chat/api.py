@@ -29,6 +29,7 @@ from app.infra.response import HttpResponse
 
 logger = get_logger(__name__)
 
+# 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
 
 
@@ -37,6 +38,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
+# 创建一条辅导对话消息：解析附件、确保会话、保存用户消息并调度后台 Agent 任务
 @router.post("/chat/messages")
 async def create_mentor_chat_message(
     background_tasks: BackgroundTasks,
@@ -47,6 +49,7 @@ async def create_mentor_chat_message(
     enable_web_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user_flexible),
 ):
+    # 获取用例层并解析附件 JSON 参数
     uc = get_chat_usecases()
     try:
         parsed_attachments = json.loads(attachments) if attachments else []
@@ -56,6 +59,7 @@ async def create_mentor_chat_message(
         isinstance(item, dict) for item in parsed_attachments
     ):
         return HttpResponse.error(code=400, message="附件参数格式错误")
+    # 确定会话 ID（未提供则使用默认会话）与有效消息文本
     effective_session = session_id or uc.default_session_id(current_user.id)
     effective_message = (user_input or "").strip()
 
@@ -63,9 +67,11 @@ async def create_mentor_chat_message(
     if not effective_message and not parsed_attachments:
         return HttpResponse.error(code=400, message="请输入问题或上传附件")
 
+    # 纯附件场景：填充默认引导语
     if not effective_message and parsed_attachments:
         effective_message = "请分析我上传的附件，并解答其中的问题。"
 
+    # 同一会话若已有进行中的回答则拒绝并发请求
     if await has_active_chat_channel(current_user.id, effective_session):
         return HttpResponse.error(code=409, message="当前回答尚未完成，请稍候")
 
@@ -79,6 +85,7 @@ async def create_mentor_chat_message(
     except Exception as exc:
         logger.warning("[ChatAPI] 确保会话存在失败: %s", exc)
 
+    # 持久化用户消息（含附件），失败返回错误
     try:
         user_message = await uc.create_user_message(
             user_id=current_user.id,
@@ -95,6 +102,7 @@ async def create_mentor_chat_message(
     if user_message_id is None:
         return HttpResponse.error(code=500, message="保存用户消息失败")
 
+    # 为该条用户消息创建事件频道供前端 SSE 订阅
     events = ChatEvents(
         user_id=current_user.id,
         session_id=effective_session,
@@ -102,6 +110,7 @@ async def create_mentor_chat_message(
     )
     await events.open()
 
+    # 将对话 Agent 处理作为后台任务调度
     background_tasks.add_task(
         run_chat_agent,
         user_message_id=user_message_id,
@@ -119,18 +128,21 @@ async def create_mentor_chat_message(
         user_message_id,
         current_user.id, effective_session, len(effective_message), len(parsed_attachments),
     )
+    # 立即返回 202，表示已受理由后台任务异步处理
     return HttpResponse.success(
         data={"message_id": user_message_id, "session_id": effective_session},
         status_code=202,
     )
 
 
+# 上传附件文件，返回可访问的文件元信息
 @router.post("/chat/upload")
 async def upload_file(
     file: UploadFile = File(...),
     session_id: str = Form(...),
     current_user: User = Depends(get_current_user_flexible),
 ):
+    # 校验文件名并读取文件内容
     if not file.filename:
         return HttpResponse.error(code=400, message="文件名不能为空")
     uc = get_chat_usecases()
@@ -148,6 +160,7 @@ async def upload_file(
     return HttpResponse.success(data=saved)
 
 
+# 按归属用户/会话/文件名解析并返回已上传的附件文件
 @router.get("/chat/uploads/{owner_username}/{session_id}/{filename}")
 async def get_uploaded_file(
     owner_username: str,
@@ -172,6 +185,7 @@ async def get_uploaded_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
+# 返回已生成的图解图片文件
 @router.get("/chat/uploads/{owner_username}/{session_id}/diagrams/{filename}")
 async def get_diagram_file(
     owner_username: str,
@@ -196,6 +210,7 @@ async def get_diagram_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
+# 返回会话内的任意聊天文件（与上传文件共用解析逻辑）
 @router.get("/chat/files/{owner_username}/{session_id}/{filename}")
 async def get_chat_file(
     owner_username: str,
@@ -220,6 +235,7 @@ async def get_chat_file(
     return FileResponse(path=str(file_path), filename=filename)
 
 
+# SSE 响应头：禁用缓存与代理缓冲，保证实时推送
 SSE_HEADERS = {
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
@@ -227,6 +243,7 @@ SSE_HEADERS = {
 }
 
 
+# 订阅某条用户消息的实时处理事件，以 SSE 长连接推送
 @router.get("/chat/sessions/{session_id}/messages/{user_message_id}/events")
 async def stream_chat_message_events(
     session_id: str,
@@ -236,6 +253,7 @@ async def stream_chat_message_events(
     session: AsyncSession = Depends(get_session),
 ):
     """订阅某条 UserMessage 的实时处理事件。"""
+    # 校验会话归属
     result = await session.exec(
         select(ChatSession).where(
             ChatSession.id == session_id,
@@ -246,18 +264,23 @@ async def stream_chat_message_events(
     if chat_session is None:
         return HttpResponse.error(code=404, message="会话不存在或无权限")
 
+    # 获取事件频道，不存在则返回 410
     events = await get_chat_channel(current_user.id, session_id, user_message_id)
     if events is None:
         return HttpResponse.error(code=410, message="事件流已过期或不存在")
 
+    # SSE 生成器：先回放历史事件，再实时推送队列事件，终态后关闭
     async def event_stream():
         queue, replay = await events.subscribe(after_sequence)
         try:
+            # 先回放错过的事件
             for event in replay:
                 yield encode_chat_sse(event)
+            # 若回放已包含终态事件，直接结束
             if replay and replay[-1].event in {"message.completed", "message.failed"}:
                 return
 
+            # 持续监听队列，30s 超时发送心跳保活
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
@@ -265,6 +288,7 @@ async def stream_chat_message_events(
                     yield ": heartbeat\n\n"
                     continue
                 yield encode_chat_sse(event)
+                # 遇到终态事件即结束流
                 if event.event in {"message.completed", "message.failed"}:
                     return
         finally:
@@ -281,6 +305,7 @@ async def stream_chat_message_events(
 # 会话路由
 # ---------------------------------------------------------------------------
 
+# 获取当前用户的会话列表（含摘要信息）
 @router.get("/chat/sessions")
 async def get_sessions(
     limit: int = Query(default=20, ge=1, le=100),
@@ -291,6 +316,7 @@ async def get_sessions(
     return HttpResponse.success(data=[{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions])
 
 
+# 创建新会话
 @router.post("/chat/sessions")
 async def create_session(
     current_user: User = Depends(get_current_user_flexible),
@@ -300,6 +326,7 @@ async def create_session(
     return HttpResponse.success(data={"id": session.id, "title": session.title}, status_code=201)
 
 
+# 归档（删除）指定会话
 @router.delete("/chat/sessions/{session_id}")
 async def delete_session(
     session_id: str,
@@ -312,12 +339,14 @@ async def delete_session(
     return HttpResponse.success(message="会话已归档")
 
 
+# 更新会话标题
 @router.patch("/chat/sessions/{session_id}")
 async def update_session(
     session_id: str,
     payload: dict,
     current_user: User = Depends(get_current_user_flexible),
 ):
+    # 校验标题非空后更新会话标题
     title = (payload.get("title") or "").strip()
     if not title:
         return HttpResponse.error(code=400, message="标题不能为空")
@@ -328,6 +357,7 @@ async def update_session(
     return HttpResponse.success(message="标题已更新")
 
 
+# 获取会话历史消息
 @router.get("/chat/history")
 async def chat_history(
     session_id: str | None = Query(default=None),
@@ -347,12 +377,14 @@ async def chat_history(
 # 学校路由
 # ---------------------------------------------------------------------------
 
+# 按关键词搜索学校（无关键词则返回最近学校）
 @router.get("/schools/search")
 async def search_schools(
     keyword: str = Query(default="", min_length=0, max_length=50),
     limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_session),
 ):
+    # 有关键词则模糊匹配学校名称，否则按 ID 倒序取最近
     if keyword:
         stmt = (
             select(School)
@@ -363,6 +395,7 @@ async def search_schools(
     else:
         stmt = select(School).order_by(School.id.desc()).limit(limit)
 
+    # 执行查询并序列化结果
     schools = list((await db.exec(stmt)).all())
 
     return HttpResponse.success(data=[

@@ -1,26 +1,26 @@
 // 登录请求参数
-export interface LoginParams {
-  username: string
-  password: string
+export interface LoginParams { // 登录请求参数
+  username: string // 用户名
+  password: string // 密码
 }
 
 // 注册请求参数（邮箱选填）
-export interface RegisterParams {
-  username: string
-  password: string
-  email?: string
+export interface RegisterParams { // 注册请求参数
+  username: string // 用户名
+  password: string // 密码
+  email?: string // 邮箱（可选）
 }
 
 // 登录成功返回的数据：token + 用户基础信息
-export interface LoginData {
-  token: string
-  user: {
-    id: number
-    username: string
-    email: string | null
-    avatar: string | null
-    created_at: string
-    is_first_login?: boolean
+export interface LoginData { // 登录响应数据
+  token: string // JWT Token
+  user: { // 用户信息
+    id: number // 用户 ID
+    username: string // 用户名
+    email: string | null // 邮箱
+    avatar: string | null // 头像 URL
+    created_at: string // 创建时间
+    is_first_login?: boolean // 是否首次登录
     // 基础信息（原 profile base_info，onboarding 填写）
     school?: string | null
     school_level?: string | null
@@ -34,14 +34,14 @@ export interface LoginData {
 }
 
 // 注册成功返回的数据：仅包含用户基础信息
-export interface UserData {
-  user: {
-    id: number
-    username: string
-    email: string | null
-    avatar: string | null
-    created_at: string
-    is_first_login?: boolean
+export interface UserData { // 注册响应数据
+  user: { // 用户信息
+    id: number // 用户 ID
+    username: string // 用户名
+    email: string | null // 邮箱
+    avatar: string | null // 头像 URL
+    created_at: string // 创建时间
+    is_first_login?: boolean // 是否首次登录
     school?: string | null
     school_level?: string | null
     major?: string | null
@@ -54,11 +54,11 @@ export interface UserData {
 }
 
 // 更新用户资料的请求参数（全部字段均可选）
-export interface UserUpdateParams {
-  username?: string
-  email?: string
-  avatar?: string
-  is_first_login?: boolean
+export interface UserUpdateParams { // 用户信息更新参数
+  username?: string // 用户名
+  email?: string // 邮箱
+  avatar?: string // 头像 URL
+  is_first_login?: boolean // 首次登录标记
   school?: string | null
   school_level?: string | null
   major?: string | null
@@ -70,6 +70,6 @@ export interface UserUpdateParams {
 }
 
 // 头像上传成功后返回的头像地址
-export interface AvatarUploadData {
-  avatar: string
+export interface AvatarUploadData { // 头像上传响应数据
+  avatar: string // 新头像 URL
 }

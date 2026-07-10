@@ -1,13 +1,11 @@
 <template>
   <div class="linked-list-visualizer">
-    <div class="visualizer-meta">
-      <div><h3>链表可视化</h3><p>展示链表节点的插入、删除、遍历过程，支持指针标注。</p></div>
+    <div class="chart-shell">
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>默认</span>
         <span class="legend-item"><i class="legend-dot visited"></i>已访问</span>
       </div>
-    </div>
-    <div class="chart-shell">
+
       <div v-if="nodes.length" class="linear-strip">
         <div v-for="(node, index) in nodes" :key="node.id" :class="['linear-node', node.tone || 'default']">
           <span class="node-value">{{ node.label }}</span>
@@ -28,8 +26,10 @@ import type { TraceEvent } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
 
+// 当前步骤的链表节点和指针数据
 const nodes = computed(() => { const raw = props.currentEvent?.state?.structure?.nodes; return Array.isArray(raw) ? raw : [] })
 const pointers = computed(() => { const raw = props.currentEvent?.state?.structure?.pointers; return Array.isArray(raw) ? raw : [] })
+// 获取特定索引节点上的指针标签
 function getPointers(index: number) { return pointers.value.filter((p: any) => p.nodeIndex === index || p.itemIndex === index) }
 </script>
 
@@ -37,38 +37,23 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
 .linked-list-visualizer {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.visualizer-meta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.visualizer-meta h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-strong);
-}
-
-.visualizer-meta p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  padding: 12px;
+  background: transparent;
 }
 
 .legend {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
   display: flex;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .legend-item {
@@ -96,6 +81,8 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
 }
 
 .chart-shell {
+  position: relative;
+  flex: 1;
   min-height: 0;
   border-radius: var(--radius-sm);
   background: var(--color-bg);

@@ -28,6 +28,7 @@
 <script setup lang="ts">
 import type { FrameworkPayload } from '@/features/chat/types/chat'
 
+// 知识框架图：中心核心 + 模块化子项
 defineProps<{
   payload: FrameworkPayload
 }>()

@@ -1,3 +1,4 @@
+# 认证模块路由层：定义注册、登录、登出、用户信息及头像相关的 REST API 端点（统一前缀 /api/v1/users）
 """认证模块 HTTP 路由。
 
 提供用户注册、登录、登出、信息查询/更新、头像上传等 REST API 端点。
@@ -35,6 +36,7 @@ async def create_user(
     创建新用户账号，用户名必须唯一。
     成功返回 201 Created，用户名重复返回 400 并附带字段级错误信息。
     """
+    # 调用认证用例层执行注册逻辑
     result = await auth_usecases.register(session, data)
     if not result.success:
         return HttpResponse.error(
@@ -42,6 +44,7 @@ async def create_user(
             message=result.error_message,
             data={"field": result.error_field},
         )
+    # 注册成功，返回 201 及用户数据
     return HttpResponse.success(data=result.data, status_code=201)
 
 
@@ -56,6 +59,7 @@ async def login(
     验证用户名密码，成功签发 JWT Token。
     失败时返回 401 并附带字段级错误信息（用户不存在 / 密码错误）。
     """
+    # 调用认证用例层执行登录校验
     result = await auth_usecases.login(session, data)
     if not result.success:
         return HttpResponse.error(
@@ -63,6 +67,7 @@ async def login(
             message=result.error_message,
             data={"field": result.error_field},
         )
+    # 登录成功，返回 Token 与用户信息
     return HttpResponse.success(data=result.data)
 
 
@@ -92,12 +97,14 @@ async def check_auth_status(current_user: User = Depends(get_current_user)):
 
     用于前端检测当前 Token 是否仍然有效，有效则返回 200。
     """
+    # 依赖校验通过，说明 Token 仍然有效
     return HttpResponse.success(message="Token 有效")
 
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     """获取当前登录用户信息。"""
+    # 返回当前登录用户（已自动排除密码等敏感字段）
     return HttpResponse.success(data=UserRead.model_validate(current_user))
 
 
@@ -108,8 +115,10 @@ async def update_me(
     session: AsyncSession = Depends(get_session),
 ):
     """更新当前用户信息（PATCH 语义，只更新提交的字段）。"""
+    # 调用业务层更新当前登录用户
     user = await auth_usecases.update_me(session, current_user.id, data)
     if not user:
+        # 目标用户不存在，返回 404
         return HttpResponse.error(code=404, message="用户不存在")
     return HttpResponse.success(data=UserRead.model_validate(user))
 
@@ -134,6 +143,7 @@ async def upload_avatar(
         )
 
     # 读取文件内容并验证大小（最大 2MB）
+    # 读取上传文件的二进制内容
     content = await file.read()
     max_size = 2 * 1024 * 1024  # 2MB
     if len(content) > max_size:
@@ -153,6 +163,7 @@ async def upload_avatar(
     file_path = avatar_dir / filename
 
     # 将文件内容写入磁盘
+    # 写入头像文件到磁盘
     file_path.write_bytes(content)
 
     # 生成头像访问 URL 并更新用户记录
@@ -172,10 +183,12 @@ async def get_avatar(username: str, filename: str):
 
     根据用户名和文件名返回头像图片，不存在则返回 404。
     """
+    # 延迟导入 FileResponse，避免顶层循环依赖
     from fastapi.responses import FileResponse
 
     avatar_dir = user_avatar_dir(username)
     file_path = avatar_dir / filename
+    # 头像文件不存在时返回 404
     if not file_path.exists():
         return HttpResponse.error(code=404, message="头像不存在")
     # 直接返回文件响应（FastAPI 自动处理 Content-Type）

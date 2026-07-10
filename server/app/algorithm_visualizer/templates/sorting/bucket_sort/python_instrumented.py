@@ -2,16 +2,20 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 insertion_sort_for_buckets 函数
 def insertion_sort_for_buckets(bucket):
+# 循环遍历处理
     for i in range(1, len(bucket)):
         key = bucket[i]
         j = i - 1
+# 循环条件判断
         while j >= 0 and bucket[j] > key:
             bucket[j + 1] = bucket[j]
             j -= 1
         bucket[j + 1] = key
     return bucket
 
+# 定义 bucket_sort 函数
 def bucket_sort(arr):
     if not arr:
         return arr
@@ -24,21 +28,25 @@ def bucket_sort(arr):
     num_buckets = max(1, n // 3)
     bucket_range = (max_val - min_val) / num_buckets
     buckets = [[] for _ in range(num_buckets)]
+# 循环遍历处理
     for x in arr:
         idx = int((x - min_val) / bucket_range)
         if idx == num_buckets:
             idx -= 1
         buckets[idx].append(x)
     result = []
+# 循环遍历处理
     for b in buckets:
         if b:
             insertion_sort_for_buckets(b)
             result.extend(b)
+# 循环遍历处理
     for i, val in enumerate(result):
         tracer.assign(i, val, line=28)
     tracer.finish(line=29)
     return result
 
+# 定义 bucket_sort_with_negatives 函数
 def bucket_sort_with_negatives(arr):
     if not arr:
         return arr
@@ -50,6 +58,7 @@ def bucket_sort_with_negatives(arr):
         pos = bucket_sort(pos)
     return neg + pos
 
+# 定义 bucket_sort_custom_buckets 函数
 def bucket_sort_custom_buckets(arr, num_buckets):
     if not arr:
         return arr
@@ -58,12 +67,14 @@ def bucket_sort_custom_buckets(arr, num_buckets):
         return arr
     bucket_range = (max_val - min_val) / num_buckets
     buckets = [[] for _ in range(num_buckets)]
+# 循环遍历处理
     for x in arr:
         idx = int((x - min_val) / bucket_range)
         if idx == num_buckets:
             idx -= 1
         buckets[idx].append(x)
     result = []
+# 循环遍历处理
     for b in buckets:
         if b:
             insertion_sort_for_buckets(b)
@@ -77,10 +88,12 @@ datasets = [
 ]
 
 bucket_sort(datasets[0][:])
+# 循环遍历处理
 for data in datasets[1:]:
     r1 = bucket_sort(data[:])
     assert r1 == sorted(data)
 
+# 循环遍历处理
 for nb in [3, 5, 7, 10]:
     r2 = bucket_sort_custom_buckets(datasets[0][:], nb)
     assert r2 == sorted(datasets[0])

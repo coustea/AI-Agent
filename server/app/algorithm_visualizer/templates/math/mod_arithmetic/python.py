@@ -1,9 +1,12 @@
+# mod_arithmetic 算法实现 — domain: math
 def mod_add(a, b, m):
     return (a % m + b % m) % m
 
+# 定义 mod_mul 函数
 def mod_mul(a, b, m):
     return (a % m * b % m) % m
 
+# 定义 mod_pow 函数
 def mod_pow(base, exp, m):
     result = 1
     base %= m
@@ -14,16 +17,19 @@ def mod_pow(base, exp, m):
         base = base * base % m
     return result
 
+# 定义 mod_inverse 函数
 def mod_inverse(a, m):
     g, x, _ = extended_gcd(a, m)
     return x % m if g == 1 else None
 
+# 定义 extended_gcd 函数
 def extended_gcd(a, b):
     if b == 0:
         return a, 1, 0
     g, x1, y1 = extended_gcd(b, a % b)
     return g, y1, x1 - (a // b) * y1
 
+# 定义 crt 函数
 def crt(remainders, moduli):
     m = 1
     for mi in moduli:

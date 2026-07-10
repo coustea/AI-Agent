@@ -14,6 +14,7 @@ ContextVar 的特性：
 - 任务结束后自动恢复到父任务的上下文
 """
 
+# 本模块基于 ContextVar 在异步调用链中传递用户与会话上下文，供各模块共享
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -26,6 +27,7 @@ _CURRENT_USER_ID: ContextVar[int | None] = ContextVar("current_user_id", default
 _CURRENT_SESSION_ID: ContextVar[str | None] = ContextVar("current_session_id", default=None)
 
 
+# 上下文管理器：在 with 块内设置 user_id/session_id，退出时容错恢复
 @contextmanager
 def runtime_context(user_id: int, session_id: str | None = None) -> Iterator[None]:
     """上下文管理器：在 with 块内设置当前 user_id/session_id，退出时自动恢复。

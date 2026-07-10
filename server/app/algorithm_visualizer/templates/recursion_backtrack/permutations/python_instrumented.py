@@ -2,6 +2,7 @@ from visual_tracer import TreeTracer
 
 tracer = TreeTracer()
 
+# 定义 permute 函数
 def permute(nums):
     if not nums:
         return []
@@ -10,11 +11,13 @@ def permute(nums):
     nodes = []
     node_counter = [0]
 
+# 定义 make_node 函数
     def make_node(label):
         nid = f"node-{node_counter[0]}"
         node_counter[0] += 1
         return nid, {"id": nid, "label": label, "children": []}
 
+# 定义 backtrack_build 函数
     def backtrack_build(start):
         if start == len(nums):
             nid, node = make_node(str(nums[:]))
@@ -22,6 +25,7 @@ def permute(nums):
             return nid
         nid, node = make_node(f"pos{start}:swap")
         nodes.append(node)
+# 循环遍历处理
         for i in range(start, len(nums)):
             nums[start], nums[i] = nums[i], nums[start]
             child_id = backtrack_build(start + 1)
@@ -34,6 +38,7 @@ def permute(nums):
 
     visit_idx = [0]
 
+# 定义 backtrack_visit 函数
     def backtrack_visit(start):
         if start == len(nums):
             nid = f"node-{visit_idx[0]}"
@@ -43,6 +48,7 @@ def permute(nums):
         nid = f"node-{visit_idx[0]}"
         visit_idx[0] += 1
         tracer.visit_node(nid, line=26)
+# 循环遍历处理
         for i in range(start, len(nums)):
             nums[start], nums[i] = nums[i], nums[start]
             backtrack_visit(start + 1)
@@ -52,10 +58,12 @@ def permute(nums):
     tracer.finish(line=34)
 
     res = []
+# 定义 collect 函数
     def collect(start):
         if start == len(nums):
             res.append(nums[:])
             return
+# 循环遍历处理
         for i in range(start, len(nums)):
             nums[start], nums[i] = nums[i], nums[start]
             collect(start + 1)
@@ -63,13 +71,16 @@ def permute(nums):
     collect(0)
     return res
 
+# 定义 permute_with_dup 函数
 def permute_with_dup(nums):
     nums.sort()
     res = []
+# 定义 backtrack 函数
     def backtrack(path, used):
         if len(path) == len(nums):
             res.append(path[:])
             return
+# 循环遍历处理
         for i in range(len(nums)):
             if used[i]:
                 continue
@@ -83,14 +94,17 @@ def permute_with_dup(nums):
     backtrack([], [False] * len(nums))
     return res
 
+# 定义 permute_k 函数
 def permute_k(nums, k):
     if k <= 0 or k > len(nums):
         return []
     res = []
+# 定义 backtrack 函数
     def backtrack(start, depth, path):
         if depth == k:
             res.append(path[:])
             return
+# 循环遍历处理
         for i in range(start, len(nums)):
             path.append(nums[i])
             backtrack(i + 1, depth + 1, path)
@@ -98,17 +112,21 @@ def permute_k(nums, k):
     backtrack(0, 0, [])
     return res
 
+# 定义 next_permutation 函数
 def next_permutation(nums):
     n = len(nums)
     i = n - 2
+# 循环条件判断
     while i >= 0 and nums[i] >= nums[i + 1]:
         i -= 1
     if i >= 0:
         j = n - 1
+# 循环条件判断
         while j > i and nums[j] <= nums[i]:
             j -= 1
         nums[i], nums[j] = nums[j], nums[i]
     left, right = i + 1, n - 1
+# 循环条件判断
     while left < right:
         nums[left], nums[right] = nums[right], nums[left]
         left += 1

@@ -2,18 +2,22 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 knuth_gaps 函数
 def knuth_gaps(n):
     gaps = []
     k = 1
+# 循环条件判断
     while (3 ** k - 1) // 2 < n // 3:
         gaps.append((3 ** k - 1) // 2)
         k += 1
     gaps.reverse()
     return gaps if gaps else [1]
 
+# 定义 sedgewick_gaps 函数
 def sedgewick_gaps(n):
     gaps = []
     i = 0
+# 循环条件判断
     while True:
         if i == 0:
             g = 1
@@ -29,23 +33,29 @@ def sedgewick_gaps(n):
     gaps.reverse()
     return gaps if gaps else [1]
 
+# 定义 hibbard_gaps 函数
 def hibbard_gaps(n):
     gaps = []
     k = 1
+# 循环条件判断
     while (2 ** k - 1) < n:
         gaps.append(2 ** k - 1)
         k += 1
     gaps.reverse()
     return gaps if gaps else [1]
 
+# 定义 shell_sort_with_gaps 函数
 def shell_sort_with_gaps(arr, gaps, trace=False):
     n = len(arr)
     if trace:
         tracer.init_array(arr, line=37)
+# 循环遍历处理
     for gap in gaps:
+# 循环遍历处理
         for i in range(gap, n):
             temp = arr[i]
             j = i
+# 循环条件判断
             while j >= gap and arr[j - gap] > temp:
                 if trace:
                     tracer.compare(j - gap, j, line=44)
@@ -60,6 +70,7 @@ def shell_sort_with_gaps(arr, gaps, trace=False):
         tracer.finish(line=53)
     return arr
 
+# 定义 shell_sort 函数
 def shell_sort(arr):
     gaps = knuth_gaps(len(arr))
     return shell_sort_with_gaps(arr, gaps)
@@ -72,6 +83,7 @@ datasets = [
 ]
 
 shell_sort_with_gaps(datasets[0][:], knuth_gaps(len(datasets[0])), trace=True)
+# 循环遍历处理
 for data in datasets[1:]:
     r1 = shell_sort_with_gaps(data[:], knuth_gaps(len(data)))
     r2 = shell_sort_with_gaps(data[:], sedgewick_gaps(len(data)))

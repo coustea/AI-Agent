@@ -1,3 +1,4 @@
+# state_compress_dp 算法实现 — domain: dynamic_programming
 def tsp(dist):
     if not dist or not dist[0]:
         return 0
@@ -8,6 +9,7 @@ def tsp(dist):
         return dist[0][1] + dist[1][0]
     memo = {}
 
+# 定义 solve 函数
     def solve(mask, pos):
         if mask == (1 << n) - 1:
             return dist[pos][0]
@@ -45,6 +47,7 @@ def tsp(dist):
     path.append(0)
     return result, path
 
+# 定义 tsp_with_pruning 函数
 def tsp_with_pruning(dist):
     n = len(dist)
     if n <= 1:
@@ -54,6 +57,7 @@ def tsp_with_pruning(dist):
     visited = [False] * n
     visited[0] = True
 
+# 定义 dfs 函数
     def dfs(pos, count, cost, path):
         nonlocal best, best_path
         if cost >= best:
@@ -75,6 +79,7 @@ def tsp_with_pruning(dist):
     dfs(0, 1, 0, [0])
     return best, best_path
 
+# 定义 tsp_nearest_neighbor 函数
 def tsp_nearest_neighbor(dist):
     n = len(dist)
     if n <= 1:

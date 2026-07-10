@@ -2,14 +2,18 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# MinHeap 类定义
 class MinHeap:
+# 定义 __init__ 函数
     def __init__(self):
         self.heap = []
 
+# 定义 push 函数
     def push(self, val):
         self.heap.append(val)
         self._sift_up(len(self.heap) - 1)
 
+# 定义 pop 函数
     def pop(self):
         if not self.heap:
             return None
@@ -20,11 +24,14 @@ class MinHeap:
         self._sift_down(0)
         return val
 
+# 定义 peek 函数
     def peek(self):
         return self.heap[0] if self.heap else None
 
+# 定义 _sift_up 函数
     def _sift_up(self, i):
         tracer.init_array(self.heap, line=16)
+# 循环条件判断
         while i > 0:
             parent = (i - 1) // 2
             tracer.compare(i, parent, line=19)
@@ -36,8 +43,10 @@ class MinHeap:
                 break
         tracer.finish(line=26)
 
+# 定义 _sift_down 函数
     def _sift_down(self, i):
         n = len(self.heap)
+# 循环条件判断
         while True:
             smallest = i
             left = 2 * i + 1
@@ -51,29 +60,37 @@ class MinHeap:
             self.heap[i], self.heap[smallest] = self.heap[smallest], self.heap[i]
             i = smallest
 
+# 定义 size 函数
     def size(self):
         return len(self.heap)
 
+# 定义 build_heap 函数
 def build_heap(arr):
     heap = MinHeap()
+# 循环遍历处理
     for v in arr:
         heap.push(v)
     return heap
 
+# 定义 heap_sort 函数
 def heap_sort(arr):
     heap = build_heap(arr)
     result = []
+# 循环条件判断
     while heap.size() > 0:
         result.append(heap.pop())
     return result
 
+# 定义 k_way_merge 函数
 def k_way_merge(arrays):
     import heapq
     heap = []
+# 循环遍历处理
     for arr_idx, arr in enumerate(arrays):
         if arr:
             heapq.heappush(heap, (arr[0], arr_idx, 0))
     result = []
+# 循环条件判断
     while heap:
         val, arr_idx, elem_idx = heapq.heappop(heap)
         result.append(val)

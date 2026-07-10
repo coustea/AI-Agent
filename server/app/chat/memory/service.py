@@ -57,6 +57,7 @@ logger = get_logger(__name__)
 # -----------------------------------------------------------------------
 
 
+# ChatMemoryService：记忆管线与持久化统一入口（会话/消息/摘要/活动/压缩/长期记忆）
 class ChatMemoryService:
     """聊天模块的记忆管线与持久化外观。"""
 
@@ -69,6 +70,7 @@ class ChatMemoryService:
     #                       并增量写入长期记忆 markdown
     #   llm               — LLM 实例，供标题生成等辅助功能使用
     # -------------------------------------------------------------------
+    # 初始化压缩器、长期记忆服务与 LLM 实例
     def __init__(self) -> None:
         self.compressor = ChatSessionCompressor(
             keep_recent=COMPRESS_KEEP_RECENT_MESSAGES,
@@ -87,6 +89,7 @@ class ChatMemoryService:
     # 初始标题为 DEFAULT_SESSION_TITLE，后续由 generate_session_title 自动更新。
     # 返回创建的 session 对象（含自动生成的 id 和时间戳）。
     # -------------------------------------------------------------------
+    # 创建新会话（初始标题，后续自动更新），返回会话对象
     async def create_session(self, *, user_id: int, title: str = DEFAULT_SESSION_TITLE) -> Any:
         async with session_scope() as db:
             chat_session = ChatSession(user_id=user_id, title=title)
@@ -101,6 +104,7 @@ class ChatMemoryService:
     # 如果 session_id 存在且属于该用户，返回现有会话；
     # 否则创建一个新会话。
     # -------------------------------------------------------------------
+    # 获取已存在会话，不存在则按给定 ID 创建
     async def get_or_create_session(self, *, user_id: int, session_id: str) -> Any:
         async with session_scope() as db:
             chat_session = (
@@ -124,6 +128,7 @@ class ChatMemoryService:
     #
     # 按 updated_at 降序排列（最近活跃的在前），限制返回数量。
     # -------------------------------------------------------------------
+    # 列出当前用户未归档的会话（按活跃时间倒序）
     async def list_sessions(self, *, user_id: int, limit: int = 20) -> list[Any]:
         async with session_scope() as db:
             stmt = (
@@ -144,6 +149,7 @@ class ChatMemoryService:
     # 但数据仍保留在数据库中供审计和恢复使用。
     # 返回 True 表示归档成功，False 表示 session 不存在或无权限。
     # -------------------------------------------------------------------
+    # 软删除归档会话（置 is_archived，数据保留）
     async def archive_session(self, *, user_id: int, session_id: str) -> bool:
         async with session_scope() as db:
             chat_session = (
@@ -168,6 +174,7 @@ class ChatMemoryService:
     # 标题截断到 TITLE_MAX_LENGTH 字符，防止过长标题影响 UI 展示。
     # 返回 True 表示更新成功，False 表示 session 不存在或无权限。
     # -------------------------------------------------------------------
+    # 更新会话标题（截断到最大长度）
     async def update_session_title(self, *, user_id: int, session_id: str, title: str) -> bool:
         async with session_scope() as db:
             chat_session = (
@@ -186,6 +193,7 @@ class ChatMemoryService:
             await db.commit()
             return True
 
+    # 根据首条消息用 LLM 生成会话标题，失败则用清理后的输入兜底
     async def generate_session_title(self, *, user_id: int, session_id: str, first_message: str) -> bool:
         """根据首条用户消息生成会话标题，失败时退回到截断后的用户输入。"""
         fallback = self._clean_session_title(first_message) or DEFAULT_SESSION_TITLE
@@ -204,6 +212,7 @@ class ChatMemoryService:
             logger.warning("[ChatMemoryService] 生成标题失败: user_id=%s session_id=%s err=%s", user_id, session_id, exc)
         return await self.update_session_title(user_id=user_id, session_id=session_id, title=title)
 
+    # 清理标题：去除换行与标点、压缩空白、截断长度
     @staticmethod
     def _clean_session_title(value: str) -> str:
         title = re.sub(r"[\r\n\t]+", " ", value or "").strip()
@@ -216,6 +225,7 @@ class ChatMemoryService:
     # -------------------------------------------------------------------
     # save_message: 持久化单条聊天消息，并更新 token 计数器
     # -------------------------------------------------------------------
+    # 持久化单条消息，校验归属并更新各 token/消息计数器
     async def save_message(
         self,
         *,
@@ -237,6 +247,7 @@ class ChatMemoryService:
             else:
                 chat_session = ChatSession(id=session_id, user_id=user_id)
             db.add(chat_session)
+            # 校验关联的用户消息存在
             if user_message_id is not None:
                 root_message = (
                     await db.exec(
@@ -250,6 +261,7 @@ class ChatMemoryService:
                 if root_message is None:
                     raise ValueError("关联的用户消息不存在")
 
+            # 文本或列表统一归一化为列表格式
             normalized_content = content
             if not isinstance(normalized_content, list):
                 normalized_content = [{"type": "text", "text": str(content or "")}]
@@ -281,6 +293,7 @@ class ChatMemoryService:
             await db.refresh(message)
             return message
 
+    # 按时间正序返回会话最近消息（先倒序查再反转）
     async def list_messages(
         self,
         *,
@@ -301,6 +314,7 @@ class ChatMemoryService:
             )
             return list(reversed((await db.exec(stmt)).all()))
 
+    # 统计会话消息数
     async def count_messages(self, *, user_id: int, session_id: str) -> int:
         async with session_scope() as db:
             result = (
@@ -316,6 +330,7 @@ class ChatMemoryService:
             ).one()
             return int(result)
 
+    # 创建附件分析记录（running 状态）
     async def create_attachment_analysis(
         self,
         *,
@@ -349,6 +364,7 @@ class ChatMemoryService:
             await db.refresh(analysis)
             return analysis
 
+    # 完成附件分析：写入内容或错误并标记状态
     async def finish_attachment_analysis(
         self,
         *,
@@ -373,6 +389,7 @@ class ChatMemoryService:
             db.add(analysis)
             await db.commit()
 
+    # 列出会话的附件分析（可选仅已完成）
     async def list_attachment_analyses(
         self,
         *,
@@ -398,6 +415,7 @@ class ChatMemoryService:
             stmt = stmt.order_by(ChatAttachmentAnalysis.created_at.asc())
             return list((await db.exec(stmt)).all())
 
+    # 保存/更新活动摘要（同 activity_id 原位更新，终态写完成时间）
     async def upsert_activity(
         self,
         *,
@@ -408,8 +426,10 @@ class ChatMemoryService:
     ) -> ChatActivity | None:
         """保存公开状态摘要；同一 activity_id 的生命周期原位更新。"""
         activity_id = str(payload.get("activity_id") or "").strip()
+        # 无 activity_id 则不记录
         if not activity_id:
             return None
+        # 归一化状态字段
         status = str(payload.get("status") or "running")
         if status in {"completed", "finished"}:
             status = "done"
@@ -419,6 +439,7 @@ class ChatMemoryService:
             status = "running"
 
         async with session_scope() as db:
+            # 查询是否已存在该活动
             activity = (
                 await db.exec(
                     select(ChatActivity)
@@ -432,6 +453,7 @@ class ChatMemoryService:
                     )
                 )
             ).first()
+            # 不存在则校验关联用户消息后新建
             if activity is None:
                 user_message = (
                     await db.exec(
@@ -452,6 +474,7 @@ class ChatMemoryService:
                     activity_id=activity_id,
                 )
 
+            # 用负载字段覆盖活动记录
             activity.kind = str(payload.get("kind") or activity.kind or "workflow")
             activity.stage = str(payload.get("stage") or "") or None
             activity.status = status
@@ -467,6 +490,7 @@ class ChatMemoryService:
             await db.refresh(activity)
             return activity
 
+    # 列出会话活动（按开始时间正序）
     async def list_activities(
         self,
         *,
@@ -486,6 +510,7 @@ class ChatMemoryService:
             )
             return list((await db.exec(stmt)).all())
 
+    # 删除会话全部短期消息（清理），返回删除条数
     async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:
         async with session_scope() as db:
             msgs = list(
@@ -508,6 +533,7 @@ class ChatMemoryService:
                 await db.commit()
             return len(stale_ids)
 
+    # 重置会话的各记忆计数器
     async def reset_session_counters(self, *, user_id: int, session_id: str) -> None:
         async with session_scope() as db:
             s = (
@@ -619,6 +645,7 @@ class ChatMemoryService:
     # 将旧消息通过 LLM 摘要化，保留最近 keep_recent 条原始消息。
     # 返回压缩后的 summary block（None 表示无需压缩）。
     # -------------------------------------------------------------------
+    # 检查会话是否需要压缩（不实际压缩）
     async def should_compress_session(
         self,
         *,
@@ -628,6 +655,7 @@ class ChatMemoryService:
         """检查会话是否需要压缩（不实际执行压缩）。"""
         try:
             async with session_scope() as db:
+                # 委托压缩器判断是否达标
                 result = await self.compressor.needs_compression(
                     db=db,
                     user_id=user_id,
@@ -639,6 +667,7 @@ class ChatMemoryService:
             logger.error("[ChatMemoryService] 压缩需求检查失败: %s", exc)
             return False
 
+    # 组合执行 LTM + 压缩的 token/消息阈值检查（后台任务调度用）
     async def evaluate_post_turn_jobs(
         self,
         *,
@@ -651,6 +680,7 @@ class ChatMemoryService:
 
         学习者画像不再在此处触发（改为 GET /profile 懒加载 + 周概要缓冲）。
         """
+        # 分类当前轮次信号（仅 LTM 信号）
         signals = classify_turn_signals(user_message, assistant_reply)
         ltm_signal = signals["ltm"]
 
@@ -665,6 +695,7 @@ class ChatMemoryService:
                     )
                 ).first()
 
+                # 会话不存在则仅依据信号判定
                 if not chat_session:
                     should_ltm = ltm_signal
                     ltm_schedule: dict[str, Any] = {
@@ -673,7 +704,7 @@ class ChatMemoryService:
                         "ltm_message_count": 0,
                     }
                 else:
-                    # 长期记忆更新阈值判断
+                    # 长期记忆更新阈值判断（信号或 token/消息数达标）
                     ltm_token = int(chat_session.ltm_token_count or 0)
                     ltm_msg = int(chat_session.ltm_message_count or 0)
                     ltm_threshold_due = ltm_token >= UPDATE_MIN_TOKENS or ltm_msg >= UPDATE_MIN_MESSAGES
@@ -686,6 +717,7 @@ class ChatMemoryService:
                         "last_ltm_message_id": int(chat_session.last_ltm_message_id or 0),
                     }
 
+                # 检查是否需要压缩
                 should_compress = await self.compressor.needs_compression(
                     db=db,
                     user_id=user_id,
@@ -711,6 +743,7 @@ class ChatMemoryService:
                 "signals": signals,
             }
 
+    # 执行会话压缩（委托压缩器，异常返回 None）
     async def compress_session(
         self,
         *,
@@ -721,6 +754,7 @@ class ChatMemoryService:
         logger.info("[ChatMemoryService] 开始会话压缩: user_id=%s session_id=%s reason=%s", user_id, session_id, reason)
         try:
             async with session_scope() as db:
+                # 委托压缩器执行条件压缩
                 result = await self.compressor.maybe_compress(
                     db=db,
                     user_id=user_id,
@@ -743,6 +777,7 @@ class ChatMemoryService:
     # 判断是否需要更新。LLM 判断 need_update 且 confidence ≥ 阈值
     # 才实际写入。返回 True 表示已更新。
     # -------------------------------------------------------------------
+    # 触发长期记忆更新：构建新对话片段并委托 LTM 服务判断写入
     async def update_long_term_memory(
         self,
         *,
@@ -766,6 +801,7 @@ class ChatMemoryService:
                         )
                     )
                 ).first()
+                # 取上次 LTM 之后的消息构建新对话片段
                 after_message_id = int(chat_session.last_ltm_message_id or 0) if chat_session else 0
                 new_dialogue, message_count, latest_message_id = await self._build_dialogue_since(
                     db=db,
@@ -778,10 +814,12 @@ class ChatMemoryService:
                     "[ChatMemoryService] 构建对话: after_message_id=%s latest_message_id=%s message_count=%s dialogue_length=%s",
                     after_message_id, latest_message_id, message_count, len(new_dialogue),
                 )
+                # 无新对话则跳过更新
                 if not new_dialogue or latest_message_id <= after_message_id:
                     logger.info("[ChatMemoryService] 无新对话，跳过长期记忆更新")
                     return {"updated": False, "analyzed": False, "latest_message_id": after_message_id}
 
+                # 委托 LTM 服务判断并更新
                 result = await self.long_term_memory.maybe_update(
                     db=db,
                     user_id=user_id,
@@ -793,6 +831,7 @@ class ChatMemoryService:
                     signal_detected=signal_detected,
                 )
                 analyzed = bool(result.get("analyzed"))
+                # 分析成功则重置 LTM 计数器并记录最后消息 ID
                 if analyzed and chat_session:
                     chat_session.ltm_token_count = 0
                     chat_session.ltm_message_count = 0
@@ -809,6 +848,7 @@ class ChatMemoryService:
             logger.error("[ChatMemoryService] 长期记忆更新失败: %s", exc)
             return {"updated": False, "analyzed": False, "error": str(exc)}
 
+    # 构建自某消息 ID 之后的对话文本（学生/辅导老师角色拼接）
     async def _build_dialogue_since(
         self,
         *,
@@ -818,6 +858,7 @@ class ChatMemoryService:
         after_message_id: int,
         limit: int,
     ) -> tuple[str, int, int]:
+        # 查询该消息 ID 之后的用户/助手对话
         stmt = (
             select(ChatMessage)
             .join(ChatSession, ChatSession.id == ChatMessage.session_id)
@@ -834,6 +875,7 @@ class ChatMemoryService:
         if not messages:
             return "", 0, after_message_id
 
+        # 倒序遍历以追踪最新消息 ID 并拼接对话行
         lines: list[str] = []
         latest_message_id = after_message_id
         for message in reversed(messages):
@@ -846,9 +888,11 @@ class ChatMemoryService:
         return "\n".join(lines), len(messages), latest_message_id
 
 
+# 全局单例缓存
 _chat_memory_service: ChatMemoryService | None = None
 
 
+# 获取 ChatMemoryService 全局单例（懒加载）
 def get_chat_memory_service() -> ChatMemoryService:
     global _chat_memory_service
     if _chat_memory_service is None:

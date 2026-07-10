@@ -100,6 +100,7 @@ class ReadingAgent(BaseResourceAgent):
         """
         coverage = config.get("coverage") or "extended"
         max_items = config.get("max_items", 5)
+        # 至少生成 max_items 的一半，否则触发重试
         min_items = max(2, max_items // 2)  # 至少生成 max_items 的一半
         language_preference = config.get("language_preference") or "chinese"
 
@@ -120,6 +121,7 @@ class ReadingAgent(BaseResourceAgent):
 
         # 步骤 3: 带重试的 LLM 生成阅读推荐
         best_resources: list[ReadingResource] | None = None
+        # 带重试的生成循环：首次不足则重新搜索并合并
         for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
             is_retry = attempt > 1
             if is_retry:
@@ -142,6 +144,7 @@ class ReadingAgent(BaseResourceAgent):
                     int((time.perf_counter() - started) * 1000),
                 )
 
+            # 搜索为空时：非末次重试，末次则失败返回
             if not search_results:
                 if attempt < MAX_RETRY_ATTEMPTS:
                     logger.warning("Agent[%s] 搜索结果为空，准备重试", self.agent_id)
@@ -203,7 +206,7 @@ class ReadingAgent(BaseResourceAgent):
                 self.agent_id, attempt, len(attempt_resources), merged_count,
             )
 
-            # 资源充足则提前结束
+            # 资源充足则提前结束重试
             if merged_count >= min_items:
                 break
 
@@ -345,6 +348,7 @@ class ReadingAgent(BaseResourceAgent):
                 unique_results.append(result)
                 seen_urls.add(url)
 
+        # 返回去重后的结果
         return unique_results
 
     def _build_enhanced_input(
@@ -429,11 +433,12 @@ def _merge_reading_resources(
                 pass
 
     merged = list(primary)
+    # 遍历重试结果，去重后追加
     for r in secondary:
         url_lower = r.url.strip().lower() if r.url else ""
         title_lower = r.title.strip().lower() if r.title else ""
 
-        # 去重检查
+        # 去重检查（URL 或标题重复则跳过）
         if url_lower and url_lower in existing_urls:
             continue
         if title_lower and title_lower in existing_titles:

@@ -17,6 +17,7 @@ from app.resource.schemas.request import LearningScenario
 
 class AgentResult(BaseModel):
     """统一 Agent 输出结果，用于多智能体资源和路径规划节点资源。"""
+    # 禁止额外字段，确保结果结构可控
     model_config = ConfigDict(extra="forbid")
 
     success: bool = True

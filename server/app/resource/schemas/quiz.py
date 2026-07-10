@@ -15,6 +15,7 @@ QuizQuestionType = Literal[
 ]
 QuizDifficulty = Literal["basic", "medium", "advanced"]
 
+# 前端题型别名到内部题型枚举的映射
 QUESTION_TYPE_MAP: dict[str, QuizQuestionType] = {
     "single": "single_choice",
     "multiple": "multiple_choice",
@@ -51,15 +52,19 @@ class QuizQuestion(BaseModel):
     @model_validator(mode="after")
     def validate_question_contract(self) -> "QuizQuestion":
         labels = [option.label for option in self.options]
+        # 选项标签不可重复
         if len(labels) != len(set(labels)):
             raise ValueError("选项标签不能重复")
 
+        # 选择题必须有恰好四个 A-D 选项
         if self.type in {"single_choice", "multiple_choice"}:
             if labels != ["A", "B", "C", "D"]:
                 raise ValueError("选择题必须按 A、B、C、D 提供恰好四个选项")
         elif self.options:
+            # 判断/填空不应有选项
             raise ValueError("判断题和填空题的 options 必须为空")
 
+        # 按题型分别校验答案形态
         if self.type == "single_choice":
             if not isinstance(self.answer, str) or self.answer not in labels:
                 raise ValueError("单选题答案必须是一个有效选项标签")
@@ -102,6 +107,7 @@ def build_quiz_blueprint(
     difficulty_mode: str,
 ) -> list[QuizBlueprintSlot]:
     """在调用模型前确定题目编号、题型和难度，避免模型自行分配后漂移。"""
+    # 归一化题型并去重，缺失时回退默认题型
     normalized_types = [
         QUESTION_TYPE_MAP[value]
         for value in (question_types or [])
@@ -109,10 +115,11 @@ def build_quiz_blueprint(
     ]
     types = tuple(dict.fromkeys(normalized_types)) or DEFAULT_QUESTION_TYPES
 
+    # 按难度模式生成难度循环序列
     if difficulty_mode == "basic":
         difficulty_cycle: tuple[QuizDifficulty, ...] = ("basic",)
     elif difficulty_mode == "exam":
-        # 一个完整周期严格满足基础/中等/进阶 = 3:5:2。
+        # 考试模式：每 10 题严格满足基础/中等/进阶 = 3:5:2
         difficulty_cycle = (
             "basic",
             "medium",
@@ -126,9 +133,10 @@ def build_quiz_blueprint(
             "medium",
         )
     else:
-        # 自适应模式保留足够基础题，同时包含迁移与进阶检测。
+        # 自适应模式：保留基础题，同时包含迁移与进阶检测
         difficulty_cycle = ("basic", "medium", "basic", "medium", "advanced")
 
+    # 按题号循环映射到题型与难度，产出确定性蓝图
     return [
         QuizBlueprintSlot(
             id=index + 1,
@@ -145,12 +153,14 @@ def validate_quiz_payload(
 ) -> None:
     """校验模型输出与确定性蓝图完全一致。"""
     errors: list[str] = []
+    # 题目总数必须与蓝图一致
     if len(payload.questions) != len(blueprint):
         errors.append(
             f"题目数量应为 {len(blueprint)}，实际为 {len(payload.questions)}"
         )
 
     seen_questions: set[str] = set()
+    # 逐题比对 id/type/difficulty 并与前题去重
     for index, slot in enumerate(blueprint):
         if index >= len(payload.questions):
             break
@@ -168,11 +178,13 @@ def validate_quiz_payload(
                 f"第 {index + 1} 题难度应为 {slot.difficulty}，实际为 {question.difficulty}"
             )
 
+        # 归一化题干后检测是否与前题重复
         normalized_question = " ".join(question.question.split()).casefold()
         if normalized_question in seen_questions:
             errors.append(f"第 {index + 1} 题与前面题目重复")
         seen_questions.add(normalized_question)
 
+    # 汇总前 12 条错误并抛出
     if errors:
         raise ValueError("；".join(errors[:12]))
 

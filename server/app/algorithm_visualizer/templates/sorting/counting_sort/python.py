@@ -18,6 +18,7 @@ def counting_sort(arr):
         arr[i] = output[i]
     return arr
 
+# 定义 counting_sort_unstable 函数
 def counting_sort_unstable(arr):
     if not arr:
         return arr
@@ -32,6 +33,7 @@ def counting_sort_unstable(arr):
         result.extend([i + min_val] * count[i])
     return result
 
+# 定义 frequency_count 函数
 def frequency_count(arr):
     if not arr:
         return {}

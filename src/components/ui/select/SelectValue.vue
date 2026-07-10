@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器选中值展示
 import type { SelectValueProps } from "reka-ui"
 import { SelectValue } from "reka-ui"
 

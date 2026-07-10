@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+# TutorRequestContext：当前用户消息的辅导请求上下文（用于工具构建）
 class TutorRequestContext(BaseModel):
     """当前用户消息的辅导请求上下文。"""
     user_id: int
@@ -18,6 +19,7 @@ class TutorRequestContext(BaseModel):
     need_teaching_diagram: bool = False
 
 
+# TutorAgentInput：TutorAgent 的输入（ChatService 组装后传入 chat()）
 class TutorAgentInput(BaseModel):
     """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。"""
     user_id: int
@@ -34,6 +36,7 @@ class TutorAgentInput(BaseModel):
 
 # ── 流式事件类型（简化后）──
 
+# TutorAgent 流式事件类型：覆盖对话开始/工具状态/回答/图解/最终/错误
 TutorRuntimeEventType = Literal[
     "message_start",      # 对话开始
     "agent_status",       # Agent 工具调用状态（包含附件分析、搜索、图解生成）
@@ -46,6 +49,7 @@ TutorRuntimeEventType = Literal[
 ]
 
 
+# TutorRuntimeEvent：TutorAgent 产生的单次流式事件（类型/负载/序列/时间戳）
 class TutorRuntimeEvent(BaseModel):
     """TutorAgent 流式事件。"""
     type: TutorRuntimeEventType

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 按钮
 import type { PrimitiveProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import type { ButtonVariants } from "."

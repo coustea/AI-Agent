@@ -2,12 +2,15 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 bidirectional_selection_sort 函数
 def bidirectional_selection_sort(arr):
     n = len(arr)
     lo, hi = 0, n - 1
     tracer.init_array(arr, line=3)
+# 循环条件判断
     while lo < hi:
         min_idx, max_idx = lo, lo
+# 循环遍历处理
         for i in range(lo, hi + 1):
             tracer.compare(i, min_idx, line=7)
             if arr[i] < arr[min_idx]:
@@ -32,10 +35,13 @@ def bidirectional_selection_sort(arr):
     tracer.finish(line=23)
     return arr
 
+# 定义 selection_sort 函数
 def selection_sort(arr):
     n = len(arr)
+# 循环遍历处理
     for i in range(n):
         min_idx = i
+# 循环遍历处理
         for j in range(i + 1, n):
             if arr[j] < arr[min_idx]:
                 min_idx = j
@@ -43,10 +49,13 @@ def selection_sort(arr):
             arr[i], arr[min_idx] = arr[min_idx], arr[i]
     return arr
 
+# 定义 count_inversions 函数
 def count_inversions(arr):
+# 定义 merge_count 函数
     def merge_count(left, right):
         result = []
         i = j = inv = 0
+# 循环条件判断
         while i < len(left) and j < len(right):
             if left[i] <= right[j]:
                 result.append(left[i])
@@ -59,6 +68,7 @@ def count_inversions(arr):
         result.extend(right[j:])
         return result, inv
 
+# 定义 sort_count 函数
     def sort_count(arr):
         if len(arr) <= 1:
             return arr, 0
@@ -77,6 +87,7 @@ datasets = [
     [42, 42, 17, 17, 63, 63, 8, 8, 91, 91, 25, 25, 56, 56, 34],
 ]
 
+# 循环遍历处理
 for data in datasets:
     result = bidirectional_selection_sort(data[:])
     inv = count_inversions(data[:])

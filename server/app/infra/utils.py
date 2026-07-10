@@ -11,6 +11,7 @@ JSON 工具（用于 LLM 输出解析）：
 - preview_for_log(): 日志摘要
 """
 
+# 本模块提供应用异常层级与 LLM 输出 JSON 解析工具
 from __future__ import annotations
 
 import json
@@ -20,6 +21,7 @@ from typing import Any
 # ============ 异常定义 ============
 
 
+# 应用异常基类：所有业务异常继承自此类，便于统一捕获
 class AppError(Exception):
     """应用异常基类。
 
@@ -32,6 +34,7 @@ class AppError(Exception):
         super().__init__(message)
 
 
+# 外部服务不可用异常（LLM / 数据库 / 第三方 API 失败）
 class ServiceError(AppError):
     """外部服务不可用异常。
 
@@ -39,12 +42,14 @@ class ServiceError(AppError):
     """
 
 
+# 资源不存在异常
 class NotFoundError(AppError):
     """资源不存在异常。
 
     当请求的资源（用户、会话、记录等）不存在时抛出。"""
 
 
+# 权限不足异常
 class ForbiddenError(AppError):
     """权限不足异常。
 
@@ -54,6 +59,7 @@ class ForbiddenError(AppError):
 # ============ JSON 解析工具 ============
 
 
+# 去除 Markdown 代码围栏（```json ... ```），仅做字符串操作
 def strip_markdown_code_fences(text: str) -> str:
     """去掉 Markdown 代码围栏（```json ... ```）。
 
@@ -77,6 +83,7 @@ def strip_markdown_code_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+# 从文本中解析首个 JSON 值（dict/list/标量），扫描 { 与 [ 起点
 def parse_first_json_value(text: str) -> Any:
     """从文本中解析出第一个 JSON 值（dict/list/str/number/bool/null）。
 
@@ -131,6 +138,7 @@ def parse_first_json_value(text: str) -> Any:
     raise json.JSONDecodeError("no JSON value found", s, 0)
 
 
+# 解析文本并保证返回 dict 类型的 JSON 对象，否则抛 TypeError
 def parse_first_json_object(text: str) -> dict[str, Any]:
     """解析文本并保证返回 dict 类型的 JSON 对象。
 
@@ -150,6 +158,7 @@ def parse_first_json_object(text: str) -> dict[str, Any]:
     return value
 
 
+# 将任意值摘要为单行截断字符串，用于安全记录日志
 def preview_for_log(value: Any, max_len: int = 500) -> str:
     """用于日志的输出摘要，避免日志过长。
 

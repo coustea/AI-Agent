@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器选项
 import { CheckIcon } from '@lucide/vue';
 
 import type { SelectItemProps } from "reka-ui"

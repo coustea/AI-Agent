@@ -5,6 +5,8 @@ import { visit } from 'unist-util-visit'
 
 import { languageLoaders, normalizeLanguage, shouldHighlight } from './languages'
 
+// 代码块高亮模块：解析代码语言、加载语法高亮、为代码块添加头部和行标签
+
 let highlighter: HighlighterCore | undefined
 const languagePromises = new Map<string, Promise<void>>()
 

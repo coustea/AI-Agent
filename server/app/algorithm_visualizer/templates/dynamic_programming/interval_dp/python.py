@@ -1,3 +1,4 @@
+# interval_dp 算法实现 — domain: dynamic_programming
 def longest_palindrome_subseq(s):
     if not s:
         return 0, [], ""
@@ -17,6 +18,7 @@ def longest_palindrome_subseq(s):
                     dp[i][j] = dp[i + 1][j - 1] + 2
             else:
                 dp[i][j] = max(dp[i + 1][j], dp[i][j - 1])
+# 定义 reconstruct 函数
     def reconstruct(i, j):
         if i > j:
             return ""
@@ -31,6 +33,7 @@ def longest_palindrome_subseq(s):
     lps = reconstruct(0, n - 1)
     return dp[0][n - 1], dp, lps
 
+# 定义 matrix_chain_order 函数
 def matrix_chain_order(dims):
     n = len(dims) - 1
     if n <= 0:
@@ -48,6 +51,7 @@ def matrix_chain_order(dims):
                     split[i][j] = k
     return dp[0][n - 1], dp
 
+# 定义 longest_palindrome_substring 函数
 def longest_palindrome_substring(s):
     if not s:
         return 0, ""

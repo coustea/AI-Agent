@@ -24,8 +24,10 @@ from app.quiz.schemas import (
 )
 from app.quiz.service import quiz_bank_service, quiz_review_service
 
+# 创建模块级日志器
 logger = get_logger(__name__)
 
+# 创建题库相关路由实例
 router = APIRouter()
 
 # 408 四门科目
@@ -37,6 +39,7 @@ SUBJECTS_408 = ["数据结构与算法", "计算机组成原理", "计算机网�
 # ---------------------------------------------------------------------------
 
 
+# 学校列表查询接口（支持按层次筛选与分页）
 @router.get("/schools")
 async def list_schools(
     tier: str | None = Query(default=None, description="院校层次：985/211/双一流/普通本科"),
@@ -45,20 +48,25 @@ async def list_schools(
     session: AsyncSession = Depends(get_session),
 ):
     """获取学校列表。"""
+    # 构建学校查询语句与计数语句
     stmt = select(School)
     count_stmt = select(func.count()).select_from(School)
 
+    # 按院校层次过滤
     if tier:
         stmt = stmt.where(School.tier == tier)
         count_stmt = count_stmt.where(School.tier == tier)
 
+    # 执行计数查询，获取学校总数
     total = (await session.exec(count_stmt)).scalar() or 0
+    # 分页查询学校列表并按 id 排序
     items = (await session.exec(
         stmt.order_by(School.id)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )).scalars().all()
 
+    # 返回学校列表及分页元信息
     return HttpResponse.success(data={
         "items": [{"name": s.name, "level": s.level, "tier": s.tier} for s in items],
         "total": total,
@@ -72,26 +80,33 @@ async def list_schools(
 # ---------------------------------------------------------------------------
 
 
+# 408 题库统计接口（按科目统计题量与题型分布）
 @router.get("/quiz/stats")
 async def get_quiz_stats(session: AsyncSession = Depends(get_session)):
     """获取 408 题库统计。"""
+    # 按科目聚合统计结果
     stats = {}
     for subject in SUBJECTS_408:
+        # 统计该科目的题目总数
         total = (await session.exec(
             select(func.count()).select_from(QuizQuestion).where(
                 QuizQuestion.subject == subject
             )
         )).scalar() or 0
 
+        # 按题型分组统计数量
         type_rows = (await session.exec(
             select(QuizQuestion.question_type, func.count().label("c"))
             .where(QuizQuestion.subject == subject)
             .group_by(QuizQuestion.question_type)
         )).all()
+        # 转换为题型-数量字典
         types = {t: c for t, c in type_rows}
 
+        # 记录该科目的统计结果
         stats[subject] = {"total": total, "types": types}
 
+    # 返回各科目统计及总体题量
     return HttpResponse.success(data={
         "subjects": SUBJECTS_408,
         "total": sum(s["total"] for s in stats.values()),
@@ -99,6 +114,7 @@ async def get_quiz_stats(session: AsyncSession = Depends(get_session)):
     })
 
 
+# 题目列表查询接口（委托题库服务执行筛选与分页）
 @router.get("/quiz")
 async def list_quiz(
     query: str | None = Query(default=None, description="搜索关键词"),
@@ -111,6 +127,7 @@ async def list_quiz(
     session: AsyncSession = Depends(get_session),
 ):
     """获取题目列表。"""
+    # 调用题库服务查询题目
     result = await quiz_bank_service.list_questions(
         session=session,
         query=query,
@@ -121,6 +138,7 @@ async def list_quiz(
         page=page,
         page_size=page_size,
     )
+    # 返回题目列表分页结果
     return HttpResponse.success(data=result.model_dump())
 
 
@@ -129,9 +147,11 @@ async def list_quiz(
 # ---------------------------------------------------------------------------
 
 
+# AI 主观题答案审查接口
 @router.post("/quiz/review")
 async def review_answer(request: QuizReviewRequest) -> QuizReviewResponse:
     """AI 审查主观题答案。"""
+    # 调用 AI 审查服务评判用户答案
     result = await quiz_review_service.review(
         question_type=request.question_type,
         question_content=request.question_content,
@@ -139,9 +159,11 @@ async def review_answer(request: QuizReviewRequest) -> QuizReviewResponse:
         user_answer=request.user_answer,
         knowledge_points=request.knowledge_points,
     )
+    # 返回结构化审查结果
     return QuizReviewResponse(**result)
 
 
+# 客观题提交接口：自动判卷并收录错题本
 @router.post("/quiz/submit")
 async def submit_quiz(
     request: ObjectiveSubmitRequest,
@@ -149,13 +171,17 @@ async def submit_quiz(
     current_user: User = Depends(get_current_user),
 ) -> HttpResponse:
     """提交客观题结果，自动收录错题。"""
+    # 获取当前用户 ID 并初始化错题计数
     user_id = current_user.id
     wrong_count = 0
 
+    # 遍历每道题目的判卷结果
     for r in request.results:
+        # 答对的题目直接跳过，不收录
         if r.is_correct:
             continue
 
+        # 查询该题是否已存在于错题本
         existing = (await session.exec(
             select(WrongQuestion).where(
                 WrongQuestion.user_id == user_id,
@@ -163,6 +189,7 @@ async def submit_quiz(
             )
         )).scalars().first()
 
+        # 已存在则累加错误次数并更新用户答案、取消归档
         if existing:
             existing.wrong_count += 1
             existing.user_answer = r.user_answer
@@ -170,10 +197,12 @@ async def submit_quiz(
             wrong_count += 1
             continue
 
+        # 从题库中查找原题信息
         quiz = (await session.exec(
             select(QuizQuestion).where(QuizQuestion.question_id == r.question_id)
         )).scalars().first()
 
+        # 题库中存在原题：写入完整错题记录
         if quiz:
             session.add(WrongQuestion(
                 user_id=user_id,
@@ -188,6 +217,7 @@ async def submit_quiz(
                 wrong_count=1,
             ))
             wrong_count += 1
+        # 题库中无原题：使用前端传回的快照创建错题
         elif r.content:
             # 前端可能传中文标签，需转换为英文键以保持一致
             from app.quiz.service import QuizBankService
@@ -207,12 +237,15 @@ async def submit_quiz(
             ))
             wrong_count += 1
 
+    # 提交数据库，保存错题记录
     await session.commit()
 
+    # 计算正确率与得分
     total = len(request.results)
     correct_count = sum(1 for r in request.results if r.is_correct)
     score = (correct_count / total * 100) if total > 0 else 0
     subject = request.results[0].subject if request.results else None
+    # 记录答题事件用于画像评分，失败不影响主流程
     try:
         await record_quiz_submit_event(
             db=session,
@@ -225,6 +258,7 @@ async def submit_quiz(
     except Exception:
         logger.exception("记录 quiz_submitted 事件失败: user_id=%s", user_id)
 
+    # 返回处理结果
     return HttpResponse.success(data=ObjectiveSubmitResponse(
         processed_count=total,
         wrong_saved_count=wrong_count,
@@ -236,6 +270,7 @@ async def submit_quiz(
 # ---------------------------------------------------------------------------
 
 
+# 错题列表查询接口（支持科目、题型、归档状态筛选）
 @router.get("/wrong")
 async def list_wrong(
     subject: str | None = Query(default=None),
@@ -247,15 +282,19 @@ async def list_wrong(
     current_user: User = Depends(get_current_user),
 ) -> WrongQuestionListResponse:
     """获取错题列表。"""
+    # 获取当前用户 ID
     user_id = current_user.id
 
+    # 基础查询：当前用户且匹配归档状态
     stmt = select(WrongQuestion).where(
         WrongQuestion.user_id == user_id,
         WrongQuestion.is_archived == archived,
     )
 
+    # 按科目筛选
     if subject:
         stmt = stmt.where(WrongQuestion.subject == subject)
+    # 按题型筛选（兼容中英文标签）
     if type:
         # 前端传中文标签，需兼容英文键和中文标签两种存储格式
         from app.quiz.service import QuizBankService
@@ -264,16 +303,19 @@ async def list_wrong(
             (WrongQuestion.question_type == type) | (WrongQuestion.question_type == db_type)
         )
 
+    # 统计符合筛选条件的错题总数
     total = (await session.exec(
         select(func.count()).select_from(stmt.subquery())
     )).scalar() or 0
 
+    # 分页查询错题列表，按更新时间倒序
     items = (await session.exec(
         stmt.order_by(WrongQuestion.updated_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )).scalars().all()
 
+    # 返回错题列表分页响应
     return WrongQuestionListResponse(
         items=[_to_wrong_read(i) for i in items],
         total=total,
@@ -284,6 +326,7 @@ async def list_wrong(
     )
 
 
+# 随机抽题接口：从未归档错题中随机返回一道
 @router.get("/wrong/random")
 async def get_wrong_random(
     subject: str | None = Query(default=None),
@@ -291,22 +334,29 @@ async def get_wrong_random(
     current_user: User = Depends(get_current_user),
 ) -> HttpResponse:
     """随机获取一道错题。"""
+    # 获取当前用户 ID
     user_id = current_user.id
 
+    # 查询当前用户未归档的错题
     stmt = select(WrongQuestion).where(
         WrongQuestion.user_id == user_id,
         WrongQuestion.is_archived == False,
     )
+    # 可选按科目过滤
     if subject:
         stmt = stmt.where(WrongQuestion.subject == subject)
 
+    # 取回全部候选错题
     items = (await session.exec(stmt)).scalars().all()
+    # 无可练习错题时返回空
     if not items:
         return HttpResponse.success(data=None)
 
+    # 随机返回一道错题
     return HttpResponse.success(data=_to_wrong_read(random.choice(items)))
 
 
+# 错题归档接口：将指定错题标记为已归档
 @router.post("/wrong/{wrong_id}/archive")
 async def archive_wrong(
     wrong_id: int,
@@ -314,6 +364,7 @@ async def archive_wrong(
     current_user: User = Depends(get_current_user),
 ) -> HttpResponse:
     """归档错题。"""
+    # 查询归属当前用户的错题
     wrong = (await session.exec(
         select(WrongQuestion).where(
             WrongQuestion.id == wrong_id,
@@ -321,14 +372,18 @@ async def archive_wrong(
         )
     )).scalars().first()
 
+    # 错题不存在时返回 404
     if not wrong:
         return HttpResponse.error(code=404, message="错题不存在")
 
+    # 标记归档并保存
     wrong.is_archived = True
     await session.commit()
+    # 返回归档成功
     return HttpResponse.success(message="已归档")
 
 
+# 错题删除接口：从错题本中移除指定错题
 @router.delete("/wrong/{wrong_id}")
 async def delete_wrong(
     wrong_id: int,
@@ -336,6 +391,7 @@ async def delete_wrong(
     current_user: User = Depends(get_current_user),
 ) -> HttpResponse:
     """删除错题。"""
+    # 查询归属当前用户的错题
     wrong = (await session.exec(
         select(WrongQuestion).where(
             WrongQuestion.id == wrong_id,
@@ -343,16 +399,21 @@ async def delete_wrong(
         )
     )).scalars().first()
 
+    # 错题不存在时返回 404
     if not wrong:
         return HttpResponse.error(code=404, message="错题不存在")
 
+    # 删除错题并保存
     await session.delete(wrong)
     await session.commit()
+    # 返回删除成功
     return HttpResponse.success(message="已删除")
 
 
+# 将错题 ORM 对象转换为对外响应 DTO
 def _to_wrong_read(item: WrongQuestion) -> WrongQuestionRead:
     """转换 ORM 为响应 DTO。"""
+    # 逐个字段映射构建响应对象
     return WrongQuestionRead(
         id=item.id,
         question_id=item.question_id,

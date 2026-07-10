@@ -3,19 +3,24 @@ import heapq
 
 tracer = TreeTracer()
 
+# HuffmanNode 类定义
 class HuffmanNode:
+# 定义 __init__ 函数
     def __init__(self, char=None, freq=0, left=None, right=None):
         self.char = char
         self.freq = freq
         self.left = left
         self.right = right
 
+# 定义 __lt__ 函数
     def __lt__(self, other):
         return self.freq < other.freq
 
+# 定义 build_huffman_tree 函数
 def build_huffman_tree(char_freq):
     heap = [HuffmanNode(ch, f) for ch, f in char_freq]
     heapq.heapify(heap)
+# 循环条件判断
     while len(heap) > 1:
         left = heapq.heappop(heap)
         right = heapq.heappop(heap)
@@ -23,6 +28,7 @@ def build_huffman_tree(char_freq):
         heapq.heappush(heap, merged)
     return heap[0] if heap else None
 
+# 定义 build_codes 函数
 def build_codes(node, prefix="", codes=None):
     if codes is None:
         codes = {}
@@ -35,6 +41,7 @@ def build_codes(node, prefix="", codes=None):
     build_codes(node.right, prefix + "1", codes)
     return codes
 
+# 定义 tree_to_tracer_nodes 函数
 def tree_to_tracer_nodes(node, counter=[0]):
     if node is None:
         return None
@@ -51,12 +58,15 @@ def tree_to_tracer_nodes(node, counter=[0]):
     tracer._nodes.append({"id": nid, "label": label, "children": children})
     return nid
 
+# 定义 encode 函数
 def encode(text, codes):
     return "".join(codes[ch] for ch in text)
 
+# 定义 decode 函数
 def decode(encoded, root):
     result = []
     node = root
+# 循环遍历处理
     for bit in encoded:
         node = node.left if bit == "0" else node.right
         if node.char is not None:
@@ -64,6 +74,7 @@ def decode(encoded, root):
             node = root
     return "".join(result)
 
+# 定义 compression_ratio 函数
 def compression_ratio(text, codes):
     original_bits = len(text) * 8
     encoded_bits = sum(len(codes[ch]) for ch in text)
@@ -75,6 +86,7 @@ counter = [0]
 tracer._nodes = []
 tree_to_tracer_nodes(tree, counter)
 tracer.init_tree(tracer._nodes, line=25)
+# 循环遍历处理
 for n in tracer._nodes:
     tracer.visit_node(n["id"], line=27)
 codes = build_codes(tree)

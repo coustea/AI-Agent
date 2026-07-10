@@ -1,14 +1,18 @@
+# linked_list_reverse 算法实现 — domain: base_data_structure
 class ListNode:
+# 定义 __init__ 函数
     def __init__(self, val=0, next=None):
         self.val = val
         self.next = next
 
+# 定义 list_to_nodes 函数
 def list_to_nodes(arr):
     head = None
     for v in reversed(arr):
         head = ListNode(v, head)
     return head
 
+# 定义 nodes_to_list 函数
 def nodes_to_list(head):
     result = []
     while head:
@@ -16,6 +20,7 @@ def nodes_to_list(head):
         head = head.next
     return result
 
+# 定义 reverse_list 函数
 def reverse_list(head):
     prev = None
     curr = head
@@ -26,7 +31,9 @@ def reverse_list(head):
         curr = next_node
     return prev
 
+# 定义 reverse_k_group 函数
 def reverse_k_group(head, k):
+# 定义 get_kth 函数
     def get_kth(curr, k):
         while curr and k > 0:
             curr = curr.next
@@ -51,6 +58,7 @@ def reverse_k_group(head, k):
         group_prev = tmp
     return dummy.next
 
+# 定义 reverse_between 函数
 def reverse_between(head, left, right):
     dummy = ListNode(0, head)
     prev = dummy
@@ -64,6 +72,7 @@ def reverse_between(head, left, right):
         prev.next = tmp
     return dummy.next
 
+# 定义 reverse_recursive 函数
 def reverse_recursive(head):
     if not head or not head.next:
         return head

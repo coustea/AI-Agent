@@ -18,11 +18,13 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
+# 通用搜索查询参数模型
 class SearchQueryArgs(BaseModel):
     """搜索查询参数。"""
     query: str = Field(description="Search query")
 
 
+# 清理搜索查询：去除控制字符、压缩空白并截断，防止注入与解析错误
 def _sanitize_query(query: str) -> str:
     """清理搜索查询：去除特殊字符，防止注入和解析错误。"""
     # 去除控制字符
@@ -37,6 +39,7 @@ def _sanitize_query(query: str) -> str:
 # DuckDuckGo 搜索（免费）
 # ============================================================================
 
+# DuckDuckGo 通用搜索（免费，无需 API Key）
 async def duckduckgo_search(query: str) -> str:
     """DuckDuckGo 搜索 - 免费，无需 API Key。
 
@@ -49,6 +52,7 @@ async def duckduckgo_search(query: str) -> str:
         client = DDGS()
         rows = await asyncio.to_thread(client.text, query, max_results=5)
 
+        # 无结果时返回友好提示
         if not rows:
             return "DuckDuckGo 搜索未找到结果"
 
@@ -62,11 +66,13 @@ async def duckduckgo_search(query: str) -> str:
         logger.info("[duckduckgo_search] query=%r result_preview=%r", query, result[:300])
         return result
 
+    # 任何异常都降级为可读错误信息，避免中断整个搜索流程
     except Exception as exc:
         logger.warning("[duckduckgo_search] failed: query=%r error=%s", query, exc)
         return f"DuckDuckGo 搜索失败: {exc}"
 
 
+# DuckDuckGo 即时答案（适用于定义、百科摘要等快速答案）
 async def duckduckgo_instant_answer(query: str) -> str:
     """DuckDuckGo 即时答案 - 免费。
 
@@ -86,6 +92,7 @@ async def duckduckgo_instant_answer(query: str) -> str:
             text=True,
         )
 
+        # curl 退出码非 0 表示请求失败
         if result.returncode != 0:
             return f"DuckDuckGo API 请求失败"
 
@@ -93,17 +100,17 @@ async def duckduckgo_instant_answer(query: str) -> str:
         data = json.loads(result.stdout)
         output_parts = []
 
-        # 提取摘要
+        # 提取摘要字段
         abstract = data.get("Abstract", "")
         if abstract:
             output_parts.append(f"摘要:\n{abstract}")
 
-        # 提取即时答案
+        # 提取即时答案字段
         answer = data.get("Answer", "")
         if answer:
             output_parts.append(f"答案:\n{answer}")
 
-        # 提取定义
+        # 提取定义字段
         definition = data.get("Definition", "")
         if definition:
             output_parts.append(f"定义:\n{definition}")
@@ -122,6 +129,7 @@ async def duckduckgo_instant_answer(query: str) -> str:
 # Wikipedia 搜索（免费）
 # ============================================================================
 
+# Wikipedia 中英双语搜索（免费，无需 API Key）
 async def wikipedia_search(query: str) -> str:
     """Wikipedia API 搜索 - 免费，无需 API Key。
 
@@ -139,7 +147,7 @@ async def wikipedia_search(query: str) -> str:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # 英文搜索
+            # 英文搜索：调用 Wikipedia API
             response_en = await client.get(url_en, params=params)
             if response_en.status_code != 200:
                 logger.warning("[wikipedia_search] EN status=%d", response_en.status_code)
@@ -147,7 +155,7 @@ async def wikipedia_search(query: str) -> str:
             else:
                 data_en = response_en.json()
 
-            # 中文搜索
+            # 中文搜索：并行检索中文百科
             url_zh = "https://zh.wikipedia.org/w/api.php"
             response_zh = await client.get(url_zh, params=params)
             if response_zh.status_code != 200:
@@ -158,7 +166,7 @@ async def wikipedia_search(query: str) -> str:
 
         results = []
 
-        # 处理英文结果
+        # 处理英文结果：转换为带链接的条目
         for item in data_en.get("query", {}).get("search", []):
             title = item.get("title", "")
             results.append(
@@ -166,7 +174,7 @@ async def wikipedia_search(query: str) -> str:
                 f"链接: https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
             )
 
-        # 处理中文结果
+        # 处理中文结果：转换为带链接的条目
         for item in data_zh.get("query", {}).get("search", []):
             title = item.get("title", "")
             results.append(
@@ -188,6 +196,7 @@ async def wikipedia_search(query: str) -> str:
 # ArXiv 搜索（免费 - 学术论文）
 # ============================================================================
 
+# ArXiv 学术论文搜索（免费）
 async def arxiv_search(query: str) -> str:
     """ArXiv 学术论文搜索 - 免费。
 
@@ -204,6 +213,7 @@ async def arxiv_search(query: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(url, params=params)
+            # HTTP 非 200 直接返回失败提示
             if response.status_code != 200:
                 return f"ArXiv 搜索失败: HTTP {response.status_code}"
             root = ET.fromstring(response.text)
@@ -235,6 +245,7 @@ async def arxiv_search(query: str) -> str:
 # GitHub 搜索（免费）
 # ============================================================================
 
+# GitHub 仓库搜索（免费，无 Token 时有速率限制）
 async def github_search(query: str) -> str:
     """GitHub 仓库搜索 - 免费（无 Token 有速率限制）。
 
@@ -275,6 +286,7 @@ async def github_search(query: str) -> str:
 # StackOverflow 搜索（免费）
 # ============================================================================
 
+# StackOverflow 技术问答搜索（免费）
 async def stackoverflow_search(query: str) -> str:
     """StackOverflow 技术问答搜索 - 免费。
 
@@ -320,6 +332,7 @@ async def stackoverflow_search(query: str) -> str:
 # 已配置的搜索工具（Tavily 和 Spark）
 # ============================================================================
 
+# Tavily AI 优化搜索（需配置 API Key）
 async def tavily_search(query: str) -> str:
     """Tavily AI 优化搜索 - 已配置 API Key。
 
@@ -328,6 +341,7 @@ async def tavily_search(query: str) -> str:
     from app.config import TAVILY_KEY
     from tavily import AsyncTavilyClient
 
+    # 未配置 Key 时直接返回不可用提示
     if not TAVILY_KEY:
         return "Tavily 搜索不可用: 未配置 API Key"
 
@@ -354,6 +368,7 @@ async def tavily_search(query: str) -> str:
         return f"Tavily 搜索失败: {exc}"
 
 
+# 讯飞星火中文语义搜索（需配置 API Key，支持语义重排序）
 async def spark_search(query: str) -> str:
     """讯飞星火中文语义搜索 - 已配置 API Key。
 
@@ -361,6 +376,7 @@ async def spark_search(query: str) -> str:
     """
     from app.config import SPARK_SEARCH_KEY
 
+    # 未配置 Key 时直接返回不可用提示
     if not SPARK_SEARCH_KEY:
         return "讯飞搜索不可用: 未配置 API Key"
 
@@ -398,12 +414,14 @@ async def spark_search(query: str) -> str:
 # 内容抓取工具
 # ============================================================================
 
+# curl 抓取参数模型
 class CurlArgs(BaseModel):
     """curl 参数。"""
     url: str = Field(description="URL to fetch")
     max_time: int = Field(default=15, description="Max time in seconds")
 
 
+# 使用 curl 命令抓取网页内容（支持重定向）
 async def curl_fetch(url: str, max_time: int = 15) -> str:
     """curl 命令抓取 - 免费。
 
@@ -427,11 +445,13 @@ async def curl_fetch(url: str, max_time: int = 15) -> str:
         return f"curl 异常: {exc}"
 
 
+# HTTP 抓取参数模型
 class WebFetchArgs(BaseModel):
     """webfetch 参数。"""
     url: str = Field(description="URL to fetch")
 
 
+# 使用 httpx 发起 HTTP GET 抓取网页内容
 async def webfetch(url: str) -> str:
     """HTTP 抓取 - 免费。
 

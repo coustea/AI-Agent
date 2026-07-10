@@ -1,5 +1,7 @@
+# recursive_divide 算法实现 — domain: divide_conquer
 def tower_of_hanoi(n, source='A', target='C', auxiliary='B'):
     moves = []
+# 定义 hanoi 函数
     def hanoi(n, src, tgt, aux):
         if n == 1:
             moves.append((src, tgt))
@@ -10,6 +12,7 @@ def tower_of_hanoi(n, source='A', target='C', auxiliary='B'):
     hanoi(n, source, target, auxiliary)
     return moves
 
+# 定义 power_decomposition 函数
 def power_decomposition(n):
     if n == 0:
         return []
@@ -21,6 +24,7 @@ def power_decomposition(n):
         exp += 1
     return result
 
+# 定义 max_subarray_divide 函数
 def max_subarray_divide(arr, left, right):
     if left == right:
         return arr[left]
@@ -39,6 +43,7 @@ def max_subarray_divide(arr, left, right):
         cross_right = max(cross_right, curr)
     return max(left_max, right_max, cross_left + cross_right)
 
+# 定义 merge_sort_count 函数
 def merge_sort_count(arr):
     if len(arr) <= 1:
         return arr, 0

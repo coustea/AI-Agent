@@ -1,5 +1,6 @@
 """画像 API 请求模型 — 入门信息更新、全局辅导更新。"""
 
+# 定义入门信息更新与全局辅导增量更新的请求模型
 from __future__ import annotations
 
 from typing import Any

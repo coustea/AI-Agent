@@ -1,5 +1,6 @@
 """答题模块 — 周摘要章节构建。"""
 
+# 聚合本周答题记录，统计正确率与薄弱知识点
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,6 +16,7 @@ from app.profile.weekly.types import SectionResult
 logger = get_logger(__name__)
 
 
+# 构建周摘要的「答题情况」章节
 async def build_quiz_section(
     db: AsyncSession,
     user_id: int,
@@ -48,10 +50,12 @@ async def build_quiz_section(
             raw_length=0,
         )
 
+    # 统计答题总数、正确数与正确率
     total = len(questions)
     correct = sum(1 for q in questions if q.is_correct)
     accuracy = round(correct / total * 100) if total else 0
 
+    # 收集错题涉及的知识点
     wrong_kps: list[str] = []
     for q in questions:
         if q.is_correct is False and q.knowledge_points:

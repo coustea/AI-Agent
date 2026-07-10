@@ -101,7 +101,9 @@
 </template>
 
 <script setup lang="ts">
+// Vue 核心 API：响应式、计算属性、生命周期、侦听器等
 import { computed, ref, onMounted, onUnmounted, watch, reactive } from 'vue'
+// Vue Router：获取当前路由和路由实例
 import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronDownIcon,
@@ -116,12 +118,15 @@ import {
   MessageSquareTextIcon as ChatDotRound,
   UserIcon,
 } from '@lucide/vue'
+// 功能模块：认证 API、新手引导弹窗、登出确认弹窗、当前用户状态
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
 import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 import { clearCurrentUser, ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
+// 画像模块：全局动态特征画像弹窗
 import GlobalProfileDialog from '@/features/profile/components/GlobalProfileDialog.vue'
 import { isGlobalProfileVisible } from '@/features/profile/model/useGlobalProfile'
+// 认证轮询、Token 清除、UI 组件
 import { useAuthPolling } from '@/features/auth/model/useAuthPolling'
 import { clearAuthToken } from '@/shared/auth/token'
 import GlobalNoteFab from '@/shared/ui/GlobalNoteFab.vue'
@@ -137,13 +142,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+// 路由实例与当前用户状态
 const route = useRoute()
 const router = useRouter()
 const { currentUser, userName } = useCurrentUser()
+// 新手引导对话框可见性 & 待跳转路径（引导完成后恢复）
 const onboardingDialogVisible = ref(false)
 const pendingPath = ref<string | null>(null)
+// 用户头像首字母
 const userInitial = computed(() => userName.value.trim().charAt(0).toUpperCase() || 'U')
 
+// 顶部导航菜单项配置
 const navItems = [
   { path: '/dashboard', label: '全景中枢', icon: Menu, theme: 'nav-theme-dashboard' },
   { path: '/resource-generator', label: '资源引擎', icon: Cpu, theme: 'nav-theme-resource' },
@@ -152,10 +161,12 @@ const navItems = [
   { path: '/question-bank', label: '学习题库', icon: Collection, theme: 'nav-theme-eval' },
 ]
 
+// 启动认证状态轮询（每 60 秒检查 Token 有效性）
 useAuthPolling(60000)
 
 navItems.push({ path: '/algorithm-visualizer', label: '算法可视化', icon: Branch, theme: 'nav-theme-visualizer' })
 
+// 当前激活的导航项：根据路由路径匹配高亮
 const activePath = computed(() => {
   const current = pendingPath.value || route.path
   if (current.startsWith('/resource-generator') || current.startsWith('/resource-detail') || current.startsWith('/ai/resources/history')) {
@@ -179,19 +190,23 @@ const activePath = computed(() => {
   return current
 })
 
+// 时钟显示
 const currentTime = ref('')
 let timerId: number | null = null
 
+// 更新当前时间显示（每秒执行）
 const updateTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleTimeString('zh-CN', { hour12: false })
 }
 
+// 组件挂载后：启动时钟、获取用户信息、检查登录成功或新手引导参数
 onMounted(() => {
   updateTime()
   timerId = window.setInterval(updateTime, 1000)
   ensureCurrentUser().catch(() => null)
   
+  // 从登录页跳回时显示登录成功弹窗
   if (route.query.loginSuccess === 'true') {
     logoutModalState.type = 'success'
     logoutModalState.title = '登录成功'
@@ -205,11 +220,13 @@ onMounted(() => {
     logoutModalState.isOpen = true
   }
   
+  // 触发新手引导弹窗
   if (route.query.onboarding === 'true') {
     onboardingDialogVisible.value = true
   }
 })
 
+// 路由变化时清除待跳转路径，同步新手引导状态
 watch(
   () => route.fullPath,
   () => {
@@ -218,25 +235,29 @@ watch(
   },
 )
 
+// 组件卸载时清除时钟定时器
 onUnmounted(() => {
   if (timerId) {
     clearInterval(timerId)
   }
 })
 
+// 导航到指定路径
 const navigateTo = (path: string) => {
   router.push(path)
 }
 
+// 导航到个人中心
 const navigateToProfile = () => {
   void router.push('/profile')
 }
 
+// 新手引导完成：刷新用户数据
 const handleOnboardingSuccess = async () => {
-  // 刷新用户数据以确保个人信息正确展示
   await ensureCurrentUser(true)
 }
 
+// 退出登录弹窗的响应式状态（确认/成功/错误）
 const logoutModalState = reactive({
   isOpen: false,
   type: 'confirm' as 'success' | 'error' | 'confirm',
@@ -248,6 +269,7 @@ const logoutModalState = reactive({
   onConfirm: () => {}
 })
 
+// 退出登录：弹出确认框 → 调用登出 API → 清除 Token 和用户状态 → 跳转登录页
 const handleLogout = () => {
   logoutModalState.type = 'confirm'
   logoutModalState.title = '退出登录'

@@ -41,6 +41,7 @@
 <script setup lang="ts">
 import type { HierarchyPayload } from '@/features/chat/types/chat'
 
+// 层级概括图：根节点 → 分支 → 子项
 defineProps<{
   payload: HierarchyPayload
 }>()

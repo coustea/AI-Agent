@@ -40,6 +40,7 @@ def _source_artifacts(
     handoffs: dict[str, DownstreamContext],
 ) -> list[PPTSource]:
     artifacts: list[PPTSource] = []
+    # 将上游交接内容转换为 PPT 素材（去重 materials，最多 12 条）
     for agent_id, handoff in handoffs.items():
         materials = list(
             dict.fromkeys(str(item).strip() for item in handoff.materials if str(item).strip())
@@ -56,6 +57,7 @@ def _source_artifacts(
 
 
 def _result_artifacts(results: dict[str, AgentResult]) -> list[PPTSource]:
+    # 仅取成功结果的正文前 4000 字符作为素材
     return [
         PPTSource(
             agent_id=agent_id,
@@ -127,6 +129,7 @@ class PPTAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         username = input_data.username
+        # 路径节点场景：输出到 paths/{path_id}/nodes/{node_id}/ppt/
         output_dir = user_path_node_ppt_dir(
             username, str(input_data.path_id), str(input_data.node_id)
         )
@@ -150,6 +153,7 @@ class PPTAgent(BaseResourceAgent):
             else uuid.uuid4().hex
         )
         username = input_data.username
+        # 多智能体资源场景：输出到 resources/{id}/ppt/
         output_dir = user_resource_ppt_dir(username, resource_key)
         return await self._generate(
             build_resource_ppt_request(input_data),
@@ -174,6 +178,7 @@ class PPTAgent(BaseResourceAgent):
             await self.emitter.send(self.agent_id, "running", message, percent)
 
         try:
+            # 调用共享 PPT 模块生成 HTML 课件，期间发送心跳
             artifact = await self.run_with_heartbeat(
                 PPTGenerator().generate(
                     request,
@@ -189,6 +194,7 @@ class PPTAgent(BaseResourceAgent):
                 progress=70,
             )
         except PPTGenerationError as exc:
+            # 生成失败：记录阶段并返回失败结果
             logger.exception("PPT 生成失败")
             return AgentResult(
                 success=False,

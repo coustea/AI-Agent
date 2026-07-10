@@ -1,3 +1,4 @@
+# 资源生成模块：聚合 api / service / orchestrator / agents / workflow 等子模块
 """资源生成模块 — 多智能体协作生成个性化学习资源。
 
 核心组件：

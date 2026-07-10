@@ -1,4 +1,5 @@
 """
+# graph_representation 算法实现 — domain: graph_structure
 图的多种表示方式构建与一致性验证
 ================================
 本程序演示无向加权图的三种经典表示方法：
@@ -18,6 +19,7 @@
 """
 
 
+# 定义 build_graph 函数
 def build_graph():
     labels = ["A", "B", "C", "D", "E", "F", "G"]
     num_nodes = len(labels)

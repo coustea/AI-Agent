@@ -13,9 +13,11 @@ from app.evaluation.request import LearningEventCreate
 from app.evaluation.service import EvaluationService
 from app.infra.logging import get_logger
 
+# 创建模块级日志器
 logger = get_logger(__name__)
 
 
+# 记录一次独立题库答题事件到 learning_events 表
 async def record_quiz_submit_event(
     db: AsyncSession,
     user_id: int,
@@ -34,6 +36,7 @@ async def record_quiz_submit_event(
         score: 得分百分比（0-100）。
         subject: 可选的学习科目。
     """
+    # 构建学习事件载荷（模块、事件类型、科目、得分与元信息）
     payload = LearningEventCreate(
         module=MODULE_QUIZ,
         event_type=QUIZ_SUBMITTED,
@@ -44,7 +47,9 @@ async def record_quiz_submit_event(
             "correct_count": correct_count,
         },
     )
+    # 调用评测服务持久化答题事件
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
+    # 记录事件落库日志
     logger.info(
         "[Quiz] event recorded: user_id=%s score=%s total=%s correct=%s",
         user_id,

@@ -1,14 +1,12 @@
 <template>
   <div class="dp-table-visualizer">
-    <div class="visualizer-meta">
-      <div><h3>动态规划表可视化</h3><p>展示 DP 表格的逐格填入过程，高亮当前读写单元格。</p></div>
+    <div class="chart-shell">
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>默认</span>
         <span class="legend-item"><i class="legend-dot active"></i>当前</span>
         <span class="legend-item"><i class="legend-dot success"></i>已完成</span>
       </div>
-    </div>
-    <div class="chart-shell">
+
       <div v-if="headers.length || values.length" class="dp-grid">
         <div v-if="headers.length" class="dp-row header">
           <span v-for="(header, index) in headers" :key="`h-${index}`" class="dp-cell header">{{ header }}</span>
@@ -28,10 +26,12 @@ import type { TraceEvent } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
 
+// DP 表的表头、数值网格、高亮单元格坐标
 const headers = computed<string[]>(() => { const raw = props.currentEvent?.state?.structure?.headers; return Array.isArray(raw) ? raw : [] })
 const values = computed<Array<Array<string | number>>>(() => { const raw = props.currentEvent?.state?.structure?.values; return Array.isArray(raw) ? raw : [] })
 const highlighted = computed(() => { const raw = props.currentEvent?.state?.structure?.highlighted; return Array.isArray(raw) ? raw : [] })
 
+// 获取单元格的颜色主题（在 highlighted 列表中查找）
 function getCellTone(row: number, col: number) {
   const matched = highlighted.value.find((item: any) => item.row === row && item.col === col)
   return matched?.tone || ''
@@ -42,38 +42,25 @@ function getCellTone(row: number, col: number) {
 .dp-table-visualizer {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: var(--color-surface);
-}
-
-.visualizer-meta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.visualizer-meta h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-strong);
-}
-
-.visualizer-meta p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--color-text-muted);
+  padding: 12px;
+  background: transparent;
 }
 
 .legend {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: fit-content;
+  margin-left: auto;
+  margin-bottom: 12px;
   display: flex;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .legend-item {
@@ -106,6 +93,7 @@ function getCellTone(row: number, col: number) {
 }
 
 .chart-shell {
+  flex: 1;
   min-height: 0;
   border-radius: var(--radius-sm);
   background: var(--color-bg);

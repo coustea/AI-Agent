@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单触发器
 import type { DropdownMenuTriggerProps } from "reka-ui"
 import { DropdownMenuTrigger, useForwardProps } from "reka-ui"
 

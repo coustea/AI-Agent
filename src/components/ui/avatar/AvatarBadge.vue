@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 头像徽标
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 

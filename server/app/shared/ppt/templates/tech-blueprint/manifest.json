@@ -1,0 +1,106 @@
+{
+  "id": "tech-blueprint",
+  "name": "蓝白机制图谱",
+  "version": "1.0.0",
+  "description": "面向高校计算机课程机制讲解的蓝白技术图谱模板，以蓝图线框、机制链路、判断轴、参数表、纠错路径和知识网络组织内容，适合操作系统、计算机网络、数据库、数据结构、算法和编译原理等机制型知识讲解。",
+  "family": "technical",
+  "scheme": "light",
+  "tags": [
+    "技术机制",
+    "蓝白",
+    "系统图谱",
+    "算法流程",
+    "机制链路",
+    "数据结构",
+    "操作系统",
+    "计算机网络",
+    "数据库",
+    "编译原理"
+  ],
+  "layouts": [
+    {
+      "id": "blueprint-cover",
+      "name": "机制图谱封面",
+      "type": "cover",
+      "animation": "reveal",
+      "skeleton": "blueprint-cover"
+    },
+    {
+      "id": "blueprint-agenda",
+      "name": "技术路线",
+      "type": "agenda",
+      "animation": "trace",
+      "skeleton": "route-blueprint"
+    },
+    {
+      "id": "blueprint-goals",
+      "name": "能力阶梯",
+      "type": "learning_goals",
+      "animation": "build",
+      "skeleton": "goal-ladder"
+    },
+    {
+      "id": "blueprint-question",
+      "name": "矛盾问题",
+      "type": "hook_question",
+      "animation": "focus",
+      "skeleton": "question-signal"
+    },
+    {
+      "id": "blueprint-definition",
+      "name": "技术定义",
+      "type": "definition",
+      "animation": "reveal",
+      "skeleton": "definition-spec"
+    },
+    {
+      "id": "blueprint-boundary",
+      "name": "边界判断",
+      "type": "concept_boundary",
+      "animation": "compare",
+      "skeleton": "boundary-diagnosis"
+    },
+    {
+      "id": "blueprint-mechanism",
+      "name": "机制拓扑",
+      "type": "mechanism_overview",
+      "animation": "trace",
+      "skeleton": "mechanism-topology"
+    },
+    {
+      "id": "blueprint-explain",
+      "name": "机制拆解",
+      "type": "knowledge_explain",
+      "animation": "build",
+      "skeleton": "mechanism-explain"
+    },
+    {
+      "id": "blueprint-comparison",
+      "name": "参数对照",
+      "type": "comparison",
+      "animation": "compare",
+      "skeleton": "parameter-table"
+    },
+    {
+      "id": "blueprint-misconception",
+      "name": "纠错路径",
+      "type": "misconception",
+      "animation": "resolve",
+      "skeleton": "bug-reason-fix"
+    },
+    {
+      "id": "blueprint-map",
+      "name": "知识网络",
+      "type": "knowledge_map",
+      "animation": "build",
+      "skeleton": "knowledge-network"
+    },
+    {
+      "id": "blueprint-closing",
+      "name": "最终结论",
+      "type": "closing",
+      "animation": "focus",
+      "skeleton": "final-signal"
+    }
+  ]
+}

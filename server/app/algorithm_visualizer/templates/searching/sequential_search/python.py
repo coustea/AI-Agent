@@ -4,6 +4,7 @@ def sequential_search(arr, target):
             return i
     return -1
 
+# 定义 sentinel_search 函数
 def sentinel_search(arr, target):
     last = arr[-1]
     arr[-1] = target
@@ -15,6 +16,7 @@ def sentinel_search(arr, target):
         return i
     return -1
 
+# 定义 multi_key_search 函数
 def multi_key_search(arr, keys):
     results = {}
     for key in keys:
@@ -22,6 +24,7 @@ def multi_key_search(arr, keys):
         results[key] = indices
     return results
 
+# 定义 search_with_count 函数
 def search_with_count(arr, target):
     comparisons = 0
     for i, val in enumerate(arr):

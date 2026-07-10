@@ -1,3 +1,4 @@
+# shell_sort 算法实现 — domain: sorting
 def knuth_gaps(n):
     gaps = []
     k = 1
@@ -7,6 +8,7 @@ def knuth_gaps(n):
     gaps.reverse()
     return gaps if gaps else [1]
 
+# 定义 sedgewick_gaps 函数
 def sedgewick_gaps(n):
     gaps = []
     i = 0
@@ -25,6 +27,7 @@ def sedgewick_gaps(n):
     gaps.reverse()
     return gaps if gaps else [1]
 
+# 定义 hibbard_gaps 函数
 def hibbard_gaps(n):
     gaps = []
     k = 1
@@ -34,6 +37,7 @@ def hibbard_gaps(n):
     gaps.reverse()
     return gaps if gaps else [1]
 
+# 定义 shell_sort_with_gaps 函数
 def shell_sort_with_gaps(arr, gaps):
     n = len(arr)
     for gap in gaps:
@@ -46,6 +50,7 @@ def shell_sort_with_gaps(arr, gaps):
             arr[j] = temp
     return arr
 
+# 定义 shell_sort 函数
 def shell_sort(arr):
     gaps = knuth_gaps(len(arr))
     return shell_sort_with_gaps(arr, gaps)

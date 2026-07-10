@@ -1,6 +1,6 @@
 // src/types/chat.ts — 聊天相关类型定义
 
-// OpenAI 格式的内容部分类型
+// 附件元数据（URL、类型、名称等）
 interface AttachmentContentMeta {
   url?: string
   file_type?: string
@@ -14,6 +14,7 @@ export type ContentPart =
   | ({ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } & AttachmentContentMeta)
   | ({ type: "file"; file: { file_id?: string; file_data?: string; filename?: string } } & AttachmentContentMeta)
 
+// 教学图类型枚举（10种可视化结构）
 export type TeachingDiagramType = 'comparison' | 'flowchart' | 'sequence' | 'framework' | 'summary' | 'hierarchy' | 'tree' | 'grid' | 'protocol' | 'timeline'
 type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
 
@@ -127,9 +128,9 @@ export interface TreePayload {
 
 // ---- 8. 网格/内存/指针图 ----
 export interface GridCell {
-  index: string
+  index: number
   label: string
-  status: 'normal' | 'active' | 'empty' | 'pointer'
+  status?: 'normal' | 'active' | 'empty' | 'pointer' | null
   pointer?: string | null
   detail?: string | null
 }
@@ -143,7 +144,7 @@ export interface GridPayload {
 // ---- 9. 协议字段/报文格式图 ----
 export interface ProtocolField {
   name: string
-  detail: string
+  detail?: string | null
   width_ratio?: number | null
   highlight: boolean
 }
@@ -193,6 +194,7 @@ export type VisualContent =
   | ProtocolPayload
   | TimelinePayload
 
+// 完整教学图解结构（含视觉数据和教学内容）
 export interface TeachingDiagram {
   graph_type: TeachingDiagramType
   title: string
@@ -204,6 +206,7 @@ export interface TeachingDiagram {
   teaching_content: TeachingContent
 }
 
+// 聊天消息（含附件、工具调用、活动状态、图解）
 export interface ChatMessageItem {
   id?: number
   user_message_id?: number | null
@@ -255,6 +258,7 @@ export interface MessageAttachmentInput {
   mime_type?: string
 }
 
+// SSE 流式聊天请求参数
 export interface StreamChatParams {
   message?: string
   session_id?: string

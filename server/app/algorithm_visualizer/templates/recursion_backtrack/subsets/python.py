@@ -3,6 +3,7 @@ def subsets(nums):
         return [[]]
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, path):
         res.append(path[:])
         for i in range(start, len(nums)):
@@ -13,10 +14,12 @@ def subsets(nums):
     backtrack(0, [])
     return res
 
+# 定义 subsets_with_dup 函数
 def subsets_with_dup(nums):
     nums.sort()
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, path):
         res.append(path[:])
         for i in range(start, len(nums)):
@@ -29,6 +32,7 @@ def subsets_with_dup(nums):
     backtrack(0, [])
     return res
 
+# 定义 subsets_bitmask 函数
 def subsets_bitmask(nums):
     n = len(nums)
     res = []
@@ -40,9 +44,11 @@ def subsets_bitmask(nums):
         res.append(subset)
     return res
 
+# 定义 subset_sum 函数
 def subset_sum(nums, target):
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, remain, path):
         if remain == 0:
             res.append(path[:])

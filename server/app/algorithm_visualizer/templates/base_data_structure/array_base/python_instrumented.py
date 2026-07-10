@@ -4,6 +4,7 @@ tracer = ArrayTracer()
 
 
 
+# 定义 array_operations 函数
 def array_operations():
     arr = [3, 7, 1, 9, 4, 6, 2, 8, 5, 10, 0, 11]
     tracer.init_array(arr, line=10)
@@ -13,6 +14,7 @@ def array_operations():
 
     target = 8
     found_idx = -1
+# 循环遍历处理
     for i in range(len(arr)):
         tracer.compare(i, i, line=20)
         if arr[i] == target:
@@ -26,6 +28,7 @@ def array_operations():
     insert_val = 20
     arr.append(0)
     tracer.assign(len(arr) - 1, 0, line=32)
+# 循环遍历处理
     for i in range(len(arr) - 1, insert_pos, -1):
         arr[i] = arr[i - 1]
         tracer.assign(i, arr[i], line=34)
@@ -35,10 +38,12 @@ def array_operations():
     delete_pos = 3
     if delete_pos < len(arr):
         removed = arr.pop(delete_pos)
+# 循环遍历处理
         for i in range(delete_pos, len(arr)):
             tracer.assign(i, arr[i], line=43)
 
     min_idx = 0
+# 循环遍历处理
     for i in range(1, len(arr)):
         tracer.compare(i, min_idx, line=49)
         if arr[i] < arr[min_idx]:

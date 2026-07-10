@@ -2,10 +2,12 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 binary_search_first 函数
 def binary_search_first(arr, target):
     tracer.init_array(arr, line=1)
     lo, hi = 0, len(arr) - 1
     result = -1
+# 循环条件判断
     while lo <= hi:
         mid = (lo + hi) // 2
         tracer.move_pointer({"lo": lo, "hi": hi, "mid": mid}, line=6)
@@ -20,9 +22,11 @@ def binary_search_first(arr, target):
     tracer.finish(line=16)
     return result
 
+# 定义 binary_search_last 函数
 def binary_search_last(arr, target):
     lo, hi = 0, len(arr) - 1
     result = -1
+# 循环条件判断
     while lo <= hi:
         mid = (lo + hi) // 2
         if arr[mid] == target:
@@ -34,10 +38,12 @@ def binary_search_last(arr, target):
             hi = mid - 1
     return result
 
+# 定义 sqrt_binary 函数
 def sqrt_binary(n, precision=1e-7):
     if n < 0:
         return None
     lo, hi = 0, max(1, n)
+# 循环条件判断
     while hi - lo > precision:
         mid = (lo + hi) / 2
         if mid * mid < n:
@@ -46,8 +52,10 @@ def sqrt_binary(n, precision=1e-7):
             hi = mid
     return (lo + hi) / 2
 
+# 定义 search_rotated 函数
 def search_rotated(arr, target):
     lo, hi = 0, len(arr) - 1
+# 循环条件判断
     while lo <= hi:
         mid = (lo + hi) // 2
         if arr[mid] == target:

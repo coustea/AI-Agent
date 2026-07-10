@@ -36,12 +36,14 @@ def solve_n_queens(n):
     headers = [str(c) for c in range(n)]
     tracer.init_table(headers, rows=n, cols=n, fill_value="", line=1)
 
+# 定义 backtrack 函数
     def backtrack(row):
         if row == n:
             res.append(["".join(r) for r in board])
             tracer.finish(line=30)
             return
 
+# 循环遍历处理
         for col in range(n):
             if col in cols or (row - col) in diag1 or (row + col) in diag2:
                 tracer.highlight(row, col, tone="conflict", line=42)
@@ -70,8 +72,10 @@ def solve_n_queens(n):
 
 result = solve_n_queens(8)
 print(f"8 皇后问题共 {len(result)} 个解")
+# 循环遍历处理
 for i, sol in enumerate(result[:3]):
     print(f"解 {i+1}:")
+# 循环遍历处理
     for row in sol:
         print(f"  {row}")
 tracer.dump()

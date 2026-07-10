@@ -1,3 +1,4 @@
+// 输入框组组件集及变体定义
 import type { VariantProps } from "class-variance-authority"
 import type { HTMLAttributes } from "vue"
 import type { ButtonVariants } from '@/components/ui/button'

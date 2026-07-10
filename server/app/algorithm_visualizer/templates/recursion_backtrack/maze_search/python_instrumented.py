@@ -2,6 +2,7 @@ from visual_tracer import DpTableTracer
 
 tracer = DpTableTracer()
 
+# 定义 solve_maze 函数
 def solve_maze(maze):
     if not maze or not maze[0]:
         return []
@@ -13,10 +14,13 @@ def solve_maze(maze):
     visited = [[False] * w for _ in range(h)]
     headers = [str(c) for c in range(w)]
     tracer.init_table(headers, rows=h, cols=w, fill_value="", line=4)
+# 循环遍历处理
     for r in range(h):
+# 循环遍历处理
         for c in range(w):
             if maze[r][c] == 1:
                 tracer.set_value(r, c, "X", line=8)
+# 定义 dfs 函数
     def dfs(r, c):
         if r < 0 or r >= h or c < 0 or c >= w:
             return False
@@ -32,6 +36,7 @@ def solve_maze(maze):
             tracer.set_value(r, c, "E", line=23)
             tracer.finish(line=24)
             return True
+# 循环遍历处理
         for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             if dfs(r + dr, c + dc):
                 return True
@@ -44,6 +49,7 @@ def solve_maze(maze):
     tracer.finish(line=37)
     return []
 
+# 定义 solve_maze_all_paths 函数
 def solve_maze_all_paths(maze):
     if not maze or not maze[0]:
         return []
@@ -53,6 +59,7 @@ def solve_maze_all_paths(maze):
         return []
     all_paths = []
     visited = [[False] * w for _ in range(h)]
+# 定义 dfs 函数
     def dfs(r, c, path):
         if r < 0 or r >= h or c < 0 or c >= w:
             return
@@ -63,6 +70,7 @@ def solve_maze_all_paths(maze):
         if r == h - 1 and c == w - 1:
             all_paths.append(path[:])
         else:
+# 循环遍历处理
             for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 dfs(r + dr, c + dc, path)
         path.pop()
@@ -70,6 +78,7 @@ def solve_maze_all_paths(maze):
     dfs(0, 0, [])
     return all_paths
 
+# 定义 shortest_path_length 函数
 def shortest_path_length(maze):
     if not maze or not maze[0]:
         return -1
@@ -81,10 +90,12 @@ def shortest_path_length(maze):
     queue = deque([(0, 0, 0)])
     visited = [[False] * w for _ in range(h)]
     visited[0][0] = True
+# 循环条件判断
     while queue:
         r, c, dist = queue.popleft()
         if r == h - 1 and c == w - 1:
             return dist
+# 循环遍历处理
         for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             nr, nc = r + dr, c + dc
             if 0 <= nr < h and 0 <= nc < w and maze[nr][nc] == 0 and not visited[nr][nc]:

@@ -3,9 +3,11 @@ from visual_tracer import TreeTracer
 tracer = TreeTracer()
 
 
+# SegmentTree 类定义
 class SegmentTree:
     """线段树 — 支持区间求和、单点更新、区间查询"""
 
+# 定义 __init__ 函数
     def __init__(self, arr):
         if not arr:
             raise ValueError("输入数组不能为空")
@@ -13,6 +15,7 @@ class SegmentTree:
         self.tree = [0] * (4 * self.n)
         self._build(arr, 0, 0, self.n - 1)
 
+# 定义 _build 函数
     def _build(self, arr, node, start, end):
         if start == end:
             self.tree[node] = arr[start]
@@ -24,11 +27,13 @@ class SegmentTree:
         self._build(arr, right_child, mid + 1, end)
         self.tree[node] = self.tree[left_child] + self.tree[right_child]
 
+# 定义 update 函数
     def update(self, idx, val):
         if idx < 0 or idx >= self.n:
             raise IndexError(f"索引 {idx} 超出范围")
         self._update(0, 0, self.n - 1, idx, val)
 
+# 定义 _update 函数
     def _update(self, node, start, end, idx, val):
         if start == end:
             self.tree[node] = val
@@ -40,11 +45,13 @@ class SegmentTree:
             self._update(2 * node + 2, mid + 1, end, idx, val)
         self.tree[node] = self.tree[2 * node + 1] + self.tree[2 * node + 2]
 
+# 定义 query 函数
     def query(self, l, r):
         if l < 0 or r >= self.n or l > r:
             raise IndexError(f"查询区间 [{l}, {r}] 无效")
         return self._query(0, 0, self.n - 1, l, r)
 
+# 定义 _query 函数
     def _query(self, node, start, end, l, r):
         if r < start or end < l:
             return 0
@@ -59,6 +66,7 @@ class SegmentTree:
 arr = [2, 5, 1, 4, 8, 3, 7, 6]
 st = SegmentTree(arr)
 
+# 定义 find_max_node 函数
 def find_max_node(st_obj, node, start, end):
     if start == end:
         return node
@@ -70,6 +78,7 @@ def find_max_node(st_obj, node, start, end):
 max_node = find_max_node(st, 0, 0, st.n - 1)
 
 nodes = []
+# 循环遍历处理
 for i in range(max_node + 1):
     children = []
     left = 2 * i + 1
@@ -83,6 +92,7 @@ for i in range(max_node + 1):
 
 tracer.init_tree(nodes, line=87)
 
+# 定义 visit_build 函数
 def visit_build(node, start, end):
     tracer.visit_node(f"node-{node}", line=19)
     if start == end:

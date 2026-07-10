@@ -40,14 +40,19 @@ function parsePathEvent(raw: MessageEvent): PathEvent | null {
 }
 
 export function usePathEvents() {
+  // 当前 SSE 连接的 run_id 和 path_id
   const runId = ref<string | null>(null)
   const pathId = ref<number | null>(null)
+  // 连接状态：从 idle → connecting → running/reconnecting → completed/failed
   const connectionStatus = ref<PathConnectionStatus>('idle')
+  // 累积的事件队列（按 sequence 去重）
   const events = ref<PathEvent[]>([])
   const error = shallowRef<Error | null>(null)
   const source = shallowRef<EventSource | null>(null)
+  // 已处理的最大序号，用于去重
   const lastSequence = ref(0)
 
+  // 关闭当前 SSE 连接
   const close = () => {
     source.value?.close()
     source.value = null

@@ -7,6 +7,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+# 虚拟人桥接生成响应数据模型
 class AvatarBridgeResponse(BaseModel):
     """虚拟人桥接生成响应模型。"""
 

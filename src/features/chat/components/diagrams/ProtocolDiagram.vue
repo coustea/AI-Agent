@@ -101,12 +101,12 @@ const props = defineProps<{
   payload: ProtocolPayload
 }>()
 
-// Dynamic layer badge helper for vertical stacks
+// 垂直堆叠模式下层的编号（L1, L2, ...）
 const getLayerBadge = (idx: number, total: number) => {
   return `L${total - idx}`
 }
 
-// Group fields into 32-bit rows for packet header diagrams
+// 将协议字段按 32-bit 分组为数据包行
 const rows = computed(() => {
   const result: ProtocolField[][] = []
   let currentRow: ProtocolField[] = []
@@ -133,7 +133,7 @@ const rows = computed(() => {
   return result
 })
 
-// Calculate bit offsets for each row
+// 计算每行的起始 bit 偏移
 const rowMeta = computed(() => {
   const result: { fields: ProtocolField[]; startBit: number; endBit: number }[] = []
   let currentStartBit = 0

@@ -105,6 +105,7 @@ import { setAuthToken } from '@/shared/auth/token'
 import AppLogo from '@/shared/ui/AppLogo.vue'
 import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 
+// Vue Router 实例与当前路由信息
 const router = useRouter()
 const route = useRoute()
 // 登录请求进行中的加载状态
@@ -166,9 +167,10 @@ const handleLogin = async () => {
     const res = await login({ username: form.username, password: form.password })
     const { data } = res.data
     if (data.token) {
+      // 保存 JWT Token 并更新全局用户状态
       setAuthToken(data.token)
       setCurrentUser(data.user ?? null)
-      // 首次登录用户跳转后触发 onboarding 引导
+      // 首次登录跳转 onboarding 引导页，非首次直接进 dashboard
       if (!data.user?.is_first_login) {
         router.push('/dashboard?onboarding=true&loginSuccess=true')
       } else {

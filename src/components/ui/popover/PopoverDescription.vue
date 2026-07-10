@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 弹出框描述
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 

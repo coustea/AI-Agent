@@ -2,13 +2,16 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 heap_sort 函数
 def heap_sort(arr):
     n = len(arr)
     if n <= 1:
         return arr
     tracer.init_array(arr, line=1)
+# 循环遍历处理
     for i in range(n // 2 - 1, -1, -1):
         heapify(arr, n, i)
+# 循环遍历处理
     for i in range(n - 1, 0, -1):
         arr[0], arr[i] = arr[i], arr[0]
         tracer.swap(0, i, line=10)
@@ -18,6 +21,7 @@ def heap_sort(arr):
     tracer.finish(line=14)
     return arr
 
+# 定义 heapify 函数
 def heapify(arr, n, i):
     largest = i
     left = 2 * i + 1
@@ -35,19 +39,23 @@ def heapify(arr, n, i):
         tracer.swap(i, largest, line=22)
         heapify(arr, n, largest)
 
+# 定义 heap_sort_min 函数
 def heap_sort_min(arr):
     n = len(arr)
     if n <= 1:
         return arr
+# 循环遍历处理
     for i in range(n // 2 - 1, -1, -1):
         heapify_min(arr, n, i)
     result = []
+# 循环遍历处理
     for i in range(n - 1, -1, -1):
         result.append(arr[0])
         arr[0] = arr[i]
         heapify_min(arr, i, 0)
     return result
 
+# 定义 heapify_min 函数
 def heapify_min(arr, n, i):
     smallest = i
     left = 2 * i + 1
@@ -60,10 +68,13 @@ def heapify_min(arr, n, i):
         arr[i], arr[smallest] = arr[smallest], arr[i]
         heapify_min(arr, n, smallest)
 
+# 定义 kth_largest 函数
 def kth_largest(arr, k):
     n = len(arr)
+# 循环遍历处理
     for i in range(n // 2 - 1, -1, -1):
         heapify(arr, n, i)
+# 循环遍历处理
     for i in range(k - 1):
         arr[0], arr[n - 1 - i] = arr[n - 1 - i], arr[0]
         heapify(arr, n - 1 - i, 0)
@@ -76,6 +87,7 @@ datasets = [
 ]
 
 heap_sort(datasets[0][:])
+# 循环遍历处理
 for data in datasets[1:]:
     r1 = heap_sort(data[:])
     assert r1 == sorted(data)

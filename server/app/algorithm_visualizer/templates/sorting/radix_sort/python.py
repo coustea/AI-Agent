@@ -10,6 +10,7 @@ def radix_sort(arr):
         exp *= 10
     return arr
 
+# 定义 counting_sort_by_digit 函数
 def counting_sort_by_digit(arr, exp):
     n = len(arr)
     output = [0] * n
@@ -25,6 +26,7 @@ def counting_sort_by_digit(arr, exp):
         count[digit] -= 1
     return output
 
+# 定义 radix_sort_with_negatives 函数
 def radix_sort_with_negatives(arr):
     if not arr:
         return arr
@@ -37,6 +39,7 @@ def radix_sort_with_negatives(arr):
         pos = radix_sort(pos)
     return neg + pos
 
+# 定义 max_digit_count 函数
 def max_digit_count(arr):
     if not arr:
         return 0

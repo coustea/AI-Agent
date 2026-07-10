@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板空状态
 import type { PrimitiveProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

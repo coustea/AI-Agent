@@ -1,3 +1,4 @@
+# fenwick_tree 算法实现 — domain: tree_structure
 class FenwickTree:
     """树状数组 — 高效的前缀和结构"""
 

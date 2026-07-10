@@ -1,5 +1,6 @@
 """共享学习者画像模块。"""
 
+# 汇总导出画像相关的请求、响应、服务与类型定义
 from app.profile.request import OnboardingUpdate, GlobalTutoringProfileUpdate
 from app.profile.response import (
     BaseInfoData,

@@ -29,7 +29,7 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-# 共享实例
+# 共享实例：上下文构建器与事件映射器（模块级复用）
 _context_builder = ChatContextBuilder()
 _event_mapper = ChatRuntimeEventMapper()
 
@@ -38,6 +38,7 @@ _event_mapper = ChatRuntimeEventMapper()
 # -----------------------------------------------------------------------
 
 
+# 从数据库构建 LangChain 消息列表（委托给 ChatContextBuilder，排除本轮消息）
 async def build_messages(
     user_id: int,
     session_id: str,
@@ -50,6 +51,7 @@ async def build_messages(
     )
 
 
+# 对话总编排：构建上下文 → 调用 TutorAgent → 转发 SSE 事件 → 持久化助手回复
 async def chat(
     *,
     user_message_id: int,
@@ -81,6 +83,7 @@ async def chat(
     )
 
     # ── 1. 持久化用户消息 ──
+    # 发送“正在理解问题”活动并持久化，随后产出初始 status 事件
     memory_svc = get_chat_memory_service()
     preparing_payload = build_workflow_activity_payload(
         stage="preparing_context",
@@ -98,7 +101,7 @@ async def chat(
     )
     yield {"event": "status", "data": preparing_payload}
 
-    # 如果是第一条消息，后台生成标题
+    # 若是首条消息，后台异步生成会话标题
     if await memory_svc.count_messages(user_id=user_id, session_id=effective_session) <= 1:
         uc._spawn_background(
             memory_svc.generate_session_title(
@@ -110,6 +113,7 @@ async def chat(
         )
 
     # ── 2. 构建上下文 ──
+    # 构建历史消息与会话摘要上下文
     history_messages = await build_messages(
         user_id, effective_session,
         exclude_message_id=user_message_id,
@@ -117,6 +121,7 @@ async def chat(
     session_summary = await memory_svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
 
     # ── 3. 调用 TutorAgent ──
+    # 组装 Agent 输入并创建 TutorAgent 实例
     agent_input = TutorAgentInput(
         user_id=user_id,
         username=username,
@@ -137,15 +142,18 @@ async def chat(
     sources: list[dict[str, Any]] = []
     has_error = False
 
+    # 迭代 Agent 流式事件并转换为前端事件
     try:
         async for event in agent.chat(agent_input):
             sse_event = SSE_EVENT_MAP.get(event.type, "status")
             sse_data = event.payload
 
+            # 增量回答 token 直接透传
             if event.type == "answer_token":
                 yield {"event": "token", "data": sse_data.get("token", "")}
                 continue
 
+            # 最终事件：收集完整回答/图解/工具调用/来源，并发送图解与保存中状态
             if event.type == "final":
                 full_answer = sse_data.get("final_answer", "")
                 diagram_result = sse_data.get("diagram_result")
@@ -165,14 +173,17 @@ async def chat(
                 }
                 continue
 
+            # 错误事件：标记失败并结束流
             if event.type == "error":
                 has_error = True
                 yield {"event": "error", "data": sse_data.get("error", "未知错误")}
                 yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
                 return
 
+            # 其余事件按映射表转发
             yield {"event": sse_event, "data": sse_data}
 
+    # 捕获 Agent 执行异常，向前端报告错误
     except Exception as exc:
         logger.exception("[chat] TutorAgent 执行失败")
         has_error = True
@@ -181,6 +192,7 @@ async def chat(
         return
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
+    # 若正常产出，则保存助手消息并记录工具/来源/图解元数据
     saved_message_id: int | None = None
     if not has_error and full_answer:
         usage_meta: dict[str, Any] = {}
@@ -203,6 +215,7 @@ async def chat(
             usage_metadata=usage_meta or None,
         )
         saved_message_id = saved.id
+    # 未产出回答则视为错误并结束
     elif not has_error:
         has_error = True
         yield {"event": "error", "data": "模型未生成可用回答"}
@@ -210,6 +223,7 @@ async def chat(
         return
 
     # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
+    # 用完整回答覆盖前端已流式显示的内容
     if not has_error and full_answer:
         yield {
             "event": "content_replace",
@@ -217,6 +231,7 @@ async def chat(
         }
 
     # ── 6. 返回最终结果 ──
+    # 发送 done 事件，附带完整回答与工具调用信息
     if not has_error:
         yield {
             "event": "done",
@@ -231,6 +246,7 @@ async def chat(
         }
 
     # ── 5. 后台记忆任务 ──
+    # 对话成功后触发长期记忆与压缩等后台任务
     if full_answer:
         uc._spawn_background(
             run_background_memory_jobs(
@@ -244,6 +260,7 @@ async def chat(
         )
 
 
+# 将内部运行事件映射为 ChatEvent 并发送（委托给 ChatRuntimeEventMapper）
 async def _publish_chat_runtime_event(
     events: ChatEvents,
     event: dict[str, Any],
@@ -252,6 +269,7 @@ async def _publish_chat_runtime_event(
     return await _event_mapper.publish(events, event)
 
 
+# 后台入口：执行对话并通过 ChatEvents 推送运行状态，最后记录对话事件
 async def run_chat_agent(
     *,
     user_message_id: int,
@@ -267,6 +285,7 @@ async def run_chat_agent(
 
     频道已在 router 中通过 ChatEvents.open() 注册。
     """
+    # 创建频道并发送初始“正在思考”状态
     events = ChatEvents(
         user_id=user_id,
         session_id=session_id,
@@ -280,6 +299,7 @@ async def run_chat_agent(
         title="正在思考",
         message="正在准备回答",
     )
+    # 持久化开始活动并推送 message.started 事件
     await memory_svc.upsert_activity(
         user_id=user_id,
         session_id=session_id,
@@ -289,6 +309,7 @@ async def run_chat_agent(
     await events.send(event="message.started", message=started["message"], data=started)
     failed = False
     try:
+        # 逐个转发对话事件；只要有一次失败即标记 failed
         async for event in chat(
             user_message_id=user_message_id,
             user_id=user_id,
@@ -301,6 +322,7 @@ async def run_chat_agent(
         ):
             failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:
+            # 失败：持久化失败活动并发送 message.failed
             await memory_svc.upsert_activity(
                 user_id=user_id,
                 session_id=session_id,
@@ -315,6 +337,7 @@ async def run_chat_agent(
             )
             await events.send(event="message.failed", message="回答失败", data={"error": "智能辅导暂时无法完成本次回答"})
         else:
+            # 成功：持久化完成活动并发送 message.completed
             await memory_svc.upsert_activity(
                 user_id=user_id,
                 session_id=session_id,
@@ -330,6 +353,7 @@ async def run_chat_agent(
             # 图解数据通过 chat() 生成器的 diagram 事件发送，
             # 由 ChatRuntimeEventMapper 自动转换为 diagram.ready 前端事件
             await events.send(event="message.completed", message="回答完成", data={})
+            # 记录对话埋点事件（与压缩任务异步解耦）
             try:
                 async with session_scope() as db:
                     await record_dialogue_event(
@@ -342,6 +366,7 @@ async def run_chat_agent(
                     "[Chat] 记录对话事件失败: session=%s",
                     session_id,
                 )
+    # 捕获整体异常，标记失败并发送 message.failed
     except Exception as e:
         logger.exception("聊天 Agent 执行失败: user_message_id=%s", user_message_id)
         await memory_svc.upsert_activity(
@@ -362,6 +387,7 @@ async def run_chat_agent(
 
 
 
+# ChatUseCases：聊天服务核心类（附件上传、文件解析、对话流编排、后台任务）
 class ChatUseCases:
     """聊天服务核心类 — 负责附件上传、文件解析和对话流编排。
 
@@ -376,6 +402,7 @@ class ChatUseCases:
     不需要再经过此层转发。
     """
 
+    # 初始化文件存储、后台任务集合与记忆服务
     def __init__(self) -> None:
         # 本地文件存储：用户上传文件的磁盘读写
         self.file_store: LocalFileStore = LocalFileStore()
@@ -383,10 +410,12 @@ class ChatUseCases:
         self._background_tasks: set[asyncio.Task] = set()
         self._memory_service = get_chat_memory_service()
 
+    # 生成与 PostgreSQL UUID 列一致的新会话 ID
     def default_session_id(self, user_id: int) -> str:
         """生成与 PostgreSQL UUID 列一致的新会话 ID。"""
         return str(uuid4())
 
+    # 将文字与原始附件快照写入 UserMessage（带 URL 校验与文件类型识别）
     async def create_user_message(
         self,
         *,
@@ -396,6 +425,7 @@ class ChatUseCases:
         attachments: list[dict[str, Any]],
     ) -> Any:
         """把文字和原始附件快照直接写入 UserMessage。"""
+        # 校验并归一化每个附件（URL 前缀 + 去重）
         normalized_attachments: list[dict[str, Any]] = []
         prefix = f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/"
         seen_urls: set[str] = set()
@@ -420,6 +450,7 @@ class ChatUseCases:
                 "size_bytes": path.stat().st_size,
             })
             seen_urls.add(url)
+        # 持久化最终归一化的用户消息
         return await self._memory_service.save_message(
             user_id=user_id,
             session_id=session_id,
@@ -427,6 +458,7 @@ class ChatUseCases:
             content=build_user_content(text, normalized_attachments),
         )
 
+    # 获取会话历史消息，组装为 ChatMessageItem 列表（含附件分析与活动）
     async def get_history(
         self,
         *,
@@ -435,6 +467,7 @@ class ChatUseCases:
         limit: int = 50,
     ) -> list[ChatMessageItem]:
         """获取会话历史消息，组装为 ChatMessageItem 列表。"""
+        # 未指定会话则取最近一个
         memory_svc = get_chat_memory_service()
         if not session_id:
             sessions = await memory_svc.list_sessions(user_id=user_id, limit=1)
@@ -442,10 +475,12 @@ class ChatUseCases:
                 return []
             session_id = sessions[0].id
 
+        # 读取原始消息、附件分析与活动记录
         raw_messages = await memory_svc.list_messages(user_id=user_id, session_id=session_id, limit=limit)
         analyses = await memory_svc.list_attachment_analyses(user_id=user_id, session_id=session_id)
         activities = await memory_svc.list_activities(user_id=user_id, session_id=session_id)
 
+        # 按 user_message_id 分组附件分析与活动
         analyses_by_message: dict[int, list[dict[str, Any]]] = {}
         for analysis in analyses:
             analyses_by_message.setdefault(analysis.user_message_id, []).append({
@@ -469,6 +504,7 @@ class ChatUseCases:
                 "detail": activity.detail or {},
             })
 
+        # 组装每条消息项
         result: list[ChatMessageItem] = []
         final_answer_roots = {
             message.user_message_id
@@ -496,6 +532,7 @@ class ChatUseCases:
                 )
             )
 
+        # 为仅有活动、无最终回答的用户消息补充一条活动展示项
         for message in raw_messages:
             if message.role != "user" or message.id in final_answer_roots:
                 continue
@@ -513,6 +550,7 @@ class ChatUseCases:
                     created_at=message.created_at,
                 )
             )
+        # 按时间、角色、ID 排序
         result.sort(key=lambda item: (
             item.created_at,
             0 if item.role == "user" else 1,
@@ -523,6 +561,7 @@ class ChatUseCases:
 
 
 
+    # 保存用户上传文件：校验后写入磁盘并返回附件快照
     async def save_upload(
         self,
         *,
@@ -539,13 +578,14 @@ class ChatUseCases:
         3. 调用 LocalFileStore 写入磁盘
         4. 返回附件快照，随 UserMessage 一起提交
         """
+        # 校验文件名非空
         if not filename:
             raise ValueError("文件名不能为空")
         # 检查文件数上限
         existing = self.file_store.list_files(username=username, session_id=session_id)
         if len(existing) >= MAX_UPLOAD_FILES_PER_REQUEST:
             raise ValueError(f"单次上传最多 {MAX_UPLOAD_FILES_PER_REQUEST} 个文件")
-        # 写入磁盘
+        # 写入磁盘并返回快照
         payload = await self.file_store.save_upload(
             filename=filename,
             content=content,
@@ -554,6 +594,7 @@ class ChatUseCases:
         )
         return payload
 
+    # 解析上传文件路径，带所有者权限校验
     def resolve_uploaded_file(
         self,
         *,
@@ -567,6 +608,7 @@ class ChatUseCases:
         只有文件所有者才能访问，防止越权读取。
         实际路径解析委托给 LocalFileStore.resolve_user_file。
         """
+        # 仅文件所有者可访问，防止越权读取
         if current_username != owner_username:
             raise PermissionError("无权访问此文件")
         return self.file_store.resolve_user_file(
@@ -576,6 +618,7 @@ class ChatUseCases:
             filename=filename,
         )
 
+    # 安全地启动后台协程任务，避免被 GC 回收并记录异常
     def _spawn_background(self, coro, *, label: str = "") -> None:
         """安全地启动后台协程任务。
 
@@ -585,6 +628,7 @@ class ChatUseCases:
         3. 异常被 catch 并记录日志，不会影响主流程
         4. 若当前不在事件循环中（极端情况），记录警告而非崩溃
         """
+        # 包装协程，捕获并记录异常
         async def _run() -> None:
             try:
                 await coro
@@ -611,6 +655,7 @@ _chat_usecases: ChatUseCases | None = None
 _avatar_chat_usecases: ChatUseCases | None = None
 
 
+# 获取主对话的 ChatUseCases 单例（懒加载）
 def get_chat_usecases() -> ChatUseCases:
     """获取主对话的 ChatUseCases 单例。
 
@@ -622,6 +667,7 @@ def get_chat_usecases() -> ChatUseCases:
     return _chat_usecases
 
 
+# 获取数字人对话的 ChatUseCases 单例（独立，避免状态互相干扰）
 def get_avatar_chat_usecases() -> ChatUseCases:
     """获取数字人对话的 ChatUseCases 单例。
 

@@ -30,11 +30,7 @@
 
       <section class="onboarding-workspace">
         <section class="chat-area" aria-label="对话式填写基础资料">
-          <div class="current-question">
-            <span>当前确认</span>
-            <strong>{{ currentQuestionTitle }}</strong>
-            <p>{{ currentStepMeta.description }}</p>
-          </div>
+
 
           <div
             ref="messageListRef"
@@ -267,6 +263,7 @@ const emit = defineEmits<{
   (e: 'success'): void
 }>()
 
+// Vue Router 和当前用户共享状态
 const route = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
@@ -311,7 +308,7 @@ type ProfileOnboardingDraftState = {
   form: ProfileOnboardingUpdate
 }
 
-// 对话消息列表
+// 对话消息列表、提交状态、消息区 DOM 引用、输入框 DOM 引用
 const messages = ref<ChatMessage[]>([])
 const submitting = ref(false)
 const messageListRef = ref<HTMLDivElement | null>(null)
@@ -354,6 +351,7 @@ const form = reactive<ProfileOnboardingUpdate>({
   courses: [],
 })
 
+// 预置的常见专业列表，供快速选择标签
 const PRESET_MAJORS = [
   '软件工程',
   '计算机科学与技术',
@@ -363,6 +361,7 @@ const PRESET_MAJORS = [
   '电子信息工程',
 ]
 
+// 预置学校列表，无搜索匹配时的兜底推荐
 const PRESET_SCHOOLS = [
   '北京大学',
   '清华大学',
@@ -383,6 +382,7 @@ const PRESET_COURSES = [
   '机器学习',
 ]
 
+// 学习目标、年级、每日时长、编程语言的预设选项
 const PRESET_GOALS = ['期末复习', '考研学习', '进阶学习', '补基础', '项目实战']
 const PRESET_GRADES = ['大一', '大二', '大三', '大四', '研一', '研二', '研三']
 const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
@@ -447,6 +447,7 @@ const currentTimeLabel = computed(() => {
   return formatTime()
 })
 
+// 将 form.courses 统一转为字符串数组（兼容后端可能返回对象数组的情况）
 const coursesValue = computed<string[]>(() => {
   return Array.isArray(form.courses) ? (form.courses as string[]).map(String) : []
 })
@@ -479,36 +480,14 @@ const profileProgress = computed(() => {
   return Math.round((completedRequiredCount.value / 6) * 100)
 })
 
+// 是否可以发送消息：输入不为空且无进行中的请求
 const canSend = computed(() => {
   return userInput.value.trim().length > 0 && !isAssistantStreaming.value && !submitting.value
 })
 
 const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
 
-const currentStepMeta = computed<StepMeta>(() => {
-  return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
-})
 
-const currentQuestionTitle = computed(() => {
-  switch (currentStep.value) {
-    case 1:
-      return '你的专业是什么？'
-    case 2:
-      return '你目前处于哪个年级？'
-    case 3:
-      return '你的主要学习目标是什么？'
-    case 4:
-      return '你的学校是哪一所？'
-    case 5:
-      return '每天大约能学习多久？'
-    case 6:
-      return '常用哪些编程语言？'
-    case 7:
-      return '本学期重点课程有哪些？'
-    default:
-      return '基础资料已确认'
-  }
-})
 
 const stepTimeline = computed<StepTimelineItem[]>(() => {
   return ONBOARDING_STEPS.map(step => {
@@ -697,6 +676,7 @@ watch(visible, async open => {
   await initializeDialog()
 })
 
+// 组件挂载时若可见，锁定页面滚动并初始化对话
 onMounted(async () => {
   if (visible.value) {
     lockPageScroll()
@@ -704,10 +684,12 @@ onMounted(async () => {
   }
 })
 
+// 组件卸载时恢复页面滚动
 onUnmounted(() => {
   unlockPageScroll()
 })
 
+// 步骤、输入、消息列表或表单变化时自动保存草稿到 localStorage
 watch([currentStep, userInput], () => {
   persistDraft()
 })
@@ -736,6 +718,7 @@ const initializeDialog = async () => {
   await streamAssistantMessage('你好，我是 Mentorly。我们会用聊天方式完成基础资料。先只确认一个问题：你的专业是什么？')
 }
 
+// 重置所有表单、步骤和消息状态到初始值
 const resetState = () => {
   streamRunId += 1
   currentStep.value = 1
@@ -1401,41 +1384,12 @@ const handleCompleteLater = async () => {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
   background: transparent;
 }
 
-.current-question {
-  max-width: 760px;
-  padding: 0 0 18px;
-}
 
-.current-question span {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--color-primary-text, #0f766e);
-  font-size: 12px;
-  font-weight: 950;
-  letter-spacing: 0.06em;
-}
-
-.current-question strong {
-  display: block;
-  color: #0f172a;
-  font-size: 22px;
-  font-weight: 950;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-}
-
-.current-question p {
-  margin: 7px 0 0;
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1.6;
-}
 
 .message-list {
   position: relative;
@@ -1465,7 +1419,7 @@ const handleCompleteLater = async () => {
 .message-inner {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   min-height: min-content;
 }
 
@@ -1503,7 +1457,7 @@ const handleCompleteLater = async () => {
 }
 
 .message-main {
-  max-width: min(670px, 84%);
+  max-width: min(500px, 75%);
 }
 
 .message-row.user .message-main {
@@ -1528,6 +1482,7 @@ const handleCompleteLater = async () => {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.68);
   box-shadow: none;
+  width: fit-content;
 }
 
 .message-row.user .message-bubble {
@@ -1538,11 +1493,11 @@ const handleCompleteLater = async () => {
 
 .message-text {
   margin: 0;
-  padding: 13px 16px;
+  padding: 9px 13px;
   color: #1e293b;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
-  line-height: 1.82;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1553,7 +1508,7 @@ const handleCompleteLater = async () => {
 }
 
 .bubble-quick-replies {
-  padding: 0 14px 14px;
+  padding: 0 12px 12px;
 }
 
 .quick-replies-grid {
@@ -2085,9 +2040,6 @@ const handleCompleteLater = async () => {
     font-size: 23px;
   }
 
-  .current-question strong {
-    font-size: 19px;
-  }
 
   .message-row {
     gap: 8px;

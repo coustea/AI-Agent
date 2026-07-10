@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 MAX_FILE_CONTENT_CHARS = 15000
 
 
+# 将上传文件 URL 解析为 (username, absolute_path)，并校验路径安全与存在性
 def resolve_uploaded_path(file_url: str) -> tuple[str, str] | None:
     """将 URL 路径解析为 (username, absolute_path)，校验路径安全性和文件存在性。
 
@@ -59,6 +60,7 @@ def resolve_uploaded_path(file_url: str) -> tuple[str, str] | None:
             user_dir = (WORKPLACE_DIR / username).resolve()
             file_path = (user_dir / "chat" / session_id / subdir / filename).resolve()
 
+            # 解析后路径必须落在用户目录内且文件存在
             if not str(file_path).startswith(str(user_dir)):
                 return None
             if not file_path.exists():
@@ -106,6 +108,7 @@ def resolve_uploaded_path(file_url: str) -> tuple[str, str] | None:
     return None
 
 
+# 解析图片 URL 为本地 Path（不存在或非文件返回 None）
 def resolve_uploaded_image_path(image_url: str) -> Path | None:
     """解析图片 URL 为本地 Path。
 
@@ -123,6 +126,7 @@ def resolve_uploaded_image_path(image_url: str) -> Path | None:
     return path if path.is_file() else None
 
 
+# 读取上传文件内容并截断，支持多种文档格式（依赖延迟导入）
 def read_uploaded_file_content(
     absolute_path: str,
     *,
@@ -185,6 +189,7 @@ def read_uploaded_file_content(
     else:
         return f"不支持的文件类型: {suffix}（支持: .pdf, .docx, .txt, .md, .log, .xlsx, .xls, .csv, .tsv）"
 
+    # 空内容处理与超长截断
     if not content or not content.strip():
         return "文件内容为空"
     # 截断超长内容，防止撑爆 LLM 上下文窗口
@@ -193,6 +198,7 @@ def read_uploaded_file_content(
     return content
 
 
+# 批量读取文档并拼装为可注入 LLM 的分析提示词
 async def analyze_documents(
     *,
     current_username: str,
@@ -252,6 +258,7 @@ async def analyze_documents(
         # 构建单个文件的内容片段，用于拼接为完整的分析上下文
         snippets.append(f"文件《{Path(absolute_path).name}》内容如下：\n{content}")
 
+    # 无可读文档时返回失败
     if not documents:
         return {
             "success": False,

@@ -21,11 +21,13 @@ def max_sliding_window(nums, k):
     res = []
     tracer.init_queue(line=22)
 
+# 循环遍历处理
     for i in range(n):
         if q and q[0] < i - k + 1:
             q.popleft()
             tracer.dequeue(line=28)
 
+# 循环条件判断
         while q and nums[q[-1]] < nums[i]:
             q.pop()
             tracer.dequeue(line=32)
@@ -53,9 +55,11 @@ def min_sliding_window(nums, k):
     q = deque()
     res = []
 
+# 循环遍历处理
     for i in range(n):
         if q and q[0] < i - k + 1:
             q.popleft()
+# 循环条件判断
         while q and nums[q[-1]] > nums[i]:
             q.pop()
         q.append(i)

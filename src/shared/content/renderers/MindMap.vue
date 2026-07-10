@@ -13,6 +13,8 @@
 </template>
 
 <script setup lang="ts">
+// 思维导图渲染器：基于 markmap 将 markdown 大纲渲染为交互式思维导图
+
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { parseJsonObject, type ResourceArtifactLike } from '../artifact'
 
@@ -35,6 +37,7 @@ const markmapRef = ref<HTMLElement | null>(null)
 let markmapInstance: MarkmapInstance | null = null
 let markmapRuntimePromise: Promise<MarkmapRuntime> | null = null
 
+// 懒加载 markmap-lib 和 markmap-view（按需动态导入）
 const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
   if (!markmapRuntimePromise) {
     markmapRuntimePromise = Promise.all([
@@ -87,11 +90,13 @@ const loadMarkmapRuntime = async (): Promise<MarkmapRuntime> => {
   return markmapRuntimePromise
 }
 
+// 从资源数据中提取思维导图的 Markdown 内容（多种嵌套格式兼容）
 const markdownContent = computed<string>(() => {
   if (!props.resultData) return ''
   if (typeof props.resultData === 'string') return props.resultData
 
   let data: Record<string, any> = props.resultData as Record<string, any>
+  // 解包 resource 嵌套
   if (data.resource && typeof data.resource === 'object') {
     data = data.resource
   }
@@ -128,6 +133,7 @@ const markdownContent = computed<string>(() => {
   return ''
 })
 
+// 预处理思维导图文本：JSON 树 → markdown / mindmap 语法 → markdown
 const preprocessContent = (text: string): string => {
   let content = text.trim()
   const parsedJson = parseJsonObject(content)
@@ -181,6 +187,7 @@ const preprocessContent = (text: string): string => {
   return markdownLines.join('\n')
 }
 
+// 递归将 JSON 树节点转换为 markdown 标题/列表格式
 const rootTreeToMarkdown = (root: Record<string, any>): string => {
   const lines: string[] = []
 
@@ -207,6 +214,7 @@ const rootTreeToMarkdown = (root: Record<string, any>): string => {
   return lines.join('\n')
 }
 
+// 渲染思维导图：创建/复用 SVG，调用 markmap 库绘制
 const renderMarkmap = async (rawContent: string) => {
   if (!rawContent.trim() || !markmapRef.value) return
 
@@ -254,6 +262,7 @@ onMounted(() => {
   }
 })
 
+// 组件卸载时销毁 markmap 实例并清空 DOM
 onBeforeUnmount(() => {
   if (markmapInstance?.destroy) {
     markmapInstance.destroy()

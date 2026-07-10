@@ -1,4 +1,5 @@
 """Rabin-Karp 字符串匹配算法
+# rabin_karp 算法实现 — domain: string_structure
 
 核心思想：将字符串比较转化为数值比较，利用滚动哈希（Rolling Hash）
 在 O(1) 时间内完成窗口滑动时的哈希值更新，从而避免逐字符重新计算。
@@ -29,6 +30,7 @@
 """
 
 
+# 定义 rabin_karp 函数
 def rabin_karp(text, pattern):
     if not pattern:
         return list(range(len(text) + 1))

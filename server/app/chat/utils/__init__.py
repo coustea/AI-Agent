@@ -20,6 +20,7 @@ from langchain_core.messages import AnyMessage, HumanMessage
 # 字符串 / 文本处理
 # ---------------------------------------------------------------------------
 
+# 将 LLM 输出统一转为字符串（None 为空串，其余强转）
 def normalize_message_content(content: Any) -> str:
     """将 LLM 输出统一转为字符串。"""
     if content is None:
@@ -27,6 +28,7 @@ def normalize_message_content(content: Any) -> str:
     return content if isinstance(content, str) else str(content)
 
 
+# 截断过长文本，防止撑爆 LLM 上下文窗口
 def compact_text(text: str, *, limit: int = 3500) -> str:
     """截断过长文本，防止撑爆 LLM 上下文窗口。"""
     value = str(text or "").strip()
@@ -35,6 +37,7 @@ def compact_text(text: str, *, limit: int = 3500) -> str:
     return value[: limit - 3].rstrip() + "..."
 
 
+# 截断任意值为指定字符数的字符串（用于日志）
 def truncate(value: Any, max_chars: int = 400) -> str:
     """截断任意值到指定字符数。"""
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
@@ -44,6 +47,7 @@ def truncate(value: Any, max_chars: int = 400) -> str:
     return text[:max_chars] + "..."
 
 
+# 检测 LLM 返回文本是否为无效回复（空/时间标记/过短）
 def is_unusable_reply_text(text: str) -> bool:
     """检测 LLM 返回的文本是否属于无效回复。"""
     normalized = (text or "").strip()
@@ -62,8 +66,10 @@ def is_unusable_reply_text(text: str) -> bool:
 # 消息构建
 # ---------------------------------------------------------------------------
 
+# 从消息列表中提取用户最近的一条纯文本问题（剥离附件标记）
 def extract_question(messages: list[AnyMessage]) -> str:
     """从消息列表中提取用户最近的一条纯文本问题。"""
+    # 倒序查找最近一条 HumanMessage 并剥离附件标记
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)

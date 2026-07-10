@@ -1,3 +1,4 @@
+# bst 算法实现 — domain: tree_structure
 class TreeNode:
     """BST 节点定义"""
     def __init__(self, val=0, left=None, right=None):

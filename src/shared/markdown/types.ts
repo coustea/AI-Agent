@@ -1,3 +1,5 @@
+// Markdown 渲染类型定义：Worker 通信协议与渲染结果结构
+
 export type MarkdownTheme = 'light' | 'dark'
 
 export interface MarkdownRenderRequest {

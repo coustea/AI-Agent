@@ -2,12 +2,15 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 binary_insertion_sort 函数
 def binary_insertion_sort(arr):
     n = len(arr)
     tracer.init_array(arr, line=3)
+# 循环遍历处理
     for i in range(1, n):
         key = arr[i]
         lo, hi = 0, i
+# 循环条件判断
         while lo < hi:
             mid = (lo + hi) // 2
             tracer.compare(mid, i, line=9)
@@ -15,6 +18,7 @@ def binary_insertion_sort(arr):
                 lo = mid + 1
             else:
                 hi = mid
+# 循环遍历处理
         for j in range(i, lo, -1):
             arr[j] = arr[j - 1]
             tracer.assign(j, arr[j], line=16)
@@ -24,22 +28,28 @@ def binary_insertion_sort(arr):
     tracer.finish(line=20)
     return arr
 
+# 定义 insertion_sort 函数
 def insertion_sort(arr):
     n = len(arr)
+# 循环遍历处理
     for i in range(1, n):
         key = arr[i]
         j = i - 1
+# 循环条件判断
         while j >= 0 and key < arr[j]:
             arr[j + 1] = arr[j]
             j -= 1
         arr[j + 1] = key
     return arr
 
+# 定义 shell_insertion 函数
 def shell_insertion(arr, gap):
     n = len(arr)
+# 循环遍历处理
     for i in range(gap, n):
         key = arr[i]
         j = i
+# 循环条件判断
         while j >= gap and arr[j - gap] > key:
             arr[j] = arr[j - gap]
             j -= gap
@@ -53,6 +63,7 @@ datasets = [
     [1, 3, 5, 7, 9, 2, 4, 6, 8, 6, 10, 12, 14, 11, 13, 15],
 ]
 
+# 循环遍历处理
 for data in datasets:
     r1 = insertion_sort(data[:])
     r2 = binary_insertion_sort(data[:])

@@ -71,6 +71,7 @@ _path_lock = asyncio.Lock()
 
 # 内部频道实现 — 管理单个路径的事件缓冲和订阅
 class _PathChannel:
+    # 初始化频道：事件缓冲区、订阅者列表与序列号
     def __init__(
         self,
         *,
@@ -137,6 +138,7 @@ class _PathChannel:
             )
         return path_event
 
+    # 订阅频道事件，支持断线重放历史事件
     async def subscribe(
         self, after_sequence: int
     ) -> tuple[asyncio.Queue[PathEvent], list[PathEvent]]:
@@ -145,9 +147,11 @@ class _PathChannel:
         replay = [e for e in self._buffer if e.sequence > after_sequence]
         return queue, replay
 
+    # 取消订阅，从订阅者列表移除
     async def unsubscribe(self, queue: asyncio.Queue[PathEvent]) -> None:
         self._subscribers = [q for q in self._subscribers if q is not queue]
 
+    # 清理无订阅者的终止频道，从全局注册表中移除
     async def _cleanup(self) -> None:
         """清理无订阅者的终止频道。"""
         if self._subscribers:
@@ -220,6 +224,7 @@ class PathEvents:
             raise PathEventNotOpenError(f"Path channel not opened for run_id={self._run_id}")
         return await self._channel.send(event, message, data, stage, progress)
 
+    # 订阅路径事件流，自动复用已有频道
     async def subscribe(
         self, after_sequence: int = 0
     ) -> tuple[asyncio.Queue[PathEvent], list[PathEvent]]:
@@ -230,6 +235,7 @@ class PathEvents:
             raise PathEventNotOpenError(f"Path channel not found for run_id={self._run_id}")
         return await self._channel.subscribe(after_sequence)
 
+    # 取消事件流订阅
     async def unsubscribe(self, queue: asyncio.Queue[PathEvent]) -> None:
         if self._channel is None:
             return

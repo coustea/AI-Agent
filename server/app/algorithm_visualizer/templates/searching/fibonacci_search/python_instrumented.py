@@ -2,11 +2,13 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 fibonacci_search 函数
 def fibonacci_search(arr, target):
     n = len(arr)
     if n == 0:
         return -1
     fib = [0, 1]
+# 循环条件判断
     while fib[-1] < n:
         fib.append(fib[-1] + fib[-2])
     k = len(fib) - 1
@@ -14,6 +16,7 @@ def fibonacci_search(arr, target):
     tracer.init_array(arr, line=4)
     offset = -1
     tracer.move_pointer({"offset": -1, "k": k}, line=10)
+# 循环条件判断
     while fib[k] > 1:
         i = min(offset + fib[k - 2], n - 1)
         tracer.move_pointer({"offset": offset, "i": i, "k": k}, line=13)
@@ -34,24 +37,29 @@ def fibonacci_search(arr, target):
     tracer.finish(line=26)
     return -1
 
+# 定义 fibonacci_search_range 函数
 def fibonacci_search_range(arr, target):
     idx = fibonacci_search(arr, target)
     if idx == -1:
         return -1, -1
     left = idx
+# 循环条件判断
     while left > 0 and arr[left - 1] == target:
         left -= 1
     right = idx
+# 循环条件判断
     while right < len(arr) - 1 and arr[right + 1] == target:
         right += 1
     return left, right
 
+# 定义 build_fibonacci_sequence 函数
 def build_fibonacci_sequence(n):
     if n <= 0:
         return [0]
     if n == 1:
         return [0, 1]
     fib = [0, 1]
+# 循环遍历处理
     for i in range(2, n + 1):
         fib.append(fib[-1] + fib[-2])
     return fib

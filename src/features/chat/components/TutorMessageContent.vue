@@ -15,7 +15,7 @@ import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 const props = defineProps<{
   content: string
   isStreaming?: boolean
-}>()
+}>()()
 </script>
 
 <style scoped>

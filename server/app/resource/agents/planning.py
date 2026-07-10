@@ -33,6 +33,7 @@ class PlanningAgent(BaseResourceAgent):
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
+        # 规划只用 LLM，不依赖联网搜索
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
@@ -55,6 +56,7 @@ class PlanningAgent(BaseResourceAgent):
         attempt_prompt = full_prompt
         plan: ResourcePlan | None = None
 
+        # 最多重试 _MAX_PLAN_ATTEMPTS 次，直到计划通过校验
         for attempt in range(_MAX_PLAN_ATTEMPTS):
             try:
                 logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(attempt_prompt))
@@ -81,6 +83,7 @@ class PlanningAgent(BaseResourceAgent):
                 validate_resource_plan(plan, expected_agent_ids=agents if agents else None)
                 break
             except (ValueError, PlanValidationError) as exc:
+                # 已达最大次数则直接抛出
                 if attempt + 1 >= _MAX_PLAN_ATTEMPTS:
                     raise
                 attempt_elapsed = int((time.perf_counter() - started) * 1000)
@@ -94,6 +97,7 @@ class PlanningAgent(BaseResourceAgent):
                     "计划未通过校验，正在重新规划...",
                     50,
                 )
+                # 将校验错误回灌给模型进行定向纠正
                 attempt_prompt = (
                     f"{full_prompt}\n\n"
                     "## 上次输出的校验错误\n"
@@ -101,6 +105,7 @@ class PlanningAgent(BaseResourceAgent):
                     "请重新生成完整计划，修正上述错误。"
                 )
 
+        # 全部尝试均失败则报错
         if plan is None:
             raise ValueError("PlanningAgent did not produce a valid plan")
 
@@ -181,4 +186,5 @@ class PlanningAgent(BaseResourceAgent):
             filtered = {k: v for k, v in agent_configs.items() if k in agents} if agents else agent_configs
             if filtered:
                 parts.append("## 各 Agent 用户配置参数\n" + json.dumps(filtered, ensure_ascii=False, indent=2))
+        # 拼装为完整规划输入文本
         return "\n\n".join(parts)

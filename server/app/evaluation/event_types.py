@@ -5,6 +5,7 @@
 - METADATA_SCHEMA 定义每 (module, event_type) 的 metadata 字段白名单。
 """
 
+# 本模块定义学习事件的类型常量与 metadata 字段白名单（发布后冻结）。
 from __future__ import annotations
 
 # ── Module 常量 ────────────────────────────────────────────────────────────────
@@ -14,6 +15,7 @@ MODULE_PATH = "path"
 MODULE_QUIZ = "quiz"
 MODULE_VISUALIZER = "visualizer"
 
+# 系统支持的全部业务模块集合
 ALL_MODULES: frozenset[str] = frozenset({
     MODULE_CHAT, MODULE_RESOURCE, MODULE_PATH, MODULE_QUIZ, MODULE_VISUALIZER,
 })
@@ -48,13 +50,16 @@ EVENT_TYPES_BY_MODULE: dict[str, frozenset[str]] = {
     MODULE_VISUALIZER: frozenset({VISUALIZER_RUN}),
 }
 
+# 展开所有模块得到全部合法事件类型集合
 ALL_EVENT_TYPES: frozenset[str] = frozenset(
     et for ets in EVENT_TYPES_BY_MODULE.values() for et in ets
 )
 
+# 仅这些事件类型附带评分，用于平均分与薄弱知识点计算
 SCORED_EVENT_TYPES: frozenset[str] = frozenset({QUIZ_SUBMITTED, PATH_QUIZ_ANSWERED, PATH_NODE_COMPLETED})
 
 # ── Metadata schema 定义 ───────────────────────────────────────────────────────
+# metadata 字段白名单：限定每个 (module, event_type) 允许写入的字段
 METADATA_SCHEMA: dict[tuple[str, str], list[str]] = {
     (MODULE_CHAT, CHAT_DIALOGUE): ["turn_count", "summary_md", "summary_length"],
     (MODULE_RESOURCE, RESOURCE_GENERATED): ["resource_id", "user_need", "agent_types", "agent_params", "status"],

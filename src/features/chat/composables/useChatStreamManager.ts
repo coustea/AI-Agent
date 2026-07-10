@@ -27,10 +27,12 @@ export interface StreamState {
 
 // ── Global singleton state ─────────────────────────────
 
+// 全局活跃流 Map（sessionId → StreamState）
 const activeStreams = shallowRef(new Map<string, StreamState>())
 
 const CLEANUP_DELAY_MS = 5 * 60 * 1000 // 5 minutes
 
+// 延迟清理已完成/出错的流（5分钟后自动回收）
 function scheduleCleanup(sessionId: string) {
   setTimeout(() => {
     const state = activeStreams.value.get(sessionId)
@@ -42,7 +44,9 @@ function scheduleCleanup(sessionId: string) {
 
 // ── Composable ─────────────────────────────────────────
 
+// 流式消息管理器：处理创建消息→连接 SSE→回调分发全流程
 export function useChatStreamManager() {
+  // 启动新的流式请求并挂载事件回调
   const startStream = async (
     sessionId: string,
     params: StreamChatParams,
@@ -99,6 +103,7 @@ export function useChatStreamManager() {
     }
   }
 
+  // 主动停止指定会话的流
   const stopStream = (sessionId: string) => {
     const state = activeStreams.value.get(sessionId)
     if (state) {
@@ -107,10 +112,12 @@ export function useChatStreamManager() {
     }
   }
 
+  // 获取指定会话的流状态
   const getStreamState = (sessionId: string): StreamState | null => {
     return activeStreams.value.get(sessionId) ?? null
   }
 
+  // 检查会话是否处于流式输出中
   const isStreamActive = (sessionId: string): boolean => {
     return activeStreams.value.get(sessionId)?.status === 'streaming'
   }
@@ -126,6 +133,7 @@ export function useChatStreamManager() {
     }
   }
 
+  // 更新已活跃流的回调（切换页面后重新绑定 UI）
   const resubscribe = (sessionId: string, callbacks: StreamCallbacks) => {
     const state = activeStreams.value.get(sessionId)
     if (!state) return

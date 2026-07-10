@@ -1,3 +1,4 @@
+# permutations 算法实现 — domain: recursion_backtrack
 def permute(nums):
     if not nums:
         return []
@@ -5,6 +6,7 @@ def permute(nums):
         return [nums[:]]
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start):
         if start == len(nums):
             res.append(nums[:])
@@ -17,10 +19,12 @@ def permute(nums):
     backtrack(0)
     return res
 
+# 定义 permute_with_dup 函数
 def permute_with_dup(nums):
     nums.sort()
     res = []
 
+# 定义 backtrack 函数
     def backtrack(path, used):
         if len(path) == len(nums):
             res.append(path[:])
@@ -39,11 +43,13 @@ def permute_with_dup(nums):
     backtrack([], [False] * len(nums))
     return res
 
+# 定义 permute_k 函数
 def permute_k(nums, k):
     if k <= 0 or k > len(nums):
         return []
     res = []
 
+# 定义 backtrack 函数
     def backtrack(start, depth, path):
         if depth == k:
             res.append(path[:])
@@ -56,6 +62,7 @@ def permute_k(nums, k):
     backtrack(0, 0, [])
     return res
 
+# 定义 next_permutation 函数
 def next_permutation(nums):
     n = len(nums)
     i = n - 2

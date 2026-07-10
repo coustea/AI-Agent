@@ -1,15 +1,20 @@
+# huffman_coding 算法实现 — domain: greedy
 import heapq
 
+# HuffmanNode 类定义
 class HuffmanNode:
+# 定义 __init__ 函数
     def __init__(self, char=None, freq=0, left=None, right=None):
         self.char = char
         self.freq = freq
         self.left = left
         self.right = right
 
+# 定义 __lt__ 函数
     def __lt__(self, other):
         return self.freq < other.freq
 
+# 定义 build_huffman_tree 函数
 def build_huffman_tree(char_freq):
     heap = [HuffmanNode(ch, f) for ch, f in char_freq]
     heapq.heapify(heap)
@@ -20,6 +25,7 @@ def build_huffman_tree(char_freq):
         heapq.heappush(heap, merged)
     return heap[0] if heap else None
 
+# 定义 build_codes 函数
 def build_codes(node, prefix="", codes=None):
     if codes is None:
         codes = {}
@@ -32,9 +38,11 @@ def build_codes(node, prefix="", codes=None):
     build_codes(node.right, prefix + "1", codes)
     return codes
 
+# 定义 encode 函数
 def encode(text, codes):
     return "".join(codes[ch] for ch in text)
 
+# 定义 decode 函数
 def decode(encoded, root):
     result = []
     node = root
@@ -45,6 +53,7 @@ def decode(encoded, root):
             node = root
     return "".join(result)
 
+# 定义 compression_ratio 函数
 def compression_ratio(text, codes):
     original_bits = len(text) * 8
     encoded_bits = sum(len(codes[ch]) for ch in text)

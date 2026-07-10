@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 侧边栏标题
 import type { DialogTitleProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

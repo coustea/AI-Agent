@@ -1,11 +1,13 @@
 """周概要构建器共享类型定义。"""
 
+# 定义周摘要章节结果与整体构建结果的共享数据结构
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
 
+# 单个模块的周摘要章节结果（Markdown + 统计 + 原始长度）
 @dataclass
 class SectionResult:
     """单个模块的周摘要章节结果。
@@ -22,6 +24,7 @@ class SectionResult:
     raw_length: int = 0
 
 
+# 周摘要构建器的完整输出（聚合所有章节）
 @dataclass
 class DigestBuildResult:
     """周摘要构建器的完整输出。

@@ -1,20 +1,26 @@
+# linked_list_base 算法实现 — domain: base_data_structure
 class ListNode:
+# 定义 __init__ 函数
     def __init__(self, val=0, next=None):
         self.val = val
         self.next = next
 
+# DoublyListNode 类定义
 class DoublyListNode:
+# 定义 __init__ 函数
     def __init__(self, val=0, prev=None, next=None):
         self.val = val
         self.prev = prev
         self.next = next
 
+# 定义 build_singly_linked 函数
 def build_singly_linked(arr):
     head = None
     for v in reversed(arr):
         head = ListNode(v, head)
     return head
 
+# 定义 build_doubly_linked 函数
 def build_doubly_linked(arr):
     dummy = DoublyListNode()
     curr = dummy
@@ -24,6 +30,7 @@ def build_doubly_linked(arr):
         curr = node
     return dummy.next
 
+# 定义 detect_cycle 函数
 def detect_cycle(head):
     slow = fast = head
     while fast and fast.next:
@@ -33,6 +40,7 @@ def detect_cycle(head):
             return True
     return False
 
+# 定义 merge_two_lists 函数
 def merge_two_lists(l1, l2):
     dummy = ListNode()
     tail = dummy
@@ -47,6 +55,7 @@ def merge_two_lists(l1, l2):
     tail.next = l1 or l2
     return dummy.next
 
+# 定义 middle_node 函数
 def middle_node(head):
     slow = fast = head
     while fast and fast.next:

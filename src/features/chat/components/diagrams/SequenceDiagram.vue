@@ -53,6 +53,7 @@ const props = defineProps<{
   payload: SequencePayload
 }>()
 
+// 每个角色占据的宽度百分比
 const actorWidth = computed(() => {
   return 100 / Math.max(1, props.payload.actors.length)
 })

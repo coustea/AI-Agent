@@ -4,6 +4,7 @@
 所有接口统一使用 HttpResponse.success() 和 HttpResponse.error() 返回。
 """
 
+# 本模块定义统一响应信封 {code, message, data}，并提供 success/error 构造方法
 from __future__ import annotations
 
 from typing import Any
@@ -12,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 
+# 统一 HTTP 响应信封模型：所有接口响应均遵循 {code, message, data}
 class HttpResponse(BaseModel):
     """HTTP 响应信封模型。
 
@@ -29,6 +31,7 @@ class HttpResponse(BaseModel):
     # 响应数据，可以是任意类型
     data: Any = None
 
+    # 构造成功响应（业务 code=200），Pydantic 模型按 JSON 模式序列化
     @staticmethod
     def success(data: Any = None, message: str = "success", status_code: int = 200) -> JSONResponse:
         """创建成功响应。
@@ -45,6 +48,7 @@ class HttpResponse(BaseModel):
         body = HttpResponse(code=200, message=message, data=data).model_dump(mode="json")
         return JSONResponse(status_code=status_code, content=body)
 
+    # 构造错误响应：业务状态码同时作为 HTTP 状态码
     @staticmethod
     def error(
         code: int = 500,

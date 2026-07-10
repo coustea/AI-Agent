@@ -1,5 +1,7 @@
+// 功能模块类型
 export type ModuleType = 'chat' | 'resource' | 'path' | 'quiz' | 'visualizer'
 
+// 学习事件类型枚举
 export type LearningEventType =
   | 'chat_dialogue'
   | 'resource_generated'
@@ -14,6 +16,7 @@ export type LearningEventType =
   | 'visualizer_run'
   | 'tutor_helpful'
 
+// 创建学习事件的请求参数
 export interface LearningEventCreate {
   module: ModuleType
   entity_id?: string | null
@@ -24,6 +27,7 @@ export interface LearningEventCreate {
   event_metadata?: Record<string, unknown>
 }
 
+// 创建学习会话的请求参数
 export interface LearningSessionCreate {
   source_page: string
   started_at: string
@@ -34,11 +38,13 @@ export interface LearningSessionCreate {
   event_metadata?: Record<string, unknown>
 }
 
+// 每日学习时长记录
 export interface DailyTimeEntry {
   date: string
   seconds: number
 }
 
+// 学习时间统计（总时长/连续天数/每日分布）
 export interface LearningTimeStats {
   today_seconds: number
   total_seconds: number
@@ -47,6 +53,7 @@ export interface LearningTimeStats {
   context_breakdown?: Record<string, number>
 }
 
+// 学习事件记录项
 export interface LearningEventItem {
   id: number
   module: ModuleType
@@ -59,6 +66,7 @@ export interface LearningEventItem {
   created_at: string
 }
 
+// 学习评估摘要（事件统计/弱项/推荐）
 export interface EvaluationSummary {
   event_count: number
   average_score: number | null

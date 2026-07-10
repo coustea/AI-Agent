@@ -1,95 +1,103 @@
 {
   "id": "teaching-white",
-  "name": "清晰教学白板",
-  "version": "5.0.0",
-  "description": "非卡片化教学 PPT 模板，以白板板书、路径轴、能力阶梯、机制链路、对比矩阵和知识结构图组织内容，适合高校课程知识点讲解。",
+  "name": "高校教学白",
+  "version": "7.0.0",
+  "description": "面向高校计算机课程知识讲解的白色教学模板，以课程讲义、定义板书、学习路径、机制链路、对比表、误区纠正和知识结构图组织内容，适合大多数概念型、复习型和课堂型 PPT。",
   "family": "teaching",
   "scheme": "light",
-  "tags": ["教学", "白板", "板书", "讲义", "理论", "概念", "机制", "知识结构"],
+  "tags": [
+    "高校教学",
+    "白色",
+    "计算机课程",
+    "知识讲解",
+    "课堂讲义",
+    "非卡片化",
+    "概念复习"
+  ],
   "layouts": [
     {
-      "id": "tw-cover",
-      "name": "白板封面",
+      "id": "white-cover",
+      "name": "课程讲义封面",
       "type": "cover",
       "animation": "reveal",
-      "skeleton": "tw-cover"
+      "skeleton": "course-handout-cover"
     },
     {
-      "id": "tw-agenda",
-      "name": "学习路线轴",
+      "id": "white-agenda",
+      "name": "学习路径",
       "type": "agenda",
       "animation": "trace",
-      "skeleton": "tw-route"
+      "skeleton": "learning-route"
     },
     {
-      "id": "tw-learning-goals",
-      "name": "能力阶梯",
+      "id": "white-goals",
+      "name": "能力目标",
       "type": "learning_goals",
       "animation": "build",
-      "skeleton": "tw-ladder"
+      "skeleton": "goal-progression"
     },
     {
-      "id": "tw-hook-question",
-      "name": "课堂大问题",
+      "id": "white-question",
+      "name": "问题导入",
       "type": "hook_question",
       "animation": "focus",
-      "skeleton": "tw-question"
+      "skeleton": "question-focus"
     },
     {
-      "id": "tw-definition",
-      "name": "定义板书",
+      "id": "white-definition",
+      "name": "概念定义",
       "type": "definition",
       "animation": "reveal",
-      "skeleton": "tw-definition"
+      "skeleton": "definition-board"
     },
     {
-      "id": "tw-concept-boundary",
-      "name": "概念边界轴",
+      "id": "white-boundary",
+      "name": "概念边界",
       "type": "concept_boundary",
       "animation": "compare",
-      "skeleton": "tw-boundary-axis"
+      "skeleton": "boundary-axis"
     },
     {
-      "id": "tw-mechanism-overview",
+      "id": "white-mechanism",
       "name": "机制链路",
       "type": "mechanism_overview",
       "animation": "trace",
-      "skeleton": "tw-flow-chain"
+      "skeleton": "mechanism-line"
     },
     {
-      "id": "tw-knowledge-explain",
-      "name": "讲义分层展开",
+      "id": "white-explain",
+      "name": "知识讲解",
       "type": "knowledge_explain",
-      "animation": "reveal",
-      "skeleton": "tw-explain-lines"
+      "animation": "build",
+      "skeleton": "explain-editorial"
     },
     {
-      "id": "tw-comparison",
-      "name": "对比矩阵",
+      "id": "white-comparison",
+      "name": "对比分析",
       "type": "comparison",
       "animation": "compare",
-      "skeleton": "tw-matrix"
+      "skeleton": "comparison-table"
     },
     {
-      "id": "tw-misconception",
-      "name": "误区修正路径",
+      "id": "white-misconception",
+      "name": "误区纠正",
       "type": "misconception",
       "animation": "resolve",
-      "skeleton": "tw-debug-path"
+      "skeleton": "misconception-correction"
     },
     {
-      "id": "tw-knowledge-map",
-      "name": "知识结构图",
+      "id": "white-map",
+      "name": "知识结构",
       "type": "knowledge_map",
       "animation": "build",
-      "skeleton": "tw-knowledge-map"
+      "skeleton": "knowledge-structure"
     },
     {
-      "id": "tw-closing",
-      "name": "结论收束",
+      "id": "white-closing",
+      "name": "课程收束",
       "type": "closing",
       "animation": "focus",
-      "skeleton": "tw-closing"
+      "skeleton": "closing-statement"
     }
   ]
 }

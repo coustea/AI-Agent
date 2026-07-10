@@ -105,17 +105,21 @@ const props = defineProps<{
 
 const expanded = ref(false)
 
+// 过滤掉无 activity_id 或空 title 的无效活动
 const visibleActivities = computed(() => props.activities.filter(item => (
   Boolean(item.activity_id?.trim()) && Boolean(item.title?.trim())
 )))
 
+// 当前正在运行或最新的活动
 const currentActivity = computed(() => (
   [...visibleActivities.value].reverse().find(item => item.status === 'running')
   || visibleActivities.value[visibleActivities.value.length - 1]
 ))
 
+// 是否有活动正在运行
 const isActive = computed(() => visibleActivities.value.some(item => item.status === 'running'))
 const hasFailure = computed(() => visibleActivities.value.some(item => item.status === 'failed'))
+// 已完成（非 running）的活动数量
 const completedCount = computed(() => visibleActivities.value.filter(item => item.status !== 'running').length)
 
 const headline = computed(() => currentActivity.value?.message || currentActivity.value?.title || '正在准备回答')
@@ -127,6 +131,7 @@ const summaryLine = computed(() => {
   return summary === item.title || summary === item.message ? '' : summary
 })
 
+// 新活动开始时自动折叠详情面板
 watch(isActive, active => {
   if (active && visibleActivities.value.length <= 1) expanded.value = false
 })

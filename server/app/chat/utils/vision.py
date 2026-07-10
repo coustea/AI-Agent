@@ -31,6 +31,7 @@ logger = get_logger(__name__)
 _SPARK_IMAGE_URL = "wss://spark-api.cn-huabei-1.xf-yun.com/v2.1/image"
 
 
+# 将图片 URL 构造为 LLM vision API 可识别的 content block
 def _build_image_input(url: str) -> dict | None:
     """将图片 URL 构造为 LLM vision API 可识别的 content block。
 
@@ -54,9 +55,11 @@ def _build_image_input(url: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
+# _WsParam：讯飞 WebSocket 鉴权参数生成器（HMAC-SHA256 签名）
 class _WsParam:
     """WebSocket 鉴权参数生成器。"""
 
+    # 初始化鉴权所需的三要素与 URL 解析结果
     def __init__(self, api_key: str, api_secret: str, base_url: str):
         self.api_key = api_key
         self.api_secret = api_secret
@@ -64,6 +67,7 @@ class _WsParam:
         self.path = urlparse(base_url).path
         self.base_url = base_url
 
+    # 生成带 HMAC-SHA256 签名的 WebSocket 鉴权 URL
     def create_url(self) -> str:
         """生成带 HMAC-SHA256 签名的 WebSocket 鉴权 URL。
 
@@ -94,9 +98,11 @@ class _WsParam:
         return f"{self.base_url}?{urlencode(params)}"
 
 
+# SparkImageService：讯飞 Spark 图片理解服务（WebSocket）
 class SparkImageService:
     """讯飞 Spark 图片理解服务。"""
 
+    # 初始化并校验三项凭据是否齐全
     def __init__(self):
         self.appid = SPARK_APP_ID
         self.api_key = SPARK_API_KEY
@@ -104,10 +110,12 @@ class SparkImageService:
         if not all([self.appid, self.api_key, self.api_secret]):
             logger.warning("[SparkImage] 凭据未完整配置，图片理解将回退到 GLM")
 
+    # 是否已完成完整凭据配置
     @property
     def configured(self) -> bool:
         return bool(self.appid and self.api_key and self.api_secret)
 
+    # 通过 WebSocket 调用讯飞 Spark 图片理解 API，返回文字描述
     async def analyze(self, image_bytes: bytes, question: str = "请描述这张图片") -> str:
         """通过 WebSocket 调用讯飞 Spark 图片理解 API。
 
@@ -163,13 +171,16 @@ spark_image_service = SparkImageService()
 # ---------------------------------------------------------------------------
 
 
+# VisionService：图片分析服务，支持 Spark OCR 与 GLM-4V 双模式
 class VisionService:
     """图片分析服务，支持 Spark OCR 和 GLM-4V 双模式。"""
 
+    # 初始化视觉服务，注入 LLM 实例用于 GLM-4V 降级模式
     def __init__(self, llm: Llm | None = None) -> None:
         """初始化视觉服务，注入 LLM 实例用于 GLM-4V 降级模式。"""
         self.llm = llm or get_llm()
 
+    # 分析图片：优先 Spark，失败或未配置则降级 GLM-4V
     async def analyze_images(self, image_urls: list[str], question: str) -> dict:
         """分析图片，优先 Spark 模式，失败时降级到 GLM-4V。
 
@@ -199,6 +210,7 @@ class VisionService:
                     spark_ok = False
                     break
 
+            # Spark 全部成功时直接返回拼接结果
             if spark_ok and spark_results:
                 # 多张图片结果用双换行拼接，保持可读性
                 combined = "\n\n".join(spark_results) if len(spark_results) > 1 else spark_results[0]
@@ -229,6 +241,7 @@ class VisionService:
         }
 
 
+# 工厂函数：创建 VisionService 实例（可注入自定义 LLM）
 def build_vision_service(llm: Llm | None = None):
     """工厂函数：创建 VisionService 实例。
 

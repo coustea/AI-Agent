@@ -5,17 +5,18 @@ import type { TraceEvent } from '@/features/algorithm-visualization/types'
 interface UseVisualizerTimelineOptions {
   playing: Ref<boolean>
   currentEvent: ComputedRef<TraceEvent | null>
-  speed: Ref<number>
   next: () => void
   pause: () => void
 }
 
-/** 自动推进 TraceEvent 步骤的定时器。
- * AlgorithmVisualization.vue 使用。已从 VisualStep 改为 TraceEvent。
- * 基础速度：每步 1200ms，按 speed 比例缩放 */
+// 每步停留时长（毫秒）
+const STEP_DURATION_MS = 1200
+
+// 自动播放时间线调度器 — 用 setTimeout 驱动步骤播放
 export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
   let timerId: number | null = null
 
+  // 清除当前播放定时器
   function clearTimer() {
     if (timerId !== null) {
       window.clearTimeout(timerId)
@@ -23,15 +24,13 @@ export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
     }
   }
 
+  // 调度下一步播放（仅在播放中和有事件时执行）
   function schedule() {
     clearTimer()
 
     if (!options.playing.value || !options.currentEvent.value) {
       return
     }
-
-    // 根据倍速比例缩放，限制最小时间为 100ms 避免浏览器卡死
-    const duration = Math.max(100, Math.round(1200 / options.speed.value))
 
     timerId = window.setTimeout(() => {
       if (!options.playing.value) {
@@ -42,17 +41,19 @@ export function useVisualizerTimeline(options: UseVisualizerTimelineOptions) {
       if (!options.playing.value) {
         options.pause()
       }
-    }, duration)
+    }, STEP_DURATION_MS)
   }
 
+  // 播放状态或事件变化时重新调度
   watch(
-    [options.playing, options.currentEvent, options.speed],
+    [options.playing, options.currentEvent],
     () => {
       schedule()
     },
     { immediate: true },
   )
 
+  // 组件卸载时清除定时器
   onBeforeUnmount(() => {
     clearTimer()
   })

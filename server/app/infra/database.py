@@ -10,6 +10,7 @@
 表结构和扩展由外部管理（init_schema.sql），后端仅负责 CRUD。
 """
 
+# 本模块负责数据库引擎创建、连接池管理、健康检查、建表初始化与会话工厂
 from __future__ import annotations
 
 import time
@@ -36,6 +37,7 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
+# 单个服务的健康状态数据结构
 @dataclass
 class ServiceStatus:
     """单个服务的健康状态。"""
@@ -46,12 +48,14 @@ class ServiceStatus:
     error: str = ""
 
 
+# 健康检测报告：聚合多个服务的状态并给出整体结论
 @dataclass
 class HealthReport:
     """健康检测报告，包含所有服务状态。"""
 
     services: list[ServiceStatus] = field(default_factory=list)
 
+    # 根据各服务状态计算整体健康结论：ok / degraded / error
     @property
     def status(self) -> str:
         """返回整体状态。"""
@@ -62,6 +66,7 @@ class HealthReport:
         return "error"
 
 
+# 校验数据库必填配置，缺失则启动即报错
 def _validate_database_settings() -> None:
     """校验数据库配置必填项。"""
     if not DB_URL:
@@ -73,6 +78,7 @@ def _validate_database_settings() -> None:
 _validate_database_settings()
 
 # 创建全局异步数据库引擎（连接池）
+# 全局异步引擎：配置连接池、预检与语句缓存
 engine = create_async_engine(
     DB_URL,
     echo=DB_ECHO,
@@ -85,6 +91,7 @@ engine = create_async_engine(
 )
 
 
+# 执行 SELECT 1 验证数据库连通性，捕获常见连接异常
 async def _test_connection() -> bool:
     """测试数据库连接是否可用。
 
@@ -113,6 +120,7 @@ async def _test_connection() -> bool:
         return False
 
 
+# 启动健康检测：测试数据库连接并生成健康报告
 async def check_all() -> HealthReport:
     """检测数据库服务，返回健康报告。
 
@@ -142,6 +150,7 @@ async def check_all() -> HealthReport:
     return report
 
 
+# 初始化数据库：验证连接后按需导入种子数据
 async def init_db() -> None:
     """初始化数据库。
 
@@ -164,6 +173,7 @@ async def init_db() -> None:
     await _seed_initial_data()
 
 
+# 启动时检查并导入种子数据（学校、408 题库）
 async def _seed_initial_data() -> None:
     """启动时自动导入种子数据。
 
@@ -182,6 +192,7 @@ async def _seed_initial_data() -> None:
     logger.info("[Database] 种子数据检查完成")
 
 
+# FastAPI 依赖注入的会话工厂：不自动提交，异常时仅告警不回滚
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI 依赖注入用的会话工厂。
 
@@ -204,6 +215,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         logger.warning("[Database] 会话关闭时连接已不可用: %s", exc)
 
 
+# 显式短生命周期会话上下文：退出时自动提交，异常时回滚
 @asynccontextmanager
 async def session_scope() -> AsyncGenerator[AsyncSession, None]:
     """供非 DI 场景显式创建短生命周期会话。

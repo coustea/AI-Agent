@@ -2,6 +2,7 @@ from visual_tracer import DpTableTracer
 
 tracer = DpTableTracer()
 
+# 定义 longest_palindrome_subseq 函数
 def longest_palindrome_subseq(s):
     if not s:
         return 0, [], ""
@@ -11,12 +12,15 @@ def longest_palindrome_subseq(s):
     headers = ["dp"] + [f"{s[j]}(j={j})" for j in range(n)]
     tracer.init_table(headers, rows=n, cols=n, fill_value=0, line=4)
     dp = [[0] * n for _ in range(n)]
+# 循环遍历处理
     for i in range(n):
         dp[i][i] = 1
         tracer.highlight(i, i, tone="active", line=9)
         tracer.set_value(i, i, 1, line=9)
         tracer.clear_highlights(line=10)
+# 循环遍历处理
     for length in range(2, n + 1):
+# 循环遍历处理
         for i in range(n - length + 1):
             j = i + length - 1
             if s[i] == s[j]:
@@ -34,6 +38,7 @@ def longest_palindrome_subseq(s):
                 tracer.highlight(i, j, tone="active", line=23)
                 tracer.set_value(i, j, dp[i][j], line=23)
             tracer.clear_highlights(line=25)
+# 定义 reconstruct 函数
     def reconstruct(i, j):
         if i > j:
             return ""
@@ -49,16 +54,20 @@ def longest_palindrome_subseq(s):
     tracer.finish(line=38)
     return dp[0][n - 1], dp, lps
 
+# 定义 matrix_chain_order 函数
 def matrix_chain_order(dims):
     n = len(dims) - 1
     if n <= 0:
         return 0, []
     dp = [[0] * n for _ in range(n)]
     split = [[0] * n for _ in range(n)]
+# 循环遍历处理
     for length in range(2, n + 1):
+# 循环遍历处理
         for i in range(n - length + 1):
             j = i + length - 1
             dp[i][j] = float('inf')
+# 循环遍历处理
             for k in range(i, j):
                 cost = dp[i][k] + dp[k + 1][j] + dims[i] * dims[k + 1] * dims[j + 1]
                 if cost < dp[i][j]:
@@ -66,6 +75,7 @@ def matrix_chain_order(dims):
                     split[i][j] = k
     return dp[0][n - 1], dp
 
+# 定义 longest_palindrome_substring 函数
 def longest_palindrome_substring(s):
     if not s:
         return 0, ""
@@ -73,9 +83,12 @@ def longest_palindrome_substring(s):
     dp = [[False] * n for _ in range(n)]
     max_len = 1
     start = 0
+# 循环遍历处理
     for i in range(n):
         dp[i][i] = True
+# 循环遍历处理
     for length in range(2, n + 1):
+# 循环遍历处理
         for i in range(n - length + 1):
             j = i + length - 1
             if s[i] == s[j]:

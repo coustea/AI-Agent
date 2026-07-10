@@ -1,3 +1,4 @@
+# segment_tree 算法实现 — domain: tree_structure
 class SegmentTree:
     """线段树 — 支持区间求和、单点更新、区间查询"""
 
@@ -32,6 +33,7 @@ class SegmentTree:
             raise IndexError(f"索引 {idx} 超出范围 [0, {self.n-1}]")
         self._update(0, 0, self.n - 1, idx, val)
 
+# 定义 _update 函数
     def _update(self, node, start, end, idx, val):
         if start == end:
             self.tree[node] = val
@@ -51,6 +53,7 @@ class SegmentTree:
             raise IndexError(f"查询区间 [{l}, {r}] 无效")
         return self._query(0, 0, self.n - 1, l, r)
 
+# 定义 _query 函数
     def _query(self, node, start, end, l, r):
         if r < start or end < l:
             return 0

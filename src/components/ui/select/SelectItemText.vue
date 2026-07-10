@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器选项文本
 import type { SelectItemTextProps } from "reka-ui"
 import { SelectItemText } from "reka-ui"
 

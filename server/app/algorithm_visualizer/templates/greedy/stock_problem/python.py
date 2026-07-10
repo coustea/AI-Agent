@@ -1,3 +1,4 @@
+# stock_problem 算法实现 — domain: greedy
 def max_profit_single(prices):
     min_price = float('inf')
     max_profit = 0
@@ -6,6 +7,7 @@ def max_profit_single(prices):
         max_profit = max(max_profit, p - min_price)
     return max_profit
 
+# 定义 max_profit_unlimited 函数
 def max_profit_unlimited(prices):
     profit = 0
     for i in range(1, len(prices)):
@@ -13,6 +15,7 @@ def max_profit_unlimited(prices):
             profit += prices[i] - prices[i - 1]
     return profit
 
+# 定义 max_profit_two_transactions 函数
 def max_profit_two_transactions(prices):
     n = len(prices)
     if n < 2:
@@ -29,6 +32,7 @@ def max_profit_two_transactions(prices):
         max_price = max(max_price, prices[i])
     return max(left_profit[i] + right_profit[i] for i in range(n))
 
+# 定义 max_profit_with_cooldown 函数
 def max_profit_with_cooldown(prices):
     n = len(prices)
     if n < 2:

@@ -1,4 +1,5 @@
 """
+# topological_sort 算法实现 — domain: graph_structure
 拓扑排序（Kahn 算法）— 课程先修关系示例
 ==========================================
 

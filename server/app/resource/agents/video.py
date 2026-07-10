@@ -54,6 +54,7 @@ def _resource_materials(input_data: ResourceInput) -> list[SourceMaterial]:
 
 
 def _node_materials(input_data: NodeInput) -> list[SourceMaterial]:
+    # 路径节点场景：教程 + 已生成资源作为素材
     materials = [
         SourceMaterial(
             source_id="tutorial",
@@ -130,6 +131,7 @@ class VideoAgent(BaseResourceAgent):
 
     async def generate_node(self, input_data: NodeInput) -> AgentResult:
         username = input_data.username
+        # 路径节点场景：以节点标题/目标构建视频请求
         request = VideoRequest(
             topic=input_data.node_title,
             audience=_profile_text(input_data.profile),
@@ -177,6 +179,7 @@ class VideoAgent(BaseResourceAgent):
         self.video_agent = video_agent
 
         try:
+            # 调用共享视频管线生成 MP4，期间发送心跳
             artifact = await self.run_with_heartbeat(
                 self.video_agent.generate(request),
                 messages=[
@@ -188,6 +191,7 @@ class VideoAgent(BaseResourceAgent):
                 progress=70,
             )
         except Exception as exc:
+            # 生成失败：返回带错误信息的失败结果
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.error(
                 "Agent[%s] 生成失败: error=%s elapsed_ms=%d",

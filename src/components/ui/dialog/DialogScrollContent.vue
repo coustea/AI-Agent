@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 对话框可滚动内容
 import { XIcon } from '@lucide/vue';
 
 import type { DialogContentEmits, DialogContentProps } from "reka-ui"

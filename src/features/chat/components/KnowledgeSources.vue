@@ -41,6 +41,7 @@ const props = defineProps<{
 const maxVisible = 3
 const expanded = ref(false)
 
+// 展开/收起控制：默认只显示前 3 条
 const visibleSources = computed(() => {
   if (expanded.value) return props.sources
   return props.sources.slice(0, maxVisible)

@@ -1,6 +1,8 @@
 import type { Schema } from 'hast-util-sanitize'
 import { defaultSchema } from 'rehype-sanitize'
 
+// Markdown 净化白名单：扩展默认 schema 以允许代码块、数学公式和自定义类名
+
 export const markdownSanitizeSchema: Schema = {
   ...defaultSchema,
   attributes: {

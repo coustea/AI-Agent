@@ -4,6 +4,7 @@
 组装为结构化 Markdown，在内容超出阈值时通过 LLM 精炼。
 """
 
+# 对外导出周摘要构建入口、阈值与各结果类型
 from app.profile.weekly.builder import build_digest, LLM_CONDENSE_THRESHOLD
 from app.profile.weekly.types import DigestBuildResult, SectionResult
 

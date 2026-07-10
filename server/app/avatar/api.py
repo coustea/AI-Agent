@@ -13,7 +13,8 @@ from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
 from app.infra.models import User
 from app.infra.response import HttpResponse
 
-router = APIRouter()  # 数字人模块路由，挂载在 /api/v1/ai/avatar/ 下
+# 数字人模块路由，挂载在 /api/v1/ai/avatar/ 下
+router = APIRouter()
 
 
 @router.get("/avatar/status")  # GET 数字人连接状态
@@ -31,6 +32,7 @@ async def get_avatar_stream(
 ):
     """获取数字人视频流信息"""
     stream_info = await avatar_bridge_manager.get_stream_info(user.id)
+    # 流信息未就绪时返回 404
     if not stream_info:
         return HttpResponse.error(message="数字人视频流未就绪", code=404)
     return HttpResponse.success(data=stream_info)
@@ -62,14 +64,17 @@ async def clear_avatar_history(
     """清空数字人会话历史消息（默认清空当前会话）。"""
     chat_uc = get_chat_usecases()
 
+    # 优先使用传入的 session_id，否则从 bridge 状态获取
     target_session_id = (session_id or "").strip()
     if not target_session_id:
         status = await avatar_bridge_manager.get_status(user.id)
         target_session_id = str(status.get("session_id") or "").strip()
+    # 仍未获取到则取用户最近一个会话
     if not target_session_id:
         sessions = await chat_uc.list_sessions(user_id=user.id, limit=1)
         if sessions:
             target_session_id = str(sessions[0]["id"])
+    # 无会话可清理时直接返回 0
     if not target_session_id:
         return HttpResponse.success(data={"session_id": "", "deleted_count": 0})
 
@@ -89,6 +94,7 @@ async def analyze_avatar_attachments(
     """数字人可调用：上传并并行分析附件，返回结构化分析结果。"""
     uc = get_avatar_chat_usecases()
 
+    # 收集所有上传文件，校验非空文件名
     upload_payloads: list[tuple[str, bytes]] = []
     all_uploads = list(files)
     if file is not None:
@@ -98,9 +104,11 @@ async def analyze_avatar_attachments(
             return HttpResponse.error(code=400, message="文件名不能为空")
         upload_payloads.append((upload.filename, await upload.read()))
 
+    # 解析逗号分隔的附件 ID 列表
     parsed_attachments = [u.strip() for u in attachments.split(",") if u.strip()] if attachments else []
 
     try:
+        # 调用 chat 服务并行分析附件
         payload = await uc.analyze_uploaded_attachments(
             user_id=user.id,
             question=question,

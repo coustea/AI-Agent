@@ -76,6 +76,7 @@ export interface ProfileOnboardingUpdateResult {
 
 
 
+// 判断 onboarding 是否填写完整（学校/专业/年级/时间/目标/课程均需有值）
 export function isProfileOnboardingComplete(baseInfo: BaseInfoData | null | undefined): boolean {
   if (!baseInfo) return false
 

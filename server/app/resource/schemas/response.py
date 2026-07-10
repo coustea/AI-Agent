@@ -90,6 +90,7 @@ class SingleResourceRequest(BaseModel):
     @classmethod
     def validate_aggregation_agent(cls, value: ResourceAgentId) -> ResourceAgentId:
         """PPT/Cartoon 单独调用时必须提供知识点和教程；Video 仍不支持单独调用。"""
+        # 视频 Agent 不允许单独调用
         if value == ResourceAgentId.VIDEO:
             raise ValueError("Video Agent 不支持单独调用")
         return value
@@ -97,6 +98,7 @@ class SingleResourceRequest(BaseModel):
     @model_validator(mode="after")
     def validate_path_node_fields(self) -> "SingleResourceRequest":
         """PPT/Cartoon 单独调用时，knowledge_points 和 tutorial_markdown 必填。"""
+        # 聚合 Agent 单独调用必须携带知识点与教程内容
         if self.agent_id in {ResourceAgentId.PPT, ResourceAgentId.CARTOON}:
             if not self.knowledge_points:
                 raise ValueError("PPT/Cartoon 单独调用时必须提供 knowledge_points")

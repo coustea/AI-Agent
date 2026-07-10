@@ -1,4 +1,5 @@
 """Kruskal 最小生成树算法 —— 含并查集（路径压缩 + 按秩合并）与连通性检测
+# mst_kruskal 算法实现 — domain: graph_structure
 
 Kruskal 算法核心思想：
   将所有边按权重从小到大排序，依次考虑每条边：
@@ -42,6 +43,7 @@ labels = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G"}
 num_nodes = 7
 
 
+# DSU 类定义
 class DSU:
     """并查集（Disjoint Set Union）—— 路径压缩 + 按秩合并
 
@@ -53,6 +55,7 @@ class DSU:
     配合路径压缩后，均摊复杂度为 O(α(V))。
     """
 
+# 定义 __init__ 函数
     def __init__(self, n):
         self.parent = list(range(n))
         self.rank = [0] * n

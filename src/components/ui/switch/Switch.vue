@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 开关
 import type { SwitchRootEmits, SwitchRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

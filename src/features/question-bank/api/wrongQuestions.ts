@@ -1,5 +1,6 @@
 import http from '@/shared/api/http'
 
+// 题型映射常量
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   single_choice: '单选题',
   judge: '判断题',
@@ -7,6 +8,7 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   analysis: '分析题',
 }
 
+// 错题数据类型定义
 export interface WrongQuestion {
   id: number
   question_id: string
@@ -24,6 +26,7 @@ export interface WrongQuestion {
   updated_at: string
 }
 
+// 错题列表响应类型
 export interface WrongQuestionListResponse {
   items: WrongQuestion[]
   total: number
@@ -33,6 +36,7 @@ export interface WrongQuestionListResponse {
   types: string[]
 }
 
+// 获取错题列表（支持筛选和分页）
 export async function fetchWrongQuestions(params?: {
   subject?: string
   question_type?: string
@@ -60,15 +64,17 @@ export async function fetchWrongQuestions(params?: {
 }
 
 
+// 删除错题
 export async function removeWrongQuestion(wrongId: number): Promise<void> {
   await http.delete(`/ai/wrong/${wrongId}`)
 }
 
+// 归档错题（标记为已掌握）
 export async function archiveWrongQuestion(wrongId: number): Promise<void> {
   await http.post(`/ai/wrong/${wrongId}/archive`)
 }
 
-
+// 获取随机一道错题用于再练
 export async function fetchRandomWrongQuestion(subject?: string): Promise<WrongQuestion | null> {
   const response = await http.get('/ai/wrong/random', {
     params: subject ? { subject } : undefined,
@@ -76,6 +82,7 @@ export async function fetchRandomWrongQuestion(subject?: string): Promise<WrongQ
   return response.data.data ? normalizeWrongQuestion(response.data.data) : null
 }
 
+// 标准化错题数据字段
 function normalizeWrongQuestion(item: Record<string, any>): WrongQuestion {
   return {
     id: Number(item.id || 0),
@@ -95,6 +102,7 @@ function normalizeWrongQuestion(item: Record<string, any>): WrongQuestion {
   }
 }
 
+// 标准化选项字段
 function normalizeOptions(options: unknown): Record<string, string> | null {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return null
   return Object.fromEntries(
@@ -102,6 +110,7 @@ function normalizeOptions(options: unknown): Record<string, string> | null {
   )
 }
 
+// 将后端题型枚举转为中文标签
 function toQuestionTypeLabel(value: unknown): string {
   const key = String(value || '').trim()
   return QUESTION_TYPE_LABELS[key] || key

@@ -3,6 +3,7 @@
 并行执行 5 个模块的章节构建，合并统计，组装最终 Markdown，
 并在原始内容超出阈值时触发 LLM 精炼。"""
 
+# 编排 5 个模块章节构建、合并统计、组装 Markdown 及可选 LLM 精炼
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +29,7 @@ from app.profile.weekly.visualizer import build_visualizer_section
 LLM_CONDENSE_THRESHOLD = 3000
 
 
+# 构建完整周度学习摘要：并行章节构建 + 统计合并 + 组装 + 可选精炼
 async def build_digest(
     db: AsyncSession,
     user_id: int,
@@ -55,6 +57,7 @@ async def build_digest(
     logger.info("Building weekly digest — user=%d week=%s~%s", user_id, week_start.date(), week_end.date())
     _t0 = perf_counter()
 
+    # 并行构建 5 个模块的章节以缩短总耗时
     sections: list[SectionResult] = await asyncio.gather(
         build_chat_section(db, user_id, week_start, week_end),
         build_resource_section(db, user_id, week_start, week_end),
@@ -72,7 +75,7 @@ async def build_digest(
         sections[4].raw_length,
     )
 
-    # 合并统计
+    # 合并统计：先初始化各模块汇总字典
     merged_stats: dict = {
         "dialogue_turns": 0,
         "resources_generated": 0,
@@ -91,6 +94,7 @@ async def build_digest(
     courses_set: set[str] = set()
     total_raw_length = 0
 
+    # 遍历各章节统计，累加并处理课程标题/测验聚合
     for sec in sections:
         total_raw_length += sec.raw_length
         for key, val in sec.stats.items():
@@ -105,6 +109,7 @@ async def build_digest(
             elif key in merged_stats:
                 merged_stats[key] += val
 
+    # 根据聚合后的测验数重算正确率
     if quiz_total > 0:
         merged_stats["quiz_total"] = quiz_total
         merged_stats["quiz_correct"] = quiz_correct
@@ -112,7 +117,7 @@ async def build_digest(
 
     courses_active = sorted(courses_set)
 
-    # 组装完整 Markdown
+    # 组装完整 Markdown（含概览与各模块章节）
     md = _assemble_markdown(
         username=username,
         week_start=week_start,
@@ -121,11 +126,12 @@ async def build_digest(
         sections=sections,
     )
 
-    # LLM 精炼（仅当内容过多时）
+    # LLM 精炼（仅当原始内容超过阈值时触发）
     condensed = False
     if total_raw_length > LLM_CONDENSE_THRESHOLD:
         logger.info("Raw digest length %d exceeds threshold %d — triggering LLM condense", total_raw_length, LLM_CONDENSE_THRESHOLD)
         condensed_md = await _condense_with_llm(md, username)
+        # 精炼成功则替换，否则保留原始摘要
         if condensed_md:
             md = condensed_md
             condensed = True
@@ -147,6 +153,7 @@ async def build_digest(
     )
 
 
+# 构建「## 学习概览」章节文本
 def _build_overview_md(stats: dict) -> str:
     """构建 ## 学习概览 章节。"""
     lines = [f"- 辅导对话：{stats.get('dialogue_turns', 0)} 轮"]
@@ -157,6 +164,7 @@ def _build_overview_md(stats: dict) -> str:
     return "\n".join(lines)
 
 
+# 各模块章节标题与 key 的映射（顺序对应并行构建结果）
 SECTION_HEADERS = [
     ("辅导对话", "chat"),
     ("资源生成", "resource"),
@@ -166,6 +174,7 @@ SECTION_HEADERS = [
 ]
 
 
+# 将概览与各章节组装为完整 Markdown 文档
 def _assemble_markdown(
     username: str,
     week_start: datetime,
@@ -185,11 +194,13 @@ def _assemble_markdown(
         "",
     ]
 
+    # 依次追加各模块章节标题与内容
     for (header_name, _), sec in zip(SECTION_HEADERS, sections):
         parts.append(f"## {header_name}")
         parts.append(sec.markdown)
         parts.append("")
 
+    # 长期记忆章节（暂未实现）
     parts.append("## 长期记忆")
     parts.append("（待梳理）")
     parts.append("")
@@ -197,6 +208,7 @@ def _assemble_markdown(
     return "\n".join(parts)
 
 
+# 调用 LLM 精炼周摘要（仅当原始内容过多时触发）
 async def _condense_with_llm(raw_md: str, username: str) -> str | None:
     """调用 LLM 精炼周摘要（仅当原始内容过多时触发）。"""
     system_prompt = (
@@ -211,6 +223,7 @@ async def _condense_with_llm(raw_md: str, username: str) -> str | None:
     logger.info("Condensing digest via LLM (input length=%d chars)", len(raw_md))
     try:
         llm = get_llm()
+        # 调用 LLM 生成更紧凑的摘要
         resp = await llm.ainvoke(
             [HumanMessage(content=user_prompt)],
             temperature=0.3,
@@ -218,11 +231,13 @@ async def _condense_with_llm(raw_md: str, username: str) -> str | None:
         )
         content = str(resp.content or "").strip()
 
+        # 仅当输出足够长才采用精炼结果
         if content and len(content) > 50:
             logger.info("LLM condense successful — output length=%d chars", len(content))
             return content
         logger.warning("LLM condense produced too-short content (%d chars) — discarding", len(content))
     except Exception as exc:
+        # 精炼失败不阻断主流程，返回 None 以保留原始摘要
         logger.exception("LLM condense failed: %s", exc)
 
     return None

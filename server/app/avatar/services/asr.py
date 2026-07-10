@@ -17,15 +17,18 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
+# 讯飞实时语音识别（IAT）客户端 — 支持流式语音识别
 class IatClient:
     """讯飞实时语音识别客户端。"""
 
+    # 初始化 ASR 客户端：生成带签名的鉴权 WebSocket URL
     def __init__(self):
-        """初始化 ASR 客户端 — 生成带签名的鉴权 URL。"""
+        # 构造带签名鉴权的讯飞 IAT WebSocket 连接地址
         self.auth_url = xfyun_auth.assemble_auth_url(
             AVATAR_IAT_URL, 'GET', ASR_API_KEY, ASR_API_SECRET
         )
 
+    # 对音频队列执行流式语音识别：发送音频帧并返回识别文本
     async def recognize_stream(self, audio_queue):
         """对音频队列执行流式语音识别。
 
@@ -41,8 +44,9 @@ class IatClient:
         result_text = ""
 
         try:
+            # 建立与讯飞 ASR 服务的 WebSocket 连接
             async with websockets.connect(self.auth_url) as ws:
-                # 发送启动帧（status=0）
+                # 构造启动帧（status=0），携带语言、VAD、标点等识别参数
                 start_params = {
                     "common": {"app_id": ASR_APP_ID},
                     "business": {
@@ -62,19 +66,21 @@ class IatClient:
                         "audio": ""
                     }
                 }
+                # 发送启动帧，通知服务端开始一次识别会话
                 await ws.send(json.dumps(start_params))
 
-                # 启动结果接收任务
+                # 启动后台任务持续接收识别结果
                 recv_task = asyncio.create_task(self._receive_results(ws))
 
-                # 持续发送音频数据块
+                # 持续从音频队列取出音频块并发送（None 表示结束）
                 while True:
                     try:
                         audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=1.0)
-                        if audio_chunk is None:  # 结束信号
+                        # None 为结束信号，退出循环
+                        if audio_chunk is None:
                             break
 
-                        # 将 PCM 音频数据编码为 base64
+                        # 将 PCM 音频字节编码为 base64 后放入中间帧
                         audio_b64 = base64.b64encode(audio_chunk).decode()
                         frame = {
                             "data": {
@@ -86,9 +92,10 @@ class IatClient:
                         }
                         await ws.send(json.dumps(frame))
                     except asyncio.TimeoutError:
+                        # 队列超时无新数据，继续等待而非退出
                         continue
 
-                # 发送结束帧（status=2）
+                # 发送结束帧（status=2），告知服务端音频流结束
                 end_frame = {
                     "data": {
                         "status": 2,  # 2=末帧
@@ -99,24 +106,26 @@ class IatClient:
                 }
                 await ws.send(json.dumps(end_frame))
 
-                # 等待最终识别结果
+                # 阻塞等待识别结果接收任务返回最终文本
                 result_text = await recv_task
                 return result_text
 
         except Exception as e:
+            # 识别过程异常，记录并向上抛出 RuntimeError
             logger.error(f"语音识别失败: {e}")
             raise RuntimeError(f"Speech recognition failed: {e}")
 
+    # 持续接收并解析识别结果，直到收到 status=2 的最终结果
     async def _receive_results(self, ws):
-        """持续接收并解析识别结果 — 直到收到 status=2 的最终结果。"""
         result_text = ""
 
         try:
+            # 逐条接收服务端推送的识别消息
             async for message in ws:
                 data = json.loads(message)
                 code = data.get('code', -1)
 
-                # 非零 code 表示 API 错误
+                # 非零 code 表示讯飞 API 返回错误，直接抛出异常
                 if code != 0:
                     error_msg = data.get('message', 'Unknown error')
                     logger.error(f"ASR 错误: code={code}, message={error_msg}")
@@ -125,7 +134,7 @@ class IatClient:
                 result = data.get('data', {}).get('result', {})
                 ws_list = result.get('ws', [])
 
-                # 从识别结果中提取词语
+                # 遍历词片（ws→cw）拼接出本轮识别文本
                 for ws_item in ws_list:
                     for cw in ws_item.get('cw', []):
                         word = cw.get('w', '')
@@ -134,15 +143,18 @@ class IatClient:
                 if ws_list:
                     logger.debug(f"中间识别结果: {result_text}")
 
-                # status=2 表示最终结果，退出循环
+                # status=2 表示已收到最终结果，结束接收循环
                 if data.get('data', {}).get('status') == 2:
                     logger.info(f"最终识别结果: {result_text}")
                     break
 
+            # 返回累计的完整识别文本
             return result_text
 
         except RuntimeError:
+            # 已封装为 RuntimeError 的 API 错误，原样抛出
             raise
         except Exception as e:
+            # 其他异常统一包装为 RuntimeError 向上传递
             logger.error(f"接收识别结果失败: {e}")
             raise RuntimeError(f"Failed to receive recognition results: {e}")

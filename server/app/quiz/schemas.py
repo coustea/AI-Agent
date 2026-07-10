@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+# 题目读取响应模型：包含题干、选项、答案、解析与元数据
 class QuizQuestionRead(BaseModel):
     """题目读取响应 — 包含题干、选项、答案、解析和元数据。"""
     id: str
@@ -23,6 +24,7 @@ class QuizQuestionRead(BaseModel):
     split: str | None = None
 
 
+# 题目列表分页响应模型：含筛选选项数据源
 class QuizQuestionListResponse(BaseModel):
     """题目列表响应 — 分页查询结果，含筛选选项。"""
     items: list[QuizQuestionRead]
@@ -35,6 +37,7 @@ class QuizQuestionListResponse(BaseModel):
     types: list[str] = Field(default_factory=list)
 
 
+# AI 答案审查请求模型
 class QuizReviewRequest(BaseModel):
     """AI 答案审查请求 — 用于分析题/简答题的自动评分。"""
     question_id: str = Field(description="题目唯一标识")
@@ -45,6 +48,7 @@ class QuizReviewRequest(BaseModel):
     knowledge_points: list[str] = Field(default_factory=list, description="相关知识点")
 
 
+# AI 答案审查响应模型：得分、正确性、反馈与建议
 class QuizReviewResponse(BaseModel):
     """AI 答案审查响应 — 包含得分、是否正确、反馈和改进建议。"""
     score: int = Field(ge=0, le=100, description="得分 0-100")
@@ -53,6 +57,7 @@ class QuizReviewResponse(BaseModel):
     improvement_hints: list[str] = Field(default_factory=list, description="改进建议")
 
 
+# 单道客观题判卷结果模型
 class ObjectiveQuestionResult(BaseModel):
     """单道客观题的前端判卷结果。"""
     question_id: str = Field(description="题目唯一标识")
@@ -67,17 +72,20 @@ class ObjectiveQuestionResult(BaseModel):
     analysis: str | None = Field(default=None, description="题目解析")
 
 
+# 客观题批量提交请求模型
 class ObjectiveSubmitRequest(BaseModel):
     """客观题判卷结果提交请求。"""
     results: list[ObjectiveQuestionResult] = Field(description="客观题作答结果列表")
 
 
+# 客观题提交响应模型
 class ObjectiveSubmitResponse(BaseModel):
     """客观题提交响应。"""
     processed_count: int = Field(description="处理的题目总数")
     wrong_saved_count: int = Field(description="自动收录进错题本的数量")
 
 
+# 错题记录响应模型
 class WrongQuestionRead(BaseModel):
     """错题记录响应 — 包含题目内容、用户答案和错误次数。"""
     id: int
@@ -96,6 +104,7 @@ class WrongQuestionRead(BaseModel):
     updated_at: datetime
 
 
+# 错题列表分页响应模型
 class WrongQuestionListResponse(BaseModel):
     """错题列表响应 — 分页结果，含可用的科目和类型筛选选项。"""
     items: list[WrongQuestionRead]

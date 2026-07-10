@@ -2,6 +2,7 @@ from visual_tracer import ArrayTracer
 
 tracer = ArrayTracer()
 
+# 定义 two_sum_sorted 函数
 def two_sum_sorted(arr, target):
     n = len(arr)
     if n < 2:
@@ -10,6 +11,7 @@ def two_sum_sorted(arr, target):
     right = n - 1
     tracer.init_array(arr, line=4)
     tracer.move_pointer({"left": left, "right": right}, line=8)
+# 循环条件判断
     while left < right:
         current_sum = arr[left] + arr[right]
         if current_sum == target:
@@ -22,6 +24,7 @@ def two_sum_sorted(arr, target):
         tracer.move_pointer({"left": left, "right": right}, line=18)
     return None
 
+# 定义 two_sum_all_pairs 函数
 def two_sum_all_pairs(arr, target):
     n = len(arr)
     if n < 2:
@@ -29,6 +32,7 @@ def two_sum_all_pairs(arr, target):
     left = 0
     right = n - 1
     pairs = []
+# 循环条件判断
     while left < right:
         current_sum = arr[left] + arr[right]
         if current_sum == target:
@@ -41,6 +45,7 @@ def two_sum_all_pairs(arr, target):
             right -= 1
     return pairs
 
+# 定义 reverse_in_range 函数
 def reverse_in_range(arr, start, end):
     if start < 0 or end >= len(arr) or start >= end:
         return arr
@@ -48,6 +53,7 @@ def reverse_in_range(arr, start, end):
     right = end
     tracer.init_array(arr, line=28)
     tracer.move_pointer({"left": left, "right": right}, line=31)
+# 循环条件判断
     while left < right:
         arr[left], arr[right] = arr[right], arr[left]
         tracer.swap(left, right, line=34)
@@ -57,23 +63,28 @@ def reverse_in_range(arr, start, end):
     tracer.finish(line=39)
     return arr
 
+# 定义 three_sum_sorted 函数
 def three_sum_sorted(arr, target):
     n = len(arr)
     if n < 3:
         return []
     result = []
+# 循环遍历处理
     for i in range(n - 2):
         if i > 0 and arr[i] == arr[i - 1]:
             continue
         left, right = i + 1, n - 1
+# 循环条件判断
         while left < right:
             s = arr[i] + arr[left] + arr[right]
             if s == target:
                 result.append((arr[i], arr[left], arr[right]))
                 left += 1
                 right -= 1
+# 循环条件判断
                 while left < right and arr[left] == arr[left - 1]:
                     left += 1
+# 循环条件判断
                 while left < right and arr[right] == arr[right + 1]:
                     right -= 1
             elif s < target:
@@ -82,10 +93,12 @@ def three_sum_sorted(arr, target):
                 right -= 1
     return result
 
+# 定义 remove_duplicates_sorted 函数
 def remove_duplicates_sorted(arr):
     if not arr:
         return []
     slow = 0
+# 循环遍历处理
     for fast in range(1, len(arr)):
         if arr[fast] != arr[slow]:
             slow += 1

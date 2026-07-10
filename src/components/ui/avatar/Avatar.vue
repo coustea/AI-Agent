@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 头像根容器
 import type { HTMLAttributes } from "vue"
 import type { AvatarVariants } from "."
 import { AvatarRoot } from "reka-ui"

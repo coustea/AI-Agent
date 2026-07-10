@@ -35,6 +35,8 @@
 </template>
 
 <script setup lang="ts">
+// 视频渲染器：展示讲解视频（MP4），含播放器、元数据和下载
+
 import { computed } from 'vue'
 import { Download, LoaderCircle } from 'lucide-vue-next'
 
@@ -54,6 +56,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+// 从 resultData 中解析视频制品（支持字符串 JSON 和嵌套 metadata）
 function parseArtifact(value: unknown): VideoArtifactView | null {
   let candidate = value
   if (typeof candidate === 'string') {
@@ -87,6 +90,7 @@ function parseArtifact(value: unknown): VideoArtifactView | null {
 
 const artifact = computed(() => parseArtifact(props.resultData))
 
+// 时长格式化为 M:SS
 const durationLabel = computed(() => {
   const seconds = Math.max(0, Math.round((artifact.value?.durationMs ?? 0) / 1000))
   const minutes = Math.floor(seconds / 60)
@@ -94,6 +98,7 @@ const durationLabel = computed(() => {
   return `${minutes}:${remaining}`
 })
 
+// 视频风格的中文标签映射
 const styleLabel = computed(() => {
   const labels: Record<string, string> = {
     precision_light: '精密图解',

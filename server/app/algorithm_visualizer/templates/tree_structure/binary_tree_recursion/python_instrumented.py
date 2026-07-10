@@ -3,6 +3,7 @@ from visual_tracer import TreeTracer
 tracer = TreeTracer()
 
 
+# TreeNode 类定义
 class TreeNode:
     """二叉树节点定义"""
     def __init__(self, val=0, left=None, right=None):
@@ -14,6 +15,7 @@ class TreeNode:
 nodes = []
 _counter = [0]
 
+# 定义 build_tree_nodes 函数
 def build_tree_nodes(root):
     if not root:
         return None
@@ -52,6 +54,7 @@ tracer.init_tree(nodes, line=55)
 _node_id_map = {}
 _idx = [0]
 
+# 定义 build_id_map 函数
 def build_id_map(node):
     if not node:
         return

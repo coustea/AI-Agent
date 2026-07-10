@@ -22,9 +22,11 @@ def _format_profile(profile: dict) -> str | None:
     """
     if not profile:
         return None
+    # 优先使用已渲染的 Markdown 画像
     profile_md = profile.get("markdown") if isinstance(profile, dict) else None
     if profile_md:
         return profile_md
+    # 否则将原始字典序列化
     return json.dumps(profile, ensure_ascii=False, indent=2)
 
 
@@ -36,6 +38,7 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
     parts = [f"## 学习需求\n{input_data.learning_need}"]
     parts.append(f"## 学习场景\n{input_data.learning_scenario}")
 
+    # 注入学习者画像
     profile_text = _format_profile(input_data.profile)
     if profile_text:
         parts.append("## 学习者画像\n" + profile_text)
@@ -46,12 +49,14 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
         if config:
             parts.append("## 生成配置\n" + json.dumps(config, ensure_ascii=False, indent=2))
 
+    # 注入协同计划并高亮本 Agent 专属段落
     if input_data.teaching_plan:
         agent_id = (input_data.agent_config.get("agent_id") if input_data.agent_config else None) or input_data.agent_name
         if not agent_id:
             raise ValueError("resource Agent input missing agent_id")
         parts.extend(build_plan_context(input_data.teaching_plan, agent_id))
 
+    # 注入上游 Agent 的交接摘要
     if input_data.upstream_handoffs:
         handoffs = {
             agent_id: handoff.model_dump(mode="json")
@@ -74,10 +79,12 @@ def build_plan_context(plan_markdown: str, agent_id: str) -> list[str]:
     plan = ResourcePlan(content=plan_markdown, title="")
     section = plan.extract_agent_section(agent_id)
 
+    # 若该 agent 有专属段落则单独注入
     if section:
         parts.append("### 你的专属任务")
         parts.append(section)
 
+    # 同时附带完整协同计划供上下文参考
     parts.append("### 完整协同计划")
     parts.append(plan_markdown)
 
@@ -98,6 +105,7 @@ def build_node_context(input_data: NodeInput) -> list[str]:
         ]),
     ]
 
+    # 注入知识点、薄弱点与生成重点
     if input_data.knowledge_points:
         parts.append("## 节点知识点\n" + "\n".join(f"- {item}" for item in input_data.knowledge_points))
     if input_data.weak_knowledge_points:
@@ -105,6 +113,7 @@ def build_node_context(input_data: NodeInput) -> list[str]:
     if input_data.generation_focus:
         parts.append("## 生成重点\n" + "\n".join(f"- {item}" for item in input_data.generation_focus))
 
+    # 注入学习者画像
     profile_text = _format_profile(input_data.profile)
     if profile_text:
         parts.append("## 学习者画像\n" + profile_text)

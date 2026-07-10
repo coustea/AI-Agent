@@ -1,3 +1,4 @@
+# maze_search 算法实现 — domain: recursion_backtrack
 def solve_maze(maze):
     if not maze or not maze[0]:
         return []
@@ -8,6 +9,7 @@ def solve_maze(maze):
     path = []
     visited = [[False] * w for _ in range(h)]
 
+# 定义 dfs 函数
     def dfs(r, c):
         if r < 0 or r >= h or c < 0 or c >= w:
             return False
@@ -27,6 +29,7 @@ def solve_maze(maze):
         return path
     return []
 
+# 定义 solve_maze_all_paths 函数
 def solve_maze_all_paths(maze):
     if not maze or not maze[0]:
         return []
@@ -37,6 +40,7 @@ def solve_maze_all_paths(maze):
     all_paths = []
     visited = [[False] * w for _ in range(h)]
 
+# 定义 dfs 函数
     def dfs(r, c, path):
         if r < 0 or r >= h or c < 0 or c >= w:
             return
@@ -55,6 +59,7 @@ def solve_maze_all_paths(maze):
     dfs(0, 0, [])
     return all_paths
 
+# 定义 shortest_path_length 函数
 def shortest_path_length(maze):
     if not maze or not maze[0]:
         return -1

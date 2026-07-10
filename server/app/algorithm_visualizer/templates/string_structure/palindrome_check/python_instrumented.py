@@ -20,6 +20,7 @@ def is_palindrome(s):
 
     left = 0
     right = len(cleaned) - 1
+# 循环条件判断
     while left < right:
         tracer.move_pointer({"left": left, "right": right}, line=51)
         tracer.compare(left, right, line=54)

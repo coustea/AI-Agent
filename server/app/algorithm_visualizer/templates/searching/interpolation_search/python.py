@@ -17,6 +17,7 @@ def interpolation_search(arr, target):
             high = pos - 1
     return -1
 
+# 定义 interpolation_search_all 函数
 def interpolation_search_all(arr, target):
     idx = interpolation_search(arr, target)
     if idx == -1:
@@ -32,6 +33,7 @@ def interpolation_search_all(arr, target):
         right += 1
     return sorted(result)
 
+# 定义 interpolation_insert_pos 函数
 def interpolation_insert_pos(arr, target):
     if not arr:
         return 0

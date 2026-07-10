@@ -1,3 +1,4 @@
+# sliding_window 算法实现 — domain: linear_structure
 def max_subarray_sum(arr, k):
     n = len(arr)
     if n < k or k <= 0:
@@ -12,6 +13,7 @@ def max_subarray_sum(arr, k):
             max_start = i + 1
     return max_sum, max_start
 
+# 定义 min_subarray_sum 函数
 def min_subarray_sum(arr, k):
     n = len(arr)
     if n < k or k <= 0:
@@ -24,6 +26,7 @@ def min_subarray_sum(arr, k):
             min_sum = window_sum
     return min_sum
 
+# 定义 max_subarray_sum_variable 函数
 def max_subarray_sum_variable(arr):
     if not arr:
         return 0
@@ -42,6 +45,7 @@ def max_subarray_sum_variable(arr):
             best_start, best_end = start, i
     return max_sum, best_start, best_end
 
+# 定义 longest_substring_k_distinct 函数
 def longest_substring_k_distinct(arr, k):
     if k <= 0:
         return 0

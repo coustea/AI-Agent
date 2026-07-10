@@ -1,18 +1,12 @@
 <template>
   <div class="tree-visualizer">
-    <div class="visualizer-meta">
-      <div class="flex flex-col">
-        <h3>树结构可视化</h3>
-        <p>展示树节点的遍历和访问过程，实时绘制父子节点连接线。</p>
-      </div>
+    <div class="chart-shell">
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>默认</span>
         <span class="legend-item"><i class="legend-dot visited"></i>已访问</span>
       </div>
-    </div>
-    <div class="chart-shell">
+
       <div v-if="layoutNodes.length" class="tree-container">
-        <!-- SVG Connection Lines -->
         <svg class="tree-links-svg">
           <line
             v-for="(link, idx) in treeLinks"
@@ -25,7 +19,6 @@
           />
         </svg>
 
-        <!-- Node Elements -->
         <div
           v-for="node in layoutNodes"
           :key="node.id"
@@ -50,13 +43,13 @@ const props = defineProps<{
   events: TraceEvent[]
 }>()
 
-// Parse raw nodes from trace state
+// 从 trace state 解析原始树节点
 const rawNodes = computed(() => {
   const raw = props.currentEvent?.state?.structure?.nodes
   return Array.isArray(raw) ? raw : []
 })
 
-// Build tree mapping and links
+// 构建树节点映射和父子连接关系
 const treeData = computed(() => {
   const nodes = rawNodes.value
   const nodeMap = new Map<string, any>()
@@ -65,7 +58,7 @@ const treeData = computed(() => {
   const links: Array<{ from: string; to: string; tone?: string }> = []
   const hasParent = new Set<string>()
 
-  // 1. Try to find links using left/right/children properties
+  // 优先用 left/right/children 字段构建父子连接
   nodes.forEach(n => {
     const idStr = String(n.id)
     if (n.left !== undefined && n.left !== null && String(n.left) !== '') {
@@ -87,7 +80,7 @@ const treeData = computed(() => {
     }
   })
 
-  // 2. Fallback: If no left/right is defined (e.g. C++), build standard binary heap index connections
+  // 降级方案：没有 left/right 时按二叉堆索引构建链接
   if (links.length === 0 && nodes.length > 1) {
     nodes.forEach((n, idx) => {
       const idStr = String(n.id)
@@ -107,17 +100,17 @@ const treeData = computed(() => {
     })
   }
 
-  // Find root node(s)
+  // 找到根节点（没有被其他节点作为子节点的节点）
   const roots = nodes.map(n => String(n.id)).filter(id => !hasParent.has(id))
   return { nodeMap, links, roots }
 })
 
-// Calculate positions using In-order DFS layout to prevent overlaps and keep tree centered
+// 用中序 DFS 计算节点坐标，防止重叠并保持居中
 const layoutNodes = computed(() => {
   const { nodeMap, links, roots } = treeData.value
   if (nodeMap.size === 0) return []
 
-  // Create adjacency list for traversal
+  // 构建邻接表用于 DFS 遍历
   const adj = new Map<string, string[]>()
   nodeMap.forEach((_, id) => adj.set(id, []))
   links.forEach(l => {
@@ -136,10 +129,10 @@ const layoutNodes = computed(() => {
     if (children[1]) traverse(children[1], depth + 1)
   }
 
-  // Run layout for each root
+  // 从每个根节点开始遍历布局
   roots.forEach(r => traverse(r, 0))
 
-  // Convert to coordinates
+  // 将 DFS 坐标转换为实际画布像素坐标
   const canvasWidth = 800
   const nodeCount = nodeMap.size
   const colWidth = nodeCount > 1 ? (canvasWidth - 80) / (nodeCount - 1) : 0
@@ -149,7 +142,7 @@ const layoutNodes = computed(() => {
     const idStr = String(n.id)
     const c = coords.get(idStr) || { x: 0, y: 0 }
     
-    // Scale and center nodes horizontally
+    // 水平缩放并居中
     const px = nodeCount > 1 ? 40 + c.x * colWidth : canvasWidth / 2
     const py = 30 + c.y * rowHeight
 
@@ -161,7 +154,7 @@ const layoutNodes = computed(() => {
   })
 })
 
-// Coordinates of tree link lines
+// 计算树连接线的 SVG 坐标
 const treeLinks = computed(() => {
   const { links } = treeData.value
   const nodes = layoutNodes.value
@@ -186,38 +179,23 @@ const treeLinks = computed(() => {
 .tree-visualizer {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px;
-  background: #ffffff;
-}
-
-.visualizer-meta {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.visualizer-meta h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.visualizer-meta p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #64748b;
+  padding: 12px;
+  background: transparent;
 }
 
 .legend {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
   display: flex;
   gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .legend-item {
@@ -245,13 +223,14 @@ const treeLinks = computed(() => {
 }
 
 .chart-shell {
+  position: relative;
+  flex: 1;
   min-height: 0;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   padding: 12px;
   overflow: hidden;
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;

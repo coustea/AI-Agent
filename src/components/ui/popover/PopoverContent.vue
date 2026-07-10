@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 弹出框内容
 import type { PopoverContentEmits, PopoverContentProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"

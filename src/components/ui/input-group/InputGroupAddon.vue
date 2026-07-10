@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 输入框组附加元素
 import type { HTMLAttributes } from "vue"
 import type { InputGroupVariants } from "."
 import { cn } from "@/lib/utils"

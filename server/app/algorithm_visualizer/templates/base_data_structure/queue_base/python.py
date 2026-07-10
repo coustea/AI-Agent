@@ -2,8 +2,10 @@
 # 队列(Queue)：先进先出(FIFO)的线性数据结构
 # 特性：入队/出队 O(1)，只能访问队首和队尾
 # 适用场景：任务调度、消息队列、BFS遍历、请求缓冲
+# queue_base 算法实现 — domain: base_data_structure
 
 
+# 定义 queue_operations 函数
 def queue_operations():
     queue = []
 

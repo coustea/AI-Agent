@@ -41,16 +41,19 @@ async def run_multi_agent_generation(
     success = False
 
     try:
+        # 通知前端资源生成已开始
         await events.send("global", "running", "资源生成已开始")
         logger.info(
             "启动 LangGraph 全局编排图资源生成: user_id=%s, resource_id=%s",
             user_id, resource_id,
         )
 
+        # 将资源状态置为 generating
         async with session_scope() as session:
             service = ResourceService(session)
             await service.update_resource_status(resource_id, "generating")
 
+        # 构建并编译全局编排图
         graph = build_parent_graph()
         initial_state = ParentState(
             user_id=user_id,
@@ -59,9 +62,12 @@ async def run_multi_agent_generation(
             request_data=request_data or {},
             profile=profile or {},
         )
+        # 执行整张工作流图
         final_state = await graph.ainvoke(initial_state)
+        # 读取工作流终态是否成功
         success = bool(final_state.get("success", False))
 
+        # 未成功：若仍停留在 generating 则兜底标记为 failed
         if not success:
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             logger.warning(
@@ -77,6 +83,7 @@ async def run_multi_agent_generation(
                         "failed",
                     )
 
+        # 根据成败发送全局终态事件
         if success:
             await events.send("global", "completed", "资源生成完成")
         else:
@@ -86,6 +93,7 @@ async def run_multi_agent_generation(
             "资源生成结束: resource_id=%s success=%s elapsed_ms=%d",
             resource_id, success, total_elapsed,
         )
+    # 顶层异常兜底：标记失败并推送失败事件
     except Exception as exc:
         total_elapsed = int((time.perf_counter() - start_time) * 1000)
         logger.error(
@@ -139,10 +147,11 @@ async def run_node_agent_generation(
             node_input=node_input,
         )
 
-        # 3. 根据结果流转终态
+        # 3. 根据结果流转终态：结果字典中存在该 agent 即视为成功
         success = bool(result.get("results", {}).get(agent_id))
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
 
+        # 成功：交由 finalize_generation 计算终态并标记完成
         if success:
             async with session_scope() as session:
                 service = ResourceService(session)
@@ -157,6 +166,7 @@ async def run_node_agent_generation(
                 resource_id, agent_id, elapsed_ms,
             )
         else:
+            # 失败：直接标记 failed 并推送失败事件
             async with session_scope() as session:
                 service = ResourceService(session)
                 await service.update_resource_status(resource_id, "failed")
@@ -166,6 +176,7 @@ async def run_node_agent_generation(
                 resource_id, agent_id, elapsed_ms,
             )
 
+    # 顶层异常兜底
     except Exception as exc:
         total_elapsed = int((time.perf_counter() - start_time) * 1000)
         logger.error(

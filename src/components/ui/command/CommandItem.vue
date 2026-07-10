@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 命令面板选项
 import { CheckIcon } from '@lucide/vue';
 
 import type { ListboxItemEmits, ListboxItemProps } from "reka-ui"

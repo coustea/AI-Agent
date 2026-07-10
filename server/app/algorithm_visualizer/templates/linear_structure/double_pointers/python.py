@@ -1,3 +1,4 @@
+# double_pointers 算法实现 — domain: linear_structure
 def two_sum_sorted(arr, target):
     n = len(arr)
     if n < 2:
@@ -14,6 +15,7 @@ def two_sum_sorted(arr, target):
             right -= 1
     return None
 
+# 定义 two_sum_all_pairs 函数
 def two_sum_all_pairs(arr, target):
     n = len(arr)
     if n < 2:
@@ -33,6 +35,7 @@ def two_sum_all_pairs(arr, target):
             right -= 1
     return pairs
 
+# 定义 reverse_in_range 函数
 def reverse_in_range(arr, start, end):
     if start < 0 or end >= len(arr) or start >= end:
         return arr
@@ -44,6 +47,7 @@ def reverse_in_range(arr, start, end):
         right -= 1
     return arr
 
+# 定义 three_sum_sorted 函数
 def three_sum_sorted(arr, target):
     n = len(arr)
     if n < 3:
@@ -69,6 +73,7 @@ def three_sum_sorted(arr, target):
                 right -= 1
     return result
 
+# 定义 remove_duplicates_sorted 函数
 def remove_duplicates_sorted(arr):
     if not arr:
         return []

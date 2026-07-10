@@ -2,6 +2,7 @@ from visual_tracer import DpTableTracer
 
 tracer = DpTableTracer()
 
+# 定义 tsp 函数
 def tsp(dist):
     if not dist or not dist[0]:
         return 0
@@ -15,6 +16,7 @@ def tsp(dist):
     tracer.init_table(headers, rows=n, cols=max_mask + 1, fill_value="", line=4)
     memo = {}
 
+# 定义 solve 函数
     def solve(mask, pos):
         if mask == (1 << n) - 1:
             return dist[pos][0]
@@ -23,6 +25,7 @@ def tsp(dist):
             return memo[state]
         tracer.highlight(pos, mask, tone="active", line=14)
         ans = float('inf')
+# 循环遍历处理
         for nxt in range(n):
             if not (mask & (1 << nxt)):
                 next_mask = mask | (1 << nxt)
@@ -40,9 +43,11 @@ def tsp(dist):
     path = [0]
     mask = 1
     pos = 0
+# 循环条件判断
     while mask != (1 << n) - 1:
         best_nxt = -1
         best_val = float('inf')
+# 循环遍历处理
         for nxt in range(n):
             if not (mask & (1 << nxt)):
                 val = dist[pos][nxt] + memo.get((mask | (1 << nxt), nxt), float('inf'))
@@ -58,6 +63,7 @@ def tsp(dist):
     tracer.finish(line=44)
     return result, path
 
+# 定义 tsp_with_pruning 函数
 def tsp_with_pruning(dist):
     n = len(dist)
     if n <= 1:
@@ -67,6 +73,7 @@ def tsp_with_pruning(dist):
     visited = [False] * n
     visited[0] = True
 
+# 定义 dfs 函数
     def dfs(pos, count, cost, path):
         nonlocal best, best_path
         if cost >= best:
@@ -77,6 +84,7 @@ def tsp_with_pruning(dist):
                 best = total
                 best_path = path[:] + [0]
             return
+# 循环遍历处理
         for nxt in range(n):
             if not visited[nxt]:
                 visited[nxt] = True
@@ -88,6 +96,7 @@ def tsp_with_pruning(dist):
     dfs(0, 1, 0, [0])
     return best, best_path
 
+# 定义 tsp_nearest_neighbor 函数
 def tsp_nearest_neighbor(dist):
     n = len(dist)
     if n <= 1:
@@ -97,9 +106,11 @@ def tsp_nearest_neighbor(dist):
     visited[0] = True
     total = 0
     pos = 0
+# 循环遍历处理
     for _ in range(n - 1):
         best_nxt = -1
         best_dist = float('inf')
+# 循环遍历处理
         for nxt in range(n):
             if not visited[nxt] and dist[pos][nxt] < best_dist:
                 best_dist = dist[pos][nxt]

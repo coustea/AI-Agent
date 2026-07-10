@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# 支持的语言信息响应模型
 class LanguageResponse(BaseModel):
     """语言信息响应。"""
 

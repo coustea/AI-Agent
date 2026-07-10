@@ -183,6 +183,7 @@ _RETRY_PROMPT = """\
 # 数据结构
 # ---------------------------------------------------------------------------
 
+# 插装结果数据结构：包含插装后的代码、错误信息和是否命中缓存
 @dataclass
 class InstrumentationResult:
     """插装结果。"""
@@ -196,6 +197,7 @@ class InstrumentationResult:
 # 插装引擎
 # ---------------------------------------------------------------------------
 
+# LLM 驱动的主插装引擎：缓存命中 → 首次调用 LLM → 校验 → 单次重试
 class CodeInstrumenter:
     """LLM 自动插装引擎，带缓存和重试。
 
@@ -203,8 +205,10 @@ class CodeInstrumenter:
     """
 
     def __init__(self) -> None:
+        # 初始化插装引擎，使用内存字典作为插装结果缓存
         self._cache: dict[str, InstrumentationResult] = {}
 
+    # 主入口：对干净代码插装，经缓存/LLM/校验/重试后返回结果
     async def instrument(
         self,
         clean_code: str,
@@ -226,16 +230,17 @@ class CodeInstrumenter:
         Returns:
             InstrumentationResult 包含插装后代码或错误信息
         """
+        # 仅支持 Python，其他语言直接返回原代码并标记错误
         if language != "python":
             return InstrumentationResult(
                 code=clean_code,
                 error=f"插装引擎暂不支持 {language}，仅支持 Python",
             )
 
-        # 1. 计算缓存键
+        # 1. 计算代码指纹作为缓存键（代码 + 可视化类型 + 必需事件）
         cache_key = self._compute_hash(clean_code, visualizer_type, required_events)
 
-        # 2. 检查缓存
+        # 2. 命中缓存则直接返回，避免重复调用 LLM
         if cache_key in self._cache:
             cached = self._cache[cache_key]
             logger.info("[Instrumenter] 缓存命中: algorithm=%s", algorithm_name)
@@ -245,7 +250,7 @@ class CodeInstrumenter:
                 cached=True,
             )
 
-        # 3. 第一次 LLM 插装
+        # 3. 首次调用 LLM 进行插装
         instrumented_code = await self._call_llm(
             clean_code=clean_code,
             algorithm_name=algorithm_name,
@@ -253,6 +258,7 @@ class CodeInstrumenter:
             required_events=required_events,
         )
 
+        # LLM 未返回可用代码，缓存失败结果并返回
         if instrumented_code is None:
             result = InstrumentationResult(
                 code=clean_code,
@@ -261,7 +267,7 @@ class CodeInstrumenter:
             self._cache[cache_key] = result
             return result
 
-        # 4. 校验
+        # 4. 校验插装质量（语法/导入/实例化/必需事件/line 参数）
         errors = self._validate(instrumented_code, visualizer_type, required_events)
         if not errors:
             result = InstrumentationResult(code=instrumented_code)
@@ -269,7 +275,7 @@ class CodeInstrumenter:
             logger.info("[Instrumenter] 插装成功: algorithm=%s", algorithm_name)
             return result
 
-        # 5. 单次重试（带错误反馈）
+        # 5. 首次失败时使用错误反馈进行单次重试
         logger.warning(
             "[Instrumenter] 首次插装校验失败: algorithm=%s errors=%s",
             algorithm_name,
@@ -284,6 +290,7 @@ class CodeInstrumenter:
             errors=errors,
         )
 
+        # 重试成功则缓存并返回
         if retry_code is not None:
             retry_errors = self._validate(retry_code, visualizer_type, required_events)
             if not retry_errors:
@@ -292,7 +299,7 @@ class CodeInstrumenter:
                 logger.info("[Instrumenter] 重试插装成功: algorithm=%s", algorithm_name)
                 return result
 
-        # 两次都失败
+        # 两次均失败，返回原代码并附带错误信息
         result = InstrumentationResult(
             code=clean_code,
             error=f"插装失败（重试后仍不通过）: {'; '.join(errors)}",
@@ -305,6 +312,7 @@ class CodeInstrumenter:
     # 缓存
     # ------------------------------------------------------------------
 
+    # 计算插装结果的缓存哈希键（基于代码、可视化类型与排序后的必需事件）
     @staticmethod
     def _compute_hash(
         code: str,
@@ -318,6 +326,7 @@ class CodeInstrumenter:
     # LLM 调用
     # ------------------------------------------------------------------
 
+    # 调用 LLM 对干净代码插装，返回插装后的 Python 代码或 None
     async def _call_llm(
         self,
         clean_code: str,
@@ -326,6 +335,7 @@ class CodeInstrumenter:
         required_events: list[str],
     ) -> str | None:
         """调用 LLM 进行插装，返回插装后代码或 None。"""
+        # 填充插装提示词（算法信息 + tracer API + 原始代码）
         prompt = _INSTRUMENT_PROMPT.format(
             algorithm_name=algorithm_name,
             visualizer_type=visualizer_type,
@@ -334,6 +344,7 @@ class CodeInstrumenter:
             clean_code=clean_code,
         )
 
+        # 调用大模型（低温度保证插装结果稳定）并提取代码
         try:
             llm = get_llm()
             response = await llm.ainvoke(
@@ -344,10 +355,12 @@ class CodeInstrumenter:
                 temperature=0.1,
             )
             return self._extract_code(response)
+        # LLM 调用异常时记录日志并返回 None
         except Exception as e:
             logger.error("[Instrumenter] LLM 调用失败: %s", e)
             return None
 
+    # 携带上次错误反馈重试插装，返回重试后的代码或 None
     async def _call_llm_retry(
         self,
         clean_code: str,
@@ -357,6 +370,7 @@ class CodeInstrumenter:
         errors: list[str],
     ) -> str | None:
         """带错误反馈的重试调用。"""
+        # 填充重试提示词（错误信息 + 上次代码 + 原始代码）
         prompt = _RETRY_PROMPT.format(
             errors="; ".join(errors),
             last_code=last_code,
@@ -383,28 +397,31 @@ class CodeInstrumenter:
     # 代码提取
     # ------------------------------------------------------------------
 
+    # 从 LLM 响应中提取 Python 代码（支持 markdown 代码块或纯代码）
     @staticmethod
     def _extract_code(response: Any) -> str | None:
         """从 LLM 响应中提取 markdown 代码块内的 Python 代码。"""
+        # 取模型输出文本并去除首尾空白
         content = getattr(response, "content", "") or ""
         content = str(content).strip()
 
+        # 空响应直接返回 None
         if not content:
             return None
 
-        # 尝试提取 ```python ... ``` 代码块
+        # 优先匹配 ```python ... ``` 代码块
         pattern = r"```python\s*\n(.*?)```"
         matches = re.findall(pattern, content, re.DOTALL)
         if matches:
             return matches[0].strip()
 
-        # 尝试提取 ``` ... ``` 代码块（无语言标记）
+        # 退而求其次匹配无语言标记的 ``` ... ``` 代码块
         pattern = r"```\s*\n(.*?)```"
         matches = re.findall(pattern, content, re.DOTALL)
         if matches:
             return matches[0].strip()
 
-        # 如果整个响应看起来就是代码（以 def/class/import/from 开头）
+        # 若整段响应本身就是代码（以 def/class/import/from 开头），直接返回
         lines = content.split("\n")
         non_empty = [l for l in lines if l.strip() and not l.strip().startswith("#")]
         if non_empty and any(
@@ -419,6 +436,7 @@ class CodeInstrumenter:
     # 校验
     # ------------------------------------------------------------------
 
+    # 校验插装结果：语法 / tracer 导入 / 实例化 / 必需事件 / line 参数
     def _validate(
         self,
         code: str,
@@ -426,6 +444,7 @@ class CodeInstrumenter:
         required_events: list[str],
     ) -> list[str]:
         """校验插装结果，返回错误列表（空列表表示通过）。"""
+        # 累积所有校验错误
         errors: list[str] = []
 
         # 1. 语法检查
@@ -451,20 +470,22 @@ class CodeInstrumenter:
         if not tracer_var:
             errors.append(f"未找到 tracer 实例化: 需要 {tracer_classes[0]}()")
 
-        # 4. Required events 检查
+        # 4. Required events 检查（每个必需事件必须在代码中出现）
         for event in required_events:
             if event not in code:
                 errors.append(f"缺少必需事件调用: {event}()")
 
-        # 5. line 参数检查（至少有一个 tracer 调用带 line=）
+        # 5. line 参数检查（至少有一个 tracer 调用带 line= 标注原始行号）
         if tracer_var and not re.search(rf"{tracer_var}\.\w+\(.*line\s*=", code):
             errors.append("tracer 调用缺少 line 参数（需要 line=N 标注原始行号）")
 
         return errors
 
+    # 按可视化类型映射所需的 tracer 类名列表
     @staticmethod
     def _get_tracer_classes(visualizer_type: str) -> list[str]:
         """根据 visualizer_type 返回对应的 tracer 类名列表。"""
+        # 可视化类型到 tracer 类名的映射
         mapping: dict[str, list[str]] = {
             "array": ["ArrayTracer"],
             "stack-queue": ["StackTracer", "QueueTracer"],
@@ -475,9 +496,11 @@ class CodeInstrumenter:
         }
         return mapping.get(visualizer_type, [])
 
+    # 在源码中查找 tracer 实例的变量名（如 tracer = ArrayTracer()）
     @staticmethod
     def _find_tracer_variable(code: str, tracer_classes: list[str]) -> str | None:
         """从代码中找到 tracer 变量名。"""
+        # 正则匹配形如 `var = TracerClass(` 的赋值
         for cls in tracer_classes:
             match = re.search(rf"(\w+)\s*=\s*{cls}\s*\(", code)
             if match:
@@ -492,8 +515,10 @@ class CodeInstrumenter:
 _instrumenter: CodeInstrumenter | None = None
 
 
+# 获取插装引擎的进程级单例（懒初始化）
 def get_instrumenter() -> CodeInstrumenter:
     """获取插装引擎单例。"""
+    # 首次调用时创建并缓存单例
     global _instrumenter
     if _instrumenter is None:
         _instrumenter = CodeInstrumenter()

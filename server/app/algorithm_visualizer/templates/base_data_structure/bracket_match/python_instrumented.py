@@ -2,10 +2,12 @@ from visual_tracer import StackTracer
 
 tracer = StackTracer()
 
+# 定义 is_valid_brackets 函数
 def is_valid_brackets(s):
     pairs = {')': '(', ']': '[', '}': '{'}
     tracer.init_stack(line=3)
     stack = []
+# 循环遍历处理
     for idx, ch in enumerate(s):
         tracer.highlight_input(idx, line=7)
         if ch in '([{':
@@ -20,8 +22,10 @@ def is_valid_brackets(s):
     tracer.finish(line=18)
     return len(stack) == 0
 
+# 定义 score_of_brackets 函数
 def score_of_brackets(s):
     stack = [0]
+# 循环遍历处理
     for ch in s:
         if ch == '(':
             stack.append(0)
@@ -30,8 +34,10 @@ def score_of_brackets(s):
             stack[-1] += max(2 * v, 1)
     return stack[0]
 
+# 定义 generate_valid_brackets 函数
 def generate_valid_brackets(n):
     result = []
+# 定义 backtrack 函数
     def backtrack(current, open_count, close_count):
         if len(current) == 2 * n:
             result.append(current)
@@ -43,9 +49,11 @@ def generate_valid_brackets(n):
     backtrack('', 0, 0)
     return result
 
+# 定义 longest_valid_brackets 函数
 def longest_valid_brackets(s):
     stack = [-1]
     max_len = 0
+# 循环遍历处理
     for i, ch in enumerate(s):
         if ch == '(':
             stack.append(i)
@@ -63,6 +71,7 @@ tests = [
     ("", True), ("([{}])", True), ("(())", True),
 ]
 
+# 循环遍历处理
 for s, expected in tests:
     result = is_valid_brackets(s)
 

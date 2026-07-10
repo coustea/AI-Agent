@@ -1,3 +1,4 @@
+# difference_array 算法实现 — domain: linear_structure
 def range_updates(arr, updates):
     n = len(arr)
     if n == 0:
@@ -19,6 +20,7 @@ def range_updates(arr, updates):
         result[i] = result[i - 1] + diff[i]
     return result
 
+# 定义 range_updates_with_query 函数
 def range_updates_with_query(arr, updates, queries):
     n = len(arr)
     if n == 0:
@@ -38,6 +40,7 @@ def range_updates_with_query(arr, updates, queries):
         result_arr[i] = result_arr[i - 1] + diff[i]
     return [result_arr[q] for q in queries if 0 <= q < n]
 
+# 定义 range_add_and_range_sum 函数
 def range_add_and_range_sum(arr, updates, queries):
     n = len(arr)
     result = range_updates(arr, updates)
@@ -50,6 +53,7 @@ def range_add_and_range_sum(arr, updates, queries):
             results.append(prefix[r + 1] - prefix[l])
     return results
 
+# 定义 apply_and_verify 函数
 def apply_and_verify(arr, updates):
     result = range_updates(arr, updates)
     brute = list(arr)

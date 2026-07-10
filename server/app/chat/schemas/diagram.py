@@ -226,6 +226,7 @@ class TimelinePayload(BaseModel):
 
 # ---- graph_type → Payload 映射 ----
 
+# 各 graph_type 对应的 Payload 模型类
 PAYLOAD_TYPE_MAP: dict[str, type[BaseModel]] = {
     "comparison": ComparisonPayload,
     "flowchart": FlowchartPayload,
@@ -240,6 +241,7 @@ PAYLOAD_TYPE_MAP: dict[str, type[BaseModel]] = {
 }
 
 
+# 自动修复 LLM 常见的 visual_content 格式错误（root/index/from_ 等）
 def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) -> dict[str, Any]:
     """自动修复 LLM 常见的 visual_content 格式错误。
 
@@ -249,6 +251,7 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
     - flowchart/sequence 的 from 字段被输出为 from_（Pydantic alias 问题）
     - comparison 的 dimensions 中可能混入多余字段
     """
+    # 浅拷贝，不修改原始数据
     vc = dict(visual_content)  # 浅拷贝，不修改原始数据
 
     if graph_type == "hierarchy":
@@ -290,6 +293,7 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
                 fixed_branches.append({**branch, "children": fixed_children})
             vc["branches"] = fixed_branches
 
+    # grid 类型：将字符串 index 修正为整数
     elif graph_type == "grid":
         # LLM 可能把 grid.cells[].index 输出为 string
         cells = vc.get("cells")
@@ -304,6 +308,7 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
                 fixed_cells.append(cell)
             vc["cells"] = fixed_cells
 
+    # flowchart 类型：将 from_ 修正为 from（Pydantic alias 问题）
     elif graph_type == "flowchart":
         # LLM 可能用 from_ 而非 from（Pydantic alias 问题）
         edges = vc.get("edges")
@@ -317,6 +322,7 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
                 fixed_edges.append(edge)
             vc["edges"] = fixed_edges
 
+    # sequence 类型：同上处理 from_ → from
     elif graph_type == "sequence":
         # 同上，from_ → from
         messages = vc.get("messages")
@@ -330,15 +336,18 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
                 fixed_messages.append(msg)
             vc["messages"] = fixed_messages
 
+    # 返回修复后的 visual_content
     return vc
 
 
+# 服务端二次校验：确保 graph_type 与 visual_content 结构匹配，并返回错误信息
 def validate_visual(graph_type: str, visual_content: dict[str, Any]) -> tuple[dict[str, Any], str]:
     """服务端二次校验：确保 graph_type 与 visual_content 结构匹配。
 
     返回 (校验后的 visual_content dict, 错误信息)。
     校验成功时错误信息为空字符串；校验失败时返回原始 dict 和错误描述。
     """
+    # 未知 graph_type 直接跳过校验并给出警告
     payload_cls = PAYLOAD_TYPE_MAP.get(graph_type)
     if payload_cls is None:
         warning = f"未知 graph_type={graph_type}，跳过校验"
@@ -348,6 +357,7 @@ def validate_visual(graph_type: str, visual_content: dict[str, Any]) -> tuple[di
     # 先尝试自动修复常见格式错误
     fixed_vc = _auto_fix_visual_content(graph_type, visual_content)
 
+    # 用对应 Payload 模型校验，失败则返回原始内容与错误
     try:
         validated = payload_cls.model_validate(fixed_vc)
         return validated.model_dump(mode="json", by_alias=True), ""
@@ -359,6 +369,7 @@ def validate_visual(graph_type: str, visual_content: dict[str, Any]) -> tuple[di
 
 # ---- 顶层 TeachingDiagram ----
 
+# TeachingDiagram：一次答疑对应的一张结构化教学图解（顶层聚合模型）
 class TeachingDiagram(BaseModel):
     """一次答疑对应的一张结构化教学图解。"""
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -376,6 +387,7 @@ class TeachingDiagram(BaseModel):
     ]
     teaching_content: TeachingContent
 
+    # 校验器：确保 graph_type 与 visual_content 的实际类型匹配
     @model_validator(mode="after")
     def validate_payload_type(self) -> "TeachingDiagram":
         """确保 graph_type 与 visual_content 的实际类型匹配。"""
@@ -385,6 +397,7 @@ class TeachingDiagram(BaseModel):
         return self
 
 
+# 校验从 <answer> 的 <diagram> 标签提取的 JSON，返回 (校验后 dict, 错误)
 def validate_diagram_json(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     """校验从 <diagram> 标签提取的 JSON，返回 (校验后的 dict, 错误信息)。
 
@@ -397,9 +410,11 @@ def validate_diagram_json(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, s
     返回 (None, error_msg) 表示校验失败，error_msg 可用于修复提示。
     返回 (validated_dict, "") 表示校验成功。
     """
+    # 顶层必须是字典
     if not isinstance(raw, dict):
         return None, "图解 JSON 不是有效的对象"
 
+    # 校验 graph_type 合法性与必填字段
     graph_type = raw.get("graph_type", "")
     if graph_type not in PAYLOAD_TYPE_MAP:
         error = f"非法 graph_type={graph_type}，允许值: {', '.join(PAYLOAD_TYPE_MAP.keys())}"
@@ -412,6 +427,7 @@ def validate_diagram_json(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, s
     if not raw.get("teaching_goal"):
         return None, "缺少必填字段 teaching_goal"
 
+    # 校验 visual_content 与 teaching_content 均为对象
     visual_content = raw.get("visual_content")
     if not isinstance(visual_content, dict):
         return None, "visual_content 不是有效的对象"

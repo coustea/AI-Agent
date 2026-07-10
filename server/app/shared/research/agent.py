@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 # 失败标记（用于过滤无效搜索结果）
 # ============================================================================
 
+# 失败标记常量集合：搜索工具返回的文本一旦包含这些片段即视为无效结果
 FAILURE_MARKERS = (
     "搜索不可用",
     "搜索失败",
@@ -50,6 +51,7 @@ FAILURE_MARKERS = (
 # ResearchAgent 实现
 # ============================================================================
 
+# 独立搜索子 Agent：只负责并发搜索并解析为结构化结果，不负责总结或存储
 class ResearchAgent:
     """搜索子 Agent。
 
@@ -60,6 +62,7 @@ class ResearchAgent:
     4. 无状态，每次调用独立
     """
 
+    # 初始化：构建工具列表与事件回调
     def __init__(
         self,
         *,
@@ -75,6 +78,7 @@ class ResearchAgent:
         self.tools = list(tools) if tools is not None else build_search_tools()
         self.event_handler = event_handler
 
+    # 执行搜索任务：并发多引擎搜索、解析去重并返回报告
     async def run(self, task: ResearchTask) -> ResearchReport:
         """执行搜索任务，返回结构化结果。
 
@@ -91,24 +95,25 @@ class ResearchAgent:
         """
         logger.info("[ResearchAgent] starting search: query=%r", task.query)
 
-        # 1. 创建请求级 ToolExcute
+        # 1. 创建请求级 ToolExcute（按本次请求隔离工具执行器）
         tool_excute = ToolExcute(
             tools=self.tools,
             event_handler=self._emit_event,
         )
 
-        # 2. 并发搜索
+        # 2. 并发搜索：为每个搜索引擎构造一个协程任务
         search_tasks = [
             self._search_tool(tool_excute, tool_name, task.query)
             for tool_name in SEARCH_TOOL_NAMES
         ]
         all_results = await asyncio.gather(*search_tasks, return_exceptions=True)
 
-        # 3. 解析有效结果
+        # 3. 解析有效结果：遍历并发结果，区分异常/有效/无效
         sources: list[ResearchSourceItem] = []
         errors: list[ResearchError] = []
 
         for i, result in enumerate(all_results):
+            # 协程抛出的异常单独记录为可恢复错误
             if isinstance(result, Exception):
                 logger.debug("[ResearchAgent] result[%d] is exception: %s", i, result)
                 errors.append(ResearchError(
@@ -119,6 +124,7 @@ class ResearchAgent:
                 ))
                 continue
 
+            # 有效结果：解析为结构化来源项并累计
             if self._is_valid_result(result):
                 tool_name, result_text = result
                 parsed = self._parse_search_text(result_text, tool_name)
@@ -134,7 +140,7 @@ class ResearchAgent:
                     recoverable=True,
                 ))
 
-        # 4. 去重（按 URL）
+        # 4. 去重（按 URL）：同一链接只保留首次出现
         unique_sources: list[ResearchSourceItem] = []
         seen_urls = set()
         for s in sources:
@@ -144,13 +150,14 @@ class ResearchAgent:
 
         logger.info("[ResearchAgent] completed: query=%r sources=%d", task.query, len(unique_sources))
 
-        # 5. 返回报告
+        # 5. 返回最终搜索报告
         return ResearchReport(
             query=task.query,
             sources=unique_sources,
             errors=errors,
         )
 
+    # 将工具执行事件补充语义后回传给调用方
     async def _emit_event(self, event: dict[str, Any]) -> None:
         """补充展示语义后，把生命周期事件交还给调用方。"""
         if self.event_handler is None:
@@ -160,6 +167,7 @@ class ResearchAgent:
         payload["action"] = RESEARCH_TOOL_ACTIONS.get(tool_name, "核验研究资料")
         await self.event_handler(payload)
 
+    # 调用单个搜索工具，失败时返回异常对象而非抛出
     async def _search_tool(
         self,
         tool_excute: ToolExcute,
@@ -176,6 +184,7 @@ class ResearchAgent:
         Returns:
             搜索结果（可能是异常）
         """
+        # 请求级执行：构造工具调用请求并等待结果
         try:
             result = await tool_excute.execute({
                 "id": f"{tool_name}-{uuid4().hex}",
@@ -184,10 +193,12 @@ class ResearchAgent:
             })
             logger.debug("[ResearchAgent] tool=%s success result_len=%d", tool_name, len(str(result)))
             return tool_name, str(result)
+        # 工具调用失败时记录日志并返回异常对象
         except Exception as exc:
             logger.warning("[ResearchAgent] tool=%s failed: %s", tool_name, exc)
             return exc
 
+    # 校验搜索结果是否有效（非异常、足够长、不含失败标记）
     def _is_valid_result(self, result: Any) -> bool:
         """检查搜索结果是否有效。
 
@@ -204,13 +215,15 @@ class ResearchAgent:
         if len(text.strip()) < 50:
             return False
 
-        # 过滤失败标记
+        # 过滤失败标记：命中任一标记即视为无效
         for marker in FAILURE_MARKERS:
             if marker in text:
                 return False
 
+        # 通过所有校验，结果为有效
         return True
 
+    # 解析工具返回的格式化文本为结构化来源项列表
     def _parse_search_text(self, text: str, source: str) -> list[ResearchSourceItem]:
         """解析搜索工具返回的格式化字符串为结构化数据。
 
@@ -228,7 +241,7 @@ class ResearchAgent:
         for line in lines:
             line = line.strip()
 
-            # 匹配标题行（数字开头）
+            # 匹配标题行（数字开头）：遇到新标题先保存上一个结果
             if line and line[0].isdigit() and ". " in line:
                 # 保存前一个结果
                 if current.get("url"):
@@ -241,18 +254,18 @@ class ResearchAgent:
                 current = {"source": source}
                 current["title"] = line.split(". ", 1)[-1]
 
-            # 匹配链接行
+            # 匹配链接行：提取 http 开头的链接
             elif "链接:" in line or "链接 :" in line:
                 url = line.split("链接:")[-1].split("链接 :")[-1].strip()
                 if url.startswith("http"):
                     current["url"] = url
 
-            # 匹配摘要行
+            # 匹配摘要行：提取摘要文本
             elif "摘要:" in line or "摘要 :" in line:
                 snippet = line.split("摘要:")[-1].split("摘要 :")[-1].strip()
                 current["summary"] = snippet
 
-        # 添加最后一个结果
+        # 添加最后一个结果（收尾）
         if current.get("url"):
             results.append(ResearchSourceItem(
                 source=current.get("source", source),

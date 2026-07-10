@@ -3,30 +3,38 @@ from visual_tracer import TreeTracer
 tracer = TreeTracer()
 
 
+# TrieNode 类定义
 class TrieNode:
+# 定义 __init__ 函数
     def __init__(self):
         self.children = {}
         self.is_word = False
 
+# Trie 类定义
 class Trie:
+# 定义 __init__ 函数
     def __init__(self):
         self.root = TrieNode()
 
+# 定义 insert 函数
     def insert(self, word):
         if not word:
             self.root.is_word = True
             return
         curr = self.root
+# 循环遍历处理
         for char in word:
             if char not in curr.children:
                 curr.children[char] = TrieNode()
             curr = curr.children[char]
         curr.is_word = True
 
+# 定义 search 函数
     def search(self, word):
         if not word:
             return self.root.is_word
         curr = self.root
+# 循环遍历处理
         for char in word:
             if char not in curr.children:
                 return False
@@ -53,6 +61,7 @@ def build_trie_nodes(trie_node, label="root"):
     nid = f"node-{_counter[0]}"
     _counter[0] += 1
     children = []
+# 循环遍历处理
     for ch in sorted(trie_node.children.keys()):
         child_id = build_trie_nodes(trie_node.children[ch], ch)
         if child_id:
@@ -76,6 +85,7 @@ def build_id_map(trie_node):
     nid = f"node-{_idx[0]}"
     _idx[0] += 1
     _node_id_map[id(trie_node)] = nid
+# 循环遍历处理
     for ch in sorted(trie_node.children.keys()):
         build_id_map(trie_node.children[ch])
 
@@ -86,6 +96,7 @@ def visit_insert(word):
     if not word:
         return
     curr = t.root
+# 循环遍历处理
     for char in word:
         if char in curr.children:
             curr = curr.children[char]
@@ -105,6 +116,7 @@ def visit_search(word, found):
     if not word:
         return
     curr = t.root
+# 循环遍历处理
     for char in word:
         if char in curr.children:
             curr = curr.children[char]

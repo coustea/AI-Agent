@@ -3,6 +3,7 @@ from visual_tracer import TreeTracer
 tracer = TreeTracer()
 
 
+# TrieNode 类定义
 class TrieNode:
     """字典树节点"""
     def __init__(self):
@@ -10,46 +11,55 @@ class TrieNode:
         self.is_end = False
 
 
+# Trie 类定义
 class Trie:
     """字典树实现"""
     def __init__(self):
         self.root = TrieNode()
 
+# 定义 insert 函数
     def insert(self, word):
         if not word:
             return
         node = self.root
+# 循环遍历处理
         for char in word:
             if char not in node.children:
                 node.children[char] = TrieNode()
             node = node.children[char]
         node.is_end = True
 
+# 定义 search 函数
     def search(self, word):
         if not word:
             return False
         node = self.root
+# 循环遍历处理
         for char in word:
             if char not in node.children:
                 return False
             node = node.children[char]
         return node.is_end
 
+# 定义 starts_with 函数
     def starts_with(self, prefix):
         if not prefix:
             return True
         node = self.root
+# 循环遍历处理
         for char in prefix:
             if char not in node.children:
                 return False
             node = node.children[char]
         return True
 
+# 定义 delete 函数
     def delete(self, word):
         if not word:
             return False
         node = self.root
         path = [(self.root, word[0] if word else '')]
+# 循环遍历处理
         for char in word:
             if char not in node.children:
                 return False
@@ -60,6 +70,7 @@ class Trie:
         if node.children:
             node.is_end = False
             return True
+# 循环遍历处理
         for i in range(len(path) - 1, 0, -1):
             parent_node, char = path[i - 1][0], path[i][1]
             child_node = path[i][0]
@@ -71,18 +82,21 @@ class Trie:
 
 trie = Trie()
 words = ["cat", "car", "card", "care", "dog", "deer", "deep", "do"]
+# 循环遍历处理
 for w in words:
     trie.insert(w)
 
 nodes = []
 _counter = [0]
 
+# 定义 build_trie_nodes 函数
 def build_trie_nodes(trie_node, label="root"):
     if not trie_node:
         return None
     nid = f"node-{_counter[0]}"
     _counter[0] += 1
     children = []
+# 循环遍历处理
     for ch in sorted(trie_node.children.keys()):
         child_id = build_trie_nodes(trie_node.children[ch], ch)
         if child_id:
@@ -99,60 +113,70 @@ tracer.init_tree(nodes, line=109)
 _node_id_map = {}
 _idx = [0]
 
+# 定义 build_id_map 函数
 def build_id_map(trie_node):
     if not trie_node:
         return
     nid = f"node-{_idx[0]}"
     _idx[0] += 1
     _node_id_map[id(trie_node)] = nid
+# 循环遍历处理
     for ch in sorted(trie_node.children.keys()):
         build_id_map(trie_node.children[ch])
 
 build_id_map(trie.root)
 
 node = trie.root
+# 循环遍历处理
 for ch in "cat":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "car":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "card":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "care":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "dog":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "deer":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "deep":
     if ch in node.children:
         node = node.children[ch]
         tracer.visit_node(_node_id_map[id(node)], line=25)
 
 node = trie.root
+# 循环遍历处理
 for ch in "do":
     if ch in node.children:
         node = node.children[ch]

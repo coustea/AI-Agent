@@ -2,30 +2,38 @@ from visual_tracer import LinkedListTracer
 
 tracer = LinkedListTracer()
 
+# ListNode 类定义
 class ListNode:
+# 定义 __init__ 函数
     def __init__(self, val=0, next=None):
         self.val = val
         self.next = next
 
+# 定义 list_to_nodes 函数
 def list_to_nodes(arr):
     head = None
+# 循环遍历处理
     for v in reversed(arr):
         head = ListNode(v, head)
     return head
 
+# 定义 nodes_to_list 函数
 def nodes_to_list(head):
     result = []
+# 循环条件判断
     while head:
         result.append(head.val)
         head = head.next
     return result
 
+# 定义 reverse_list 函数
 def reverse_list(head):
     nodes = [{"id": f"node-{i}", "label": str(v), "tone": "default"} for i, v in enumerate(nodes_to_list(head))]
     tracer.init_list(nodes, [tracer._pointers[0] if tracer._pointers else {"label": "curr", "nodeIndex": 0, "tone": "accent"}], line=16)
     prev = None
     curr = head
     idx = 0
+# 循环条件判断
     while curr:
         tracer.move_pointer("curr", idx, line=21)
         next_node = curr.next
@@ -38,14 +46,18 @@ def reverse_list(head):
     tracer.finish(line=30)
     return prev
 
+# 定义 reverse_k_group 函数
 def reverse_k_group(head, k):
+# 定义 get_kth 函数
     def get_kth(curr, k):
+# 循环条件判断
         while curr and k > 0:
             curr = curr.next
             k -= 1
         return curr
     dummy = ListNode(0, head)
     group_prev = dummy
+# 循环条件判断
     while True:
         kth = get_kth(group_prev, k)
         if not kth:
@@ -53,6 +65,7 @@ def reverse_k_group(head, k):
         group_next = kth.next
         prev = kth.next
         curr = group_prev.next
+# 循环条件判断
         while curr != group_next:
             tmp = curr.next
             curr.next = prev
@@ -63,12 +76,15 @@ def reverse_k_group(head, k):
         group_prev = tmp
     return dummy.next
 
+# 定义 reverse_between 函数
 def reverse_between(head, left, right):
     dummy = ListNode(0, head)
     prev = dummy
+# 循环遍历处理
     for _ in range(left - 1):
         prev = prev.next
     curr = prev.next
+# 循环遍历处理
     for _ in range(right - left):
         tmp = curr.next
         curr.next = tmp.next
@@ -76,6 +92,7 @@ def reverse_between(head, left, right):
         prev.next = tmp
     return dummy.next
 
+# 定义 reverse_recursive 函数
 def reverse_recursive(head):
     if not head or not head.next:
         return head

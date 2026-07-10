@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 选择器分组标签
 import type { SelectLabelProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { SelectLabel } from "reka-ui"

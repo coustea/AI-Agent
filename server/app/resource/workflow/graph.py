@@ -30,8 +30,10 @@ from app.resource.workflow.state import ParentState
 
 @lru_cache(maxsize=1)
 def build_parent_graph() -> Any:
+    # 构建全局编排状态图（仅编译一次并缓存）
     workflow = StateGraph(ParentState)
 
+    # 注册所有节点
     workflow.add_node("planning", planning_node)
     workflow.add_node("worker_node", worker_node)
     workflow.add_node("merge_workers", merge_workers_node)
@@ -41,20 +43,24 @@ def build_parent_graph() -> Any:
     workflow.add_node("merge_aggregation", merge_aggregation_node)
     workflow.add_node("save_node", save_node)
 
+    # 连边：START → 规划 → 基础 worker 并行 → 合并
     workflow.add_edge(START, "planning")
     workflow.add_conditional_edges(
         "planning",
         route_workers_or_merge,
     )
     workflow.add_edge("worker_node", "merge_workers")
+    # 合并后决定是否需要聚合节点
     workflow.add_conditional_edges(
         "merge_workers",
         route_after_merge,
     )
+    # 三个聚合 Agent 均汇入 merge_aggregation
     workflow.add_edge("ppt_node", "merge_aggregation")
     workflow.add_edge("video_node", "merge_aggregation")
     workflow.add_edge("cartoon_node", "merge_aggregation")
     workflow.add_edge("merge_aggregation", "save_node")
+    # 无聚合 Agent 时 save_node 直接落库后结束
     workflow.add_edge("save_node", END)
 
     return workflow.compile()

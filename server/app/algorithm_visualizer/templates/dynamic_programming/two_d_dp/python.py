@@ -1,3 +1,4 @@
+# two_d_dp 算法实现 — domain: dynamic_programming
 def min_path_sum(grid):
     if not grid or not grid[0]:
         return 0, [], []
@@ -27,6 +28,7 @@ def min_path_sum(grid):
     path.reverse()
     return dp[m - 1][n - 1], dp, path
 
+# 定义 max_path_sum 函数
 def max_path_sum(grid):
     if not grid or not grid[0]:
         return 0
@@ -42,6 +44,7 @@ def max_path_sum(grid):
             dp[i][j] = max(dp[i - 1][j], dp[i][j - 1]) + grid[i][j]
     return dp[m - 1][n - 1]
 
+# 定义 unique_paths 函数
 def unique_paths(m, n):
     dp = [[0] * n for _ in range(m)]
     for i in range(m):
@@ -53,6 +56,7 @@ def unique_paths(m, n):
             dp[i][j] = dp[i - 1][j] + dp[i][j - 1]
     return dp[m - 1][n - 1]
 
+# 定义 unique_paths_with_obstacles 函数
 def unique_paths_with_obstacles(obstacle_grid):
     m, n = len(obstacle_grid), len(obstacle_grid[0])
     dp = [[0] * n for _ in range(m)]

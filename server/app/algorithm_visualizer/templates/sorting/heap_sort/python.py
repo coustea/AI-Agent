@@ -9,6 +9,7 @@ def heap_sort(arr):
         heapify(arr, i, 0)
     return arr
 
+# 定义 heapify 函数
 def heapify(arr, n, i):
     largest = i
     left = 2 * i + 1
@@ -21,6 +22,7 @@ def heapify(arr, n, i):
         arr[i], arr[largest] = arr[largest], arr[i]
         heapify(arr, n, largest)
 
+# 定义 heap_sort_min 函数
 def heap_sort_min(arr):
     n = len(arr)
     if n <= 1:
@@ -34,6 +36,7 @@ def heap_sort_min(arr):
         heapify_min(arr, i, 0)
     return result
 
+# 定义 heapify_min 函数
 def heapify_min(arr, n, i):
     smallest = i
     left = 2 * i + 1
@@ -46,6 +49,7 @@ def heapify_min(arr, n, i):
         arr[i], arr[smallest] = arr[smallest], arr[i]
         heapify_min(arr, n, smallest)
 
+# 定义 kth_largest 函数
 def kth_largest(arr, k):
     n = len(arr)
     for i in range(n // 2 - 1, -1, -1):

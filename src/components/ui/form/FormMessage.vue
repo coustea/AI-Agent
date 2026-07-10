@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+// 表单验证错误消息
 import type { HTMLAttributes } from "vue"
 import { ErrorMessage } from "vee-validate"
 import { toValue } from "vue"

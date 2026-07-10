@@ -717,9 +717,11 @@ const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 const { userName } = useCurrentUser()
 
-// 状态
+// 聊天模式：standard（文本）| digital_human（数字人）
 const chatMode = ref('standard')
+// 用户输入文本
 const userInput = ref('')
+// AI 是否正在思考/生成中
 const isAIThinking = ref(false)
 const digitalHumanBackendStatus = ref('')
 const chatScroll = ref<HTMLElement | null>(null)
@@ -728,7 +730,9 @@ const messageFormRef = ref<HTMLFormElement | null>(null)
 const isExpandedInput = ref(false)
 const isComposing = ref(false)
 
+// 联网搜索开关
 const enableWebSearch = ref(false)
+// 是否需要生成教学图解
 const needTeachingDiagram = ref(false)
 
 const imgPreviewVisible = ref(false)
@@ -959,7 +963,9 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
 
 
+// 会话列表
 const sessions = ref<ChatSession[]>([])
+// 当前活跃会话 ID
 const currentSessionId = ref<string | undefined>(undefined)
 const digitalHumanSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
@@ -968,8 +974,11 @@ const searchKeyword = ref('')
 const historyExpanded = ref(false)
 const HISTORY_COLLAPSED_COUNT = 5
 
+// 当前会话的消息列表
 const messages = ref<ChatMsg[]>([])
+// 正在流式输出的消息 ID
 const streamingMsgId = ref<number | null>(null)
+// 正在流式输出的消息引用
 const streamingMsgRef = ref<ChatMsg | null>(null)
 
 /**
@@ -987,7 +996,9 @@ const canSendMessage = computed(() => (
   && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
 ))
 
+// 流式消息管理器（全局单例）
 const streamManager = useChatStreamManager()
+// 数字人思考超时定时器
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAsrProcessing = ref(false)
 let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
@@ -1046,6 +1057,7 @@ const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayloa
   else activities.push(activity)
 }
 
+// 将后端 SSE 事件应用到 AI 消息上（活动状态、图解就绪等）
 const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   if (!aiMsg) return
 
@@ -1218,8 +1230,10 @@ const startAvatarThinkingTimeout = () => {
   }, 30000)
 }
 
+// 流式渲染相关状态
 let scrollPending = false
 let streamFlushHandle: ReturnType<typeof window.setTimeout> | null = null
+// 当前显示的流式文本
 const streamDisplayText = ref('')
 const pendingRenderQueue: string[] = []
 let pendingRenderQueueStart = 0
@@ -1246,7 +1260,7 @@ const DIGITAL_HUMAN_STREAM_MAX_DELAY_MS = 90
 const STREAM_SCROLL_INTERVAL_MS = 64
 const STREAM_AUTO_SCROLL_BOTTOM_GAP_PX = 96
 
-// 计算属性
+// 搜索框过滤后的会话列表
 const filteredSessions = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
   if (!keyword) return []
@@ -1263,6 +1277,7 @@ const visibleSessions = computed(() => {
 
 const hasMoreSessions = computed(() => sessions.value.length > HISTORY_COLLAPSED_COUNT)
 
+// 判断消息是否处于流式输出中
 const isStreamingMessage = (msg: ChatMsg) => {
   if (msg.id !== streamingMsgId.value) return false
   // 数字人模式下：只要还在流式输出（streamingMsgId 存在）就算 streaming
@@ -1330,6 +1345,7 @@ const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
 
 const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
 
+// 打开教学图解预览弹窗
 const previewTeachingDiagram = (diagram: TeachingDiagram) => {
   teachingDiagramPreviewData.value = diagram
   teachingDiagramPreviewVisible.value = true
@@ -1396,6 +1412,7 @@ const handleMessageClick = (e: MouseEvent) => {
   }
 }
 
+// 滚动聊天区域到底部
 const scrollToBottom = () => {
   if (scrollPending) return
   scrollPending = true
@@ -1511,6 +1528,7 @@ const getNextStreamDelay = (
   return Math.max(STREAM_MIN_DELAY_MS, Math.min(STREAM_MAX_DELAY_MS, delay))
 }
 
+// 刷新待渲染队列中的文本到显示区域
 const flushPendingStreamText = (forceScroll = false, unitOverride?: number): number | undefined => {
   if (pendingRenderQueueStart >= pendingRenderQueue.length) return
   const aiMsg = streamingMsgRef.value
@@ -1571,6 +1589,7 @@ const scheduleStreamFlush = (forceScroll = false, delayMs = STREAM_BASE_DELAY_MS
   }, delayMs)
 }
 
+// 将流式文本块加入渲染队列
 const enqueueStreamChunk = (messageId: number, chunk: string) => {
   if (!chunk) return
   if (streamingMsgRef.value?.id !== messageId) return
@@ -1652,6 +1671,7 @@ const completeStreamingMessage = (messageId: number) => {
   scheduleStreamFlush(true, STREAM_MIN_DELAY_MS)
 }
 
+// 将流式渲染的文本正式提交到消息中
 const commitStreamTextToMessage = (messageId: number) => {
   const aiMsg = streamingMsgRef.value && streamingMsgRef.value.id === messageId
     ? streamingMsgRef.value
@@ -1814,6 +1834,7 @@ const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
   }
 }
 
+// 加载会话列表
 const loadSessions = async () => {
   try {
     const res = await getSessions()
@@ -1842,6 +1863,7 @@ const refreshSessionTitleWithRetry = async (sessionId: string) => {
   }
 }
 
+// 创建新会话：断开当前流渲染，清空消息
 const newSession = () => {
   // Detach from the current stream's render loop without aborting the SSE.
   // The global streamManager keeps the old session's connection alive so
@@ -1856,6 +1878,7 @@ const newSession = () => {
   clearPendingFiles()
 }
 
+// 从 API 加载指定会话的历史消息
 const loadHistoryFromAPI = async (sessionId: string) => {
   try {
     const res = await getChatHistory(sessionId)
@@ -1928,6 +1951,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
   }
 }
 
+// 切换会话：加载历史 → 恢复流状态 → 绑定回调
 const switchSession = async (sessionId: string) => {
   currentSessionId.value = sessionId
   messages.value = []
@@ -2132,6 +2156,7 @@ const handleTeachingDiagramToggle = () => {
   needTeachingDiagram.value = !needTeachingDiagram.value
 }
 
+// 确保当前有活跃会话（没有则创建）
 const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standard') => {
   const sessionRef = mode === 'digital_human' ? digitalHumanSessionId : currentSessionId
   if (sessionRef.value) return true
@@ -2185,6 +2210,7 @@ const handleVoiceToggle = async () => {
   clearAsrProcessing()
 }
 
+// 重新连接数字人（断开后重建 WebSocket）
 const handleAvatarReconnect = async () => {
   disconnectAvatar()
   await connectAvatar()
@@ -2201,6 +2227,7 @@ const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
 }
 
+// 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流 / 数字人消息
 const handleSend = async () => {
   const text = userInput.value.trim()
   const currentPending = [...pendingFiles.value]
@@ -2404,6 +2431,7 @@ const handleSend = async () => {
   )
 }
 
+// 监听聊天模式切换：数字人 ↔ 标准文本
 watch(chatMode, async (newMode) => {
   if (newMode === 'digital_human') {
     sessionSidebarCollapsed.value = true
@@ -2437,6 +2465,7 @@ watch(needTeachingDiagram, (enabled) => {
   }
 })
 
+// 组件挂载：加载用户信息、会话列表、恢复上次会话
 onMounted(async () => {
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
   resetDimTimer()
@@ -2458,6 +2487,7 @@ onMounted(async () => {
 
 let tutorWasDeactivated = false
 
+// 组件重新激活（keep-alive）：恢复会话和滚动
 onActivated(async () => {
   if (!tutorWasDeactivated) return
   tutorWasDeactivated = false
@@ -2470,6 +2500,7 @@ onActivated(async () => {
   }
 })
 
+// 组件停用时：暂停流渲染、清理事件监听
 onDeactivated(() => {
   tutorWasDeactivated = true
   clearAvatarThinkingTimeout()
@@ -2483,6 +2514,7 @@ onDeactivated(() => {
   }
 })
 
+// 组件卸载前：断开数字人、清理流、释放附件
 onBeforeUnmount(() => {
   clearAvatarThinkingTimeout()
   detachCurrentStreamCallbacks()

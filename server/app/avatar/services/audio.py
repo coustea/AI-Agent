@@ -5,4 +5,5 @@
 
 from app.infra.logging import get_logger
 
+# 音频处理模块日志器（占位模块，真实缓冲逻辑已迁移到 bridge/manager.py）
 logger = get_logger(__name__)

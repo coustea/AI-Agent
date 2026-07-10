@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { fetchAlgorithms, fetchLanguages, fetchTemplate } from '@/features/algorithm-visualization/api/algorithmVisualizer'
 import type {
@@ -9,30 +9,54 @@ import type {
   VisualizerType,
 } from '@/features/algorithm-visualization/types'
 
-/** 算法+语言→模板代码加载。AlgorithmVisualization.vue 使用。 */
+// 算法+语言→模板代码加载
 export function useAlgorithmTemplate() {
+  // 当前选中的语言、算法 key、编辑器代码、模板数据、加载中状态
   const language = ref<CodeLanguage>('python')
   const algorithm = ref<string>('bubble_sort')
   const code = ref('')
   const templateData = ref<TemplateData | null>(null)
   const loading = ref(false)
 
+  // 语言列表、算法列表、元数据加载状态、当前算法对象（根据 algorithm key 计算）
   const languages = ref<LanguageInfo[]>([])
   const algorithms = ref<AlgorithmInfo[]>([])
   const metaLoading = ref(false)
+  const currentAlgorithm = computed(() => {
+    return algorithms.value.find((item) => item.key === algorithm.value) ?? null
+  })
 
-  /** 去重：同一 (algorithm, language) 的并发 loadTemplate 只执行一次 */
   let _loadSeq = 0
 
+  // 当算法或语言变更时，确保当前选择在有效范围内
+  function normalizeSelection() {
+    let changed = false
+
+    if (!currentAlgorithm.value && algorithms.value.length > 0) {
+      algorithm.value = algorithms.value[0]!.key
+      changed = true
+    }
+
+    const selected = currentAlgorithm.value
+    if (selected?.supportedLanguages.length && !selected.supportedLanguages.includes(language.value)) {
+      language.value = selected.supportedLanguages[0]!
+      changed = true
+    }
+
+    return changed
+  }
+
+  // 初始加载语言列表和算法列表
   async function loadMeta() {
     metaLoading.value = true
     try {
       const [langsRes, algsRes] = await Promise.all([
         fetchLanguages(),
-        fetchAlgorithms('all', language.value),
+        fetchAlgorithms('all'),
       ])
       languages.value = langsRes.data.data ?? []
       algorithms.value = algsRes.data.data ?? []
+      normalizeSelection()
     } catch {
       toast.error('加载语言或算法列表失败')
     } finally {
@@ -40,29 +64,14 @@ export function useAlgorithmTemplate() {
     }
   }
 
-  /** 切换语言时重新加载算法列表（只显示支持当前语言的算法） */
-  async function reloadAlgorithms() {
-    try {
-      const algsRes = await fetchAlgorithms('all', language.value)
-      algorithms.value = algsRes.data.data ?? []
-
-      // 如果当前算法不在新列表里，自动切换到第一个可用算法
-      const stillAvailable = algorithms.value.some((a) => a.key === algorithm.value)
-      if (!stillAvailable && algorithms.value.length > 0) {
-        algorithm.value = algorithms.value[0]!.key
-      }
-    } catch {
-      toast.error('加载算法列表失败')
-    }
-  }
-
+  // 根据当前选中的算法和语言加载代码模板
   async function loadTemplate() {
-    // 递增序号，后续并发调用会因序号不匹配而跳过
+    if (!algorithm.value || !language.value) return
+
     const mySeq = ++_loadSeq
     loading.value = true
     try {
       const resp = await fetchTemplate(algorithm.value, language.value)
-      // 只有最新一次调用的结果才写入，避免竞态覆盖
       if (mySeq !== _loadSeq) return
       templateData.value = resp.data.data
       code.value = templateData.value?.templateCode ?? ''
@@ -76,37 +85,36 @@ export function useAlgorithmTemplate() {
     }
   }
 
-  /** 切换算法时自动重载模板 */
-  watch(
-    [algorithm],
-    () => {
-      loadTemplate()
-    },
-    { immediate: false },
-  )
+  // 算法或语言切换时，自动规范化选择并重新加载模板
+  watch([algorithm, language], () => {
+    if (!algorithms.value.length) return
+    if (normalizeSelection()) return
+    loadTemplate()
+  })
 
-  /** 切换语言时先更新算法列表，再加载模板 */
-  watch(
-    [language],
-    async () => {
-      await reloadAlgorithms()
-      // reloadAlgorithms 可能会更改 algorithm，后续的 algorithm watch 会触发 loadTemplate
-      // 但如果 algorithm 没变，也需要重新加载模板（因为语言变了）
-      loadTemplate()
-    },
-  )
+  // 设置当前算法，同时确保语言与算法兼容
+  function setAlgorithm(nextAlgorithm: string) {
+    const selected = algorithms.value.find((item) => item.key === nextAlgorithm)
+    if (!selected) return
 
-  /** 重置到默认模板 */
+    algorithm.value = selected.key
+
+    if (selected.supportedLanguages.length && !selected.supportedLanguages.includes(language.value)) {
+      language.value = selected.supportedLanguages[0]!
+    }
+  }
+
+  // 重置模板为当前算法+语言的初始代码
   function resetTemplate() {
     loadTemplate()
   }
 
-  /** 根据算法 key 获取当前算法信息 */
+  // 获取当前算法信息
   function getCurrentAlgorithmInfo(): AlgorithmInfo | undefined {
-    return algorithms.value.find((a) => a.key === algorithm.value)
+    return currentAlgorithm.value ?? undefined
   }
 
-  /** 获取当前算法的 visualizerType */
+  // 获取当前可视化器类型
   function getCurrentVisualizerType(): VisualizerType {
     return getCurrentAlgorithmInfo()?.visualizerType ?? 'array'
   }
@@ -120,9 +128,12 @@ export function useAlgorithmTemplate() {
     languages,
     algorithms,
     metaLoading,
+    currentAlgorithm,
     loadMeta,
     loadTemplate,
     resetTemplate,
+    setAlgorithm,
+    normalizeSelection,
     getCurrentAlgorithmInfo,
     getCurrentVisualizerType,
   }

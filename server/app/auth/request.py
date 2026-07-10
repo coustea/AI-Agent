@@ -1,3 +1,4 @@
+# 认证模块请求模型：定义注册、登录、更新用户信息等接口的请求体 Schema（基于 Pydantic 校验）
 """认证模块请求数据模型。
 
 定义注册、登录、更新用户信息等接口的请求体 Schema。
@@ -9,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+# 用户注册请求体模型
 class UserRegister(BaseModel):
     """用户注册请求体。"""
     # 用户名：2-50 个字符
@@ -19,6 +21,7 @@ class UserRegister(BaseModel):
     email: str | None = None
 
 
+# 用户登录请求体模型
 class UserLogin(BaseModel):
     """用户登录请求体。"""
     # 用户名
@@ -27,6 +30,7 @@ class UserLogin(BaseModel):
     password: str
 
 
+# 用户信息更新请求体模型（PATCH 语义，字段可选）
 class UserUpdate(BaseModel):
     """更新用户信息请求体。
 

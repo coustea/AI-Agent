@@ -1,3 +1,4 @@
+// 表单组件集（基于 vee-validate）
 export { default as FormControl } from "./FormControl.vue"
 export { default as FormDescription } from "./FormDescription.vue"
 export { default as FormItem } from "./FormItem.vue"

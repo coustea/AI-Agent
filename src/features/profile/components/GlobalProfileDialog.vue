@@ -144,8 +144,11 @@ import { getProfile, type ProfileData, type ProfileDimensionKey } from '@/featur
 import { isGlobalProfileVisible, profileRefreshTrigger } from '@/features/profile/model/useGlobalProfile'
 import type { DimensionValue } from '@/features/profile/model/profile'
 
+// 画像主数据，为空时显示骨架屏
 const profile = ref<ProfileData | null>(null)
+// 加载状态
 const loading = ref(false)
+// 当前悬浮的维度节点 key
 const hoveredNodeKey = ref<string | null>(null)
 
 const DIM_CONFIG: Array<{
@@ -163,6 +166,7 @@ const DIM_CONFIG: Array<{
   { key: 'self_correction_ability', label: '自纠能力', tip: '发现问题、复盘问题和修正问题的能力', icon: '纠' }
 ]
 
+// 将原始维度数据转为展示用的卡片列表，补充 label/tip/icon
 const dimensionCards = computed(() => {
   const dims = (profile.value?.dimensions ?? {}) as Record<ProfileDimensionKey, DimensionValue>
 
@@ -180,8 +184,10 @@ const dimensionCards = computed(() => {
   })
 })
 
+// 已成型维度数量（有具体 value 即视为成型）
 const activeCount = computed(() => dimensionCards.value.filter(item => item.value).length)
 
+// 根据成型维度数量计算画像所处阶段
 const portraitStage = computed(() => {
   if (activeCount.value === 0) {
     return { name: '初始化采样', title: '画像正在从学习行为中生成' }
@@ -198,6 +204,7 @@ const portraitStage = computed(() => {
   return { name: '画像已稳定', title: '七维学习画像趋于完整' }
 })
 
+// 计算各维度节点在轨道上的位置坐标、动画延迟和状态
 const orbitNodes = computed(() => {
   const radiusX = 41
   const radiusY = 35
@@ -217,6 +224,7 @@ const orbitNodes = computed(() => {
   })
 })
 
+// 异步拉取画像数据，异常时置空
 const fetchProfile = async () => {
   loading.value = true
 
@@ -231,12 +239,14 @@ const fetchProfile = async () => {
   }
 }
 
+// 弹窗打开时自动加载画像
 watch(isGlobalProfileVisible, newVal => {
   if (newVal) {
     fetchProfile()
   }
 })
 
+// 外部触发刷新时重新加载画像
 watch(profileRefreshTrigger, () => {
   if (isGlobalProfileVisible.value) {
     fetchProfile()

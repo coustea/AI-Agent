@@ -1,73 +1,77 @@
-# 示例：队列处理流程
+# 示例：二叉搜索树插入机制
 
+@course: 数据结构
+@topic: 二叉搜索树插入
 @duration: 96
 
-## Scene 1: 输入请求进入系统
-@id: intro
+## Scene 1: 为什么需要按规则插入
+@id: problem
 @start: 0
-@duration: 14
-@type: intro
+@duration: 12
+@type: problem
+@layout: hero
+@focus: 有序结构
 
 ### Narration
-这段视频讲解队列处理流程。输入请求按顺序到达，根据规则选择处理资源，最终形成时间线记录。
+因为二叉搜索树要支持快速查找，所以新节点不能随便放入，而必须根据大小关系沿路径移动到正确位置。
 
 ### HTML
 ```html
-<div class="scene-inner flex-col gap-lg">
-  <div class="stage main-stage">
-    <div id="input-strip" class="input-strip">
-      <span>A</span><span>B</span><span>C</span>
-    </div>
-  </div>
-  <div class="flex-row gap-lg">
-    <div id="queue" class="panel operation-panel">等待队列：空</div>
-    <div id="resource" class="panel metric-panel">
-      <div class="metric-value">空闲</div>
-      <div class="metric-label">处理资源</div>
-    </div>
-  </div>
+<div class="video-stage hero-stage">
+  <div id="problem-main" class="concept-node hero-node">BST</div>
+  <div id="problem-token" class="data-token action-token">6</div>
+  <div id="problem-rule" class="rule-bubble">插入规则：小于当前节点走左边，大于当前节点走右边</div>
 </div>
 ```
 
 ### Timeline
 ```js
-Runtime.reveal(tl, "#scene-intro #input-strip", T("intro", 0.4), 0.6);
-Runtime.reveal(tl, "#scene-intro #queue", T("intro", 1.0), 0.6);
-Runtime.reveal(tl, "#scene-intro #resource", T("intro", 1.6), 0.6);
-Runtime.caption(tl, "#caption-intro", T("intro", 2.4), 4.0);
-Runtime.pulse(tl, "#scene-intro #input-strip", T("intro", 6.0), 0.8);
+Runtime.sceneIn(tl, "#scene-problem", T("problem", 0.0), 0.6);
+Runtime.popIn(tl, "#scene-problem #problem-main", T("problem", 0.5), 0.6);
+Runtime.spawn(tl, "#scene-problem #problem-token", "#scene-problem #problem-main", T("problem", 1.3), 0.5);
+Runtime.reveal(tl, "#scene-problem #problem-rule", T("problem", 2.0), 0.6);
+Runtime.cameraZoom(tl, "#scene-problem #camera-problem", 1.08, 860, 360, T("problem", 3.0), 1.0);
+Runtime.caption(tl, "#caption-problem", T("problem", 3.4), 5.0);
+Runtime.sceneOut(tl, "#scene-problem", T("problem", 11.2), 0.6);
 ```
 
-## Scene 2: 请求 A 占用资源
-@id: process-a
-@start: 14
+## Scene 2: 建立可视化模型
+@id: model
+@start: 12
 @duration: 16
-@type: trace
+@type: model
+@layout: structure
+@focus: 根节点与左右子树
 
 ### Narration
-请求 A 从等待队列中取出，占用处理资源。队列更新，资源状态变为处理中。
+当插入开始时，算法从根节点出发，因为根节点把整棵树分成左小右大的两个范围。
 
 ### HTML
 ```html
-<div class="scene-inner flex-col gap-lg">
-  <div class="stage main-stage">
-    <div id="token-a" class="token">A</div>
-  </div>
-  <div class="flex-row gap-lg">
-    <div id="queue2" class="panel operation-panel">等待队列：B, C</div>
-    <div id="resource2" class="panel metric-panel">
-      <div class="metric-value">处理 A</div>
-      <div class="metric-label">处理资源</div>
-    </div>
-  </div>
+<div class="video-stage structure-stage">
+  <svg class="path-layer">
+    <line id="model-edge-left" class="graph-edge"></line>
+    <line id="model-edge-right" class="graph-edge"></line>
+  </svg>
+  <div id="model-root" class="tree-node">8</div>
+  <div id="model-left" class="tree-node">3</div>
+  <div id="model-right" class="tree-node">10</div>
+  <div id="model-new" class="data-token">6</div>
+  <div id="model-rule" class="rule-bubble">当前比较：6 &lt; 8，所以转向左子树</div>
 </div>
 ```
 
 ### Timeline
 ```js
-Runtime.spawn(tl, "#scene-process-a #token-a", "#scene-process-a #queue2", T("process-a", 0.2), 0.5);
-Runtime.move(tl, "#scene-process-a #token-a", "#scene-process-a #resource2", T("process-a", 1.0), 1.2);
-Runtime.setText(tl, "#scene-process-a #resource2 .metric-value", "处理 A", T("process-a", 2.4), 0.5);
-Runtime.setText(tl, "#scene-process-a #queue2", "等待队列：B, C", T("process-a", 2.6), 0.5);
-Runtime.caption(tl, "#caption-process-a", T("process-a", 3.5), 5.0);
+Runtime.sceneIn(tl, "#scene-model", T("model", 0.0), 0.5);
+Runtime.popIn(tl, "#scene-model #model-root", T("model", 0.4), 0.5);
+Runtime.popIn(tl, "#scene-model #model-left", T("model", 1.0), 0.5);
+Runtime.popIn(tl, "#scene-model #model-right", T("model", 1.4), 0.5);
+Runtime.connect(tl, "#scene-model #model-edge-left", "#scene-model #model-root", "#scene-model #model-left", T("model", 2.0), 0.6);
+Runtime.connect(tl, "#scene-model #model-edge-right", "#scene-model #model-root", "#scene-model #model-right", T("model", 2.4), 0.6);
+Runtime.spawn(tl, "#scene-model #model-new", "#scene-model #model-root", T("model", 3.2), 0.5);
+Runtime.reveal(tl, "#scene-model #model-rule", T("model", 4.0), 0.6);
+Runtime.cameraFocus(tl, "#scene-model #camera-model", "#scene-model #model-root", 1.12, T("model", 5.0), 1.0);
+Runtime.caption(tl, "#caption-model", T("model", 5.4), 5.0);
+Runtime.sceneOut(tl, "#scene-model", T("model", 15.2), 0.5);
 ```

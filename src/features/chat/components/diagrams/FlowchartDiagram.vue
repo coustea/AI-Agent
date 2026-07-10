@@ -67,12 +67,14 @@ const props = defineProps<{
   payload: FlowchartPayload
 }>()
 
+// 流程图布局常量
 const NODE_W = 160
 const NODE_H = 64
 const GAP_X = 200
 const GAP_Y = 110
 const PADDING = 40
 
+// SVG 宽度（垂直/水平方向自适应）
 const svgWidth = computed(() => {
   const nodes = props.payload.nodes
   const isVertical = props.payload.direction === 'vertical'
@@ -82,6 +84,7 @@ const svgWidth = computed(() => {
   return Math.max(200, (nodes.length - 1) * GAP_X + NODE_W + PADDING * 2)
 })
 
+// SVG 高度
 const svgHeight = computed(() => {
   const nodes = props.payload.nodes
   const isVertical = props.payload.direction === 'vertical'
@@ -91,6 +94,7 @@ const svgHeight = computed(() => {
   return NODE_H + PADDING * 2
 })
 
+// 计算每个节点的 (x, y) 坐标
 const layoutNodes = computed(() => {
   const nodes = props.payload.nodes
   const isVertical = props.payload.direction === 'vertical'
@@ -101,12 +105,14 @@ const layoutNodes = computed(() => {
   }))
 })
 
+// 节点坐标快速查找表
 const nodeMap = computed(() => {
   const map = new Map<string, { x: number; y: number }>()
   layoutNodes.value.forEach((n) => map.set(n.id, { x: n.x, y: n.y }))
   return map
 })
 
+// 计算每条边的贝塞尔曲线路径和标签位置
 const layoutEdges = computed(() => {
   return props.payload.edges.map((edge, i) => {
     const src = nodeMap.value.get(edge.from)

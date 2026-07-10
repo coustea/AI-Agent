@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 下拉菜单子菜单触发器
 import { ChevronRightIcon } from '@lucide/vue';
 
 import type { DropdownMenuSubTriggerProps } from "reka-ui"

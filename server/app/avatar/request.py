@@ -7,6 +7,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+# 虚拟人生成请求数据模型
 class AvatarGenerateRequest(BaseModel):
     """虚拟人生成请求模型。"""
 

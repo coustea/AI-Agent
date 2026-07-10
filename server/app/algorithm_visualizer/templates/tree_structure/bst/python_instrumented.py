@@ -3,6 +3,7 @@ from visual_tracer import TreeTracer
 tracer = TreeTracer()
 
 
+# TreeNode 类定义
 class TreeNode:
     """BST 节点定义"""
     def __init__(self, val=0, left=None, right=None):
@@ -63,9 +64,11 @@ def delete(root, val):
     return root
 
 
+# 定义 build_tree_nodes 函数
 def build_tree_nodes(root):
     nodes = []
     counter = [0]
+# 定义 walk 函数
     def walk(node):
         if not node:
             return None
@@ -86,6 +89,7 @@ def build_tree_nodes(root):
 
 root = None
 values = [50, 30, 70, 20, 40, 60, 80, 10, 35, 65]
+# 循环遍历处理
 for v in values:
     root = insert(root, v)
 
@@ -95,6 +99,7 @@ tracer.init_tree(nodes, line=82)
 _node_id_map = {}
 _idx = [0]
 
+# 定义 build_id_map 函数
 def build_id_map(node):
     if not node:
         return
@@ -106,6 +111,7 @@ def build_id_map(node):
 
 build_id_map(root)
 
+# 定义 inorder_visit 函数
 def inorder_visit(node):
     if not node:
         return

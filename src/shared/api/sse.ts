@@ -1,6 +1,8 @@
 // src/api/sse.ts — 共享 SSE 流解析工具
 
-import { getAuthToken } from '@/shared/auth/token'
+import { getAuthToken } from '@/shared/auth/token' // 导入 Token 读取函数
+
+// SSE 模块：建立 Event Stream 连接，逐帧解析 token/done/error 事件
 
 /**
  * 将 SSE data 字段的原始文本解析为结构化数据。
@@ -8,11 +10,11 @@ import { getAuthToken } from '@/shared/auth/token'
  */
 function normalizeSsePayload(payload: string): unknown {
   const trimmed = payload.trim()
-  if (!trimmed) return ''
+  if (!trimmed) return '' // 空白内容返回空字符串
   try {
-    return JSON.parse(trimmed)
+    return JSON.parse(trimmed) // 尝试 JSON 解析
   } catch {
-    return payload
+    return payload // 解析失败返回原始文本
   }
 }
 
@@ -21,9 +23,9 @@ function normalizeSsePayload(payload: string): unknown {
  * 返回已完成帧列表和未完成的尾部（下次拼接用）。
  */
 function parseSseFrames(raw: string): { frames: string[]; rest: string } {
-  const normalized = raw.replace(/\r\n/g, '\n')
-  const parts = normalized.split('\n\n')
-  const rest = parts.pop() || ''
+  const normalized = raw.replace(/\r\n/g, '\n') // 统一换行符
+  const parts = normalized.split('\n\n') // 按双换行拆分帧
+  const rest = parts.pop() || '' // 最后一段可能不完整，留作缓冲
   return { frames: parts, rest }
 }
 
@@ -35,15 +37,15 @@ function parseSseFrames(raw: string): { frames: string[]; rest: string } {
  * - onError：流错误（HTTP 错误、SSE error 事件、网络异常）。
  */
 export interface SseStreamConfig {
-  url: string
-  method?: string
-  headers?: Record<string, string>
-  body?: BodyInit
-  signal?: AbortSignal
-  onChunk?: (text: string) => void
-  onEvent?: (eventName: string, data: unknown) => void
-  onDone: () => void
-  onError: (err: Error) => void
+  url: string // SSE 端点 URL
+  method?: string // HTTP 方法（默认 GET）
+  headers?: Record<string, string> // 额外请求头
+  body?: BodyInit // 请求体（POST 时使用）
+  signal?: AbortSignal // 中断信号
+  onChunk?: (text: string) => void // 文本增量回调（聊天 token 流）
+  onEvent?: (eventName: string, data: unknown) => void // 结构化事件回调
+  onDone: () => void // 流结束回调
+  onError: (err: Error) => void // 流错误回调
 }
 
 /**
@@ -63,56 +65,56 @@ export function createSseStream(config: SseStreamConfig): void {
     onError,
   } = config
 
-  const token = getAuthToken()
+  const token = getAuthToken() // 获取认证 Token
 
-  fetch(url, {
+  fetch(url, { // 发起 fetch 请求
     method,
     headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}), // 附加认证头
       ...headers,
     },
     body,
     signal,
   })
     .then(async (response) => {
-      if (!response.ok) {
+      if (!response.ok) { // HTTP 错误处理
         const text = await response.text()
         throw new Error(text || `HTTP ${response.status}`)
       }
 
-      const reader = response.body?.getReader()
+      const reader = response.body?.getReader() // 获取 ReadableStream 读取器
       if (!reader) throw new Error('ReadableStream not supported')
 
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let completed = false
+      const decoder = new TextDecoder() // 文本解码器
+      let buffer = '' // 未解析的缓冲区
+      let completed = false // 是否已收到 done 事件
 
-      while (true) {
+      while (true) { // 持续读取流数据
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) break // 流结束
 
-        buffer += decoder.decode(value, { stream: true })
-        const { frames, rest } = parseSseFrames(buffer)
-        buffer = rest
+        buffer += decoder.decode(value, { stream: true }) // 追加解码后的文本
+        const { frames, rest } = parseSseFrames(buffer) // 拆分完整帧
+        buffer = rest // 保留未完成部分
 
-        for (const frame of frames) {
-          if (!frame.trim()) continue
+        for (const frame of frames) { // 逐帧处理
+          if (!frame.trim()) continue // 跳过空帧
 
-          let eventName = 'message'
-          const dataLines: string[] = []
+          let eventName = 'message' // 默认事件名
+          const dataLines: string[] = [] // data 行收集器
 
-          frame.split('\n').forEach((line) => {
-            if (line.startsWith('event:')) {
+          frame.split('\n').forEach((line) => { // 解析帧内的 SSE 字段
+            if (line.startsWith('event:')) { // event: 行 → 事件名
               eventName = line.slice(6).trim() || 'message'
               return
             }
-            if (line.startsWith('data:')) {
+            if (line.startsWith('data:')) { // data: 行 → 数据内容
               dataLines.push(line.slice(5).replace(/^ /, ''))
             }
           })
 
-          const payloadRaw = dataLines.join('\n')
-          const payload = normalizeSsePayload(payloadRaw)
+          const payloadRaw = dataLines.join('\n') // 合并多行 data
+          const payload = normalizeSsePayload(payloadRaw) // 解析为结构化数据
 
           // token 事件 → 聊天流的文本增量
           if (eventName === 'token') {
@@ -120,7 +122,7 @@ export function createSseStream(config: SseStreamConfig): void {
               if (typeof payload === 'string') {
                 onChunk(payload)
               } else {
-                onChunk(JSON.stringify(payload))
+                onChunk(JSON.stringify(payload)) // 非字符串时序列化
               }
             }
             continue
@@ -151,11 +153,11 @@ export function createSseStream(config: SseStreamConfig): void {
 
       // ReadableStream 结束但没收到 done 事件
       if (!completed) {
-        onDone()
+        onDone() // 仍触发完成回调
       }
     })
     .catch((err) => {
-      if (err.name === 'AbortError') return
+      if (err.name === 'AbortError') return // 主动中断不视为错误
       onError(err)
     })
 }

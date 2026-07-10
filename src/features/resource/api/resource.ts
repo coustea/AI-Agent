@@ -7,7 +7,7 @@ import type {
   ResourceTaskStatus,
 } from '@/features/resource/model/resource'
 
-// PPT 模板选项：供用户在前端选择幻灯片模板时使用
+// PPT 模板选项结构：供用户在前端选择幻灯片模板时使用
 export interface PptTemplateOption {
   id: string // 模板唯一标识
   name: string // 模板展示名称

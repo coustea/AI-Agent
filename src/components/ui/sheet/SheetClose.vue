@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 侧边栏关闭按钮
 import type { DialogCloseProps } from "reka-ui"
 import { DialogClose } from "reka-ui"
 

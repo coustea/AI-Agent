@@ -25,6 +25,7 @@
 <script setup lang="ts">
 import type { SummaryPayload } from '@/features/chat/types/chat'
 
+// 总结卡片图：带编号的核心要点卡片
 defineProps<{
   payload: SummaryPayload
 }>()

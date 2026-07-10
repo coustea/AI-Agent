@@ -1,5 +1,6 @@
 import http from '@/shared/api/http'
 
+// 题库题目数据类型定义
 export interface QuizBankQuestion {
   id: string
   subject: string
@@ -16,6 +17,7 @@ export interface QuizBankQuestion {
   split?: string | null
 }
 
+// 题库列表响应数据类型（含筛选条件可选值）
 export interface QuizBankQuestionListResponse {
   items: QuizBankQuestion[]
   total: number
@@ -26,6 +28,7 @@ export interface QuizBankQuestionListResponse {
   types: string[]
 }
 
+// 题型映射常量
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   single_choice: '单选题',
   judge: '判断题',
@@ -33,6 +36,7 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   analysis: '分析题',
 }
 
+// AI 评阅请求参数
 export interface QuizReviewRequest {
   question_id: string
   question_type: string
@@ -42,6 +46,7 @@ export interface QuizReviewRequest {
   knowledge_points?: string[]
 }
 
+// AI 评阅结果
 export interface QuizReviewResult {
   score: number
   is_correct: boolean
@@ -49,6 +54,7 @@ export interface QuizReviewResult {
   improvement_hints: string[]
 }
 
+// 获取题库题目列表（支持分页和筛选）
 export async function fetchQuizBankQuestions(params?: {
   query?: string
   subject?: string
@@ -67,8 +73,10 @@ export async function fetchQuizBankQuestions(params?: {
     page: params?.page,
     page_size: params?.page_size,
   }
+  // 发起 API 请求获取题库数据
   const response = await http.get('/ai/quiz', { params: requestParams })
   const payload = response.data.data as Partial<QuizBankQuestionListResponse> & { items?: any[] }
+  // 标准化题目数据并提取筛选选项
   const items = (payload.items || []).map((item) => normalizeQuizQuestion(item))
   const subjects = payload.subjects?.length ? payload.subjects : unique(items.map((item) => item.subject))
   const difficulties = payload.difficulties?.length ? payload.difficulties : unique(items.map((item) => item.difficulty || '').filter(Boolean))
@@ -85,6 +93,7 @@ export async function fetchQuizBankQuestions(params?: {
   }
 }
 
+// 提交分析题给 AI 评阅
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
   const response = await http.post('/ai/quiz/review', request, { timeout: 60000 })
   return response.data as QuizReviewResult
@@ -111,11 +120,13 @@ export interface ObjectiveSubmitResponse {
   wrong_saved_count: number
 }
 
+// 提交客观题结果（用于保存答题记录和错题）
 export async function submitObjectiveResults(request: ObjectiveSubmitRequest): Promise<ObjectiveSubmitResponse> {
   const response = await http.post('/ai/quiz/submit', request)
   return response.data.data as ObjectiveSubmitResponse
 }
 
+// 标准化题目数据字段
 function normalizeQuizQuestion(item: Record<string, any>) {
   return {
     id: String(item.id || ''),
@@ -134,6 +145,7 @@ function normalizeQuizQuestion(item: Record<string, any>) {
   }
 }
 
+// 标准化选项字段
 function normalizeOptions(options: unknown): Record<string, string> | null {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return null
   return Object.fromEntries(
@@ -141,11 +153,13 @@ function normalizeOptions(options: unknown): Record<string, string> | null {
   )
 }
 
+// 将后端题型枚举转为中文标签
 export function toQuestionTypeLabel(value: unknown): string {
   const key = String(value || '').trim()
   return QUESTION_TYPE_LABELS[key] || key
 }
 
+// 数组去重工具函数
 function unique(items: string[]) {
   return Array.from(new Set(items.filter(Boolean)))
 }

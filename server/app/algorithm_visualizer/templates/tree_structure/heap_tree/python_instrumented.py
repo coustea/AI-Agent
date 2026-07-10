@@ -3,11 +3,14 @@ from visual_tracer import TreeTracer
 tracer = TreeTracer()
 
 
+# 定义 build_heap_nodes 函数
 def build_heap_nodes(arr):
     n = len(arr)
     nodes = []
+# 循环遍历处理
     for i in range(n):
         nodes.append({"id": f"node-{i}", "label": str(arr[i]), "children": []})
+# 循环遍历处理
     for i in range(n):
         left = 2 * i + 1
         right = 2 * i + 2
@@ -24,6 +27,7 @@ heap = list(data)
 nodes = build_heap_nodes(heap)
 tracer.init_tree(nodes, line=62)
 
+# 定义 max_heapify 函数
 def max_heapify(arr, n, i):
     largest = i
     left = 2 * i + 1
@@ -35,15 +39,18 @@ def max_heapify(arr, n, i):
         largest = right
     if largest != i:
         arr[i], arr[largest] = arr[largest], arr[i]
+# 循环遍历处理
         for idx in range(n):
             nodes[idx]["label"] = str(arr[idx])
         tracer.visit_node(f"node-{largest}", line=16)
         max_heapify(arr, n, largest)
 
+# 定义 build_max_heap 函数
 def build_max_heap(arr):
     n = len(arr)
     if n <= 1:
         return
+# 循环遍历处理
     for i in range(n // 2 - 1, -1, -1):
         max_heapify(arr, n, i)
 

@@ -29,6 +29,7 @@ def solve_n_queens(n):
     diag1 = set()
     diag2 = set()
 
+# 定义 backtrack 函数
     def backtrack(row):
         if row == n:
             res.append(["".join(r) for r in board])

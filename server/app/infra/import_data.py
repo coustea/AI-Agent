@@ -5,6 +5,7 @@
 数据目录: app/infra/data/
 """
 
+# 本模块负责在数据库为空时导入种子数据：408 题库与学校信息
 import asyncio
 import json
 from pathlib import Path
@@ -33,6 +34,7 @@ TYPE_MAP = {
 }
 
 
+# 导入 408 题库：已有数据则跳过，否则读取 JSON 文件导入
 async def import_408_quiz() -> int:
     """导入 408 题库。有数据跳过，无数据导入。
 
@@ -62,6 +64,7 @@ async def import_408_quiz() -> int:
         return _load_quiz_files(session, files)
 
 
+# 遍历题库文件逐个导入，单文件失败不影响整体
 def _load_quiz_files(session, files) -> int:
     """批量导入题库文件。"""
     total = 0
@@ -77,6 +80,7 @@ def _load_quiz_files(session, files) -> int:
     return total
 
 
+# 解析单个题库 JSON 文件并构造 QuizQuestion 记录
 def _load_quiz_file(session, f: Path, subj: str) -> int:
     """导入单个题库文件。"""
     data = json.loads(f.read_text(encoding="utf-8"))
@@ -109,6 +113,7 @@ def _load_quiz_file(session, f: Path, subj: str) -> int:
 SCHOOL_XLSX = _DATA_DIR / "school.xlsx"
 
 
+# 导入学校数据：已有数据则跳过，否则读取 Excel 导入
 async def import_schools() -> int:
     """导入学校。有数据跳过，无数据导入。
 
@@ -132,6 +137,7 @@ async def import_schools() -> int:
         return _load_xlsx(session)
 
 
+# 从 Excel 工作簿解析表头与行数据，构造 School 记录
 def _load_xlsx(session) -> int:
     """从 Excel 加载学校数据。"""
     wb = load_workbook(SCHOOL_XLSX, data_only=True)

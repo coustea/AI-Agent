@@ -74,6 +74,7 @@ class QuizAgent(BaseResourceAgent):
         emphasis = config.get("emphasis", "foundations")
         logger.info("Agent[%s] 开始生成: learning_need=%s question_count=%d", self.agent_id, title_prefix, question_count)
         started = time.perf_counter()
+        # 先生成确定性蓝图（题号/题型/难度），约束模型输出
         blueprint = build_quiz_blueprint(
             question_count=question_count,
             question_types=config.get("question_types"),
@@ -96,6 +97,7 @@ class QuizAgent(BaseResourceAgent):
             "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
             self.agent_id, search_query, len(search_report.sources), search_elapsed,
         )
+        # 将搜索参考前置拼入提示词
         if search_text:
             input_text = f"## 搜索到的出题参考背景\n{search_text}\n\n" + input_text
 
@@ -130,6 +132,7 @@ class QuizAgent(BaseResourceAgent):
             "Agent[%s] LLM 完成: questions=%d elapsed_ms=%d",
             self.agent_id, len(questions), llm_elapsed,
         )
+        # 统计各难度题目数量
         difficulty_dist: dict[str, int] = {}
         for question in questions:
             difficulty_dist[question.difficulty] = (
@@ -166,6 +169,7 @@ class QuizAgent(BaseResourceAgent):
     ) -> QuizPayload:
         """使用结构化输出生成题库；语义不匹配时仅做一次定向纠正。"""
         try:
+            # 首次尝试：结构化输出并校验
             payload = await self.llm.ainvoke_json(
                 QuizPayload,
                 prompt,
@@ -174,6 +178,7 @@ class QuizAgent(BaseResourceAgent):
             validate_quiz_payload(payload, blueprint)
             return payload
         except Exception as first_error:
+            # 首次失败：将校验错误回灌模型做定向纠正
             logger.warning(
                 "Agent[quiz] 首次结构化输出不符合题库契约，正在定向纠正: %s",
                 first_error,
