@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.config import KB_AUTO_BUILD, KB_ENABLED, KB_EMBED_MODEL, WORKPLACE_DIR
+from app.config import KB_ENABLED, KB_EMBED_MODEL, WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging, get_logger
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     # 执行数据库连接检查，确保连接可用
     await check_all()
 
-    # 知识库索引检查 + 自动构建
+    # 知识库索引状态检查（不自动构建，构建请执行: python -m app.rag）
     log = get_logger("main")
     if not KB_ENABLED:
         log.info("[KB] 知识库已在配置中禁用")
@@ -57,73 +57,17 @@ async def lifespan(app: FastAPI):
             health = check_index_health()
             if health.ready:
                 log.info(
-                    "[KB] 索引就绪: %d 个分块, 嵌入模型=%s",
+                    "[KB] 知识检索可用: %d 个分块, 嵌入模型=%s",
                     health.chunk_count,
                     KB_EMBED_MODEL,
                 )
             else:
-                needs_rebuild = KB_AUTO_BUILD
-                # 嵌入模型变更 → 必须重建（即使 auto_build=False 也提示）
-                if "embedding_model_mismatch" in health.reason:
-                    log.warning(
-                        "[KB] 嵌入模型已变更 (配置=%s), 索引需要重建 (原因: %s)",
-                        KB_EMBED_MODEL,
-                        health.reason,
-                    )
-                    needs_rebuild = True
-                else:
-                    log.info(
-                        "[KB] 索引未就绪 (原因: %s)%s",
-                        health.reason,
-                        ", 正在后台自动构建..." if needs_rebuild else "",
-                    )
-
-                if needs_rebuild:
-                    import threading
-                    from app.rag.indexing.build import build_index
-
-                    # 后台线程：检查嵌入模型可用后构建知识库索引并重置检索缓存
-                    def _bg_build() -> None:
-                        log.info("[KB] 自动构建开始 (嵌入模型=%s)...", KB_EMBED_MODEL)
-
-                        # 先检查嵌入模型是否可用，不可用则跳过构建
-                        from app.rag.embeddings import embed_query
-
-                        test_embedding = embed_query("test")
-                        if test_embedding is None:
-                            log.error(
-                                "[KB] 自动构建已跳过: 嵌入模型不可用。"
-                                "请检查嵌入服务配置 (knowledge.embed_base_url)。"
-                            )
-                            return
-
-                        try:
-                            build_index()
-                            # 重置 BM25 懒加载单例，使后续检索能加载新索引
-                            from app.rag.bm25 import reset_bm25_index
-                            reset_bm25_index()
-                            # 验证构建结果
-                            post_health = check_index_health()
-                            if post_health.ready:
-                                log.info(
-                                    "[KB] 自动构建成功: %d 个分块, 嵌入模型=%s",
-                                    post_health.chunk_count,
-                                    KB_EMBED_MODEL,
-                                )
-                            else:
-                                log.error(
-                                    "[KB] 自动构建完成但健康检查失败: %s",
-                                    post_health.reason,
-                                )
-                        except Exception as exc:
-                            log.error("[KB] 自动构建失败: %s", exc, exc_info=True)
-
-                    t = threading.Thread(target=_bg_build, daemon=True)
-                    t.start()
-                else:
-                    log.warning(
-                        "[KB] 索引未就绪且自动构建已禁用, 知识检索不可用"
-                    )
+                log.warning(
+                    "[KB] 知识检索不可用 (原因: %s, 嵌入模型=%s)。"
+                    "请执行 python -m app.rag 构建索引",
+                    health.reason,
+                    KB_EMBED_MODEL,
+                )
         except Exception as exc:
             log.error("[KB] 索引检查失败: %s", exc, exc_info=True)
 
@@ -175,4 +119,30 @@ def create_app() -> FastAPI:
 # 创建 FastAPI 应用实例（供 uvicorn / gunicorn 等 ASGI 服务器加载）
 # 模块级应用实例，作为 ASGI 入口被服务器加载
 app = create_app()
+
+
+def main() -> None:
+    """命令行入口：启动开发服务器。
+
+    使用方式：
+        python -m app.main
+        python app/main.py
+
+    生产环境请使用 uvicorn app.main:app --host 0.0.0.0 --port 9999
+    """
+    import uvicorn
+
+    from app.config import HOST, PORT
+
+    uvicorn.run(
+        "app.main:app",
+        host=HOST,
+        port=PORT,
+        reload=True,
+        reload_dirs=["app"],
+    )
+
+
+if __name__ == "__main__":
+    main()
 

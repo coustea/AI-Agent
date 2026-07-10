@@ -19,41 +19,40 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-# 路径片段 → 课程名映射（覆盖编号目录格式如 "01-操作系统" 和旧格式 "操作系统"）
+# 路径片段 → 课程名映射（新版扁平化目录结构）
+# 新结构：source/课程名/章节名/文件.md（无编号前缀）
 _COURSE_DIR_MAP: dict[str, str] = {
+    # 计算机基础课程
     "操作系统": "操作系统",
     "计算机网络": "计算机网络",
     "数据结构与算法": "数据结构与算法",
-    "计算机组成": "计算机组成原理",
-    "程序设计基础": "程序设计基础",
+    "计算机组成原理": "计算机组成原理",
+    "数据库系统": "数据库系统",
+    # 编程语言
     "Java": "Java",
-    "C-CPP": "C/C++",
     "Python": "Python",
-    "机器学习入门": "机器学习",
+    "C-CPP": "C/C++",
+    # AI 相关
+    "机器学习": "机器学习",
     "深度学习": "深度学习",
     "AI入门": "AI入门",
     "生成式AI": "生成式AI",
     "AI-Agents": "AI-Agents",
     "AI工程": "AI工程",
+    # Web 开发
     "前端全栈": "前端全栈",
     "Web安全": "Web安全",
-    "二进制安全": "二进制安全",
-    "安全基础": "安全基础",
-    "MySQL": "MySQL",
-    "Redis": "Redis",
-    "数据库系统": "数据库系统",
+    # 系统与架构
     "系统架构": "系统架构",
     "分布式系统": "分布式系统",
+    # 数学基础
     "数学": "数学",
-    "理论CS": "理论CS",
     "高等数学": "高等数学",
     "统计学": "统计学",
     "概率论与数理统计": "概率论与数理统计",
-    "软件工程": "软件工程",
-    "开发工具": "开发工具",
+    # 其他
     "面试": "面试",
-    "书单与杂项": "通识",
-    "其他": "通识",
+    "通识": "通识",
 }
 
 # 标题关键词 → 课程名映射（回退推断）
@@ -112,17 +111,15 @@ def infer_title(source: str) -> str:
 def infer_course(source: str, title: str = "") -> str:
     """从相对路径推断课程名。
 
-    优先使用路径中的课程分类目录片段（如 "01-操作系统" → "操作系统"），
-    通过 _COURSE_DIR_MAP 匹配路径中每个片段的最后一段（去掉编号前缀），
-    其次从标题关键词推断。
+    新版扁平化目录结构：source/课程名/章节名/文件.md
+    直接从第一级目录名匹配课程。
     """
     parts = Path(source).parts
-    # 从深到浅优先细粒度匹配课程目录
-    for part in reversed(parts):
-        # 去掉编号前缀（如 "01-操作系统" → "操作系统"）
-        segment = part.split("-", 1)[-1] if "-" in part and part[0].isdigit() else part
-        if segment in _COURSE_DIR_MAP:
-            return _COURSE_DIR_MAP[segment]
+    # 新结构：第一级目录即为课程名
+    if parts:
+        first_dir = parts[0]
+        if first_dir in _COURSE_DIR_MAP:
+            return _COURSE_DIR_MAP[first_dir]
 
     # 回退：用标题关键词匹配课程
     text = title.lower()

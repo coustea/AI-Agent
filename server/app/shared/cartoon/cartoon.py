@@ -4,9 +4,9 @@ The LLM outputs a constrained Markdown DSL. The backend parses and validates
 the DSL, wraps every scene into a shared HTML video template, copies runtime
 assets, and lets HyperFrames render the result.
 
-The module is intentionally knowledge-agnostic. It supports operating systems,
-data structures, computer networks, databases, compilers, computer organization,
-and other computer-theory concepts through common animation objects and actions.
+This module keeps the existing cartoon package naming for compatibility with
+the current route/module structure, but its content goal is computer-theory
+animation video generation rather than comic-style video generation.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,90 @@ class CartoonGenerationResult:
     scene_count: int
 
 
+@dataclass(frozen=True)
+class ParsedSceneHTML:
+    tags: list[str]
+    ids: list[str]
+    classes: set[str]
+    visible_text: str
+    event_attrs: list[str]
+    remote_refs: list[str]
+    javascript_refs: list[str]
+
+
+@dataclass(frozen=True)
+class ParsedTimeline:
+    statements: list[str]
+    runtime_methods: list[str]
+    selector_ids: set[str]
+    time_refs: list[tuple[str, float]]
+    forbidden_hits: list[str]
+
+
+class SceneHTMLParser(HTMLParser):
+    """Parse LLM generated scene HTML as a fragment.
+
+    The validator must separate HTML structure from visible text. Never scan
+    raw HTML as source code, because normal attributes such as class="tree-node"
+    are not user-visible content and must not be treated as code.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tags: list[str] = []
+        self.ids: list[str] = []
+        self.classes: set[str] = set()
+        self.visible_text_parts: list[str] = []
+        self.event_attrs: list[str] = []
+        self.remote_refs: list[str] = []
+        self.javascript_refs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower().strip()
+        if tag:
+            self.tags.append(tag)
+
+        for raw_name, raw_value in attrs:
+            name = raw_name.lower().strip()
+            value = raw_value or ""
+
+            if name == "id" and value:
+                self.ids.append(value)
+
+            if name == "class" and value:
+                self.classes.update(item.strip() for item in value.split() if item.strip())
+
+            if name.startswith("on"):
+                self.event_attrs.append(name)
+
+            if name in {"src", "href", "xlink:href"}:
+                if re.search(r"https?://", value, re.IGNORECASE):
+                    self.remote_refs.append(value)
+                if re.search(r"javascript\s*:", value, re.IGNORECASE):
+                    self.javascript_refs.append(value)
+
+            if re.search(r"javascript\s*:", value, re.IGNORECASE):
+                self.javascript_refs.append(value)
+
+    def handle_data(self, data: str) -> None:
+        text = data.strip()
+        if text:
+            self.visible_text_parts.append(text)
+
+    def result(self) -> ParsedSceneHTML:
+        visible_text = html_mod.unescape(" ".join(self.visible_text_parts))
+        visible_text = re.sub(r"\s+", " ", visible_text).strip()
+        return ParsedSceneHTML(
+            tags=self.tags,
+            ids=self.ids,
+            classes=self.classes,
+            visible_text=visible_text,
+            event_attrs=self.event_attrs,
+            remote_refs=self.remote_refs,
+            javascript_refs=self.javascript_refs,
+        )
+
+
 _ALLOWED_SCENE_TYPES = {
     "problem",
     "model",
@@ -117,15 +202,33 @@ _BANNED_HTML_TAGS = {
     "code",
 }
 
-_BANNED_CODE_PATTERNS = {
-    r"\bcode-board\b": "code-board",
-    r"\bsource-code\b": "source-code",
-    r"\b(active-line|line-number)\b": "代码行样式",
-    r"<\s*pre[\s>/]": "<pre>",
-    r"<\s*code[\s>/]": "<code>",
-    r"\b(def|class|function|return|import|include|public\s+class|System\.out|console\.log)\b": "源码关键词",
-    r"\b(for|while|if|else)\s*\(": "代码控制结构",
-    r"[{}]\s*(//|/\*)": "源码片段",
+_BANNED_CODE_CLASSES = {
+    "code-board",
+    "source-code",
+    "code-editor",
+    "code-line",
+    "line-number",
+    "active-line",
+    "hljs",
+    "language-python",
+    "language-java",
+    "language-cpp",
+    "language-c",
+    "language-javascript",
+    "language-js",
+}
+
+_BANNED_CODE_TEXT_PATTERNS = {
+    r"\bdef\s+[A-Za-z_]\w*\s*\(": "Python 函数定义",
+    r"\bfunction\s+[A-Za-z_]\w*\s*\(": "JavaScript 函数定义",
+    r"\breturn\s+[^，。；;\n]{1,80}": "return 语句",
+    r"\bconsole\.log\s*\(": "console.log",
+    r"\bSystem\.out\.println\s*\(": "System.out.println",
+    r"#\s*include\s*<[^>]+>": "#include",
+    r"\bpublic\s+class\s+[A-Za-z_]\w*": "Java 类定义",
+    r"\bimport\s+[A-Za-z_][\w.]*": "import 语句",
+    r"\b(for|while|if|else)\s*\([^)]*\)\s*\{": "代码控制结构",
+    r"[{}]\s*(//|/\*)": "源码注释片段",
 }
 
 _OBJECT_CLASSES = {
@@ -203,9 +306,39 @@ _STATE_METHODS = {
     "replaceFrame",
 }
 
-_CAMERA_METHODS = {"cameraZoom", "cameraPan", "cameraFocus", "cameraReset", "sceneIn", "sceneOut"}
+_CAMERA_METHODS = {
+    "cameraZoom",
+    "cameraPan",
+    "cameraFocus",
+    "cameraReset",
+    "sceneIn",
+    "sceneOut",
+}
 
-_CAUSAL_WORDS = ("因为", "所以", "因此", "当", "如果", "表示", "触发", "导致", "此时", "意味着")
+_TRACE_MOTION_METHODS = {
+    "move",
+    "moveTo",
+    "transfer",
+    "drawPath",
+    "connect",
+    "sendPacket",
+    "returnAck",
+    "insertNode",
+    "replaceFrame",
+}
+
+_TIMELINE_FORBIDDEN_PATTERNS = {
+    r"\bconst\s+tl\b": "const tl",
+    r"window\.__timelines": "window.__timelines",
+    r"\bgsap\.": "gsap",
+    r"\bdocument\.": "document",
+    r"\bMath\.random\s*\(": "Math.random",
+    r"\bDate\.now\s*\(": "Date.now",
+    r"\bsetTimeout\s*\(": "setTimeout",
+    r"https?://": "远程链接",
+    r"</script": "</script>",
+    r"```": "Markdown 代码围栏",
+}
 
 
 def _safe_scene_id(raw: str) -> str:
@@ -238,41 +371,6 @@ def _clean_llm_output(text: str) -> str:
     return text
 
 
-def _runtime_calls(code: str) -> list[str]:
-    return re.findall(r"Runtime\.(\w+)\s*\(", code)
-
-
-def _strip_js_comments(code: str) -> str:
-    code = re.sub(r"/\*[\s\S]*?\*/", "", code)
-    code = re.sub(r"^\s*//.*$", "", code, flags=re.MULTILINE)
-    return code
-
-
-def _split_js_statements(code: str) -> list[str]:
-    cleaned = _strip_js_comments(code)
-    return [item.strip() for item in cleaned.split(";") if item.strip()]
-
-
-def _extract_ids(html: str) -> list[str]:
-    return re.findall(r'\bid\s*=\s*"([^"]+)"', html)
-
-
-def _extract_classes(html: str) -> set[str]:
-    class_values = re.findall(r'\bclass\s*=\s*"([^"]+)"', html)
-    classes: set[str] = set()
-    for value in class_values:
-        classes.update(token.strip() for token in value.split() if token.strip())
-    return classes
-
-
-def _extract_selector_ids(timeline: str) -> set[str]:
-    ids: set[str] = set()
-    for selector in re.findall(r'["\']([^"\']*#[^"\']+)["\']', timeline):
-        for item in re.findall(r"#([A-Za-z0-9_-]+)", selector):
-            ids.add(item)
-    return ids
-
-
 def _read_directive(block: str, name: str, default: str | None = None) -> str | None:
     match = re.search(rf"^@{re.escape(name)}:\s*(.+?)\s*$", block, re.MULTILINE)
     if match:
@@ -296,6 +394,256 @@ def _read_fenced_section(block: str, title: str, lang: str) -> str:
     return match.group("body").strip() if match else ""
 
 
+def _strip_js_comments(code: str) -> str:
+    code = re.sub(r"/\*[\s\S]*?\*/", "", code)
+    code = re.sub(r"^\s*//.*$", "", code, flags=re.MULTILINE)
+    return code
+
+
+def _split_js_statements(code: str) -> list[str]:
+    cleaned = _strip_js_comments(code)
+    statements: list[str] = []
+    buffer: list[str] = []
+    quote: str | None = None
+    escape = False
+    depth = 0
+
+    for char in cleaned:
+        buffer.append(char)
+
+        if escape:
+            escape = False
+            continue
+
+        if char == "\\":
+            escape = True
+            continue
+
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote = char
+            continue
+
+        if char in "([{":
+            depth += 1
+            continue
+
+        if char in ")]}":
+            depth = max(0, depth - 1)
+            continue
+
+        if char == ";" and depth == 0:
+            statement = "".join(buffer).strip()
+            if statement:
+                statements.append(statement[:-1].strip())
+            buffer = []
+
+    tail = "".join(buffer).strip()
+    if tail:
+        statements.append(tail)
+
+    return [item for item in statements if item]
+
+
+def _runtime_calls(code: str) -> list[str]:
+    return re.findall(r"\bRuntime\.(\w+)\s*\(", code)
+
+
+def _extract_selector_ids_from_timeline(timeline: str) -> set[str]:
+    ids: set[str] = set()
+    for selector in re.findall(r'["\']([^"\']*#[^"\']+)["\']', timeline):
+        for item in re.findall(r"#([A-Za-z0-9_-]+)", selector):
+            ids.add(item)
+    return ids
+
+
+def _extract_t_refs(timeline: str) -> list[tuple[str, float]]:
+    refs: list[tuple[str, float]] = []
+    for scene_id, local_time_text in re.findall(
+        r'T\(\s*["\']([^"\']+)["\']\s*,\s*([\d.]+)\s*\)',
+        timeline,
+    ):
+        try:
+            refs.append((scene_id, float(local_time_text)))
+        except ValueError:
+            refs.append((scene_id, -1.0))
+    return refs
+
+
+def _parse_scene_html(scene_html: str) -> ParsedSceneHTML:
+    parser = SceneHTMLParser()
+    try:
+        parser.feed(scene_html)
+        parser.close()
+    except Exception:
+        logger.warning("Scene HTML parser failed; using partial parse result", exc_info=True)
+    return parser.result()
+
+
+def _parse_timeline(timeline: str) -> ParsedTimeline:
+    statements = _split_js_statements(timeline)
+    runtime_methods = _runtime_calls(timeline)
+    selector_ids = _extract_selector_ids_from_timeline(timeline)
+    time_refs = _extract_t_refs(timeline)
+
+    forbidden_hits: list[str] = []
+    for pattern, label in _TIMELINE_FORBIDDEN_PATTERNS.items():
+        if re.search(pattern, timeline, re.IGNORECASE):
+            forbidden_hits.append(label)
+
+    return ParsedTimeline(
+        statements=statements,
+        runtime_methods=runtime_methods,
+        selector_ids=selector_ids,
+        time_refs=time_refs,
+        forbidden_hits=forbidden_hits,
+    )
+
+
+def _detect_code_tendency(parsed_html: ParsedSceneHTML, narration: str) -> list[str]:
+    """Detect actual source-code presentation without scanning raw HTML.
+
+    The detector checks only explicit code component class names and visible
+    text. It intentionally ignores raw HTML attributes such as class="tree-node",
+    so normal HTML will not be confused with source code.
+    """
+
+    problems: list[str] = []
+
+    code_classes = sorted(parsed_html.classes & _BANNED_CODE_CLASSES)
+    for class_name in code_classes:
+        problems.append(f"代码展示类名: {class_name}")
+
+    text_for_check = f"{parsed_html.visible_text}\n{narration}"
+    for pattern, label in _BANNED_CODE_TEXT_PATTERNS.items():
+        if re.search(pattern, text_for_check, re.IGNORECASE):
+            problems.append(label)
+
+    return problems
+
+
+def _validate_narration(scene: CartoonScene) -> list[str]:
+    problems: list[str] = []
+    narration = scene.narration.strip()
+
+    if not narration:
+        problems.append(f"Scene '{scene.scene_id}' 缺少 Narration")
+        return problems
+
+    if len(narration) < 18:
+        problems.append(f"Scene '{scene.scene_id}' Narration 太短，必须解释机制")
+        return problems
+
+    if scene.scene_type in {"mechanism", "trace", "state"} and len(narration) < 28:
+        problems.append(f"Scene '{scene.scene_id}' Narration 过短，核心过程场景必须解释机制原因")
+
+    return problems
+
+
+def _validate_scene_html(scene: CartoonScene, parsed_html: ParsedSceneHTML) -> list[str]:
+    problems: list[str] = []
+
+    if not scene.html.strip():
+        problems.append(f"Scene '{scene.scene_id}' 缺少 HTML")
+        return problems
+
+    for tag in parsed_html.tags:
+        if tag in _BANNED_HTML_TAGS:
+            problems.append(f"Scene '{scene.scene_id}' HTML 包含禁止标签 <{tag}>")
+
+    for attr in parsed_html.event_attrs:
+        problems.append(f"Scene '{scene.scene_id}' HTML 包含事件属性 {attr}")
+
+    if parsed_html.remote_refs:
+        problems.append(f"Scene '{scene.scene_id}' HTML 包含远程资源链接")
+
+    if parsed_html.javascript_refs:
+        problems.append(f"Scene '{scene.scene_id}' HTML 包含 javascript:")
+
+    if "```" in scene.html:
+        problems.append(f"Scene '{scene.scene_id}' HTML 包含 Markdown 代码围栏残留")
+
+    for label in _detect_code_tendency(parsed_html, scene.narration):
+        problems.append(f"Scene '{scene.scene_id}' 包含代码讲解倾向: {label}")
+
+    for item_id in parsed_html.ids:
+        expected_prefix = f"{scene.scene_id}-"
+        if not item_id.startswith(expected_prefix):
+            problems.append(f"Scene '{scene.scene_id}' 内部 id '{item_id}' 未使用 scene 前缀")
+
+    if not (parsed_html.classes & _OBJECT_CLASSES):
+        problems.append(f"Scene '{scene.scene_id}' 缺少理论动画对象类")
+
+    return problems
+
+
+def _validate_scene_timeline(
+    scene: CartoonScene,
+    parsed_html: ParsedSceneHTML,
+    parsed_timeline: ParsedTimeline,
+    scene_ids: set[str],
+    scenes_by_id: dict[str, CartoonScene],
+) -> list[str]:
+    problems: list[str] = []
+
+    if not scene.timeline.strip():
+        problems.append(f"Scene '{scene.scene_id}' 缺少 Timeline")
+        return problems
+
+    for label in parsed_timeline.forbidden_hits:
+        problems.append(f"Scene '{scene.scene_id}' Timeline 包含禁止内容: {label}")
+
+    for statement in parsed_timeline.statements:
+        if not re.match(r"^Runtime\.\w+\s*\(", statement, re.DOTALL):
+            problems.append(f"Scene '{scene.scene_id}' Timeline 包含非 Runtime 调用: {statement[:80]}")
+        if "\n" in statement:
+            problems.append(f"Scene '{scene.scene_id}' Runtime 调用必须单行书写")
+
+    calls = parsed_timeline.runtime_methods
+
+    if len(calls) < 4:
+        problems.append(f"Scene '{scene.scene_id}' Runtime 调用数量不足，每个 scene 至少 4 个")
+
+    call_set = set(calls)
+
+    if scene.scene_type in {"mechanism", "trace", "state"} and not (call_set & _DYNAMIC_METHODS):
+        problems.append(f"Scene '{scene.scene_id}' 必须包含动态机制动作")
+
+    if scene.scene_type == "state" and not (call_set & _STATE_METHODS):
+        problems.append(f"Scene '{scene.scene_id}' 是 state 场景，必须包含状态同步动作")
+
+    if scene.scene_type == "trace" and not (call_set & _TRACE_MOTION_METHODS):
+        problems.append(f"Scene '{scene.scene_id}' 是 trace 场景，必须有对象移动、路径绘制或连线变化")
+
+    valid_ids = set(parsed_html.ids) | {
+        f"scene-{scene.scene_id}",
+        f"caption-{scene.scene_id}",
+        f"camera-{scene.scene_id}",
+    }
+
+    for used_id in sorted(parsed_timeline.selector_ids):
+        if used_id not in valid_ids:
+            problems.append(f"Scene '{scene.scene_id}' Timeline selector 引用了不存在的 id: #{used_id}")
+
+    for ref_id, local_time in parsed_timeline.time_refs:
+        if ref_id not in scene_ids:
+            problems.append(f"Scene '{scene.scene_id}' T(\"{ref_id}\") 引用了不存在的 scene id")
+            continue
+
+        ref_scene = scenes_by_id.get(ref_id)
+        if ref_scene and local_time > ref_scene.duration + 0.01:
+            problems.append(f"Scene '{scene.scene_id}' T(\"{ref_id}\", {local_time}) 超过 scene duration")
+
+        if local_time < 0:
+            problems.append(f"Scene '{scene.scene_id}' T(\"{ref_id}\") 使用了非法时间")
+
+    return problems
+
+
 def parse_markdown(markdown_text: str) -> CartoonVideoDocument:
     text = markdown_text.strip()
     if not text:
@@ -309,7 +657,11 @@ def parse_markdown(markdown_text: str) -> CartoonVideoDocument:
     duration_raw = _read_directive(text, "duration")
     if not duration_raw:
         raise ValueError("缺少全局 @duration")
-    duration = float(duration_raw)
+
+    try:
+        duration = float(duration_raw)
+    except ValueError as exc:
+        raise ValueError(f"全局 @duration 不是有效数字: {duration_raw}") from exc
 
     course = _read_directive(text, "course", "计算机理论") or "计算机理论"
     topic = _read_directive(text, "topic", title) or title
@@ -343,13 +695,19 @@ def parse_markdown(markdown_text: str) -> CartoonVideoDocument:
         if not scene_type:
             raise ValueError(f"Scene '{scene_title}' 缺少 @type")
 
+        try:
+            start = float(raw_start)
+            scene_duration = float(raw_duration)
+        except ValueError as exc:
+            raise ValueError(f"Scene '{scene_title}' 的 @start 或 @duration 不是有效数字") from exc
+
         scenes.append(
             CartoonScene(
                 index=len(scenes),
                 title=scene_title,
                 scene_id=_safe_scene_id(raw_scene_id),
-                start=float(raw_start),
-                duration=float(raw_duration),
+                start=start,
+                duration=scene_duration,
                 scene_type=scene_type.strip(),
                 layout=(layout or "mechanism").strip(),
                 focus=focus.strip(),
@@ -376,10 +734,12 @@ def validate_markdown(doc: CartoonVideoDocument, raw_markdown: str) -> AuditResu
 
     if not doc.title.strip():
         problems.append("标题不能为空")
+
     if doc.duration < 60:
         problems.append(f"总时长 {doc.duration} 秒不足，至少需要 60 秒")
-    if doc.duration > 420:
-        problems.append(f"总时长 {doc.duration} 秒过长，最多 420 秒")
+
+    if doc.duration > 600:
+        problems.append(f"总时长 {doc.duration} 秒过长，最多 600 秒")
 
     if len(doc.scenes) < 5:
         problems.append(f"场景数量 {len(doc.scenes)} 不足，至少需要 5 个")
@@ -395,49 +755,59 @@ def validate_markdown(doc: CartoonVideoDocument, raw_markdown: str) -> AuditResu
         problems.append("缺少 recap 场景，理论视频必须有结构化总结")
 
     scene_ids = [scene.scene_id for scene in doc.scenes]
-    duplicates = [sid for sid in set(scene_ids) if scene_ids.count(sid) > 1]
+    scene_id_set = set(scene_ids)
+    scenes_by_id = {scene.scene_id: scene for scene in doc.scenes}
+    duplicates = [sid for sid in scene_id_set if scene_ids.count(sid) > 1]
     if duplicates:
         problems.append(f"场景 id 重复: {', '.join(duplicates)}")
 
+    parsed_html_by_scene: dict[str, ParsedSceneHTML] = {}
+    parsed_timeline_by_scene: dict[str, ParsedTimeline] = {}
+
     for scene in doc.scenes:
+        parsed_html_by_scene[scene.scene_id] = _parse_scene_html(scene.html)
+        parsed_timeline_by_scene[scene.scene_id] = _parse_timeline(scene.timeline)
+
         if scene.scene_type not in _ALLOWED_SCENE_TYPES:
             problems.append(f"Scene '{scene.scene_id}' type 无效: {scene.scene_type}")
+
         if scene.layout not in _ALLOWED_LAYOUTS:
             problems.append(f"Scene '{scene.scene_id}' layout 无效: {scene.layout}")
+
         if not re.fullmatch(r"[a-z][a-z0-9_-]{0,47}", scene.scene_id):
             problems.append(f"Scene id '{scene.scene_id}' 不合法")
+
         if scene.start < 0:
             problems.append(f"Scene '{scene.scene_id}' 的 start {scene.start} < 0")
+
         if scene.duration < 8:
             problems.append(f"Scene '{scene.scene_id}' duration 太短，至少 8 秒")
-        if not scene.narration.strip():
-            problems.append(f"Scene '{scene.scene_id}' 缺少 Narration")
-        elif len(scene.narration.strip()) < 18:
-            problems.append(f"Scene '{scene.scene_id}' Narration 太短，必须解释机制")
-        elif not any(word in scene.narration for word in _CAUSAL_WORDS):
-            problems.append(f"Scene '{scene.scene_id}' Narration 缺少因果解释词")
-        if not scene.html.strip():
-            problems.append(f"Scene '{scene.scene_id}' 缺少 HTML")
-        if not scene.timeline.strip():
-            problems.append(f"Scene '{scene.scene_id}' 缺少 Timeline")
+
+        problems.extend(_validate_narration(scene))
 
     sorted_scenes = sorted(doc.scenes, key=lambda item: item.start)
     if sorted_scenes and abs(sorted_scenes[0].start) > 0.01:
         problems.append("第一个 Scene 必须从 0 秒开始")
-    for i in range(len(sorted_scenes) - 1):
-        current_end = sorted_scenes[i].start + sorted_scenes[i].duration
-        next_start = sorted_scenes[i + 1].start
-        if current_end > next_start + 0.01:
-            problems.append(f"场景时间重叠: {sorted_scenes[i].scene_id} / {sorted_scenes[i + 1].scene_id}")
-        if next_start - current_end > 4:
-            problems.append(f"场景间空白过长: {sorted_scenes[i].scene_id} / {sorted_scenes[i + 1].scene_id}")
 
-    last = max(doc.scenes, key=lambda item: item.start + item.duration)
-    last_end = last.start + last.duration
-    if last_end > doc.duration + 8:
-        problems.append(f"最后场景结束于 {last_end:.1f}s，超出总时长 {doc.duration:.1f}s 太多")
-    if doc.duration - last_end > 10:
-        problems.append(f"视频总时长 {doc.duration:.1f}s 与最后场景结束 {last_end:.1f}s 差距过大")
+    for index in range(len(sorted_scenes) - 1):
+        current = sorted_scenes[index]
+        next_scene = sorted_scenes[index + 1]
+        current_end = current.start + current.duration
+        next_start = next_scene.start
+
+        if current_end > next_start + 0.01:
+            problems.append(f"场景时间重叠: {current.scene_id} / {next_scene.scene_id}")
+
+        if next_start - current_end > 4:
+            problems.append(f"场景间空白过长: {current.scene_id} / {next_scene.scene_id}")
+
+    if doc.scenes:
+        last = max(doc.scenes, key=lambda item: item.start + item.duration)
+        last_end = last.start + last.duration
+        if last_end > doc.duration + 8:
+            problems.append(f"最后场景结束于 {last_end:.1f}s，超出总时长 {doc.duration:.1f}s 太多")
+        if doc.duration - last_end > 10:
+            problems.append(f"视频总时长 {doc.duration:.1f}s 与最后场景结束 {last_end:.1f}s 差距过大")
 
     all_inner_ids: list[str] = []
     total_runtime_calls = 0
@@ -445,89 +815,24 @@ def validate_markdown(doc: CartoonVideoDocument, raw_markdown: str) -> AuditResu
     layouts: list[str] = []
 
     for scene in doc.scenes:
+        parsed_html = parsed_html_by_scene[scene.scene_id]
+        parsed_timeline = parsed_timeline_by_scene[scene.scene_id]
+
         layouts.append(scene.layout)
+        all_inner_ids.extend(parsed_html.ids)
+        total_runtime_calls += len(parsed_timeline.runtime_methods)
+        all_methods.extend(parsed_timeline.runtime_methods)
 
-        for tag in _BANNED_HTML_TAGS:
-            if re.search(rf"<\s*{tag}[\s>/]", scene.html, re.IGNORECASE):
-                problems.append(f"Scene '{scene.scene_id}' HTML 包含禁止标签 <{tag}>")
-
-        for pattern, label in _BANNED_CODE_PATTERNS.items():
-            if re.search(pattern, scene.html, re.IGNORECASE) or re.search(pattern, scene.narration, re.IGNORECASE):
-                problems.append(f"Scene '{scene.scene_id}' 包含代码讲解倾向: {label}")
-
-        if re.search(r"\son\w+\s*=", scene.html, re.IGNORECASE):
-            problems.append(f"Scene '{scene.scene_id}' HTML 包含事件属性 onxxx")
-        if re.search(r"javascript\s*:", scene.html, re.IGNORECASE):
-            problems.append(f"Scene '{scene.scene_id}' HTML 包含 javascript:")
-        if re.search(r"https?://", scene.html, re.IGNORECASE):
-            problems.append(f"Scene '{scene.scene_id}' HTML 包含远程资源链接")
-        if "```" in scene.html:
-            problems.append(f"Scene '{scene.scene_id}' HTML 包含 Markdown 代码围栏残留")
-
-        ids = _extract_ids(scene.html)
-        all_inner_ids.extend(ids)
-        for item_id in ids:
-            expected_prefix = f"{scene.scene_id}-"
-            if not item_id.startswith(expected_prefix):
-                problems.append(f"Scene '{scene.scene_id}' 内部 id '{item_id}' 未使用 scene 前缀")
-
-        classes = _extract_classes(scene.html)
-        if not (classes & _OBJECT_CLASSES):
-            problems.append(f"Scene '{scene.scene_id}' 缺少理论动画对象类")
-
-        timeline = scene.timeline
-        banned_timeline_patterns = {
-            r"\bconst\s+tl\b": "const tl",
-            r"window\.__timelines": "window.__timelines",
-            r"\bgsap\.": "gsap",
-            r"\bdocument\.": "document",
-            r"\bMath\.random\s*\(": "Math.random",
-            r"\bDate\.now\s*\(": "Date.now",
-            r"\bsetTimeout\s*\(": "setTimeout",
-            r"https?://": "远程链接",
-            r"</script": "</script>",
-            r"```": "Markdown 代码围栏",
-        }
-        for pattern, label in banned_timeline_patterns.items():
-            if re.search(pattern, timeline, re.IGNORECASE):
-                problems.append(f"Scene '{scene.scene_id}' Timeline 包含禁止内容: {label}")
-
-        statements = _split_js_statements(timeline)
-        for statement in statements:
-            if not re.match(r"^Runtime\.\w+\s*\(", statement, re.DOTALL):
-                problems.append(f"Scene '{scene.scene_id}' Timeline 包含非 Runtime 调用: {statement[:80]}")
-            if "\n" in statement:
-                problems.append(f"Scene '{scene.scene_id}' Runtime 调用必须单行书写")
-
-        calls = _runtime_calls(timeline)
-        total_runtime_calls += len(calls)
-        all_methods.extend(calls)
-
-        if len(calls) < 4:
-            problems.append(f"Scene '{scene.scene_id}' Runtime 调用数量不足，每个 scene 至少 4 个")
-
-        if scene.scene_type in {"mechanism", "trace", "state"} and not (set(calls) & _DYNAMIC_METHODS):
-            problems.append(f"Scene '{scene.scene_id}' 必须包含动态机制动作")
-        if scene.scene_type == "state" and not (set(calls) & _STATE_METHODS):
-            problems.append(f"Scene '{scene.scene_id}' 是 state 场景，必须包含状态同步动作")
-        if scene.scene_type == "trace" and not (set(calls) & {"move", "moveTo", "transfer", "drawPath", "connect", "sendPacket", "insertNode"}):
-            problems.append(f"Scene '{scene.scene_id}' 是 trace 场景，必须有对象移动、路径绘制或连线变化")
-
-        valid_ids = set(ids) | {f"scene-{scene.scene_id}", f"caption-{scene.scene_id}", f"camera-{scene.scene_id}"}
-        used_selector_ids = _extract_selector_ids(timeline)
-        for used_id in sorted(used_selector_ids):
-            if used_id not in valid_ids:
-                problems.append(f"Scene '{scene.scene_id}' Timeline selector 引用了不存在的 id: #{used_id}")
-
-        t_refs = re.findall(r'T\(\s*["\']([^"\']+)["\']\s*,\s*([\d.]+)\s*\)', timeline)
-        for ref_id, local_time_str in t_refs:
-            if ref_id not in scene_ids:
-                problems.append(f"Scene '{scene.scene_id}' T(\"{ref_id}\") 引用了不存在的 scene id")
-                continue
-            local_time = float(local_time_str)
-            ref_scene = next((item for item in doc.scenes if item.scene_id == ref_id), None)
-            if ref_scene and local_time > ref_scene.duration + 0.01:
-                problems.append(f"Scene '{scene.scene_id}' T(\"{ref_id}\", {local_time}) 超过 scene duration")
+        problems.extend(_validate_scene_html(scene, parsed_html))
+        problems.extend(
+            _validate_scene_timeline(
+                scene=scene,
+                parsed_html=parsed_html,
+                parsed_timeline=parsed_timeline,
+                scene_ids=scene_id_set,
+                scenes_by_id=scenes_by_id,
+            )
+        )
 
     duplicate_inner_ids = [item for item in set(all_inner_ids) if all_inner_ids.count(item) > 1]
     if duplicate_inner_ids:
@@ -546,20 +851,16 @@ def validate_markdown(doc: CartoonVideoDocument, raw_markdown: str) -> AuditResu
         _CAMERA_METHODS,
         {"caption"},
     ]
+
     family_hits = sum(1 for family in action_families if method_set & family)
     if family_hits < 5:
         problems.append("动画动作类型不足，至少需要出现 5 类动作")
 
     if len(set(layouts)) < 3 and len(doc.scenes) >= 5:
         problems.append("布局过于单一，至少需要 3 种镜头布局")
+
     if not (method_set & _CAMERA_METHODS):
         problems.append("缺少镜头语言，至少使用 cameraZoom/cameraPan/cameraFocus/sceneIn/sceneOut 之一")
-
-    raw_lower = raw_markdown.lower()
-    for pattern, label in _BANNED_CODE_PATTERNS.items():
-        if re.search(pattern, raw_lower, re.IGNORECASE):
-            problems.append(f"整份 DSL 包含代码展示倾向: {label}")
-            break
 
     return AuditResult(passed=len(problems) == 0, problems=problems)
 
@@ -652,6 +953,7 @@ def validate_html(html_content: str, doc: CartoonVideoDocument) -> AuditResult:
     for section_tag in sections:
         classes = re.search(r'class="([^"]*)"', section_tag)
         class_text = classes.group(1) if classes else ""
+
         if "scene" not in class_text.split():
             problems.append(f"section 缺少 scene class: {section_tag[:120]}")
         if "clip" not in class_text.split():
@@ -665,6 +967,7 @@ def validate_html(html_content: str, doc: CartoonVideoDocument) -> AuditResult:
 
     if not re.search(r"gsap\.timeline\(\s*\{\s*paused\s*:\s*true\s*\}\s*\)", html_content):
         problems.append("缺少 gsap.timeline({ paused: true })")
+
     if f'window.__timelines["{_COMPOSITION_ID}"]' not in html_content:
         problems.append(f'缺少 window.__timelines["{_COMPOSITION_ID}"] = tl')
 
@@ -701,6 +1004,7 @@ def validate_html(html_content: str, doc: CartoonVideoDocument) -> AuditResult:
         start_match = re.search(r'data-start="([\d.]+)"', section_tag)
         duration_match = re.search(r'data-duration="([\d.]+)"', section_tag)
         id_match = re.search(r'id="([^"]+)"', section_tag)
+
         if start_match and duration_match:
             start = float(start_match.group(1))
             duration = float(duration_match.group(1))
@@ -708,9 +1012,9 @@ def validate_html(html_content: str, doc: CartoonVideoDocument) -> AuditResult:
             section_times.append((start, start + duration, section_id))
 
     section_times.sort()
-    for i in range(len(section_times) - 1):
-        if section_times[i][1] > section_times[i + 1][0] + 0.01:
-            problems.append(f"section 时间重叠: {section_times[i][2]} / {section_times[i + 1][2]}")
+    for index in range(len(section_times) - 1):
+        if section_times[index][1] > section_times[index + 1][0] + 0.01:
+            problems.append(f"section 时间重叠: {section_times[index][2]} / {section_times[index + 1][2]}")
 
     return AuditResult(passed=len(problems) == 0, problems=problems)
 
@@ -766,8 +1070,14 @@ class CartoonVideoAgent:
                 "scene_count": len(doc.scenes),
                 "composition_id": _COMPOSITION_ID,
                 "stages": {
-                    "markdown_validation": {"passed": md_audit.passed, "problems": md_audit.problems},
-                    "html_validation": {"passed": html_audit.passed, "problems": html_audit.problems},
+                    "markdown_validation": {
+                        "passed": md_audit.passed,
+                        "problems": md_audit.problems,
+                    },
+                    "html_validation": {
+                        "passed": html_audit.passed,
+                        "problems": html_audit.problems,
+                    },
                 },
             },
         )
@@ -797,7 +1107,7 @@ class CartoonVideoAgent:
         duration_text = (
             f"请生成约 {target_duration} 秒的视频，全局 @duration 应接近该值。"
             if target_duration
-            else "默认生成 90 到 130 秒的视频。"
+            else "请生成 90 到 150 秒（1分半到2分半）的视频，根据内容复杂度灵活调整，全局 @duration 应接近该范围。"
         )
 
         return "\n\n".join(
@@ -836,7 +1146,11 @@ class CartoonVideoAgent:
     ) -> str:
         rules_md = (_TEMPLATE_DIR / "rules.md").read_text(encoding="utf-8")
         reference_md = (_TEMPLATE_DIR / "reference.md").read_text(encoding="utf-8")
-        duration_rule = f"目标视频时长约 {target_duration} 秒。" if target_duration else "目标视频时长为 90 到 130 秒。"
+        duration_rule = (
+            f"目标视频时长约 {target_duration} 秒。"
+            if target_duration
+            else "目标视频时长为 90 到 150 秒（1分半到2分半），根据内容灵活调整，允许范围 60 到 600 秒。"
+        )
 
         prompt = (
             "以下 theory_video.md 不符合通用计算机理论动画视频规范，请修复后返回完整 theory_video.md。\n\n"
@@ -889,6 +1203,7 @@ class CartoonVideoAgent:
             except Exception as exc:
                 last_error = exc
                 logger.warning("Theory Markdown 生成失败 (attempt %d/3): %s", attempt + 1, exc)
+
         raise CartoonGenerationError(f"Theory Markdown 生成失败: {last_error}")
 
     async def _parse_validate_repair(
@@ -907,6 +1222,7 @@ class CartoonVideoAgent:
                 last_audit = AuditResult(passed=False, problems=[str(exc)])
                 if round_num >= self.MAX_REPAIR_ROUNDS:
                     raise CartoonGenerationError(f"Markdown 解析失败且修复次数耗尽: {exc}", audit=last_audit)
+
                 last_text = await self.repair_markdown(
                     learning_need=learning_need,
                     markdown_text=last_text,
@@ -949,7 +1265,11 @@ class CartoonVideoAgent:
         last_audit = AuditResult(passed=False, problems=problems)
 
         for round_num in range(self.MAX_REPAIR_ROUNDS):
-            logger.warning("HTML 校验失败，尝试修复 Markdown (round %d): %s", round_num + 1, "; ".join(last_audit.problems[:6]))
+            logger.warning(
+                "HTML 校验失败，尝试修复 Markdown (round %d): %s",
+                round_num + 1,
+                "; ".join(last_audit.problems[:6]),
+            )
             last_text = await self.repair_markdown(
                 learning_need=learning_need,
                 markdown_text=last_text,
@@ -957,15 +1277,18 @@ class CartoonVideoAgent:
                 target_duration=target_duration,
             )
             last_text = _clean_llm_output(last_text)
+
             doc = parse_markdown(last_text)
             md_audit = validate_markdown(doc, last_text)
             if not md_audit.passed:
                 last_audit = md_audit
                 continue
+
             html_content = compose_html(doc)
             html_audit = validate_html(html_content, doc)
             if html_audit.passed:
                 return doc, last_text, html_content, html_audit
+
             last_audit = html_audit
 
         raise CartoonGenerationError(
@@ -1006,6 +1329,7 @@ class CartoonVideoAgent:
             if resolved in seen:
                 continue
             seen.add(resolved)
+
             if candidate.is_file():
                 shutil.copy2(candidate, assets_dir / "gsap.min.js")
                 return

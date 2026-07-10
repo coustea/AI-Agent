@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -16,9 +17,13 @@ from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import (
     build_node_context,
     build_resource_context,
+    build_path_context,
 )
 from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+
+if TYPE_CHECKING:
+    from app.path.schemas import PathResourceRequest
 
 logger = get_logger(__name__)
 
@@ -81,6 +86,24 @@ class ReadingAgent(BaseResourceAgent):
         )
         result.metadata["path_id"] = input_data.path_id
         result.metadata["node_id"] = input_data.node_id
+        return result
+
+    async def generate_for_path(self, request: "PathResourceRequest") -> AgentResult:
+        """路径规划统一接口 — 接收 PathResourceRequest，返回 AgentResult。"""
+        if request.tutorial is None:
+            return AgentResult(
+                success=False,
+                title="拓展阅读生成失败",
+                file_type="json",
+                error="缺少教程内容",
+            )
+        input_text = "\n\n".join(build_path_context(request))
+        result = await self._generate_reading(
+            input_text=input_text,
+            title_prefix=request.node_title,
+            config={},
+        )
+        result.metadata["node_id"] = request.node_id
         return result
 
     async def _generate_reading(

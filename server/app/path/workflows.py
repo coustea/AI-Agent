@@ -35,8 +35,7 @@ from app.infra.models import (
     User,
 )
 from app.profile.service import get_profile_service
-from app.resource.path_helpers import generate_path_node_resource
-from app.resource.schemas import NodeInput
+from app.resource.schemas import AgentResult
 from app.rag.tools import build_knowledge_tool
 from app.shared.research import ResearchAgent, ResearchTask
 
@@ -48,6 +47,8 @@ from app.path.schemas import (
     PathRequest,
     LearnState,
     AgentQuestionSet,
+    LearningPathTutorialDTO,
+    PathResourceRequest,
 )
 
 logger = get_logger(__name__)
@@ -555,13 +556,13 @@ class NodeLearningAgent:
         except Exception as exc:
             logger.warning("[NodeLearningAgent] 知识库检索失败: %s", exc)
             kb_section = "无"
-        # 渲染教程 Prompt 并调用 LLM 生成
+        # 根据 tutorial_type 选择对应的 prompt
+        prompt_key = f"tutorial_{tutorial_type}"  # tutorial_primary, tutorial_remediation, tutorial_reinforced
         prompt = prompts.get("path").render(
-            "tutorial",
+            prompt_key,
             path_goal=path_goal,
             node_title=node_title,
             mastery_target=mastery_target,
-            tutorial_type=tutorial_type,
             weak_points_section=weak_points_section,
             profile_section=profile_section,
             kb_section=kb_section,
@@ -1090,45 +1091,66 @@ async def node_record_quiz_event(state: LearnState) -> dict:
 
 # 工作流节点：生成节点辅助资源（委托 resource 模块）
 async def node_generate_resource(state: LearnState) -> dict:
-    """生成节点辅助资源 — 需要先有教程，不自创建。"""
+    """生成节点辅助资源 — 使用统一接口 PathResourceRequest。"""
+    from app.shared.ppt import PPTService
+    from app.shared.cartoon import CartoonService
+    from app.resource.agents import AGENT_REGISTRY
+
     if state.get("error"):
         return {}
-    session = state["session"]
     node = state["node"]
     path = state["path"]
     user_id = state["user_id"]
     resource_type = state.get("resource_type", "mindmap")
-    current_tutorial = state.get("current_tutorial")
 
-    if current_tutorial is None:
-        return {"error": "当前节点还没有教程，请先生成主教程再生成辅助资源"}
+    # 资源生成只使用 primary 教程，不使用 remediation/reinforced 教程
+    tutorials = state.get("tutorials", [])
+    primary_tutorial = next(
+        (t for t in tutorials if t.tutorial_type == "primary"), None
+    )
+    if primary_tutorial is None:
+        return {"error": "当前节点还没有主教程，请先生成主教程再生成辅助资源"}
 
-    # 获取用户画像（用户指令：cartoon 需要根据用户画像来生成视频，画像必须要有）
+    # 获取用户画像
     profile_service = get_profile_service()
     profile_markdown = await profile_service.build_profile_markdown(user_id=user_id)
 
-    # 构建资源生成输入，委托 resource 模块生成
-    node_input = NodeInput(
+    # 将 ORM 对象转换为 DTO
+    tutorial_dto = LearningPathTutorialDTO.from_model(primary_tutorial)
+
+    # 构建统一请求
+    request = PathResourceRequest(
+        user_id=user_id,
         path_id=path.id,
         node_id=node.id,
-        node_key=node.node_id,
-        stage_id=node.stage_id,
+        profile={"markdown": profile_markdown},
+        tutorial=tutorial_dto,
+        username=state.get("username", ""),
         path_title=path.title,
         path_goal=path.goal,
         node_title=node.title,
-        difficulty=node.difficulty,
-        mastery_target=None,
-        knowledge_points=list(current_tutorial.knowledge_points or []),
-        weak_knowledge_points=list(current_tutorial.weak_knowledge_points or []),
-        generation_focus=[],
-        tutorial_title=current_tutorial.title,
-        tutorial_summary=current_tutorial.summary,
-        tutorial_markdown=current_tutorial.content_markdown,
-        profile={"markdown": profile_markdown},
-        agent_config={},
-        username=state.get("username", ""),
+        node_key=node.node_id,
+        difficulty=node.difficulty or "beginner",
     )
-    result = await generate_path_node_resource(resource_type, node_input)
+
+    # 统一调用 generate_for_path 接口
+    if resource_type == "ppt":
+        service = PPTService()
+        result = await service.generate_for_path(request)
+    elif resource_type == "cartoon":
+        service = CartoonService()
+        result = await service.generate_for_path(request)
+    elif resource_type in {"mindmap", "code", "reading"}:
+        agent = AGENT_REGISTRY[resource_type]()
+        result = await agent.generate_for_path(request)
+    else:
+        result = AgentResult(
+            success=False,
+            title="资源生成失败",
+            file_type="markdown",
+            error=f"不支持的资源类型: {resource_type}",
+        )
+
     return {"resource_result": result, "resource_type": resource_type}
 
 
@@ -1141,7 +1163,11 @@ async def node_persist_resource(state: LearnState) -> dict:
     node = state["node"]
     path = state["path"]
     user_id = state["user_id"]
-    current_tutorial = state.get("current_tutorial")
+    # 资源生成只使用 primary 教程
+    tutorials = state.get("tutorials", [])
+    primary_tutorial = next(
+        (t for t in tutorials if t.tutorial_type == "primary"), None
+    )
     resource_type = state.get("resource_type", "mindmap")
     result = state["resource_result"]
 
@@ -1157,7 +1183,7 @@ async def node_persist_resource(state: LearnState) -> dict:
         resource = PathNodeResource(
             path_id=path.id,
             node_id=node.id,
-            tutorial_id=current_tutorial.id if current_tutorial else None,
+            tutorial_id=primary_tutorial.id if primary_tutorial else None,
             user_id=user_id,
             resource_type=resource_type,
             version_no=version_no,
@@ -1196,7 +1222,7 @@ async def node_persist_resource(state: LearnState) -> dict:
     resource = PathNodeResource(
         path_id=path.id,
         node_id=node.id,
-        tutorial_id=current_tutorial.id if current_tutorial else None,
+        tutorial_id=primary_tutorial.id if primary_tutorial else None,
         user_id=user_id,
         resource_type=resource_type,
         version_no=version_no,

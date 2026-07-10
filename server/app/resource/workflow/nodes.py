@@ -48,27 +48,7 @@ from app.resource.event import ResourceEvents
 logger = get_logger(__name__)
 
 
-def _split_handoff_materials(content: str, *, limit: int = 12000) -> list[str]:
-    """把已持久化正文切成适合 PPT 规划器消费的有界材料块。"""
-    normalized = content.strip()[:limit]
-    if not normalized:
-        return []
-
-    chunks: list[str] = []
-    current = ""
-    for paragraph in normalized.split("\n\n"):
-        paragraph = paragraph.strip()
-        if not paragraph:
-            continue
-        candidate = f"{current}\n\n{paragraph}".strip()
-        if current and len(candidate) > 2400:
-            chunks.append(current)
-            current = paragraph
-        else:
-            current = candidate
-    if current:
-        chunks.append(current)
-    return chunks[:6]
+from app.resource.workflow.extraction import extract_core_content
 
 
 def build_agent_resource_input(
@@ -106,7 +86,10 @@ async def get_handoffs(
     resource_id: int,
     user_id: int,
 ) -> dict[str, DownstreamContext]:
-    """从成功持久化的基础资源构建 PPT 所需的真实内容交接。"""
+    """从成功持久化的基础资源构建下游交接内容。
+
+    使用 extract_core_content() 提取核心内容，替代旧的盲切片逻辑。
+    """
     async with session_scope() as session:
         service = ResourceService(session)
         items = await service.list_resource_items(user_id, resource_id)
@@ -125,7 +108,20 @@ async def get_handoffs(
             )
         else:
             content = ""
-        materials = _split_handoff_materials(content)
+
+        if not content:
+            continue
+
+        # 提取 agent 配置（用于驱动提取行为）
+        config = item.input_data.get("agent_config", {}) if item.input_data else {}
+
+        # 使用新的提取函数
+        materials = extract_core_content(
+            markdown=content,
+            agent_id=item.agent_type,
+            config=config,
+        )
+
         summary = " ".join(content.split())[:300] or item.title or item.agent_type
         handoffs[item.agent_type] = DownstreamContext(
             source_agent=item.agent_type,

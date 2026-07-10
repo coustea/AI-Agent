@@ -13,6 +13,12 @@ RetrievalType = Literal["vector", "bm25", "hybrid", ""]
 # ChromaDB collection 名（build 与 retriever 共享的索引契约，属实现细节，不暴露为运行时配置）
 CHROMA_COLLECTION = "langchain"
 
+# 索引 Schema 版本（store 与 build 共享）
+SCHEMA_VERSION = "1"
+
+# Manifest 文件名（retriever 与 build 共享）
+MANIFEST_FILENAME = "manifest.json"
+
 
 # 单条检索结果的数据模型
 class RetrievedChunk(BaseModel):

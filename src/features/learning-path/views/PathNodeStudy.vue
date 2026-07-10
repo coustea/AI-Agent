@@ -403,11 +403,7 @@ import Reading from '@/shared/content/renderers/Reading.vue'
 import Slides from '@/shared/content/renderers/Slides.vue'
 
 import {
-  generateMindmap,
-  generateCode,
-  generatePpt,
-  generateReading,
-  generateCartoon,
+  generateNodeResource,
   generateNodeQuestions,
   getNodeQuestions,
   generateTutorial,
@@ -912,11 +908,11 @@ async function submitQuiz() {
 }
 
 const resourceApiMap: Record<ResourceKind, (nodeId: number) => Promise<any>> = {
-  mindmap: generateMindmap,
-  code: generateCode,
-  ppt: generatePpt,
-  reading: generateReading,
-  cartoon: generateCartoon,
+  mindmap: (id) => generateNodeResource(id, 'mindmap'),
+  code: (id) => generateNodeResource(id, 'code'),
+  ppt: (id) => generateNodeResource(id, 'ppt'),
+  reading: (id) => generateNodeResource(id, 'reading'),
+  cartoon: (id) => generateNodeResource(id, 'cartoon'),
 }
 
 // 调用后端生成辅助资源（如思维导图、代码、PPT 等），生成后打开查看器

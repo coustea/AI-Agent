@@ -3,7 +3,7 @@
 包含请求/响应/内部状态的所有数据结构。
 
 主要分类：
-1. 请求模型 — PathRequest
+1. 请求模型 — PathRequest, PathResourceRequest
 2. Agent 结构化输出 — LearningPlan, PlanNode, AgentStage
 3. 响应 DTO — PathResponse, LearningPathNodeWorkspaceResponse 等
 4. 工作流状态 — LearnState (LangGraph 状态图)
@@ -35,26 +35,7 @@ class PathRequest(BaseModel):
     preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
 
 
-# ======================================================================
-# Agent 结构化输出模型
-# ======================================================================
-
-
-# 学习效果快照 — 用于路径优化决策
-class LearningSignalSnapshot(BaseModel):
-    """学习效果摘要 — 路径调整用的聚合信号。"""
-
-    average_score: float | None = Field(default=None, description="平均测验分数 0-100")
-    weak_topics: list[str] = Field(default_factory=list, description="薄弱知识点")
-    preferred_resources: list[str] = Field(default_factory=list, description="偏好资源类型")
-    negative_feedback: list[str] = Field(default_factory=list, description="负面反馈摘要")
-    completed_resource_count: int = Field(default=0)
-    viewed_resource_count: int = Field(default=0)
-    active_minutes: int = Field(default=0)
-    recommendations: list[str] = Field(default_factory=list, description="系统调整建议")
-
-
-# 节点教程 DTO — 用于工作区响应
+# 节点教程 DTO — 用于工作区响应和资源生成请求
 class LearningPathTutorialDTO(BaseModel):
     id: int
     tutorial_type: str
@@ -82,6 +63,60 @@ class LearningPathTutorialDTO(BaseModel):
             weak_knowledge_points=list(tutorial.weak_knowledge_points or []),
             created_at=tutorial.created_at.isoformat() if tutorial.created_at else "",
         )
+
+
+# 路径节点资源生成请求 — 统一参数模型
+class PathResourceRequest(BaseModel):
+    """路径节点资源生成请求 — 统一参数。
+
+    用于 mindmap / code / ppt / reading / cartoon 五种资源类型。
+
+    核心字段：
+    - user_id: 用户 ID
+    - path_id: 路径 ID
+    - node_id: 节点 ID
+    - profile: 用户画像
+    - tutorial: 教程内容
+
+    上下文字段（由 PathService 填充）：
+    - username: 用户名（文件路径用）
+    - path_title / path_goal: 路径标题/目标
+    - node_title / node_key / difficulty: 节点信息
+    - knowledge_points / weak_knowledge_points: 知识点
+    """
+
+    user_id: int
+    path_id: int
+    node_id: int
+    profile: dict[str, Any] = Field(default_factory=dict)
+    tutorial: LearningPathTutorialDTO | None = None
+
+    # 上下文字段（由 PathService 查询填充）
+    username: str = ""
+    path_title: str = ""
+    path_goal: str = ""
+    node_title: str = ""
+    node_key: str = ""
+    difficulty: str = "beginner"
+
+
+# ======================================================================
+# Agent 结构化输出模型
+# ======================================================================
+
+
+# 学习效果快照 — 用于路径优化决策
+class LearningSignalSnapshot(BaseModel):
+    """学习效果摘要 — 路径调整用的聚合信号。"""
+
+    average_score: float | None = Field(default=None, description="平均测验分数 0-100")
+    weak_topics: list[str] = Field(default_factory=list, description="薄弱知识点")
+    preferred_resources: list[str] = Field(default_factory=list, description="偏好资源类型")
+    negative_feedback: list[str] = Field(default_factory=list, description="负面反馈摘要")
+    completed_resource_count: int = Field(default=0)
+    viewed_resource_count: int = Field(default=0)
+    active_minutes: int = Field(default=0)
+    recommendations: list[str] = Field(default_factory=list, description="系统调整建议")
 
 
 # 节点测验题目 DTO

@@ -44,10 +44,12 @@ from app.infra.models import (
     PathNodeQuestion,
     PathNodeResource,
     PathNodeTutorial,
+    User,
 )
 from app.path.schemas import (
     LearningPlan,
     PathRequest,
+    PathResourceRequest,
     LearningPathHistoryItem,
     LearningPathNodeDTO,
     LearningPathNodeWorkspaceResponse,
@@ -97,6 +99,8 @@ class PathService:
         self.path_planner = PathPlannerAgent()
         self.evaluation_service = EvaluationService()
         self.learn_graph = get_learn_workflow()
+        # 预创建资源生成服务实例，避免重复实例化
+        self._resource_services = self._init_resource_services()
 
     # ── 路径规划 ────────────────────────────────────────────────────────────
 
@@ -386,28 +390,98 @@ class PathService:
         )
 
     # 生成节点辅助资源（思维导图/代码/PPT/阅读/动画）
-    async def generate_node_resource(self, user_id: int, node_id: int, resource_type: str) -> LearningPathResourceDTO:
-        """生成节点辅助资源 — 通过 LangGraph 工作流调用 resource 模块 agent。"""
-        logger.info("[PathService] 生成节点资源: user_id=%s node_id=%s type=%s", user_id, node_id, resource_type)
+    async def generate_node_resource(
+        self,
+        user_id: int,
+        node_id: int,
+        resource_type: str,
+    ) -> LearningPathResourceDTO:
+        """生成节点辅助资源。
+
+        统一接口：所有资源类型都通过 generate_for_path 方法生成，
+        接收 PathResourceRequest，返回 AgentResult。
+        """
+        logger.info(
+            "[PathService] 生成节点资源: user_id=%s node_id=%s type=%s",
+            user_id, node_id, resource_type,
+        )
         if resource_type not in AUX_RESOURCE_TYPES:
             raise ValueError(f"不支持的资源类型: {resource_type}")
+
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
         self._ensure_node_in_deep_learning(node)
 
-        state = LearnState(
-            user_id=user_id,
-            node_id=node_id,
-            phase="resource",
-            session=self.session,
-            resource_type=resource_type,
-        )
-        result = await self.learn_graph.ainvoke(state)
-        if result.get("error"):
-            raise ValueError(result["error"])
+        # 获取当前教程
+        current_tutorial = await self._get_current_tutorial(node.id)
+        if current_tutorial is None:
+            raise ValueError("当前节点还没有教程，请先生成主教程再生成辅助资源")
 
-        resource_dto = result.get("resource_dto", {})
-        return LearningPathResourceDTO(**resource_dto)
+        # 获取用户画像和上下文信息
+        profile_markdown = await self.profile_builder.build_profile_markdown(user_id=user_id)
+        path = await self.session.get(LearningPath, node.path_id)
+        user = await self.session.get(User, user_id)
+
+        # 构建统一请求（包含所有上下文）
+        request = PathResourceRequest(
+            user_id=user_id,
+            path_id=node.path_id,
+            node_id=node.id,
+            profile={"markdown": profile_markdown},
+            tutorial=LearningPathTutorialDTO.from_model(current_tutorial),
+            username=user.username if user else "",
+            path_title=path.title if path else "",
+            path_goal=path.goal if path else "",
+            node_title=node.title,
+            node_key=node.node_id,
+            difficulty=node.difficulty or "beginner",
+        )
+
+        # 统一调用 generate_for_path 接口
+        result = await self._call_generate_for_path(resource_type, request)
+
+        # 持久化到数据库
+        resource_dto = await self._persist_resource_result(
+            user_id=user_id,
+            node=node,
+            tutorial=current_tutorial,
+            resource_type=resource_type,
+            result=result,
+        )
+        return resource_dto
+
+    async def _call_generate_for_path(
+        self,
+        resource_type: str,
+        request: PathResourceRequest,
+    ) -> "AgentResult":
+        """统一调用各服务的 generate_for_path 接口。"""
+        services = self._resource_services
+        if resource_type == "ppt":
+            return await services["ppt"].generate_for_path(request)
+        elif resource_type == "cartoon":
+            return await services["cartoon"].generate_for_path(request)
+        elif resource_type == "mindmap":
+            return await services["mindmap"].generate_for_path(request)
+        elif resource_type == "code":
+            return await services["code"].generate_for_path(request)
+        elif resource_type == "reading":
+            return await services["reading"].generate_for_path(request)
+        raise ValueError(f"不支持的资源类型: {resource_type}")
+
+    @staticmethod
+    def _init_resource_services() -> dict:
+        """预创建资源生成服务实例。"""
+        from app.shared.ppt import PPTService
+        from app.shared.cartoon import CartoonService
+        from app.resource.agents import AGENT_REGISTRY
+        return {
+            "ppt": PPTService(),
+            "cartoon": CartoonService(),
+            "mindmap": AGENT_REGISTRY["mindmap"](),
+            "code": AGENT_REGISTRY["code"](),
+            "reading": AGENT_REGISTRY["reading"](),
+        }
 
     # 获取节点指定类型的最新资源
     async def get_node_resource_by_type(self, user_id: int, node_id: int, resource_type: str) -> LearningPathResourceDTO | None:
@@ -877,6 +951,55 @@ class PathService:
         if hasattr(stage, "model_dump"):
             return stage.model_dump(mode="json")
         return dict(stage)
+
+    async def _persist_resource_result(
+        self,
+        *,
+        user_id: int,
+        node: PathNode,
+        tutorial: PathNodeTutorial,
+        resource_type: str,
+        result: "AgentResult",
+    ) -> LearningPathResourceDTO:
+        """持久化资源生成结果到数据库。"""
+        from app.resource.schemas import AgentResult
+
+        existing_count = await self._count_resources(node.id, resource_type)
+        version_no = existing_count + 1
+
+        title = result.title if result.success else f"{node.title} - {resource_type}"
+
+        resource = PathNodeResource(
+            path_id=node.path_id,
+            node_id=node.id,
+            tutorial_id=tutorial.id,
+            user_id=user_id,
+            resource_type=resource_type,
+            version_no=version_no,
+            title=title,
+            content_format="html" if resource_type in {"ppt", "cartoon"} else "markdown",
+            content_text=result.content if result.success else None,
+            status="completed" if result.success else "failed",
+            error_message=result.error if not result.success else None,
+            summary=result.summary if result.success else None,
+            metadata_json=result.metadata if result.success else None,
+        )
+        self.session.add(resource)
+        await self.session.commit()
+        await self.session.refresh(resource)
+
+        return LearningPathResourceDTO.from_model(resource)
+
+    async def _count_resources(self, node_id: int, resource_type: str) -> int:
+        """统计节点指定类型的资源数量。"""
+        from sqlalchemy import func
+
+        stmt = select(func.count()).where(
+            PathNodeResource.node_id == node_id,
+            PathNodeResource.resource_type == resource_type,
+        )
+        result = await self.session.exec(stmt)
+        return result.first() or 0
 
 
 # 将 LearningEvent ORM 转换为响应 DTO

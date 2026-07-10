@@ -19,7 +19,6 @@ import { useResourceEvents } from './useResourceEvents'
 import {
   PPT_AGENT_ID,
   CARTOON_AGENT_ID,
-  VIDEO_AGENT_ID,
   COORDINATOR_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
@@ -44,7 +43,7 @@ export function useGeneration() {
   // 学习场景预设
   const learningScenario = ref<LearningScenario>('daily_review')
   // 已启用的智能体 id 列表，默认全部启用
-  const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'cartoon', 'video'])
+  const enabledAgentIds = ref<ResourceAgentId[]>(['content', 'mindmap', 'code', 'quiz', 'reading', 'ppt', 'cartoon'])
 
   // 各智能体的默认配置参数
   const agentConfigs = ref<AnyAgentConfigs>({
@@ -55,15 +54,14 @@ export function useGeneration() {
     reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'concept', density: 'standard', focus: ['core_concepts'] },
     cartoon: { style: 'diagram', depth: 'standard', pace: 'normal', visuals: 'balanced' },
-    video: { style: 'precision_light', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
   })
 
   // DAG 选中的智能体 id 列表（直接使用 enabledAgentIds）
   const dagSelectedAgentIds = computed(() => enabledAgentIds.value)
 
-  // 基础并行生成智能体 id：排除需要单独流水线阶段的 PPT/动画/视频
+  // 基础并行生成智能体 id：排除需要单独流水线阶段的 PPT/动画
   const baseGenerationAgentIds = computed(() => (
-    dagSelectedAgentIds.value.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID, VIDEO_AGENT_ID].includes(id))
+    dagSelectedAgentIds.value.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
   ))
 
   // 所有 DAG 节点的状态映射表，key 为节点 id
@@ -126,10 +124,6 @@ export function useGeneration() {
     if (selected.includes(CARTOON_AGENT_ID)) {
       nodes.push(dagNodeStates.value[CARTOON_AGENT_ID] || { id: CARTOON_AGENT_ID, label: '动画讲解助手', icon: '🎬', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
     }
-    // 讲解视频智能体仅在用户启用时出现
-    if (selected.includes(VIDEO_AGENT_ID)) {
-      nodes.push(dagNodeStates.value[VIDEO_AGENT_ID] || { id: VIDEO_AGENT_ID, label: '讲解视频助手', icon: '🎥', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: false })
-    }
     // 资源组装节点始终排在最后
     nodes.push(dagNodeStates.value[BUNDLE_AGENT_ID] || { id: BUNDLE_AGENT_ID, label: '资源组装', icon: '📦', status: 'waiting', progress: 0, currentMessage: '', stepHistory: [], eventLogs: [], isSystem: true })
     return nodes
@@ -170,7 +164,7 @@ export function useGeneration() {
 
   // 根据各阶段加权进度计算全局整体进度
   function updateOverallProgressFromDag() {
-    // 各阶段权重：规划 15%、并行池 55%、PPT/动画/视频各 15%、组装 10%
+    // 各阶段权重：规划 15%、并行池 55%、PPT/动画各 15%、组装 10%
     const stages = [
       { weight: 15, progress: getStageNode('planning').progress },
       { weight: 55, progress: parallelPoolNodes.value.length ? parallelPoolNodes.value.reduce((sum, node) => sum + node.progress, 0) / parallelPoolNodes.value.length : 0 },
@@ -179,9 +173,6 @@ export function useGeneration() {
       ] : []),
       ...(dagSelectedAgentIds.value.includes(CARTOON_AGENT_ID as ResourceAgentId) ? [
         { weight: 15, progress: getStageNode(CARTOON_AGENT_ID).progress },
-      ] : []),
-      ...(dagSelectedAgentIds.value.includes(VIDEO_AGENT_ID as ResourceAgentId) ? [
-        { weight: 15, progress: getStageNode(VIDEO_AGENT_ID).progress },
       ] : []),
       { weight: 10, progress: getStageNode(BUNDLE_AGENT_ID).progress },
     ]
@@ -393,12 +384,8 @@ export function useGeneration() {
         }
       })
     }
-    // 后端有整体进度则直接采用，否则按 DAG 加权计算
-    if (typeof taskStatus.overall_progress === 'number') {
-      overallProgress.value = Math.max(0, Math.min(100, Math.round(taskStatus.overall_progress)))
-    } else {
-      updateOverallProgressFromDag()
-    }
+    // 整体进度通过 DAG 加权计算
+    updateOverallProgressFromDag()
   }
 
   // 生成完成后的收尾：拉取资源包、更新结果状态、清理连接
@@ -445,7 +432,8 @@ export function useGeneration() {
     const taskStatus = (await pollResourceStatus(resourceId)).data.data
     applyTaskStatus(taskStatus)
     // 终态状态触发完成收尾
-    if (['completed', 'partial_completed', 'failed'].includes(taskStatus.status)) {
+    const status = taskStatus.status || ''
+    if (['completed', 'partial_completed', 'failed'].includes(status)) {
       await completeGeneration(resourceId, taskStatus)
     }
   }
@@ -575,7 +563,8 @@ export function useGeneration() {
       const taskStatus = (await pollResourceStatus(resourceId)).data.data
       applyTaskStatus(taskStatus)
       // 若任务已结束则直接完成收尾
-      if (['completed', 'partial_completed', 'failed'].includes(taskStatus.status)) {
+      const status = taskStatus.status || ''
+      if (['completed', 'partial_completed', 'failed'].includes(status)) {
         await completeGeneration(resourceId, taskStatus)
         return
       }

@@ -2,7 +2,7 @@
 // 各 agent 只暴露影响生成质量的核心参数，前后端完全对齐
 
 // 可选智能体的标识联合类型
-export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon' | 'video'
+export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon'
 
 // 学习场景的标识联合类型
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
@@ -79,26 +79,18 @@ export interface ResourceGenerationRequest {
       pace: 'fast' | 'normal' | 'slow'
       visuals: 'clean' | 'balanced' | 'detailed'
     }
-    // 讲解视频智能体的配置
-    video: {
-      style: 'precision_light' | 'systems_dark' | 'editorial_classroom'
-      focus: 'concept' | 'process' | 'comparison' | 'practice'
-      voice: 'teacher' | 'coach'
-      aspect_ratio: '16:9' | '9:16' | '1:1'
-    }
   }
 }
 
 // 资源生成任务的整体状态结构：包含进度、各智能体快照及产物列表
+// 与后端 ResourceStatusSnapshot 完全对齐
 export interface ResourceTaskStatus {
   resource_id: number // 资源生成任务主键
   learning_need?: string // 用户输入的学习需求
-  status: 'pending' | 'planning' | 'generating' | 'completed' | 'partial_completed' | 'failed' // 任务生命周期状态
+  status?: string // 任务生命周期状态：pending / planning / generating / completed / partial_completed / failed
   selected_agents?: string[] // 参与生成的智能体 id 列表
   agent_snapshots?: Record<string, ResourceAgentSnapshot> // 各智能体实时快照，键为 agent_id
-  overall_progress?: number // 整体进度百分比 0–100
   current_message?: string // 当前阶段的汇总消息
   resources?: any[] // 已完成产物列表
-  started_at?: string | null // 任务开始时间
   updated_at?: string | null // 任务最近更新时间
 }

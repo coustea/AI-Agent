@@ -30,9 +30,6 @@ from app.resource.agents.reading import ReadingAgent
 # 课件 Agent：生成教学 PPT
 from app.resource.agents.ppt import PPTAgent
 
-# 视频 Agent：生成最终 MP4 讲解视频
-from app.resource.agents.video import VideoAgent
-
 # 动画讲解 Agent：使用 HyperFrames 生成带配音与字幕的 MP4
 from app.resource.agents.cartoon import CartoonAgent
 
@@ -58,8 +55,6 @@ __all__ = [
     "ReadingAgent",
     # 课件 Agent
     "PPTAgent",
-    # 视频 Agent
-    "VideoAgent",
     # 动画讲解 Agent
     "CartoonAgent",
 ]

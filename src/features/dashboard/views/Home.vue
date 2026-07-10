@@ -1,26 +1,21 @@
 <template>
   <main class="home-page min-h-screen font-sans antialiased pb-16 bg-slate-50/30">
     <div class="home-shell max-w-7xl mx-auto px-6 py-8">
-      
+
       <div class="dashboard-content space-y-10" v-if="dataLoaded">
-        
-        <!-- Top Visual Row: Carousel + Radar (Cardless) -->
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
-          
-          <!-- Carousel Banner (Left 2 columns on desktop) -->
+
           <div class="lg:col-span-2 relative rounded-3xl overflow-hidden bg-slate-900 group min-h-[380px] flex flex-col justify-end border border-slate-200/10">
-            <!-- Slides -->
             <div class="absolute inset-0 select-none">
               <Transition name="slide-fade" mode="out-in">
                 <div :key="activeSlide" class="absolute inset-0">
                   <img :src="carouselSlides[activeSlide]?.image" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" alt="Banner" />
-                  <!-- Gradient overlay for text readability -->
                   <div class="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/35 to-transparent"></div>
                 </div>
               </Transition>
             </div>
 
-            <!-- Slide Content Overlay -->
             <div class="relative z-10 p-8 sm:p-10 space-y-4 max-w-xl text-left">
               <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
                 {{ carouselSlides[activeSlide]?.title }}
@@ -29,44 +24,39 @@
                 {{ carouselSlides[activeSlide]?.description }}
               </p>
               <div class="pt-2">
-                <Button 
-                  @click="goTo(carouselSlides[activeSlide]?.path || '')" 
-                  class="bg-teal-500 hover:bg-teal-400 text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-lg shadow-teal-500/25 border-none transition-all duration-300 cursor-pointer"
+                <Button
+                    @click="goTo(carouselSlides[activeSlide]?.path || '')"
+                    class="bg-teal-500 hover:bg-teal-400 text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-lg shadow-teal-500/25 border-none transition-all duration-300 cursor-pointer"
                 >
                   {{ carouselSlides[activeSlide]?.actionText }}
                 </Button>
               </div>
             </div>
 
-            <!-- Carousel Controls -->
-            <!-- Previous Button -->
-            <button 
-              @click="prevSlide" 
-              class="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 cursor-pointer border border-white/10"
+            <button
+                @click="prevSlide"
+                class="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 cursor-pointer border border-white/10"
             >
               <ChevronLeft class="w-5 h-5" />
             </button>
-            <!-- Next Button -->
-            <button 
-              @click="nextSlide" 
-              class="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 cursor-pointer border border-white/10"
+            <button
+                @click="nextSlide"
+                class="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 cursor-pointer border border-white/10"
             >
               <ChevronRight class="w-5 h-5" />
             </button>
 
-            <!-- Indicators -->
             <div class="absolute bottom-6 right-10 z-10 flex gap-2">
-              <button 
-                v-for="(_, index) in carouselSlides" 
-                :key="index"
-                @click="setSlide(index)"
-                class="w-2 h-2 rounded-full transition-all duration-300 cursor-pointer border-none"
-                :class="activeSlide === index ? 'bg-teal-400 w-6' : 'bg-white/40 hover:bg-white/60'"
+              <button
+                  v-for="(_, index) in carouselSlides"
+                  :key="index"
+                  @click="setSlide(index)"
+                  class="w-2 h-2 rounded-full transition-all duration-300 cursor-pointer border-none"
+                  :class="activeSlide === index ? 'bg-teal-400 w-6' : 'bg-white/40 hover:bg-white/60'"
               ></button>
             </div>
           </div>
 
-          <!-- Radar Chart Snapshot (Right column on desktop, Cardless) -->
           <div class="lg:col-span-1 flex flex-col justify-between py-2 relative overflow-hidden">
             <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
               <h2 class="text-xs font-black text-slate-800 uppercase tracking-wider font-mono">能力画像诊断</h2>
@@ -75,15 +65,12 @@
               </Button>
             </div>
 
-            <!-- Score KPI & Radar Content -->
             <div class="flex items-center gap-4 my-4">
-              <!-- KPI (Cardless) -->
               <div class="score-badge flex flex-col items-center justify-center text-center shrink-0 min-w-[90px] border-r border-slate-200/60 pr-6">
                 <span class="text-[9px] text-teal-600 font-bold uppercase tracking-wider">画像评分</span>
                 <strong class="text-4xl font-black text-slate-800 mt-1 leading-none">{{ profileScore }}</strong>
                 <span class="text-[9px] font-mono text-teal-700 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100/40 mt-3">S-Tier</span>
               </div>
-              <!-- Radar Chart -->
               <div class="flex-1 h-[150px] relative min-w-0">
                 <div v-if="!profileRadarData" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs">
                   <div class="w-4 h-4 rounded-full border border-teal-500 border-t-transparent animate-spin"></div>
@@ -92,7 +79,6 @@
               </div>
             </div>
 
-            <!-- Diagnostics (Cardless) -->
             <div class="diagnostic-advice pt-4 border-t border-slate-200/60">
               <div class="text-[10px] font-bold text-teal-800 uppercase tracking-wider mb-1">建议</div>
               <p class="text-xs text-slate-655 leading-relaxed text-left">
@@ -100,17 +86,16 @@
               </p>
             </div>
           </div>
-          
+
         </div>
 
-        <!-- Middle Row: Quick Action Dock (Cardless) -->
         <section class="dock-section py-6 border-y border-slate-200/60">
           <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-12">
-            <button 
-              v-for="action in quickActions" 
-              :key="action.label" 
-              class="dock-button flex items-center gap-4 hover:bg-slate-100/45 px-4 py-2.5 rounded-2xl transition-all duration-300 cursor-pointer text-left"
-              @click="goTo(action.path)"
+            <button
+                v-for="action in quickActions"
+                :key="action.label"
+                class="dock-button flex items-center gap-4 hover:bg-slate-100/45 px-4 py-2.5 rounded-2xl transition-all duration-300 cursor-pointer text-left"
+                @click="goTo(action.path)"
             >
               <div class="dock-icon-circle w-11 h-11 rounded-2xl flex items-center justify-center bg-teal-50/70 text-teal-655 hover:bg-teal-500 hover:text-white transition-colors duration-300 shrink-0">
                 <component :is="getIconComponent(action.icon)" class="w-5 h-5" />
@@ -123,10 +108,8 @@
           </div>
         </section>
 
-        <!-- Bottom Row: Dual History Board (Cardless & Equal Height) -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-stretch">
-          
-          <!-- Left Column: Resource History (Cardless) -->
+
           <section class="history-section flex flex-col justify-between py-2 min-h-[360px]">
             <div class="space-y-4 flex-1">
               <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
@@ -139,14 +122,13 @@
                 </Button>
               </div>
 
-              <!-- Fixed Height List Container to guarantee alignment -->
               <div class="history-list-container h-[260px] flex flex-col justify-start">
                 <div v-if="paginatedResources.length" class="divide-y divide-slate-100/50">
-                  <div 
-                    v-for="resource in paginatedResources" 
-                    :key="resource.id"
-                    class="history-item flex items-center justify-between py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200 cursor-pointer"
-                    @click="goTo(resource.path)"
+                  <div
+                      v-for="resource in paginatedResources"
+                      :key="resource.id"
+                      class="history-item flex items-center justify-between py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200 cursor-pointer"
+                      @click="goTo(resource.path)"
                   >
                     <div class="space-y-1.5 text-left min-w-0 pr-4 flex-1">
                       <strong class="block text-xs font-bold text-slate-800 truncate">{{ resource.title }}</strong>
@@ -163,7 +145,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <div v-else class="h-full border border-dashed border-slate-200/80 rounded-2xl flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
                   <p>暂无资源生成记录</p>
                   <Button size="sm" class="rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white cursor-pointer border-none" @click="goTo('/resource-generator')">
@@ -173,23 +155,22 @@
               </div>
             </div>
 
-            <!-- Pagination footer -->
             <div class="flex items-center justify-between border-t border-slate-200/60 pt-3 mt-4 text-[10px] font-mono text-slate-400">
               <span>共 {{ recentResources.length }} 项</span>
               <div class="flex items-center gap-3" v-if="totalResourcePages > 1">
                 <span>{{ resourcePage }} / {{ totalResourcePages }} 页</span>
                 <div class="flex gap-1.5">
-                  <button 
-                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
-                    :disabled="resourcePage === 1"
-                    @click="resourcePage--"
+                  <button
+                      class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="resourcePage === 1"
+                      @click="resourcePage--"
                   >
                     <ChevronLeft class="w-3 h-3 text-slate-655" />
                   </button>
-                  <button 
-                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
-                    :disabled="resourcePage === totalResourcePages"
-                    @click="resourcePage++"
+                  <button
+                      class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="resourcePage === totalResourcePages"
+                      @click="resourcePage++"
                   >
                     <ChevronRight class="w-3 h-3 text-slate-655" />
                   </button>
@@ -198,7 +179,6 @@
             </div>
           </section>
 
-          <!-- Right Column: Path History (Cardless) -->
           <section class="history-section flex flex-col justify-between py-2 min-h-[360px]">
             <div class="space-y-4 flex-1">
               <div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
@@ -211,13 +191,12 @@
                 </Button>
               </div>
 
-              <!-- Fixed Height List Container to guarantee alignment -->
               <div class="history-list-container h-[260px] flex flex-col justify-start">
                 <div v-if="paginatedPaths.length" class="divide-y divide-slate-100/50">
-                  <div 
-                    v-for="path in paginatedPaths" 
-                    :key="path.id"
-                    class="history-item flex flex-col py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200"
+                  <div
+                      v-for="path in paginatedPaths"
+                      :key="path.id"
+                      class="history-item flex flex-col py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200"
                   >
                     <div class="flex items-start justify-between gap-4">
                       <div class="space-y-1.5 text-left min-w-0 flex-1">
@@ -226,16 +205,15 @@
                           当前节点：<span class="font-bold text-slate-650">{{ path.currentNodeTitle }}</span>
                         </div>
                       </div>
-                      <Button 
-                        size="sm" 
-                        class="text-[10px] h-7 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl border-none cursor-pointer" 
-                        @click="goTo(path.path)"
+                      <Button
+                          size="sm"
+                          class="text-[10px] h-7 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl border-none cursor-pointer"
+                          @click="goTo(path.path)"
                       >
                         继续学习
                       </Button>
                     </div>
-                    
-                    <!-- Progress bar -->
+
                     <div class="mt-2.5">
                       <div class="flex items-center justify-between text-[9px] text-slate-450 font-mono mb-1">
                         <span>总体进度</span>
@@ -247,7 +225,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <div v-else class="h-full border border-dashed border-slate-200/80 rounded-2xl flex flex-col items-center justify-center text-slate-400 text-xs space-y-3">
                   <p>暂无活跃路径记录</p>
                   <Button size="sm" class="rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white cursor-pointer border-none" @click="goTo('/path-planner')">
@@ -257,23 +235,22 @@
               </div>
             </div>
 
-            <!-- Pagination footer -->
             <div class="flex items-center justify-between border-t border-slate-200/60 pt-3 mt-4 text-[10px] font-mono text-slate-400">
               <span>共 {{ activePaths.length }} 项</span>
               <div class="flex items-center gap-3" v-if="totalPathPages > 1">
                 <span>{{ pathPage }} / {{ totalPathPages }} 页</span>
                 <div class="flex gap-1.5">
-                  <button 
-                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
-                    :disabled="pathPage === 1"
-                    @click="pathPage--"
+                  <button
+                      class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="pathPage === 1"
+                      @click="pathPage--"
                   >
                     <ChevronLeft class="w-3 h-3 text-slate-655" />
                   </button>
-                  <button 
-                    class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
-                    :disabled="pathPage === totalPathPages"
-                    @click="pathPage++"
+                  <button
+                      class="p-1 border border-slate-200 hover:border-slate-350 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:hover:bg-transparent"
+                      :disabled="pathPage === totalPathPages"
+                      @click="pathPage++"
                   >
                     <ChevronRight class="w-3 h-3 text-slate-655" />
                   </button>
@@ -286,7 +263,6 @@
 
       </div>
 
-      <!-- Loading State -->
       <div v-if="loading" class="loading-state">
         <div class="loading-pulse-dots">
           <span class="pulse-dot"></span>
@@ -295,17 +271,6 @@
         </div>
         <p class="loading-label">正在同步学习控制台</p>
         <p class="loading-hint">读取画像、路径、资源与学习事件</p>
-      </div>
-
-      <!-- Error State -->
-      <div v-else-if="loadError" class="loading-state">
-        <div class="error-mark">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </div>
-        <p class="error-label">{{ loadError }}</p>
-        <button class="error-retry" @click="loadAllData">重新加载</button>
       </div>
     </div>
   </main>
@@ -356,7 +321,7 @@ use([CanvasRenderer, RadarChart, TooltipComponent])
 
 const router = useRouter()
 
-// 响应式状态：各模块数据、加载态、错误信息
+// 响应式状态：各模块数据、加载态
 const recommendationData = ref<RecommendationData | null>(null)
 const profileRadarData = ref<ProfileRadarData | null>(null)
 const continueLearningData = ref<ContinueLearningData | null>(null)
@@ -364,10 +329,8 @@ const quickActionsData = ref<QuickActionsData | null>(null)
 const recentResourcesData = ref<RecentResourceItem[]>([])
 const loading = ref(true)
 const dataLoaded = ref(false)
-const loadError = ref('')
 
 // Carousel slides definition
-// Banner 轮播：当前索引与幻灯片定义
 const activeSlide = ref(0)
 const carouselSlides = [
   {
@@ -395,7 +358,6 @@ const carouselSlides = [
 
 let carouselInterval: ReturnType<typeof setInterval> | null = null
 
-// 切换到下一张/上一张幻灯片
 const nextSlide = () => {
   activeSlide.value = (activeSlide.value + 1) % carouselSlides.length
 }
@@ -404,13 +366,11 @@ const prevSlide = () => {
   activeSlide.value = (activeSlide.value - 1 + carouselSlides.length) % carouselSlides.length
 }
 
-// 跳转到指定幻灯片并重置自动播放
 const setSlide = (index: number) => {
   activeSlide.value = index
   resetAutoplay()
 }
 
-// 启动/停止轮播自动播放
 const startAutoplay = () => {
   carouselInterval = setInterval(nextSlide, 6000)
 }
@@ -427,12 +387,10 @@ const resetAutoplay = () => {
   startAutoplay()
 }
 
-// 路由跳转封装
 const goTo = (path: string) => {
   if (path) router.push(path)
 }
 
-// 根据图标名映射 Lucide 图标组件
 const getIconComponent = (iconName: string) => {
   switch (iconName) {
     case 'chat': return ChatDotRound
@@ -477,9 +435,9 @@ const formatDateTime = (value?: string | null) => {
   }).format(date)
 
   const isSameDay = (a: Date, b: Date) => (
-    a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate()
+      a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate()
   )
 
   if (isSameDay(date, now)) return `今天 ${time}`
@@ -487,23 +445,19 @@ const formatDateTime = (value?: string | null) => {
   return `${formatDate(value)} ${time}`
 }
 
-// 雷达图跳转路径
 const profilePath = computed(() => profileRadarData.value?.radar?.path || '/profile')
 
-// 将原始数据转换为 ECharts 雷达图格式
 const radarSource = computed<any>(() => {
   if (!profileRadarData.value) return null
   return getRadarChartData(profileRadarData.value)
 })
 
-// 提取各维度数值并归一化到百分比
 const radarValues = computed<number[]>(() => {
   const rawValues = radarSource.value?.series?.[0]?.data?.[0]?.value
   if (!Array.isArray(rawValues)) return []
   return rawValues.map((item: unknown) => clampPercent(item))
 })
 
-// 雷达图 ECharts option 配置
 const radarOption = computed(() => {
   const rawData = radarSource.value
   if (!rawData?.radar) return {}
@@ -539,7 +493,7 @@ const radarOption = computed(() => {
         value: rawData.series?.[0]?.data?.[0]?.value || [],
         name: '能力得分',
         areaStyle: { color: 'rgba(70, 184, 180, 0.2)' },
-        lineStyle: { color: '#0d9488', width: 1.8 }, // Teal-600 equivalent
+        lineStyle: { color: '#0d9488', width: 1.8 },
         itemStyle: { color: '#0d9488', borderColor: '#FCFFFF', borderWidth: 2 },
         symbolSize: 4
       }]
@@ -547,7 +501,6 @@ const radarOption = computed(() => {
   }
 })
 
-// 综合画像得分：优先取后端总分，无则取各维度均值
 const profileScore = computed(() => {
   const raw = profileRadarData.value as any
   const candidate = raw?.score
@@ -558,7 +511,6 @@ const profileScore = computed(() => {
   return clampPercent(values.reduce((sum, value) => sum + value, 0) / values.length)
 })
 
-// 雷达各维度名称与得分映射
 const profileDimensions = computed(() => {
   const indicators = radarSource.value?.radar?.indicator
   const values = radarValues.value
@@ -573,7 +525,6 @@ const profileDimensions = computed(() => {
   }))
 })
 
-// 薄弱方向：优先取后端标记，否则从低分维度推导
 const weakAreas = computed(() => {
   const backendWeakAreas = profileRadarData.value?.weak_areas
   if (Array.isArray(backendWeakAreas) && backendWeakAreas.length) {
@@ -581,17 +532,15 @@ const weakAreas = computed(() => {
   }
 
   const lowDimensions = profileDimensions.value
-    .filter(item => item.score < 75)
-    .sort((a, b) => a.score - b.score)
-    .map(item => item.name)
+      .filter(item => item.score < 75)
+      .sort((a, b) => a.score - b.score)
+      .map(item => item.name)
 
   return lowDimensions.length ? lowDimensions.slice(0, 2) : []
 })
 
-// 薄弱方向展示文案
 const weakAreaText = computed(() => weakAreas.value.join(' / '))
 
-// 最近资源：按创建时间倒序排序后格式化
 const recentResources = computed(() => {
   const list = [...(recentResourcesData.value || [])]
   list.sort((a, b) => {
@@ -611,7 +560,6 @@ const recentResources = computed(() => {
   })
 })
 
-// 活跃学习路径：按最后学习时间倒序排序后格式化
 const activePaths = computed(() => {
   const paths = [...(continueLearningData.value?.active_paths || [])]
   paths.sort((a, b) => {
@@ -633,16 +581,13 @@ const activePaths = computed(() => {
   })
 })
 
-// 分页逻辑：每页4项，资源与路径分页独立
 const ITEMS_PER_PAGE = 4
 const resourcePage = ref(1)
 const pathPage = ref(1)
 
-// 计算总页数
 const totalResourcePages = computed(() => Math.ceil(recentResources.value.length / ITEMS_PER_PAGE) || 1)
 const totalPathPages = computed(() => Math.ceil(activePaths.value.length / ITEMS_PER_PAGE) || 1)
 
-// 当前页切片数据
 const paginatedResources = computed(() => {
   const start = (resourcePage.value - 1) * ITEMS_PER_PAGE
   return recentResources.value.slice(start, start + ITEMS_PER_PAGE)
@@ -653,7 +598,6 @@ const paginatedPaths = computed(() => {
   return activePaths.value.slice(start, start + ITEMS_PER_PAGE)
 })
 
-// 数据刷新时重置分页到第一页
 watch(recentResources, () => {
   resourcePage.value = 1
 })
@@ -661,18 +605,15 @@ watch(activePaths, () => {
   pathPage.value = 1
 })
 
-// 快捷操作：最多取前6项
 const quickActions = computed<HomeActionItem[]>(() => {
   const actions = quickActionsData.value?.actions || []
   return actions.slice(0, 6)
 })
 
-// 并行加载所有首页数据，各接口独立容错
 const loadAllData = async () => {
   if (!dataLoaded.value) {
     loading.value = true
   }
-  loadError.value = ''
 
   const results = await Promise.allSettled([
     getRecommendation(),
@@ -690,11 +631,8 @@ const loadAllData = async () => {
   if (actionsRes.status === 'fulfilled') quickActionsData.value = actionsRes.value.data.data
   if (resourcesRes.status === 'fulfilled') recentResourcesData.value = resourcesRes.value.data.data ?? []
 
-  // 全部失败时显示错误提示，部分失败仅打印警告
   const failedCount = results.filter(r => r.status === 'rejected').length
-  if (failedCount === results.length) {
-    loadError.value = '后端接口暂时不可用，请稍后重试。'
-  } else if (failedCount > 0) {
+  if (failedCount > 0) {
     console.warn(`${failedCount} 个首页接口请求失败，部分数据不可用`)
   }
 
@@ -702,18 +640,15 @@ const loadAllData = async () => {
   loading.value = false
 }
 
-// 生命周期：挂载时加载数据并启动轮播
 onMounted(() => {
   loadAllData()
   startAutoplay()
 })
 
-// keep-alive 激活时重新加载数据
 onActivated(() => {
   loadAllData()
 })
 
-// 组件卸载时清理轮播定时器
 onUnmounted(() => {
   stopAutoplay()
 })
@@ -723,8 +658,8 @@ onUnmounted(() => {
 .home-page {
   color: var(--color-text);
   background:
-    radial-gradient(circle at 84% 2%, rgba(13, 148, 136, 0.03), transparent 30rem),
-    #fafafa; /* Flat soft off-white background */
+      radial-gradient(circle at 84% 2%, rgba(13, 148, 136, 0.03), transparent 30rem),
+      #fafafa;
 }
 
 .home-shell {
@@ -742,7 +677,6 @@ onUnmounted(() => {
   height: 100%;
 }
 
-/* Custom dock button effects without white card borders */
 .dock-button {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -756,7 +690,6 @@ onUnmounted(() => {
   color: #ffffff;
 }
 
-/* History lists custom minimal styles */
 .history-item {
   transition: all 0.2s ease;
 }
@@ -765,7 +698,6 @@ onUnmounted(() => {
   background-color: rgba(241, 245, 249, 0.6);
 }
 
-/* Carousel slide transitions */
 .slide-fade-enter-active,
 .slide-fade-leave-active {
   transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
@@ -781,7 +713,6 @@ onUnmounted(() => {
   transform: scale(0.99);
 }
 
-/* Loading State */
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -854,49 +785,6 @@ onUnmounted(() => {
   font-size: var(--text-sm);
   color: var(--color-text-faint);
   letter-spacing: 0.01em;
-}
-
-/* Error State */
-.error-mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-
-.error-label {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  text-align: center;
-  max-width: 320px;
-}
-
-.error-retry {
-  margin-top: 12px;
-  height: 32px;
-  padding: 0 16px;
-  border-radius: var(--radius-sm);
-  background: var(--color-action);
-  color: var(--color-text-strong);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  border: none;
-  cursor: pointer;
-  transition: var(--btn-transition);
-  letter-spacing: 0.01em;
-}
-
-.error-retry:hover {
-  background: var(--color-action-hover);
-  transform: translateY(-1px);
 }
 
 @media (prefers-reduced-motion: reduce) {

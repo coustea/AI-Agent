@@ -247,12 +247,12 @@
                 <div class="slide-thumb t2"></div>
               </div>
 
-              <!-- 动画 / 视频 -->
-              <div v-else class="visual visual-video">
-                <div class="video-screen">
+              <!-- 动画 -->
+              <div v-else class="visual visual-cartoon">
+                <div class="cartoon-screen">
                   <PhPlayCircle />
                 </div>
-                <div class="video-track">
+                <div class="cartoon-track">
                   <span></span>
                   <span></span>
                   <span></span>
@@ -383,7 +383,7 @@ const isPartial = computed(() => bundle.value?.status === 'partial_completed')
 const createdAt = computed(() => formatTime(bundle.value?.created_at || null))
 
 // 资源类型的定义顺序（用于排序）与有效集合
-const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'cartoon', 'video']
+const RESOURCE_ORDER = ['content', 'mindmap', 'quiz', 'code', 'reading', 'ppt', 'cartoon']
 const RESOURCE_TYPES = new Set(RESOURCE_ORDER)
 
 // 原始资源列表：优先从 bundle.resources 读取，兼容 items 字段
@@ -471,7 +471,6 @@ function getDefaultSummary(type: string) {
     reading: '补充相关课程资料与拓展阅读，便于继续深入学习。',
     ppt: '整合重点内容形成结构化课件，适合快速复习和课堂展示。',
     cartoon: '用动画方式呈现概念变化、执行过程和知识关系。',
-    video: '基于学习目标生成讲解视频，适合跟学和回看。',
   })[type] ?? '根据本次学习需求生成的个性化学习资源。'
 }
 
@@ -491,7 +490,6 @@ function getFormat(r: any, type: string) {
     reading: 'Links',
     ppt: 'Slides',
     cartoon: 'Video',
-    video: 'Video',
   })[type] ?? 'Resource'
 }
 
@@ -506,7 +504,7 @@ function normalizeFormat(raw: string) {
   if (value === 'links') return 'Links'
   if (value === 'pdf') return 'PDF'
   if (value === 'ppt' || value === 'pptx' || value === 'slides') return 'Slides'
-  if (value === 'mp4' || value === 'video') return 'Video'
+  if (value === 'mp4') return 'Video'
 
   return raw.trim()
 }
@@ -530,9 +528,9 @@ function getHighlights(metadata: any, metrics: any): string[] {
   return ['重点梳理', '个性化生成', '可直接学习']
 }
 
-// 判断资源是否有实质内容：PPT/视频等始终视为有效，其余检查字符串/数组/对象
+// 判断资源是否有实质内容：PPT/动画等始终视为有效，其余检查字符串/数组/对象
 function hasContent(value: unknown, type?: string) {
-  if (type === 'ppt' || type === 'cartoon' || type === 'video') return true
+  if (type === 'ppt' || type === 'cartoon') return true
   if (typeof value === 'string') return value.trim().length > 0
   if (Array.isArray(value)) return value.length > 0
   return isPlainObj(value) && Object.keys(value).length > 0
@@ -556,7 +554,6 @@ function getIconComponent(type: string) {
     reading: PhBookOpenText,
     ppt: PhPresentationChart,
     cartoon: PhFilmSlate,
-    video: PhPlayCircle,
   })[type] ?? PhFolderOpen
 }
 
@@ -569,7 +566,6 @@ function getActionText(type: string) {
     reading: '查看拓展阅读',
     ppt: '查看课件内容',
     cartoon: '查看动画资源',
-    video: '查看视频资源',
   })[type] ?? '查看内容'
 }
 
@@ -950,8 +946,7 @@ function formatTime(time: string | null) {
   background: linear-gradient(135deg, #dc2626, #f87171);
 }
 
-.type-cartoon .type-icon,
-.type-video .type-icon {
+.type-cartoon .type-icon {
   background: linear-gradient(135deg, #4f46e5, #818cf8);
 }
 
@@ -1435,8 +1430,8 @@ function formatTime(time: string | null) {
   bottom: 26px;
 }
 
-/* Video */
-.video-screen {
+/* Cartoon */
+.cartoon-screen {
   position: absolute;
   inset: 24px 52px 48px;
   border-radius: 18px;
@@ -1446,13 +1441,13 @@ function formatTime(time: string | null) {
   box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18);
 }
 
-.video-screen svg {
+.cartoon-screen svg {
   width: 38px;
   height: 38px;
   color: #fff;
 }
 
-.video-track {
+.cartoon-track {
   position: absolute;
   left: 52px;
   right: 52px;
@@ -1462,7 +1457,7 @@ function formatTime(time: string | null) {
   gap: 8px;
 }
 
-.video-track span {
+.cartoon-track span {
   height: 7px;
   border-radius: 999px;
   background: #c7d2fe;

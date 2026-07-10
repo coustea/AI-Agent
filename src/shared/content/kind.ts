@@ -8,7 +8,6 @@ const ARTIFACT_LABELS: Record<string, string> = { // 资源类型到中文标签
   reading: '拓展阅读',
   ppt: '演示幻灯',
   cartoon: '动画讲解',
-  video: '讲解视频',
 }
 
 export function getArtifactLabel(type: string) { // 获取资源类型的中文显示名称

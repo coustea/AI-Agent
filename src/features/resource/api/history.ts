@@ -16,27 +16,20 @@ export interface GeneratedResourceItem {
   updated_at: string | null // 任务最近更新时间（ISO 字符串）
 }
 
-// 单个资源产物的详细信息：对应后端 generated_resource_items 表的一行
+// 单个资源产物的详细信息：与后端 GeneratedResourceItem 完全对齐
 export interface ResourceItemDetail {
-  id: number // 产物记录主键
+  id: string // 产物记录主键（UUID）
   type: string // 产物类型：content / mindmap / quiz / code / reading / ppt / cartoon / video
   title: string // 产物标题
   format: string // 产物格式：markdown / json / html / pptx / mp4 等
   content: Record<string, unknown> | string | null // 产物正文内容，结构因类型而异
-  summary: string // 产物摘要
-  metrics: Record<string, unknown> // 生成过程指标（耗时、token 数等）
-  downstream_context?: Record<string, unknown> | null // 传递给下游智能体的上下文片段
   metadata: Record<string, unknown> // 额外元数据（模板、版本号等）
-  status: string // 单产物状态：completed / failed / generating
-  error_message: string | null // 失败时的错误信息，成功时为 null
   created_at: string | null // 产物创建时间
-  updated_at: string | null // 产物最近更新时间
 }
 
-// 一次资源生成任务的完整产物包：包含任务元信息与全部产物明细
+// 一次资源生成任务的完整产物包：与后端 ResourceBundle 完全对齐
 export interface GeneratedResourceBundle {
   id: string // 任务唯一标识（前端字符串化后的 resource_id）
-  task_id: string // 后端任务追踪 ID
   title: string // 任务标题
   learning_need: string // 用户输入的学习需求
   selected_agents: string[] // 参与生成的智能体 id 列表

@@ -34,15 +34,12 @@ from app.config import (
 from app.infra.logging import get_logger
 from app.rag.bm25 import get_bm25_index
 from app.rag.embeddings import embed_query
-from app.rag.models import CHROMA_COLLECTION, RetrievedChunk, RetrievalResult
+from app.rag.models import CHROMA_COLLECTION, MANIFEST_FILENAME, RetrievedChunk, RetrievalResult
 
 logger = get_logger(__name__)
 
 # 并发检索限制
 _semaphore = asyncio.Semaphore(4)
-
-# Manifest 文件名
-_MANIFEST_FILENAME = "manifest.json"
 
 # 混合检索内部参数
 _VECTOR_FETCH_K = 40       # 向量召回数量，先多召回
@@ -116,7 +113,7 @@ def _elapsed_ms(start: float) -> int:
 
 # 读取索引 manifest，失败返回 None
 def _load_manifest(kb_dir: Path) -> dict[str, Any] | None:
-    manifest_path = kb_dir / _MANIFEST_FILENAME
+    manifest_path = kb_dir / MANIFEST_FILENAME
     if not manifest_path.exists():
         return None
     try:

@@ -3,8 +3,8 @@
 使用 langchain_openai.OpenAIEmbeddings 通过 OpenAI 兼容 API 生成查询向量，
 嵌入模型配置独立于全局 LLM 配置。
 
-切换嵌入模型只需修改 config.yaml 中的 knowledge.embed_model 和
-knowledge.embed_base_url，下次启动时自动感知：
+切换嵌入模型只需修改 config.yaml 中的 knowledge.embed_model、
+knowledge.embed_base_url 和 knowledge.embed_api_key，下次启动时自动感知：
   - manifest 中记录的 embedding_model 与当前配置不同 → 触发重建
   - _get_embeddings_client() 每次读取最新配置，无缓存过时问题
 """
@@ -15,13 +15,11 @@ import time
 
 from langchain_openai import OpenAIEmbeddings
 
-from app.config import KB_EMBED_BASE_URL, KB_EMBED_MODEL
+from app.config import KB_EMBED_API_KEY, KB_EMBED_BASE_URL, KB_EMBED_MODEL
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-# llama.cpp 嵌入服务不校验 api_key，占位即可
-_EMBED_API_KEY = "sk-placeholder"
 # 嵌入请求超时秒数（批量嵌入 32 条长文本时需较长等待）
 _REQUEST_TIMEOUT = 30
 
@@ -69,12 +67,12 @@ def reset_breaker() -> None:
 def _get_embeddings_client() -> OpenAIEmbeddings:
     """创建嵌入客户端。每次读取最新配置，模型切换后无需重启。
 
-    不使用 lru_cache：config.yaml 修改 embed_model/embed_base_url 后
+    不使用 lru_cache：config.yaml 修改 embed_model/embed_base_url/embed_api_key 后
     应立即生效，缓存会导致继续使用旧模型。
     """
     return OpenAIEmbeddings(
         model=KB_EMBED_MODEL,
-        api_key=_EMBED_API_KEY,
+        api_key=KB_EMBED_API_KEY,
         base_url=KB_EMBED_BASE_URL,
         check_embedding_ctx_length=False,
         request_timeout=_REQUEST_TIMEOUT,

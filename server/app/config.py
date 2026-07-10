@@ -56,6 +56,13 @@ def get(path: str, default=None):
     return value
 
 
+# ============ 应用配置 ============
+# 服务监听地址
+HOST = get("app.host", "127.0.0.1")
+# 服务监听端口
+PORT = get("app.port", 9999)
+
+
 # ============ 数据库配置 ============
 # 数据库连接 URL（如 postgresql://user:pass@host/db）
 DB_URL = get("database.url", "")
@@ -130,12 +137,6 @@ def user_chat_uploads_dir(username: str, session_id: str) -> Path:
     return user_chat_dir(username, session_id) / "uploads"
 
 
-# 获取用户聊天视频目录
-def user_chat_videos_dir(username: str, session_id: str, message_id: str) -> Path:
-    """获取用户聊天视频目录：static/{username}/chat/{session_id}/videos/{message_id}/"""
-    return user_chat_dir(username, session_id) / "videos" / message_id
-
-
 # 获取用户资源目录
 def user_resources_dir(username: str) -> Path:
     """获取用户资源目录：static/{username}/resources/"""
@@ -154,13 +155,7 @@ def user_resource_ppt_dir(username: str, resource_id: str) -> Path:
     return user_resource_dir(username, resource_id) / "ppt"
 
 
-# 获取资源视频目录
-def user_resource_video_dir(username: str, resource_id: str) -> Path:
-    """获取资源视频目录：static/{username}/resources/{resource_id}/video/"""
-    return user_resource_dir(username, resource_id) / "video"
-
-
-# 获取用户学习路径目录
+# 获取路径节点 PPT 目录
 def user_paths_dir(username: str) -> Path:
     """获取用户学习路径目录：static/{username}/paths/"""
     return user_dir(username) / "paths"
@@ -184,13 +179,7 @@ def user_path_node_ppt_dir(username: str, path_id: str, node_id: str) -> Path:
     return user_path_node_dir(username, path_id, node_id) / "ppt"
 
 
-# 获取路径节点视频目录
-def user_path_node_video_dir(username: str, path_id: str, node_id: str) -> Path:
-    """获取路径节点视频目录：static/{username}/paths/{path_id}/nodes/{node_id}/video/"""
-    return user_path_node_dir(username, path_id, node_id) / "video"
-
-
-# 获取资源动画目录
+# 获取路径节点动画目录
 def user_resource_cartoon_dir(username: str, resource_id: str) -> Path:
     """获取资源动画目录：static/{username}/resources/{resource_id}/cartoon/"""
     return user_resource_dir(username, resource_id) / "cartoon"
@@ -234,34 +223,16 @@ def chat_upload_url(username: str, session_id: str, filename: str) -> str:
 
 
 
-# 构建聊天视频 URL
-def chat_video_url(username: str, session_id: str, message_id: str) -> str:
-    """构建聊天视频 URL：/static/{username}/chat/{session_id}/videos/{message_id}/video.mp4"""
-    return f"/static/{username}/chat/{session_id}/videos/{message_id}/video.mp4"
-
-
 # 构建资源 PPT URL
 def resource_ppt_url(username: str, resource_id: str) -> str:
     """构建资源 PPT URL：/static/{username}/resources/{resource_id}/ppt/slides.html"""
     return f"/static/{username}/resources/{resource_id}/ppt/slides.html"
 
 
-# 构建资源视频 URL
-def resource_video_url(username: str, resource_id: str) -> str:
-    """构建资源视频 URL：/static/{username}/resources/{resource_id}/video/video.mp4"""
-    return f"/static/{username}/resources/{resource_id}/video/video.mp4"
-
-
 # 构建路径节点 PPT URL
 def path_node_ppt_url(username: str, path_id: str, node_id: str) -> str:
     """构建路径节点 PPT URL：/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"""
     return f"/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"
-
-
-# 构建路径节点视频 URL
-def path_node_video_url(username: str, path_id: str, node_id: str) -> str:
-    """构建路径节点视频 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/video/video.mp4"""
-    return f"/static/{username}/paths/{path_id}/nodes/{node_id}/video/video.mp4"
 
 
 # 构建资源动画 URL
@@ -275,12 +246,6 @@ def path_node_cartoon_url(username: str, path_id: str, node_id: str, filename: s
     """构建路径节点动画 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"""
     return f"/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"
 
-
-# ============ 讲解视频渲染配置 ============
-VIDEO_RENDER_TIMEOUT_SECONDS = get("video.render_timeout_seconds", 900)
-VIDEO_RENDER_CONCURRENCY = get("video.concurrency", 4)
-VIDEO_RENDER_CHROMIUM_GL = get("video.chromium_gl", "angle")
-
 # ============ 知识库配置 ============
 # 仅保留部署/调优参数；collection、切分、RRF 等实现细节下沉为 RAG 模块常量
 # 是否启用知识库功能
@@ -289,12 +254,12 @@ KB_ENABLED = get("knowledge.enabled", True)
 KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3")
 # 嵌入服务地址（llama.cpp /v1）
 KB_EMBED_BASE_URL = get("knowledge.embed_base_url", "http://127.0.0.1:10000/v1")
+# 嵌入服务 API Key（llama.cpp 等本地服务可不校验，填占位符即可）
+KB_EMBED_API_KEY = get("knowledge.embed_api_key", "sk-placeholder")
 # 检索时返回的最相似文档数量
 KB_TOP_K = get("knowledge.top_k", 4)
 # 返回给 ChatAgent 的最大上下文字符数
 KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
-# 启动时索引不存在则自动构建
-KB_AUTO_BUILD = get("knowledge.auto_build", True)
 
 # ============ 日志配置 ============
 # LangChain 调试开关

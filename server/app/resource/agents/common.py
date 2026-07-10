@@ -4,14 +4,19 @@
 提供：
   build_resource_context — 构建 standalone 多智能体资源生成 prompt 上下文
   build_node_context     — 构建路径规划节点资源生成 prompt 上下文
+  build_path_context     — 从 PathResourceRequest 构建上下文（统一接口）
 """
 
 import json
+from typing import TYPE_CHECKING
 
 from app.resource.schemas import (
     NodeInput,
     ResourceInput,
 )
+
+if TYPE_CHECKING:
+    from app.path.schemas import PathResourceRequest
 
 
 def _format_profile(profile: dict) -> str | None:
@@ -125,5 +130,43 @@ def build_node_context(input_data: NodeInput) -> list[str]:
         "",
         input_data.tutorial_markdown,
     ]))
+
+    return parts
+
+
+def build_path_context(request: "PathResourceRequest") -> list[str]:
+    """从 PathResourceRequest 构建上下文（路径规划统一接口）。"""
+    parts = [
+        f"## 路径目标\n{request.path_goal}",
+        f"## 路径标题\n{request.path_title}",
+        "\n".join([
+            "## 当前节点",
+            f"- 节点标题: {request.node_title}",
+            f"- 节点标识: {request.node_key}",
+            f"- 难度: {request.difficulty or ''}",
+        ]),
+    ]
+
+    # 注入知识点、薄弱点
+    if request.knowledge_points:
+        parts.append("## 节点知识点\n" + "\n".join(f"- {item}" for item in request.knowledge_points))
+    if request.weak_knowledge_points:
+        parts.append("## 薄弱知识点\n" + "\n".join(f"- {item}" for item in request.weak_knowledge_points))
+
+    # 注入学习者画像
+    profile_text = _format_profile(request.profile)
+    if profile_text:
+        parts.append("## 学习者画像\n" + profile_text)
+
+    # 注入教程内容
+    tutorial = request.tutorial
+    if tutorial:
+        parts.append("\n".join([
+            "## 当前教程",
+            f"- 标题: {tutorial.title}",
+            f"- 摘要: {tutorial.summary or ''}",
+            "",
+            tutorial.content_markdown,
+        ]))
 
     return parts

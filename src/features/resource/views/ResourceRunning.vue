@@ -515,7 +515,6 @@ const workflowIconMap: Record<string, Component> = {
   code: Cpu,
   reading: Reading,
   ppt: DataBoard,
-  video: VideoIcon,
   cartoon: VideoIcon,
   bundle: Box,
 }
@@ -530,7 +529,6 @@ const workflowTitleMap: Record<string, string> = {
   code: '代码示例',
   reading: '拓展阅读',
   ppt: '教学课件',
-  video: '讲解视频',
   cartoon: '动画讲解',
   bundle: '资源包交付',
 }
@@ -770,7 +768,7 @@ function getNodeMessage(node: DagNodeState): string {
   if (node.status === 'running') {
     const msg = node.currentMessage?.trim()
     // 过滤掉 "planning completed" / "content finished" 等冗余完成消息
-    if (msg && /^(planning|content|mindmap|quiz|code|reading|ppt|video|cartoon|bundle)\s+(completed|finished|done)/i.test(msg)) {
+    if (msg && /^(planning|content|mindmap|quiz|code|reading|ppt|cartoon|bundle)\s+(completed|finished|done)/i.test(msg)) {
       return '运行中'
     }
     return msg || '运行中'
@@ -922,7 +920,6 @@ const outputIcons: Record<string, Component> = {
   reading: ReadingIcon,
   ppt: SlidesIcon,
   cartoon: VideoIcon,
-  video: VideoIcon,
 }
 
 // 根据智能体 id 返回对应图标，缺省回退到文章图标

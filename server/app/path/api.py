@@ -250,154 +250,43 @@ async def submit_node_quiz(
 # ── 辅助资源生成 ───────────────────────────────────────────────────────────
 
 
-# 生成节点思维导图资源
-@router.post("/nodes/{node_id}/mindmap")  # POST 生成思维导图
-async def generate_mindmap(
+# 支持的资源类型
+RESOURCE_TYPES = {"mindmap", "code", "ppt", "reading", "cartoon"}
+
+
+# 生成节点辅助资源（思维导图/代码实操/PPT/阅读/动画）
+@router.post("/nodes/{node_id}/resources/{resource_type}")
+async def generate_node_resource(
     node_id: int,
+    resource_type: str,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """生成节点辅助资源 — 支持类型：mindmap, code, ppt, reading, cartoon"""
+    if resource_type not in RESOURCE_TYPES:
+        return HttpResponse.error(code=400, message=f"不支持的资源类型: {resource_type}")
     service = PathService(session)
     try:
-        result = await service.generate_node_resource(current_user.id, node_id, "mindmap")
+        result = await service.generate_node_resource(current_user.id, node_id, resource_type)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
-# 生成节点代码实操资源
-@router.post("/nodes/{node_id}/code")  # POST 生成代码实操
-async def generate_code(
+# 获取节点辅助资源
+@router.get("/nodes/{node_id}/resources/{resource_type}")
+async def get_node_resource(
     node_id: int,
+    resource_type: str,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    """获取节点辅助资源 — 支持类型：mindmap, code, ppt, reading, cartoon"""
+    if resource_type not in RESOURCE_TYPES:
+        return HttpResponse.error(code=400, message=f"不支持的资源类型: {resource_type}")
     service = PathService(session)
     try:
-        result = await service.generate_node_resource(current_user.id, node_id, "code")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json"))
-
-
-# 生成节点 PPT 课件资源
-@router.post("/nodes/{node_id}/ppt")  # POST 生成 PPT 课件
-async def generate_ppt(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.generate_node_resource(current_user.id, node_id, "ppt")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json"))
-
-
-# 生成节点拓展阅读资源
-@router.post("/nodes/{node_id}/reading")  # POST 生成拓展阅读
-async def generate_reading(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.generate_node_resource(current_user.id, node_id, "reading")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json"))
-
-
-# 生成节点动画讲解资源
-@router.post("/nodes/{node_id}/cartoon")  # POST 生成动画讲解资源
-async def generate_cartoon(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.generate_node_resource(current_user.id, node_id, "cartoon")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json"))
-
-
-# ── 辅助资源获取 ───────────────────────────────────────────────────────────
-
-
-# 获取节点思维导图（最新版本）
-@router.get("/nodes/{node_id}/mindmap")  # GET 获取节点思维导图（最新版本）
-async def get_mindmap(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, "mindmap")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
-
-
-# 获取节点代码实操资源
-@router.get("/nodes/{node_id}/code")  # GET 获取节点代码实操
-async def get_code(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, "code")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
-
-
-# 获取节点 PPT 课件
-@router.get("/nodes/{node_id}/ppt")  # GET 获取节点 PPT 课件
-async def get_ppt(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, "ppt")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
-
-
-# 获取节点拓展阅读
-@router.get("/nodes/{node_id}/reading")  # GET 获取节点拓展阅读
-async def get_reading(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, "reading")
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
-
-
-# 获取节点动画讲解资源
-@router.get("/nodes/{node_id}/cartoon")  # GET 获取节点动画讲解资源
-async def get_cartoon(
-    node_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, "cartoon")
+        result = await service.get_node_resource_by_type(current_user.id, node_id, resource_type)
     except ValueError as exc:
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)

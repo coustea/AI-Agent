@@ -240,11 +240,12 @@
           <section class="mentor-section evaluation-panel">
             <span class="mentor-kicker">EVALUATION</span>
             <h3>学习效果评估</h3>
+
             <div v-if="evaluation" class="cockpit-card">
               <div class="cockpit-header">
                 <div class="header-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                   </svg>
                 </div>
                 <h3>AI 导师学习诊断</h3>
@@ -254,24 +255,26 @@
                 <div class="metric-item card-hover">
                   <div class="metric-icon clock">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
                     </svg>
                   </div>
                   <div class="metric-info">
                     <label>学习时长</label>
-                    <strong>{{ evaluation.signal_snapshot.active_minutes }} <small>分钟</small></strong>
+                    <strong>{{ activeMinutes }} <small>分钟</small></strong>
                   </div>
                 </div>
 
                 <div class="metric-item card-hover">
                   <div class="metric-icon score">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/>
+                      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                      <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
                     </svg>
                   </div>
                   <div class="metric-info">
                     <label>测验均分</label>
-                    <strong :class="{ 'good': averageScore >= 80, 'warning': averageScore > 0 && averageScore < 80 }">
+                    <strong :class="{ good: averageScore >= 80, warning: averageScore > 0 && averageScore < 80 }">
                       {{ averageScore > 0 ? `${averageScore} 分` : '暂无' }}
                     </strong>
                   </div>
@@ -281,32 +284,42 @@
               <div class="diagnostic-section">
                 <h4 class="section-title">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
                   </svg>
                   薄弱知识点
                 </h4>
-                <div v-if="evaluation.signal_snapshot.weak_topics.length > 0" class="weak-tags">
-                  <span v-for="topic in evaluation.signal_snapshot.weak_topics" :key="topic" class="weak-tag">
+
+                <div v-if="weakTopics.length > 0" class="weak-tags">
+                  <span v-for="topic in weakTopics" :key="topic" class="weak-tag">
                     {{ topic }}
                   </span>
                 </div>
+
                 <div v-else class="empty-weak">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
+                    <polyline points="20 6 9 17 4 12" />
                   </svg>
                   无明显薄弱知识点，继续保持！
                 </div>
               </div>
 
-              <div v-if="evaluation.optimization_tips.length > 0" class="diagnostic-section advice-section">
+              <div v-if="optimizationTips.length > 0" class="diagnostic-section advice-section">
                 <h4 class="section-title">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+                    <path d="M12 8V4H8" />
+                    <rect width="16" height="12" x="4" y="8" rx="2" />
+                    <path d="M2 14h2" />
+                    <path d="M20 14h2" />
+                    <path d="M15 13v2" />
+                    <path d="M9 13v2" />
                   </svg>
                   优化处方与建议
                 </h4>
+
                 <ul class="advice-list">
-                  <li v-for="(tip, idx) in evaluation.optimization_tips" :key="idx" class="advice-item">
+                  <li v-for="(tip, idx) in optimizationTips" :key="idx" class="advice-item">
                     <span class="bullet">{{ idx + 1 }}</span>
                     <p>{{ tip }}</p>
                   </li>
@@ -318,10 +331,9 @@
       </section>
     </section>
 
-    <!-- 教程生成弹窗 overlay：不切换页面，在当前学习路径页上方展示 -->
     <Teleport to="body">
       <transition name="tutorial-overlay">
-        <div v-if="isGeneratingTutorial" class="tutorial-generating-overlay" @click.self>
+        <div v-if="isGeneratingTutorial" class="tutorial-generating-overlay">
           <section class="tutorial-generating-modal">
             <div class="generate-copy">
               <span>NODE TUTORIAL</span>
@@ -352,7 +364,6 @@
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-
 
 import {
   createLearningPath,
@@ -386,26 +397,17 @@ type NodeWorkspaceLike = {
 const router = useRouter()
 const route = useRoute()
 
-// 路径数据与评估状态
 const loading = ref(false)
 const path = ref<PathOverview | null>(null)
 const evaluation = ref<PathLearningEvaluationResponse | null>(null)
 const activeDetailNode = ref<LearningPathNode | null>(null)
 
-// 从评估报告中计算测验平均分
-const averageScore = computed(() => {
-  if (!evaluation.value || evaluation.value.signal_snapshot.average_score === null) return 0
-  return Math.round(evaluation.value.signal_snapshot.average_score)
-})
-
-// 路径规划中：通过 SSE 实时接收后端多智能体生成进度
 const isGenerating = ref(false)
 const generatingProgress = ref(12)
 const generatingMessages = ref<string[]>([])
 const pathEvents = usePathEvents()
 const activeRunId = ref<string | null>(null)
 
-// 节点教程生成中：点击未生成教程的节点时的弹窗状态
 const isGeneratingTutorial = ref(false)
 const openingNodeId = ref<number | null>(null)
 const tutorialNodeId = ref<number | null>(null)
@@ -422,32 +424,47 @@ const enterableStatuses = new Set([
   'completed_with_gaps',
 ])
 
-// 计算当前学习节点：优先使用后端返回的 current_node_key，否则取第一个可学节点
+const averageScore = computed(() => {
+  const score = evaluation.value?.signal_snapshot?.average_score
+  if (score === null || score === undefined) return 0
+  return Math.round(score)
+})
+
+const activeMinutes = computed(() => {
+  return evaluation.value?.signal_snapshot?.active_minutes ?? 0
+})
+
+const weakTopics = computed(() => {
+  return evaluation.value?.signal_snapshot?.weak_topics ?? []
+})
+
+const optimizationTips = computed(() => {
+  return evaluation.value?.optimization_tips ?? []
+})
+
 const currentNode = computed(() => {
   if (!path.value) return null
 
-  return path.value.nodes.find((node) => node.node_id === path.value?.current_node_key)
+  return (
+      path.value.nodes.find((node) => node.node_id === path.value?.current_node_key)
       ?? path.value.nodes.find((node) => ['available', 'in_progress', 'remediation', 'reinforced'].includes(node.status))
       ?? null
+  )
 })
 
-// 右侧面板展示的节点（悬停或当前节点）
 const displayedNode = computed(() => activeDetailNode.value || currentNode.value)
 
 const selectedNodeId = computed(() => displayedNode.value?.id ?? null)
 
-// 展示节点的所属阶段标题
 const displayedStageTitle = computed(() => {
   if (!displayedNode.value) return ''
   return stageTitleById(displayedNode.value.stage_id)
 })
 
-// 展示节点的前置依赖名称列表
 const displayedPrerequisites = computed(() => {
   return displayedNode.value?.prerequisites?.map(prerequisiteLabel) ?? []
 })
 
-// 路径概览数字汇总：可学习 / 学习中 / 已完成 / 未解锁
 const summary = computed(() => {
   const nodes = path.value?.nodes ?? []
 
@@ -459,7 +476,6 @@ const summary = computed(() => {
   }
 })
 
-// 节点 ID → 标题的映射表，用于前置依赖显示
 const nodeTitleMap = computed(() => {
   const map = new Map<string, string>()
 
@@ -470,7 +486,6 @@ const nodeTitleMap = computed(() => {
   return map
 })
 
-// 按阶段分组节点：每个阶段下节点按 priority 排序，未归属节点单独成组
 const stageSections = computed<StageSection[]>(() => {
   if (!path.value) return []
 
@@ -516,7 +531,6 @@ const stageTitleById = (stageId: string) => {
   return stage?.title || stageId
 }
 
-// 阶段维度统计：已完成数、可学数、进度百分比
 const stageCompletedCount = (stage: StageSection) => {
   return stage.nodes.filter((node) => completedStatuses.has(node.status)).length
 }
@@ -586,12 +600,10 @@ const prerequisiteLabel = (nodeKey: string) => {
   return nodeTitleMap.value.get(nodeKey) || nodeKey
 }
 
-// 节点是否可进入（available / in_progress / remediation 等状态）
 const canEnterNode = (node: LearningPathNode) => {
   return enterableStatuses.has(node.status)
 }
 
-// 通用解包：处理嵌套的 ApiResponse 结构，提取 data
 function unwrapResponseData<T>(response: unknown): T {
   const maybeResponse = response as {
     data?: {
@@ -600,11 +612,11 @@ function unwrapResponseData<T>(response: unknown): T {
   }
 
   if (
-      maybeResponse &&
-      typeof maybeResponse === 'object' &&
-      maybeResponse.data &&
-      typeof maybeResponse.data === 'object' &&
-      'data' in maybeResponse.data
+      maybeResponse
+      && typeof maybeResponse === 'object'
+      && maybeResponse.data
+      && typeof maybeResponse.data === 'object'
+      && 'data' in maybeResponse.data
   ) {
     return maybeResponse.data.data as T
   }
@@ -616,12 +628,10 @@ function unwrapResponseData<T>(response: unknown): T {
   return response as T
 }
 
-// 鼠标悬停/聚焦节点时更新右侧面板显示
 const previewNode = (node: LearningPathNode) => {
   activeDetailNode.value = node
 }
 
-// 点击节点：解锁检查 → 打开节点学习空间（已有教程则直接进入，否则先生成）
 const handleNodeClick = async (node: LearningPathNode) => {
   activeDetailNode.value = node
 
@@ -633,7 +643,6 @@ const handleNodeClick = async (node: LearningPathNode) => {
   await openNodeLearning(node)
 }
 
-// 检查节点工作空间：有教程直接跳转学习页，无教程则调用生成流程
 const openNodeLearning = async (node: LearningPathNode) => {
   if (openingNodeId.value || isGeneratingTutorial.value) return
 
@@ -663,7 +672,6 @@ const openNodeLearning = async (node: LearningPathNode) => {
   }
 }
 
-// 生成教程并进入节点页：调用 startLearning + generateTutorial，期间展示轮播日志动画
 const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
   isGeneratingTutorial.value = true
   tutorialNodeId.value = node.id
@@ -672,7 +680,6 @@ const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
     '正在读取路径目标、节点信息和学习画像...',
   ]
 
-  // 1800ms 轮播生成进度日志，让用户感知后端正在工作（LLM 调用需 15-30s）
   const logs = [
     '正在生成节点主教程结构...',
     '正在补充核心概念、例子和易错点...',
@@ -694,7 +701,6 @@ const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
   }, 1800)
 
   try {
-    // 先轻量标记"开始学习"，再调用 LLM 教程生成（需超长 timeout，见 generateTutorial 定义）
     await startLearning(node.id)
     await generateTutorial(node.id)
     router.push(`/path-planner/node/${node.id}`)
@@ -709,12 +715,10 @@ const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
   }
 }
 
-// 关闭 SSE 连接
 const stopSSE = () => {
   pathEvents.close()
 }
 
-// 处理 SSE 推来的实时事件：更新进度百分比 + 轮播日志消息（去重）
 const handlePathEvent = (event: PathEvent) => {
   if (typeof event.progress === 'number') {
     generatingProgress.value = Math.max(generatingProgress.value, Math.min(event.progress, 100))
@@ -730,19 +734,16 @@ const handlePathEvent = (event: PathEvent) => {
   }
 }
 
-// 建立 SSE 连接监听后端多智能体路径规划进度
 const startSSE = (pathId: number, runId: string) => {
   stopSSE()
   pathEvents.connect(pathId, runId, {
     onEvent: handlePathEvent,
-    // 完成时：进度设为 100%，延迟后刷新路径
     onCompleted: () => {
       generatingProgress.value = 100
-      setTimeout(() => {
+      window.setTimeout(() => {
         loadPath()
       }, 700)
     },
-    // 失败时：提示错误并刷新
     onFailed: (error) => {
       toast.error(error.message || '路径规划失败')
       isGenerating.value = false
@@ -751,16 +752,16 @@ const startSSE = (pathId: number, runId: string) => {
   })
 }
 
-// 加载路径学习评估报告
+const loadEvaluation = async (pathId: number) => {
   try {
-    const res = await getLearningEvaluation(pathId)
-    evaluation.value = res.data.data
+    const response = await getLearningEvaluation(pathId)
+    evaluation.value = unwrapResponseData<PathLearningEvaluationResponse>(response)
   } catch (error) {
     console.error('Failed to load evaluation', error)
+    evaluation.value = null
   }
 }
 
-// 加载路径数据：处理新建（路径 planning）、查看指定 ID、查看最新路径三种场景
 const loadPath = async () => {
   const rawId = String(route.params.id || '')
 
@@ -789,6 +790,7 @@ const loadPath = async () => {
 
     try {
       let parsedKnowledge: string[] = []
+
       if (route.query.current_knowledge) {
         try {
           parsedKnowledge = JSON.parse(route.query.current_knowledge as string)
@@ -802,19 +804,19 @@ const loadPath = async () => {
         use_profile: route.query.use_profile !== 'false',
       }
 
-      const res = await createLearningPath({
+      const response = await createLearningPath({
         goal: newGoal,
         topic: newTopic,
         current_knowledge: parsedKnowledge,
         preferences,
       })
 
-      const newPath = res.data.data
-      activeRunId.value = newPath.run_id
+      const newPath = unwrapResponseData<PathOverview & { run_id?: string }>(response)
+      activeRunId.value = newPath.run_id || null
 
       router.replace({
         path: `/path-planner/overview/${newPath.id}`,
-        query: { run_id: newPath.run_id },
+        query: newPath.run_id ? { run_id: newPath.run_id } : {},
       })
     } catch (error) {
       toast.error(getErrorMessage(error, '路径规划任务创建失败'))
@@ -825,7 +827,6 @@ const loadPath = async () => {
     return
   }
 
-  // 非 new 分支：加载已有路径（latest 或指定 ID）
   loading.value = true
 
   try {
@@ -835,13 +836,13 @@ const loadPath = async () => {
     let currentPathId = 0
 
     if (shouldLoadSpecificPath) {
-      const res = await getLearningPathById(paramId)
-      const loadedPath = res.data.data
+      const response = await getLearningPathById(paramId)
+      const loadedPath = unwrapResponseData<PathOverview>(response)
       path.value = loadedPath
       currentPathId = loadedPath.id
     } else {
-      const res = await getCurrentLearningPath()
-      const current = res.data.data
+      const response = await getCurrentLearningPath()
+      const current = unwrapResponseData<PathOverview | null>(response)
 
       if (!current) {
         path.value = null
@@ -862,7 +863,6 @@ const loadPath = async () => {
     const loaded = path.value
     if (!loaded) return
 
-    // 路径还在生成中：建立 SSE 监听进度
     if (loaded.status === 'generating') {
       isGenerating.value = true
       generatingProgress.value = Math.max(generatingProgress.value, 18)
@@ -875,9 +875,11 @@ const loadPath = async () => {
       }
 
       activeRunId.value = String(route.query.run_id || activeRunId.value || '') || null
-      if (activeRunId.value && currentPathId) startSSE(currentPathId, activeRunId.value)
+
+      if (activeRunId.value && currentPathId) {
+        startSSE(currentPathId, activeRunId.value)
+      }
     } else {
-      // 路径已就绪：停止 SSE，加载评估报告
       isGenerating.value = false
       generatingProgress.value = 100
       stopSSE()
@@ -893,7 +895,6 @@ const loadPath = async () => {
   }
 }
 
-// 路径 ID 变化时切换加载逻辑（从新建态过渡到查看态）
 watch(
     () => route.params.id,
     (newId, oldId) => {
@@ -912,42 +913,38 @@ watch(
     },
 )
 
-// 页面激活时恢复 SSE（keep-alive 场景）
 onActivated(() => {
   if (isGenerating.value && activeRunId.value && path.value?.id) {
     startSSE(path.value.id, activeRunId.value)
   }
 })
 
-// 离开页面时关闭 SSE 连接
 onBeforeUnmount(() => {
   stopSSE()
 })
 
-// 页面挂载加载路径
 onMounted(loadPath)
 </script>
 
 <style scoped>
 .path-overview-page {
-  /* 引入色彩体系 */
   --color-state-locked: #94a3b8;
   --color-state-locked-border: #e2e8f0;
-  
+
   --color-state-available: var(--color-primary-text, #205f67);
   --color-state-available-border: var(--color-primary-border, #b9dedc);
-  
+
   --color-state-active: #4f46e5;
   --color-state-active-border: #6366f1;
   --color-state-active-glow: rgba(99, 102, 241, 0.15);
-  
+
   --color-state-alert: #d97706;
   --color-state-alert-border: #fbbf24;
-  
+
   --color-state-completed: var(--color-success, #329a82);
   --color-state-completed-bg: var(--color-success-soft, #e8f7f2);
   --color-state-completed-border: #86efac;
-  
+
   min-height: calc(100vh - var(--navbar-height, 72px));
   background: #fafbfc;
   color: var(--color-text, #173b42);
@@ -1081,7 +1078,6 @@ onMounted(loadPath)
   background: var(--color-primary, #46b8b4);
 }
 
-/* --- 教程生成弹窗 overlay --- */
 .tutorial-generating-overlay {
   position: fixed;
   inset: 0;
@@ -1778,6 +1774,208 @@ onMounted(loadPath)
   transform: translateY(-8px);
 }
 
+.cockpit-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: var(--shadow-sm);
+  border-top: 3px solid var(--color-primary);
+  transition: all 0.3s ease;
+}
+
+.cockpit-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.cockpit-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--color-border-light);
+  padding-bottom: 14px;
+}
+
+.header-icon {
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse-glow 2s infinite alternate;
+}
+
+.cockpit-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-text-strong);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.metric-item {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s ease;
+}
+
+.metric-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metric-icon.clock {
+  background: rgba(79, 70, 229, 0.08);
+  color: var(--color-primary);
+}
+
+.metric-icon.score {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--color-success);
+}
+
+.metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-info label {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.metric-info strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.metric-info strong.good {
+  color: var(--color-success);
+}
+
+.metric-info strong.warning {
+  color: var(--color-warning);
+}
+
+.metric-info strong small {
+  font-size: 0.75rem;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+.diagnostic-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.section-title svg {
+  color: var(--color-text-muted);
+}
+
+.weak-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.weak-tag {
+  font-size: 0.75rem;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.empty-weak {
+  font-size: 0.75rem;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.advice-section {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 16px;
+}
+
+.advice-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.advice-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.bullet {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.advice-item p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1799,187 +1997,16 @@ onMounted(loadPath)
   }
 }
 
-/* ==============================
-   Inlined from Evaluation.vue
-   ============================== */
-.cockpit-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  box-shadow: var(--shadow-sm);
-  border-top: 3px solid var(--color-primary);
-  transition: all 0.3s ease;
-}
-.cockpit-card:hover {
-  box-shadow: var(--shadow-md);
-}
-.cockpit-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--color-border-light);
-  padding-bottom: 14px;
-}
-.header-icon {
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: pulse-glow 2s infinite alternate;
-}
 @keyframes pulse-glow {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  100% { transform: scale(1.05); opacity: 1; }
-}
-.cockpit-header h3 {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: var(--color-text-strong);
-}
-.metrics-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.metric-item {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transition: all 0.2s ease;
-}
-.metric-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.metric-icon.clock {
-  background: rgba(79, 70, 229, 0.08);
-  color: var(--color-primary);
-}
-.metric-icon.score {
-  background: rgba(16, 185, 129, 0.08);
-  color: var(--color-success);
-}
-.metric-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.metric-info label {
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.metric-info strong {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: var(--color-text);
-}
-.metric-info strong.good {
-  color: var(--color-success);
-}
-.metric-info strong.warning {
-  color: var(--color-warning);
-}
-.metric-info strong small {
-  font-size: 0.75rem;
-  font-weight: var(--weight-medium);
-  color: var(--color-text-muted);
-}
-.diagnostic-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.section-title {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.section-title svg {
-  color: var(--color-text-muted);
-}
-.weak-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.weak-tag {
-  font-size: 0.75rem;
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  border: 1px solid rgba(239, 68, 68, 0.15);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-}
-.empty-weak {
-  font-size: 0.75rem;
-  background: var(--color-success-soft);
-  color: var(--color-success);
-  border: 1px solid rgba(16, 185, 129, 0.15);
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-}
-.advice-section {
-  border-top: 1px dashed var(--color-border);
-  padding-top: 16px;
-}
-.advice-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.advice-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-.bullet {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.advice-item p {
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 1380px) {

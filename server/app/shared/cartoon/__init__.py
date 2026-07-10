@@ -1,25 +1,27 @@
-"""Generic computer-theory animation video generation module."""
+"""动画讲解视频生成模块。"""
 
 from app.shared.cartoon.cartoon import (
     AuditResult,
+    CartoonGenerationError,
+    CartoonGenerationResult,
     CartoonScene,
     CartoonVideoAgent,
     CartoonVideoDocument,
-    CartoonGenerationError,
-    CartoonGenerationResult,
 )
 from app.shared.cartoon.renderer import CartoonVideoRenderer, CartoonVideoRenderResult
-from app.shared.cartoon.service import CartoonVideoResult, CartoonVideoService
+from app.shared.cartoon.service import CartoonService
 
 __all__ = [
+    # 服务层（统一入口）
+    "CartoonService",
+    # 底层组件
+    "CartoonVideoAgent",
+    "CartoonVideoRenderer",
+    "CartoonVideoRenderResult",
+    # 数据结构
     "AuditResult",
     "CartoonScene",
-    "CartoonVideoAgent",
     "CartoonVideoDocument",
     "CartoonGenerationError",
     "CartoonGenerationResult",
-    "CartoonVideoRenderer",
-    "CartoonVideoRenderResult",
-    "CartoonVideoResult",
-    "CartoonVideoService",
 ]

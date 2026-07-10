@@ -11,15 +11,12 @@ import {
   PhBooks as Collection,
   PhGraduationCap as DataBoard,
   PhFilmStrip as FilmStrip,
-  PhVideoCamera as VideoCamera,
 } from '@phosphor-icons/vue'
 
 // PPT 智能体的固定标识
 export const PPT_AGENT_ID = 'ppt'
 // 动画讲解智能体的固定标识
 export const CARTOON_AGENT_ID = 'cartoon'
-// 讲解视频智能体的固定标识
-export const VIDEO_AGENT_ID = 'video'
 // 协同中枢智能体的固定标识
 export const COORDINATOR_AGENT_ID = 'coordinator'
 // 汇编归档智能体的固定标识
@@ -40,7 +37,6 @@ export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   reading: { label: '拓展阅读', icon: '📚' },
   ppt: { label: '演示幻灯', icon: '📊' },
   cartoon: { label: '动画讲解', icon: '🎬' },
-  video: { label: '讲解视频', icon: '🎥' },
   bundle: { label: '汇编归档', icon: '📦' },
 }
 
@@ -53,7 +49,6 @@ export const agentMetaList = [
   { id: 'reading', name: '拓展阅读', icon: Collection, colorClass: 'text-indigo' },
   { id: 'ppt', name: '演示幻灯', icon: DataBoard, colorClass: 'text-pink' },
   { id: 'cartoon', name: '动画讲解', icon: FilmStrip, colorClass: 'text-cyan-600' },
-  { id: 'video', name: '讲解视频', icon: VideoCamera, colorClass: 'text-orange' },
 ]
 
 // 根据智能体 id 查找其元信息，找不到时回退为使用 id 作为名称的默认值
@@ -74,7 +69,6 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'review', density: 'detailed', focus: ['core_concepts', 'pitfalls'] },
     cartoon: { style: 'diagram', depth: 'deep', pace: 'normal', visuals: 'detailed' },
-    video: { style: 'precision_light', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
   },
   // 日常学习场景：循序渐进、偏基础与巩固
   daily_review: {
@@ -85,7 +79,6 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
     ppt: { template: 'instructional-editorial', explanation_style: 'review', density: 'concise', focus: ['core_concepts', 'pitfalls'] },
     cartoon: { style: 'minimal', depth: 'overview', pace: 'fast', visuals: 'clean' },
-    video: { style: 'editorial_classroom', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
   },
   // 项目实践场景：案例驱动、偏工程化与应用
   project_practice: {
@@ -96,7 +89,6 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     reading: { coverage: 'broad', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
     ppt: { template: 'tech-blueprint', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
     cartoon: { style: 'dark_tech', depth: 'deep', pace: 'slow', visuals: 'detailed' },
-    video: { style: 'systems_dark', focus: 'practice', voice: 'coach', aspect_ratio: '16:9' },
   },
   // 预习自学场景：系统化、偏概念与基础架构
   self_study: {
@@ -107,7 +99,6 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
     ppt: { template: 'auto', explanation_style: 'review', density: 'standard', focus: ['core_concepts', 'pitfalls'] },
     cartoon: { style: 'diagram', depth: 'standard', pace: 'normal', visuals: 'balanced' },
-    video: { style: 'precision_light', focus: 'concept', voice: 'teacher', aspect_ratio: '16:9' },
   },
 }
 
@@ -162,7 +153,6 @@ export const getResourceToneClass = (type: string) => {
     reading: 'tone-indigo',
     ppt: 'tone-pink',
     cartoon: 'tone-blue',
-    video: 'tone-purple',
   }
   return toneMap[type] || 'tone-blue'
 }
@@ -178,7 +168,6 @@ export const getAgentOutputFormat = (agentId: string) => {
     reading: '拓展阅读文献',
     ppt: '演示幻灯课件',
     cartoon: '动画讲解视频',
-    video: '讲解视频',
   }
   return formatMap[agentId] || '学习资源'
 }

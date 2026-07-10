@@ -1,4 +1,4 @@
-"""HTTP API for theory animation video generation."""
+"""HTTP API for computer-theory animation video generation."""
 
 from __future__ import annotations
 
@@ -11,19 +11,18 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.infra.logging import get_logger
-from app.shared.cartoon import CartoonGenerationError
-from app.shared.cartoon.service import CartoonVideoService
+from app.shared.cartoon import CartoonGenerationError, CartoonService
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["cartoon-video"])
-service = CartoonVideoService()
+service = CartoonService()
 
 
 class CartoonGeneratePayload(BaseModel):
     learning_need: str = Field(min_length=1, description="用户要讲解的计算机理论知识点或学习问题")
     profile: dict[str, Any] = Field(default_factory=dict, description="用户画像或学习偏好")
-    duration: int | None = Field(default=None, ge=60, le=420, description="目标视频时长，单位秒")
+    duration: int | None = Field(default=None, ge=60, le=600, description="目标视频时长，单位秒")
     render_mp4: bool = Field(default=True, description="是否立即渲染 MP4；false 时只生成 HTML 预览")
 
 
@@ -76,31 +75,43 @@ async def generate_cartoon_video(payload: CartoonGeneratePayload) -> CartoonGene
 
 
 @router.get("/{task_id}/markdown")
-async def get_theory_markdown(task_id: str) -> FileResponse:
+async def get_cartoon_markdown(task_id: str) -> FileResponse:
     path = service.resolve_markdown(task_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Markdown 文件不存在")
-    return FileResponse(path=path, filename="theory_video.md", media_type="text/markdown; charset=utf-8")
+    return FileResponse(
+        path=path,
+        filename="theory_video.md",
+        media_type="text/markdown; charset=utf-8",
+    )
 
 
 @router.get("/{task_id}/html")
-async def get_theory_html(task_id: str) -> FileResponse:
+async def get_cartoon_html(task_id: str) -> FileResponse:
     path = service.resolve_html(task_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="HTML 文件不存在")
-    return FileResponse(path=path, filename="index.html", media_type="text/html; charset=utf-8")
+    return FileResponse(
+        path=path,
+        filename="index.html",
+        media_type="text/html; charset=utf-8",
+    )
 
 
 @router.get("/{task_id}/video")
-async def get_theory_video(task_id: str) -> FileResponse:
+async def get_cartoon_video(task_id: str) -> FileResponse:
     path = service.resolve_video(task_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="视频文件不存在；可能本次生成设置了 render_mp4=false")
-    return FileResponse(path=path, filename=path.name, media_type="video/mp4")
+    return FileResponse(
+        path=path,
+        filename=path.name,
+        media_type="video/mp4",
+    )
 
 
 @router.get("/{task_id}/audit")
-async def get_theory_audit(task_id: str) -> dict[str, Any]:
+async def get_cartoon_audit(task_id: str) -> dict[str, Any]:
     path = service.resolve_audit(task_id)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Audit 文件不存在")

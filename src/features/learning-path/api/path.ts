@@ -72,56 +72,22 @@ export function submitNodeQuiz(nodeId: number, payload: PathQuizSubmitRequest) {
   return http.post<ApiResponse<PathQuizSubmitResponse>>(`/ai/path-plan/nodes/${nodeId}/quiz-submit`, payload)
 }
 
-// 以下 5 个为多智能体辅助资源生成接口（每个资源类型有独立的生成智能体）
-export function generateMindmap(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/mindmap`, null, {
-    timeout: 120000,
-  })
+// 生成/获取节点辅助资源（统一接口）
+const RESOURCE_TYPES = ['mindmap', 'code', 'ppt', 'reading', 'cartoon'] as const
+type ResourceType = (typeof RESOURCE_TYPES)[number]
+
+export function generateNodeResource(nodeId: number, resourceType: ResourceType) {
+  return http.post<ApiResponse<PathResourceDetail>>(
+    `/ai/path-plan/nodes/${nodeId}/resources/${resourceType}`,
+    null,
+    { timeout: 120000 }
+  )
 }
 
-export function generateCode(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/code`, null, {
-    timeout: 120000,
-  })
-}
-
-export function generatePpt(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/ppt`, null, {
-    timeout: 120000,
-  })
-}
-
-export function generateReading(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/reading`, null, {
-    timeout: 120000,
-  })
-}
-
-export function generateCartoon(nodeId: number) {
-  return http.post<ApiResponse<PathResourceDetail>>(`/ai/path-plan/nodes/${nodeId}/cartoon`, null, {
-    timeout: 120000,
-  })
-}
-
-// 查询已生成的辅助资源（生成前后都用它刷新状态）
-export function getMindmap(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/mindmap`)
-}
-
-export function getCode(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/code`)
-}
-
-export function getPpt(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/ppt`)
-}
-
-export function getReading(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/reading`)
-}
-
-export function getCartoon(nodeId: number) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(`/ai/path-plan/nodes/${nodeId}/cartoon`)
+export function getNodeResource(nodeId: number, resourceType: ResourceType) {
+  return http.get<ApiResponse<PathResourceDetail | null>>(
+    `/ai/path-plan/nodes/${nodeId}/resources/${resourceType}`
+  )
 }
 
 // 获取路径学习评估报告：含画像快照、薄弱点、优化建议

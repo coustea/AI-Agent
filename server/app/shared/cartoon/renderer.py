@@ -1,4 +1,4 @@
-"""Render theory-video HyperFrames HTML composition to MP4."""
+"""Render computer-theory HyperFrames HTML composition to MP4."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class CartoonVideoRenderer:
         if not npx_path:
             return AuditResult(passed=False, problems=["npx 未安装或不在 PATH 中，无法运行 HyperFrames CLI"])
 
-        command = [npx_path, "--no-install", "hyperframes", "lint", ".", "--json"]
+        command = [npx_path, "hyperframes", "lint", ".", "--json"]
 
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
@@ -61,7 +61,7 @@ class CartoonVideoRenderer:
                 command,
                 cwd=output_dir,
                 timeout_seconds=90,
-                logger_name="app.shared.theory_video.lint",
+                logger_name="app.shared.cartoon.lint",
             )
         except Exception as exc:
             return AuditResult(passed=False, problems=[f"HyperFrames lint 执行失败: {exc}"])
@@ -103,7 +103,6 @@ class CartoonVideoRenderer:
 
         command = [
             npx_path,
-            "--no-install",
             "hyperframes",
             "render",
             ".",
@@ -119,7 +118,7 @@ class CartoonVideoRenderer:
             str(self.height),
         ]
 
-        logger.info("Theory video 渲染开始: cwd=%s duration=%.1fs output=%s", output_dir, duration, video_path)
+        logger.info("Cartoon video 渲染开始: cwd=%s duration=%.1fs output=%s", output_dir, duration, video_path)
 
         try:
             from app.shared.utils.proc_logger import run_process_with_logging
@@ -128,7 +127,7 @@ class CartoonVideoRenderer:
                 command,
                 cwd=output_dir,
                 timeout_seconds=self.timeout_seconds,
-                logger_name="app.shared.theory_video.render",
+                logger_name="app.shared.cartoon.render",
             )
         except Exception as exc:
             logger.exception("HyperFrames 渲染进程启动失败")
@@ -145,7 +144,7 @@ class CartoonVideoRenderer:
             else:
                 raise RuntimeError("HyperFrames 渲染完成但未找到 MP4 文件")
 
-        logger.info("Theory video 渲染完成: %s", video_path)
+        logger.info("Cartoon video 渲染完成: %s", video_path)
         return CartoonVideoRenderResult(
             video_path=video_path,
             duration=duration,

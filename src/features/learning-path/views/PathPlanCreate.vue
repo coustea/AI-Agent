@@ -2,7 +2,6 @@
   <main class="page-container path-planner-page">
     <div class="planner-unified-container">
 
-      <!-- 全局高维顶层头部 -->
       <header class="workspace-brand-header">
         <div class="header-headline-group">
           <span class="agent-eyebrow">PATH PLANNER AI ENGINE</span>
@@ -11,7 +10,6 @@
             自定义您专属的主题、目标与偏好。智能引擎将自动构建清晰的阶段性知识图谱与高维前置依赖节点。
           </p>
         </div>
-        <!-- 历史路径从右侧隔离盒优雅上移归位 -->
         <div class="header-action-group">
           <button class="btn-outline btn-sm" type="button" :disabled="isPlanning" @click="goHistory">
             <span>历史路径记录</span>
@@ -20,77 +18,8 @@
         </div>
       </header>
 
-      <!-- 状态一：正在生成路径的动态全屏卡片 -->
-      <div v-if="isPlanning" class="bezel-card-outer planning-card-wrapper">
-        <div class="bezel-card-inner">
-          <div class="planning-engine-head">
-            <span class="status-badge pulse-animation">ENGINE GENERATING</span>
-            <h2>AI 路径结构规划中</h2>
-            <p>系统正根据您的动态基础画像、场景及偏好，校准最优学习路由...</p>
-          </div>
+      <div class="workspace-content-flow">
 
-          <!-- 横向精密流程时轴线 -->
-          <div class="orbit-timeline-container">
-            <div class="orbit-line-track"></div>
-            <div
-                v-for="(step, index) in planningSteps"
-                :key="step.key"
-                class="orbit-node-item"
-                :class="[
-                step.tone,
-                {
-                  active: currentPlanningIndex === index,
-                  done: currentPlanningIndex > index,
-                },
-              ]"
-            >
-              <div class="node-geometric-dot">
-                <ph-check v-if="currentPlanningIndex > index" :size="14" weight="bold" />
-                <span v-else>{{ index + 1 }}</span>
-              </div>
-              <strong class="node-label">{{ step.title }}</strong>
-            </div>
-          </div>
-
-          <!-- 进度条系统 -->
-          <div class="progress-bar-block">
-            <div class="progress-bar-header">
-              <span class="task-title">{{ currentPlanningTitle }}</span>
-              <strong class="percent-value">{{ Math.round(planningProgress) }}%</strong>
-            </div>
-            <div class="progress-bar-track">
-              <div class="progress-bar-fill animate-pulse" :style="{ width: `${planningProgress}%` }"></div>
-            </div>
-          </div>
-
-          <!-- 实时规划流日志 -->
-          <transition-group name="log-slide" tag="div" class="planning-logs-area">
-            <div
-                v-for="(message, index) in planningLogs"
-                :key="`${message}-${index}`"
-                class="log-row-item"
-            >
-              <i class="log-dot-indicator"></i>
-              <span class="log-message-text">{{ message }}</span>
-            </div>
-          </transition-group>
-
-          <div v-if="planningError" class="error-handling-panel">
-            <div class="error-message-content">
-              <strong>高维规划引擎中断</strong>
-              <p>{{ planningError }}</p>
-            </div>
-            <button type="button" class="btn-sm btn-outline danger-border" @click="resetPlanningState">
-              返回修改参数
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 状态二：流式智能配置工作台 -->
-      <div v-else class="workspace-content-flow">
-
-        <!-- 常用模板横向快捷画廊：大幅提升视线流畅度与操作效率 -->
         <section class="horizontal-templates-gallery">
           <div class="gallery-title-strip">
             <h4>常用路径模板</h4>
@@ -114,10 +43,8 @@
           </div>
         </section>
 
-        <!-- 主表单卡片容器 -->
         <div class="panel structured-form-panel">
 
-          <!-- 01 学习主题 -->
           <div class="form-grid-row">
             <div class="row-meta-pane">
               <span class="row-badge-num">01</span>
@@ -142,7 +69,6 @@
             </div>
           </div>
 
-          <!-- 02 学习目标 -->
           <div class="form-grid-row">
             <div class="row-meta-pane">
               <span class="row-badge-num">02</span>
@@ -173,7 +99,6 @@
             </div>
           </div>
 
-          <!-- 03 当前基础 -->
           <div class="form-grid-row">
             <div class="row-meta-pane">
               <span class="row-badge-num">03</span>
@@ -201,14 +126,14 @@
                   <input
                       v-model.trim="knowledgeInput"
                       type="text"
-                      placeholder="输入后按 Enter 添加，如：Python、链表"
+                      placeholder="输入后按 Enter 或失去焦点添加"
                       @keydown.enter.prevent="addKnowledge"
                       @keydown.backspace="removeLastKnowledge"
+                      @blur="addKnowledge"
                   />
                 </div>
               </div>
 
-              <!-- 快捷基础池 -->
               <div class="quick-tags-container">
                 <button
                     v-for="item in quickKnowledge"
@@ -224,7 +149,6 @@
             </div>
           </div>
 
-          <!-- 04 学习偏好 -->
           <div class="form-grid-row">
             <div class="row-meta-pane">
               <span class="row-badge-num">04</span>
@@ -305,7 +229,6 @@
             </div>
           </div>
 
-          <!-- 高度集成的就绪仪表控制底栏：彻底抹去右边死板复读的预览表格 -->
           <footer class="form-action-footer">
             <div class="ai-readiness-inline-dashboard" :class="{ 'is-ready': canSubmit }">
               <div class="dashboard-visual-pulse">
@@ -343,7 +266,6 @@
           </footer>
         </div>
 
-        <!-- 敏捷说明页脚区 -->
         <footer class="workspace-flow-footnote">
           <div class="agile-notice-banner-box">
             <span class="mini-badge">AGILE GENERATION SPECIFICATION</span>
@@ -351,6 +273,73 @@
           </div>
         </footer>
       </div>
+
+      <transition name="modal-fade">
+        <div v-if="isPlanning" class="student-planning-modal-backdrop">
+          <div class="student-planning-modal-content">
+
+            <div class="modal-loading-header">
+              <div class="premium-sparkle-loader">
+                <div class="spinner-double-ring"></div>
+                <ph-sparkle :size="24" class="sparkle-center-icon animate-pulse" weight="fill" />
+              </div>
+              <h2>AI 正在为您量身定制学习路径</h2>
+              <p>请稍候，我们正在梳理最佳的知识拓扑顺序...</p>
+            </div>
+
+            <div class="student-timeline-track">
+              <div
+                  v-for="(step, index) in planningSteps"
+                  :key="step.key"
+                  class="student-timeline-node"
+                  :class="{
+                  'is-active': currentPlanningIndex === index,
+                  'is-done': currentPlanningIndex > index
+                }"
+              >
+                <div class="node-circle-indicator">
+                  <ph-check v-if="currentPlanningIndex > index" :size="12" weight="bold" />
+                  <span v-else>{{ index + 1 }}</span>
+                </div>
+                <span class="node-text-label">{{ step.title }}</span>
+                <div v-if="index < planningSteps.length - 1" class="node-connecting-dash"></div>
+              </div>
+            </div>
+
+            <div class="student-progress-dashboard">
+              <div class="progress-bar-minimal">
+                <div class="progress-bar-minimal-fill" :style="{ width: `${planningProgress}%` }"></div>
+              </div>
+              <div class="progress-percent-count">
+                已编排 <span>{{ Math.round(planningProgress) }}%</span>
+              </div>
+            </div>
+
+            <div class="student-friendly-log-box">
+              <transition-group name="log-item-fade">
+                <div v-for="(message, index) in planningLogs" :key="`${message}-${index}`" class="friendly-log-row">
+                  <span class="friendly-log-dot"></span>
+                  <span class="friendly-log-text">{{ message }}</span>
+                </div>
+              </transition-group>
+            </div>
+
+            <div v-if="planningError" class="student-error-box">
+              <div class="error-meta-flex">
+                <ph-warning-circle :size="18" weight="fill" />
+                <div>
+                  <strong>规划路径时遇到了一点小状况</strong>
+                  <p>{{ planningError }}</p>
+                </div>
+              </div>
+              <button type="button" class="btn-modal-back" @click="resetPlanningState">
+                返回修改参数
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </transition>
 
     </div>
   </main>
@@ -385,16 +374,13 @@ interface ExampleItem {
 interface PlanningStep {
   key: string
   title: string
-  desc: string
   threshold: number
-  tone: ExampleTone
 }
 
 const router = useRouter()
-// 表单 DOM 引用与输入状态
 const goalRef = ref<HTMLTextAreaElement | null>(null)
 const knowledgeInput = ref('')
-// 提交/规划流程状态
+
 const isSubmitting = ref(false)
 const isPlanning = ref(false)
 const planningPathId = ref<number | null>(null)
@@ -403,11 +389,9 @@ const planningProgress = ref(0)
 const planningLogs = ref<string[]>([])
 const planningError = ref('')
 
-// 轮播进度定时器与轮询停止标识
 let progressTimer: number | null = null
 let pollingStopped = false
 
-// 表单响应式数据：主题、目标、已有知识、偏好参数
 const form = reactive({
   topic: '',
   goal: '',
@@ -456,50 +440,19 @@ const quickKnowledge = [
   'Linux',
 ]
 
+// 面向学生精简的步骤名称
 const planningSteps: PlanningStep[] = [
-  {
-    key: 'profile',
-    title: '读取画像与目标',
-    desc: '正在结合学习画像、学习主题和本次目标确定路径起点。',
-    threshold: 12,
-    tone: 'teal',
-  },
-  {
-    key: 'stage',
-    title: '拆解学习阶段',
-    desc: '正在将学习目标拆解为基础、核心、应用和巩固阶段。',
-    threshold: 34,
-    tone: 'blue',
-  },
-  {
-    key: 'node',
-    title: '生成学习节点',
-    desc: '正在生成具体学习节点，并确定每个节点的前置关系。',
-    threshold: 58,
-    tone: 'amber',
-  },
-  {
-    key: 'validate',
-    title: '校验路径结构',
-    desc: '正在检查节点依赖、阶段覆盖和学习顺序是否合理。',
-    threshold: 78,
-    tone: 'violet',
-  },
-  {
-    key: 'save',
-    title: '保存路径结果',
-    desc: '正在保存路径数据，完成后会自动进入路径总览页。',
-    threshold: 92,
-    tone: 'teal',
-  },
+  { key: 'profile', title: '结合学术画像', threshold: 12 },
+  { key: 'stage', title: '拆解学习阶段', threshold: 34 },
+  { key: 'node', title: '编排知识节点', threshold: 58 },
+  { key: 'validate', title: '校验图谱结构', threshold: 78 },
+  { key: 'save', title: '生成完美路线', threshold: 92 },
 ]
 
 const fallbackPlanningStep: PlanningStep = {
   key: 'fallback',
-  title: '正在规划路径',
-  desc: '系统正在生成学习路径。',
+  title: '正在规划路线',
   threshold: 0,
-  tone: 'teal',
 }
 
 const examples: ExampleItem[] = [
@@ -549,12 +502,10 @@ const examples: ExampleItem[] = [
   },
 ]
 
-// 表单是否可提交：主题非空且目标至少 8 个字
 const canSubmit = computed(() => {
   return form.topic.trim().length > 0 && form.goal.trim().length >= 8
 })
 
-// 提交按钮状态的标题和描述文案
 const submitStateTitle = computed(() => {
   if (!form.topic.trim()) return '请先填写学习主题'
   if (form.goal.trim().length < 8) return '请补充学习目标'
@@ -567,16 +518,13 @@ const submitStateDesc = computed(() => {
   return '点击提交后，智能引擎将调取您的学术画像数据并实时输出骨架方案。'
 })
 
-// 根据进度百分比计算当前处于规划流程的第几步
 const currentPlanningIndex = computed(() => {
   for (let i = planningSteps.length - 1; i >= 0; i -= 1) {
     const step = planningSteps[i]
-
     if (step && planningProgress.value >= step.threshold) {
       return i
     }
   }
-
   return 0
 })
 
@@ -588,58 +536,52 @@ const currentPlanningTitle = computed(() => {
   return currentPlanningStep.value.title
 })
 
-// 自动调整 textarea 高度
 function autoResize() {
   if (!goalRef.value) return
   goalRef.value.style.height = 'auto'
   goalRef.value.style.height = `${Math.min(goalRef.value.scrollHeight, 150)}px`
 }
 
-// 添加已有知识标签
 function addKnowledge() {
   const value = knowledgeInput.value.trim()
   if (!value) return
 
-  if (!form.currentKnowledge.includes(value)) {
-    form.currentKnowledge.push(value)
+  if (form.currentKnowledge.includes(value)) {
+    toast.warning('请勿重复添加相同的先修知识')
+    knowledgeInput.value = ''
+    return
   }
 
+  form.currentKnowledge.push(value)
   knowledgeInput.value = ''
 }
 
-// 删除指定知识标签
 function removeKnowledge(value: string) {
   form.currentKnowledge = form.currentKnowledge.filter(item => item !== value)
 }
 
-// 按退格键删除最后一个标签
 function removeLastKnowledge() {
   if (knowledgeInput.value || !form.currentKnowledge.length) return
   form.currentKnowledge.pop()
 }
 
-// 切换知识标签（选中/取消）
 function toggleKnowledge(value: string) {
   if (form.currentKnowledge.includes(value)) {
     removeKnowledge(value)
     return
   }
-
   form.currentKnowledge.push(value)
 }
 
-// 切换规划重点（至少保留一个）
 function toggleFocus(value: Focus) {
   if (form.focus.includes(value)) {
     if (form.focus.length === 1) {
       toast.warning('至少保留一个规划重点')
       return
     }
-
     form.focus = form.focus.filter(item => item !== value)
     return
   }
-
   form.focus.push(value)
 }
 
@@ -659,7 +601,6 @@ function applyExample(item: ExampleItem) {
   nextTick(autoResize)
 }
 
-// 重置表单到初始状态
 function resetForm() {
   form.topic = ''
   form.goal = ''
@@ -673,12 +614,10 @@ function resetForm() {
   nextTick(autoResize)
 }
 
-// 跳转到历史路径页
 function goHistory() {
   router.push('/path-planner/history')
 }
 
-// 构建提交给后端的请求 payload
 function buildPayload(): PathRequest {
   return {
     goal: form.goal.trim(),
@@ -696,7 +635,6 @@ function buildPayload(): PathRequest {
   }
 }
 
-// 清除进度轮播定时器
 function clearProgressTimer() {
   if (progressTimer !== null) {
     window.clearInterval(progressTimer)
@@ -704,18 +642,15 @@ function clearProgressTimer() {
   }
 }
 
-// 添加 SSE 规划日志（去重并限制最多 6 条）
 function addPlanningLog(message: string) {
   if (planningLogs.value.includes(message)) return
-  planningLogs.value = [...planningLogs.value, message].slice(-6)
+  planningLogs.value = [...planningLogs.value, message].slice(-3)
 }
 
-// 启动前端模拟进度动画，逐步展示各阶段的提示文案
 function startProgressAnimation() {
   clearProgressTimer()
-
   planningProgress.value = 6
-  planningLogs.value = ['路径任务已创建，正在启动规划流程']
+  planningLogs.value = ['✨ 智能路径任务已提交，开始构建路线啦']
 
   progressTimer = window.setInterval(() => {
     if (planningProgress.value < 28) {
@@ -728,15 +663,14 @@ function startProgressAnimation() {
       planningProgress.value += 0.45
     }
 
-    if (planningProgress.value >= 12) addPlanningLog('正在读取学习画像与规划参数')
-    if (planningProgress.value >= 34) addPlanningLog('正在拆解学习阶段')
-    if (planningProgress.value >= 58) addPlanningLog('正在生成学习节点和依赖关系')
-    if (planningProgress.value >= 78) addPlanningLog('正在校验路径结构')
-    if (planningProgress.value >= 92) addPlanningLog('正在等待后端保存结果')
+    if (planningProgress.value >= 12) addPlanningLog('🎯 正在分析你的学习目标与已有基础偏好...')
+    if (planningProgress.value >= 34) addPlanningLog('🌱 正在科学合理地为你切分学习的不同阶段...')
+    if (planningProgress.value >= 58) addPlanningLog('🧩 正在精细安排路径内的知识核心节点...')
+    if (planningProgress.value >= 78) addPlanningLog('🔮 正在智能校验路线的前后衔接与覆盖度...')
+    if (planningProgress.value >= 92) addPlanningLog('🎈 完美！正在为您保存本次生成的专属路径...')
   }, 700)
 }
 
-// 重置规划状态以便用户重新提交
 function resetPlanningState() {
   clearProgressTimer()
   pollingStopped = true
@@ -755,7 +689,6 @@ function delay(ms: number) {
   })
 }
 
-// 轮询等待后端路径生成完成（超时 3 分钟），完成后跳转至总览页
 async function waitForPathReady(pathId: number, runId: string) {
   const startedAt = Date.now()
   const timeoutMs = 180_000
@@ -764,14 +697,14 @@ async function waitForPathReady(pathId: number, runId: string) {
     await delay(1600)
 
     if (Date.now() - startedAt > timeoutMs) {
-      throw new Error('路径生成等待超时，请稍后在历史路径中查看结果')
+      throw new Error('路径规划因网络超时未能完成，请稍后前往历史路径查看。')
     }
 
     const detailRes = await getLearningPathById(pathId)
     const detail = detailRes.data.data
 
     if (detail.status === 'failed') {
-      throw new Error('路径规划失败，请修改输入后重试')
+      throw new Error('小主，系统规划路径失败了，请尝试换个表述或修改参数重试。')
     }
 
     const hasNodes = Array.isArray(detail.nodes) && detail.nodes.length > 0
@@ -780,7 +713,7 @@ async function waitForPathReady(pathId: number, runId: string) {
     if (isReady && hasNodes) {
       clearProgressTimer()
       planningProgress.value = 100
-      addPlanningLog('学习路径生成完成，正在进入路径节点页面')
+      addPlanningLog('🎉 路径大纲设计完毕，正在为你开启总览看板...')
 
       await delay(650)
 
@@ -791,13 +724,11 @@ async function waitForPathReady(pathId: number, runId: string) {
           status: detail.status,
         },
       })
-
       return
     }
   }
 }
 
-// 提交路径创建：校验表单、调用 API、启动进度轮播并等待生成完成
 async function handleSubmit() {
   if (isSubmitting.value || isPlanning.value) return
 
@@ -805,12 +736,10 @@ async function handleSubmit() {
     toast.warning('请输入学习主题')
     return
   }
-
   if (!form.goal.trim()) {
     toast.warning('请输入学习目标')
     return
   }
-
   if (form.goal.trim().length < 8) {
     toast.warning('学习目标太短，请补充学习内容或目标')
     return
@@ -829,19 +758,16 @@ async function handleSubmit() {
     const runId = data.run_id || ''
 
     if (!pathId) {
-      throw new Error('后端未返回路径 ID')
+      throw new Error('服务器开小差了，未成功分发路径标识。')
     }
 
     planningPathId.value = pathId
     planningRunId.value = runId
 
-    addPlanningLog('后端已接收路径任务，正在后台生成路径')
-    toast.success('路径任务已创建，正在规划')
-
     await waitForPathReady(pathId, runId)
   } catch (error) {
     clearProgressTimer()
-    const message = error instanceof Error ? error.message : '学习路径创建失败'
+    const message = error instanceof Error ? error.message : '智能规划未能成功拉起'
     planningError.value = message
     planningProgress.value = Math.min(planningProgress.value, 96)
     toast.error(message)
@@ -849,8 +775,6 @@ async function handleSubmit() {
     isSubmitting.value = false
   }
 }
-
-// 组件卸载时停止轮询与定时器
 
 onBeforeUnmount(() => {
   pollingStopped = true
@@ -868,11 +792,11 @@ onBeforeUnmount(() => {
 }
 
 .planner-unified-container {
-  max-width: var(--content-max-width); /* 1120px 黄金内宽垂直对齐 */
+  max-width: var(--content-max-width, 1120px);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-6, 24px);
 }
 
 /* 一体化顶层头部 */
@@ -880,34 +804,34 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding: var(--space-4) var(--space-1) var(--space-2);
+  padding: var(--space-4, 16px) var(--space-1, 4px) var(--space-2, 8px);
 }
 .header-headline-group {
   max-width: 75%;
 }
 .agent-eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
-  font-weight: var(--weight-bold);
-  color: var(--color-primary);
+  font-weight: var(--weight-bold, 700);
+  color: var(--color-primary, #46b8b4);
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
 .workspace-brand-header h1 {
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
-  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-2xl, 24px);
+  font-weight: var(--weight-extrabold, 800);
+  color: var(--color-text-strong, #1a1a1a);
+  margin: var(--space-1, 4px) 0 var(--space-2, 8px);
 }
 .cognitive-subtext {
   margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--leading-normal);
+  font-size: var(--text-sm, 14px);
+  color: var(--color-text-secondary, #666);
+  line-height: var(--leading-normal, 1.5);
 }
 .arrow-symbol {
-  font-weight: var(--weight-extrabold);
-  margin-left: var(--space-1);
+  font-weight: var(--weight-extrabold, 800);
+  margin-left: var(--space-1, 4px);
   transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .header-action-group button:hover .arrow-symbol {
@@ -915,58 +839,60 @@ onBeforeUnmount(() => {
 }
 
 /* ============================================================
-   常用模板：重塑为表单上方的横向全宽快速配置画廊
+   常用模板横向快捷画廊
    ============================================================ */
 .horizontal-templates-gallery {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: 0 var(--space-1);
+  gap: var(--space-3, 12px);
+  padding: 0 var(--space-1, 4px);
+  margin-bottom: 12px;
 }
 .gallery-title-strip {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
 }
 .gallery-title-strip h4 {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--weight-extrabold, 800);
+  color: var(--color-text-strong, #1a1a1a);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  margin: 0;
 }
 .gallery-title-strip span {
   font-size: 11px;
-  color: var(--color-text-faint);
+  color: var(--color-text-faint, #999);
 }
 .templates-horizontal-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-4, 16px);
 }
 .micro-template-gallery-card {
-  background: var(--color-surface);
-  border: 1.5px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface, #fff);
+  border: 1.5px solid var(--color-border-light, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
   text-align: left;
   cursor: pointer;
   box-sizing: border-box;
-  transition: var(--transition-base);
+  transition: var(--transition-base, all 0.2s ease);
   height: 64px;
 }
 .micro-template-gallery-card:hover {
-  border-color: var(--color-border-hover);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--color-border-hover, #ccc);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
   transform: translateY(-2px);
 }
 .micro-template-gallery-card.active {
   border-color: currentColor;
-  box-shadow: var(--shadow-md), 0 0 12px var(--color-primary-soft);
-  background: var(--color-surface);
+  box-shadow: var(--shadow-md, 0 4px 6px rgba(0,0,0,0.05)), 0 0 12px var(--color-primary-soft, rgba(70,184,180,0.1));
+  background: var(--color-surface, #fff);
   transform: translateY(-2px);
 }
 .category-glow-dot {
@@ -976,14 +902,16 @@ onBeforeUnmount(() => {
   background: currentColor;
   flex-shrink: 0;
 }
+
 .micro-card-meta {
   min-width: 0;
   flex: 1;
 }
 .micro-card-meta strong {
   display: block;
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-strong, #1a1a1a);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -991,17 +919,17 @@ onBeforeUnmount(() => {
 .micro-card-meta span {
   display: block;
   font-size: 11px;
-  color: var(--color-text-secondary);
-  margin-top: 2px;
+  color: var(--color-text-secondary, #666);
+  margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.micro-template-gallery-card.teal { color: var(--color-primary); }
-.micro-template-gallery-card.blue { color: var(--cat-tutor); }
-.micro-template-gallery-card.amber { color: var(--cat-path); }
-.micro-template-gallery-card.violet { color: var(--cat-eval); }
+.micro-template-gallery-card.teal { color: var(--color-primary, #46b8b4); }
+.micro-template-gallery-card.blue { color: var(--cat-tutor, #1e40af); }
+.micro-template-gallery-card.amber { color: var(--cat-path, #f59e0b); }
+.micro-template-gallery-card.violet { color: var(--cat-eval, #7c3aed); }
 
 /* ============================================================
    核心工作表单面板
@@ -1009,120 +937,118 @@ onBeforeUnmount(() => {
 .structured-form-panel {
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  padding: var(--space-8);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border-light, #eee);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-8, 32px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
 }
 
 .form-grid-row {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  gap: var(--space-6);
-  padding: var(--space-6) 0;
-  border-bottom: 1px solid var(--color-border-light);
+  gap: var(--space-6, 24px);
+  padding: var(--space-6, 24px) 0;
+  border-bottom: 1px solid var(--color-border-light, #eee);
 }
 .form-grid-row:first-child { padding-top: 0; }
 
 .row-meta-pane {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
 }
 .row-badge-num {
   width: 28px;
   height: 28px;
-  background: var(--color-primary-soft);
-  border: 1.5px solid var(--color-primary-border);
-  color: var(--color-primary-text);
-  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft, rgba(70,184,180,0.1));
+  border: 1.5px solid var(--color-primary-border, #46b8b4);
+  color: var(--color-primary-text, #205f67);
+  border-radius: var(--radius-sm, 4px);
   display: grid;
   place-items: center;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--weight-bold, 700);
   flex-shrink: 0;
 }
 .row-headline-group h3 {
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
-  color: var(--color-text-strong);
+  font-size: var(--text-base, 16px);
+  font-weight: var(--weight-bold, 700);
+  color: var(--color-text-strong, #1a1a1a);
   margin: 2px 0 0;
 }
 .row-title-group {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-1_5, 6px);
 }
 .title-icon {
-  color: var(--color-primary-text);
+  color: var(--color-primary-text, #205f67);
   opacity: 0.85;
   flex-shrink: 0;
 }
 .row-headline-group p {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  line-height: var(--leading-normal);
+  margin: var(--space-2, 8px) 0 0;
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-muted, #888);
+  line-height: var(--leading-normal, 1.5);
 }
 
-/* 控制台输入域 */
 .input-container-box input,
 .textarea-container-box textarea {
   width: 100%;
   box-sizing: border-box;
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  color: var(--color-text);
+  border: 1.5px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-bg, #fafafa);
+  color: var(--color-text, #333);
   font-family: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-sm, 14px);
   outline: none;
-  transition: var(--transition-base);
+  transition: var(--transition-base, all 0.2s ease);
 }
 .input-container-box input {
   height: 42px;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-4, 16px);
 }
 .textarea-container-box textarea {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
   resize: none;
   min-height: 96px;
-  line-height: var(--leading-normal);
+  line-height: var(--leading-normal, 1.5);
 }
 .input-container-box input:focus,
 .textarea-container-box textarea:focus {
-  border-color: var(--color-primary);
-  background: var(--color-page-bg);
+  border-color: var(--color-primary, #46b8b4);
+  background: var(--color-page-bg, #fff);
   box-shadow: 0 0 0 3px rgba(70, 184, 180, 0.15);
 }
 .textarea-info-bar {
   display: flex;
   justify-content: space-between;
-  margin-top: var(--space-1_5);
-  font-size: var(--text-xs);
-  color: var(--color-text-faint);
+  margin-top: var(--space-1_5, 6px);
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-faint, #999);
 }
 
-/* 先修基础标签盒 */
 .tag-input-bezel-box {
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  padding: var(--space-1_5) var(--space-3);
+  border: 1.5px solid var(--color-border, #ddd);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-bg, #fafafa);
+  padding: var(--space-1_5, 6px) var(--space-3, 12px);
   min-height: 42px;
   box-sizing: border-box;
-  transition: var(--transition-base);
+  transition: var(--transition-base, all 0.2s ease);
 }
 .tag-input-bezel-box:focus-within {
-  border-color: var(--color-primary);
-  background: var(--color-page-bg);
+  border-color: var(--color-primary, #46b8b4);
+  background: var(--color-page-bg, #fff);
   box-shadow: 0 0 0 3px rgba(70, 184, 180, 0.15);
 }
 .tag-inner-flex {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1_5);
+  gap: var(--space-1_5, 6px);
   align-items: center;
 }
 .tag-inner-flex input {
@@ -1130,27 +1056,27 @@ onBeforeUnmount(() => {
   background: transparent;
   outline: none;
   font-family: inherit;
-  font-size: var(--text-sm);
-  color: var(--color-text);
+  font-size: var(--text-sm, 14px);
+  color: var(--color-text, #333);
   padding: 4px 0;
   flex-grow: 1;
 }
 .custom-tag-node {
-  background: var(--color-primary-soft);
-  border: 1px solid var(--color-primary-border);
-  color: var(--color-primary-text);
-  padding: var(--space-0_5) var(--space-2_5);
+  background: var(--color-primary-soft, rgba(70,184,180,0.1));
+  border: 1px solid var(--color-primary-border, #46b8b4);
+  color: var(--color-primary-text, #205f67);
+  padding: var(--space-0_5, 2px) var(--space-2_5, 10px);
   border-radius: 6px;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--weight-semibold, 600);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: var(--transition-fast);
+  transition: var(--transition-fast, all 0.1s ease);
 }
 .custom-tag-node:hover {
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary);
+  background: var(--color-primary-soft, rgba(70,184,180,0.1));
+  border-color: var(--color-primary, #46b8b4);
 }
 .tag-close-trigger {
   background: none;
@@ -1162,7 +1088,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: var(--transition-fast);
+  transition: var(--transition-fast, all 0.1s ease);
 }
 .tag-close-trigger:hover {
   opacity: 1;
@@ -1171,157 +1097,151 @@ onBeforeUnmount(() => {
 .quick-tags-container {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-3, 12px);
 }
 .quick-tags-container .btn-pill {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  border-radius: var(--radius-pill);
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  color: var(--color-text-secondary, #666);
+  font-size: var(--text-xs, 12px);
+  border-radius: var(--radius-pill, 50px);
   height: 28px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-3, 12px);
   cursor: pointer;
-  transition: var(--transition-base);
+  transition: var(--transition-base, all 0.2s ease);
 }
 .quick-tags-container .btn-pill:hover {
-  border-color: var(--color-border-hover);
-  color: var(--color-text-strong);
+  border-color: var(--color-border-hover, #ccc);
+  color: var(--color-text-strong, #1a1a1a);
   transform: translateY(-1px);
 }
 .quick-tags-container .btn-pill.active {
-  background-color: var(--color-primary-soft) !important;
-  border-color: var(--color-primary) !important;
-  color: var(--color-primary-text) !important;
-  font-weight: var(--weight-bold);
+  background-color: var(--color-primary-soft, rgba(70,184,180,0.1)) !important;
+  border-color: var(--color-primary, #46b8b4) !important;
+  color: var(--color-primary-text, #205f67) !important;
+  font-weight: var(--weight-bold, 700);
 }
 
-/* 偏好微调控制轴 */
 .preferences-matrix {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-5, 20px);
 }
 .preference-flex-line {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
 }
 .pref-field-label {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  color: var(--color-text-strong);
+  font-size: var(--text-sm, 14px);
+  font-weight: var(--weight-bold, 700);
+  color: var(--color-text-strong, #1a1a1a);
 }
 .segmented-pill-group {
   display: inline-flex;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-pill);
+  background: var(--color-bg, #fafafa);
+  border: 1px solid var(--color-border-light, #eee);
+  border-radius: var(--radius-pill, 50px);
   padding: 4px;
   gap: 4px;
 }
 .segmented-pill-group .btn-pill {
   background: transparent;
   border: none;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary, #666);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--weight-medium, 500);
   padding: 6px 14px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-pill, 50px);
   height: 28px;
-  transition: var(--transition-fast);
+  transition: var(--transition-fast, all 0.1s ease);
   cursor: pointer;
 }
 .segmented-pill-group .btn-pill:hover {
-  color: var(--color-text-strong);
+  color: var(--color-text-strong, #1a1a1a);
 }
 .segmented-pill-group .btn-pill.active {
-  background-color: var(--color-surface) !important;
-  border: 1px solid var(--color-primary-border) !important;
-  color: var(--color-primary-text) !important;
-  font-weight: var(--weight-bold);
-  box-shadow: var(--shadow-sm);
+  background-color: var(--color-surface, #fff) !important;
+  border: 1px solid var(--color-primary-border, #46b8b4) !important;
+  color: var(--color-primary-text, #205f67) !important;
+  font-weight: var(--weight-bold, 700);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
 }
 
-/* 多选重点专属高亮 */
 .focus-accent-group {
   display: flex;
   flex-wrap: wrap;
   background: transparent;
   border: none;
   padding: 0;
-  gap: var(--space-2_5);
+  gap: var(--space-2_5, 10px);
 }
 .focus-accent-group .btn-pill {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #ddd);
+  color: var(--color-text-secondary, #666);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--weight-semibold, 600);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-radius: var(--radius-sm, 4px);
   height: auto;
   cursor: pointer;
-  transition: var(--transition-base);
+  transition: var(--transition-base, all 0.2s ease);
 }
 .focus-accent-group .btn-pill:hover {
-  border-color: var(--color-border-hover);
-  color: var(--color-text-strong);
+  border-color: var(--color-border-hover, #ccc);
+  color: var(--color-text-strong, #1a1a1a);
   transform: translateY(-1px);
 }
 .focus-accent-group .btn-pill.foundation.active {
-  background-color: var(--cat-tutor-soft) !important;
-  border-color: var(--cat-tutor) !important;
-  color: var(--cat-tutor) !important;
+  background-color: var(--cat-tutor-soft, rgba(30,64,175,0.08)) !important;
+  border-color: var(--cat-tutor, #1e40af) !important;
+  color: var(--cat-tutor, #1e40af) !important;
   box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.08);
 }
 .focus-accent-group .btn-pill.key_points.active {
-  background-color: var(--cat-path-soft) !important;
-  border-color: var(--cat-path) !important;
-  color: var(--cat-path) !important;
+  background-color: var(--cat-path-soft, rgba(245,158,11,0.08)) !important;
+  border-color: var(--cat-path, #f59e0b) !important;
+  color: var(--cat-path, #f59e0b) !important;
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.08);
 }
 .focus-accent-group .btn-pill.practice.active {
-  background-color: var(--cat-resource-soft) !important;
-  border-color: var(--cat-resource) !important;
-  color: var(--cat-resource) !important;
+  background-color: var(--cat-resource-soft, rgba(16,185,129,0.08)) !important;
+  border-color: var(--cat-resource, #10b981) !important;
+  color: var(--cat-resource, #10b981) !important;
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
 }
 .focus-accent-group .btn-pill.weakness.active {
-  background-color: var(--cat-rose-soft) !important;
-  border-color: var(--cat-rose) !important;
-  color: var(--cat-rose) !important;
+  background-color: var(--cat-rose-soft, rgba(244,63,94,0.08)) !important;
+  border-color: var(--cat-rose, #f43f5e) !important;
+  color: var(--cat-rose, #f43f5e) !important;
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.08);
 }
 
-/* ============================================================
-   高度集成的底栏控制台（融合 AI 校验就绪状态与提交控制）
-   ============================================================ */
 .form-action-footer {
-  border-top: 1px solid var(--color-border-light);
-  margin-top: var(--space-4);
-  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border-light, #eee);
+  margin-top: var(--space-4, 16px);
+  padding-top: var(--space-6, 24px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-6, 24px);
 }
 
-/* 内联 AI 参数校验视窗 */
 .ai-readiness-inline-dashboard {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
   align-items: flex-start;
   background: rgba(242, 248, 247, 0.6);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-3_5) var(--space-4);
+  border: 1px solid var(--color-border-light, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3_5, 14px) var(--space-4, 16px);
   flex-grow: 1;
   max-width: 60%;
-  transition: var(--transition-base);
+  transition: var(--transition-base, all 0.2s ease);
 }
 .dashboard-visual-pulse {
   position: relative;
@@ -1334,7 +1254,7 @@ onBeforeUnmount(() => {
   position: absolute;
   width: 100%;
   height: 100%;
-  background: var(--color-text-faint);
+  background: var(--color-text-faint, #999);
   border-radius: 50%;
   opacity: 0.2;
 }
@@ -1344,47 +1264,45 @@ onBeforeUnmount(() => {
   left: 3px;
   width: 8px;
   height: 8px;
-  background: var(--color-text-faint);
+  background: var(--color-text-faint, #999);
   border-radius: 50%;
 }
 .dashboard-inline-meta strong {
   display: block;
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-  margin-bottom: var(--space-1);
+  font-size: var(--text-sm, 14px);
+  color: var(--color-text-strong, #1a1a1a);
+  margin-bottom: var(--space-1, 4px);
 }
 .dashboard-inline-meta p {
   margin: 0;
   font-size: 11.5px;
-  color: var(--color-text-secondary);
-  line-height: var(--leading-tight);
+  color: var(--color-text-secondary, #666);
+  line-height: var(--leading-tight, 1.25);
 }
 .dashboard-inline-meta .lack {
-  color: var(--color-danger);
-  font-weight: var(--weight-bold);
+  color: var(--color-danger, #ef4444);
+  font-weight: var(--weight-bold, 700);
   padding: 0 2px;
 }
 
-/* 引擎就绪动态高亮（清透冰川工作室质感） */
 .ai-readiness-inline-dashboard.is-ready {
   background: rgba(216, 241, 240, 0.7);
-  backdrop-filter: blur(8px);
-  border-color: var(--color-primary-border);
+  border-color: var(--color-primary-border, #46b8b4);
   box-shadow: 0 4px 16px rgba(70, 184, 180, 0.1);
 }
 .ai-readiness-inline-dashboard.is-ready .pulse-ring {
-  background: var(--color-primary);
+  background: var(--color-primary, #46b8b4);
   animation: pulseSpread 1.8s infinite ease-in-out;
   opacity: 0.4;
 }
 .ai-readiness-inline-dashboard.is-ready .pulse-center-core {
-  background: var(--color-primary);
+  background: var(--color-primary, #46b8b4);
 }
 .ai-readiness-inline-dashboard.is-ready .dashboard-inline-meta strong {
-  color: var(--color-primary-text);
+  color: var(--color-primary-text, #205f67);
 }
 .ai-readiness-inline-dashboard.is-ready .dashboard-inline-meta p {
-  color: var(--color-primary-text);
+  color: var(--color-primary-text, #205f67);
 }
 
 @keyframes pulseSpread {
@@ -1394,22 +1312,21 @@ onBeforeUnmount(() => {
 
 .footer-buttons-cluster {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
   flex-shrink: 0;
 }
 
-/* 生成路径主行动按钮 */
 .custom-premium-action {
-  background: linear-gradient(135deg, var(--color-text-strong), var(--color-primary-text)) !important;
+  background: linear-gradient(135deg, var(--color-text-strong, #1a1a1a), var(--color-primary-text, #205f67)) !important;
   color: #FCFFFF !important;
-  font-weight: var(--weight-bold) !important;
+  font-weight: var(--weight-bold, 700) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   box-shadow: 0 6px 16px rgba(32, 95, 103, 0.16) !important;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
-  transition: var(--transition-base) !important;
+  transition: var(--transition-base, all 0.2s ease) !important;
 }
 .custom-premium-action:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--color-primary-text), var(--color-primary-hover)) !important;
+  background: linear-gradient(135deg, var(--color-primary-text, #205f67), var(--color-primary-hover, #3aa3a0)) !important;
   box-shadow: 0 8px 24px rgba(32, 95, 103, 0.24) !important;
   transform: translateY(-1.5px);
 }
@@ -1418,212 +1335,293 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 10px rgba(32, 95, 103, 0.12) !important;
 }
 
-/* ============================================================
-   统一流式页脚提示区
-   ============================================================ */
 .workspace-flow-footnote {
-  padding: 0 var(--space-1) var(--space-8);
+  padding: 0 var(--space-1, 4px) var(--space-8, 32px);
 }
 .agile-notice-banner-box {
   background: rgba(70, 184, 180, 0.04);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-5);
+  border: 1px dashed var(--color-border, #ddd);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
 }
 .mini-badge {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
-  font-weight: var(--weight-bold);
-  color: var(--color-primary);
+  font-weight: var(--weight-bold, 700);
+  color: var(--color-primary, #46b8b4);
   letter-spacing: 0.06em;
   display: block;
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-1, 4px);
 }
 .agile-notice-banner-box p {
   margin: 0;
   font-size: 12px;
-  color: var(--color-text-secondary);
-  line-height: var(--leading-relaxed);
+  color: var(--color-text-secondary, #666);
+  line-height: var(--leading-relaxed, 1.6);
 }
 
 /* ============================================================
-   智能引擎构建动画状态卡片
+   学生友好型“就地弹窗”样式（全新重构 - 升级微调版）
    ============================================================ */
-.planning-card-wrapper {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  padding: var(--space-8);
-  box-shadow: var(--shadow-md);
-  max-width: 860px;
-  margin: var(--space-4) auto;
-}
-.planning-engine-head {
-  text-align: center;
-  margin-bottom: var(--space-8);
-}
-.status-badge {
-  display: inline-block;
-  padding: 4px var(--space-3);
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: var(--weight-bold);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-primary-border);
-}
-.status-badge.pulse-animation {
-  animation: pulseOpacity 2s infinite ease-in-out;
-}
-@keyframes pulseOpacity {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.planning-engine-head h2 {
-  font-size: var(--text-xl);
-  color: var(--color-text-strong);
-  margin: var(--space-3) 0 var(--space-1);
-}
-.planning-engine-head p {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+.student-planning-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  /* 调至更通透清爽的亮色毛玻璃质感底色 */
+  background-color: rgba(244, 249, 249, 0.45);
+  /* 降低模糊层级，隐约透出底层表单结构，消除盲盒感 */
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
 
-.orbit-timeline-container {
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--space-8);
-  padding: 0 var(--space-6);
-}
-.orbit-line-track {
-  position: absolute;
-  top: 18px;
-  left: var(--space-10);
-  right: var(--space-10);
-  height: 2px;
-  background: var(--color-border-light);
-  z-index: 1;
-}
-.orbit-node-item {
-  position: relative;
-  z-index: 2;
+.student-planning-modal-content {
+  background: #ffffff;
+  border: 1px solid var(--color-primary-border, rgba(70, 184, 180, 0.25));
+  border-radius: 20px;
+  width: 100%;
+  max-width: 620px;
+  padding: 40px;
+  /* 优化投影：使其具有如纸片浮于水面的通透悬浮感，去掉沉重暗色 */
+  box-shadow: 0 12px 40px rgba(32, 95, 103, 0.08), 0 2px 10px rgba(0, 0, 0, 0.02);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-2_5);
-  flex: 1;
+  gap: 32px;
+  position: relative;
 }
-.node-geometric-dot {
-  width: 36px;
-  height: 36px;
-  background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: 50%;
+
+/* 头部微流光加载 */
+.modal-loading-header {
+  text-align: center;
+}
+.premium-sparkle-loader {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
   display: grid;
   place-items: center;
-  font-size: var(--text-xs);
-  font-family: var(--font-mono);
-  font-weight: var(--weight-bold);
-  color: var(--color-text-faint);
-  transition: var(--transition-base);
 }
-.node-label {
-  font-size: var(--text-xs);
-  color: var(--color-text-faint);
-  transition: var(--transition-base);
+.spinner-double-ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(70, 184, 180, 0.1);
+  border-top-color: var(--color-primary, #46b8b4);
+  border-bottom-color: var(--cat-tutor, #1e40af);
+  border-radius: 50%;
+  animation: modalSpin 1.2s infinite cubic-bezier(0.68, -0.55, 0.27, 1.55);
 }
-.orbit-node-item.active .node-geometric-dot {
-  border-color: currentColor;
-  box-shadow: 0 0 0 4px var(--color-primary-soft);
-  transform: scale(1.05);
+.sparkle-center-icon {
+  color: var(--color-primary, #46b8b4);
 }
-.orbit-node-item.done .node-geometric-dot,
-.orbit-node-item.active .node-geometric-dot {
-  background: currentColor;
-  color: #FFFFFF;
+.modal-loading-header h2 {
+  font-size: 18px;
+  color: var(--color-text-strong, #1a1a1a);
+  margin: 0 0 6px 0;
+  font-weight: 700;
 }
-.orbit-node-item.done .node-label,
-.orbit-node-item.active .node-label {
-  color: var(--color-text-strong);
-  font-weight: var(--weight-bold);
+.modal-loading-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
 }
-.orbit-node-item.teal { color: var(--color-primary); }
-.orbit-node-item.blue { color: var(--cat-tutor); }
-.orbit-node-item.amber { color: var(--cat-path); }
-.orbit-node-item.violet { color: var(--cat-eval); }
 
-.progress-bar-block {
-  margin-bottom: var(--space-6);
-}
-.progress-bar-header {
+/* 横向流式节点进度 */
+.student-timeline-track {
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--space-2);
-  font-size: var(--text-sm);
+  position: relative;
+  padding: 0 10px;
 }
-.task-title { font-weight: var(--weight-bold); color: var(--color-text-strong); }
-.percent-value { color: var(--color-primary-text); }
-.progress-bar-track {
-  height: 6px;
-  background: var(--color-border-light);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), var(--cat-tutor));
-  border-radius: var(--radius-pill);
-  transition: width 0.4s ease;
-}
-
-.planning-logs-area {
-  background: #0f2427;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
+.student-timeline-node {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2_5);
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  flex: 1;
 }
-.log-row-item {
+.node-circle-indicator {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--color-border, #ddd);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-faint, #999);
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+.node-text-label {
+  font-size: 11px;
+  color: var(--color-text-faint, #999);
+  font-weight: 500;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+/* 节点间连线 */
+.node-connecting-dash {
+  position: absolute;
+  height: 2px;
+  background: var(--color-border-light, #eee);
+  top: 13px;
+  left: 50%;
+  width: 100%;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+
+/* 进度激活/完成联动 */
+.student-timeline-node.is-active .node-circle-indicator {
+  border-color: var(--color-primary, #46b8b4);
+  color: var(--color-primary-text, #205f67);
+  font-weight: 700;
+  box-shadow: 0 0 0 4px var(--color-primary-soft, rgba(70,184,180,0.15));
+}
+.student-timeline-node.is-active .node-text-label {
+  color: var(--color-text-strong, #1a1a1a);
+  font-weight: 600;
+}
+.student-timeline-node.is-done .node-circle-indicator {
+  background: var(--color-primary, #46b8b4);
+  border-color: var(--color-primary, #46b8b4);
+  color: #fff;
+}
+.student-timeline-node.is-done .node-text-label {
+  color: var(--color-text-secondary, #666);
+}
+.student-timeline-node.is-done .node-connecting-dash {
+  background: var(--color-primary, #46b8b4);
+}
+
+/* 简易仪表进度 */
+.student-progress-dashboard {
   display: flex;
   align-items: center;
-  gap: var(--space-2_5);
+  justify-content: space-between;
+  background: #f8fbfb;
+  border: 1px solid rgba(70, 184, 180, 0.1);
+  border-radius: 10px;
+  padding: 12px 18px;
 }
-.log-dot-indicator {
+.progress-bar-minimal {
+  flex: 1;
+  height: 6px;
+  background: var(--color-bg, #fafafa);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-right: 20px;
+}
+.progress-bar-minimal-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #46b8b4, #1e40af);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.progress-percent-count {
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+.progress-percent-count span {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  color: var(--color-primary-text, #205f67);
+  font-size: 14px;
+}
+
+/* 暖心一句话流日志容器 */
+.student-friendly-log-box {
+  min-height: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.friendly-log-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.friendly-log-dot {
   width: 5px;
   height: 5px;
-  background: var(--color-primary);
+  background-color: var(--color-primary, #46b8b4);
   border-radius: 50%;
 }
-.log-message-text {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: #a4cbd1;
+.friendly-log-text {
+  font-size: 13px;
+  color: var(--color-primary-text, #205f67);
+  font-weight: 500;
 }
-.log-slide-enter-active, .log-slide-leave-active { transition: all 0.25s ease; }
-.log-slide-enter-from { opacity: 0; transform: translateY(5px); }
 
-.error-handling-panel {
-  margin-top: var(--space-4);
-  padding: var(--space-4);
-  background: var(--color-danger-soft);
-  border: 1px solid rgba(196, 61, 91, 0.15);
-  border-radius: var(--radius-md);
+/* 错误退出面板 */
+.student-error-box {
+  background: rgba(239, 68, 68, 0.03);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  padding: 16px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: 14px;
 }
-.error-message-content strong { display: block; font-size: var(--text-sm); color: var(--color-danger); }
-.error-message-content p { margin: 2px 0 0; font-size: var(--text-xs); color: var(--color-text-secondary); }
-.danger-border { border-color: rgba(196, 61, 91, 0.3) !important; color: var(--color-danger) !important; }
+.error-meta-flex {
+  display: flex;
+  gap: 10px;
+  color: #ef4444;
+}
+.error-meta-flex strong {
+  font-size: 13px;
+  display: block;
+  margin-bottom: 2px;
+}
+.error-meta-flex p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+.btn-modal-back {
+  align-self: flex-end;
+  height: 30px;
+  padding: 0 16px;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-modal-back:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* 动画定义 */
+@keyframes modalSpin {
+  100% { transform: rotate(360deg); }
+}
+.modal-fade-enter-active, .modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.modal-fade-enter-from, .modal-fade-leave-to {
+  opacity: 0;
+}
+.log-item-fade-enter-active {
+  transition: all 0.2s ease;
+}
+.log-item-fade-enter-from {
+  opacity: 0;
+  transform: translateY(5px);
+}
 
 /* ============================================================
-   移动端与小屏幕平滑降级自适应
+   移动端响应式降级
    ============================================================ */
 @media (max-width: 1024px) {
   .templates-horizontal-grid {
@@ -1632,17 +1630,16 @@ onBeforeUnmount(() => {
   .form-action-footer {
     flex-direction: column;
     align-items: stretch;
-    gap: var(--space-4);
+    gap: var(--space-4, 16px);
   }
   .ai-readiness-inline-dashboard {
     max-width: 100%;
   }
 }
-
 @media (max-width: 768px) {
   .form-grid-row {
     grid-template-columns: 1fr;
-    gap: var(--space-3);
+    gap: var(--space-3, 12px);
   }
   .templates-horizontal-grid {
     grid-template-columns: 1fr;
@@ -1653,22 +1650,16 @@ onBeforeUnmount(() => {
   .footer-buttons-cluster button {
     flex: 1;
   }
-  .orbit-timeline-container {
+  .student-timeline-track {
     flex-direction: column;
-    gap: var(--space-4);
-    padding-left: var(--space-2);
+    gap: 16px;
   }
-  .orbit-line-track {
-    top: 0;
-    bottom: 0;
-    left: 21px;
-    width: 2px;
-    height: auto;
+  .node-connecting-dash {
+    display: none;
   }
-  .orbit-node-item {
+  .student-timeline-node {
     flex-direction: row;
-    align-items: center;
-    gap: var(--space-4);
+    gap: 12px;
   }
 }
 </style>
