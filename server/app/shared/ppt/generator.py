@@ -10,7 +10,7 @@ from app.infra.llm import get_llm
 from app.infra.prompts import prompts
 from app.shared.ppt.compiler import PPTCompileError, compile_ppt_plan
 from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer
-from app.shared.ppt.models import PPTArtifact, PPTPlan, PathPPTRequest, ResourcePPTRequest
+from app.shared.ppt.models import PPTArtifact, PPTPlan, PathPPT, ResourcePPT
 from app.shared.ppt.templates import PPTTemplateCatalog, get_ppt_template_catalog
 
 
@@ -50,7 +50,7 @@ class PPTGenerator:
 
     async def generate(
         self,
-        request: ResourcePPTRequest | PathPPTRequest,
+        request: ResourcePPT | PathPPT,
         *,
         output_dir: Path,
         progress: ProgressCallback | None = None,
@@ -101,7 +101,7 @@ class PPTGenerator:
 
     async def _generate_plan(
         self,
-        request: ResourcePPTRequest | PathPPTRequest,
+        request: ResourcePPT | PathPPT,
     ) -> tuple[PPTPlan, str]:
         prompt = prompts.get("ppt").render(
             "slide_outline",

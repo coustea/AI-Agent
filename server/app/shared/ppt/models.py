@@ -85,34 +85,39 @@ class PPTPreferences(PPTModel):
     )
 
 
-class ResourcePPTRequest(PPTModel):
+class ResourcePPT(PPTModel):
+    """资源生成 PPT 请求 — 字段对齐 ResourceInput。"""
+
+    username: str = ""
     learning_need: str = Field(min_length=1)
-    learning_scenario: str = Field(min_length=1)
-    profile: dict[str, Any] | str
+    learning_scenario: str = "self_study"
+    profile: dict[str, Any] | str = Field(default_factory=dict)
     teaching_plan: str | None = None
     artifacts: list[PPTSource] = Field(default_factory=list, max_length=16)
     preferences: PPTPreferences = Field(default_factory=PPTPreferences)
 
 
-class PathPPTRequest(PPTModel):
-    learning_need: str = Field(min_length=1)
-    profile: dict[str, Any] | str
-    artifacts: list[PPTSource] = Field(default_factory=list, max_length=16)
+class PathPPT(PPTModel):
+    """路径规划 PPT 请求 — 字段对齐 NodeInput。"""
+
+    username: str = ""
+    profile: dict[str, Any] | str = Field(default_factory=dict)
     preferences: PPTPreferences = Field(default_factory=PPTPreferences)
 
     path_title: str = Field(min_length=1)
     path_goal: str = Field(min_length=1)
     node_title: str = Field(min_length=1)
     node_key: str = Field(min_length=1)
-    difficulty: str = Field(min_length=1)
+    difficulty: str = "beginner"
 
     knowledge_points: list[str] = Field(default_factory=list, max_length=24)
     weak_knowledge_points: list[str] = Field(default_factory=list, max_length=24)
-    generation_focus: list[str] = Field(default_factory=list, max_length=12)
 
+    # 教程核心内容（仅标题、摘要、知识点、核心知识点讲解部分）
     tutorial_title: str = Field(min_length=1)
-    tutorial_summary: str = Field(min_length=1)
-    tutorial_markdown: str = Field(min_length=1)
+    tutorial_summary: str = ""
+    tutorial_knowledge_points: list[str] = Field(default_factory=list, max_length=24)
+    tutorial_core_content: str = Field(min_length=1)
 
 
 class PPTTemplatePreference(PPTModel):
@@ -295,3 +300,4 @@ class PPTArtifact(PPTModel):
     template_id: str
     template_name: str
     slide_count: int
+    html_url: str = ""

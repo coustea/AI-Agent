@@ -6,15 +6,16 @@ from app.shared.ppt.models import (
     KeyPoint,
     KnowledgeBranch,
     MisconceptionItem,
+    PathPPT,
     PPTArtifact,
     PPTPlan,
     PPTPreferences,
     PPTSlide,
     PPTSource,
-    PathPPTRequest,
     ProcessStep,
-    ResourcePPTRequest,
+    ResourcePPT,
 )
+from app.shared.ppt.service import PPTService
 
 __all__ = [
     "ComparisonTable",
@@ -28,10 +29,11 @@ __all__ = [
     "PPTGenerator",
     "PPTPlan",
     "PPTPreferences",
+    "PPTService",
     "PPTSlide",
     "PPTSource",
-    "PathPPTRequest",
+    "PathPPT",
     "ProcessStep",
-    "ResourcePPTRequest",
+    "ResourcePPT",
     "compile_ppt_plan",
 ]
