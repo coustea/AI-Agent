@@ -210,10 +210,13 @@ export interface StructuredTeachingDiagram {
 export interface TeachingDiagramImage {
   kind: 'image'
   title: string
-  graph_type?: TeachingDiagramType
+  subtitle?: string | null
+  graph_type?: TeachingDiagramType | string
   image_url: string
-  width: number
-  height: number
+  filename?: string
+  mime_type?: 'image/png' | string
+  width?: number
+  height?: number
 }
 
 export interface TeachingDiagramFallback {

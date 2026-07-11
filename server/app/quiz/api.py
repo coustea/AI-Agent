@@ -12,11 +12,13 @@ from app.auth.security import get_current_user
 from app.infra.logging import get_logger
 from app.infra.database import get_session
 from app.quiz.events import record_quiz_submit_event
-from app.infra.models import QuizQuestion, School, User, WrongQuestion
+from app.infra.models import QuizQuestion, QuizAnswerHistory, School, User, WrongQuestion
 from app.infra.response import HttpResponse
 from app.quiz.schemas import (
     ObjectiveSubmitRequest,
     ObjectiveSubmitResponse,
+    QuizAnswerHistoryItem,
+    QuizAnswerHistoryResponse,
     QuizReviewRequest,
     QuizReviewResponse,
     WrongQuestionListResponse,
@@ -163,6 +165,87 @@ async def review_answer(request: QuizReviewRequest) -> QuizReviewResponse:
     return QuizReviewResponse(**result)
 
 
+# 答题历史查询接口：获取用户做过的所有题目（支持分页和筛选）
+@router.get("/quiz/history")
+async def get_quiz_history(
+    subject: str | None = Query(default=None, description="科目筛选"),
+    is_correct: bool | None = Query(default=None, description="对错筛选"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> HttpResponse:
+    """获取用户答题历史。返回每道做过的题的最新状态，支持分页和筛选。"""
+    from sqlalchemy import func as sa_func
+
+    user_id = current_user.id
+
+    # 基础条件
+    base_filters = [QuizAnswerHistory.user_id == user_id]
+    if subject:
+        base_filters.append(QuizAnswerHistory.subject == subject)
+    if is_correct is not None:
+        base_filters.append(QuizAnswerHistory.is_correct == is_correct)
+
+    # 子查询：每个 question_id 的最新一条记录的 id（在筛选范围内）
+    latest_subq = (
+        select(
+            QuizAnswerHistory.question_id,
+            sa_func.max(QuizAnswerHistory.id).label("max_id"),
+        )
+        .where(*base_filters)
+        .group_by(QuizAnswerHistory.question_id)
+        .subquery()
+    )
+
+    # 总数统计（去重后的 question_id 数量）
+    total = (await session.exec(
+        select(sa_func.count()).select_from(latest_subq)
+    )).scalar() or 0
+
+    # 联表获取最新记录的详细信息，分页
+    stmt = (
+        select(QuizAnswerHistory)
+        .join(latest_subq, QuizAnswerHistory.id == latest_subq.c.max_id)
+        .order_by(QuizAnswerHistory.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await session.exec(stmt)).scalars().all()
+
+    # 统计每个 question_id 的总做题次数（在筛选范围内）
+    count_stmt = (
+        select(
+            QuizAnswerHistory.question_id,
+            sa_func.count().label("cnt"),
+        )
+        .where(*base_filters)
+        .group_by(QuizAnswerHistory.question_id)
+    )
+    count_rows = (await session.exec(count_stmt)).all()
+    attempt_counts = {qid: cnt for qid, cnt in count_rows}
+
+    items = [
+        QuizAnswerHistoryItem(
+            question_id=r.question_id,
+            subject=r.subject,
+            question_type=r.question_type,
+            is_correct=r.is_correct,
+            attempts=attempt_counts.get(r.question_id, 1),
+            last_answer=r.user_answer,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+    return HttpResponse.success(data=QuizAnswerHistoryResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    ).model_dump())
+
+
 # 客观题提交接口：自动判卷并收录错题本
 @router.post("/quiz/submit")
 async def submit_quiz(
@@ -177,7 +260,17 @@ async def submit_quiz(
 
     # 遍历每道题目的判卷结果
     for r in request.results:
-        # 答对的题目直接跳过，不收录
+        # 保存答题历史（所有题目，无论对错）
+        session.add(QuizAnswerHistory(
+            user_id=user_id,
+            question_id=r.question_id,
+            subject=r.subject,
+            question_type=r.question_type,
+            user_answer=r.user_answer,
+            is_correct=r.is_correct,
+        ))
+
+        # 答对的题目直接跳过，不收录错题本
         if r.is_correct:
             continue
 

@@ -16,6 +16,7 @@
               <span class="meta-tag subject-tag">{{ question.subject }}</span>
               <span class="meta-tag type-tag">{{ question.type }}</span>
               <span v-if="question.difficulty" class="meta-tag difficulty-tag">{{ question.difficulty }}</span>
+              <span v-if="answerHistoryMap?.has(question.id)" class="meta-tag done-tag">做过</span>
             </div>
           </div>
         </div>
@@ -141,6 +142,7 @@ const props = defineProps<{
   openedAnalysis: Set<string>
   submittedCount: number
   correctCount: number
+  answerHistoryMap?: Map<string, { question_id: string; is_correct: boolean; attempts: number }>
 }>()
 
 // 事件：换题、选择选项、提交、切换解析
@@ -321,6 +323,11 @@ function renderInline(text: string) {
 .difficulty-tag {
   background: #dff2ff;
   color: #3487c7;
+}
+
+.done-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
 .question-content {
