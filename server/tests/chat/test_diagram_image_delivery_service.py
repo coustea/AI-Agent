@@ -29,6 +29,9 @@ class _FakeUseCases:
 
 
 class _FakeMemoryService:
+    def __init__(self) -> None:
+        self.saved_messages: list[dict] = []
+
     async def upsert_activity(self, **kwargs) -> None:
         return None
 
@@ -39,10 +42,11 @@ class _FakeMemoryService:
         return ""
 
     async def save_message(self, **kwargs):
+        self.saved_messages.append(kwargs)
         return SimpleNamespace(id=99)
 
 
-async def _events_for_final_payload(monkeypatch: pytest.MonkeyPatch, delivery) -> list[dict]:
+async def _events_for_final_payload(monkeypatch: pytest.MonkeyPatch, delivery) -> tuple[list[dict], _FakeMemoryService]:
     import app.chat.service as service
 
     class FakeTutorAgent:
@@ -52,8 +56,11 @@ async def _events_for_final_payload(monkeypatch: pytest.MonkeyPatch, delivery) -
     async def empty_history(*args, **kwargs):
         return []
 
-    monkeypatch.setattr(service, "get_chat_usecases", lambda: _FakeUseCases())
-    monkeypatch.setattr(service, "get_chat_memory_service", lambda: _FakeMemoryService())
+    memory_service = _FakeMemoryService()
+    use_cases = _FakeUseCases()
+    use_cases._memory_service = memory_service
+    monkeypatch.setattr(service, "get_chat_usecases", lambda: use_cases)
+    monkeypatch.setattr(service, "get_chat_memory_service", lambda: memory_service)
     monkeypatch.setattr(service, "build_messages", empty_history)
     monkeypatch.setattr(service, "TutorAgent", FakeTutorAgent)
 
@@ -67,7 +74,7 @@ async def _events_for_final_payload(monkeypatch: pytest.MonkeyPatch, delivery) -
             user_input="解释 TCP",
             need_teaching_diagram=True,
         )
-    ]
+    ], memory_service
 
 
 @pytest.mark.asyncio
@@ -84,7 +91,7 @@ async def test_chat_emits_png_payload_for_final_diagram(monkeypatch: pytest.Monk
             diagram, username=username, session_id=session_id, renderer=png_renderer,
         )
 
-    events = await _events_for_final_payload(monkeypatch, delivery)
+    events, _ = await _events_for_final_payload(monkeypatch, delivery)
 
     assert next(event for event in events if event["event"] == "diagram")["data"] == image
 
@@ -113,7 +120,8 @@ async def test_chat_emits_structured_fallback_when_png_rendering_fails(monkeypat
             diagram, username=username, session_id=session_id, renderer=failing_renderer,
         )
 
-    events = await _events_for_final_payload(monkeypatch, delivery)
+    events, memory_service = await _events_for_final_payload(monkeypatch, delivery)
 
     assert calls == 2
     assert next(event for event in events if event["event"] == "diagram")["data"] == fallback
+    assert memory_service.saved_messages[0]["usage_metadata"]["diagram"] == fallback
