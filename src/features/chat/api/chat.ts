@@ -3,6 +3,7 @@ import type { ApiResponse } from '@/shared/api/http' // 导入响应信封类型
 import type {
   ChatMessageItem,
   ChatSession,
+  TeachingDiagramImage,
   UploadResult,
   StreamChatParams,
 } from '@/features/chat/types/chat' // 导入聊天 DTO 类型
@@ -90,5 +91,11 @@ export function createChatMessage(params: StreamChatParams) {
     {
       headers: { 'Content-Type': 'multipart/form-data' }, // FormData 编码
     },
+  )
+}
+
+export function retryDiagramImage(messageId: number) {
+  return http.post<ApiResponse<{ diagram: TeachingDiagramImage }>>(
+    `/ai/chat/messages/${messageId}/diagram-image/retry`,
   )
 }

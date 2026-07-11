@@ -333,10 +333,18 @@
                   </div>
 
                   <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
+                    <TeachingDiagramImage
+                      v-if="msg.teachingDiagram.kind === 'image'"
+                      :title="msg.teachingDiagram.title"
+                      :image-url="msg.teachingDiagram.image_url"
+                    />
                     <TeachingDiagramCard
+                      v-else
                       :diagram="msg.teachingDiagram"
                       compact
+                      :retrying="retryingDiagramMessageIds.has(msg.id)"
                       @expand="previewTeachingDiagram"
+                      @retry="retryTeachingDiagramImage(msg)"
                     />
                   </div>
                 </div>
@@ -597,7 +605,7 @@
             <header class="custom-modal-header diagram-dialog-header">
               <div>
                 <span class="diagram-kicker">教学图解</span>
-                <strong class="diagram-title">{{ teachingDiagramPreviewData?.title || '图解说明' }}</strong>
+                <strong class="diagram-title">{{ teachingDiagramTitle(teachingDiagramPreviewData) }}</strong>
               </div>
               <button type="button" class="modal-close-btn" @click="teachingDiagramPreviewVisible = false" aria-label="关闭图解">
                 <Close class="close-icon" />
@@ -606,7 +614,12 @@
 
             <div v-if="teachingDiagramPreviewData" class="custom-modal-body diagram-preview-body">
               <div class="preview-content">
-                <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
+                <TeachingDiagramImage
+                  v-if="teachingDiagramPreviewData.kind === 'image'"
+                  :title="teachingDiagramPreviewData.title"
+                  :image-url="teachingDiagramPreviewData.image_url"
+                />
+                <TeachingDiagramCard v-else :diagram="teachingDiagramPreviewData" />
               </div>
               <div class="preview-footer">
                 <span>图解可保存为高清图片，便于复习。</span>
@@ -673,6 +686,7 @@ import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
+import TeachingDiagramImage from '@/features/chat/components/TeachingDiagramImage.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
 
 
@@ -687,6 +701,7 @@ import {
   deleteSession,
   updateSessionTitle,
   getChatHistory,
+  retryDiagramImage,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
@@ -1342,6 +1357,7 @@ const digitalHumanStatusText = computed(() => {
 
 const teachingDiagramPreviewVisible = ref(false)
 const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
+const retryingDiagramMessageIds = ref(new Set<number>())
 
 const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
 
@@ -1349,6 +1365,27 @@ const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
 const previewTeachingDiagram = (diagram: TeachingDiagram) => {
   teachingDiagramPreviewData.value = diagram
   teachingDiagramPreviewVisible.value = true
+}
+
+const teachingDiagramTitle = (diagram: TeachingDiagram | null) => {
+  if (!diagram) return '图解说明'
+  return diagram.kind === 'fallback' ? diagram.diagram.title : diagram.title
+}
+
+const retryTeachingDiagramImage = async (message: ChatMsg) => {
+  if (!message.id || message.teachingDiagram?.kind !== 'fallback') return
+  retryingDiagramMessageIds.value = new Set(retryingDiagramMessageIds.value).add(message.id)
+  try {
+    const response = await retryDiagramImage(message.id)
+    const diagram = normalizeTeachingDiagram(response.data.data?.diagram)
+    if (diagram?.kind === 'image') message.teachingDiagram = diagram
+  } catch (error) {
+    toast.error(getErrorMessage(error))
+  } finally {
+    const pending = new Set(retryingDiagramMessageIds.value)
+    pending.delete(message.id)
+    retryingDiagramMessageIds.value = pending
+  }
 }
 
 const handleDownloadDiagram = async () => {
@@ -1364,7 +1401,7 @@ const handleDownloadDiagram = async () => {
   })
   
   if (dataUrl) {
-    downloadImage(dataUrl, `${teachingDiagramPreviewData.value.title || '图解说明'}_高清截图`)
+    downloadImage(dataUrl, `${teachingDiagramTitle(teachingDiagramPreviewData.value)}_高清截图`)
     toast.success('图解说明已保存至本地')
   }
 }
