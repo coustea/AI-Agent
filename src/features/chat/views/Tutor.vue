@@ -335,8 +335,8 @@
                   <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
                     <TeachingDiagramImage
                       v-if="msg.teachingDiagram.kind === 'image'"
-                      :title="msg.teachingDiagram.title"
-                      :image-url="msg.teachingDiagram.image_url"
+                      :diagram="msg.teachingDiagram"
+                      compact
                       @expand="previewTeachingDiagram(msg.teachingDiagram)"
                     />
                     <TeachingDiagramCard
@@ -416,7 +416,7 @@
               ></textarea>
 
               <div class="minimal-action-bar">
-                <div class="action-left">
+                <div class="action-left" :key="inputToolStateKey">
                   <button
                     type="button"
                     class="input-tool-btn"
@@ -617,21 +617,10 @@
               <div class="preview-content">
                 <TeachingDiagramImage
                   v-if="teachingDiagramPreviewData.kind === 'image'"
-                  :title="teachingDiagramPreviewData.title"
-                  :image-url="teachingDiagramPreviewData.image_url"
+                  :diagram="teachingDiagramPreviewData"
+                  show-download
                 />
                 <TeachingDiagramCard v-else :diagram="teachingDiagramPreviewData" />
-              </div>
-              <div class="preview-footer">
-                <span>图解可保存为高清图片，便于复习。</span>
-                <div class="footer-actions">
-                  <button class="btn btn-outline" :disabled="isCapturing" @click="handleDownloadDiagram">
-                    <span v-if="isCapturing" class="spinner mr-2"></span>
-                    <Download class="btn-icon-left" />
-                    <span>保存图片</span>
-                  </button>
-                  <button class="btn btn-primary" @click="teachingDiagramPreviewVisible = false">完成</button>
-                </div>
               </div>
             </div>
           </div>
@@ -679,7 +668,6 @@ import {
   PhClock as Timer,
   PhGraph as DataLine,
   PhCheckCircle as CircleCheckFilled,
-  PhDownload as Download,
   PhSpinner as Loading
 } from '@phosphor-icons/vue'
 import { toast } from 'vue-sonner'
@@ -689,9 +677,6 @@ import TutorMessageContent from '@/features/chat/components/TutorMessageContent.
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import TeachingDiagramImage from '@/features/chat/components/TeachingDiagramImage.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
-
-
-import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
 
 import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
 import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
@@ -723,6 +708,7 @@ import {
   formatFileSize,
   formatRelativeTime,
   finalizeRunningAgentActivities,
+  getInputToolStateKey,
   shouldAutoRestartVadAfterAssistantComplete,
   isInsideOpenFence,
   takeNextStreamUnit,
@@ -978,6 +964,11 @@ watch(canvasRef, (newInstance) => {
 const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
+const inputToolStateKey = computed(() => getInputToolStateKey({
+  uploadingFile: uploadingFile.value,
+  enableWebSearch: enableWebSearch.value,
+  needTeachingDiagram: needTeachingDiagram.value,
+}))
 
 
 // 会话列表
@@ -1361,8 +1352,6 @@ const teachingDiagramPreviewVisible = ref(false)
 const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
 const retryingDiagramMessageIds = ref(new Set<number>())
 
-const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
-
 // 打开教学图解预览弹窗
 const previewTeachingDiagram = (diagram: TeachingDiagram) => {
   teachingDiagramPreviewData.value = diagram
@@ -1387,24 +1376,6 @@ const retryTeachingDiagramImage = async (message: ChatMsg) => {
     const pending = new Set(retryingDiagramMessageIds.value)
     pending.delete(message.id)
     retryingDiagramMessageIds.value = pending
-  }
-}
-
-const handleDownloadDiagram = async () => {
-  if (!teachingDiagramPreviewData.value) return
-  
-  const dataUrl = await captureToDataUrl('capture-target', {
-    pixelRatio: 2,
-    backgroundColor: '#ffffff',
-    style: {
-      padding: '24px',
-      borderRadius: '16px'
-    }
-  })
-  
-  if (dataUrl) {
-    downloadImage(dataUrl, `${teachingDiagramTitle(teachingDiagramPreviewData.value)}_高清截图`)
-    toast.success('图解说明已保存至本地')
   }
 }
 
@@ -5094,6 +5065,53 @@ onBeforeUnmount(() => {
   gap: 16px;
   min-height: 62px;
   padding: 11px 16px;
+}
+
+.diagram-image-dialog {
+  position: relative;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.diagram-image-dialog .diagram-preview-body {
+  height: 100vh;
+  max-height: 100vh;
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+}
+
+.diagram-image-dialog .preview-content {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.diagram-image-close {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #1f2937;
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid rgba(148, 163, 184, .42);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .18);
+  backdrop-filter: blur(10px);
+}
+
+.diagram-image-close:hover {
+  color: #0f172a;
+  background: #fff;
 }
 
 .diagram-dialog-header > div {

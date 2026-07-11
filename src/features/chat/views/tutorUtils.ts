@@ -117,7 +117,6 @@ const SUPPORTED_DIAGRAM_TYPES = new Set([
   'timeline',
 ])
 
-// 校验教学图解结构完整性和类型支持
 const isStructuredTeachingDiagram = (diagram: unknown): diagram is StructuredTeachingDiagram => {
   if (!diagram || typeof diagram !== 'object') return false
   const candidate = diagram as Partial<StructuredTeachingDiagram>
@@ -150,6 +149,24 @@ export const normalizeTeachingDiagram = (diagram: unknown): TeachingDiagram | nu
 }
 
 // 根据文件名获取文档类型分类
+export interface InputToolState {
+  uploadingFile: boolean
+  enableWebSearch: boolean
+  needTeachingDiagram: boolean
+}
+
+export const getInputToolStateKey = ({
+  uploadingFile,
+  enableWebSearch,
+  needTeachingDiagram,
+}: InputToolState): string => (
+  [
+    uploadingFile ? 'uploading' : 'idle',
+    enableWebSearch ? 'web-on' : 'web-off',
+    needTeachingDiagram ? 'diagram-on' : 'diagram-off',
+  ].join(':')
+)
+
 export const getDocumentType = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
   if (['doc', 'docx'].includes(ext)) return 'word'

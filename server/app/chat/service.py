@@ -161,6 +161,17 @@ async def chat(
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
 
+                if diagram_result is not None:
+                    try:
+                        diagram_result = await ensure_teaching_diagram_png_payload(
+                            diagram_result,
+                            username=username,
+                            session_id=effective_session,
+                        )
+                    except Exception as exc:
+                        logger.warning("[chat] 图解 PNG 渲染失败，跳过图解输出: %s", exc)
+                        diagram_result = None
+
                 # 图解数据通过单独事件发送，前端在回答后立即渲染
                 if diagram_result is not None:
                     diagram_result = await ensure_teaching_diagram_png_payload(

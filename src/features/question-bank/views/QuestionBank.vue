@@ -83,6 +83,7 @@
                     <span class="tag subject-tag">{{ portalQuestion.subject }}</span>
                     <span class="tag type-tag">{{ portalQuestion.type }}</span>
                     <span class="tag difficulty-tag">{{ portalQuestion.difficulty || '中等' }}</span>
+                    <span v-if="isQuestionDone(portalQuestion.id)" class="tag done-tag">做过</span>
                   </div>
 
                   <div class="recommend-question-content" v-html="renderInline(portalQuestion.content)"></div>
@@ -157,11 +158,18 @@
                   </div>
                 </template>
 
+                <template v-else-if="recommendationLoading">
+                  <div class="empty-state">
+                    <strong>正在加载推荐题目</strong>
+                    <p>正在同步题库数据，请稍候。</p>
+                  </div>
+                </template>
+
                 <template v-else>
                   <div class="empty-state">
                     <strong>暂无可推荐题目</strong>
                     <p>题库接口返回为空时会显示此状态，请先导入题库数据或调整课程筛选。</p>
-                    <button type="button" class="primary-action" @click="loadQuestionBank">重新加载题库</button>
+                    <button type="button" class="primary-action" @click="reloadQuestionBank">重新加载题库</button>
                   </div>
                 </template>
               </section>
@@ -231,6 +239,7 @@
                     :openedAnalysis="openedDailyAnalysis"
                     :submittedCount="dailySubmittedCount"
                     :correctCount="dailyCorrectCount"
+                    :answerHistoryMap="answerHistoryMap"
                     @refresh-daily="refreshDailyQuestions"
                     @select-daily-option="selectDailyOption"
                     @submit-daily="submitDailyAnswer"
@@ -256,6 +265,7 @@
                     :openedAnalysis="openedAnalysis"
                     :highlightQuestionId="highlightQuestionId"
                     :highlightVersion="highlightVersion"
+                    :answerHistoryMap="answerHistoryMap"
                     @search="searchBank"
                     @page-change="handleBankPageChange"
                     @select-option="selectBankOption"
@@ -327,6 +337,10 @@
                     @toggle-wrong-analysis="toggleWrongAnalysis"
                     @archive-wrong="archiveWrong"
                     @remove-wrong="removeWrong"
+                />
+
+                <HistoryTab
+                    v-else-if="activeModule === 'history'"
                 />
               </section>
             </div>
@@ -462,7 +476,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
-import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
+import { fetchQuizBankQuestions, fetchQuizReview, fetchQuizAnswerHistory, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult, type QuizAnswerHistoryItem } from '@/features/question-bank/api/quizBank'
 import {
   archiveWrongQuestion,
   fetchRandomWrongQuestion,
@@ -475,10 +489,11 @@ import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
 import AnalysisReviewPage from '@/features/question-bank/components/AnalysisReviewPage.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
+import HistoryTab from '@/features/question-bank/components/HistoryTab.vue'
 import { getErrorMessage } from '@/shared/api/http'
 
 type ViewMode = 'workspace' | 'exam' | 'analysis-review'
-type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong'
+type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong' | 'history'
 type AnswerValue = string | string[] | undefined
 
 interface Question {
@@ -545,6 +560,7 @@ const allQuestionPool = shallowRef<Question[]>([])
 const portalQuestion = ref<Question | null>(null)
 const dailyQuestions = shallowRef<Question[]>([])
 const dailyChallengeQuestion = ref<Question | null>(null)
+const recommendationLoading = ref(true)
 
 // 题库搜索状态
 const questions = shallowRef<Question[]>([])
@@ -561,6 +577,9 @@ const wrongLoading = ref(false)
 const wrongPage = ref(1)
 const wrongPageSize = ref(8)
 const wrongFilters = reactive({ query: '', subject: '', type: '' })
+
+// 答题历史（做过的题）— key: question_id, value: 最新作答记录
+const answerHistoryMap = ref<Map<string, QuizAnswerHistoryItem>>(new Map())
 
 // 题库答题状态
 const bankAnswers = ref<Record<string, AnswerValue>>({})
@@ -704,6 +723,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   search: '全部题目',
   paper: '模拟组卷',
   wrong: '错题本',
+  history: '答题记录',
 }
 
 const moduleDescriptions: Record<ModuleKey, string> = {
@@ -712,6 +732,7 @@ const moduleDescriptions: Record<ModuleKey, string> = {
   search: '按学科、难度和题型检索题库并直接作答。',
   paper: '配置你的模拟试卷，并在预览后进入考试模式。',
   wrong: '集中复习错题、管理薄弱点并进行再练。',
+  history: '查看所有做过的题目，按科目和对错筛选。',
 }
 
 const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark: string }> = [
@@ -720,6 +741,7 @@ const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark:
   { key: 'search', label: '全部题目', desc: '筛选检索', mark: '03' },
   { key: 'paper', label: '模拟组卷', desc: '考试模式', mark: '04' },
   { key: 'wrong', label: '错题本', desc: '薄弱复习', mark: '05' },
+  { key: 'history', label: '答题记录', desc: '做过汇总', mark: '06' },
 ]
 
 // 首页功能卡片配置（动态显示每日/错题/模考状态）
@@ -932,10 +954,26 @@ async function bootstrap() {
   }
 
   syncBankSubmissionStateForToday()
-  await loadPracticePool()
-  await loadQuestionBank()
-  await loadWrongBook()
+  recommendationLoading.value = true
+  const practicePoolPromise = loadPracticePool()
+  await Promise.all([
+    practicePoolPromise,
+    loadQuestionBank(),
+    loadWrongBook(),
+    loadAnswerHistory(),
+  ])
   refreshDailySelections()
+  recommendationLoading.value = false
+}
+
+async function reloadQuestionBank() {
+  recommendationLoading.value = true
+  await Promise.all([
+    loadPracticePool(),
+    loadQuestionBank(),
+  ])
+  refreshDailySelections()
+  recommendationLoading.value = false
 }
 
 // 切换左侧导航模块
@@ -1012,6 +1050,20 @@ async function loadPracticePool() {
     practicePool.value = []
     toast.error(getErrorMessage(error, '加载练习池失败'))
   }
+}
+
+// 加载答题历史（做过的题）
+async function loadAnswerHistory() {
+  try {
+    answerHistoryMap.value = await fetchQuizAnswerHistory()
+  } catch {
+    answerHistoryMap.value = new Map()
+  }
+}
+
+// 检查题目是否做过
+function isQuestionDone(questionId: string): boolean {
+  return answerHistoryMap.value.has(questionId)
 }
 
 // 根据筛选条件加载题库分页
@@ -1280,6 +1332,7 @@ async function submitPortalAnswer(question: Question) {
   if (!result.correct) await saveWrongQuestion(question, portalAnswers.value[question.id])
 
   portalReviewing.value[question.id] = false
+  void loadAnswerHistory()
 }
 
 // 提交题库搜索中的题目答案
@@ -1298,6 +1351,7 @@ async function submitBankAnswer(question: Question) {
   if (!result.correct) await saveWrongQuestion(question, bankAnswers.value[question.id])
 
   bankReviewing.value[question.id] = false
+  void loadAnswerHistory()
 }
 
 // 每日练习选项选择
@@ -1321,6 +1375,7 @@ async function submitDailyAnswer(question: Question) {
   if (!result.correct) await saveWrongQuestion(question, dailyAnswers.value[question.id])
 
   dailyReviewing.value[question.id] = false
+  void loadAnswerHistory()
 
   // 全部完成后标记今日达标并更新连续打卡
   if (dailySubmittedCount.value === dailyQuestions.value.length && dailyQuestions.value.length > 0 && !isDailyCompleted.value) {
@@ -2641,6 +2696,11 @@ function scrollQuestionBankViewportToTop() {
 .difficulty-tag {
   background: #dff2ff;
   color: #3487c7;
+}
+
+.done-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
 .recommend-question-content {

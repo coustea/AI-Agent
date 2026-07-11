@@ -45,6 +45,7 @@
                 <span class="head-tag subject-tag">{{ question.subject || '未分类' }}</span>
                 <span class="head-tag type-tag">{{ question.type || '未分类' }}</span>
                 <span class="head-tag difficulty-tag">{{ question.difficulty || '未评级' }}</span>
+                <span v-if="answerHistoryMap?.has(question.id)" class="head-tag done-tag">做过</span>
                 <span :class="['status-pill', statusClass(question)]">
                   {{ statusText(question) }}
                 </span>
@@ -201,6 +202,7 @@ const props = defineProps<{
   openedAnalysis: Set<string>
   highlightQuestionId?: string | null
   highlightVersion?: number
+  answerHistoryMap?: Map<string, { question_id: string; is_correct: boolean; attempts: number }>
 }>()
 
 // 事件：搜索、翻页、选择选项、提交、切换解析
@@ -552,6 +554,12 @@ function renderInline(text: string) {
 .difficulty-tag {
   background: #dff2ff;
   color: #3487c7;
+  border-color: transparent;
+}
+
+.done-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
   border-color: transparent;
 }
 
