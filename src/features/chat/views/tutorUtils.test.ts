@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeTeachingDiagram } from './tutorUtils'
+import { assignPersistedAssistantMessageId, normalizeTeachingDiagram } from './tutorUtils'
 
 describe('normalizeTeachingDiagram', () => {
   it('keeps a structured diagram when the server returns an image fallback', () => {
@@ -13,5 +13,16 @@ describe('normalizeTeachingDiagram', () => {
     })
 
     expect(diagram?.kind).toBe('fallback')
+  })
+})
+
+describe('assignPersistedAssistantMessageId', () => {
+  it('replaces a synthetic assistant ID with the persisted message ID', () => {
+    const message = { id: 100001, role: 'ai' as const, content: '', time: 'now' }
+
+    const messageId = assignPersistedAssistantMessageId(message, 99)
+
+    expect(messageId).toBe(99)
+    expect(message.id).toBe(99)
   })
 })

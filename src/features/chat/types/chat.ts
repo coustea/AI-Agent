@@ -212,6 +212,8 @@ export interface TeachingDiagramImage {
   title: string
   graph_type?: TeachingDiagramType
   image_url: string
+  width: number
+  height: number
 }
 
 export interface TeachingDiagramFallback {

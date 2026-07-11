@@ -337,6 +337,7 @@
                       v-if="msg.teachingDiagram.kind === 'image'"
                       :title="msg.teachingDiagram.title"
                       :image-url="msg.teachingDiagram.image_url"
+                      @expand="previewTeachingDiagram(msg.teachingDiagram)"
                     />
                     <TeachingDiagramCard
                       v-else
@@ -714,6 +715,7 @@ import {
   type PendingFile,
   type Attachment,
   type ChatMsg,
+  assignPersistedAssistantMessageId,
   type AgentActivity,
   normalizeTeachingDiagram,
   getDocumentType,
@@ -2038,8 +2040,13 @@ const switchSession = async (sessionId: string) => {
       onChunk: (chunk) => {
         enqueueStreamChunk(aiMsgId, chunk)
       },
-      onDone: () => {
-        completeStreamingMessage(aiMsgId)
+      onDone: (data) => {
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        const persistedMessageId = aiMsg
+          ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
+          : aiMsgId
+        if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
+        completeStreamingMessage(persistedMessageId)
         void refreshSessionTitleWithRetry(sessionId)
       },
       onError: (_err) => {
@@ -2441,8 +2448,13 @@ const handleSend = async () => {
         }
         enqueueStreamChunk(aiMsgId, chunk)
       },
-      onDone: () => {
-        completeStreamingMessage(aiMsgId)
+      onDone: (data) => {
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        const persistedMessageId = aiMsg
+          ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
+          : aiMsgId
+        if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
+        completeStreamingMessage(persistedMessageId)
         void refreshSessionTitleWithRetry(activeSessionId)
       },
       onError: (_err) => {

@@ -232,6 +232,23 @@ def _image_renderer_comparison_diagram() -> dict:
 
 class TestDiagramImageRenderer:
     @pytest.mark.asyncio
+    async def test_rendered_png_payload_includes_its_dimensions(self, monkeypatch) -> None:
+        import app.chat.diagram_image_renderer as renderer
+
+        async def fake_screenshot(html, output_path) -> None:
+            return None
+
+        monkeypatch.setattr(renderer, "user_chat_uploads_dir", lambda username, session_id: Path("C:/diagrams"))
+        monkeypatch.setattr(renderer, "_screenshot_html_to_png", fake_screenshot)
+
+        payload = await renderer.render_teaching_diagram_png(
+            _image_renderer_framework_diagram(), username="alice", session_id="s1",
+        )
+
+        assert payload["width"] == 1280
+        assert payload["height"] == 900
+
+    @pytest.mark.asyncio
     async def test_ensure_png_retries_once_then_returns_image(self) -> None:
         from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 

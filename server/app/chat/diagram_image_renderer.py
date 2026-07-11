@@ -16,6 +16,8 @@ logger = get_logger(__name__)
 
 Renderer = Callable[..., Awaitable[dict[str, Any]]]
 _BROWSER_TIMEOUT_MS = 20_000
+_PNG_WIDTH = 1280
+_PNG_HEIGHT = 900
 
 
 def _text(value: Any) -> str:
@@ -127,7 +129,7 @@ async def _screenshot_html_to_png(html: str, output_path: Path) -> None:
     browser = None
     try:
         browser = await playwright.chromium.launch(timeout=_BROWSER_TIMEOUT_MS)
-        page = await browser.new_page(viewport={"width": 1280, "height": 900}, device_scale_factor=1)
+        page = await browser.new_page(viewport={"width": _PNG_WIDTH, "height": _PNG_HEIGHT}, device_scale_factor=1)
         await page.set_content(html, wait_until="networkidle", timeout=_BROWSER_TIMEOUT_MS)
         await page.screenshot(path=str(output_path), full_page=True, timeout=_BROWSER_TIMEOUT_MS)
     finally:
@@ -149,6 +151,8 @@ async def render_teaching_diagram_png(
         "title": _text(diagram.get("title")),
         "graph_type": _text(diagram.get("graph_type")),
         "image_url": f"/api/v1/ai/chat/uploads/{username}/{session_id}/diagrams/{filename}",
+        "width": _PNG_WIDTH,
+        "height": _PNG_HEIGHT,
     }
 
 

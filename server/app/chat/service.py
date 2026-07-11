@@ -243,6 +243,7 @@ async def chat(
             "event": "done",
             "data": {
                 "session_id": effective_session,
+                "saved_message_id": saved_message_id,
                 "full_response": full_answer,
                 "tool_calls": [
                     {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}

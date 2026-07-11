@@ -97,6 +97,17 @@ async def test_chat_emits_png_payload_for_final_diagram(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_chat_done_payload_identifies_the_persisted_assistant_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def delivery(diagram: dict, *, username: str, session_id: str) -> dict:
+        return {"kind": "image", "title": diagram["title"], "image_url": "/diagram.png"}
+
+    events, _ = await _events_for_final_payload(monkeypatch, delivery)
+
+    done = next(event for event in events if event["event"] == "done")
+    assert done["data"]["saved_message_id"] == 99
+
+
+@pytest.mark.asyncio
 async def test_chat_emits_structured_fallback_when_png_rendering_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 

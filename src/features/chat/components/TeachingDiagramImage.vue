@@ -1,6 +1,6 @@
 <template>
   <article class="teaching-diagram-image">
-    <img v-if="imageUrl" :src="imageUrl" :alt="title" />
+    <img v-if="imageUrl" :src="imageUrl" :alt="title" @click="emit('expand')" />
     <footer v-if="imageUrl">
       <strong>{{ title }}</strong>
       <a :href="imageUrl" :download="`${title || '教学图解'}.png`">下载 PNG</a>
@@ -16,12 +16,13 @@ const props = defineProps<{
   imageUrl?: string
   image_url?: string
 }>()
+const emit = defineEmits<{ expand: [] }>()
 const imageUrl = computed(() => props.imageUrl ?? props.image_url ?? '')
 </script>
 
 <style scoped>
 .teaching-diagram-image { overflow: hidden; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
-.teaching-diagram-image img { display: block; width: 100%; height: auto; }
+.teaching-diagram-image img { display: block; width: 100%; height: auto; cursor: zoom-in; }
 .teaching-diagram-image footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; }
 .teaching-diagram-image a { color: var(--color-primary); font-size: 13px; }
 </style>

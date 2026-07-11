@@ -66,6 +66,13 @@ export interface ChatMsg {
 }
 
 // 将活动中所有 running 状态统一标记为 done/failed
+export const assignPersistedAssistantMessageId = (message: ChatMsg, savedMessageId: unknown): number => {
+  if (typeof savedMessageId === 'number' && Number.isSafeInteger(savedMessageId) && savedMessageId > 0) {
+    message.id = savedMessageId
+  }
+  return message.id
+}
+
 export const finalizeRunningAgentActivities = (
   activities: AgentActivity[] | undefined,
   status: Extract<AgentActivity['status'], 'done' | 'failed'>,

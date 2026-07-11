@@ -4,10 +4,10 @@ import TeachingDiagramImage from './TeachingDiagramImage.vue'
 
 const mountedApps: Array<{ unmount: () => void }> = []
 
-const mount = (props: { title: string; image_url: string }) => {
+const mount = (props: { title: string; image_url: string }, onExpand?: () => void) => {
   const target = document.createElement('div')
   document.body.append(target)
-  const app = createApp(TeachingDiagramImage, props)
+  const app = createApp(TeachingDiagramImage, { ...props, onExpand })
   app.mount(target)
   mountedApps.push(app)
   return target
@@ -30,5 +30,15 @@ describe('TeachingDiagramImage', () => {
     await nextTick()
 
     expect(target.querySelector('img')).toBeNull()
+  })
+
+  it('emits expand when the PNG preview is clicked', async () => {
+    let expanded = 0
+    const target = mount({ title: 'TCP 图解', image_url: '/diagram.png' }, () => { expanded++ })
+
+    target.querySelector('img')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+
+    expect(expanded).toBe(1)
   })
 })
