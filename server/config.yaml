@@ -4,7 +4,7 @@ app:
   port: 9999
 
 database:
-  url: "postgresql+asyncpg://postgres:Aa123456@127.0.0.1:5432/agent"
+  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
   echo: false
   pool_size: 20
   max_overflow: 30
