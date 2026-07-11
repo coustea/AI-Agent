@@ -20,10 +20,14 @@ jwt:
 # ============ 模型配置 ============
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-  # --- 云端：讯飞 Maas ---
-  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-  api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
-  model_name: "astron-code-latest"
+#  # --- 云端：讯飞 Maas ---
+#  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+#  api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
+#  model_name: "astron-code-latest"
+
+  base_url: "https://api.deepseek.com"
+  api_key: "sk-dd48ba6031634138a4fc7b3644faa299"
+  model_name: "deepseek-v4-flash"
 
 
   # 推理参数
