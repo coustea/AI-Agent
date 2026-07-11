@@ -189,3 +189,92 @@ def test_teaching_diagram_new_cs_types() -> None:
     assert diagram.visual_content.axis_label == "Time (ms)"
     assert len(diagram.visual_content.tracks) == 1
     assert len(diagram.visual_content.tracks[0].blocks) == 2
+
+
+def _image_renderer_framework_diagram() -> dict:
+    return {
+        "graph_type": "framework",
+        "title": "TCP 连接建立",
+        "subtitle": "三次握手的关键信息",
+        "teaching_goal": "理解连接建立过程",
+        "difficulty": "intermediate",
+        "visual_content": {
+            "center": "三次握手",
+            "modules": [
+                {"title": "发起", "items": ["客户端发送 SYN"]},
+                {"title": "确认", "items": ["服务端返回 SYN + ACK"]},
+            ],
+        },
+        "teaching_content": {
+            "core_explanation": "双方分别确认收发能力。",
+            "key_points": ["SYN", "SYN + ACK", "ACK"],
+            "summary": "建立可靠的双向连接。",
+        },
+    }
+
+
+def _image_renderer_comparison_diagram() -> dict:
+    diagram = _image_renderer_framework_diagram()
+    diagram.update(
+        {
+            "graph_type": "comparison",
+            "title": "TCP 与 UDP 对比",
+            "visual_content": {
+                "left_entity": {"name": "TCP", "core_label": "可靠", "short_desc": "面向连接"},
+                "right_entity": {"name": "UDP", "core_label": "高效", "short_desc": "无连接"},
+                "visual_summary": {"center_conclusion": "可靠性与实时性的取舍"},
+                "dimensions": [{"name": "连接", "left": "需要", "right": "不需要"}],
+            },
+        }
+    )
+    return diagram
+
+
+class TestDiagramImageRenderer:
+    @pytest.mark.asyncio
+    async def test_ensure_png_retries_once_then_returns_image(self) -> None:
+        from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
+
+        calls = 0
+
+        async def flaky_renderer(diagram: dict, *, username: str, session_id: str) -> dict:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("chromium launch failed")
+            return {"kind": "image", "title": diagram["title"], "image_url": "/diagram.png"}
+
+        payload = await ensure_teaching_diagram_png_payload(
+            _image_renderer_framework_diagram(), username="alice", session_id="s1", renderer=flaky_renderer,
+        )
+
+        assert calls == 2
+        assert payload["kind"] == "image"
+
+    @pytest.mark.asyncio
+    async def test_ensure_png_returns_structured_fallback_after_two_failures(self) -> None:
+        from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
+
+        async def broken_renderer(diagram: dict, *, username: str, session_id: str) -> dict:
+            raise TimeoutError("screenshot timeout")
+
+        diagram = _image_renderer_framework_diagram()
+        payload = await ensure_teaching_diagram_png_payload(
+            diagram, username="alice", session_id="s1", renderer=broken_renderer,
+        )
+
+        assert payload == {
+            "kind": "fallback", "diagram": diagram,
+            "render_error": "图片生成暂时失败", "retryable": True,
+        }
+
+    def test_comparison_html_uses_a_style_chinese_information_graphic(self) -> None:
+        from app.chat.diagram_image_renderer import build_teaching_diagram_html
+
+        html = build_teaching_diagram_html(_image_renderer_comparison_diagram())
+
+        assert "核心差异对比" in html
+        assert "TCP" in html
+        assert "UDP" in html
+        assert "PNG DIAGRAM" not in html
+        assert "Backend Rendered PNG" not in html
