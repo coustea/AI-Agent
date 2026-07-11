@@ -1,0 +1,20 @@
+:root {
+  --paper: #ffffff;
+  --surface: #f7f8fa;
+  --ink: #172033;
+  --muted: #62708a;
+  --line: #d9e0e8;
+  --line-strong: #aeb9c8;
+  --focus: #0f766e;
+  --focus-soft: #d9f3ed;
+  --state: #315ddc;
+  --state-soft: #e3ebff;
+  --change: #c2410c;
+  --change-soft: #ffedd5;
+  --danger: #be123c;
+  --font: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  --title-size: 43px;
+  --body-size: 20px;
+  --radius: 8px;
+  --ease: cubic-bezier(.2,.8,.2,1);
+}

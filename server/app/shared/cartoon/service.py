@@ -1,371 +1,1227 @@
-"""动画讲解视频服务 — 统一入口。
+"""Business adapter for cartoon video generation.
 
-提供两个公开接口：
-- generate_resource(ResourceInput) → AgentResult  # 多智能体资源生成入口
-- generate_for_path(PathResourceRequest) → AgentResult  # 路径规划入口
+Public surface:
+- generate_resource(ResourceInput) -> AgentResult
+- generate_for_path(PathResourceRequest) -> AgentResult
 
-文件保存路径规范：
-- Resource: storage/{username}/resource/{resource_id}/cartoon/
-- Path: storage/{username}/path/{path_id}/{node_id}/cartoon/
+The service only adapts business requests, owns isolated workspaces and atomic
+publication, and converts the generated artifact into a small resource card.
+All video-generation work is delegated to CartoonVideoAgent.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
+from uuid import uuid4
 
-from app.config import WORKPLACE_DIR
+from pydantic import (
+    BaseModel,
+    ValidationError,
+)
+
+from app.config import (
+    static_url,
+    user_path_node_cartoon_dir,
+    user_resource_cartoon_dir,
+)
 from app.infra.logging import get_logger
-from app.shared.cartoon.cartoon import CartoonGenerationError, CartoonVideoAgent
-from app.shared.cartoon.renderer import CartoonVideoRenderer
+from app.shared.cartoon.agent import (
+    CartoonGenerationError,
+    CartoonGenerationResult,
+    CartoonVideoAgent,
+)
+from app.shared.cartoon.schemas import (
+    CartoonBrief,
+    CartoonGenerationConfig,
+)
 
 if TYPE_CHECKING:
-    from app.path.schemas import PathResourceRequest
-    from app.resource.schemas import AgentResult, ResourceInput
+    from app.path.schemas import (
+        PathResourceRequest,
+    )
+    from app.resource.schemas import (
+        AgentResult,
+        ResourceInput,
+    )
 
 logger = get_logger(__name__)
 
 
-@dataclass(frozen=True)
-class _GenerateResult:
-    """内部生成结果。"""
-    title: str
-    duration: float
-    scene_count: int
-    output_dir: Path
-    html_path: Path
-    video_path: Path | None
-    video_url: str
-    html_url: str
-
-
 class CartoonService:
-    """动画讲解视频服务 — 统一入口。
-
-    两个公开接口：
-    - generate_resource(): 多智能体资源生成入口
-    - generate_for_path(): 路径规划入口
-
-    文件保存路径规范：
-    - Resource: storage/{username}/resource/{resource_id}/cartoon/
-    - Path: storage/{username}/path/{path_id}/{node_id}/cartoon/
-    """
+    """Expose exactly two business entry points for cartoon generation."""
 
     def __init__(
         self,
         *,
         agent: CartoonVideoAgent | None = None,
-        renderer: CartoonVideoRenderer | None = None,
     ) -> None:
-        self._agent = agent or CartoonVideoAgent()
-        self._renderer = renderer or CartoonVideoRenderer()
-
-    # =========================================================================
-    # 公开接口
-    # =========================================================================
-
-    async def generate_resource(self, input_data: "ResourceInput") -> "AgentResult":
-        """多智能体资源生成入口。
-
-        路径格式: storage/{username}/resource/{resource_id}/cartoon/
-
-        Args:
-            input_data: 多智能体资源生成输入
-
-        Returns:
-            AgentResult: 统一输出结果
-        """
-        from app.resource.schemas import AgentResult
-
-        username = input_data.username or "anonymous"
-        resource_id = input_data.resource_id or 0
-        learning_need = input_data.learning_need
-
-        logger.info(
-            "CartoonService.generate_resource 开始: username=%s resource_id=%s learning_need=%s",
-            username, resource_id, learning_need[:50]
+        self._agent = (
+            agent
+            or CartoonVideoAgent()
         )
+
+        self._locks: dict[
+            str,
+            asyncio.Lock,
+        ] = {}
+
+        self._locks_guard = asyncio.Lock()
+
+    async def generate_resource(
+        self,
+        input_data: "ResourceInput",
+    ) -> "AgentResult":
+        """Generate a video for the multi-agent resource workflow."""
         started = time.perf_counter()
 
-        output_dir = WORKPLACE_DIR / username / "resource" / str(resource_id) / "cartoon"
+        learning_need = self._bounded_text(
+            input_data.learning_need,
+            500,
+        )
+
+        username = self._username(
+            input_data.username,
+            getattr(
+                input_data,
+                "user_id",
+                None,
+            ),
+        )
+
+        resource_key = (
+            str(input_data.resource_id)
+            if input_data.resource_id is not None
+            else uuid4().hex
+        )
+
+        output_dir = user_resource_cartoon_dir(
+            username,
+            resource_key,
+        )
 
         try:
-            result = await self._generate(
-                output_dir=output_dir,
-                learning_need=learning_need,
-                profile=input_data.profile,
+            brief = self._build_resource_brief(
+                input_data
             )
+
+            artifact = await self._generate_and_publish(
+                brief,
+                output_dir,
+            )
+
+            return self._build_card_result(
+                artifact,
+                started,
+            )
+
         except CartoonGenerationError as exc:
-            return self._error_result(learning_need, exc, started)
+            return self._build_error_result(
+                learning_need,
+                exc,
+                started,
+            )
+
+        except (
+            ValidationError,
+            ValueError,
+        ) as exc:
+            wrapped = CartoonGenerationError(
+                f"动画视频请求参数无效: {exc}",
+                stage="request",
+                problems=[str(exc)],
+            )
+
+            return self._build_error_result(
+                learning_need,
+                wrapped,
+                started,
+            )
+
         except Exception as exc:
-            elapsed_ms = int((time.perf_counter() - started) * 1000)
-            logger.error("CartoonService.generate_resource 异常: %s elapsed_ms=%d", exc, elapsed_ms, exc_info=True)
-            return AgentResult(
-                success=False,
-                title=f"{learning_need} - 动画讲解视频",
-                file_type="mp4",
-                error=str(exc),
-                metadata={"agent_id": "cartoon"},
+            logger.exception(
+                "Cartoon resource generation failed"
             )
 
-        return self._build_agent_result(result, started)
-
-    async def generate_for_path(self, request: "PathResourceRequest") -> "AgentResult":
-        """路径规划专用入口。
-
-        路径格式: storage/{username}/path/{path_id}/{node_id}/cartoon/
-
-        Args:
-            request: 路径规划统一请求参数
-
-        Returns:
-            AgentResult: 统一输出结果
-        """
-        from app.resource.schemas import AgentResult
-
-        tutorial = request.tutorial
-        if tutorial is None:
-            return AgentResult(
-                success=False,
-                title="动画视频生成失败",
-                file_type="mp4",
-                error="缺少教程内容",
+            wrapped = CartoonGenerationError(
+                f"动画视频生成异常: {exc}",
+                stage="service",
+                problems=[str(exc)],
             )
 
-        username = request.username or "anonymous"
-        path_id = request.path_id
-        node_id = request.node_id
-        learning_need = f"{request.node_title}: {tutorial.content_markdown[:2000]}"
-
-        output_dir = WORKPLACE_DIR / username / "path" / str(path_id) / str(node_id) / "cartoon"
-
-        try:
-            result = await self._generate(
-                output_dir=output_dir,
-                learning_need=learning_need,
-                profile=request.profile,
-            )
-        except Exception as exc:
-            logger.exception("动画视频生成失败")
-            return AgentResult(
-                success=False,
-                title="动画视频生成失败",
-                file_type="mp4",
-                error=str(exc),
+            return self._build_error_result(
+                learning_need,
+                wrapped,
+                started,
             )
 
-        return self._build_agent_result(result, time.perf_counter())
-
-    # =========================================================================
-    # 内部方法
-    # =========================================================================
-
-    async def _generate(
+    async def generate_for_path(
         self,
-        *,
-        output_dir: Path,
-        learning_need: str,
-        profile: dict[str, Any] | None = None,
-        render_mp4: bool = True,
-    ) -> _GenerateResult:
-        """核心生成逻辑。"""
-        temp_dir = output_dir.parent / f".{output_dir.name}.tmp"
+        request: "PathResourceRequest",
+    ) -> "AgentResult":
+        """Generate a video for one learning-path node."""
+        started = time.perf_counter()
 
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir)
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        node_title = self._bounded_text(
+            request.node_title,
+            500,
+        )
 
-        logger.info("Cartoon video 生成开始: output_dir=%s", output_dir)
+        username = self._username(
+            request.username,
+            getattr(
+                request,
+                "user_id",
+                None,
+            ),
+        )
+
+        output_dir = user_path_node_cartoon_dir(
+            username,
+            str(request.path_id),
+            str(request.node_id),
+        )
 
         try:
-            result = await self._agent.generate(
-                learning_need=learning_need,
-                output_dir=temp_dir,
-                profile=profile or {},
+            brief = self._build_path_brief(
+                request
             )
 
-            lint_result = await self._renderer.lint(temp_dir)
-            self._update_audit(
-                result.audit_path,
-                "hyperframes_lint",
-                {"passed": lint_result.passed, "problems": lint_result.problems},
+            artifact = await self._generate_and_publish(
+                brief,
+                output_dir,
             )
-            if not lint_result.passed:
-                raise CartoonGenerationError(
-                    f"HyperFrames lint 失败: {'; '.join(lint_result.problems[:6])}",
-                    audit=lint_result,
+
+            return self._build_card_result(
+                artifact,
+                started,
+            )
+
+        except CartoonGenerationError as exc:
+            return self._build_error_result(
+                node_title,
+                exc,
+                started,
+            )
+
+        except (
+            ValidationError,
+            ValueError,
+        ) as exc:
+            wrapped = CartoonGenerationError(
+                f"动画视频请求参数无效: {exc}",
+                stage="request",
+                problems=[str(exc)],
+            )
+
+            return self._build_error_result(
+                node_title,
+                wrapped,
+                started,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "Cartoon path generation failed"
+            )
+
+            wrapped = CartoonGenerationError(
+                f"动画视频生成异常: {exc}",
+                stage="service",
+                problems=[str(exc)],
+            )
+
+            return self._build_error_result(
+                node_title,
+                wrapped,
+                started,
+            )
+
+    def _build_resource_brief(
+        self,
+        input_data: "ResourceInput",
+    ) -> CartoonBrief:
+        raw_config = dict(
+            input_data.agent_config
+            or {}
+        )
+
+        configuration = (
+            self._build_generation_config(
+                raw_config
+            )
+        )
+
+        handoffs = self._normalize_mapping(
+            input_data.upstream_handoffs
+            or {}
+        )
+
+        tutorial_markdown = (
+            self._handoffs_as_markdown(
+                handoffs
+            )
+        )
+
+        return CartoonBrief(
+            learning_need=self._bounded_text(
+                input_data.learning_need,
+                500,
+            ),
+            teaching_plan=self._bounded_text(
+                input_data.teaching_plan
+                or "",
+                12000,
+            ),
+            tutorial_markdown=self._bounded_text(
+                tutorial_markdown,
+                30000,
+            ),
+            prerequisites=self._string_list(
+                raw_config.get(
+                    "prerequisites"
+                ),
+                20,
+            ),
+            knowledge_points=self._string_list(
+                raw_config.get(
+                    "knowledge_points"
+                ),
+                30,
+            ),
+            weak_knowledge_points=self._string_list(
+                raw_config.get(
+                    "weak_knowledge_points"
+                ),
+                20,
+            ),
+            learner_profile=self._normalize_profile(
+                input_data.profile
+            ),
+            upstream_handoffs=handoffs,
+            configuration=configuration,
+        )
+
+    def _build_path_brief(
+        self,
+        request: "PathResourceRequest",
+    ) -> CartoonBrief:
+        tutorial = request.tutorial
+
+        if tutorial is None:
+            raise ValueError(
+                "路径节点缺少教程内容，不能生成动画视频"
+            )
+
+        tutorial_markdown = self._bounded_text(
+            tutorial.content_markdown,
+            30000,
+        )
+
+        if not tutorial_markdown:
+            raise ValueError(
+                "路径节点教程正文为空，不能生成动画视频"
+            )
+
+        path_context = {
+            "path_title": getattr(
+                request,
+                "path_title",
+                "",
+            ),
+            "path_goal": getattr(
+                request,
+                "path_goal",
+                "",
+            ),
+            "node_title": request.node_title,
+            "difficulty": getattr(
+                request,
+                "difficulty",
+                "",
+            ),
+            "mastery_target": getattr(
+                request,
+                "mastery_target",
+                "",
+            ),
+            "generation_focus": list(
+                getattr(
+                    request,
+                    "generation_focus",
+                    [],
                 )
+                or []
+            ),
+            "tutorial_title": getattr(
+                tutorial,
+                "title",
+                "",
+            ),
+            "tutorial_summary": getattr(
+                tutorial,
+                "summary",
+                "",
+            ),
+        }
 
-            video_path: Path | None = None
-            if render_mp4:
-                render_result = await self._renderer.render(temp_dir)
-                video_path = render_result.video_path
-                self._update_audit(
-                    result.audit_path,
-                    "render",
-                    {
-                        "passed": True,
-                        "problems": [],
-                        "video_path": str(video_path),
-                        "duration": render_result.duration,
-                        "width": render_result.width,
-                        "height": render_result.height,
-                        "fps": render_result.fps,
-                    },
-                    overall_passed=True,
+        teaching_plan = (
+            self._path_context_as_markdown(
+                path_context
+            )
+        )
+
+        raw_config = dict(
+            getattr(
+                request,
+                "agent_config",
+                {},
+            )
+            or {}
+        )
+
+        knowledge_points = list(
+            getattr(
+                tutorial,
+                "knowledge_points",
+                None,
+            )
+            or getattr(
+                request,
+                "knowledge_points",
+                None,
+            )
+            or []
+        )
+
+        weak_points = list(
+            getattr(
+                tutorial,
+                "weak_knowledge_points",
+                None,
+            )
+            or getattr(
+                request,
+                "weak_knowledge_points",
+                None,
+            )
+            or []
+        )
+
+        prerequisites = list(
+            getattr(
+                request,
+                "prerequisites",
+                [],
+            )
+            or []
+        )
+
+        return CartoonBrief(
+            learning_need=self._bounded_text(
+                request.node_title,
+                500,
+            ),
+            teaching_plan=self._bounded_text(
+                teaching_plan,
+                12000,
+            ),
+            tutorial_markdown=tutorial_markdown,
+            prerequisites=self._string_list(
+                prerequisites,
+                20,
+            ),
+            knowledge_points=self._string_list(
+                knowledge_points,
+                30,
+            ),
+            weak_knowledge_points=self._string_list(
+                weak_points,
+                20,
+            ),
+            learner_profile=self._normalize_profile(
+                request.profile
+            ),
+            upstream_handoffs={
+                "path_context": path_context,
+            },
+            configuration=self._build_generation_config(
+                raw_config
+            ),
+        )
+
+    async def _generate_and_publish(
+        self,
+        brief: CartoonBrief,
+        output_dir: Path,
+    ) -> CartoonGenerationResult:
+        output_dir.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        workspace = (
+            output_dir.parent
+            / (
+                f".{output_dir.name}."
+                f"work-{uuid4().hex}"
+            )
+        )
+
+        workspace.mkdir(
+            parents=False,
+            exist_ok=False,
+        )
+
+        logger.info(
+            (
+                "Cartoon generation start: "
+                "target=%s workspace=%s need=%s"
+            ),
+            output_dir,
+            workspace,
+            brief.learning_need[:80],
+        )
+
+        try:
+            artifact = await self._agent.generate(
+                brief,
+                workspace,
+            )
+
+            relative_paths = (
+                self._artifact_relative_paths(
+                    artifact,
+                    workspace,
                 )
-            else:
-                self._update_audit(
-                    result.audit_path,
-                    "render",
-                    {"passed": True, "skipped": True, "problems": []},
-                    overall_passed=True,
-                )
+            )
 
-            if output_dir.exists():
-                shutil.rmtree(output_dir)
-            temp_dir.rename(output_dir)
+            await self._publish_workspace(
+                workspace,
+                output_dir,
+            )
 
-            final_video_path = output_dir / video_path.name if video_path else None
-            final_html_path = output_dir / result.html_path.name
-
-            # 构建静态 URL
-            video_url = ""
-            html_url = ""
-            if final_video_path and final_video_path.exists():
-                video_url = f"/static/{final_video_path.relative_to(WORKPLACE_DIR)}"
-            if final_html_path.exists():
-                html_url = f"/static/{final_html_path.relative_to(WORKPLACE_DIR)}"
+            published = self._rebase_artifact(
+                artifact,
+                output_dir,
+                relative_paths,
+            )
 
             logger.info(
-                "Cartoon video 生成完成: output_dir=%s title=%s duration=%.1fs",
-                output_dir, result.title, result.duration,
+                (
+                    "Cartoon generation complete: "
+                    "target=%s title=%s duration_ms=%d"
+                ),
+                output_dir,
+                published.title,
+                published.duration_ms,
             )
 
-            return _GenerateResult(
-                title=result.title,
-                duration=result.duration,
-                scene_count=result.scene_count,
-                output_dir=output_dir,
-                html_path=final_html_path,
-                video_path=final_video_path,
-                video_url=video_url,
-                html_url=html_url,
-            )
+            return published
+
         except Exception:
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
+            if workspace.exists():
+                shutil.rmtree(
+                    workspace,
+                    ignore_errors=True,
+                )
+
             raise
 
-    def _build_agent_result(self, result: _GenerateResult, started: float) -> "AgentResult":
-        """构建 AgentResult 输出。"""
-        from app.resource.schemas import AgentResult
+    async def _publish_workspace(
+        self,
+        workspace: Path,
+        output_dir: Path,
+    ) -> None:
+        lock = await self._lock_for(
+            output_dir
+        )
 
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        async with lock:
+            backup = (
+                output_dir.parent
+                / (
+                    f".{output_dir.name}."
+                    f"backup-{uuid4().hex}"
+                )
+            )
+
+            moved_old = False
+
+            try:
+                if output_dir.exists():
+                    output_dir.rename(
+                        backup
+                    )
+                    moved_old = True
+
+                workspace.rename(
+                    output_dir
+                )
+
+            except Exception:
+                if (
+                    output_dir.exists()
+                    and not workspace.exists()
+                ):
+                    shutil.rmtree(
+                        output_dir,
+                        ignore_errors=True,
+                    )
+
+                if (
+                    moved_old
+                    and backup.exists()
+                    and not output_dir.exists()
+                ):
+                    backup.rename(
+                        output_dir
+                    )
+
+                raise
+
+            else:
+                if backup.exists():
+                    shutil.rmtree(
+                        backup,
+                        ignore_errors=True,
+                    )
+
+    async def _lock_for(
+        self,
+        output_dir: Path,
+    ) -> asyncio.Lock:
+        key = str(
+            output_dir.resolve()
+        )
+
+        async with self._locks_guard:
+            lock = self._locks.get(
+                key
+            )
+
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks[key] = lock
+
+            return lock
+
+    @staticmethod
+    def _artifact_relative_paths(
+        artifact: CartoonGenerationResult,
+        workspace: Path,
+    ) -> dict[str, Path]:
+        fields = (
+            "lesson_path",
+            "composition_path",
+            "html_path",
+            "video_path",
+            "manifest_path",
+            "audit_path",
+        )
+
+        return {
+            field: (
+                getattr(
+                    artifact,
+                    field,
+                )
+                .resolve()
+                .relative_to(
+                    workspace.resolve()
+                )
+            )
+            for field in fields
+        }
+
+    @staticmethod
+    def _rebase_artifact(
+        artifact: CartoonGenerationResult,
+        output_dir: Path,
+        relative_paths: dict[str, Path],
+    ) -> CartoonGenerationResult:
+        return CartoonGenerationResult(
+            schema_version=artifact.schema_version,
+            title=artifact.title,
+            duration_ms=artifact.duration_ms,
+            scene_count=artifact.scene_count,
+            has_audio=artifact.has_audio,
+            output_dir=output_dir,
+            lesson_path=(
+                output_dir
+                / relative_paths["lesson_path"]
+            ),
+            composition_path=(
+                output_dir
+                / relative_paths["composition_path"]
+            ),
+            html_path=(
+                output_dir
+                / relative_paths["html_path"]
+            ),
+            video_path=(
+                output_dir
+                / relative_paths["video_path"]
+            ),
+            manifest_path=(
+                output_dir
+                / relative_paths["manifest_path"]
+            ),
+            audit_path=(
+                output_dir
+                / relative_paths["audit_path"]
+            ),
+        )
+
+    @staticmethod
+    def _build_generation_config(
+        raw_config: dict[str, Any],
+    ) -> CartoonGenerationConfig:
+        pace_aliases = {
+            "slow": "calm",
+            "normal": "balanced",
+            "medium": "balanced",
+            "calm": "calm",
+            "balanced": "balanced",
+            "fast": "fast",
+        }
+
+        density_aliases = {
+            "simple": "moderate",
+            "moderate": "moderate",
+            "standard": "rich",
+            "rich": "rich",
+            "dense": "intensive",
+            "intensive": "intensive",
+        }
+
+        duration = raw_config.get(
+            "target_duration_seconds"
+        )
+
+        if duration is None:
+            duration = raw_config.get(
+                "duration"
+            )
+
+        payload: dict[str, Any] = {}
+
+        if raw_config.get("depth") in {
+            "overview",
+            "standard",
+            "deep",
+        }:
+            payload["depth"] = (
+                raw_config["depth"]
+            )
+
+        pace = pace_aliases.get(
+            str(
+                raw_config.get(
+                    "pace",
+                    "",
+                )
+            ).lower()
+        )
+
+        if pace:
+            payload["pace"] = pace
+
+        density = density_aliases.get(
+            str(
+                raw_config.get(
+                    "visual_density",
+                    raw_config.get(
+                        "density",
+                        "",
+                    ),
+                )
+            ).lower()
+        )
+
+        if density:
+            payload["visual_density"] = (
+                density
+            )
+
+        if duration not in (
+            None,
+            "",
+        ):
+            payload[
+                "target_duration_seconds"
+            ] = int(duration)
+
+        if raw_config.get("voice") in {
+            "teacher",
+            "coach",
+        }:
+            payload["voice"] = (
+                raw_config["voice"]
+            )
+
+        if raw_config.get("template_id"):
+            payload["template_id"] = str(
+                raw_config["template_id"]
+            )
+
+        return (
+            CartoonGenerationConfig
+            .model_validate(payload)
+        )
+
+    @staticmethod
+    def _normalize_profile(
+        value: Any,
+    ) -> dict[str, Any]:
+        if value is None:
+            return {}
+
+        if isinstance(
+            value,
+            BaseModel,
+        ):
+            return value.model_dump(
+                mode="json",
+                exclude_none=True,
+            )
+
+        if isinstance(
+            value,
+            dict,
+        ):
+            return {
+                str(key): CartoonService._json_value(
+                    item
+                )
+                for key, item in value.items()
+            }
+
+        if isinstance(
+            value,
+            str,
+        ):
+            text = value.strip()
+
+            return (
+                {
+                    "profile_markdown": text,
+                }
+                if text
+                else {}
+            )
+
+        return {
+            "profile": str(value),
+        }
+
+    @staticmethod
+    def _normalize_mapping(
+        value: Any,
+    ) -> dict[str, Any]:
+        if not value:
+            return {}
+
+        if isinstance(
+            value,
+            BaseModel,
+        ):
+            value = value.model_dump(
+                mode="json",
+                exclude_none=True,
+            )
+
+        if not isinstance(
+            value,
+            dict,
+        ):
+            raise ValueError(
+                "upstream_handoffs 必须是字典"
+            )
+
+        return {
+            str(key): CartoonService._json_value(
+                item
+            )
+            for key, item in value.items()
+        }
+
+    @staticmethod
+    def _json_value(
+        value: Any,
+    ) -> Any:
+        if isinstance(
+            value,
+            BaseModel,
+        ):
+            return value.model_dump(
+                mode="json",
+                exclude_none=True,
+            )
+
+        if isinstance(
+            value,
+            dict,
+        ):
+            return {
+                str(key): CartoonService._json_value(
+                    item
+                )
+                for key, item in value.items()
+            }
+
+        if isinstance(
+            value,
+            (
+                list,
+                tuple,
+                set,
+            ),
+        ):
+            return [
+                CartoonService._json_value(
+                    item
+                )
+                for item in value
+            ]
+
+        if (
+            value is None
+            or isinstance(
+                value,
+                (
+                    str,
+                    int,
+                    float,
+                    bool,
+                ),
+            )
+        ):
+            return value
+
+        return str(value)
+
+    @staticmethod
+    def _handoffs_as_markdown(
+        handoffs: dict[str, Any],
+    ) -> str:
+        sections: list[str] = []
+
+        for source, payload in handoffs.items():
+            if not isinstance(
+                payload,
+                dict,
+            ):
+                sections.append(
+                    f"## {source}\n\n{payload}"
+                )
+                continue
+
+            title = str(
+                payload.get("title")
+                or source
+            )
+
+            summary = str(
+                payload.get(
+                    "one_sentence_summary"
+                )
+                or payload.get("summary")
+                or ""
+            ).strip()
+
+            materials = (
+                payload.get("materials")
+                or []
+            )
+
+            lines = [
+                f"## {title}",
+            ]
+
+            if summary:
+                lines.extend(
+                    [
+                        "",
+                        summary,
+                    ]
+                )
+
+            for material in materials:
+                text = str(
+                    material
+                ).strip()
+
+                if text:
+                    lines.extend(
+                        [
+                            "",
+                            text,
+                        ]
+                    )
+
+            sections.append(
+                "\n".join(lines)
+            )
+
+        return "\n\n".join(
+            sections
+        )
+
+    @staticmethod
+    def _path_context_as_markdown(
+        context: dict[str, Any],
+    ) -> str:
+        labels = {
+            "path_title": "学习路径",
+            "path_goal": "路径目标",
+            "node_title": "当前节点",
+            "difficulty": "难度",
+            "mastery_target": "掌握目标",
+            "generation_focus": "生成重点",
+            "tutorial_title": "教程标题",
+            "tutorial_summary": "教程摘要",
+        }
+
+        lines = [
+            "# 路径节点教学上下文",
+        ]
+
+        for key, label in labels.items():
+            value = context.get(key)
+
+            if value in (
+                None,
+                "",
+                [],
+            ):
+                continue
+
+            if isinstance(
+                value,
+                list,
+            ):
+                rendered = "、".join(
+                    str(item)
+                    for item in value
+                )
+            else:
+                rendered = str(value)
+
+            lines.append(
+                f"- {label}：{rendered}"
+            )
+
+        return "\n".join(
+            lines
+        )
+
+    @staticmethod
+    def _string_list(
+        value: Any,
+        limit: int,
+    ) -> list[str]:
+        if value is None:
+            return []
+
+        if isinstance(
+            value,
+            str,
+        ):
+            raw_items = [
+                item.strip()
+                for item in value
+                .replace("，", ",")
+                .split(",")
+            ]
+
+        elif isinstance(
+            value,
+            (
+                list,
+                tuple,
+                set,
+            ),
+        ):
+            raw_items = [
+                str(item).strip()
+                for item in value
+            ]
+
+        else:
+            raw_items = [
+                str(value).strip()
+            ]
+
+        result: list[str] = []
+
+        for item in raw_items:
+            if item and item not in result:
+                result.append(
+                    item[:160]
+                )
+
+            if len(result) >= limit:
+                break
+
+        return result
+
+    @staticmethod
+    def _bounded_text(
+        value: Any,
+        limit: int,
+    ) -> str:
+        text = str(
+            value
+            or ""
+        ).strip()
+
+        return text[:limit]
+
+    @staticmethod
+    def _username(
+        username: Any,
+        user_id: Any,
+    ) -> str:
+        value = str(
+            username
+            or user_id
+            or "anonymous"
+        ).strip()
+
+        safe = "".join(
+            char
+            for char in value
+            if (
+                char.isalnum()
+                or char in {
+                    "-",
+                    "_",
+                }
+            )
+        )
+
+        return (
+            safe[:80]
+            or "anonymous"
+        )
+
+    @staticmethod
+    def _build_card_result(
+        artifact: CartoonGenerationResult,
+        started: float,
+    ) -> "AgentResult":
+        from app.resource.schemas import (
+            AgentResult,
+        )
+
+        duration_seconds = round(
+            artifact.duration_ms / 1000,
+            2,
+        )
+
+        card = {
+            "schema_version": "cartoon/card-v1",
+            "resource_type": "cartoon",
+            "title": artifact.title,
+            "file_type": "mp4",
+            "video_url": static_url(
+                artifact.video_path
+            ),
+            "preview_url": static_url(
+                artifact.html_path
+            ),
+            "duration_seconds": duration_seconds,
+            "scene_count": artifact.scene_count,
+            "has_audio": artifact.has_audio,
+            "engine": "hyperframes",
+        }
+
+        elapsed_ms = int(
+            (
+                time.perf_counter()
+                - started
+            )
+            * 1000
+        )
 
         return AgentResult(
             success=True,
-            title=f"{result.title} - 动画讲解视频",
+            title=artifact.title,
             file_type="mp4",
-            content="",
-            summary=f"生成 {result.scene_count} 个场景、{result.duration:.1f} 秒动画讲解视频",
+            content=json.dumps(
+                card,
+                ensure_ascii=False,
+            ),
+            summary=(
+                f"{artifact.scene_count} 个场景，"
+                f"时长 {duration_seconds:.1f} 秒"
+            ),
             metrics={
-                "scene_count": result.scene_count,
-                "duration_seconds": round(result.duration, 2),
+                "scene_count": artifact.scene_count,
+                "duration_seconds": duration_seconds,
                 "elapsed_ms": elapsed_ms,
             },
             metadata={
-                "engine": "hyperframes",
                 "agent_id": "cartoon",
-                "video_url": result.video_url,
-                "html_url": result.html_url,
-                "duration_seconds": result.duration,
-                "scene_count": result.scene_count,
-                "html_path": str(result.html_path),
-                "video_path": str(result.video_path) if result.video_path else None,
+                "schema_version": "cartoon/card-v1",
+                "engine": "hyperframes",
+                "has_audio": artifact.has_audio,
+                "video_url": static_url(
+                    artifact.video_path
+                ),
+                "html_url": static_url(
+                    artifact.html_path
+                ),
             },
         )
 
-    def _error_result(self, learning_need: str, exc: CartoonGenerationError, started: float) -> "AgentResult":
-        """构建错误结果。"""
-        from app.resource.schemas import AgentResult
+    @staticmethod
+    def _build_error_result(
+        title_source: str,
+        exc: CartoonGenerationError,
+        started: float,
+    ) -> "AgentResult":
+        from app.resource.schemas import (
+            AgentResult,
+        )
 
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
-        logger.error("CartoonService 生成失败: error=%s elapsed_ms=%d", exc, elapsed_ms)
+        elapsed_ms = int(
+            (
+                time.perf_counter()
+                - started
+            )
+            * 1000
+        )
+
+        logger.error(
+            (
+                "Cartoon generation failed: "
+                "stage=%s error=%s elapsed_ms=%d"
+            ),
+            exc.stage,
+            exc,
+            elapsed_ms,
+        )
+
         return AgentResult(
             success=False,
-            title=f"{learning_need} - 动画讲解视频",
+            title=(
+                f"{title_source[:48]} "
+                f"- 动画讲解视频"
+            ),
             file_type="mp4",
             error=str(exc),
+            metrics={
+                "elapsed_ms": elapsed_ms,
+            },
             metadata={
                 "agent_id": "cartoon",
-                "problems": exc.audit.problems if exc.audit else [],
+                "stage": exc.stage,
+                "problems": exc.problems,
             },
         )
-
-    # =========================================================================
-    # 文件路径解析（供独立 API 使用，按 task_id 查找）
-    # =========================================================================
-
-    def resolve_html(self, task_id: str) -> Path:
-        """通过 task_id 解析 HTML 文件路径（向后兼容独立 API）。"""
-        # task_id 格式可能是 "path-node-{node_id}" 或 UUID
-        return WORKPLACE_DIR / "cartoon_video" / self._safe_id(task_id) / "index.html"
-
-    def resolve_video(self, task_id: str) -> Path:
-        """通过 task_id 解析视频文件路径（向后兼容独立 API）。"""
-        output_dir = WORKPLACE_DIR / "cartoon_video" / self._safe_id(task_id)
-        for name in ("output.mp4", "video.mp4"):
-            candidate = output_dir / name
-            if candidate.is_file():
-                return candidate
-        mp4_files = sorted(output_dir.rglob("*.mp4"))
-        return mp4_files[0] if mp4_files else output_dir / "output.mp4"
-
-    def resolve_markdown(self, task_id: str) -> Path:
-        """通过 task_id 解析 Markdown 文件路径（向后兼容独立 API）。"""
-        return WORKPLACE_DIR / "cartoon_video" / self._safe_id(task_id) / "theory_video.md"
-
-    def resolve_audit(self, task_id: str) -> Path:
-        """通过 task_id 解析审计文件路径（向后兼容独立 API）。"""
-        return WORKPLACE_DIR / "cartoon_video" / self._safe_id(task_id) / "audit.json"
-
-    # =========================================================================
-    # 工具方法
-    # =========================================================================
-
-    @staticmethod
-    def _safe_id(value: str) -> str:
-        """安全化 ID 字符串。"""
-        safe = "".join(ch for ch in str(value) if ch.isalnum() or ch in {"-", "_"})
-        return safe[:80] if safe else "unknown"
-
-    @staticmethod
-    def _update_audit(
-        audit_path: Path,
-        stage: str,
-        stage_payload: dict[str, Any],
-        *,
-        overall_passed: bool | None = None,
-    ) -> None:
-        if audit_path.is_file():
-            try:
-                audit_data = json.loads(audit_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                audit_data = {}
-        else:
-            audit_data = {}
-
-        stages = audit_data.setdefault("stages", {})
-        stages[stage] = stage_payload
-
-        if overall_passed is not None:
-            audit_data["passed"] = overall_passed
-        elif not stage_payload.get("passed", False):
-            audit_data["passed"] = False
-
-        audit_path.write_text(json.dumps(audit_data, ensure_ascii=False, indent=2), encoding="utf-8")

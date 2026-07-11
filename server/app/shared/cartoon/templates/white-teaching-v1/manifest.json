@@ -1,0 +1,15 @@
+{
+  "schema": "cartoon-template/v1",
+  "id": "white-teaching-v1",
+  "version": "1.0.0",
+  "canvas": {"width": 1920, "height": 1080, "fps": 30},
+  "files": {
+    "composition": "composition.html",
+    "tokens": "tokens.css",
+    "layout": "layout.css",
+    "motion": "motion.js"
+  },
+  "slots": ["header", "stage", "state-rail", "captions", "progress"],
+  "visual_kinds": ["tree", "array", "graph", "flow", "state-machine", "memory", "network", "comparison"],
+  "actions": ["reveal", "focus", "compare", "traverse", "transfer", "mutate", "insert", "remove", "connect", "highlight"]
+}
