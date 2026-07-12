@@ -534,6 +534,10 @@ CREATE TABLE IF NOT EXISTS learning_sessions (
     created_at          TIMESTAMPTZ     DEFAULT NOW()
 );
 
+-- Existing installations may predate client-side session deduplication.
+ALTER TABLE learning_sessions
+    ADD COLUMN IF NOT EXISTS client_session_id VARCHAR(64);
+
 CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_id ON learning_sessions (user_id);
 CREATE INDEX IF NOT EXISTS ix_learning_sessions_started_at ON learning_sessions (started_at);
 CREATE INDEX IF NOT EXISTS ix_learning_sessions_source_page ON learning_sessions (source_page);

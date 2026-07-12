@@ -282,6 +282,12 @@ class RealtimeBridge:
         elif event_type == "tts_end":
             # 使用 Avatar 回调传来的 turn_id
             await self._send_to_frontend({
+                "type": "digital_human_state",
+                "state": "avatar_ready",
+                "message": "Avatar service ready",
+                "turn_id": turn_id,
+            })
+            await self._send_to_frontend({
                 "type": "avatar_stopped",
                 "data": data,
                 "turn_id": turn_id,
@@ -684,6 +690,7 @@ class RealtimeBridge:
     async def _handle_stop_speaking(self):
         if self._avatar_controller:
             await self._avatar_controller.stop()
+        await self._send_digital_human_state("avatar_ready", "Avatar service ready")
         await self._send_to_frontend({"type": "avatar_stopped"})
 
     # 清除当前会话的聊天历史记录

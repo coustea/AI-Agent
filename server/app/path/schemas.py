@@ -189,6 +189,12 @@ class LearningPathResourceDTO(BaseModel):
         )
 
 
+# 路径节点辅助资源后台任务响应；与 standalone resource 任务保持独立契约。
+class PathResourceTaskResponse(BaseModel):
+    resource: LearningPathResourceDTO
+    run_id: str
+
+
 # 路径节点 DTO
 class LearningPathNodeDTO(BaseModel):
     id: int
@@ -568,6 +574,7 @@ __all__ = [
     # Response
     "LearningPathQuestionDTO",
     "LearningPathResourceDTO",
+    "PathResourceTaskResponse",
     "LearningPathTutorialDTO",
     "LearningPathNodeDTO",
     "PathResponse",

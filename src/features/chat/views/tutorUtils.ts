@@ -84,26 +84,6 @@ export const finalizeRunningAgentActivities = (
   ))
 )
 
-export interface AutoRestartVadDecision {
-  isVoiceChatting: boolean
-  chatMode: string
-  isAvatarConnected: boolean
-  continuousVoiceConversation?: boolean
-}
-
-// 判断数字人回复完成后是否应自动重启 VAD（语音通话模式）
-export const shouldAutoRestartVadAfterAssistantComplete = ({
-  isVoiceChatting,
-  chatMode,
-  isAvatarConnected,
-  continuousVoiceConversation = true,
-}: AutoRestartVadDecision): boolean => (
-  continuousVoiceConversation
-  && isVoiceChatting
-  && chatMode === 'digital_human'
-  && isAvatarConnected
-)
-
 const SUPPORTED_DIAGRAM_TYPES = new Set([
   'comparison',
   'flowchart',

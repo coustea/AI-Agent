@@ -25,6 +25,7 @@ export interface IdleDisconnectState {
 
 export const MAX_PENDING_AUDIO_CHUNKS = 6
 export const MAX_WS_AUDIO_BUFFERED_BYTES = 32 * 1024
+export const CONTINUOUS_VAD_RESTART_DELAY_MS = 600
 
 export function enqueueBoundedAudioChunk(queue: string[], chunk: string, maxSize = MAX_PENDING_AUDIO_CHUNKS): boolean {
     const safeMaxSize = Math.max(1, Math.floor(maxSize))
@@ -152,6 +153,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let player: any = null
     let audioContext: AudioContext | null = null
     let audioStream: MediaStream | null = null
+    let audioSource: MediaStreamAudioSourceNode | null = null
+    let audioProcessor: ScriptProcessorNode | null = null
     let audioMonitor: ReturnType<typeof setInterval> | null = null
     let audioFlushTimer: ReturnType<typeof setTimeout> | null = null
     const pendingAudioChunks: string[] = []
@@ -165,6 +168,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let playerGeneration = 0
     // 当数字人说话时尝试启动 VAD，会暂存参数，等播报结束后自动重启
     let _pendingVadRestart: { needDiagram: boolean; capabilities: DigitalHumanCapabilities } | null = null
+    let continuousVadOptions: { needDiagram: boolean; capabilities: DigitalHumanCapabilities } | null = null
+    let vadRestartTimer: ReturnType<typeof setTimeout> | null = null
     // Pending stream data: saved when stream_info arrives before container is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let pendingStreamData: { url: string; extend: Record<string, any> } | null = null
@@ -260,6 +265,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         ws.onclose = (event) => {
             isConnected.value = false
+            setContinuousVoice(false)
             stopVad()
             destroyPlayer()
             stopIdleTimer()
@@ -279,6 +285,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     // 断开 WebSocket + 停止 VAD + 销毁播放器
     function disconnect(): void {
+        setContinuousVoice(false)
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'stop_speaking' }))
         }
@@ -419,6 +426,12 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onDiagram?.(data.data, turn_id)
         } else if (type === 'avatar_stopped') {
             isSpeaking.value = false
+            // 先恢复可监听状态，再通知页面重启 VAD；否则 startVad 会被 speaking 状态拦截。
+            if (digitalHumanState.value !== 'avatar_ready') {
+                digitalHumanState.value = 'avatar_ready'
+                callbacks?.onDigitalHumanStateChange?.('avatar_ready', turn_id)
+                callbacks?.onStatus?.({ stage: 'avatar_ready', message: 'Avatar service ready' })
+            }
             if (currentSpeechStartedAt > 0 && currentSpeechReleasedCost > 0) {
                 const elapsedSec = Math.max(0.25, (Date.now() - currentSpeechStartedAt) / 1000)
                 const actualRate = currentSpeechReleasedCost / elapsedSec
@@ -436,28 +449,18 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             currentSpeechReleasedCost = 0
             targetRevealCharsPerSecond = 0
             finalizeBufferedAssistantTurn()
-            // 数字人播报结束后，通知前端可以安全重启 VAD
-            // 之前在 assistant_complete 时就重启 VAD，导致麦克风拾取到 TTS 回声
             callbacks?.onAvatarStopped?.()
-            // 如果在播报期间有 VAD 重启请求，现在安全地执行
-            if (_pendingVadRestart) {
-                const { needDiagram: pendingDiagram, capabilities: pendingCaps } = _pendingVadRestart
-                _pendingVadRestart = null
-                // 延迟一小段时间确保 TTS 音频完全停止播放
-                setTimeout(() => {
-                    if (!isSpeaking.value && !vadActive && ws && ws.readyState === WebSocket.OPEN) {
-                        startVad(pendingDiagram, pendingCaps)
-                    }
-                }, 500)
-            }
+            const restartOptions = _pendingVadRestart ?? continuousVadOptions
+            _pendingVadRestart = null
+            if (restartOptions) scheduleVadRestart(restartOptions)
         } else if (type === 'vad_state') {
             const state = data.data?.listening ?? (data.state === 'listening' || data.state === 'speaking')
             const listening = !!state
             backendVadReady = listening
             isListening.value = listening
             if (shouldCleanupLocalVadOnBackendState(listening)) {
-                vadActive = false
-                cleanupAudioInput()
+                if (continuousVadOptions) pauseAudioInput()
+                else cleanupAudioInput()
             }
             callbacks?.onVadStateChange?.(!!state)
         } else if (type === 'history_cleared') {
@@ -802,6 +805,15 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     // 清理麦克风音频资源（停止轨道、关闭 AudioContext）
     function cleanupAudioInput(): void {
+        if (audioProcessor) {
+            audioProcessor.onaudioprocess = null
+            audioProcessor.disconnect()
+            audioProcessor = null
+        }
+        if (audioSource) {
+            audioSource.disconnect()
+            audioSource = null
+        }
         // Stop mic tracks - does NOT depend on vadActive
         if (audioStream) {
             audioStream.getTracks().forEach((track) => track.stop())
@@ -825,23 +837,37 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    // 连续对话期间只暂停上传，保留用户手势获取到的麦克风与 AudioContext。
+    function pauseAudioInput(): void {
+        vadActive = false
+        clearPendingAudioChunks()
+        if (speechHangTimer) {
+            clearTimeout(speechHangTimer)
+            speechHangTimer = null
+        }
+        if (speechDetected) {
+            speechDetected = false
+            callbacks?.onSpeechDetectedChange?.(false)
+        }
+    }
+
     // 启动语音活动检测（VAD）：采集麦克风音频 → PCM → base64 → WebSocket 发送
-    async function startVad(needDiagram = false, capabilities: DigitalHumanCapabilities = {}): Promise<void> {
-        if (vadActive) return
+    async function startVad(needDiagram = false, capabilities: DigitalHumanCapabilities = {}): Promise<boolean> {
+        if (vadActive) return true
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             error.value = '数字人未连接，无法开启语音输入'
             callbacks?.onError?.(error.value)
-            return
+            return false
         }
         // 数字人正在说话时，不允许开启语音识别
         // 避免麦克风拾取到 TTS 回声导致错误识别
         if (isSpeaking.value) {
             console.warn('[DH] Cannot start VAD while avatar is speaking, will auto-restart after speech ends')
             _pendingVadRestart = { needDiagram, capabilities }
-            return
+            return false
         }
         if (shouldStopVadForDigitalHumanState(digitalHumanState.value)) {
-            return
+            return false
         }
 
         // Clear turn state
@@ -860,64 +886,64 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 ...capabilities,
             }))
 
-            audioStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: 16000,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                },
-            })
+            if (!audioStream || !audioContext || !audioProcessor) {
+                audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                    },
+                })
 
-            audioContext = new AudioContext({ sampleRate: 16000 })
-            const source = audioContext.createMediaStreamSource(audioStream)
-            // 使用 2048 buffer（128ms @ 16kHz）替代 4096（256ms）以降低采集延迟
-            const processor = audioContext.createScriptProcessor(2048, 1, 1)
-            // 先采集到有界队列，后端 ACK 后再按 WebSocket 背压逐批发送。
-            vadActive = true
+                audioContext = new AudioContext({ sampleRate: 16000 })
+                audioSource = audioContext.createMediaStreamSource(audioStream)
+                // 使用 2048 buffer（128ms @ 16kHz）替代 4096（256ms）以降低采集延迟
+                audioProcessor = audioContext.createScriptProcessor(2048, 1, 1)
+                audioProcessor.onaudioprocess = (e) => {
+                    if (!vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
 
-            processor.onaudioprocess = (e) => {
-                if (!vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
-
-                const inputData = e.inputBuffer.getChannelData(0)
-                let sum = 0
-                const pcmData = new Int16Array(inputData.length)
-                for (let i = 0; i < inputData.length; i++) {
-                    const sample = inputData[i] ?? 0
-                    const s = Math.max(-1, Math.min(1, sample))
-                    sum += s * s
-                    pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-                }
-                const rms = Math.sqrt(sum / Math.max(1, inputData.length))
-                const speakingNow = rms > 0.02
-                if (speakingNow) {
-                    if (!speechDetected) {
-                        speechDetected = true
-                        callbacks?.onSpeechDetectedChange?.(true)
+                    const inputData = e.inputBuffer.getChannelData(0)
+                    let sum = 0
+                    const pcmData = new Int16Array(inputData.length)
+                    for (let i = 0; i < inputData.length; i++) {
+                        const sample = inputData[i] ?? 0
+                        const s = Math.max(-1, Math.min(1, sample))
+                        sum += s * s
+                        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7fff
                     }
-                    if (speechHangTimer) {
-                        clearTimeout(speechHangTimer)
-                        speechHangTimer = null
+                    const rms = Math.sqrt(sum / Math.max(1, inputData.length))
+                    const speakingNow = rms > 0.02
+                    if (speakingNow) {
+                        if (!speechDetected) {
+                            speechDetected = true
+                            callbacks?.onSpeechDetectedChange?.(true)
+                        }
+                        if (speechHangTimer) {
+                            clearTimeout(speechHangTimer)
+                            speechHangTimer = null
+                        }
+                        speechHangTimer = setTimeout(() => {
+                            speechDetected = false
+                            callbacks?.onSpeechDetectedChange?.(false)
+                            speechHangTimer = null
+                        }, 700)
                     }
-                    speechHangTimer = setTimeout(() => {
-                        speechDetected = false
-                        callbacks?.onSpeechDetectedChange?.(false)
-                        speechHangTimer = null
-                    }, 700)
+
+                    const uint8Array = new Uint8Array(pcmData.buffer)
+                    let binary = ''
+                    for (let i = 0; i < uint8Array.length; i++) {
+                        binary += String.fromCharCode(uint8Array[i] ?? 0)
+                    }
+                    queueAudioChunk(btoa(binary))
                 }
 
-                const uint8Array = new Uint8Array(pcmData.buffer)
-                let binary = ''
-                for (let i = 0; i < uint8Array.length; i++) {
-                    binary += String.fromCharCode(uint8Array[i] ?? 0)
-                }
-                const base64 = btoa(binary)
-
-                queueAudioChunk(base64)
+                audioSource.connect(audioProcessor)
+                audioProcessor.connect(audioContext.destination)
             }
 
-            source.connect(processor)
-            processor.connect(audioContext.destination)
+            // 自动恢复时复用首次用户手势取得的音频链路，不重新请求麦克风权限。
+            vadActive = true
 
             const waitStart = Date.now()
             while (!backendVadReady && Date.now() - waitStart < 1500) {
@@ -935,6 +961,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             if (!audioEnabled.value && isAvatarReady.value) {
                 enableAudio()
             }
+            return true
         } catch (err) {
             console.error('[DH] mic error:', err)
             // Cleanup audio resources even when vadActive not yet set
@@ -948,14 +975,47 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'stop_vad' }))
             }
+            return false
+        }
+    }
+
+    function clearVadRestartTimer(): void {
+        if (vadRestartTimer) {
+            clearTimeout(vadRestartTimer)
+            vadRestartTimer = null
+        }
+    }
+
+    function scheduleVadRestart(options: { needDiagram: boolean; capabilities: DigitalHumanCapabilities }): void {
+        clearVadRestartTimer()
+        vadRestartTimer = setTimeout(async () => {
+            vadRestartTimer = null
+            if (isSpeaking.value || vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
+            await startVad(options.needDiagram, options.capabilities)
+        }, CONTINUOUS_VAD_RESTART_DELAY_MS)
+    }
+
+    function setContinuousVoice(
+        enabled: boolean,
+        needDiagram = false,
+        capabilities: DigitalHumanCapabilities = {},
+    ): void {
+        clearVadRestartTimer()
+        if (!enabled) {
+            continuousVadOptions = null
+            _pendingVadRestart = null
+            return
+        }
+        continuousVadOptions = {
+            needDiagram: !!needDiagram,
+            capabilities: { ...capabilities },
         }
     }
 
     // 停止语音活动检测并通知后端
-    function stopVad(): void {
-        // Always cleanup audio resources, even if vadActive is false
-        // (e.g., if vad failed during startup but audioStream/audioContext were created)
-        cleanupAudioInput()
+    function stopVad(preserveAudio = continuousVadOptions !== null): void {
+        if (preserveAudio) pauseAudioInput()
+        else cleanupAudioInput()
         clearPendingAudioChunks()
 
         // Notify backend if connected
@@ -1029,13 +1089,13 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     function getRevealCharsPerSecond(): number {
         const rate = Math.max(0.8, Math.min(1.5, Number(speechRate.value) || 1.0))
-        // 基础估算速率：保守估计，字幕跟在语音后面
-        const estimated = 2.0 + (rate - 0.8) * 2.5
+        // 字幕保持略微领先于 TTS，避免实际音频结束后仍有文字继续输出。
+        const estimated = 4.8 * rate
         if (targetRevealCharsPerSecond > 0) {
-            return Math.max(1.2, Math.min(7.0, targetRevealCharsPerSecond * (0.85 + (rate - 0.8) * 0.3)))
+            return Math.max(estimated, Math.min(8.0, targetRevealCharsPerSecond * 1.05))
         }
         if (calibratedRevealCharsPerSecond > 0) {
-            return Math.max(1.2, Math.min(7.0, calibratedRevealCharsPerSecond * (0.85 + (rate - 0.8) * 0.3)))
+            return Math.max(estimated, Math.min(8.0, calibratedRevealCharsPerSecond * 1.05))
         }
         return estimated
     }
@@ -1043,12 +1103,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     function getRevealUnitCost(unit: string): number {
         const trimmed = unit.trim()
         if (!trimmed) return 0.5
-        // 句末标点：较长停顿
-        if (/^[。！？!?]$/.test(trimmed)) return 5.0
-        // 分句标点：中等停顿
-        if (/^[，,；;]$/.test(trimmed)) return 3.0
-        // 冒号、引号：短停顿
-        if (/^[：:""''（）()《》【】]$/.test(trimmed)) return 1.5
+        // 标点保留自然停顿，但不让字幕因累计停顿落后于语音。
+        if (/^[。！？!?]$/.test(trimmed)) return 2.0
+        if (/^[，,；;]$/.test(trimmed)) return 1.35
+        if (/^[：:""''（）()《》【】]$/.test(trimmed)) return 1.1
         // 英文单词
         if (/^[A-Za-z0-9_]+(?:['-][A-Za-z0-9_]+)*$/.test(trimmed)) {
             return Math.max(1.2, Math.min(2.5, trimmed.length * 0.35 + 0.8))
@@ -1180,6 +1238,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         sendText,
         startVad,
         stopVad,
+        setContinuousVoice,
         stopSpeaking,
         clearHistory,
         setSpeechRate,
