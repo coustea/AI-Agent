@@ -649,7 +649,7 @@ class LearningSession(SQLModel, table=True):
     source_page: str = Field(max_length=50, index=True, description="来源页面标识")
     started_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), index=True))
     ended_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
-    duration_seconds: int = Field(ge=1, le=86400, description="实际活跃时长(秒)")
+    duration_seconds: int = Field(ge=1, le=14400, description="实际活跃时长(秒)")
     resource_id: int | None = Field(default=None)
     path_id: int | None = Field(default=None)
     path_node_id: int | None = Field(default=None)

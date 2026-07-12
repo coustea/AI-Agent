@@ -268,7 +268,6 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 
 CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles (user_id);
-ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_last_report FOREIGN KEY (last_assessment_report_id) REFERENCES learning_assessment_reports(id) ON DELETE SET NULL;
 
 COMMENT ON TABLE user_profiles IS '用户主画像表，每个用户一条';
 COMMENT ON COLUMN user_profiles.user_id IS '用户ID';
@@ -327,6 +326,18 @@ CREATE TABLE IF NOT EXISTS learning_assessment_reports (
 CREATE INDEX IF NOT EXISTS ix_reports_user_created ON learning_assessment_reports (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_reports_user_status ON learning_assessment_reports (user_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_user_generating ON learning_assessment_reports (user_id) WHERE status = 'generating';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_profiles_last_report'
+    ) THEN
+        ALTER TABLE user_profiles
+            ADD CONSTRAINT fk_user_profiles_last_report
+            FOREIGN KEY (last_assessment_report_id)
+            REFERENCES learning_assessment_reports(id)
+            ON DELETE SET NULL;
+    END IF;
+END $$;
 
 COMMENT ON TABLE learning_assessment_reports IS '学习效果评估报告表，记录用户单次评估报告';
 COMMENT ON COLUMN learning_assessment_reports.user_id IS '用户ID';
@@ -522,7 +533,7 @@ CREATE TABLE IF NOT EXISTS learning_sessions (
     source_page         VARCHAR(50)     NOT NULL,
     started_at          TIMESTAMPTZ     NOT NULL,
     ended_at            TIMESTAMPTZ     NOT NULL,
-    duration_seconds    INTEGER         NOT NULL,
+    duration_seconds    INTEGER         NOT NULL CHECK (duration_seconds >= 1 AND duration_seconds <= 14400),
     resource_id         INTEGER,
     path_id             INTEGER,
     path_node_id        INTEGER,

@@ -1,20 +1,44 @@
 :root {
   --paper: #ffffff;
-  --surface: #f7f8fa;
+  --surface: #f7f9fc;
+  --surface-strong: #eef3f8;
   --ink: #172033;
   --muted: #62708a;
-  --line: #d9e0e8;
-  --line-strong: #aeb9c8;
+  --muted-soft: #8b97aa;
+
+  --line: #d9e1ea;
+  --line-strong: #aebac9;
+  --line-active: #73a9a4;
+
   --focus: #0f766e;
+  --focus-strong: #0b5f59;
   --focus-soft: #d9f3ed;
+  --accent-color: #0f766e;
+
   --state: #315ddc;
-  --state-soft: #e3ebff;
+  --state-soft: #e4ebff;
+  --state-detail: #3f4d67;
   --change: #c2410c;
   --change-soft: #ffedd5;
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
   --danger: #be123c;
-  --font: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
-  --title-size: 43px;
+  --danger-soft: #ffe4e9;
+  --flow: #0284c7;
+  --flow-soft: #e0f2fe;
+
+  --shadow-xs: 0 2px 8px rgba(23, 32, 51, 0.05);
+  --shadow-sm: 0 7px 20px rgba(23, 32, 51, 0.08);
+  --shadow-md: 0 16px 38px rgba(23, 32, 51, 0.12);
+  --focus-ring: 0 0 0 7px rgba(15, 118, 110, 0.12);
+
+  --font: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+  --title-size: 42px;
   --body-size: 20px;
-  --radius: 8px;
-  --ease: cubic-bezier(.2,.8,.2,1);
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
 }

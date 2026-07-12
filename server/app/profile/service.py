@@ -5,25 +5,23 @@
 评分汇总存储在 UserProfile 表。
 """
 
-# 画像服务：基础信息/维度/评分的持久化、周摘要缓冲与 LLM 推理
+# 画像服务：基础信息/维度/评分的持久化与 LLM 推理
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.messages import HumanMessage
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from sqlalchemy import case, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.infra.database import session_scope
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.infra.models import (
-    LearningEvent,
     School,
     User,
     UserProfile,
@@ -36,7 +34,6 @@ from app.profile.types import (
     COGNITIVE_DIMENSIONS,
     DimensionValue,
     ProfileDimensionsPatch,
-    GlobalTutoringInferenceOutput,
     ProfileScoreOutput,
 )
 from app.infra.prompts import prompts
@@ -45,30 +42,6 @@ logger = get_logger(__name__)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
-
-# 用于计算周结束时刻（周日 23:59:59.999999）的微小偏移量
-_NEXT_MONDAY_MINUS_ONE_MICRO: timedelta = timedelta(microseconds=1)
-
-
-# 计算给定时间所在自然周（周一~周日）的 UTC 起止范围
-def _utc_week_range(now: datetime | None = None) -> tuple[datetime, datetime]:
-    """计算给定时间所在自然周（周一 00:00 ~ 周日 23:59:59.999999）的 UTC 范围。"""
-    now = now or datetime.now(timezone.utc)
-    weekday = now.weekday()
-    week_start = (now - timedelta(days=weekday)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    week_end = week_start + timedelta(days=7) - _NEXT_MONDAY_MINUS_ONE_MICRO
-    return week_start, week_end
-
-
-# 将周起止时间格式化为可读的周标签（ISO 周 + 日期区间）
-def _format_week_label(week_start: datetime, week_end: datetime) -> str:
-    iso_year, iso_week, _ = week_start.isocalendar()
-    start_str = week_start.strftime("%Y-%m-%d")
-    end_str = week_end.strftime("%Y-%m-%d")
-    return f"{iso_year}-W{iso_week:02d}: {start_str} ~ {end_str}"
-
 
 # 从 User ORM 提取基础信息字典，供 prompt 与响应使用
 def _user_base_info_dict(user: User) -> dict[str, Any]:
@@ -107,50 +80,17 @@ def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
     }
 
 
-# ── 懒加载触发阈值 ─────────────────────────────────────────────────────
-
-# 文字画像懒加载刷新的加权事件点数阈值
-PROFILE_REFRESH_EVENT_THRESHOLD = 10
-"""文字画像懒加载刷新的加权事件阈值（点）。
-
-加权规则：quiz_submitted / path_node_completed / path_quiz_answered = 3，
-resource_generated = 2，其他 = 1。强信号事件少但权重大，弱信号事件多但权重小。
-"""
-
-# 权重为 3 的强信号事件类型（测验、路径节点完成、路径测验）
-_WEIGHT_3_EVENTS: tuple[str, ...] = (
-    "quiz_submitted",
-    "path_node_completed",
-    "path_quiz_answered",
-)
-
-
-# 计算 since 之后新增学习事件的加权点数（用于懒加载刷新判据）
-async def weighted_new_event_points(
-    db: AsyncSession, user_id: int, since: datetime
-) -> int:
-    """计算 ``since`` 之后新增学习事件的加权点数。
-
-    用于 GET /profile 懒加载触发判据：当点数 ≥ PROFILE_REFRESH_EVENT_THRESHOLD
-    或 profile.updated_at 早于本周周一时，后台触发 infer_profile_from_digest。
-    """
-    weight_expr = case(
-        (LearningEvent.event_type.in_(_WEIGHT_3_EVENTS), 3),
-        (LearningEvent.event_type == "resource_generated", 2),
-        else_=1,
-    )
-    # 按事件权重求和得到加权点数
-    stmt = select(func.coalesce(func.sum(weight_expr), 0)).where(
-        LearningEvent.user_id == user_id,
-        LearningEvent.created_at > since,
-    )
-    result = (await db.exec(stmt)).one()
-    return int(result)
+def get_effective_guidance_strategy(profile: UserProfile | None) -> dict[str, Any]:
+    """获取用户有效的自适应辅导策略，若没有或为空则返回初始缺省默认值。"""
+    if not profile or not profile.guidance_strategy:
+        from app.evaluation.guidance import DEFAULT_GUIDANCE_STRATEGY
+        return DEFAULT_GUIDANCE_STRATEGY
+    return profile.guidance_strategy
 
 
 # ── ProfileService ────────────────────────────────────────────────────
 
-# 学习者画像服务：CRUD、周摘要与 LLM 推理评分
+# 学习者画像服务：CRUD 与 LLM 推理评分
 class ProfileService:
     """学习者画像服务 — CRUD、LLM 推理与评分。
 
@@ -301,6 +241,7 @@ class ProfileService:
         async with session_scope() as db:
             user = (await db.exec(select(User).where(User.id == user_id))).first()
             dimensions = await self.get_dimensions(user_id=user_id, db=db)
+            profile = (await db.exec(select(UserProfile).where(UserProfile.user_id == user_id))).first()
 
         base_info = _user_base_info_dict(user) if user else {}
         lines: list[str] = ["# 学习者画像"]
@@ -349,6 +290,22 @@ class ProfileService:
             value = dim_data.get("value", "")
             lines.append(f"\n### {dim_name}")
             lines.append(value if value else "暂无明确画像")
+
+        # 4. 当前自适应辅导策略段落
+        strategy = get_effective_guidance_strategy(profile)
+        lines.append("\n## 当前自适应辅导策略")
+        lines.append(f"- 阶段关注目标：{strategy.get('weekly_goal')}")
+        lines.append(f"- 建议单次学习时长：{strategy.get('recommended_session_minutes')} 分钟")
+        lines.append(f"- 推荐辅导风格：{strategy.get('tutoring_style')}")
+        
+        focus_topics = strategy.get("focus_topics", [])
+        topics_str = "、".join(focus_topics) if focus_topics else "暂无"
+        lines.append(f"- 重点学习主题：{topics_str}")
+        
+        pref_types = strategy.get("preferred_resource_types", [])
+        types_str = "、".join(pref_types) if pref_types else "暂无"
+        lines.append(f"- 偏好学习资源类型：{types_str}")
+        lines.append(f"- 策略制定依据：{strategy.get('reason')}")
 
         return "\n".join(lines)
 

@@ -185,30 +185,6 @@ def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
         raise ValidationError("PPT resource requires html_url")
 
 
-def validate_video(result: "AgentResult", input_data: "ResourceInput") -> None:
-    """Video 资源必须是带音频的最终 MP4 产物。"""
-    if result.file_type != "mp4":
-        raise ValidationError("Video must be MP4")
-
-    # 解析产物元数据 JSON
-    try:
-        data = json.loads(result.content) if isinstance(result.content, str) else result.content
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"Video JSON parse error: {exc}") from exc
-
-    # 逐项校验视频产物契约
-    if not isinstance(data, dict):
-        raise ValidationError("Video must be object")
-    if data.get("schema_version") != "video/v2":
-        raise ValidationError("Video must use the video/v2 schema")
-    if not str(data.get("public_url", "")).endswith(".mp4"):
-        raise ValidationError("Video must expose an MP4 public_url")
-    if data.get("duration_ms", 0) <= 0 or data.get("size_bytes", 0) <= 0:
-        raise ValidationError("Video artifact metadata is invalid")
-    if result.metadata.get("has_audio") is not True:
-        raise ValidationError("Video must contain an audio stream")
-
-
 def validate_cartoon(result: "AgentResult", input_data: "ResourceInput") -> None:
     """Cartoon 资源必须提供 HyperFrames 生成的带音频 MP4 发布引用。"""
     if result.file_type != "mp4":
@@ -248,7 +224,6 @@ AGENT_VALIDATORS: dict[str, Validator] = {
     "code": validate_code,
     "reading": validate_reading,
     "ppt": validate_ppt,
-    "video": validate_video,
     "cartoon": validate_cartoon,
 }
 

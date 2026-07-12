@@ -472,6 +472,15 @@ async def get_quick_actions(
 
     weak_topics = _weak_topics_from_events(recent_events)
 
+    # Check if user has a ready assessment report
+    from app.infra.models import LearningAssessmentReport
+    report_count = (await session.exec(
+        select(func.count())
+        .select_from(LearningAssessmentReport)
+        .where(LearningAssessmentReport.user_id == current_user.id, LearningAssessmentReport.status == 'ready')
+    )).one()
+    has_ready_report = report_count > 0
+
     action_defs = [
         {
             "key": "tutor",
@@ -508,6 +517,15 @@ async def get_quick_actions(
             "score": 25 + sum(1 for event in recent_events if event.event_type == "quiz_submitted") * 4 + len(weak_topics),
             "description": f"用练习验证 {weak_topics[0]}" if weak_topics else "用题目把最近学习收口成反馈",
             "tag": f"{sum(1 for event in recent_events if event.event_type == 'quiz_submitted')} 次测验",
+        },
+        {
+            "key": "assessment",
+            "label": "学习评估",
+            "path": "/assessment",
+            "icon": "assessment",
+            "score": 40 + (10 if has_ready_report else 0),
+            "description": "查看学习效果评估报告与辅导策略" if has_ready_report else "生成学习效果评估，获取个性化辅导建议",
+            "tag": "已有报告" if has_ready_report else "待生成",
         },
     ]
     # 按 score 降序排序并剔除 score 字段，生成最终快捷操作列表

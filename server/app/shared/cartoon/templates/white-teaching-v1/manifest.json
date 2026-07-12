@@ -1,15 +1,83 @@
 {
   "schema": "cartoon-template/v1",
   "id": "white-teaching-v1",
-  "version": "1.0.0",
-  "canvas": {"width": 1920, "height": 1080, "fps": 30},
+  "version": "1.1.0",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
   "files": {
     "composition": "composition.html",
     "tokens": "tokens.css",
     "layout": "layout.css",
     "motion": "motion.js"
   },
-  "slots": ["header", "stage", "state-rail", "captions", "progress"],
-  "visual_kinds": ["tree", "array", "graph", "flow", "state-machine", "memory", "network", "comparison"],
-  "actions": ["reveal", "focus", "compare", "traverse", "transfer", "mutate", "insert", "remove", "connect", "highlight"]
+  "slots": [
+    "header",
+    "stage",
+    "state-rail",
+    "captions",
+    "progress"
+  ],
+  "visual_kinds": [
+    "tree",
+    "array",
+    "graph",
+    "flow",
+    "state-machine",
+    "memory",
+    "network",
+    "comparison"
+  ],
+  "actions": [
+    "reveal",
+    "focus",
+    "compare",
+    "traverse",
+    "transfer",
+    "mutate",
+    "insert",
+    "remove",
+    "connect",
+    "highlight"
+  ],
+  "mechanisms": [
+    "structure",
+    "sequence",
+    "state_transition",
+    "data_flow",
+    "message_exchange",
+    "container_operation",
+    "tree_growth",
+    "graph_traversal",
+    "timeline",
+    "memory_change",
+    "pipeline",
+    "comparison"
+  ],
+  "element_kinds": [
+    "concept",
+    "process",
+    "state",
+    "data",
+    "packet",
+    "array_cell",
+    "tree_node",
+    "graph_node",
+    "queue_item",
+    "stack_frame",
+    "memory_block",
+    "page_frame",
+    "register",
+    "instruction",
+    "pipeline_stage",
+    "table_row",
+    "code_line",
+    "formula",
+    "pointer",
+    "timer",
+    "window",
+    "annotation"
+  ]
 }

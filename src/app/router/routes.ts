@@ -18,6 +18,7 @@ const ResourceResult = () => import('@/features/resource/views/ResourceResult.vu
 const QuestionBank = () => import('@/features/question-bank/views/QuestionBank.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
 const AlgorithmVisualizer = () => import('@/features/algorithm-visualization/views/AlgorithmVisualization.vue')
+const LearningAssessment = () => import('@/features/learning-assessment/views/LearningAssessment.vue')
 
 // 路由配置表
 export const routes: RouteRecordRaw[] = [
@@ -50,6 +51,14 @@ export const routes: RouteRecordRaw[] = [
         component: AlgorithmVisualizer,
         meta: {
           title: '算法可视化',
+        },
+      },
+      {
+        path: 'assessment',
+        name: 'LearningAssessment',
+        component: LearningAssessment,
+        meta: {
+          title: '学习评估',
         },
       },
     ],

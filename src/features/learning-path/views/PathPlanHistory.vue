@@ -214,7 +214,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import { activateLearningPath, getLearningPathHistory } from '@/features/learning-path/api/path'
+import { getLearningPathHistory } from '@/features/learning-path/api/path'
 import type { LearningPathHistoryItem } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 
@@ -237,7 +237,6 @@ const statusTabs: StatusTab[] = [
   { label: '全部路径', value: 'all' },
   { label: '正在推进', value: 'active' },
   { label: '已通关点', value: 'completed' },
-  { label: '历史归档', value: 'archived' },
   { label: '多维生成中', value: 'generating' },
   { label: '发生编译阻断', value: 'failed' },
 ]
@@ -304,15 +303,10 @@ const loadHistory = async () => {
   }
 }
 
-// 继续学习：激活并跳转到指定历史路径
-const continueLearning = async (item: LearningPathHistoryItem) => {
+// 继续学习：直接进入指定路径，不再归档或切换其他未完成路径
+const continueLearning = (item: LearningPathHistoryItem) => {
   if (!canActivate(item)) return
-  try {
-    const res = await activateLearningPath(item.id)
-    router.push(`/path-planner/overview/${res.data.data.id}`)
-  } catch (error) {
-    toast.error(getErrorMessage(error, '恢复历史路径失败'))
-  }
+  router.push(`/path-planner/overview/${item.id}`)
 }
 
 // 切换分页
@@ -328,7 +322,8 @@ const canActivate = (item: LearningPathHistoryItem) => {
 const actionText = (item: LearningPathHistoryItem) => {
   if (item.status === 'generating') return '组织中'
   if (item.status === 'failed') return '已锁死'
-  return '恢复学习进度'
+  if (item.status === 'completed') return '查看学习路径'
+  return '继续学习进度'
 }
 
 const getStatusCount = (status: string) => {
@@ -340,7 +335,7 @@ const statusLabel = (status: string) => {
   switch (status) {
     case 'active': return '学习中'
     case 'completed': return '已完成'
-    case 'archived': return '已归档'
+    case 'archived': return '历史记录'
     case 'paused': return '已暂停'
     case 'generating': return '生成中'
     case 'failed': return '失败'

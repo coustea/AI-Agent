@@ -524,7 +524,20 @@ async def react_node(
         if search_text:
             forced_context_blocks.append(f"[联网搜索结果]\n{search_text}")
 
-    # ── 2. 构建 system prompt（统一 tutor_agent 模板，注入会话概要/附件/日期等）──
+    # ── 2. 构建 system prompt（统一 tutor_agent 模板，注入会话概要/附件/日期/辅导策略等）──
+    from app.infra.database import session_scope
+    from app.evaluation.guidance import get_effective_guidance_strategy
+    async with session_scope() as db:
+        strategy = await get_effective_guidance_strategy(db, user_id)
+    
+    strategy_str = (
+        f"当前周期目标: {strategy.get('weekly_goal')}\n"
+        f"推荐单次时长: {strategy.get('recommended_session_minutes')} 分钟\n"
+        f"辅导风格: {strategy.get('tutoring_style')}\n"
+        f"重点关注主题: {'、'.join(strategy.get('focus_topics', [])) or '无'}\n"
+        f"偏好资源类型: {'、'.join(strategy.get('preferred_resource_types', [])) or '无'}"
+    )
+
     system_prompt = prompts.get("chat").render(
         "tutor_agent",
         session_summary_context=session_summary,
@@ -536,6 +549,7 @@ async def react_node(
             if need_teaching_diagram
             else "关闭"
         ),
+        guidance_strategy_context=strategy_str,
     )
 
     # ── 3. 初始化消息和事件收集 ──

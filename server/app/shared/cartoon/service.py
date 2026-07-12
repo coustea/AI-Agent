@@ -1125,7 +1125,7 @@ class CartoonService:
         )
 
         card = {
-            "schema_version": "cartoon/card-v1",
+            "schema_version": "cartoon/v1",
             "resource_type": "cartoon",
             "title": artifact.title,
             "file_type": "mp4",
@@ -1168,9 +1168,11 @@ class CartoonService:
             },
             metadata={
                 "agent_id": "cartoon",
-                "schema_version": "cartoon/card-v1",
+                "schema_version": "cartoon/v1",
                 "engine": "hyperframes",
                 "has_audio": artifact.has_audio,
+                "video_file_path": str(artifact.video_path),
+                "html_file_path": str(artifact.html_path),
                 "video_url": static_url(
                     artifact.video_path
                 ),

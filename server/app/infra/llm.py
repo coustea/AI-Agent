@@ -15,6 +15,7 @@
 # 本模块是 OpenAI 兼容的 LLM 网关：提供文本生成、流式输出、工具调用与结构化 JSON 输出
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -438,6 +439,7 @@ def _build_repair_prompt(
 
 # 基础设施异常类型元组（延迟填充），用于区分可重试的底层故障
 _INFRA_EXCEPTIONS: tuple[type[Exception], ...] = ()
+_LLM_INFRA_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 
 
 # 延迟注册 openai / httpx 等基础设施异常类型到判断集合
@@ -514,6 +516,66 @@ def _is_infra_error(exc: Exception) -> bool:
         return True
 
     return False
+
+
+def _is_permanent_infra_error(exc: Exception) -> bool:
+    """判断基础设施异常是否为不可通过重试恢复的配置/权限问题。"""
+    text = f"{type(exc).__name__}: {exc}".lower()
+    permanent_markers = (
+        "authentication",
+        "permission",
+        "permissiondenied",
+        "invalid api key",
+        "notfound",
+        "not found",
+        "401",
+        "403",
+    )
+    return any(marker in text for marker in permanent_markers)
+
+
+def _is_retryable_infra_error(exc: Exception) -> bool:
+    """判断 LLM 调用是否值得在网关层重试。"""
+    return _is_infra_error(exc) and not _is_permanent_infra_error(exc)
+
+
+async def _ainvoke_with_infra_retries(
+    model: Any,
+    input_data: Any,
+    *,
+    operation: str,
+) -> Any:
+    """Centralized bounded retry for transient LLM transport failures."""
+    attempts = len(_LLM_INFRA_RETRY_DELAYS_SECONDS) + 1
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return await model.ainvoke(input_data)
+        except Exception as exc:
+            if not _is_retryable_infra_error(exc):
+                raise
+
+            if attempt >= attempts:
+                logger.warning(
+                    "[LLM] %s transient infra error exhausted after %d attempts: %s",
+                    operation,
+                    attempt,
+                    _short_error(exc),
+                )
+                raise
+
+            delay = _LLM_INFRA_RETRY_DELAYS_SECONDS[attempt - 1]
+            logger.warning(
+                "[LLM] %s transient infra error; retrying attempt %d/%d after %.1fs: %s",
+                operation,
+                attempt + 1,
+                attempts,
+                delay,
+                _short_error(exc),
+            )
+            await asyncio.sleep(delay)
+
+    raise RuntimeError(f"{operation} exhausted without returning")
 
 
 # 从多样的 LLM 响应结构中尽力提取纯文本或 tool/function arguments
@@ -748,11 +810,16 @@ class Llm:
         max_tokens: int | None = None,
     ) -> Any:
         temp = temperature if temperature is not None else DEFAULT_TEMPERATURE
-        return await _bind(
+        bound_model = _bind(
             model or self.model,
             temperature=temp,
             max_tokens=max_tokens,
-        ).ainvoke(input_data)
+        )
+        return await _ainvoke_with_infra_retries(
+            bound_model,
+            input_data,
+            operation="ainvoke",
+        )
 
     # 流式文本生成：绑定温度后逐块 yield
     async def astream(
@@ -805,7 +872,11 @@ class Llm:
 
         try:
             generation_messages = _build_json_generation_messages(schema, messages)
-            response = await model.ainvoke(generation_messages)
+            response = await _ainvoke_with_infra_retries(
+                model,
+                generation_messages,
+                operation=f"ainvoke_json.generate.{schema.__name__}",
+            )
             raw_output = _extract_text_from_response(response)
 
             if not raw_output:
@@ -844,7 +915,11 @@ class Llm:
                 raw_output or "<empty response>",
                 error_msg,
             )
-            response = await model.ainvoke(repair_messages)
+            response = await _ainvoke_with_infra_retries(
+                model,
+                repair_messages,
+                operation=f"ainvoke_json.repair.{schema.__name__}",
+            )
             repair_content = _extract_text_from_response(response)
 
             if not repair_content:

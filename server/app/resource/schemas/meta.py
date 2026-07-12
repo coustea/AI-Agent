@@ -15,13 +15,12 @@ AGENT_META: dict[str, dict[str, str]] = {
     "code": {"name": "代码示例", "icon": "Code", "description": "代码实操案例"},
     "reading": {"name": "拓展阅读", "icon": "Reading", "description": "拓展阅读推荐"},
     "ppt": {"name": "PPT文稿", "icon": "DataBoard", "description": "PPT文稿生成"},
-    "video": {"name": "讲解视频", "icon": "Video", "description": "带配音和字幕的 MP4 讲解视频"},
     "cartoon": {"name": "动画讲解", "icon": "FilmStrip", "description": "知识点动画、配音与字幕同步的 MP4 教学视频"},
 }
 
 # 前端展示与校验的默认 Agent 顺序
-AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon", "video"]
+AGENT_DEFAULT_ORDER: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon"]
 # 默认启用（开放）的 Agent 列表
-AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon", "video"]
+AGENT_DEFAULT_ENABLED: list[str] = ["content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon"]
 # 至少需选中的 Agent 数量下限
 MIN_SELECTED_AGENTS = 3

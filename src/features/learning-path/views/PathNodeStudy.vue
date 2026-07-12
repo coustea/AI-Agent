@@ -418,6 +418,7 @@ import type {
   LearningPathWorkspace,
   PathQuizRound,
   PathQuizSubmitResponse,
+  PathResourceEvent,
 } from '@/features/learning-path/model/path'
 import { getErrorMessage } from '@/shared/api/http'
 import { startTracking, stopTracking } from '@/features/evaluation/model/useLearningTracker'
@@ -446,6 +447,7 @@ const loading = ref(false)
 const quizLoading = ref(false)
 const submitLoading = ref(false)
 const resourceLoading = ref<ResourceKind | ''>('')
+const resourceEventSource = ref<EventSource | null>(null)
 
 // 核心数据：节点工作空间、测验轮次、判分结果、用户答案
 const workspace = ref<LearningPathWorkspace | null>(null)
@@ -802,15 +804,35 @@ async function startLearningTracking() {
 
   await recordPathLearningEvent(workspace.value.path.id, {
     module: 'path',
-    event_type: 'resource_viewed',
+    event_type: 'path_node_started',
     course: workspace.value.path.title,
     topic: workspace.value.node.title,
+    client_event_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'evt-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
+    occurred_at: new Date().toISOString(),
     event_metadata: {
       path_id: workspace.value.path.id,
       path_node_id: workspace.value.node.id,
       node_id: workspace.value.node.node_id,
     },
   })
+}
+
+function hydrateQuizState(round: PathQuizRound) {
+  quizRound.value = round
+  const nextAnswers: Record<number, string> = {}
+  let submittedCount = 0
+
+  for (const question of round.questions) {
+    if (question.response) {
+      nextAnswers[question.id] = question.response
+    }
+    if (question.response || question.is_correct !== null) {
+      submittedCount += 1
+    }
+  }
+
+  answers.value = nextAnswers
+  isQuizSubmitted.value = round.questions.length > 0 && submittedCount === round.questions.length
 }
 
 // 加载或重新打开节点测验题目
@@ -836,8 +858,7 @@ async function loadQuiz() {
       const res = await getNodeQuestions(workspace.value.node.id)
       const data = res.data.data
       if (data) {
-        quizRound.value = data
-        answers.value = {}
+        hydrateQuizState(data)
         showQuizOverlay.value = true
         return
       }
@@ -845,8 +866,7 @@ async function loadQuiz() {
 
     // 首次生成题目
     const res = await generateNodeQuestions(workspace.value.node.id)
-    quizRound.value = res.data.data
-    answers.value = {}
+    hydrateQuizState(res.data.data)
     showQuizOverlay.value = true
 
     // 刷新 workspace 以更新 current_round 和 quiz_available
@@ -882,18 +902,26 @@ async function submitQuiz() {
 
     await recordPathLearningEvent(workspace.value.path.id, {
       module: 'path',
-      event_type: 'quiz_submitted',
+      event_type: 'path_quiz_answered',
       course: workspace.value.path.title,
       topic: workspace.value.node.title,
       score: Number(((quizResult.value.score / 5) * 100).toFixed(0)),
+      client_event_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'evt-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
+      occurred_at: new Date().toISOString(),
       event_metadata: {
         path_id: workspace.value.path.id,
         path_node_id: workspace.value.node.id,
         node_id: workspace.value.node.node_id,
-        outcome: quizResult.value.outcome,
+        is_correct: quizResult.value.outcome === 'completed',
+        attempt_index: 1,
         weak_knowledge_points: quizResult.value.weak_knowledge_points,
       },
     })
+
+    const submittedRound = await getNodeQuestions(workspace.value.node.id)
+    if (submittedRound.data.data) {
+      hydrateQuizState(submittedRound.data.data)
+    }
 
     const resWorkspace = await getLearningNodeWorkspace(nodeId.value)
     workspace.value = resWorkspace.data.data
@@ -915,21 +943,67 @@ const resourceApiMap: Record<ResourceKind, (nodeId: number) => Promise<any>> = {
   cartoon: (id) => generateNodeResource(id, 'cartoon'),
 }
 
-// 调用后端生成辅助资源（如思维导图、代码、PPT 等），生成后打开查看器
+function closeResourceEvents() {
+  resourceEventSource.value?.close()
+  resourceEventSource.value = null
+}
+
+function parseResourceEvent(raw: MessageEvent): PathResourceEvent | null {
+  try {
+    return JSON.parse(raw.data) as PathResourceEvent
+  } catch {
+    return null
+  }
+}
+
+function connectResourceEvents(resourceId: number, runId: string, type: ResourceKind) {
+  closeResourceEvents()
+  const source = new EventSource(`/api/v1/ai/path-plan/resources/${resourceId}/runs/${runId}/events`)
+  source.addEventListener('path.event', async (raw: MessageEvent) => {
+    const event = parseResourceEvent(raw)
+    if (!event) return
+
+    if (event.event === 'resource.completed') {
+      closeResourceEvents()
+      const resWorkspace = await getLearningNodeWorkspace(nodeId.value)
+      workspace.value = resWorkspace.data.data
+      const generated = workspace.value?.resources.find((item) => item.id === resourceId)
+      if (generated) openViewer(generated)
+      resourceLoading.value = ''
+      toast.success('辅助资源生成完成')
+    }
+
+    if (event.event === 'resource.failed') {
+      closeResourceEvents()
+      const resWorkspace = await getLearningNodeWorkspace(nodeId.value)
+      workspace.value = resWorkspace.data.data
+      resourceLoading.value = ''
+      toast.error(event.message || '生成辅助资源失败')
+    }
+  })
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) {
+      resourceLoading.value = ''
+    }
+  }
+  resourceEventSource.value = source
+  resourceLoading.value = type
+}
+
+// 调用后端创建辅助资源任务（如思维导图、代码、PPT 等），通过 SSE 等待完成
 async function createResource(type: ResourceKind) {
   if (!workspace.value) return
   resourceLoading.value = type
   try {
     const apiFn = resourceApiMap[type]
     const res = await apiFn(workspace.value.node.id)
-    openViewer(res.data.data)
-
+    const task = res.data.data
     const resWorkspace = await getLearningNodeWorkspace(nodeId.value)
     workspace.value = resWorkspace.data.data
+    connectResourceEvents(task.resource.id, task.run_id, type)
   } catch (error) {
-    toast.error(getErrorMessage(error, '生成辅助资源失败'))
-  } finally {
     resourceLoading.value = ''
+    toast.error(getErrorMessage(error, '生成辅助资源失败'))
   }
 }
 
@@ -1001,6 +1075,7 @@ watch(tutorialMarkdown, () => {
 // 页面挂载时加载工作空间，卸载时停止追踪
 onMounted(loadWorkspace)
 onBeforeUnmount(() => {
+  closeResourceEvents()
   stopTracking()
 })
 </script>

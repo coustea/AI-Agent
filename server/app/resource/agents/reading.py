@@ -9,7 +9,7 @@ import json
 import time
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
@@ -49,11 +49,23 @@ class ReadingResource(BaseModel):
     estimated_time: str = ""
     note: str = ""
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        """将发布前 URL 契约前移到 JSON schema 修复边界。"""
+        normalized = value.strip()
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("url must use the http or https scheme")
+        return normalized
+
 
 # LLM 输出包装类（ainvoke_json 要求 BaseModel 子类）
 class ReadingPayload(BaseModel):
     """阅读资源列表 — LLM 结构化输出容器。"""
-    resources: list[ReadingResource] = Field(description="推荐的阅读资源列表")
+    resources: list[ReadingResource] = Field(
+        min_length=1,
+        description="至少包含一条推荐的阅读资源",
+    )
 
 
 @register_agent

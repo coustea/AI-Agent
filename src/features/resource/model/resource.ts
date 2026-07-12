@@ -65,19 +65,17 @@ export interface ResourceGenerationRequest {
       max_items: number
       focus: 'textbook' | 'engineering' | 'research'
     }
-    // 演示幻灯智能体的配置
+    // 演示幻灯智能体的配置：四项参数只影响 PPT 大纲 LLM 内容输出
     ppt: {
-      template: string
-      explanation_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
+      template: 'auto' | 'teaching' | 'technical' | 'case_study' | 'exam_review'
+      narrative_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
       density: 'concise' | 'standard' | 'detailed'
-      focus: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
+      emphasis: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
     }
     // 动画讲解智能体的配置
     cartoon: {
-      style: 'diagram' | 'minimal' | 'dark_tech' | 'chalkboard'
       depth: 'overview' | 'standard' | 'deep'
       pace: 'fast' | 'normal' | 'slow'
-      visuals: 'clean' | 'balanced' | 'detailed'
     }
   }
 }

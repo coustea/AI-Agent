@@ -205,7 +205,7 @@
                 </div>
                 <div>
                   <strong>{{ getWorkflowTitle(node.id) }}</strong>
-                  <span>{{ node.id === CARTOON_AGENT_ID ? 'Cartoon Agent' : node.id === VIDEO_AGENT_ID ? 'Video Agent' : 'PPT Agent' }}</span>
+                  <span>{{ node.id === CARTOON_AGENT_ID ? 'Cartoon Agent' : 'PPT Agent' }}</span>
                 </div>
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
@@ -330,42 +330,6 @@
       </Teleport>
     </main>
 
-    <!-- 内联 Outputs：已交付资源停靠区 -->
-    <section class="output-dock-section output-dock-section-v4">
-      <div class="output-dock-heading">
-        <div>
-          <span>READY RESOURCES</span>
-          <strong>已交付资源</strong>
-        </div>
-        <p>这里仅展示已经完成并可预览的资源，不改变主流水线的阅读顺序。</p>
-      </div>
-      <div class="output-dock-list">
-        <button
-          v-for="agentId in visibleOutputAgentIds"
-          :key="agentId"
-          type="button"
-          class="output-dock-item"
-          :class="[
-            isOutputReady(agentId) ? 'ready' : isOutputRunning(agentId) ? 'running' : 'waiting',
-            { 'just-arrived': latestArtifactAgentId === agentId }
-          ]"
-          :disabled="!isOutputReady(agentId)"
-          @click="isOutputReady(agentId) && openResourcePreview(agentId)"
-        >
-          <span class="output-icon"><component :is="getOutputIcon(agentId)" class="h-4 w-4" /></span>
-          <span class="output-copy">
-            <strong>{{ getArtifactLabel(agentId) }}</strong>
-            <small>{{ getAgentOutputFormat(agentId) }}</small>
-          </span>
-          <em class="output-status">
-            <template v-if="isOutputReady(agentId)">刚刚完成 ▶</template>
-            <template v-else-if="isOutputRunning(agentId)">执行中<span class="loading-dots">...</span></template>
-            <template v-else>就绪待命</template>
-          </em>
-        </button>
-      </div>
-    </section>
-
     <!-- 内联 Logs：工作流日志抽屉 -->
     <Teleport to="body">
       <transition name="slide-over">
@@ -395,12 +359,6 @@
       </transition>
     </Teleport>
 
-    <!-- 资源预览弹窗：点击产物时打开 -->
-    <PreviewDialog
-      v-model:activeAgent="activePreviewAgent"
-      :data="previewData"
-      :resource="previewResource"
-    />
   </div>
 </template>
 
@@ -419,21 +377,10 @@ import {
   PhNotePencil as EditPen,
   PhBookOpen as Reading,
   PhShareNetwork as Share,
-  // 内联 Outputs 所需图标
-  PhChartBar as SlidesIcon,
-  PhCpu as CodeIcon,
-  PhFileText as ArticleIcon,
   PhFilmStrip as VideoIcon,
-  PhNotePencil as QuizIcon,
-  PhBookOpen as ReadingIcon,
-  PhShareNetwork as MindMapIcon,
 } from '@phosphor-icons/vue'
 // 资源智能体 ID 联合类型
 import type { ResourceAgentId } from '@/features/resource/model/resource'
-// 预览弹窗
-import PreviewDialog from '@/shared/content/PreviewDialog.vue'
-// 共享的内容类型标签工具（内联 Outputs 所需）
-import { getArtifactLabel } from '@/shared/content/kind'
 // 智能体工位连线坐标计算组合式函数
 import { useFlow } from '../composables/useFlow'
 // 引入智能体常量、显示信息与 DAG 节点状态类型
@@ -441,11 +388,9 @@ import {
   COORDINATOR_AGENT_ID,
   CARTOON_AGENT_ID,
   PPT_AGENT_ID,
-  VIDEO_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
-  getAgentOutputFormat,
   getResourceToneClass,
   type DagNodeState,
 } from '../model/catalog'
@@ -467,43 +412,18 @@ const props = defineProps<{
   dagSelectedAgentIds: ResourceAgentId[]
   generationError: string | null
   planReady: boolean
-  latestArtifactAgentId: string | null
   visibleWorkflowNodes: DagNodeState[]
 }>()
 
-// 事件输出：选中节点与打开资源预览
+// 事件输出：选中工作流节点
 const emit = defineEmits<{
   selectNode: [id: string]
-  openResource: [type: string]
 }>()
 
 // 日志抽屉显隐状态
 const workflowLogDrawerVisible = ref(false)
 // 详情浮层显隐状态
 const detailPanelVisible = ref(false)
-
-// 预览弹窗状态（点击产物区资源时打开预览）
-const activePreviewAgent = ref<string | null>(null)
-const previewData        = ref<any>(null)
-const previewResource    = ref<any>(null)
-
-// 点击产物时打开预览：数据已加载则直接展示，否则委托父组件从 API 获取
-function openResourcePreview(type: string) {
-  const resource = props.generatedResources.find((r: any) => r.type === type)
-  if (!resource) {
-    // 数据尚未加载，委托父组件从 API 获取后打开预览
-    emit('openResource', type)
-    return
-  }
-  if (resource.content) {
-    activePreviewAgent.value = resource.type || resource.agent_type
-    previewData.value        = resource.content
-    previewResource.value    = resource
-  } else {
-    // 资源内容尚未加载，委托父组件从后端获取后打开预览
-    emit('openResource', type)
-  }
-}
 
 // 智能体 ID 到 Phosphor 图标组件的映射表
 const workflowIconMap: Record<string, Component> = {
@@ -556,7 +476,7 @@ function closeAgentDetail() {
 
 // 基础资源智能体 ID 列表（排除 PPT / 动画 / 视频等聚合阶段智能体）
 const baseGenerationAgentIds = computed(() => {
-  return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID, VIDEO_AGENT_ID].includes(id))
+  return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID].includes(id))
 })
 
 // 基础资源并行工位的 DAG 节点状态数组
@@ -583,9 +503,6 @@ const aggregationNodes = computed(() => {
   // 直接使用 dagSelectedAgentIds 判断，不再依赖 DAG 节点是否已进入工作流
   if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(PPT_AGENT_ID))
-  }
-  if (props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId)) {
-    nodes.push(getStageNode(VIDEO_AGENT_ID))
   }
   if (props.dagSelectedAgentIds.includes(CARTOON_AGENT_ID as ResourceAgentId)) {
     nodes.push(getStageNode(CARTOON_AGENT_ID))
@@ -657,11 +574,6 @@ const routeSteps = computed(() => {
       lineState: '',
     },
   ]
-})
-
-// 产物输出区需要展示的智能体 ID 列表
-const visibleOutputAgentIds = computed(() => {
-  return props.dagSelectedAgentIds
 })
 
 // 工作流日志条目汇总：全局错误 + 各节点最近事件/步骤历史
@@ -784,7 +696,7 @@ function getNodeStageLabel(node: DagNodeState) {
   if (node.status === 'running') {
     if (node.id === 'planning') return '计划生成中'
     if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
-    if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
+    if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
     if (node.phase === 'llm_generating') return '核心推演中'
     if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
     if (node.phase === 'validating') return '一致性校验中'
@@ -793,7 +705,7 @@ function getNodeStageLabel(node: DagNodeState) {
     return '工位执行中'
   }
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与课件'
-  if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '等待基础资源'
+  if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '等待基础资源'
   return '等待上游协同'
 }
 
@@ -818,7 +730,7 @@ function getNodePhaseLabel(node: DagNodeState) {
   if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
   if (node.id === 'planning' && node.status === 'running') return '计划生成'
   if (node.id === COORDINATOR_AGENT_ID && node.status === 'running') return '任务调度'
-  if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id) && node.status === 'running') return '聚合生成'
+  if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id) && node.status === 'running') return '聚合生成'
   if (node.id === BUNDLE_AGENT_ID && node.status === 'running') return '打包交付'
   if (node.status === 'waiting') return '等待上游'
   if (node.status === 'success') return '已完成'
@@ -849,9 +761,6 @@ function getNodeArtifactStatus(node: DagNodeState) {
   if (node.id === PPT_AGENT_ID) {
     return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
   }
-  if (node.id === VIDEO_AGENT_ID) {
-    return hasGeneratedResource(node.id) ? '讲解视频已交付' : '等待基础资源后生成'
-  }
   if (node.id === CARTOON_AGENT_ID) {
     return hasGeneratedResource(node.id) ? '动画视频已交付' : '等待基础资源后生成'
   }
@@ -864,7 +773,6 @@ function getNodeInputSummary(node: DagNodeState) {
   if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
   if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
   if (node.id === PPT_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
-  if (node.id === VIDEO_AGENT_ID) return '学习需求 / 基础资源 handoff / 视频个性化参数'
   if (node.id === CARTOON_AGENT_ID) return '学习需求 / 基础资源 handoff / 动画个性化参数'
   return '学习需求 / 用户画像 / 教学计划'
 }
@@ -874,9 +782,8 @@ function getNodeOutputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '教学计划 / 大纲 / Agent 分工'
   if (node.id === COORDINATOR_AGENT_ID) return '成功失败统计 / 覆盖情况 / 基础资源 handoff'
   if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
-  if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
+  if (hasGeneratedResource(node.id)) return '资源已交付，等待任务完成后统一查看'
   if (node.id === PPT_AGENT_ID) return '聚合资源生成中 / 等待中'
-  if (node.id === VIDEO_AGENT_ID) return 'MP4 讲解视频生成中 / 等待中'
   if (node.id === CARTOON_AGENT_ID) return 'MP4 动画视频生成中 / 等待中'
   return '基础资源生成中 / 等待中'
 }
@@ -908,33 +815,6 @@ function getMetricChips(node: DagNodeState) {
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .slice(0, 4)
     .map(([key, value]) => `${key}: ${String(value)}`)
-}
-
-// ==================== 内联 Outputs 逻辑 ====================
-// 智能体 id 到图标组件的映射表（Outputs 用）
-const outputIcons: Record<string, Component> = {
-  content: ArticleIcon,
-  mindmap: MindMapIcon,
-  quiz: QuizIcon,
-  code: CodeIcon,
-  reading: ReadingIcon,
-  ppt: SlidesIcon,
-  cartoon: VideoIcon,
-}
-
-// 根据智能体 id 返回对应图标，缺省回退到文章图标
-function getOutputIcon(id: string) {
-  return outputIcons[id] || ArticleIcon
-}
-
-// 判断某智能体产出是否已就绪：已生成或节点状态为成功
-function isOutputReady(id: string) {
-  return props.generatedResources.some((r: any) => r.type === id) || props.dagNodeStates[id]?.status === 'success'
-}
-
-// 判断某智能体是否正在执行中
-function isOutputRunning(id: string) {
-  return props.dagNodeStates[id]?.status === 'running'
 }
 
 </script>
@@ -3856,6 +3736,32 @@ function isOutputRunning(id: string) {
   background: rgba(255, 255, 255, 0.95) !important;
   border-color: rgba(16, 185, 129, 0.24) !important;
   box-shadow: 0 4px 18px rgba(16, 185, 129, 0.02) !important;
+}
+
+/* 基础与聚合 Agent 使用同一工位尺寸；聚合行不再因卡片数量少而拉伸。 */
+.agent-station-row-v4.base-agent-row,
+.agent-station-row-v4.aggregation-agent-row {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
+  max-width: 1420px;
+  justify-content: center;
+}
+
+.aggregation-agent-row .agent-station-card-v4:only-child {
+  grid-column: auto;
+  width: auto;
+  justify-self: stretch;
+}
+
+.agent-station-card-v4 {
+  height: 116px;
+  min-height: 116px;
+}
+
+@media (max-width: 640px) {
+  .agent-station-row-v4.base-agent-row,
+  .agent-station-row-v4.aggregation-agent-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* 连接线微妙光晕 */

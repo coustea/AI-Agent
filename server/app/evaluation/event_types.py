@@ -61,16 +61,24 @@ SCORED_EVENT_TYPES: frozenset[str] = frozenset({QUIZ_SUBMITTED, PATH_QUIZ_ANSWER
 # ── Metadata schema 定义 ───────────────────────────────────────────────────────
 # metadata 字段白名单：限定每个 (module, event_type) 允许写入的字段
 METADATA_SCHEMA: dict[tuple[str, str], list[str]] = {
-    (MODULE_CHAT, CHAT_DIALOGUE): ["turn_count", "summary_md", "summary_length"],
-    (MODULE_RESOURCE, RESOURCE_GENERATED): ["resource_id", "user_need", "agent_types", "agent_params", "status"],
+    (MODULE_CHAT, CHAT_DIALOGUE): ["turn_count", "summary_length"],
+    (MODULE_RESOURCE, RESOURCE_GENERATED): ["resource_id", "agent_types", "status"],
     (MODULE_RESOURCE, RESOURCE_VIEWED): [],
     (MODULE_RESOURCE, RESOURCE_COMPLETED): [],
-    (MODULE_RESOURCE, RESOURCE_FEEDBACK): ["feedback_type"],
-    (MODULE_PATH, PATH_NODE_STARTED): ["path_id", "node_id"],
-    (MODULE_PATH, PATH_NODE_COMPLETED): ["path_id", "node_id", "weak_knowledge_points"],
-    (MODULE_PATH, PATH_QUIZ_ANSWERED): ["path_id", "node_id", "weak_knowledge_points", "outcome"],
-    (MODULE_PATH, PATH_FEEDBACK): ["path_id", "node_id"],
-    (MODULE_QUIZ, QUIZ_SUBMITTED): ["total_count", "correct_count", "wrong_knowledge_points"],
+    (MODULE_RESOURCE, RESOURCE_FEEDBACK): ["feedback"],
+    (MODULE_PATH, PATH_NODE_STARTED): ["path_id", "path_node_id", "node_id"],
+    (MODULE_PATH, PATH_NODE_COMPLETED): ["path_id", "path_node_id", "node_id", "weak_knowledge_points"],
+    (MODULE_PATH, PATH_QUIZ_ANSWERED): [
+        "path_id",
+        "path_node_id",
+        "node_id",
+        "is_correct",
+        "attempt_index",
+        "weak_knowledge_points",
+        "outcome",
+    ],
+    (MODULE_PATH, PATH_FEEDBACK): ["path_id", "path_node_id", "node_id"],
+    (MODULE_QUIZ, QUIZ_SUBMITTED): ["is_correct", "attempt_index", "question_type"],
     (MODULE_VISUALIZER, VISUALIZER_RUN): ["language", "success", "error_message"],
 }
 """每 (module, event_type) 允许写入 metadata 的字段白名单。"""

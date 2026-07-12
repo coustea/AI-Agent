@@ -27,6 +27,37 @@ class LearningEventCreate(BaseModel):
     client_event_id: str | None = Field(default=None, max_length=64)
     occurred_at: datetime | None = Field(default=None)
 
+    @model_validator(mode="before")
+    @classmethod
+    def infer_path_module_for_path_events(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or data.get("module"):
+            has_module = bool(data.get("module"))
+        else:
+            has_module = False
+        has_path_context = any(
+            data.get(key) is not None
+            for key in ("path_id", "path_node_id", "node_id")
+        )
+        metadata = data.get("event_metadata")
+        if isinstance(metadata, dict):
+            has_path_context = has_path_context or any(
+                metadata.get(key) is not None
+                for key in ("path_id", "path_node_id", "node_id")
+            )
+        if has_path_context:
+            next_data = {**data}
+            if not has_module:
+                next_data["module"] = "path"
+            if next_data.get("module") == "path" and next_data.get("event_type") == "quiz_submitted":
+                next_data["event_type"] = "path_quiz_answered"
+                next_metadata = dict(next_data.get("event_metadata") or {})
+                if "is_correct" not in next_metadata and next_data.get("score") is not None:
+                    next_metadata["is_correct"] = float(next_data["score"]) >= 60
+                next_metadata.setdefault("attempt_index", 1)
+                next_data["event_metadata"] = next_metadata
+            return next_data
+        return data
+
     @model_validator(mode="after")
     def validate_metadata_constraints(self) -> LearningEventCreate:
         if self.event_type in ("quiz_submitted", "path_quiz_answered"):

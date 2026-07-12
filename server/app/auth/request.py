@@ -15,8 +15,8 @@ class UserRegister(BaseModel):
     """用户注册请求体。"""
     # 用户名：2-50 个字符
     username: str = Field(min_length=2, max_length=50)
-    # 密码：6-100 个字符
-    password: str = Field(min_length=6, max_length=100)
+    # 密码：5-100 个字符
+    password: str = Field(min_length=5, max_length=100)
     # 邮箱：可选
     email: str | None = None
 

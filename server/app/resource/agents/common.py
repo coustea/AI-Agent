@@ -14,6 +14,7 @@ from app.resource.schemas import (
     NodeInput,
     ResourceInput,
 )
+from app.resource.agent_preferences import build_agent_preference_instruction
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
@@ -48,11 +49,15 @@ def build_resource_context(input_data: ResourceInput) -> list[str]:
     if profile_text:
         parts.append("## 学习者画像\n" + profile_text)
 
-    # 注入 Agent 配置（排除运行时注入的 agent_id）
+    # 参数必须转成面向输出的 LLM 指令，不能把实现 JSON 当作提示词契约。
     if input_data.agent_config:
         config = {k: v for k, v in input_data.agent_config.items() if k != "agent_id"}
-        if config:
-            parts.append("## 生成配置\n" + json.dumps(config, ensure_ascii=False, indent=2))
+        preference_instruction = build_agent_preference_instruction(
+            input_data.agent_name,
+            config,
+        )
+        if preference_instruction:
+            parts.append(preference_instruction)
 
     # 注入协同计划并高亮本 Agent 专属段落
     if input_data.teaching_plan:

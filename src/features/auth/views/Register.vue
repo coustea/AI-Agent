@@ -68,7 +68,7 @@
                 class="input-control"
                 type="password"
                 autocomplete="new-password"
-                placeholder="至少 6 个字符"
+                placeholder="至少 5 个字符"
                 :disabled="isDeploying"
               />
             </div>
@@ -205,7 +205,7 @@ const validateForm = () => {
     errors.password = '请输入密码'
     isValid = false
   } else if (form.password.length < 6 || form.password.length > 50) {
-    errors.password = '密码长度需为 6-50 个字符'
+    errors.password = '密码长度需为 5-50 个字符'
     isValid = false
   }
 

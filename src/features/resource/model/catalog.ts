@@ -1,5 +1,5 @@
 // 引入学习场景与资源生成请求类型，以及从共享模块获取产物类型标签
-import type { LearningScenario, ResourceGenerationRequest } from './resource'
+import type { LearningScenario, ResourceAgentId, ResourceGenerationRequest } from './resource'
 // 引入共享的内容类型标签工具，用于根据产物类型解析展示名称
 import { getArtifactLabel } from '@/shared/content/kind'
 // 引入 Phosphor 图标，并为各智能体类型映射对应的图标组件
@@ -49,7 +49,12 @@ export const agentMetaList = [
   { id: 'reading', name: '拓展阅读', icon: Collection, colorClass: 'text-indigo' },
   { id: 'ppt', name: '演示幻灯', icon: DataBoard, colorClass: 'text-pink' },
   { id: 'cartoon', name: '动画讲解', icon: FilmStrip, colorClass: 'text-cyan-600' },
-]
+] satisfies ReadonlyArray<{
+  id: ResourceAgentId
+  name: string
+  icon: unknown
+  colorClass: string
+}>
 
 // 根据智能体 id 查找其元信息，找不到时回退为使用 id 作为名称的默认值
 export const getAgentMeta = (id: string) =>
@@ -67,8 +72,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'exam_map', max_depth: 3, leaf_detail: 'annotated', show_relations: true },
     code: { programming_language: 'python', output_style: 'challenge', focus: 'application', include_tests: true },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'auto', explanation_style: 'review', density: 'detailed', focus: ['core_concepts', 'pitfalls'] },
-    cartoon: { style: 'diagram', depth: 'deep', pace: 'normal', visuals: 'detailed' },
+    ppt: { template: 'exam_review', narrative_style: 'review', density: 'detailed', emphasis: ['core_concepts', 'pitfalls'] },
+    cartoon: { depth: 'deep', pace: 'normal' },
   },
   // 日常学习场景：循序渐进、偏基础与巩固
   daily_review: {
@@ -77,8 +82,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'instructional-editorial', explanation_style: 'review', density: 'concise', focus: ['core_concepts', 'pitfalls'] },
-    cartoon: { style: 'minimal', depth: 'overview', pace: 'fast', visuals: 'clean' },
+    ppt: { template: 'teaching', narrative_style: 'review', density: 'concise', emphasis: ['core_concepts', 'pitfalls'] },
+    cartoon: { depth: 'overview', pace: 'fast' },
   },
   // 项目实践场景：案例驱动、偏工程化与应用
   project_practice: {
@@ -87,8 +92,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
     code: { programming_language: 'python', output_style: 'reference', focus: 'application', include_tests: true },
     reading: { coverage: 'broad', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
-    ppt: { template: 'tech-blueprint', explanation_style: 'case_driven', density: 'detailed', focus: ['core_concepts', 'cases', 'derivation'] },
-    cartoon: { style: 'dark_tech', depth: 'deep', pace: 'slow', visuals: 'detailed' },
+    ppt: { template: 'technical', narrative_style: 'case_driven', density: 'detailed', emphasis: ['core_concepts', 'cases', 'derivation'] },
+    cartoon: { depth: 'deep', pace: 'slow' },
   },
   // 预习自学场景：系统化、偏概念与基础架构
   self_study: {
@@ -97,8 +102,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'auto', explanation_style: 'review', density: 'standard', focus: ['core_concepts', 'pitfalls'] },
-    cartoon: { style: 'diagram', depth: 'standard', pace: 'normal', visuals: 'balanced' },
+    ppt: { template: 'teaching', narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts', 'pitfalls'] },
+    cartoon: { depth: 'standard', pace: 'normal' },
   },
 }
 
@@ -108,6 +113,7 @@ export const scenarioOptions: Array<{ icon: string; name: string; value: Learnin
   { icon: '学', name: '日常学习', value: 'daily_review' },
   { icon: '践', name: '项目实践', value: 'project_practice' },
   { icon: '预', name: '预习自学', value: 'self_study' },
+  { icon: '径', name: '路径学习', value: 'path_learning' },
 ]
 
 // 根据场景值返回对应的中文描述文案
@@ -118,6 +124,7 @@ export const getScenarioDesc = (scenario: string) => {
     daily_review: '循序渐进地巩固每日所学知识点',
     project_practice: '侧重于代码实战与工程化应用能力',
     self_study: '系统化地探索新知识领域的基础架构',
+    path_learning: '基于学习路径节点生成配套资源',
   }
   return descMap[scenario] || ''
 }

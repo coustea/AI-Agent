@@ -7,16 +7,6 @@ import type {
   ResourceTaskStatus,
 } from '@/features/resource/model/resource'
 
-// PPT 模板选项结构：供用户在前端选择幻灯片模板时使用
-export interface PptTemplateOption {
-  id: string // 模板唯一标识
-  name: string // 模板展示名称
-  description: string // 模板描述文案
-  family: string // 模板所属系列（如 instructional / technical）
-  scheme: string // 模板配色方案标识
-  tags: string[] // 模板标签列表，用于筛选与分类
-}
-
 // ==========================================
 // 资源生成 API
 // ==========================================
@@ -36,7 +26,5 @@ export function getResourceBundle(resourceId: number) {
   return http.get<ApiResponse<any>>(`/ai/resources/${resourceId}`, { timeout: 30000 })
 }
 
-// 获取可选 PPT 模板列表 GET /ai/resources/ppt/templates
-export function getPptTemplates() {
-  return http.get<ApiResponse<PptTemplateOption[]>>('/ai/resources/ppt/templates')
-}
+
+

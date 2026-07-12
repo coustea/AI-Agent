@@ -1,13 +1,11 @@
-"""学习评估 HTTP 路由。
-
-包含首页仪表盘相关端点（从 dashboard 模块迁移）。
-"""
+"""学习评估 HTTP 路由。"""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -72,10 +70,8 @@ async def record_learning_session(
     return HttpResponse.success(data={"id": learning_session.id, "deduplicated": deduplicated})
 
 
-from pydantic import BaseModel, Field
-
 class ReportGenerateRequest(BaseModel):
-    range_days: int = Field(..., description="评估天数，必须为 7、14 或 30")
+    range_days: Literal[7, 14, 30] = Field(..., description="评估天数，必须为 7、14 或 30")
 
 
 # 1. POST /api/v1/ai/evaluation/reports -> 建立并同步生成报告

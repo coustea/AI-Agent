@@ -268,6 +268,7 @@ class PathState(TypedDict):
     search_context: str
     progress_callback: ProgressCallback | None
     final_plan: LearningPlan | None
+    guidance_strategy: dict[str, Any]
 
 
 # 路径规划智能体：联网检索 + LLM 生成阶段与节点
@@ -371,7 +372,7 @@ class PathPlannerAgent:
 
         return workflow.compile()
 
-    async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "") -> LearningPlan:
+    async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "", guidance_strategy: dict[str, Any] = None) -> LearningPlan:
         """执行路径规划工作流，返回 LearningPlan。
 
         失败时自动降级到 build_fallback_plan。
@@ -385,6 +386,7 @@ class PathPlannerAgent:
                 "search_context": "",
                 "progress_callback": progress_callback,
                 "final_plan": None,
+                "guidance_strategy": guidance_strategy or {},
             }
             final_state = await self.generate_graph.ainvoke(initial_state)
             plan = final_state.get("final_plan")
@@ -671,8 +673,6 @@ def _build_learn_workflow() -> StateGraph:
     wf.add_node("gen_reinforced_tutorial", node_generate_tutorial)
     wf.add_node("persist_reinforced_tutorial", node_persist_tutorial_and_mark)
     wf.add_node("record_event", node_record_quiz_event)
-    wf.add_node("gen_resource", node_generate_resource)
-    wf.add_node("persist_resource", node_persist_resource)
 
     wf.add_edge(START, "load_context")
 
@@ -683,7 +683,6 @@ def _build_learn_workflow() -> StateGraph:
             "start": "gen_primary_tutorial",
             "questions": "gen_questions",
             "quiz": "score_answers",
-            "resource": "gen_resource",
         },
     )
 
@@ -712,9 +711,6 @@ def _build_learn_workflow() -> StateGraph:
     wf.add_edge("persist_reinforced_tutorial", "unlock_progress")
 
     wf.add_edge("unlock_progress", "record_event")
-
-    wf.add_edge("gen_resource", "persist_resource")
-    wf.add_edge("persist_resource", END)
 
     return wf.compile()
 
@@ -928,7 +924,15 @@ async def node_score_answers(state: LearnState) -> dict:
     questions = state.get("quiz_questions", [])
     if len(questions) != PATH_QUIZ_SIZE:
         return {"error": "当前节点还没有完整的五道题"}
+    if any(question.submitted_at is not None for question in questions):
+        return {"error": "当前轮次已经提交，不能重复提交"}
     answers = state.get("quiz_answers", [])
+    submitted_ids = [item["question_id"] for item in answers]
+    expected_ids = {question.id for question in questions}
+    if len(set(submitted_ids)) != len(submitted_ids) or set(submitted_ids) != expected_ids:
+        return {"error": "提交答案必须对应当前轮次的全部题目"}
+    if any(not str(item.get("response", "")).strip() for item in answers):
+        return {"error": "答案不能为空"}
     answer_map = {item["question_id"]: item["response"] for item in answers}
 
     # 逐题比对答案，累计得分并收集错题知识点
@@ -1046,7 +1050,10 @@ async def node_unlock_and_update_progress(state: LearnState) -> dict:
         )
         path.current_node_key = next_node.node_id if next_node else None
         if completed_count == len(nodes):
+            path.overall_progress = 100
             path.status = "completed"
+        else:
+            path.status = "active"
         path.updated_at = datetime.now(timezone.utc)
 
     await session.commit()
@@ -1059,7 +1066,7 @@ async def node_unlock_and_update_progress(state: LearnState) -> dict:
 
 # 工作流节点：记录测验事件到评估系统
 async def node_record_quiz_event(state: LearnState) -> dict:
-    """记录测验事件到评估系统，触发画像更新。"""
+    """记录测验事件到评估系统。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -1089,155 +1096,6 @@ async def node_record_quiz_event(state: LearnState) -> dict:
     return {}
 
 
-# 工作流节点：生成节点辅助资源（委托 resource 模块）
-async def node_generate_resource(state: LearnState) -> dict:
-    """生成节点辅助资源 — 使用统一接口 PathResourceRequest。"""
-    from app.shared.ppt import PPTService
-    from app.shared.cartoon import CartoonService
-    from app.resource.agents import AGENT_REGISTRY
-
-    if state.get("error"):
-        return {}
-    node = state["node"]
-    path = state["path"]
-    user_id = state["user_id"]
-    resource_type = state.get("resource_type", "mindmap")
-
-    # 资源生成只使用 primary 教程，不使用 remediation/reinforced 教程
-    tutorials = state.get("tutorials", [])
-    primary_tutorial = next(
-        (t for t in tutorials if t.tutorial_type == "primary"), None
-    )
-    if primary_tutorial is None:
-        return {"error": "当前节点还没有主教程，请先生成主教程再生成辅助资源"}
-
-    # 获取用户画像
-    profile_service = get_profile_service()
-    profile_markdown = await profile_service.build_profile_markdown(user_id=user_id)
-
-    # 将 ORM 对象转换为 DTO
-    tutorial_dto = LearningPathTutorialDTO.from_model(primary_tutorial)
-
-    # 构建统一请求
-    request = PathResourceRequest(
-        user_id=user_id,
-        path_id=path.id,
-        node_id=node.id,
-        profile={"markdown": profile_markdown},
-        tutorial=tutorial_dto,
-        username=state.get("username", ""),
-        path_title=path.title,
-        path_goal=path.goal,
-        node_title=node.title,
-        node_key=node.node_id,
-        difficulty=node.difficulty or "beginner",
-    )
-
-    # 统一调用 generate_for_path 接口
-    if resource_type == "ppt":
-        service = PPTService()
-        result = await service.generate_for_path(request)
-    elif resource_type == "cartoon":
-        service = CartoonService()
-        result = await service.generate_for_path(request)
-    elif resource_type in {"mindmap", "code", "reading"}:
-        agent = AGENT_REGISTRY[resource_type]()
-        result = await agent.generate_for_path(request)
-    else:
-        result = AgentResult(
-            success=False,
-            title="资源生成失败",
-            file_type="markdown",
-            error=f"不支持的资源类型: {resource_type}",
-        )
-
-    return {"resource_result": result, "resource_type": resource_type}
-
-
-# 工作流节点：持久化辅助资源到数据库
-async def node_persist_resource(state: LearnState) -> dict:
-    """持久化辅助资源到 PathNodeResource 表。"""
-    if state.get("error"):
-        return {}
-    session = state["session"]
-    node = state["node"]
-    path = state["path"]
-    user_id = state["user_id"]
-    # 资源生成只使用 primary 教程
-    tutorials = state.get("tutorials", [])
-    primary_tutorial = next(
-        (t for t in tutorials if t.tutorial_type == "primary"), None
-    )
-    resource_type = state.get("resource_type", "mindmap")
-    result = state["resource_result"]
-
-    existing_count = await _count_resources(session, node.id, resource_type)
-    version_no = existing_count + 1
-    title = (
-        result.title
-        if hasattr(result, "title") and result.title
-        else f"{node.title} - {resource_type}"
-    )
-
-    if hasattr(result, "success") and not result.success:
-        resource = PathNodeResource(
-            path_id=path.id,
-            node_id=node.id,
-            tutorial_id=primary_tutorial.id if primary_tutorial else None,
-            user_id=user_id,
-            resource_type=resource_type,
-            version_no=version_no,
-            title=title,
-            content_format="markdown",
-            status="failed",
-            error_message=(
-                result.error if hasattr(result, "error") else "unknown"
-            ),
-            summary=result.summary if hasattr(result, "summary") else None,
-            metadata_json=(
-                result.metadata if hasattr(result, "metadata") else None
-            ),
-        )
-        session.add(resource)
-        await session.commit()
-        await session.refresh(resource)
-        return {"resource_dto": _resource_to_dict(resource)}
-
-    content_text = None
-    content_json_val = None
-    file_type = getattr(result, "file_type", "markdown")
-    raw_content = getattr(result, "content", "")
-    if file_type == "json":
-        try:
-            content_json_val = (
-                json.loads(raw_content)
-                if isinstance(raw_content, str)
-                else raw_content
-            )
-        except (json.JSONDecodeError, TypeError):
-            content_text = str(raw_content)
-    else:
-        content_text = str(raw_content)
-
-    resource = PathNodeResource(
-        path_id=path.id,
-        node_id=node.id,
-        tutorial_id=primary_tutorial.id if primary_tutorial else None,
-        user_id=user_id,
-        resource_type=resource_type,
-        version_no=version_no,
-        title=title,
-        content_format=file_type,
-        content_text=content_text,
-        content_json=content_json_val,
-        summary=result.summary if hasattr(result, "summary") else None,
-        status="completed",
-        metadata_json=result.metadata if hasattr(result, "metadata") else None,
-    )
-    session.add(resource)
-    await session.commit()
-    await session.refresh(resource)
-    return {"resource_dto": _resource_to_dict(resource)}
 
 
 # ── 内部辅助函数 ──────────────────────────────────────────────────────────

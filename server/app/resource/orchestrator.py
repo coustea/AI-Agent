@@ -4,20 +4,17 @@
 1. 更新资源状态为 generating
 2. 构建并执行 LangGraph 全局编排图
 3. 处理成功/失败结果，发送完成事件
-4. 单智能体 Node Agent（PPT/Cartoon）编排与终态流转
 """
 
 from __future__ import annotations
 
 import time
-from typing import Any
 
 from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
 from app.resource.event import ResourceEvents
 from app.resource.service import ResourceService
 from app.resource.workflow import build_parent_graph
-from app.resource.workflow.execution import execute_node_agent
 from app.resource.workflow.state import ParentState
 
 logger = get_module_logger("resource", sub="orchestrator")
@@ -26,15 +23,10 @@ logger = get_module_logger("resource", sub="orchestrator")
 async def run_multi_agent_generation(
     user_id: int,
     resource_id: int,
-    *,
-    selected_agents: list[str] | None = None,
-    request_data: dict[str, Any] | None = None,
-    profile: dict[str, Any] | None = None,
 ) -> None:
     """后台资源生成编排入口。
 
-    通过参数传入 selected_agents, request_data, profile，
-    不再从数据库读取快照列。
+    只从任务创建时冻结的请求快照读取工作流输入。
     """
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     start_time = time.perf_counter()
@@ -52,15 +44,26 @@ async def run_multi_agent_generation(
         async with session_scope() as session:
             service = ResourceService(session)
             await service.update_resource_status(resource_id, "generating")
+            resource = await service.get_resource(user_id, resource_id)
+            if resource is None:
+                raise ValueError(f"资源不存在或无权限: {resource_id}")
+            snapshot = resource.request_snapshot_json
+            if not snapshot:
+                raise ValueError(f"资源缺少请求快照: {resource_id}")
 
         # 构建并编译全局编排图
         graph = build_parent_graph()
         initial_state = ParentState(
             user_id=user_id,
             resource_id=resource_id,
-            selected_agents=selected_agents or [],
-            request_data=request_data or {},
-            profile=profile or {},
+            selected_agents=list(snapshot["selected_agents"]),
+            request_data={
+                "learning_need": snapshot["learning_need"],
+                "learning_scenario": snapshot["learning_scenario"],
+                "agent_configs": snapshot["agent_configs"],
+                "username": snapshot["username"],
+            },
+            profile=dict(snapshot["profile"]),
         )
         # 执行整张工作流图
         final_state = await graph.ainvoke(initial_state)
@@ -108,82 +111,3 @@ async def run_multi_agent_generation(
             )
         await events.send("global", "failed", "资源生成过程中发生异常")
 
-
-async def run_node_agent_generation(
-    *,
-    user_id: int,
-    resource_id: int,
-    agent_id: str,
-    node_input: Any,
-) -> None:
-    """单智能体 Node Agent（PPT/Cartoon）后台编排入口。
-
-    与 run_multi_agent_generation 对称，负责：
-    1. 将 GeneratedResource 状态从 pending → generating
-    2. 调用 execute_node_agent 执行 Agent
-    3. 根据执行结果将状态流转到 completed / failed
-    4. 发送全局终态事件
-    """
-    events = ResourceEvents(user_id=user_id, resource_id=resource_id)
-    start_time = time.perf_counter()
-
-    try:
-        # 1. 状态 → generating
-        async with session_scope() as session:
-            service = ResourceService(session)
-            await service.update_resource_status(resource_id, "generating")
-
-        await events.send("global", "running", "资源生成已开始")
-        logger.info(
-            "启动 Node Agent 编排: user_id=%s resource_id=%s agent_id=%s",
-            user_id, resource_id, agent_id,
-        )
-
-        # 2. 执行 Agent
-        result = await execute_node_agent(
-            user_id=user_id,
-            resource_id=resource_id,
-            agent_id=agent_id,
-            node_input=node_input,
-        )
-
-        # 3. 根据结果流转终态：结果字典中存在该 agent 即视为成功
-        success = bool(result.get("results", {}).get(agent_id))
-        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-
-        # 成功：交由 finalize_generation 计算终态并标记完成
-        if success:
-            async with session_scope() as session:
-                service = ResourceService(session)
-                await service.finalize_generation(
-                    user_id=user_id,
-                    resource_id=resource_id,
-                    expected_agent_ids={agent_id},
-                )
-            await events.send("global", "completed", "资源生成完成")
-            logger.info(
-                "Node Agent 编排完成: resource_id=%s agent_id=%s elapsed_ms=%d",
-                resource_id, agent_id, elapsed_ms,
-            )
-        else:
-            # 失败：直接标记 failed 并推送失败事件
-            async with session_scope() as session:
-                service = ResourceService(session)
-                await service.update_resource_status(resource_id, "failed")
-            await events.send("global", "failed", "资源生成未产生可用结果")
-            logger.warning(
-                "Node Agent 编排失败: resource_id=%s agent_id=%s elapsed_ms=%d",
-                resource_id, agent_id, elapsed_ms,
-            )
-
-    # 顶层异常兜底
-    except Exception as exc:
-        total_elapsed = int((time.perf_counter() - start_time) * 1000)
-        logger.error(
-            "Node Agent 编排异常: resource_id=%s agent_id=%s error=%s elapsed_ms=%d",
-            resource_id, agent_id, exc, total_elapsed, exc_info=True,
-        )
-        async with session_scope() as session:
-            service = ResourceService(session)
-            await service.update_resource_status(resource_id, "failed")
-        await events.send("global", "failed", "资源生成过程中发生异常")

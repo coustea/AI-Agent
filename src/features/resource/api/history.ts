@@ -19,7 +19,7 @@ export interface GeneratedResourceItem {
 // 单个资源产物的详细信息：与后端 GeneratedResourceItem 完全对齐
 export interface ResourceItemDetail {
   id: string // 产物记录主键（UUID）
-  type: string // 产物类型：content / mindmap / quiz / code / reading / ppt / cartoon / video
+  type: string // 产物类型：content / mindmap / quiz / code / reading / ppt / cartoon
   title: string // 产物标题
   format: string // 产物格式：markdown / json / html / pptx / mp4 等
   content: Record<string, unknown> | string | null // 产物正文内容，结构因类型而异
@@ -33,6 +33,7 @@ export interface GeneratedResourceBundle {
   title: string // 任务标题
   learning_need: string // 用户输入的学习需求
   selected_agents: string[] // 参与生成的智能体 id 列表
+  plan_content: string | null // 教学计划 Markdown 内容
   resources: ResourceItemDetail[] // 全部产物明细列表
   status: string // 任务整体状态
   created_at: string | null // 任务创建时间

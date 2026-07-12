@@ -6,7 +6,7 @@
 - service.py       — 业务逻辑层，CRUD 用例，Agent ID 常量
 - orchestrator.py  — 后台任务编排入口，协调 LangGraph 工作流
 - event.py         — SSE 事件系统，实时推送 agent 状态变更
-- agents/          — 资源生成智能体（content/mindmap/code/quiz/reading/ppt/video/cartoon）
+- agents/          — 资源生成智能体（content/mindmap/code/quiz/reading/ppt/cartoon）
 - schemas/         — 请求/响应/运行时数据模型
 - workflow/        — LangGraph 工作流（全局编排图 + 节点函数）
 - prompts/         — LLM 提示词模板

@@ -991,19 +991,19 @@ const completedResourceCount = computed(
     0,
 );
 
-// 统计指定场景的学习时长总和
-const secondsForContexts = (...keys: string[]) => {
+// 统计指定场景的模块事件次数
+const eventCountForContexts = (...keys: string[]) => {
   const context = learningStats.value?.context_breakdown || {};
   return keys.reduce((sum, key) => sum + (context[key] || 0), 0);
 };
 
-// 各场景累计时长（题库/AI 辅导/路径规划/智能推荐）
-const questionBankSeconds = computed(() =>
-  secondsForContexts("QuestionBank", "question-bank"),
+// 各场景事件次数（题库/AI 辅导/路径规划/智能推荐）
+const questionBankEvents = computed(() =>
+  eventCountForContexts("QuestionBank", "question-bank"),
 );
-const tutorSeconds = computed(() => secondsForContexts("Tutor", "tutor"));
-const pathPlanningSeconds = computed(() =>
-  secondsForContexts(
+const tutorEvents = computed(() => eventCountForContexts("Tutor", "tutor"));
+const pathPlanningEvents = computed(() =>
+  eventCountForContexts(
     "PathPlanCreate",
     "PathPlanOverview",
     "PathPlanHistory",
@@ -1014,8 +1014,8 @@ const pathPlanningSeconds = computed(() =>
     "path-planner-node",
   ),
 );
-const recommendationSeconds = computed(() =>
-  secondsForContexts(
+const recommendationEvents = computed(() =>
+  eventCountForContexts(
     "ResourceGenerator",
     "ResourceGenerator",
     "ResourceResult",
@@ -1182,22 +1182,22 @@ const resourceMixRows = computed(() => {
       ];
 });
 
-// 计算各学习场景的时长占比
+// 计算各学习场景的事件占比
 const scenarioBreakdown = computed(() => {
   const items = [
-    { name: "题库练习", seconds: questionBankSeconds.value, color: "#818CF8" },
-    { name: "AI辅导", seconds: tutorSeconds.value, color: "#2DD4BF" },
-    { name: "路径规划", seconds: pathPlanningSeconds.value, color: "#FBBF24" },
+    { name: "题库练习", count: questionBankEvents.value, color: "#818CF8" },
+    { name: "AI辅导", count: tutorEvents.value, color: "#2DD4BF" },
+    { name: "路径规划", count: pathPlanningEvents.value, color: "#FBBF24" },
     {
       name: "智能推荐",
-      seconds: recommendationSeconds.value,
+      count: recommendationEvents.value,
       color: "#34D399",
     },
   ];
-  const total = items.reduce((sum, item) => sum + item.seconds, 0);
+  const total = items.reduce((sum, item) => sum + item.count, 0);
   return items.map((item) => ({
     ...item,
-    percent: total > 0 ? Math.round((item.seconds / total) * 100) : 0,
+    percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
   }));
 });
 
@@ -1206,7 +1206,7 @@ const hasLineChartData = computed(() =>
   (learningStats.value?.daily_breakdown || []).some((item) => item.seconds > 0),
 );
 const hasScenarioData = computed(() =>
-  scenarioBreakdown.value.some((item) => item.seconds > 0),
+  scenarioBreakdown.value.some((item) => item.count > 0),
 );
 
 // 学习专注走势折线图 ECharts 配置
@@ -1297,7 +1297,7 @@ const pieOption = computed(() => {
         labelLine: { show: false },
         data: hasScenarioData.value
           ? scenarioBreakdown.value.map((item) => ({
-              value: item.seconds,
+              value: item.count,
               name: item.name,
               itemStyle: { color: item.color },
             }))

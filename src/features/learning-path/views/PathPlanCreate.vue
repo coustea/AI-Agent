@@ -449,12 +449,6 @@ const planningSteps: PlanningStep[] = [
   { key: 'save', title: '生成完美路线', threshold: 92 },
 ]
 
-const fallbackPlanningStep: PlanningStep = {
-  key: 'fallback',
-  title: '正在规划路线',
-  threshold: 0,
-}
-
 const examples: ExampleItem[] = [
   {
     title: '操作系统期末复习',
@@ -526,14 +520,6 @@ const currentPlanningIndex = computed(() => {
     }
   }
   return 0
-})
-
-const currentPlanningStep = computed(() => {
-  return planningSteps[currentPlanningIndex.value] ?? planningSteps[0] ?? fallbackPlanningStep
-})
-
-const currentPlanningTitle = computed(() => {
-  return currentPlanningStep.value.title
 })
 
 function autoResize() {

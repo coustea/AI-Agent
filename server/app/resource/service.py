@@ -37,13 +37,12 @@ logger = get_module_logger("resource", sub="service")
 # Agent ID 常量
 PPT_AGENT_ID = "ppt"
 COORDINATOR_AGENT_ID = "coordinator"
-VIDEO_AGENT_ID = "video"
 CARTOON_AGENT_ID = "cartoon"
 BUNDLE_AGENT_ID = "bundle"
 # 基础资源 Agent（为聚合 Agent 提供素材）
 BASE_RESOURCE_AGENT_IDS = frozenset({"content", "mindmap", "quiz", "code", "reading"})
 # 聚合型 Agent（依赖基础资源）
-AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID)
+AGGREGATION_AGENT_IDS = (PPT_AGENT_ID, CARTOON_AGENT_ID)
 
 # agent_type → content_format 映射（不再存 content_format 列）
 # 不同 Agent 产物的存储格式：json/html/mp4/markdown
@@ -54,7 +53,6 @@ AGENT_CONTENT_FORMAT: dict[str, str] = {
     "quiz": "json",
     "reading": "json",
     "ppt": "html",
-    "video": "mp4",
     "cartoon": "mp4",
 }
 
@@ -150,16 +148,41 @@ class ResourceService:
         *,
         user_id: int,
         request: ResourceGenerationRequest,
+        profile_markdown: str = "",
+        username: str = "",
+        guidance_strategy: dict[str, Any] = None,
     ) -> dict[str, Any]:
         """创建任务。"""
+        request_snapshot = {
+            "schema_version": 1,
+            "learning_need": request.learning_need,
+            "learning_scenario": request.learning_scenario,
+            "selected_agents": request.enabled_agent_ids(),
+            "agent_configs": request.agent_configs.model_dump(mode="json"),
+            "profile": {"markdown": profile_markdown},
+            "username": username,
+            "guidance_strategy": guidance_strategy or {},
+        }
         resource = GeneratedResource(
             user_id=user_id,
             learning_need=request.learning_need,
+            request_snapshot_json=request_snapshot,
             status="pending",
         )
         self.session.add(resource)
         await self.session.flush()
         resource_id = int(getattr(resource, "id", 0) or 0)
+        # 选择集是任务的持久化事实，而不是由已执行 Agent 反推的展示结果。
+        # 预先创建 pending Run 后，刷新/轮询始终能恢复所有已选 Agent（含尚未
+        # 进入聚合阶段的 PPT 与 Cartoon）。
+        for agent_id in request_snapshot["selected_agents"]:
+            self.session.add(
+                GeneratedResourceAgentRun(
+                    resource_id=resource_id,
+                    agent_id=agent_id,
+                    status="pending",
+                )
+            )
         # 落库并返回新任务 ID
         await self._commit(resource)
         return {"resource_id": resource_id, "status": "pending"}
@@ -328,7 +351,7 @@ class ResourceService:
 
         resource.status = status
         await self._commit(resource)
-        # 记录资源生成事件供画像评分（失败不影响主流程）
+        # 记录资源生成事件供学习评估聚合（失败不影响主流程）
         try:
             await record_resource_generated_event(
                 db=self.session,
@@ -395,13 +418,12 @@ class ResourceService:
         runs_result = await self.session.exec(runs_stmt)
         runs_by_agent = {run.agent_id: run for run in runs_result.all()}
 
-        # 从 items 和 runs 推导 selected_agents（取并集并限定已知 agent）
-        agent_ids_from_items = {item.agent_type for item in db_items}
-        agent_ids_from_runs = {run.agent_id for run in runs_by_agent.values()}
-        selected_agents = sorted(
-            (agent_ids_from_items | agent_ids_from_runs)
-            & set(AGENT_CONTENT_FORMAT)
-        )
+        # 选择顺序是创建时冻结的请求事实，不能从成功产物反推。
+        selected_agents = [
+            agent_id
+            for agent_id in resource.request_snapshot_json.get("selected_agents", [])
+            if agent_id in AGENT_CONTENT_FORMAT
+        ]
 
         # 构建 agent_snapshots
         merged: dict[str, dict[str, Any]] = {}
@@ -461,7 +483,11 @@ class ResourceService:
         if resource is None:
             return None
         db_items = await self.list_resource_items(user_id, resource_id)
-        selected_agents = [item.agent_type for item in db_items]
+        selected_agents = [
+            agent_id
+            for agent_id in resource.request_snapshot_json.get("selected_agents", [])
+            if agent_id in AGENT_CONTENT_FORMAT
+        ]
 
         # 从 agent_runs 推导 failed_agents
         failed_stmt = (

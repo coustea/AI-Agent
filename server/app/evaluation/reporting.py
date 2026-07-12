@@ -51,7 +51,7 @@ def validate_output(model_instance: AssessmentReportOutput) -> None:
         raise ValueError("Markdown report cannot contain 'javascript:' links.")
     
     # Reject remote images
-    if re.search(r"!\[.*?\]\((http.*?)\)", markdown_content):
+    if re.search(r"!\[[^\]]*\]\(\s*https?://", markdown_content, flags=re.IGNORECASE):
         raise ValueError("Markdown report cannot contain remote images.")
         
     # Reject raw HTML tags

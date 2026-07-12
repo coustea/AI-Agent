@@ -54,6 +54,7 @@ class PlanningAgent(BaseResourceAgent):
         agents = list(input_data.agent_config.get("enabled_agents", [])) if input_data.agent_config else []
 
         attempt_prompt = full_prompt
+        previous_content = ""
         plan: ResourcePlan | None = None
 
         # 最多重试 _MAX_PLAN_ATTEMPTS 次，直到计划通过校验
@@ -63,6 +64,7 @@ class PlanningAgent(BaseResourceAgent):
                 llm_started = time.perf_counter()
                 response = await self.llm.ainvoke(attempt_prompt)
                 content = response.content if hasattr(response, "content") else str(response)
+                previous_content = content
                 llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
 
                 # 提取标题：取第一行 # 标题
@@ -100,9 +102,11 @@ class PlanningAgent(BaseResourceAgent):
                 # 将校验错误回灌给模型进行定向纠正
                 attempt_prompt = (
                     f"{full_prompt}\n\n"
+                    "## 上一次生成的计划原文\n"
+                    f"```markdown\n{previous_content}\n```\n\n"
                     "## 上次输出的校验错误\n"
                     f"{str(exc)[:1200]}\n\n"
-                    "请重新生成完整计划，修正上述错误。"
+                    "请在保留有效内容的基础上重新生成完整计划，修正上述错误。"
                 )
 
         # 全部尝试均失败则报错
@@ -168,7 +172,6 @@ class PlanningAgent(BaseResourceAgent):
                 "code": "代码示例 Agent — 生成代码示例和编程练习",
                 "reading": "阅读材料 Agent — 生成延伸阅读材料",
                 "ppt": "PPT Agent — 基于基础资源生成课件",
-                "video": "视频 Agent — 基于基础资源生成讲解视频",
                 "cartoon": "动画 Agent — 基于基础资源生成动画讲解",
             }
             for agent_id in agents:

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal, TYPE_CHECKING
 from typing_extensions import TypedDict
 
@@ -119,6 +120,18 @@ class LearningSignalSnapshot(BaseModel):
     recommendations: list[str] = Field(default_factory=list, description="系统调整建议")
 
 
+class PathLearningEventItem(BaseModel):
+    id: int
+    module: str
+    entity_id: str | None = None
+    event_type: str
+    score: float | None = None
+    course: str | None = None
+    topic: str | None = None
+    event_metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
 # 节点测验题目 DTO
 class LearningPathQuestionDTO(BaseModel):
     id: int
@@ -189,7 +202,6 @@ class LearningPathResourceDTO(BaseModel):
         )
 
 
-# 路径节点辅助资源后台任务响应；与 standalone resource 任务保持独立契约。
 class PathResourceTaskResponse(BaseModel):
     resource: LearningPathResourceDTO
     run_id: str

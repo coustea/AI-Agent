@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,11 +30,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import PATH_QUIZ_SIZE
 from app.evaluation.request import LearningEventCreate
-from app.evaluation.response import LearningEventItem
-from app.evaluation.service import (
-    EvaluationService,
-    build_summary_from_events,
-)
+from app.evaluation.service import EvaluationService
 from app.infra.database import session_scope
 from app.path.event import PathEvents
 from app.infra.logging import get_logger
@@ -60,6 +57,7 @@ from app.path.schemas import (
     PathResourceTaskResponse,
     LearningPathTutorialDTO,
     LearningSignalSnapshot,
+    PathLearningEventItem,
     PathLearningEvaluationResponse,
     PathQuizRoundResponse,
     PathQuizSubmitRequest,
@@ -196,11 +194,14 @@ class PathService:
                 progress=10,
             )
 
+            from app.evaluation.guidance import get_effective_guidance_strategy
+            guidance_strategy = await get_effective_guidance_strategy(self.session, user_id)
             plan = await self.path_planner.generate_plan(
                 request,
                 profile,
                 progress_callback=progress_cb,
                 profile_markdown=profile_md,
+                guidance_strategy=guidance_strategy,
             )
 
             await events.send(
@@ -621,16 +622,7 @@ class PathService:
         active_minutes = await self._get_path_active_minutes(
             user_id=user_id, path_id=path.id
         )
-        summary = build_summary_from_events(events)
-        signal_snapshot = LearningSignalSnapshot(
-            average_score=summary.average_score,
-            weak_topics=list(summary.weak_topics),
-            preferred_resources=list(summary.preferred_resources),
-            completed_resource_count=summary.completed_resources,
-            viewed_resource_count=summary.viewed_resources,
-            active_minutes=active_minutes,
-            recommendations=list(summary.recommendations),
-        )
+        signal_snapshot = build_path_signal_snapshot(events, active_minutes)
         current_node = await self._get_current_path_node(
             path.id, path.current_node_key
         )
@@ -687,11 +679,12 @@ class PathService:
             "entity_id": str(path.id),
             "event_metadata": meta,
         })
-        event, _ = await self.evaluation_service.record_event(
+        record_result = await self.evaluation_service.record_event(
             self.session,
             user_id=user_id,
             payload=payload,
         )
+        event = record_result[0] if isinstance(record_result, tuple) else record_result
         return event
 
     # ── 共享内部方法 ────────────────────────────────────────────────────────
@@ -1102,9 +1095,59 @@ class PathService:
         return result.first() or 0
 
 
-# 将 LearningEvent ORM 转换为响应 DTO
-def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
-    return LearningEventItem(
+# 根据路径学习事件构建路径专属学习信号快照
+def build_path_signal_snapshot(
+    events: list[LearningEvent],
+    active_minutes: int,
+) -> LearningSignalSnapshot:
+    score_values = [event.score for event in events if event.score is not None]
+    average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
+
+    weak_counter: Counter[str] = Counter()
+    preferred_counter: Counter[str] = Counter()
+    for event in events:
+        topic = event.topic or event.course
+        if event.score is not None and event.score < 70 and topic:
+            weak_counter[topic] += 1
+
+        metadata = event.event_metadata or {}
+        feedback = str(metadata.get("feedback") or getattr(event, "feedback", "") or "")
+        if topic and any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
+            weak_counter[topic] += 1
+        for keyword, label in {
+            "图解": "图解材料",
+            "案例": "案例讲解",
+            "代码": "代码实操",
+            "视频": "视频讲解",
+            "题": "练习题库",
+        }.items():
+            if keyword in feedback:
+                preferred_counter[label] += 1
+
+    recommendations: list[str] = []
+    if average_score is not None and average_score < 70:
+        recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")
+    if weak_counter:
+        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")
+    if preferred_counter:
+        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")
+    if not recommendations:
+        recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")
+
+    return LearningSignalSnapshot(
+        average_score=average_score,
+        weak_topics=[item for item, _ in weak_counter.most_common(5)],
+        preferred_resources=[item for item, _ in preferred_counter.most_common(5)],
+        completed_resource_count=0,
+        viewed_resource_count=0,
+        active_minutes=active_minutes,
+        recommendations=recommendations,
+    )
+
+
+# 将 LearningEvent ORM 转换为路径事件响应 DTO
+def build_learning_event_item(event: LearningEvent) -> PathLearningEventItem:
+    return PathLearningEventItem(
         id=event.id or 0,
         module=event.module or "path",
         entity_id=event.entity_id or (str(getattr(event, "path_id", "")) or None),

@@ -52,56 +52,6 @@ class ResourceBundle(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class SingleResourceRequest(BaseModel):
-    """单智能体资源生成请求（路径规划 / 即调即用）。
 
-    PPT/Cartoon 是聚合 Agent，在多智能体模式下依赖上游素材；
-    但在单智能体模式下可直接调用，走路径规划的 generate_node 逻辑，
-    只需要传入知识点和教程即可生成，保存到 paths/ 路径下。
-    """
-    model_config = ConfigDict(extra="forbid")
 
-    agent_id: ResourceAgentId
-    learning_need: str
 
-    # ── PPT/Cartoon 单独调用所需字段 ──────────────────────────────────
-    knowledge_points: list[str] = Field(
-        default_factory=list,
-        description="知识点列表 — PPT/Cartoon 单独调用时必填",
-    )
-    tutorial_markdown: str = Field(
-        default="",
-        description="教程 Markdown 内容 — PPT/Cartoon 单独调用时必填",
-    )
-    tutorial_title: str = Field(
-        default="",
-        description="教程标题 — PPT/Cartoon 单独调用时选填，默认取 learning_need",
-    )
-
-    @field_validator("learning_need")
-    @classmethod
-    def validate_learning_need(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("学习需求不能为空")
-        return value
-
-    @field_validator("agent_id")
-    @classmethod
-    def validate_aggregation_agent(cls, value: ResourceAgentId) -> ResourceAgentId:
-        """PPT/Cartoon 单独调用时必须提供知识点和教程；Video 仍不支持单独调用。"""
-        # 视频 Agent 不允许单独调用
-        if value == ResourceAgentId.VIDEO:
-            raise ValueError("Video Agent 不支持单独调用")
-        return value
-
-    @model_validator(mode="after")
-    def validate_path_node_fields(self) -> "SingleResourceRequest":
-        """PPT/Cartoon 单独调用时，knowledge_points 和 tutorial_markdown 必填。"""
-        # 聚合 Agent 单独调用必须携带知识点与教程内容
-        if self.agent_id in {ResourceAgentId.PPT, ResourceAgentId.CARTOON}:
-            if not self.knowledge_points:
-                raise ValueError("PPT/Cartoon 单独调用时必须提供 knowledge_points")
-            if not self.tutorial_markdown.strip():
-                raise ValueError("PPT/Cartoon 单独调用时必须提供 tutorial_markdown")
-        return self

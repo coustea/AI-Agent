@@ -5,8 +5,7 @@
   - 检查并执行：长期记忆更新、会话压缩
   - 两个任务独立触发，根据 token 阈值判断
 
-注：学习者画像不再在对话后实时更新。画像改由 GET /profile 懒加载触发
-infer_profile_from_digest（基于周概要缓冲），见 app/profile/service.py。
+注：学习者画像不在对话后台任务中更新；学习评估报告只会定向更新当前辅导策略。
 """
 
 from __future__ import annotations

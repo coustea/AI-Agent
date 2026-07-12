@@ -337,21 +337,20 @@ async def submit_quiz(
     # 提交数据库，保存错题记录
     await session.commit()
 
-    # 计算正确率与得分
+    # 记录逐题答题事实用于学习评估聚合，失败不影响主流程
     total = len(request.results)
-    correct_count = sum(1 for r in request.results if r.is_correct)
-    score = (correct_count / total * 100) if total > 0 else 0
-    subject = request.results[0].subject if request.results else None
-    # 记录答题事件用于画像评分，失败不影响主流程
     try:
-        await record_quiz_submit_event(
-            db=session,
-            user_id=user_id,
-            total_count=total,
-            correct_count=correct_count,
-            score=score,
-            subject=subject,
-        )
+        for index, result in enumerate(request.results, start=1):
+            await record_quiz_submit_event(
+                db=session,
+                user_id=user_id,
+                score=100 if result.is_correct else 0,
+                is_correct=result.is_correct,
+                attempt_index=index,
+                subject=result.subject,
+                question_id=result.question_id,
+                question_type=result.question_type,
+            )
     except Exception:
         logger.exception("记录 quiz_submitted 事件失败: user_id=%s", user_id)
 

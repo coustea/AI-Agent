@@ -33,7 +33,6 @@ from app.resource.schemas.response import (
     GeneratedResourceItem,
     ResourceBundle,
     ResourceStatusSnapshot,
-    SingleResourceRequest,
 )
 
 __all__ = [
@@ -42,7 +41,6 @@ __all__ = [
     "AGENT_DEFAULT_ORDER",
     # Request models
     "ResourceGenerationRequest",
-    "SingleResourceRequest",
     "AgentConfigs",
     "AgentSelection",
     # Planning

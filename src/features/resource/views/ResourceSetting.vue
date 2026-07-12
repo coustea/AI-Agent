@@ -1,502 +1,312 @@
 <template>
   <div class="agent-config-page">
-    <div class="agent-config-shell">
-      <aside class="agent-left-rail">
-        <section class="rail-section scenario-section">
-          <div class="rail-title-row">
-            <span class="rail-kicker">SCENARIO</span>
-            <strong>学习场景</strong>
+    <div class="config-container">
+      <header class="config-topbar">
+        <button
+          type="button"
+          class="back-button"
+          @click="emit('back')"
+        >
+          <ArrowLeft />
+          <span>返回需求</span>
+        </button>
+
+        <div class="page-heading">
+          <div class="heading-icon">
+            <SlidersIcon />
           </div>
 
-          <div class="scenario-list">
-            <button
-                v-for="scenario in scenarioOptions"
-                :key="scenario.value"
-                type="button"
-                class="scenario-row"
-                :class="{ active: learningScenario === scenario.value }"
-                @click="selectScenario(scenario.value)"
-            >
-              <span class="scenario-icon">{{ scenario.icon }}</span>
-              <span class="scenario-name">{{ scenario.name }}</span>
-            </button>
+          <div class="heading-copy">
+            <h1>多智能体参数配置</h1>
+            <p>选择参与生成的智能体，并调整各类资源的核心参数</p>
           </div>
-        </section>
-
-        <section class="rail-section agent-section">
-          <div class="rail-title-row">
-            <span class="rail-kicker">AGENTS</span>
-            <strong>{{ enabledAgentIds.length }} / {{ agents.length }} 已启用</strong>
-          </div>
-
-          <div class="agent-vertical-list">
-            <button
-                v-for="agent in agents"
-                :key="agent.id"
-                type="button"
-                class="agent-row"
-                :class="{
-                active: activeAgentId === agent.id,
-                disabled: !isAgentEnabled(agent.id)
-              }"
-                :style="agentThemeStyle(agent.id)"
-                @click="selectAgent(agent.id)"
-            >
-              <span class="agent-color-mark"></span>
-
-              <span class="agent-icon-box">
-                <component :is="agent.icon" />
-              </span>
-
-              <span class="agent-row-main">
-                <strong>{{ agent.name }}</strong>
-                <small>{{ isAgentEnabled(agent.id) ? getAgentSummary(agent.id) : '已关闭' }}</small>
-              </span>
-
-              <span class="agent-switch-wrap" @click.stop>
-                <label class="compact-switch">
-                  <input
-                      type="checkbox"
-                      :checked="isAgentEnabled(agent.id)"
-                      @change="toggleAgent(agent.id)"
-                  />
-                  <span></span>
-                </label>
-              </span>
-            </button>
-          </div>
-        </section>
-      </aside>
-
-      <main class="agent-main-panel" :style="agentThemeStyle(activeAgentId)">
-        <header class="config-header">
-          <div class="config-heading">
-            <span class="config-agent-icon">
-              <component :is="activeAgentMeta.icon" />
-            </span>
-
-            <div>
-              <div class="config-title-line">
-                <h2>{{ activeAgentMeta.name }}</h2>
-                <span :class="['status-chip', activeAgentEnabled ? 'active' : 'sleep']">
-                  {{ activeAgentEnabled ? '已启用' : '已关闭' }}
-                </span>
-              </div>
-              <p>{{ activeAgentOutputLabel }}</p>
-            </div>
-          </div>
-
-          <label class="compact-switch header-switch">
-            <input
-                type="checkbox"
-                :checked="activeAgentEnabled"
-                @change="toggleAgent(activeAgentId)"
-            />
-            <span></span>
-          </label>
-        </header>
-
-        <div v-if="!activeAgentEnabled" class="sleep-notice">
-          <span>当前智能体未参与本次资源生成，参数可预设但不会提交给协同流程。</span>
-          <button type="button" @click="toggleAgent(activeAgentId)">启用该智能体</button>
         </div>
 
-        <section class="config-body" :class="{ muted: !activeAgentEnabled }">
-          <div class="config-body-inner">
-            <template v-if="activeAgentId === 'content'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>讲解组织结构</strong>
-                  <span>决定文档讲解的展开顺序</span>
-                </div>
+        <div class="topbar-status">
+          <span class="step-label">步骤 2 / 3</span>
 
-                <div class="option-grid two">
-                  <button
-                      v-for="opt in contentStructureOptions"
-                      :key="opt.value"
-                      type="button"
-                      class="option-button"
-                      :class="{ active: localConfigs.content.structure === opt.value }"
-                      @click="localConfigs.content.structure = opt.value"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
+          <span class="enabled-label">
+            <CheckCircle />
+            已启用 {{ enabledAgentIds.length }} 个
+          </span>
+        </div>
+      </header>
 
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>讲解深度</strong>
-                  <span>控制解释长度与推导强度</span>
-                </div>
+      <section class="request-bar">
+        <div class="request-copy">
+          <span>当前学习需求</span>
 
-                <div class="segmented-control">
-                  <button
-                      v-for="opt in contentDepthOptions"
-                      :key="opt.value"
-                      type="button"
-                      :class="{ active: localConfigs.content.depth_level === opt.value }"
-                      @click="localConfigs.content.depth_level = opt.value as any"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
+          <p :title="naturalInput || '暂无原始学习需求。'">
+            {{ naturalInput || '暂无原始学习需求。' }}
+          </p>
+        </div>
 
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>聚焦模式</strong>
-                  <span>决定讲解更偏向薄弱点、主干概念还是完整覆盖</span>
-                </div>
+        <div
+          class="scenario-switcher"
+          aria-label="学习场景"
+        >
+          <span class="scenario-label">学习场景</span>
 
-                <select class="clean-select" v-model="localConfigs.content.focus_mode">
-                  <option value="weak_points">薄弱点强化</option>
-                  <option value="key_concepts">核心概念提炼</option>
-                  <option value="full_coverage">完整知识覆盖</option>
-                </select>
-              </div>
-
-              <div class="setting-line">
-                <div>
-                  <strong>加入生活化类比</strong>
-                  <span>用具象例子解释抽象概念、公式或机制</span>
-                </div>
-
-                <label class="compact-switch">
-                  <input type="checkbox" v-model="localConfigs.content.include_examples" />
-                  <span></span>
-                </label>
-              </div>
-            </template>
-
-            <template v-if="activeAgentId === 'mindmap'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>思维导图类型</strong>
-                  <span>决定知识节点的组织方式</span>
-                </div>
-
-                <select class="clean-select" v-model="localConfigs.mindmap.map_type">
-                  <option value="knowledge_tree">层级知识树</option>
-                  <option value="exam_map">考点重点图</option>
-                  <option value="comparison_map">对比复习图</option>
-                </select>
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>最大层级</strong>
-                  <span>{{ localConfigs.mindmap.max_depth }} 层</span>
-                </div>
-
-                <input
-                    class="clean-range"
-                    type="range"
-                    v-model.number="localConfigs.mindmap.max_depth"
-                    :min="2"
-                    :max="5"
-                    :step="1"
-                />
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>叶子节点密度</strong>
-                  <span>控制节点文字长度</span>
-                </div>
-
-                <div class="segmented-control">
-                  <button
-                      v-for="opt in mindmapLeafOptions"
-                      :key="opt.value"
-                      type="button"
-                      :class="{ active: localConfigs.mindmap.leaf_detail === opt.value }"
-                      @click="localConfigs.mindmap.leaf_detail = opt.value as any"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="setting-line">
-                <div>
-                  <strong>显示跨分支关联</strong>
-                  <span>适合展示概念之间的非层级关系</span>
-                </div>
-
-                <label class="compact-switch">
-                  <input type="checkbox" v-model="localConfigs.mindmap.show_relations" />
-                  <span></span>
-                </label>
-              </div>
-            </template>
-
-            <template v-if="activeAgentId === 'code'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>编程语言</strong>
-                  <span>生成代码实操案例使用的语言</span>
-                </div>
-
-                <div class="option-grid three">
-                  <button
-                      v-for="lang in programmingLanguageOptions"
-                      :key="lang.key"
-                      type="button"
-                      class="option-button"
-                      :class="{ active: localConfigs.code.programming_language === lang.key }"
-                      @click="localConfigs.code.programming_language = lang.key"
-                  >
-                    {{ lang.label }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>源码类型</strong>
-                  <span>决定代码偏教学、参考实现还是挑战练习</span>
-                </div>
-
-                <div class="segmented-control">
-                  <button
-                      v-for="opt in codeOutputOptions"
-                      :key="opt.value"
-                      type="button"
-                      :class="{ active: localConfigs.code.output_style === opt.value }"
-                      @click="localConfigs.code.output_style = opt.value as any"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>讲解侧重</strong>
-                  <span>决定代码说明重点</span>
-                </div>
-
-                <select class="clean-select" v-model="localConfigs.code.focus">
-                  <option value="syntax">语法机制与 API 边界</option>
-                  <option value="application">工程实践与集成方式</option>
-                  <option value="debugging">调试思路与错误排查</option>
-                </select>
-              </div>
-            </template>
-
-            <template v-if="activeAgentId === 'quiz'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>题目难度策略</strong>
-                  <span>决定题目更偏基础、自适应还是考试</span>
-                </div>
-
-                <select class="clean-select" v-model="localConfigs.quiz.difficulty_mode">
-                  <option value="basic">基础辨析</option>
-                  <option value="adaptive">自适应梯度</option>
-                  <option value="exam">考试强化</option>
-                </select>
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>题目数量</strong>
-                  <span>{{ localConfigs.quiz.question_count }} 题</span>
-                </div>
-
-                <input
-                    class="clean-range"
-                    type="range"
-                    v-model.number="localConfigs.quiz.question_count"
-                    :min="3"
-                    :max="10"
-                    :step="1"
-                />
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>题型范围</strong>
-                  <span>至少保留一种题型</span>
-                </div>
-
-                <div class="option-grid two">
-                  <button
-                      v-for="opt in questionTypeOptions"
-                      :key="opt.value"
-                      type="button"
-                      class="option-button"
-                      :class="{ active: localConfigs.quiz.question_types.includes(opt.value as any) }"
-                      @click="toggleQuestionType(opt.value)"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <template v-if="activeAgentId === 'reading'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>资源覆盖范围</strong>
-                  <span>控制推荐资料的广度</span>
-                </div>
-
-                <div class="segmented-control">
-                  <button
-                      v-for="opt in readingCoverageOptions"
-                      :key="opt.value"
-                      type="button"
-                      :class="{ active: localConfigs.reading.coverage === opt.value }"
-                      @click="localConfigs.reading.coverage = opt.value as any"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>资源侧重</strong>
-                  <span>决定推荐教材、工程资料还是论文</span>
-                </div>
-
-                <select class="clean-select" v-model="localConfigs.reading.focus">
-                  <option value="textbook">教材 / 专著</option>
-                  <option value="engineering">官方文档 / 工程博客</option>
-                  <option value="research">论文 / 白皮书</option>
-                </select>
-              </div>
-
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>推荐数量</strong>
-                  <span>{{ localConfigs.reading.max_items }} 篇</span>
-                </div>
-
-                <input
-                    class="clean-range"
-                    type="range"
-                    v-model.number="localConfigs.reading.max_items"
-                    :min="3"
-                    :max="12"
-                    :step="1"
-                />
-              </div>
-            </template>
-
-            <template v-if="activeAgentId === 'ppt'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>PPT 模板</strong>
-                  <span>决定课件视觉风格</span>
-                </div>
-
-                <select class="clean-select" v-model="localConfigs.ppt.template">
-                  <option value="auto">自动匹配最佳模板</option>
-                  <option
-                      v-for="template in pptTemplates"
-                      :key="template.id"
-                      :value="template.id"
-                  >
-                    {{ template.name }}
-                  </option>
-                </select>
-
-                <p class="hint-text">{{ selectedPptTemplateDescription }}</p>
-              </div>
-            </template>
-
-            <template v-if="activeAgentId === 'cartoon'">
-              <div class="setting-block">
-                <div class="setting-label">
-                  <strong>动画风格</strong>
-                  <span>决定动画讲解的视觉表达</span>
-                </div>
-
-                <select class="clean-select" v-model="localConfigs.cartoon.style">
-                  <option value="diagram">动态教学图解</option>
-                  <option value="minimal">现代极简版面</option>
-                  <option value="dark_tech">高对比科技风</option>
-                  <option value="chalkboard">黑板粉笔风</option>
-                </select>
-              </div>
-            </template>
+          <div class="scenario-options">
+            <button
+              v-for="scenario in scenarioOptions"
+              :key="scenario.value"
+              type="button"
+              :class="{
+                active: learningScenario === scenario.value,
+              }"
+              @click="selectScenario(scenario.value)"
+            >
+              {{ scenario.name }}
+            </button>
           </div>
+        </div>
+      </section>
+
+      <section
+        class="agent-navigation"
+        aria-label="协作智能体"
+      >
+        <div class="agent-navigation-title">
+          <div>
+            <strong>协作智能体</strong>
+            <span>
+              至少启用 {{ MIN_ENABLED_AGENTS }} 个，点击智能体切换参数
+            </span>
+          </div>
+
+          <em>
+            {{ enabledAgentIds.length }} / {{ agents.length }}
+          </em>
+        </div>
+
+        <div class="agent-tabs">
+          <button
+            v-for="agent in agents"
+            :key="agent.id"
+            type="button"
+            class="agent-tab"
+            :class="{
+              active: activeAgentId === agent.id,
+              disabled: !isAgentEnabled(agent.id),
+            }"
+            :style="agentThemeStyle(agent.id)"
+            @click="selectAgent(agent.id)"
+          >
+            <span class="agent-tab-icon">
+              <component :is="agent.icon" />
+            </span>
+
+            <span class="agent-tab-copy">
+              <strong>{{ agent.name }}</strong>
+
+              <small>
+                {{
+                  isAgentEnabled(agent.id)
+                    ? getAgentOutput(agent.id)
+                    : '未参与生成'
+                }}
+              </small>
+            </span>
+
+            <span
+              class="agent-tab-switch"
+              @click.stop
+            >
+              <label
+                class="compact-switch"
+                :aria-label="`${agent.name}启用状态`"
+              >
+                <input
+                  type="checkbox"
+                  :checked="isAgentEnabled(agent.id)"
+                  @change="toggleAgent(agent.id)"
+                />
+                <span></span>
+              </label>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <main
+        class="config-workspace"
+      >
+        <div
+          v-if="!activeAgentEnabled"
+          class="disabled-banner"
+        >
+          <div>
+            <strong>该智能体不会参与本次资源生成</strong>
+            <span>参数配置会继续保留，重新启用后即可使用。</span>
+          </div>
+
+          <button
+            type="button"
+            @click="toggleAgent(activeAgentId)"
+          >
+            启用智能体
+          </button>
+        </div>
+
+        <section
+          class="settings-grid"
+          :class="{ muted: !activeAgentEnabled }"
+        >
+          <article
+            v-for="(field, index) in activeSettingFields"
+            :key="`${activeAgentId}-${field.key}`"
+            class="setting-item"
+            :class="{
+              'switch-setting': field.type === 'switch',
+            }"
+          >
+            <div class="setting-copy">
+              <span class="setting-index">
+                {{ String(index + 1).padStart(2, '0') }}
+              </span>
+
+              <div>
+                <strong>{{ field.title }}</strong>
+                <p>{{ field.description }}</p>
+              </div>
+
+              <em
+                v-if="field.type === 'range'"
+                class="value-badge"
+              >
+                {{ getFieldValue(field.key) }}{{ field.unit }}
+              </em>
+            </div>
+
+            <div
+              v-if="
+                field.type === 'choice' ||
+                field.type === 'multi'
+              "
+              class="option-grid"
+              :class="{
+                'two-columns': field.layout !== 'language',
+                'language-grid': field.layout === 'language',
+              }"
+            >
+              <button
+                v-for="option in field.options"
+                :key="option.value"
+                type="button"
+                class="option-button"
+                :class="{
+                  active:
+                    field.type === 'multi'
+                      ? isMultiSelected(field.key, option.value)
+                      : getFieldValue(field.key) === option.value,
+                }"
+                @click="
+                  field.type === 'multi'
+                    ? toggleMultiValue(field.key, option.value)
+                    : setFieldValue(field.key, option.value)
+                "
+              >
+                {{ option.label }}
+              </button>
+            </div>
+
+            <div
+              v-else-if="field.type === 'segment'"
+              class="segmented-control"
+            >
+              <button
+                v-for="option in field.options"
+                :key="option.value"
+                type="button"
+                :class="{
+                  active: getFieldValue(field.key) === option.value,
+                }"
+                @click="setFieldValue(field.key, option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+
+            <select
+              v-else-if="field.type === 'select'"
+              class="clean-select"
+              :value="getFieldValue(field.key)"
+              @change="setSelectField(field.key, $event)"
+            >
+              <option
+                v-for="option in field.options"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+
+            <div
+              v-else-if="field.type === 'range'"
+              class="range-wrap"
+            >
+              <input
+                class="clean-range"
+                type="range"
+                :value="getFieldValue(field.key)"
+                :min="field.min"
+                :max="field.max"
+                :step="field.step"
+                @input="setRangeField(field.key, $event)"
+              />
+
+              <div class="range-scale">
+                <span
+                  v-for="scale in field.scales"
+                  :key="scale"
+                >
+                  {{ scale }}
+                </span>
+              </div>
+            </div>
+
+            <label
+              v-else-if="field.type === 'switch'"
+              class="compact-switch large-switch"
+            >
+              <input
+                type="checkbox"
+                :checked="Boolean(getFieldValue(field.key))"
+                @change="setBooleanField(field.key, $event)"
+              />
+              <span></span>
+            </label>
+          </article>
         </section>
       </main>
 
-      <aside class="agent-right-panel">
-        <section class="summary-block">
-          <div class="summary-title">
-            <span>INPUT</span>
-            <strong>学习输入</strong>
-          </div>
+      <footer class="action-footer">
+        <div class="footer-copy">
+          <strong>
+            {{ enabledAgentIds.length }} 个智能体将并行生成资源
+          </strong>
 
-          <p class="input-preview">
-            {{ naturalInput || '暂无原始学习需求。' }}
-          </p>
+          <span
+            v-if="enabledAgentIds.length === MIN_ENABLED_AGENTS"
+          >
+            当前已达到最低协作数量，无法继续关闭智能体。
+          </span>
 
-          <div class="scenario-desc">
-            <span>场景策略</span>
-            <strong>{{ activeScenarioDesc }}</strong>
-          </div>
-        </section>
+          <span v-else>
+            所有参数会在开始生成时统一提交。
+          </span>
+        </div>
 
-        <section class="summary-block fill">
-          <div class="summary-title">
-            <span>ACTIVE STACK</span>
-            <strong>启用资源链路</strong>
-          </div>
-
-          <div class="enabled-list">
-            <div
-                v-for="agent in enabledAgents"
-                :key="agent.id"
-                class="enabled-row"
-                :style="agentThemeStyle(agent.id)"
-            >
-              <span class="enabled-dot"></span>
-              <div>
-                <strong>{{ agent.name }}</strong>
-                <small>{{ getAgentSummary(agent.id) }}</small>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="summary-block compact">
-          <div class="summary-title">
-            <span>CHECK</span>
-            <strong>提交前检查</strong>
-          </div>
-
-          <div class="check-row">
-            <span>最少智能体</span>
-            <strong>{{ MIN_AGENTS }} 个</strong>
-          </div>
-          <div class="check-row">
-            <span>当前状态</span>
-            <strong :class="{ danger: enabledAgentIds.length <= MIN_AGENTS }">
-              {{ enabledAgentIds.length <= MIN_AGENTS ? '核心保护中' : '可继续调整' }}
-            </strong>
-          </div>
-        </section>
-      </aside>
-
-      <footer class="bottom-action-bar">
-        <button type="button" class="ghost-button" @click="emit('back')">
-          返回修改需求
-        </button>
-
-        <p v-if="enabledAgentIds.length <= MIN_AGENTS" class="footer-warning">
-          至少保留 {{ MIN_AGENTS }} 个智能体，避免资源生成链路过弱。
-        </p>
-
-        <button type="button" class="primary-button" @click="emit('launch')">
-          确认配置并开始生成
-          <Position class="button-icon" />
+        <button
+          type="button"
+          class="primary-button"
+          :disabled="!canLaunch"
+          @click="launchGeneration"
+        >
+          开始生成资源
+          <Position />
         </button>
       </footer>
     </div>
@@ -504,23 +314,59 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { PhPaperPlaneTilt as Position } from '@phosphor-icons/vue'
+import {
+  computed,
+  ref,
+  watch,
+} from 'vue'
+
+import {
+  PhArrowLeft as ArrowLeft,
+  PhCheckCircle as CheckCircle,
+  PhPaperPlaneTilt as Position,
+  PhSlidersHorizontal as SlidersIcon,
+} from '@phosphor-icons/vue'
+
 import { toast } from 'vue-sonner'
+
+import type {
+  LearningScenario,
+  ResourceAgentId,
+} from '@/features/resource/model/resource'
+
 import {
-  getPptTemplates,
-  type PptTemplateOption,
-} from '@/features/resource/api/resource'
-import type { LearningScenario, ResourceAgentId } from '@/features/resource/model/resource'
-import {
-  MIN_AGENTS,
-  getAgentMeta,
-  scenarioOptions,
-  getScenarioDesc,
   SCENARIO_DEFAULTS,
   agentMetaList,
+  scenarioOptions,
   type AnyAgentConfigs,
 } from '../model/catalog'
+
+type SettingType =
+  | 'choice'
+  | 'segment'
+  | 'select'
+  | 'range'
+  | 'switch'
+  | 'multi'
+
+interface SettingOption {
+  label: string
+  value: string
+}
+
+interface SettingField {
+  key: string
+  title: string
+  description: string
+  type: SettingType
+  options?: SettingOption[]
+  layout?: 'default' | 'language'
+  min?: number
+  max?: number
+  step?: number
+  scales?: Array<string | number>
+  unit?: string
+}
 
 const props = defineProps<{
   learningScenario: LearningScenario
@@ -530,306 +376,912 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'update:learningScenario': [value: LearningScenario]
-  'update:enabledAgentIds': [value: ResourceAgentId[]]
-  'update:agentConfigs': [value: AnyAgentConfigs]
+  'update:learningScenario': [
+    value: LearningScenario,
+  ]
+  'update:enabledAgentIds': [
+    value: ResourceAgentId[],
+  ]
+  'update:agentConfigs': [
+    value: AnyAgentConfigs,
+  ]
   back: []
   launch: []
 }>()
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
+const MIN_ENABLED_AGENTS = 3
 
-const activeAgentId = ref<ResourceAgentId>('content')
-const localConfigs = ref<AnyAgentConfigs>(clone(props.agentConfigs))
-const pptTemplates = ref<PptTemplateOption[]>([])
+const clone = <T,>(value: T): T =>
+  JSON.parse(JSON.stringify(value)) as T
+
+const activeAgentId =
+  ref<ResourceAgentId>('content')
+
+const localConfigs = ref<AnyAgentConfigs>(
+  clone(props.agentConfigs),
+)
 
 const learningScenario = computed({
   get: () => props.learningScenario,
-  set: (value) => emit('update:learningScenario', value),
+  set: (value: LearningScenario) => {
+    emit('update:learningScenario', value)
+  },
 })
 
 const enabledAgentIds = computed({
   get: () => props.enabledAgentIds,
-  set: (value) => emit('update:enabledAgentIds', value),
+  set: (value: ResourceAgentId[]) => {
+    emit('update:enabledAgentIds', value)
+  },
 })
 
 const agents = computed(() => agentMetaList)
-const enabledAgents = computed(() =>
-    agents.value.filter((agent) => enabledAgentIds.value.includes(agent.id as ResourceAgentId))
+
+const naturalInput = computed(
+  () => props.naturalInput?.trim() || '',
 )
 
-const activeAgentMeta = computed(() => getAgentMeta(activeAgentId.value))
-const activeAgentEnabled = computed(() => isAgentEnabled(activeAgentId.value))
-const naturalInput = computed(() => props.naturalInput?.trim() || '')
-const activeScenarioDesc = computed(() => getScenarioDesc(learningScenario.value))
+const activeAgentEnabled = computed(() =>
+  isAgentEnabled(activeAgentId.value),
+)
 
-const contentStructureOptions = [
-  { label: '渐进式引导', value: 'progressive' },
-  { label: '先总后分', value: 'summary_first' },
-  { label: '考点驱动', value: 'exam_points' },
-  { label: '案例驱动', value: 'case_driven' },
-]
+const canLaunch = computed(
+  () =>
+    enabledAgentIds.value.length >=
+    MIN_ENABLED_AGENTS,
+)
 
-const contentDepthOptions = [
-  { label: '快速概述', value: 'quick' },
-  { label: '标准讲解', value: 'standard' },
-  { label: '深度推导', value: 'deep' },
-]
-
-const mindmapLeafOptions = [
-  { label: '核心词', value: 'keyword' },
-  { label: '简要注释', value: 'brief_note' },
-  { label: '详细注释', value: 'annotated' },
-]
-
-const programmingLanguageOptions = [
-  { key: 'python', label: 'Python' },
-  { key: 'java', label: 'Java' },
-  { key: 'cpp', label: 'C++' },
-  { key: 'go', label: 'Go' },
-  { key: 'javascript', label: 'JS' },
-  { key: 'typescript', label: 'TS' },
-]
-
-const codeOutputOptions = [
-  { label: '教学案例', value: 'tutorial' },
-  { label: '参考实现', value: 'reference' },
-  { label: '挑战练习', value: 'challenge' },
-]
-
-const questionTypeOptions = [
-  { label: '单选题', value: 'single' },
-  { label: '多选题', value: 'multiple' },
-  { label: '判断题', value: 'judge' },
-  { label: '填空题', value: 'fill' },
-]
-
-const readingCoverageOptions = [
-  { label: '核心精选', value: 'core' },
-  { label: '横向延展', value: 'extended' },
-  { label: '广泛覆盖', value: 'broad' },
-]
-
-const activeAgentOutputLabel = computed(() => {
-  const map: Record<ResourceAgentId, string> = {
-    content: '生成课程讲解文档，负责知识点主线说明。',
-    mindmap: '生成知识结构图，负责概念层级和关联梳理。',
-    code: '生成代码实操案例，负责理论到实践的迁移。',
-    quiz: '生成练习题，负责检测掌握情况与反馈。',
-    reading: '生成拓展阅读，负责补充教材、文档和论文资料。',
-    ppt: '生成教学课件，负责结构化演示与课堂展示。',
-    cartoon: '生成动画讲解，负责抽象机制的可视化解释。',
-  }
-
-  return map[activeAgentId.value] || '配置当前智能体的资源生成策略。'
-})
-
-const selectedPptTemplateDescription = computed(() => {
-  if (localConfigs.value.ppt.template === 'auto') {
-    return '系统会根据知识点类型、内容密度和资源目标自动选择模板。'
-  }
-
-  return pptTemplates.value.find(
-      (template) => template.id === localConfigs.value.ppt.template
-  )?.description || '当前模板已选定。'
-})
-
-onMounted(async () => {
-  try {
-    const response = await getPptTemplates()
-    const templates = response.data?.data
-
-    if (Array.isArray(templates) && templates.length > 0) {
-      pptTemplates.value = templates
-    }
-  } catch (error) {
-    console.error('PPT 模板加载失败', error)
-  }
-})
-
-watch(
-    () => props.agentConfigs,
-    (newVal) => {
-      localConfigs.value = clone(newVal)
+const agentSettingSchemas: Record<
+  ResourceAgentId,
+  SettingField[]
+> = {
+  content: [
+    {
+      key: 'structure',
+      title: '讲解组织结构',
+      description: '决定知识内容的展开顺序与学习节奏',
+      type: 'choice',
+      options: [
+        {
+          label: '渐进式引导',
+          value: 'progressive',
+        },
+        {
+          label: '先总后分',
+          value: 'summary_first',
+        },
+        {
+          label: '考点驱动',
+          value: 'exam_points',
+        },
+        {
+          label: '案例驱动',
+          value: 'case_driven',
+        },
+      ],
     },
-    { deep: true }
-)
-
-watch(
-    localConfigs,
-    (newVal) => {
-      emit('update:agentConfigs', clone(newVal))
+    {
+      key: 'depth_level',
+      title: '讲解深度',
+      description: '控制解释长度、概念推导与细节强度',
+      type: 'segment',
+      options: [
+        {
+          label: '快速概述',
+          value: 'quick',
+        },
+        {
+          label: '标准讲解',
+          value: 'standard',
+        },
+        {
+          label: '深度推导',
+          value: 'deep',
+        },
+      ],
     },
-    { deep: true }
-)
+    {
+      key: 'focus_mode',
+      title: '聚焦模式',
+      description: '指定文档优先强化的内容范围',
+      type: 'select',
+      options: [
+        {
+          label: '薄弱点强化',
+          value: 'weak_points',
+        },
+        {
+          label: '核心概念提炼',
+          value: 'key_concepts',
+        },
+        {
+          label: '完整知识覆盖',
+          value: 'full_coverage',
+        },
+      ],
+    },
+    {
+      key: 'include_examples',
+      title: '加入生活化类比',
+      description: '用具象案例解释抽象概念、公式或机制',
+      type: 'switch',
+    },
+  ],
 
-function isAgentEnabled(id: string) {
-  return enabledAgentIds.value.includes(id as ResourceAgentId)
+  mindmap: [
+    {
+      key: 'map_type',
+      title: '思维导图类型',
+      description: '选择知识节点的主要组织方式',
+      type: 'select',
+      options: [
+        {
+          label: '层级知识树',
+          value: 'knowledge_tree',
+        },
+        {
+          label: '考点重点图',
+          value: 'exam_map',
+        },
+        {
+          label: '对比复习图',
+          value: 'comparison_map',
+        },
+      ],
+    },
+    {
+      key: 'max_depth',
+      title: '最大层级',
+      description: '控制知识树的纵向展开深度',
+      type: 'range',
+      min: 2,
+      max: 5,
+      step: 1,
+      scales: [2, 3, 4, 5],
+      unit: ' 层',
+    },
+    {
+      key: 'leaf_detail',
+      title: '叶子节点密度',
+      description: '控制末级节点的文字长度与解释量',
+      type: 'segment',
+      options: [
+        {
+          label: '核心词',
+          value: 'keyword',
+        },
+        {
+          label: '简要注释',
+          value: 'brief_note',
+        },
+        {
+          label: '详细注释',
+          value: 'annotated',
+        },
+      ],
+    },
+    {
+      key: 'show_relations',
+      title: '显示跨分支关联',
+      description: '补充概念之间非层级的关联关系',
+      type: 'switch',
+    },
+  ],
+
+  code: [
+    {
+      key: 'programming_language',
+      title: '编程语言',
+      description: '选择代码实操案例使用的主要语言',
+      type: 'choice',
+      layout: 'language',
+      options: [
+        {
+          label: 'Python',
+          value: 'python',
+        },
+        {
+          label: 'C',
+          value: 'c',
+        },
+        {
+          label: 'Java',
+          value: 'java',
+        },
+        {
+          label: 'C++',
+          value: 'cpp',
+        },
+        {
+          label: 'Go',
+          value: 'go',
+        },
+        {
+          label: 'JS',
+          value: 'javascript',
+        },
+        {
+          label: 'TS',
+          value: 'typescript',
+        },
+      ],
+    },
+    {
+      key: 'output_style',
+      title: '源码类型',
+      description: '决定案例偏教学、参考实现或挑战练习',
+      type: 'segment',
+      options: [
+        {
+          label: '教学案例',
+          value: 'tutorial',
+        },
+        {
+          label: '参考实现',
+          value: 'reference',
+        },
+        {
+          label: '挑战练习',
+          value: 'challenge',
+        },
+      ],
+    },
+    {
+      key: 'focus',
+      title: '讲解侧重',
+      description: '指定代码说明与实践指导的重点',
+      type: 'select',
+      options: [
+        {
+          label: '语法机制与 API 边界',
+          value: 'syntax',
+        },
+        {
+          label: '工程实践与集成方式',
+          value: 'application',
+        },
+        {
+          label: '调试思路与错误排查',
+          value: 'debugging',
+        },
+      ],
+    },
+    {
+      key: 'include_tests',
+      title: '包含测试用例',
+      description: '为示例代码补充可运行校验或断言',
+      type: 'switch',
+    },
+  ],
+
+  quiz: [
+    {
+      key: 'difficulty_mode',
+      title: '题目难度策略',
+      description: '设置练习题的整体难度分布方式',
+      type: 'select',
+      options: [
+        {
+          label: '基础辨析',
+          value: 'basic',
+        },
+        {
+          label: '自适应梯度',
+          value: 'adaptive',
+        },
+        {
+          label: '考试强化',
+          value: 'exam',
+        },
+      ],
+    },
+    {
+      key: 'question_count',
+      title: '题目数量',
+      description: '设置本次生成的练习题总数',
+      type: 'range',
+      min: 1,
+      max: 20,
+      step: 1,
+      scales: [1, 5, 10, 15, 20],
+      unit: ' 题',
+    },
+    {
+      key: 'emphasis',
+      title: '考查侧重',
+      description: '控制题目更偏概念、应用还是分析推理',
+      type: 'segment',
+      options: [
+        {
+          label: '基础概念',
+          value: 'foundations',
+        },
+        {
+          label: '应用迁移',
+          value: 'application',
+        },
+        {
+          label: '分析推理',
+          value: 'analysis',
+        },
+      ],
+    },
+    {
+      key: 'question_types',
+      title: '题型范围',
+      description: '可多选，至少保留一种题型',
+      type: 'multi',
+      options: [
+        {
+          label: '单选题',
+          value: 'single',
+        },
+        {
+          label: '多选题',
+          value: 'multiple',
+        },
+        {
+          label: '判断题',
+          value: 'judge',
+        },
+        {
+          label: '填空题',
+          value: 'fill',
+        },
+      ],
+    },
+  ],
+
+  reading: [
+    {
+      key: 'coverage',
+      title: '资源覆盖范围',
+      description: '控制推荐资料的广度与延展范围',
+      type: 'segment',
+      options: [
+        {
+          label: '核心精选',
+          value: 'core',
+        },
+        {
+          label: '横向延展',
+          value: 'extended',
+        },
+        {
+          label: '广泛覆盖',
+          value: 'broad',
+        },
+      ],
+    },
+    {
+      key: 'focus',
+      title: '资源侧重',
+      description: '选择优先推荐的资料类别',
+      type: 'select',
+      options: [
+        {
+          label: '教材 / 专著',
+          value: 'textbook',
+        },
+        {
+          label: '官方文档 / 工程博客',
+          value: 'engineering',
+        },
+        {
+          label: '论文 / 白皮书',
+          value: 'research',
+        },
+      ],
+    },
+    {
+      key: 'max_items',
+      title: '推荐数量',
+      description: '限制本次拓展阅读清单的最大数量',
+      type: 'range',
+      min: 1,
+      max: 10,
+      step: 1,
+      scales: [1, 3, 5, 8, 10],
+      unit: ' 篇',
+    },
+    {
+      key: 'language_preference',
+      title: '语言偏好',
+      description: '限定推荐资料使用的语言范围',
+      type: 'segment',
+      options: [
+        {
+          label: '中文',
+          value: 'chinese',
+        },
+        {
+          label: '英文',
+          value: 'english',
+        },
+        {
+          label: '中英混合',
+          value: 'both',
+        },
+      ],
+    },
+  ],
+
+  ppt: [
+    {
+      key: 'template',
+      title: '内容取向',
+      description: '控制课件内容组织，不改变视觉模板',
+      type: 'select',
+      options: [
+        {
+          label: '自动取向',
+          value: 'auto',
+        },
+        {
+          label: '课堂讲授',
+          value: 'teaching',
+        },
+        {
+          label: '技术解析',
+          value: 'technical',
+        },
+        {
+          label: '案例拆解',
+          value: 'case_study',
+        },
+        {
+          label: '复习巩固',
+          value: 'exam_review',
+        },
+      ],
+    },
+    {
+      key: 'narrative_style',
+      title: '叙事方式',
+      description: '决定 PPT 大纲从概念、案例或问题切入',
+      type: 'choice',
+      options: [
+        {
+          label: '概念递进',
+          value: 'concept',
+        },
+        {
+          label: '案例驱动',
+          value: 'case_driven',
+        },
+        {
+          label: '问题引导',
+          value: 'problem_led',
+        },
+        {
+          label: '复习巩固',
+          value: 'review',
+        },
+      ],
+    },
+    {
+      key: 'density',
+      title: '内容密度',
+      description: '调整页面文字与配套讲稿的详略程度',
+      type: 'segment',
+      options: [
+        {
+          label: '精炼',
+          value: 'concise',
+        },
+        {
+          label: '标准',
+          value: 'standard',
+        },
+        {
+          label: '详细',
+          value: 'detailed',
+        },
+      ],
+    },
+    {
+      key: 'emphasis',
+      title: '教学重点',
+      description: '可多选，至少保留一个教学重点',
+      type: 'multi',
+      options: [
+        {
+          label: '核心概念',
+          value: 'core_concepts',
+        },
+        {
+          label: '案例应用',
+          value: 'cases',
+        },
+        {
+          label: '易错误区',
+          value: 'pitfalls',
+        },
+        {
+          label: '推导过程',
+          value: 'derivation',
+        },
+      ],
+    },
+  ],
+
+  cartoon: [
+    {
+      key: 'depth',
+      title: '讲解深度',
+      description: '控制动画脚本的解释层级与推导程度',
+      type: 'segment',
+      options: [
+        {
+          label: '概览',
+          value: 'overview',
+        },
+        {
+          label: '标准',
+          value: 'standard',
+        },
+        {
+          label: '深入',
+          value: 'deep',
+        },
+      ],
+    },
+    {
+      key: 'pace',
+      title: '播放节奏',
+      description: '决定信息出现速度、镜头停顿与讲解节奏',
+      type: 'segment',
+      options: [
+        {
+          label: '快速',
+          value: 'fast',
+        },
+        {
+          label: '正常',
+          value: 'normal',
+        },
+        {
+          label: '慢速',
+          value: 'slow',
+        },
+      ],
+    },
+  ],
 }
 
-function selectAgent(id: string) {
-  activeAgentId.value = id as ResourceAgentId
-}
+const activeSettingFields = computed(
+  () =>
+    agentSettingSchemas[
+      activeAgentId.value
+    ] ?? [],
+)
 
-function toggleAgent(id: string) {
-  const agentId = id as ResourceAgentId
-  const index = enabledAgentIds.value.indexOf(agentId)
-
-  if (index >= 0) {
-    if (enabledAgentIds.value.length <= MIN_AGENTS) {
-      toast.warning(`至少需要保留 ${MIN_AGENTS} 个智能体`)
+watch(
+  () => props.enabledAgentIds,
+  (ids) => {
+    if (
+      ids.length >=
+      MIN_ENABLED_AGENTS
+    ) {
       return
     }
 
-    const next = [...enabledAgentIds.value]
+    const normalized = [...ids]
+
+    for (const agent of agentMetaList) {
+      if (!normalized.includes(agent.id)) {
+        normalized.push(agent.id)
+      }
+
+      if (
+        normalized.length >=
+        MIN_ENABLED_AGENTS
+      ) {
+        break
+      }
+    }
+
+    emit(
+      'update:enabledAgentIds',
+      normalized,
+    )
+  },
+  {
+    immediate: true,
+  },
+)
+
+watch(
+  () => props.agentConfigs,
+  (value) => {
+    localConfigs.value = clone(value)
+  },
+  {
+    deep: true,
+  },
+)
+
+watch(
+  localConfigs,
+  (value) => {
+    emit(
+      'update:agentConfigs',
+      clone(value),
+    )
+  },
+  {
+    deep: true,
+  },
+)
+
+function isAgentEnabled(
+  id: ResourceAgentId | string,
+): boolean {
+  return enabledAgentIds.value.includes(
+    id as ResourceAgentId,
+  )
+}
+
+function selectAgent(
+  id: ResourceAgentId | string,
+): void {
+  activeAgentId.value =
+    id as ResourceAgentId
+}
+
+function toggleAgent(
+  id: ResourceAgentId | string,
+): void {
+  const agentId = id as ResourceAgentId
+  const index =
+    enabledAgentIds.value.indexOf(agentId)
+
+  if (index >= 0) {
+    if (
+      enabledAgentIds.value.length <=
+      MIN_ENABLED_AGENTS
+    ) {
+      toast.warning(
+        `至少需要保留 ${MIN_ENABLED_AGENTS} 个智能体`,
+      )
+      return
+    }
+
+    const next = [
+      ...enabledAgentIds.value,
+    ]
+
     next.splice(index, 1)
     enabledAgentIds.value = next
     return
   }
 
-  enabledAgentIds.value = [...enabledAgentIds.value, agentId]
+  enabledAgentIds.value = [
+    ...enabledAgentIds.value,
+    agentId,
+  ]
 }
 
-function selectScenario(scenario: LearningScenario) {
+function selectScenario(
+  scenario: LearningScenario,
+): void {
   learningScenario.value = scenario
 
-  const defaults = SCENARIO_DEFAULTS[scenario]
-  if (defaults) {
-    localConfigs.value = clone({
-      ...localConfigs.value,
-      ...defaults,
-    })
+  const defaults =
+    SCENARIO_DEFAULTS[scenario]
+
+  if (!defaults) {
+    return
   }
+
+  localConfigs.value = clone({
+    ...localConfigs.value,
+    ...defaults,
+  })
 }
 
-function toggleQuestionType(type: string) {
-  const types = [...localConfigs.value.quiz.question_types]
-  const index = types.indexOf(type as any)
+function getActiveAgentConfig(): Record<
+  string,
+  unknown
+> {
+  const configs =
+    localConfigs.value as unknown as Record<
+      ResourceAgentId,
+      Record<string, unknown>
+    >
+
+  return configs[activeAgentId.value]
+}
+
+function getFieldValue(
+  key: string,
+): unknown {
+  return getActiveAgentConfig()[key]
+}
+
+function setFieldValue(
+  key: string,
+  value: unknown,
+): void {
+  getActiveAgentConfig()[key] = value
+}
+
+function setSelectField(
+  key: string,
+  event: Event,
+): void {
+  const target =
+    event.target as HTMLSelectElement
+
+  setFieldValue(key, target.value)
+}
+
+function setRangeField(
+  key: string,
+  event: Event,
+): void {
+  const target =
+    event.target as HTMLInputElement
+
+  setFieldValue(
+    key,
+    Number(target.value),
+  )
+}
+
+function setBooleanField(
+  key: string,
+  event: Event,
+): void {
+  const target =
+    event.target as HTMLInputElement
+
+  setFieldValue(
+    key,
+    target.checked,
+  )
+}
+
+function isMultiSelected(
+  key: string,
+  value: string,
+): boolean {
+  const current = getFieldValue(key)
+
+  return (
+    Array.isArray(current) &&
+    current.includes(value)
+  )
+}
+
+function toggleMultiValue(
+  key: string,
+  value: string,
+): void {
+  const currentValue = getFieldValue(key)
+
+  const current = Array.isArray(currentValue)
+    ? [...currentValue]
+    : []
+
+  const index = current.indexOf(value)
 
   if (index >= 0) {
-    if (types.length <= 1) {
-      toast.warning('至少需要保留一种题型')
+    if (current.length <= 1) {
+      toast.warning(
+        key === 'question_types'
+          ? '至少需要保留一种题型'
+          : '至少需要保留一个教学重点',
+      )
       return
     }
 
-    types.splice(index, 1)
+    current.splice(index, 1)
   } else {
-    types.push(type as any)
+    current.push(value)
   }
 
-  localConfigs.value.quiz.question_types = types
+  setFieldValue(key, current)
 }
 
-function getAgentSummary(id: string) {
-  const configs = localConfigs.value
-
-  if (id === 'content') {
-    const structureMap: Record<string, string> = {
-      progressive: '渐进式',
-      summary_first: '先总后分',
-      exam_points: '考点驱动',
-      case_driven: '案例驱动',
-    }
-
-    const depthMap: Record<string, string> = {
-      quick: '快速',
-      standard: '标准',
-      deep: '深度',
-    }
-
-    return `${structureMap[configs.content.structure] || '标准'} · ${depthMap[configs.content.depth_level] || '标准'}`
+function launchGeneration(): void {
+  if (!canLaunch.value) {
+    toast.warning(
+      `请至少启用 ${MIN_ENABLED_AGENTS} 个智能体`,
+    )
+    return
   }
 
-  if (id === 'mindmap') {
-    const mapType: Record<string, string> = {
-      knowledge_tree: '知识树',
-      exam_map: '考点图',
-      comparison_map: '对比图',
-    }
-
-    return `${mapType[configs.mindmap.map_type] || '知识树'} · ${configs.mindmap.max_depth} 层`
-  }
-
-  if (id === 'quiz') {
-    return `${configs.quiz.question_count} 题 · ${configs.quiz.question_types.length} 类题型`
-  }
-
-  if (id === 'code') {
-    const languageMap: Record<string, string> = {
-      python: 'Python',
-      c: 'C',
-      cpp: 'C++',
-      java: 'Java',
-      go: 'Go',
-      javascript: 'JS',
-      typescript: 'TS',
-    }
-
-    return `${languageMap[configs.code.programming_language] || '代码'} · ${configs.code.output_style}`
-  }
-
-  if (id === 'reading') {
-    return `${configs.reading.coverage} · ${configs.reading.max_items} 篇`
-  }
-
-  if (id === 'ppt') {
-    return configs.ppt.template === 'auto' ? '自动模板' : '指定模板'
-  }
-
-  if (id === 'cartoon') {
-    return `${configs.cartoon.style} 风格`
-  }
-
-  return '已配置'
+  emit('launch')
 }
 
-function agentThemeStyle(id: string) {
-  const themes: Record<string, { accent: string; soft: string; text: string; glow: string }> = {
+function getAgentOutput(
+  id: ResourceAgentId | string,
+): string {
+  const outputMap: Record<
+    ResourceAgentId,
+    string
+  > = {
+    content: '讲解文档',
+    mindmap: '思维导图',
+    code: '代码示例',
+    quiz: '练习题',
+    reading: '阅读清单',
+    ppt: 'PPT 文件',
+    cartoon: '动画视频',
+  }
+
+  return (
+    outputMap[id as ResourceAgentId] ??
+    '学习资源'
+  )
+}
+
+function agentThemeStyle(
+  id: ResourceAgentId | string,
+): Record<string, string> {
+  const themes: Record<
+    ResourceAgentId,
+    {
+      accent: string
+      soft: string
+      text: string
+      glow: string
+    }
+  > = {
     content: {
-      accent: '#3B82F6',
-      soft: '#EFF6FF',
-      text: '#1D4ED8',
-      glow: 'rgba(59, 130, 246, 0.16)',
+      accent: '#3b82f6',
+      soft: 'rgba(59, 130, 246, 0.10)',
+      text: '#1d4ed8',
+      glow: 'rgba(59, 130, 246, 0.20)',
     },
+
     mindmap: {
-      accent: '#8B5CF6',
-      soft: '#F5F3FF',
-      text: '#6D28D9',
-      glow: 'rgba(139, 92, 246, 0.14)',
+      accent: '#8b5cf6',
+      soft: 'rgba(139, 92, 246, 0.10)',
+      text: '#6d28d9',
+      glow: 'rgba(139, 92, 246, 0.20)',
     },
+
     code: {
-      accent: '#22C55E',
-      soft: '#F0FDF4',
-      text: '#15803D',
-      glow: 'rgba(34, 197, 94, 0.14)',
+      accent: '#10b981',
+      soft: 'rgba(16, 185, 129, 0.10)',
+      text: '#047857',
+      glow: 'rgba(16, 185, 129, 0.20)',
     },
+
     quiz: {
-      accent: '#F59E0B',
-      soft: '#FFFBEB',
-      text: '#B45309',
-      glow: 'rgba(245, 158, 11, 0.14)',
+      accent: '#f43f5e',
+      soft: 'rgba(244, 63, 94, 0.10)',
+      text: '#be123c',
+      glow: 'rgba(244, 63, 94, 0.20)',
     },
+
     reading: {
-      accent: '#14B8A6',
-      soft: '#F0FDFA',
-      text: '#0F766E',
-      glow: 'rgba(20, 184, 166, 0.14)',
+      accent: '#f59e0b',
+      soft: 'rgba(245, 158, 11, 0.11)',
+      text: '#b45309',
+      glow: 'rgba(245, 158, 11, 0.20)',
     },
+
     ppt: {
-      accent: '#EF4444',
-      soft: '#FEF2F2',
-      text: '#B91C1C',
-      glow: 'rgba(239, 68, 68, 0.14)',
+      accent: '#6366f1',
+      soft: 'rgba(99, 102, 241, 0.10)',
+      text: '#4338ca',
+      glow: 'rgba(99, 102, 241, 0.20)',
     },
+
     cartoon: {
-      accent: '#6366F1',
-      soft: '#EEF2FF',
-      text: '#4338CA',
-      glow: 'rgba(99, 102, 241, 0.14)',
+      accent: '#ec4899',
+      soft: 'rgba(236, 72, 153, 0.10)',
+      text: '#be185d',
+      glow: 'rgba(236, 72, 153, 0.20)',
     },
   }
 
-  const theme = themes[id] || themes.content
+  const theme =
+    themes[id as ResourceAgentId] ??
+    themes.content
 
   return {
     '--agent-accent': theme.accent,
@@ -842,445 +1294,596 @@ function agentThemeStyle(id: string) {
 
 <style scoped>
 .agent-config-page {
+  --page-blue: var(
+    --cat-resource,
+    #3b82f6
+  );
+
+  --page-blue-soft: var(
+    --cat-resource-soft,
+    #eff6ff
+  );
+
   width: 100%;
-  height: calc(100vh - var(--navbar-height, 72px));
-  padding: 14px;
+  min-height: calc(
+    100vh - var(--navbar-height, 72px)
+  );
+  padding:
+    20px
+    clamp(18px, 3vw, 42px)
+    30px;
   box-sizing: border-box;
   background:
-      radial-gradient(circle at 18% 10%, rgba(59, 130, 246, 0.08), transparent 32%),
-      radial-gradient(circle at 86% 16%, rgba(20, 184, 166, 0.08), transparent 28%),
-      linear-gradient(135deg, rgba(248, 251, 255, 0.96), rgba(241, 248, 250, 0.94));
+    linear-gradient(
+      180deg,
+      #f8fbff 0%,
+      #f5f8fc 48%,
+      #f7f9fc 100%
+    );
+  color: var(
+    --color-text,
+    #334155
+  );
+  color-scheme: light;
 }
 
-.agent-config-shell {
-  width: min(1580px, 100%);
-  height: 100%;
+.config-container {
+  width: min(1320px, 100%);
   margin: 0 auto;
+}
+
+.config-topbar {
+  position: relative;
+  min-height: 56px;
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr) 290px;
-  grid-template-rows: minmax(0, 1fr) 66px;
-  overflow: hidden;
-  border-radius: 24px;
-  border: 1px solid rgba(226, 232, 240, 0.78);
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow:
-      0 12px 40px rgba(15, 23, 42, 0.06),
-      0 2px 8px rgba(15, 23, 42, 0.03);
-  backdrop-filter: blur(12px);
-}
-
-.agent-left-rail {
-  grid-row: 1 / 2;
-  min-height: 0;
-  background: rgba(255, 255, 255, 0.66);
-  backdrop-filter: blur(18px);
-  border-right: 1px solid rgba(226, 232, 240, 0.72);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.rail-section {
-  padding: 18px 16px;
-}
-
-.scenario-section {
-  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
-}
-
-.agent-section {
-  min-height: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-
-.rail-title-row {
-  display: flex;
+  grid-template-columns:
+    136px
+    minmax(0, 1fr)
+    auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 18px;
+  padding: 0 2px 14px;
+  border-bottom: 1px solid #dfe7f0;
 }
 
-.rail-title-row strong {
-  font-size: 13px;
-  font-weight: 800;
-  color: #102f36;
+.back-button,
+.primary-button,
+.agent-tab,
+.option-button,
+.segmented-control button,
+.scenario-options button,
+.disabled-banner button {
+  font: inherit;
 }
 
-.rail-kicker {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #3b82f6;
-  background: rgba(239, 246, 255, 0.92);
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  border-radius: 999px;
-  padding: 3px 8px;
-}
-
-.scenario-list {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.scenario-row {
-  min-height: 38px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: 12px;
+.back-button {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 7px 0;
+  background: transparent;
   color: #64748b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition:
-      transform 0.18s ease,
-      box-shadow 0.18s ease,
-      border-color 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease;
+  transition: color 0.18s ease;
 }
 
-.scenario-row:hover {
-  border-color: rgba(59, 130, 246, 0.35);
-  color: #2563eb;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
-  transform: translateY(-1px);
+.back-button:hover {
+  color: var(--page-blue);
 }
 
-.scenario-row.active {
-  background: #eff6ff;
-  border-color: rgba(59, 130, 246, 0.45);
-  color: #1d4ed8;
-  box-shadow:
-      0 8px 18px rgba(59, 130, 246, 0.08),
-      inset 0 0 0 1px rgba(59, 130, 246, 0.08);
-}
-
-.scenario-icon {
-  font-size: 13px;
-}
-
-.scenario-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-vertical-list {
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding-right: 2px;
-}
-
-.agent-vertical-list::-webkit-scrollbar,
-.config-body::-webkit-scrollbar,
-.enabled-list::-webkit-scrollbar,
-.input-preview::-webkit-scrollbar {
-  width: 6px;
-}
-
-.agent-vertical-list::-webkit-scrollbar-thumb,
-.config-body::-webkit-scrollbar-thumb,
-.enabled-list::-webkit-scrollbar-thumb,
-.input-preview::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.34);
-  border-radius: 999px;
-}
-
-.agent-row {
-  width: 100%;
-  min-height: 60px;
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  background: rgba(255, 255, 255, 0.68);
-  border-radius: 16px;
-  display: grid;
-  grid-template-columns: 4px 36px minmax(0, 1fr) 42px;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 10px 10px 0;
-  text-align: left;
-  cursor: pointer;
-  transition:
-      transform 0.18s ease,
-      box-shadow 0.18s ease,
-      border-color 0.18s ease,
-      background 0.18s ease,
-      opacity 0.18s ease;
-}
-
-.agent-row:hover {
-  border-color: color-mix(in srgb, var(--agent-accent) 42%, white);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 20px rgba(148, 163, 184, 0.09);
-  transform: translateY(-1px);
-}
-
-.agent-row.active {
-  border-color: color-mix(in srgb, var(--agent-accent) 52%, white);
-  background: var(--agent-soft);
-  box-shadow:
-      0 10px 24px var(--agent-glow),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.58);
-}
-
-.agent-row.disabled {
-  opacity: 0.56;
-  filter: saturate(0.82);
-}
-
-.agent-row.disabled.active {
-  opacity: 0.84;
-}
-
-.agent-color-mark {
-  width: 4px;
-  align-self: stretch;
-  border-radius: 0 999px 999px 0;
-  background: transparent;
-}
-
-.agent-row.active .agent-color-mark {
-  background: var(--agent-accent);
-}
-
-.agent-icon-box {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.9);
-  color: #64748b;
-  display: grid;
-  place-items: center;
-  transition:
-      background 0.18s ease,
-      color 0.18s ease,
-      box-shadow 0.18s ease;
-}
-
-.agent-row.active .agent-icon-box {
-  background: rgba(255, 255, 255, 0.82);
-  color: var(--agent-accent);
-  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.12);
-}
-
-.agent-icon-box :deep(svg) {
+.back-button svg {
   width: 17px;
   height: 17px;
 }
 
-.agent-row-main {
+.page-heading {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.heading-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cfe0f5;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--page-blue);
+  box-shadow:
+    0 4px 12px
+    rgba(45, 83, 126, 0.07);
+}
+
+.heading-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.heading-copy {
+  min-width: 0;
+}
+
+.page-heading h1 {
+  margin: 0;
+  color: var(
+    --color-text-strong,
+    #0f172a
+  );
+  font-size: clamp(
+    20px,
+    1.7vw,
+    24px
+  );
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.page-heading p {
+  margin: 4px 0 0;
+  color: var(
+    --color-text-muted,
+    #64748b
+  );
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.step-label {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.enabled-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.enabled-label svg {
+  width: 16px;
+  height: 16px;
+}
+
+.request-bar {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+  align-items: center;
+  gap: 28px;
+  padding: 14px 2px;
+  border-bottom: 1px solid #dfe7f0;
+}
+
+.request-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    auto
+    minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.request-copy > span,
+.scenario-label {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.request-copy p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-switcher {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scenario-options {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.scenario-options button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 13px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.scenario-options button:hover {
+  color: #334155;
+}
+
+.scenario-options button.active {
+  background:
+    var(--page-blue-soft);
+  color: var(--page-blue);
+  box-shadow:
+    0 1px 3px
+    rgba(59, 130, 246, 0.12);
+}
+
+.agent-navigation {
+  padding-top: 18px;
+}
+
+.agent-navigation-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 2px 11px;
+}
+
+.agent-navigation-title > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.agent-navigation-title strong {
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.agent-navigation-title span {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-navigation-title em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.agent-tabs {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      7,
+      minmax(142px, 1fr)
+    );
+  overflow-x: auto;
+  border-top: 1px solid #dfe7f0;
+  border-bottom: 1px solid #dfe7f0;
+  background:
+    rgba(255, 255, 255, 0.58);
+  scrollbar-width: thin;
+}
+
+.agent-tab {
+  position: relative;
+  min-width: 142px;
+  min-height: 74px;
+  display: grid;
+  grid-template-columns:
+    36px
+    minmax(0, 1fr)
+    auto;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-right: 1px solid #e7edf4;
+  padding: 11px 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.agent-tab:last-child {
+  border-right: 0;
+}
+
+.agent-tab::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 3px;
+  border-radius:
+    999px 999px 0 0;
+  background: transparent;
+}
+
+.agent-tab:hover {
+  background:
+    color-mix(
+      in srgb,
+      var(--agent-soft) 45%,
+      #ffffff
+    );
+}
+
+.agent-tab.active {
+  background:
+    color-mix(
+      in srgb,
+      var(--agent-soft) 64%,
+      #ffffff
+    );
+}
+
+.agent-tab.active::after {
+  background:
+    var(--agent-accent);
+}
+
+.agent-tab.disabled {
+  opacity: 0.52;
+}
+
+.agent-tab.disabled.active {
+  opacity: 0.72;
+}
+
+.agent-tab-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border:
+    1px solid
+    color-mix(
+      in srgb,
+      var(--agent-accent) 25%,
+      #dce5ef
+    );
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--agent-accent);
+}
+
+.agent-tab-icon :deep(svg) {
+  width: 19px;
+  height: 19px;
+}
+
+.agent-tab-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-tab-copy strong {
+  overflow: hidden;
+  color: #243244;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tab-copy small {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tab.active
+  .agent-tab-copy
+  strong,
+.agent-tab.active
+  .agent-tab-copy
+  small {
+  color: var(--agent-text);
+}
+
+.agent-tab-switch {
+  display: grid;
+  place-items: center;
+}
+
+.config-workspace {
+  /* 参数区使用系统冰川绿；多色主题仅用于上方 Agent 选择。 */
+  --agent-accent: var(--color-primary, #46b8b4);
+  --agent-soft: var(--color-primary-soft, #d8f1f0);
+  --agent-text: var(--color-primary-text, #205f67);
+
+  position: relative;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid #dce5ef;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow:
+    0 10px 28px
+    rgba(31, 55, 82, 0.06);
+}
+
+.disabled-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 18px 20px 0;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fffbeb;
+}
+
+.disabled-banner > div {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.agent-row-main strong {
+.disabled-banner strong {
+  color: #92400e;
   font-size: 13px;
   font-weight: 800;
-  color: #102f36;
 }
 
-.agent-row-main small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  line-height: 1.2;
-  color: #71828a;
-  font-weight: 500;
-}
-
-.agent-row.active .agent-row-main small {
-  color: var(--agent-text);
-}
-
-.agent-switch-wrap {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.agent-main-panel {
-  grid-row: 1 / 2;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: rgba(248, 251, 255, 0.52);
-}
-
-.config-header {
-  height: 76px;
-  flex-shrink: 0;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.76);
-  background: rgba(255, 255, 255, 0.68);
-  backdrop-filter: blur(16px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-}
-
-.config-heading {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.config-agent-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 15px;
-  background: var(--agent-soft);
-  color: var(--agent-accent);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  box-shadow: 0 8px 18px var(--agent-glow);
-}
-
-.config-agent-icon :deep(svg) {
-  width: 22px;
-  height: 22px;
-}
-
-.config-title-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.config-title-line h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 850;
-  letter-spacing: -0.02em;
-  color: #102f36;
-}
-
-.config-heading p {
-  margin: 4px 0 0;
-  color: #71828a;
+.disabled-banner span {
+  color: #a16207;
   font-size: 12px;
-  line-height: 1.45;
-  font-weight: 500;
 }
 
-.status-chip {
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.status-chip.active {
-  color: var(--agent-text);
-  background: var(--agent-soft);
-  border: 1px solid color-mix(in srgb, var(--agent-accent) 24%, white);
-}
-
-.status-chip.sleep {
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-}
-
-.header-switch {
-  transform: scale(1.08);
-}
-
-.sleep-notice {
-  margin: 18px 24px 0;
-  padding: 10px 12px;
-  border: 1px dashed rgba(245, 158, 11, 0.55);
-  background: rgba(255, 251, 235, 0.86);
-  color: #92400e;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+.disabled-banner button {
+  flex: 0 0 auto;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: #ffffff;
+  color: #b45309;
   font-size: 12px;
-  font-weight: 650;
-}
-
-.sleep-notice button {
-  height: 28px;
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  background: rgba(255, 255, 255, 0.86);
-  color: #92400e;
-  border-radius: 999px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 800;
+  font-weight: 750;
   cursor: pointer;
 }
 
-.config-body {
-  min-height: 0;
-  overflow-y: auto;
-  padding: 20px 24px 28px;
+.settings-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  padding-top: 3px;
+  transition:
+    opacity 0.18s ease,
+    filter 0.18s ease;
 }
 
-.config-body.muted {
-  opacity: 0.68;
+.settings-grid.muted {
+  opacity: 0.58;
+  filter: saturate(0.72);
 }
 
-.config-body-inner {
-  width: 100%;
-  max-width: 980px;
-  margin: 0 auto;
+.setting-item {
+  min-width: 0;
+  min-height: 184px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
-}
-
-.setting-block,
-.setting-line {
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
-}
-
-.setting-label {
-  display: flex;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
+  gap: 22px;
+  padding: 23px;
+  border-right: 1px solid #e6edf4;
+  border-bottom: 1px solid #e6edf4;
 }
 
-.setting-label strong {
-  font-size: 14px;
+.setting-item:nth-child(2n) {
+  border-right: 0;
+}
+
+.setting-item:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.setting-copy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.setting-copy > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.setting-index {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color:
+    color-mix(
+      in srgb,
+      var(--agent-accent) 70%,
+      #64748b
+    );
+  font-size: 11px;
   font-weight: 850;
-  color: #102f36;
+  letter-spacing: 0.04em;
 }
 
-.setting-label span {
-  color: #71828a;
+.setting-copy strong {
+  display: block;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.setting-copy p {
+  margin: 5px 0 0;
+  color: #8492a6;
   font-size: 12px;
-  font-weight: 500;
+  line-height: 1.5;
+}
+
+.value-badge {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background:
+    color-mix(
+      in srgb,
+      var(--agent-soft) 72%,
+      #ffffff
+    );
+  color: var(--agent-text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .option-grid {
@@ -1288,468 +1891,575 @@ function agentThemeStyle(id: string) {
   gap: 8px;
 }
 
-.option-grid.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.two-columns {
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
 }
 
-.option-grid.three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.language-grid {
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
 }
 
 .option-button {
-  min-height: 38px;
-  border: 1px solid rgba(226, 232, 240, 0.96);
-  background: rgba(255, 255, 255, 0.82);
-  border-radius: 12px;
-  color: #64748b;
+  min-height: 40px;
+  border: 1px solid #dce5ef;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #526174;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   transition:
-      transform 0.16s ease,
-      box-shadow 0.16s ease,
-      border-color 0.16s ease,
-      background 0.16s ease,
-      color 0.16s ease;
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .option-button:hover {
-  border-color: color-mix(in srgb, var(--agent-accent) 40%, white);
+  border-color:
+    color-mix(
+      in srgb,
+      var(--agent-accent) 42%,
+      #dce5ef
+    );
   color: var(--agent-text);
-  background: rgba(255, 255, 255, 0.96);
-  transform: translateY(-1px);
 }
 
 .option-button.active {
-  background: var(--agent-soft);
-  border-color: color-mix(in srgb, var(--agent-accent) 56%, white);
+  border-color:
+    color-mix(
+      in srgb,
+      var(--agent-accent) 64%,
+      #ffffff
+    );
+  background:
+    color-mix(
+      in srgb,
+      var(--agent-soft) 70%,
+      #ffffff
+    );
   color: var(--agent-text);
-  box-shadow: 0 8px 16px var(--agent-glow);
+  box-shadow:
+    inset 0 0 0 1px
+    color-mix(
+      in srgb,
+      var(--agent-accent) 14%,
+      transparent
+    );
 }
 
 .segmented-control {
-  min-height: 44px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 13px;
-  background: rgba(248, 250, 252, 0.82);
-  padding: 4px;
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 4px;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  background: #f8fafc;
 }
 
 .segmented-control button {
+  min-height: 36px;
   border: 0;
+  border-radius: 7px;
+  padding: 6px 8px;
   background: transparent;
-  border-radius: 10px;
   color: #64748b;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   transition:
-      color 0.16s ease,
-      background 0.16s ease,
-      box-shadow 0.16s ease;
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.segmented-control button:hover {
+  color: #334155;
 }
 
 .segmented-control button.active {
   background: #ffffff;
   color: var(--agent-text);
-  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.13);
+  box-shadow:
+    0 2px 7px
+    rgba(30, 52, 76, 0.09);
 }
 
 .clean-select {
   width: 100%;
-  height: 42px;
-  border: 1px solid rgba(226, 232, 240, 0.96);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  color: #102f36;
-  outline: none;
-  padding: 0 12px;
+  min-height: 42px;
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: light;
+  forced-color-adjust: none;
+  border: 1px solid #dce5ef;
+  border-radius: 9px;
+  padding: 0 42px 0 13px;
+
+  background-color: #ffffff !important;
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent 50%,
+      #7b8a9d 50%
+    ),
+    linear-gradient(
+      135deg,
+      #7b8a9d 50%,
+      transparent 50%
+    );
+  background-position:
+    calc(100% - 18px) 18px,
+    calc(100% - 13px) 18px;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+
+  color: #334155 !important;
   font-size: 13px;
   font-weight: 650;
+  outline: none;
+  cursor: pointer;
   transition:
-      border-color 0.16s ease,
-      box-shadow 0.16s ease,
-      background 0.16s ease;
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
-.clean-select:focus {
-  background: #ffffff;
-  border-color: color-mix(in srgb, var(--agent-accent) 52%, white);
-  box-shadow: 0 0 0 4px var(--agent-glow);
+.clean-select:hover {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--agent-accent) 48%,
+      #dce5ef
+    );
+  background-color: #ffffff !important;
+  color: #334155 !important;
+}
+
+.clean-select:focus,
+.clean-select:focus-visible {
+  border-color:
+    color-mix(
+      in srgb,
+      var(--agent-accent) 56%,
+      #dce5ef
+    );
+  background-color: #ffffff !important;
+  color: #334155 !important;
+  box-shadow:
+    0 0 0 3px
+    color-mix(
+      in srgb,
+      var(--agent-soft) 72%,
+      transparent
+    );
+}
+
+.clean-select:disabled {
+  background-color: #f8fafc !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed;
+}
+
+.clean-select option,
+.clean-select optgroup {
+  color-scheme: light;
+  background-color: #ffffff !important;
+  color: #334155 !important;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.clean-select option:hover,
+.clean-select option:focus {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.clean-select option:checked {
+  background:
+    linear-gradient(
+      0deg,
+      #eff6ff,
+      #eff6ff
+    ) !important;
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 700;
+}
+
+.range-wrap {
+  width: 100%;
 }
 
 .clean-range {
   width: 100%;
-  accent-color: var(--agent-accent);
+  height: 5px;
+  appearance: none;
+  border-radius: 999px;
+  background: #e5ebf2;
+  outline: none;
+  cursor: pointer;
 }
 
-.setting-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.setting-line strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #102f36;
-  font-size: 14px;
-  font-weight: 850;
-}
-
-.setting-line span {
-  display: block;
-  color: #71828a;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.hint-text {
-  margin: 10px 0 0;
-  color: #71828a;
-  font-size: 12px;
-  line-height: 1.6;
-  font-weight: 500;
-}
-
-.agent-right-panel {
-  grid-row: 1 / 2;
-  min-height: 0;
-  background: rgba(255, 255, 255, 0.64);
-  backdrop-filter: blur(18px);
-  border-left: 1px solid rgba(226, 232, 240, 0.72);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.summary-block {
-  padding: 16px 16px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
-}
-
-.summary-block.fill {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.summary-block.compact {
-  flex-shrink: 0;
-}
-
-.summary-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.summary-title span {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #3b82f6;
-}
-
-.summary-title strong {
-  font-size: 13px;
-  font-weight: 850;
-  color: #102f36;
-}
-
-.input-preview {
-  margin: 0;
-  max-height: 90px;
-  overflow-y: auto;
-  color: #475569;
-  font-size: 13px;
-  line-height: 1.65;
-  font-weight: 550;
-}
-
-.scenario-desc {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(203, 213, 225, 0.86);
-}
-
-.scenario-desc span {
-  display: block;
-  margin-bottom: 5px;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.scenario-desc strong {
-  color: #2563eb;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.enabled-list {
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.enabled-row {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 10px;
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.025);
-}
-
-.enabled-dot {
-  width: 8px;
-  height: 8px;
+.clean-range::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  appearance: none;
+  border: 4px solid #ffffff;
   border-radius: 50%;
   background: var(--agent-accent);
-  box-shadow: 0 0 0 4px var(--agent-glow);
+  box-shadow:
+    0 1px 5px
+    rgba(30, 41, 59, 0.2);
 }
 
-.enabled-row strong {
-  display: block;
-  color: #102f36;
-  font-size: 12px;
-  font-weight: 850;
+.clean-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 4px solid #ffffff;
+  border-radius: 50%;
+  background: var(--agent-accent);
+  box-shadow:
+    0 1px 5px
+    rgba(30, 41, 59, 0.2);
 }
 
-.enabled-row small {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #71828a;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.check-row {
+.range-scale {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  min-height: 32px;
-  color: #64748b;
-  font-size: 12px;
+  margin-top: 9px;
+  color: #a0aec0;
+  font-size: 10px;
   font-weight: 650;
 }
 
-.check-row strong {
-  color: #102f36;
-  font-weight: 850;
-}
-
-.check-row strong.danger {
-  color: #b45309;
-}
-
-.bottom-action-bar {
-  grid-column: 1 / -1;
-  grid-row: 2 / 3;
-  height: 66px;
-  border-top: 1px solid rgba(226, 232, 240, 0.76);
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(18px);
-  display: flex;
+.switch-setting {
+  flex-direction: row;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 0 20px;
-  box-sizing: border-box;
-}
-
-.ghost-button,
-.primary-button {
-  height: 40px;
-  border-radius: 999px;
-  padding: 0 16px;
-  font-size: 13px;
-  font-weight: 850;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition:
-      transform 0.18s ease,
-      box-shadow 0.18s ease,
-      border-color 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease;
-}
-
-.ghost-button {
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: rgba(255, 255, 255, 0.76);
-  color: #64748b;
-}
-
-.ghost-button:hover {
-  border-color: rgba(59, 130, 246, 0.42);
-  color: #2563eb;
-  background: #ffffff;
-  transform: translateY(-1px);
-}
-
-.primary-button {
-  border: 0;
-  background: var(--cat-resource, #3b82f6);
-  color: #ffffff;
-  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.22);
-}
-
-.primary-button:hover {
-  background: var(--color-info, #2563eb);
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(59, 130, 246, 0.28);
-}
-
-.button-icon {
-  width: 15px;
-  height: 15px;
-}
-
-.footer-warning {
-  margin: 0;
-  color: #b45309;
-  font-size: 12px;
-  font-weight: 750;
-  text-align: center;
 }
 
 .compact-switch {
   position: relative;
-  width: 38px;
-  height: 22px;
-  display: inline-block;
-  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
 }
 
 .compact-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
   opacity: 0;
-  width: 0;
-  height: 0;
+  pointer-events: none;
 }
 
-.compact-switch span {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  background: #d7e0e4;
+.compact-switch > span {
+  position: relative;
+  width: 30px;
+  height: 18px;
   border-radius: 999px;
-  transition:
-      background 0.18s ease,
-      box-shadow 0.18s ease;
+  background: #cbd5e1;
+  transition: background 0.18s ease;
 }
 
-.compact-switch span::before {
-  content: "";
+.compact-switch > span::after {
+  content: '';
   position: absolute;
-  width: 16px;
-  height: 16px;
-  left: 3px;
   top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #ffffff;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
-  transition: transform 0.18s ease;
+  box-shadow:
+    0 1px 3px
+    rgba(15, 23, 42, 0.22);
+  transition:
+    transform 0.18s ease;
 }
 
-.compact-switch input:checked + span {
-  background: var(--agent-accent, #3b82f6);
-  box-shadow: 0 0 0 4px var(--agent-glow, rgba(59, 130, 246, 0.14));
+.compact-switch
+  input:checked
+  + span {
+  background:
+    var(
+      --agent-accent,
+      var(--page-blue)
+    );
 }
 
-.compact-switch input:checked + span::before {
-  transform: translateX(16px);
+.compact-switch
+  input:checked
+  + span::after {
+  transform: translateX(12px);
 }
 
-button,
-select {
-  font-family: inherit;
+.large-switch > span {
+  width: 42px;
+  height: 24px;
 }
 
-@media (max-width: 1440px) {
-  .agent-config-shell {
-    grid-template-columns: 252px minmax(0, 1fr) 268px;
+.large-switch > span::after {
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+}
+
+.large-switch
+  input:checked
+  + span::after {
+  transform: translateX(18px);
+}
+
+.action-footer {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 17px;
+  border-top: 1px solid #dfe7f0;
+  padding: 17px 2px 0;
+}
+
+.footer-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.footer-copy strong {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.footer-copy span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.primary-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid var(--page-blue);
+  border-radius: 10px;
+  padding: 0 18px;
+  background: var(--page-blue);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow:
+    0 8px 18px
+    rgba(59, 130, 246, 0.22);
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 24px
+    rgba(59, 130, 246, 0.28);
+}
+
+.primary-button:disabled {
+  border-color: #cbd5e1;
+  background: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.primary-button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.primary-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (max-width: 1120px) {
+  .config-topbar {
+    grid-template-columns:
+      44px
+      minmax(0, 1fr)
+      auto;
   }
-}
 
-@media (max-width: 1280px) {
-  .agent-config-shell {
-    grid-template-columns: 240px minmax(0, 1fr) 250px;
-  }
-
-  .option-grid.three {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1080px) {
-  .agent-config-page {
-    padding: 10px;
-  }
-
-  .agent-config-shell {
-    grid-template-columns: 250px minmax(0, 1fr);
-  }
-
-  .agent-right-panel {
+  .back-button span {
     display: none;
   }
 
-  .config-body-inner {
-    max-width: 100%;
+  .request-bar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .scenario-switcher {
+    justify-content: space-between;
+  }
+
+  .language-grid {
+    grid-template-columns:
+      repeat(
+        4,
+        minmax(86px, 1fr)
+      );
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 820px) {
   .agent-config-page {
-    height: auto;
-    min-height: calc(100vh - var(--navbar-height, 72px));
+    padding:
+      16px
+      14px
+      24px;
   }
 
-  .agent-config-shell {
-    height: auto;
-    min-height: calc(100vh - var(--navbar-height, 72px) - 20px);
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
+  .config-topbar {
+    grid-template-columns:
+      auto
+      minmax(0, 1fr);
+    gap: 12px;
   }
 
-  .agent-left-rail {
-    border-right: 0;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.72);
-  }
-
-  .agent-right-panel {
-    display: flex;
-    border-left: 0;
-    border-top: 1px solid rgba(226, 232, 240, 0.72);
-  }
-
-  .bottom-action-bar {
+  .page-heading {
     position: static;
-    height: auto;
-    min-height: 66px;
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 12px 16px;
+    transform: none;
+  }
+
+  .topbar-status {
+    display: none;
+  }
+
+  .page-heading p,
+  .agent-navigation-title span {
+    display: none;
+  }
+
+  .request-copy {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .scenario-switcher {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .scenario-options {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .scenario-options button {
+    flex: 1 0 auto;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .setting-item,
+  .setting-item:nth-child(2n),
+  .setting-item:nth-last-child(-n + 2) {
+    min-height: auto;
+    border-right: 0;
+    border-bottom:
+      1px solid #e6edf4;
+  }
+
+  .setting-item:last-child {
+    border-bottom: 0;
+  }
+
+  .language-grid {
+    grid-template-columns:
+      repeat(
+        3,
+        minmax(0, 1fr)
+      );
+  }
+
+  .action-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 540px) {
+  .page-heading {
+    gap: 9px;
+  }
+
+  .heading-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .page-heading h1 {
+    font-size: 19px;
+  }
+
+  .disabled-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    margin: 14px 16px 0;
+  }
+
+  .setting-item {
+    padding: 20px 16px;
+  }
+
+  .two-columns,
+  .language-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+  .switch-setting {
+    align-items: flex-start;
+  }
+}
+
+@media (
+  prefers-reduced-motion: reduce
+) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior:
+      auto !important;
+    transition-duration:
+      0.01ms !important;
+    animation-duration:
+      0.01ms !important;
+    animation-iteration-count:
+      1 !important;
   }
 }
 </style>

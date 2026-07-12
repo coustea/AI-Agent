@@ -41,7 +41,6 @@ AGENT_TIMEOUTS: dict[str, float] = {
     "code": 600.0,
     "reading": 600.0,
     "ppt": 900.0,
-    "video": 1200.0,
     "cartoon": 1800.0,
 }
 
@@ -53,7 +52,6 @@ AGENT_START_MESSAGES: dict[str, str] = {
     "code": "开始生成代码实操案例...",
     "reading": "开始生成拓展阅读资源...",
     "ppt": "开始生成教学课件...",
-    "video": "开始生成讲解视频...",
     "cartoon": "开始生成动画讲解视频...",
 }
 
@@ -142,6 +140,17 @@ async def _run_agent_lifecycle(
             agent_id=agent_id,
             stage="generation",
             exception=exc,
+            started_at=started,
+            events=events,
+        )
+
+    if result.success is not True:
+        generation_stage = str(result.metadata.get("generation_stage") or "generation")
+        return await _record_failure(
+            resource_id=resource_id,
+            agent_id=agent_id,
+            stage=generation_stage,
+            exception=RuntimeError(result.error or "Agent returned success=False"),
             started_at=started,
             events=events,
         )

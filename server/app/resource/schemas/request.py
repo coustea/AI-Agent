@@ -35,7 +35,6 @@ class ResourceAgentId(str, Enum):
     READING = "reading"
     CODE = "code"
     PPT = "ppt"
-    VIDEO = "video"
     CARTOON = "cartoon"
 
 
@@ -98,22 +97,13 @@ class ReadingConfig(BaseModel):
     focus: Literal["textbook", "engineering", "research"] = "textbook"
 
 
-class VideoConfig(BaseModel):
-    """视频 Agent 配置 — 4 个核心参数，全部影响生成内容。"""
-
-    style: Literal["precision_light", "systems_dark", "editorial_classroom"] = "precision_light"
-    focus: Literal["concept", "process", "comparison", "practice"] = "concept"
-    voice: Literal["teacher", "coach"] = "teacher"
-    aspect_ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
-
-
 class CartoonConfig(BaseModel):
-    """动画讲解 Agent 配置 — 4 个参数全部影响 HTML 输出."""
+    """动画讲解 Agent 配置 — 仅保留影响脚本 LLM 输出的参数。"""
 
-    style: Literal["diagram", "minimal", "dark_tech", "chalkboard"] = "diagram"
+    model_config = ConfigDict(extra="forbid")
+
     depth: Literal["overview", "standard", "deep"] = "standard"
     pace: Literal["fast", "normal", "slow"] = "normal"
-    visuals: Literal["clean", "balanced", "detailed"] = "balanced"
 
 
 class AgentConfigs(BaseModel):
@@ -126,7 +116,6 @@ class AgentConfigs(BaseModel):
     code: CodeConfig = Field(default_factory=CodeConfig)
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
     ppt: PPTPreferences = Field(default_factory=PPTPreferences)
-    video: VideoConfig = Field(default_factory=VideoConfig)
     cartoon: CartoonConfig = Field(default_factory=CartoonConfig)
 
     def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
@@ -180,12 +169,12 @@ class ResourceGenerationRequest(BaseModel):
             raise ValueError(
                 f"selected_agents 过滤 enabled=true 后至少需要 {MIN_SELECTED_AGENTS} 个 Agent"
             )
-        aggregation_agent_ids = enabled_agent_ids & {"ppt", "video", "cartoon"}
+        aggregation_agent_ids = enabled_agent_ids & {"ppt", "cartoon"}
         base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
         # 聚合 Agent 必须至少有一个基础 Agent 提供素材
         if aggregation_agent_ids and not base_agent_ids:
             raise ValueError(
-                "PPT/Video/Cartoon 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
+                "PPT/Cartoon 聚合 Agent 至少需要一个基础资源 Agent 提供素材"
             )
         # 按默认顺序排序后返回
         self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)

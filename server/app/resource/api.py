@@ -3,11 +3,9 @@ Resource HTTP routes.
 
 API 端点：
 - POST /resources - 创建后台资源生成任务
-- POST /resources/single - 创建单智能体资源生成任务
 - GET /resources/{id}/status - 查询任务执行状态
 - GET /resources/{id}/events - SSE 推送任务事件
 - GET /resources/agents - 查询可用 Agent 列表
-- GET /resources/ppt/templates - 查询 PPT 模板列表
 - GET /resources - 查询资源列表
 - GET /resources/{id} - 查询资源详情
 """
@@ -28,7 +26,7 @@ from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.profile.service import ProfileService
-from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, SingleResourceRequest, AgentSelection, AgentConfigs
+from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, AgentConfigs
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.infra.response import HttpResponse
@@ -38,7 +36,6 @@ from app.resource.event import (
     encode_resource_sse,
     get_resource_channel,
 )
-from app.shared.ppt import PPTGenerator
 
 
 router = APIRouter()
@@ -46,7 +43,7 @@ logger = get_logger(__name__)
 
 # 当前多智能体资源生成页面开放全部资源 Agent。
 FRONTEND_RESOURCE_AGENT_IDS = frozenset(
-    {"content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon", "video"}
+    {"content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon"}
 )
 
 
@@ -62,10 +59,17 @@ async def create_resource_task(
         current_user.id,
         req.enabled_agent_ids(),
     )
+    profile_service = ProfileService()
+    profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
+    from app.evaluation.guidance import get_effective_guidance_strategy
+    guidance_strategy = await get_effective_guidance_strategy(session, current_user.id)
     service = ResourceService(session)
     result = await service.create_task(
         user_id=current_user.id,
         request=req,
+        profile_markdown=profile_markdown,
+        username=current_user.username,
+        guidance_strategy=guidance_strategy,
     )
     resource_id = result["resource_id"]
 
@@ -77,83 +81,15 @@ async def create_resource_task(
     await events.open()
 
     # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
-    profile_service = ProfileService()
-    profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
     asyncio.create_task(
         run_multi_agent_generation(
             user_id=current_user.id,
             resource_id=resource_id,
-            selected_agents=req.enabled_agent_ids(),
-            request_data={
-                "learning_need": req.learning_need,
-                "learning_scenario": req.learning_scenario,
-                "agent_configs": req.agent_configs.model_dump(mode="json"),
-                "username": current_user.username,
-            },
-            profile={"markdown": profile_markdown},
         )
     )
 
     # 立即返回 resource_id，实际生成在后台进行
     return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
-
-
-@router.post("/resources/single")
-async def create_single_resource_task(
-    req: SingleResourceRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """启动单智能体资源生成后台任务。"""
-    agent_id_str = req.agent_id.value
-    logger.info(
-        "[ResourceAPI] 收到单智能体生成请求: user_id=%s agent_id=%s",
-        current_user.id,
-        agent_id_str,
-    )
-
-    service = ResourceService(session)
-    request = ResourceGenerationRequest.model_construct(
-        learning_need=req.learning_need,
-        learning_scenario="self_study",
-        selected_agents=[AgentSelection(agent_id=req.agent_id, enabled=True)],
-        agent_configs=AgentConfigs(),
-    )
-    result = await service.create_task(
-        user_id=current_user.id,
-        request=request,
-    )
-    resource_id = result["resource_id"]
-
-    # 创建事件频道
-    events = ResourceEvents(
-        user_id=current_user.id,
-        resource_id=resource_id,
-    )
-    await events.open()
-
-    # 启动后台生成
-    profile_service = ProfileService()
-    profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
-    asyncio.create_task(
-        run_multi_agent_generation(
-            user_id=current_user.id,
-            resource_id=resource_id,
-            selected_agents=[agent_id_str],
-            request_data={
-                "learning_need": req.learning_need,
-                "learning_scenario": "self_study",
-                "agent_configs": {},
-                "username": current_user.username,
-            },
-            profile={"markdown": profile_markdown},
-        )
-    )
-
-    return HttpResponse.success(
-        data={"resource_id": resource_id, "status": "generating", "agent_id": agent_id_str},
-        status_code=201,
-    )
 
 
 @router.get("/resources/{resource_id}/status")
@@ -262,14 +198,6 @@ async def list_agents():
     return HttpResponse.success(data=agents)
 
 
-@router.get("/resources/ppt/templates")
-async def list_ppt_templates(
-    current_user: User = Depends(get_current_user),
-):
-    """查询当前 PPT 模块中可用的运行时模板。"""
-    return HttpResponse.success(data=PPTGenerator.available_templates())
-
-
 @router.get("/resources")
 async def list_resources(
     limit: int = Query(default=20, ge=1, le=100),
@@ -352,21 +280,16 @@ async def get_public_item_video(
     item_id: int,
     session: AsyncSession = Depends(get_session),
 ):
-    """公开获取 Video/Cartoon 的 MP4 视频文件。"""
+    """公开获取 Cartoon 的 MP4 视频文件。"""
     from app.infra.models import GeneratedResourceItem as ItemModel
 
     item = await session.get(ItemModel, item_id)
-    # 仅 Video/Cartoon 产出 MP4，其他类型拒绝访问
-    if not item or item.agent_type not in ("video", "cartoon"):
+    if not item or item.agent_type != "cartoon":
         return HttpResponse.error(code=404, message="视频资源不存在")
 
     video_path = None
-    # 从不同 agent_type 的元数据中取出视频路径
     if item.metadata_json:
-        if item.agent_type == "video":
-            video_path = item.metadata_json.get("file_path")
-        elif item.agent_type == "cartoon":
-            video_path = item.metadata_json.get("video_file_path")
+        video_path = item.metadata_json.get("video_file_path")
 
     if not video_path or not os.path.exists(video_path):
         return HttpResponse.error(code=404, message="视频文件未找到")

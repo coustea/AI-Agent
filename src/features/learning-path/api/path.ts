@@ -9,7 +9,7 @@ import type {
   PathQuizRound,
   PathQuizSubmitRequest,
   PathQuizSubmitResponse,
-  PathResourceDetail,
+  PathResourceTaskResponse,
   PathLearningEvaluationResponse,
 } from '@/features/learning-path/model/path'
 
@@ -18,9 +18,9 @@ export function createLearningPath(payload: PathRequest) {
   return http.post<ApiResponse<CreatePathResponse>>('/ai/path-plan', payload)
 }
 
-// 获取当前激活的路径概览（含 stages + nodes 树形结构）
+// 获取最近更新的可继续学习路径概览
 export function getCurrentLearningPath() {
-  return http.get<ApiResponse<PathOverview | null>>('/ai/path-plan/active')
+  return http.get<ApiResponse<PathOverview | null>>('/ai/path-plan/latest')
 }
 
 // 按 ID 查询指定路径的完整概览
@@ -31,11 +31,6 @@ export function getLearningPathById(pathId: number) {
 // 获取当前用户的历史路径列表
 export function getLearningPathHistory() {
   return http.get<ApiResponse<LearningPathHistoryItem[]>>('/ai/path-plan/history')
-}
-
-// 切换到指定路径作为当前激活路径
-export function activateLearningPath(pathId: number) {
-  return http.post<ApiResponse<PathOverview>>(`/ai/path-plan/${pathId}/activate`)
 }
 
 // 获取节点工作空间：含当前教程、所有教程列表、资源列表、题目轮次信息
@@ -72,21 +67,15 @@ export function submitNodeQuiz(nodeId: number, payload: PathQuizSubmitRequest) {
   return http.post<ApiResponse<PathQuizSubmitResponse>>(`/ai/path-plan/nodes/${nodeId}/quiz-submit`, payload)
 }
 
-// 生成/获取节点辅助资源（统一接口）
+// 生成节点辅助资源（统一接口）
 const RESOURCE_TYPES = ['mindmap', 'code', 'ppt', 'reading', 'cartoon'] as const
 type ResourceType = (typeof RESOURCE_TYPES)[number]
 
 export function generateNodeResource(nodeId: number, resourceType: ResourceType) {
-  return http.post<ApiResponse<PathResourceDetail>>(
+  return http.post<ApiResponse<PathResourceTaskResponse>>(
     `/ai/path-plan/nodes/${nodeId}/resources/${resourceType}`,
     null,
-    { timeout: 120000 }
-  )
-}
-
-export function getNodeResource(nodeId: number, resourceType: ResourceType) {
-  return http.get<ApiResponse<PathResourceDetail | null>>(
-    `/ai/path-plan/nodes/${nodeId}/resources/${resourceType}`
+    { timeout: 30000 }
   )
 }
 

@@ -134,8 +134,18 @@ async def build_assessment_facts(
     viewed = sum(1 for e in events if e.event_type == "resource_viewed")
     completed = sum(1 for e in events if e.event_type == "resource_completed")
     
-    helpful = sum(1 for e in events if e.event_type == "resource_feedback" and e.event_metadata.get("feedback") == "helpful")
-    not_helpful = sum(1 for e in events if e.event_type == "resource_feedback" and e.event_metadata.get("feedback") == "not_helpful")
+    helpful = sum(
+        1
+        for e in events
+        if e.event_type == "resource_feedback"
+        and (e.event_metadata or {}).get("feedback") == "helpful"
+    )
+    not_helpful = sum(
+        1
+        for e in events
+        if e.event_type == "resource_feedback"
+        and (e.event_metadata or {}).get("feedback") == "not_helpful"
+    )
 
     # Learning path
     nodes_started = sum(1 for e in events if e.event_type == "path_node_started")
@@ -151,7 +161,7 @@ async def build_assessment_facts(
                 practice_events.append(e)
 
     submitted = len(practice_events)
-    correct = sum(1 for e in practice_events if e.event_metadata.get("is_correct") is True)
+    correct = sum(1 for e in practice_events if (e.event_metadata or {}).get("is_correct") is True)
     accuracy = (correct / submitted) if submitted > 0 else 0.0
 
     # Group practice by topic
@@ -166,12 +176,12 @@ async def build_assessment_facts(
     insufficient_topics = []
     for topic, evts in topic_practice_map.items():
         sub = len(evts)
-        corr = sum(1 for e in evts if e.event_metadata.get("is_correct") is True)
+        corr = sum(1 for e in evts if (e.event_metadata or {}).get("is_correct") is True)
         acc = (corr / sub) if sub > 0 else 0.0
         
         attempts = set()
         for e in evts:
-            attempt_idx = e.event_metadata.get("attempt_index")
+            attempt_idx = (e.event_metadata or {}).get("attempt_index")
             if attempt_idx is not None:
                 attempts.add(attempt_idx)
             else:

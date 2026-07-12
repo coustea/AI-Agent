@@ -167,39 +167,18 @@ class QuizAgent(BaseResourceAgent):
         prompt: str,
         blueprint: list[QuizBlueprintSlot],
     ) -> QuizPayload:
-        """使用结构化输出生成题库；语义不匹配时仅做一次定向纠正。"""
-        try:
-            # 首次尝试：结构化输出并校验
-            payload = await self.llm.ainvoke_json(
-                QuizPayload,
-                prompt,
-            )
-            payload = QuizPayload.model_validate(payload)
+        """生成题库并在统一 JSON 边界校验确定性题目蓝图。
+
+        ``ainvoke_json`` 保存首次原始输出；当蓝图校验失败时，会把那份原文
+        与错误一起交回模型修复一次。因此这里不能再发起脱离原文的第二次生成。
+        """
+        def validate_blueprint(candidate: object) -> None:
+            payload = QuizPayload.model_validate(candidate)
             validate_quiz_payload(payload, blueprint)
-            return payload
-        except Exception as first_error:
-            # 首次失败：将校验错误回灌模型做定向纠正
-            logger.warning(
-                "Agent[quiz] 首次结构化输出不符合题库契约，正在定向纠正: %s",
-                first_error,
-            )
-            await self.emitter.send(
-                self.agent_id,
-                "running",
-                "正在按题目蓝图纠正输出结构...",
-                75,
-            )
-            correction_prompt = (
-                f"{prompt}\n\n"
-                "## 上一次输出的校验错误\n"
-                f"{str(first_error)[:1600]}\n\n"
-                "重新生成完整 QuizPayload。只纠正上述结构或蓝图偏差，"
-                "仍须保持题目准确、选项有区分度、解析能够说明正确与错误原因。"
-            )
-            payload = await self.llm.ainvoke_json(
-                QuizPayload,
-                correction_prompt,
-            )
-            payload = QuizPayload.model_validate(payload)
-            validate_quiz_payload(payload, blueprint)
-            return payload
+
+        payload = await self.llm.ainvoke_json(
+            QuizPayload,
+            prompt,
+            validator=validate_blueprint,
+        )
+        return QuizPayload.model_validate(payload)

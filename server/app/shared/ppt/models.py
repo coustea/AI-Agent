@@ -51,14 +51,17 @@ class PPTSource(PPTModel):
 
 
 class PPTPreferences(PPTModel):
-    template: str = Field(
-        default="auto",
-        min_length=1,
-        max_length=64,
-        pattern=r"^(auto|[a-z0-9]+(?:-[a-z0-9]+)*)$",
-    )
+    """PPT 生成偏好 — 四项参数只影响大纲 LLM 内容输出。"""
 
-    explanation_style: Literal[
+    template: Literal[
+        "auto",
+        "teaching",
+        "technical",
+        "case_study",
+        "exam_review",
+    ] = "auto"
+
+    narrative_style: Literal[
         "concept",
         "case_driven",
         "problem_led",
@@ -71,7 +74,7 @@ class PPTPreferences(PPTModel):
         "detailed",
     ] = "standard"
 
-    focus: list[
+    emphasis: list[
         Literal[
             "core_concepts",
             "cases",
@@ -197,6 +200,50 @@ class PPTSlide(PPTModel):
 
     animation: AnimationKind = "reveal"
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_llm_shape(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+
+        slide_type = value.get("type")
+        normalized = dict(value)
+
+        if slide_type == "cover" and not (
+            normalized.get("statement") or normalized.get("question")
+        ):
+            statement = normalized.get("subtitle") or normalized.get("title")
+            if statement:
+                normalized["statement"] = statement
+
+        if slide_type == "agenda" and not normalized.get("steps"):
+            points = normalized.get("points")
+            if isinstance(points, list) and points:
+                steps: list[dict[str, str]] = []
+                for index, point in enumerate(points[:7], start=1):
+                    if not isinstance(point, dict):
+                        continue
+                    label = str(point.get("label") or "").strip()
+                    detail = str(point.get("detail") or "").strip()
+                    if label and detail:
+                        steps.append(
+                            {
+                                "key": f"{index:02d}",
+                                "title": label,
+                                "detail": detail,
+                            }
+                        )
+
+                if steps:
+                    normalized["steps"] = steps
+
+        if slide_type == "agenda" and not normalized.get("statement"):
+            statement = normalized.get("title") or normalized.get("speaker_notes")
+            if statement:
+                normalized["statement"] = statement
+
+        return normalized
+
     @model_validator(mode="after")
     def validate_required_content(self) -> "PPTSlide":
         has_table = bool(self.table.headers and self.table.rows)
@@ -235,7 +282,7 @@ class PPTPlan(PPTModel):
     language: str = "zh-CN"
     template_preference: PPTTemplatePreference = Field(default_factory=PPTTemplatePreference)
 
-    slides: list[PPTSlide] = Field(min_length=14, max_length=18)
+    slides: list[PPTSlide] = Field(min_length=13, max_length=15)
 
     @model_validator(mode="after")
     def validate_teaching_rhythm(self) -> "PPTPlan":
@@ -272,8 +319,8 @@ class PPTPlan(PPTModel):
 
         middle = types[len(prefix) : -len(suffix)]
 
-        if middle.count("knowledge_explain") < 3:
-            raise ValueError("teaching deck requires at least three knowledge_explain slides")
+        if middle.count("knowledge_explain") < 2:
+            raise ValueError("teaching deck requires at least two knowledge_explain slides")
 
         unexpected = [
             slide_type
@@ -296,7 +343,7 @@ class PPTPlan(PPTModel):
 class PPTArtifact(PPTModel):
     path: Path
     plan: PPTPlan
-    plan_markdown: str = ""
+    plan_json: str = ""
     template_id: str
     template_name: str
     slide_count: int

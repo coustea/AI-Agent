@@ -52,8 +52,8 @@ export function useGeneration() {
     quiz: { question_count: 5, difficulty_mode: 'adaptive', emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
-    ppt: { template: 'auto', explanation_style: 'concept', density: 'standard', focus: ['core_concepts'] },
-    cartoon: { style: 'diagram', depth: 'standard', pace: 'normal', visuals: 'balanced' },
+    ppt: { template: 'auto', narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
+    cartoon: { depth: 'standard', pace: 'normal' },
   })
 
   // DAG 选中的智能体 id 列表（直接使用 enabledAgentIds）
@@ -96,6 +96,44 @@ export function useGeneration() {
   const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
   // SSE 事件流连接管理
   const resourceEvents = useResourceEvents()
+  // 任务选择集在创建时已由后端持久化；这里保留本次页面会话缓存，防止首次
+  // 轮询早于后端写入快照时用不完整数据覆盖用户刚刚选择的 Agent。
+  const selectedAgentsHydrated = ref(false)
+
+  function selectedAgentsCacheKey(resourceId: number) {
+    return `resource-generation:selected-agents:${resourceId}`
+  }
+
+  function cacheSelectedAgents(resourceId: number, agentIds: ResourceAgentId[]) {
+    sessionStorage.setItem(selectedAgentsCacheKey(resourceId), JSON.stringify(agentIds))
+  }
+
+  function readCachedSelectedAgents(resourceId: number): ResourceAgentId[] {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(selectedAgentsCacheKey(resourceId)) || '[]')
+      return Array.isArray(parsed)
+        ? parsed.filter(id => typeof id === 'string' && AGENT_DISPLAY[id]) as ResourceAgentId[]
+        : []
+    } catch {
+      return []
+    }
+  }
+
+  function hydrateSelectedAgents(resourceId: number, selectedAgents: string[]) {
+    const fromStatus = selectedAgents.filter(id => AGENT_DISPLAY[id]) as ResourceAgentId[]
+    const cached = readCachedSelectedAgents(resourceId)
+    // 首次恢复优先使用任务快照；旧任务的快照若尚不完整，则以会话缓存补齐，
+    // 后续轮询只补全，绝不移除已进入本次任务的卡片。
+    const authoritative = fromStatus.length ? fromStatus : cached
+    const merged = selectedAgentsHydrated.value
+      ? [...new Set([...enabledAgentIds.value, ...authoritative])]
+      : [...new Set([...authoritative, ...cached])]
+    if (merged.length) {
+      enabledAgentIds.value = merged
+      cacheSelectedAgents(resourceId, merged)
+    }
+    selectedAgentsHydrated.value = true
+  }
 
   // 选中某个 DAG 节点，展开其详情
   function selectDagNode(id: string) {
@@ -338,8 +376,8 @@ export function useGeneration() {
   function applyTaskStatus(taskStatus: ResourceTaskStatus) {
     if (taskStatus.learning_need) naturalInput.value = taskStatus.learning_need
     // 恢复已选智能体列表
-    if (Array.isArray(taskStatus.selected_agents) && taskStatus.selected_agents.length) {
-      enabledAgentIds.value = taskStatus.selected_agents.filter(id => AGENT_DISPLAY[id]) as ResourceAgentId[]
+    if (Array.isArray(taskStatus.selected_agents)) {
+      hydrateSelectedAgents(taskStatus.resource_id, taskStatus.selected_agents)
     }
     // 合并资源摘要，保留已有的详细 content 避免覆盖
     if (Array.isArray(taskStatus.resources)) {
@@ -502,6 +540,8 @@ export function useGeneration() {
       // 发起生成请求并获取资源 id
       const { resource_id } = (await startResourceGeneration(requestParams)).data.data
       activeResourceId.value = resource_id
+      selectedAgentsHydrated.value = true
+      cacheSelectedAgents(resource_id, enabledAgentIds.value)
       // 将资源 id 写入 URL query，支持刷新后恢复
       await router.replace({
         query: {
@@ -532,6 +572,7 @@ export function useGeneration() {
     selectedDagNodeId.value = null
     planReady.value = false
     latestArtifactAgentId.value = null
+    selectedAgentsHydrated.value = false
   }
 
   // 停止轮询定时器
@@ -557,6 +598,12 @@ export function useGeneration() {
     initializeWaitingNodes()
     activeResourceId.value = resourceId
     isGenerating.value = true
+
+    const cachedSelection = readCachedSelectedAgents(resourceId)
+    if (cachedSelection.length) {
+      enabledAgentIds.value = cachedSelection
+      selectedAgentsHydrated.value = true
+    }
 
     try {
       // 拉取当前任务状态并应用

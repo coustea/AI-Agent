@@ -1,4 +1,3 @@
-from app.shared.ppt.compiler import PPTCompileError, compile_ppt_plan
 from app.shared.ppt.generator import PPTGenerationError, PPTGenerator
 from app.shared.ppt.models import (
     ComparisonTable,
@@ -24,7 +23,6 @@ __all__ = [
     "KnowledgeBranch",
     "MisconceptionItem",
     "PPTArtifact",
-    "PPTCompileError",
     "PPTGenerationError",
     "PPTGenerator",
     "PPTPlan",
@@ -35,5 +33,4 @@ __all__ = [
     "PathPPT",
     "ProcessStep",
     "ResourcePPT",
-    "compile_ppt_plan",
 ]

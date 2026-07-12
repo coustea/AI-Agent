@@ -1,8 +1,7 @@
 """chat 模块事件埋点 — chat_dialogue。
 
-在每轮 SSE 对话成功完成后记录事件。``summary_md`` 取该 session 最新一条
-``ChatSessionSummaryBlock.summary_markdown``（可能是上一轮压缩的），
-保证不依赖异步压缩任务的时序。
+在每轮 SSE 对话成功完成后记录事件。学习评估只保存轮次和摘要长度等
+可聚合事实，不把聊天正文或摘要文本复制进事件表。
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ async def record_dialogue_event(
     db: AsyncSession,
     user_id: int,
     session_id: str,
-    summary_md: str | None = None,
+    summary_text: str | None = None,
     turn_count: int = 1,
 ) -> None:
     """记录一次辅导对话事件。
@@ -33,12 +32,12 @@ async def record_dialogue_event(
         db: 异步数据库会话。
         user_id: 用户 ID。
         session_id: 会话 ID（UUID 字符串）。
-        summary_md: 可选的会话压缩摘要；为 None 时尝试从最新 ChatSessionSummaryBlock 取。
+        summary_text: 可选的会话压缩摘要；仅用于计算长度，不写入事件元数据。
         turn_count: 本轮对话包含的消息数（默认 1）。
     """
     # 未传入摘要时，从最近一次会话压缩摘要块中获取
-    if summary_md is None:
-        summary_md = await _fetch_latest_summary(db, session_id)
+    if summary_text is None:
+        summary_text = await _fetch_latest_summary(db, session_id)
 
     # 构造对话事件负载并提交到评估服务
     payload = LearningEventCreate(
@@ -46,8 +45,7 @@ async def record_dialogue_event(
         entity_id=session_id,
         event_type=CHAT_DIALOGUE,
         event_metadata={
-            "summary_md": summary_md or "",
-            "summary_length": len(summary_md or ""),
+            "summary_length": len(summary_text or ""),
             "turn_count": turn_count,
         },
     )
@@ -56,7 +54,7 @@ async def record_dialogue_event(
         "[Chat] 对话事件已记录: user_id=%s session=%s summary_len=%s",
         user_id,
         session_id,
-        len(summary_md or ""),
+        len(summary_text or ""),
     )
 
 

@@ -2,7 +2,7 @@
 
 节点拓扑：
   START → planning → worker_node(×N, Send并行) → merge_workers
-    → [ppt_node, video_node, cartoon_node] → merge_aggregation → save_node
+    → aggregation(PPT/Cartoon按选择并发) → save_node
 
 核心设计：
 - 传递 user_id, resource_id, selected_agents, request_data, profile, teaching_plan
@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any
@@ -40,7 +41,6 @@ from app.resource.service import (
     CARTOON_AGENT_ID,
     COORDINATOR_AGENT_ID,
     PPT_AGENT_ID,
-    VIDEO_AGENT_ID,
     _infer_content_format,
 )
 from app.resource.event import ResourceEvents
@@ -85,6 +85,7 @@ def build_agent_resource_input(
 async def get_handoffs(
     resource_id: int,
     user_id: int,
+    agent_configs: dict[str, Any] | None = None,
 ) -> dict[str, DownstreamContext]:
     """从成功持久化的基础资源构建下游交接内容。
 
@@ -112,8 +113,9 @@ async def get_handoffs(
         if not content:
             continue
 
-        # 提取 agent 配置（用于驱动提取行为）
-        config = item.input_data.get("agent_config", {}) if item.input_data else {}
+        # 提取 agent 配置（用于驱动提取行为）。资源项表只保存产物，
+        # 不再保存输入快照；运行时配置从工作流 state 的 request_data 传入。
+        config = dict((agent_configs or {}).get(item.agent_type, {}))
 
         # 使用新的提取函数
         materials = extract_core_content(
@@ -435,40 +437,13 @@ async def merge_workers_node(state: ParentState) -> dict[str, Any]:
 # ── Routing after merge ────────────────────────────────────────────────
 
 
-def route_after_merge(state: ParentState) -> list[str]:
-    """路由到聚合 Agent（PPT/Video/Cartoon）或直接保存。
-
-    同步函数，从 state 读取 selected_agents。
-    如果选择了基础 Agent 但全部失败，跳过聚合 Agent 直接保存。
-    """
-    selected_agents = state.get("selected_agents") or []
-    results = state.get("results") or {}
-
-    # 如果选择了基础 Agent，但基础 Agent 全部失败，则不要继续生成聚合资源
-    selected_base_agents = [
-        aid for aid in selected_agents
-        if aid in BASE_RESOURCE_AGENT_IDS
-    ]
-    if selected_base_agents and not any(aid in results for aid in selected_base_agents):
-        return ["save_node"]
-
-    destinations: list[str] = []
-    if PPT_AGENT_ID in selected_agents:
-        destinations.append("ppt_node")
-    if VIDEO_AGENT_ID in selected_agents:
-        destinations.append("video_node")
-    if CARTOON_AGENT_ID in selected_agents:
-        destinations.append("cartoon_node")
-    return destinations or ["save_node"]
-
-
-# ── Aggregation nodes (PPT, Video) ────────────────────────────────────
+# ── Aggregation nodes (PPT, Cartoon) ──────────────────────────────────
 
 
 async def _aggregation_node(state: ParentState, agent_id: str) -> dict[str, Any]:
-    """聚合节点（PPT/Video/Cartoon）— 取基础资源交接并调用对应 Agent 生成。
+    """聚合节点（PPT/Cartoon）— 取基础资源交接并调用对应 Agent 生成。
 
-    三者逻辑完全一致，仅目标 agent_id 不同。
+    两者逻辑完全一致，仅目标 agent_id 不同。
     """
     user_id = state["user_id"]
     resource_id = state["resource_id"]
@@ -480,6 +455,7 @@ async def _aggregation_node(state: ParentState, agent_id: str) -> dict[str, Any]
     base_handoffs = await get_handoffs(
         resource_id=resource_id,
         user_id=user_id,
+        agent_configs=agent_configs,
     )
     resource_input = build_agent_resource_input(
         resource_id=resource_id,
@@ -503,62 +479,40 @@ async def _aggregation_node(state: ParentState, agent_id: str) -> dict[str, Any]
     )
 
 
-async def ppt_node(state: ParentState) -> dict[str, Any]:
-    """PPT 聚合节点 — 调用独立课件生成器并保存其发布引用。"""
-    return await _aggregation_node(state, PPT_AGENT_ID)
-
-
-async def video_node(state: ParentState) -> dict[str, Any]:
-    """Video 聚合节点 — 基于已保存的基础资源生成最终 MP4。"""
-    return await _aggregation_node(state, VIDEO_AGENT_ID)
-
-
-async def cartoon_node(state: ParentState) -> dict[str, Any]:
-    """Cartoon 聚合节点 — 基于基础资源生成带配音与字幕的动画讲解 MP4。"""
-    return await _aggregation_node(state, CARTOON_AGENT_ID)
-
-
-# ── Merge aggregation barrier ──────────────────────────────────────────
-
-
-async def merge_aggregation_node(state: ParentState) -> dict[str, Any]:
-    """聚合 Barrier 节点 — 等待 PPT/Video/Cartoon Agent 完成后汇总结果。"""
+async def aggregation_node(state: ParentState) -> dict[str, Any]:
+    """仅并发运行本次选择的 PPT/Cartoon，不依赖固定 LangGraph barrier。"""
     user_id = state["user_id"]
     resource_id = state["resource_id"]
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
+    selected = [aid for aid in state.get("selected_agents", []) if aid in AGGREGATION_AGENT_IDS]
+    if not selected:
+        return {}
 
-    started = time.perf_counter()
-    results = state.get("results") or {}
-    failures = state.get("failures") or {}
-    agg_results = {aid: r for aid, r in results.items() if aid in AGGREGATION_AGENT_IDS}
-    agg_failures = {aid: f for aid, f in failures.items() if aid in AGGREGATION_AGENT_IDS}
-    success_count = len(agg_results)
-    fail_count = len(agg_failures)
-    logger.info(
-        "聚合合并节点: resource_id=%s success=%d failed=%d",
-        resource_id, success_count, fail_count,
-    )
-    message = (
-        f"聚合资源已就绪：成功 {success_count} 个"
-        + (f"，失败 {fail_count} 个" if fail_count else "")
-        + "，开始组装资源包"
-    )
+    # PPT/Cartoon 的专用服务可直接以教学计划作为素材，因此不能因没有基础
+    # Agent 成果而跳过已选 Agent。这样“仅 PPT”“仅 Cartoon”与基础 Agent
+    # 全部失败的任务仍会进入各自的真实生成链路并独立保存产物。
+    outputs = await asyncio.gather(*[_aggregation_node(state, agent_id) for agent_id in selected])
+    merged_results: dict[str, Any] = {}
+    merged_failures: dict[str, Any] = {}
+    for output in outputs:
+        merged_results.update(output.get("results", {}))
+        merged_failures.update(output.get("failures", {}))
     async with session_scope() as session:
         service = ResourceService(session)
         await service.upsert_agent_run(
             resource_id=resource_id,
             agent_id=BUNDLE_AGENT_ID,
             status="running",
-            error_message=f"失败 {fail_count} 个" if fail_count else None,
+            error_message=f"失败 {len(merged_failures)} 个" if merged_failures else None,
         )
     await events.send(
         BUNDLE_AGENT_ID,
         "running",
-        message,
+        "聚合资源处理完成，开始组装资源包",
         90,
-        data={"phase": "aggregation_ready", "success_count": success_count, "fail_count": fail_count},
+        data={"phase": "aggregation_ready", "success_count": len(merged_results), "fail_count": len(merged_failures)},
     )
-    return {}
+    return {"results": merged_results, "failures": merged_failures}
 
 
 # ── Save node ──────────────────────────────────────────────────────────

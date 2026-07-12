@@ -20,40 +20,28 @@ jwt:
 # ============ 模型配置 ============
 # 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-#  # --- 云端：讯飞 Maas ---
-#  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-#  api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
-#  model_name: "astron-code-latest"
-
-  base_url: "https://api.deepseek.com"
-  api_key: "sk-dd48ba6031634138a4fc7b3644faa299"
-  model_name: "deepseek-v4-flash"
-
-
-  # 推理参数
-  max_tokens: 8192
-  # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
-  structured_output_strategy: "function_calling_first"
-  # 网络与重试参数
-  timeout: 300          # 单次请求超时（秒）
-  max_retries: 2        # 失败重试次数
-
-  # 温度参数（控制输出随机性，0=确定性，1=高随机性）
-  # json_temp: JSON 结构化输出，低温度确保格式稳定
-  # stream_temp: 流式对话输出，高温度增加创意性和自然感
-  # default_temp: 普通文本生成，中等温度平衡确定性和多样性
-  json_temp: 0.1
-  stream_temp: 1.0
-  default_temp: 0.7
-
-  # 图片理解模型（独立配置）
-  vision:
-    base_url: "https://open.bigmodel.cn/api/paas/v4/"
-    api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
-    model_name: "glm-4.6v-flash"
-    temperature: 0.7
+  default: &default_model
+    base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+    api_key: "3842c168016ff65462f3f01133b14259:ODZkZjE4ZjIzNTNjNmI3YzNiNmYwNWUz"
+    model_name: "astron-code-latest"
+    max_tokens: 8192
+    structured_output_strategy: "function_calling_first"
     timeout: 300
     max_retries: 2
+    json_temp: 0.1
+    stream_temp: 1.0
+    default_temp: 0.7
+    vision:
+      base_url: "https://open.bigmodel.cn/api/paas/v4/"
+      api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
+      model_name: "glm-4.6v-flash"
+      temperature: 0.7
+      timeout: 300
+      max_retries: 2
+  ppt:
+    <<: *default_model
+    timeout: 120
+    max_retries: 0
 
 # 星火 WebSocket API（Vision 用，TTS 也回退到此配置）
 spark:
