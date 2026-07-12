@@ -1325,10 +1325,11 @@ const voiceAsrStage = computed<VoiceAsrStage>(() => {
 const digitalHumanStatusText = computed(() => {
   if (isAvatarSpeaking.value) return '正在播报中...'
   if (isAIThinking.value) return '正在思考中...'
-  if (voiceAsrStage.value === 'no_voice') return '未识别到声音'
-  if (voiceAsrStage.value === 'heard_voice') return '已识别到声音'
-  if (voiceAsrStage.value === 'transcribing') return '正在转文字'
-  return '倾听就绪'
+  if (voiceAsrStage.value === 'no_voice') return '倾听就绪'
+  if (voiceAsrStage.value === 'heard_voice') return '已检测到语音'
+  if (voiceAsrStage.value === 'transcribing') return '正在转文字...'
+  if (isVoiceChatting.value) return '正在准备语音识别...'
+  return '数字人已就绪'
 })
 
 const teachingDiagramPreviewVisible = ref(false)

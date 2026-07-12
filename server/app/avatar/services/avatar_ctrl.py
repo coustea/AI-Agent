@@ -482,6 +482,16 @@ class AvatarController:
                 logger.error(
                     f"Sentence failed after {self.MAX_RETRIES} retries: {sentence[:30]}..."
                 )
+                if self._event_callback:
+                    await self._event_callback(
+                        "tts_end",
+                        {
+                            "event_type": "tts_end",
+                            "fallback": True,
+                            "reason": "dispatch_failed",
+                        },
+                        turn_id,
+                    )
                 self._current_speak_turn_id = None
                 continue
 

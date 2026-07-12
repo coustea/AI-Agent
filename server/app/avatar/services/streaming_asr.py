@@ -18,6 +18,9 @@ from app.config import ASR_API_KEY, ASR_API_SECRET, ASR_APP_ID, AVATAR_IAT_URL, 
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+FIRST_AUDIO_TIMEOUT_SECONDS = 8.0
+ASR_CLOSE_TIMEOUT_SECONDS = 0.25
+PCM_BYTES_PER_SECOND = 16000 * 2
 
 
 # 单次 ASR 流式识别会话：消费音频队列 → 连接讯飞 → 收发音频与结果
@@ -36,11 +39,20 @@ class StreamingASRSession:
         self,
         audio_queue: asyncio.Queue,
         vad_eos: int = ASR_VAD_EOS,
+        ready_event: asyncio.Event | None = None,
     ):
         self.audio_queue = audio_queue
         self.vad_eos = vad_eos
+        self.ready_event = ready_event
         self.chunk_count = 0
         self.timeout_hit = False
+        self._consumed_items: list[tuple[float, bytes] | None] = []
+
+    def take_replay_items(self) -> list[tuple[float, bytes] | None]:
+        """Return PCM frames consumed by a failed upstream session."""
+        items = self._consumed_items
+        self._consumed_items = []
+        return items
 
     # 执行一轮 ASR 识别：等待首个音频块 → 建立连接 → 并发发送/接收 → 返回结果
     async def run(self) -> str | None:
@@ -52,37 +64,45 @@ class StreamingASRSession:
         Raises:
             RuntimeError: ASR 连接或处理失败
         """
-        # 等待首个音频块（5 秒超时，超时即视为无人说话，返回 None）
-        try:
-            first_item = await asyncio.wait_for(self.audio_queue.get(), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.debug("[ASR] No audio chunk received within timeout")
-            return None
-
-        # 收到结束信号则直接返回
-        if first_item is None:
-            return None
-
-        # 解包时间戳与音频字节
-        _, first_chunk = first_item
-
         # 构造带鉴权的讯飞 ASR WebSocket 地址
         auth_url = assemble_auth_url(AVATAR_IAT_URL, 'GET', ASR_API_KEY, ASR_API_SECRET)
 
         try:
-            # 建立识别会话 WebSocket
-            async with websockets.connect(auth_url) as ws:
+            # VAD 开启后立即预连接讯飞，再等待用户首帧，避免握手期间堆满音频队列。
+            async with websockets.connect(
+                auth_url,
+                open_timeout=8,
+                close_timeout=ASR_CLOSE_TIMEOUT_SECONDS,
+            ) as ws:
+                if self.ready_event is not None:
+                    self.ready_event.set()
+
+                try:
+                    first_item = await asyncio.wait_for(
+                        self.audio_queue.get(),
+                        timeout=FIRST_AUDIO_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.debug("[ASR] No audio chunk received within timeout")
+                    return None
+
+                if first_item is None:
+                    return None
+
+                _, first_chunk = first_item
+                self._consumed_items.append(first_item)
                 # 并发：一个任务发送音频流，一个任务接收识别结果
                 send_task = asyncio.create_task(self._send_audio(ws, first_chunk))
                 recv_task = asyncio.create_task(self._receive_result(ws))
 
-                # 先等待识别结果
-                result = await recv_task
-
-                # 识别结束后取消仍在发送的任务并回收其统计指标
-                if not send_task.done():
-                    send_task.cancel()
-                send_result = await asyncio.gather(send_task, return_exceptions=True)
+                try:
+                    # 先等待识别结果
+                    result = await recv_task
+                finally:
+                    # 无论接收成功、失败还是取消，都必须回收发送任务。
+                    if not send_task.done():
+                        send_task.cancel()
+                    send_result = await asyncio.gather(send_task, return_exceptions=True)
 
                 # 从发送任务结果中提取本轮回填的指标
                 if isinstance(send_result[0], dict):
@@ -97,10 +117,12 @@ class StreamingASRSession:
                 )
 
                 # 返回本轮识别文本
+                self._consumed_items.clear()
                 return result
         except Exception as e:
-            logger.error("[ASR] Session failed: %s", e)
-            raise RuntimeError(f"ASR session failed: {e}")
+            error_name = type(e).__name__
+            logger.error("[ASR] Session failed: %s: %r", error_name, e)
+            raise RuntimeError(f"ASR session failed: {error_name}: {e!r}") from e
 
     # 向 ASR WebSocket 发送音频流：启动帧 → 中间帧 → 结束帧，返回发送指标
     async def _send_audio(self, ws, first_chunk: bytes) -> dict:
@@ -121,10 +143,9 @@ class StreamingASRSession:
                 "language": "zh_cn",
                 "domain": "iat",
                 "accent": "mandarin",
-                "vad_eos": self.vad_eos,
+                "eos": self.vad_eos,
                 "ptt": 1,      # Enable punctuation
-                "pd": "0",     # Speaker separation mode
-                "nunum": 0,    # Convert numbers to Arabic
+                "nunum": 1,    # Convert number words to Arabic numerals
                 "dwa": "wpgs", # Enable dynamic correction
             },
             "data": {
@@ -137,8 +158,10 @@ class StreamingASRSession:
         # 发送启动帧（status=0），携带首个音频块
         await ws.send(json.dumps(start_params))
         chunk_count = 1
+        self.chunk_count = chunk_count
         timeout_hit = False
-        await asyncio.sleep(0.01)  # Minimal inter-frame delay for first frame
+        loop = asyncio.get_running_loop()
+        next_send_at = loop.time() + len(first_chunk) / PCM_BYTES_PER_SECOND
 
         # 循环发送中间帧（status=1），直到队列超时或收到结束信号
         while True:
@@ -147,14 +170,21 @@ class StreamingASRSession:
             except asyncio.TimeoutError:
                 # 队列 3 秒无数据，判定语音结束，准备发送结束帧
                 timeout_hit = True
+                self.timeout_hit = True
                 logger.debug("[ASR] Audio queue timeout, sending end frame")
                 break
 
             # 收到结束信号（None）则停止发送
             if item is None:
+                self._consumed_items.append(None)
                 break
 
+            self._consumed_items.append(item)
             _, chunk = item
+            now = loop.time()
+            send_at = max(next_send_at, now)
+            if send_at > now:
+                await asyncio.sleep(send_at - now)
             audio_b64 = base64.b64encode(chunk).decode()
             frame = {
                 "data": {
@@ -166,7 +196,8 @@ class StreamingASRSession:
             }
             await ws.send(json.dumps(frame))
             chunk_count += 1
-            # 不添加帧间延时，尽快发送以降低延迟（队列本身随真实采集速率节流）
+            self.chunk_count = chunk_count
+            next_send_at = send_at + len(chunk) / PCM_BYTES_PER_SECOND
 
         # 发送结束帧（status=2），标识音频流结束
         end_frame = {
@@ -177,7 +208,10 @@ class StreamingASRSession:
                 "audio": "",
             }
         }
-        # 发送结束帧并结束发送任务
+        # Let the final PCM frame occupy its real audio duration before ending.
+        remaining = next_send_at - loop.time()
+        if remaining > 0:
+            await asyncio.sleep(remaining)
         await ws.send(json.dumps(end_frame))
 
         # 返回本轮回填的发送指标（块数、是否触发超时）
@@ -194,6 +228,7 @@ class StreamingASRSession:
             str: Recognized text (stripped)
         """
         result_text = ""
+        segments: dict[int, str] = {}
         async for message in ws:
             data = json.loads(message)
             code = data.get('code', -1)
@@ -202,7 +237,7 @@ class StreamingASRSession:
             if code != 0:
                 error_msg = data.get('message', 'Unknown error')
                 logger.error("[ASR] API error: code=%d message=%s", code, error_msg)
-                break
+                raise RuntimeError(f"ASR API error: code={code} message={error_msg}")
 
             result = data.get('data', {}).get('result', {})
             status = data.get('data', {}).get('status')
@@ -210,16 +245,35 @@ class StreamingASRSession:
             # 累加本轮词片文本
             current_text = ""
             for ws_item in result.get('ws', []):
-                for cw in ws_item.get('cw', []):
-                    current_text += cw.get('w', '')
+                candidates = ws_item.get('cw', [])
+                if candidates and isinstance(candidates[0], dict):
+                    current_text += candidates[0].get('w', '')
 
-            # 讯飞 IAT 通常为整句快照而非增量，故用覆盖模式避免重复拼接
+            raw_sn = result.get('sn')
+            try:
+                segment_sn = int(raw_sn) if raw_sn is not None else None
+            except (TypeError, ValueError):
+                segment_sn = None
+
+            # Apply wpgs replacement ranges even when the replacement is empty.
+            if result.get('pgs') == 'rpl':
+                replace_range = result.get('rg')
+                try:
+                    start, end = (int(value) for value in replace_range)
+                except (TypeError, ValueError):
+                    start = end = None
+                if start is not None and end is not None:
+                    for segment_id in range(start, end + 1):
+                        segments.pop(segment_id, None)
+                    result_text = ''.join(segments[key] for key in sorted(segments))
+
+            # wpgs 模式通过 sn 标识片段，pgs=rpl 时用 rg 指定替换范围。
             if current_text:
-                if status == 2:
-                    # 最终结果：仅当文本有效（长度>1）才更新
-                    if current_text.strip() and len(current_text.strip()) > 1:
-                        result_text = current_text
+                if segment_sn is not None:
+                    segments[segment_sn] = current_text
+                    result_text = ''.join(segments[key] for key in sorted(segments))
                 else:
+                    # 兼容不携带 sn/pgs 的整句快照响应。
                     result_text = current_text
 
             # status=2 表示最终结果，结束接收

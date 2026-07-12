@@ -23,9 +23,147 @@ export interface IdleDisconnectState {
     isListening: boolean
 }
 
-export const MAX_PENDING_AUDIO_CHUNKS = 6
+// Keep only a short pre-roll so stale audio cannot sit seconds ahead of live speech.
+export const MAX_PENDING_AUDIO_CHUNKS = 4
+export const MAX_PENDING_AUDIO_CHUNKS_WHILE_ASR_CONNECTING = 128
 export const MAX_WS_AUDIO_BUFFERED_BYTES = 32 * 1024
-export const CONTINUOUS_VAD_RESTART_DELAY_MS = 600
+export const CONTINUOUS_VAD_RESTART_DELAY_MS = 50
+// The provider frequently omits tts_end. Its estimated stop event can precede
+// the audible RTC tail, so keep the microphone closed until that tail drains.
+export const FALLBACK_VAD_RESTART_DELAY_MS = 1800
+export const VAD_BACKEND_READY_TIMEOUT_MS = 16_000
+export const VAD_WEBSOCKET_OPEN_TIMEOUT_MS = 5_000
+export const ASR_TARGET_SAMPLE_RATE = 16_000
+export const ASR_SPEECH_START_RMS = 0.012
+export const ASR_SPEECH_CONFIRM_MS = 180
+export const ASR_SILENCE_END_MS = 1100
+// Do not arm a new turn until ASR is ready and the microphone has observed a
+// short quiet window. Setup audio must never become the next user utterance.
+export const ASR_INPUT_ARM_SILENCE_MS = 640
+export const ASR_INPUT_ARM_MAX_RMS = ASR_SPEECH_START_RMS
+export const AVATAR_OUTPUT_ACTIVE_RMS = 0.004
+export const AVATAR_OUTPUT_SILENCE_MS = 450
+export const AVATAR_OUTPUT_MAX_DRAIN_MS = 8_000
+
+export function calculateAudioRms(samples: ArrayLike<number>): number {
+    if (samples.length === 0) return 0
+    let sum = 0
+    for (let index = 0; index < samples.length; index++) {
+        const sample = samples[index] ?? 0
+        sum += sample * sample
+    }
+    return Math.sqrt(sum / samples.length)
+}
+
+export interface AsrVoiceActivityDecision {
+    speechActive: boolean
+    speechStarted: boolean
+    speechEnded: boolean
+}
+
+export class AsrVoiceActivityGate {
+    private noiseFloorRms = 0.004
+    private candidateDurationMs = 0
+    private silenceDurationMs = 0
+    private active = false
+
+    update(rms: number, durationMs: number): AsrVoiceActivityDecision {
+        const safeRms = Number.isFinite(rms) ? Math.max(0, rms) : 0
+        const safeDurationMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0
+
+        if (!this.active) {
+            const startThreshold = Math.max(ASR_SPEECH_START_RMS, this.noiseFloorRms * 2.5)
+            if (safeRms >= startThreshold) {
+                this.candidateDurationMs += safeDurationMs
+                if (this.candidateDurationMs >= ASR_SPEECH_CONFIRM_MS) {
+                    this.active = true
+                    this.silenceDurationMs = 0
+                    return { speechActive: true, speechStarted: true, speechEnded: false }
+                }
+            } else {
+                this.candidateDurationMs = 0
+                this.noiseFloorRms = Math.min(
+                    ASR_SPEECH_START_RMS * 0.6,
+                    this.noiseFloorRms * 0.92 + safeRms * 0.08,
+                )
+            }
+            return { speechActive: false, speechStarted: false, speechEnded: false }
+        }
+
+        const releaseThreshold = Math.max(0.012, this.noiseFloorRms * 1.8)
+        if (safeRms >= releaseThreshold) {
+            this.silenceDurationMs = 0
+        } else {
+            this.silenceDurationMs += safeDurationMs
+        }
+
+        if (this.silenceDurationMs >= ASR_SILENCE_END_MS) {
+            this.active = false
+            this.candidateDurationMs = 0
+            this.silenceDurationMs = 0
+            return { speechActive: false, speechStarted: false, speechEnded: true }
+        }
+        return { speechActive: true, speechStarted: false, speechEnded: false }
+    }
+
+    reset(): void {
+        this.noiseFloorRms = 0.004
+        this.candidateDurationMs = 0
+        this.silenceDurationMs = 0
+        this.active = false
+    }
+}
+
+export function resampleAudioForAsr(
+    input: Float32Array,
+    inputSampleRate: number,
+    outputSampleRate = ASR_TARGET_SAMPLE_RATE,
+): Float32Array {
+    if (input.length === 0 || inputSampleRate === outputSampleRate) return input
+    if (
+        !Number.isFinite(inputSampleRate)
+        || !Number.isFinite(outputSampleRate)
+        || inputSampleRate <= 0
+        || outputSampleRate <= 0
+    ) {
+        return input
+    }
+
+    const outputLength = Math.max(1, Math.round(input.length * outputSampleRate / inputSampleRate))
+    const output = new Float32Array(outputLength)
+
+    if (inputSampleRate > outputSampleRate) {
+        const ratio = input.length / outputLength
+        for (let outputIndex = 0; outputIndex < outputLength; outputIndex++) {
+            const start = outputIndex * ratio
+            const end = Math.min(input.length, (outputIndex + 1) * ratio)
+            let weightedSum = 0
+            let weight = 0
+            for (let inputIndex = Math.floor(start); inputIndex < Math.ceil(end); inputIndex++) {
+                const overlap = Math.min(end, inputIndex + 1) - Math.max(start, inputIndex)
+                if (overlap <= 0) continue
+                weightedSum += (input[inputIndex] ?? 0) * overlap
+                weight += overlap
+            }
+            output[outputIndex] = weight > 0 ? weightedSum / weight : 0
+        }
+        return output
+    }
+
+    if (outputLength === 1 || input.length === 1) {
+        output[0] = input[0] ?? 0
+        return output
+    }
+    const ratio = (input.length - 1) / (outputLength - 1)
+    for (let outputIndex = 0; outputIndex < outputLength; outputIndex++) {
+        const position = outputIndex * ratio
+        const left = Math.floor(position)
+        const right = Math.min(input.length - 1, left + 1)
+        const fraction = position - left
+        output[outputIndex] = (input[left] ?? 0) * (1 - fraction) + (input[right] ?? 0) * fraction
+    }
+    return output
+}
 
 export function enqueueBoundedAudioChunk(queue: string[], chunk: string, maxSize = MAX_PENDING_AUDIO_CHUNKS): boolean {
     const safeMaxSize = Math.max(1, Math.floor(maxSize))
@@ -157,12 +295,21 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let audioProcessor: ScriptProcessorNode | null = null
     let audioMonitor: ReturnType<typeof setInterval> | null = null
     let audioFlushTimer: ReturnType<typeof setTimeout> | null = null
+    let avatarOutputSource: MediaStreamAudioSourceNode | null = null
+    let avatarOutputAnalyser: AnalyserNode | null = null
+    let avatarOutputStream: MediaStream | null = null
+    let avatarStopTimer: ReturnType<typeof setTimeout> | null = null
+    let avatarStopGeneration = 0
     const pendingAudioChunks: string[] = []
+    const preSpeechAudioChunks: string[] = []
+    const voiceActivityGate = new AsrVoiceActivityGate()
     let droppedAudioChunks = 0
+    let pendingAudioEnd = false
     let vadActive = false
     let backendVadReady = false
+    let localAudioCaptureReady = false
+    let localAudioQuietDurationMs = 0
     let speechDetected = false
-    let speechHangTimer: ReturnType<typeof setTimeout> | null = null
     let playerContainer: HTMLElement | null = null
     let playerReadyTimer: ReturnType<typeof setTimeout> | null = null
     let playerGeneration = 0
@@ -368,6 +515,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         // 处理数字人状态变更事件（经过过期过滤后）
         if (type === 'digital_human_state') {
             const state = data.state as DigitalHumanStateType
+            if (state === 'avatar_ready' && isSpeaking.value) return
             digitalHumanState.value = state
             if (shouldStopVadForDigitalHumanState(state) && vadActive) {
                 stopVad()
@@ -413,6 +561,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             // 确保所有缓冲文本都开始 reveal
             startAssistantReveal()
         } else if (type === 'avatar_speaking') {
+            clearAvatarStopWait()
             isSpeaking.value = true
             currentSpeechStartedAt = Date.now()
             currentSpeechReleasedCost = 0
@@ -425,44 +574,22 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         } else if (type === 'diagram') {
             callbacks?.onDiagram?.(data.data, turn_id)
         } else if (type === 'avatar_stopped') {
-            isSpeaking.value = false
-            // 先恢复可监听状态，再通知页面重启 VAD；否则 startVad 会被 speaking 状态拦截。
-            if (digitalHumanState.value !== 'avatar_ready') {
-                digitalHumanState.value = 'avatar_ready'
-                callbacks?.onDigitalHumanStateChange?.('avatar_ready', turn_id)
-                callbacks?.onStatus?.({ stage: 'avatar_ready', message: 'Avatar service ready' })
-            }
-            if (currentSpeechStartedAt > 0 && currentSpeechReleasedCost > 0) {
-                const elapsedSec = Math.max(0.25, (Date.now() - currentSpeechStartedAt) / 1000)
-                const actualRate = currentSpeechReleasedCost / elapsedSec
-                const clampedActualRate = Math.max(1.5, Math.min(7.0, actualRate))
-                if (calibratedRevealCharsPerSecond <= 0) {
-                    // 首次校准：使用实测速率 × 0.9 补偿系数
-                    calibratedRevealCharsPerSecond = clampedActualRate * 0.9
-                } else {
-                    // 后续校准：平滑更新
-                    calibratedRevealCharsPerSecond =
-                        calibratedRevealCharsPerSecond * 0.7 + clampedActualRate * 0.3
-                }
-            }
-            currentSpeechStartedAt = 0
-            currentSpeechReleasedCost = 0
-            targetRevealCharsPerSecond = 0
-            finalizeBufferedAssistantTurn()
-            callbacks?.onAvatarStopped?.()
-            const restartOptions = _pendingVadRestart ?? continuousVadOptions
-            _pendingVadRestart = null
-            if (restartOptions) scheduleVadRestart(restartOptions)
+            const finish = () => finishAvatarStopped(turn_id)
+            if (data.data?.fallback === true) waitForAvatarOutputSilence(finish)
+            else finish()
         } else if (type === 'vad_state') {
             const state = data.data?.listening ?? (data.state === 'listening' || data.state === 'speaking')
             const listening = !!state
             backendVadReady = listening
-            isListening.value = listening
             if (shouldCleanupLocalVadOnBackendState(listening)) {
                 if (continuousVadOptions) pauseAudioInput()
                 else cleanupAudioInput()
+            } else {
+                localAudioQuietDurationMs = 0
+                localAudioCaptureReady = false
+                clearPendingAudioChunks()
+                syncVadListeningState()
             }
-            callbacks?.onVadStateChange?.(!!state)
         } else if (type === 'history_cleared') {
             callbacks?.onHistoryCleared?.(data.data)
         } else if (type === 'error') {
@@ -590,6 +717,35 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
+    function finishAvatarStopped(turnId?: string): void {
+        clearAvatarStopWait()
+        isSpeaking.value = false
+        if (digitalHumanState.value !== 'avatar_ready') {
+            digitalHumanState.value = 'avatar_ready'
+            callbacks?.onDigitalHumanStateChange?.('avatar_ready', turnId)
+            callbacks?.onStatus?.({ stage: 'avatar_ready', message: 'Avatar service ready' })
+        }
+        if (currentSpeechStartedAt > 0 && currentSpeechReleasedCost > 0) {
+            const elapsedSec = Math.max(0.25, (Date.now() - currentSpeechStartedAt) / 1000)
+            const actualRate = currentSpeechReleasedCost / elapsedSec
+            const clampedActualRate = Math.max(1.5, Math.min(7.0, actualRate))
+            if (calibratedRevealCharsPerSecond <= 0) {
+                calibratedRevealCharsPerSecond = clampedActualRate * 0.9
+            } else {
+                calibratedRevealCharsPerSecond =
+                    calibratedRevealCharsPerSecond * 0.7 + clampedActualRate * 0.3
+            }
+        }
+        currentSpeechStartedAt = 0
+        currentSpeechReleasedCost = 0
+        targetRevealCharsPerSecond = 0
+        finalizeBufferedAssistantTurn()
+        callbacks?.onAvatarStopped?.()
+        const restartOptions = _pendingVadRestart ?? continuousVadOptions
+        _pendingVadRestart = null
+        if (restartOptions) scheduleVadRestart(restartOptions, CONTINUOUS_VAD_RESTART_DELAY_MS)
+    }
+
     function setAvatarReady(ready: boolean): void {
         if (isAvatarReady.value === ready) return
         isAvatarReady.value = ready
@@ -627,6 +783,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // 销毁 RTC 播放器并清空渲染容器
     function destroyPlayer(): void {
         playerGeneration += 1
+        clearAvatarStopWait()
+        detachAvatarOutputAnalyser()
         clearPlayerReadyTimer()
         setAvatarReady(false)
         if (player) {
@@ -700,6 +858,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             const el = audible
             el.muted = false
             el.volume = 1.0
+            attachAvatarOutputAnalyser(el)
             // 只对暂停的元素调用 play()，避免对已播放的元素重复调用导致音频重叠
             if (el.paused) {
                 el.play().catch(() => {})
@@ -717,11 +876,100 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     function clearPendingAudioChunks(): void {
         pendingAudioChunks.length = 0
+        preSpeechAudioChunks.length = 0
         droppedAudioChunks = 0
+        pendingAudioEnd = false
+        voiceActivityGate.reset()
         if (audioFlushTimer) {
             clearTimeout(audioFlushTimer)
             audioFlushTimer = null
         }
+    }
+
+    function detachAvatarOutputAnalyser(): void {
+        if (avatarOutputSource) {
+            try {
+                avatarOutputSource.disconnect()
+            } catch {
+                // ignore a source already detached by AudioContext shutdown
+            }
+        }
+        avatarOutputSource = null
+        avatarOutputAnalyser = null
+        avatarOutputStream = null
+    }
+
+    function attachAvatarOutputAnalyser(media: HTMLMediaElement): void {
+        if (
+            !audioContext
+            || audioContext.state === 'closed'
+            || typeof audioContext.createAnalyser !== 'function'
+            || typeof MediaStream === 'undefined'
+            || !(media.srcObject instanceof MediaStream)
+        ) {
+            return
+        }
+        const stream = media.srcObject
+        if (avatarOutputStream === stream && avatarOutputAnalyser) return
+
+        detachAvatarOutputAnalyser()
+        try {
+            const source = audioContext.createMediaStreamSource(stream)
+            const analyser = audioContext.createAnalyser()
+            analyser.fftSize = 1024
+            analyser.smoothingTimeConstant = 0.2
+            source.connect(analyser)
+            avatarOutputSource = source
+            avatarOutputAnalyser = analyser
+            avatarOutputStream = stream
+        } catch (err) {
+            console.warn('[DH] avatar output analyser unavailable:', err)
+            detachAvatarOutputAnalyser()
+        }
+    }
+
+    function clearAvatarStopWait(): void {
+        avatarStopGeneration += 1
+        if (avatarStopTimer) {
+            clearTimeout(avatarStopTimer)
+            avatarStopTimer = null
+        }
+    }
+
+    function waitForAvatarOutputSilence(onSilent: () => void): void {
+        clearAvatarStopWait()
+        const generation = avatarStopGeneration
+        const analyser = avatarOutputAnalyser
+        const canMeasureOutput = !!analyser && audioContext?.state === 'running'
+
+        if (!canMeasureOutput) {
+            avatarStopTimer = setTimeout(onSilent, FALLBACK_VAD_RESTART_DELAY_MS)
+            return
+        }
+
+        const samples = new Float32Array(analyser.fftSize)
+        const startedAt = Date.now()
+        let silentSince = 0
+        const check = () => {
+            if (generation !== avatarStopGeneration || !avatarOutputAnalyser) return
+            avatarOutputAnalyser.getFloatTimeDomainData(samples)
+            const now = Date.now()
+            const outputActive = calculateAudioRms(samples) >= AVATAR_OUTPUT_ACTIVE_RMS
+            if (outputActive) {
+                silentSince = 0
+            } else if (silentSince === 0) {
+                silentSince = now
+            }
+
+            const silenceConfirmed = silentSince > 0 && now - silentSince >= AVATAR_OUTPUT_SILENCE_MS
+            const drainTimedOut = now - startedAt >= AVATAR_OUTPUT_MAX_DRAIN_MS
+            if (silenceConfirmed || drainTimedOut) {
+                onSilent()
+                return
+            }
+            avatarStopTimer = setTimeout(check, 50)
+        }
+        check()
     }
 
     function scheduleAudioFlush(): void {
@@ -747,17 +995,66 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             sent += 1
         }
 
-        if (pendingAudioChunks.length > 0) scheduleAudioFlush()
+        if (pendingAudioChunks.length > 0) {
+            scheduleAudioFlush()
+        } else if (pendingAudioEnd) {
+            ws.send(JSON.stringify({ type: 'audio_end' }))
+            pendingAudioEnd = false
+        }
     }
 
     function queueAudioChunk(chunk: string): void {
-        if (enqueueBoundedAudioChunk(pendingAudioChunks, chunk)) {
+        const maxPendingChunks = backendVadReady
+            ? MAX_PENDING_AUDIO_CHUNKS
+            : MAX_PENDING_AUDIO_CHUNKS_WHILE_ASR_CONNECTING
+        if (enqueueBoundedAudioChunk(pendingAudioChunks, chunk, maxPendingChunks)) {
             droppedAudioChunks += 1
             if (droppedAudioChunks === 1 || droppedAudioChunks % 25 === 0) {
                 console.warn('[DH] audio backpressure dropped chunks:', droppedAudioChunks)
             }
         }
         scheduleAudioFlush()
+    }
+
+    function queuePreSpeechAudioChunk(chunk: string): void {
+        if (preSpeechAudioChunks.length >= MAX_PENDING_AUDIO_CHUNKS) {
+            preSpeechAudioChunks.shift()
+        }
+        preSpeechAudioChunks.push(chunk)
+    }
+
+    function flushPreSpeechAudioChunks(): void {
+        for (const chunk of preSpeechAudioChunks) queueAudioChunk(chunk)
+        preSpeechAudioChunks.length = 0
+        flushPendingAudioChunks()
+    }
+
+    function requestAudioEnd(): void {
+        if (pendingAudioEnd) return
+        pendingAudioEnd = true
+        vadActive = false
+        flushPendingAudioChunks()
+    }
+
+    function setSpeechDetected(detected: boolean): void {
+        if (speechDetected === detected) return
+        speechDetected = detected
+        callbacks?.onSpeechDetectedChange?.(detected)
+    }
+
+    function syncVadListeningState(): void {
+        const listening = vadActive && backendVadReady && localAudioCaptureReady
+        if (isListening.value === listening) return
+        isListening.value = listening
+        callbacks?.onVadStateChange?.(listening)
+    }
+
+    async function waitForWebSocketOpen(timeoutMs = VAD_WEBSOCKET_OPEN_TIMEOUT_MS): Promise<boolean> {
+        const deadline = Date.now() + timeoutMs
+        while (ws?.readyState === WebSocket.CONNECTING && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        return ws?.readyState === WebSocket.OPEN
     }
 
     // ==========================================
@@ -822,40 +1119,39 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         // Close audio context - use void + catch to avoid unhandled promise
         if (audioContext) {
+            detachAvatarOutputAnalyser()
             void audioContext.close().catch(() => {})
             audioContext = null
         }
 
-        // Clear speech detection timers
-        if (speechHangTimer) {
-            clearTimeout(speechHangTimer)
-            speechHangTimer = null
-        }
-        if (speechDetected) {
-            speechDetected = false
-            callbacks?.onSpeechDetectedChange?.(false)
-        }
+        setSpeechDetected(false)
+        localAudioCaptureReady = false
+        localAudioQuietDurationMs = 0
+        syncVadListeningState()
+        voiceActivityGate.reset()
+        preSpeechAudioChunks.length = 0
     }
 
     // 连续对话期间只暂停上传，保留用户手势获取到的麦克风与 AudioContext。
     function pauseAudioInput(): void {
         vadActive = false
+        localAudioCaptureReady = false
+        localAudioQuietDurationMs = 0
         clearPendingAudioChunks()
-        if (speechHangTimer) {
-            clearTimeout(speechHangTimer)
-            speechHangTimer = null
-        }
-        if (speechDetected) {
-            speechDetected = false
-            callbacks?.onSpeechDetectedChange?.(false)
-        }
+        setSpeechDetected(false)
+        syncVadListeningState()
     }
 
     // 启动语音活动检测（VAD）：采集麦克风音频 → PCM → base64 → WebSocket 发送
     async function startVad(needDiagram = false, capabilities: DigitalHumanCapabilities = {}): Promise<boolean> {
         if (vadActive) return true
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
+        if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
             error.value = '数字人未连接，无法开启语音输入'
+            callbacks?.onError?.(error.value)
+            return false
+        }
+        if (ws.readyState === WebSocket.CONNECTING && !await waitForWebSocketOpen()) {
+            error.value = '数字人连接超时，无法开启语音输入'
             callbacks?.onError?.(error.value)
             return false
         }
@@ -878,6 +1174,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         try {
             clearPendingAudioChunks()
+            localAudioCaptureReady = false
+            localAudioQuietDurationMs = 0
             // Tell backend to prepare VAD/ASR queue and carry diagram preference atomically.
             backendVadReady = false
             ws.send(JSON.stringify({
@@ -886,6 +1184,23 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 ...capabilities,
             }))
 
+            const existingTracks = audioStream?.getAudioTracks?.() ?? audioStream?.getTracks() ?? []
+            const existingTrack = existingTracks[0]
+            if (
+                (existingTrack && 'readyState' in existingTrack && existingTrack.readyState !== 'live')
+                || (existingTrack && ('enabled' in existingTrack && !existingTrack.enabled))
+                || (existingTrack && ('muted' in existingTrack && existingTrack.muted))
+                || audioContext?.state === 'closed'
+            ) {
+                cleanupAudioInput()
+            } else if (audioContext?.state === 'suspended') {
+                try {
+                    await audioContext.resume()
+                } catch {
+                    cleanupAudioInput()
+                }
+            }
+
             if (!audioStream || !audioContext || !audioProcessor) {
                 audioStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -893,6 +1208,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                         channelCount: 1,
                         echoCancellation: true,
                         noiseSuppression: true,
+                        autoGainControl: true,
                     },
                 })
 
@@ -901,33 +1217,48 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 // 使用 2048 buffer（128ms @ 16kHz）替代 4096（256ms）以降低采集延迟
                 audioProcessor = audioContext.createScriptProcessor(2048, 1, 1)
                 audioProcessor.onaudioprocess = (e) => {
-                    if (!vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
+                    if (!vadActive) return
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return
 
                     const inputData = e.inputBuffer.getChannelData(0)
                     let sum = 0
-                    const pcmData = new Int16Array(inputData.length)
                     for (let i = 0; i < inputData.length; i++) {
                         const sample = inputData[i] ?? 0
-                        const s = Math.max(-1, Math.min(1, sample))
-                        sum += s * s
-                        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+                        sum += sample * sample
                     }
                     const rms = Math.sqrt(sum / Math.max(1, inputData.length))
-                    const speakingNow = rms > 0.02
-                    if (speakingNow) {
-                        if (!speechDetected) {
-                            speechDetected = true
-                            callbacks?.onSpeechDetectedChange?.(true)
+                    const inputSampleRate = e.inputBuffer.sampleRate
+                        || audioContext?.sampleRate
+                        || ASR_TARGET_SAMPLE_RATE
+                    const asrData = resampleAudioForAsr(inputData, inputSampleRate)
+                    const frameDurationMs = asrData.length / ASR_TARGET_SAMPLE_RATE * 1000
+
+                    // The backend ack only means its upstream socket is open. Drop all
+                    // setup audio, then require quiet before reporting true readiness.
+                    if (!backendVadReady) {
+                        localAudioQuietDurationMs = 0
+                        voiceActivityGate.reset()
+                        preSpeechAudioChunks.length = 0
+                        return
+                    }
+                    if (!localAudioCaptureReady) {
+                        if (rms <= ASR_INPUT_ARM_MAX_RMS) {
+                            localAudioQuietDurationMs += frameDurationMs
+                        } else {
+                            localAudioQuietDurationMs = 0
                         }
-                        if (speechHangTimer) {
-                            clearTimeout(speechHangTimer)
-                            speechHangTimer = null
-                        }
-                        speechHangTimer = setTimeout(() => {
-                            speechDetected = false
-                            callbacks?.onSpeechDetectedChange?.(false)
-                            speechHangTimer = null
-                        }, 700)
+                        voiceActivityGate.reset()
+                        preSpeechAudioChunks.length = 0
+                        if (localAudioQuietDurationMs < ASR_INPUT_ARM_SILENCE_MS) return
+                        localAudioCaptureReady = true
+                        syncVadListeningState()
+                        return
+                    }
+
+                    const pcmData = new Int16Array(asrData.length)
+                    for (let i = 0; i < asrData.length; i++) {
+                        const sample = Math.max(-1, Math.min(1, asrData[i] ?? 0))
+                        pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
                     }
 
                     const uint8Array = new Uint8Array(pcmData.buffer)
@@ -935,25 +1266,46 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                     for (let i = 0; i < uint8Array.length; i++) {
                         binary += String.fromCharCode(uint8Array[i] ?? 0)
                     }
-                    queueAudioChunk(btoa(binary))
+                    const audioChunk = btoa(binary)
+                    const decision = voiceActivityGate.update(rms, frameDurationMs)
+
+                    if (decision.speechStarted) {
+                        queuePreSpeechAudioChunk(audioChunk)
+                        flushPreSpeechAudioChunks()
+                        setSpeechDetected(true)
+                    } else if (decision.speechEnded) {
+                        queueAudioChunk(audioChunk)
+                        setSpeechDetected(false)
+                        requestAudioEnd()
+                    } else if (decision.speechActive) {
+                        queueAudioChunk(audioChunk)
+                    } else {
+                        queuePreSpeechAudioChunk(audioChunk)
+                    }
                 }
 
                 audioSource.connect(audioProcessor)
                 audioProcessor.connect(audioContext.destination)
+                if (playerContainer) {
+                    const { audible } = selectAvatarAudioOutputs(
+                        playerContainer.querySelectorAll('video, audio'),
+                    )
+                    if (audible) attachAvatarOutputAnalyser(audible)
+                }
             }
 
             // 自动恢复时复用首次用户手势取得的音频链路，不重新请求麦克风权限。
             vadActive = true
 
             const waitStart = Date.now()
-            while (!backendVadReady && Date.now() - waitStart < 1500) {
+            while (!backendVadReady && Date.now() - waitStart < VAD_BACKEND_READY_TIMEOUT_MS) {
                 await new Promise((resolve) => setTimeout(resolve, 50))
             }
             if (!backendVadReady) {
                 throw new Error('VAD backend ack timeout')
             }
 
-            isListening.value = true
+            syncVadListeningState()
             flushPendingAudioChunks()
             resetIdleTimer()
 
@@ -968,7 +1320,11 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             cleanupAudioInput()
             clearPendingAudioChunks()
             vadActive = false
+            localAudioCaptureReady = false
+            localAudioQuietDurationMs = 0
+            isListening.value = false
             backendVadReady = false
+            callbacks?.onVadStateChange?.(false)
             error.value = '无法访问麦克风或语音服务未就绪，请检查权限并重试'
             callbacks?.onError?.(error.value)
             // Notify backend to cleanup if start_vad was sent
@@ -986,13 +1342,16 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
-    function scheduleVadRestart(options: { needDiagram: boolean; capabilities: DigitalHumanCapabilities }): void {
+    function scheduleVadRestart(
+        options: { needDiagram: boolean; capabilities: DigitalHumanCapabilities },
+        delayMs = CONTINUOUS_VAD_RESTART_DELAY_MS,
+    ): void {
         clearVadRestartTimer()
         vadRestartTimer = setTimeout(async () => {
             vadRestartTimer = null
             if (isSpeaking.value || vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
             await startVad(options.needDiagram, options.capabilities)
-        }, CONTINUOUS_VAD_RESTART_DELAY_MS)
+        }, delayMs)
     }
 
     function setContinuousVoice(
@@ -1026,6 +1385,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         vadActive = false
         isListening.value = false
         backendVadReady = false
+        localAudioCaptureReady = false
+        localAudioQuietDurationMs = 0
         asrText.value = ''
     }
 
