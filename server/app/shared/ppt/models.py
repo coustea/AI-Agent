@@ -131,13 +131,13 @@ class PPTTemplatePreference(PPTModel):
 
 class KeyPoint(PPTModel):
     label: str = Field(min_length=1, max_length=32)
-    detail: str = Field(min_length=1, max_length=220)
+    detail: str = Field(min_length=16, max_length=220)
 
 
 class ProcessStep(PPTModel):
     key: str = Field(min_length=1, max_length=20)
     title: str = Field(min_length=1, max_length=40)
-    detail: str = Field(min_length=1, max_length=220)
+    detail: str = Field(min_length=16, max_length=220)
 
 
 class ComparisonTable(PPTModel):
@@ -161,9 +161,9 @@ class ComparisonTable(PPTModel):
 
 
 class MisconceptionItem(PPTModel):
-    myth: str = Field(min_length=1, max_length=140)
-    reason: str = Field(min_length=1, max_length=180)
-    truth: str = Field(min_length=1, max_length=180)
+    myth: str = Field(min_length=8, max_length=140)
+    reason: str = Field(min_length=16, max_length=180)
+    truth: str = Field(min_length=16, max_length=180)
 
 
 class KnowledgeBranch(PPTModel):
@@ -200,50 +200,6 @@ class PPTSlide(PPTModel):
 
     animation: AnimationKind = "reveal"
 
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_llm_shape(cls, value: Any) -> Any:
-        if not isinstance(value, dict):
-            return value
-
-        slide_type = value.get("type")
-        normalized = dict(value)
-
-        if slide_type == "cover" and not (
-            normalized.get("statement") or normalized.get("question")
-        ):
-            statement = normalized.get("subtitle") or normalized.get("title")
-            if statement:
-                normalized["statement"] = statement
-
-        if slide_type == "agenda" and not normalized.get("steps"):
-            points = normalized.get("points")
-            if isinstance(points, list) and points:
-                steps: list[dict[str, str]] = []
-                for index, point in enumerate(points[:7], start=1):
-                    if not isinstance(point, dict):
-                        continue
-                    label = str(point.get("label") or "").strip()
-                    detail = str(point.get("detail") or "").strip()
-                    if label and detail:
-                        steps.append(
-                            {
-                                "key": f"{index:02d}",
-                                "title": label,
-                                "detail": detail,
-                            }
-                        )
-
-                if steps:
-                    normalized["steps"] = steps
-
-        if slide_type == "agenda" and not normalized.get("statement"):
-            statement = normalized.get("title") or normalized.get("speaker_notes")
-            if statement:
-                normalized["statement"] = statement
-
-        return normalized
-
     @model_validator(mode="after")
     def validate_required_content(self) -> "PPTSlide":
         has_table = bool(self.table.headers and self.table.rows)
@@ -266,6 +222,37 @@ class PPTSlide(PPTModel):
         if not required_content[self.type]:
             raise ValueError(
                 f"slide {self.type!r} is missing required teaching content"
+            )
+
+        minimum_items = {
+            "agenda": 3,
+            "learning_goals": 3,
+            "hook_question": 3,
+            "definition": 3,
+            "concept_boundary": 2,
+            "mechanism_overview": 3,
+            "knowledge_explain": 3,
+            "comparison": 2,
+            "misconception": 2,
+            "knowledge_map": 2,
+        }
+        item_count = {
+            "agenda": len(self.steps),
+            "learning_goals": len(self.points),
+            "hook_question": len(self.points),
+            "definition": len(self.points),
+            "concept_boundary": max(len(self.points), len(self.table.rows)),
+            "mechanism_overview": len(self.steps),
+            "knowledge_explain": len(self.points),
+            "comparison": len(self.table.rows),
+            "misconception": len(self.misconceptions),
+            "knowledge_map": len(self.branches),
+        }
+
+        required_count = minimum_items.get(self.type)
+        if required_count and item_count[self.type] < required_count:
+            raise ValueError(
+                f"slide {self.type!r} needs at least {required_count} teaching items"
             )
 
         return self

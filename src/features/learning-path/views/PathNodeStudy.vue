@@ -505,8 +505,6 @@ function resourceTypeLabel(type: string) {
 }
 
 function tutorialTypeLabel(value?: string | null) {
-  if (value === 'remediation') return '补救教程'
-  if (value === 'reinforced') return '强化教程'
   return '主讲义'
 }
 
@@ -582,9 +580,7 @@ function preprocessTutorialMarkdown(raw: string): string {
 
     // 替换元数据块为美观的渲染格式
     const typeLabel: Record<string, string> = {
-      primary: '首次学习',
-      remediation: '薄弱点巩固',
-      reinforced: '强化补漏',
+      primary: '主教程',
     }
 
     const renderedMeta = [
@@ -1029,8 +1025,6 @@ function statusText(status: string) {
   switch (status) {
     case 'available': return '可开始'
     case 'in_progress': return '学习中'
-    case 'remediation': return '专项巩固中'
-    case 'reinforced': return '强化学习中'
     case 'completed': return '已通过'
     case 'completed_with_gaps': return '带缺口完成'
     default: return status
@@ -1042,10 +1036,6 @@ function resultText(outcome: string) {
     case 'completed':
     case 'passed':
       return '认知指标达标，下一路径节点已解锁。'
-    case 'remediation':
-      return '存在知识隐患，系统将围绕薄弱点为您动态注入专项巩固讲义。'
-    case 'reinforced':
-      return '已开启极限强化模式，智能体正在针对易错盲区进行追踪阻击。'
     case 'completed_with_gaps':
       return '带缺口通关，允许继续向前推进，但强烈建议回溯下方弱项。'
     default:
@@ -1189,12 +1179,6 @@ onBeforeUnmount(() => {
 .status-pill.completed_with_gaps {
   color: var(--color-success);
   background: var(--color-success-soft);
-}
-
-.status-pill.remediation,
-.status-pill.reinforced {
-  color: var(--cat-tutor);
-  background: var(--cat-tutor-soft);
 }
 
 .status-pill.available {
@@ -1402,18 +1386,6 @@ onBeforeUnmount(() => {
   color: var(--color-primary);
   background: var(--color-primary-soft);
   border: 1px solid var(--color-primary-border);
-}
-
-.markdown-shell :deep(.tutorial-meta-banner .type-remediation) {
-  color: #b45309;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-}
-
-.markdown-shell :deep(.tutorial-meta-banner .type-reinforced) {
-  color: #5b6ee1;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
 }
 
 /* ============================================================

@@ -67,6 +67,7 @@ def _schedule_step(
     absolute_start_ms: int,
     pace: str,
     visual_density: str,
+    allocated_duration_ms: int,
 ) -> TimedStep:
     settings = _PACE.get(pace, _PACE["balanced"])
     lead_ms = settings["lead"]
@@ -75,7 +76,11 @@ def _schedule_step(
     reinforce_gap = settings["reinforce_gap"]
 
     minimum_action_window = sum(action.duration_ms for action in step.actions) + gap_ms * max(0, len(step.actions) - 1)
-    available_ms = max(minimum_action_window, audio.duration_ms - lead_ms - tail_ms)
+    available_ms = max(
+        minimum_action_window,
+        allocated_duration_ms - lead_ms - tail_ms,
+        audio.duration_ms - lead_ms - tail_ms,
+    )
     durations = _scale_action_durations(step.actions, available_ms, gap_ms)
 
     timed_actions: list[TimedAction] = []
@@ -130,7 +135,14 @@ def _schedule_step(
         cursor,
         max((patch.start_ms for patch in timed_patches), default=absolute_start_ms) + 120,
     )
-    step_end = max(absolute_start_ms + audio.duration_ms, visual_end + tail_ms)
+    # A target duration is a production contract.  The step remains on screen
+    # long enough for its voice-over, but is never shortened below its allocated
+    # teaching time; the extra time is used for the mechanism to settle.
+    step_end = max(
+        absolute_start_ms + allocated_duration_ms,
+        absolute_start_ms + audio.duration_ms,
+        visual_end + tail_ms,
+    )
 
     return TimedStep(
         scene_id=scene_id,
@@ -150,8 +162,39 @@ def build_composition_plan(
     *,
     pace: str = "balanced",
     visual_density: str = "rich",
-    transition_ms: int = 420,
+    target_duration_seconds: int = 90,
+    transition_ms: int = 760,
 ) -> CompositionPlan:
+    if not 90 <= target_duration_seconds <= 600:
+        raise ValueError("target_duration_seconds must be between 90 and 600")
+
+    scene_count = len(lesson.scenes)
+    transition_total = transition_ms * max(0, scene_count - 1)
+    target_content_ms = max(scene_count * 2_400, target_duration_seconds * 1000 - transition_total)
+    steps = [step for scene in lesson.scenes for step in scene.steps]
+    if not steps:
+        raise ValueError("lesson must contain timed steps")
+    # Longer process steps get a little more viewing time than orientation or
+    # conclusion steps.  This makes pacing follow the mechanism, not file order.
+    weights = [max(1, len(step.actions)) for step in steps]
+    weight_total = sum(weights)
+    minimum_step_ms = max(1_500, round(target_content_ms / len(steps) * 0.62))
+    allocated_by_key: dict[str, int] = {}
+    remaining = target_content_ms
+    weighted_steps = [
+        (scene, step, max(1, len(step.actions)))
+        for scene in lesson.scenes
+        for step in scene.steps
+    ]
+    for index, (scene, step, weight) in enumerate(weighted_steps):
+        key = f"{scene.id}:{step.id}"
+        if index == len(steps) - 1:
+            allocated = remaining
+        else:
+            allocated = max(minimum_step_ms, round(target_content_ms * weight / weight_total))
+            remaining -= allocated
+        allocated_by_key[key] = allocated
+
     scenes: list[TimedScene] = []
     cursor = 0
 
@@ -172,11 +215,13 @@ def build_composition_plan(
                 absolute_start_ms=cursor,
                 pace=pace,
                 visual_density=visual_density,
+                allocated_duration_ms=allocated_by_key[key],
             )
             timed_steps.append(timed)
             cursor += timed.duration_ms
 
-        cursor += transition_ms
+        if index < scene_count - 1:
+            cursor += transition_ms
         scenes.append(
             TimedScene(
                 index=index,

@@ -213,14 +213,6 @@
           </section>
 
           <section class="report-layout">
-            <article v-if="activeReport.report_markdown" class="panel report-panel">
-              <div class="panel-title report-title">
-                <BookOpenCheck :size="18" />
-                <h2>Markdown 评估报告</h2>
-              </div>
-              <MarkdownRenderer :content="activeReport.report_markdown" />
-            </article>
-
             <aside class="history-rail">
               <section class="panel history-panel">
                 <div class="panel-title">
@@ -306,7 +298,6 @@ import type {
   LearningAssessmentReport,
 } from '@/features/learning-assessment/model/assessment'
 import { normalizeGuidanceStrategy } from '@/features/learning-assessment/model/assessment'
-import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 use([
   CanvasRenderer,
@@ -1139,10 +1130,6 @@ p {
 .report-layout {
   grid-template-columns: minmax(0, 1fr) minmax(21rem, 25rem);
   align-items: start;
-}
-
-.report-panel :deep(.markdown-renderer) {
-  color: var(--color-text);
 }
 
 .history-rail {

@@ -413,13 +413,11 @@ const openingNodeId = ref<number | null>(null)
 const tutorialNodeId = ref<number | null>(null)
 const tutorialMessages = ref<string[]>([])
 
-const learningStatuses = new Set(['in_progress', 'remediation', 'reinforced'])
+const learningStatuses = new Set(['in_progress'])
 const completedStatuses = new Set(['completed', 'completed_with_gaps'])
 const enterableStatuses = new Set([
   'available',
   'in_progress',
-  'remediation',
-  'reinforced',
   'completed',
   'completed_with_gaps',
 ])
@@ -447,7 +445,7 @@ const currentNode = computed(() => {
 
   return (
       path.value.nodes.find((node) => node.node_id === path.value?.current_node_key)
-      ?? path.value.nodes.find((node) => ['available', 'in_progress', 'remediation', 'reinforced'].includes(node.status))
+      ?? path.value.nodes.find((node) => ['available', 'in_progress'].includes(node.status))
       ?? null
   )
 })
@@ -557,10 +555,6 @@ const statusText = (status: string) => {
       return '可开始'
     case 'in_progress':
       return '学习中'
-    case 'remediation':
-      return '补救中'
-    case 'reinforced':
-      return '强化中'
     case 'locked':
       return '未解锁'
     case 'completed':
@@ -583,14 +577,6 @@ const nodeLearningHint = (node: LearningPathNode) => {
 
   if (node.status === 'completed_with_gaps') {
     return '该节点已完成但仍存在薄弱点。点击左侧节点可以进入学习页查看强化内容并复习错题。'
-  }
-
-  if (node.status === 'remediation') {
-    return '该节点测验暴露出薄弱点。点击左侧节点后会进入补救学习流程。'
-  }
-
-  if (node.status === 'reinforced') {
-    return '该节点正在进行强化学习。点击左侧节点后，系统会围绕薄弱点补充更有针对性的学习资源。'
   }
 
   return '该节点可以开始学习。点击左侧节点后，若已有教程会直接进入学习页；若没有教程，会在当前页面生成完成后进入。'
@@ -1539,9 +1525,7 @@ onMounted(loadPath)
   animation: checkpointPulse 1.45s ease-in-out infinite;
 }
 
-.map-node.in_progress .checkpoint i,
-.map-node.remediation .checkpoint i,
-.map-node.reinforced .checkpoint i {
+.map-node.in_progress .checkpoint i {
   background: #5b6ee1;
   box-shadow:
       0 0 0 2px rgba(91, 110, 225, 0.34),

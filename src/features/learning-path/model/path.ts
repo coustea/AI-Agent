@@ -13,10 +13,10 @@ export interface LearningPathNode {
   node_id: string
   stage_id: string
   title: string
-  // 状态流转：locked → available → in_progress → (completed | remediation | reinforced | completed_with_gaps)
-  status: 'locked' | 'available' | 'in_progress' | 'remediation' | 'reinforced' | 'completed' | 'completed_with_gaps'
+  // 状态流转：locked → available → in_progress → (completed | completed_with_gaps)
+  status: 'locked' | 'available' | 'in_progress' | 'completed' | 'completed_with_gaps'
   priority: number       // 阶段内排序优先级
-  attempt_count: number   // 已学习轮次（测验→巩固→再测验）
+  attempt_count: number   // 已学习轮次
   difficulty: string | null
   prerequisites: string[] // 前置节点 node_key 列表
 }
@@ -48,17 +48,17 @@ export interface LearningPathHistoryItem {
   updated_at: string
 }
 
-// 节点教程：primary(首次生成) / remediation(薄弱补救) / reinforced(强化学习)
+// 节点教程：primary(首次生成)
 export interface LearningPathTutorial {
   id: number
-  tutorial_type: 'primary' | 'remediation' | 'reinforced' | string
+  tutorial_type: 'primary' | string
   version_no: number           // 递增版本号，每次重新生成 +1
   based_on_tutorial_id: number | null  // 基于哪个旧版本生成的
   title: string
   summary: string | null
   content_markdown: string     // 教程正文（Markdown 格式）
   knowledge_points: string[]   // 覆盖的知识点列表
-  weak_knowledge_points: string[]  // 本轮待巩固的薄弱点（remediation/reinforced 时使用）
+  weak_knowledge_points: string[]  // 薄弱点（用于记录测验中暴露的问题）
   created_at: string
 }
 
@@ -150,10 +150,10 @@ export interface PathQuizSubmitResponse {
   round_no: number
   score: number
   passed: boolean
-  outcome: 'completed' | 'remediation' | 'completed_with_gaps'
+  outcome: 'completed' | 'completed_with_gaps'
   weak_knowledge_points: string[]
-  next_node_id: number | null        // 如果通过了，指向下一节点 ID
-  current_tutorial_id: number | null  // 如果进入巩固模式，指向新生成的教程
+  next_node_id: number | null        // 指向下一节点 ID
+  current_tutorial_id: number | null
 }
 
 // 创建路径时的表单请求体

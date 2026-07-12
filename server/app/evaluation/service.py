@@ -91,34 +91,57 @@ class EvaluationService:
             await session.commit()
             raise e
 
-        # 3. 调用大模型生成报告与辅导策略
-        try:
-            from app.evaluation import reporting
-            report_markdown, guidance_strategy = await reporting.generate(facts_snapshot)
+        # 3. 从 facts_snapshot 直接推导辅导策略（不调用 LLM）
+        guidance_strategy = self._derive_strategy_from_facts(facts_snapshot)
 
-            # 4. 在同一个事务中更新报告并写入用户画像策略字段
-            report.status = "ready"
-            report.report_markdown = report_markdown
-            report.generated_at = datetime.now(timezone.utc)
-            report.updated_at = datetime.now(timezone.utc)
+        # 4. 更新报告状态并写入策略
+        report.status = "ready"
+        report.generated_at = datetime.now(timezone.utc)
+        report.updated_at = datetime.now(timezone.utc)
+        # report_markdown 不再生成，保持 None
 
-            await self._update_guidance_strategy_only(
-                session,
-                user_id=user_id,
-                strategy=guidance_strategy,
-                report_id=report.id,
-            )
-            await session.commit()
-            await session.refresh(report)
-        except Exception as e:
-            await session.rollback()
-            report.status = "failed"
-            report.failure_code = "llm_generation_failed"
-            report.updated_at = datetime.now(timezone.utc)
-            await session.commit()
-            raise e
+        await self._update_guidance_strategy_only(
+            session,
+            user_id=user_id,
+            strategy=guidance_strategy,
+            report_id=report.id,
+        )
+        await session.commit()
+        await session.refresh(report)
 
         return report
+
+    def _derive_strategy_from_facts(self, facts: dict[str, Any]) -> dict[str, Any]:
+        """从 facts_snapshot 直接提取辅导策略，无需调用 LLM。
+
+        规则：
+        - 重点主题：练习次数 >= 3 且正确率 < 60% 的主题，最多取 4 个
+        - 其他字段使用默认值
+
+        Args:
+            facts: AssessmentFacts 快照字典
+
+        Returns:
+            GuidanceStrategy 字典
+        """
+        practice = facts.get("practice", {}).get("by_topic", [])
+
+        # 提取薄弱主题：练习次数 >= 3 且正确率 < 60%
+        weak_topics = [
+            t["topic"]
+            for t in practice
+            if t.get("submitted", 0) >= 3 and t.get("accuracy", 1) < 0.6
+        ][:4]
+
+        return {
+            "version": 1,
+            "focus_topics": weak_topics,
+            "preferred_resource_types": [],
+            "recommended_session_minutes": 25,
+            "weekly_goal": "",
+            "tutoring_style": "",
+            "reason": "基于练习正确率自动推导" if weak_topics else "暂无足够练习数据",
+        }
 
     async def _update_guidance_strategy_only(
         self, session: AsyncSession, *, user_id: int, strategy: dict[str, Any], report_id: int

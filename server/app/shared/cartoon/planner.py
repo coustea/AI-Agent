@@ -1,7 +1,8 @@
-"""Compile a compact lesson outline into replayable teaching scenes.
+"""Turn teaching intent into a stateful, replayable animation lesson.
 
-The LLM owns teaching intent only.  Executable scene state is created here so
-every video scene has the same validated, replayable contract before rendering.
+The language model chooses the pedagogical sequence.  This module owns the
+executable representation: every planned beat becomes a visible state and a
+separate narrated action.  No teaching information is silently collapsed.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ class CartoonPlanningError(RuntimeError):
 
 
 class SceneCompiler:
-    """Deterministically turn one teaching beat into a replayable scene."""
+    """Compile every outline beat into an evolving visual state."""
 
     _VISUAL_KINDS = {
         "tree_growth": "tree",
@@ -44,6 +45,7 @@ class SceneCompiler:
         "message_exchange": "packet",
         "pipeline": "pipeline_stage",
         "comparison": "data",
+        "state_transition": "state",
     }
     _MODES = {
         "comparison": "comparison",
@@ -63,12 +65,58 @@ class SceneCompiler:
     def compile(cls, outline: SceneOutline) -> TeachingScene:
         node_kind = cls._NODE_KINDS.get(outline.mechanism, "process")
         visual_kind = cls._VISUAL_KINDS.get(outline.mechanism, "flow")
-        focus_label = cls._text(outline.key_points[0], "起始对象", 72)
-        process_label = cls._text(outline.process_beats[0], "处理过程", 72)
-        result_label = cls._text(outline.exit_state, "教学结果", 72)
-        actions, patches = cls._process_actions(outline.mechanism)
-        hidden_ids = cls._initially_hidden_ids(outline.mechanism)
-
+        beats = [cls._text(beat, "过程变化", 72) for beat in outline.process_beats]
+        node_ids = ["anchor", *[f"beat-{index + 1:02d}" for index in range(len(beats))], "outcome"]
+        narration_budget = max(36, min(120, round(outline.estimated_seconds * 4.2 / (len(beats) + 2))))
+        nodes = [
+            {
+                "id": "anchor",
+                "label": cls._text(outline.entry_state, "起始状态", 72),
+                "detail": cls._text(outline.key_points[0], "观察起点", 88),
+                "kind": node_kind,
+                "state": "active",
+            }
+        ]
+        nodes.extend(
+            {
+                "id": node_id,
+                "label": beat,
+                "detail": cls._text(outline.objective, "推进教学过程", 88),
+                "kind": node_kind,
+                "initially_visible": False,
+            }
+            for node_id, beat in zip(node_ids[1:-1], beats, strict=True)
+        )
+        nodes.append(
+            {
+                "id": "outcome",
+                "label": cls._text(outline.exit_state, "最终状态", 72),
+                "detail": "形成可复述的结论",
+                "kind": node_kind,
+                "initially_visible": False,
+            }
+        )
+        edges = [
+            {
+                "source_id": source,
+                "target_id": destination,
+                "kind": "transition" if outline.mechanism in {"state_transition", "timeline"} else "directed",
+            }
+            for source, destination in zip(node_ids, node_ids[1:])
+        ]
+        steps = [
+            {
+                "id": "orient",
+                "narration": cls._narration("先建立起点", outline.entry_state, outline.objective, narration_budget),
+                "focus_ids": ["anchor"],
+                "actions": [{"kind": "focus", "target_ids": ["anchor"], "note": "建立观察起点", "duration_ms": 900}],
+            }
+        ]
+        previous_id = "anchor"
+        for index, (node_id, beat) in enumerate(zip(node_ids[1:-1], beats, strict=True), 1):
+            steps.append(cls._beat_step(outline, previous_id, node_id, beat, index, narration_budget))
+            previous_id = node_id
+        steps.append(cls._outcome_step(outline, previous_id, narration_budget))
         return TeachingScene.model_validate(
             {
                 "id": outline.id,
@@ -77,131 +125,46 @@ class SceneCompiler:
                 "mode": cls._MODES.get(outline.mechanism, "concept"),
                 "mechanism": outline.mechanism,
                 "tag": cls._text(outline.key_points[0], "教学过程", 36),
-                "visual_model": {
-                    "kind": visual_kind,
-                    "label": outline.title,
-                    "nodes": [
-                        {"id": "source", "label": focus_label, "kind": node_kind},
-                        {
-                            "id": "process",
-                            "label": process_label,
-                            "kind": node_kind,
-                            "initially_visible": "process" not in hidden_ids,
-                        },
-                        {
-                            "id": "result",
-                            "label": result_label,
-                            "kind": node_kind,
-                            "parent_id": "source" if outline.mechanism == "tree_growth" else None,
-                            "initially_visible": "result" not in hidden_ids,
-                        },
-                    ],
-                    "edges": cls._initial_edges(outline.mechanism),
-                },
-                "steps": [
-                    {
-                        "id": "observe",
-                        "narration": cls._narration("先观察", outline.entry_state),
-                        "focus_ids": ["source"],
-                        "actions": [
-                            {
-                                "kind": "focus",
-                                "target_ids": ["source"],
-                                "note": "建立观察起点",
-                            }
-                        ],
-                    },
-                    {
-                        "id": "demonstrate",
-                        "narration": cls._narration("再推进", outline.process_beats[-1]),
-                        "focus_ids": ["process", "result"],
-                        "actions": actions,
-                        "patches": patches,
-                    },
-                ],
+                "visual_model": {"kind": visual_kind, "label": outline.title, "nodes": nodes, "edges": edges},
+                "steps": steps,
             }
         )
 
-    @staticmethod
-    def _initially_hidden_ids(mechanism: str) -> set[str]:
-        if mechanism == "tree_growth":
-            return {"result"}
+    @classmethod
+    def _beat_step(cls, outline: SceneOutline, source: str, target: str, beat: str, index: int, budget: int) -> dict[str, Any]:
+        actions: list[dict[str, Any]] = [{"kind": "reveal", "target_ids": [target], "note": "呈现新的过程状态", "duration_ms": 720}]
+        patches: list[dict[str, Any]] = []
+        if outline.mechanism == "comparison":
+            actions.append({"kind": "compare", "target_ids": [source, target], "note": "辨析前后差异", "duration_ms": 1050})
+        elif outline.mechanism == "graph_traversal":
+            actions.append({"kind": "traverse", "target_ids": [source, target], "note": "沿路径推进", "duration_ms": 1050})
+        elif outline.mechanism in {"state_transition", "memory_change", "container_operation"}:
+            actions.append({"kind": "mutate", "target_ids": [target], "note": "状态发生改变", "duration_ms": 980})
+            patches.append({"op": "set_state", "after_action_index": 1, "target_id": target, "value": "changed"})
+        elif outline.mechanism == "tree_growth":
+            actions.append({"kind": "connect", "target_ids": [source, target], "source_id": source, "destination_id": target, "note": "展开新的结构关系", "duration_ms": 980})
+        else:
+            actions.append({"kind": "transfer", "target_ids": [source, target], "source_id": source, "destination_id": target, "note": "沿关系推动过程", "duration_ms": 1050})
+        return {
+            "id": f"beat-{index:02d}",
+            "narration": cls._narration(f"第 {index} 步", beat, outline.objective, budget),
+            "focus_ids": [source, target],
+            "actions": actions,
+            "patches": patches,
+        }
 
-        return set()
-
-    @staticmethod
-    def _initial_edges(mechanism: str) -> list[dict[str, Any]]:
-        if mechanism in {
-            "graph_traversal",
-            "timeline",
-        }:
-            return [
-                {"source_id": "source", "target_id": "process", "kind": "directed"},
-                {"source_id": "process", "target_id": "result", "kind": "directed"},
-            ]
-
-        if mechanism in {
-            "sequence",
-            "data_flow",
-            "message_exchange",
-            "pipeline",
-        }:
-            return [
-                {"source_id": "source", "target_id": "process", "kind": "directed"},
-            ]
-
-        return []
-
-    @staticmethod
-    def _process_actions(mechanism: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        if mechanism == "tree_growth":
-            edge = {"source_id": "source", "target_id": "result", "kind": "directed"}
-            return (
-                [
-                    {
-                        "kind": "insert",
-                        "target_ids": ["result"],
-                        "note": "新对象进入结构",
-                        "duration_ms": 620,
-                    },
-                    {
-                        "kind": "connect",
-                        "target_ids": ["source", "result"],
-                        "source_id": "source",
-                        "destination_id": "result",
-                        "note": "建立结构连接",
-                        "duration_ms": 620,
-                    },
-                ],
-                [{"op": "add_edge", "after_action_index": 1, "edge": edge}],
-            )
-        if mechanism == "graph_traversal":
-            return (
-                [{"kind": "traverse", "target_ids": ["source", "process", "result"], "note": "按顺序访问节点"}],
-                [],
-            )
-        if mechanism == "comparison":
-            return (
-                [{"kind": "compare", "target_ids": ["source", "process"], "note": "比较关键差异"}],
-                [],
-            )
-        if mechanism in {"state_transition", "container_operation", "memory_change"}:
-            return (
-                [{"kind": "mutate", "target_ids": ["process"], "note": "更新过程状态"}],
-                [{"op": "set_state", "after_action_index": 0, "target_id": "process", "value": "updated"}],
-            )
-        return (
-            [
-                {
-                    "kind": "transfer",
-                    "target_ids": ["source", "process"],
-                    "source_id": "source",
-                    "destination_id": "process",
-                    "note": "推动信息流转",
-                }
+    @classmethod
+    def _outcome_step(cls, outline: SceneOutline, source: str, budget: int) -> dict[str, Any]:
+        return {
+            "id": "conclude",
+            "narration": cls._narration("最后得到结论", outline.exit_state, outline.objective, budget),
+            "focus_ids": [source, "outcome"],
+            "actions": [
+                {"kind": "reveal", "target_ids": ["outcome"], "note": "呈现结论", "duration_ms": 720},
+                {"kind": "transfer", "target_ids": [source, "outcome"], "source_id": source, "destination_id": "outcome", "note": "收束为结论", "duration_ms": 1050},
+                {"kind": "highlight", "target_ids": ["outcome"], "note": "巩固核心结论", "duration_ms": 840, "intensity": "strong"},
             ],
-            [],
-        )
+        }
 
     @staticmethod
     def _text(value: str, fallback: str, limit: int) -> str:
@@ -209,61 +172,71 @@ class SceneCompiler:
         return normalized or fallback
 
     @classmethod
-    def _narration(cls, prefix: str, detail: str) -> str:
-        return cls._text(f"{prefix}：{detail}。", "观察并推进教学过程。", 180)
+    def _narration(cls, prefix: str, detail: str, objective: str, budget: int) -> str:
+        sentences = [
+            f"{prefix}，{cls._text(detail, '过程正在变化', 72)}。",
+            f"这里要抓住的是：{cls._text(objective, '理解状态之间的因果关系', 88)}。",
+            "先看清当前对象，再把它和前一个状态联系起来。",
+            "这样就能判断这一步为什么会推动下一步。",
+        ]
+        text = ""
+        for sentence in sentences:
+            if len(text) >= budget:
+                break
+            text += sentence
+        return text[:180]
 
 
 class CartoonLessonPlanner:
-    """Generate a compact outline, then compile verified executable scenes."""
+    """Generate a duration-aware outline, then compile executable scenes."""
 
     async def plan(self, brief: CartoonBrief) -> TeachingLesson:
         try:
             outline = await self._invoke_outline(brief)
+            outline = self._allocate_duration(outline, brief.configuration.target_duration_seconds)
             scenes = [SceneCompiler.compile(scene) for scene in outline.scenes]
-            return TeachingLesson.model_validate(
-                {
-                    "title": outline.title,
-                    "course": outline.course,
-                    "topic": outline.topic,
-                    "scenes": [scene.model_dump(mode="json") for scene in scenes],
-                }
-            )
+            return TeachingLesson.model_validate({"title": outline.title, "course": outline.course, "topic": outline.topic, "scenes": [scene.model_dump(mode="json") for scene in scenes]})
         except Exception as exc:
             raise CartoonPlanningError(f"无法生成可回放的教学动画: {exc}") from exc
 
     async def _invoke_outline(self, brief: CartoonBrief) -> LessonOutline:
-        response = await get_llm().ainvoke_json(
-            LessonOutline,
-            self._outline_messages(brief),
-            temperature=0.12,
-            max_tokens=2200,
-        )
+        response = await get_llm().ainvoke_json(LessonOutline, self._outline_messages(brief), temperature=0.12, max_tokens=2600)
         return response if isinstance(response, LessonOutline) else LessonOutline.model_validate(response)
 
     def _outline_messages(self, brief: CartoonBrief) -> list[Any]:
         config = brief.configuration
         source = self._source(brief, 6000)
         return [
-            SystemMessage(
-                content=(
-                    "你是高校计算机课程教学动画的总导演。只输出 LessonOutline JSON。\n"
-                    "本轮只规划全局教学结构，不生成节点、边、动作、补丁、旁白、坐标、HTML 或代码。\n"
-                    f"mechanism 只能取：{'、'.join(MECHANISM_KINDS)}。场景数量为 2-6 个，"
-                    "至少一个必须展示真实过程。每场景给出 entry_state、2-6 个连续 process_beats 和 exit_state。"
-                )
-            ),
-            HumanMessage(
-                content=(
-                    f"学习需求：{brief.learning_need}\n目标时长：{config.target_duration_seconds} 秒\n"
-                    f"知识点：{'、'.join(brief.knowledge_points)}\n"
-                    f"薄弱知识点：{'、'.join(brief.weak_knowledge_points)}\n教学材料：\n{source}"
-                )
-            ),
+            SystemMessage(content=(
+                "你是高校计算机课程教学动画的总导演。只输出 LessonOutline JSON。\n"
+                "你负责教学结构：每个 process_beats 都必须是可被单独演示的连续因果步骤，不能写泛泛总结。\n"
+                f"mechanism 只能取：{'、'.join(MECHANISM_KINDS)}。场景数量为 2-6 个，至少一个必须展示真实过程。"
+                "每场景给出 entry_state、2-6 个连续 process_beats、exit_state 和 estimated_seconds。"
+            )),
+            HumanMessage(content=(
+                f"学习需求：{brief.learning_need}\n目标时长：{config.target_duration_seconds} 秒（最少 90 秒）。\n"
+                f"知识点：{'、'.join(brief.knowledge_points)}\n薄弱知识点：{'、'.join(brief.weak_knowledge_points)}\教学材料：\n{source}"
+            )),
         ]
 
     @staticmethod
+    def _allocate_duration(outline: LessonOutline, target_seconds: int) -> LessonOutline:
+        weights = [max(1, len(scene.process_beats) + 1) for scene in outline.scenes]
+        total_weight = sum(weights)
+        remaining = target_seconds
+        allocated: list[int] = []
+        for index, weight in enumerate(weights):
+            if index == len(weights) - 1:
+                seconds = remaining
+            else:
+                seconds = round(target_seconds * weight / total_weight)
+                seconds = max(12, seconds)
+                remaining -= seconds
+            allocated.append(seconds)
+        scenes = [scene.model_copy(update={"estimated_seconds": seconds}) for scene, seconds in zip(outline.scenes, allocated, strict=True)]
+        return outline.model_copy(update={"scenes": scenes})
+
+    @staticmethod
     def _source(brief: CartoonBrief, limit: int) -> str:
-        text = "\n\n".join(
-            part for part in (brief.teaching_plan, brief.tutorial_markdown, "、".join(brief.knowledge_points)) if part.strip()
-        )
+        text = "\n\n".join(part for part in (brief.teaching_plan, brief.tutorial_markdown, "、".join(brief.knowledge_points)) if part.strip())
         return text[:limit]

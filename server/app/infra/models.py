@@ -433,7 +433,7 @@ class LearningAssessmentReport(SQLModel, table=True):
         CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_reports_status"),
         CheckConstraint("window_end > window_start", name="chk_reports_window_order"),
         CheckConstraint(
-            "(status = 'ready' AND facts_snapshot IS NOT NULL AND report_markdown IS NOT NULL) OR "
+            "(status = 'ready' AND facts_snapshot IS NOT NULL) OR "
             "(status = 'failed' AND failure_code IS NOT NULL) OR "
             "(status = 'generating')",
             name="chk_reports_state_consistency"

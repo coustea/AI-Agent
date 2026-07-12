@@ -903,7 +903,6 @@ def _teaching_panel_html(
             f'data-step-summary-index="{index}">'
             f"<b>{html.escape(_action_label(scene, step))}</b>"
             f"<strong>{html.escape(_focus_summary(scene, step))}</strong>"
-            f"<span>{html.escape(step.narration)}</span>"
             "</article>"
         )
 

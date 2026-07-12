@@ -244,6 +244,10 @@ class CartoonVideoAgent:
                         brief.configuration
                         .visual_density
                     ),
+                    target_duration_seconds=(
+                        brief.configuration
+                        .target_duration_seconds
+                    ),
                 )
             )
 
@@ -366,6 +370,11 @@ class CartoonVideoAgent:
                     "没有音频轨",
                     stage="media",
                 )
+
+            self._validate_duration_contract(
+                render.duration_seconds,
+                brief.configuration.target_duration_seconds,
+            )
 
             audit["stages"][
                 "render"
@@ -566,6 +575,21 @@ class CartoonVideoAgent:
                     str(exc)
                 ],
             ) from exc
+
+    @staticmethod
+    def _validate_duration_contract(
+        actual_seconds: float,
+        target_seconds: int,
+    ) -> None:
+        """Reject videos that are too short for meaningful lesson content."""
+        if actual_seconds < 90:
+            raise CartoonGenerationError(
+                "成片时长过短,不符合动画讲解视频要求",
+                stage="media",
+                problems=[
+                    f"actual={actual_seconds:.2f}s; minimum=90s",
+                ],
+            )
 
     async def _synthesize_steps(
         self,
