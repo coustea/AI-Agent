@@ -114,7 +114,7 @@
                     {{ difficultyLabel[item.difficulty] }}
                   </span>
                   <span>{{ getVisualizerLabel(item.visualizerType) }}</span>
-                  <span>{{ item.supportedLanguages.length }} 语言</span>
+                  <span>{{ getLanguageLabel(item.supportedLanguages) }}</span>
                 </span>
               </button>
             </template>
@@ -140,6 +140,7 @@ import type { AlgorithmCategoryGroup } from '@/features/algorithm-visualization/
 import {
   getAlgorithmDescription,
   getVisualizerLabel,
+  getLanguageLabel,
 } from '@/features/algorithm-visualization/data/visualizerMetadata'
 
 const props = defineProps<{

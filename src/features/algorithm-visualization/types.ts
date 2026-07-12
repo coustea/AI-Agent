@@ -8,7 +8,7 @@ export type VisualizerType =
   | 'dp-table'
 
 // 支持的代码语言
-export type CodeLanguage = 'python' | 'c' | 'cpp' | 'java' | 'javascript'
+export type CodeLanguage = 'python'
 
 // TraceEvent 事件协议 — 所有语言统一输出
 export interface TraceEvent {
@@ -81,7 +81,6 @@ export interface RunError {
     | 'UNSUPPORTED_ALGORITHM'
     | 'UNSUPPORTED_LANGUAGE'
     | 'VISUALIZER_TYPE_MISMATCH'
-    | 'COMPILE_ERROR'
     | 'RUNTIME_ERROR'
     | 'TIMEOUT'
     | 'TRACE_FILE_MISSING'
@@ -89,8 +88,8 @@ export interface RunError {
     | 'TRACE_EVENT_EMPTY'
     | 'TRACE_EVENT_INVALID'
     | 'TRACE_VISUALIZER_TYPE_INVALID'
-    | 'RUNTIME_NOT_FOUND'
     | 'TRACER_SDK_MISSING'
+    | 'INSTRUMENTATION_FAILED'
     | 'VISUALIZER_RUN_ERROR'
   message: string
   details?: string

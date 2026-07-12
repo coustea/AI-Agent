@@ -409,10 +409,6 @@ function toggleEditorTheme() {
 function mapCodeLanguage(value: CodeLanguage): string {
   const map: Partial<Record<CodeLanguage, string>> = {
     python: 'python',
-    javascript: 'javascript',
-    cpp: 'cpp',
-    java: 'java',
-    c: 'c',
   }
 
   return map[value] ?? 'plaintext'
@@ -426,10 +422,6 @@ function getLanguageLabel(value: CodeLanguage | string) {
 
   const fallbackMap: Record<string, string> = {
     python: 'Python',
-    javascript: 'JavaScript',
-    cpp: 'C++',
-    c: 'C',
-    java: 'Java',
   }
 
   return fallbackMap[String(value)] ?? String(value)
