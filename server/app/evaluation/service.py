@@ -33,7 +33,7 @@ from app.evaluation.response import (
 )
 from app.config import STREAK_MIN_SECONDS
 from app.infra.logging import get_logger
-from app.infra.models import LearningEvent, LearningSession
+from app.infra.models import LearningEvent, LearningSession, LearningAssessmentReport
 
 logger = get_logger(__name__)
 
@@ -120,9 +120,129 @@ def _build_recommendations(
     return recommendations
 
 
+class ConcurrencyError(Exception):
+    """当用户已有正在生成的报告时抛出该异常。"""
+    pass
+
+
 # 评估服务类：学习事件记录、会话记录、摘要与时间统计
 class EvaluationService:
     """评估服务 — 学习事件记录、会话记录、摘要生成。"""
+
+    # 生成学习效果评估报告并只更新当前辅导策略
+    async def generate_report(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: int,
+        range_days: int,
+    ) -> LearningAssessmentReport:
+        if range_days not in (7, 14, 30):
+            raise ValueError("range_days must be 7, 14, or 30")
+
+        # 1. 原子创建 generating 报告并检测并发
+        now_utc = datetime.now(timezone.utc)
+        window_start = now_utc - timedelta(days=range_days)
+        window_end = now_utc
+
+        # 查询是否已有生成中报告
+        existing_generating = await session.scalar(
+            select(LearningAssessmentReport).where(
+                LearningAssessmentReport.user_id == user_id,
+                LearningAssessmentReport.status == "generating",
+            )
+        )
+        if existing_generating is not None:
+            raise ConcurrencyError("assessment_generation_in_progress")
+
+        report = LearningAssessmentReport(
+            user_id=user_id,
+            range_days=range_days,
+            window_start=window_start,
+            window_end=window_end,
+            status="generating",
+            created_at=now_utc,
+            updated_at=now_utc,
+        )
+        session.add(report)
+        
+        from sqlalchemy.exc import IntegrityError
+        try:
+            await session.commit()
+            await session.refresh(report)
+        except IntegrityError:
+            await session.rollback()
+            raise ConcurrencyError("assessment_generation_in_progress")
+
+        # 2. 聚合事实快照并保存
+        try:
+            from app.evaluation.facts import build_assessment_facts
+            facts_snapshot = await build_assessment_facts(
+                session, user_id=user_id, window_start=window_start, window_end=window_end
+            )
+            report.facts_snapshot = facts_snapshot
+            report.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+        except Exception as e:
+            # 聚合失败，修改报告状态
+            report.status = "failed"
+            report.failure_code = "facts_aggregation_failed"
+            report.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            raise e
+
+        # 3. 调用大模型生成报告与辅导策略
+        try:
+            from app.evaluation import reporting
+            report_markdown, guidance_strategy = await reporting.generate(facts_snapshot)
+
+            # 4. 在同一个事务中更新报告并写入用户画像策略字段
+            report.status = "ready"
+            report.report_markdown = report_markdown
+            report.generated_at = datetime.now(timezone.utc)
+            report.updated_at = datetime.now(timezone.utc)
+
+            await self._update_guidance_strategy_only(
+                session,
+                user_id=user_id,
+                strategy=guidance_strategy,
+                report_id=report.id,
+            )
+            await session.commit()
+            await session.refresh(report)
+        except Exception as e:
+            await session.rollback()
+            report.status = "failed"
+            report.failure_code = "llm_generation_failed"
+            report.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            raise e
+
+        return report
+
+    async def _update_guidance_strategy_only(
+        self, session: AsyncSession, *, user_id: int, strategy: dict[str, Any], report_id: int
+    ) -> None:
+        from app.infra.models import UserProfile
+        profile = await session.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
+        now = datetime.now(timezone.utc)
+        if profile is None:
+            profile = UserProfile(
+                user_id=user_id,
+                overall_score=0,
+                scored_at=None,
+                guidance_strategy=strategy,
+                guidance_updated_at=now,
+                last_assessment_report_id=report_id,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(profile)
+        else:
+            profile.guidance_strategy = strategy
+            profile.guidance_updated_at = now
+            profile.last_assessment_report_id = report_id
+            profile.updated_at = now
 
     # 记录单条学习事件并落库（带幂等去重）
     async def record_event(
