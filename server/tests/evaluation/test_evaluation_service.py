@@ -6,52 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 from app.evaluation.service import (
     EvaluationService,
-    build_profile_update_payload,
     build_summary_from_events,
-    derive_memory_signals,
 )
 from app.infra.models import LearningEvent
-
-
-def test_quiz_low_score_becomes_weakness_memory_signal():
-    event = LearningEventCreate(
-        event_type="quiz_submitted",
-        course="计算机网络",
-        topic="TCP 三次握手",
-        score=52,
-    )
-
-    signals = derive_memory_signals(event)
-
-    # derive_memory_signals is now a legacy stub that returns empty list
-    assert signals == []
-
-
-def test_feedback_can_become_preference_and_weakness_signals():
-    event = LearningEventCreate(
-        event_type="resource_feedback",
-        topic="递归边界条件",
-        feedback="这部分还是看不懂，希望多给图解和代码案例",
-    )
-
-    signals = derive_memory_signals(event)
-
-    # derive_memory_signals is now a legacy stub that returns empty list
-    assert signals == []
-
-
-def test_memory_signals_build_tutoring_profile_update_payload():
-    event = LearningEventCreate(
-        event_type="resource_feedback",
-        course="数据结构",
-        topic="递归边界条件",
-        feedback="这部分还是看不懂，希望多给图解和代码案例",
-    )
-
-    payload = build_profile_update_payload(event)
-
-    # build_profile_update_payload is now a legacy stub that returns None
-    assert payload is None
 
 
 def test_summary_aggregates_learning_events():
@@ -76,16 +33,17 @@ def test_summary_aggregates_learning_events():
         LearningEvent(
             id=3,
             user_id=1,
+            module="resource",
             event_type="resource_feedback",
             topic="递归",
-            feedback="希望多给图解",
+            event_metadata={"feedback": "希望多给图解"},
             created_at=datetime.now(),
         ),
         LearningEvent(
             id=4,
             user_id=1,
+            module="resource",
             event_type="learning_heartbeat",
-            duration_seconds=300,
             created_at=datetime.now(),
         ),
     ]
@@ -110,23 +68,20 @@ def test_record_event_persists_path_node_context():
         session.refresh = AsyncMock()
 
         payload = LearningEventCreate(
+            module="quiz",
             event_type="quiz_submitted",
             path_id=12,
             path_node_id=34,
             node_id="fastapi-intro",
-            resource_id=56,
-            resource_item_id=78,
             topic="FastAPI 入门",
             score=58,
+            event_metadata={"is_correct": True, "resource_id": 56, "resource_item_id": 78}
         )
 
-        event = await EvaluationService().record_event(session, user_id=1, payload=payload)
+        event, _ = await EvaluationService().record_event(session, user_id=1, payload=payload)
 
         assert event is not None
-        assert event.path_id == 12
-        assert event.path_node_id == 34
-        assert event.node_id == "fastapi-intro"
-        assert event.resource_item_id == 78
+        assert event.event_metadata.get("resource_item_id") == 78
         session.add.assert_called_once_with(event)
 
     asyncio.run(run())

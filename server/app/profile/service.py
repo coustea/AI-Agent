@@ -1,11 +1,8 @@
-"""学习者画像服务 — 全局画像 CRUD、周度学习摘要、LLM 推理与评分。
+"""学习者画像服务 — 全局画像 CRUD、LLM 推理与评分。
 
 架构：基础信息（school/major/grade 等）存储在 User 表，由 onboarding 填写；
 画像维度（7 维度）存储在 UserProfileDimension 表，由 LLM 推理；
 评分汇总存储在 UserProfile 表。
-周度学习摘要（WeeklyLearningDigest）作为文字画像更新的缓冲层：由
-infer_profile_from_digest 消费——GET /profile 懒加载触发时构建本周摘要，
-再据此推理更新文字画像，避免逐事件频繁更新导致画像失准。
 """
 
 # 画像服务：基础信息/维度/评分的持久化、周摘要缓冲与 LLM 推理
@@ -31,9 +28,7 @@ from app.infra.models import (
     User,
     UserProfile,
     UserProfileDimension,
-    WeeklyLearningDigest,
 )
-from app.profile.weekly import build_digest
 from app.profile.types import (
     ALL_DIMENSIONS,
     DIMENSION_NAMES,
@@ -297,130 +292,7 @@ class ProfileService:
             user_id, len(dimensions_patch), list(dimensions_patch.keys()),
         )
 
-    # 获取或生成本周学习摘要（已存在且无新事件则复用）
-    async def get_or_create_weekly_digest(
-        self,
-        *,
-        user_id: int,
-        db: AsyncSession,
-        now: datetime | None = None,
-    ) -> WeeklyLearningDigest:
-        """获取或生成本周学习摘要。
 
-        优化：当本周摘要已存在且无新增 LearningEvent 时直接复用，
-        避免每次触发都重新聚合 5 个模块的数据。
-        """
-        week_start, week_end = _utc_week_range(now)
-
-        # 1) 尝试复用已存在的摘要
-        existing = (
-            await db.exec(
-                select(WeeklyLearningDigest).where(
-                    WeeklyLearningDigest.user_id == user_id,
-                    WeeklyLearningDigest.module == self.module,
-                    WeeklyLearningDigest.week_start == week_start,
-                )
-            )
-        ).first()
-
-        if existing is not None:
-            # 检查自摘要更新后是否有新增学习事件
-            has_new = (
-                await db.exec(
-                    select(func.count())
-                    .select_from(LearningEvent)
-                    .where(
-                        LearningEvent.user_id == user_id,
-                        LearningEvent.created_at > existing.updated_at,
-                    )
-                )
-            ).one()
-            # 无新事件则直接复用，避免重复聚合
-            if has_new == 0:
-                logger.info(
-                    "[ProfileService] 复用现有周摘要: user_id=%s week=%s updated_at=%s",
-                    user_id, _format_week_label(week_start, week_end), existing.updated_at,
-                )
-                return existing
-            logger.info(
-                "[ProfileService] 有新事件，重建周摘要: user_id=%s week=%s",
-                user_id, _format_week_label(week_start, week_end),
-            )
-
-        # 2) 无可用摘要或有新事件 → 重建
-        user_row = (await db.exec(select(User).where(User.id == user_id))).first()
-        username = user_row.username if user_row and user_row.username else "用户"
-
-        logger.info(
-            "[ProfileService] 周摘要构建: user_id=%s week=%s",
-            user_id, _format_week_label(week_start, week_end),
-        )
-
-        # 调用周摘要构建器聚合 5 个模块数据
-        result = await build_digest(
-            db=db,
-            user_id=user_id,
-            week_start=week_start,
-            week_end=week_end,
-            username=username,
-        )
-
-        now_utc = datetime.now(timezone.utc)
-        # 以 user+module+week 为主键 upsert 周摘要
-        upsert_stmt = pg_insert(WeeklyLearningDigest).values(
-            user_id=user_id,
-            module=self.module,
-            week_start=week_start,
-            week_end=week_end,
-            digest_markdown=result.markdown,
-            courses_active=result.courses_active,
-            stats=result.stats,
-            created_at=now_utc,
-            updated_at=now_utc,
-        ).on_conflict_do_update(
-            constraint="uq_weekly_digest_user_module_week",
-            set_={
-                "digest_markdown": result.markdown,
-                "courses_active": result.courses_active,
-                "stats": result.stats,
-                "updated_at": now_utc,
-            },
-        )
-        await db.exec(upsert_stmt)  # type: ignore[arg-type]
-        await db.flush()
-
-        # upsert 后回读确认落库
-        digest = (
-            await db.exec(
-                select(WeeklyLearningDigest).where(
-                    WeeklyLearningDigest.user_id == user_id,
-                    WeeklyLearningDigest.module == self.module,
-                    WeeklyLearningDigest.week_start == week_start,
-                )
-            )
-        ).first()
-
-        # 兜底：回读为空时以内存对象返回
-        if digest is None:
-            logger.warning(
-                "[ProfileService] 周摘要 upsert+select 意外返回 None: user_id=%s week=%s",
-                user_id, _format_week_label(week_start, week_end),
-            )
-            digest = WeeklyLearningDigest(
-                user_id=user_id,
-                module=self.module,
-                week_start=week_start,
-                week_end=week_end,
-                digest_markdown=result.markdown,
-                courses_active=result.courses_active,
-                stats=result.stats,
-            )
-
-        logger.info(
-            "[ProfileService] 周摘要构建完成: user_id=%s stats=%s markdown长度=%s",
-            user_id, digest.stats, len(digest.digest_markdown),
-        )
-        return digest
 
     # 将画像维度 + 基础信息转为结构化 Markdown 文本
     async def build_profile_markdown(self, *, user_id: int) -> str:
@@ -627,83 +499,7 @@ class ProfileService:
             logger.exception("[ProfileService] onboarding 推理+评分失败: user_id=%s", user_id)
             return {"inference_ok": False, "reason": "llm_error"}
 
-    # 从本周周概要推理更新文字画像（GET /profile 懒加载触发）
-    async def infer_profile_from_digest(self, *, user_id: int) -> dict[str, Any]:
-        """从本周周概要推理更新文字画像（懒加载触发）。
 
-        流程：获取当前 profile → 构建/复用本周摘要 →
-        若摘要未变更（digest.updated_at <= profile.updated_at）则跳过 LLM，
-        否则 LLM 推理（digest_update）→
-        若 should_update 则 save_dimensions + score_profile（唯一评分通道之一）；
-        否则轻量 bump updated_at 避免重复触发，不动 scored_at 以保持不变式。
-        """
-        try:
-            logger.info("[ProfileService] 周概要画像推理开始: user_id=%s", user_id)
-            should_update = False
-            async with session_scope() as db:
-                profile = await self.get_profile(user_id=user_id, db=db)
-                digest = await self.get_or_create_weekly_digest(user_id=user_id, db=db)
-
-                # 摘要未变更 → 跳过 LLM，仅刷新 updated_at 避免重复触发
-                if digest.updated_at <= profile.updated_at:
-                    logger.info(
-                        "[ProfileService] 摘要未变更，跳过 LLM: user_id=%s digest_updated=%s profile_updated=%s",
-                        user_id, digest.updated_at, profile.updated_at,
-                    )
-                    profile.updated_at = datetime.now(timezone.utc)
-                    db.add(profile)
-                    await db.commit()
-                    return {"profile_updated": False, "reason": "digest_unchanged"}
-
-                # 读取现有维度，与周摘要一起交给 LLM 判断是否更新
-                dimensions = await self.get_dimensions(user_id=user_id, db=db)
-
-                prompt = prompts.get("profile").render(
-                    "digest_update",
-                    current_profile_json=json.dumps(dimensions, ensure_ascii=False),
-                    weekly_digest_markdown=digest.digest_markdown,
-                )
-                resp = await self.llm.ainvoke_json(
-                    GlobalTutoringInferenceOutput,
-                    [HumanMessage(content=prompt)],
-                )
-                logger.info(
-                    "[ProfileService] 周概要推理结果: should_update=%s",
-                    resp.should_update,
-                )
-
-                # LLM 判定需要更新则保存维度补丁
-                if resp.should_update and resp.dimensions_patch:
-                    await self.save_dimensions(
-                        user_id=user_id,
-                        dimensions_patch=resp.dimensions_patch,
-                        db=db,
-                    )
-                    should_update = True
-
-            # 维度有更新则重新评分
-            if should_update:
-                score_result = await self.score_profile(user_id=user_id)
-                logger.info(
-                    "[ProfileService] 周概要推理+评分完成: user_id=%s overall_score=%s",
-                    user_id, score_result.get("overall_score"),
-                )
-            else:
-                # 无变更：仅刷新 updated_at 避免重复触发（不动 scored_at）
-                async with session_scope() as db:
-                    profile_bump = await self.get_profile(user_id=user_id, db=db)
-                    profile_bump.updated_at = datetime.now(timezone.utc)
-                    db.add(profile_bump)
-                    await db.commit()
-                logger.info(
-                    "[ProfileService] 周概要推理无变更，已 bump updated_at: user_id=%s",
-                    user_id,
-                )
-
-            return {"profile_updated": should_update}
-        except Exception:
-            logger.exception("[ProfileService] 周概要推理失败: user_id=%s", user_id)
-            return {"profile_updated": False, "reason": "error"}
 
     # 仅依据文字画像（base_info + dimensions）对 7 维度重新评分
     async def score_profile(self, *, user_id: int) -> dict[str, Any]:
