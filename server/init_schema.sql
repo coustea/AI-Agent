@@ -267,12 +267,6 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     CONSTRAINT uq_user_profiles_user UNIQUE (user_id)
 );
 
--- Existing databases are not changed by CREATE TABLE IF NOT EXISTS.
-ALTER TABLE user_profiles
-    ADD COLUMN IF NOT EXISTS guidance_strategy JSONB NOT NULL DEFAULT '{}',
-    ADD COLUMN IF NOT EXISTS guidance_updated_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS last_assessment_report_id INTEGER;
-
 CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles (user_id);
 
 COMMENT ON TABLE user_profiles IS '用户主画像表，每个用户一条';
