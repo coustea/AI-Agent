@@ -23,6 +23,17 @@ export interface IdleDisconnectState {
     isListening: boolean
 }
 
+export const MAX_PENDING_AUDIO_CHUNKS = 6
+export const MAX_WS_AUDIO_BUFFERED_BYTES = 32 * 1024
+
+export function enqueueBoundedAudioChunk(queue: string[], chunk: string, maxSize = MAX_PENDING_AUDIO_CHUNKS): boolean {
+    const safeMaxSize = Math.max(1, Math.floor(maxSize))
+    const dropped = queue.length >= safeMaxSize
+    if (dropped) queue.shift()
+    queue.push(chunk)
+    return dropped
+}
+
 // 判断是否应暂停空闲自动断开（正在交互中不自动断开）
 export function shouldPauseIdleDisconnect({ state, isSpeaking, isListening }: IdleDisconnectState): boolean {
     if (isSpeaking || isListening) return true
@@ -102,7 +113,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     const generationCache = ref(localStorage.getItem(CACHE_KEY) || '')
     let bufferedAssistantText = ''
     let pendingAssistantComplete = false
-    let assistantFlushFallbackTimer: ReturnType<typeof setTimeout> | null = null
     let assistantRevealTimer: ReturnType<typeof setTimeout> | null = null
     let revealingAssistantText = false
     let assistantRevealBudget = 0
@@ -143,11 +153,16 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let audioContext: AudioContext | null = null
     let audioStream: MediaStream | null = null
     let audioMonitor: ReturnType<typeof setInterval> | null = null
+    let audioFlushTimer: ReturnType<typeof setTimeout> | null = null
+    const pendingAudioChunks: string[] = []
+    let droppedAudioChunks = 0
     let vadActive = false
     let backendVadReady = false
     let speechDetected = false
     let speechHangTimer: ReturnType<typeof setTimeout> | null = null
     let playerContainer: HTMLElement | null = null
+    let playerReadyTimer: ReturnType<typeof setTimeout> | null = null
+    let playerGeneration = 0
     // 当数字人说话时尝试启动 VAD，会暂存参数，等播报结束后自动重启
     let _pendingVadRestart: { needDiagram: boolean; capabilities: DigitalHumanCapabilities } | null = null
     // Pending stream data: saved when stream_info arrives before container is ready
@@ -245,6 +260,9 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         ws.onclose = (event) => {
             isConnected.value = false
+            stopVad()
+            destroyPlayer()
+            stopIdleTimer()
             callbacks?.onConnectionChange?.(false)
             if (event.code === 4001) {
                 error.value = '认证失败，请重新登录'
@@ -289,10 +307,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         audioEnabled.value = false
         error.value = null
         pendingStreamData = null
+        clearPendingAudioChunks()
         bufferedAssistantText = ''
         pendingAssistantComplete = false
         _pendingVadRestart = null
-        clearAssistantFlushFallbackTimer()
         clearAssistantRevealTimer()
         callbacks?.onConnectionChange?.(false)
     }
@@ -312,7 +330,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             // Clear previous turn's buffered text
             bufferedAssistantText = ''
             pendingAssistantComplete = false
-            clearAssistantFlushFallbackTimer()
             clearAssistantRevealTimer()
             return
         }
@@ -371,7 +388,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             updateCache('', false) // 开始新一轮对话前清理上一轮残留
             bufferedAssistantText = ''
             pendingAssistantComplete = false
-            clearAssistantFlushFallbackTimer()
             clearAssistantRevealTimer()
             callbacks?.onAsrResult?.(data.content || '')
         } else if (type === 'assistant_chunk') {
@@ -389,15 +405,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onThinkingEnd?.()
             // 确保所有缓冲文本都开始 reveal
             startAssistantReveal()
-            clearAssistantFlushFallbackTimer()
-            assistantFlushFallbackTimer = setTimeout(() => {
-                // avatar_stopped 一直没来，强制 finalize 避免消息卡住
-                if (isSpeaking.value) {
-                    console.warn('[DH] avatar_stopped not received after assistant_complete, force finalizing')
-                    isSpeaking.value = false
-                }
-                finalizeBufferedAssistantTurn(true)
-            }, 8000)
         } else if (type === 'avatar_speaking') {
             isSpeaking.value = true
             currentSpeechStartedAt = Date.now()
@@ -467,6 +474,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         const url = data.stream_url || data.data?.stream_url
         const extend = data.stream_extend || data.data?.stream_extend || {}
 
+        setAvatarReady(false)
+
         if (data.reconnected) {
             // Reconnection: destroy and reinit player
             const wasAudioEnabled = audioEnabled.value
@@ -475,12 +484,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             nextTick(() => {
                 streamUrl.value = url || null
                 streamExtend.value = extend
-                isAvatarReady.value = true
-                callbacks?.onAvatarReady?.(true)
                 initPlayer(url, extend)
-                if (wasAudioEnabled) {
-                    setTimeout(() => enableAudio(), 1000)
-                }
+                if (wasAudioEnabled) waitForAvatarReadyAndEnableAudio()
             })
         } else {
             // First connection: use nextTick to ensure DigitalHumanCanvas is mounted
@@ -488,9 +493,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             nextTick(() => {
                 streamUrl.value = url || null
                 streamExtend.value = extend
-                isAvatarReady.value = true
-                // Set container first, then init player
-                callbacks?.onAvatarReady?.(true)
                 initPlayer(url, extend)
             })
         }
@@ -514,7 +516,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function initPlayer(url: string, extend: Record<string, any>): void {
         if (!url) {
-            console.warn('[DH] cannot init player: no stream url')
+            reportPlayerError('数字人视频流地址无效')
             return
         }
 
@@ -527,17 +529,23 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const RTCPlayer = (window as any).Interactive?.RTCPlayer
         if (!RTCPlayer) {
-            console.error('[DH] RTCPlayer SDK not loaded')
+            reportPlayerError('数字人播放器加载失败，请刷新页面重试')
             return
         }
 
         const parsed = parseXrtcsUrl(url)
+        if (!parsed.host || !parsed.roomId) {
+            reportPlayerError('数字人视频流参数无效')
+            return
+        }
 
         try {
-            player = new RTCPlayer()
-            player.container = playerContainer
-            player.videoSize = { width: 720, height: 1280 }
-            player.stream = {
+            const generation = ++playerGeneration
+            const nextPlayer = new RTCPlayer()
+            player = nextPlayer
+            nextPlayer.container = playerContainer
+            nextPlayer.videoSize = { width: 720, height: 1280 }
+            nextPlayer.stream = {
                 server: `wss://${parsed.host}`,
                 auth: extend.user_sign || '',
                 appid: extend.appid || '',
@@ -545,17 +553,79 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 roomId: parsed.roomId,
             }
 
-            player.play().then(() => {
-            }).catch((err: unknown) => {
+            const markReady = () => {
+                if (generation !== playerGeneration || player !== nextPlayer) return
+                clearPlayerReadyTimer()
+                error.value = null
+                setAvatarReady(true)
+            }
+            const markFailed = (reason?: unknown) => {
+                if (generation !== playerGeneration || player !== nextPlayer) return
+                console.error('[DH] player error:', reason)
+                reportPlayerError('数字人视频播放失败，请重新连接')
+            }
+
+            if (typeof nextPlayer.on === 'function') {
+                nextPlayer.on('playing', markReady)
+                nextPlayer.on('error', markFailed)
+            }
+
+            clearPlayerReadyTimer()
+            playerReadyTimer = setTimeout(() => {
+                if (generation === playerGeneration && !isAvatarReady.value) {
+                    reportPlayerError('数字人视频连接超时，请重新连接')
+                }
+            }, 15_000)
+
+            Promise.resolve(nextPlayer.play()).catch((err: unknown) => {
                 console.error('[DH] player error:', err)
+                markFailed(err)
             })
         } catch (err) {
             console.error('[DH] player init failed:', err)
+            reportPlayerError('数字人播放器初始化失败，请重新连接')
         }
+    }
+
+    function setAvatarReady(ready: boolean): void {
+        if (isAvatarReady.value === ready) return
+        isAvatarReady.value = ready
+        callbacks?.onAvatarReady?.(ready)
+    }
+
+    function clearPlayerReadyTimer(): void {
+        if (playerReadyTimer) {
+            clearTimeout(playerReadyTimer)
+            playerReadyTimer = null
+        }
+    }
+
+    function reportPlayerError(message: string): void {
+        destroyPlayer()
+        error.value = message
+        digitalHumanState.value = 'error'
+        callbacks?.onError?.(message)
+        callbacks?.onDigitalHumanStateChange?.('error')
+    }
+
+    function waitForAvatarReadyAndEnableAudio(): void {
+        const generation = playerGeneration
+        const check = () => {
+            if (generation !== playerGeneration) return
+            if (isAvatarReady.value) {
+                enableAudio()
+                return
+            }
+            setTimeout(check, 100)
+        }
+        setTimeout(check, 100)
     }
 
     // 销毁 RTC 播放器并清空渲染容器
     function destroyPlayer(): void {
+        playerGeneration += 1
+        clearPlayerReadyTimer()
+        setAvatarReady(false)
         if (player) {
             try {
                 player.destroy()
@@ -642,6 +712,51 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }, 2000)
     }
 
+    function clearPendingAudioChunks(): void {
+        pendingAudioChunks.length = 0
+        droppedAudioChunks = 0
+        if (audioFlushTimer) {
+            clearTimeout(audioFlushTimer)
+            audioFlushTimer = null
+        }
+    }
+
+    function scheduleAudioFlush(): void {
+        if (audioFlushTimer || !backendVadReady) return
+        audioFlushTimer = setTimeout(() => {
+            audioFlushTimer = null
+            flushPendingAudioChunks()
+        }, 20)
+    }
+
+    function flushPendingAudioChunks(): void {
+        if (!backendVadReady || !ws || ws.readyState !== WebSocket.OPEN) return
+
+        let sent = 0
+        while (
+            pendingAudioChunks.length > 0
+            && ws.bufferedAmount <= MAX_WS_AUDIO_BUFFERED_BYTES
+            && sent < 4
+        ) {
+            const chunk = pendingAudioChunks.shift()
+            if (!chunk) continue
+            ws.send(JSON.stringify({ type: 'audio_chunk', audio: chunk }))
+            sent += 1
+        }
+
+        if (pendingAudioChunks.length > 0) scheduleAudioFlush()
+    }
+
+    function queueAudioChunk(chunk: string): void {
+        if (enqueueBoundedAudioChunk(pendingAudioChunks, chunk)) {
+            droppedAudioChunks += 1
+            if (droppedAudioChunks === 1 || droppedAudioChunks % 25 === 0) {
+                console.warn('[DH] audio backpressure dropped chunks:', droppedAudioChunks)
+            }
+        }
+        scheduleAudioFlush()
+    }
+
     // ==========================================
     // Text messaging
     // ==========================================
@@ -663,7 +778,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         updateCache('', false) // 开始新的提问，清空旧缓存
         bufferedAssistantText = ''
         pendingAssistantComplete = false
-        clearAssistantFlushFallbackTimer()
         clearAssistantRevealTimer()
 
         const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
@@ -734,10 +848,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         activeTurnId = null
         bufferedAssistantText = ''
         pendingAssistantComplete = false
-        clearAssistantFlushFallbackTimer()
         clearAssistantRevealTimer()
 
         try {
+            clearPendingAudioChunks()
             // Tell backend to prepare VAD/ASR queue and carry diagram preference atomically.
             backendVadReady = false
             ws.send(JSON.stringify({
@@ -759,8 +873,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             const source = audioContext.createMediaStreamSource(audioStream)
             // 使用 2048 buffer（128ms @ 16kHz）替代 4096（256ms）以降低采集延迟
             const processor = audioContext.createScriptProcessor(2048, 1, 1)
-            // 缓存后端未就绪时的音频数据，等 backend 就绪后批量发送
-            const pendingAudioChunks: string[] = []
+            // 先采集到有界队列，后端 ACK 后再按 WebSocket 背压逐批发送。
+            vadActive = true
 
             processor.onaudioprocess = (e) => {
                 if (!vadActive || !ws || ws.readyState !== WebSocket.OPEN) return
@@ -799,19 +913,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 }
                 const base64 = btoa(binary)
 
-                if (!backendVadReady) {
-                    // 后端还没就绪，缓存音频数据
-                    pendingAudioChunks.push(base64)
-                    return
-                }
-
-                // 发送缓存的音频数据（如果有）
-                while (pendingAudioChunks.length > 0) {
-                    const chunk = pendingAudioChunks.shift()!
-                    ws.send(JSON.stringify({ type: 'audio_chunk', audio: chunk }))
-                }
-
-                ws.send(JSON.stringify({ type: 'audio_chunk', audio: base64 }))
+                queueAudioChunk(base64)
             }
 
             source.connect(processor)
@@ -825,8 +927,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 throw new Error('VAD backend ack timeout')
             }
 
-            vadActive = true
             isListening.value = true
+            flushPendingAudioChunks()
             resetIdleTimer()
 
             // Auto-enable audio
@@ -837,6 +939,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             console.error('[DH] mic error:', err)
             // Cleanup audio resources even when vadActive not yet set
             cleanupAudioInput()
+            clearPendingAudioChunks()
+            vadActive = false
             backendVadReady = false
             error.value = '无法访问麦克风或语音服务未就绪，请检查权限并重试'
             callbacks?.onError?.(error.value)
@@ -852,6 +956,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         // Always cleanup audio resources, even if vadActive is false
         // (e.g., if vad failed during startup but audioStream/audioContext were created)
         cleanupAudioInput()
+        clearPendingAudioChunks()
 
         // Notify backend if connected
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -882,13 +987,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         speechRate.value = clamped
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'set_speech_rate', speech_rate: clamped }))
-        }
-    }
-
-    function clearAssistantFlushFallbackTimer(): void {
-        if (assistantFlushFallbackTimer) {
-            clearTimeout(assistantFlushFallbackTimer)
-            assistantFlushFallbackTimer = null
         }
     }
 
@@ -1037,22 +1135,16 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         bufferedAssistantText = ''
     }
 
-    // 结束当前轮次：强制刷出剩余文本或启动 reveal
-    function finalizeBufferedAssistantTurn(forceImmediate = false): void {
-        if (forceImmediate) {
-            clearAssistantRevealTimer()
-            flushBufferedAssistantTextImmediately()
-        } else if (bufferedAssistantText && !revealingAssistantText) {
-            startAssistantReveal()
-            return
-        }
+    // Avatar 停止时立即刷出剩余字幕并结束当前轮次。
+    function finalizeBufferedAssistantTurn(): void {
+        clearAssistantRevealTimer()
+        flushBufferedAssistantTextImmediately()
 
         if (pendingAssistantComplete) {
             pendingAssistantComplete = false
             callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
             updateCache('', false)
         }
-        clearAssistantFlushFallbackTimer()
     }
 
     function setNeedDiagram(enabled: boolean): void {

@@ -32,6 +32,9 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+AUDIO_QUEUE_MAX_CHUNKS = 48
+AUDIO_MESSAGE_MAX_BYTES = 64 * 1024
+
 
 # 清理 LLM 输出文本中的 Markdown 标记，使文本适合 TTS 朗读
 def _clean_text_for_tts(text: str) -> str:
@@ -151,6 +154,7 @@ class RealtimeBridge:
 
         # Audio chunk tracking
         self._audio_chunk_counter = 0   # 音频块计数器
+        self._audio_dropped_chunks = 0  # 队列拥塞时丢弃的旧音频块
         self._last_asr_text: str = ""   # 上一次 ASR 识别结果（用于去重）
         self._last_asr_at: float = 0.0  # 上一次 ASR 结果的时间戳
 
@@ -593,7 +597,14 @@ class RealtimeBridge:
         audio_b64 = data.get("audio", "")
         if not self.is_listening or not audio_b64 or not self.current_audio_queue:
             return
-        pcm_bytes = base64.b64decode(audio_b64)
+        try:
+            pcm_bytes = base64.b64decode(audio_b64, validate=True)
+        except (ValueError, TypeError):
+            logger.warning("[Bridge] ignored invalid base64 audio chunk")
+            return
+        if len(pcm_bytes) > AUDIO_MESSAGE_MAX_BYTES:
+            logger.warning("[Bridge] ignored oversized audio chunk bytes=%s", len(pcm_bytes))
+            return
         self._audio_chunk_counter += 1
         if self._audio_chunk_counter % 25 == 0:
             logger.info(
@@ -605,12 +616,49 @@ class RealtimeBridge:
         # 音频块切分（1280 字节 = 40ms @ 16kHz）
         for i in range(0, len(pcm_bytes), 1280):
             chunk = pcm_bytes[i:i + 1280]
-            await self.current_audio_queue.put((time.monotonic(), chunk))
+            if not chunk:
+                continue
+            self._put_audio_chunk((time.monotonic(), chunk))
+
+    def _put_audio_chunk(self, item: tuple[float, bytes]) -> None:
+        """入队最新音频；拥塞时丢弃最旧帧，避免延迟无限增长。"""
+        queue = self.current_audio_queue
+        if queue is None:
+            return
+        if queue.full():
+            try:
+                queue.get_nowait()
+                self._audio_dropped_chunks += 1
+                if self._audio_dropped_chunks == 1 or self._audio_dropped_chunks % 25 == 0:
+                    logger.warning(
+                        "[Bridge] audio backpressure dropped=%s queue_size=%s",
+                        self._audio_dropped_chunks,
+                        queue.qsize(),
+                    )
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            queue.put_nowait(item)
+        except asyncio.QueueFull:
+            self._audio_dropped_chunks += 1
 
     # 处理音频输入结束信号：向队列发送 None 终止符
     async def _handle_audio_end(self):
         if self.current_audio_queue:
-            await self.current_audio_queue.put(None)
+            self._put_audio_end(self.current_audio_queue)
+
+    @staticmethod
+    def _put_audio_end(queue: asyncio.Queue) -> None:
+        """确保结束标记可以进入有界队列。"""
+        while queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        try:
+            queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
 
     # 处理文本输入：提取文本、附件、语速等参数，分派到辅导管线
     async def _handle_text_input(self, data: dict):
@@ -671,8 +719,9 @@ class RealtimeBridge:
     # 启动 VAD 语音活动检测监听模式
     async def _handle_start_vad(self):
         self.is_listening = True
-        self.current_audio_queue = asyncio.Queue()
+        self.current_audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_MAX_CHUNKS)
         self._audio_chunk_counter = 0
+        self._audio_dropped_chunks = 0
         if self._asr_loop_task is None or self._asr_loop_task.done():
             self._asr_loop_task = asyncio.create_task(self._continuous_listen_loop())
         await self._send_to_frontend({"type": "vad_state", "data": {"listening": True}})
@@ -689,7 +738,7 @@ class RealtimeBridge:
         audio_queue = self.current_audio_queue
         self.current_audio_queue = None
         if audio_queue:
-            await audio_queue.put(None)
+            self._put_audio_end(audio_queue)
         if self._asr_loop_task and not self._asr_loop_task.done():
             current_task = asyncio.current_task()
             if self._asr_loop_task is not current_task:
