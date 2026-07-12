@@ -8,7 +8,12 @@
     @keydown.enter.prevent="handleExpand"
     @keydown.space.prevent="handleExpand"
   >
-    <img :src="props.diagram.image_url" :alt="props.diagram.title || '教学图解'" loading="lazy">
+    <img
+      v-if="props.diagram.image_url"
+      :src="props.diagram.image_url"
+      :alt="props.diagram.title || '教学图解'"
+      loading="lazy"
+    >
     <a
       v-if="props.showDownload && !props.compact"
       class="diagram-download"

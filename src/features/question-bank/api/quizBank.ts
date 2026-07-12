@@ -161,12 +161,20 @@ export async function fetchQuizHistoryList(params?: QuizHistoryParams): Promise<
 
 // 获取用户答题历史（所有做过的题，用于"做过"标记）
 export async function fetchQuizAnswerHistory(): Promise<Map<string, QuizAnswerHistoryItem>> {
-  const response = await http.get('/ai/quiz/history', { params: { page_size: 1000 } })
-  const data = response.data.data as QuizAnswerHistoryResponse
   const map = new Map<string, QuizAnswerHistoryItem>()
-  for (const item of data.items || []) {
-    map.set(item.question_id, item)
+  const pageSize = 100
+  let page = 1
+
+  while (true) {
+    const data = await fetchQuizHistoryList({ page, page_size: pageSize })
+    for (const item of data.items || []) {
+      map.set(item.question_id, item)
+    }
+
+    if (!data.items?.length || data.items.length < pageSize || map.size >= data.total) break
+    page += 1
   }
+
   return map
 }
 

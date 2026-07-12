@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from html import escape
+from math import ceil, sqrt
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -27,7 +28,7 @@ ImageUrlBuilder = Callable[[str], str]
 DiagramRenderer = Callable[..., Awaitable[dict[str, Any]]]
 
 
-def build_diagram_image_document(diagram: dict[str, Any], *, width: int = DEFAULT_WIDTH, height: int = DEFAULT_HEIGHT) -> str:
+def _build_legacy_diagram_image_document(diagram: dict[str, Any], *, width: int = DEFAULT_WIDTH, height: int = DEFAULT_HEIGHT) -> str:
     title = _text(diagram.get("title")) or "Teaching Diagram"
     subtitle = _text(diagram.get("subtitle"))
     graph_type = _text(diagram.get("graph_type")) or "diagram"
@@ -298,6 +299,206 @@ def build_diagram_image_document(diagram: dict[str, Any], *, width: int = DEFAUL
 </html>"""
 
 
+def build_teaching_diagram_html(
+    diagram: dict[str, Any],
+    *,
+    width: int = DEFAULT_WIDTH,
+    height: int = DEFAULT_HEIGHT,
+) -> str:
+    """Render structured content with comparison, flow, or knowledge cards."""
+    title = _localize_title(_text(diagram.get("title")) or "教学图解")
+    subtitle = _text(diagram.get("subtitle"))
+    graph_type = _text(diagram.get("graph_type")) or "summary"
+    visual = diagram.get("visual_content") if isinstance(diagram.get("visual_content"), dict) else {}
+    teaching = diagram.get("teaching_content") if isinstance(diagram.get("teaching_content"), dict) else {}
+    center, sections = _extract_visual_model(graph_type, visual, teaching)
+
+    if graph_type == "comparison":
+        template = "comparison"
+        sections = _comparison_sections(visual)
+        subtitle = subtitle or "标题 + 多栏对比 + 底部结论"
+        visual_summary = visual.get("visual_summary") if isinstance(visual.get("visual_summary"), dict) else {}
+        summary = _text(visual_summary.get("center_conclusion")) or _text(teaching.get("summary"))
+    elif graph_type in {"flowchart", "sequence", "timeline"}:
+        template = "flow"
+        subtitle = subtitle or "标题 + 主流程 + 关键说明"
+        summary = _text(teaching.get("summary")) or _text(teaching.get("core_explanation"))
+    else:
+        template = "cards"
+        subtitle = subtitle or "标题 + 中心主题 + 重点卡片"
+        summary = _text(teaching.get("summary"))
+
+    if not any(_section_has_teaching_content(section) for section in sections):
+        sections = _teaching_overview_sections(teaching) or _fallback_sections(visual)
+    sections = [
+        section for section in sections
+        if _text(section.get("title")) or _string_list(section.get("items"))
+    ]
+
+    content_html = _render_template_content(template, sections)
+    center_html = (
+        f'<div class="center-topic">{escape(center or title)}</div>'
+        if template == "cards" else ""
+    )
+    conclusion_html = (
+        f'<footer class="conclusion"><strong>核心结论：</strong>{escape(summary)}</footer>'
+        if summary else ""
+    )
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; width: {width}px; min-height: {height}px; color: #092f5e; background: #f4f9ff; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }}
+    #diagram-canvas {{ width: {width}px; min-height: {height}px; padding: 44px 40px 32px; border: 2px solid #397cff; border-radius: 28px; background: linear-gradient(180deg, #f6faff, #f1f8fb); }}
+    header {{ margin-bottom: 30px; text-align: center; }}
+    h1 {{ margin: 0; color: #0a3470; font-size: 42px; line-height: 1.2; letter-spacing: 0; }}
+    .subtitle {{ margin: 20px 0 0; color: #55708f; font-size: 20px; }}
+    .comparison-grid {{ display: grid; grid-template-columns: repeat(var(--comparison-columns), minmax(0, 1fr)); gap: 20px; }}
+    .compare-column {{ padding: 24px 22px 22px; border: 1.5px solid #78a9ff; border-radius: 20px; background: #fff; }}
+    .compare-column h2 {{ margin: 0 0 18px; padding-bottom: 16px; border-bottom: 1px dashed #75a7ff; color: #07546f; font-size: 30px; text-align: center; }}
+    .fact-list {{ display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }}
+    .fact-list li {{ padding: 14px 16px; border-radius: 10px; color: #092e58; background: #eef6ff; font-size: 20px; line-height: 1.35; font-weight: 600; }}
+    .flow {{ display: grid; gap: 0; }}
+    .flow-step {{ padding: 21px 28px; border-radius: 18px; color: #fff; background: linear-gradient(90deg, #315ead, #407dd1); text-align: center; font-size: 22px; font-weight: 800; }}
+    .flow-step:nth-of-type(even) {{ background: linear-gradient(90deg, #1d877f, #35b3a8); }}
+    .flow-detail {{ display: block; margin-top: 7px; font-size: 17px; font-weight: 500; opacity: .92; }}
+    .flow-arrow {{ height: 44px; color: #3672d8; text-align: center; font-size: 38px; line-height: 40px; }}
+    .center-topic {{ margin-bottom: 18px; padding: 20px 26px; border-radius: 16px; color: #fff; background: linear-gradient(90deg, #1d877f, #35b3a8); text-align: center; font-size: 22px; font-weight: 800; }}
+    .knowledge-grid {{ --card-min: {_card_min_width(sections)}px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min)), 1fr)); gap: 18px; }}
+    .knowledge-card {{ min-height: 180px; padding: 22px 24px; border: 1.5px solid #89cec9; border-radius: 20px; background: #fff; }}
+    .knowledge-card h2 {{ margin: 0 0 12px; color: #08716d; font-size: 22px; }}
+    .knowledge-card p {{ margin: 0; color: #49647f; font-size: 19px; line-height: 1.55; }}
+    .conclusion {{ min-height: 76px; margin-top: 24px; padding: 20px 24px; border-left: 7px solid #3779e8; background: #eaf2ff; color: #0a2e5d; font-size: 20px; line-height: 1.45; }}
+  </style>
+</head>
+<body>
+  <main id="diagram-canvas" data-template="{template}">
+    <header><h1>{escape(title)}</h1><p class="subtitle">{escape(subtitle)}</p></header>
+    {center_html}
+    {content_html}
+    {conclusion_html}
+  </main>
+</body>
+</html>"""
+
+
+def build_diagram_image_document(
+    diagram: dict[str, Any],
+    *,
+    width: int = DEFAULT_WIDTH,
+    height: int = DEFAULT_HEIGHT,
+) -> str:
+    return build_teaching_diagram_html(diagram, width=width, height=height)
+
+
+def _comparison_sections(visual: dict[str, Any]) -> list[dict[str, Any]]:
+    left = visual.get("left_entity") if isinstance(visual.get("left_entity"), dict) else {}
+    right = visual.get("right_entity") if isinstance(visual.get("right_entity"), dict) else {}
+    dimensions = _dict_list(visual.get("dimensions"))
+
+    def entity_section(entity: dict[str, Any], side: str) -> dict[str, Any]:
+        items = [
+            text for text in (
+                _text(entity.get("core_label")),
+                _text(entity.get("short_desc")),
+            ) if text
+        ]
+        for dimension in dimensions:
+            value = _text(dimension.get(side))
+            if not value:
+                continue
+            name = _text(dimension.get("name"))
+            items.append(f"{name}：{value}" if name else value)
+        return {
+            "title": _text(entity.get("name")) or ("左侧" if side == "left" else "右侧"),
+            "items": items,
+        }
+
+    return [entity_section(left, "left"), entity_section(right, "right")]
+
+
+def _render_template_content(template: str, sections: list[dict[str, Any]]) -> str:
+    if template == "comparison":
+        columns = "".join(
+            (
+                '<article class="compare-column">'
+                f'<h2>{escape(_text(section.get("title")))}</h2>'
+                f'<ul class="fact-list">{_list_items_html(section)}</ul>'
+                "</article>"
+            )
+            for section in sections
+        )
+        column_count = _balanced_column_count(len(sections))
+        return (
+            f'<section class="comparison-grid" style="--comparison-columns: {column_count}">'
+            f"{columns}</section>"
+        )
+
+    if template == "flow":
+        steps: list[str] = []
+        for index, section in enumerate(sections):
+            if index:
+                steps.append('<div class="flow-arrow">↓</div>')
+            details = _string_list(section.get("items"))
+            detail_html = (
+                f'<span class="flow-detail">{escape(" · ".join(details))}</span>'
+                if details else ""
+            )
+            steps.append(
+                f'<article class="flow-step">{escape(_text(section.get("title")))}'
+                f"{detail_html}</article>"
+            )
+        return f'<section class="flow">{"".join(steps)}</section>'
+
+    cards = "".join(
+        (
+            '<article class="knowledge-card">'
+            f'<h2>{escape(_text(section.get("title")))}</h2>'
+            f'<p>{escape("；".join(_string_list(section.get("items"))))}</p>'
+            "</article>"
+        )
+        for section in sections
+    )
+    return f'<section class="knowledge-grid">{cards}</section>'
+
+
+def _list_items_html(section: dict[str, Any]) -> str:
+    return "".join(
+        f"<li>{escape(item)}</li>"
+        for item in _string_list(section.get("items"))
+    )
+
+
+def _card_min_width(sections: list[dict[str, Any]]) -> int:
+    """Let CSS auto-fit choose the column count from actual content density."""
+    longest = max(
+        (
+            len(_text(section.get("title")))
+            + sum(len(item) for item in _string_list(section.get("items")))
+            for section in sections
+        ),
+        default=0,
+    )
+    return max(260, min(620, 240 + longest * 3))
+
+
+def _balanced_column_count(item_count: int) -> int:
+    if item_count <= 0:
+        return 1
+    if item_count <= 3:
+        return item_count
+    if item_count == 4:
+        return 2
+    return ceil(sqrt(item_count))
+
+
+def _localize_title(title: str) -> str:
+    return title.replace(" vs ", " 与 ").replace(" VS ", " 与 ").replace(" Vs ", " 与 ")
+
+
 async def render_teaching_diagram_png(
     diagram: dict[str, Any],
     *,
@@ -349,7 +550,22 @@ async def ensure_teaching_diagram_png_payload(
         return None
     if diagram.get("kind") == "image" and _text(diagram.get("image_url")):
         return diagram
-    return await renderer(diagram, username=username, session_id=session_id)
+
+    source = diagram.get("diagram") if diagram.get("kind") == "fallback" else diagram
+    if not isinstance(source, dict):
+        return diagram
+
+    try:
+        return await renderer(source, username=username, session_id=session_id)
+    except Exception:
+        if diagram.get("kind") == "fallback":
+            return diagram
+        return {
+            "kind": "fallback",
+            "diagram": source,
+            "render_error": "图片生成暂时失败",
+            "retryable": True,
+        }
 
 
 async def _screenshot_html_to_png(html: str, width: int, height: int) -> bytes:
@@ -498,19 +714,19 @@ def _teaching_overview_sections(teaching_content: dict[str, Any]) -> list[dict[s
     sections: list[dict[str, Any]] = []
     core = _text(teaching_content.get("core_explanation"))
     if core:
-        sections.append({"title": "Definition / Core", "items": [core]})
+        sections.append({"title": "核心定义", "items": [core]})
 
     key_points = _string_list(teaching_content.get("key_points"))
     if key_points:
-        sections.append({"title": "Must Know", "items": key_points})
+        sections.append({"title": "必须掌握", "items": key_points})
 
     examples = _string_list(teaching_content.get("examples"))
     if examples:
-        sections.append({"title": "Examples", "items": examples})
+        sections.append({"title": "示例", "items": examples})
 
     mistakes = _string_list(teaching_content.get("common_mistakes"))
     if mistakes:
-        sections.append({"title": "Common Mistakes", "items": mistakes})
+        sections.append({"title": "常见误区", "items": mistakes})
 
     return sections[:4]
 

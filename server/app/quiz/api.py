@@ -184,10 +184,8 @@ async def get_quiz_history(
     base_filters = [QuizAnswerHistory.user_id == user_id]
     if subject:
         base_filters.append(QuizAnswerHistory.subject == subject)
-    if is_correct is not None:
-        base_filters.append(QuizAnswerHistory.is_correct == is_correct)
 
-    # 子查询：每个 question_id 的最新一条记录的 id（在筛选范围内）
+    # 子查询：先确定每个 question_id 的最新一条记录，再按最新状态筛选。
     latest_subq = (
         select(
             QuizAnswerHistory.question_id,
@@ -198,22 +196,28 @@ async def get_quiz_history(
         .subquery()
     )
 
-    # 总数统计（去重后的 question_id 数量）
+    latest_stmt = select(QuizAnswerHistory).join(
+        latest_subq,
+        QuizAnswerHistory.id == latest_subq.c.max_id,
+    )
+    if is_correct is not None:
+        latest_stmt = latest_stmt.where(QuizAnswerHistory.is_correct == is_correct)
+
+    # 总数统计（按最新状态筛选后的题目数量）
     total = (await session.exec(
-        select(sa_func.count()).select_from(latest_subq)
+        select(sa_func.count()).select_from(latest_stmt.subquery())
     )).scalar() or 0
 
     # 联表获取最新记录的详细信息，分页
     stmt = (
-        select(QuizAnswerHistory)
-        .join(latest_subq, QuizAnswerHistory.id == latest_subq.c.max_id)
+        latest_stmt
         .order_by(QuizAnswerHistory.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
     rows = (await session.exec(stmt)).scalars().all()
 
-    # 统计每个 question_id 的总做题次数（在筛选范围内）
+    # 统计每个 question_id 的总做题次数（不受最新正确状态筛选影响）
     count_stmt = (
         select(
             QuizAnswerHistory.question_id,
