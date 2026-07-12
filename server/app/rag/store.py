@@ -20,7 +20,7 @@ from langchain_core.documents import Document
 
 from app.infra.logging import get_logger
 from app.rag.bm25 import BM25Index
-from app.rag.embeddings import embed_documents
+from app.rag.embeddings import embed_documents, validate_embeddings
 from app.rag.models import CHROMA_COLLECTION, SCHEMA_VERSION
 
 logger = get_logger(__name__)
@@ -142,6 +142,7 @@ def build_store(
     output_dir: Path,
     collection: str = CHROMA_COLLECTION,
     batch_size: int = 32,
+    embedding_dimension: int | None = None,
 ) -> tuple[int, int]:
     """构建向量库（ChromaDB），返回 (doc_count, chunk_count)。
 
@@ -231,11 +232,11 @@ def build_store(
                 f"starting index {start}. Cannot build index without embeddings."
             )
 
-        if len(embeddings) != len(batch_texts):
-            raise RuntimeError(
-                f"Embedding count mismatch at batch {batch_no}/{total_batches}: "
-                f"expected {len(batch_texts)}, got {len(embeddings)}"
-            )
+        validate_embeddings(
+            embeddings,
+            expected_count=len(batch_texts),
+            expected_dimension=embedding_dimension,
+        )
 
         col.add(
             ids=batch_ids,
@@ -280,14 +281,14 @@ def build_store(
 # ============ BM25 关键词索引构建 ============
 
 
-def build_bm25(chunks: list[Document], output_dir: Path) -> None:
+def build_bm25(chunks: list[Document], output_dir: Path) -> dict[str, Any] | None:
     """构建 BM25 索引并持久化。
 
     BM25 构建失败不影响向量库可用性，但会影响关键词检索和 embedding 失败时的兜底检索。
     """
     if not chunks:
         logger.warning("[store] BM25 skipped: empty chunks")
-        return
+        return None
 
     started_at = time.monotonic()
     logger.info("[store] BM25 build started: chunks=%d output=%s", len(chunks), output_dir)
@@ -301,7 +302,9 @@ def build_bm25(chunks: list[Document], output_dir: Path) -> None:
     try:
         bm25 = BM25Index()
         bm25.build(texts, metadatas)
-        bm25.save(output_dir)
+        metadata = bm25.save(output_dir)
+        if not metadata:
+            raise RuntimeError("BM25 index did not produce metadata")
 
         elapsed = time.monotonic() - started_at
         logger.info(
@@ -309,8 +312,10 @@ def build_bm25(chunks: list[Document], output_dir: Path) -> None:
             len(chunks),
             _format_duration(elapsed),
         )
+        return metadata
     except Exception as exc:
-        logger.warning("[store] BM25 index build failed (non-fatal): %s", exc)
+        logger.warning("[store] BM25 index build failed: %s", exc)
+        return None
 
 
 # ============ 向量库完整性校验 ============

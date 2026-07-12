@@ -250,22 +250,6 @@ class BM25Index:
             logger.warning("[bm25] load failed: %s", exc)
             return cls()
 
-    def validate(self, expected_sha256: str | None = None) -> bool:
-        """验证索引完整性。
-
-        Args:
-            expected_sha256: 预期的 SHA256 校验和（可选）
-
-        Returns:
-            是否验证通过
-        """
-        if not self.is_ready:
-            return False
-
-        # 可以添加更多验证逻辑
-        return True
-
-
 # 模块级懒加载单例
 _bm25_index: BM25Index | None = None
 _bm25_loaded = False
