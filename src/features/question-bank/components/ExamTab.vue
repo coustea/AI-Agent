@@ -276,6 +276,18 @@
             </div>
           </div>
         </article>
+
+        <div v-if="!examSubmitted" class="exam-bottom-submit">
+          <button
+            class="btn-primary"
+            type="button"
+            :disabled="examReviewing"
+            :aria-busy="examReviewing"
+            @click="$emit('request-submit-exam')"
+          >
+            {{ examReviewing ? '评阅中，请稍候...' : '交卷' }}
+          </button>
+        </div>
       </div>
 
       <aside class="exam-sidebar">
@@ -949,6 +961,18 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+}
+
+.exam-bottom-submit {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 24px;
+}
+
+.exam-bottom-submit .btn-primary {
+  min-width: 160px;
+  min-height: 44px;
+  font-size: 14px;
 }
 
 .exam-question,
@@ -1881,6 +1905,10 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
 }
 
 @media (max-width: 640px) {
+  .exam-bottom-submit .btn-primary {
+    width: 100%;
+  }
+
   .head-actions,
   .field-row.compact-grid,
   .count-chip-row {
