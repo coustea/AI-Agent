@@ -349,6 +349,7 @@
 
                 <HistoryTab
                     v-else-if="activeModule === 'history'"
+                    @open-question="openHistoryQuestion"
                 />
               </section>
             </div>
@@ -1349,6 +1350,30 @@ async function submitPortalAnswer(question: Question) {
   await submitQuestionAttempt(question, portalAnswers.value[question.id], result.correct)
 
   portalReviewing.value[question.id] = false
+}
+
+// 从答题记录定位到题库原题，并自动展开作答面板。
+async function openHistoryQuestion(questionId: string) {
+  const source = allQuestionPool.value.length
+    ? allQuestionPool.value
+    : practicePool.value.length
+      ? practicePool.value
+      : questions.value
+  const sourceIndex = source.findIndex((item) => item.id === questionId)
+
+  activeModule.value = 'search'
+  resetQuestionBankFilters()
+  bankPage.value = sourceIndex >= 0 ? Math.floor(sourceIndex / bankPageSize.value) + 1 : 1
+  highlightQuestionId.value = questionId
+  highlightVersion.value += 1
+  openedAnalysis.value = new Set()
+
+  await loadQuestionBank()
+
+  if (!questions.value.some((item) => item.id === questionId)) {
+    highlightQuestionId.value = null
+    toast.warning('未能在题库中定位到这道题目')
+  }
 }
 
 // 提交题库搜索中的题目答案

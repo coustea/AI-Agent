@@ -37,12 +37,17 @@
           <span :class="['result-dot', item.is_correct ? 'correct' : 'wrong']"></span>
           <span class="history-subject">{{ item.subject || '未知科目' }}</span>
           <span class="history-type">{{ toQuestionTypeLabel(item.question_type || '') }}</span>
-          <span class="history-question-id">{{ item.question_id }}</span>
           <span v-if="item.attempts > 1" class="history-attempts">×{{ item.attempts }}</span>
         </div>
         <div class="history-item-foot">
           <span class="history-answer" v-if="item.last_answer">最后作答：{{ item.last_answer }}</span>
-          <span class="history-time">{{ formatTime(item.created_at) }}</span>
+          <div class="history-item-actions">
+            <span class="history-time">{{ formatTime(item.created_at) }}</span>
+            <button class="history-open-btn" type="button" @click="emit('open-question', item.question_id)">
+              查看题目
+              <PhArrowRight :size="14" weight="bold" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -57,7 +62,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { PhArrowRight } from '@phosphor-icons/vue'
 import { fetchQuizHistoryList, toQuestionTypeLabel, type QuizAnswerHistoryItem } from '@/features/question-bank/api/quizBank'
+
+const emit = defineEmits<{
+  (e: 'open-question', questionId: string): void
+}>()
 
 const PAGE_SIZE = 15
 
@@ -248,13 +258,8 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.history-question-id {
-  color: #94a3b8;
-  font-size: 12px;
-  margin-left: auto;
-}
-
 .history-attempts {
+  margin-left: auto;
   background: #fef3c7;
   color: #92400e;
   font-size: 11px;
@@ -273,6 +278,33 @@ onMounted(() => {
 
 .history-answer {
   color: #64748b;
+}
+
+.history-item-actions,
+.history-open-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+.history-item-actions {
+  gap: 12px;
+  margin-left: auto;
+}
+
+.history-open-btn {
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.history-open-btn:hover {
+  background: #f1f5f9;
 }
 
 .pagination {
@@ -305,5 +337,19 @@ onMounted(() => {
 .page-info {
   font-size: 13px;
   color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .history-item-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .history-item-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
 }
 </style>
