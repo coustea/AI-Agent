@@ -11,6 +11,7 @@ import asyncio
 import base64
 import binascii
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -33,6 +34,19 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 SERVER_DIR = Path(__file__).resolve().parents[3]
+
+
+def estimate_speech_duration(text: str, speech_rate: float = 1.0) -> float:
+    """Estimate playback time when the Avatar provider omits TTS lifecycle events."""
+    rate = max(0.8, min(1.5, float(speech_rate)))
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", text))
+    latin_words = len(re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", text))
+    sentence_pauses = len(re.findall(r"[。！？!?]", text))
+    clause_pauses = len(re.findall(r"[，,；;：:]", text))
+
+    spoken_seconds = cjk_count / 4.8 + latin_words / 2.7
+    pause_seconds = sentence_pauses * 0.32 + clause_pauses * 0.14
+    return max(1.8, min(58.0, 1.0 + (spoken_seconds + pause_seconds) / rate))
 
 
 # 标准化背景图编码格式：移除点号前缀，jpeg 统一为 jpg
@@ -330,16 +344,19 @@ class AvatarController:
 
                 elif event_type == "tts_start":
                     # TTS 开始播报 — 使用当前播报的 turn_id
-                    self.is_speaking = True
                     turn_id = self._current_speak_turn_id
-                    await callback("tts_start", avatar_data, turn_id)
+                    if not self.is_speaking:
+                        self.is_speaking = True
+                        await callback("tts_start", avatar_data, turn_id)
                     logger.debug(f"Avatar started speaking (turn_id: {turn_id})")
 
                 elif event_type == "tts_end":
                     # TTS 播报结束 — 使用当前播报的 turn_id
+                    was_speaking = self.is_speaking
                     self.is_speaking = False
                     turn_id = self._current_speak_turn_id
-                    await callback("tts_end", avatar_data, turn_id)
+                    if was_speaking:
+                        await callback("tts_end", avatar_data, turn_id)
                     logger.debug(f"Avatar finished speaking (turn_id: {turn_id})")
 
             # 循环正常退出 = 服务端关闭了连接
@@ -458,33 +475,40 @@ class AvatarController:
 
             logger.debug(f"Avatar speech dispatched: {sentence[:30]}... (turn_id: {turn_id})")
 
-            # Wait for tts_start event (max 5 seconds)
-            wait_start_count = 50  # 5 seconds at 0.1s per iteration
-            while not self.is_speaking and wait_start_count > 0:
-                await asyncio.sleep(0.1)
-                wait_start_count -= 1
-
+            # The provider can play audio without emitting tts_start/tts_end. Start a
+            # local lifecycle after dispatch so the frontend cannot remain stuck.
             if not self.is_speaking:
-                # tts_start not received within timeout
-                logger.warning(
-                    f"tts_start timeout (5s) for: {sentence[:30]}... - skipping sentence"
-                )
-                # Don't immediately send next sentence - wait to avoid overlap
-                await asyncio.sleep(1.5)
-                self._current_speak_turn_id = None
-                continue
+                self.is_speaking = True
+                if self._event_callback:
+                    await self._event_callback(
+                        "tts_start",
+                        {"event_type": "tts_start", "fallback": True},
+                        turn_id,
+                    )
 
-            # Wait for tts_end event (max 60 seconds)
-            wait_end_timeout = 600  # 60 seconds at 0.1s per iteration
-            while self.is_speaking and wait_end_timeout > 0:
-                await asyncio.sleep(0.1)
-                wait_end_timeout -= 1
+            estimated_duration = estimate_speech_duration(sentence, speech_rate)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + estimated_duration
+            while self.is_speaking and loop.time() < deadline:
+                await asyncio.sleep(min(0.1, max(0.0, deadline - loop.time())))
 
             if self.is_speaking:
                 logger.warning(
-                    f"Avatar speech timeout (60s), forcing end: {sentence[:30]}..."
+                    "Avatar omitted tts_end; using estimated completion after %.1fs: %s...",
+                    estimated_duration,
+                    sentence[:30],
                 )
                 self.is_speaking = False
+                if self._event_callback:
+                    await self._event_callback(
+                        "tts_end",
+                        {
+                            "event_type": "tts_end",
+                            "fallback": True,
+                            "estimated_duration": estimated_duration,
+                        },
+                        turn_id,
+                    )
 
             logger.debug(f"Sentence completed: {sentence[:30]}... (turn_id: {turn_id})")
             # 清除当前播报的 turn_id

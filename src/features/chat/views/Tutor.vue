@@ -493,8 +493,8 @@
                     class="minimal-icon-btn voice"
                     :class="{ 'is-recording': isRecording }"
                     @click="handleVoiceToggle"
-                    :aria-label="isRecording ? '结束录音' : '语音提问'"
-                    :title="isRecording ? '结束录音' : '语音提问'"
+                    :aria-label="isRecording ? '结束连续语音' : '开启连续语音'"
+                    :title="isRecording ? '结束连续语音' : '开启连续语音'"
                   >
                     <Microphone class="btn-icon" aria-hidden="true" />
                   </button>
@@ -709,7 +709,6 @@ import {
   formatRelativeTime,
   finalizeRunningAgentActivities,
   getInputToolStateKey,
-  shouldAutoRestartVadAfterAssistantComplete,
   isInsideOpenFence,
   takeNextStreamUnit,
 } from './tutorUtils'
@@ -778,6 +777,7 @@ const {
   setNeedDiagram: setAvatarNeedDiagram,
   startVad,
   stopVad,
+  setContinuousVoice,
   enableAudio: enableAvatarAudio,
   setPlayerContainer,
 } = useDigitalHuman({
@@ -852,7 +852,7 @@ const {
     triggerGlobalProfileRefresh()
     // 不再在 assistant_complete 时重启 VAD
     // 因为此时数字人可能还在说话（TTS 播报中），麦克风会拾取到回声
-    // VAD 重启逻辑已移至 onAvatarStopped 回调中
+    // 连续语音的 VAD 重启由 useDigitalHuman 在 avatar_stopped 后统一调度。
   },
   onAsrResult: (text) => {
     if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
@@ -930,23 +930,6 @@ const {
         setPlayerContainer(container)
       }
     })
-  },
-  onAvatarStopped: () => {
-    // 数字人播报结束后，如果处于语音通话模式，自动重启 VAD
-    // 之前在 assistant_complete 时重启，但那时 TTS 可能还在播放，
-    // 导致麦克风拾取到 TTS 回声产生错误识别
-    if (shouldAutoRestartVadAfterAssistantComplete({
-      isVoiceChatting: isVoiceChatting.value,
-      chatMode: chatMode.value,
-      isAvatarConnected: isAvatarConnected.value,
-    })) {
-      window.setTimeout(async () => {
-        if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
-        if (isAvatarSpeaking.value) return // 安全检查：确保确实已停止说话
-        await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-        isRecording.value = isVadListening.value
-      }, 600) // 600ms 延迟确保 TTS 音频完全停止
-    }
   },
 })
 
@@ -2167,6 +2150,10 @@ const getAvatarCapabilities = () => ({
   enable_search: enableWebSearch.value,
 })
 
+const configureContinuousVoice = (enabled: boolean) => {
+  setContinuousVoice(enabled, needTeachingDiagram.value, getAvatarCapabilities())
+}
+
 const handleTeachingDiagramToggle = () => {
   needTeachingDiagram.value = !needTeachingDiagram.value
 }
@@ -2191,6 +2178,7 @@ const handleVoiceChatToggle = async () => {
   if (!isVoiceChatting.value) {
     if (!await ensureCurrentSession('digital_human')) return
     isVoiceChatting.value = true
+    configureContinuousVoice(true)
     chatMode.value = 'digital_human'
     await connectAvatar()
     nextTick(() => {
@@ -2203,6 +2191,7 @@ const handleVoiceChatToggle = async () => {
     isRecording.value = isVadListening.value
     toast.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
+    configureContinuousVoice(false)
     stopVad()
     isRecording.value = false
     isVoiceChatting.value = false
@@ -2212,14 +2201,18 @@ const handleVoiceChatToggle = async () => {
 
 const handleVoiceToggle = async () => {
   if (isVadListening.value) {
+    configureContinuousVoice(false)
     stopVad()
     isRecording.value = false
+    isVoiceChatting.value = false
     hasSpeechDetected.value = true
     startAsrProcessing(8000)
     return
   }
 
   if (!await ensureCurrentSession('digital_human')) return
+  isVoiceChatting.value = true
+  configureContinuousVoice(true)
   await startVad(needTeachingDiagram.value, getAvatarCapabilities())
   isRecording.value = isVadListening.value
   clearAsrProcessing()
@@ -2469,6 +2462,8 @@ watch(chatMode, async (newMode) => {
     })
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
+    isVoiceChatting.value = false
+    configureContinuousVoice(false)
     disconnectAvatar()
     clearPendingFiles()
     if (currentSessionId.value) {
@@ -2483,6 +2478,11 @@ watch(needTeachingDiagram, (enabled) => {
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     setAvatarNeedDiagram(enabled)
   }
+  if (isVoiceChatting.value) configureContinuousVoice(true)
+})
+
+watch(enableWebSearch, () => {
+  if (isVoiceChatting.value) configureContinuousVoice(true)
 })
 
 // 组件挂载：加载用户信息、会话列表、恢复上次会话
