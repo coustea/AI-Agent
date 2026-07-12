@@ -7,7 +7,7 @@ MD: MarkdownHeaderTextSplitter → RecursiveCharacterTextSplitter（中文分隔
 PDF: RecursiveCharacterTextSplitter（中文分隔符）
 代码块保护：分割前替换为占位符，分割后恢复
 
-Called by: app/rag/indexing/build.py
+Called by: app/rag/build.py
 Per user: "splitter.py 用到了 Path，但顶部没有导入…短块合并可能跨 heading 合并"
 """
 

@@ -17,8 +17,9 @@ from unittest.mock import patch
 import pytest
 from langchain_core.documents import Document
 
-from app.rag.build import _read_manifest, _write_manifest, build_index
-from app.rag.load import load_directory
+from app.rag.bm25 import BM25Index
+from app.rag.build import _ensure_complete_index, _read_manifest, _write_manifest, build_index
+from app.rag.load import DocumentLoadError, load_directory
 from app.rag.metadata import enrich_metadata, infer_title, infer_course, infer_section
 from app.rag.splitter import split_documents
 from app.rag.store import _stable_chunk_id
@@ -176,6 +177,16 @@ class TestLoadDocuments:
         docs = load_directory(tmp_path, extensions={".md"})
         assert docs == []
 
+    def test_load_failure_aborts_with_relative_source_path(self, tmp_path: Path):
+        """单个源文件无法加载时不能发布不完整知识库。"""
+        broken_file = tmp_path / "chapter" / "broken.md"
+        broken_file.parent.mkdir()
+        broken_file.write_text("内容", encoding="utf-8")
+
+        with patch("app.rag.load._load_file", side_effect=OSError("read failed")):
+            with pytest.raises(DocumentLoadError, match="chapter/broken.md"):
+                load_directory(tmp_path, extensions={".md"})
+
 
 class TestManifest:
     """测试 manifest 写入与读取。"""
@@ -192,6 +203,13 @@ class TestManifest:
             source_dir=source_dir,
             source_snapshot={"test.md": "abc123"},
             batch_size=16,
+            embedding_dimension=1024,
+            bm25_metadata={
+                "filename": "bm25_index.pkl",
+                "schema_version": "1",
+                "chunk_count": 100,
+                "sha256": "abc123",
+            },
         )
         manifest = _read_manifest(tmp_path)
         assert manifest is not None
@@ -238,12 +256,45 @@ class TestBuildIndex:
         with patch("app.rag.embeddings.embed_documents") as mock_embed:
             mock_embed.return_value = None  # embedding 失败
 
-            with pytest.raises(RuntimeError, match="Embedding failed"):
+            with pytest.raises(RuntimeError, match="embedding service did not return vectors"):
                 build_index(source_dir=src_dir, output_dir=out_dir)
 
         # 正式索引目录应仍然存在
         assert out_dir.exists()
         assert (out_dir / "existing.txt").exists()
+
+    def test_bm25_rejects_misaligned_texts_and_metadata(self):
+        """BM25 文档必须与向量 chunk 一一对应。"""
+        with pytest.raises(ValueError, match="texts/metadatas"):
+            BM25Index().build(["first", "second"], [{"chunk_id": "one"}])
+
+    def test_incomplete_staged_index_does_not_replace_existing(self, tmp_path: Path):
+        """临时索引缺少 BM25 时不得进入替换阶段。"""
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        source_dir.joinpath("lesson.md").write_text("lesson", encoding="utf-8")
+        output_dir = tmp_path / "index"
+        output_dir.mkdir()
+        output_dir.joinpath("existing.txt").write_text("keep", encoding="utf-8")
+        chunk = Document(page_content="lesson", metadata={"source": "lesson.md"})
+
+        with patch("app.rag.build.load_directory", return_value=[chunk]), \
+             patch("app.rag.build.enrich_metadata", return_value=[chunk]), \
+             patch("app.rag.build.split_documents", return_value=[chunk]), \
+             patch("app.rag.build.probe_embedding_service", return_value=2), \
+             patch("app.rag.build.build_store", return_value=(1, 1)), \
+             patch("app.rag.build.build_bm25", return_value={"schema_version": "1"}), \
+             patch("app.rag.build.verify_store"), \
+             patch(
+                 "app.rag.build._ensure_complete_index",
+                 side_effect=RuntimeError("bm25 index incomplete"),
+             ), \
+             patch("app.rag.build._swap_index") as swap_index:
+            with pytest.raises(RuntimeError, match="bm25 index incomplete"):
+                build_index(source_dir=source_dir, output_dir=output_dir)
+
+        swap_index.assert_not_called()
+        assert output_dir.joinpath("existing.txt").read_text(encoding="utf-8") == "keep"
 
     def test_check_only_does_not_modify(self, tmp_path: Path):
         """测试 --check-only 不修改磁盘。"""

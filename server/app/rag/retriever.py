@@ -9,7 +9,7 @@ ChatAgent 不感知 Chroma、embedding、distance 等细节。
   3. 扩大召回后融合截断
   4. BM25 结果不再用 source 冒充正文
 
-Called by: app/rag/tools.py (retrieve), app/rag/indexing/build.py (check_index_health),
+Called by: app/rag/tools.py (retrieve), app/rag/build.py (check_index_health),
            app/main.py lifespan (check_index_health).
 Per user: "retrieve() 里 embedding 失败就直接返回 unavailable，没有使用 BM25 兜底"
 """
@@ -67,7 +67,7 @@ _MAX_DENSE_DISTANCE = 1.0  # 向量距离上限，超过此值视为无证据
 
 # 健康检查 TTL 缓存
 _HEALTH_TTL_SECONDS = 30.0
-_health_cache: tuple[float, IndexHealth] | None = None
+_health_cache: tuple[float, Path, IndexHealth] | None = None
 
 
 # 索引健康状态模型
@@ -98,10 +98,15 @@ async def _get_cached_health(kb_dir: Path | None = None) -> IndexHealth:
     """获取带 TTL 缓存的索引健康状态。"""
     global _health_cache
     now = time.monotonic()
-    if _health_cache and now - _health_cache[0] < _HEALTH_TTL_SECONDS:
-        return _health_cache[1]
-    health = await asyncio.to_thread(check_index_health, kb_dir)
-    _health_cache = (now, health)
+    target_dir = Path(kb_dir or KB_DIR).expanduser().resolve()
+    if (
+        _health_cache
+        and _health_cache[1] == target_dir
+        and now - _health_cache[0] < _HEALTH_TTL_SECONDS
+    ):
+        return _health_cache[2]
+    health = await asyncio.to_thread(check_index_health, target_dir)
+    _health_cache = (now, target_dir, health)
     return health
 
 
@@ -182,6 +187,10 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     if collection_name != CHROMA_COLLECTION:
         return IndexHealth(ready=False, reason=f"collection_mismatch:{collection_name}")
 
+    chunk_count = int(manifest.get("chunk_count", 0))
+    if chunk_count <= 0:
+        return IndexHealth(ready=False, reason="chunk_count_zero")
+
     embed_model = str(manifest.get("embedding_model", ""))
     if embed_model and embed_model != KB_EMBED_MODEL:
         return IndexHealth(ready=False, reason=f"embedding_model_mismatch:{embed_model}")
@@ -192,10 +201,6 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
             ready=False,
             reason=f"embedding_base_url_mismatch:{manifest_base_url}",
         )
-
-    chunk_count = int(manifest.get("chunk_count", 0))
-    if chunk_count <= 0:
-        return IndexHealth(ready=False, reason="chunk_count_zero")
 
     # 校验 Chroma 实际数量
     try:

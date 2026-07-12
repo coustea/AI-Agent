@@ -9,7 +9,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.rag.retriever import IndexHealth, check_index_health
+from app.rag.retriever import (
+    IndexHealth,
+    _get_cached_health,
+    check_index_health,
+    reset_health_cache,
+)
 
 
 class TestCheckIndexHealth:
@@ -83,7 +88,7 @@ class TestCheckIndexHealth:
             assert "embedding" in health.reason
 
     def test_chunk_count_zero(self, tmp_path: Path):
-        """Manifest chunk_count 为零。"""
+        """结构错误要先于 embedding 配置差异报告。"""
         manifest = {
             "schema_version": "1",
             "collection": "langchain",
@@ -93,10 +98,30 @@ class TestCheckIndexHealth:
         (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
         with patch("app.rag.retriever.KB_ENABLED", True), \
-             patch("app.rag.retriever.KB_DIR", str(tmp_path)):
+             patch("app.rag.retriever.KB_DIR", str(tmp_path)), \
+             patch("app.rag.retriever.KB_EMBED_MODEL", "bge-m3"):
             health = check_index_health()
             assert not health.ready
-            assert "zero" in health.reason
+            assert health.reason == "chunk_count_zero"
+
+    @pytest.mark.asyncio
+    async def test_health_cache_is_scoped_to_requested_directory(self, tmp_path: Path):
+        """不同输出目录不能复用同一个健康检查缓存。"""
+        reset_health_cache()
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        first_health = IndexHealth(ready=False, reason="first")
+        second_health = IndexHealth(ready=False, reason="second")
+
+        with patch(
+            "app.rag.retriever.check_index_health",
+            side_effect=[first_health, second_health],
+        ) as check:
+            assert (await _get_cached_health(first)).reason == "first"
+            assert (await _get_cached_health(second)).reason == "second"
+
+        assert check.call_count == 2
+        reset_health_cache()
 
 
 class TestIndexHealthModel:

@@ -224,6 +224,17 @@ def _read_manifest(output_dir: Path) -> dict[str, Any] | None:
         return None
 
 
+def _ensure_complete_index(index_dir: Path) -> None:
+    """Reject an index unless both retrieval channels validate from disk."""
+    from app.rag.retriever import check_index_health
+
+    health = check_index_health(index_dir)
+    if not health.ready:
+        raise RuntimeError(f"Vector index validation failed: {health.reason}")
+    if not health.bm25_ready:
+        raise RuntimeError(f"BM25 index validation failed: {health.bm25_reason}")
+
+
 # ============ 构建残留清理 ============
 
 
@@ -272,7 +283,7 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
     流程：
       1. 如果旧索引存在，先重命名为 backup
       2. 将 temp_dir 重命名为正式索引目录
-      3. 重新打开 ChromaDB 验证
+      3. 重新打开并验证向量与 BM25 工件
       4. 验证失败则删除新目录并回滚旧目录
       5. 成功后重置 BM25 懒加载单例
     """
@@ -289,20 +300,17 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
     temp_dir.rename(final_dir)
 
     try:
-        import chromadb
-
-        client = chromadb.PersistentClient(path=str(final_dir))
-        collection = client.get_collection(name=CHROMA_COLLECTION)
-        count = collection.count()
-
-        logger.info("[build] final index verified: %d chunks", count)
+        _ensure_complete_index(final_dir)
+        logger.info("[build] final index fully verified")
 
         # 如果构建和服务在同一进程内执行，确保 BM25 下次重新加载新索引。
         try:
             from app.rag.bm25 import reset_bm25_index
+            from app.rag.retriever import reset_health_cache
 
             reset_bm25_index()
-            logger.info("[build] bm25 cache reset")
+            reset_health_cache()
+            logger.info("[build] retrieval caches reset")
         except Exception as exc:
             logger.warning("[build] bm25 cache reset failed: %s", exc)
 
@@ -453,6 +461,7 @@ def build_index(
         logger.info("[build] manifest written: %s", temp_dir / MANIFEST_FILENAME)
 
         verify_store(temp_dir, col_name, chunk_count)
+        _ensure_complete_index(temp_dir)
         logger.info("[build] temp index verified")
 
         # 11. 替换正式索引目录

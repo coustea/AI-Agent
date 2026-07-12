@@ -78,12 +78,11 @@ class BM25Index:
             logger.warning("[bm25] empty texts, skip build")
             return
 
-        # 文本与元数据数量不一致时告警
+        # 文本与元数据必须一一对应，否则 BM25 排名会指向错误 chunk。
         if len(texts) != len(metadatas):
-            logger.warning(
-                "[bm25] texts/metadatas length mismatch: texts=%d, metadatas=%d",
-                len(texts),
-                len(metadatas),
+            raise ValueError(
+                "BM25 texts/metadatas length mismatch: "
+                f"texts={len(texts)}, metadatas={len(metadatas)}"
             )
 
         # 对所有文本执行分词
@@ -98,7 +97,7 @@ class BM25Index:
 
         # 关键修复：保存 chunk 正文，避免检索结果只有 source 路径
         self._docs = []
-        for idx, (text, meta) in enumerate(zip(texts, metadatas, strict=False)):
+        for idx, (text, meta) in enumerate(zip(texts, metadatas, strict=True)):
             item = dict(meta)
             item["text"] = text
             item["bm25_doc_index"] = idx
