@@ -259,8 +259,7 @@ class CartoonGenerationConfig(BaseModel):
 
     target_duration_seconds: int = Field(
         default=90,
-        ge=35,
-        le=180,
+        ge=90,
     )
 
     voice: Literal[
@@ -375,9 +374,9 @@ class SceneOutline(BaseModel):
     )
 
     estimated_seconds: int = Field(
-        default=18,
-        ge=6,
-        le=50,
+        default=30,
+        ge=12,
+        le=240,
     )
 
     @field_validator("id")
@@ -980,7 +979,7 @@ class TeachingScene(BaseModel):
 
     steps: list[TeachingStep] = Field(
         min_length=2,
-        max_length=6,
+        max_length=8,
     )
 
     @field_validator("id")

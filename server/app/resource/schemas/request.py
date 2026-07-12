@@ -71,7 +71,7 @@ class MindmapConfig(BaseModel):
 class QuizConfig(BaseModel):
     """习题 Agent 配置 — 4 个核心参数。"""
 
-    difficulty_mode: Literal["basic", "adaptive", "exam"] = "basic"
+    difficulty_mode: Literal["basic", "adaptive", "exam"] = "adaptive"
     question_count: int = Field(default=5, ge=1, le=20)
     emphasis: Literal["foundations", "application", "analysis"] = "foundations"
     question_types: list[Literal["single", "multiple", "judge", "fill"]] = Field(
@@ -93,7 +93,7 @@ class ReadingConfig(BaseModel):
 
     coverage: Literal["core", "extended", "broad"] = "extended"
     language_preference: Literal["chinese", "english", "both"] = "chinese"
-    max_items: int = Field(default=5, ge=1, le=10)
+    max_items: int = Field(default=3, ge=1, le=10)
     focus: Literal["textbook", "engineering", "research"] = "textbook"
 
 

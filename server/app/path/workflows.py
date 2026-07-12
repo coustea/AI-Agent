@@ -559,7 +559,7 @@ class NodeLearningAgent:
             logger.warning("[NodeLearningAgent] 知识库检索失败: %s", exc)
             kb_section = "无"
         # 根据 tutorial_type 选择对应的 prompt
-        prompt_key = f"tutorial_{tutorial_type}"  # tutorial_primary, tutorial_remediation, tutorial_reinforced
+        prompt_key = "tutorial_primary"  # 简化：只生成主教程
         prompt = prompts.get("path").render(
             prompt_key,
             path_goal=path_goal,
@@ -626,8 +626,8 @@ class NodeLearningAgent:
 # 节点完成状态集合
 COMPLETED_NODE_STATUSES = frozenset({"completed", "completed_with_gaps"})
 
-# 节点活跃状态集合
-ACTIVE_NODE_STATUSES = frozenset({"available", "in_progress", "remediation", "reinforced"})
+# 节点活跃状态集合（简化：移除 remediation 和 reinforced）
+ACTIVE_NODE_STATUSES = frozenset({"available", "in_progress"})
 
 
 # 工作流路由函数：根据 phase 字段决定下一个节点
@@ -636,14 +636,9 @@ def _route_by_phase(state: LearnState) -> str:
     return state["phase"]
 
 
-# 工作流路由函数：根据测验结果决定下一步（补救/强化/解锁）
+# 工作流路由函数：根据测验结果决定下一步（直接解锁）
 def _route_by_outcome(state: LearnState) -> str:
-    """路由函数：根据测验结果决定下一步（补救/强化/解锁）。"""
-    outcome = state.get("outcome", "completed")
-    if outcome == "remediation":
-        return "gen_remediation_tutorial"
-    if outcome == "completed_with_gaps" and state.get("tutorial_type") == "reinforced":
-        return "gen_reinforced_tutorial"
+    """路由函数：根据测验结果决定下一步（简化流程：直接解锁后续节点）。"""
     return "unlock_progress"
 
 
@@ -668,10 +663,6 @@ def _build_learn_workflow() -> StateGraph:
     wf.add_node("score_answers", node_score_answers)
     wf.add_node("advance_state", node_advance_state)
     wf.add_node("unlock_progress", node_unlock_and_update_progress)
-    wf.add_node("gen_remediation_tutorial", node_generate_tutorial)
-    wf.add_node("persist_remediation_tutorial", node_persist_tutorial_and_mark)
-    wf.add_node("gen_reinforced_tutorial", node_generate_tutorial)
-    wf.add_node("persist_reinforced_tutorial", node_persist_tutorial_and_mark)
     wf.add_node("record_event", node_record_quiz_event)
 
     wf.add_edge(START, "load_context")
@@ -693,22 +684,7 @@ def _build_learn_workflow() -> StateGraph:
     wf.add_edge("persist_questions", END)
 
     wf.add_edge("score_answers", "advance_state")
-    wf.add_conditional_edges(
-        "advance_state",
-        _route_by_outcome,
-        {
-            "gen_remediation_tutorial": "gen_remediation_tutorial",
-            "gen_reinforced_tutorial": "gen_reinforced_tutorial",
-            "unlock_progress": "unlock_progress",
-        },
-    )
-
-    wf.add_edge("gen_remediation_tutorial", "persist_remediation_tutorial")
-    wf.add_edge("persist_remediation_tutorial", "record_event")
-    wf.add_edge("record_event", END)
-
-    wf.add_edge("gen_reinforced_tutorial", "persist_reinforced_tutorial")
-    wf.add_edge("persist_reinforced_tutorial", "unlock_progress")
+    wf.add_edge("advance_state", "unlock_progress")
 
     wf.add_edge("unlock_progress", "record_event")
 
@@ -958,9 +934,9 @@ async def node_score_answers(state: LearnState) -> dict:
     }
 
 
-# 工作流节点：推进节点状态（完成/补救/有缺陷完成）
+# 工作流节点：推进节点状态（简化流程：一次测验即完成）
 async def node_advance_state(state: LearnState) -> dict:
-    """推进节点状态：completed/remediation/completed_with_gaps。"""
+    """推进节点状态：completed/completed_with_gaps（简化：不再生成补救/强化教程）。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -970,18 +946,11 @@ async def node_advance_state(state: LearnState) -> dict:
 
     node.attempt_count += 1
 
-    # 根据是否通过与尝试次数决定节点最终状态
+    # 简化逻辑：测验后直接标记为完成（通过或有缺陷完成）
     if passed:
         node.status = "completed"
         node.completed_at = datetime.now(timezone.utc)
         outcome = "completed"
-    elif node.attempt_count == 1:
-        node.status = "remediation"
-        outcome = "remediation"
-    elif node.attempt_count == 2:
-        node.status = "completed_with_gaps"
-        node.completed_at = datetime.now(timezone.utc)
-        outcome = "completed_with_gaps"
     else:
         node.status = "completed_with_gaps"
         node.completed_at = datetime.now(timezone.utc)
@@ -989,7 +958,7 @@ async def node_advance_state(state: LearnState) -> dict:
 
     await session.commit()
 
-    # 节点完成时记录学习事件
+    # 记录学习事件
     if outcome in ("completed", "completed_with_gaps"):
         try:
             from app.path.events import record_node_completed_event
@@ -1011,16 +980,10 @@ async def node_advance_state(state: LearnState) -> dict:
         except Exception:
             pass
 
-    result: dict = {"outcome": outcome}
-    if outcome == "remediation":
-        result["tutorial_type"] = "remediation"
-        result["weak_knowledge_points"] = weak_points
-    elif outcome == "completed_with_gaps" and node.attempt_count == 2:
-        primary = await _primary_tutorial(session, node.id)
-        result["tutorial_type"] = "reinforced"
-        result["weak_knowledge_points"] = weak_points
-        result["based_on_tutorial_id"] = primary.id if primary else None
-    return result
+    return {
+        "outcome": outcome,
+        "weak_knowledge_points": weak_points if outcome == "completed_with_gaps" else [],
+    }
 
 
 # 工作流节点：解锁后续节点并更新路径进度百分比

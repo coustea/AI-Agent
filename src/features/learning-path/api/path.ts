@@ -62,7 +62,7 @@ export function generateNodeQuestions(nodeId: number) {
   })
 }
 
-// 提交节点测验答案 → 后端判分，返回 outcome(completed/remediation/completed_with_gaps) + 薄弱点
+// 提交节点测验答案 → 后端判分，返回 outcome(completed/completed_with_gaps) + 薄弱点
 export function submitNodeQuiz(nodeId: number, payload: PathQuizSubmitRequest) {
   return http.post<ApiResponse<PathQuizSubmitResponse>>(`/ai/path-plan/nodes/${nodeId}/quiz-submit`, payload)
 }

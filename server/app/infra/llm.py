@@ -227,9 +227,33 @@ def _bind(
 
 
 # 从文本提取首个 JSON 对象并校验为指定 Pydantic schema
-def _parse_json(text: str, schema: type[BaseModel]) -> BaseModel:
-    """从 LLM 输出文本中解析第一个 JSON 对象并校验为指定 schema。"""
-    return schema.model_validate(parse_first_json_object(text))
+def _parse_json(
+    text: str,
+    schema: type[BaseModel],
+    validator: callable | None = None,
+) -> BaseModel:
+    """从 LLM 输出文本中解析第一个 JSON 对象并校验为指定 schema。
+
+    Args:
+        text: LLM 输出的文本
+        schema: Pydantic schema 类型
+        validator: 自定义校验函数（可选），接收 candidate 对象，
+                   校验失败时抛异常，异常信息会用于修复提示。
+
+    Returns:
+        BaseModel: 校验后的 Pydantic 实例
+
+    Raises:
+        ValueError: JSON 解析失败或校验失败
+    """
+    candidate = parse_first_json_object(text)
+    payload = schema.model_validate(candidate)
+
+    # 执行自定义校验（如果提供）
+    if validator is not None:
+        validator(payload)
+
+    return payload
 
 
 # 将 Pydantic schema 转为 prompt 可读的精简字段描述
@@ -857,11 +881,26 @@ class Llm:
         *,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        validator: callable | None = None,
     ) -> BaseModel:
         """结构化 JSON 输出：生成一次，失败后带原文修复一次。
 
         不使用 with_structured_output(function_calling)，避免 OpenAI-compatible
         网关把结果塞进 tool_calls 后解析成 None。
+
+        Args:
+            schema: Pydantic schema 类型
+            input_data: 输入数据（字符串、消息或消息列表）
+            temperature: JSON 生成温度（可选）
+            max_tokens: 最大输出 token 数（可选）
+            validator: 自定义校验函数（可选），接收 candidate 对象，
+                       校验失败时抛异常，异常信息会用于修复提示。
+
+        Returns:
+            BaseModel: 校验后的 Pydantic 实例
+
+        Raises:
+            ServiceError: 生成和修复都失败时抛出
         """
         messages = _normalize_messages(input_data)
         json_temp = temperature if temperature is not None else JSON_TEMPERATURE
@@ -883,7 +922,7 @@ class Llm:
             if not raw_output:
                 raise ValueError("empty response")
 
-            parsed = _parse_json(raw_output, schema)
+            parsed = _parse_json(raw_output, schema, validator)
             logger.info(
                 "[LLM] ainvoke_json 成功: schema=%s %dms raw_len=%d",
                 schema.__name__,
@@ -926,7 +965,7 @@ class Llm:
             if not repair_content:
                 raise ValueError("repair: empty response")
 
-            parsed = _parse_json(repair_content, schema)
+            parsed = _parse_json(repair_content, schema, validator)
             logger.info(
                 "[LLM] ainvoke_json 成功（修复后）: schema=%s %dms raw_len=%d",
                 schema.__name__,

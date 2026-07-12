@@ -68,14 +68,16 @@ async def generate(
         facts_snapshot=json.dumps(facts_snapshot, ensure_ascii=False, indent=2),
         subject_metadata=subject_metadata or "无"
     )
-    
+
     llm = get_llm()
     result = await llm.ainvoke_json(
         schema=AssessmentReportOutput,
         input_data=prompt,
-        validator=validate_output,
         temperature=0.1
     )
-    
+
+    # Manual validation after JSON parsing
+    validate_output(result)
+
     # Result is an instance of AssessmentReportOutput
     return result.report_markdown, result.guidance_strategy.model_dump()

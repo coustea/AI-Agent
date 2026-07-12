@@ -17,6 +17,7 @@ Per user: "retrieve() 里 embedding 失败就直接返回 unavailable，没有�
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -28,6 +29,7 @@ from pydantic import BaseModel
 from app.config import (
     KB_DIR,
     KB_ENABLED,
+    KB_EMBED_BASE_URL,
     KB_EMBED_MODEL,
     KB_TOP_K,
 )
@@ -44,6 +46,11 @@ from app.rag.models import (
 )
 
 logger = get_logger(__name__)
+
+
+def _normalize_base_url(value: str) -> str:
+    """Normalize only trailing slashes; callers must provide the API root."""
+    return value.strip().rstrip("/")
 
 # 并发检索限制
 _semaphore = asyncio.Semaphore(4)
@@ -179,6 +186,13 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     if embed_model and embed_model != KB_EMBED_MODEL:
         return IndexHealth(ready=False, reason=f"embedding_model_mismatch:{embed_model}")
 
+    manifest_base_url = str(manifest.get("embedding_base_url", "")).strip()
+    if manifest_base_url and _normalize_base_url(manifest_base_url) != _normalize_base_url(KB_EMBED_BASE_URL):
+        return IndexHealth(
+            ready=False,
+            reason=f"embedding_base_url_mismatch:{manifest_base_url}",
+        )
+
     chunk_count = int(manifest.get("chunk_count", 0))
     if chunk_count <= 0:
         return IndexHealth(ready=False, reason="chunk_count_zero")
@@ -201,12 +215,16 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     bm25_reason = ""
     bm25_manifest = manifest.get("bm25", {})
     if bm25_manifest:
+        bm25_built = bool(bm25_manifest.get("built", False))
         bm25_schema = str(bm25_manifest.get("schema_version", ""))
         bm25_chunk_count = int(bm25_manifest.get("chunk_count", 0))
         bm25_filename = str(bm25_manifest.get("filename", "bm25_index.pkl"))
+        bm25_checksum = str(bm25_manifest.get("sha256", ""))
         bm25_path = kb_dir / bm25_filename
 
-        if bm25_schema != "1":
+        if not bm25_built:
+            bm25_reason = "not_built"
+        elif bm25_schema != "1":
             bm25_reason = f"schema_version_mismatch:{bm25_schema}"
         elif bm25_chunk_count <= 0:
             bm25_reason = "chunk_count_zero"
@@ -214,6 +232,10 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
             bm25_reason = "file_missing"
         elif bm25_chunk_count != chunk_count:
             bm25_reason = f"count_mismatch:manifest={bm25_chunk_count},chroma={chunk_count}"
+        elif not bm25_checksum:
+            bm25_reason = "checksum_missing"
+        elif hashlib.sha256(bm25_path.read_bytes()).hexdigest() != bm25_checksum:
+            bm25_reason = "checksum_mismatch"
         else:
             bm25_ready = True
             bm25_reason = "ok"
@@ -405,6 +427,9 @@ async def _vector_search_soft_course(
             chunks.append(chunk)
     except Exception as exc:
         logger.warning("[retriever] chroma broad query failed: %s", exc)
+        # A broad query is the required final dense path.  Do not silently
+        # convert this runtime outage into a genuine no-match result.
+        raise RuntimeError("chroma broad query failed") from exc
 
     # 确定过滤模式
     filter_mode: CourseFilterMode = "filtered" if where_filter and course_filtered_chunks else "none"
@@ -431,18 +456,29 @@ def _bm25_query(
     if not index.is_ready:
         return [], "none"
 
-    # 先尝试课程过滤
+    # 先尝试课程过滤；不足的部分再由全库补充并显式标记。
     if course:
-        results = index.search(query, top_k=top_k, course=course)
-        if results:
-            chunks = _parse_bm25_results(results)
-            return chunks, "filtered"
+        filtered_chunks = _parse_bm25_results(
+            index.search(query, top_k=top_k, course=course)
+        )
+        if len(filtered_chunks) >= top_k:
+            return filtered_chunks, "filtered"
 
-    # 无课程过滤或过滤后无结果，使用全局检索
+        # 课程结果不足时，才用全库结果补齐；不能把全库结果伪装成已过滤。
+        global_chunks = _parse_bm25_results(index.search(query, top_k=top_k))
+        filtered_ids = {chunk.chunk_id for chunk in filtered_chunks}
+        for chunk in global_chunks:
+            if chunk.chunk_id not in filtered_ids and chunk.course != course:
+                chunk.course_fallback = True
+        merged = _dedupe_chunks([*filtered_chunks, *global_chunks])
+        if merged:
+            return merged, "fallback" if len(filtered_chunks) < top_k else "filtered"
+        return [], "filtered"
+
+    # 没有课程提示时使用全局检索。
     results = index.search(query, top_k=top_k)
     chunks = _parse_bm25_results(results)
-    filter_mode: CourseFilterMode = "filtered" if course and results else "none"
-    return chunks, filter_mode
+    return chunks, "none"
 
 
 # 解析 BM25 原始结果为 RetrievedChunk 列表
@@ -734,8 +770,18 @@ async def retrieve(
     # 去重并按最终条数截断
     chunks = _dedupe_chunks(chunks)[:effective_k]
 
-    # 无任何结果返回 empty
+    # 无任何结果时，必须把运行时故障与真实无命中分开。
     if not chunks:
+        if dense_status == "unavailable":
+            return RetrievalResult(
+                status="unavailable",
+                query=normalized_query,
+                elapsed_ms=_elapsed_ms(start),
+                message="vector retrieval unavailable and no BM25 fallback result",
+                dense_status=dense_status,
+                bm25_status=bm25_status,
+                course_filter_mode=course_filter_mode,
+            )
         return RetrievalResult(
             status="empty",
             query=normalized_query,
@@ -746,9 +792,9 @@ async def retrieve(
         )
 
     # 确定最终状态
-    final_status = "ok"
-    if dense_status != "ok" or bm25_status != "ok":
-        final_status = "partial"
+    # Dense retrieval alone is a complete usable service.  Only use `partial`
+    # when the dense channel failed and lexical retrieval supplied the result.
+    final_status = "partial" if dense_status != "ok" else "ok"
 
     # 返回检索成功结果
     return RetrievalResult(

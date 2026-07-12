@@ -292,13 +292,13 @@ class PathQuizSubmitRequest(BaseModel):
     answers: list[PathQuizAnswerItem] = Field(default_factory=list, min_length=5, max_length=5)
 
 
-# 测验提交响应 — 评分结果和下一步指引
+# 测验提交响应 — 评分结果和下一步指引（简化：不再生成补救教程）
 class PathQuizSubmitResponse(BaseModel):
     node_id: int
     round_no: int
     score: int
     passed: bool
-    outcome: Literal["completed", "remediation", "completed_with_gaps"]
+    outcome: Literal["completed", "completed_with_gaps"]
     weak_knowledge_points: list[str] = Field(default_factory=list)
     next_node_id: int | None = None
     current_tutorial_id: int | None = None
@@ -412,7 +412,7 @@ class LearnState(TypedDict, total=False):
 
     # ── 教程参数 ──────────────────────────────────────────────────
     tutorial_type: str
-    """教程类型：``'primary'``（主教程）| ``'remediation'``（补救教程）| ``'reinforced'``（强化教程）。"""
+    """教程类型：``'primary'``（主教程）。"""
     weak_knowledge_points: list[str]
     """学习者在测验中暴露出的薄弱知识点。"""
     based_on_tutorial_id: int | None
@@ -430,7 +430,7 @@ class LearnState(TypedDict, total=False):
     passed: bool
     """测验是否通过（得分 ≥ 通过线）。"""
     outcome: str
-    """节点推进结果：``'completed'``（通过）| ``'remediation'``（需补救）| ``'completed_with_gaps'``（有缺陷通过）。"""
+    """节点推进结果：``'completed'``（通过）| ``'completed_with_gaps'``（有缺陷通过）。"""
     next_node_id: int | None
     """完成后下一个可用节点的 ID。"""
     resource_result: Any

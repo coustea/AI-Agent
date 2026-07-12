@@ -119,6 +119,22 @@ body {
   margin-top: 38px;
 }
 
+.slide-body {
+  position: relative;
+  min-height: 100%;
+}
+
+.slide[data-layout-profile="sequence"] .slide-body,
+.slide[data-layout-profile="milestones"] .slide-body,
+.slide[data-layout-profile="definition-board"] .slide-body,
+.slide[data-layout-profile="boundary-grid"] .slide-body,
+.slide[data-layout-profile="mechanism"] .slide-body,
+.slide[data-layout-profile="comparison"] .slide-body,
+.slide[data-layout-profile="correction"] .slide-body,
+.slide[data-layout-profile="map"] .slide-body {
+  padding-bottom: 76px;
+}
+
 .slide-index {
   position: absolute;
   right: 104px;
@@ -603,8 +619,8 @@ class SlidePresentation {
         / this.slides.length
       ) * 100;
 
-    document.querySelector(
-      "#deckProgress span"
+    document.getElementById(
+      "deckProgress"
     ).style.width =
       `${percentage}%`;
 
@@ -809,7 +825,8 @@ def _render_points(
     )
 
     return (
-        '<div class="point-list">'
+        '<div class="point-list" '
+        f'data-count="{len(slide.points)}">'
         f"{rows}"
         "</div>"
     )
@@ -837,6 +854,7 @@ def _render_process(
 
     return (
         '<div class="process" '
+        f'data-count="{len(slide.steps)}" '
         f'style="--count:{len(slide.steps)}">'
         f"{steps}"
         "</div>"
@@ -872,12 +890,15 @@ def _render_table(
     )
 
     return (
+        '<div class="comparison-matrix" '
+        f'data-columns="{len(slide.table.headers)}">'
         '<table class="comparison-table">'
         "<thead>"
         f"<tr>{headers}</tr>"
         "</thead>"
         f"<tbody>{rows}</tbody>"
         "</table>"
+        "</div>"
     )
 
 
@@ -1062,8 +1083,71 @@ def render_slide_body(
         body = ""
 
     return (
-        body
+        '<div class="slide-body" '
+        f'data-body-type="{slide.type}">'
+        f"{body}"
+        "</div>"
         + _render_takeaway(slide)
+    )
+
+
+def _content_density(
+    slide: PPTSlide,
+) -> str:
+    """Expose a theme-neutral density hint for slide layouts."""
+    item_count = max(
+        len(slide.points),
+        len(slide.steps),
+        len(slide.table.rows),
+        len(slide.misconceptions),
+        len(slide.branches),
+    )
+    text_length = sum(
+        len(value)
+        for value in (
+            slide.title,
+            slide.subtitle,
+            slide.statement,
+            slide.question,
+            slide.takeaway,
+        )
+    )
+
+    if item_count >= 5 or text_length >= 260:
+        return "dense"
+
+    if item_count <= 2 and text_length <= 120:
+        return "sparse"
+
+    return "standard"
+
+
+def _layout_profile(slide: PPTSlide) -> str:
+    """Select a semantic composition, never a topic-specific visual treatment."""
+    profiles = {
+        "cover": "immersive",
+        "agenda": "sequence",
+        "learning_goals": "milestones",
+        "hook_question": "scenario",
+        "definition": "definition-board",
+        "concept_boundary": "boundary-grid",
+        "mechanism_overview": "mechanism",
+        "knowledge_explain": "explanation",
+        "comparison": "comparison",
+        "misconception": "correction",
+        "knowledge_map": "map",
+        "closing": "immersive",
+    }
+    return profiles[slide.type]
+
+
+def _teaching_item_count(slide: PPTSlide) -> int:
+    return max(
+        len(slide.points),
+        len(slide.steps),
+        len(slide.table.rows),
+        len(slide.misconceptions),
+        len(slide.branches),
     )
 
 
@@ -1206,6 +1290,9 @@ class PPTHTMLRenderer:
   data-layout="{_escape(layout.id)}"
   data-skeleton="{_escape(layout.skeleton)}"
   data-animation="{slide.animation}"
+  data-content-density="{_content_density(slide)}"
+  data-layout-profile="{_layout_profile(slide)}"
+  data-teaching-items="{_teaching_item_count(slide)}"
   data-title-size="{title_size}"
   data-notes="{notes}"
 >

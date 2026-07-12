@@ -215,21 +215,6 @@
         <p class="quality-note">{{ evidenceNote }}</p>
       </section>
 
-      <!-- 评估报告 (可折叠) -->
-      <section class="report-section">
-        <button type="button" class="report-toggle" @click="reportExpanded = !reportExpanded">
-          <BookOpenCheck :size="16" />
-          <h3>评估报告</h3>
-          <ChevronDown :size="18" :class="{ rotated: reportExpanded }" />
-        </button>
-        <transition name="collapse">
-          <div v-show="reportExpanded" class="report-content">
-            <MarkdownRenderer v-if="activeReport.report_markdown" :content="activeReport.report_markdown" />
-            <p v-else class="empty-chart">暂无报告内容</p>
-          </div>
-        </transition>
-      </section>
-
       <!-- 历史报告 -->
       <section class="history-section">
         <div class="section-header">
@@ -309,7 +294,6 @@ import type {
   LearningAssessmentReport,
 } from '@/features/learning-assessment/model/assessment'
 import { normalizeGuidanceStrategy } from '@/features/learning-assessment/model/assessment'
-import MarkdownRenderer from '@/shared/ui/MarkdownRenderer.vue'
 
 use([
   CanvasRenderer,
@@ -332,7 +316,6 @@ const currentPage = ref(1)
 const totalReports = ref(0)
 const totalPages = ref(1)
 const currentStepIdx = ref(0)
-const reportExpanded = ref(false)
 const pageSize = 10
 const generationSteps = ['聚合学习事实', '校验证据质量', '生成评估报告', '更新辅导策略']
 
@@ -966,50 +949,6 @@ h1, h2, h3, p {
   line-height: var(--leading-relaxed);
 }
 
-/* Report Section */
-.report-section {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  overflow: hidden;
-}
-
-.report-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 0;
-  background: transparent;
-  color: var(--color-primary-text);
-  cursor: pointer;
-  text-align: left;
-}
-
-.report-toggle h3 {
-  flex: 1;
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
-}
-
-.report-toggle svg {
-  transition: transform var(--transition-base);
-}
-
-.report-toggle svg.rotated {
-  transform: rotate(180deg);
-}
-
-.report-content {
-  padding: 0 var(--space-4) var(--space-4);
-}
-
-.report-content :deep(.markdown-renderer) {
-  color: var(--color-text);
-}
-
 /* History Section */
 .history-section {
   border: 1px solid var(--color-border);
@@ -1069,27 +1008,6 @@ h1, h2, h3, p {
   margin-top: var(--space-4);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-}
-
-/* Collapse Transition */
-.collapse-enter-active,
-.collapse-leave-active {
-  transition: all var(--transition-base);
-  overflow: hidden;
-}
-
-.collapse-enter-from,
-.collapse-leave-to {
-  opacity: 0;
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.collapse-enter-to,
-.collapse-leave-from {
-  opacity: 1;
-  max-height: 2000px;
 }
 
 /* Responsive */
