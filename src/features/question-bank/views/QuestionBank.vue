@@ -2120,7 +2120,7 @@ function scrollQuestionBankViewportToTop() {
 <style scoped>
 .question-bank-layout {
   min-height: calc(100vh - var(--navbar-height, 64px));
-  padding: 28px 28px 36px;
+  padding: 0;
   box-sizing: border-box;
   color: #172033;
   background:
@@ -2138,34 +2138,39 @@ function scrollQuestionBankViewportToTop() {
       sans-serif;
 }
 
-.question-bank-workspace,
+.question-bank-workspace {
+  width: 100%;
+  margin: 0;
+}
+
 .exam-workspace {
-  width: min(1480px, 100%);
-  margin: 0 auto;
+  width: min(1480px, calc(100% - 56px));
+  margin: 28px auto 36px;
 }
 
 .bank-shell {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr) 300px;
-  gap: 22px;
-  min-height: calc(100vh - var(--navbar-height, 64px) - 64px);
-  border: 1px solid rgba(226, 232, 240, 0.84);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
+  gap: 0;
+  min-height: calc(100vh - var(--navbar-height, 64px));
+  border: none;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
   overflow: visible;
 }
 
 .bank-left-rail {
   position: sticky;
-  top: 16px;
+  top: 0;
   align-self: start;
-  max-height: calc(100vh - var(--navbar-height, 64px) - 32px);
+  min-height: calc(100vh - var(--navbar-height, 64px));
+  max-height: calc(100vh - var(--navbar-height, 64px));
   overflow-y: auto;
-  padding: 20px 14px;
-  border-right: 1px solid rgba(226, 232, 240, 0.8);
-  background: rgba(255, 255, 255, 0.54);
+  padding: 24px 12px 28px 20px;
+  border-right: 1px solid rgba(226, 232, 240, 0.82);
+  background: rgba(255, 255, 255, 0.7);
   scrollbar-width: thin;
 }
 
@@ -2173,8 +2178,8 @@ function scrollQuestionBankViewportToTop() {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
-  padding: 0 8px;
+  margin-bottom: 24px;
+  padding: 0 4px;
 }
 
 .rail-brand-icon {
@@ -2218,10 +2223,11 @@ function scrollQuestionBankViewportToTop() {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   min-height: 58px;
-  padding: 8px;
+  padding: 8px 10px 8px 4px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
@@ -2236,13 +2242,13 @@ function scrollQuestionBankViewportToTop() {
 }
 
 .rail-menu-item:hover {
-  background: rgba(241, 245, 249, 0.72);
+  background: rgba(235, 242, 244, 0.72);
   transform: none;
 }
 
 .rail-menu-item.active {
-  border-color: rgba(52, 211, 153, 0.28);
-  background: rgba(209, 250, 229, 0.58);
+  border-color: transparent;
+  background: rgba(209, 250, 229, 0.42);
   color: #0f6b55;
 }
 
@@ -2250,9 +2256,9 @@ function scrollQuestionBankViewportToTop() {
   position: absolute;
   top: 10px;
   bottom: 10px;
-  left: -1px;
-  width: 4px;
-  border-radius: 0 4px 4px 0;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
   background: #2fc68f;
   content: '';
 }
@@ -2264,18 +2270,20 @@ function scrollQuestionBankViewportToTop() {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: rgba(241, 245, 249, 0.92);
+  background: transparent;
   color: #6f7d90;
   flex-shrink: 0;
 }
 
 .rail-menu-item.active .rail-menu-icon {
-  background: #32c894;
-  color: #fff;
+  background: rgba(47, 198, 143, 0.14);
+  color: #168165;
 }
 
 .rail-menu-copy {
+  flex: 1;
   min-width: 0;
+  text-align: left;
 }
 
 .rail-menu-item strong,
@@ -2313,7 +2321,7 @@ function scrollQuestionBankViewportToTop() {
 
 .bank-main {
   min-width: 0;
-  padding: 24px 0 28px;
+  padding: 28px 32px 36px;
 }
 
 .portal-board,
@@ -3519,6 +3527,7 @@ function scrollQuestionBankViewportToTop() {
     position: static;
     top: auto;
     align-self: stretch;
+    min-height: 0;
     max-height: none;
     overflow: visible;
     border-right: none;
