@@ -312,6 +312,7 @@ import {
   ChevronLeftIcon as ChevronLeft,
   ChevronRightIcon as ChevronRight,
   FilesIcon as Files,
+  ClipboardCheckIcon as Assessment,
 } from '@lucide/vue'
 
 defineOptions({ name: 'Home' })
@@ -399,6 +400,7 @@ const getIconComponent = (iconName: string) => {
     case 'practice': return EditPen
     case 'monitor': return Monitor
     case 'reading': return Reading
+    case 'assessment': return Assessment
     default: return DocumentCopy
   }
 }

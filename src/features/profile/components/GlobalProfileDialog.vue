@@ -22,28 +22,7 @@
                 <component :is="XIcon" class="close-icon" />
               </button>
 
-              <div class="dialog-switcher" role="tablist" aria-label="动态特征与学习评估">
-                <button
-                  type="button"
-                  role="tab"
-                  :aria-selected="activePanel === 'profile'"
-                  :class="{ active: activePanel === 'profile' }"
-                  @click="activePanel = 'profile'"
-                >
-                  动态特征
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  :aria-selected="activePanel === 'assessment'"
-                  :class="{ active: activePanel === 'assessment' }"
-                  @click="activePanel = 'assessment'"
-                >
-                  学习评估
-                </button>
-              </div>
-
-              <section v-if="activePanel === 'profile'" class="profile-visual-panel">
+              <section class="profile-visual-panel">
 
               <div class="visual-background">
                 <span class="grid-layer"></span>
@@ -184,11 +163,6 @@
                 </div>
               </div>
               </section>
-
-              <LearningAssessmentPanel
-                v-else
-                class="assessment-embedded-panel"
-              />
             </div>
           </main>
         </div>
@@ -213,7 +187,6 @@ import {
 } from '@/features/profile/model/useGlobalProfile'
 
 import type { DimensionValue } from '@/features/profile/model/profile'
-import LearningAssessmentPanel from '@/features/profile/components/LearningAssessmentPanel.vue'
 
 type PopupPlacement =
   | 'popup-above'
@@ -224,7 +197,6 @@ type PopupPlacement =
 const profile = ref<ProfileData | null>(null)
 const loading = ref(false)
 const hoveredNodeKey = ref<ProfileDimensionKey | null>(null)
-const activePanel = ref<'profile' | 'assessment'>('profile')
 
 const DIM_CONFIG: Array<{
   key: ProfileDimensionKey
@@ -367,7 +339,6 @@ const orbitNodes = computed(() => {
 
 const closeProfile = () => {
   hoveredNodeKey.value = null
-  activePanel.value = 'profile'
   isGlobalProfileVisible.value = false
 }
 
@@ -387,11 +358,9 @@ const fetchProfile = async () => {
 
 watch(isGlobalProfileVisible, visible => {
   if (visible) {
-    activePanel.value = 'profile'
     fetchProfile()
   } else {
     hoveredNodeKey.value = null
-    activePanel.value = 'profile'
   }
 })
 
@@ -486,51 +455,6 @@ watch(profileRefreshTrigger, () => {
   position: relative;
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--space-3);
-}
-
-.dialog-switcher {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  padding-right: 48px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-xs);
-}
-
-.dialog-switcher button {
-  min-width: 96px;
-  min-height: 32px;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: var(--weight-bold);
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.dialog-switcher button:hover {
-  color: var(--color-text-strong);
-  background: var(--color-bg);
-}
-
-.dialog-switcher button.active {
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
-  box-shadow: inset 0 0 0 1px var(--color-primary-border);
 }
 
 .loading-body {
@@ -551,10 +475,6 @@ watch(profileRefreshTrigger, () => {
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xs);
-}
-
-.assessment-embedded-panel {
-  min-height: 0;
 }
 
 .floating-close-btn {

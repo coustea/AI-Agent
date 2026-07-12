@@ -787,9 +787,10 @@ class Llm:
     """
 
     # 构造网关：加载文本与视觉模型配置并创建模型实例
-    def __init__(self) -> None:
-        self.text_config = _load_config("models")
-        self.vision_config = _load_config("models.vision")
+    def __init__(self, profile: str = "default") -> None:
+        self.profile = profile
+        self.text_config = _load_config(f"models.{profile}")
+        self.vision_config = _load_config(f"models.{profile}.vision")
         self._text_model = _create_model(self.text_config) if self.text_config else None
         self._vision_model = _create_model(self.vision_config) if self.vision_config else None
 
@@ -979,7 +980,7 @@ class Llm:
         ).ainvoke(input_data)
 
 
-# 全局单例获取 LLM 网关（进程内缓存一份）
-@lru_cache(maxsize=1)
-def get_llm() -> Llm:
-    return Llm()
+# 全局单例获取 LLM 网关（按 profile 进程内缓存）
+@lru_cache(maxsize=8)
+def get_llm(profile: str = "default") -> Llm:
+    return Llm(profile)
