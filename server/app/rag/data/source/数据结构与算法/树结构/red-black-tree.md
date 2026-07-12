@@ -1,0 +1,115 @@
+---
+title: 红黑树详解（性质、旋转、应用）
+description: 深入讲解红黑树的五大性质与旋转调整过程，理解自平衡机制及在标准库与索引结构中的应用。
+category: 计算机基础
+tag:
+  - 数据结构
+head:
+  - - meta
+    - name: keywords
+      content: 红黑树,自平衡,旋转,插入删除,性质,黑高,时间复杂度
+---
+
+# 红黑树
+
+## 红黑树介绍
+
+红黑树（Red Black Tree）是一种自平衡二叉查找树。它是在 1972 年由 Rudolf Bayer 发明的，当时被称为平衡二叉 B 树（symmetric binary B-trees）。后来，在 1978 年被 Leo J. Guibas 和 Robert Sedgewick 修改为如今的“红黑树”。
+
+由于其自平衡的特性，保证了最坏情形下在 O(logn) 时间复杂度内完成查找、增加、删除等操作，性能表现稳定。
+
+在 JDK 中，`TreeMap`、`TreeSet` 以及 JDK1.8 的 `HashMap` 底层都用到了红黑树。
+
+## 为什么需要红黑树？
+
+红黑树的诞生就是为了解决二叉查找树的缺陷。
+
+二叉查找树是一种基于比较的数据结构，它的每个节点都有一个键值，而且左子节点的键值小于父节点的键值，右子节点的键值大于父节点的键值。这样的结构可以方便地进行查找、插入和删除操作，因为只需要比较节点的键值就可以确定目标节点的位置。但是，二叉查找树有一个很大的问题，就是它的形状取决于节点插入的顺序。如果节点是按照升序或降序的方式插入的，那么二叉查找树就会退化成一个线性结构，也就是一个链表。这样的情况下，二叉查找树的性能就会大大降低，时间复杂度就会从 O(logn) 变为 O(n)。
+
+红黑树的诞生就是为了解决二叉查找树的缺陷，因为二叉查找树在某些情况下会退化成一个线性结构。
+
+## 红黑树特点
+
+1. 每个节点非红即黑。黑色决定平衡，红色不决定平衡。这对应了 2-3 树中一个节点内可以存放 1~2 个节点。
+2. 根节点总是黑色的。
+3. 每个叶子节点都是黑色的空节点（NIL 节点）。这里指的是红黑树都会有一个空的叶子节点，是红黑树自己的规则。
+4. 如果节点是红色的，则它的子节点必须是黑色的（反之不一定）。通常这条规则也叫不会有连续的红色节点。一个节点最多临时会有 3 个子节点，中间是黑色节点，左右是红色节点。
+5. 从任意节点到它的叶子节点或空子节点的每条路径，必须包含相同数目的黑色节点（即相同的黑色高度）。每一层都只是有一个节点贡献了树高决定平衡性，也就是对应红黑树中的黑色节点。
+
+正是这些特点才保证了红黑树的平衡，让红黑树的高度不会超过 2log(n+1)。
+
+## 红黑树数据结构
+
+建立在 BST 二叉搜索树的基础上，AVL、2-3 树、红黑树都是自平衡二叉树（统称 B-树）。但相比于 AVL 树，高度平衡所带来的时间复杂度，红黑树对平衡的控制要宽松一些，红黑树只需要保证黑色节点平衡即可。
+
+## 红黑树结构实现
+
+```java
+public class Node {
+
+    public Class<?> clazz;
+    public Integer value;
+    public Node parent;
+    public Node left;
+    public Node right;
+
+    // AVL 树所需属性
+    public int height;
+    // 红黑树所需属性
+    public Color color = Color.RED;
+
+}
+```
+
+### 1. 左倾染色
+
+![红黑树左倾染色示意图](https://oss.javaguide.cn/github/javaguide/cs-basics/data-structure/red-black-tree-1.png)
+
+- 染色时根据当前节点的爷爷节点，找到当前节点的叔叔节点。
+- 再把父节点染黑、叔叔节点染黑，爷爷节点染红。但爷爷节点染红是临时的，当平衡树高操作后会把根节点染黑。
+
+### 2. 右倾染色
+
+![红黑树右倾染色示意图](https://oss.javaguide.cn/github/javaguide/cs-basics/data-structure/red-black-tree-2.png)
+
+### 3. 左旋调衡
+
+#### 3.1 一次左旋
+
+![红黑树一次左旋调衡示意图](https://oss.javaguide.cn/github/javaguide/cs-basics/data-structure/red-black-tree-3.png)
+
+#### 3.2 右旋 + 左旋
+
+![红黑树右旋加左旋调衡示意图](https://oss.javaguide.cn/github/javaguide/cs-basics/data-structure/red-black-tree-4.png)
+
+### 4. 右旋调衡
+
+#### 4.1 一次右旋
+
+![红黑树一次右旋调衡示意图](https://oss.javaguide.cn/github/javaguide/cs-basics/data-structure/red-black-tree-5.png)
+
+#### 4.2 左旋 + 右旋
+
+![红黑树左旋加右旋调衡示意图](https://oss.javaguide.cn/github/javaguide/cs-basics/data-structure/red-black-tree-6.png)
+
+## 面试复盘重点
+
+红黑树面试一般不会要求完整手写插入删除修复，更常见的是让你说清性质、为什么近似平衡、和 AVL 树有什么区别、Java 里哪里用到了。
+
+| 对比点   | AVL 树             | 红黑树                               |
+| -------- | ------------------ | ------------------------------------ |
+| 平衡要求 | 更严格             | 相对宽松                             |
+| 查询性能 | 更稳定             | 也能保持 `O(logn)`                   |
+| 插入删除 | 旋转调整可能更多   | 调整次数通常更少                     |
+| 常见应用 | 读多写少的搜索结构 | `TreeMap`、`TreeSet`、`HashMap` 树化 |
+
+面试回答可以按这个顺序组织：
+
+1. 普通二叉搜索树在有序插入时会退化成链表。
+2. 红黑树通过颜色规则限制树高，保证查询、插入、删除仍然是 `O(logn)`。
+3. 它不是完全平衡，而是近似平衡，所以插入删除时调整成本比 AVL 树更低。
+4. Java 中 `TreeMap`、`TreeSet` 基于红黑树，JDK 8 后 `HashMap` 链表过长时也会树化为红黑树。
+
+`HashMap` 树化还要满足容量条件，并不是链表长度到阈值就一定树化。这个细节在 Java 集合面试里经常被追问。
+
+<!-- @include: @article-footer.snippet.md -->
