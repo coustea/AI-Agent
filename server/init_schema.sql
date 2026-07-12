@@ -259,12 +259,16 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     user_id                 INTEGER         NOT NULL,
     overall_score           INTEGER         DEFAULT 0,
     scored_at               TIMESTAMPTZ,
+    guidance_strategy       JSONB           NOT NULL DEFAULT '{}',
+    guidance_updated_at     TIMESTAMPTZ,
+    last_assessment_report_id INTEGER,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
     CONSTRAINT uq_user_profiles_user UNIQUE (user_id)
 );
 
 CREATE INDEX IF NOT EXISTS ix_user_profiles_user_id ON user_profiles (user_id);
+ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_last_report FOREIGN KEY (last_assessment_report_id) REFERENCES learning_assessment_reports(id) ON DELETE SET NULL;
 
 COMMENT ON TABLE user_profiles IS '用户主画像表，每个用户一条';
 COMMENT ON COLUMN user_profiles.user_id IS '用户ID';
@@ -297,33 +301,42 @@ COMMENT ON COLUMN user_profile_dimensions.evidence IS '推断依据';
 COMMENT ON COLUMN user_profile_dimensions.score IS '维度得分';
 
 -- ============================================================
--- 9. weekly_learning_digests
+-- 9. learning_assessment_reports
 -- ============================================================
-CREATE TABLE IF NOT EXISTS weekly_learning_digests (
+CREATE TABLE IF NOT EXISTS learning_assessment_reports (
     id                 SERIAL PRIMARY KEY,
-    user_id            INTEGER NOT NULL,
-    module             VARCHAR NOT NULL DEFAULT 'mentor',
-    week_start         TIMESTAMPTZ NOT NULL,
-    week_end           TIMESTAMPTZ NOT NULL,
-    digest_markdown    TEXT NOT NULL,
-    courses_active     JSONB,
-    stats              JSONB,
+    user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    range_days         SMALLINT NOT NULL CHECK (range_days IN (7, 14, 30)),
+    window_start       TIMESTAMPTZ NOT NULL,
+    window_end         TIMESTAMPTZ NOT NULL,
+    status             VARCHAR(16) NOT NULL CHECK (status IN ('generating', 'ready', 'failed')),
+    facts_snapshot     JSONB,
+    report_markdown    TEXT,
+    generated_at       TIMESTAMPTZ,
+    failure_code       VARCHAR(64),
     created_at         TIMESTAMPTZ DEFAULT NOW(),
     updated_at         TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_weekly_digest_user_module_week UNIQUE (user_id, module, week_start)
+    CHECK (window_end > window_start),
+    CHECK (
+        (status = 'ready' AND facts_snapshot IS NOT NULL AND report_markdown IS NOT NULL) OR
+        (status = 'failed' AND failure_code IS NOT NULL) OR
+        (status = 'generating')
+    )
 );
 
-CREATE INDEX IF NOT EXISTS ix_weekly_digests_user_id ON weekly_learning_digests (user_id);
-CREATE INDEX IF NOT EXISTS ix_weekly_digests_module ON weekly_learning_digests (module);
-CREATE INDEX IF NOT EXISTS ix_weekly_digests_week_start ON weekly_learning_digests (week_start);
-CREATE INDEX IF NOT EXISTS ix_weekly_digests_user_week ON weekly_learning_digests (user_id, week_start);
+CREATE INDEX IF NOT EXISTS ix_reports_user_created ON learning_assessment_reports (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_reports_user_status ON learning_assessment_reports (user_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_user_generating ON learning_assessment_reports (user_id) WHERE status = 'generating';
 
-COMMENT ON TABLE weekly_learning_digests IS '周度学习摘要表，聚合用户本周跨系统学习行为，作为全局画像评分的缓冲证据层';
-COMMENT ON COLUMN weekly_learning_digests.week_start IS '本周一 00:00:00 UTC';
-COMMENT ON COLUMN weekly_learning_digests.week_end IS '本周日 23:59:59.999999 UTC';
-COMMENT ON COLUMN weekly_learning_digests.digest_markdown IS '周度摘要 Markdown（由 weekly_digest.md prompt 生成）';
-COMMENT ON COLUMN weekly_learning_digests.courses_active IS '本周活跃课程/主题列表 JSON 数组';
-COMMENT ON COLUMN weekly_learning_digests.stats IS '聚合统计快照 JSON（对话轮数、资源数、节点完成数、答题数与正确率、活跃分钟）';
+COMMENT ON TABLE learning_assessment_reports IS '学习效果评估报告表，记录用户单次评估报告';
+COMMENT ON COLUMN learning_assessment_reports.user_id IS '用户ID';
+COMMENT ON COLUMN learning_assessment_reports.range_days IS '报告的时间范围天数 (7, 14, 30)';
+COMMENT ON COLUMN learning_assessment_reports.window_start IS '评估时间窗口起点';
+COMMENT ON COLUMN learning_assessment_reports.window_end IS '评估时间窗口终点';
+COMMENT ON COLUMN learning_assessment_reports.status IS '报告生成状态：generating, ready, failed';
+COMMENT ON COLUMN learning_assessment_reports.facts_snapshot IS '统计事实快照（JSONB）';
+COMMENT ON COLUMN learning_assessment_reports.report_markdown IS '大模型生成的分析报告 Markdown';
+COMMENT ON COLUMN learning_assessment_reports.failure_code IS '错误码，当 status = failed 时记录';
 
 -- ============================================================
 -- 10. generated_resources
@@ -332,6 +345,7 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     id                  SERIAL          PRIMARY KEY,
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
+    request_snapshot_json JSONB          NOT NULL DEFAULT '{}'::jsonb,
     plan_content        TEXT,
     status              VARCHAR(50)     DEFAULT 'pending',
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
@@ -344,6 +358,7 @@ CREATE INDEX IF NOT EXISTS ix_generated_resources_user_id
 COMMENT ON TABLE generated_resources IS '多智能体资源生成任务主表';
 COMMENT ON COLUMN generated_resources.user_id IS '用户ID';
 COMMENT ON COLUMN generated_resources.learning_need IS '学习需求描述';
+COMMENT ON COLUMN generated_resources.request_snapshot_json IS '任务创建时冻结的完整生成请求快照';
 COMMENT ON COLUMN generated_resources.status IS '任务状态：pending/generating/completed/partial_completed/failed';
 
 -- ============================================================
@@ -469,6 +484,8 @@ CREATE TABLE IF NOT EXISTS learning_events (
     course          VARCHAR(200),
     topic           VARCHAR(200),
     event_metadata  JSONB           DEFAULT '{}',
+    client_event_id VARCHAR(64),
+    occurred_at     TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     created_at      TIMESTAMPTZ     DEFAULT NOW()
 );
 
@@ -480,6 +497,9 @@ CREATE INDEX IF NOT EXISTS ix_learning_events_module_entity
     ON learning_events (module, entity_id);
 CREATE INDEX IF NOT EXISTS ix_learning_events_event_metadata
     ON learning_events USING GIN (event_metadata);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_events_user_client_event
+    ON learning_events (user_id, client_event_id)
+    WHERE client_event_id IS NOT NULL;
 
 COMMENT ON TABLE learning_events IS '学习事件表，单表 unified 结构，按 module 分域';
 COMMENT ON COLUMN learning_events.user_id IS '用户ID';
@@ -490,6 +510,8 @@ COMMENT ON COLUMN learning_events.score IS '得分 0–100，仅测验类事件'
 COMMENT ON COLUMN learning_events.course IS '课程/科目';
 COMMENT ON COLUMN learning_events.topic IS '知识点/主题/算法名';
 COMMENT ON COLUMN learning_events.event_metadata IS '模块特有扩展字段（JSONB）';
+COMMENT ON COLUMN learning_events.client_event_id IS '前端 UUID 幂等键';
+COMMENT ON COLUMN learning_events.occurred_at IS '事件发生实际时间';
 
 -- ============================================================
 -- 13b. learning_sessions
@@ -508,6 +530,7 @@ CREATE TABLE IF NOT EXISTS learning_sessions (
     course              VARCHAR(200),
     topic               VARCHAR(200),
     metadata_json       JSONB,
+    client_session_id   VARCHAR(64),
     created_at          TIMESTAMPTZ     DEFAULT NOW()
 );
 
@@ -520,6 +543,9 @@ CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_started_at
     ON learning_sessions (user_id, started_at);
 CREATE INDEX IF NOT EXISTS ix_learning_sessions_user_source_page
     ON learning_sessions (user_id, source_page);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sessions_user_client_session
+    ON learning_sessions (user_id, client_session_id)
+    WHERE client_session_id IS NOT NULL;
 
 COMMENT ON TABLE learning_sessions IS '学习会话表，记录用户的学习时间段和时长';
 COMMENT ON COLUMN learning_sessions.user_id IS '用户ID';

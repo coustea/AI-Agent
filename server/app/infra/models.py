@@ -16,7 +16,7 @@
 重构说明（v3）：
 - Chat 会话压缩使用 ChatSessionSummaryBlock
 - Chat 长期记忆使用 ChatLongTermMemory
-- Profile 独立为共享模块，复用 global_profiles / weekly_learning_digests
+- Profile 独立为共享模块
 """
 
 # 本文件集中定义所有 SQLModel 数据库表，新表需加入底部 REGISTERED_MODELS 元组以便自动建表
@@ -363,6 +363,16 @@ class UserProfile(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
     )
 
+    guidance_strategy: dict = Field(default_factory=dict, sa_column=Column(JSONB))
+    guidance_updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
+    )
+    last_assessment_report_id: int | None = Field(
+        default=None,
+        foreign_key="learning_assessment_reports.id"
+    )
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -407,38 +417,42 @@ class UserProfileDimension(SQLModel, table=True):
     )
 
 
-class WeeklyLearningDigest(SQLModel, table=True):
-    """周度学习摘要表 — 以自然周为粒度聚合用户跨系统学习行为。
-
-    作为文字画像更新的缓冲层：infer_profile_from_digest 调用
-    get_or_create_weekly_digest 构建本周摘要，再据此推理更新文字画像，
-    避免逐事件频繁更新导致画像失准。评分不直接读本表，仅紧跟文字画像变更。
-
-    周范围约定：week_start = 周一 00:00:00 UTC，week_end = 周日 23:59:59.999999 UTC。
-    """
-    __tablename__ = "weekly_learning_digests"
+class LearningAssessmentReport(SQLModel, table=True):
+    """学习效果评估报告表 — 记录用户单次评估报告。"""
+    __tablename__ = "learning_assessment_reports"
     __table_args__ = (
-        UniqueConstraint("user_id", "module", "week_start", name="uq_weekly_digest_user_module_week"),
-        Index("ix_weekly_digests_user_week", "user_id", "week_start"),
+        Index("ix_reports_user_created", "user_id", "created_at"),
+        Index("ix_reports_user_status", "user_id", "status"),
+        Index(
+            "uq_reports_user_generating",
+            "user_id",
+            postgresql_where=text("status = 'generating'"),
+            unique=True,
+        ),
+        CheckConstraint("range_days IN (7, 14, 30)", name="chk_reports_range_days"),
+        CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_reports_status"),
+        CheckConstraint("window_end > window_start", name="chk_reports_window_order"),
+        CheckConstraint(
+            "(status = 'ready' AND facts_snapshot IS NOT NULL AND report_markdown IS NOT NULL) OR "
+            "(status = 'failed' AND failure_code IS NOT NULL) OR "
+            "(status = 'generating')",
+            name="chk_reports_state_consistency"
+        )
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
-    module: str = Field(default="mentor", index=True)
-
-    # 周范围（UTC）— week_start 为周一 00:00:00，week_end 为周日 23:59:59.999999
-    week_start: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), index=True))
-    week_end: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
-
-    # 摘要主体（纯 Markdown，由 weekly_digest.md prompt 生成）
-    digest_markdown: str = Field(sa_column=Column(Text))
-
-    # 本周活跃课程/主题列表（用于快速检索，不参与评分逻辑）
-    courses_active: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-
-    # 聚合统计快照（对话轮数、资源数、节点完成数、答题数与正确率、活跃分钟）
-    stats: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-
+    user_id: int = Field(index=True, foreign_key="users.id")
+    range_days: int = Field()
+    window_start: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+    window_end: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+    status: str = Field(max_length=16, default="generating")
+    facts_snapshot: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    report_markdown: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    generated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
+    )
+    failure_code: str | None = Field(default=None, max_length=64)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -460,6 +474,11 @@ class GeneratedResource(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     learning_need: str | None = Field(default=None, sa_column=Column(Text))
+    # 请求在入队前冻结；后台工作流不得依赖 HTTP 进程内参数。
+    request_snapshot_json: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False),
+    )
     plan_content: str | None = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="pending", max_length=50)
 
@@ -490,7 +509,7 @@ class GeneratedResourceItem(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
 
-    # Agent 类型（content/mindmap/quiz/code/reading/ppt/video）
+    # Agent 类型（content/mindmap/quiz/code/reading/ppt/cartoon）
     agent_type: str = Field(max_length=50, index=True)
 
     # 展示信息
@@ -582,6 +601,13 @@ class LearningEvent(SQLModel, table=True):
         Index("ix_learning_events_user_module_created", "user_id", "module", "created_at"),
         Index("ix_learning_events_module_entity", "module", "entity_id"),
         Index("ix_learning_events_event_metadata", "event_metadata", postgresql_using="gin"),
+        Index(
+            "uq_events_user_client_event",
+            "user_id",
+            "client_event_id",
+            postgresql_where=text("client_event_id IS NOT NULL"),
+            unique=True,
+        )
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -593,6 +619,11 @@ class LearningEvent(SQLModel, table=True):
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
     event_metadata: dict[str, Any] = Field(default_factory=dict, sa_column=Column("event_metadata", JSONB))
+    client_event_id: str | None = Field(default=None, max_length=64)
+    occurred_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), index=True)
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), index=True)
@@ -604,6 +635,13 @@ class LearningSession(SQLModel, table=True):
     __table_args__ = (
         Index("ix_learning_sessions_user_started_at", "user_id", "started_at"),
         Index("ix_learning_sessions_user_source_page", "user_id", "source_page"),
+        Index(
+            "uq_sessions_user_client_session",
+            "user_id",
+            "client_session_id",
+            postgresql_where=text("client_session_id IS NOT NULL"),
+            unique=True,
+        )
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -619,6 +657,7 @@ class LearningSession(SQLModel, table=True):
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    client_session_id: str | None = Field(default=None, max_length=64)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -869,7 +908,7 @@ REGISTERED_MODELS = (
     ChatLongTermMemory,
     UserProfile,
     UserProfileDimension,
-    WeeklyLearningDigest,
+    LearningAssessmentReport,
     GeneratedResource,
     GeneratedResourceItem,
     GeneratedResourceAgentRun,
