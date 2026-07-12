@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -124,14 +124,24 @@ def _build_recommendations(
 class EvaluationService:
     """评估服务 — 学习事件记录、会话记录、摘要生成。"""
 
-    # 记录单条学习事件并落库
+    # 记录单条学习事件并落库（带幂等去重）
     async def record_event(
         self,
         session: AsyncSession,
         *,
         user_id: int,
         payload: LearningEventCreate,
-    ) -> LearningEvent:
+    ) -> tuple[LearningEvent, bool]:
+        if payload.client_event_id:
+            existing = await session.scalar(
+                select(LearningEvent).where(
+                    LearningEvent.user_id == user_id,
+                    LearningEvent.client_event_id == payload.client_event_id,
+                )
+            )
+            if existing is not None:
+                return existing, True
+
         event = LearningEvent(
             user_id=user_id,
             module=payload.module,
@@ -141,11 +151,26 @@ class EvaluationService:
             topic=payload.topic,
             score=payload.score,
             event_metadata=payload.event_metadata or None,
+            client_event_id=payload.client_event_id,
+            occurred_at=payload.occurred_at or datetime.now(timezone.utc),
         )
-        # 写入数据库并刷新获取自增 ID
-        session.add(event)
-        await session.commit()
-        await session.refresh(event)
+        try:
+            session.add(event)
+            await session.commit()
+            await session.refresh(event)
+        except Exception as e:
+            await session.rollback()
+            if payload.client_event_id:
+                existing = await session.scalar(
+                    select(LearningEvent).where(
+                        LearningEvent.user_id == user_id,
+                        LearningEvent.client_event_id == payload.client_event_id,
+                    )
+                )
+                if existing is not None:
+                    return existing, True
+            raise e
+
         logger.info(
             "[Evaluation] 事件已记录: user=%s module=%s type=%s event_id=%s",
             user_id,
@@ -153,31 +178,43 @@ class EvaluationService:
             payload.event_type,
             event.id,
         )
-        return event
+        return event, False
 
-    # 记录一次学习会话（解析时间并规整关联 ID 后落库）
+    # 记录一次学习会话（带幂等去重）
     async def record_session(
         self,
         session: AsyncSession,
         *,
         user_id: int,
         payload: LearningSessionCreate,
-    ) -> LearningSession:
-        started_at = _parse_iso_datetime(payload.started_at)
-        ended_at = _parse_iso_datetime(payload.ended_at)
+    ) -> tuple[LearningSession, bool]:
+        if payload.client_session_id:
+            existing = await session.scalar(
+                select(LearningSession).where(
+                    LearningSession.user_id == user_id,
+                    LearningSession.client_session_id == payload.client_session_id,
+                )
+            )
+            if existing is not None:
+                return existing, True
+
+        started_at = payload.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        ended_at = payload.ended_at
+        if ended_at.tzinfo is None:
+            ended_at = ended_at.replace(tzinfo=timezone.utc)
 
         # 读取上报的扩展字段并做类型规整
         metadata = payload.event_metadata or {}
 
         resource_id = metadata.get("resource_id")
-        # 尝试将 resource_id 转为整数，失败则置空
         if resource_id is not None:
             try:
                 resource_id = int(resource_id)
             except (ValueError, TypeError):
                 resource_id = None
 
-        # 尝试将 path_id 转为整数，失败则置空
         path_id = metadata.get("path_id")
         if path_id is not None:
             try:
@@ -185,7 +222,6 @@ class EvaluationService:
             except (ValueError, TypeError):
                 path_id = None
 
-        # 尝试将 path_node_id 转为整数，失败则置空
         path_node_id = metadata.get("path_node_id")
         if path_node_id is not None:
             try:
@@ -197,7 +233,6 @@ class EvaluationService:
         if node_id is not None:
             node_id = str(node_id)
 
-        # 组装学习会话记录并落库
         learning_session = LearningSession(
             user_id=user_id,
             source_page=payload.source_page,
@@ -211,11 +246,25 @@ class EvaluationService:
             course=payload.course,
             topic=payload.topic,
             metadata_json=payload.event_metadata or None,
+            client_session_id=payload.client_session_id,
         )
-        # 写入数据库并刷新获取自增 ID
-        session.add(learning_session)
-        await session.commit()
-        await session.refresh(learning_session)
+        try:
+            session.add(learning_session)
+            await session.commit()
+            await session.refresh(learning_session)
+        except Exception as e:
+            await session.rollback()
+            if payload.client_session_id:
+                existing = await session.scalar(
+                    select(LearningSession).where(
+                        LearningSession.user_id == user_id,
+                        LearningSession.client_session_id == payload.client_session_id,
+                    )
+                )
+                if existing is not None:
+                    return existing, True
+            raise e
+
         logger.info(
             "[Evaluation] 学习会话已记录: user=%s page=%s duration=%ss session_id=%s",
             user_id,
@@ -223,7 +272,7 @@ class EvaluationService:
             payload.duration_seconds,
             learning_session.id,
         )
-        return learning_session
+        return learning_session, False
 
     # 获取评估摘要：查询最近事件并聚合
     async def get_summary(

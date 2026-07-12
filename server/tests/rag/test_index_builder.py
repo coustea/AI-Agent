@@ -1,116 +1,198 @@
-"""索引构建器测试。"""
+"""索引构建器测试。
+
+测试当前的 RAG 模块：
+  - build.py      构建流程编排
+  - load.py       文档加载
+  - metadata.py   元数据推断
+  - splitter.py   文档分割
+  - store.py      向量库 + BM25 存储
+"""
 
 from __future__ import annotations
 
-import json
-import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
+from langchain_core.documents import Document
 
-from app.rag.indexing.build import (
-    _apply_overlap,
-    _extract_section,
-    _infer_course,
-    _infer_title,
-    _load_documents,
-    _split_markdown,
-    _stable_chunk_id,
-    _write_manifest,
-    _read_manifest,
-)
+from app.rag.build import _read_manifest, _write_manifest, build_index
+from app.rag.load import load_directory
+from app.rag.metadata import enrich_metadata, infer_title, infer_course, infer_section
+from app.rag.splitter import split_documents
+from app.rag.store import _stable_chunk_id
 
 
-class TestSplitMarkdown:
-    def test_simple_text(self):
-        chunks = _split_markdown("这是一段普通文本。")
+class TestSplitDocuments:
+    """测试 split_documents 函数（基于 Document 输入）。"""
+
+    def test_simple_markdown(self):
+        """测试简单 Markdown 文本分割。"""
+        doc = Document(
+            page_content="这是一段普通文本。",
+            metadata={"source": "test.md", "file_type": ".md"},
+        )
+        chunks = split_documents([doc])
         assert len(chunks) >= 1
-        assert "普通文本" in chunks[0]
+        assert any("普通文本" in chunk.page_content for chunk in chunks)
 
     def test_heading_split(self):
+        """测试按标题分割。"""
         text = "## 第一节\n" + "内容1" * 200 + "\n\n## 第二节\n" + "内容2" * 200
-        chunks = _split_markdown(text)
+        doc = Document(
+            page_content=text,
+            metadata={"source": "test.md", "file_type": ".md"},
+        )
+        chunks = split_documents([doc])
         assert len(chunks) >= 2
 
     def test_empty_input(self):
-        assert _split_markdown("") == []
-        assert _split_markdown("   ") == []
+        """测试空输入。"""
+        doc = Document(page_content="", metadata={"source": "empty.md"})
+        chunks = split_documents([doc])
+        assert chunks == []
+
+    def test_whitespace_only(self):
+        """测试空白输入。"""
+        doc = Document(page_content="   ", metadata={"source": "ws.md"})
+        chunks = split_documents([doc])
+        assert chunks == []
 
     def test_code_block_protection(self):
+        """测试代码块不被拆开。"""
         text = "前文\n```python\nprint('hello')\n```\n后文"
-        chunks = _split_markdown(text)
-        # 代码块不应被拆开
+        doc = Document(
+            page_content=text,
+            metadata={"source": "test.md", "file_type": ".md"},
+        )
+        chunks = split_documents([doc])
+        # 代码块不应被拆开（至少有一个 chunk 包含完整代码块）
         for chunk in chunks:
-            if "print" in chunk:
-                assert "```" in chunk
+            if "print" in chunk.page_content:
+                assert "```" in chunk.page_content
 
-    def test_short_chunks_merged(self):
-        text = "短\n\n短\n\n这是一段足够长的内容，用来确保它不会被合并掉，需要超过最小长度限制才会被当作独立块处理。"
-        chunks = _split_markdown(text)
-        # 短块应被合并
+    def test_metadata_preserved(self):
+        """测试元数据被保留。"""
+        doc = Document(
+            page_content="测试内容足够长来产生一个chunk",
+            metadata={"source": "test.md", "file_type": ".md", "course": "计算机网络"},
+        )
+        chunks = split_documents([doc])
         assert len(chunks) >= 1
-
-    def test_overlap_applied(self):
-        chunks = ["块1内容" * 50, "块2内容" * 50]
-        overlapped = _apply_overlap(chunks, overlap=100)
-        assert len(overlapped) == 2
-        # 第二块应包含第一块的尾部
-        assert "块1" in overlapped[1]
+        # 元数据应被保留
+        for chunk in chunks:
+            assert chunk.metadata.get("source") == "test.md"
+            assert chunk.metadata.get("course") == "计算机网络"
 
 
 class TestMetadata:
+    """测试元数据推断函数。"""
+
     def test_stable_chunk_id(self):
-        id1 = _stable_chunk_id("a.md", "sec", "content")
-        id2 = _stable_chunk_id("a.md", "sec", "content")
+        """测试稳定 chunk ID 生成。"""
+        doc1 = Document(
+            page_content="content",
+            metadata={"source": "a.md", "section": "sec", "heading_path": "path"},
+        )
+        doc2 = Document(
+            page_content="content",
+            metadata={"source": "a.md", "section": "sec", "heading_path": "path"},
+        )
+        id1 = _stable_chunk_id(doc1)
+        id2 = _stable_chunk_id(doc2)
         assert id1 == id2  # 相同输入产生相同 ID
 
     def test_different_content_different_id(self):
-        id1 = _stable_chunk_id("a.md", "sec", "content1")
-        id2 = _stable_chunk_id("a.md", "sec", "content2")
+        """测试不同内容产生不同 ID。"""
+        doc1 = Document(
+            page_content="content1",
+            metadata={"source": "a.md", "section": "sec"},
+        )
+        doc2 = Document(
+            page_content="content2",
+            metadata={"source": "a.md", "section": "sec"},
+        )
+        id1 = _stable_chunk_id(doc1)
+        id2 = _stable_chunk_id(doc2)
         assert id1 != id2
 
     def test_infer_title(self):
-        assert _infer_title("book/计算机网络.final.md") == "计算机网络"
-        assert _infer_title("book/os.md") == "os"
+        """测试标题推断。"""
+        assert infer_title("book/计算机网络.final.md") == "计算机网络"
+        assert infer_title("book/os.md") == "os"
 
     def test_infer_course(self):
-        assert _infer_course("计算机网络") == "计算机网络"
-        assert _infer_course("操作系统") == "操作系统"
-        assert _infer_course("未知教材") == ""
+        """测试课程推断。"""
+        # 新结构：第一级目录匹配
+        assert infer_course("计算机网络/chapter1/tcp.md") == "计算机网络"
+        assert infer_course("操作系统/process.md") == "操作系统"
+        # 无匹配返回空
+        assert infer_course("未知教材/test.md") == ""
 
-    def test_extract_section(self):
-        assert _extract_section("## TCP 连接\n内容") == "TCP 连接"
-        assert _extract_section("普通文本") == ""
+    def test_infer_section(self):
+        """测试章节提取。"""
+        assert infer_section("## TCP 连接\n内容") == "TCP 连接"
+        assert infer_section("普通文本") == ""
+
+    def test_enrich_metadata(self):
+        """测试元数据填充。"""
+        doc = Document(
+            page_content="## TCP 连接\n内容足够长",
+            metadata={"source": "计算机网络/tcp.md", "file_type": ".md"},
+        )
+        enriched = enrich_metadata([doc])
+        assert len(enriched) == 1
+        assert enriched[0].metadata.get("course") == "计算机网络"
+        # title 从文件名推断：tcp.md -> tcp
+        assert enriched[0].metadata.get("title") == "tcp"
+        # heading_path 由 splitter 填充，enrich_metadata 不涉及
 
 
 class TestLoadDocuments:
+    """测试文档加载函数。"""
+
     def test_load_from_dir(self, tmp_path: Path):
+        """测试从目录加载文档。"""
         (tmp_path / "test.final.md").write_text("测试内容", encoding="utf-8")
-        docs = _load_documents(tmp_path, "*.final.md")
+        docs = load_directory(tmp_path, extensions={".md"})
         assert len(docs) == 1
-        assert "测试内容" in docs[0]["text"]
+        assert "测试内容" in docs[0].page_content
 
     def test_missing_dir(self):
+        """测试缺失目录抛出异常。"""
         with pytest.raises(FileNotFoundError):
-            _load_documents(Path("/nonexistent"), "*.md")
+            load_directory(Path("/nonexistent"), extensions={".md"})
 
     def test_no_matching_docs(self, tmp_path: Path):
+        """测试无匹配文档。"""
         (tmp_path / "readme.txt").write_text("hello", encoding="utf-8")
-        docs = _load_documents(tmp_path, "*.final.md")
+        docs = load_directory(tmp_path, extensions={".md"})
         assert docs == []
 
     def test_empty_file_skipped(self, tmp_path: Path):
-        (tmp_path / "empty.final.md").write_text("   ", encoding="utf-8")
-        docs = _load_documents(tmp_path, "*.final.md")
+        """测试空文件被跳过。"""
+        (tmp_path / "empty.md").write_text("   ", encoding="utf-8")
+        docs = load_directory(tmp_path, extensions={".md"})
         assert docs == []
 
 
 class TestManifest:
+    """测试 manifest 写入与读取。"""
+
     def test_write_and_read(self, tmp_path: Path):
-        _write_manifest(tmp_path, "langchain", 100, 4)
+        """测试 manifest 写入与读取。"""
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        _write_manifest(
+            output_dir=tmp_path,
+            collection="langchain",
+            chunk_count=100,
+            doc_count=4,
+            source_dir=source_dir,
+            source_snapshot={"test.md": "abc123"},
+            batch_size=16,
+        )
         manifest = _read_manifest(tmp_path)
         assert manifest is not None
         assert manifest["schema_version"] == "1"
@@ -120,14 +202,16 @@ class TestManifest:
         assert manifest["embedding_model"]  # 非空
 
     def test_read_missing(self, tmp_path: Path):
+        """测试读取缺失的 manifest。"""
         assert _read_manifest(tmp_path) is None
 
 
 class TestBuildIndex:
+    """测试索引构建流程。"""
+
     @pytest.mark.asyncio
     async def test_no_source_docs_fails(self, tmp_path: Path):
-        from app.rag.indexing.build import build_index
-
+        """测试无源文档时构建失败。"""
         empty_dir = tmp_path / "empty_src"
         empty_dir.mkdir()
         out_dir = tmp_path / "output"
@@ -137,20 +221,21 @@ class TestBuildIndex:
 
     @pytest.mark.asyncio
     async def test_embedding_failure_preserves_existing(self, tmp_path: Path):
-        """embedding 失败不应删除正式索引。"""
-        from app.rag.indexing.build import build_index
-
+        """测试 embedding 失败不删除现有索引。"""
         # 创建一个源文件
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "test.final.md").write_text("# 测试\n内容足够长来产生一个chunk", encoding="utf-8")
+        (src_dir / "test.final.md").write_text(
+            "# 测试\n内容足够长来产生一个chunk",
+            encoding="utf-8",
+        )
 
         # 创建正式索引目录（模拟已有索引）
         out_dir = tmp_path / "kb"
         out_dir.mkdir()
         (out_dir / "existing.txt").write_text("existing index", encoding="utf-8")
 
-        with patch("app.rag.indexing.build.embed_documents") as mock_embed:
+        with patch("app.rag.embeddings.embed_documents") as mock_embed:
             mock_embed.return_value = None  # embedding 失败
 
             with pytest.raises(RuntimeError, match="Embedding failed"):
@@ -160,10 +245,9 @@ class TestBuildIndex:
         assert out_dir.exists()
         assert (out_dir / "existing.txt").exists()
 
-    @pytest.mark.asyncio
-    async def test_check_only_does_not_modify(self, tmp_path: Path):
-        """--check-only 不应修改磁盘。"""
-        from app.rag.indexing.build import check_index
+    def test_check_only_does_not_modify(self, tmp_path: Path):
+        """测试 --check-only 不修改磁盘。"""
+        from app.rag.build import check_index
 
         # 无论结果如何，不应创建或删除文件
         before_files = set(tmp_path.rglob("*"))

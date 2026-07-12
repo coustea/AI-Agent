@@ -32,19 +32,20 @@ async def record_learning_event(
     session: AsyncSession = Depends(get_session),
 ):
     """记录学习事件 — 资源浏览/完成/测验/对话/资源生成/路径节点/可视化运行等。"""
-    event = await evaluation_service.record_event(
+    event, deduplicated = await evaluation_service.record_event(
         session,
         user_id=current_user.id,
         payload=payload,
     )
     # 记录学习事件后写审计日志
     logger.info(
-        "[EvalAPI] 事件已记录: user_id=%s event_type=%s event_id=%s",
+        "[EvalAPI] 事件已记录: user_id=%s event_type=%s event_id=%s deduplicated=%s",
         current_user.id,
         payload.event_type,
         event.id,
+        deduplicated,
     )
-    return HttpResponse.success(data={"id": event.id})
+    return HttpResponse.success(data={"id": event.id, "deduplicated": deduplicated})
 
 
 # 记录一次学习会话（前端离开学习页面时上报）
@@ -55,19 +56,20 @@ async def record_learning_session(
     session: AsyncSession = Depends(get_session),
 ):
     """记录一次学习会话（前端离开学习页面时上报）。"""
-    learning_session = await evaluation_service.record_session(
+    learning_session, deduplicated = await evaluation_service.record_session(
         session,
         user_id=current_user.id,
         payload=payload,
     )
     # 记录学习会话后写审计日志
     logger.info(
-        "[EvalAPI] 学习会话已记录: user_id=%s page=%s duration=%ss",
+        "[EvalAPI] 学习会话已记录: user_id=%s page=%s duration=%ss deduplicated=%s",
         current_user.id,
         payload.source_page,
         payload.duration_seconds,
+        deduplicated,
     )
-    return HttpResponse.success(data={"id": learning_session.id})
+    return HttpResponse.success(data={"id": learning_session.id, "deduplicated": deduplicated})
 
 
 # 获取评估摘要（平均分、薄弱知识点、推荐等）

@@ -1,12 +1,9 @@
-"""学习事件请求模式定义。"""
-
-# 定义学习事件上报的统一请求数据结构与合法事件类型
 from __future__ import annotations
-
 from typing import Any, Literal
+from datetime import datetime
+from pydantic import BaseModel, Field, model_validator
 
-from pydantic import BaseModel, Field
-
+ModuleType = Literal["chat", "resource", "path", "quiz", "visualizer"]
 
 LearningEventType = Literal[
     "chat_dialogue",
@@ -16,27 +13,44 @@ LearningEventType = Literal[
     "visualizer_run",
 ]
 
-
 class LearningEventCreate(BaseModel):
-    """学习事件创建请求 — unified 结构（module + entity_id + metadata）。"""
-
-    module: str = Field(default="mentor", description="模块: chat / resource / path / quiz / visualizer")
+    module: ModuleType
     entity_id: str | None = Field(default=None, max_length=255, description="模块内实体 ID")
-    event_type: str = Field(description="事件子类型")
+    event_type: LearningEventType
     score: float | None = Field(default=None, ge=0, le=100)
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
+    path_id: int | None = Field(default=None, description="路径 ID 快捷字段")
+    path_node_id: int | None = Field(default=None, description="路径节点 ID 快捷字段")
+    node_id: str | None = Field(default=None, max_length=255, description="路径节点业务 ID 快捷字段")
     event_metadata: dict[str, Any] = Field(default_factory=dict)
+    client_event_id: str | None = Field(default=None, max_length=64)
+    occurred_at: datetime | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_metadata_constraints(self) -> LearningEventCreate:
+        if self.event_type in ("quiz_submitted", "path_quiz_answered"):
+            is_correct = self.event_metadata.get("is_correct")
+            if not isinstance(is_correct, bool):
+                raise ValueError("quiz_submitted and path_quiz_answered require boolean 'is_correct' in event_metadata")
+        elif self.event_type == "resource_feedback":
+            feedback = self.event_metadata.get("feedback")
+            if feedback not in ("helpful", "not_helpful"):
+                raise ValueError("resource_feedback requires 'feedback' to be 'helpful' or 'not_helpful' in event_metadata")
+        
+        # Ensure we don't have natural language feedback, questions, answers, or chat content in event_metadata
+        for key in ["feedback_text", "question_text", "answer_text", "chat_content", "user_message", "bot_message"]:
+            if key in self.event_metadata:
+                self.event_metadata.pop(key)
+        return self
 
 
 class LearningSessionCreate(BaseModel):
-    """学习会话上报请求 — 前端离开学习页面时一次性发送。"""
-
-    source_page: str
-    started_at: str
-    ended_at: str
-    duration_seconds: int = Field(ge=1, le=86400)
+    source_page: str = Field(max_length=50)
+    started_at: datetime
+    ended_at: datetime
+    duration_seconds: int = Field(ge=1, le=14400) # Capped to 14400 (4 hours)
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
     event_metadata: dict[str, Any] = Field(default_factory=dict)
-
+    client_session_id: str | None = Field(default=None, max_length=64)
