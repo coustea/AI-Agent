@@ -58,13 +58,3 @@ def fibonacci_range(start, end):
     for i in range(2, end + 1):
         dp.append(dp[-1] + dp[-2])
     return dp[start:end + 1]
-
-for n in [0, 1, 5, 10, 15, 20]:
-    r1 = fibonacci(n)
-    r2 = fibonacci_optimized(n)
-    r3 = fibonacci_matrix(n)
-    assert r1 == r2 == r3
-
-fib_range = fibonacci_range(0, 12)
-assert len(fib_range) == 13
-assert fib_range[10] == 55

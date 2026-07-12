@@ -61,17 +61,3 @@ def longest_substring_k_distinct(arr, k):
             left += 1
         max_len = max(max_len, right - left + 1)
     return max_len
-
-data = [3, 1, -2, 5, 4, -1, 2, 8, -3, 6, 2, 1, 4, -2, 7]
-r1 = max_subarray_sum(data, 5)
-assert r1[0] == max(sum(data[i:i+5]) for i in range(len(data) - 4))
-
-r2 = min_subarray_sum(data, 5)
-assert r2 == min(sum(data[i:i+5]) for i in range(len(data) - 4))
-
-r3 = max_subarray_sum_variable(data)
-assert r3[0] > 0
-
-chars = ['a', 'b', 'a', 'c', 'b', 'a', 'd', 'c', 'a', 'b']
-r4 = longest_substring_k_distinct(chars, 2)
-assert r4 >= 1

@@ -46,16 +46,3 @@ def max_profit_with_cooldown(prices):
         sold = hold + prices[i]
         rest = max(rest, prev_sold)
     return max(sold, rest)
-
-datasets = [
-    [7, 1, 5, 3, 6, 4],
-    [7, 6, 4, 3, 1],
-    [1, 2, 3, 4, 5],
-    [3, 3, 5, 0, 0, 3, 1, 4],
-]
-
-for prices in datasets:
-    r1 = max_profit_single(prices)
-    r2 = max_profit_unlimited(prices)
-    r3 = max_profit_two_transactions(prices)
-    r4 = max_profit_with_cooldown(prices)

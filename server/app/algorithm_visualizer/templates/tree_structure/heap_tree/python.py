@@ -66,17 +66,3 @@ def heap_sort(arr):
         arr[0], arr[i] = arr[i], arr[0]
         max_heapify(arr, i, 0)
     return arr
-
-
-data = [4, 10, 3, 5, 15, 2, 8, 12, 1, 6]
-
-heap = list(data)
-build_max_heap(heap)
-
-heap_push(heap, 20)
-heap_push(heap, 9)
-
-max1 = heap_pop(heap)
-max2 = heap_pop(heap)
-
-sorted_arr = heap_sort(list(data))

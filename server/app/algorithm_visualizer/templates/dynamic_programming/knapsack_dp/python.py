@@ -56,18 +56,3 @@ def knapsack_fractional(items, capacity):
             total_value += value * (remaining / weight)
             break
     return total_value
-
-weights = [2, 3, 4, 5, 6, 7, 8]
-values = [3, 5, 6, 8, 10, 11, 14]
-capacity = 15
-
-result, dp_table, selected = knapsack(weights, values, capacity)
-r2 = knapsack_optimized(weights, values, capacity)
-assert result == r2
-
-r3 = knapsack_unbounded(weights, values, capacity)
-assert r3 >= result
-
-items = [(2, 3), (3, 5), (4, 6), (5, 8), (6, 10), (7, 11), (8, 14)]
-r4 = knapsack_fractional(items, capacity)
-assert r4 >= result

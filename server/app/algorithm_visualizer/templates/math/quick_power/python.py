@@ -49,7 +49,3 @@ def fib_matrix(n, m=None):
     M = [[1, 1], [1, 0]]
     result = mat_pow(M, n - 1, m)
     return result[0][0] if not m else result[0][0] % m
-
-tests = [quick_pow(2, 10), quick_pow(3, 7), mod_pow(2, 100, 1000000007)]
-fib_tests = [fib_matrix(i) for i in range(15)]
-fib_mod = [fib_matrix(i, 1000000007) for i in [50, 100, 500, 1000]]

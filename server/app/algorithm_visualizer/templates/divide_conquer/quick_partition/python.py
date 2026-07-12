@@ -46,13 +46,3 @@ def find_median(arr):
     if n % 2 == 1:
         return quickselect(arr[:], n // 2)
     return (quickselect(arr[:], n // 2 - 1) + quickselect(arr[:], n // 2)) / 2
-
-arr = [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60]
-pivot_idx = partition(arr[:], 0, len(arr) - 1)
-
-arr2 = [5, 3, 8, 3, 9, 3, 2, 3, 7]
-lt, gt = three_way_partition(arr2, 0, len(arr2) - 1)
-
-kth = quickselect([89, 45, 23, 78, 12, 56, 91, 34, 67, 3], 4)
-
-median = find_median([89, 45, 23, 78, 12, 56, 91, 34, 67])

@@ -52,10 +52,3 @@ def solve_n_queens(n):
 
     backtrack(0)
     return res
-
-result = solve_n_queens(8)
-print(f"8 皇后问题共 {len(result)} 个解")
-for i, sol in enumerate(result[:3]):
-    print(f"解 {i+1}:")
-    for row in sol:
-        print(f"  {row}")

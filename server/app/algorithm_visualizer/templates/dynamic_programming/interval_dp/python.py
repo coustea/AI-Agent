@@ -71,15 +71,3 @@ def longest_palindrome_substring(s):
                         max_len = length
                         start = i
     return max_len, s[start:start + max_len]
-
-s1 = "bbbababb"
-result1, dp1, lps1 = longest_palindrome_subseq(s1)
-assert result1 >= 1
-
-dims = [10, 30, 5, 60, 15, 20, 25]
-min_cost, dp2 = matrix_chain_order(dims)
-assert min_cost > 0
-
-s2 = "babad"
-max_len, substr = longest_palindrome_substring(s2)
-assert max_len >= 1

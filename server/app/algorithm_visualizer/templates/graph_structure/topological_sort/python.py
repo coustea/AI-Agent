@@ -57,34 +57,3 @@ def topological_sort(num_nodes, edges):
         return order
     else:
         return None
-
-
-num_nodes = 7
-edges = [
-    (0, 1),
-    (0, 2),
-    (1, 3),
-    (1, 4),
-    (2, 4),
-    (2, 5),
-    (3, 6),
-    (4, 6),
-    (5, 6),
-]
-
-labels = ["A", "B", "C", "D", "E", "F", "G"]
-result = topological_sort(num_nodes, edges)
-
-if result is not None:
-    order_labels = [labels[i] for i in result]
-    print(f"拓扑排序结果: {result} -> {order_labels}")
-else:
-    print("图中存在环，无法拓扑排序")
-
-cyclic_edges = edges + [(6, 0)]
-cyclic_result = topological_sort(num_nodes, cyclic_edges)
-
-if cyclic_result is not None:
-    print(f"环图结果: {cyclic_result}")
-else:
-    print("环检测: 图中存在环，无法完成拓扑排序")

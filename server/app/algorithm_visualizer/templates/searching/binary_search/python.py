@@ -50,13 +50,3 @@ def search_rotated(arr, target):
             else:
                 hi = mid - 1
     return -1
-
-arr = [1, 3, 5, 5, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25]
-idx = binary_search(arr, 7)
-lb = lower_bound(arr, 5)
-ub = upper_bound(arr, 5)
-count = ub - lb
-
-rotated = [15, 17, 19, 21, 23, 25, 1, 3, 5, 7, 9, 11, 13]
-r = search_rotated(rotated, 5)
-r2 = search_rotated(rotated, 14)

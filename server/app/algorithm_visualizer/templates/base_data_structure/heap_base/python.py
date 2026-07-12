@@ -83,12 +83,3 @@ def k_way_merge(arrays):
         if elem_idx + 1 < len(arrays[arr_idx]):
             heapq.heappush(heap, (arrays[arr_idx][elem_idx + 1], arr_idx, elem_idx + 1))
     return result
-
-data = [89, 45, 23, 78, 12, 56, 91, 34, 67, 3]
-heap = build_heap(data)
-sorted_data = heap_sort(data)
-assert sorted_data == sorted(data)
-
-arrays = [[1, 4, 7, 10], [2, 5, 8, 11], [3, 6, 9, 12]]
-merged = k_way_merge(arrays)
-assert merged == list(range(1, 13))

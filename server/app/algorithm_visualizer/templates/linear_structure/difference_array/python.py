@@ -62,12 +62,3 @@ def apply_and_verify(arr, updates):
             if 0 <= i < len(brute):
                 brute[i] += val
     return result == brute
-
-data = [3, 7, 2, 9, 5, 1, 8, 4, 6, 10, 3, 12, 2, 5, 8]
-updates = [(1, 5, 3), (3, 8, -2), (0, 10, 4), (6, 11, 1)]
-result = range_updates(data, updates)
-assert apply_and_verify(data, updates)
-
-queries = [2, 5, 9]
-point_results = range_updates_with_query(data, updates, queries)
-assert len(point_results) == 3

@@ -64,26 +64,3 @@ def is_balanced(root):
         return height, balanced
     _, result = check(root)
     return result
-
-
-root = TreeNode(5,
-    TreeNode(3,
-        TreeNode(1,
-            TreeNode(0),
-            TreeNode(2)),
-        TreeNode(4)),
-    TreeNode(8,
-        TreeNode(7,
-            TreeNode(6),
-            None),
-        TreeNode(10,
-            TreeNode(9),
-            TreeNode(12,
-                TreeNode(11),
-                None))))
-
-depth = max_depth(root)
-total = count_nodes(root)
-path_ok = has_path_sum(root, 9)
-balanced = is_balanced(root)
-invert_tree(root)

@@ -9,27 +9,14 @@ from typing import Any, Dict, List
 # 模板根目录
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
-# 支持的语言列表
+# 支持的语言列表（未来可扩展：java, cpp, javascript 等）
 LANGUAGES: List[Dict[str, str]] = [
     {"key": "python", "label": "Python", "extension": "py"},
-    {"key": "javascript", "label": "JavaScript", "extension": "js"},
-    {"key": "cpp", "label": "C++", "extension": "cpp"},
-    {"key": "java", "label": "Java", "extension": "java"},
-    {"key": "c", "label": "C", "extension": "c"},
 ]
 
-# 语言 key → 干净模板文件名
+# 语言 key → 干净模板文件名映射（新增语言时需在此添加文件名规则）
 _LANGUAGE_FILE_MAP: Dict[str, str] = {
     "python": "python.py",
-    "javascript": "js.js",
-    "cpp": "cpp.cpp",
-    "java": "java.java",
-    "c": "c.c",
-}
-
-# 语言 key → 预插装模板文件名（仅 Python 支持）
-_INSTRUMENTED_FILE_MAP: Dict[str, str] = {
-    "python": "python_instrumented.py",
 }
 
 # 算法元信息注册表
@@ -90,7 +77,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "冒泡排序",
         "visualizer_type": "array",
         "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
+        "supported_languages": ["python"],
         "required_events": ["init_array", "compare", "swap", "mark_sorted", "finish"]
     },
     "selection_sort": {
@@ -98,7 +85,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "选择排序",
         "visualizer_type": "array",
         "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
+        "supported_languages": ["python"],
         "required_events": ["init_array", "compare", "swap", "mark_sorted", "finish"]
     },
     "insertion_sort": {
@@ -106,7 +93,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "插入排序",
         "visualizer_type": "array",
         "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
+        "supported_languages": ["python"],
         "required_events": ["init_array", "compare", "assign", "mark_sorted", "finish"]
     },
     "shell_sort": {
@@ -122,7 +109,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "快速排序",
         "visualizer_type": "array",
         "difficulty": "medium",
-        "supported_languages": ["python", "javascript", "cpp"],
+        "supported_languages": ["python"],
         "required_events": ["init_array", "compare", "swap", "assign", "mark_sorted", "finish"]
     },
     "merge_sort": {
@@ -180,7 +167,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "二分查找",
         "visualizer_type": "array",
         "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
+        "supported_languages": ["python"],
         "required_events": ["init_array", "compare", "move_pointer", "finish"]
     },
     "interpolation_search": {
@@ -264,7 +251,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "二叉树前序遍历",
         "visualizer_type": "tree",
         "difficulty": "medium",
-        "supported_languages": ["python", "javascript"],
+        "supported_languages": ["python"],
         "required_events": ["init_tree", "visit_node", "finish"]
     },
     "binary_tree_recursion": {
@@ -338,7 +325,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "图的深度优先搜索 (DFS)",
         "visualizer_type": "graph",
         "difficulty": "medium",
-        "supported_languages": ["python", "javascript", "cpp"],
+        "supported_languages": ["python"],
         "required_events": ["init_graph", "visit_node", "finish"]
     },
     "shortest_path": {
@@ -472,7 +459,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "name": "斐波那契数 DP 填表",
         "visualizer_type": "dp-table",
         "difficulty": "easy",
-        "supported_languages": ["python", "javascript"],
+        "supported_languages": ["python"],
         "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"],
     },
     "one_d_dp": {
@@ -547,7 +534,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "visualizer_type": "array",
         "difficulty": "medium",
         "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
+        "required_events": ["init_array", "move_pointer", "finish"]
     },
     "huffman_coding": {
         "domain": "greedy",
@@ -563,7 +550,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "visualizer_type": "array",
         "difficulty": "hard",
         "supported_languages": ["python"],
-        "required_events": ["init_array", "finish"]
+        "required_events": ["init_array", "move_pointer", "mark_sorted", "finish"]
     },
 
     # 11. 分治算法 (divide_conquer)
@@ -607,7 +594,7 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "visualizer_type": "array",
         "difficulty": "easy",
         "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
+        "required_events": ["init_array", "move_pointer", "assign", "finish"]
     },
     "xor_trick": {
         "domain": "bit_manipulation",
@@ -716,23 +703,115 @@ def get_template_code(algorithm_key: str, language: str) -> str:
         return f.read()
 
 
-# 读取预插装模板代码（含 tracer 调用），不存在则返回 None
-def get_instrumented_template_code(algorithm_key: str, language: str) -> str | None:
-    """读取预插装模板代码（含 tracer 调用）。
+# get_instrumented_template_code 已删除，改由 CodeInstrumenter 缓存引擎统一处理
 
-    如果预插装文件不存在，返回 None（调用方应回退到 LLM 插装）。
-    """
-    info = get_algorithm_info(algorithm_key)
-    if language not in info["supported_languages"]:
-        return None
 
-    filename = _INSTRUMENTED_FILE_MAP.get(language)
-    if not filename:
-        return None
+_DEFAULT_DATA_MAP = {
+    # 1. Base Data Structures
+    "array_base": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "linked_list_base": {"arr": [1, 2, 3, 4, 5]},
+    "stack_base": {"operations": [["enqueue", 10], ["enqueue", 20], ["dequeue", None], ["enqueue", 30]]},
+    "queue_base": {"operations": [["enqueue", 10], ["enqueue", 20], ["dequeue", None], ["enqueue", 30]]},
+    "hash_table_base": {"arr": [5, 3, 8, 1, 2]},
+    "heap_base": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    
+    # 2. Sorting
+    "bubble_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "selection_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "insertion_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "shell_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "quick_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "merge_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "heap_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "counting_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "bucket_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "radix_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    
+    # 3. Searching
+    "sequential_search": {"arr": [1, 2, 3, 5, 8], "target": 5},
+    "binary_search": {"arr": [1, 2, 3, 5, 8], "target": 5},
+    "interpolation_search": {"arr": [1, 2, 3, 5, 8], "target": 5},
+    "fibonacci_search": {"arr": [1, 2, 3, 5, 8], "target": 5},
+    "hash_search": {"arr": [5, 3, 8, 1, 2], "target": 8},
+    
+    # 4. Linear Structures
+    "double_pointers": {"arr": [1, 2, 3, 5, 8], "target": 8},
+    "sliding_window": {"arr": [1, 4, 2, 10, 2, 3, 1, 0, 20], "k": 4},
+    "monotonic_stack": {"arr": [2, 1, 2, 4, 3]},
+    "monotonic_queue": {"arr": [1, 3, -1, -3, 5, 3, 6, 7], "k": 3},
+    "prefix_sum": {"arr": [1, 2, 3, 4, 5], "left": 1, "right": 3},
+    "difference_array": {"arr": [1, 2, 3, 4, 5], "updates": [[1, 3, 2], [2, 4, 1]]},
+    
+    # 5. Trees
+    "binary_tree_traverse": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    "binary_tree_recursion": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    "bst": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    "heap_tree": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    "trie_tree": {"words": ["cat", "car"]},
+    "segment_tree": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    "fenwick_tree": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    
+    # 6. Graphs
+    "graph_representation": {"num_nodes": 6, "edges": [[0, 1, 1], [0, 2, 1], [1, 3, 1], [1, 4, 1], [2, 5, 1]], "start": 0},
+    "graph_bfs": {"num_nodes": 6, "edges": [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]], "start": 0},
+    "graph_dfs": {"num_nodes": 6, "edges": [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]], "start": 0},
+    "shortest_path": {"num_nodes": 6, "edges": [[0, 1, 5], [0, 2, 1], [1, 2, 2], [1, 3, 3], [1, 4, 20], [2, 4, 12], [3, 4, 2], [3, 5, 6], [4, 5, 1]], "start": 0},
+    "topological_sort": {"num_nodes": 6, "edges": [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]], "start": 0},
+    "mst_kruskal": {"num_nodes": 6, "edges": [[0, 1, 6], [0, 2, 1], [0, 3, 5], [1, 2, 5], [1, 4, 3], [2, 3, 5], [2, 4, 6], [2, 5, 4], [3, 5, 2], [4, 5, 6]]},
+    "dsu_union": {"num_nodes": 6, "edges": [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]], "start": 0},
+    
+    # 7. Strings
+    "string_match_naive": {"text": "abacaabadcabacaba", "pattern": "abacaba"},
+    "kmp_match": {"text": "abacaabadcabacaba", "pattern": "abacaba"},
+    "rabin_karp": {"text": "abacaabadcabacaba", "pattern": "abacaba"},
+    "trie_string_search": {"words": ["cat", "car"]},
+    "palindrome_check": {"s": "racecar"},
+    
+    # 8. Recursion & Backtrack
+    "recursion_fib": {"n": 6},
+    "permutations": {"arr": [1, 2, 3]},
+    "subsets": {"arr": [1, 2, 3]},
+    "combinations": {"candidates": [2, 3, 6, 7], "target": 7},
+    "n_queens": {"n": 4},
+    "maze_search": {"maze": [[0, 1, 0, 0], [0, 0, 0, 1], [1, 0, 1, 0], [0, 0, 0, 0]]},
+    
+    # 9. DP
+    "dp_fibonacci": {"n": 6},
+    "one_d_dp": {"n": 6},
+    "two_d_dp": {"grid": [[1, 3, 1], [1, 5, 1], [4, 2, 1]]},
+    "knapsack_dp": {"weights": [2, 3, 4, 5], "values": [3, 4, 5, 6], "capacity": 5},
+    "interval_dp": {"s": "racecar"},
+    "tree_dp": {"arr": [3, 2, 3, None, 3, None, 1]},
+    "state_compress_dp": {"dist": [[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]},
+    
+    # 10. Greedy
+    "interval_greedy": {"intervals": [[1, 2], [2, 3], [3, 4], [1, 3]]},
+    "stock_problem": {"prices": [7, 1, 5, 3, 6, 4]},
+    "jump_game": {"arr": [2, 3, 1, 1, 4]},
+    "huffman_coding": {"char_freq": [["a", 5], ["b", 9], ["c", 12], ["d", 13], ["e", 16], ["f", 45]]},
+    "covering_problem": {"points": [1.2, 2.5, 3.8, 4.0, 5.5], "interval_len": 2.0},
+    
+    # 11. Divide & Conquer
+    "binary_divide": {"arr": [1, 2, 3, 5, 8], "target": 5},
+    "merge_divide": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "quick_partition": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
+    "recursive_divide": {"n": 3},
+    
+    # 12. Bit Manipulation
+    "basic_bit": {"n": 42, "operations": [["get", 2], ["set", 3], ["clear", 1], ["toggle", 4]]},
+    "xor_trick": {"arr": [1, 2, 3]},
+    "bit_mask": {"perm_list": [0, 1, 2]},
+    "subset_enum": {"arr": [1, 2, 3]},
+    
+    # 13. Math
+    "gcd_euclidean": {"a": 48, "b": 18},
+    "quick_power": {"base": 2, "exp": 10},
+    "prime_sieve": {"n": 6},
+    "combination_num": {"n": 6},
+    "mod_arithmetic": {"base": 2, "exp": 10, "m": 1000},
+}
 
-    filepath = os.path.join(_TEMPLATES_DIR, info["domain"], algorithm_key, filename)
-    if not os.path.isfile(filepath):
-        return None
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        return f.read()
+def build_default_data(algorithm: str) -> dict:
+    """根据算法模板返回前端默认数据。"""
+    return _DEFAULT_DATA_MAP.get(algorithm, {})

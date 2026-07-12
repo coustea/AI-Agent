@@ -66,14 +66,3 @@ def dfs(node):
     color[node] = BLACK
     time += 1
     finish[node] = time
-
-for node in range(7):
-    if color[node] == WHITE:
-        dfs(node)
-
-print("DFS 遍历完成")
-print(f"发现时间: {discovery}")
-print(f"完成时间: {finish}")
-print(f"是否存在环: {'是' if has_cycle else '否'}")
-if back_edges:
-    print(f"后向边（环的来源）: {back_edges}")

@@ -66,16 +66,3 @@ def combination_sum_k(k, n):
 
     backtrack(1, n, [], 0)
     return res
-
-r1 = combination_sum([2, 3, 5, 7], 8)
-assert len(r1) >= 1
-for c in r1:
-    assert sum(c) == 8
-
-r2 = combination_sum2([10, 1, 2, 7, 6, 1, 5], 8)
-for c in r2:
-    assert sum(c) == 8
-
-r3 = combination_sum_k(3, 7)
-for c in r3:
-    assert len(c) == 3 and sum(c) == 7

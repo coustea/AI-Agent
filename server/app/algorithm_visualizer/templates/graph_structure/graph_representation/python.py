@@ -20,21 +20,20 @@
 
 
 # 定义 build_graph 函数
-def build_graph():
+def build_graph(num_nodes=7, edges=None):
     labels = ["A", "B", "C", "D", "E", "F", "G"]
-    num_nodes = len(labels)
-
-    edges = [
-        (0, 1, 3),
-        (0, 2, 7),
-        (1, 2, 2),
-        (1, 3, 5),
-        (2, 4, 1),
-        (3, 4, 4),
-        (3, 5, 6),
-        (4, 6, 3),
-        (5, 6, 2),
-    ]
+    if edges is None:
+        edges = [
+            (0, 1, 3),
+            (0, 2, 7),
+            (1, 2, 2),
+            (1, 3, 5),
+            (2, 4, 1),
+            (3, 4, 4),
+            (3, 5, 6),
+            (4, 6, 3),
+            (5, 6, 2),
+        ]
 
     self_loops = [(u, v, w) for u, v, w in edges if u == v]
     if self_loops:
@@ -111,7 +110,3 @@ def build_graph():
         print(f"  节点 {labels[i]}: 度数 {degree[i]}")
 
     return matrix, adj, edge_list, degree
-
-
-if __name__ == "__main__":
-    build_graph()

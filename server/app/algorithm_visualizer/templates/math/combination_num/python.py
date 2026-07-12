@@ -38,8 +38,3 @@ def lucas_theorem(n, r, p):
     if r == 0:
         return 1
     return nCr_mod(n % p, r % p, p) * lucas_theorem(n // p, r // p, p) % p
-
-triangle = pascals_triangle(8)
-combos = [nCr(10, 3), nCr(20, 10), nCr(15, 7), nCr(100, 50)]
-mod_results = [nCr_mod(n, r, 1000000007) for n, r in [(10, 3), (20, 10), (15, 7)]]
-lucas = lucas_theorem(100, 50, 13)

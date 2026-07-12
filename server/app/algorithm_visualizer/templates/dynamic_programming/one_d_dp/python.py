@@ -48,17 +48,3 @@ def climb_stairs_min_cost(cost):
     for i in range(2, n + 1):
         dp[i] = min(dp[i - 1] + cost[i - 1], dp[i - 2] + cost[i - 2])
     return dp[n]
-
-assert climb_stairs(10) == 89
-assert climb_stairs(0) == 1
-assert climb_stairs(1) == 1
-assert climb_stairs(5) == 8
-
-assert climb_stairs_k(10, 2) == 89
-assert climb_stairs_k(10, 3) == 274
-
-cost = [10, 15, 20, 5, 30, 10, 25, 15, 20, 8]
-r1 = climb_stairs_cost(cost)
-r2 = climb_stairs_min_cost(cost)
-assert r1 >= 0
-assert r2 >= 0

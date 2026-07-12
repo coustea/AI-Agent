@@ -44,17 +44,3 @@ def build_fibonacci_sequence(n):
     for i in range(2, n + 1):
         fib.append(fib[-1] + fib[-2])
     return fib
-
-data = [3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47, 51]
-assert fibonacci_search(data, 27) == 6
-assert fibonacci_search(data, 3) == 0
-assert fibonacci_search(data, 51) == 12
-assert fibonacci_search(data, 99) == -1
-
-data_dup = [2, 5, 5, 5, 8, 8, 12, 12, 12, 12, 15, 20]
-assert fibonacci_search_range(data_dup, 5) == (1, 3)
-assert fibonacci_search_range(data_dup, 12) == (6, 9)
-assert fibonacci_search_range(data_dup, 99) == (-1, -1)
-
-fib_seq = build_fibonacci_sequence(15)
-assert len(fib_seq) == 16

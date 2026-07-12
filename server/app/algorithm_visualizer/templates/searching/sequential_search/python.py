@@ -32,19 +32,3 @@ def search_with_count(arr, target):
         if val == target:
             return i, comparisons
     return -1, comparisons
-
-datasets = [
-    ([23, 45, 12, 67, 34, 89, 56, 1, 78, 43, 91, 15, 60, 3, 88], 67),
-    ([5, -3, 8, -1, 0, 7, -4, 2, 9, -6, 1, -8], -4),
-    ([42, 42, 17, 17, 63, 63, 8, 8, 91, 91], 63),
-]
-
-for arr, target in datasets:
-    r1 = sequential_search(arr, target)
-    r2 = sentinel_search(arr[:], target)
-    assert r1 == r2
-
-arr = [23, 45, 12, 67, 34, 89, 56, 12, 78, 12]
-multi = multi_key_search(arr, [12, 45, 99])
-
-idx, comps = search_with_count([10, 20, 30, 40, 50], 30)

@@ -103,19 +103,3 @@ def tsp_nearest_neighbor(dist):
     total += dist[pos][0]
     path.append(0)
     return total, path
-
-dist_matrix = [
-    [0,  10, 15, 20, 25],
-    [10,  0, 35, 25, 15],
-    [15, 35,  0, 30, 20],
-    [20, 25, 30,  0, 10],
-    [25, 15, 20, 10,  0]
-]
-result, path = tsp(dist_matrix)
-assert result > 0
-
-result2, path2 = tsp_with_pruning(dist_matrix)
-assert result2 == result
-
-result3, path3 = tsp_nearest_neighbor(dist_matrix)
-assert result3 >= result

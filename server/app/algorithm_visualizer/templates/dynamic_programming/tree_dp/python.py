@@ -58,33 +58,3 @@ def max_path_sum(root):
 
     dfs(root)
     return max_sum
-
-root1 = TreeNode(3,
-    TreeNode(2,
-        None,
-        TreeNode(3,
-            TreeNode(4),
-            TreeNode(5)
-        )
-    ),
-    TreeNode(3,
-        None,
-        TreeNode(1)
-    )
-)
-assert rob(root1) == 14
-
-root2 = TreeNode(3,
-    TreeNode(4,
-        TreeNode(1),
-        TreeNode(3)
-    ),
-    TreeNode(5,
-        None,
-        TreeNode(1)
-    )
-)
-assert rob(root2) == 9
-
-mps = max_path_sum(root2)
-assert mps > 0

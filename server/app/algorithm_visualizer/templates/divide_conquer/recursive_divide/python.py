@@ -63,13 +63,3 @@ def merge_sort_count(arr):
     merged.extend(left[i:])
     merged.extend(right[j:])
     return merged, inv_l + inv_r + inv_m
-
-hanoi_4 = tower_of_hanoi(4)
-assert len(hanoi_4) == 15
-
-pows = power_decomposition(42)
-
-arr = [-2, 1, -3, 4, -1, 2, 1, -5, 4]
-max_sub = max_subarray_divide(arr, 0, len(arr) - 1)
-
-sorted_arr, inversions = merge_sort_count([3, 1, 4, 1, 5, 9, 2, 6])

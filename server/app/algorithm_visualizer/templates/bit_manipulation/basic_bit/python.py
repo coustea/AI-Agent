@@ -1,44 +1,77 @@
 # basic_bit 算法实现 — domain: bit_manipulation
+"""位操作可视化模板 — 将整数的二进制位展示为 32 位数组"""
+
+
+def visualize_bit_operations(n, operations):
+    """
+    位操作可视化
+
+    Args:
+        n: 要操作的整数
+        operations: 操作列表，如 [("get", 2), ("set", 3), ("clear", 1), ("toggle", 4)]
+
+    Returns:
+        操作后的二进制位数组
+    """
+    # 将整数转换为 32 位二进制数组（低位在前）
+    bits = [(n >> i) & 1 for i in range(32)]
+
+    # 执行位操作并可视化
+    for op, i in operations:
+        if op == "get":
+            # 获取第 i 位（高亮显示）
+            bit_value = bits[i]
+        elif op == "set":
+            # 将第 i 位设置为 1
+            bits[i] = 1
+        elif op == "clear":
+            # 将第 i 位清零
+            bits[i] = 0
+        elif op == "toggle":
+            # 切换第 i 位
+            bits[i] = 1 - bits[i]
+
+    return bits
+
+
 def get_bit(n, i):
+    """获取整数 n 的第 i 位（从 0 开始，低位为 0）"""
     return (n >> i) & 1
 
-# 定义 set_bit 函数
+
 def set_bit(n, i):
+    """将整数 n 的第 i 位设置为 1"""
     return n | (1 << i)
 
-# 定义 clear_bit 函数
+
 def clear_bit(n, i):
+    """将整数 n 的第 i 位清零"""
     return n & ~(1 << i)
 
-# 定义 toggle_bit 函数
+
 def toggle_bit(n, i):
+    """切换整数 n 的第 i 位"""
     return n ^ (1 << i)
 
-# 定义 count_bits 函数
+
 def count_bits(n):
+    """统计整数 n 中 1 的个数"""
     count = 0
     while n:
         count += n & 1
         n >>= 1
     return count
 
-# 定义 reverse_bits 函数
+
 def reverse_bits(n, bit_len=32):
+    """反转整数 n 的二进制位"""
     result = 0
     for i in range(bit_len):
         result = (result << 1) | (n & 1)
         n >>= 1
     return result
 
-# 定义 is_power_of_two 函数
-def is_power_of_two(n):
-    return n > 0 and (n & (n - 1)) == 0
 
-nums = [42, 255, 0, 1, 1024, 7, 128, 31, 63, 1023]
-for n in nums:
-    bits = [get_bit(n, i) for i in range(8)]
-    bit_count = count_bits(n)
-    is_pow2 = is_power_of_two(n)
-    rev = reverse_bits(n, 8)
-    toggled = toggle_bit(n, 3)
-    cleared = clear_bit(n, 0)
+def is_power_of_two(n):
+    """判断 n 是否为 2 的幂"""
+    return n > 0 and (n & (n - 1)) == 0

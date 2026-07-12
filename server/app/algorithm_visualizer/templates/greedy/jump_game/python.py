@@ -42,15 +42,3 @@ def can_reach(arr, start):
             if 0 <= ni < n and ni not in visited:
                 stack.append(ni)
     return False
-
-tests_can = [([2, 3, 1, 1, 4], True), ([3, 2, 1, 0, 4], False), ([0], True), ([1, 0, 1, 0], False)]
-for nums, expected in tests_can:
-    assert can_jump(nums) == expected
-
-tests_min = [([2, 3, 1, 1, 4], 2), ([2, 1, 1, 1, 4], 3), ([1, 1, 1, 1, 1], 4)]
-for nums, expected in tests_min:
-    assert min_jumps(nums) == expected
-
-tests_reach = [([4, 2, 3, 0, 3, 1, 2], 5, True), ([3, 0, 2, 1, 2], 2, False)]
-for arr, start, expected in tests_reach:
-    assert can_reach(arr, start) == expected

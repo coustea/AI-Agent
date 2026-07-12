@@ -52,18 +52,3 @@ def interpolation_insert_pos(arr, target):
         else:
             high = pos - 1
     return low
-
-data = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
-assert interpolation_search(data, 70) == 6
-assert interpolation_search(data, 10) == 0
-assert interpolation_search(data, 150) == 14
-assert interpolation_search(data, 99) == -1
-
-data_dup = [5, 10, 10, 10, 20, 20, 30, 30, 30, 30, 40, 50]
-assert interpolation_search_all(data_dup, 10) == [1, 2, 3]
-assert interpolation_search_all(data_dup, 30) == [6, 7, 8, 9]
-assert interpolation_search_all(data_dup, 25) == []
-
-assert interpolation_insert_pos(data, 55) == 5
-assert interpolation_insert_pos(data, 5) == 0
-assert interpolation_insert_pos(data, 200) == 15

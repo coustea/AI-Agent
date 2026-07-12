@@ -99,22 +99,12 @@ class Trie:
         dfs(self.root, "")
         return result
 
-
-trie = Trie()
-words = ["cat", "car", "card", "care", "dog", "deer", "deep", "do"]
-for w in words:
-    trie.insert(w)
-
-found_cat = trie.search("cat")
-found_cab = trie.search("cab")
-found_car = trie.search("car")
-
-has_ca = trie.starts_with("ca")
-has_de = trie.starts_with("de")
-has_z  = trie.starts_with("z")
-
-trie.delete("card")
-trie.delete("deep")
-trie.delete("xyz")
-
-remaining = trie.list_words()
+# 定义 trie_operations 函数
+def trie_operations():
+    trie = Trie()
+    words = ["cat", "car", "card", "care", "dog", "deer", "deep", "do"]
+    for w in words:
+        trie.insert(w)
+    trie.search("cat")
+    trie.search("cab")
+    trie.delete("car")

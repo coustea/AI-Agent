@@ -121,14 +121,3 @@ def kruskal(num_nodes, edges):
         return None, None
 
     return mst, mst_weight
-
-
-mst, total_weight = kruskal(num_nodes, edges)
-
-if mst is not None:
-    print("Kruskal 最小生成树结果：")
-    print(f"  总权重: {total_weight}")
-    print(f"  MST 边数: {len(mst)} (V-1 = {num_nodes - 1})")
-    print("  MST 边：")
-    for u, v, w in mst:
-        print(f"    {labels[u]}({u}) -- {labels[v]}({v}), 权重 = {w}")

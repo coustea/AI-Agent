@@ -64,16 +64,7 @@ class SegmentTree:
         right_sum = self._query(2 * node + 2, mid + 1, end, l, r)
         return left_sum + right_sum
 
-
-arr = [2, 5, 1, 4, 8, 3, 7, 6]
-st = SegmentTree(arr)
-
-sum_0_3 = st.query(0, 3)
-sum_2_5 = st.query(2, 5)
-sum_4_7 = st.query(4, 7)
-sum_all = st.query(0, 7)
-
-st.update(2, 10)
-st.update(5, 0)
-
-sum_after = st.query(0, 5)
+def segment_tree_operations(arr):
+    st = SegmentTree(arr)
+    st.query(1, 4)
+    st.update(2, 10)

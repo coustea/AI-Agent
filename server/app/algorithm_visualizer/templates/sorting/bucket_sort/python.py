@@ -64,17 +64,3 @@ def bucket_sort_custom_buckets(arr, num_buckets):
             insertion_sort_for_buckets(b)
             result.extend(b)
     return result
-
-datasets = [
-    [29, 25, 3, 49, 9, 37, 21, 43, 88, 15, 66, 52, 71, 34, 18],
-    [0.5, 0.2, 0.8, 0.1, 0.9, 0.3, 0.7, 0.4, 0.6, 0.15, 0.85, 0.45],
-    [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
-]
-
-for data in datasets:
-    r1 = bucket_sort(data[:])
-    assert r1 == sorted(data)
-
-for nb in [3, 5, 7, 10]:
-    r2 = bucket_sort_custom_buckets(datasets[0][:], nb)
-    assert r2 == sorted(datasets[0])

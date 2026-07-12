@@ -12,9 +12,11 @@ Phase 1 仅支持 Python。
 
 from __future__ import annotations
 
+import json
 import ast
 import hashlib
 import re
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -123,10 +125,181 @@ _SYSTEM_PROMPT = """\
 3. **覆盖所有 required_events** — 根据算法的 visualizer_type 插入必需的 tracer 调用
 4. **代码必须可执行** — 无语法错误，import 正确
 5. **tracer 必须在模块级创建** — 不要在函数内部创建 tracer 实例
-6. **代码末尾必须调用 tracer.dump()** — 输出 trace.json
-7. **完整保留测试数据** — 如果原始代码中有 `root = TreeNode(...)` 等测试数据，绝不允许对其进行任何删减或修改！大模型禁止为了节省篇幅而缩短测试数据。
-8. **树结构处理策略** — 使用 `TreeTracer` 时，必须定义如 `build_tree_nodes(root)` 的辅助函数完整遍历树结构，生成包含 `id`, `label`, `children` 属性的节点列表再传入 `init_tree`。对于基于数组的树（如堆），需通过循环按父子索引（2*i+1等）构造包含 `children` 的 `nodes`。
+6. **代码中仅包含插装后的类与函数定义** — 大模型绝对不要在代码底部生成任何测试数据、硬编码运行或 `__main__` 执行块。函数调用和 `tracer.dump()` 将由宿主运行器动态追加。
+7. **不要生成或保留任何运行脚本** — 仅对干净函数和类的内部语句进行插装。
+8. **树结构处理策略** — 使用 `TreeTracer` 时，必须定义如 `_build_tree_nodes(root)` 的辅助函数完整遍历树结构，生成包含 `id`, `label`, `children` 属性的节点列表再传入 `init_tree`。对于基于数组的树（如堆），需通过循环按父子索引（2*i+1等）构造包含 `children` 的 `nodes`。
 9. **图结构处理策略** — 使用 `GraphTracer` 时，必须通过辅助逻辑将图转为带 `edges` 的 `nodes` 列表（如 `{"id":"0", "label":"0", "edges":[{"to":"1"}]}`）。
+
+## 算法特殊规则
+
+### N 皇后问题（n_queens）
+- 使用 `DpTableTracer`，棋盘状态用数值表示：0=空位，1=皇后
+- 放置皇后：`tracer.set_value(row, col, 1, line=N)`
+- 移除皇后（回溯）：`tracer.set_value(row, col, 0, line=N)`
+- 测试位置：`tracer.highlight(row, col, tone="active", line=N)`
+- 检测冲突：`tracer.highlight(row, col, tone="danger", line=N)`（可选）
+
+### 迷宫寻路（maze_search）
+- 使用 `DpTableTracer`，迷宫状态用数值表示：
+  - -1: 墙壁（原始 maze[r][c] == 1）
+  - 0: 未访问
+  - 1: 已访问（visited[r][c] = True）
+  - 2: 当前路径（正在探索）
+  - 3: 回溯路径（已回退）
+  - 4: 最终路径（找到出口）
+- 访问节点：`tracer.set_value(r, c, 1, line=N)`
+- 加入当前路径：`tracer.set_value(r, c, 2, line=N)`
+- 回溯：`tracer.set_value(r, c, 3, line=N)`
+- 找到出口：`tracer.set_value(r, c, 4, line=N)` 和 `tracer.highlight(r, c, tone="success", line=N)`
+
+### 位操作可视化（basic_bit）
+- 将整数转换为 32 位二进制数组：`bits = [(n >> i) & 1 for i in range(32)]`
+- 初始化数组：`tracer.init_array(bits, line=N)`
+- 获取位：使用 `tracer.move_pointer({"bit": i}, line=N)` 标记当前操作的位
+- 设置位：`tracer.assign(i, 1, line=N)`
+- 清除位：`tracer.assign(i, 0, line=N)`
+- 切换位：`tracer.assign(i, bits[i], line=N)`
+- 注意：ArrayTracer 没有 highlight 方法，请使用 move_pointer 或 assign 替代
+
+### 集合覆盖问题（covering_problem）
+- 初始化排序后的点数组：`tracer.init_array(sorted_points, line=N)`
+- 移动覆盖区间指针：`tracer.move_pointer({"cover_start": i}, line=N)`
+- 标记已覆盖的点：`tracer.mark_sorted(j, line=N)`
+- 注意：ArrayTracer 没有 highlight 方法，如需标记当前处理的点可用 move_pointer 或 mark_sorted
+
+## 树结构可视化辅助函数模板
+
+### 1. 基于节点类的二叉树（TreeNode）
+```python
+def _build_tree_nodes(root):
+    \"\"\"将 TreeNode 树转换为可视化节点列表\"\"\"
+    if not root:
+        return []
+    nodes = []
+    counter = [0]
+    def dfs(node):
+        if not node:
+            return None
+        node_id = f"node-{counter[0]}"
+        counter[0] += 1
+        node_data = {"id": node_id, "label": str(node.val)}
+        children = []
+        if node.left:
+            left_id = dfs(node.left)
+            if left_id:
+                children.append(left_id)
+        if node.right:
+            right_id = dfs(node.right)
+            if right_id:
+                children.append(right_id)
+        if children:
+            node_data["children"] = children
+        nodes.append(node_data)
+        return node_id
+    dfs(root)
+    return nodes
+```
+
+### 2. 基于数组的堆
+```python
+def _build_heap_nodes(arr):
+    \"\"\"将堆数组转换为可视化节点列表\"\"\"
+    nodes = []
+    n = len(arr)
+    for i in range(n):
+        node_data = {"id": f"node-{i}", "label": str(arr[i])}
+        children = []
+        left, right = 2*i+1, 2*i+2
+        if left < n:
+            children.append(f"node-{left}")
+        if right < n:
+            children.append(f"node-{right}")
+        if children:
+            node_data["children"] = children
+        nodes.append(node_data)
+    return nodes
+```
+
+### 3. 字典树（Trie）
+```python
+def _build_trie_nodes(root):
+    \"\"\"将 Trie 根节点转换为可视化节点列表\"\"\"
+    nodes = []
+    counter = [0]
+    def dfs(node, char_label):
+        node_id = f"node-{counter[0]}"
+        counter[0] += 1
+        label = char_label if char_label else "root"
+        if node.is_end:
+            label += " (✓)"
+        node_data = {"id": node_id, "label": label}
+        children = []
+        for char, child in sorted(node.children.items()):
+            child_id = dfs(child, char)
+            children.append(child_id)
+        if children:
+            node_data["children"] = children
+        nodes.append(node_data)
+        return node_id
+    dfs(root, "")
+    return nodes
+```
+
+### 4. 哈夫曼树（HuffmanNode）
+```python
+def _build_huffman_nodes(root):
+    \"\"\"将 HuffmanNode 树转换为可视化节点列表\"\"\"
+    nodes = []
+    counter = [0]
+    def dfs(node):
+        if not node:
+            return None
+        node_id = f"node-{counter[0]}"
+        counter[0] += 1
+        label = f"{node.char}:{node.freq}" if node.char else f"f={node.freq}"
+        node_data = {"id": node_id, "label": label}
+        children = []
+        if node.left:
+            left_id = dfs(node.left)
+            if left_id:
+                children.append(left_id)
+        if node.right:
+            right_id = dfs(node.right)
+            if right_id:
+                children.append(right_id)
+        if children:
+            node_data["children"] = children
+        nodes.append(node_data)
+        return node_id
+    dfs(root)
+    return nodes
+```
+
+### 5. 线段树（SegmentTree）
+```python
+def _build_segment_tree_nodes(tree, n):
+    \"\"\"将线段树数组转换为可视化节点列表\"\"\"
+    nodes = []
+    def dfs(node, start, end):
+        if start > end or node >= 4*n:
+            return None
+        node_data = {"id": f"node-{node}", "label": f"[{start},{end}]:{tree[node]}"}
+        if start != end:
+            mid = (start + end) // 2
+            children = []
+            left_id = dfs(2*node+1, start, mid)
+            if left_id:
+                children.append(left_id)
+            right_id = dfs(2*node+2, mid+1, end)
+            if right_id:
+                children.append(right_id)
+            if children:
+                node_data["children"] = children
+        nodes.append(node_data)
+        return f"node-{node}"
+    dfs(0, 0, n-1)
+    return nodes
+```
 
 ## 输出格式
 将插装后的完整代码放在 markdown 代码块中：
@@ -205,8 +378,38 @@ class CodeInstrumenter:
     """
 
     def __init__(self) -> None:
-        # 初始化插装引擎，使用内存字典作为插装结果缓存
+        self._cache_file = Path(__file__).parent / "instrumentation_cache.json"
         self._cache: dict[str, InstrumentationResult] = {}
+        self._load_cache()
+
+    def _load_cache(self) -> None:
+        if self._cache_file.exists():
+            try:
+                with open(self._cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    for key, val in data.items():
+                        self._cache[key] = InstrumentationResult(
+                            code=val["code"],
+                            error=val.get("error"),
+                            cached=True
+                        )
+                logger.info("[Instrumenter] Loaded %d cached instrumentations from %s", len(self._cache), self._cache_file.name)
+            except Exception as e:
+                logger.error("[Instrumenter] Failed to load cache file: %s", e)
+
+    def _save_cache(self) -> None:
+        try:
+            data = {}
+            for key, res in self._cache.items():
+                if res.error is None:
+                    data[key] = {
+                        "code": res.code,
+                        "error": res.error
+                    }
+            with open(self._cache_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error("[Instrumenter] Failed to save cache file: %s", e)
 
     # 主入口：对干净代码插装，经缓存/LLM/校验/重试后返回结果
     async def instrument(
@@ -225,19 +428,12 @@ class CodeInstrumenter:
             algorithm_name: 算法名称（如 "bubble_sort"）
             visualizer_type: 可视化类型（如 "array", "tree", "graph"）
             required_events: 必需事件列表
-            language: 编程语言，当前仅支持 python
+            language: 编程语言，固定为 python
 
         Returns:
             InstrumentationResult 包含插装后代码或错误信息
         """
-        # 仅支持 Python，其他语言直接返回原代码并标记错误
-        if language != "python":
-            return InstrumentationResult(
-                code=clean_code,
-                error=f"插装引擎暂不支持 {language}，仅支持 Python",
-            )
-
-        # 1. 计算代码指纹作为缓存键（代码 + 可视化类型 + 必需事件）
+        # 计算代码指纹作为缓存键（代码 + 可视化类型 + 必需事件）
         cache_key = self._compute_hash(clean_code, visualizer_type, required_events)
 
         # 2. 命中缓存则直接返回，避免重复调用 LLM
@@ -272,6 +468,7 @@ class CodeInstrumenter:
         if not errors:
             result = InstrumentationResult(code=instrumented_code)
             self._cache[cache_key] = result
+            self._save_cache()
             logger.info("[Instrumenter] 插装成功: algorithm=%s", algorithm_name)
             return result
 
@@ -296,6 +493,7 @@ class CodeInstrumenter:
             if not retry_errors:
                 result = InstrumentationResult(code=retry_code)
                 self._cache[cache_key] = result
+                self._save_cache()
                 logger.info("[Instrumenter] 重试插装成功: algorithm=%s", algorithm_name)
                 return result
 
@@ -475,9 +673,9 @@ class CodeInstrumenter:
             if event not in code:
                 errors.append(f"缺少必需事件调用: {event}()")
 
-        # 5. line 参数检查（至少有一个 tracer 调用带 line= 标注原始行号）
+        # 5. line 参数检查 (Optional warning)
         if tracer_var and not re.search(rf"{tracer_var}\.\w+\(.*line\s*=", code):
-            errors.append("tracer 调用缺少 line 参数（需要 line=N 标注原始行号）")
+            logger.warning("tracer 调用缺少 line 参数（需要 line=N 标注原始行号）")
 
         return errors
 

@@ -62,11 +62,3 @@ def merge_k_sorted(arrays):
         if elem_idx + 1 < len(arrays[arr_idx]):
             heapq.heappush(heap, (arrays[arr_idx][elem_idx + 1], arr_idx, elem_idx + 1))
     return result
-
-data = [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60]
-sorted_data = merge_sort(data)
-
-_, inv = count_inversions([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
-
-arrays = [[1, 4, 7], [2, 5, 8], [3, 6, 9, 10]]
-merged = merge_k_sorted(arrays)

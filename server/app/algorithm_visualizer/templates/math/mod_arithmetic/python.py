@@ -40,8 +40,3 @@ def crt(remainders, moduli):
         yi = mod_inverse(Mi, mi)
         x = (x + ri * Mi * yi) % m
     return x
-
-m = 1000000007
-vals = [mod_add(123456, 789012, m), mod_mul(12345, 67890, m), mod_pow(2, 100, m)]
-inv = mod_inverse(3, m)
-crt_result = crt([2, 3, 2], [3, 5, 7])

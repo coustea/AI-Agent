@@ -88,17 +88,3 @@ def hash_search_double(arr, target):
             return idx
         idx = (idx + step) % size
     return -1
-
-data = [34, 7, 23, 32, 5, 62, 78, 1, 15, 49, 91, 56, 3, 88, 17]
-assert hash_search(data, 62) >= 0
-assert hash_search(data, 99) == -1
-
-idx, probes = hash_search_with_probes(data, 62)
-assert idx >= 0 and probes >= 1
-
-idx2 = hash_search_double(data, 62)
-assert idx2 >= 0
-
-data2 = [11, 22, 33, 44, 55, 66, 77, 88, 99, 10, 20, 30, 40, 50, 60]
-assert hash_search(data2, 33) >= 0
-assert hash_search(data2, 100) == -1

@@ -51,6 +51,3 @@ def array_operations():
     arr[0], arr[min_idx] = arr[min_idx], arr[0]
 
     return arr
-
-
-array_operations()

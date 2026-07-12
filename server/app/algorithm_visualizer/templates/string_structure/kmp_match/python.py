@@ -106,35 +106,3 @@ def kmp_search(text, pattern):
             else:
                 i += 1
     return res
-
-
-
-text1 = "abacaabadcabacabaabbabacaba"
-pattern1 = "abacaba"
-result1 = kmp_search(text1, pattern1)
-print(f"测试1 - 多次匹配: text='{text1}', pattern='{pattern1}'")
-print(f"  匹配位置: {result1}")
-
-text2 = "xyzabcabcdeffgh"
-pattern2 = "abcde"
-result2 = kmp_search(text2, pattern2)
-print(f"测试2 - 单次匹配: text='{text2}', pattern='{pattern2}'")
-print(f"  匹配位置: {result2}")
-
-text3 = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-pattern3 = "aab"
-result3 = kmp_search(text3, pattern3)
-print(f"测试3 - 无匹配: text='{text3}', pattern='{pattern3}'")
-print(f"  匹配位置: {result3}")
-
-result4 = kmp_search("hello", "")
-print(f"测试4 - 空模式串: text='hello', pattern=''")
-print(f"  匹配位置: {result4}")
-
-result5 = kmp_search("", "abc")
-print(f"测试5 - 空文本: text='', pattern='abc'")
-print(f"  匹配位置: {result5}")
-
-result6 = kmp_search("ab", "abcde")
-print(f"测试6 - 模式串更长: text='ab', pattern='abcde'")
-print(f"  匹配位置: {result6}")

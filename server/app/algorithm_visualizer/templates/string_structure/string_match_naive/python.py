@@ -36,35 +36,3 @@ def naive_match(text, pattern):
             indices.append(i)
 
     return indices
-
-
-
-text1 = "abacabacaba"
-pattern1 = "abacaba"
-result1 = naive_match(text1, pattern1)
-print(f"测试1 - 多次匹配: text='{text1}', pattern='{pattern1}'")
-print(f"  匹配位置: {result1}")
-
-text2 = "abacabacaba"
-pattern2 = "cab"
-result2 = naive_match(text2, pattern2)
-print(f"测试2 - 较少匹配: text='{text2}', pattern='{pattern2}'")
-print(f"  匹配位置: {result2}")
-
-text3 = "abacabacaba"
-pattern3 = "xyz"
-result3 = naive_match(text3, pattern3)
-print(f"测试3 - 无匹配: text='{text3}', pattern='{pattern3}'")
-print(f"  匹配位置: {result3}")
-
-text4 = "abc"
-pattern4 = ""
-result4 = naive_match(text4, pattern4)
-print(f"测试4 - 空模式串: text='{text4}', pattern=''")
-print(f"  匹配位置: {result4}")
-
-text5 = "ab"
-pattern5 = "abcde"
-result5 = naive_match(text5, pattern5)
-print(f"测试5 - 模式串更长: text='{text5}', pattern='{pattern5}'")
-print(f"  匹配位置: {result5}")

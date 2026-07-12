@@ -43,15 +43,3 @@ def frequency_count(arr):
     for x in arr:
         freq[x] = freq.get(x, 0) + 1
     return freq
-
-datasets = [
-    [4, -2, 2, 8, 3, 3, 1, -5, 7, 3, 0, 6, -1, 9, -3, 5, 2, 8, -4, 1],
-    [10, 10, 10, 5, 5, 5, 1, 1, 1, 8, 8, 8, 3, 3, 3],
-    [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7],
-]
-
-for data in datasets:
-    r1 = counting_sort(data[:])
-    r2 = counting_sort_unstable(data[:])
-    assert r1 == r2 == sorted(data)
-    freq = frequency_count(data)

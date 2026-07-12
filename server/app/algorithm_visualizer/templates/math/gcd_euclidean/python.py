@@ -23,15 +23,3 @@ def mod_inverse(a, m):
 # 定义 are_coprime 函数
 def are_coprime(a, b):
     return gcd(a, b) == 1
-
-pairs = [
-    (48, 18), (252, 105), (1071, 462), (35, 14),
-    (101, 103), (0, 7), (13, 13), (56, 98), (81, 27), (144, 89),
-]
-
-for a, b in pairs:
-    g = gcd(a, b)
-    l = lcm(a, b)
-    cop = are_coprime(a, b)
-    if g > 0 and are_coprime(a // g, b // g):
-        inv = mod_inverse(a, b) if cop else None

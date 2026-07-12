@@ -81,22 +81,3 @@ def shortest_path_length(maze):
                 visited[nr][nc] = True
                 queue.append((nr, nc, dist + 1))
     return -1
-
-maze = [
-    [0, 1, 0, 0, 0, 1, 0],
-    [0, 0, 0, 1, 0, 0, 0],
-    [1, 0, 1, 0, 0, 1, 0],
-    [0, 0, 0, 0, 1, 0, 0],
-    [0, 1, 1, 0, 0, 0, 1],
-    [0, 0, 0, 1, 0, 0, 0],
-    [0, 1, 0, 0, 1, 0, 0]
-]
-path = solve_maze(maze)
-assert len(path) > 0
-
-all_paths = solve_maze_all_paths(maze)
-assert len(all_paths) >= 1
-
-shortest = shortest_path_length(maze)
-assert shortest > 0
-assert shortest <= len(path) - 1

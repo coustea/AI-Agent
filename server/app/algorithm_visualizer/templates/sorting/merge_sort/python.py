@@ -80,17 +80,8 @@ def count_inversions(arr):
     _, inversions = sort_count(arr)
     return inversions
 
-datasets = [
-    [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60],
-    [5, -3, 8, -1, 0, 7, -4, 2, 9, -6, 1, -8, 3, -2, 6],
-    [42, 42, 17, 17, 63, 63, 8, 8, 91, 91, 25, 25, 56, 56, 34],
-    [99, 88, 77, 66, 55, 44, 33, 22, 11, 1, 2, 3, 4, 5, 6, 7],
-]
-
-for data in datasets:
-    r1 = merge_sort(data[:])
-    temp = [0] * len(data)
-    arr_copy = data[:]
-    merge_sort_inplace(arr_copy, temp, 0, len(arr_copy) - 1)
-    assert r1 == arr_copy == sorted(data)
-    inv = count_inversions(data[:])
+# 定义 merge_sort_wrapper 函数
+def merge_sort_wrapper(arr):
+    temp = [0] * len(arr)
+    merge_sort_inplace(arr, temp, 0, len(arr) - 1)
+    return arr

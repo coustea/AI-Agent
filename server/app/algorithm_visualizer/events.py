@@ -1,7 +1,7 @@
 """算法可视化模块事件埋点。
 
 在用户运行可视化后异步记录 ``visualizer_run`` 事件到 ``learning_events`` 表，
-供画像评分按时间窗口聚合统计。
+供学习评估按时间窗口聚合统计。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
-# 记录一次算法可视化运行事件到 learning_events 表，供画像评分聚合
+# 记录一次算法可视化运行事件到 learning_events 表，供学习评估聚合
 async def record_visualizer_run_event(
     db: AsyncSession,
     user_id: int,

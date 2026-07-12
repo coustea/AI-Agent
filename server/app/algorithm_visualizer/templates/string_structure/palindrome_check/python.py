@@ -55,29 +55,3 @@ def is_palindrome(s):
         left += 1
         right -= 1
     return True
-
-
-
-s1 = "A man, a plan, a canal: Panama"
-result1 = is_palindrome(s1)
-print(f"测试1 - 经典回文: '{s1}' => {result1}")
-
-s2 = "hello world"
-result2 = is_palindrome(s2)
-print(f"测试2 - 非回文: '{s2}' => {result2}")
-
-s3 = ""
-result3 = is_palindrome(s3)
-print(f"测试3 - 空字符串: '{s3}' => {result3}")
-
-s4 = "a"
-result4 = is_palindrome(s4)
-print(f"测试4 - 单字符: '{s4}' => {result4}")
-
-s5 = "!@#$%^&*()"
-result5 = is_palindrome(s5)
-print(f"测试5 - 仅非字母数字: '{s5}' => {result5}")
-
-s6 = "Was it a car or a cat I saw"
-result6 = is_palindrome(s6)
-print(f"测试6 - 较长回文: '{s6}' => {result6}")

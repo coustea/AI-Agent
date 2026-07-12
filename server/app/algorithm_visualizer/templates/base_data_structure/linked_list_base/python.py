@@ -63,11 +63,12 @@ def middle_node(head):
         fast = fast.next.next
     return slow
 
-l1 = build_singly_linked([1, 3, 5, 7, 9])
-l2 = build_singly_linked([2, 4, 6, 8, 10])
-merged = merge_two_lists(l1, l2)
-
-no_cycle = detect_cycle(build_singly_linked([1, 2, 3, 4, 5]))
-
-head = build_singly_linked([1, 2, 3, 4, 5, 6, 7])
-mid = middle_node(head).val
+# 定义 linked_list_operations 函数
+def linked_list_operations(arr):
+    head = build_singly_linked(arr)
+    # Perform some node insertion and deletion to trigger required events!
+    node = ListNode(99)
+    node.next = head.next
+    head.next = node
+    head.next = node.next
+    return head

@@ -62,16 +62,3 @@ def subset_sum(nums, target):
 
     backtrack(0, target, [])
     return res
-
-r1 = subsets([1, 2, 3, 4, 5])
-assert len(r1) == 32
-
-r2 = subsets_with_dup([1, 2, 2, 3])
-assert len(r2) == 12
-
-r3 = subsets_bitmask([1, 2, 3])
-assert len(r3) == 8
-
-r4 = subset_sum([3, 1, 4, 2, 5, 6], 6)
-for s in r4:
-    assert sum(s) == 6

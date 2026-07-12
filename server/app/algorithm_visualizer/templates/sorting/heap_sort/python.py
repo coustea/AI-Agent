@@ -58,18 +58,3 @@ def kth_largest(arr, k):
         arr[0], arr[n - 1 - i] = arr[n - 1 - i], arr[0]
         heapify(arr, n - 1 - i, 0)
     return arr[0]
-
-datasets = [
-    [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60],
-    [5, -3, 8, -1, 0, 7, -4, 2, 9, -6, 1, -8, 3, -2, 6],
-    [42, 42, 17, 17, 63, 63, 8, 8, 91, 91, 25, 25, 56, 56, 34],
-]
-
-for data in datasets:
-    r1 = heap_sort(data[:])
-    assert r1 == sorted(data)
-    r2 = heap_sort_min(data[:])
-    assert r2 == sorted(data)
-    k3 = kth_largest(data[:], 3)
-    expected3 = sorted(data, reverse=True)[2]
-    assert k3 == expected3

@@ -34,25 +34,13 @@ class Trie:
             curr = curr.children[char]
         return curr.is_word
 
-t = Trie()
-t.insert("algorithm")
-t.insert("algo")
-t.insert("align")
-t.insert("all")
-t.insert("also")
-t.insert("tree")
-t.insert("trie")
-t.insert("")
-
-print(t.search("algo"))
-print(t.search("algorithm")) # True  — 完整单词，存在
-print(t.search("align"))
-print(t.search("all"))
-print(t.search("also"))
-print(t.search("tree"))
-print(t.search("trie"))
-print(t.search(""))
-print(t.search("alien"))
-print(t.search("alg"))
-print(t.search("trees"))
-print(t.search("try"))
+# 定义 trie_search 函数
+def trie_search():
+    t = Trie()
+    words = ["algo", "algorithm", "align", "all", "also", "tree", "trie"]
+    for w in words:
+        t.insert(w)
+    t.search("algo")
+    t.search("algorithm")
+    t.search("alien")
+    t.search("alg")

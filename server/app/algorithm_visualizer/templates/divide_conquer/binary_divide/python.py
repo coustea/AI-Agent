@@ -59,14 +59,3 @@ def search_rotated(arr, target):
             else:
                 hi = mid - 1
     return -1
-
-arr = [1, 2, 3, 4, 5, 5, 5, 6, 7, 8, 9, 10]
-first = binary_search_first(arr, 5)
-last = binary_search_last(arr, 5)
-
-sqrt_2 = sqrt_binary(2)
-sqrt_10 = sqrt_binary(10)
-
-rotated = [4, 5, 6, 7, 0, 1, 2]
-idx = search_rotated(rotated, 0)
-idx2 = search_rotated(rotated, 3)

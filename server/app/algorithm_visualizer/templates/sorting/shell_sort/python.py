@@ -54,16 +54,3 @@ def shell_sort_with_gaps(arr, gaps):
 def shell_sort(arr):
     gaps = knuth_gaps(len(arr))
     return shell_sort_with_gaps(arr, gaps)
-
-datasets = [
-    [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60],
-    [5, -3, 8, -1, 0, 7, -4, 2, 9, -6, 1, -8, 3, -2, 6],
-    [42, 42, 17, 17, 63, 63, 8, 8, 91, 91, 25, 25, 56, 56, 34],
-    [99, 88, 77, 66, 55, 44, 33, 22, 11, 1, 2, 3, 4, 5, 6, 7],
-]
-
-for data in datasets:
-    r1 = shell_sort_with_gaps(data[:], knuth_gaps(len(data)))
-    r2 = shell_sort_with_gaps(data[:], sedgewick_gaps(len(data)))
-    r3 = shell_sort_with_gaps(data[:], hibbard_gaps(len(data)))
-    assert r1 == r2 == r3 == sorted(data)

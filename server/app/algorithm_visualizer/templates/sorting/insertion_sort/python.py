@@ -37,15 +37,3 @@ def shell_insertion(arr, gap):
             j -= gap
         arr[j] = key
     return arr
-
-datasets = [
-    [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60],
-    [5, -3, 8, -1, 0, 7, -4, 2, 9, -6, 1, -8, 3, -2, 6],
-    [42, 42, 17, 17, 63, 63, 8, 8, 91, 91, 25, 25, 56, 56, 34],
-    [1, 3, 5, 7, 9, 2, 4, 6, 8, 6, 10, 12, 14, 11, 13, 15],
-]
-
-for data in datasets:
-    r1 = insertion_sort(data[:])
-    r2 = binary_insertion_sort(data[:])
-    assert r1 == r2

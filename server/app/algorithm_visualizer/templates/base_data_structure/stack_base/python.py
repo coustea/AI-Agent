@@ -48,6 +48,3 @@ def stack_operations():
     depth = len(stack)  # 栈深度：6
 
     return stack, depth
-
-
-stack_operations()

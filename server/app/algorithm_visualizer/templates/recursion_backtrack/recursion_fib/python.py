@@ -53,12 +53,3 @@ def fib_matrix(n):
         return n
     M = [[1, 1], [1, 0]]
     return mat_pow(M, n - 1)[0][0]
-
-for n in [10, 20, 30]:
-    r1 = fib_memo(n)
-    r2 = fib_tabulation(n)
-    r3 = fib_optimized(n)
-    r4 = fib_matrix(n)
-    assert r1 == r2 == r3 == r4
-
-dp_table = [fib_tabulation(i) for i in range(15)]

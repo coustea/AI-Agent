@@ -78,16 +78,3 @@ def next_permutation(nums):
         nums[left], nums[right] = nums[right], nums[left]
         left += 1
         right -= 1
-
-r1 = permute([1, 2, 3, 4])
-assert len(r1) == 24
-
-r2 = permute_with_dup([1, 1, 2])
-assert len(r2) == 3
-
-r3 = permute_k([1, 2, 3, 4, 5], 3)
-assert len(r3) == 10
-
-arr = [1, 2, 3]
-next_permutation(arr)
-assert arr == [1, 3, 2]

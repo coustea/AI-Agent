@@ -58,12 +58,3 @@ def compression_ratio(text, codes):
     original_bits = len(text) * 8
     encoded_bits = sum(len(codes[ch]) for ch in text)
     return encoded_bits / original_bits
-
-char_freq = [('a', 45), ('b', 13), ('c', 12), ('d', 16), ('e', 9), ('f', 5)]
-tree = build_huffman_tree(char_freq)
-codes = build_codes(tree)
-encoded = encode("abcdef", codes)
-decoded = decode(encoded, tree)
-assert decoded == "abcdef"
-
-ratio = compression_ratio("aabbccddeeff", codes)

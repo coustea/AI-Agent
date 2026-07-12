@@ -49,20 +49,9 @@ class FenwickTree:
         等价于 range_sum(idx, idx)"""
         return self.range_sum(idx, idx)
 
-
-ft = FenwickTree(10)
-data = [3, 7, 1, 9, 5, 2, 8, 4, 6, 10]
-for i, val in enumerate(data, 1):
-    ft.update(i, val)
-
-p5 = ft.prefix_sum(5)
-p8 = ft.prefix_sum(8)
-
-r3_7 = ft.range_sum(3, 7)
-r1_10 = ft.range_sum(1, 10) # 全部之和 = 55
-
-ft.update(3, 5)
-ft.update(7, -3)
-
-p5_after = ft.prefix_sum(5)
-r3_7_after = ft.range_sum(3, 7)
+# 定义 fenwick_tree_operations 函数
+def fenwick_tree_operations():
+    data = [2, 5, 1, 4, 8, 3, 7, 6]
+    ft = FenwickTree(len(data))
+    for i, val in enumerate(data, 1):
+        ft.update(i, val)

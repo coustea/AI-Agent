@@ -60,13 +60,3 @@ def count_inversions(arr):
 
     _, inversions = sort_count(arr)
     return inversions
-
-datasets = [
-    [89, 45, 23, 78, 12, 56, 91, 34, 67, 3, 88, 15, 72, 41, 60],
-    [5, -3, 8, -1, 0, 7, -4, 2, 9, -6, 1, -8, 3, -2, 6],
-    [42, 42, 17, 17, 63, 63, 8, 8, 91, 91, 25, 25, 56, 56, 34],
-]
-
-for data in datasets:
-    result = bidirectional_selection_sort(data[:])
-    inv = count_inversions(data[:])

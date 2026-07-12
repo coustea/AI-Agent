@@ -74,19 +74,12 @@ def inorder(root):
         return []
     return inorder(root.left) + [root.val] + inorder(root.right)
 
-
-root = None
-values = [50, 30, 70, 20, 40, 60, 80, 10, 35, 65]
-for v in values:
-    root = insert(root, v)
-
-sorted_result = inorder(root)
-
-found_40 = search(root, 40)
-found_55 = search(root, 55)
-
-root = delete(root, 10)
-root = delete(root, 30)
-root = delete(root, 80)
-
-after_delete = inorder(root)
+# 定义 bst_operations 函数
+def bst_operations(arr):
+    root = None
+    for v in arr:
+        root = insert(root, v)
+    search(root, arr[0] if arr else 0)
+    if arr:
+        root = delete(root, arr[0])
+    return root

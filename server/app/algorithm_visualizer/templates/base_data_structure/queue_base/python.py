@@ -50,6 +50,3 @@ def queue_operations():
     queue_len = len(queue)  # 队列长度：6
 
     return queue, queue_len
-
-
-queue_operations()

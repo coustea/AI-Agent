@@ -74,32 +74,3 @@ def reconstruct_path(predecessors, source, target):
         node = predecessors[node]
     path.reverse()
     return path
-
-
-graph = {
-    0: [(1, 2), (2, 6)],
-    1: [(3, 5)],
-    2: [(3, 2), (4, 3)],
-    3: [(5, 1)],
-    4: [(5, 4), (6, 2)],
-    5: [(6, 3)],
-    6: [],
-}
-
-distances, predecessors = dijkstra(graph, 0, 7)
-
-labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
-print("最短距离:")
-for i in range(7):
-    d = distances[i]
-    d_str = str(d) if d != float('inf') else "∞"
-    print(f"  {labels[i]}({i}): {d_str}")
-
-print("\n最短路径:")
-for i in range(7):
-    path = reconstruct_path(predecessors, 0, i)
-    if path:
-        path_str = " -> ".join(f"{labels[n]}({n})" for n in path)
-        print(f"  A(0) -> {labels[i]}({i}): {path_str}, 距离={distances[i]}")
-    else:
-        print(f"  A(0) -> {labels[i]}({i}): 不可达")

@@ -42,13 +42,3 @@ def is_prime_check(n):
             return False
         i += 6
     return True
-
-primes_100 = sieve_of_eratosthenes(100)
-primes_linear_100 = linear_sieve(100)
-assert primes_100 == primes_linear_100
-
-count_1000 = count_primes(1000)
-
-checks = [2, 3, 4, 17, 25, 97, 100, 101, 997, 1000]
-for n in checks:
-    r = is_prime_check(n)

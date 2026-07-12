@@ -43,9 +43,3 @@ def count_subsets_with_sum(nums, target):
         if total == target:
             count += 1
     return count
-
-nums = [3, 1, 4, 2, 5]
-subsets = enumerate_subsets(len(nums))
-gc = gray_code(4)
-sums = subset_sum(nums, 7)
-count = count_subsets_with_sum(nums, 7)

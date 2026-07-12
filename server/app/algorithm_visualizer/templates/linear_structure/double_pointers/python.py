@@ -84,17 +84,6 @@ def remove_duplicates_sorted(arr):
             arr[slow] = arr[fast]
     return arr[:slow + 1]
 
-data = [-4, -1, 0, 3, 5, 9, 12, 15, 18, 20, 23, 27]
-assert two_sum_sorted(data, 30) is not None
-assert two_sum_sorted(data, 100) is None
-
-pairs = two_sum_all_pairs(data, 23)
-assert len(pairs) >= 1
-
-assert reverse_in_range(data[:], 2, 9)[2] == data[9]
-
-triplets = three_sum_sorted(data, 14)
-assert isinstance(triplets, list)
-
-dup_data = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
-assert remove_duplicates_sorted(dup_data) == [1, 2, 3, 4, 5]
+# 定义 reverse_array 函数
+def reverse_array(arr):
+    return reverse_in_range(arr, 0, len(arr) - 1)

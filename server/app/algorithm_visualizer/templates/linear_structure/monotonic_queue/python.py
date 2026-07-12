@@ -54,8 +54,3 @@ def min_sliding_window(nums, k):
             res.append(nums[q[0]])
 
     return res
-
-
-data = [4, 2, 12, 3, 5, 1, 6, 8, 7, 10, 2, 9, 5, 3]
-print(f"滑动窗口最大值 (k=4): {max_sliding_window(data, 4)}")
-print(f"滑动窗口最小值 (k=4): {min_sliding_window(data, 4)}")

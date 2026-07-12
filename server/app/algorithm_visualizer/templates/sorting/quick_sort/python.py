@@ -48,8 +48,3 @@ def insertion_sort_small(nums, left, right):
             nums[j + 1] = nums[j]
             j -= 1
         nums[j + 1] = key
-
-
-# 测试数据：12个元素，包含重复值
-arr = [64, 34, 25, 12, 22, 11, 90, 55, 43, 28, 73, 16]
-quick_sort(arr, 0, len(arr) - 1)

@@ -101,16 +101,26 @@ class StackTracer(VisualTracer):
         return [{"id": f"item-{i}", "label": str(it["value"]), "tone": it.get("tone", "default")}
                 for i, it in enumerate(self._items)]
 
-    def init_stack(self, line: Optional[int] = None) -> None:
+    def init_stack(self, *args, **kwargs) -> None:
+        line = kwargs.get("line")
+        items = None
+        for arg in args:
+            if isinstance(arg, list):
+                items = arg
+            elif isinstance(arg, int) and line is None:
+                line = arg
         self._items = []
-        self._record("init_stack", {"mode": "stack", "items": self._snapshot()}, message="初始化空栈", line=line)
+        if items:
+            for val in items:
+                self._items.append({"value": val, "tone": "default"})
+        self._record("init_stack", {"mode": "stack", "items": self._snapshot()}, message="初始化栈结构", line=line)
 
     def push(self, value: Any, line: Optional[int] = None) -> None:
         self._items.append({"value": value, "tone": "default"})
         self._record("push", {"mode": "stack", "items": self._snapshot()},
                       targets=[len(self._items) - 1], message=f"入栈：{value}", line=line)
 
-    def pop(self, line: Optional[int] = None) -> Any:
+    def pop(self, *args, line: Optional[int] = None) -> Any:
         if self._items:
             item = self._items.pop()
             self._record("pop", {"mode": "stack", "items": self._snapshot()}, message=f"出栈：{item['value']}", line=line)
@@ -139,16 +149,26 @@ class QueueTracer(VisualTracer):
         return [{"id": f"item-{i}", "label": str(it["value"]), "tone": it.get("tone", "default")}
                 for i, it in enumerate(self._items)]
 
-    def init_queue(self, line: Optional[int] = None) -> None:
+    def init_queue(self, *args, **kwargs) -> None:
+        line = kwargs.get("line")
+        items = None
+        for arg in args:
+            if isinstance(arg, list):
+                items = arg
+            elif isinstance(arg, int) and line is None:
+                line = arg
         self._items = []
-        self._record("init_queue", {"mode": "queue", "items": self._snapshot()}, message="初始化空队列", line=line)
+        if items:
+            for val in items:
+                self._items.append({"value": val, "tone": "default"})
+        self._record("init_queue", {"mode": "queue", "items": self._snapshot()}, message="初始化队列结构", line=line)
 
     def enqueue(self, value: Any, line: Optional[int] = None) -> None:
         self._items.append({"value": value, "tone": "default"})
         self._record("enqueue", {"mode": "queue", "items": self._snapshot()},
                       targets=[len(self._items) - 1], message=f"入队：{value}", line=line)
 
-    def dequeue(self, line: Optional[int] = None) -> Any:
+    def dequeue(self, *args, line: Optional[int] = None) -> Any:
         if self._items:
             item = self._items.pop(0)
             self._record("dequeue", {"mode": "queue", "items": self._snapshot()}, message=f"出队：{item['value']}", line=line)
@@ -270,20 +290,72 @@ class DpTableTracer(VisualTracer):
         self._values: List[List[Any]] = []
         self._highlighted: List[Dict[str, Any]] = []
 
-    def init_table(self, headers: List[str], rows: int, cols: int, fill_value: Any = 0, line: Optional[int] = None) -> None:
-        self._headers = list(headers)
+    def init_table(self, *args, **kwargs) -> None:
+        line = kwargs.get("line")
+        headers = kwargs.get("headers")
+        fill_value = kwargs.get("fill_value", 0)
+        rows = kwargs.get("rows")
+        cols = kwargs.get("cols")
+        
+        positional_ints = []
+        for arg in args:
+            if isinstance(arg, list):
+                headers = arg
+            elif isinstance(arg, int):
+                positional_ints.append(arg)
+            elif arg is not None:
+                fill_value = arg
+                
+        if len(positional_ints) == 3 and line is None:
+            line = positional_ints[2]
+            positional_ints = positional_ints[:2]
+            
+        if rows is None and len(positional_ints) > 0:
+            rows = positional_ints[0]
+            positional_ints = positional_ints[1:]
+            
+        if cols is None and len(positional_ints) > 0:
+            cols = positional_ints[0]
+            
+        if rows is None: rows = 1
+        if cols is None: cols = 1
+        
+        try: rows = int(rows)
+        except Exception: rows = 1
+        try: cols = int(cols)
+        except Exception: cols = 1
+        
+        self._headers = [str(h) for h in headers] if headers else [str(i) for i in range(cols)]
         self._values = [[fill_value] * cols for _ in range(rows)]
         self._highlighted = []
         self._record("init_table", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
                       message="初始化 DP 表格", line=line)
 
-    def set_value(self, row: int, col: int, value: Any, line: Optional[int] = None) -> None:
+    def set_value(self, row: Any, col: Any, value: Any, line: Optional[int] = None) -> None:
+        if isinstance(row, str) and row in self._headers:
+            row = self._headers.index(row)
+        if isinstance(col, str) and col in self._headers:
+            col = self._headers.index(col)
+        try: row = int(row)
+        except Exception: row = 0
+        try: col = int(col)
+        except Exception: col = 0
+
         if 0 <= row < len(self._values) and 0 <= col < len(self._values[row]):
             self._values[row][col] = value
         self._record("set_value", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},
                       message=f"更新表格值 dp[{row}][{col}] = {value}", line=line)
 
-    def highlight(self, row: int, col: int, tone: str = "active", line: Optional[int] = None) -> None:
+    def highlight(self, row: Any, col: Any, tone: str = "active", line: Optional[int] = None) -> None:
+        if isinstance(row, str) and row in self._headers:
+            row = self._headers.index(row)
+        if isinstance(col, str) and col in self._headers:
+            col = self._headers.index(col)
+        try: row = int(row)
+        except Exception: row = 0
+        try: col = int(col)
+        except Exception: col = 0
+
         self._highlighted = [item for item in self._highlighted if not (item["row"] == row and item["col"] == col)]
         self._highlighted.append({"row": row, "col": col, "tone": tone})
         self._record("highlight", {"headers": list(self._headers), "values": list(self._values), "highlighted": list(self._highlighted)},

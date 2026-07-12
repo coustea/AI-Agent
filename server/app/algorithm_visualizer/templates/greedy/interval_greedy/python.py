@@ -45,14 +45,3 @@ def partition_labels(s):
             result.append(i - start + 1)
             start = i + 1
     return result
-
-intervals_1 = [(1, 3), (2, 5), (4, 7), (6, 9), (8, 10)]
-selected = activity_selection(intervals_1)
-
-intervals_2 = [(0, 30), (5, 10), (15, 20), (10, 15), (20, 25)]
-rooms = min_meeting_rooms(intervals_2)
-
-intervals_3 = [(1, 2), (2, 3), (3, 4), (1, 3)]
-erased = erase_overlap(intervals_3)
-
-labels = partition_labels("ababcbacadefegdehijhklij")

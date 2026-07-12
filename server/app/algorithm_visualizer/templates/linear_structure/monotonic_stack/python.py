@@ -47,9 +47,3 @@ def next_greater_element_circular(nums):
             stack.append(i)
 
     return res
-
-
-# ---- 演示 ----
-data = [3, 1, 4, 2, 5, 7, 6, 9, 8, 0, 3, 11]
-print("下一个更大元素:", next_greater_element(data))
-print("环形下一个更大元素:", next_greater_element_circular(data))

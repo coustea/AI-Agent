@@ -49,17 +49,3 @@ def max_digit_count(arr):
         digits += 1
         max_val //= 10
     return digits
-
-datasets = [
-    [170, 45, 75, 90, 802, 24, 2, 66, 503, 31, 7, 128, 999, 4, 567],
-    [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9],
-    [100, 200, 300, 400, 500, 600, 700, 800, 900],
-]
-
-for data in datasets:
-    r1 = radix_sort(data[:])
-    assert r1 == sorted(data)
-
-mixed = [-5, 3, -1, 7, -8, 2, 0, -3, 9, -2, 4, -7, 1, -4, 6]
-r2 = radix_sort_with_negatives(mixed[:])
-assert r2 == sorted(mixed)

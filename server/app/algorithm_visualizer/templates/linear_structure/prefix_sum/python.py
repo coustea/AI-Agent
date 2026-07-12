@@ -53,18 +53,7 @@ class PrefixSum2D:
 def range_sum_brute(arr, left, right):
     return sum(arr[left:right + 1])
 
-data = [2, 5, -3, 7, 1, 4, 6, -2, 8, 3, 9, -1, 5, -4, 11]
-ps = PrefixSum(data)
-assert ps.range_query(2, 8) == range_sum_brute(data, 2, 8)
-assert ps.range_query(0, 14) == sum(data)
-assert ps.prefix_at(5) == sum(data[:5])
-
-grid = [
-    [1, 2, 3, 4, 5],
-    [6, 7, 8, 9, 10],
-    [11, 12, 13, 14, 15],
-    [16, 17, 18, 19, 20],
-]
-ps2d = PrefixSum2D(grid)
-assert ps2d.range_query(1, 1, 2, 3) == 7 + 8 + 9 + 12 + 13 + 14
-assert ps2d.range_query(0, 0, 3, 4) == sum(sum(row) for row in grid)
+# 定义 prefix_sum_operations 函数
+def prefix_sum_operations(arr):
+    ps = PrefixSum(arr)
+    ps.range_query(1, 3)

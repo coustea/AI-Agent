@@ -56,29 +56,3 @@ def levelorder_traversal(root):
         if node.right:
             queue.append(node.right)
     return result
-
-
-root = TreeNode(1,
-    TreeNode(2,
-        TreeNode(4,
-            TreeNode(8),
-            TreeNode(9)),
-        TreeNode(5,
-            TreeNode(10),
-            None)),
-    TreeNode(3,
-        TreeNode(6,
-            TreeNode(11,
-                TreeNode(14),
-                None),
-            None),
-        TreeNode(7,
-            TreeNode(12),
-            TreeNode(13,
-                None,
-                TreeNode(15)))))
-
-pre = preorder_traversal(root)
-ino = inorder_traversal(root)
-post = postorder_traversal(root)
-level = levelorder_traversal(root) # [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]

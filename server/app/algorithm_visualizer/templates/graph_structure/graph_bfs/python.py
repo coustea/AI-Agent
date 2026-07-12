@@ -81,25 +81,3 @@ def bfs_all_components(graph):
             components.append(component)
 
     return components, distance, parent
-
-
-components, distance, parent = bfs_all_components(graph)
-
-print(f"连通分量数量: {len(components)}")
-for i, comp in enumerate(components):
-    labels_str = ", ".join(labels[n] for n in comp)
-    print(f"  分量 {i + 1}: [{labels_str}] (节点编号: {comp})")
-
-print("\n节点距离与前驱信息:")
-for node in sorted(graph.keys()):
-    p = labels.get(parent[node], "无") if parent.get(node) is not None else "无"
-    if parent.get(node) == -1:
-        p = "无（起始节点）"
-    print(f"  节点 {labels[node]}({node}): 距离={distance[node]}, 前驱={p}")
-
-print("\nBFS 层级结构（按距离分组）:")
-max_dist = max(distance.values())
-for d in range(max_dist + 1):
-    level_nodes = [n for n in sorted(graph.keys()) if distance[n] == d]
-    labels_str = ", ".join(labels[n] for n in level_nodes)
-    print(f"  距离 {d}: [{labels_str}]")

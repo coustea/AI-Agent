@@ -57,24 +57,15 @@ class DSU:
         self.components -= 1
         return True
 
-
-
-dsu = DSU(7)
-
-dsu.union(0, 1)
-
-dsu.union(2, 3)
-
-dsu.union(4, 5)
-
-dsu.union(0, 2)
-
-dsu.find(3)
-
-dsu.union(4, 6)
-
-dsu.union(1, 5)
-
-dsu.find(6)
-
-dsu.union(0, 3)
+# 定义 dsu_operations 函数
+def dsu_operations():
+    dsu = DSU(7)
+    dsu.union(0, 1)
+    dsu.union(2, 3)
+    dsu.union(4, 5)
+    dsu.union(0, 2)
+    dsu.find(3)
+    dsu.union(4, 6)
+    dsu.union(1, 5)
+    dsu.find(6)
+    dsu.union(0, 3)

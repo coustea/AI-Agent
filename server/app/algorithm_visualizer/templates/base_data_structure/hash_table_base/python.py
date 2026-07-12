@@ -78,15 +78,12 @@ class HashTableLinearProbing:
     def load_factor(self):
         return sum(1 for k in self.keys if k is not None) / self.size
 
-ht_chain = HashTableChaining()
-for k, v in [("apple", 1), ("banana", 2), ("cherry", 3), ("date", 4), ("elderberry", 5), ("fig", 6), ("grape", 7)]:
-    ht_chain.put(k, v)
-assert ht_chain.get("cherry") == 3
-ht_chain.remove("date")
-assert ht_chain.get("date") is None
-lf = ht_chain.load_factor()
-
-ht_probe = HashTableLinearProbing()
-for k, v in [("apple", 1), ("banana", 2), ("cherry", 3), ("date", 4), ("fig", 5)]:
-    ht_probe.put(k, v)
-assert ht_probe.get("banana") == 2
+# 定义 hash_table_operations 函数
+def hash_table_operations(arr):
+    ht = HashTableChaining()
+    for v in arr:
+        ht.put(str(v), v)
+    for v in arr:
+        ht.get(str(v))
+    if arr:
+        ht.remove(str(arr[0]))

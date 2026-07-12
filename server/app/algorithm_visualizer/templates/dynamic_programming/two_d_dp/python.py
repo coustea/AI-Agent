@@ -72,29 +72,3 @@ def unique_paths_with_obstacles(obstacle_grid):
             else:
                 dp[i][j] = 0
     return dp[m - 1][n - 1]
-
-grid = [
-    [1, 3, 5, 9, 2, 1],
-    [2, 1, 3, 4, 8, 3],
-    [5, 2, 6, 7, 1, 4],
-    [3, 4, 1, 2, 3, 5],
-    [2, 1, 4, 1, 2, 1]
-]
-result, dp_table, path = min_path_sum(grid)
-assert result > 0
-
-max_result = max_path_sum(grid)
-assert max_result >= result
-
-assert unique_paths(3, 7) == 28
-assert unique_paths(1, 1) == 1
-
-obstacle_grid = [
-    [0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 1, 0, 0],
-    [0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 1],
-    [0, 0, 0, 0, 0, 0]
-]
-paths = unique_paths_with_obstacles(obstacle_grid)
-assert paths >= 1
