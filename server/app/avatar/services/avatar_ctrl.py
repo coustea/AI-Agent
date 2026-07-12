@@ -34,6 +34,7 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 SERVER_DIR = Path(__file__).resolve().parents[3]
+AVATAR_INLINE_BACKGROUND_MAX_BASE64_BYTES = 60 * 1024
 
 
 def estimate_speech_duration(text: str, speech_rate: float = 1.0) -> float:
@@ -130,6 +131,17 @@ def _validated_background_config() -> tuple[str, str] | None:
         encoding,
     )
     compact_image = "".join(image.split())
+
+    # The Avatar provider caps a complete WebSocket text message at 64 KiB.
+    # Leave room for the start command envelope and omit oversized inline images.
+    if len(compact_image.encode("ascii", errors="ignore")) > AVATAR_INLINE_BACKGROUND_MAX_BASE64_BYTES:
+        logger.warning(
+            "Avatar background ignored: inline base64 exceeds provider message limit "
+            "(bytes=%d, max=%d)",
+            len(compact_image),
+            AVATAR_INLINE_BACKGROUND_MAX_BASE64_BYTES,
+        )
+        return None
 
     try:
         raw = base64.b64decode(compact_image, validate=True)

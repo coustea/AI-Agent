@@ -58,8 +58,8 @@ avatar:
   anchor_id: "111204004"
   vcn: "x5_lingxiaoyue_flow"
   iat_url: "wss://iat-api.xfyun.cn/v2/iat"
-  background_source: "image"
-  background_image: "../public/static/avatar-background-bookshelf.jpg"
+  background_source: "res_key"
+  background_image: "22SLM2teIw+aqR6Xsm2JbH6Ng310kDam2NiCY/RQ9n6s3nYJXloZWW1l64/g32vrn7d2lJQR7m9xD5EHYkVs1zuP4AyAYT6ujNjsPymLI/WxeAzv8DjuimJOQlzH+66+Pc7W/Dug9AuYPnJkluZEQyoPrYAzp5Au+YU4hioS6cTosd4rev2C8fcKvtuWjZXJEFhyZMD8c+ssuXeQE1StdaR11kxFrbyVEVCzQmhikzYwMT7cljAvIlsK/ptuXqi4qHI8xSQ+tfk5s6SQoqA/2PfPxTvC/ZQGruKSUb6y8q7OmlkFRb0dpkvT5TAcRlkkV2oaULluWs4NuYqVuuR2s5k6pPWJlfl2JcuLrqHSbiI="
   background_encoding: "jpg"
 
 # 搜索服务
