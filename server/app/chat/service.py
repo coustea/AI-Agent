@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
+from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.events import record_dialogue_event
@@ -160,8 +161,24 @@ async def chat(
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
 
+                if diagram_result is not None:
+                    try:
+                        diagram_result = await ensure_teaching_diagram_png_payload(
+                            diagram_result,
+                            username=username,
+                            session_id=effective_session,
+                        )
+                    except Exception as exc:
+                        logger.warning("[chat] 图解 PNG 渲染失败，跳过图解输出: %s", exc)
+                        diagram_result = None
+
                 # 图解数据通过单独事件发送，前端在回答后立即渲染
                 if diagram_result is not None:
+                    diagram_result = await ensure_teaching_diagram_png_payload(
+                        diagram_result,
+                        username=username,
+                        session_id=effective_session,
+                    )
                     yield {"event": "diagram", "data": diagram_result}
 
                 yield {
@@ -237,6 +254,7 @@ async def chat(
             "event": "done",
             "data": {
                 "session_id": effective_session,
+                "saved_message_id": saved_message_id,
                 "full_response": full_answer,
                 "tool_calls": [
                     {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}

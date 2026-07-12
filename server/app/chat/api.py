@@ -21,16 +21,70 @@ from app.chat.emitter import (
     has_active_chat_channel,
 )
 from app.chat.memory.service import get_chat_memory_service
+from app.chat.diagram_image_renderer import render_teaching_diagram_png
 from app.chat.service import get_chat_usecases, run_chat_agent
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import ChatSession, School, User
+from app.infra.models import ChatMessage, ChatSession, School, User
 from app.infra.response import HttpResponse
 
 logger = get_logger(__name__)
 
 # 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
+
+
+async def _get_owned_assistant_message(
+    session: AsyncSession,
+    user_id: int,
+    message_id: int,
+) -> ChatMessage | None:
+    """Return an assistant message only when its session belongs to the caller."""
+    result = await session.exec(
+        select(ChatMessage)
+        .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+        .where(
+            ChatMessage.id == message_id,
+            ChatMessage.role == "assistant",
+            ChatSession.user_id == user_id,
+        )
+    )
+    return result.first()
+
+
+@router.post("/chat/messages/{message_id}/diagram-image/retry")
+async def retry_diagram_image(
+    message_id: int,
+    current_user: User = Depends(get_current_user_flexible),
+    session: AsyncSession = Depends(get_session),
+):
+    """Retry PNG rendering for the caller's persisted fallback diagram."""
+    message = await _get_owned_assistant_message(session, current_user.id, message_id)
+    if message is None:
+        return HttpResponse.error(code=404, message="找不到图解消息")
+
+    fallback = (message.usage_metadata or {}).get("diagram")
+    if not isinstance(fallback, dict) or fallback.get("kind") != "fallback":
+        return HttpResponse.error(code=409, message="当前图解无需重新生成")
+
+    diagram = fallback.get("diagram")
+    if not isinstance(diagram, dict):
+        return HttpResponse.error(code=404, message="找不到可重试的图解")
+
+    try:
+        image = await render_teaching_diagram_png(
+            diagram,
+            username=current_user.username,
+            session_id=message.session_id,
+        )
+    except Exception:
+        logger.exception("[ChatAPI] 图解图片重试渲染失败: message_id=%s", message_id)
+        return HttpResponse.error(code=503, message="图片生成暂时失败，请稍后重试")
+
+    message.usage_metadata = {**(message.usage_metadata or {}), "diagram": image}
+    session.add(message)
+    await session.commit()
+    return HttpResponse.success(data={"diagram": image})
 
 
 # ---------------------------------------------------------------------------

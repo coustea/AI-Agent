@@ -61,6 +61,24 @@ def _normalize_reasoning_summary(text: str) -> str:
     return re.sub(r"\s+", " ", summary).strip()[:200]
 
 
+# LLM 不支持图片输入时返回的错误文本模式，需从回答中剥离并替换为友好提示
+_LLM_IMAGE_UNSUPPORTED_RE = re.compile(
+    r"ERROR:\s*Cannot read \".+?\".*?does not support image input.*?Inform the user\.?",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _strip_llm_image_error(text: str) -> tuple[str, bool]:
+    """检测并移除 LLM 因不支持图片输入而返回的错误文本。
+
+    返回 (清理后的文本, 是否包含该错误)。
+    """
+    if _LLM_IMAGE_UNSUPPORTED_RE.search(text):
+        cleaned = _LLM_IMAGE_UNSUPPORTED_RE.sub("", text).strip()
+        return cleaned, True
+    return text, False
+
+
 # 拆分可公开的进度摘要与严格包裹在 <answer> 标签内的正式回答
 def split_reasoning_and_answer(text: str) -> tuple[str, str]:
     """拆分可公开的进度摘要与严格包裹的正式回答。"""
@@ -140,18 +158,49 @@ def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> s
 
 
 # 从 <answer> 内容中提取 <diagram> 标签内的 JSON，返回去除标签后的回答与解析结果
-def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] | None]:
+def _try_repair_json(text: str) -> dict[str, Any] | None:
+    """尝试修复 LLM 输出的常见 JSON 格式问题。"""
+    repaired = text
+    # 1. 移除尾逗号（对象/数组最后一个元素后的逗号）
+    repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+    # 2. 移除行尾注释 // ... 或 /* ... */
+    repaired = re.sub(r"//[^\n]*", "", repaired)
+    repaired = re.sub(r"/\*.*?\*/", "", repaired, flags=re.DOTALL)
+    # 3. 将单引号替换为双引号（仅当不含内部双引号时）
+    if "'" in repaired and '"' not in repaired:
+        repaired = repaired.replace("'", '"')
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. 尝试补全缺失的右括号
+    open_braces = repaired.count("{") - repaired.count("}")
+    open_brackets = repaired.count("[") - repaired.count("]")
+    if open_braces > 0 or open_brackets > 0:
+        attempt = repaired + "]" * max(0, open_brackets) + "}" * max(0, open_braces)
+        try:
+            return json.loads(attempt)
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+# 从 <answer> 内容中提取 <diagram> 标签内的 JSON，返回去除标签后的回答与解析结果
+def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] | None, str]:
     """从 <answer> 内容中提取 <diagram> 标签的 JSON。
 
-    返回 (cleaned_answer, diagram_dict)。
-    - 如果找到 <diagram> 标签且 JSON 合法，返回去除 <diagram> 的回答和解析后的 dict
-    - 如果未找到 <diagram> 标签，返回原回答和 None
-    - 如果 JSON 解析失败，返回原回答和 None（由调用方处理修复重试）
+    返回 (cleaned_answer, diagram_dict, parse_status)。
+    - parse_status: "ok" | "no_tag" | "json_error"
+    - 如果找到 <diagram> 标签且 JSON 合法，返回去除 <diagram> 的回答、解析后的 dict、"ok"
+    - 如果未找到 <diagram> 标签，返回原回答、None、"no_tag"
+    - 如果 JSON 解析失败（含修复尝试），返回原回答、None、"json_error"
     """
     # 未找到 <diagram> 标签则直接返回原回答，无图解
     match = _DIAGRAM_TAG_RE.search(answer_body)
     if not match:
-        return answer_body, None
+        return answer_body, None, "no_tag"
 
     # 提取 JSON 文本
     json_text = match.group("json").strip()
@@ -161,16 +210,21 @@ def extract_diagram_from_answer(answer_body: str) -> tuple[str, dict[str, Any] |
         json_text = re.sub(r"\n?```\s*$", "", json_text)
         json_text = json_text.strip()
 
-    # 解析 JSON，失败则保留原回答交由调用方决定是否重试
+    # 解析 JSON，失败则尝试常见修复后再解析
     try:
         parsed = json.loads(json_text)
-    except json.JSONDecodeError as exc:
-        logger.warning("[extract_diagram] JSON 解析失败: %s", exc)
-        return answer_body, None
+    except json.JSONDecodeError:
+        repaired = _try_repair_json(json_text)
+        if repaired is not None:
+            parsed = repaired
+            logger.info("[extract_diagram] JSON 修复成功")
+        else:
+            logger.warning("[extract_diagram] JSON 解析失败，标记为可修复")
+            return answer_body, None, "json_error"
 
     # 从回答中移除 <diagram> 标签并清理空白
     cleaned = _DIAGRAM_TAG_RE.sub("", answer_body).strip()
-    return cleaned, parsed
+    return cleaned, parsed, "ok"
 
 
 # 生成思考卡片的降级摘要：优先用推理文本，其次用决策文本，最后用默认模板
@@ -559,6 +613,12 @@ async def react_node(
             tool_calls = getattr(accumulated_response, "tool_calls", None) if accumulated_response else None
             reasoning_summary, answer_body = split_reasoning_and_answer(answer_text)
 
+            # 检测 LLM 因不支持图片输入而返回的错误，替换为友好提示
+            answer_body, has_image_error = _strip_llm_image_error(answer_body)
+            if has_image_error:
+                answer_body = "抱歉，当前模型暂不支持直接读取图片。请将图片中的关键内容以文字描述发送，我会尽力帮助你。"
+                logger.info("[react_node] 检测到 LLM 不支持图片输入，替换为友好提示")
+
             # 判断本轮是否产出最终回答或需要格式修复
             has_final_answer = bool(answer_body)
             needs_format_repair = not tool_calls and not has_final_answer
@@ -624,7 +684,26 @@ async def react_node(
                 # ── 无工具调用 → 这是最终回答 ──
 
                 # 提取回答中的 <diagram> 标签内容
-                cleaned_answer, raw_diagram = extract_diagram_from_answer(answer_body)
+                cleaned_answer, raw_diagram, diagram_parse_status = extract_diagram_from_answer(answer_body)
+
+                # JSON 解析失败但找到了 <diagram> 标签 → 触发修复重试
+                if diagram_parse_status == "json_error" and not diagram_repair_used:
+                    diagram_repair_used = True
+                    logger.info("[react_node] 图解 JSON 解析失败，发起修复重试")
+                    if accumulated_response is not None:
+                        messages.append(accumulated_response)
+                    messages.append(HumanMessage(content=(
+                        "[DIAGRAM REPAIR]\n"
+                        "上一次图解 JSON 格式不合法，无法解析。\n"
+                        "请严格输出合法 JSON，确保所有字符串使用双引号、属性间用逗号分隔、无尾逗号。\n"
+                        "请修复并重新输出完整的 <answer>，包含修复后的 <diagram>...</diagram>。"
+                        "确保 graph_type 是合法类型，visual_content 结构与 graph_type 严格匹配。"
+                    )))
+                    continue
+                elif diagram_parse_status == "json_error":
+                    # 修复已用过仍失败，放弃图解，去除标签保留文字回答
+                    logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解")
+                    answer_body = cleaned_answer
 
                 # 存在图解 JSON 则进行校验与修复处理
                 if raw_diagram is not None:

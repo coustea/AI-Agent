@@ -113,3 +113,24 @@ class WrongQuestionListResponse(BaseModel):
     page_size: int = 20
     subjects: list[str] = Field(default_factory=list)
     types: list[str] = Field(default_factory=list)
+
+
+# 答题历史条目（单题）
+class QuizAnswerHistoryItem(BaseModel):
+    """答题历史条目 — 单道题的最新作答记录。"""
+    question_id: str
+    subject: str | None = None
+    question_type: str | None = None
+    is_correct: bool
+    attempts: int = 1
+    last_answer: str | None = None
+    created_at: datetime
+
+
+# 答题历史分页响应
+class QuizAnswerHistoryResponse(BaseModel):
+    """答题历史分页响应 — 支持筛选和分页。"""
+    items: list[QuizAnswerHistoryItem]
+    total: int
+    page: int = 1
+    page_size: int = 20

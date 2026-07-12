@@ -254,6 +254,36 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
     # 浅拷贝，不修改原始数据
     vc = dict(visual_content)  # 浅拷贝，不修改原始数据
 
+    def pick_text(item: dict[str, Any], keys: tuple[str, ...]) -> str:
+        for key in keys:
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                nested = pick_text(value, ("label", "title", "name", "text", "content", "detail", "description"))
+                if nested:
+                    return nested
+        return ""
+
+    def pick_text_list(item: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+        for key in keys:
+            value = item.get(key)
+            if not isinstance(value, list):
+                continue
+            texts: list[str] = []
+            for entry in value:
+                if isinstance(entry, str) and entry.strip():
+                    texts.append(entry.strip())
+                elif isinstance(entry, dict):
+                    text = pick_text(entry, ("label", "title", "name", "text", "content", "detail", "description"))
+                    if text:
+                        texts.append(text)
+                elif entry is not None:
+                    texts.append(str(entry))
+            if texts:
+                return texts
+        return []
+
     if graph_type == "hierarchy":
         # LLM 经常把 hierarchy.root 输出为嵌套对象而非 string
         root = vc.get("root")
@@ -309,7 +339,59 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
             vc["cells"] = fixed_cells
 
     # flowchart 类型：将 from_ 修正为 from（Pydantic alias 问题）
+    elif graph_type == "framework":
+        center = pick_text(vc, ("center", "root", "topic", "title", "name", "core", "subject", "main_topic"))
+        if center:
+            vc["center"] = center
+
+        modules = vc.get("modules")
+        if not isinstance(modules, list):
+            for key in ("branches", "categories", "sections", "parts", "nodes"):
+                value = vc.get(key)
+                if isinstance(value, list):
+                    modules = value
+                    break
+
+        if isinstance(modules, list):
+            fixed_modules = []
+            for module in modules:
+                if isinstance(module, str):
+                    if module.strip():
+                        fixed_modules.append({"title": module.strip(), "items": []})
+                    continue
+                if not isinstance(module, dict):
+                    continue
+                title = pick_text(module, ("title", "name", "label", "module", "category", "topic"))
+                items = pick_text_list(
+                    module,
+                    ("items", "children", "points", "knowledge_points", "concepts", "details", "subitems"),
+                )
+                fixed_module = {**module}
+                if title:
+                    fixed_module["title"] = title
+                fixed_module["items"] = items
+                fixed_modules.append(fixed_module)
+            vc["modules"] = fixed_modules
+
     elif graph_type == "flowchart":
+        nodes = vc.get("nodes")
+        if isinstance(nodes, list):
+            fixed_nodes = []
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                title = pick_text(node, ("title", "label", "name", "text", "content"))
+                short_desc = pick_text(node, ("short_desc", "description", "desc", "detail", "note"))
+                if not short_desc and node.get("text") != title:
+                    short_desc = pick_text(node, ("text",))
+                fixed_node = {**node}
+                if title:
+                    fixed_node["title"] = title
+                if short_desc:
+                    fixed_node["short_desc"] = short_desc
+                fixed_nodes.append(fixed_node)
+            vc["nodes"] = fixed_nodes
+
         # LLM 可能用 from_ 而非 from（Pydantic alias 问题）
         edges = vc.get("edges")
         if isinstance(edges, list):
@@ -336,8 +418,64 @@ def _auto_fix_visual_content(graph_type: str, visual_content: dict[str, Any]) ->
                 fixed_messages.append(msg)
             vc["messages"] = fixed_messages
 
+    # comparison 类型：修复 left_entity/right_entity/visual_summary 的常见格式错误
+    elif graph_type == "comparison":
+        def _ensure_comparison_entity(val: Any) -> dict[str, str]:
+            if isinstance(val, dict):
+                return {
+                    "name": str(val.get("name", "")),
+                    "core_label": str(val.get("core_label", "")),
+                    "short_desc": str(val.get("short_desc", "")),
+                }
+            if isinstance(val, str) and val.strip():
+                return {"name": val.strip(), "core_label": "", "short_desc": ""}
+            return {"name": "", "core_label": "", "short_desc": ""}
+
+        def _ensure_visual_summary(val: Any) -> dict[str, str]:
+            if isinstance(val, dict):
+                return {
+                    "left_keyword": str(val.get("left_keyword", "")),
+                    "right_keyword": str(val.get("right_keyword", "")),
+                    "center_conclusion": str(val.get("center_conclusion", "")),
+                }
+            if isinstance(val, str) and val.strip():
+                return {"left_keyword": "", "right_keyword": "", "center_conclusion": val.strip()}
+            return {"left_keyword": "", "right_keyword": "", "center_conclusion": ""}
+
+        # LLM 可能用 left/right 代替 left_entity/right_entity
+        if "left_entity" not in vc and "left" in vc:
+            vc["left_entity"] = vc.pop("left")
+        if "right_entity" not in vc and "right" in vc:
+            vc["right_entity"] = vc.pop("right")
+
+        vc["left_entity"] = _ensure_comparison_entity(vc.get("left_entity", {}))
+        vc["right_entity"] = _ensure_comparison_entity(vc.get("right_entity", {}))
+        vc["visual_summary"] = _ensure_visual_summary(vc.get("visual_summary", {}))
+
     # 返回修复后的 visual_content
     return vc
+
+
+def _framework_has_visible_content(visual_content: dict[str, Any]) -> bool:
+    center = visual_content.get("center")
+    if isinstance(center, str) and center.strip():
+        return True
+
+    modules = visual_content.get("modules")
+    if not isinstance(modules, list):
+        return False
+
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        title = module.get("title")
+        if isinstance(title, str) and title.strip():
+            return True
+        items = module.get("items")
+        if isinstance(items, list) and any(isinstance(item, str) and item.strip() for item in items):
+            return True
+
+    return False
 
 
 # 服务端二次校验：确保 graph_type 与 visual_content 结构匹配，并返回错误信息
@@ -360,7 +498,12 @@ def validate_visual(graph_type: str, visual_content: dict[str, Any]) -> tuple[di
     # 用对应 Payload 模型校验，失败则返回原始内容与错误
     try:
         validated = payload_cls.model_validate(fixed_vc)
-        return validated.model_dump(mode="json", by_alias=True), ""
+        validated_dict = validated.model_dump(mode="json", by_alias=True)
+        if graph_type == "framework" and not _framework_has_visible_content(validated_dict):
+            error_msg = "framework visual_content has no visible content; center or non-empty modules are required"
+            logger.warning("[validate_visual] %s", error_msg)
+            return visual_content, error_msg
+        return validated_dict, ""
     except Exception as exc:
         error_msg = str(exc)
         logger.warning("[validate_visual] visual_content 校验失败: graph_type=%s error=%s", graph_type, exc)
@@ -438,6 +581,8 @@ def validate_diagram_json(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, s
 
     # 校验 visual_content（含自动修复）
     validated_visual, visual_error = validate_visual(graph_type, visual_content)
+    if visual_error:
+        return None, visual_error
 
     # 校验 teaching_content
     validated_tc: dict[str, Any] | None = None

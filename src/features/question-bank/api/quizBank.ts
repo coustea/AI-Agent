@@ -126,6 +126,58 @@ export async function submitObjectiveResults(request: ObjectiveSubmitRequest): P
   return response.data.data as ObjectiveSubmitResponse
 }
 
+// 答题历史条目
+export interface QuizAnswerHistoryItem {
+  question_id: string
+  subject: string | null
+  question_type: string | null
+  is_correct: boolean
+  attempts: number
+  last_answer: string | null
+  created_at: string
+}
+
+// 答题历史响应
+export interface QuizAnswerHistoryResponse {
+  items: QuizAnswerHistoryItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+// 答题历史分页查询参数
+export interface QuizHistoryParams {
+  subject?: string
+  is_correct?: boolean
+  page?: number
+  page_size?: number
+}
+
+// 获取用户答题历史（分页列表）
+export async function fetchQuizHistoryList(params?: QuizHistoryParams): Promise<QuizAnswerHistoryResponse> {
+  const response = await http.get('/ai/quiz/history', { params })
+  return response.data.data as QuizAnswerHistoryResponse
+}
+
+// 获取用户答题历史（所有做过的题，用于"做过"标记）
+export async function fetchQuizAnswerHistory(): Promise<Map<string, QuizAnswerHistoryItem>> {
+  const map = new Map<string, QuizAnswerHistoryItem>()
+  const pageSize = 100
+  let page = 1
+
+  while (true) {
+    const data = await fetchQuizHistoryList({ page, page_size: pageSize })
+    for (const item of data.items || []) {
+      map.set(item.question_id, item)
+    }
+
+    if (!data.items?.length || data.items.length < pageSize || map.size >= data.total) break
+    page += 1
+  }
+
+  return map
+}
+
 // 标准化题目数据字段
 function normalizeQuizQuestion(item: Record<string, any>) {
   return {

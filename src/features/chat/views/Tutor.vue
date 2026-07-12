@@ -333,10 +333,19 @@
                   </div>
 
                   <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
-                    <TeachingDiagramCard
+                    <TeachingDiagramImage
+                      v-if="msg.teachingDiagram.kind === 'image'"
                       :diagram="msg.teachingDiagram"
                       compact
+                      @expand="previewTeachingDiagram(msg.teachingDiagram)"
+                    />
+                    <TeachingDiagramCard
+                      v-else
+                      :diagram="msg.teachingDiagram"
+                      compact
+                      :retrying="retryingDiagramMessageIds.has(msg.id)"
                       @expand="previewTeachingDiagram"
+                      @retry="retryTeachingDiagramImage(msg)"
                     />
                   </div>
                 </div>
@@ -407,7 +416,7 @@
               ></textarea>
 
               <div class="minimal-action-bar">
-                <div class="action-left">
+                <div class="action-left" :key="inputToolStateKey">
                   <button
                     type="button"
                     class="input-tool-btn"
@@ -597,7 +606,7 @@
             <header class="custom-modal-header diagram-dialog-header">
               <div>
                 <span class="diagram-kicker">教学图解</span>
-                <strong class="diagram-title">{{ teachingDiagramPreviewData?.title || '图解说明' }}</strong>
+                <strong class="diagram-title">{{ teachingDiagramTitle(teachingDiagramPreviewData) }}</strong>
               </div>
               <button type="button" class="modal-close-btn" @click="teachingDiagramPreviewVisible = false" aria-label="关闭图解">
                 <Close class="close-icon" />
@@ -606,18 +615,12 @@
 
             <div v-if="teachingDiagramPreviewData" class="custom-modal-body diagram-preview-body">
               <div class="preview-content">
-                <TeachingDiagramCard :diagram="teachingDiagramPreviewData" />
-              </div>
-              <div class="preview-footer">
-                <span>图解可保存为高清图片，便于复习。</span>
-                <div class="footer-actions">
-                  <button class="btn btn-outline" :disabled="isCapturing" @click="handleDownloadDiagram">
-                    <span v-if="isCapturing" class="spinner mr-2"></span>
-                    <Download class="btn-icon-left" />
-                    <span>保存图片</span>
-                  </button>
-                  <button class="btn btn-primary" @click="teachingDiagramPreviewVisible = false">完成</button>
-                </div>
+                <TeachingDiagramImage
+                  v-if="teachingDiagramPreviewData.kind === 'image'"
+                  :diagram="teachingDiagramPreviewData"
+                  show-download
+                />
+                <TeachingDiagramCard v-else :diagram="teachingDiagramPreviewData" />
               </div>
             </div>
           </div>
@@ -665,7 +668,6 @@ import {
   PhClock as Timer,
   PhGraph as DataLine,
   PhCheckCircle as CircleCheckFilled,
-  PhDownload as Download,
   PhSpinner as Loading
 } from '@phosphor-icons/vue'
 import { toast } from 'vue-sonner'
@@ -673,10 +675,8 @@ import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
+import TeachingDiagramImage from '@/features/chat/components/TeachingDiagramImage.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
-
-
-import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
 
 import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
 import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
@@ -687,6 +687,7 @@ import {
   deleteSession,
   updateSessionTitle,
   getChatHistory,
+  retryDiagramImage,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
@@ -699,6 +700,7 @@ import {
   type PendingFile,
   type Attachment,
   type ChatMsg,
+  assignPersistedAssistantMessageId,
   type AgentActivity,
   normalizeTeachingDiagram,
   getDocumentType,
@@ -706,6 +708,7 @@ import {
   formatFileSize,
   formatRelativeTime,
   finalizeRunningAgentActivities,
+  getInputToolStateKey,
   shouldAutoRestartVadAfterAssistantComplete,
   isInsideOpenFence,
   takeNextStreamUnit,
@@ -961,6 +964,11 @@ watch(canvasRef, (newInstance) => {
 const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
+const inputToolStateKey = computed(() => getInputToolStateKey({
+  uploadingFile: uploadingFile.value,
+  enableWebSearch: enableWebSearch.value,
+  needTeachingDiagram: needTeachingDiagram.value,
+}))
 
 
 // 会话列表
@@ -1342,8 +1350,7 @@ const digitalHumanStatusText = computed(() => {
 
 const teachingDiagramPreviewVisible = ref(false)
 const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
-
-const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
+const retryingDiagramMessageIds = ref(new Set<number>())
 
 // 打开教学图解预览弹窗
 const previewTeachingDiagram = (diagram: TeachingDiagram) => {
@@ -1351,21 +1358,24 @@ const previewTeachingDiagram = (diagram: TeachingDiagram) => {
   teachingDiagramPreviewVisible.value = true
 }
 
-const handleDownloadDiagram = async () => {
-  if (!teachingDiagramPreviewData.value) return
-  
-  const dataUrl = await captureToDataUrl('capture-target', {
-    pixelRatio: 2,
-    backgroundColor: '#ffffff',
-    style: {
-      padding: '24px',
-      borderRadius: '16px'
-    }
-  })
-  
-  if (dataUrl) {
-    downloadImage(dataUrl, `${teachingDiagramPreviewData.value.title || '图解说明'}_高清截图`)
-    toast.success('图解说明已保存至本地')
+const teachingDiagramTitle = (diagram: TeachingDiagram | null) => {
+  if (!diagram) return '图解说明'
+  return diagram.kind === 'fallback' ? diagram.diagram.title : diagram.title
+}
+
+const retryTeachingDiagramImage = async (message: ChatMsg) => {
+  if (!message.id || message.teachingDiagram?.kind !== 'fallback') return
+  retryingDiagramMessageIds.value = new Set(retryingDiagramMessageIds.value).add(message.id)
+  try {
+    const response = await retryDiagramImage(message.id)
+    const diagram = normalizeTeachingDiagram(response.data.data?.diagram)
+    if (diagram?.kind === 'image') message.teachingDiagram = diagram
+  } catch (error) {
+    toast.error(getErrorMessage(error))
+  } finally {
+    const pending = new Set(retryingDiagramMessageIds.value)
+    pending.delete(message.id)
+    retryingDiagramMessageIds.value = pending
   }
 }
 
@@ -2001,8 +2011,13 @@ const switchSession = async (sessionId: string) => {
       onChunk: (chunk) => {
         enqueueStreamChunk(aiMsgId, chunk)
       },
-      onDone: () => {
-        completeStreamingMessage(aiMsgId)
+      onDone: (data) => {
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        const persistedMessageId = aiMsg
+          ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
+          : aiMsgId
+        if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
+        completeStreamingMessage(persistedMessageId)
         void refreshSessionTitleWithRetry(sessionId)
       },
       onError: (_err) => {
@@ -2404,8 +2419,13 @@ const handleSend = async () => {
         }
         enqueueStreamChunk(aiMsgId, chunk)
       },
-      onDone: () => {
-        completeStreamingMessage(aiMsgId)
+      onDone: (data) => {
+        const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        const persistedMessageId = aiMsg
+          ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
+          : aiMsgId
+        if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
+        completeStreamingMessage(persistedMessageId)
         void refreshSessionTitleWithRetry(activeSessionId)
       },
       onError: (_err) => {
@@ -5045,6 +5065,53 @@ onBeforeUnmount(() => {
   gap: 16px;
   min-height: 62px;
   padding: 11px 16px;
+}
+
+.diagram-image-dialog {
+  position: relative;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.diagram-image-dialog .diagram-preview-body {
+  height: 100vh;
+  max-height: 100vh;
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+}
+
+.diagram-image-dialog .preview-content {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.diagram-image-close {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #1f2937;
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid rgba(148, 163, 184, .42);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .18);
+  backdrop-filter: blur(10px);
+}
+
+.diagram-image-close:hover {
+  color: #0f172a;
+  background: #fff;
 }
 
 .diagram-dialog-header > div {

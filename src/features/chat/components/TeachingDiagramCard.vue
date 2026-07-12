@@ -1,14 +1,23 @@
 <template>
   <article
     class="diagram-card"
-    :class="{ compact: props.compact, 'is-interactive': props.compact }"
+    :class="{ compact: props.compact, 'visual-only': props.visualOnly, 'is-interactive': props.compact }"
     :role="props.compact ? 'button' : undefined"
     :tabindex="props.compact ? 0 : undefined"
     @click="handleExpand"
     @keydown.enter.prevent="handleExpand"
     @keydown.space.prevent="handleExpand"
   >
-    <header class="diagram-header">
+    <div v-if="fallback" class="diagram-image-fallback" role="status">
+      <p>图片生成失败，已展示图解</p>
+      <button
+        v-if="fallback.retryable"
+        type="button"
+        :disabled="retrying"
+        @click.stop="emit('retry')"
+      >{{ retrying ? '正在重新生成图片…' : '重新生成图片' }}</button>
+    </div>
+    <header v-if="!props.visualOnly" class="diagram-header">
       <div class="diagram-heading-mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none">
           <rect x="3" y="4" width="7" height="6" rx="1.5" />
@@ -19,15 +28,15 @@
       </div>
 
       <div class="diagram-heading-copy">
-        <p class="diagram-kicker">{{ typeLabel[props.diagram.graph_type] || '教学图解' }}</p>
-        <h3>{{ props.diagram.title }}</h3>
-        <p v-if="props.diagram.subtitle" class="diagram-subtitle">{{ props.diagram.subtitle }}</p>
+        <p class="diagram-kicker">{{ typeLabel[displayDiagram.graph_type] || '教学图解' }}</p>
+        <h3>{{ displayDiagram.title }}</h3>
+        <p v-if="displayDiagram.subtitle" class="diagram-subtitle">{{ displayDiagram.subtitle }}</p>
       </div>
 
       <div v-if="!props.compact" class="diagram-meta">
-        <span v-if="props.diagram.course" class="meta-chip">{{ props.diagram.course }}</span>
-        <span class="meta-chip" :class="`is-${props.diagram.difficulty}`">
-          {{ difficultyLabel[props.diagram.difficulty] || props.diagram.difficulty }}
+        <span v-if="displayDiagram.course" class="meta-chip">{{ displayDiagram.course }}</span>
+        <span class="meta-chip" :class="`is-${displayDiagram.difficulty}`">
+          {{ difficultyLabel[displayDiagram.difficulty] || displayDiagram.difficulty }}
         </span>
       </div>
     </header>
@@ -41,16 +50,16 @@
 
         <div class="visual-viewport">
           <div class="visual-wrapper" :id="props.compact ? undefined : 'capture-target'">
-            <ComparisonDiagram v-if="props.diagram.graph_type === 'comparison'" :payload="props.diagram.visual_content as ComparisonPayload" />
-            <FlowchartDiagram v-else-if="props.diagram.graph_type === 'flowchart'" :payload="props.diagram.visual_content as FlowchartPayload" />
-            <SequenceDiagram v-else-if="props.diagram.graph_type === 'sequence'" :payload="props.diagram.visual_content as SequencePayload" />
-            <FrameworkDiagram v-else-if="props.diagram.graph_type === 'framework'" :payload="props.diagram.visual_content as FrameworkPayload" />
-            <SummaryDiagram v-else-if="props.diagram.graph_type === 'summary'" :payload="props.diagram.visual_content as SummaryPayload" />
-            <HierarchyDiagram v-else-if="props.diagram.graph_type === 'hierarchy'" :payload="props.diagram.visual_content as HierarchyPayload" />
-            <TreeDiagram v-else-if="props.diagram.graph_type === 'tree'" :payload="props.diagram.visual_content as TreePayload" />
-            <GridDiagram v-else-if="props.diagram.graph_type === 'grid'" :payload="props.diagram.visual_content as GridPayload" />
-            <ProtocolDiagram v-else-if="props.diagram.graph_type === 'protocol'" :payload="props.diagram.visual_content as ProtocolPayload" />
-            <TimelineDiagram v-else-if="props.diagram.graph_type === 'timeline'" :payload="props.diagram.visual_content as TimelinePayload" />
+            <ComparisonDiagram v-if="displayDiagram.graph_type === 'comparison'" :payload="displayDiagram.visual_content as ComparisonPayload" />
+            <FlowchartDiagram v-else-if="displayDiagram.graph_type === 'flowchart'" :payload="displayDiagram.visual_content as FlowchartPayload" />
+            <SequenceDiagram v-else-if="displayDiagram.graph_type === 'sequence'" :payload="displayDiagram.visual_content as SequencePayload" />
+            <FrameworkDiagram v-else-if="displayDiagram.graph_type === 'framework'" :payload="displayDiagram.visual_content as FrameworkPayload" />
+            <SummaryDiagram v-else-if="displayDiagram.graph_type === 'summary'" :payload="displayDiagram.visual_content as SummaryPayload" />
+            <HierarchyDiagram v-else-if="displayDiagram.graph_type === 'hierarchy'" :payload="displayDiagram.visual_content as HierarchyPayload" />
+            <TreeDiagram v-else-if="displayDiagram.graph_type === 'tree'" :payload="displayDiagram.visual_content as TreePayload" />
+            <GridDiagram v-else-if="displayDiagram.graph_type === 'grid'" :payload="displayDiagram.visual_content as GridPayload" />
+            <ProtocolDiagram v-else-if="displayDiagram.graph_type === 'protocol'" :payload="displayDiagram.visual_content as ProtocolPayload" />
+            <TimelineDiagram v-else-if="displayDiagram.graph_type === 'timeline'" :payload="displayDiagram.visual_content as TimelinePayload" />
           </div>
         </div>
 
@@ -63,12 +72,12 @@
         </div>
       </section>
 
-      <aside v-if="!props.compact" class="teaching-panel">
-        <section v-if="props.diagram.teaching_goal" class="teaching-block teaching-goal">
+      <aside v-if="!props.compact && !props.visualOnly" class="teaching-panel">
+        <section v-if="displayDiagram.teaching_goal" class="teaching-block teaching-goal">
           <span class="section-index">01</span>
           <div>
             <h4>先明确学习目标</h4>
-            <p>{{ props.diagram.teaching_goal }}</p>
+            <p>{{ displayDiagram.teaching_goal }}</p>
           </div>
         </section>
 
@@ -76,7 +85,7 @@
           <span class="section-index">02</span>
           <div>
             <h4>核心解释</h4>
-            <p>{{ props.diagram.teaching_content.core_explanation }}</p>
+            <p>{{ displayDiagram.teaching_content.core_explanation }}</p>
           </div>
         </section>
 
@@ -103,9 +112,9 @@
       </aside>
     </div>
 
-    <footer v-if="!props.compact && props.diagram.teaching_content.summary" class="diagram-summary">
+    <footer v-if="!props.compact && !props.visualOnly && displayDiagram.teaching_content.summary" class="diagram-summary">
       <span>一句话带走</span>
-      <p>{{ props.diagram.teaching_content.summary }}</p>
+      <p>{{ displayDiagram.teaching_content.summary }}</p>
     </footer>
   </article>
 </template>
@@ -163,7 +172,7 @@ import type {
   HierarchyPayload,
   SequencePayload,
   SummaryPayload,
-  TeachingDiagram,
+  TeachingDiagram, StructuredTeachingDiagram, TeachingDiagramFallback,
   TreePayload,
   GridPayload,
   ProtocolPayload,
@@ -173,25 +182,46 @@ import type {
 const props = defineProps<{
   diagram: TeachingDiagram
   compact?: boolean
+  retrying?: boolean
+  visualOnly?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'expand', diagram: TeachingDiagram): void
+  (e: 'retry'): void
 }>()
 
 // 当前图解的视觉提示文本
-const visualHint = computed(() => visualHintMap[props.diagram.graph_type] || '结合图形理解知识结构')
-const keyPoints = computed(() => props.diagram.teaching_content?.key_points || [])
-const commonMistakes = computed(() => props.diagram.teaching_content?.common_mistakes || [])
-const examples = computed(() => props.diagram.teaching_content?.examples || [])
+const fallback = computed(() => props.diagram.kind === 'fallback' ? props.diagram as TeachingDiagramFallback : null)
+const displayDiagram = computed<StructuredTeachingDiagram>(() => fallback.value?.diagram ?? props.diagram as StructuredTeachingDiagram)
+const visualHint = computed(() => visualHintMap[displayDiagram.value.graph_type] || '结合图形理解知识结构')
+const keyPoints = computed(() => displayDiagram.value.teaching_content?.key_points || [])
+const commonMistakes = computed(() => displayDiagram.value.teaching_content?.common_mistakes || [])
+const examples = computed(() => displayDiagram.value.teaching_content?.examples || [])
 
 // compact 模式下点击展开完整图解
 const handleExpand = () => {
-  if (props.compact) emit('expand', props.diagram)
+  if (props.compact) emit('expand', fallback.value?.diagram ?? props.diagram)
 }
 </script>
 
 <style scoped>
+.diagram-image-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.diagram-image-fallback p { margin: 0; font-size: 14px; }
+.diagram-image-fallback button { padding: 6px 10px; color: #92400e; background: #fff; border: 1px solid #f59e0b; border-radius: 6px; cursor: pointer; }
+.diagram-image-fallback button:disabled { cursor: wait; opacity: .65; }
+
 .diagram-card {
   --diagram-blue: #2563eb;
   --diagram-blue-soft: #eff6ff;
@@ -218,6 +248,15 @@ const handleExpand = () => {
   overflow: hidden;
   border-radius: 10px;
   box-shadow: 0 7px 24px rgba(15, 23, 42, 0.07);
+}
+
+.diagram-card.visual-only {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .diagram-card.is-interactive {
@@ -339,6 +378,11 @@ const handleExpand = () => {
   display: block;
 }
 
+.visual-only .diagram-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
 .visual-panel {
   position: relative;
   min-width: 0;
@@ -355,6 +399,10 @@ const handleExpand = () => {
 .compact .visual-panel {
   border: 0;
   border-radius: 0;
+}
+
+.visual-only .visual-panel {
+  border-radius: 10px;
 }
 
 .visual-toolbar {
@@ -385,6 +433,11 @@ const handleExpand = () => {
   max-height: 290px;
   padding: 12px;
   overflow: hidden;
+}
+
+.visual-only .visual-viewport {
+  min-height: min(72vh, 720px);
+  padding: 24px;
 }
 
 .visual-wrapper {

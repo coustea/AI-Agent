@@ -1,4 +1,4 @@
-import type { TeachingDiagram } from '@/features/chat/types/chat'
+import type { StructuredTeachingDiagram, TeachingDiagram } from '@/features/chat/types/chat'
 
 export interface PendingFile {
   file?: File
@@ -66,6 +66,13 @@ export interface ChatMsg {
 }
 
 // 将活动中所有 running 状态统一标记为 done/failed
+export const assignPersistedAssistantMessageId = (message: ChatMsg, savedMessageId: unknown): number => {
+  if (typeof savedMessageId === 'number' && Number.isSafeInteger(savedMessageId) && savedMessageId > 0) {
+    message.id = savedMessageId
+  }
+  return message.id
+}
+
 export const finalizeRunningAgentActivities = (
   activities: AgentActivity[] | undefined,
   status: Extract<AgentActivity['status'], 'done' | 'failed'>,
@@ -110,15 +117,56 @@ const SUPPORTED_DIAGRAM_TYPES = new Set([
   'timeline',
 ])
 
-// 校验教学图解结构完整性和类型支持
-export const normalizeTeachingDiagram = (diagram: TeachingDiagram | null | undefined): TeachingDiagram | null => {
+const isStructuredTeachingDiagram = (diagram: unknown): diagram is StructuredTeachingDiagram => {
+  if (!diagram || typeof diagram !== 'object') return false
+  const candidate = diagram as Partial<StructuredTeachingDiagram>
+  return Boolean(
+    typeof candidate.graph_type === 'string'
+    && SUPPORTED_DIAGRAM_TYPES.has(candidate.graph_type)
+    && candidate.title
+    && candidate.visual_content
+    && candidate.teaching_content,
+  )
+}
+
+// 兼容旧的结构化 payload、PNG payload，以及 PNG 生成失败时保留的结构化回退。
+export const normalizeTeachingDiagram = (diagram: unknown): TeachingDiagram | null => {
   if (!diagram || typeof diagram !== 'object') return null
-  if (!SUPPORTED_DIAGRAM_TYPES.has(diagram.graph_type)) return null
-  if (!diagram.title || !diagram.visual_content || !diagram.teaching_content) return null
-  return diagram
+  const candidate = diagram as Record<string, unknown>
+  if (candidate.kind === 'image') {
+    return typeof candidate.title === 'string' && typeof candidate.image_url === 'string' && candidate.image_url
+      ? candidate as unknown as TeachingDiagram
+      : null
+  }
+  if (candidate.kind === 'fallback') {
+    return isStructuredTeachingDiagram(candidate.diagram)
+      && typeof candidate.render_error === 'string'
+      && typeof candidate.retryable === 'boolean'
+      ? candidate as unknown as TeachingDiagram
+      : null
+  }
+  return isStructuredTeachingDiagram(candidate) ? candidate : null
 }
 
 // 根据文件名获取文档类型分类
+export interface InputToolState {
+  uploadingFile: boolean
+  enableWebSearch: boolean
+  needTeachingDiagram: boolean
+}
+
+export const getInputToolStateKey = ({
+  uploadingFile,
+  enableWebSearch,
+  needTeachingDiagram,
+}: InputToolState): string => (
+  [
+    uploadingFile ? 'uploading' : 'idle',
+    enableWebSearch ? 'web-on' : 'web-off',
+    needTeachingDiagram ? 'diagram-on' : 'diagram-off',
+  ].join(':')
+)
+
 export const getDocumentType = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
   if (['doc', 'docx'].includes(ext)) return 'word'

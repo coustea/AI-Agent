@@ -840,3 +840,32 @@ COMMENT ON COLUMN wrong_questions.user_answer IS '用户作答';
 COMMENT ON COLUMN wrong_questions.wrong_count IS '累计错误次数';
 COMMENT ON COLUMN wrong_questions.note IS '用户备注笔记';
 COMMENT ON COLUMN wrong_questions.is_archived IS '是否已归档（已掌握）';
+
+-- ============================================================
+-- 20. quiz_answer_history
+-- ============================================================
+CREATE TABLE IF NOT EXISTS quiz_answer_history (
+    id                SERIAL          PRIMARY KEY,
+    user_id           INTEGER         NOT NULL,
+    question_id       VARCHAR(255)    NOT NULL,
+    subject           VARCHAR(255),
+    question_type     VARCHAR(100),
+    user_answer       TEXT,
+    is_correct        BOOLEAN         NOT NULL DEFAULT FALSE,
+    created_at        TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_quiz_answer_history_user_id
+    ON quiz_answer_history (user_id);
+CREATE INDEX IF NOT EXISTS ix_quiz_answer_history_question_id
+    ON quiz_answer_history (question_id);
+CREATE INDEX IF NOT EXISTS ix_quiz_answer_history_user_question
+    ON quiz_answer_history (user_id, question_id);
+CREATE INDEX IF NOT EXISTS ix_quiz_answer_history_user_created
+    ON quiz_answer_history (user_id, created_at);
+
+COMMENT ON TABLE quiz_answer_history IS '题库答题历史表，记录用户每次作答结果';
+COMMENT ON COLUMN quiz_answer_history.user_id IS '用户ID';
+COMMENT ON COLUMN quiz_answer_history.question_id IS '题目唯一标识';
+COMMENT ON COLUMN quiz_answer_history.user_answer IS '用户本次作答';
+COMMENT ON COLUMN quiz_answer_history.is_correct IS '本次作答是否正确';

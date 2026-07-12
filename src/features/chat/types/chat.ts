@@ -195,7 +195,8 @@ export type VisualContent =
   | TimelinePayload
 
 // 完整教学图解结构（含视觉数据和教学内容）
-export interface TeachingDiagram {
+export interface StructuredTeachingDiagram {
+  kind?: undefined
   graph_type: TeachingDiagramType
   title: string
   subtitle?: string | null
@@ -205,6 +206,27 @@ export interface TeachingDiagram {
   visual_content: VisualContent
   teaching_content: TeachingContent
 }
+
+export interface TeachingDiagramImage {
+  kind: 'image'
+  title: string
+  subtitle?: string | null
+  graph_type?: TeachingDiagramType | string
+  image_url: string
+  filename?: string
+  mime_type?: 'image/png' | string
+  width?: number
+  height?: number
+}
+
+export interface TeachingDiagramFallback {
+  kind: 'fallback'
+  diagram: StructuredTeachingDiagram
+  render_error: string
+  retryable: boolean
+}
+
+export type TeachingDiagram = StructuredTeachingDiagram | TeachingDiagramImage | TeachingDiagramFallback
 
 // 聊天消息（含附件、工具调用、活动状态、图解）
 export interface ChatMessageItem {

@@ -855,6 +855,27 @@ class PathNodeResource(SQLModel, table=True):
 # Wrong Question — 错题本
 # ---------------------------------------------------------------------------
 
+class QuizAnswerHistory(SQLModel, table=True):
+    """答题历史表 — 记录用户每次答题的作答结果。"""
+    __tablename__ = "quiz_answer_history"
+    __table_args__ = (
+        Index("ix_quiz_answer_history_user_question", "user_id", "question_id"),
+        Index("ix_quiz_answer_history_user_created", "user_id", "created_at"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    question_id: str = Field(max_length=255, index=True)
+    subject: str | None = Field(default=None, max_length=255)
+    question_type: str | None = Field(default=None, max_length=100)
+    user_answer: str | None = Field(default=None, sa_column=Column(Text))
+    is_correct: bool = Field(default=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+
+
 class WrongQuestion(SQLModel, table=True):
     """错题本表 — 记录用户答错的题目"""
     __tablename__ = "wrong_questions"
@@ -913,6 +934,7 @@ REGISTERED_MODELS = (
     GeneratedResourceItem,
     GeneratedResourceAgentRun,
     QuizQuestion,
+    QuizAnswerHistory,
     LearningEvent,
     LearningSession,
     LearningPath,
