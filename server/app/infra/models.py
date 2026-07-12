@@ -397,7 +397,7 @@ class UserProfileDimension(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
+    user_id: int = Field()
     dimension_key: str = Field(max_length=50, index=True)
 
     # 维度正文描述（原 dimensions[*].value）
