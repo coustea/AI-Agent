@@ -48,8 +48,8 @@
 - `id`: 格式 `s01`、`s02`…，连续不重复
 - `kind`: 从上述页面叙事角色中选择
 - `title`: 1～54 字符
-- `teaching_goal`: 12～150 字符
-- `content_focus`: 12～180 字符
+- `teaching_goal`: 至少 12 个字符，请详细描述本页要达成的教学目标
+- `content_focus`: 至少 12 个字符，请详细描述本页内容重点
 - `visual_kind`: 从上述视觉类型中选择
 - `layout`: 从上述布局版式中选择
 
