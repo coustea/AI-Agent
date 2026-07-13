@@ -200,8 +200,16 @@
                       v-for="item in form.currentKnowledge"
                       :key="item"
                       class="custom-tag-node"
+                      :style="getKnowledgeToneStyle(item)"
                   >
-                    <span>{{ item }}</span>
+                    <span
+                        class="knowledge-tag-dot"
+                        aria-hidden="true"
+                    ></span>
+
+                    <span class="knowledge-tag-label">
+                      {{ item }}
+                    </span>
 
                     <button
                         type="button"
@@ -237,14 +245,22 @@
                     :class="{
                     'is-selected': form.currentKnowledge.includes(item),
                   }"
+                    :style="getKnowledgeToneStyle(item)"
                     :aria-pressed="form.currentKnowledge.includes(item)"
                     @click="toggleKnowledge(item)"
                 >
-                  <ph-check
-                      v-if="form.currentKnowledge.includes(item)"
-                      :size="12"
-                      weight="bold"
-                  />
+                  <span
+                      class="knowledge-option-indicator"
+                      aria-hidden="true"
+                  >
+                    <ph-check
+                        v-if="form.currentKnowledge.includes(item)"
+                        :size="11"
+                        weight="bold"
+                    />
+
+                    <span v-else></span>
+                  </span>
 
                   <span>{{ item }}</span>
                 </button>
@@ -607,6 +623,8 @@
                     'is-active': currentPlanningIndex === index,
                     'is-done': currentPlanningIndex > index,
                   }"
+                    :style="getPlanningStepStyle(step, index)"
+                    :aria-current="currentPlanningIndex === index ? 'step' : undefined"
                 >
                   <div class="node-circle-indicator">
                     <ph-check
@@ -660,7 +678,7 @@
                   <div
                       class="progress-bar-minimal-fill"
                       :style="{
-                      width: `${planningProgress}%`,
+                      transform: `scaleX(${planningProgress / 100})`,
                     }"
                   ></div>
                 </div>
@@ -701,18 +719,21 @@ import {
   reactive,
   ref,
 } from 'vue'
+import type { CSSProperties } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import {
-  createLearningPath,
-} from '@/features/learning-path/api/path'
+import { createLearningPath } from '@/features/learning-path/api/path'
 
 import type {
   PathRequest,
 } from '@/features/learning-path/model/path'
 import type { PathEvent } from '@/features/learning-path/model/pathEvent'
 import { usePathEvents } from '@/features/learning-path/composables/usePathEvents'
+import {
+  runPathCompletionTransition,
+  waitForPathTerminalEvent,
+} from '@/features/learning-path/model/pathCompletion'
 
 type Scene =
     | 'exam'
@@ -755,10 +776,19 @@ interface ExampleItem {
   tone: ExampleTone
 }
 
+interface PlanningStepTone {
+  start: string
+  end: string
+  soft: string
+  text: string
+  glow: string
+}
+
 interface PlanningStep {
   key: string
   title: string
   threshold: number
+  tone: PlanningStepTone
 }
 
 const router = useRouter()
@@ -778,6 +808,8 @@ let progressTimer: number | null = null
 // SSE 事件管理
 const pathEvents = usePathEvents()
 let sseCompleted = false
+let isUnmounted = false
+let pathWaitController: AbortController | null = null
 
 const form = reactive({
   topic: '',
@@ -872,31 +904,156 @@ const quickKnowledge = [
   'Linux',
 ]
 
+const knowledgeTones = [
+  {
+    start: '#5b87d8',
+    end: '#7ca2e5',
+    soft: '#f3f7fd',
+    border: '#c8d8ef',
+    text: '#3f6398',
+    glow: 'rgba(91, 135, 216, 0.12)',
+  },
+  {
+    start: '#786ccc',
+    end: '#998fe0',
+    soft: '#f6f4fd',
+    border: '#d2cced',
+    text: '#5c52a0',
+    glow: 'rgba(120, 108, 204, 0.12)',
+  },
+  {
+    start: '#d1844c',
+    end: '#e2a06e',
+    soft: '#fff7f1',
+    border: '#efd0b7',
+    text: '#9b6139',
+    glow: 'rgba(209, 132, 76, 0.12)',
+  },
+  {
+    start: '#c3982f',
+    end: '#d6b65f',
+    soft: '#fffbef',
+    border: '#eadcae',
+    text: '#896b20',
+    glow: 'rgba(195, 152, 47, 0.12)',
+  },
+  {
+    start: '#cf7863',
+    end: '#df9988',
+    soft: '#fff5f2',
+    border: '#edc8bf',
+    text: '#985747',
+    glow: 'rgba(207, 120, 99, 0.12)',
+  },
+  {
+    start: '#896fc2',
+    end: '#a690d2',
+    soft: '#f8f5fc',
+    border: '#d8cdec',
+    text: '#665292',
+    glow: 'rgba(137, 111, 194, 0.12)',
+  },
+  {
+    start: '#3b95a2',
+    end: '#66aeb8',
+    soft: '#f1f9fa',
+    border: '#badde1',
+    text: '#2a6c75',
+    glow: 'rgba(59, 149, 162, 0.12)',
+  },
+  {
+    start: '#4f9472',
+    end: '#77ad8e',
+    soft: '#f2f9f5',
+    border: '#bfddcc',
+    text: '#386b52',
+    glow: 'rgba(79, 148, 114, 0.12)',
+  },
+] as const
+
+const knowledgeToneAliases: Record<string, number> = {
+  python: 0,
+  css: 0,
+  '计算机网络': 0,
+  '计算机网络基础': 0,
+  'c++': 1,
+  '数据结构': 5,
+  '数据结构基础': 5,
+  '数组': 5,
+  '链表': 5,
+  java: 2,
+  '操作系统': 2,
+  '操作系统基础': 2,
+  javascript: 3,
+  js: 3,
+  html: 4,
+  'c语言': 4,
+  '数据库': 6,
+  '数据库基础': 6,
+  sql: 6,
+  linux: 7,
+}
+
 const planningSteps: PlanningStep[] = [
   {
     key: 'profile',
     title: '结合学习画像',
     threshold: 10,
+    tone: {
+      start: '#4f8cf7',
+      end: '#70b1ff',
+      soft: '#edf5ff',
+      text: '#356eb8',
+      glow: 'rgba(79, 140, 247, 0.18)',
+    },
   },
   {
     key: 'stage',
     title: '拆解学习阶段',
     threshold: 30,
+    tone: {
+      start: '#796fe8',
+      end: '#a88bff',
+      soft: '#f2efff',
+      text: '#6252b8',
+      glow: 'rgba(121, 111, 232, 0.18)',
+    },
   },
   {
     key: 'node',
     title: '编排知识节点',
     threshold: 52,
+    tone: {
+      start: '#ee9154',
+      end: '#f3be69',
+      soft: '#fff4e8',
+      text: '#a76032',
+      glow: 'rgba(238, 145, 84, 0.19)',
+    },
   },
   {
     key: 'validate',
     title: '校验路径依赖',
     threshold: 74,
+    tone: {
+      start: '#d96d9c',
+      end: '#ef9cbe',
+      soft: '#fff0f6',
+      text: '#a54f78',
+      glow: 'rgba(217, 109, 156, 0.18)',
+    },
   },
   {
     key: 'save',
     title: '保存路径结构',
     threshold: 90,
+    tone: {
+      start: '#1fa899',
+      end: '#56c7b9',
+      soft: '#eaf9f6',
+      text: '#14766d',
+      glow: 'rgba(31, 168, 153, 0.19)',
+    },
   },
 ]
 
@@ -1046,6 +1203,56 @@ const currentPlanningStepNumber = computed(() => {
       planningSteps.length,
   )
 })
+
+function getPlanningStepStyle(
+    step: PlanningStep,
+    index: number,
+): CSSProperties {
+  const nextStep =
+      planningSteps[index + 1] ?? step
+
+  return {
+    '--timeline-node-start': step.tone.start,
+    '--timeline-node-end': step.tone.end,
+    '--timeline-node-soft': step.tone.soft,
+    '--timeline-node-text': step.tone.text,
+    '--timeline-node-glow': step.tone.glow,
+    '--timeline-next-start': nextStep.tone.start,
+  } as CSSProperties
+}
+
+function getKnowledgeToneStyle(
+    value: string,
+): CSSProperties {
+  const normalized = value.trim().toLowerCase()
+  const mappedIndex = knowledgeToneAliases[normalized]
+
+  let toneIndex = mappedIndex
+
+  if (toneIndex === undefined) {
+    let hash = 0
+
+    for (const char of normalized) {
+      hash = (
+          hash * 31 +
+          char.codePointAt(0)!
+      ) >>> 0
+    }
+
+    toneIndex = hash % knowledgeTones.length
+  }
+
+  const tone = knowledgeTones[toneIndex]!
+
+  return {
+    '--knowledge-tone-start': tone.start,
+    '--knowledge-tone-end': tone.end,
+    '--knowledge-tone-soft': tone.soft,
+    '--knowledge-tone-border': tone.border,
+    '--knowledge-tone-text': tone.text,
+    '--knowledge-tone-glow': tone.glow,
+  } as CSSProperties
+}
 
 function autoResize() {
   if (!goalRef.value) {
@@ -1254,6 +1461,8 @@ function startProgressAnimation() {
 
 function resetPlanningState() {
   clearProgressTimer()
+  pathWaitController?.abort()
+  pathWaitController = null
   pathEvents.reset()
 
   isPlanning.value = false
@@ -1265,6 +1474,8 @@ function resetPlanningState() {
 
 async function retryPlanning() {
   clearProgressTimer()
+  pathWaitController?.abort()
+  pathWaitController = null
   pathEvents.reset()
   sseCompleted = false
 
@@ -1301,45 +1512,83 @@ async function waitForPathReady(
     runId: string,
 ) {
   sseCompleted = false
+  pathWaitController?.abort()
+  const waitController = new AbortController()
+  pathWaitController = waitController
 
-  // 连接 SSE 事件流
-  pathEvents.connect(pathId, runId, {
-    onEvent: handleSSEEvent,
-    onCompleted: async () => {
-      sseCompleted = true
-      clearProgressTimer()
-      planningProgress.value = 100
-      addPlanningLog('路径结构生成完成，正在打开路径总览。')
+  let completionPromise: Promise<void> | null = null
 
-      // 立即跳转到路径展示页面，无需额外延迟
-      isPlanning.value = false
-      isSubmitting.value = false
+  const completePlanning = () => {
+    if (completionPromise) {
+      return completionPromise
+    }
 
-      await router.push({
-        path: `/path-planner/overview/${pathId}`,
-        query: { run_id: runId },
-      })
-    },
-    onFailed: (error) => {
-      sseCompleted = true
-      clearProgressTimer()
-      planningProgress.value = Math.min(planningProgress.value, 96)
-      planningError.value = error.message || '路径规划失败，请调整参数后重试'
-      toast.error(planningError.value)
-    },
-  })
+    sseCompleted = true
+    pathEvents.close()
+    completionPromise = runPathCompletionTransition({
+      markComplete: () => {
+        clearProgressTimer()
+        planningProgress.value = 100
+        addPlanningLog(
+            '路径结构生成完成，正在打开路径总览。',
+        )
+      },
+      waitForRender: nextTick,
+      wait: delay,
+      navigate: () => {
+        if (isUnmounted) {
+          return Promise.resolve()
+        }
 
-  // 超时保护（180 秒）
-  const startedAt = Date.now()
-  const timeoutMs = 180_000
+        return router.push({
+          path: `/path-planner/overview/${pathId}`,
+          query: { run_id: runId },
+        })
+      },
+    })
 
-  while (!sseCompleted && Date.now() - startedAt < timeoutMs) {
-    await delay(500)
+    return completionPromise
   }
 
-  if (!sseCompleted) {
+  const failPlanning = (error: Error) => {
+    if (sseCompleted) {
+      return
+    }
+
+    sseCompleted = true
     pathEvents.close()
-    throw new Error('路径规划等待超时，请稍后前往历史路径查看生成结果。')
+    clearProgressTimer()
+    planningProgress.value = Math.min(
+        planningProgress.value,
+        96,
+    )
+    planningError.value =
+        error.message ||
+        '路径规划失败，请调整参数后重试'
+    toast.error(planningError.value)
+  }
+
+  try {
+    await waitForPathTerminalEvent({
+      timeoutMs: 180_000,
+      signal: waitController.signal,
+      start: ({ onCompleted, onFailed }) => {
+        pathEvents.connect(pathId, runId, {
+          onEvent: handleSSEEvent,
+          onCompleted,
+          onFailed,
+        })
+      },
+      onCompleted: completePlanning,
+      onFailed: failPlanning,
+      onTimeout: () => {
+        pathEvents.close()
+      },
+    })
+  } finally {
+    if (pathWaitController === waitController) {
+      pathWaitController = null
+    }
   }
 }
 
@@ -1416,6 +1665,10 @@ async function handleSubmit() {
 }
 
 onBeforeUnmount(() => {
+  isUnmounted = true
+  sseCompleted = true
+  pathWaitController?.abort()
+  pathWaitController = null
   pathEvents.close()
   clearProgressTimer()
 })
@@ -1621,6 +1874,14 @@ onBeforeUnmount(() => {
 }
 
 .micro-template-gallery-card {
+  --template-tone: #159a94;
+  --template-tone-end: #47bdb5;
+  --template-tone-soft: #eef9f8;
+  --template-tone-softer: #f7fcfb;
+  --template-tone-border: #91d4d0;
+  --template-tone-text: #176b67;
+  --template-tone-glow: rgba(21, 154, 148, 0.15);
+
   position: relative;
   display: grid;
   grid-template-columns:
@@ -1630,60 +1891,154 @@ onBeforeUnmount(() => {
   min-width: 0;
   height: 64px;
   padding: 10px 13px;
+  overflow: hidden;
   border: 1px solid var(--planner-border);
   border-radius: 8px;
   background: var(--planner-surface);
   color: var(--template-tone);
   text-align: left;
   cursor: pointer;
+  isolation: isolate;
   transition:
       border-color 180ms ease,
-      background-color 180ms ease,
+      background 180ms ease,
       box-shadow 180ms ease,
       transform 180ms ease;
 }
 
+.micro-template-gallery-card::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background:
+      linear-gradient(
+          180deg,
+          var(--template-tone),
+          var(--template-tone-end)
+      );
+  content: '';
+  opacity: 0;
+  transform: scaleY(0.4);
+  transform-origin: center;
+  transition:
+      opacity 180ms ease,
+      transform 180ms ease;
+}
+
 .micro-template-gallery-card:hover {
-  border-color: #b9cfcd;
-  background: #fbfdfd;
+  border-color: var(--template-tone-border);
+  background:
+      linear-gradient(
+          135deg,
+          var(--template-tone-softer),
+          #ffffff 72%
+      );
+  box-shadow:
+      0 5px 14px
+      var(--template-tone-glow);
   transform: translateY(-1px);
 }
 
+.micro-template-gallery-card:hover::before {
+  opacity: 0.52;
+  transform: scaleY(0.72);
+}
+
 .micro-template-gallery-card:focus-visible {
-  outline: 3px solid var(--planner-focus-ring);
+  outline: 3px solid var(--template-tone-glow);
   outline-offset: 2px;
 }
 
 .micro-template-gallery-card.is-selected {
-  border-color: var(--planner-accent-border);
-  background: var(--planner-accent-softer);
+  border-color: var(--template-tone);
+  background:
+      linear-gradient(
+          135deg,
+          var(--template-tone-soft),
+          #ffffff 76%
+      );
   box-shadow:
       0 0 0 2px
-      rgba(21, 154, 148, 0.06);
+      var(--template-tone-glow),
+      0 7px 18px
+      var(--template-tone-glow);
   transform: translateY(-1px);
+}
+
+.micro-template-gallery-card.is-selected::before {
+  opacity: 1;
+  transform: scaleY(1);
 }
 
 .micro-template-gallery-card.teal {
   --template-tone: #159a94;
+  --template-tone-end: #47bdb5;
+  --template-tone-soft: #eef9f8;
+  --template-tone-softer: #f7fcfb;
+  --template-tone-border: #91d4d0;
+  --template-tone-text: #176b67;
+  --template-tone-glow: rgba(21, 154, 148, 0.15);
 }
 
 .micro-template-gallery-card.blue {
   --template-tone: #4d83ba;
+  --template-tone-end: #75a8db;
+  --template-tone-soft: #eff6fc;
+  --template-tone-softer: #f7fbfe;
+  --template-tone-border: #a9c9e8;
+  --template-tone-text: #35658f;
+  --template-tone-glow: rgba(77, 131, 186, 0.15);
 }
 
 .micro-template-gallery-card.amber {
   --template-tone: #d4922a;
+  --template-tone-end: #efb24d;
+  --template-tone-soft: #fff7e8;
+  --template-tone-softer: #fffaf2;
+  --template-tone-border: #efc77e;
+  --template-tone-text: #9a6418;
+  --template-tone-glow: rgba(212, 146, 42, 0.16);
 }
 
 .micro-template-gallery-card.violet {
   --template-tone: #8068b5;
+  --template-tone-end: #a18bd1;
+  --template-tone-soft: #f5f1fb;
+  --template-tone-softer: #faf8fd;
+  --template-tone-border: #c9b9e4;
+  --template-tone-text: #654c97;
+  --template-tone-glow: rgba(128, 104, 181, 0.15);
 }
 
 .category-glow-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: currentColor;
+  background:
+      linear-gradient(
+          135deg,
+          var(--template-tone),
+          var(--template-tone-end)
+      );
+  box-shadow:
+      0 0 0 3px
+      var(--template-tone-glow);
+  transition:
+      box-shadow 180ms ease,
+      transform 180ms ease;
+}
+
+.micro-template-gallery-card:hover
+.category-glow-dot,
+.micro-template-gallery-card.is-selected
+.category-glow-dot {
+  box-shadow:
+      0 0 0 4px
+      var(--template-tone-glow);
+  transform: scale(1.08);
 }
 
 .micro-card-meta {
@@ -1700,6 +2055,7 @@ onBeforeUnmount(() => {
   line-height: var(--planner-line-control);
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 180ms ease;
 }
 
 .micro-card-meta > span {
@@ -1711,6 +2067,18 @@ onBeforeUnmount(() => {
   line-height: var(--planner-line-control);
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 180ms ease;
+}
+
+.micro-template-gallery-card.is-selected
+.micro-card-meta strong {
+  color: var(--template-tone-text);
+}
+
+.micro-template-gallery-card.is-selected
+.micro-card-meta > span {
+  color: var(--template-tone-text);
+  opacity: 0.76;
 }
 
 .template-selected-mark {
@@ -1720,8 +2088,19 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--planner-accent);
+  background:
+      linear-gradient(
+          135deg,
+          var(--template-tone),
+          var(--template-tone-end)
+      );
   color: #ffffff;
+  box-shadow:
+      0 4px 10px
+      var(--template-tone-glow);
+  animation:
+      template-mark-enter
+      220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .structured-form-panel {
@@ -1873,8 +2252,8 @@ onBeforeUnmount(() => {
 }
 
 .tag-input-bezel-box {
-  min-height: 43px;
-  padding: 6px 11px;
+  min-height: 44px;
+  padding: 7px 10px;
   border: 1px solid var(--planner-border);
   border-radius: 6px;
   background: var(--planner-surface);
@@ -1894,13 +2273,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .tag-inner-flex input {
-  min-width: 170px;
+  min-width: 190px;
   flex: 1;
-  padding: 4px 0;
+  padding: 3px 2px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -1910,25 +2289,52 @@ onBeforeUnmount(() => {
 }
 
 .custom-tag-node {
+  --knowledge-tone-start: #159a94;
+  --knowledge-tone-end: #4bbdb5;
+  --knowledge-tone-soft: #f3faf9;
+  --knowledge-tone-border: #bddfdd;
+  --knowledge-tone-text: #176b67;
+  --knowledge-tone-glow: rgba(21, 154, 148, 0.1);
+
   display: inline-flex;
   min-height: 28px;
   align-items: center;
   gap: 6px;
-  padding: 3px 7px 3px 9px;
-  border: 1px solid
-  var(--planner-accent-border);
+  padding: 3px 5px 3px 8px;
+  border: 1px solid var(--knowledge-tone-border);
   border-radius: 6px;
-  background: var(--planner-accent-soft);
-  color: var(--planner-accent-text);
+  background: var(--knowledge-tone-soft);
+  color: var(--knowledge-tone-text);
   font-size: var(--planner-font-control);
-  font-weight: 650;
+  font-weight: 600;
   line-height: var(--planner-line-control);
+  transition:
+      border-color 160ms ease,
+      background-color 160ms ease;
+}
+
+.custom-tag-node:hover {
+  border-color: var(--knowledge-tone-start);
+}
+
+.knowledge-tag-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--knowledge-tone-start);
+  box-shadow: 0 0 0 3px var(--knowledge-tone-glow);
+}
+
+.knowledge-tag-label {
+  min-width: 0;
+  line-height: 1.35;
 }
 
 .tag-close-trigger {
   display: inline-flex;
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -1937,21 +2343,21 @@ onBeforeUnmount(() => {
   background: transparent;
   color: inherit;
   cursor: pointer;
-  opacity: 0.65;
+  opacity: 0.56;
   transition:
       opacity 150ms ease,
       background-color 150ms ease;
 }
 
 .tag-close-trigger:hover {
-  background: rgba(21, 154, 148, 0.1);
+  background: var(--knowledge-tone-glow);
   opacity: 1;
 }
 
 .quick-tags-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   margin-top: 11px;
 }
 
@@ -1966,38 +2372,74 @@ onBeforeUnmount(() => {
       border-color 160ms ease,
       background-color 160ms ease,
       color 160ms ease,
-      box-shadow 160ms ease,
-      transform 160ms ease;
+      box-shadow 160ms ease;
 }
 
 .planner-knowledge-option {
+  --knowledge-tone-start: #159a94;
+  --knowledge-tone-end: #4bbdb5;
+  --knowledge-tone-soft: #f3faf9;
+  --knowledge-tone-border: #bddfdd;
+  --knowledge-tone-text: #176b67;
+  --knowledge-tone-glow: rgba(21, 154, 148, 0.1);
+
   display: inline-flex;
   min-height: 32px;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 0 12px;
+  gap: 7px;
+  padding: 0 11px;
   border: 1px solid var(--planner-border);
   border-radius: 999px;
   background: var(--planner-surface);
+  color: var(--planner-text-secondary);
   font-weight: 600;
 }
 
+.knowledge-option-indicator {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  transition:
+      background 160ms ease,
+      box-shadow 160ms ease;
+}
+
+.knowledge-option-indicator > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--knowledge-tone-start);
+  opacity: 0.82;
+}
+
 .planner-knowledge-option:hover {
-  border-color: var(--planner-accent-border);
-  background: var(--planner-accent-softer);
-  color: var(--planner-accent-text);
-  transform: translateY(-1px);
+  border-color: var(--knowledge-tone-border);
+  background: var(--knowledge-tone-soft);
+  color: var(--knowledge-tone-text);
 }
 
 .planner-knowledge-option.is-selected {
-  border-color: var(--planner-accent-border);
-  background: var(--planner-accent-soft);
-  color: var(--planner-accent-text);
+  border-color: var(--knowledge-tone-border);
+  background: var(--knowledge-tone-soft);
+  color: var(--knowledge-tone-text);
   font-weight: 700;
-  box-shadow:
-      0 0 0 2px
-      rgba(21, 154, 148, 0.05);
+  box-shadow: inset 0 0 0 1px var(--knowledge-tone-glow);
+}
+
+.planner-knowledge-option.is-selected
+.knowledge-option-indicator {
+  background:
+      linear-gradient(
+          135deg,
+          var(--knowledge-tone-start),
+          var(--knowledge-tone-end)
+      );
+  box-shadow: 0 2px 5px var(--knowledge-tone-glow);
 }
 
 .planner-knowledge-option:focus-visible,
@@ -2374,6 +2816,13 @@ onBeforeUnmount(() => {
 }
 
 .student-timeline-node {
+  --timeline-node-start: #7f9b98;
+  --timeline-node-end: #a7bfbc;
+  --timeline-node-soft: #f2f7f6;
+  --timeline-node-text: #58726f;
+  --timeline-node-glow: rgba(73, 111, 107, 0.14);
+  --timeline-next-start: #a7bfbc;
+
   position: relative;
   display: flex;
   min-width: 0;
@@ -2386,24 +2835,58 @@ onBeforeUnmount(() => {
 .node-circle-indicator {
   position: relative;
   z-index: 2;
+  isolation: isolate;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   place-items: center;
-  border: 2px solid
-  var(--planner-border);
+  border: 2px solid transparent;
   border-radius: 50%;
-  background: #ffffff;
-  color: var(--planner-text-faint);
+  background:
+      linear-gradient(#ffffff, #ffffff)
+      padding-box,
+      linear-gradient(
+          135deg,
+          var(--timeline-node-start),
+          var(--timeline-node-end)
+      ) border-box;
+  color: var(--timeline-node-text);
+  box-shadow:
+      0 2px 8px
+      rgba(39, 72, 75, 0.055);
   font-family: var(--font-mono, monospace);
   font-size: var(--planner-font-micro);
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1;
   transition:
-      border-color 240ms ease,
-      background-color 240ms ease,
-      color 240ms ease,
-      box-shadow 240ms ease;
+      color 260ms ease,
+      box-shadow 260ms ease,
+      transform 260ms ease,
+      filter 260ms ease;
+}
+
+.node-circle-indicator::after {
+  position: absolute;
+  z-index: -1;
+  inset: -6px;
+  border-radius: inherit;
+  background:
+      radial-gradient(
+          circle,
+          var(--timeline-node-glow) 0%,
+          transparent 70%
+      );
+  content: '';
+  opacity: 0;
+  transform: scale(0.76);
+  transition:
+      opacity 260ms ease,
+      transform 260ms ease;
+}
+
+.node-circle-indicator > * {
+  position: relative;
+  z-index: 1;
 }
 
 .node-text-label {
@@ -2415,52 +2898,100 @@ onBeforeUnmount(() => {
   text-align: center;
   transition:
       color 240ms ease,
-      font-weight 240ms ease;
+      font-weight 240ms ease,
+      transform 240ms ease;
 }
 
 .node-connecting-dash {
   position: absolute;
   z-index: 1;
-  top: 13px;
+  top: 14px;
   left: 50%;
   width: 100%;
   height: 2px;
+  overflow: hidden;
   background: var(--planner-border-light);
-  transition: background-color 240ms ease;
+  transition:
+      background 320ms ease,
+      box-shadow 320ms ease;
 }
 
 .student-timeline-node.is-active
 .node-circle-indicator {
-  border-color: var(--planner-accent);
-  background: var(--planner-accent-soft);
-  color: var(--planner-accent-text);
+  background:
+      linear-gradient(
+          135deg,
+          var(--timeline-node-soft),
+          #ffffff
+      ) padding-box,
+      linear-gradient(
+          135deg,
+          var(--timeline-node-start),
+          var(--timeline-node-end)
+      ) border-box;
+  color: var(--timeline-node-text);
   box-shadow:
-      0 0 0 4px
-      rgba(21, 154, 148, 0.1);
+      0 0 0 5px
+      var(--timeline-node-glow),
+      0 8px 18px
+      var(--timeline-node-glow);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.student-timeline-node.is-active
+.node-circle-indicator::after {
+  opacity: 1;
+  transform: scale(1);
+  animation:
+      timeline-node-breathe
+      1.9s ease-in-out infinite;
 }
 
 .student-timeline-node.is-active
 .node-text-label {
-  color: var(--planner-accent-text);
-  font-weight: 700;
+  color: var(--timeline-node-text);
+  font-weight: 750;
+  transform: translateY(1px);
 }
 
 .student-timeline-node.is-done
 .node-circle-indicator {
-  border-color: var(--planner-accent);
-  background: var(--planner-accent);
+  background:
+      linear-gradient(
+          135deg,
+          var(--timeline-node-start),
+          var(--timeline-node-end)
+      ) border-box;
   color: #ffffff;
+  box-shadow:
+      0 5px 13px
+      var(--timeline-node-glow);
+  filter: saturate(1.02);
+}
+
+.student-timeline-node.is-done
+.node-circle-indicator::after {
+  opacity: 0.62;
+  transform: scale(0.94);
 }
 
 .student-timeline-node.is-done
 .node-text-label {
-  color: var(--planner-text-secondary);
-  font-weight: 650;
+  color: var(--timeline-node-text);
+  font-weight: 680;
 }
 
 .student-timeline-node.is-done
 .node-connecting-dash {
-  background: var(--planner-accent);
+  background:
+      linear-gradient(
+          90deg,
+          var(--timeline-node-end),
+          var(--timeline-next-start)
+      );
+  box-shadow:
+      0 1px 5px
+      var(--timeline-node-glow);
 }
 
 .student-progress-dashboard {
@@ -2519,15 +3050,15 @@ onBeforeUnmount(() => {
 }
 
 .progress-bar-minimal-fill {
+  width: 100%;
   height: 100%;
   border-radius: inherit;
-  background:
-      linear-gradient(
-          90deg,
-          #159a94,
-          #5abdb8
-      );
-  transition: width 320ms ease;
+  background: var(--planner-accent);
+  box-shadow:
+      0 1px 5px
+      rgba(21, 154, 148, 0.24);
+  transform-origin: left center;
+  transition: transform 320ms ease;
 }
 
 .student-friendly-log-box {
@@ -2754,6 +3285,31 @@ onBeforeUnmount(() => {
 .log-item-fade-enter-from {
   opacity: 0;
   transform: translateY(4px);
+}
+
+@keyframes template-mark-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes timeline-node-breathe {
+  0%,
+  100% {
+    opacity: 0.56;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
 }
 
 @keyframes pulse-spread {

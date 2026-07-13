@@ -101,7 +101,11 @@ export function useGeneration() {
   const selectedAgentsHydrated = ref(false)
 
   function selectedAgentsCacheKey(resourceId: number) {
-    return `resource-generation:selected-agents:${resourceId}`
+    return `resource-generation:selected-agents:v2:${resourceId}`
+  }
+
+  function generationStateCacheKey(resourceId: number) {
+    return `resource-generation:state:v2:${resourceId}`
   }
 
   function cacheSelectedAgents(resourceId: number, agentIds: ResourceAgentId[]) {
@@ -117,6 +121,47 @@ export function useGeneration() {
     } catch {
       return []
     }
+  }
+
+  // 缓存生成状态，支持刷新页面后恢复
+  interface CachedGenerationState {
+    naturalInput: string
+    learningScenario: LearningScenario
+    enabledAgentIds: ResourceAgentId[]
+    agentConfigs: AnyAgentConfigs
+    timestamp: number
+  }
+
+  function cacheGenerationState(resourceId: number) {
+    const state: CachedGenerationState = {
+      naturalInput: naturalInput.value,
+      learningScenario: learningScenario.value,
+      enabledAgentIds: enabledAgentIds.value,
+      agentConfigs: agentConfigs.value,
+      timestamp: Date.now(),
+    }
+    sessionStorage.setItem(generationStateCacheKey(resourceId), JSON.stringify(state))
+  }
+
+  function readCachedGenerationState(resourceId: number): CachedGenerationState | null {
+    try {
+      const raw = sessionStorage.getItem(generationStateCacheKey(resourceId))
+      if (!raw) return null
+      const state = JSON.parse(raw) as CachedGenerationState
+      // 缓存超过 24 小时则失效
+      if (Date.now() - state.timestamp > 24 * 60 * 60 * 1000) {
+        sessionStorage.removeItem(generationStateCacheKey(resourceId))
+        return null
+      }
+      return state
+    } catch {
+      return null
+    }
+  }
+
+  function clearGenerationCache(resourceId: number) {
+    sessionStorage.removeItem(selectedAgentsCacheKey(resourceId))
+    sessionStorage.removeItem(generationStateCacheKey(resourceId))
   }
 
   function hydrateSelectedAgents(resourceId: number, selectedAgents: string[]) {
@@ -554,7 +599,9 @@ export function useGeneration() {
       const { resource_id } = (await startResourceGeneration(requestParams)).data.data
       activeResourceId.value = resource_id
       selectedAgentsHydrated.value = true
+      // 缓存选中的智能体和生成状态，支持刷新恢复
       cacheSelectedAgents(resource_id, enabledAgentIds.value)
+      cacheGenerationState(resource_id)
       // 将资源 id 写入 URL query，支持刷新后恢复
       await router.replace({
         query: {
@@ -612,10 +659,21 @@ export function useGeneration() {
     activeResourceId.value = resourceId
     isGenerating.value = true
 
-    const cachedSelection = readCachedSelectedAgents(resourceId)
-    if (cachedSelection.length) {
-      enabledAgentIds.value = cachedSelection
+    // 先尝试从缓存恢复生成状态
+    const cachedState = readCachedGenerationState(resourceId)
+    if (cachedState) {
+      naturalInput.value = cachedState.naturalInput
+      learningScenario.value = cachedState.learningScenario
+      enabledAgentIds.value = cachedState.enabledAgentIds
+      agentConfigs.value = cachedState.agentConfigs
       selectedAgentsHydrated.value = true
+    } else {
+      // 无缓存时尝试从 selected_agents 缓存恢复
+      const cachedSelection = readCachedSelectedAgents(resourceId)
+      if (cachedSelection.length) {
+        enabledAgentIds.value = cachedSelection
+        selectedAgentsHydrated.value = true
+      }
     }
 
     try {
@@ -634,7 +692,8 @@ export function useGeneration() {
       generationError.value = err.message || '无法恢复资源生成任务'
       isGenerating.value = false
       currentPhase.value = 'input'
-      // 恢复失败则清除 URL 中的 resourceId 参数
+      // 恢复失败则清除 URL 中的 resourceId 参数和缓存
+      clearGenerationCache(resourceId)
       const query = { ...route.query }
       delete query.resourceId
       await router.replace({ query })
@@ -656,10 +715,14 @@ export function useGeneration() {
     if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(resourceId)
   }
 
-  // 完全重置：回到输入阶段并清理 URL 参数
+  // 完全重置：回到输入阶段并清理 URL 参数和缓存
   const reset = () => {
     stopPolling()
     stopResourceStream()
+    // 清理当前任务的缓存
+    if (activeResourceId.value) {
+      clearGenerationCache(activeResourceId.value)
+    }
     naturalInput.value = ''
     resetGenerationState()
     currentPhase.value = 'input'

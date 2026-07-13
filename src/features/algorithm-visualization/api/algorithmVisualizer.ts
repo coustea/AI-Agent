@@ -35,7 +35,7 @@ export function runVisualization(data: {
   visualizerType: VisualizerType
   language: CodeLanguage
   code: string
-  inputData?: string
+  inputData?: Record<string, unknown>
 }) {
   return http.post<ApiResponse<RunResult>>('/ai/algorithm-visualizer/run', data, {
     timeout: 60000,
