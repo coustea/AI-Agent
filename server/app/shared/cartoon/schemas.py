@@ -104,6 +104,14 @@ def motion_values() -> str:
     return ", ".join(item.value for item in MotionKind)
 
 
+def connected_visual_kind_values() -> str:
+    return "、".join(f"`{kind.value}`" for kind in _CONNECTED_VISUAL_KINDS)
+
+
+def role_values() -> str:
+    return "、".join(f"`{role.value}`" for role in VisualRole)
+
+
 def layout_guidance() -> str:
     return "\n".join(f"- `{layout.value}`：{spec.instruction}" for layout, spec in LAYOUTS.items())
 
