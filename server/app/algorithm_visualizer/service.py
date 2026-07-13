@@ -233,6 +233,9 @@ async def _auto_instrument(
 ) -> str:
     """如果代码不包含 tracer 调用，自动进行 LLM 插装。
 
+    对于模板代码（干净模板），直接从缓存或预插装结果获取。
+    对于用户自定义代码（无 tracer），调用 LLM 自动插装。
+
     Returns:
         插装后的代码（或原始代码，如果已包含 tracer 或插装失败）
     """
@@ -250,7 +253,44 @@ async def _auto_instrument(
         )
         return code
 
-    # 调用插装引擎
+    # 判断是否为模板代码（与注册表中的干净模板匹配）
+    clean_template_code = get_template_code(algorithm, language)
+    is_template_code = (code.strip() == clean_template_code.strip())
+
+    if is_template_code:
+        # 模板代码：优先尝试读取预插装模板文件
+        pre_instrumented = _try_pre_instrumented_template(algorithm, language)
+        if pre_instrumented:
+            logger.info("[Visualizer] 模板代码使用预插装版本: algorithm=%s", algorithm)
+            return pre_instrumented
+
+        # 没有预插装文件，尝试缓存
+        instrumenter = get_instrumenter()
+        result = await instrumenter.instrument(
+            clean_code=code,
+            algorithm_name=algorithm,
+            visualizer_type=algorithm_info.get("visualizer_type", "array"),
+            required_events=algorithm_info.get("required_events", []),
+            language=language,
+        )
+        if result.error:
+            logger.error(
+                "[Visualizer] 模板自动插装失败: algorithm=%s error=%s",
+                algorithm,
+                result.error,
+            )
+            raise VisualizerRunError(
+                f"模板插装失败：{result.error}。",
+                "INSTRUMENTATION_FAILED",
+            )
+        logger.info(
+            "[Visualizer] 模板缓存插装成功: algorithm=%s cached=%s",
+            algorithm,
+            result.cached,
+        )
+        return result.code
+
+    # 用户自定义代码：调用插装引擎
     instrumenter = get_instrumenter()
     result = await instrumenter.instrument(
         clean_code=code,
@@ -262,7 +302,7 @@ async def _auto_instrument(
 
     if result.error:
         logger.error(
-            "[Visualizer] 自动插装失败: algorithm=%s error=%s",
+            "[Visualizer] 自定义代码自动插装失败: algorithm=%s error=%s",
             algorithm,
             result.error,
         )
@@ -272,11 +312,34 @@ async def _auto_instrument(
         )
 
     logger.info(
-        "[Visualizer] 自动插装成功: algorithm=%s cached=%s",
+        "[Visualizer] 自定义代码自动插装成功: algorithm=%s cached=%s",
         algorithm,
         result.cached,
     )
     return result.code
+
+
+def _try_pre_instrumented_template(algorithm: str, language: str) -> str | None:
+    """尝试读取预插装模板文件。
+
+    模板目录结构：
+    templates/{domain}/{algorithm}/python_instrumented.py
+
+    Returns:
+        预插装代码，或 None（文件不存在）
+    """
+    try:
+        algorithm_info = get_algorithm_info(algorithm)
+        domain = algorithm_info["domain"]
+        filename = f"{language}_instrumented.py"
+
+        filepath = SDK_DIR.parent / "templates" / domain / algorithm / filename
+        if filepath.exists():
+            return filepath.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.warning("[Visualizer] 读取预插装模板失败: algorithm=%s error=%s", algorithm, e)
+
+    return None
 
 
 def _has_tracer_calls(code: str, language: str) -> bool:
@@ -819,7 +882,7 @@ async def run_process(
     }
 
 
-def build_runtime_config(language: str, code: str) -> RuntimeConfig:
+def normalize_event_visualizer_type(events: List[Dict[str, Any]]) -> None:
     """兼容事件字段 visualizerType / visualizer_type。
 
     前端统一使用 visualizerType。

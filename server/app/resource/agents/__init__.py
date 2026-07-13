@@ -1,7 +1,8 @@
 """资源生成智能体 — 通过 @register_agent 装饰器自动注册。
 
-每个 agent 实现 BaseResourceAgent 的 generate_resource 和 generate_node 方法，
-通过全局 AGENT_REGISTRY 字典按 agent_id 查找调用。
+每个 agent 实现以下方法：
+- generate_resource: standalone 多智能体资源生成（必需）
+- generate_for_path: 路径规划资源生成（可选，部分 agent 实现）
 """
 
 # 基类、注册表和注册装饰器

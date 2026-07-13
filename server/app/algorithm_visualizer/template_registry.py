@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List
 
 # 模板根目录
@@ -18,6 +21,40 @@ LANGUAGES: List[Dict[str, str]] = [
 _LANGUAGE_FILE_MAP: Dict[str, str] = {
     "python": "python.py",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateSpec:
+    """Complete runtime contract for one algorithm template."""
+
+    key: str
+    domain: str
+    name: str
+    visualizer_type: str
+    difficulty: str
+    entry_point: str
+    default_input: Dict[str, Any]
+    input_schema: Dict[str, Any]
+    expected_events: tuple[str, ...]
+    language: str = "python"
+
+    @property
+    def source_path(self) -> Path:
+        return Path(_TEMPLATES_DIR) / self.domain / self.key / "python.py"
+
+    @property
+    def visual_path(self) -> Path:
+        return Path(_TEMPLATES_DIR) / self.domain / self.key / "visual.py"
+
+    @property
+    def source_code(self) -> str:
+        return self.source_path.read_text(encoding="utf-8")
+
+    @property
+    def version(self) -> str:
+        normalized = self.source_code.replace("\r\n", "\n").rstrip() + "\n"
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        return f"sha256:{digest}"
 
 # 算法元信息注册表
 ALGORITHMS: Dict[str, Dict[str, Any]] = {
@@ -69,6 +106,30 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
         "difficulty": "medium",
         "supported_languages": ["python"],
         "required_events": ["init_tree", "visit_node", "finish"]
+    },
+    "bracket_match": {
+        "domain": "base_data_structure",
+        "name": "括号匹配",
+        "visualizer_type": "stack-queue",
+        "difficulty": "easy",
+        "supported_languages": ["python"],
+        "required_events": ["init_stack", "snapshot", "finish"],
+    },
+    "linked_list_reverse": {
+        "domain": "base_data_structure",
+        "name": "链表反转",
+        "visualizer_type": "linked-list",
+        "difficulty": "medium",
+        "supported_languages": ["python"],
+        "required_events": ["init_list", "snapshot", "finish"],
+    },
+    "queue_simulation": {
+        "domain": "base_data_structure",
+        "name": "队列模拟",
+        "visualizer_type": "stack-queue",
+        "difficulty": "medium",
+        "supported_languages": ["python"],
+        "required_events": ["init_queue", "snapshot", "finish"],
     },
 
     # 2. 排序算法 (sorting)
@@ -665,6 +726,90 @@ ALGORITHMS: Dict[str, Dict[str, Any]] = {
 }
 
 
+_ENTRY_POINTS: Dict[str, str] = {
+    "array_base": "array_operations",
+    "linked_list_base": "linked_list_operations",
+    "stack_base": "stack_operations",
+    "queue_base": "queue_operations",
+    "hash_table_base": "hash_table_operations",
+    "heap_base": "heap_sort",
+    "bracket_match": "is_valid_brackets",
+    "linked_list_reverse": "reverse_list",
+    "queue_simulation": "simulate_bank_queue",
+    "bubble_sort": "bubble_sort_with_bounds",
+    "selection_sort": "selection_sort",
+    "insertion_sort": "insertion_sort",
+    "shell_sort": "shell_sort",
+    "quick_sort": "quick_sort",
+    "merge_sort": "merge_sort_wrapper",
+    "heap_sort": "heap_sort",
+    "counting_sort": "counting_sort",
+    "bucket_sort": "bucket_sort",
+    "radix_sort": "radix_sort",
+    "sequential_search": "sequential_search",
+    "binary_search": "binary_search",
+    "interpolation_search": "interpolation_search",
+    "fibonacci_search": "fibonacci_search",
+    "hash_search": "hash_search",
+    "double_pointers": "reverse_array",
+    "sliding_window": "max_subarray_sum",
+    "monotonic_stack": "next_greater_element",
+    "monotonic_queue": "max_sliding_window",
+    "prefix_sum": "prefix_sum_operations",
+    "difference_array": "range_updates",
+    "binary_tree_traverse": "preorder_traversal",
+    "binary_tree_recursion": "max_depth",
+    "bst": "bst_operations",
+    "heap_tree": "build_max_heap",
+    "trie_tree": "trie_operations",
+    "segment_tree": "segment_tree_operations",
+    "fenwick_tree": "fenwick_tree_operations",
+    "graph_representation": "build_graph",
+    "graph_bfs": "bfs_all_components",
+    "graph_dfs": "dfs_graph",
+    "shortest_path": "dijkstra",
+    "topological_sort": "topological_sort",
+    "mst_kruskal": "kruskal",
+    "dsu_union": "dsu_operations",
+    "string_match_naive": "naive_match",
+    "kmp_match": "kmp_search",
+    "rabin_karp": "rabin_karp",
+    "trie_string_search": "trie_search",
+    "palindrome_check": "is_palindrome",
+    "recursion_fib": "fib_naive",
+    "permutations": "permute",
+    "subsets": "subsets",
+    "combinations": "combination_sum",
+    "n_queens": "solve_n_queens",
+    "maze_search": "solve_maze",
+    "dp_fibonacci": "fibonacci",
+    "one_d_dp": "climb_stairs",
+    "two_d_dp": "min_path_sum",
+    "knapsack_dp": "knapsack",
+    "interval_dp": "longest_palindrome_subseq",
+    "tree_dp": "rob",
+    "state_compress_dp": "tsp",
+    "interval_greedy": "activity_selection",
+    "stock_problem": "max_profit_single",
+    "jump_game": "can_jump",
+    "huffman_coding": "build_huffman_tree",
+    "covering_problem": "min_interval_cover",
+    "binary_divide": "binary_search_first",
+    "merge_divide": "merge_sort",
+    "quick_partition": "partition",
+    "recursive_divide": "tower_of_hanoi",
+    "basic_bit": "visualize_bit_operations",
+    "xor_trick": "find_single_number",
+    "bit_mask": "perm_to_mask",
+    "subset_enum": "enumerate_subsets",
+    "gcd_euclidean": "gcd",
+    "quick_power": "quick_pow",
+    "prime_sieve": "sieve_of_eratosthenes",
+    "combination_num": "pascals_triangle",
+    "mod_arithmetic": "mod_pow",
+}
+
+
 # 按 domain 过滤并返回所有算法信息列表
 def get_all_algorithms(domain: str = "all") -> List[Dict[str, Any]]:
     """获取指定 domain 下的所有算法信息列表。支持 domain="all"。"""
@@ -710,10 +855,16 @@ _DEFAULT_DATA_MAP = {
     # 1. Base Data Structures
     "array_base": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
     "linked_list_base": {"arr": [1, 2, 3, 4, 5]},
-    "stack_base": {"operations": [["enqueue", 10], ["enqueue", 20], ["dequeue", None], ["enqueue", 30]]},
+    "stack_base": {"operations": [["push", 10], ["push", 20], ["pop", None], ["push", 30]]},
     "queue_base": {"operations": [["enqueue", 10], ["enqueue", 20], ["dequeue", None], ["enqueue", 30]]},
     "hash_table_base": {"arr": [5, 3, 8, 1, 2]},
     "heap_base": {"arr": [1, 2, 3, 4, 5, 6, 7]},
+    "bracket_match": {"s": "{[()]}"},
+    "linked_list_reverse": {"arr": [1, 2, 3, 4, 5]},
+    "queue_simulation": {
+        "customers": [[0, 3], [1, 2], [2, 4], [4, 1]],
+        "num_counters": 2,
+    },
     
     # 2. Sorting
     "bubble_sort": {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]},
@@ -747,7 +898,7 @@ _DEFAULT_DATA_MAP = {
     "binary_tree_recursion": {"arr": [1, 2, 3, 4, 5, 6, 7]},
     "bst": {"arr": [1, 2, 3, 4, 5, 6, 7]},
     "heap_tree": {"arr": [1, 2, 3, 4, 5, 6, 7]},
-    "trie_tree": {"words": ["cat", "car"]},
+    "trie_tree": {"words": ["cat", "car"], "queries": ["cat", "cab"]},
     "segment_tree": {"arr": [1, 2, 3, 4, 5, 6, 7]},
     "fenwick_tree": {"arr": [1, 2, 3, 4, 5, 6, 7]},
     
@@ -764,7 +915,7 @@ _DEFAULT_DATA_MAP = {
     "string_match_naive": {"text": "abacaabadcabacaba", "pattern": "abacaba"},
     "kmp_match": {"text": "abacaabadcabacaba", "pattern": "abacaba"},
     "rabin_karp": {"text": "abacaabadcabacaba", "pattern": "abacaba"},
-    "trie_string_search": {"words": ["cat", "car"]},
+    "trie_string_search": {"words": ["cat", "car"], "queries": ["cat", "cab"]},
     "palindrome_check": {"s": "racecar"},
     
     # 8. Recursion & Backtrack
@@ -815,3 +966,76 @@ _DEFAULT_DATA_MAP = {
 def build_default_data(algorithm: str) -> dict:
     """根据算法模板返回前端默认数据。"""
     return _DEFAULT_DATA_MAP.get(algorithm, {})
+
+
+def _infer_input_schema(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return {
+            "type": "object",
+            "required": list(value),
+            "properties": {key: _infer_input_schema(item) for key, item in value.items()},
+        }
+    if isinstance(value, list):
+        schema: Dict[str, Any] = {"type": "array"}
+        if value:
+            item_schemas = [_infer_input_schema(item) for item in value]
+            first_schema = item_schemas[0]
+            schema["items"] = (
+                first_schema
+                if all(item_schema == first_schema for item_schema in item_schemas)
+                else {}
+            )
+        return schema
+    if isinstance(value, bool):
+        return {"type": "boolean"}
+    if isinstance(value, int):
+        return {"type": "integer"}
+    if isinstance(value, float):
+        return {"type": "number"}
+    if value is None:
+        return {"type": "null"}
+    return {"type": "string"}
+
+
+def get_all_template_specs() -> List[TemplateSpec]:
+    """Return typed template contracts in registry order."""
+
+    specs: List[TemplateSpec] = []
+    for key, info in ALGORITHMS.items():
+        default_input = build_default_data(key)
+        specs.append(
+            TemplateSpec(
+                key=key,
+                domain=info["domain"],
+                name=info["name"],
+                visualizer_type=info["visualizer_type"],
+                difficulty=info["difficulty"],
+                entry_point=_ENTRY_POINTS[key],
+                default_input=default_input,
+                input_schema=_infer_input_schema(default_input),
+                expected_events=_expected_events(key, info["visualizer_type"]),
+            )
+        )
+    return specs
+
+
+def _expected_events(algorithm_key: str, visualizer_type: str) -> tuple[str, ...]:
+    if visualizer_type == "array":
+        initial = "init_array"
+    elif visualizer_type == "stack-queue":
+        initial = "init_queue" if "queue" in algorithm_key else "init_stack"
+    else:
+        initial = {
+            "linked-list": "init_list",
+            "tree": "init_tree",
+            "graph": "init_graph",
+            "dp-table": "init_table",
+        }[visualizer_type]
+    return initial, "snapshot", "finish"
+
+
+def get_template_spec(algorithm_key: str) -> TemplateSpec:
+    for spec in get_all_template_specs():
+        if spec.key == algorithm_key:
+            return spec
+    raise ValueError(f"不支持的算法模板: {algorithm_key}")

@@ -168,15 +168,24 @@ async def planning_node(state: ParentState) -> dict[str, Any]:
 # ── Worker nodes ───────────────────────────────────────────────────────
 
 
-def route_workers_or_merge(state: ParentState) -> list[Send] | list[str]:
-    """路由：有 worker agent → Send 并行分发，否则直接合并。
+def route_workers_or_merge(state: ParentState) -> list[Send]:
+    """路由：有 worker agent → Send 并行分发，否则跳过到 merge_workers。
 
-    同步函数，从 state 读取 planning_node 写入 of selected_agents。
+    同步函数，从 state 读取 planning_node 写入的 selected_agents。
+    返回 Send 列表给 LangGraph 并行执行；无 worker 时发送到 merge_workers。
     """
     selected_agents = state.get("selected_agents") or []
     worker_ids = [aid for aid in selected_agents if aid in BASE_RESOURCE_AGENT_IDS]
     if not worker_ids:
-        return ["merge_workers"]
+        # 无 worker 时直接跳到 merge_workers
+        return [Send("merge_workers", {
+            "user_id": state["user_id"],
+            "resource_id": state["resource_id"],
+            "selected_agents": selected_agents,
+            "request_data": state.get("request_data") or {},
+            "profile": state.get("profile") or {},
+            "teaching_plan": state.get("teaching_plan"),
+        })]
     # Send 必须携带 worker_node 所需的全部数据，
     # 因为 LangGraph Send 创建独立 state，不继承父 state。
     return [

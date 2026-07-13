@@ -317,7 +317,7 @@ CREATE TABLE IF NOT EXISTS learning_assessment_reports (
     updated_at         TIMESTAMPTZ DEFAULT NOW(),
     CHECK (window_end > window_start),
     CHECK (
-        (status = 'ready' AND facts_snapshot IS NOT NULL AND report_markdown IS NOT NULL) OR
+        (status = 'ready' AND facts_snapshot IS NOT NULL) OR
         (status = 'failed' AND failure_code IS NOT NULL) OR
         (status = 'generating')
     )

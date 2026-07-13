@@ -27,10 +27,12 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 # ============ 切分参数 ============
-
-CHUNK_MAX_SIZE = 800
+# 注意：embedding 服务有 token 限制（如 bge-m3 限制 1024 tokens）
+# 中文字符约 1-2 tokens，保守估计每字符 1.5 tokens
+# 1024 tokens / 1.5 ≈ 680 字符，设置 400 以留足够安全余量
+CHUNK_MAX_SIZE = 400
 CHUNK_MIN_SIZE = 100
-CHUNK_OVERLAP = 100
+CHUNK_OVERLAP = 80
 
 # 中文分隔符列表（用于 RecursiveCharacterTextSplitter）
 _CHINESE_SEPARATORS = [
@@ -166,12 +168,26 @@ def _split_markdown(doc: Document) -> list[Document]:
     for heading_path, safe_content in chunks_with_heading:
         content = _restore_code_blocks(safe_content, placeholder_map)
         if content.strip():
-            final_chunks.append(
-                Document(
-                    page_content=content.strip(),
-                    metadata={**doc.metadata, "heading_path": heading_path},
+            # 恢复代码块后可能超长，需要二次切分
+            if len(content) > CHUNK_MAX_SIZE:
+                # 重新切分（代码块已被恢复，会被当作普通文本切分）
+                sub_texts = char_splitter.split_text(content)
+                for sub_text in sub_texts:
+                    sub_text = sub_text.strip()
+                    if sub_text:
+                        final_chunks.append(
+                            Document(
+                                page_content=sub_text,
+                                metadata={**doc.metadata, "heading_path": heading_path},
+                            )
+                        )
+            else:
+                final_chunks.append(
+                    Document(
+                        page_content=content.strip(),
+                        metadata={**doc.metadata, "heading_path": heading_path},
+                    )
                 )
-            )
 
     # 5. 合并同章节相邻短块
     final_chunks = _merge_short_chunks(final_chunks)

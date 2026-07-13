@@ -11,11 +11,11 @@ from typing import Any, Dict, List, Optional
 class VisualTracer:
     """Multi-domain algorithm visualization tracer for Python."""
 
-    def __init__(self) -> None:
+    def __init__(self, visualizer_type: str = "array") -> None:
         self._events: List[Dict[str, Any]] = []
         self._step: int = 0
         self._domain: str = "data_structure"
-        self._visualizer_type: str = "array"
+        self._visualizer_type: str = visualizer_type
 
     def _record(
         self,
@@ -40,6 +40,31 @@ class VisualTracer:
         }
         self._events.append(event)
         self._step += 1
+
+    @property
+    def events(self) -> List[Dict[str, Any]]:
+        return copy.deepcopy(self._events)
+
+    def snapshot(
+        self,
+        event_type: str,
+        state_structure: Dict[str, Any],
+        targets: Optional[List[Any]] = None,
+        message: Optional[str] = None,
+        line: Optional[int] = None,
+        formula: Optional[str] = None,
+    ) -> None:
+        self._record(
+            event_type,
+            state_structure,
+            targets=targets,
+            message=message,
+            line=line,
+            formula=formula,
+        )
+
+    def to_payload(self) -> List[Dict[str, Any]]:
+        return self.events
 
     def dump(self, filepath: str = "trace.json") -> None:
         with open(filepath, "w", encoding="utf-8") as f:

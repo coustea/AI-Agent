@@ -111,8 +111,14 @@ class PPTService:
         from app.resource.schemas import AgentResult
         from app.shared.ppt import PPTGenerationError
 
+        logger.info(
+            "[PPTService] 开始 PPT 生成: node_id=%s node_title=%s",
+            request.node_id, request.node_title,
+        )
+
         tutorial = request.tutorial
         if tutorial is None:
+            logger.error("[PPTService] 缺少教程内容: node_id=%s", request.node_id)
             return AgentResult(
                 success=False,
                 title="PPT 生成失败",
@@ -121,6 +127,10 @@ class PPTService:
             )
 
         # 构建 PathPPT 请求
+        logger.info(
+            "[PPTService] 构建 PPT 请求: tutorial_title=%s knowledge_points=%s",
+            tutorial.title, list(tutorial.knowledge_points or []),
+        )
         ppt_request = PathPPT(
             username=request.username,
             profile=request.profile,
@@ -140,11 +150,17 @@ class PPTService:
 
         # 计算输出路径
         output_dir = user_path_node_ppt_dir(request.username, str(request.path_id), str(request.node_id))
+        logger.info("[PPTService] 输出目录: %s", output_dir)
 
         try:
+            logger.info("[PPTService] 调用 generate 方法开始生成")
             artifact = await self.generate(ppt_request, output_dir)
+            logger.info(
+                "[PPTService] PPT 生成成功: title=%s slides=%d",
+                artifact.title, artifact.slide_count,
+            )
         except PPTGenerationError as exc:
-            logger.exception("PPT 生成失败")
+            logger.exception("[PPTService] PPT 生成失败: stage=%s error=%s", exc.stage, exc)
             return AgentResult(
                 success=False,
                 title="PPT 生成失败",
@@ -155,6 +171,11 @@ class PPTService:
 
         # 填充 html_url
         artifact.html_url = path_node_ppt_url(request.username, str(request.path_id), str(request.node_id))
+
+        logger.info(
+            "[PPTService] PPT 任务完成: html_url=%s slide_count=%d",
+            artifact.html_url, artifact.slide_count,
+        )
 
         return AgentResult(
             success=True,

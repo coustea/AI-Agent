@@ -35,12 +35,8 @@ class Trie:
         return curr.is_word
 
 # 定义 trie_search 函数
-def trie_search():
+def trie_search(words, queries=()):
     t = Trie()
-    words = ["algo", "algorithm", "align", "all", "also", "tree", "trie"]
     for w in words:
         t.insert(w)
-    t.search("algo")
-    t.search("algorithm")
-    t.search("alien")
-    t.search("alg")
+    return {query: t.search(query) for query in queries}

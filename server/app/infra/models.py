@@ -721,6 +721,8 @@ class LearningPath(SQLModel, table=True):
     title: str = Field(max_length=200)
     goal: str = Field(sa_column=Column(Text))
     topic: str | None = Field(default=None, sa_column=Column(Text))
+    current_knowledge: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
+    preferences: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
 
     overall_progress: int = Field(default=0, ge=0, le=100)
     current_node_key: str | None = Field(default=None, max_length=80, index=True)

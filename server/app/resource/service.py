@@ -39,10 +39,6 @@ from app.resource.schemas import (
 
 logger = get_module_logger("resource", sub="service")
 
-def _infer_content_format(agent_type: str) -> str:
-    """从 agent_type 推导 content_format。"""
-    return AGENT_CONTENT_FORMAT.get(agent_type, "json")
-
 
 def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | None, str | None]:
     """将 AgentResult 内容拆分为 JSON 和纯文本存储字段。
@@ -73,7 +69,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
     include_content=False 时 content 为 None，用于状态轮询等轻量场景。
     content_format 由 agent_type 推导。
     """
-    content_format = _infer_content_format(item.agent_type)
+    content_format = AGENT_CONTENT_FORMAT.get(item.agent_type, "json")
 
     # 按格式从数据库对应字段取回内容
     if include_content:

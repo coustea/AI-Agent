@@ -58,14 +58,10 @@ class DSU:
         return True
 
 # 定义 dsu_operations 函数
-def dsu_operations():
-    dsu = DSU(7)
-    dsu.union(0, 1)
-    dsu.union(2, 3)
-    dsu.union(4, 5)
-    dsu.union(0, 2)
-    dsu.find(3)
-    dsu.union(4, 6)
-    dsu.union(1, 5)
-    dsu.find(6)
-    dsu.union(0, 3)
+def dsu_operations(num_nodes, edges):
+    dsu = DSU(num_nodes)
+    for left, right, *_ in edges:
+        dsu.union(left, right)
+    for node in range(num_nodes):
+        dsu.find(node)
+    return {"parent": dsu.parent, "components": dsu.components}

@@ -11,6 +11,5 @@
 - workflow/        — LangGraph 工作流（全局编排图 + 节点函数）
 - prompts/         — LLM 提示词模板
 
-注：路径规划模块的资源生成已统一使用 PathResourceRequest + generate_for_path 接口，
-   不再依赖独立的 path_helpers.py 文件。
+注：路径规划模块的资源生成已统一使用 PathResourceRequest + generate_for_path 接口。
 """

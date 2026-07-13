@@ -26,43 +26,31 @@ DFS 是图论中最基础的遍历算法之一，沿着每条分支尽可能深�
 """
 
 
-graph = {
-    0: [1, 2],
-    1: [3, 4],
-    2: [0, 5],
-    3: [],
-    4: [6],
-    5: [6],
-    6: [2],
-}
+def dfs_graph(num_nodes, edges, start=0):
+    """递归 DFS，返回遍历顺序和无向图环检测结果。"""
+    graph = {node: [] for node in range(num_nodes)}
+    for left, right, *_ in edges:
+        graph[left].append(right)
+        graph[right].append(left)
 
-labels = {0: "A", 1: "B", 2: "C", 3: "D", 4: "E", 5: "F", 6: "G"}
+    visited = [False] * num_nodes
+    order = []
+    back_edges = []
 
-WHITE, GRAY, BLACK = 0, 1, 2
-color = [WHITE] * 7
+    def visit(node, parent):
+        visited[node] = True
+        order.append(node)
+        for neighbor in graph[node]:
+            if not visited[neighbor]:
+                visit(neighbor, node)
+            elif neighbor != parent and [neighbor, node] not in back_edges:
+                back_edges.append([node, neighbor])
 
-discovery = [0] * 7
-finish = [0] * 7
-time = 0
+    if 0 <= start < num_nodes:
+        visit(start, -1)
 
-has_cycle = False
-back_edges = []
-
-def dfs(node):
-    """递归 DFS，同时进行环检测并记录发现/完成时间。"""
-    global time, has_cycle
-
-    color[node] = GRAY
-    time += 1
-    discovery[node] = time
-
-    for neighbor in graph[node]:
-        if color[neighbor] == WHITE:
-            dfs(neighbor)
-        elif color[neighbor] == GRAY:
-            has_cycle = True
-            back_edges.append((labels[node], labels[neighbor]))
-
-    color[node] = BLACK
-    time += 1
-    finish[node] = time
+    return {
+        "order": order,
+        "has_cycle": bool(back_edges),
+        "back_edges": back_edges,
+    }
