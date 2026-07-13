@@ -84,24 +84,13 @@
 
     <OnboardingDialog v-model="onboardingDialogVisible" @success="handleOnboardingSuccess" />
 
-    <!-- Logout Confirm/Success Dialog -->
-    <AuthStatusModal
-      :is-open="logoutModalState.isOpen"
-      :type="logoutModalState.type"
-      :title="logoutModalState.title"
-      :message="logoutModalState.message"
-      :countdown="logoutModalState.countdown"
-      :primary-button-text="logoutModalState.primaryButtonText"
-      :cancel-button-text="logoutModalState.cancelButtonText"
-      @confirm="logoutModalState.onConfirm"
-      @close="logoutModalState.isOpen = false"
-    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 // Vue 核心 API：响应式、计算属性、生命周期、侦听器等
-import { computed, ref, onMounted, onUnmounted, watch, reactive } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 // Vue Router：获取当前路由和路由实例
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -120,7 +109,6 @@ import {
 // 功能模块：认证 API、新手引导弹窗、登出确认弹窗、当前用户状态
 import { logout } from '@/features/auth/api/auth'
 import OnboardingDialog from '@/features/auth/components/OnboardingDialog.vue'
-import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
 import { clearCurrentUser, ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 // 画像模块：全局动态特征画像弹窗
 import GlobalProfileDialog from '@/features/profile/components/GlobalProfileDialog.vue'
@@ -128,6 +116,8 @@ import { isGlobalProfileVisible } from '@/features/profile/model/useGlobalProfil
 // 认证轮询、Token 清除、UI 组件
 import { useAuthPolling } from '@/features/auth/model/useAuthPolling'
 import { clearAuthToken } from '@/shared/auth/token'
+import { useConfirm } from 'primevue/useconfirm'
+import { useToast } from 'primevue/usetoast'
 import AppLogo from '@/shared/ui/AppLogo.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -147,6 +137,9 @@ const { currentUser, userName } = useCurrentUser()
 // 新手引导对话框可见性 & 待跳转路径（引导完成后恢复）
 const onboardingDialogVisible = ref(false)
 const pendingPath = ref<string | null>(null)
+
+const confirm = useConfirm()
+const toast = useToast()
 // 用户头像首字母
 const userInitial = computed(() => userName.value.trim().charAt(0).toUpperCase() || 'U')
 
@@ -204,18 +197,10 @@ onMounted(() => {
   timerId = window.setInterval(updateTime, 1000)
   ensureCurrentUser().catch(() => null)
   
-  // 从登录页跳回时显示登录成功弹窗
+  // 从登录页跳回时显示登录成功通知 (Toast)
   if (route.query.loginSuccess === 'true') {
-    logoutModalState.type = 'success'
-    logoutModalState.title = '登录成功'
-    logoutModalState.message = '欢迎回来！正在载入您的智能学习工作台...'
-    logoutModalState.countdown = 2
-    logoutModalState.primaryButtonText = '立即进入'
-    logoutModalState.onConfirm = () => {
-      logoutModalState.isOpen = false
-      router.replace({ path: route.path, query: { ...route.query, loginSuccess: undefined } })
-    }
-    logoutModalState.isOpen = true
+    toast.add({ severity: 'success', summary: '登录成功', detail: '欢迎回来！正在载入您的智能学习工作台...', life: 3000 })
+    router.replace({ path: route.path, query: { ...route.query, loginSuccess: undefined } })
   }
   
   // 触发新手引导弹窗
@@ -255,39 +240,28 @@ const handleOnboardingSuccess = async () => {
   await ensureCurrentUser(true)
 }
 
-// 退出登录弹窗的响应式状态（确认/成功/错误）
-const logoutModalState = reactive({
-  isOpen: false,
-  type: 'confirm' as 'success' | 'error' | 'confirm',
-  title: '',
-  message: '',
-  countdown: 0,
-  primaryButtonText: '',
-  cancelButtonText: '',
-  onConfirm: () => {}
-})
-
-// 退出登录：弹出确认框 → 调用登出 API → 清除 Token 和用户状态 → 跳转登录页
+// 退出登录：弹出 PrimeVue 确认框 → 调用登出 API → 清除 Token 和用户状态 → 跳转登录页
 const handleLogout = () => {
-  logoutModalState.type = 'confirm'
-  logoutModalState.title = '退出登录'
-  logoutModalState.message = '您确定要退出当前账号吗？'
-  logoutModalState.primaryButtonText = '确认退出'
-  logoutModalState.cancelButtonText = '取消'
-  logoutModalState.countdown = 0
-  logoutModalState.onConfirm = async () => {
-    try {
-      await logout()
-    } catch (e) {
-      console.error('Logout error API request', e)
-    } finally {
-      clearAuthToken()
-      clearCurrentUser()
-      logoutModalState.isOpen = false
-      router.push('/login')
+  confirm.require({
+    message: '退出后，系统将安全清除您当前的登录凭据与学习会话。您确定要退出吗？',
+    header: '确定要退出登录吗？',
+    acceptLabel: '确认退出',
+    rejectLabel: '取消',
+    acceptProps: {
+      severity: 'danger'
+    },
+    accept: async () => {
+      try {
+        await logout()
+      } catch (e) {
+        console.error('Logout error API request', e)
+      } finally {
+        clearAuthToken()
+        clearCurrentUser()
+        router.push('/login')
+      }
     }
-  }
-  logoutModalState.isOpen = true
+  })
 }
 </script>
 
