@@ -21,13 +21,16 @@ from app.shared.cartoon.schemas import (
     StoryboardScene,
     TeachingLesson,
     TeachingScene,
+    TeachingStep,
     TimedMotion,
     TimedScene,
     TimedStep,
     connected_visual_kind_values,
     layout_guidance,
+    layout_kind_values,
     motion_values,
     role_values,
+    visual_kind_values,
 )
 
 
@@ -110,6 +113,9 @@ class CartoonLessonPlanner:
         prompt = self._prompts["storyboard.md"].render({
             "density": brief.configuration.visual_density,
             "layout_guidance": layout_guidance(),
+            "layouts": layout_kind_values(),
+            "visual_kinds": visual_kind_values(),
+            "connected_visual_kinds": connected_visual_kind_values(),
             "source": self._source(brief, 12000),
         })
         response = await get_llm().ainvoke_json(CartoonStoryboard, [SystemMessage(content=prompt), HumanMessage(content="根据素材生成整套动画分镜。")], temperature=0.22, max_tokens=2200)
@@ -158,7 +164,7 @@ _PACE = {
 
 def _timed_step(
     scene_id: str,
-    step,
+    step: TeachingStep,
     audio: AudioSynthesis,
     start_ms: int,
     allocated_ms: int,

@@ -41,14 +41,14 @@ class VisualKind(StrEnum):
     METRICS = "metrics"
 
 
-_CONNECTED_VISUAL_KINDS = frozenset({
+_CONNECTED_VISUAL_KINDS = (
     VisualKind.MODEL,
     VisualKind.TREE,
     VisualKind.FLOW,
     VisualKind.STATE,
     VisualKind.MEMORY,
     VisualKind.NETWORK,
-})
+)
 
 
 class MotionKind(StrEnum):
@@ -110,6 +110,14 @@ def connected_visual_kind_values() -> str:
 
 def role_values() -> str:
     return "、".join(f"`{role.value}`" for role in VisualRole)
+
+
+def visual_kind_values() -> str:
+    return "、".join(f"`{kind.value}`" for kind in VisualKind)
+
+
+def layout_kind_values() -> str:
+    return "、".join(f"`{layout.value}`" for layout in SceneLayout)
 
 
 def layout_guidance() -> str:
