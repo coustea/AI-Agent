@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -171,10 +172,9 @@ class KnowledgeBranch(PPTModel):
     keywords: list[str] = Field(min_length=1, max_length=6)
 
 
-class CoverMeta(PPTModel):
-    presenter: str = Field(default="", max_length=40)
-    organization: str = Field(default="", max_length=60)
-    date: str = Field(default="", max_length=30)
+class CoverContent(PPTModel):
+    """LLM 可生成的封面内容，不包含发布身份或时间。"""
+
     keywords: list[str] = Field(default_factory=list, max_length=6)
 
 
@@ -196,7 +196,7 @@ class PPTSlide(PPTModel):
 
     takeaway: str = Field(default="", max_length=160)
     speaker_notes: str = Field(default="", max_length=700)
-    cover_meta: CoverMeta = Field(default_factory=CoverMeta)
+    cover: CoverContent = Field(default_factory=CoverContent)
 
     animation: AnimationKind = "reveal"
 
@@ -331,6 +331,7 @@ class PPTArtifact(PPTModel):
     path: Path
     plan: PPTPlan
     plan_json: str = ""
+    generated_at: datetime
     template_id: str
     template_name: str
     slide_count: int

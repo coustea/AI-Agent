@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 import html
 import os
 import re
@@ -8,6 +10,20 @@ from pathlib import Path
 
 from app.shared.ppt.models import PPTSlide
 from app.shared.ppt.templates import ResolvedPPT, ResolvedPPTSlide
+
+
+PRESENTATION_SPEAKER = "Mentorly"
+
+
+@dataclass(frozen=True)
+class PPTPublication:
+    """Runtime-only publication facts, intentionally outside LLM slide content."""
+
+    generated_at: datetime
+
+    @property
+    def generated_label(self) -> str:
+        return self.generated_at.strftime("生成于 %Y-%m-%d %H:%M")
 
 
 BASE_CSS = r"""
@@ -975,9 +991,8 @@ def _render_knowledge_map(
 
 def _render_cover(
     slide: PPTSlide,
+    publication: PPTPublication,
 ) -> str:
-    meta = slide.cover_meta
-
     meta_html = "".join(
         (
             "<span>"
@@ -985,15 +1000,13 @@ def _render_cover(
             "</span>"
         )
         for value in (
-            meta.presenter,
-            meta.organization,
-            meta.date,
+            PRESENTATION_SPEAKER,
+            publication.generated_label,
         )
-        if value
     )
 
     keywords = " · ".join(
-        meta.keywords
+        slide.cover.keywords
     )
 
     return (
@@ -1013,9 +1026,10 @@ def _render_cover(
 
 def render_slide_body(
     slide: PPTSlide,
+    publication: PPTPublication,
 ) -> str:
     if slide.type == "cover":
-        return _render_cover(slide)
+        return _render_cover(slide, publication)
 
     if slide.type in {
         "agenda",
@@ -1155,12 +1169,14 @@ class PPTHTMLRenderer:
     def render(
         self,
         deck: ResolvedPPT,
+        publication: PPTPublication,
     ) -> str:
         slides_html = "\n".join(
             self._render_slide(
                 resolved,
                 index,
                 len(deck.slides),
+                publication,
             )
             for index, resolved in enumerate(
                 deck.slides
@@ -1254,6 +1270,7 @@ class PPTHTMLRenderer:
         resolved: ResolvedPPTSlide,
         index: int,
         total: int,
+        publication: PPTPublication,
     ) -> str:
         slide = resolved.spec
         layout = resolved.layout
@@ -1314,7 +1331,7 @@ class PPTHTMLRenderer:
     </header>
 
     <div class="slide-content">
-      {render_slide_body(slide)}
+      {render_slide_body(slide, publication)}
     </div>
   </div>
 </section>

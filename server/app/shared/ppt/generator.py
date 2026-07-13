@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import hashlib
 import json
 import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.infra.llm import _is_infra_error, get_llm
 from app.infra.logging import get_logger
 from app.infra.prompts import prompts
-from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer
+from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer, PPTPublication
 from app.shared.ppt.models import PPTArtifact, PPTPlan, PPTPreferences, PathPPT, ResourcePPT
 from app.shared.ppt.templates import PPTTemplateCatalog, get_ppt_template_catalog
 
@@ -22,6 +24,7 @@ logger = get_logger(__name__)
 _PLAN_ATTEMPTS = 3
 _PLAN_MAX_TOKENS = 4_200
 _PLAN_RETRY_DELAYS_SECONDS = (1.0, 3.0)
+_PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 class PPTGenerationError(RuntimeError):
@@ -63,7 +66,10 @@ class PPTGenerator:
 
             stage = "render"
             await self._progress(progress, "正在渲染 HTML 教学课件…", 82)
-            document = self._renderer.render(resolved)
+            publication = PPTPublication(
+                generated_at=datetime.now(_PRESENTATION_TIMEZONE)
+            )
+            document = self._renderer.render(resolved, publication)
 
             stage = "publish"
             await self._progress(progress, "正在发布课件…", 96)
@@ -85,6 +91,7 @@ class PPTGenerator:
             path=path,
             plan=plan,
             plan_json=plan_json,
+            generated_at=publication.generated_at,
             template_id=resolved.template.manifest.id,
             template_name=resolved.template.manifest.name,
             slide_count=len(resolved.slides),

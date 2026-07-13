@@ -1,7 +1,7 @@
 from app.shared.ppt.generator import PPTGenerationError, PPTGenerator
 from app.shared.ppt.models import (
     ComparisonTable,
-    CoverMeta,
+    CoverContent,
     KeyPoint,
     KnowledgeBranch,
     MisconceptionItem,
@@ -18,7 +18,7 @@ from app.shared.ppt.service import PPTService
 
 __all__ = [
     "ComparisonTable",
-    "CoverMeta",
+    "CoverContent",
     "KeyPoint",
     "KnowledgeBranch",
     "MisconceptionItem",
