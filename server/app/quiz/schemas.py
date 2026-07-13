@@ -59,10 +59,11 @@ class QuizReviewResponse(BaseModel):
 
 # 单道客观题判卷结果模型
 class ObjectiveQuestionResult(BaseModel):
-    """单道客观题的前端判卷结果。"""
+    """单道题目的前端判卷结果。"""
     question_id: str = Field(description="题目唯一标识")
     user_answer: str = Field(description="用户作答（如A、B、C或正确、错误，或填空题字面答案）")
     is_correct: bool = Field(description="前端判定的对错结果")
+    score: int | None = Field(default=None, ge=0, le=100, description="主观题评分；客观题可省略")
     # 动态题目快照字段（当该题不是题库中的固定题目时，前端需将这些快照信息传回以存错题本）
     subject: str | None = Field(default=None, description="所属科目")
     question_type: str | None = Field(default=None, description="题目类型（选择题、判断题、填空题等）")
@@ -121,6 +122,7 @@ class QuizAnswerHistoryItem(BaseModel):
     question_id: str
     subject: str | None = None
     question_type: str | None = None
+    score: int | None = Field(default=None, ge=0, le=100)
     is_correct: bool
     attempts: int = 1
     last_answer: str | None = None

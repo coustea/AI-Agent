@@ -38,6 +38,35 @@ ASR_AUDIO_FRAME_BYTES = 1280
 CHAT_STREAM_IDLE_TIMEOUT_SECONDS = 75.0
 ASR_READY_TIMEOUT_SECONDS = 15.0
 
+_TRANSIENT_ASR_ERROR_MARKERS = (
+    "connectionreseterror",
+    "connection reset",
+    "connection closed",
+    "disconnected",
+    "unexpected eof",
+    "upstream reset",
+)
+
+_PYTHON_ASR_HOMOPHONES = re.compile(r"(?:排分|派森|拍森|排森|拍分)", re.IGNORECASE)
+_PROGRAMMING_CONTEXT = re.compile(
+    r"(?:Python|Java|C\+\+|编程|程序|代码|开发|语法|算法|数据结构)",
+    re.IGNORECASE,
+)
+
+
+def normalize_asr_technical_terms(text: str, previous_text: str = "") -> str:
+    """Correct a small set of high-confidence CS term homophones."""
+    normalized = _PYTHON_ASR_HOMOPHONES.sub("Python", str(text or ""))
+    context = f"{previous_text} {normalized}"
+    if _PROGRAMMING_CONTEXT.search(context):
+        normalized = normalized.replace("阵法", "语法")
+    return normalized
+
+
+def _is_transient_asr_error(error: Exception) -> bool:
+    message = f"{type(error).__name__}: {error}".lower()
+    return any(marker in message for marker in _TRANSIENT_ASR_ERROR_MARKERS)
+
 
 # 清理 LLM 输出文本中的 Markdown 标记，使文本适合 TTS 朗读
 def _clean_text_for_tts(text: str) -> str:
@@ -168,6 +197,8 @@ class RealtimeBridge:
         self._audio_dropped_chunks = 0  # 队列拥塞时丢弃的旧音频块
         self._last_asr_text: str = ""   # 上一次 ASR 识别结果（用于去重）
         self._last_asr_at: float = 0.0  # 上一次 ASR 结果的时间戳
+        self._empty_asr_retry_count = 0
+        self._asr_connection_retry_count = 0
 
         # Turn defaults
         self._speech_rate: float = 1.0  # TTS 语速（0.8~1.5）
@@ -268,6 +299,20 @@ class RealtimeBridge:
 
             if not need_recreate:
                 self._start_avatar_receiver(self._avatar_controller)
+                last_stream_info = getattr(self._avatar_controller, "_last_stream_info", None)
+                if self._avatar_controller.is_ready and last_stream_info:
+                    # The controller outlives individual frontend WebSockets. A
+                    # newly attached page won't receive another provider-side
+                    # stream_info event, so replay the cached stream metadata.
+                    await self._send_to_frontend({
+                        "type": "stream_info",
+                        "data": last_stream_info,
+                        "reused": True,
+                    })
+                    await self._send_digital_human_state(
+                        "avatar_ready",
+                        "Avatar service ready",
+                    )
                 return
 
             await self._send_digital_human_state("avatar_connecting", "Connecting to Avatar service")
@@ -483,9 +528,16 @@ class RealtimeBridge:
             # 持续接收前端消息并路由处理
             while self.owns_frontend(owner):
                 try:
-                    message = await ws.receive_text()
-                    data = json.loads(message)
-                    await self._route_message(data)
+                    message = await ws.receive()
+                    if message.get("type") == "websocket.disconnect":
+                        break
+                    audio_bytes = message.get("bytes")
+                    if audio_bytes is not None:
+                        await self._handle_audio_bytes(audio_bytes)
+                        continue
+                    text_message = message.get("text")
+                    if text_message is not None:
+                        await self._route_message(json.loads(text_message))
                 except asyncio.CancelledError:
                     logger.info("[Bridge] frontend loop cancelled")
                     raise
@@ -670,6 +722,14 @@ class RealtimeBridge:
         except (ValueError, TypeError):
             logger.warning("[Bridge] ignored invalid base64 audio chunk")
             return
+        await self._handle_audio_bytes(pcm_bytes)
+
+    async def _handle_audio_bytes(self, pcm_bytes: bytes) -> None:
+        """Accept one raw mono 16-bit PCM browser callback."""
+        if not self.is_listening or not pcm_bytes or not self.current_audio_queue:
+            return
+        if self._avatar_controller and self._avatar_controller.is_speaking:
+            return
         if len(pcm_bytes) > AUDIO_MESSAGE_MAX_BYTES:
             logger.warning("[Bridge] ignored oversized audio chunk bytes=%s", len(pcm_bytes))
             return
@@ -844,6 +904,8 @@ class RealtimeBridge:
         self._audio_frame_buffer.clear()
         self._audio_chunk_counter = 0
         self._audio_dropped_chunks = 0
+        self._empty_asr_retry_count = 0
+        self._asr_connection_retry_count = 0
         asr_ready_event = asyncio.Event()
         asr_task = asyncio.create_task(
             self._continuous_listen_loop(generation, asr_ready_event)
@@ -1002,6 +1064,7 @@ class RealtimeBridge:
         try:
             # Run ASR recognition
             result_text = await asr_session.run()
+            self._asr_connection_retry_count = 0
 
             # Record metrics for adaptive VAD
             self._vad_controller.record_round(
@@ -1019,8 +1082,18 @@ class RealtimeBridge:
             )
 
             if result_text:
-                normalized = str(result_text).strip()
+                raw_asr_text = str(result_text).strip()
+                normalized = normalize_asr_technical_terms(
+                    raw_asr_text,
+                    self._last_asr_text,
+                ).strip()
                 if normalized:
+                    if normalized != raw_asr_text:
+                        logger.info(
+                            "[Bridge] ASR technical terms normalized input_len=%s output_len=%s",
+                            len(raw_asr_text),
+                            len(normalized),
+                        )
                     now_ts = time.monotonic()
                     is_dup = normalized == self._last_asr_text
                     recent_dup = is_dup and (now_ts - self._last_asr_at < 1.6)
@@ -1031,6 +1104,7 @@ class RealtimeBridge:
                         else:
                             self._last_asr_text = normalized
                             self._last_asr_at = now_ts
+                            self._empty_asr_retry_count = 0
                             await self._send_to_frontend({"type": "asr_result", "content": normalized})
                             await self._stop_vad_input()
                             # 如果当前有 turn 正在执行（锁被持有），将文本追加到 pending buffer
@@ -1051,9 +1125,43 @@ class RealtimeBridge:
                                     ),
                                     label="voice-turn",
                                 )
+                return
+
+            take_replay_items = getattr(asr_session, "take_replay_items", None)
+            replay_items = take_replay_items() if callable(take_replay_items) else []
+            if replay_items and self._empty_asr_retry_count < 1:
+                self._empty_asr_retry_count += 1
+                self._restore_asr_audio(replay_items)
+                logger.warning(
+                    "[Bridge] ASR returned empty result; retrying utterance frames=%s",
+                    len(replay_items),
+                )
+                return
+
+            self._empty_asr_retry_count = 0
+            await self._stop_vad_input()
+            await self._send_to_frontend({"type": "asr_empty"})
         except Exception as e:
-            self._restore_asr_audio(asr_session.take_replay_items())
+            take_replay_items = getattr(asr_session, "take_replay_items", None)
+            replay_items = take_replay_items() if callable(take_replay_items) else []
+            self._restore_asr_audio(replay_items)
+            if (
+                _is_transient_asr_error(e)
+                and self.is_listening
+                and self.current_audio_queue is not None
+                and self._asr_connection_retry_count < 1
+            ):
+                self._asr_connection_retry_count += 1
+                logger.warning(
+                    "[Bridge] transient ASR connection failure; retrying once: %s",
+                    e,
+                )
+                await asyncio.sleep(0.25)
+                return
+
+            self._asr_connection_retry_count = 0
             logger.error("[Bridge] ASR session failed: %s", e)
+            await self._stop_vad_input()
             await self._send_event_with_turn_id("error", content=f"语音识别异常: {e}")
 
     # 串行化 turn 处理：获取锁后合并 pending 文本、打断旧播报、执行新 turn
@@ -1153,6 +1261,7 @@ class RealtimeBridge:
         attachment_records = [{"url": url} for url in merged_attachments]
         user_message = await chat_uc.create_user_message(
             user_id=self.user_id,
+            username=self.username or f"user_{self.user_id}",
             session_id=self.session_id,
             text=user_text,
             attachments=attachment_records,

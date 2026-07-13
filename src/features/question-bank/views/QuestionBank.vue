@@ -145,7 +145,7 @@
                         :disabled="portalSubmitted[portalQuestion.id] || !hasAnswerData(portalAnswers[portalQuestion.id])"
                         @click="submitPortalAnswer(portalQuestion)"
                       >
-                        {{ portalReviewing[portalQuestion.id] ? '评阅中...' : '提交答案' }}
+                        {{ portalReviewing[portalQuestion.id] ? `${pendingAnswerLabel(portalQuestion.type)}...` : '提交答案' }}
                       </button>
                       <button type="button" class="soft-action inline" @click="pickPortalQuestion">换一题</button>
                       <button type="button" class="soft-action inline" @click="switchModule('search')">全部题库</button>
@@ -509,6 +509,7 @@ import AnalysisReviewPage from '@/features/question-bank/components/AnalysisRevi
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
 import HistoryTab from '@/features/question-bank/components/HistoryTab.vue'
 import { getErrorMessage } from '@/shared/api/http'
+import { pendingAnswerLabel, requiresAiReview } from '@/features/question-bank/model/grading'
 
 type ViewMode = 'workspace' | 'exam' | 'analysis-review'
 type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong' | 'history'
@@ -1347,7 +1348,7 @@ async function submitPortalAnswer(question: Question) {
   openedPortalAnalysis.value = new Set(openedPortalAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  await submitQuestionAttempt(question, portalAnswers.value[question.id], result.correct)
+  await submitQuestionAttempt(question, portalAnswers.value[question.id], result.correct, result.review?.score)
 
   portalReviewing.value[question.id] = false
 }
@@ -1389,7 +1390,7 @@ async function submitBankAnswer(question: Question) {
   markBankQuestionSubmittedToday(question.id, result.correct)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  await submitQuestionAttempt(question, bankAnswers.value[question.id], result.correct)
+  await submitQuestionAttempt(question, bankAnswers.value[question.id], result.correct, result.review?.score)
 
   bankReviewing.value[question.id] = false
 }
@@ -1412,7 +1413,7 @@ async function submitDailyAnswer(question: Question) {
   openedDailyAnalysis.value = new Set(openedDailyAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  await submitQuestionAttempt(question, dailyAnswers.value[question.id], result.correct)
+  await submitQuestionAttempt(question, dailyAnswers.value[question.id], result.correct, result.review?.score)
 
   dailyReviewing.value[question.id] = false
 
@@ -1445,7 +1446,7 @@ async function submitWrongAnswer(question: Question) {
   wrongReview.value[question.id] = result.review
   openedWrongAnalysis.value = new Set(openedWrongAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
-  await submitQuestionAttempt(question, wrongAnswers.value[question.id], result.correct)
+  await submitQuestionAttempt(question, wrongAnswers.value[question.id], result.correct, result.review?.score)
   wrongReviewing.value[question.id] = false
 }
 
@@ -1459,7 +1460,7 @@ async function submitWrongDrill() {
   wrongDrillCorrect.value = result.correct
   wrongDrillReview.value = result.review
   saveAttempt(1, result.correct ? 1 : 0)
-  await submitQuestionAttempt(wrongDrillQuestion.value, wrongDrillAnswer.value, result.correct)
+  await submitQuestionAttempt(wrongDrillQuestion.value, wrongDrillAnswer.value, result.correct, result.review?.score)
   wrongDrillReviewing.value = false
 }
 
@@ -1675,7 +1676,7 @@ async function submitExam() {
     const batchResults: Array<Record<string, unknown>> = []
 
     examPaper.value.forEach((q) => {
-      if (isObjectiveQuestion(q)) {
+      if (!requiresAiReview(q.type)) {
         const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
         if (isCorrect) correctCount += 1
 
@@ -1683,6 +1684,7 @@ async function submitExam() {
           question_id: q.id,
           user_answer: formatUserAnswer(examAnswers.value[q.id]),
           is_correct: isCorrect,
+          score: isCorrect ? 100 : 0,
           subject: q.subject,
           question_type: q.type,
           content: q.content,
@@ -1694,7 +1696,7 @@ async function submitExam() {
     })
 
     const subjectiveTasks = examPaper.value
-      .filter((q) => !isObjectiveQuestion(q))
+      .filter((q) => requiresAiReview(q.type))
       .map(async (q) => {
         const result = await gradeQuestion(q, examAnswers.value[q.id])
         examReview.value[q.id] = result.review
@@ -1705,6 +1707,7 @@ async function submitExam() {
           question_id: q.id,
           user_answer: formatUserAnswer(examAnswers.value[q.id]),
           is_correct: correct,
+          score: result.review?.score,
           subject: q.subject,
           question_type: q.type,
           content: q.content,
@@ -1825,9 +1828,9 @@ function updateExamAnswer(id: string, value: string) {
   examAnswers.value[id] = value
 }
 
-// 评阅单道题目（客观题自动判，主观题调 AI）
+// 仅填空题和分析题调用 AI，其余题型在前端精确判定。
 async function gradeQuestion(question: Question, answer: AnswerValue) {
-  if (isObjectiveQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
+  if (!requiresAiReview(question.type)) return { correct: evaluateAnswer(question, answer), review: null }
 
   try {
     const review = await fetchQuizReview({
@@ -1855,7 +1858,7 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
 }
 
 // 提交单题作答；后端统一保存历史，并仅在答错时维护错题本。
-async function submitQuestionAttempt(question: Question, answer: AnswerValue, isCorrect: boolean) {
+async function submitQuestionAttempt(question: Question, answer: AnswerValue, isCorrect: boolean, score?: number) {
   try {
     const response = await submitObjectiveResults({
       results: [
@@ -1863,6 +1866,7 @@ async function submitQuestionAttempt(question: Question, answer: AnswerValue, is
           question_id: question.id,
           user_answer: formatUserAnswer(answer),
           is_correct: isCorrect,
+          score,
           subject: question.subject,
           question_type: question.type,
           content: question.content,
@@ -1931,10 +1935,6 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
   }
 
   return userText.includes(stdText) || stdText.includes(userText)
-}
-
-function isObjectiveQuestion(q: Question) {
-  return ['选择题', '单选题', '判断题', '填空题'].includes(q.type)
 }
 
 function isOptionQuestion(q: Question) {
