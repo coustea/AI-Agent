@@ -1,6 +1,35 @@
 // 路径节点内可生成的辅助资源类型
 export type PathResourceType = 'mindmap' | 'code' | 'reading' | 'ppt' | 'cartoon'
 
+// ======================================================================
+// 路径偏好参数（前后端对齐）
+// ======================================================================
+
+export type LearningScene = 'general' | 'exam' | 'beginner' | 'project' | 'interview'
+export type LearningPace = 'slow' | 'normal' | 'fast'
+export type LearningGranularity = 'coarse' | 'standard' | 'fine'
+export type LearningFocus = 'foundation' | 'key_points' | 'practice' | 'weakness'
+
+/**
+ * 学习路径偏好参数 — 前后端对齐的结构化配置
+ */
+export interface PathPreferences {
+  /** 是否融合学习者画像 */
+  use_profile: boolean
+  /** 学习场景 */
+  scene: LearningScene
+  /** 学习节奏 */
+  pace: LearningPace
+  /** 路径粒度 */
+  granularity: LearningGranularity
+  /** 规划重点列表 */
+  focus: LearningFocus[]
+}
+
+// ======================================================================
+// 请求/响应模型
+// ======================================================================
+
 // 路径的阶段结构（如：基础篇 → 进阶篇 → 实战篇）
 export interface LearningPathStage {
   stage_id: string
@@ -159,9 +188,9 @@ export interface PathQuizSubmitResponse {
 // 创建路径时的表单请求体
 export interface PathRequest {
   goal: string
-  topic?: string
-  current_knowledge?: string[]
-  preferences?: Record<string, unknown>
+  topic: string
+  current_knowledge: string[]
+  preferences: PathPreferences
 }
 
 // 创建路径的即时响应（完整规划异步通过 SSE 返回）

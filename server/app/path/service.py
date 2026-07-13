@@ -117,6 +117,8 @@ class PathService:
             title=request.topic or "学习路径",
             goal=request.goal,
             topic=request.topic or None,
+            current_knowledge=request.current_knowledge,
+            preferences=request.preferences.model_dump(mode="json"),
             overall_progress=0,
             status="generating",
             stages_json=[],
@@ -454,16 +456,25 @@ class PathService:
         request: PathResourceRequest,
     ) -> "AgentResult":
         """统一调用各服务的 generate_for_path 接口。"""
+        logger.info(
+            "[PathService] 调用资源生成服务: type=%s node_id=%s node_title=%s",
+            resource_type, request.node_id, request.node_title,
+        )
         services = self._resource_services
         if resource_type == "ppt":
+            logger.info("[PathService] 调用 PPTService.generate_for_path")
             return await services["ppt"].generate_for_path(request)
         elif resource_type == "cartoon":
+            logger.info("[PathService] 调用 CartoonService.generate_for_path")
             return await services["cartoon"].generate_for_path(request)
         elif resource_type == "mindmap":
+            logger.info("[PathService] 调用 MindmapAgent.generate_for_path")
             return await services["mindmap"].generate_for_path(request)
         elif resource_type == "code":
+            logger.info("[PathService] 调用 CodeAgent.generate_for_path")
             return await services["code"].generate_for_path(request)
         elif resource_type == "reading":
+            logger.info("[PathService] 调用 ReadingAgent.generate_for_path")
             return await services["reading"].generate_for_path(request)
         raise ValueError(f"不支持的资源类型: {resource_type}")
 
@@ -994,18 +1005,32 @@ class PathService:
         run_id: str,
     ) -> None:
         """执行资源生成任务并更新任务记录。"""
+        logger.info(
+            "[PathService] 开始执行资源生成任务: user_id=%s resource_id=%s run_id=%s",
+            user_id, resource_id, run_id,
+        )
         events = PathEvents(user_id=user_id, path_id=resource_id, run_id=run_id)
         await events.open()
         resource = await self.session.get(PathNodeResource, resource_id)
         if resource is None or resource.user_id != user_id:
+            logger.error(
+                "[PathService] 资源任务不存在或无权限: resource_id=%s user_id=%s",
+                resource_id, user_id,
+            )
             await events.send(event="resource.failed", message="资源任务不存在", progress=0)
             return
+
+        resource_type = resource.resource_type
+        logger.info(
+            "[PathService] 资源任务信息: resource_id=%s type=%s node_id=%s status=%s",
+            resource_id, resource_type, resource.node_id, resource.status,
+        )
 
         await events.send(
             event="resource.started",
             message="资源生成任务已开始",
             progress=5,
-            data={"resource_id": resource_id, "resource_type": resource.resource_type},
+            data={"resource_id": resource_id, "resource_type": resource_type},
         )
         try:
             node = await self._must_get_node(user_id, resource.node_id)
@@ -1014,9 +1039,21 @@ class PathService:
             tutorial = await self._get_current_tutorial(node.id)
             if tutorial is None:
                 raise ValueError("当前节点还没有教程，请先生成主教程再生成辅助资源")
+            logger.info(
+                "[PathService] 构建资源生成请求: node_id=%s tutorial_id=%s type=%s",
+                node.id, tutorial.id, resource_type,
+            )
             request = await self._build_resource_request(user_id, node, tutorial)
             await events.send(event="resource.running", message="正在调用资源智能体", progress=35)
-            result = await self._call_generate_for_path(resource.resource_type, request)
+            logger.info(
+                "[PathService] 调用资源生成服务: type=%s node_title=%s",
+                resource_type, node.title,
+            )
+            result = await self._call_generate_for_path(resource_type, request)
+            logger.info(
+                "[PathService] 资源生成完成: type=%s success=%s title=%s",
+                resource_type, result.success, result.title,
+            )
             await self._apply_resource_result(resource, tutorial, result)
             await events.send(
                 event="resource.completed" if result.success else "resource.failed",
@@ -1025,7 +1062,10 @@ class PathService:
                 data={"resource_id": resource.id, "status": resource.status},
             )
         except Exception as exc:
-            logger.error("路径节点资源任务异常: %s", exc, exc_info=True)
+            logger.error(
+                "[PathService] 路径节点资源任务异常: resource_id=%s type=%s error=%s",
+                resource_id, resource_type, exc, exc_info=True,
+            )
             resource.status = "failed"
             resource.error_message = str(exc)
             resource.updated_at = datetime.now(timezone.utc)
@@ -1044,9 +1084,15 @@ class PathService:
         tutorial: PathNodeTutorial,
     ) -> PathResourceRequest:
         """构建路径节点资源生成请求。"""
+        from app.path.schemas import PathPreferences
+
         path = await self._must_get_path(user_id, node.path_id)
         user = await self.session.get(User, user_id)
         profile = await self._get_profile_dict(user_id)
+
+        # 解析路径偏好参数（使用安全方法处理可能格式错误的数据）
+        preferences_data = path.preferences or {}
+        preferences = PathPreferences.from_dict_safe(preferences_data)
 
         return PathResourceRequest(
             user_id=user_id,
@@ -1060,6 +1106,8 @@ class PathService:
             node_title=node.title,
             node_key=node.node_id,
             difficulty=node.difficulty or "beginner",
+            current_knowledge=list(path.current_knowledge or []),
+            preferences=preferences,
         )
 
     async def _apply_resource_result(
@@ -1178,10 +1226,24 @@ async def run_resource_generation_bg(
     resource_id: int,
     run_id: str,
 ):
-    async with session_scope() as session:
-        service = PathService(session)
-        await service.complete_resource_task(
-            user_id=user_id,
-            resource_id=resource_id,
-            run_id=run_id,
+    logger.info(
+        "[PathBG] 开始后台资源生成: user_id=%s resource_id=%s run_id=%s",
+        user_id, resource_id, run_id,
+    )
+    try:
+        async with session_scope() as session:
+            service = PathService(session)
+            await service.complete_resource_task(
+                user_id=user_id,
+                resource_id=resource_id,
+                run_id=run_id,
+            )
+        logger.info(
+            "[PathBG] 后台资源生成完成: resource_id=%s run_id=%s",
+            resource_id, run_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "[PathBG] 后台资源生成异常: resource_id=%s run_id=%s error=%s",
+            resource_id, run_id, exc, exc_info=True,
         )

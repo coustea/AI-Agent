@@ -33,6 +33,7 @@ from app.infra.models import (
     PathNodeResource,
     PathNodeTutorial,
     User,
+    WrongQuestion,
 )
 from app.profile.service import get_profile_service
 from app.resource.schemas import AgentResult
@@ -45,13 +46,48 @@ from app.path.schemas import (
     PlanNode,
     AgentStage,
     PathRequest,
+    PathPreferences,
     LearnState,
     AgentQuestionSet,
     LearningPathTutorialDTO,
-    PathResourceRequest,
 )
 
 logger = get_logger(__name__)
+
+# ======================================================================
+# 偏好参数语义化映射
+# ======================================================================
+
+# 学习场景 → 自然语言描述
+SCENE_DESCRIPTIONS: dict[str, str] = {
+    "general": "通用学习场景，注重知识体系完整性和循序渐进",
+    "exam": "考试复习场景，重点覆盖高频考点和易错点，强化记忆和练习",
+    "beginner": "基础入门场景，从零开始讲解，强调概念清晰和示例丰富",
+    "project": "项目实战场景，以实际项目为主线，边做边学，强调动手实践",
+    "interview": "面试准备场景，聚焦高频面试题和核心概念，强调表达和总结",
+}
+
+# 学习节奏 → 自然语言描述
+PACE_DESCRIPTIONS: dict[str, str] = {
+    "slow": "慢速细学，每个知识点展开讲解，提供更多背景知识和延伸阅读",
+    "normal": "正常节奏，平衡讲解深度和推进速度",
+    "fast": "快速推进，精简内容，聚焦核心要点，减少冗余讲解",
+}
+
+# 路径粒度 → 自然语言描述
+GRANULARITY_DESCRIPTIONS: dict[str, str] = {
+    "coarse": "粗略路径，阶段和节点数量较少（建议3-5个阶段，每阶段2-3个节点）",
+    "standard": "标准路径，阶段和节点数量适中（建议4-6个阶段，每阶段3-5个节点）",
+    "fine": "细节点路径，阶段和节点数量较多（建议5-8个阶段，每阶段4-6个节点）",
+}
+
+# 规划重点 → 自然语言描述
+FOCUS_DESCRIPTIONS: dict[str, str] = {
+    "foundation": "补基础：优先安排基础概念和前置知识，确保根基稳固",
+    "key_points": "抓重点：聚焦核心考点和关键机制，减少边缘内容",
+    "practice": "多练习：增加练习题和实战环节，强化动手能力",
+    "weakness": "补薄弱点：针对已知薄弱环节强化，重点攻克易错点",
+}
 
 # ======================================================================
 # 1. 兜底与修复规划函数
@@ -326,9 +362,9 @@ class PathPlannerAgent:
             )
 
             # 根据用户偏好决定是否融合个人画像
-            use_profile = state["request"].preferences.get("use_profile", True)
-            if use_profile is False or use_profile == "false":
-                profile_md = "用户已关闭个人画像融合，请勿结合画像数据，仅根据学习主题与目标进行最优路径推演规划。"
+            use_profile = state["request"].preferences.use_profile
+            if not use_profile:
+                profile_md = ""
             else:
                 profile_md = state.get("profile_markdown", "")
                 if not profile_md:
@@ -463,16 +499,37 @@ def _build_planner_messages(
     search_context: str,
     profile_markdown: str,
 ) -> list[Any]:
+    """组装路径规划的 LLM 消息。
+
+    消息结构：
+    - System: 规划系统提示（从 prompts 读取）
+    - Human: 结构化的请求上下文 + 画像 + 检索参考
+    """
     sys_msg = SystemMessage(
         content=prompts.get("path").get("planner_system")
     )
+
+    # 构建画像融合提示
+    profile_section = ""
+    if profile_markdown:
+        profile_section = (
+            "\n\n## 学习者画像\n\n"
+            "以下是学习者的个人画像，请结合画像特点进行个性化规划：\n\n"
+            f"{profile_markdown}"
+        )
+
+    # 构建检索参考提示
+    search_section = ""
+    if search_context:
+        search_section = f"\n\n## 联网参考\n\n{search_context}"
+
     human_msg = HumanMessage(
         content=(
             "请根据以下信息生成学习路径 JSON。\n\n"
-            f"用户请求：\n{request_context}\n\n"
-            f"联网参考：\n{search_context or '未启用或无可用参考'}\n\n"
-            f"学习者画像：\n{profile_markdown or '未提供'}\n\n"
-            "再次强调：只输出符合 schema 的 JSON 根对象，不要输出 Markdown，不要输出解释文字。"
+            f"## 学习请求\n\n{request_context}"
+            f"{profile_section}"
+            f"{search_section}"
+            "\n\n再次强调：只输出符合 schema 的 JSON 根对象，不要输出 Markdown，不要输出解释文字。"
         )
     )
     return [sys_msg, human_msg]
@@ -480,22 +537,54 @@ def _build_planner_messages(
 
 # 将 PathRequest 格式化为可读的请求上下文文本
 def _format_request(request: PathRequest) -> str:
+    """格式化请求参数为可读文本，供 LLM prompt 使用。
+
+    将结构化的偏好参数转换为自然语言描述，让 LLM 更好理解用户意图。
+    """
     current_knowledge = (
         "、".join(request.current_knowledge)
         if request.current_knowledge
         else "未提供"
     )
-    preferences = (
-        json.dumps(request.preferences, ensure_ascii=False, indent=2)
-        if request.preferences
-        else "未提供"
-    )
+
+    # 语义化偏好参数
+    preferences_desc = _format_preferences(request.preferences)
+
     return (
         f"学习目标: {request.goal}\n"
         f"学习主题: {request.topic or '未提供'}\n"
         f"已掌握知识: {current_knowledge}\n"
-        f"学习偏好:\n{preferences}"
+        f"学习偏好:\n{preferences_desc}"
     )
+
+
+# 将结构化偏好参数转换为自然语言描述
+def _format_preferences(preferences: PathPreferences) -> str:
+    """将结构化偏好参数转换为自然语言描述。"""
+    lines: list[str] = []
+
+    # 学习场景
+    scene_desc = SCENE_DESCRIPTIONS.get(preferences.scene, "通用学习场景")
+    lines.append(f"- 学习场景：{scene_desc}")
+
+    # 学习节奏
+    pace_desc = PACE_DESCRIPTIONS.get(preferences.pace, "正常节奏")
+    lines.append(f"- 学习节奏：{pace_desc}")
+
+    # 路径粒度
+    granularity_desc = GRANULARITY_DESCRIPTIONS.get(preferences.granularity, "标准路径")
+    lines.append(f"- 路径粒度：{granularity_desc}")
+
+    # 规划重点
+    if preferences.focus:
+        focus_items = [FOCUS_DESCRIPTIONS.get(f, f) for f in preferences.focus]
+        lines.append(f"- 规划重点：{'；'.join(focus_items)}")
+
+    # 是否使用画像（在 prompt 中单独处理，此处仅备注）
+    if not preferences.use_profile:
+        lines.append("- 画像融合：用户已关闭画像融合，仅根据学习目标规划")
+
+    return "\n".join(lines)
 
 
 
@@ -588,7 +677,9 @@ class NodeLearningAgent:
         tutorial_title: str,
         tutorial_summary: str,
         round_no: int,
+        max_retries: int = 3,
     ) -> list[dict[str, Any]]:
+        """生成测验题目，带重试机制确保返回 5 道题。"""
         prompt = prompts.get("path").render(
             "question_generation",
             path_goal=path_goal,
@@ -598,25 +689,52 @@ class NodeLearningAgent:
             tutorial_summary=tutorial_summary,
             round_no=round_no,
         )
-        result = await self.llm.ainvoke_json(AgentQuestionSet, prompt)
-        questions = result.questions if hasattr(result, "questions") else []
-        # 归一化每道题的字段结构
-        normalized: list[dict[str, Any]] = []
-        for item in questions:
-            choice = dict(getattr(item, "choice", {}) or {})
-            normalized.append(
-                {
-                    "question": getattr(item, "question", ""),
-                    "choice": choice,
-                    "answer": str(getattr(item, "answer", "")),
-                    "analysis": getattr(item, "analysis", ""),
-                    "knowledge_points": list(
-                        getattr(item, "knowledge_points", []) or [node_title]
-                    ),
-                    "type": getattr(item, "type", "single_choice"),
-                }
-            )
-        return normalized
+
+        last_error: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                result = await self.llm.ainvoke_json(AgentQuestionSet, prompt)
+                questions = result.questions if hasattr(result, "questions") else []
+                if len(questions) == PATH_QUIZ_SIZE:
+                    # 归一化每道题的字段结构
+                    normalized: list[dict[str, Any]] = []
+                    for item in questions:
+                        choice = dict(getattr(item, "choice", {}) or {})
+                        normalized.append(
+                            {
+                                "question": getattr(item, "question", ""),
+                                "choice": choice,
+                                "answer": str(getattr(item, "answer", "")),
+                                "analysis": getattr(item, "analysis", ""),
+                                "knowledge_points": list(
+                                    getattr(item, "knowledge_points", []) or [node_title]
+                                ),
+                                "type": getattr(item, "type", "single_choice"),
+                            }
+                        )
+                    logger.info(
+                        "[NodeLearningAgent] 成功生成 %d 道测验题 (attempt=%d)",
+                        len(normalized), attempt + 1,
+                    )
+                    return normalized
+                else:
+                    logger.warning(
+                        "[NodeLearningAgent] 题目数量不足: 期望 %d, 实际 %d (attempt=%d)",
+                        PATH_QUIZ_SIZE, len(questions), attempt + 1,
+                    )
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "[NodeLearningAgent] 生成测验题失败 (attempt=%d): %s",
+                    attempt + 1, e,
+                )
+
+        # 所有重试都失败
+        logger.error(
+            "[NodeLearningAgent] 生成测验题最终失败，已重试 %d 次: %s",
+            max_retries, last_error,
+        )
+        return []
 
 
 # ======================================================================
@@ -894,9 +1012,10 @@ async def node_persist_questions(state: LearnState) -> dict:
 
 # 工作流节点：评分用户答案，计算得分和薄弱知识点
 async def node_score_answers(state: LearnState) -> dict:
-    """评分用户答案，计算得分和薄弱知识点。"""
+    """评分用户答案，计算得分和薄弱知识点，并将错题写入错题本。"""
     if state.get("error"):
         return {}
+    session = state["session"]
     questions = state.get("quiz_questions", [])
     if len(questions) != PATH_QUIZ_SIZE:
         return {"error": "当前节点还没有完整的五道题"}
@@ -911,9 +1030,13 @@ async def node_score_answers(state: LearnState) -> dict:
         return {"error": "答案不能为空"}
     answer_map = {item["question_id"]: item["response"] for item in answers}
 
+    node = state["node"]
+    path = state["path"]
+
     # 逐题比对答案，累计得分并收集错题知识点
     score = 0
     weak_points: list[str] = []
+    wrong_questions: list[dict] = []  # 收集错题信息用于写入错题本
     for question in questions:
         response = answer_map.get(question.id)
         is_correct = response == question.answer
@@ -927,6 +1050,27 @@ async def node_score_answers(state: LearnState) -> dict:
             for point in question.knowledge_points or []:
                 if point not in weak_points:
                     weak_points.append(point)
+            # 收集错题信息
+            wrong_questions.append({
+                "question_id": f"path-{path.id}-{node.node_id}-{question.id}",
+                "subject": path.title,
+                "question_type": question.type or "single_choice",
+                "content": question.question,
+                "options_json": question.choice or {},
+                "standard_answer": question.answer,
+                "analysis": question.analysis,
+                "user_answer": response,
+                "knowledge_points": question.knowledge_points or [],
+            })
+
+    # 将错题写入错题本
+    if wrong_questions:
+        await _save_wrong_questions(
+            session=session,
+            user_id=state["user_id"],
+            wrong_questions=wrong_questions,
+        )
+
     return {
         "score": score,
         "passed": score >= PATH_PASS_SCORE,
@@ -1119,6 +1263,56 @@ def _resource_to_dict(resource) -> dict:
             resource.created_at.isoformat() if resource.created_at else ""
         ),
     }
+
+
+# 将路径测验错题写入错题本
+async def _save_wrong_questions(
+    session,
+    user_id: int,
+    wrong_questions: list[dict],
+) -> None:
+    """将路径测验错题写入错题本。
+
+    对已存在的错题，累加错误次数并更新用户答案；
+    对新错题，创建完整记录（包含题目快照）。
+    """
+    for item in wrong_questions:
+        question_id = item["question_id"]
+
+        # 查询该题是否已存在于错题本
+        existing = (await session.exec(
+            select(WrongQuestion).where(
+                WrongQuestion.user_id == user_id,
+                WrongQuestion.question_id == question_id,
+            )
+        )).scalars().first()
+
+        if existing:
+            # 已存在则累加错误次数并更新用户答案、取消归档
+            existing.wrong_count += 1
+            existing.user_answer = item["user_answer"]
+            existing.is_archived = False
+        else:
+            # 创建新错题记录
+            wrong = WrongQuestion(
+                user_id=user_id,
+                question_id=question_id,
+                subject=item["subject"],
+                question_type=item["question_type"],
+                content=item["content"],
+                options_json=item["options_json"],
+                standard_answer=item["standard_answer"],
+                analysis=item["analysis"],
+                user_answer=item["user_answer"],
+                wrong_count=1,
+            )
+            session.add(wrong)
+
+    await session.flush()
+    logger.info(
+        "[PathWorkflows] 已将 %d 道错题写入错题本: user_id=%s",
+        len(wrong_questions), user_id,
+    )
 
 
 __all__ = [
