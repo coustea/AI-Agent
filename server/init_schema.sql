@@ -357,7 +357,7 @@ CREATE TABLE IF NOT EXISTS generated_resources (
     user_id             INTEGER         NOT NULL,
     learning_need       TEXT,
     request_snapshot_json JSONB          NOT NULL DEFAULT '{}'::jsonb,
-    plan_content        TEXT,
+    plan_json           JSONB,
     status              VARCHAR(50)     DEFAULT 'pending',
     created_at          TIMESTAMPTZ     DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     DEFAULT NOW()
@@ -371,6 +371,7 @@ COMMENT ON COLUMN generated_resources.user_id IS '用户ID';
 COMMENT ON COLUMN generated_resources.learning_need IS '学习需求描述';
 COMMENT ON COLUMN generated_resources.request_snapshot_json IS '任务创建时冻结的完整生成请求快照';
 COMMENT ON COLUMN generated_resources.status IS '任务状态：pending/generating/completed/partial_completed/failed';
+COMMENT ON COLUMN generated_resources.plan_json IS '版本化结构化教学计划';
 
 -- ============================================================
 -- 11. generated_resource_items
@@ -416,8 +417,15 @@ CREATE TABLE IF NOT EXISTS generated_resource_agent_runs (
     resource_id     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
     agent_id        VARCHAR(32)     NOT NULL,
     status          VARCHAR(16)     NOT NULL DEFAULT 'pending',
+    phase           VARCHAR(64)     NOT NULL DEFAULT 'queued',
+    message         TEXT            NOT NULL DEFAULT '等待调度',
+    progress        INTEGER         NOT NULL DEFAULT 0,
     error_message   TEXT,
     elapsed_ms      INTEGER,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    heartbeat_at    TIMESTAMPTZ,
+    updated_at      TIMESTAMPTZ     DEFAULT NOW(),
 
     CONSTRAINT uq_resource_agent_run UNIQUE (resource_id, agent_id),
     CONSTRAINT ck_resource_agent_run_status
@@ -433,6 +441,38 @@ COMMENT ON COLUMN generated_resource_agent_runs.agent_id IS 'Agent类型标识';
 COMMENT ON COLUMN generated_resource_agent_runs.status IS '运行状态：pending/running/completed/failed/interrupted';
 COMMENT ON COLUMN generated_resource_agent_runs.error_message IS '错误信息';
 COMMENT ON COLUMN generated_resource_agent_runs.elapsed_ms IS '执行耗时（毫秒）';
+
+-- ============================================================
+-- 11c. generated_resource_run_events
+-- ============================================================
+CREATE TABLE IF NOT EXISTS generated_resource_run_events (
+    id              SERIAL          PRIMARY KEY,
+    resource_id     INTEGER         NOT NULL REFERENCES generated_resources(id) ON DELETE CASCADE,
+    agent_id        VARCHAR(32),
+    event           VARCHAR(48)     NOT NULL,
+    status          VARCHAR(16),
+    phase           VARCHAR(64),
+    message         TEXT            NOT NULL,
+    progress        INTEGER,
+    data_json       JSONB           NOT NULL DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ     DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_generated_resource_run_events_resource_id_id
+    ON generated_resource_run_events (resource_id, id);
+
+COMMENT ON TABLE generated_resource_run_events IS '资源生成任务的持久化事件历史，供 SSE 断点续传与运行页恢复使用';
+
+-- 已存在开发库的破坏性演进：旧 Markdown 计划字段被结构化计划替代。
+ALTER TABLE generated_resources ADD COLUMN IF NOT EXISTS plan_json JSONB;
+ALTER TABLE generated_resources DROP COLUMN IF EXISTS plan_content;
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS phase VARCHAR(64) NOT NULL DEFAULT 'queued';
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS message TEXT NOT NULL DEFAULT '等待调度';
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS progress INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMPTZ;
+ALTER TABLE generated_resource_agent_runs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ============================================================
 -- 12. quiz_questions
