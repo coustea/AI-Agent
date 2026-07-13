@@ -125,4 +125,4 @@ paths_config:
 # ASR 语音识别配置
 asr:
   # VAD 结束静默时长（毫秒）— 越小响应越快，但可能截断短停顿
-  vad_eos: 700
+  vad_eos: 1200

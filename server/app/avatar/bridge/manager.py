@@ -32,8 +32,11 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
-AUDIO_QUEUE_MAX_CHUNKS = 48
+AUDIO_QUEUE_MAX_CHUNKS = 512
 AUDIO_MESSAGE_MAX_BYTES = 64 * 1024
+ASR_AUDIO_FRAME_BYTES = 1280
+CHAT_STREAM_IDLE_TIMEOUT_SECONDS = 75.0
+ASR_READY_TIMEOUT_SECONDS = 15.0
 
 
 # 清理 LLM 输出文本中的 Markdown 标记，使文本适合 TTS 朗读
@@ -136,15 +139,23 @@ class RealtimeBridge:
         self.session_id: str = ""
         # 前端 WebSocket 连接引用
         self.frontend_ws = None
+        self._frontend_owner: object | None = None
         # VAD 监听模式标志
         self.is_listening = False
         # 音频输入队列（VAD 模式下持续接收 PCM 音频块）
         self.current_audio_queue: Optional[asyncio.Queue] = None
+        self._audio_frame_buffer = bytearray()
 
         # 数字人控制器实例
         self._avatar_controller = None
+        self._avatar_init_lock = asyncio.Lock()
+        self._avatar_receive_task: asyncio.Task | None = None
+        self._background_tasks: set[asyncio.Task] = set()
         # ASR 持续监听的后台任务
         self._asr_loop_task = None
+        self._asr_ready_ack_task: asyncio.Task | None = None
+        self._vad_generation = 0
+        self._vad_ack_generation: int | None = None
 
         # Turn tracking - 用于串线保护
         self._current_turn_id: Optional[str] = None
@@ -198,40 +209,87 @@ class RealtimeBridge:
 
         return max(candidates, key=score)
 
+    def bind_frontend(self, ws) -> object:
+        """Bind a frontend socket and return an ownership token for cleanup."""
+        owner = object()
+        self.frontend_ws = ws
+        self._frontend_owner = owner
+        self.session_id = ""
+        return owner
+
+    def owns_frontend(self, owner: object) -> bool:
+        return self._frontend_owner is owner
+
+    def _spawn_background(self, coroutine, *, label: str) -> asyncio.Task:
+        task = asyncio.create_task(coroutine)
+        self._background_tasks.add(task)
+
+        def _done(completed: asyncio.Task) -> None:
+            self._background_tasks.discard(completed)
+            if completed.cancelled():
+                return
+            try:
+                exc = completed.exception()
+            except asyncio.CancelledError:
+                return
+            if exc is not None:
+                logger.error("[Bridge] background task failed label=%s: %s", label, exc)
+
+        task.add_done_callback(_done)
+        return task
+
+    async def _stop_avatar_receiver(self) -> None:
+        task = self._avatar_receive_task
+        self._avatar_receive_task = None
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    def _start_avatar_receiver(self, controller) -> None:
+        if self._avatar_receive_task is not None and not self._avatar_receive_task.done():
+            return
+        self._avatar_receive_task = asyncio.create_task(
+            controller.receive_messages(self._on_avatar_event)
+        )
+
     # 确保 Avatar 控制器已初始化并连接就绪，必要时重建
     async def _ensure_avatar_controller(self):
-        need_recreate = False
-        if self._avatar_controller is None:
-            need_recreate = True
-        else:
-            try:
-                if self._avatar_controller._ws_closed:
-                    need_recreate = True
-            except Exception:
+        async with self._avatar_init_lock:
+            need_recreate = False
+            if self._avatar_controller is None:
                 need_recreate = True
+            else:
+                try:
+                    if self._avatar_controller._ws_closed:
+                        need_recreate = True
+                except Exception:
+                    need_recreate = True
 
-        if need_recreate:
+            if not need_recreate:
+                self._start_avatar_receiver(self._avatar_controller)
+                return
+
             await self._send_digital_human_state("avatar_connecting", "Connecting to Avatar service")
+            await self._stop_avatar_receiver()
             if self._avatar_controller is not None:
                 try:
                     await self._avatar_controller.close()
                 except Exception:
                     logger.debug("[Bridge] close stale avatar controller failed", exc_info=True)
-            self._avatar_controller = AvatarController()
-            await self._avatar_controller.connect(
-                on_reconnect_callback=self._on_avatar_reconnect
-            )
-            # 等待 Avatar 就绪
-            asyncio.create_task(
-                self._avatar_controller.receive_messages(self._on_avatar_event)
-            )
+
+            controller = AvatarController()
+            self._avatar_controller = controller
+            await controller.connect(on_reconnect_callback=self._on_avatar_reconnect)
+            self._start_avatar_receiver(controller)
+
             # 等待最多 20 秒
             for _ in range(40):
-                if self._avatar_controller.is_ready:
+                if controller.is_ready:
                     break
                 await asyncio.sleep(0.5)
 
-            if self._avatar_controller.is_ready:
+            if controller.is_ready:
                 await self._send_digital_human_state("avatar_ready", "Avatar service ready")
             else:
                 await self._send_digital_human_state("error", "Avatar connection timeout")
@@ -349,30 +407,26 @@ class RealtimeBridge:
                         return
 
                     try:
-                        # 关闭旧的 controller
-                        if self._avatar_controller is not None:
-                            try:
-                                await self._avatar_controller.close()
-                            except Exception:
-                                logger.debug("[Bridge] close stale avatar controller failed", exc_info=True)
+                        async with self._avatar_init_lock:
+                            await self._stop_avatar_receiver()
+                            if self._avatar_controller is not None:
+                                try:
+                                    await self._avatar_controller.close()
+                                except Exception:
+                                    logger.debug("[Bridge] close stale avatar controller failed", exc_info=True)
 
-                        # 创建新的 controller 并连接
-                        self._avatar_controller = AvatarController()
-                        await self._avatar_controller.connect(
-                            on_reconnect_callback=self._on_avatar_reconnect
-                        )
-                        # 启动消息接收循环
-                        asyncio.create_task(
-                            self._avatar_controller.receive_messages(self._on_avatar_event)
-                        )
+                            controller = AvatarController()
+                            self._avatar_controller = controller
+                            await controller.connect(on_reconnect_callback=self._on_avatar_reconnect)
+                            self._start_avatar_receiver(controller)
 
-                        # 等待 Avatar 就绪（最多 20 秒）
-                        for _ in range(40):
-                            if self._avatar_controller.is_ready:
-                                break
-                            await asyncio.sleep(0.5)
+                            # 等待 Avatar 就绪（最多 20 秒）
+                            for _ in range(40):
+                                if controller.is_ready:
+                                    break
+                                await asyncio.sleep(0.5)
 
-                        if self._avatar_controller.is_ready:
+                        if controller.is_ready:
                             logger.info("[Bridge] Avatar reconnected successfully on attempt %d", attempt)
                             await self._send_digital_human_state("avatar_ready", "数字人重连成功")
                             # 重连成功后发送带 reconnected 标记的 stream_info，
@@ -397,10 +451,11 @@ class RealtimeBridge:
                 self._reconnecting = False
 
     # 处理前端 WebSocket 连接 — 主消息循环
-    async def handle_frontend(self, ws):
-        self.frontend_ws = ws
-        # 每次新连接重置 session_id，避免跨模块会话复用
-        self.session_id = ""
+    async def handle_frontend(self, ws, owner: object | None = None):
+        if owner is None:
+            owner = self.bind_frontend(ws)
+        elif not self.owns_frontend(owner):
+            return
         # 确保 AvatarController 已初始化
         try:
             await self._ensure_avatar_controller()
@@ -413,6 +468,10 @@ class RealtimeBridge:
                 "content": "数字人服务连接失败，请检查网络后刷新页面重试",
             })
 
+        # A newer frontend connection superseded this one while Avatar was connecting.
+        if not self.owns_frontend(owner):
+            return
+
         # 发送已缓存的流信息（Avatar 重连场景）
         if self._avatar_controller and self._avatar_controller._last_stream_info:
             await self._send_to_frontend({
@@ -422,7 +481,7 @@ class RealtimeBridge:
 
         try:
             # 持续接收前端消息并路由处理
-            while True:
+            while self.owns_frontend(owner):
                 try:
                     message = await ws.receive_text()
                     data = json.loads(message)
@@ -452,13 +511,14 @@ class RealtimeBridge:
         except Exception as e:
             logger.error("[Bridge] handle_frontend : %s", e, exc_info=True)
         finally:
-            # 连接断开时清理 Avatar 资源
-            if self._avatar_controller:
-                try:
-                    await self._avatar_controller.stop()
-                except Exception:
-                    logger.debug("[Bridge] avatar stop on disconnect failed", exc_info=True)
-            self.frontend_ws = None
+            # Only the active frontend owner may stop shared Avatar resources.
+            if self.owns_frontend(owner):
+                if self._avatar_controller:
+                    try:
+                        await self._avatar_controller.stop()
+                    except Exception:
+                        logger.debug("[Bridge] avatar stop on disconnect failed", exc_info=True)
+                self.frontend_ws = None
 
     # 检查前端 WebSocket 连接状态是否仍有效
     def _frontend_ws_ready(self) -> bool:
@@ -598,10 +658,12 @@ class RealtimeBridge:
 
         return list(dict.fromkeys(attachments))
 
-    # 处理前端传来的音频数据块：base64 解码后按 1280 字节切分入队列
+    # 处理前端传来的音频数据块：跨消息聚合为 40ms 的完整 PCM 帧
     async def _handle_audio_chunk(self, data: dict):
         audio_b64 = data.get("audio", "")
         if not self.is_listening or not audio_b64 or not self.current_audio_queue:
+            return
+        if self._avatar_controller and self._avatar_controller.is_speaking:
             return
         try:
             pcm_bytes = base64.b64decode(audio_b64, validate=True)
@@ -612,18 +674,19 @@ class RealtimeBridge:
             logger.warning("[Bridge] ignored oversized audio chunk bytes=%s", len(pcm_bytes))
             return
         self._audio_chunk_counter += 1
-        if self._audio_chunk_counter % 25 == 0:
+        if self._audio_chunk_counter == 1 or self._audio_chunk_counter % 25 == 0:
             logger.info(
                 "[Bridge] audio_chunk recv count=%s bytes=%s queue_size=%s",
                 self._audio_chunk_counter,
                 len(pcm_bytes),
                 self.current_audio_queue.qsize(),
             )
-        # 音频块切分（1280 字节 = 40ms @ 16kHz）
-        for i in range(0, len(pcm_bytes), 1280):
-            chunk = pcm_bytes[i:i + 1280]
-            if not chunk:
-                continue
+        # 4096-byte browser callbacks do not align to 1280-byte ASR frames.
+        # Preserve the remainder across callbacks instead of emitting 256-byte bursts.
+        self._audio_frame_buffer.extend(pcm_bytes)
+        while len(self._audio_frame_buffer) >= ASR_AUDIO_FRAME_BYTES:
+            chunk = bytes(self._audio_frame_buffer[:ASR_AUDIO_FRAME_BYTES])
+            del self._audio_frame_buffer[:ASR_AUDIO_FRAME_BYTES]
             self._put_audio_chunk((time.monotonic(), chunk))
 
     def _put_audio_chunk(self, item: tuple[float, bytes]) -> None:
@@ -648,10 +711,48 @@ class RealtimeBridge:
         except asyncio.QueueFull:
             self._audio_dropped_chunks += 1
 
+    def _restore_asr_audio(self, items: list[tuple[float, bytes] | None]) -> None:
+        """Put frames consumed by a failed ASR connection before newer audio."""
+        queue = self.current_audio_queue
+        if queue is None or not items:
+            return
+
+        pending: list[tuple[float, bytes] | None] = []
+        while True:
+            try:
+                pending.append(queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+
+        combined: list[tuple[float, bytes] | None] = [*items, *pending]
+        if queue.maxsize > 0 and len(combined) > queue.maxsize:
+            has_end_marker = combined[-1] is None
+            truncated = len(combined) - queue.maxsize
+            combined = combined[:queue.maxsize]
+            if has_end_marker:
+                combined[-1] = None
+            logger.warning(
+                "[Bridge] ASR replay truncated frames=%s maxsize=%s",
+                truncated,
+                queue.maxsize,
+            )
+
+        for item in combined:
+            queue.put_nowait(item)
+        logger.info("[Bridge] restored ASR audio frames=%s pending=%s", len(items), len(pending))
+
     # 处理音频输入结束信号：向队列发送 None 终止符
     async def _handle_audio_end(self):
         if self.current_audio_queue:
+            has_audio = self._audio_chunk_counter > 0 or bool(self._audio_frame_buffer)
+            if self._audio_frame_buffer:
+                self._put_audio_chunk(
+                    (time.monotonic(), bytes(self._audio_frame_buffer))
+                )
+                self._audio_frame_buffer.clear()
             self._put_audio_end(self.current_audio_queue)
+            if has_audio:
+                await self._send_digital_human_state("recognizing", "Processing speech")
 
     @staticmethod
     def _put_audio_end(queue: asyncio.Queue) -> None:
@@ -725,14 +826,100 @@ class RealtimeBridge:
 
     # 启动 VAD 语音活动检测监听模式
     async def _handle_start_vad(self):
+        await self._cancel_asr_ready_ack()
+        previous_queue = self.current_audio_queue
+        self._vad_generation += 1
+        generation = self._vad_generation
+        self._vad_ack_generation = None
+        previous_task = self._asr_loop_task
+        self._asr_loop_task = None
+        if previous_queue is not None:
+            self._put_audio_end(previous_queue)
+        if previous_task is not None and not previous_task.done():
+            previous_task.cancel()
+            await asyncio.gather(previous_task, return_exceptions=True)
+
         self.is_listening = True
         self.current_audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_MAX_CHUNKS)
+        self._audio_frame_buffer.clear()
         self._audio_chunk_counter = 0
         self._audio_dropped_chunks = 0
-        if self._asr_loop_task is None or self._asr_loop_task.done():
-            self._asr_loop_task = asyncio.create_task(self._continuous_listen_loop())
-        await self._send_to_frontend({"type": "vad_state", "data": {"listening": True}})
-        await self._send_digital_human_state("listening", "Listening for speech")
+        asr_ready_event = asyncio.Event()
+        asr_task = asyncio.create_task(
+            self._continuous_listen_loop(generation, asr_ready_event)
+        )
+        self._asr_loop_task = asr_task
+        owner = self._frontend_owner
+        self._asr_ready_ack_task = asyncio.create_task(
+            self._ack_vad_when_asr_ready(
+                generation=generation,
+                asr_task=asr_task,
+                ready_event=asr_ready_event,
+                owner=owner,
+            )
+        )
+
+    async def _ack_vad_when_asr_ready(
+        self,
+        *,
+        generation: int,
+        asr_task: asyncio.Task,
+        ready_event: asyncio.Event,
+        owner: object | None,
+    ) -> None:
+        current_task = asyncio.current_task()
+        try:
+            try:
+                await asyncio.wait_for(
+                    ready_event.wait(),
+                    timeout=ASR_READY_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                # Resolve a timeout/ready race in favor of a completed connection.
+                if not ready_event.is_set():
+                    is_current = (
+                        generation == self._vad_generation
+                        and self._asr_loop_task is asr_task
+                        and self.is_listening
+                    )
+                    if is_current:
+                        owner_is_current = owner is None or self.owns_frontend(owner)
+                        logger.error("[Bridge] ASR upstream connection timed out")
+                        await self._stop_vad_input()
+                        if owner_is_current:
+                            await self._send_event_with_turn_id(
+                                "error",
+                                content="语音识别服务连接超时，请重试。",
+                            )
+                    return
+
+            is_current = (
+                generation == self._vad_generation
+                and self._asr_loop_task is asr_task
+                and self.is_listening
+            )
+            if not is_current:
+                return
+            if owner is not None and not self.owns_frontend(owner):
+                await self._stop_vad_input()
+                return
+
+            await self._send_to_frontend({"type": "vad_state", "data": {"listening": True}})
+            self._vad_ack_generation = generation
+            await self._send_digital_human_state("listening", "Listening for speech")
+        except asyncio.CancelledError:
+            return
+        finally:
+            if self._asr_ready_ack_task is current_task:
+                self._asr_ready_ack_task = None
+
+    async def _cancel_asr_ready_ack(self) -> None:
+        task = self._asr_ready_ack_task
+        self._asr_ready_ack_task = None
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
     # 停止 VAD 监听模式
     async def _handle_stop_vad(self):
@@ -742,19 +929,29 @@ class RealtimeBridge:
     # 停止接受麦克风音频输入并取消 ASR 循环任务
     async def _stop_vad_input(self):
         self.is_listening = False
+        self._vad_generation += 1
+        self._vad_ack_generation = None
+        await self._cancel_asr_ready_ack()
         audio_queue = self.current_audio_queue
         self.current_audio_queue = None
+        self._audio_frame_buffer.clear()
         if audio_queue:
             self._put_audio_end(audio_queue)
         if self._asr_loop_task and not self._asr_loop_task.done():
             current_task = asyncio.current_task()
             if self._asr_loop_task is not current_task:
                 self._asr_loop_task.cancel()
+                await asyncio.gather(self._asr_loop_task, return_exceptions=True)
+        self._asr_loop_task = None
         await self._send_to_frontend({"type": "vad_state", "data": {"listening": False}})
 
     # 持续 ASR 监听循环：数字人说话时暂停以避免拾取 TTS 回声
-    async def _continuous_listen_loop(self):
-        while self.is_listening:
+    async def _continuous_listen_loop(
+        self,
+        generation: int,
+        ready_event: asyncio.Event | None = None,
+    ):
+        while self.is_listening and generation == self._vad_generation:
             try:
                 # 如果数字人正在说话，暂停 ASR 识别
                 # 避免麦克风拾取到 TTS 回声导致错误识别
@@ -762,16 +959,22 @@ class RealtimeBridge:
                     await asyncio.sleep(0.3)
                     continue
 
-                await self._single_recognition_round()
+                await self._single_recognition_round(ready_event)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("[Bridge] ASR continuous listen error: %s", e)
-                await self._send_event_with_turn_id("error", content=f"语音识别异常: {e}")
+                # Initial connection failures are retried behind the readiness gate.
+                # The frontend receives one timeout only if all retries fail.
+                if self._vad_ack_generation == generation:
+                    await self._send_event_with_turn_id("error", content=f"语音识别异常: {e}")
                 await asyncio.sleep(0.5)
 
-    # 单轮 ASR 识别：清空积压音频 → 创建 StreamingASRSession → 处理结果
-    async def _single_recognition_round(self):
+    # 单轮 ASR 识别：保留用户开口音频 → 创建 StreamingASRSession → 处理结果
+    async def _single_recognition_round(
+        self,
+        ready_event: asyncio.Event | None = None,
+    ):
         """Run one ASR recognition round using StreamingASRSession.
 
         如果数字人正在说话，跳过本轮识别以避免拾取 TTS 回声。
@@ -785,20 +988,7 @@ class RealtimeBridge:
             await asyncio.sleep(0.3)
             return
 
-        # 清理队列中积压的旧音频数据，避免发送过时的音频给 ASR
-        drained = 0
-        while not self.current_audio_queue.empty():
-            try:
-                self.current_audio_queue.get_nowait()
-                drained += 1
-            except asyncio.QueueEmpty:
-                break
-        if drained > 0:
-            logger.debug("[Bridge] Drained %d stale audio chunks before ASR round", drained)
-
         # 发送 recognizing 状态
-        await self._send_digital_human_state("recognizing", "Processing speech")
-
         # Compute adaptive VAD EOS
         vad_eos = self._vad_controller.compute_vad_eos()
 
@@ -806,6 +996,7 @@ class RealtimeBridge:
         asr_session = StreamingASRSession(
             audio_queue=self.current_audio_queue,
             vad_eos=vad_eos,
+            ready_event=ready_event,
         )
 
         try:
@@ -834,9 +1025,9 @@ class RealtimeBridge:
                     is_dup = normalized == self._last_asr_text
                     recent_dup = is_dup and (now_ts - self._last_asr_at < 1.6)
                     if not recent_dup:
-                        # 过滤过短的误识别（噪音）——单字或极短文本通常是误触发
-                        if len(normalized) <= 1:
-                            logger.debug("[Bridge] Ignoring too-short ASR result: '%s'", normalized)
+                        # 单字“好/对/是/嗯”也是有效的连续对话输入，仅过滤纯标点或空白。
+                        if not re.search(r"[\w\u3400-\u9fff]", normalized):
+                            logger.debug("[Bridge] Ignoring non-verbal ASR result: '%s'", normalized)
                         else:
                             self._last_asr_text = normalized
                             self._last_asr_at = now_ts
@@ -852,14 +1043,16 @@ class RealtimeBridge:
                                 self._pending_asr_texts.append(normalized)
                             else:
                                 # Keep ASR loop responsive: do not block next round on LLM pipeline.
-                                asyncio.create_task(
+                                self._spawn_background(
                                     self._handle_user_text(
                                         normalized,
                                         need_diagram=self._need_diagram_default,
                                         enable_search=self._enable_search_default,
-                                    )
+                                    ),
+                                    label="voice-turn",
                                 )
         except Exception as e:
+            self._restore_asr_audio(asr_session.take_replay_items())
             logger.error("[Bridge] ASR session failed: %s", e)
             await self._send_event_with_turn_id("error", content=f"语音识别异常: {e}")
 
@@ -982,7 +1175,7 @@ class RealtimeBridge:
                 """消费 chat 服务的 SSE 事件流，转发 token/status/error/diagram 事件。"""
                 nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
                 nonlocal stream_failed, fail_reason
-                async for event in chat(
+                event_stream = chat(
                     user_message_id=user_message_id,
                     user_id=self.user_id,
                     username=self.username or f"user_{self.user_id}",
@@ -991,74 +1184,92 @@ class RealtimeBridge:
                     attachments=merged_attachments,
                     need_teaching_diagram=need_diagram,
                     enable_web_search=enable_search,
-                ):
-                    event_count += 1
-                    if not self.frontend_ws:
-                        logger.warning("[Bridge] WebSocket disconnected, stop processing events")
-                        break
-
-                    event_type = str(event.get("event", ""))
-                    payload = event.get("data")
-                    logger.info("[Bridge] event#%d type=%s payload_type=%s preview=%s",
-                                event_count, event_type, type(payload).__name__,
-                                str(payload)[:120] if payload else "None")
-
-                    if event_type == "token":
-                        # 流式 token → 修复编码后转发给前端
-                        content = self._repair_text_encoding(str(payload or ""))
-                        if content:
-                            full_response += content
-                            if self.frontend_ws:
-                                await self._send_event_with_turn_id("assistant_chunk", content=content)
-
-                    elif event_type == "status":
-                        # 状态事件 → 转发给前端
-                        if self.frontend_ws and isinstance(payload, dict):
-                            await self._send_event_with_turn_id("status", data=payload)
-
-                    elif event_type == "agent_status":
-                        # Agent 思考过程事件 → 转发给前端显示思考进度
-                        if self.frontend_ws and isinstance(payload, dict):
-                            await self._send_event_with_turn_id("status", data=payload)
-
-                    elif event_type == "error":
-                        # 错误事件 → 标记失败并通知前端
-                        stream_failed = True
-                        fail_reason = str(payload or "数字人回答失败，请重试")
-                        if self.frontend_ws:
-                            await self._send_digital_human_state("error", fail_reason)
-                            await self._send_event_with_turn_id("error", content=fail_reason)
-
-                    elif event_type == "diagram":
-                        # 教学图事件 → 缓存并转发给前端
-                        last_diagram_payload = payload
-                        if self.frontend_ws and not diagram_forwarded:
-                            await self._send_event_with_turn_id("diagram", data=payload)
-                            diagram_forwarded = True
-
-                    elif event_type == "done":
-                        # 完成事件 → 提取最终回复和教学图
-                        if isinstance(payload, dict):
-                            maybe_text = self._repair_text_encoding(
-                                str(payload.get("full_response", "") or payload.get("response", "") or "")
+                )
+                try:
+                    while True:
+                        try:
+                            event = await asyncio.wait_for(
+                                anext(event_stream),
+                                timeout=CHAT_STREAM_IDLE_TIMEOUT_SECONDS,
                             )
-                            if maybe_text and not full_response:
-                                full_response = maybe_text
+                        except StopAsyncIteration:
+                            break
+                        except asyncio.TimeoutError as exc:
+                            stream_failed = True
+                            fail_reason = "回答生成长时间没有进展，请重试"
+                            raise RuntimeError(fail_reason) from exc
+
+                        event_count += 1
+                        if not self.frontend_ws:
+                            logger.warning("[Bridge] WebSocket disconnected, stop processing events")
+                            break
+
+                        event_type = str(event.get("event", ""))
+                        payload = event.get("data")
+                        logger.info("[Bridge] event#%d type=%s payload_type=%s preview=%s",
+                                    event_count, event_type, type(payload).__name__,
+                                    str(payload)[:120] if payload else "None")
+
+                        if event_type == "token":
+                            # 流式 token → 修复编码后转发给前端
+                            content = self._repair_text_encoding(str(payload or ""))
+                            if content:
+                                full_response += content
                                 if self.frontend_ws:
-                                    await self._send_event_with_turn_id("assistant_chunk", content=full_response)
-                            resources = payload.get("resources")
-                            diagram_payload = None
-                            if isinstance(resources, dict):
-                                diagram_payload = resources.get("teaching_diagram") or resources.get("diagram")
-                            if not diagram_payload:
-                                diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
-                            if diagram_payload:
-                                last_diagram_payload = diagram_payload
-                            if diagram_payload and self.frontend_ws and not diagram_forwarded:
-                                await self._send_event_with_turn_id("diagram", data=diagram_payload)
+                                    await self._send_event_with_turn_id("assistant_chunk", content=content)
+
+                        elif event_type == "status":
+                            # 状态事件 → 转发给前端
+                            if self.frontend_ws and isinstance(payload, dict):
+                                await self._send_event_with_turn_id("status", data=payload)
+
+                        elif event_type == "agent_status":
+                            # Agent 思考过程事件 → 转发给前端显示思考进度
+                            if self.frontend_ws and isinstance(payload, dict):
+                                await self._send_event_with_turn_id("status", data=payload)
+
+                        elif event_type == "error":
+                            # 错误事件 → 标记失败并通知前端
+                            stream_failed = True
+                            fail_reason = str(payload or "数字人回答失败，请重试")
+                            if self.frontend_ws:
+                                await self._send_digital_human_state("error", fail_reason)
+                                await self._send_event_with_turn_id("error", content=fail_reason)
+
+                        elif event_type == "diagram":
+                            # 教学图事件 → 缓存并转发
+                            last_diagram_payload = payload
+                            if self.frontend_ws and not diagram_forwarded:
+                                await self._send_event_with_turn_id("diagram", data=payload)
                                 diagram_forwarded = True
 
-            # 执行事件流消费（不设固定超时，长回复+教学图可能超过 120s）
+                        elif event_type == "done":
+                            # 完成事件 → 提取最终回复和教学图
+                            if isinstance(payload, dict):
+                                maybe_text = self._repair_text_encoding(
+                                    str(payload.get("full_response", "") or payload.get("response", "") or "")
+                                )
+                                if maybe_text and not full_response:
+                                    full_response = maybe_text
+                                    if self.frontend_ws:
+                                        await self._send_event_with_turn_id("assistant_chunk", content=full_response)
+                                resources = payload.get("resources")
+                                diagram_payload = None
+                                if isinstance(resources, dict):
+                                    diagram_payload = resources.get("teaching_diagram") or resources.get("diagram")
+                                if not diagram_payload:
+                                    diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
+                                if diagram_payload:
+                                    last_diagram_payload = diagram_payload
+                                if diagram_payload and self.frontend_ws and not diagram_forwarded:
+                                    await self._send_event_with_turn_id("diagram", data=diagram_payload)
+                                    diagram_forwarded = True
+                finally:
+                    aclose = getattr(event_stream, "aclose", None)
+                    if callable(aclose):
+                        await aclose()
+
+            # 每收到一个事件都会重置空闲超时，长回复可以持续流式执行。
             await _consume_stream_events()
         except asyncio.CancelledError:
             stream_failed = True
@@ -1077,6 +1288,15 @@ class RealtimeBridge:
                 await self._send_digital_human_state("error", str(exc))
                 await self._send_event_with_turn_id("error", content=f"数字人回答失败: {fail_reason}")
         finally:
+            if not full_response.strip():
+                full_response = (
+                    "抱歉，刚才的回答生成超时了，请再说一次。"
+                    if "长时间没有进展" in fail_reason
+                    else "抱歉，刚才没有生成有效回答，请再说一次。"
+                )
+                if self.frontend_ws:
+                    await self._send_event_with_turn_id("assistant_chunk", content=full_response)
+
             logger.info(
                 "[Bridge] stream ended events=%d full_response_len=%d failed=%s",
                 event_count,
@@ -1102,12 +1322,13 @@ class RealtimeBridge:
                     bool(self.frontend_ws),
                 )
                 # 不在这里发送 speaking 状态，等 tts_start 回调时再发送
-                asyncio.create_task(
+                self._spawn_background(
                     self._avatar_controller.speak(
                         tts_text,
                         speech_rate=self._speech_rate,
                         turn_id=self._current_turn_id,
-                    )
+                    ),
+                    label="avatar-speech",
                 )
 
     # 向前端 WebSocket 发送 JSON 消息（如果连接已关闭则静默忽略）
@@ -1124,10 +1345,29 @@ class RealtimeBridge:
     # 关闭桥接资源：停止 ASR 循环、关闭 Avatar 控制器
     async def close(self):
         self.is_listening = False
+        self._vad_generation += 1
+        self._vad_ack_generation = None
+        self._audio_frame_buffer.clear()
+        await self._cancel_asr_ready_ack()
         if self._asr_loop_task and not self._asr_loop_task.done():
             self._asr_loop_task.cancel()
+            await asyncio.gather(self._asr_loop_task, return_exceptions=True)
+        self._asr_loop_task = None
+        background_tasks = [
+            task for task in self._background_tasks
+            if task is not asyncio.current_task() and not task.done()
+        ]
+        for task in background_tasks:
+            task.cancel()
+        if background_tasks:
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+        self._background_tasks.clear()
+        await self._stop_avatar_receiver()
         if self._avatar_controller:
             await self._avatar_controller.close()
+        self._avatar_controller = None
+        self.frontend_ws = None
+        self._frontend_owner = None
 
 
 # 全局 AvatarBridgeManager 单例 — 管理所有用户的 RealtimeBridge 实例
@@ -1158,6 +1398,25 @@ class AvatarBridgeManager:
                 self._bridges[user_id] = bridge
             return self._bridges[user_id]
 
+    async def attach_frontend(self, user_id: int, ws, username: str = "") -> tuple[RealtimeBridge, object]:
+        """Atomically bind the latest frontend connection for a user."""
+        lock = self._get_lock(user_id)
+        previous_ws = None
+        async with lock:
+            bridge = self._bridges.get(user_id)
+            if bridge is None:
+                bridge = RealtimeBridge(user_id=user_id, username=username)
+                self._bridges[user_id] = bridge
+            previous_ws = bridge.frontend_ws
+            owner = bridge.bind_frontend(ws)
+
+        if previous_ws is not None and previous_ws is not ws:
+            try:
+                await previous_ws.close(code=1000, reason="superseded by a newer connection")
+            except Exception:
+                pass
+        return bridge, owner
+
     # 查询用户的 Bridge 状态：连接状态、会话 ID、监听状态
     async def get_status(self, user_id: int) -> dict:
         bridge = self._bridges.get(user_id)
@@ -1184,11 +1443,25 @@ class AvatarBridgeManager:
             await bridge._avatar_controller.stop()
 
     # 清理用户的 Bridge 实例：从字典移除并关闭连接
-    async def cleanup(self, user_id: int):
-        bridge = self._bridges.pop(user_id, None)
-        self._locks.pop(user_id, None)
-        if bridge:
-            await bridge.close()
+    async def cleanup(
+        self,
+        user_id: int,
+        bridge: RealtimeBridge | None = None,
+        owner: object | None = None,
+    ):
+        lock = self._get_lock(user_id)
+        target = None
+        async with lock:
+            current = self._bridges.get(user_id)
+            if current is None:
+                return
+            if bridge is not None and current is not bridge:
+                return
+            if owner is not None and not current.owns_frontend(owner):
+                return
+            target = self._bridges.pop(user_id)
+
+        await target.close()
 
 
 # 全局单例 — 所有路由共享同一个 BridgeManager
