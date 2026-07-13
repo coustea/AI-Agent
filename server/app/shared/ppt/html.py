@@ -3,1400 +3,250 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import html
+import math
 import os
-import re
 import tempfile
 from pathlib import Path
 
-from app.shared.ppt.models import PPTSlide
-from app.shared.ppt.templates import ResolvedPPT, ResolvedPPTSlide
-
-
-PRESENTATION_SPEAKER = "Mentorly"
+from app.shared.ppt.contract import DiagramLayout, VisualRenderMode, visual_component
+from app.shared.ppt.models import PPTDeck, PPTSlide, VisualSpec
 
 
 @dataclass(frozen=True)
 class PPTPublication:
-    """Runtime-only publication facts, intentionally outside LLM slide content."""
-
     generated_at: datetime
 
-    @property
-    def generated_label(self) -> str:
-        return self.generated_at.strftime("生成于 %Y-%m-%d %H:%M")
 
+def _escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
 
-BASE_CSS = r"""
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
 
-html,
-body {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--stage-bg, #eef1f5);
-}
-
-body {
-  font-family:
-    var(
-      --font-family,
-      "Noto Sans SC",
-      "Microsoft YaHei",
-      sans-serif
-    );
-  color: var(--text, #172033);
-  user-select: none;
-}
-
-.deck-viewport {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-}
-
-.deck-stage {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1920px;
-  height: 1080px;
-  overflow: hidden;
-  transform-origin: 0 0;
-  background: var(--slide-bg, #ffffff);
-}
-
-.slide {
-  position: absolute;
-  inset: 0;
-  width: 1920px;
-  height: 1080px;
-  overflow: hidden;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  background: var(--slide-bg, #ffffff);
-}
-
-.slide.active,
-.slide.visible {
-  z-index: 1;
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.slide-shell {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: 74px 104px 70px;
-}
-
-.slide-header {
-  position: relative;
-  z-index: 2;
-}
-
-.eyebrow {
-  font-size: 18px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted, #667085);
-}
-
-.slide-title {
-  max-width: 1500px;
-  margin-top: 12px;
-  font-size: 54px;
-  line-height: 1.18;
-  letter-spacing: -0.035em;
-}
-
-[data-title-size="compact"] .slide-title {
-  font-size: 46px;
-}
-
-.slide-subtitle {
-  max-width: 1200px;
-  margin-top: 14px;
-  font-size: 25px;
-  line-height: 1.5;
-  color: var(--muted, #667085);
-}
-
-.slide-content {
-  position: relative;
-  height: 760px;
-  margin-top: 38px;
-}
-
-.slide-body {
-  position: relative;
-  min-height: 100%;
-}
-
-.slide[data-layout-profile="sequence"] .slide-body,
-.slide[data-layout-profile="milestones"] .slide-body,
-.slide[data-layout-profile="definition-board"] .slide-body,
-.slide[data-layout-profile="boundary-grid"] .slide-body,
-.slide[data-layout-profile="mechanism"] .slide-body,
-.slide[data-layout-profile="comparison"] .slide-body,
-.slide[data-layout-profile="correction"] .slide-body,
-.slide[data-layout-profile="map"] .slide-body {
-  padding-bottom: 76px;
-}
-
-.slide-index {
-  position: absolute;
-  right: 104px;
-  top: 82px;
-  font-size: 18px;
-  color: var(--muted, #667085);
-}
-
-.hero-statement {
-  max-width: 1420px;
-  font-size: 48px;
-  line-height: 1.34;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-}
-
-.question-text {
-  max-width: 1500px;
-  font-size: 58px;
-  line-height: 1.28;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.point-list {
-  display: grid;
-  gap: 24px;
-  max-width: 1540px;
-  margin-top: 42px;
-}
-
-.point-row {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 38px;
-  padding: 18px 0;
-  border-bottom:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.point-label {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--accent, #3157d5);
-}
-
-.point-detail {
-  font-size: 25px;
-  line-height: 1.55;
-}
-
-.process {
-  display: grid;
-  grid-template-columns:
-    repeat(
-      var(--count, 5),
-      minmax(0, 1fr)
-    );
-  gap: 0;
-  align-items: start;
-  margin-top: 80px;
-}
-
-.process-step {
-  position: relative;
-  min-height: 250px;
-  padding: 0 30px 0 42px;
-  border-left:
-    2px solid
-    var(--line, #d9dee8);
-}
-
-.step-key {
-  font-size: 18px;
-  font-weight: 750;
-  color: var(--accent, #3157d5);
-}
-
-.step-title {
-  margin-top: 18px;
-  font-size: 28px;
-  line-height: 1.25;
-}
-
-.step-detail {
-  margin-top: 18px;
-  font-size: 21px;
-  line-height: 1.55;
-  color: var(--muted, #667085);
-}
-
-.comparison-table {
-  width: 100%;
-  margin-top: 34px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 20px;
-}
-
-.comparison-table th {
-  padding: 18px 20px;
-  text-align: left;
-  border-bottom:
-    2px solid
-    var(--text, #172033);
-  font-size: 21px;
-}
-
-.comparison-table td {
-  padding: 19px 20px;
-  vertical-align: top;
-  border-bottom:
-    1px solid
-    var(--line, #d9dee8);
-  line-height: 1.45;
-}
-
-.misconception-list {
-  display: grid;
-  gap: 28px;
-  margin-top: 30px;
-}
-
-.misconception-row {
-  display: grid;
-  grid-template-columns:
-    1fr 1.15fr 1.15fr;
-  gap: 0;
-  border-top:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.misconception-cell {
-  padding: 22px 28px 22px 0;
-  font-size: 21px;
-  line-height: 1.5;
-}
-
-.misconception-cell
-+ .misconception-cell {
-  padding-left: 28px;
-  border-left:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.cell-label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 15px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  color: var(--accent, #3157d5);
-}
-
-.knowledge-map {
-  position: relative;
-  display: grid;
-  grid-template-columns:
-    330px 1fr;
-  gap: 90px;
-  align-items: center;
-  height: 600px;
-}
-
-.map-center {
-  font-size: 38px;
-  line-height: 1.3;
-  font-weight: 720;
-}
-
-.map-branches {
-  display: grid;
-  gap: 24px;
-}
-
-.map-branch {
-  display: grid;
-  grid-template-columns:
-    230px 1fr;
-  gap: 30px;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.branch-label {
-  font-size: 23px;
-  font-weight: 700;
-  color: var(--accent, #3157d5);
-}
-
-.branch-keywords {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 24px;
-  font-size: 22px;
-}
-
-.takeaway {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding-top: 18px;
-  border-top:
-    1px solid
-    var(--line, #d9dee8);
-  font-size: 22px;
-  font-weight: 650;
-  color: var(--accent, #3157d5);
-}
-
-.cover-content,
-.closing-content {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  height: 700px;
-}
-
-.cover-meta {
-  display: flex;
-  gap: 36px;
-  margin-top: 56px;
-  font-size: 20px;
-  color: var(--muted, #667085);
-}
-
-.keyword-line {
-  margin-top: 24px;
-  font-size: 20px;
-  color: var(--muted, #667085);
-}
-
-.deck-controls {
-  position: fixed;
-  left: 50%;
-  bottom: 22px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  transform: translate(-50%, 12px);
-  border-radius: 999px;
-  background: rgba(10, 15, 25, 0.82);
-  color: #ffffff;
-  opacity: 0;
-  pointer-events: none;
-  backdrop-filter: blur(12px);
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
-}
-
-body.controls-visible .deck-controls,
-.deck-controls:hover {
-  opacity: 0.92;
-  pointer-events: auto;
-  transform: translate(-50%, 0);
-}
-
-.deck-controls button {
-  width: 38px;
-  height: 32px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  cursor: pointer;
-}
-
-.deck-counter {
-  min-width: 64px;
-  text-align: center;
-  font: 600 13px sans-serif;
-}
-
-.deck-progress {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 999;
-  height: 3px;
-  background: rgba(0, 0, 0, 0.08);
-  opacity: 0.38;
-}
-
-.deck-progress > span {
-  display: block;
-  width: 0;
-  height: 100%;
-  background: var(--accent, #3157d5);
-  transition: width 0.3s ease;
-}
-
-.speaker-notes-panel {
-  position: fixed;
-  right: 18px;
-  bottom: 72px;
-  z-index: 1002;
-  display: none;
-  width: min(580px, 42vw);
-  max-height: 36vh;
-  overflow: auto;
-  padding: 20px;
-  border-radius: 12px;
-  background: rgba(7, 11, 18, 0.94);
-  color: #eef2f8;
-  font: 16px/1.6 sans-serif;
-}
-
-.speaker-notes-panel.open {
-  display: block;
-}
-
-[data-step] {
-  opacity: 1;
-}
-
-@media print {
-  html,
-  body {
-    width: 1920px;
-    height: auto;
-    overflow: visible;
-  }
-
-  .deck-viewport,
-  .deck-stage {
-    position: static;
-    overflow: visible;
-    transform: none !important;
-  }
-
-  .deck-stage {
-    width: auto;
-    height: auto;
-  }
-
-  .slide {
-    position: relative;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    break-after: page;
-  }
-
-  .deck-controls,
-  .deck-progress,
-  .speaker-notes-panel {
-    display: none !important;
-  }
-}
-
-@media (
-  prefers-reduced-motion: reduce
-) {
-  *,
-  *::before,
-  *::after {
-    animation-duration:
-      0.01ms !important;
-    transition-duration:
-      0.01ms !important;
-  }
-}
-"""
-
-
-CONTROLLER_JS = r"""
-class SlidePresentation {
-  constructor() {
-    this.stage =
-      document.getElementById(
-        "deckStage"
-      );
-
-    this.slides = [
-      ...document.querySelectorAll(
-        ".slide"
-      ),
-    ];
-
-    this.current = 0;
-    this.controlsTimer = null;
-
-    this.scale();
-    this.bind();
-    this.show(0);
-    this.revealControls();
-
-    window.addEventListener(
-      "resize",
-      () => this.scale()
-    );
-  }
-
-  scale() {
-    const factor = Math.min(
-      window.innerWidth / 1920,
-      window.innerHeight / 1080
-    );
-
-    const x =
-      (
-        window.innerWidth
-        - 1920 * factor
-      ) / 2;
-
-    const y =
-      (
-        window.innerHeight
-        - 1080 * factor
-      ) / 2;
-
-    this.stage.style.transform =
-      `translate(${x}px, ${y}px) scale(${factor})`;
-  }
-
-  revealControls() {
-    document.body.classList.add(
-      "controls-visible"
-    );
-
-    if (this.controlsTimer) {
-      clearTimeout(
-        this.controlsTimer
-      );
-    }
-
-    this.controlsTimer = setTimeout(
-      () => {
-        document.body.classList.remove(
-          "controls-visible"
-        );
-      },
-      1500
-    );
-  }
-
-  show(index) {
-    this.current = Math.max(
-      0,
-      Math.min(
-        index,
-        this.slides.length - 1
-      )
-    );
-
-    this.slides.forEach(
-      (slide, slideIndex) => {
-        const active =
-          slideIndex === this.current;
-
-        slide.classList.toggle(
-          "active",
-          active
-        );
-
-        slide.classList.toggle(
-          "visible",
-          active
-        );
-      }
-    );
-
-    document.getElementById(
-      "deckCounter"
-    ).textContent =
-      `${this.current + 1} / ${this.slides.length}`;
-
-    const percentage =
-      (
-        (this.current + 1)
-        / this.slides.length
-      ) * 100;
-
-    document.getElementById(
-      "deckProgress"
-    ).style.width =
-      `${percentage}%`;
-
-    const notesPanel =
-      document.getElementById(
-        "notesPanel"
-      );
-
-    notesPanel.textContent =
-      this.slides[
-        this.current
-      ].dataset.notes
-      || "暂无讲稿";
-
-    this.revealControls();
-  }
-
-  bind() {
-    document.addEventListener(
-      "mousemove",
-      () => this.revealControls()
-    );
-
-    document.addEventListener(
-      "touchstart",
-      () => this.revealControls(),
-      {
-        passive: true,
-      }
-    );
-
-    document.getElementById(
-      "prevSlide"
-    ).addEventListener(
-      "click",
-      () => this.show(
-        this.current - 1
-      )
-    );
-
-    document.getElementById(
-      "nextSlide"
-    ).addEventListener(
-      "click",
-      () => this.show(
-        this.current + 1
-      )
-    );
-
-    document.getElementById(
-      "notesToggle"
-    ).addEventListener(
-      "click",
-      () => {
-        document.getElementById(
-          "notesPanel"
-        ).classList.toggle(
-          "open"
-        );
-
-        this.revealControls();
-      }
-    );
-
-    document.getElementById(
-      "downloadDeck"
-    ).addEventListener(
-      "click",
-      () => this.download()
-    );
-
-    window.addEventListener(
-      "keydown",
-      event => {
-        this.revealControls();
-
-        if (
-          [
-            "ArrowRight",
-            "PageDown",
-            " ",
-          ].includes(event.key)
-        ) {
-          event.preventDefault();
-
-          this.show(
-            this.current + 1
-          );
-        }
-
-        if (
-          [
-            "ArrowLeft",
-            "PageUp",
-          ].includes(event.key)
-        ) {
-          event.preventDefault();
-
-          this.show(
-            this.current - 1
-          );
-        }
-
-        if (
-          event.key.toLowerCase()
-          === "n"
-        ) {
-          document.getElementById(
-            "notesPanel"
-          ).classList.toggle(
-            "open"
-          );
-        }
-      }
-    );
-  }
-
-  download() {
-    const source =
-      document.documentElement.outerHTML;
-
-    const blob = new Blob(
-      [source],
-      {
-        type: "text/html",
-      }
-    );
-
-    const url =
-      URL.createObjectURL(blob);
-
-    const link =
-      document.createElement("a");
-
-    link.href = url;
-    link.download =
-      `${document.title || "slides"}.html`;
-
-    link.click();
-
-    URL.revokeObjectURL(url);
-  }
-}
-
-new SlidePresentation();
-"""
-
-
-_SAFE_FILE_ID = re.compile(
-    r"^[A-Za-z0-9_-]+$"
-)
-
-
-def _escape(value: str) -> str:
-    return html.escape(
-        value,
-        quote=True,
-    )
-
-
-def _render_takeaway(
-    slide: PPTSlide,
-) -> str:
-    if not slide.takeaway:
+def _render_points(slide: PPTSlide) -> str:
+    if not slide.points:
         return ""
-
-    return (
-        '<p class="takeaway" data-step>'
-        f"{_escape(slide.takeaway)}"
-        "</p>"
-    )
-
-
-def _render_statement(
-    slide: PPTSlide,
-) -> str:
-    if not slide.statement:
-        return ""
-
-    return (
-        '<p class="hero-statement" data-step>'
-        f"{_escape(slide.statement)}"
-        "</p>"
-    )
-
-
-def _render_points(
-    slide: PPTSlide,
-) -> str:
-    rows = "".join(
-        (
-            '<div class="point-row" data-step>'
-            '<div class="point-label">'
-            f"{_escape(point.label)}"
-            "</div>"
-            '<div class="point-detail">'
-            f"{_escape(point.detail)}"
-            "</div>"
-            "</div>"
-        )
+    cards = "".join(
+        f'<article class="point"><h3>{_escape(point.label)}</h3><p>{_escape(point.detail)}</p></article>'
         for point in slide.points
     )
-
-    return (
-        '<div class="point-list" '
-        f'data-count="{len(slide.points)}">'
-        f"{rows}"
-        "</div>"
-    )
+    return f'<div class="points points-{len(slide.points)}">{cards}</div>'
 
 
-def _render_process(
-    slide: PPTSlide,
-) -> str:
-    steps = "".join(
-        (
-            '<article class="process-step" data-step>'
-            '<div class="step-key">'
-            f"{_escape(step.key)}"
-            "</div>"
-            '<h3 class="step-title">'
-            f"{_escape(step.title)}"
-            "</h3>"
-            '<p class="step-detail">'
-            f"{_escape(step.detail)}"
-            "</p>"
-            "</article>"
-        )
-        for step in slide.steps
-    )
-
-    return (
-        '<div class="process" '
-        f'data-count="{len(slide.steps)}" '
-        f'style="--count:{len(slide.steps)}">'
-        f"{steps}"
-        "</div>"
-    )
-
-
-def _render_table(
-    slide: PPTSlide,
-) -> str:
-    headers = "".join(
-        (
-            "<th>"
-            f"{_escape(value)}"
-            "</th>"
-        )
-        for value in slide.table.headers
-    )
-
-    rows = "".join(
-        (
-            "<tr>"
-            + "".join(
-                (
-                    "<td>"
-                    f"{_escape(value)}"
-                    "</td>"
-                )
-                for value in row
+def _positions(layout: DiagramLayout, count: int) -> list[tuple[float, float]]:
+    if count == 1:
+        return [(800, 225)]
+    if layout is DiagramLayout.HIERARCHY:
+        return [(800, 84)] + [
+            (240 + item * 1120 / max(count - 2, 1), 324) for item in range(count - 1)
+        ]
+    if layout is DiagramLayout.RING:
+        return [
+            (
+                800 + 430 * math.cos(-math.pi / 2 + item * 2 * math.pi / count),
+                225 + 158 * math.sin(-math.pi / 2 + item * 2 * math.pi / count),
             )
-            + "</tr>"
-        )
-        for row in slide.table.rows
-    )
+            for item in range(count)
+        ]
+    if layout is DiagramLayout.GRID:
+        columns = min(3, count)
+        return [
+            (360 + (item % columns) * 440, 120 + (item // columns) * 210)
+            for item in range(count)
+        ]
+    return [(170 + item * 1260 / max(count - 1, 1), 225) for item in range(count)]
 
+
+def _render_diagram(visual: VisualSpec) -> str:
+    nodes = visual.nodes
+    if not nodes:
+        return '<div class="empty-visual"><b>Visual focus</b><span>本页以关键结论组织讲解</span></div>'
+    positions = _positions(visual_component(visual.kind).layout, len(nodes))
+    by_id = {node.id: positions[index] for index, node in enumerate(nodes)}
+    edges = visual.edges or [
+        type("Edge", (), {"source": nodes[index].id, "target": nodes[index + 1].id})()
+        for index in range(len(nodes) - 1)
+    ]
+    lines = "".join(
+        f'<path class="diagram-edge" d="M {by_id[edge.source][0]:.0f} {by_id[edge.source][1]:.0f} L {by_id[edge.target][0]:.0f} {by_id[edge.target][1]:.0f}" />'
+        for edge in edges
+        if edge.source in by_id and edge.target in by_id
+    )
+    boxes = "".join(
+        f'<g class="diagram-node tone-{node.tone}"><rect x="{x - 142:.0f}" y="{y - 54:.0f}" width="284" height="108" rx="20" />'
+        f'<text x="{x:.0f}" y="{y - 7:.0f}">{_escape(node.label)}</text>'
+        f'<text class="diagram-detail" x="{x:.0f}" y="{y + 24:.0f}">{_escape(node.detail)}</text></g>'
+        for node, (x, y) in zip(nodes, positions, strict=True)
+    )
     return (
-        '<div class="comparison-matrix" '
-        f'data-columns="{len(slide.table.headers)}">'
-        '<table class="comparison-table">'
-        "<thead>"
-        f"<tr>{headers}</tr>"
-        "</thead>"
-        f"<tbody>{rows}</tbody>"
-        "</table>"
-        "</div>"
+        '<div class="diagram-wrap">'
+        f'<svg class="diagram" viewBox="0 0 1600 450" role="img" aria-label="{_escape(visual.title or visual.kind)}">'
+        f'{lines}{boxes}</svg><p class="visual-caption">{_escape(visual.caption)}</p></div>'
     )
 
 
-def _render_misconceptions(
-    slide: PPTSlide,
-) -> str:
-    rows = "".join(
-        (
-            '<article class="misconception-row" data-step>'
-            '<div class="misconception-cell">'
-            '<span class="cell-label">误区</span>'
-            f"{_escape(item.myth)}"
-            "</div>"
-            '<div class="misconception-cell">'
-            '<span class="cell-label">为什么错</span>'
-            f"{_escape(item.reason)}"
-            "</div>"
-            '<div class="misconception-cell">'
-            '<span class="cell-label">正确理解</span>'
-            f"{_escape(item.truth)}"
-            "</div>"
-            "</article>"
+def _render_visual(visual: VisualSpec) -> str:
+    mode = visual_component(visual.kind).render_mode
+    if mode is VisualRenderMode.CODE:
+        return (
+            '<section class="code-panel"><div class="code-head"><i></i><i></i><i></i>'
+            f'<b>{_escape(visual.code_language or "example")}</b></div><pre><code>{_escape(visual.code)}</code></pre></section>'
         )
-        for item in slide.misconceptions
-    )
-
-    return (
-        '<div class="misconception-list">'
-        f"{rows}"
-        "</div>"
-    )
-
-
-def _render_knowledge_map(
-    slide: PPTSlide,
-) -> str:
-    branches = "".join(
-        (
-            '<div class="map-branch" data-step>'
-            '<div class="branch-label">'
-            f"{_escape(branch.label)}"
-            "</div>"
-            '<div class="branch-keywords">'
-            + "".join(
-                (
-                    "<span>"
-                    f"{_escape(keyword)}"
-                    "</span>"
-                )
-                for keyword in branch.keywords
-            )
-            + "</div>"
-            "</div>"
+    if mode is VisualRenderMode.FORMULA:
+        steps = "".join(f'<li>{_escape(step)}</li>' for step in visual.formula_steps)
+        return f'<section class="formula-panel"><div class="formula">{_escape(visual.formula)}</div><ol>{steps}</ol></section>'
+    if mode is VisualRenderMode.METRICS:
+        metrics = "".join(
+            f'<article><strong>{_escape(metric.value)}</strong><b>{_escape(metric.label)}</b><p>{_escape(metric.detail)}</p></article>'
+            for metric in visual.metrics
         )
-        for branch in slide.branches
-    )
-
-    center_text = (
-        slide.statement
-        or slide.title
-    )
-
-    return (
-        '<div class="knowledge-map">'
-        '<div class="map-center">'
-        f"{_escape(center_text)}"
-        "</div>"
-        '<div class="map-branches">'
-        f"{branches}"
-        "</div>"
-        "</div>"
-    )
+        return f'<section class="metrics">{metrics}</section>'
+    return _render_diagram(visual)
 
 
-def _render_cover(
-    slide: PPTSlide,
-    publication: PPTPublication,
-) -> str:
-    meta_html = "".join(
-        (
-            "<span>"
-            f"{_escape(value)}"
-            "</span>"
-        )
-        for value in (
-            PRESENTATION_SPEAKER,
-            publication.generated_label,
-        )
-    )
+def _render_slide(slide: PPTSlide, index: int, total: int) -> str:
+    eyebrow_html = f'<div class="eyebrow">{_escape(slide.eyebrow or slide.kind.value)}</div>'
+    if slide.kind == "cover" or slide.kind.value == "cover":
+        eyebrow_html = f'<div class="author-badge">Presented by Mentorly</div>{eyebrow_html}'
 
-    keywords = " · ".join(
-        slide.cover.keywords
-    )
-
-    return (
-        '<div class="cover-content">'
-        '<p class="hero-statement" data-step>'
-        f"{_escape(slide.statement)}"
-        "</p>"
-        '<div class="cover-meta">'
-        f"{meta_html}"
-        "</div>"
-        '<p class="keyword-line">'
-        f"{_escape(keywords)}"
-        "</p>"
-        "</div>"
-    )
+    subtitle = f'<p class="subtitle">{_escape(slide.subtitle)}</p>' if slide.subtitle else ""
+    lead = f'<p class="lead">{_escape(slide.lead)}</p>' if slide.lead else ""
+    takeaway = f'<footer><span>TAKEAWAY</span>{_escape(slide.takeaway)}</footer>' if slide.takeaway else ""
+    active = " active" if index == 0 else ""
+    return f'''<section class="slide layout-{slide.layout.value} kind-{slide.kind.value}{active}" data-notes="{_escape(slide.speaker_notes)}">
+  <div class="orb orb-one"></div><div class="orb orb-two"></div>
+  <div class="shell">
+    <header>{eyebrow_html}<div class="page">{index + 1:02d}<i></i>{total:02d}</div><h1>{_escape(slide.title)}</h1>{subtitle}</header>
+    <div class="slide-main"><section class="copy">{lead}{_render_points(slide)}</section><section class="visual visual-{slide.visual.kind.value}">{_render_visual(slide.visual)}</section></div>
+    {takeaway}
+  </div>
+</section>'''
 
 
-def render_slide_body(
-    slide: PPTSlide,
-    publication: PPTPublication,
-) -> str:
-    if slide.type == "cover":
-        return _render_cover(slide, publication)
-
-    if slide.type in {
-        "agenda",
-        "mechanism_overview",
-    }:
-        body = _render_process(slide)
-
-    elif slide.type in {
-        "learning_goals",
-        "definition",
-        "knowledge_explain",
-    }:
-        body = (
-            _render_statement(slide)
-            + _render_points(slide)
-        )
-
-    elif slide.type == "hook_question":
-        question = (
-            slide.question
-            or slide.statement
-        )
-
-        body = (
-            '<p class="question-text" data-step>'
-            f"{_escape(question)}"
-            "</p>"
-            + _render_points(slide)
-        )
-
-    elif slide.type == "concept_boundary":
-        body = _render_statement(slide)
-
-        if slide.table.rows:
-            body += _render_table(slide)
-        else:
-            body += _render_points(slide)
-
-    elif slide.type == "comparison":
-        body = (
-            _render_statement(slide)
-            + _render_table(slide)
-        )
-
-    elif slide.type == "misconception":
-        body = _render_misconceptions(
-            slide
-        )
-
-    elif slide.type == "knowledge_map":
-        body = _render_knowledge_map(
-            slide
-        )
-
-    elif slide.type == "closing":
-        body = (
-            '<div class="closing-content">'
-            '<p class="hero-statement">'
-            f"{_escape(slide.statement)}"
-            "</p>"
-            "</div>"
-        )
-
-    else:
-        body = ""
-
-    return (
-        '<div class="slide-body" '
-        f'data-body-type="{slide.type}">'
-        f"{body}"
-        "</div>"
-        + _render_takeaway(slide)
-    )
-
-
-def _content_density(
-    slide: PPTSlide,
-) -> str:
-    """Expose a theme-neutral density hint for slide layouts."""
-    item_count = max(
-        len(slide.points),
-        len(slide.steps),
-        len(slide.table.rows),
-        len(slide.misconceptions),
-        len(slide.branches),
-    )
-    text_length = sum(
-        len(value)
-        for value in (
-            slide.title,
-            slide.subtitle,
-            slide.statement,
-            slide.question,
-            slide.takeaway,
-        )
-    )
-
-    if item_count >= 5 or text_length >= 260:
-        return "dense"
-
-    if item_count <= 2 and text_length <= 120:
-        return "sparse"
-
-    return "standard"
+BASE_CSS = r'''
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#f8fbff}
+body{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;color:#173b42}
+code,.cs-term{font-family:'JetBrains Mono',monospace;background:rgba(70,184,180,0.1);color:#005552;padding:2px 8px;border-radius:6px;font-size:.9em;letter-spacing:-.02em}
+.viewport{position:fixed;inset:0;overflow:hidden}.stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;visibility:hidden;opacity:0;overflow:hidden;background:linear-gradient(135deg,#ffffff 0%,#f0f5fa 100%);transition:opacity .28s ease}
+.slide.active{visibility:visible;opacity:1}
+.shell{position:relative;height:100%;padding:68px 102px 82px}
+.orb{position:absolute;border:1px solid #46B8B4;border-radius:50%;opacity:.15}
+.orb-one{right:-130px;top:-168px;width:540px;height:540px}
+.orb-two{left:-188px;bottom:-246px;width:500px;height:500px;border-color:#173B42}
+header{position:relative;z-index:1;padding-left:24px;border-left:4px solid #46B8B4}
+.author-badge{color:#46B8B4;font-size:18px;font-weight:800;letter-spacing:.15em;margin-bottom:12px;text-transform:uppercase}
+.eyebrow{color:#46B8B4;font-size:16px;font-weight:800;letter-spacing:.12em}
+.page{position:absolute;right:18px;top:3px;color:#8293ad;font:800 16px/1 'JetBrains Mono',monospace;letter-spacing:.12em}
+.page i{display:inline-block;width:48px;height:1px;margin:0 12px 5px;background:#b9cbe7}
+h1{max-width:1260px;margin:16px 0 0;font-size:54px;line-height:1.12;letter-spacing:-.045em;color:#0b1d21}
+.subtitle{max-width:860px;margin:14px 0 0;color:#526970;font-size:22px;line-height:1.45}
+.slide-main{position:relative;z-index:1;height:685px;padding:34px 22px 58px;display:flex;gap:46px;align-items:center}
+.copy{flex:1;min-width:0}.visual{flex:1;min-width:0;height:100%;padding:0}
+.lead{max-width:720px;margin:0 0 24px;font-size:29px;line-height:1.36;font-weight:750;letter-spacing:-.025em}
+.points{display:grid;gap:20px}
+.points-3,.points-4{grid-template-columns:repeat(2,minmax(0,1fr))}
+.point{min-width:0;min-height:96px;padding:24px;border-radius:18px;background:#fff;box-shadow:0 8px 30px rgba(23,59,66,.05);border:1px solid #e1e9eb}
+.point h3{margin:0 0 10px;color:#173B42;font-size:20px;font-weight:800}
+.point p{margin:0;color:#526970;font-size:16px;line-height:1.5}
+.diagram-wrap{height:100%;display:flex;flex-direction:column;justify-content:center}
+.diagram{display:block;width:100%;height:100%;overflow:visible;min-height:450px}
+.diagram-edge{fill:none;stroke:#46B8B4;stroke-width:3;marker-end:url(#arrow)}
+marker path{fill:#46B8B4}
+.diagram-node rect{fill:#fff;stroke:#46B8B4;stroke-width:2}
+.diagram-node.tone-secondary rect{fill:#f3fbfa;stroke:#46B8B4}
+.diagram-node.tone-accent rect{fill:#fff8ec;stroke:#eeaa42}
+.diagram-node.tone-muted rect{fill:#f6f7fa;stroke:#a1aab9}
+.diagram-node.tone-warning rect{fill:#fff1f0;stroke:#e78278}
+.diagram-node text{fill:#173b42;text-anchor:middle;font-size:25px;font-weight:760}
+.diagram-node .diagram-detail{fill:#526970;font-size:15px;font-weight:500}
+.visual-caption{margin:16px 0 0;padding:0 18px;color:#71809a;font-size:16px;line-height:1.4;text-align:center;font-style:italic}
+.empty-visual{display:grid;place-content:center;height:100%;border:2px dashed #c8d9ef;border-radius:18px;color:#8291a7;text-align:center}
+.code-panel{height:100%;overflow:hidden;border-radius:16px;background:#173b42;box-shadow:0 16px 40px rgba(23,59,66,.2)}
+.code-head{display:flex;align-items:center;gap:8px;height:46px;padding:0 17px;background:#0b1d21}
+.code-head i{width:10px;height:10px;border-radius:50%;background:#ff7e71}
+.code-head i:nth-child(2){background:#ffc762}
+.code-head i:nth-child(3){background:#65d5a7}
+.code-head b{margin-left:auto;color:#46b8b4;font:600 14px 'JetBrains Mono',monospace;text-transform:uppercase}
+.code-panel pre{height:calc(100% - 46px);margin:0;padding:27px;color:#f0f5fa;font:18px/1.6 'JetBrains Mono',monospace;white-space:pre-wrap;overflow:auto}
+.formula-panel{height:100%;padding:40px;background:#fff;border-radius:24px;border:1px solid #e1e9eb;box-shadow:0 8px 30px rgba(23,59,66,.05)}
+.formula{padding:30px;border-radius:17px;background:#f3fbfa;color:#173B42;font:700 36px/1.35 'JetBrains Mono',monospace;text-align:center}
+.formula-panel ol{margin:30px 0 0;padding-left:27px;color:#526970;font-size:20px;line-height:1.8}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;height:100%}
+.metrics article{display:flex;flex-direction:column;justify-content:center;min-height:145px;padding:24px;border:1px solid #e1e9eb;border-radius:20px;background:#fff}
+.metrics strong{color:#46B8B4;font-size:48px;letter-spacing:-.05em;font-family:'JetBrains Mono',monospace}
+.metrics b{margin-top:12px;font-size:20px;color:#173b42}
+.metrics p{margin:8px 0 0;color:#526970;font-size:15px;line-height:1.4}
+footer{position:absolute;z-index:1;right:102px;bottom:58px;left:102px;padding:20px 0;border-top:2px solid rgba(70,184,180,0.2);color:#526970;font-size:18px;font-weight:600}
+footer span{margin-right:16px;color:#46B8B4;font:800 14px 'JetBrains Mono',monospace;letter-spacing:.15em;text-transform:uppercase}
+.layout-hero .slide-main{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;padding:0;height:654px}
+.layout-hero .copy{flex:none;width:100%;max-width:1000px}
+.layout-hero .lead{font-size:38px;line-height:1.4}
+.layout-hero h1{font-size:80px;margin-bottom:24px}
+.layout-hero .visual{display:none}
+.layout-route .slide-main,.layout-statement .slide-main,.layout-studio .slide-main{display:grid;grid-template-columns:1fr 1fr;gap:60px}
+.layout-route .visual,.layout-statement .visual,.layout-studio .visual{height:100%}
+.layout-studio .slide-main{grid-template-columns:1.2fr 0.8fr}
+.layout-diagram .slide-main,.layout-sequence .slide-main{display:flex;flex-direction:column;align-items:center;text-align:center}
+.layout-diagram .copy,.layout-sequence .copy{flex:none}
+.layout-diagram header,.layout-sequence header{border:none;padding-left:0;text-align:center}
+.layout-diagram header h1,.layout-sequence header h1{margin-left:auto;margin-right:auto}
+.layout-diagram .visual,.layout-sequence .visual{width:100%;height:500px;flex:1}
+.layout-diagram .points,.layout-sequence .points{display:none}
+.layout-comparison .slide-main,.layout-mosaic .slide-main,.layout-recap .slide-main{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+.layout-mosaic .points{grid-template-columns:1fr 1fr;grid-column:span 2}
+.layout-mosaic .visual{display:none}
+.layout-recap .slide-main{grid-template-columns:0.8fr 1.2fr}
+.layout-recap .point{background:#173b42;color:#fff}
+.layout-recap .point h3{color:#46B8B4}
+.layout-recap .point p{color:#a8bee0}
+.kind-question h1{font-size:60px}
+.deck-controls{position:fixed;z-index:5;right:24px;bottom:22px;display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.6);box-shadow:0 4px 15px rgba(0,0,0,.05);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.4)}
+.deck-controls button{width:36px;height:32px;border:0;border-radius:8px;background:transparent;color:#526970;font-size:18px;cursor:pointer;transition:all .2s}
+.deck-controls button:hover{background:#46b8b4;color:#fff}
+.deck-controls button:focus-visible{outline:2px solid #46b8b4;outline-offset:2px}
+.deck-counter{min-width:60px;color:#526970;font:600 14px 'JetBrains Mono',monospace;text-align:center}
+.speaker-notes{position:fixed;z-index:4;right:24px;bottom:84px;width:360px;max-height:250px;padding:16px 18px;border:1px solid #d2ddec;border-radius:14px;background:#fff;color:#526079;font-size:14px;line-height:1.6;box-shadow:0 12px 30px #1d457d22;display:none}
+.speaker-notes.open{display:block}
+body.embedded .deck-controls,body.embedded .speaker-notes{display:none}
+'''
 
 
-def _layout_profile(slide: PPTSlide) -> str:
-    """Select a semantic composition, never a topic-specific visual treatment."""
-    profiles = {
-        "cover": "immersive",
-        "agenda": "sequence",
-        "learning_goals": "milestones",
-        "hook_question": "scenario",
-        "definition": "definition-board",
-        "concept_boundary": "boundary-grid",
-        "mechanism_overview": "mechanism",
-        "knowledge_explain": "explanation",
-        "comparison": "comparison",
-        "misconception": "correction",
-        "knowledge_map": "map",
-        "closing": "immersive",
-    }
-    return profiles[slide.type]
-
-
-def _teaching_item_count(slide: PPTSlide) -> int:
-    return max(
-        len(slide.points),
-        len(slide.steps),
-        len(slide.table.rows),
-        len(slide.misconceptions),
-        len(slide.branches),
-    )
+CONTROLLER_JS = r'''
+class DeckController {
+  constructor() { this.slides = Array.from(document.querySelectorAll('.slide')); this.current = 0; this.counter = document.getElementById('deckCounter'); this.notes = document.getElementById('speakerNotes'); this.embedded = window.parent !== window; if (this.embedded) document.body.classList.add('embedded'); this.fit(); this.show(0, false); this.bind(); this.post('ready'); }
+  post(type) { if (this.embedded) window.parent.postMessage({ source: 'mentorly-ppt', type, current: this.current + 1, total: this.slides.length }, '*'); }
+  fit() { const scale = Math.min(innerWidth / 1920, innerHeight / 1080); document.getElementById('deckStage').style.transform = `translate(-50%, -50%) scale(${scale})`; }
+  show(index, notify = true) { this.current = Math.max(0, Math.min(index, this.slides.length - 1)); this.slides.forEach((slide, item) => slide.classList.toggle('active', item === this.current)); this.counter.textContent = `${this.current + 1} / ${this.slides.length}`; this.notes.textContent = this.slides[this.current].dataset.notes || '暂无讲稿'; if (notify) this.post('state'); }
+  bind() { addEventListener('resize', () => this.fit()); addEventListener('keydown', event => { if (['ArrowRight','PageDown',' '].includes(event.key)) { event.preventDefault(); this.show(this.current + 1); } if (['ArrowLeft','PageUp'].includes(event.key)) { event.preventDefault(); this.show(this.current - 1); } }); document.getElementById('prevSlide').addEventListener('click', () => this.show(this.current - 1)); document.getElementById('nextSlide').addEventListener('click', () => this.show(this.current + 1)); document.getElementById('notesToggle').addEventListener('click', () => document.getElementById('speakerNotes').classList.toggle('open')); let touchStartX = 0; addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, {passive: true}); addEventListener('touchend', e => { const dx = e.changedTouches[0].screenX - touchStartX; if (dx > 50) this.show(this.current - 1); else if (dx < -50) this.show(this.current + 1); }, {passive: true}); addEventListener('message', event => { if (event.source !== window.parent) return; const data = event.data; if (!data || data.source !== 'mentorly-ppt' || data.type !== 'command') return; if (data.action === 'next') this.show(this.current + 1); if (data.action === 'previous') this.show(this.current - 1); if (data.action === 'goto') this.show(Number(data.page) - 1); if (data.action === 'state') this.post('state'); }); }
+}
+new DeckController();
+'''
 
 
 class PPTHTMLRenderer:
-    def render(
-        self,
-        deck: ResolvedPPT,
-        publication: PPTPublication,
-    ) -> str:
-        slides_html = "\n".join(
-            self._render_slide(
-                resolved,
-                index,
-                len(deck.slides),
-                publication,
-            )
-            for index, resolved in enumerate(
-                deck.slides
-            )
-        )
-
-        template_css = deck.template.css.replace(
-            "</style",
-            "<\\/style",
-        )
-
-        return f"""<!doctype html>
-<html lang="{_escape(deck.plan.language)}">
-<head>
-  <meta charset="utf-8">
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
-  >
-  <title>{_escape(deck.plan.title)}</title>
-  <style>
-    {BASE_CSS}
-    {template_css}
-  </style>
-</head>
-<body data-template="{_escape(deck.template.manifest.id)}">
-  <div class="deck-viewport">
-    <main
-      class="deck-stage"
-      id="deckStage"
-    >
-      {slides_html}
-    </main>
-  </div>
-
-  <div class="deck-progress">
-    <span id="deckProgress"></span>
-  </div>
-
-  <nav
-    class="deck-controls"
-    aria-label="演示控制"
-  >
-    <button
-      id="prevSlide"
-      aria-label="上一页"
-    >
-      ←
-    </button>
-
-    <span
-      class="deck-counter"
-      id="deckCounter"
-    ></span>
-
-    <button
-      id="nextSlide"
-      aria-label="下一页"
-    >
-      →
-    </button>
-
-    <button
-      id="notesToggle"
-      aria-label="显示讲稿"
-    >
-      N
-    </button>
-
-    <button
-      id="downloadDeck"
-      aria-label="下载 HTML"
-    >
-      ↓
-    </button>
-  </nav>
-
-  <div
-    class="speaker-notes-panel"
-    id="notesPanel"
-  ></div>
-
-  <script>
-    {CONTROLLER_JS}
-  </script>
-</body>
-</html>"""
-
-    def _render_slide(
-        self,
-        resolved: ResolvedPPTSlide,
-        index: int,
-        total: int,
-        publication: PPTPublication,
-    ) -> str:
-        slide = resolved.spec
-        layout = resolved.layout
-
-        subtitle_html = ""
-
-        if slide.subtitle:
-            subtitle_html = (
-                '<p class="slide-subtitle">'
-                f"{_escape(slide.subtitle)}"
-                "</p>"
-            )
-
-        title_size = (
-            "compact"
-            if len(slide.title) > 24
-            else "normal"
-        )
-
-        active_class = (
-            " active visible"
-            if index == 0
-            else ""
-        )
-
-        notes = _escape(
-            slide.speaker_notes
-        )
-
-        return f"""
-<section
-  class="slide{active_class}"
-  data-type="{slide.type}"
-  data-layout="{_escape(layout.id)}"
-  data-skeleton="{_escape(layout.skeleton)}"
-  data-animation="{layout.animation}"
-  data-content-density="{_content_density(slide)}"
-  data-layout-profile="{_layout_profile(slide)}"
-  data-teaching-items="{_teaching_item_count(slide)}"
-  data-title-size="{title_size}"
-  data-notes="{notes}"
->
-  <div class="slide-shell">
-    <span class="slide-index">
-      {index + 1:02d} / {total:02d}
-    </span>
-
-    <header class="slide-header">
-      <div class="eyebrow">
-        {_escape(slide.eyebrow or layout.name)}
-      </div>
-
-      <h2 class="slide-title">
-        {_escape(slide.title)}
-      </h2>
-
-      {subtitle_html}
-    </header>
-
-    <div class="slide-content">
-      {render_slide_body(slide, publication)}
-    </div>
-  </div>
-</section>
-"""
+    def render(self, deck: PPTDeck, publication: PPTPublication) -> str:
+        slides = "".join(_render_slide(slide, index, len(deck.slides)) for index, slide in enumerate(deck.slides))
+        return f'''<!doctype html><html lang="{_escape(deck.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{_escape(deck.title)}</title><style>{BASE_CSS}</style></head><body><svg style="display:none;" aria-hidden="true"><defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#87a9e8" /></marker></defs></svg><div class="viewport"><div class="stage" id="deckStage">{slides}</div></div><nav class="deck-controls"><button id="prevSlide" aria-label="上一页">←</button><span class="deck-counter" id="deckCounter"></span><button id="nextSlide" aria-label="下一页">→</button><button id="notesToggle" aria-label="讲稿">N</button></nav><aside class="speaker-notes" id="speakerNotes"></aside><script>{CONTROLLER_JS}</script></body></html>'''
 
 
 class PPTHTMLPublisher:
-    def __init__(
-        self,
-        output_dir: Path,
-    ) -> None:
+    def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
 
-    def publish(
-        self,
-        file_id: str,
-        content: str,
-    ) -> Path:
-        if not _SAFE_FILE_ID.fullmatch(
-            file_id
-        ):
-            raise ValueError(
-                "PPT file_id contains unsafe characters"
-            )
-
-        self.output_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        final_path = (
-            self.output_dir
-            / f"{file_id}.html"
-        )
-
+    def publish(self, file_id: str, content: str) -> Path:
+        if file_id != "slides":
+            raise ValueError("PPT publisher only accepts the canonical slides file")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        final_path = self.output_dir / "slides.html"
         temporary_path: Path | None = None
-
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=self.output_dir,
-                suffix=".tmp",
-                delete=False,
-            ) as handle:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.output_dir, suffix=".tmp", delete=False) as handle:
                 handle.write(content)
                 handle.flush()
-                os.fsync(
-                    handle.fileno()
-                )
-
-                temporary_path = Path(
-                    handle.name
-                )
-
-            os.replace(
-                temporary_path,
-                final_path,
-            )
-
+                os.fsync(handle.fileno())
+                temporary_path = Path(handle.name)
+            os.replace(temporary_path, final_path)
             return final_path
-
         finally:
-            if (
-                temporary_path is not None
-                and temporary_path.exists()
-            ):
+            if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
