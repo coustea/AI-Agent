@@ -13,13 +13,94 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, ClassVar, Literal, TYPE_CHECKING
 from typing_extensions import TypedDict
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 if TYPE_CHECKING:
     from app.infra.models import PathNode, PathNodeTutorial, PathNodeQuestion, PathNodeResource
+
+# ======================================================================
+# 路径偏好参数（前后端对齐）
+# ======================================================================
+
+# 学习场景类型
+LearningScene = Literal["general", "exam", "beginner", "project", "interview"]
+
+# 学习节奏类型
+LearningPace = Literal["slow", "normal", "fast"]
+
+# 路径粒度类型
+LearningGranularity = Literal["coarse", "standard", "fine"]
+
+# 规划重点类型
+LearningFocus = Literal["foundation", "key_points", "practice", "weakness"]
+
+
+class PathPreferences(BaseModel):
+    """学习路径偏好参数 — 前后端对齐的结构化配置。
+
+    字段说明：
+    - use_profile: 是否融合学习者画像进行个性化规划
+    - scene: 学习场景（通用学习/考试复习/基础入门/项目实战/面试准备）
+    - pace: 学习节奏（慢速细学/正常节奏/快速推进）
+    - granularity: 路径粒度（粗略/标准/细节点）
+    - focus: 规划重点列表（补基础/抓重点/多练习/补薄弱点）
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    use_profile: bool = Field(default=True, description="是否融合学习者画像")
+    scene: LearningScene = Field(default="general", description="学习场景")
+    pace: LearningPace = Field(default="normal", description="学习节奏")
+    granularity: LearningGranularity = Field(default="standard", description="路径粒度")
+    focus: list[LearningFocus] = Field(
+        default_factory=lambda: ["key_points"],
+        description="规划重点列表",
+    )
+
+    # 有效值集合（类变量，不是字段）
+    VALID_SCENES: ClassVar[set[str]] = {"general", "exam", "beginner", "project", "interview"}
+    VALID_PACES: ClassVar[set[str]] = {"slow", "normal", "fast"}
+    VALID_GRANULARITIES: ClassVar[set[str]] = {"coarse", "standard", "fine"}
+    VALID_FOCUS: ClassVar[set[str]] = {"foundation", "key_points", "practice", "weakness"}
+
+    @classmethod
+    def from_dict_safe(cls, data: dict[str, Any] | None) -> PathPreferences:
+        """从字典安全构建 PathPreferences，过滤无效值并使用默认值。
+
+        用于处理数据库中可能存储的格式错误数据。
+        """
+        if not data:
+            return cls()
+
+        # 过滤有效值
+        scene = data.get("scene") or data.get("learning_scene")
+        if scene not in cls.VALID_SCENES:
+            scene = "general"
+
+        pace = data.get("pace")
+        if pace not in cls.VALID_PACES:
+            pace = "normal"
+
+        granularity = data.get("granularity")
+        if granularity not in cls.VALID_GRANULARITIES:
+            granularity = "standard"
+
+        focus_raw = data.get("focus", [])
+        focus = [f for f in focus_raw if f in cls.VALID_FOCUS]
+        if not focus:
+            focus = ["key_points"]
+
+        return cls(
+            use_profile=bool(data.get("use_profile", True)),
+            scene=scene,
+            pace=pace,
+            granularity=granularity,
+            focus=focus,
+        )
+
 
 # ======================================================================
 # 请求模型
@@ -30,10 +111,19 @@ if TYPE_CHECKING:
 class PathRequest(BaseModel):
     """新学习路径创建请求。"""
 
-    goal: str = Field(description="学习目标")
-    topic: str = Field(default="", description="学习主题")
-    current_knowledge: list[str] = Field(default_factory=list, description="当前已掌握的知识点")
-    preferences: dict[str, Any] = Field(default_factory=dict, description="学习偏好")
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str = Field(min_length=8, max_length=500, description="学习目标")
+    topic: str = Field(default="", max_length=100, description="学习主题")
+    current_knowledge: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="当前已掌握的知识点",
+    )
+    preferences: PathPreferences = Field(
+        default_factory=PathPreferences,
+        description="学习偏好配置",
+    )
 
 
 # 节点教程 DTO — 用于工作区响应和资源生成请求
@@ -77,13 +167,14 @@ class PathResourceRequest(BaseModel):
     - path_id: 路径 ID
     - node_id: 节点 ID
     - profile: 用户画像
-    - tutorial: 教程内容
+    - tutorial: 教程内容（含知识点、薄弱点）
 
-    上下文字段（由 PathService 填充）：
+    路径规划上下文（由 PathService 填充）：
     - username: 用户名（文件路径用）
     - path_title / path_goal: 路径标题/目标
     - node_title / node_key / difficulty: 节点信息
-    - knowledge_points / weak_knowledge_points: 知识点
+    - current_knowledge: 用户已掌握的知识点
+    - preferences: 路径偏好参数（场景/节奏/粒度/重点）
     """
 
     user_id: int
@@ -92,13 +183,25 @@ class PathResourceRequest(BaseModel):
     profile: dict[str, Any] = Field(default_factory=dict)
     tutorial: LearningPathTutorialDTO | None = None
 
-    # 上下文字段（由 PathService 查询填充）
+    # 路径规划上下文（由 PathService 查询填充）
     username: str = ""
     path_title: str = ""
     path_goal: str = ""
     node_title: str = ""
     node_key: str = ""
     difficulty: str = "beginner"
+    current_knowledge: list[str] = Field(default_factory=list)
+    preferences: PathPreferences = Field(default_factory=PathPreferences)
+
+    @property
+    def knowledge_points(self) -> list[str]:
+        """从教程获取知识点列表。"""
+        return list(self.tutorial.knowledge_points) if self.tutorial else []
+
+    @property
+    def weak_knowledge_points(self) -> list[str]:
+        """从教程获取薄弱知识点列表。"""
+        return list(self.tutorial.weak_knowledge_points) if self.tutorial else []
 
 
 # ======================================================================
@@ -283,8 +386,8 @@ class PathQuizRoundResponse(BaseModel):
 
 # 测验答案提交项
 class PathQuizAnswerItem(BaseModel):
-    question_id: int
-    response: str
+    question_id: int = Field(ge=1)
+    response: str = Field(min_length=1, max_length=10, description="用户答案（如 A/B/C/D）")
 
 
 # 测验提交请求 — POST /nodes/{id}/quiz-submit
@@ -322,7 +425,12 @@ class AgentQuestionItem(BaseModel):
 
 # Agent 生成的题目集 — LLM 结构化输出
 class AgentQuestionSet(BaseModel):
-    questions: list[AgentQuestionItem] = Field(default_factory=list, min_length=0, max_length=5)
+    questions: list[AgentQuestionItem] = Field(
+        default_factory=list,
+        min_length=5,
+        max_length=5,
+        description="必须生成正好 5 道测验题目",
+    )
 
 
 # 规划节点 — LLM 输出的节点定义
@@ -569,6 +677,12 @@ def _assert_no_dependency_cycle(adjacency: dict[str, list[str]]) -> None:
 __all__ = [
     # Request
     "PathRequest",
+    "PathPreferences",
+    # Type aliases
+    "LearningScene",
+    "LearningPace",
+    "LearningGranularity",
+    "LearningFocus",
     # Agent output
     "PlanNode",
     "AgentStage",

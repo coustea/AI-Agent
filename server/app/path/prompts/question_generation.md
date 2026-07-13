@@ -39,7 +39,31 @@
 
 # OUTPUT FORMAT（输出结构）
 
-输出符合系统测验 Schema 的 JSON。
+输出符合系统测验 Schema 的 JSON，**必须包含正好 5 道题目**：
+
+```json
+{
+  "questions": [
+    // 题目 1
+    // 题目 2
+    // 题目 3
+    // 题目 4
+    // 题目 5
+  ]
+}
+```
+
+每道题的结构：
+```json
+{
+  "question": "题干内容",
+  "choice": {"A": "选项A", "B": "选项B", "C": "选项C", "D": "选项D"},
+  "answer": "正确答案字母（如 A）",
+  "analysis": "答案解析",
+  "knowledge_points": ["知识点1", "知识点2"],
+  "type": "single_choice"
+}
+```
 
 # OUTPUT CONTROL（输出控制）
 
@@ -50,8 +74,11 @@
 
 ## Hard Constraints
 
+- **必须生成正好 5 道选择题**
 - 测验题必须围绕当前节点的核心知识点
 - 必须覆盖掌握目标中描述的能力点
+- 每道题必须有 4 个选项（A/B/C/D）
+- 每道题必须有明确的正确答案和解析
 
 ## Soft Constraints
 
@@ -75,6 +102,8 @@
 
 # EXAMPLES（实例）
 
+以下是完整的 5 道测验题示例：
+
 ```json
 {
   "questions": [
@@ -87,11 +116,35 @@
       "type": "single_choice"
     },
     {
-      "question": "以下关于虚拟内存的说法，正确的有哪些？",
-      "choice": {"A": "虚拟内存使程序可以超过物理内存大小", "B": "虚拟内存的访问速度比物理内存快", "C": "页面置换算法可以完全消除缺页中断", "D": "虚拟内存基于局部性原理实现"},
+      "question": "以下关于虚拟内存的说法，正确的是？",
+      "choice": {"A": "虚拟内存使程序可以超过物理内存大小", "B": "虚拟内存的访问速度比物理内存快", "C": "页面置换算法可以完全消除缺页中断", "D": "虚拟内存不需要硬件支持"},
       "answer": "A",
-      "analysis": "虚拟内存允许程序使用超过物理内存的地址空间（A正确）。虚拟内存因缺页中断反而更慢（B错误）。页面置换只能减少缺页率，无法完全消除（C错误）。D也正确但本题为单选，A更直接。",
-      "knowledge_points": ["虚拟内存", "页面置换"],
+      "analysis": "虚拟内存允许程序使用超过物理内存的地址空间。",
+      "knowledge_points": ["虚拟内存"],
+      "type": "single_choice"
+    },
+    {
+      "question": "页面置换算法 FIFO 的主要缺点是？",
+      "choice": {"A": "实现复杂", "B": "可能产生 Belady 异常", "C": "需要硬件支持", "D": "内存开销大"},
+      "answer": "B",
+      "analysis": "FIFO 算法可能出现 Belady 异常：增加页面数反而增加缺页率。",
+      "knowledge_points": ["页面置换", "FIFO算法"],
+      "type": "single_choice"
+    },
+    {
+      "question": "进程调度中，短作业优先策略的主要优点是？",
+      "choice": {"A": "公平性好", "B": "平均等待时间短", "C": "无饥饿问题", "D": "实现简单"},
+      "answer": "B",
+      "analysis": "SJF 优先执行短作业，减少平均等待时间。",
+      "knowledge_points": ["进程调度", "SJF算法"],
+      "type": "single_choice"
+    },
+    {
+      "question": "死锁产生的四个必要条件不包括？",
+      "choice": {"A": "互斥", "B": "占有并等待", "C": "抢占", "D": "循环等待"},
+      "answer": "C",
+      "analysis": "死锁四个必要条件：互斥、占有并等待、不可抢占、循环等待。抢占不是必要条件。",
+      "knowledge_points": ["死锁", "必要条件"],
       "type": "single_choice"
     }
   ]

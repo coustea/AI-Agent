@@ -198,6 +198,7 @@ async def create_mentor_chat_message(
     try:
         user_message = await uc.create_user_message(
             user_id=current_user.id,
+            username=current_user.username,
             session_id=effective_session,
             text=effective_message,
             attachments=parsed_attachments,

@@ -115,7 +115,7 @@
               @click="submitAnswer(question)"
             >
               <span v-if="reviewing[question.id]" class="reviewing-spinner"></span>
-              {{ reviewing[question.id] ? 'AI 评阅中' : '提交答案' }}
+              {{ reviewing[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
             </button>
 
             <button
@@ -129,7 +129,7 @@
 
           <div v-if="reviewing[question.id]" class="reviewing-banner">
             <span class="reviewing-spinner-lg"></span>
-            <span class="reviewing-text">AI 正在评阅你的答案，请稍候...</span>
+            <span class="reviewing-text">{{ pendingAnswerMessage(question.type) }}</span>
           </div>
 
           <div v-if="submitted[question.id]" class="result-banner">
@@ -182,6 +182,8 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
+import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
+import { summarizeQuestionText } from '@/features/question-bank/model/questionText'
 
 // 组件属性：题库列表、筛选、答题状态
 const props = defineProps<{
@@ -342,10 +344,7 @@ function formatReferenceAnswer(question: any) {
 }
 
 function summarizeText(text: string) {
-  return String(text || '')
-    .replace(/\s+/g, ' ')
-    .replace(/[#*_`>-]/g, '')
-    .trim()
+  return summarizeQuestionText(text)
 }
 
 function visibleKnowledgePoints(question: any) {

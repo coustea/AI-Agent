@@ -907,6 +907,7 @@ class QuizAnswerHistory(SQLModel, table=True):
     subject: str | None = Field(default=None, max_length=255)
     question_type: str | None = Field(default=None, max_length=100)
     user_answer: str | None = Field(default=None, sa_column=Column(Text))
+    score: int | None = Field(default=None, ge=0, le=100)
     is_correct: bool = Field(default=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

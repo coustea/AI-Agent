@@ -117,7 +117,10 @@ class StreamingASRSession:
                 )
 
                 # 返回本轮识别文本
-                self._consumed_items.clear()
+                # Preserve an empty-result utterance so the bridge can retry it
+                # once on a fresh provider connection.
+                if result and result.strip():
+                    self._consumed_items.clear()
                 return result
         except Exception as e:
             error_name = type(e).__name__

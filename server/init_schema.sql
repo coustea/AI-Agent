@@ -582,6 +582,8 @@ CREATE TABLE IF NOT EXISTS learning_paths (
     title                VARCHAR(200)    NOT NULL,
     goal                 TEXT            NOT NULL,
     topic                TEXT,
+    current_knowledge    JSONB           NOT NULL DEFAULT '[]'::jsonb,
+    preferences          JSONB           NOT NULL DEFAULT '{}'::jsonb,
     overall_progress     INTEGER         DEFAULT 0,
     current_node_key     VARCHAR(80),
     status               VARCHAR(30)     NOT NULL DEFAULT 'active',
@@ -607,6 +609,8 @@ COMMENT ON COLUMN learning_paths.module IS '模块标识';
 COMMENT ON COLUMN learning_paths.title IS '路径标题';
 COMMENT ON COLUMN learning_paths.goal IS '学习目标';
 COMMENT ON COLUMN learning_paths.topic IS '学习主题';
+COMMENT ON COLUMN learning_paths.current_knowledge IS '用户创建路径时声明的已掌握知识点';
+COMMENT ON COLUMN learning_paths.preferences IS '用户创建路径时声明的学习偏好';
 COMMENT ON COLUMN learning_paths.overall_progress IS '总体进度百分比，0-100';
 COMMENT ON COLUMN learning_paths.current_node_key IS '当前节点标识';
 COMMENT ON COLUMN learning_paths.status IS '路径状态：active/completed/paused';
@@ -866,9 +870,13 @@ CREATE TABLE IF NOT EXISTS quiz_answer_history (
     subject           VARCHAR(255),
     question_type     VARCHAR(100),
     user_answer       TEXT,
+    score             INTEGER         CHECK (score BETWEEN 0 AND 100),
     is_correct        BOOLEAN         NOT NULL DEFAULT FALSE,
     created_at        TIMESTAMPTZ     DEFAULT NOW()
 );
+
+ALTER TABLE quiz_answer_history
+    ADD COLUMN IF NOT EXISTS score INTEGER CHECK (score BETWEEN 0 AND 100);
 
 CREATE INDEX IF NOT EXISTS ix_quiz_answer_history_user_id
     ON quiz_answer_history (user_id);
@@ -883,4 +891,5 @@ COMMENT ON TABLE quiz_answer_history IS '题库答题历史表，记录用户每
 COMMENT ON COLUMN quiz_answer_history.user_id IS '用户ID';
 COMMENT ON COLUMN quiz_answer_history.question_id IS '题目唯一标识';
 COMMENT ON COLUMN quiz_answer_history.user_answer IS '用户本次作答';
+COMMENT ON COLUMN quiz_answer_history.score IS '本次作答得分（0-100）';
 COMMENT ON COLUMN quiz_answer_history.is_correct IS '本次作答是否正确';

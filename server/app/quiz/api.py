@@ -15,6 +15,7 @@ from app.quiz.events import record_quiz_submit_event
 from app.infra.models import QuizQuestion, QuizAnswerHistory, School, User, WrongQuestion
 from app.infra.response import HttpResponse
 from app.quiz.schemas import (
+    ObjectiveQuestionResult,
     ObjectiveSubmitRequest,
     ObjectiveSubmitResponse,
     QuizAnswerHistoryItem,
@@ -234,6 +235,7 @@ async def get_quiz_history(
             question_id=r.question_id,
             subject=r.subject,
             question_type=r.question_type,
+            score=r.score,
             is_correct=r.is_correct,
             attempts=attempt_counts.get(r.question_id, 1),
             last_answer=r.user_answer,
@@ -261,9 +263,14 @@ async def submit_quiz(
     # 获取当前用户 ID 并初始化错题计数
     user_id = current_user.id
     wrong_count = 0
+    submitted_results: list[tuple[ObjectiveQuestionResult, int, bool]] = []
 
     # 遍历每道题目的判卷结果
     for r in request.results:
+        score = r.score if r.score is not None else (100 if r.is_correct else 0)
+        is_correct = score >= 60 if r.score is not None else r.is_correct
+        submitted_results.append((r, score, is_correct))
+
         # 保存答题历史（所有题目，无论对错）
         session.add(QuizAnswerHistory(
             user_id=user_id,
@@ -271,11 +278,12 @@ async def submit_quiz(
             subject=r.subject,
             question_type=r.question_type,
             user_answer=r.user_answer,
-            is_correct=r.is_correct,
+            score=score,
+            is_correct=is_correct,
         ))
 
         # 答对的题目直接跳过，不收录错题本
-        if r.is_correct:
+        if is_correct:
             continue
 
         # 查询该题是否已存在于错题本
@@ -340,12 +348,12 @@ async def submit_quiz(
     # 记录逐题答题事实用于学习评估聚合，失败不影响主流程
     total = len(request.results)
     try:
-        for index, result in enumerate(request.results, start=1):
+        for index, (result, score, is_correct) in enumerate(submitted_results, start=1):
             await record_quiz_submit_event(
                 db=session,
                 user_id=user_id,
-                score=100 if result.is_correct else 0,
-                is_correct=result.is_correct,
+                score=score,
+                is_correct=is_correct,
                 attempt_index=index,
                 subject=result.subject,
                 question_id=result.question_id,

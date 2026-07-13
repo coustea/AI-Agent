@@ -37,6 +37,9 @@
           <span :class="['result-dot', item.is_correct ? 'correct' : 'wrong']"></span>
           <span class="history-subject">{{ item.subject || '未知科目' }}</span>
           <span class="history-type">{{ toQuestionTypeLabel(item.question_type || '') }}</span>
+          <span v-if="item.score != null" :class="['history-score', item.is_correct ? 'correct' : 'wrong']">
+            {{ item.score }}分
+          </span>
           <span v-if="item.attempts > 1" class="history-attempts">×{{ item.attempts }}</span>
         </div>
         <div class="history-item-foot">
@@ -256,6 +259,19 @@ onMounted(() => {
 .history-type {
   color: #6366f1;
   font-size: 12px;
+}
+
+.history-score {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-score.correct {
+  color: #15803d;
+}
+
+.history-score.wrong {
+  color: #b91c1c;
 }
 
 .history-attempts {

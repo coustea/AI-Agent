@@ -379,6 +379,7 @@ import type {
   LearningPathStage,
   PathLearningEvaluationResponse,
   PathOverview,
+  PathPreferences,
 } from '@/features/learning-path/model/path'
 import type { PathEvent } from '@/features/learning-path/model/pathEvent'
 import { usePathEvents } from '@/features/learning-path/composables/usePathEvents'
@@ -726,9 +727,8 @@ const startSSE = (pathId: number, runId: string) => {
     onEvent: handlePathEvent,
     onCompleted: () => {
       generatingProgress.value = 100
-      window.setTimeout(() => {
-        loadPath()
-      }, 700)
+      // 立即加载路径数据，无需额外延迟
+      loadPath()
     },
     onFailed: (error) => {
       toast.error(error.message || '路径规划失败')
@@ -785,9 +785,12 @@ const loadPath = async () => {
         }
       }
 
-      const preferences = {
-        difficulty: (route.query.difficulty as string) || 'intermediate',
+      const preferences: PathPreferences = {
         use_profile: route.query.use_profile !== 'false',
+        scene: 'general',
+        pace: 'normal',
+        granularity: 'standard',
+        focus: ['key_points'],
       }
 
       const response = await createLearningPath({

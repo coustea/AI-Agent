@@ -13,6 +13,7 @@
   "dependencies": {
     "@lucide/vue": "^1.22.0",
     "@phosphor-icons/vue": "^2.2.1",
+    "@primevue/themes": "^4.5.4",
     "@shikijs/langs": "^4.3.0",
     "@shikijs/rehype": "^4.3.0",
     "@shikijs/themes": "^4.3.0",
@@ -33,6 +34,7 @@
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
     "monaco-editor": "^0.55.1",
+    "primevue": "^4.5.5",
     "radix-vue": "^1.9.17",
     "rehype-katex": "^7.0.1",
     "rehype-sanitize": "^6.0.0",

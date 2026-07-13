@@ -25,7 +25,7 @@ export interface IdleDisconnectState {
 
 // Keep only a short pre-roll so stale audio cannot sit seconds ahead of live speech.
 export const MAX_PENDING_AUDIO_CHUNKS = 4
-export const MAX_PENDING_AUDIO_CHUNKS_WHILE_ASR_CONNECTING = 128
+export const MAX_PENDING_AUDIO_CHUNKS_WHILE_ASR_CONNECTING = 4
 export const MAX_WS_AUDIO_BUFFERED_BYTES = 32 * 1024
 export const CONTINUOUS_VAD_RESTART_DELAY_MS = 50
 // The provider frequently omits tts_end. Its estimated stop event can precede
@@ -34,6 +34,7 @@ export const FALLBACK_VAD_RESTART_DELAY_MS = 1800
 export const VAD_BACKEND_READY_TIMEOUT_MS = 16_000
 export const VAD_WEBSOCKET_OPEN_TIMEOUT_MS = 5_000
 export const ASR_TARGET_SAMPLE_RATE = 16_000
+export const ASR_PROCESSOR_BUFFER_SIZE = 4096
 export const ASR_SPEECH_START_RMS = 0.012
 export const ASR_SPEECH_CONFIRM_MS = 180
 export const ASR_SILENCE_END_MS = 1100
@@ -41,6 +42,7 @@ export const ASR_SILENCE_END_MS = 1100
 // short quiet window. Setup audio must never become the next user utterance.
 export const ASR_INPUT_ARM_SILENCE_MS = 640
 export const ASR_INPUT_ARM_MAX_RMS = ASR_SPEECH_START_RMS
+export const ASR_EMPTY_RESTART_DELAY_MS = 300
 export const AVATAR_OUTPUT_ACTIVE_RMS = 0.004
 export const AVATAR_OUTPUT_SILENCE_MS = 450
 export const AVATAR_OUTPUT_MAX_DRAIN_MS = 8_000
@@ -165,7 +167,7 @@ export function resampleAudioForAsr(
     return output
 }
 
-export function enqueueBoundedAudioChunk(queue: string[], chunk: string, maxSize = MAX_PENDING_AUDIO_CHUNKS): boolean {
+export function enqueueBoundedAudioChunk<T>(queue: T[], chunk: T, maxSize = MAX_PENDING_AUDIO_CHUNKS): boolean {
     const safeMaxSize = Math.max(1, Math.floor(maxSize))
     const dropped = queue.length >= safeMaxSize
     if (dropped) queue.shift()
@@ -246,6 +248,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     // --- 轮次 ID 追踪（过滤过期事件） ---
     let activeTurnId: string | null = null
+    let thinkingTurnId: string | null = null
+    let thinkingActive = false
 
     // --- 实时生成缓存 (应对不可抗力断开) ---
     const CACHE_KEY = 'dh_current_generation_cache'
@@ -300,8 +304,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     let avatarOutputStream: MediaStream | null = null
     let avatarStopTimer: ReturnType<typeof setTimeout> | null = null
     let avatarStopGeneration = 0
-    const pendingAudioChunks: string[] = []
-    const preSpeechAudioChunks: string[] = []
+    const pendingAudioChunks: ArrayBuffer[] = []
+    const preSpeechAudioChunks: ArrayBuffer[] = []
     const voiceActivityGate = new AsrVoiceActivityGate()
     let droppedAudioChunks = 0
     let pendingAudioEnd = false
@@ -466,7 +470,24 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         pendingAssistantComplete = false
         _pendingVadRestart = null
         clearAssistantRevealTimer()
+        endThinking()
         callbacks?.onConnectionChange?.(false)
+    }
+
+    function beginThinking(turnId?: string): void {
+        const nextTurnId = turnId || activeTurnId
+        if (thinkingActive && thinkingTurnId === nextTurnId) return
+        thinkingActive = true
+        thinkingTurnId = nextTurnId
+        callbacks?.onThinkingStart?.()
+    }
+
+    function endThinking(turnId?: string): void {
+        if (!thinkingActive) return
+        if (turnId && thinkingTurnId && turnId !== thinkingTurnId) return
+        thinkingActive = false
+        thinkingTurnId = null
+        callbacks?.onThinkingEnd?.()
     }
 
     // ==========================================
@@ -485,6 +506,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             bufferedAssistantText = ''
             pendingAssistantComplete = false
             clearAssistantRevealTimer()
+            // A turn has been accepted by the backend. Enter thinking immediately
+            // instead of leaving the UI in the previous ASR/preparing state while
+            // the user message is persisted and the LLM stream is initialized.
+            beginThinking(turn_id)
             return
         }
 
@@ -530,9 +555,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onStatus?.({ stage: state, message: data.message })
             // 当后端报告 thinking 状态时，立即通知前端进入思考模式
             // 这样用户可以在 LLM 推理阶段就看到思考动画，而不是等到 token 产出
-            if (state === 'thinking') {
-                callbacks?.onThinkingStart?.()
-            }
+            if (state === 'thinking') beginThinking(turn_id)
+            if (state === 'speaking' || state === 'error') endThinking(turn_id)
             return
         }
 
@@ -556,8 +580,10 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
             pendingAssistantComplete = true
-            // 后端回答已完成，立即通知前端结束思考动画
-            callbacks?.onThinkingEnd?.()
+            // assistant_complete only means LLM text generation has finished.
+            // Keep showing the thinking/preparing state until Avatar playback
+            // actually starts, otherwise the gap spent preparing TTS is shown as
+            // "preparing speech recognition" during continuous conversations.
             // 确保所有缓冲文本都开始 reveal
             startAssistantReveal()
         } else if (type === 'avatar_speaking') {
@@ -567,7 +593,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             currentSpeechReleasedCost = 0
             // 数字人开始说话时，立即结束思考动画
             // avatar_speaking 可能在 assistant_complete 之前到达（TTS 先于 LLM 流完成）
-            callbacks?.onThinkingEnd?.()
+            endThinking(turn_id)
             // 数字人开始说话，立即开始字幕 reveal
             // 不再延迟，让字幕和语音同步出现
             startAssistantReveal()
@@ -582,17 +608,26 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             const listening = !!state
             backendVadReady = listening
             if (shouldCleanupLocalVadOnBackendState(listening)) {
-                if (continuousVadOptions) pauseAudioInput()
-                else cleanupAudioInput()
+                cleanupAudioInput()
             } else {
                 localAudioQuietDurationMs = 0
                 localAudioCaptureReady = false
                 clearPendingAudioChunks()
                 syncVadListeningState()
             }
+        } else if (type === 'asr_empty') {
+            callbacks?.onStatus?.({
+                stage: 'asr_empty',
+                message: '未识别到有效语音，正在重新倾听',
+            })
+            if (continuousVadOptions && !isSpeaking.value) {
+                digitalHumanState.value = 'avatar_ready'
+                scheduleVadRestart(continuousVadOptions, ASR_EMPTY_RESTART_DELAY_MS)
+            }
         } else if (type === 'history_cleared') {
             callbacks?.onHistoryCleared?.(data.data)
         } else if (type === 'error') {
+            endThinking(turn_id)
             error.value = data.content || data.message || '未知错误'
             callbacks?.onError?.(error.value!)
         }
@@ -719,6 +754,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
     function finishAvatarStopped(turnId?: string): void {
         clearAvatarStopWait()
+        endThinking(turnId)
         isSpeaking.value = false
         if (digitalHumanState.value !== 'avatar_ready') {
             digitalHumanState.value = 'avatar_ready'
@@ -763,7 +799,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         destroyPlayer()
         error.value = message
         digitalHumanState.value = 'error'
-        callbacks?.onError?.(message)
+        callbacks?.onError?.(message, { source: 'player' })
         callbacks?.onDigitalHumanStateChange?.('error')
     }
 
@@ -991,7 +1027,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         ) {
             const chunk = pendingAudioChunks.shift()
             if (!chunk) continue
-            ws.send(JSON.stringify({ type: 'audio_chunk', audio: chunk }))
+            ws.send(chunk)
             sent += 1
         }
 
@@ -1003,7 +1039,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         }
     }
 
-    function queueAudioChunk(chunk: string): void {
+    function queueAudioChunk(chunk: ArrayBuffer): void {
         const maxPendingChunks = backendVadReady
             ? MAX_PENDING_AUDIO_CHUNKS
             : MAX_PENDING_AUDIO_CHUNKS_WHILE_ASR_CONNECTING
@@ -1016,7 +1052,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         scheduleAudioFlush()
     }
 
-    function queuePreSpeechAudioChunk(chunk: string): void {
+    function queuePreSpeechAudioChunk(chunk: ArrayBuffer): void {
         if (preSpeechAudioChunks.length >= MAX_PENDING_AUDIO_CHUNKS) {
             preSpeechAudioChunks.shift()
         }
@@ -1214,8 +1250,9 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
                 audioContext = new AudioContext({ sampleRate: 16000 })
                 audioSource = audioContext.createMediaStreamSource(audioStream)
-                // 使用 2048 buffer（128ms @ 16kHz）替代 4096（256ms）以降低采集延迟
-                audioProcessor = audioContext.createScriptProcessor(2048, 1, 1)
+                // A 256 ms callback leaves substantially more main-thread headroom
+                // for RTC video and chroma rendering without dropping speech frames.
+                audioProcessor = audioContext.createScriptProcessor(ASR_PROCESSOR_BUFFER_SIZE, 1, 1)
                 audioProcessor.onaudioprocess = (e) => {
                     if (!vadActive) return
                     if (!ws || ws.readyState !== WebSocket.OPEN) return
@@ -1230,8 +1267,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                     const inputSampleRate = e.inputBuffer.sampleRate
                         || audioContext?.sampleRate
                         || ASR_TARGET_SAMPLE_RATE
-                    const asrData = resampleAudioForAsr(inputData, inputSampleRate)
-                    const frameDurationMs = asrData.length / ASR_TARGET_SAMPLE_RATE * 1000
+                    const captureDurationMs = inputData.length / inputSampleRate * 1000
 
                     // The backend ack only means its upstream socket is open. Drop all
                     // setup audio, then require quiet before reporting true readiness.
@@ -1243,7 +1279,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                     }
                     if (!localAudioCaptureReady) {
                         if (rms <= ASR_INPUT_ARM_MAX_RMS) {
-                            localAudioQuietDurationMs += frameDurationMs
+                            localAudioQuietDurationMs += captureDurationMs
                         } else {
                             localAudioQuietDurationMs = 0
                         }
@@ -1255,18 +1291,19 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                         return
                     }
 
+                    // Resampling is the most expensive callback operation. Run it
+                    // only after the input is armed; preparation audio is discarded.
+                    const asrData = resampleAudioForAsr(inputData, inputSampleRate)
+                    const frameDurationMs = asrData.length / ASR_TARGET_SAMPLE_RATE * 1000
                     const pcmData = new Int16Array(asrData.length)
                     for (let i = 0; i < asrData.length; i++) {
                         const sample = Math.max(-1, Math.min(1, asrData[i] ?? 0))
                         pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
                     }
 
-                    const uint8Array = new Uint8Array(pcmData.buffer)
-                    let binary = ''
-                    for (let i = 0; i < uint8Array.length; i++) {
-                        binary += String.fromCharCode(uint8Array[i] ?? 0)
-                    }
-                    const audioChunk = btoa(binary)
+                    // Send raw PCM as a WebSocket binary frame. Base64 + JSON used
+                    // to allocate several temporary strings on every audio callback.
+                    const audioChunk = pcmData.buffer.slice(0)
                     const decision = voiceActivityGate.update(rms, frameDurationMs)
 
                     if (decision.speechStarted) {
@@ -1485,7 +1522,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         if (!bufferedAssistantText) {
             revealingAssistantText = false
-            if (pendingAssistantComplete && !isSpeaking.value) {
+            if (pendingAssistantComplete && !thinkingActive && !isSpeaking.value) {
                 pendingAssistantComplete = false
                 callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
                 updateCache('', false)
@@ -1531,7 +1568,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         revealingAssistantText = false
         assistantRevealBudget = 0
         assistantRevealLastTickAt = 0
-        if (pendingAssistantComplete && !isSpeaking.value) {
+        if (pendingAssistantComplete && !thinkingActive && !isSpeaking.value) {
             pendingAssistantComplete = false
             callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
             updateCache('', false)

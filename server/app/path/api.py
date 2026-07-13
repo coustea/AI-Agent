@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -25,6 +26,8 @@ from app.path.service import (
     run_resource_generation_bg,
 )
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
@@ -287,10 +290,16 @@ async def generate_node_resource(
     session: AsyncSession = Depends(get_session),
 ):
     """创建节点辅助资源生成任务 — 支持类型：mindmap, code, ppt, reading, cartoon"""
+    logger.info(
+        "[PathAPI] 收到资源生成请求: user_id=%s node_id=%s type=%s",
+        current_user.id, node_id, resource_type,
+    )
     if resource_type not in RESOURCE_TYPES:
+        logger.warning("[PathAPI] 不支持的资源类型: %s", resource_type)
         return HttpResponse.error(code=400, message=f"不支持的资源类型: {resource_type}")
     service = PathService(session)
     run_id = str(uuid4())
+    logger.info("[PathAPI] 生成 run_id: %s", run_id)
     try:
         result = await service.create_node_resource_task(
             current_user.id,
@@ -298,10 +307,19 @@ async def generate_node_resource(
             resource_type,
             run_id,
         )
+        logger.info(
+            "[PathAPI] 资源任务创建成功: resource_id=%s type=%s",
+            result.resource.id, resource_type,
+        )
     except ValueError as exc:
+        logger.error("[PathAPI] 资源任务创建失败: %s", exc)
         return HttpResponse.error(code=400, message=str(exc))
     events = PathEvents(user_id=current_user.id, path_id=result.resource.id, run_id=run_id)
     await events.open()
+    logger.info(
+        "[PathAPI] 添加后台任务: resource_id=%s run_id=%s",
+        result.resource.id, run_id,
+    )
     background_tasks.add_task(
         run_resource_generation_bg,
         user_id=current_user.id,
