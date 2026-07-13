@@ -1,1615 +1,451 @@
-"""Strict, replayable contracts for HyperFrames teaching videos."""
+"""Semantic contract and typed scene recipes for HyperFrames teaching videos."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-TeachingMode = Literal[
-    "concept",
-    "algorithm",
-    "protocol",
-    "state-machine",
-    "architecture",
-    "comparison",
-]
-VisualKind = Literal[
-    "tree",
-    "array",
-    "graph",
-    "flow",
-    "state-machine",
-    "memory",
-    "network",
-    "comparison",
-]
-MechanismKind = Literal[
-    "structure",
-    "sequence",
-    "state_transition",
-    "data_flow",
-    "message_exchange",
-    "container_operation",
-    "tree_growth",
-    "graph_traversal",
-    "timeline",
-    "memory_change",
-    "pipeline",
-    "comparison",
-]
-VisualElementKind = Literal[
-    "concept",
-    "process",
-    "state",
-    "data",
-    "packet",
-    "array_cell",
-    "tree_node",
-    "graph_node",
-    "queue_item",
-    "stack_frame",
-    "memory_block",
-    "page_frame",
-    "register",
-    "instruction",
-    "pipeline_stage",
-    "table_row",
-    "code_line",
-    "formula",
-    "pointer",
-    "timer",
-    "window",
-    "annotation",
-]
-ActionKind = Literal[
-    "reveal",
-    "focus",
-    "compare",
-    "traverse",
-    "transfer",
-    "mutate",
-    "insert",
-    "remove",
-    "connect",
-    "highlight",
-]
-PatchKind = Literal[
-    "add_node",
-    "remove_node",
-    "set_label",
-    "set_state",
-    "add_edge",
-    "remove_edge",
-    "set_value",
-]
-EdgeKind = Literal[
-    "directed",
-    "undirected",
-    "left",
-    "right",
-    "transition",
-]
+MAX_SCENE_VISUAL_ITEMS = 8
 
 
-TEACHING_MODES = tuple(get_args(TeachingMode))
-VISUAL_KINDS = tuple(get_args(VisualKind))
-MECHANISM_KINDS = tuple(get_args(MechanismKind))
-VISUAL_ELEMENT_KINDS = tuple(get_args(VisualElementKind))
-ACTION_KINDS = tuple(get_args(ActionKind))
-PATCH_KINDS = tuple(get_args(PatchKind))
-EDGE_KINDS = tuple(get_args(EdgeKind))
+class SceneLayout(StrEnum):
+    HERO = "hero"
+    CONCEPT_MAP = "concept_map"
+    PROCESS_LANE = "process_lane"
+    STATE_LAB = "state_lab"
+    SYSTEM_MAP = "system_map"
+    COMPARISON_BOARD = "comparison_board"
+    CODE_STUDIO = "code_studio"
+    FORMULA_LAB = "formula_lab"
+    RECAP = "recap"
 
 
-_DYNAMIC_ACTIONS = frozenset(
-    {
-        "compare",
-        "traverse",
-        "transfer",
-        "mutate",
-        "insert",
-        "remove",
-        "connect",
-    }
-)
+class VisualKind(StrEnum):
+    """A compact vocabulary of rendering grammars, not course-specific templates."""
 
-_MECHANISM_ACTIONS: dict[str, frozenset[str]] = {
-    "sequence": frozenset(
-        {
-            "transfer",
-            "traverse",
-            "mutate",
-            "insert",
-            "remove",
-            "connect",
-        }
-    ),
-    "state_transition": frozenset(
-        {
-            "mutate",
-            "transfer",
-        }
-    ),
-    "data_flow": frozenset(
-        {
-            "transfer",
-            "traverse",
-        }
-    ),
-    "message_exchange": frozenset(
-        {
-            "transfer",
-        }
-    ),
-    "container_operation": frozenset(
-        {
-            "insert",
-            "remove",
-            "transfer",
-            "mutate",
-        }
-    ),
-    "tree_growth": frozenset(
-        {
-            "insert",
-            "connect",
-        }
-    ),
-    "graph_traversal": frozenset(
-        {
-            "traverse",
-        }
-    ),
-    "timeline": frozenset(
-        {
-            "traverse",
-            "transfer",
-            "mutate",
-        }
-    ),
-    "memory_change": frozenset(
-        {
-            "mutate",
-            "transfer",
-            "insert",
-            "remove",
-        }
-    ),
-    "pipeline": frozenset(
-        {
-            "transfer",
-            "mutate",
-        }
-    ),
-    "comparison": frozenset(
-        {
-            "compare",
-        }
-    ),
+    NODES = "nodes"
+    MODEL = "model"
+    TREE = "tree"
+    FLOW = "flow"
+    STATE = "state"
+    MEMORY = "memory"
+    NETWORK = "network"
+    CODE = "code"
+    FORMULA = "formula"
+    COMPARISON = "comparison"
+    METRICS = "metrics"
+
+
+_CONNECTED_VISUAL_KINDS = frozenset({
+    VisualKind.MODEL,
+    VisualKind.TREE,
+    VisualKind.FLOW,
+    VisualKind.STATE,
+    VisualKind.MEMORY,
+    VisualKind.NETWORK,
+})
+
+
+class MotionKind(StrEnum):
+    REVEAL = "reveal"
+    FOCUS = "focus"
+    TRAVERSE = "traverse"
+    TRANSFER = "transfer"
+    TRANSFORM = "transform"
+    COMPARE = "compare"
+    EMPHASIZE = "emphasize"
+
+
+class VisualRole(StrEnum):
+    """The semantic job of an object inside a knowledge model.
+
+    Roles give the renderer useful visual hierarchy without naming any specific
+    discipline.  A red-black-tree key, a network packet, a memory cell and a
+    formula term are all supplied by the model as ordinary visual items.
+    """
+
+    ENTITY = "entity"
+    VALUE = "value"
+    OPERATION = "operation"
+    STATE = "state"
+    CONTAINER = "container"
+    SIGNAL = "signal"
+    TERM = "term"
+
+
+@dataclass(frozen=True)
+class LayoutSpec:
+    visual_kinds: frozenset[VisualKind]
+    instruction: str
+
+
+LAYOUTS: dict[SceneLayout, LayoutSpec] = {
+    SceneLayout.HERO: LayoutSpec(frozenset({VisualKind.NODES, VisualKind.MODEL, VisualKind.METRICS}), "章节开场：一个核心命题配少量关键概念，画面留白。"),
+    SceneLayout.CONCEPT_MAP: LayoutSpec(frozenset({VisualKind.NODES, VisualKind.MODEL, VisualKind.TREE, VisualKind.FLOW}), "概念关系：中心概念和 3 到 6 个关系节点，强调层次。"),
+    SceneLayout.PROCESS_LANE: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.FLOW, VisualKind.NETWORK}), "过程推演：按时间或数据方向逐步推进，避免长段文字。"),
+    SceneLayout.STATE_LAB: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.STATE, VisualKind.MEMORY, VisualKind.TREE}), "状态演化：展示前后状态差异和一次关键变换。"),
+    SceneLayout.SYSTEM_MAP: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.NETWORK, VisualKind.NODES, VisualKind.MEMORY, VisualKind.TREE}), "系统组成：组件、边界和消息/数据流。"),
+    SceneLayout.COMPARISON_BOARD: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.COMPARISON, VisualKind.METRICS}), "对比辨析：只比较两个对象，并给出明确判断维度。"),
+    SceneLayout.CODE_STUDIO: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.CODE, VisualKind.FLOW}), "代码讲解：短代码片段配执行轨迹；不展示冗长源码。"),
+    SceneLayout.FORMULA_LAB: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.FORMULA, VisualKind.METRICS}), "公式推导：一个公式、变量含义和一个代入/变化过程。"),
+    SceneLayout.RECAP: LayoutSpec(frozenset({VisualKind.MODEL, VisualKind.METRICS, VisualKind.NODES}), "收束总结：回顾 3 个以内可迁移结论，不新增知识。"),
 }
 
+if set(LAYOUTS) != set(SceneLayout):
+    raise RuntimeError("Cartoon layout registry is not exhaustive")
 
-def _token(
-    value: str,
-    fallback: str = "item",
-) -> str:
-    normalized = "".join(
-        char
-        if char.isalnum() or char in {"-", "_"}
-        else "-"
-        for char in value.strip().lower()
-    )
+
+def motion_values() -> str:
+    return ", ".join(item.value for item in MotionKind)
+
+
+def layout_guidance() -> str:
+    return "\n".join(f"- `{layout.value}`：{spec.instruction}" for layout, spec in LAYOUTS.items())
+
+
+def _id(value: str, fallback: str) -> str:
+    normalized = "".join(char if char.isalnum() or char in "-_" else "-" for char in value.strip().lower())
     return normalized.strip("-_") or fallback
 
 
-def _unique_tokens(
-    values: list[str],
-    *,
-    field_name: str,
-) -> list[str]:
-    normalized = [
-        _token(value)
-        for value in values
-        if value.strip()
-    ]
-
-    if len(normalized) != len(set(normalized)):
-        raise ValueError(
-            f"{field_name} contains duplicate ids"
-        )
-
-    return normalized
-
-
-def _edge_key(
-    edge: "VisualEdge",
-) -> tuple[str, str, str, str]:
-    return (
-        edge.source_id,
-        edge.target_id,
-        edge.kind,
-        edge.label,
-    )
-
-
 class CartoonGenerationConfig(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    pace: Literal[
-        "calm",
-        "balanced",
-        "fast",
-    ] = "balanced"
-
-    visual_density: Literal[
-        "moderate",
-        "rich",
-        "intensive",
-    ] = "rich"
-
-    target_duration_seconds: int = Field(
-        default=90,
-        ge=90,
-        le=600,
-    )
-
-    voice: Literal[
-        "teacher",
-        "coach",
-    ] = "teacher"
-
-    template_id: str = "white-teaching-v1"
-
-    @field_validator("template_id")
-    @classmethod
-    def normalize_template_id(
-        cls,
-        value: str,
-    ) -> str:
-        return _token(
-            value,
-            "white-teaching-v1",
-        )
+    model_config = ConfigDict(extra="forbid")
+    pace: Literal["calm", "balanced", "fast"] = "balanced"
+    visual_density: Literal["moderate", "rich", "intensive"] = "rich"
+    target_duration_seconds: int = Field(default=90, ge=90, le=600)
+    voice: Literal["teacher", "coach"] = "teacher"
 
 
 class CartoonBrief(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    learning_need: str = Field(
-        min_length=1,
-        max_length=500,
-    )
-
-    teaching_plan: str = Field(
-        default="",
-        max_length=12000,
-    )
-
-    tutorial_markdown: str = Field(
-        default="",
-        max_length=30000,
-    )
-
-    knowledge_points: list[str] = Field(
-        default_factory=list,
-        max_length=30,
-    )
-
-    weak_knowledge_points: list[str] = Field(
-        default_factory=list,
-        max_length=20,
-    )
-
-    configuration: CartoonGenerationConfig = Field(
-        default_factory=CartoonGenerationConfig,
-    )
+    model_config = ConfigDict(extra="forbid")
+    learning_need: str = Field(min_length=1, max_length=500)
+    teaching_plan: str = Field(default="", max_length=12000)
+    tutorial_markdown: str = Field(default="", max_length=30000)
+    knowledge_points: list[str] = Field(default_factory=list, max_length=30)
+    weak_knowledge_points: list[str] = Field(default_factory=list, max_length=20)
+    configuration: CartoonGenerationConfig = Field(default_factory=CartoonGenerationConfig)
 
 
-class SceneOutline(BaseModel):
-    """Compact scene contract produced by the global planning pass."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    id: str = Field(
-        min_length=1,
-        max_length=48,
-    )
-
-    title: str = Field(
-        min_length=1,
-        max_length=72,
-    )
-
-    objective: str = Field(
-        min_length=1,
-        max_length=140,
-    )
-
-    mechanism: MechanismKind
-
-    key_points: list[str] = Field(
-        min_length=1,
-        max_length=6,
-    )
-
-    process_beats: list[str] = Field(
-        min_length=2,
-        max_length=6,
-    )
-
-    entry_state: str = Field(
-        min_length=1,
-        max_length=180,
-    )
-
-    exit_state: str = Field(
-        min_length=1,
-        max_length=180,
-    )
+class StoryboardScene(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    title: str = Field(min_length=1, max_length=54)
+    objective: str = Field(min_length=1, max_length=110)
+    layout: SceneLayout
+    visual_kind: VisualKind
 
     @field_validator("id")
     @classmethod
-    def normalize_id(
-        cls,
-        value: str,
-    ) -> str:
-        return _token(
-            value,
-            "scene",
-        )
-
-
-class LessonOutline(BaseModel):
-    """Global teaching plan. Detailed scenes are generated in parallel."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    title: str = Field(
-        min_length=1,
-        max_length=80,
-    )
-
-    course: str = Field(
-        default="计算机科学",
-        min_length=1,
-        max_length=40,
-    )
-
-    scenes: list[SceneOutline] = Field(
-        min_length=2,
-        max_length=6,
-    )
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "scene")
 
     @model_validator(mode="after")
-    def validate_outline(
-        self,
-    ) -> "LessonOutline":
-        ids = [
-            scene.id
-            for scene in self.scenes
-        ]
-
-        if len(ids) != len(set(ids)):
-            raise ValueError(
-                "outline contains duplicate scene ids"
-            )
-
-        if not any(
-            scene.mechanism != "structure"
-            for scene in self.scenes
-        ):
-            raise ValueError(
-                "outline must contain at least one process scene"
-            )
-
+    def validate_layout_visual_pair(self) -> "StoryboardScene":
+        if self.visual_kind not in LAYOUTS[self.layout].visual_kinds:
+            raise ValueError(f"layout {self.layout.value} does not support visual kind {self.visual_kind.value}")
         return self
 
 
-class VisualNode(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+class CartoonStoryboard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=72)
+    course: str = Field(default="计算机科学", min_length=1, max_length=40)
+    scenes: list[StoryboardScene] = Field(min_length=4, max_length=6)
 
-    id: str = Field(
-        min_length=1,
-        max_length=48,
-    )
+    @model_validator(mode="after")
+    def unique_scenes(self) -> "CartoonStoryboard":
+        if len({scene.id for scene in self.scenes}) != len(self.scenes):
+            raise ValueError("storyboard contains duplicate scene ids")
+        if self.scenes[0].layout != SceneLayout.HERO or self.scenes[-1].layout != SceneLayout.RECAP:
+            raise ValueError("storyboard must begin with hero and end with recap")
+        return self
 
-    label: str = Field(
-        min_length=1,
-        max_length=72,
-    )
 
-    detail: str = Field(
-        default="",
-        max_length=120,
-    )
+class VisualItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    label: str = Field(min_length=1, max_length=30)
+    detail: str = Field(default="", max_length=64)
+    value: str = Field(default="", max_length=36)
+    role: VisualRole = VisualRole.ENTITY
+    tone: Literal["ink", "mint", "blue", "amber", "violet", "coral"] = "blue"
 
-    state: str = Field(
-        default="idle",
-        min_length=1,
-        max_length=24,
-    )
-
-    parent_id: str | None = None
-
-    value: str | int | float | None = None
-
-    kind: VisualElementKind = "concept"
-
-    group_id: str | None = None
-
-    initially_visible: bool = True
-
-    @field_validator(
-        "id",
-        "parent_id",
-        "group_id",
-    )
+    @field_validator("id")
     @classmethod
-    def normalize_id(
-        cls,
-        value: str | None,
-    ) -> str | None:
-        return (
-            _token(value)
-            if value
-            else value
-        )
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "item")
 
 
 class VisualEdge(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    """One rendered relationship between two visual items.
 
-    source_id: str = Field(
-        min_length=1,
-        max_length=48,
-    )
+    The edge is deliberately part of the compact LLM contract: it is used to
+    build SVG connectors and to derive semantic layouts such as a tree.  It is
+    not a decorative, unused graph field.
+    """
 
-    target_id: str = Field(
-        min_length=1,
-        max_length=48,
-    )
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    source_id: str = Field(min_length=1, max_length=48)
+    target_id: str = Field(min_length=1, max_length=48)
+    label: str = Field(default="", max_length=30)
+    tone: Literal["ink", "mint", "blue", "amber", "violet", "coral"] = "blue"
 
-    label: str = Field(
-        default="",
-        max_length=48,
-    )
-
-    kind: EdgeKind = "directed"
-
-    @field_validator(
-        "source_id",
-        "target_id",
-    )
+    @field_validator("id", "source_id", "target_id")
     @classmethod
-    def normalize_id(
-        cls,
-        value: str,
-    ) -> str:
-        return _token(value)
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "edge")
+
+
+class VisualStateItem(BaseModel):
+    """One object as it appears in a particular teaching-time model snapshot.
+
+    The id always points to the scene's stable object.  Optional values are
+    state-specific overrides, so an insertion, recolouring, pointer update or
+    value substitution is represented as data rather than a one-off renderer
+    rule.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    label: str | None = Field(default=None, min_length=1, max_length=30)
+    detail: str | None = Field(default=None, max_length=64)
+    value: str | None = Field(default=None, max_length=36)
+    role: VisualRole | None = None
+    tone: Literal["ink", "mint", "blue", "amber", "violet", "coral"] | None = None
+
+    @field_validator("id")
+    @classmethod
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "item")
+
+
+class VisualState(BaseModel):
+    """A replayable snapshot of the knowledge model at one teaching step."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    items: list[VisualStateItem] = Field(min_length=1, max_length=MAX_SCENE_VISUAL_ITEMS)
+    edges: list[VisualEdge] = Field(default_factory=list, max_length=MAX_SCENE_VISUAL_ITEMS * 2)
+
+    @field_validator("id")
+    @classmethod
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "state")
 
     @model_validator(mode="after")
-    def validate_endpoints(
-        self,
-    ) -> "VisualEdge":
-        if self.source_id == self.target_id:
-            raise ValueError(
-                "visual edge cannot connect a node to itself"
-            )
-
+    def unique_items(self) -> "VisualState":
+        if len({item.id for item in self.items}) != len(self.items):
+            raise ValueError("visual state contains duplicate item ids")
         return self
 
 
-class VisualModel(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
+class SceneVisual(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     kind: VisualKind
-
-    label: str = Field(
-        default="",
-        max_length=80,
-    )
-
-    nodes: list[VisualNode] = Field(
-        min_length=1,
-        max_length=36,
-    )
-
-    edges: list[VisualEdge] = Field(
-        default_factory=list,
-        max_length=64,
-    )
+    items: list[VisualItem] = Field(min_length=1, max_length=MAX_SCENE_VISUAL_ITEMS)
+    edges: list[VisualEdge] = Field(default_factory=list, max_length=MAX_SCENE_VISUAL_ITEMS * 2)
+    states: list[VisualState] = Field(default_factory=list, max_length=4)
+    code: str = Field(default="", max_length=540)
+    formula: str = Field(default="", max_length=160)
+    caption: str = Field(default="", max_length=90)
 
     @model_validator(mode="after")
-    def validate_links(
-        self,
-    ) -> "VisualModel":
-        ids = [
-            node.id
-            for node in self.nodes
-        ]
-
-        if len(ids) != len(set(ids)):
-            raise ValueError(
-                "visual model contains duplicate node ids"
-            )
-
-        known = set(ids)
-        for node in self.nodes:
-            if (
-                node.parent_id
-                and node.parent_id not in known
-            ):
-                raise ValueError(
-                    f"node {node.id} references "
-                    f"unknown parent {node.parent_id}"
-                )
-
-        edge_keys: set[
-            tuple[str, str, str, str]
-        ] = set()
-
-        for edge in self.edges:
-            if (
-                edge.source_id not in known
-                or edge.target_id not in known
-            ):
-                raise ValueError(
-                    f"visual edge "
-                    f"{edge.source_id}->{edge.target_id} "
-                    "references an unknown node"
-                )
-
-            key = _edge_key(edge)
-            if key in edge_keys:
-                raise ValueError(
-                    "visual model contains duplicate edge "
-                    f"{edge.source_id}->{edge.target_id}"
-                )
-
-            edge_keys.add(key)
-
+    def validate_payload(self) -> "SceneVisual":
+        item_ids = {item.id for item in self.items}
+        if len(item_ids) != len(self.items):
+            raise ValueError("visual contains duplicate item ids")
+        edge_ids = {edge.id for edge in self.edges}
+        if len(edge_ids) != len(self.edges):
+            raise ValueError("visual contains duplicate edge ids")
+        state_ids = {state.id for state in self.states}
+        if len(state_ids) != len(self.states):
+            raise ValueError("visual contains duplicate state ids")
+        if self.kind == VisualKind.CODE and not self.code:
+            raise ValueError("code visual requires code")
+        if self.kind == VisualKind.FORMULA and not self.formula:
+            raise ValueError("formula visual requires formula")
+        if self.kind in {VisualKind.CODE, VisualKind.FORMULA} and self.states:
+            raise ValueError(f"{self.kind.value} visual cannot contain visual states")
+        if self.states and self.edges:
+            raise ValueError("dynamic visual must define edges only inside states")
+        if self.states:
+            for state in self.states:
+                state_item_ids = {item.id for item in state.items}
+                if not state_item_ids <= item_ids:
+                    raise ValueError(f"visual state {state.id} references unknown items")
+                self._validate_edges(state_item_ids, state.edges)
+        else:
+            self._validate_edges(item_ids, self.edges)
         return self
 
+    def _validate_edges(self, item_ids: set[str], edges: list[VisualEdge]) -> None:
+        pairs = {(edge.source_id, edge.target_id) for edge in edges}
+        if len(pairs) != len(edges):
+            raise ValueError("visual contains duplicate edge endpoints")
+        invalid_edges = [edge.id for edge in edges if edge.source_id not in item_ids or edge.target_id not in item_ids or edge.source_id == edge.target_id]
+        if invalid_edges:
+            raise ValueError(f"visual contains invalid edges: {sorted(invalid_edges)}")
+        if self.kind in {VisualKind.MODEL, VisualKind.TREE, VisualKind.FLOW, VisualKind.STATE, VisualKind.NETWORK} and len(item_ids) > 1 and not edges:
+            raise ValueError(f"{self.kind.value} visual requires edges")
+        if self.kind == VisualKind.TREE:
+            self._validate_tree(item_ids, edges)
 
-class TeachingAction(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
+    @staticmethod
+    def _validate_tree(item_ids: set[str], edges: list[VisualEdge]) -> None:
+        if len(edges) != len(item_ids) - 1:
+            raise ValueError("tree visual requires exactly one parent edge for every non-root node")
+        parents = {edge.target_id for edge in edges}
+        if len(parents) != len(edges):
+            raise ValueError("tree visual contains a node with multiple parents")
+        roots = item_ids - parents
+        if len(roots) != 1:
+            raise ValueError("tree visual requires exactly one root")
+        children: dict[str, list[str]] = {item_id: [] for item_id in item_ids}
+        for edge in edges:
+            children[edge.source_id].append(edge.target_id)
+        seen: set[str] = set()
+        pending = list(roots)
+        while pending:
+            node = pending.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            pending.extend(children[node])
+        if seen != item_ids:
+            raise ValueError("tree visual must be connected and acyclic")
 
-    kind: ActionKind
 
-    target_ids: list[str] = Field(
-        default_factory=list,
-        max_length=6,
-    )
-
-    source_id: str | None = None
-
-    destination_id: str | None = None
-
-    note: str = Field(
-        default="",
-        max_length=72,
-    )
-
-    duration_ms: int = Field(
-        default=700,
-        ge=160,
-        le=4000,
-    )
-
-    intensity: Literal[
-        "subtle",
-        "normal",
-        "strong",
-    ] = "normal"
+class MotionBeat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: MotionKind
+    # A motion can address the whole visual. This must stay aligned with
+    # SceneVisual.items because the compiler accepts every referenced target.
+    target_ids: list[str] = Field(min_length=1, max_length=MAX_SCENE_VISUAL_ITEMS)
+    duration_ms: int = Field(default=700, ge=240, le=2200)
 
     @field_validator("target_ids")
     @classmethod
-    def normalize_targets(
-        cls,
-        values: list[str],
-    ) -> list[str]:
-        return _unique_tokens(
-            values,
-            field_name="target_ids",
-        )
-
-    @field_validator(
-        "source_id",
-        "destination_id",
-    )
-    @classmethod
-    def normalize_optional_id(
-        cls,
-        value: str | None,
-    ) -> str | None:
-        return (
-            _token(value)
-            if value
-            else value
-        )
-
-    @model_validator(mode="after")
-    def validate_action_shape(
-        self,
-    ) -> "TeachingAction":
-        target_count = len(
-            self.target_ids
-        )
-
-        if (
-            self.kind
-            in {
-                "reveal",
-                "focus",
-                "mutate",
-                "insert",
-                "remove",
-                "highlight",
-            }
-            and target_count < 1
-        ):
-            raise ValueError(
-                f"action {self.kind} requires "
-                "at least one target_id"
-            )
-
-        if (
-            self.kind
-            in {
-                "compare",
-                "traverse",
-            }
-            and target_count < 2
-        ):
-            raise ValueError(
-                f"action {self.kind} requires "
-                "at least two target_ids"
-            )
-
-        if self.kind in {
-            "transfer",
-            "connect",
-        }:
-            if (
-                not self.source_id
-                or not self.destination_id
-            ):
-                raise ValueError(
-                    f"action {self.kind} requires "
-                    "source_id and destination_id"
-                )
-
-            if (
-                self.source_id
-                == self.destination_id
-            ):
-                raise ValueError(
-                    f"action {self.kind} requires "
-                    "two different nodes"
-                )
-
-            if (
-                self.source_id
-                not in self.target_ids
-                or self.destination_id
-                not in self.target_ids
-            ):
-                raise ValueError(
-                    f"action {self.kind} target_ids "
-                    "must contain source_id "
-                    "and destination_id"
-                )
-
-        elif (
-            self.source_id is not None
-            or self.destination_id is not None
-        ):
-            raise ValueError(
-                f"action {self.kind} must not define "
-                "source_id or destination_id"
-            )
-
-        return self
-
-
-class StatePatch(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    op: PatchKind
-
-    after_action_index: int = Field(
-        ge=0,
-        le=5,
-    )
-
-    target_id: str | None = None
-
-    node: VisualNode | None = None
-
-    edge: VisualEdge | None = None
-
-    value: str | int | float | None = None
-
-    @field_validator("target_id")
-    @classmethod
-    def normalize_target(
-        cls,
-        value: str | None,
-    ) -> str | None:
-        return (
-            _token(value)
-            if value
-            else value
-        )
-
-    @model_validator(mode="after")
-    def validate_payload(
-        self,
-    ) -> "StatePatch":
-        if self.op == "add_node":
-            if (
-                self.node is None
-                or self.target_id is not None
-                or self.edge is not None
-                or self.value is not None
-            ):
-                raise ValueError(
-                    "add_node requires only node"
-                )
-
-        elif self.op in {
-            "add_edge",
-            "remove_edge",
-        }:
-            if (
-                self.edge is None
-                or self.target_id is not None
-                or self.node is not None
-                or self.value is not None
-            ):
-                raise ValueError(
-                    f"{self.op} requires only edge"
-                )
-
-        elif self.op in {
-            "remove_node",
-            "set_label",
-            "set_state",
-            "set_value",
-        }:
-            if (
-                not self.target_id
-                or self.node is not None
-                or self.edge is not None
-            ):
-                raise ValueError(
-                    f"{self.op} requires target_id "
-                    "and no node/edge"
-                )
-
-            if (
-                self.op == "remove_node"
-                and self.value is not None
-            ):
-                raise ValueError(
-                    "remove_node must not define value"
-                )
-
-            if (
-                self.op
-                in {
-                    "set_label",
-                    "set_state",
-                }
-                and not isinstance(
-                    self.value,
-                    str,
-                )
-            ):
-                raise ValueError(
-                    f"{self.op} requires a string value"
-                )
-
-        return self
+    def normalize_targets(cls, values: list[str]) -> list[str]:
+        normalized = [_id(value, "item") for value in values]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("motion beat contains duplicate targets")
+        return normalized
 
 
 class TeachingStep(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    id: str = Field(
-        min_length=1,
-        max_length=48,
-    )
-
-    narration: str = Field(
-        min_length=4,
-        max_length=180,
-    )
-
-    focus_ids: list[str] = Field(
-        default_factory=list,
-        max_length=8,
-    )
-
-    actions: list[TeachingAction] = Field(
-        min_length=1,
-        max_length=6,
-    )
-
-    patches: list[StatePatch] = Field(
-        default_factory=list,
-        max_length=8,
-    )
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    narration: str = Field(min_length=8, max_length=150)
+    focus: str = Field(min_length=1, max_length=64)
+    state_id: str = Field(default="", max_length=48)
+    motions: list[MotionBeat] = Field(min_length=1, max_length=4)
 
     @field_validator("id")
     @classmethod
-    def normalize_id(
-        cls,
-        value: str,
-    ) -> str:
-        return _token(
-            value,
-            "step",
-        )
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "step")
 
-    @field_validator("focus_ids")
+    @field_validator("state_id")
     @classmethod
-    def normalize_focus(
-        cls,
-        values: list[str],
-    ) -> list[str]:
-        return _unique_tokens(
-            values,
-            field_name="focus_ids",
-        )
-
-    @model_validator(mode="after")
-    def validate_patch_timing(
-        self,
-    ) -> "TeachingStep":
-        indexes = [
-            patch.after_action_index
-            for patch in self.patches
-        ]
-
-        if indexes != sorted(indexes):
-            raise ValueError(
-                "patches must be ordered "
-                "by after_action_index"
-            )
-
-        if any(
-            index >= len(self.actions)
-            for index in indexes
-        ):
-            raise ValueError(
-                "patch after_action_index "
-                "exceeds the action list"
-            )
-
-        return self
+    def normalize_state_id(cls, value: str) -> str:
+        return _id(value, "") if value else ""
 
 
 class TeachingScene(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    id: str = Field(
-        min_length=1,
-        max_length=48,
-    )
-
-    title: str = Field(
-        min_length=1,
-        max_length=72,
-    )
-
-    objective: str = Field(
-        min_length=1,
-        max_length=140,
-    )
-
-    mode: TeachingMode
-
-    mechanism: MechanismKind
-
-    tag: str = Field(
-        default="",
-        max_length=36,
-    )
-
-    visual_model: VisualModel
-
-    steps: list[TeachingStep] = Field(
-        min_length=2,
-        max_length=8,
-    )
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=48)
+    title: str = Field(min_length=1, max_length=54)
+    objective: str = Field(min_length=1, max_length=110)
+    layout: SceneLayout
+    visual: SceneVisual
+    steps: list[TeachingStep] = Field(min_length=2, max_length=4)
+    takeaway: str = Field(min_length=1, max_length=96)
 
     @field_validator("id")
     @classmethod
-    def normalize_id(
-        cls,
-        value: str,
-    ) -> str:
-        return _token(
-            value,
-            "scene",
-        )
+    def normalize_id(cls, value: str) -> str:
+        return _id(value, "scene")
 
     @model_validator(mode="after")
-    def validate_scene(
-        self,
-    ) -> "TeachingScene":
-        step_ids = [
-            step.id
-            for step in self.steps
-        ]
-
-        if len(step_ids) != len(set(step_ids)):
-            raise ValueError(
-                f"scene {self.id} contains "
-                "duplicate step ids"
-            )
-
-        replay_scene(self)
-
-        problems = scene_motion_problems(
-            self
-        )
-
-        if problems:
-            raise ValueError(
-                "; ".join(problems)
-            )
-
+    def validate_scene(self) -> "TeachingScene":
+        if len({step.id for step in self.steps}) != len(self.steps):
+            raise ValueError("scene contains duplicate step ids")
+        known = {item.id for item in self.visual.items}
+        unknown = {target for step in self.steps for motion in step.motions for target in motion.target_ids if target not in known}
+        if unknown:
+            raise ValueError(f"motion references unknown items: {sorted(unknown)}")
+        state_ids = {state.id for state in self.visual.states}
+        referenced_states = {step.state_id for step in self.steps if step.state_id}
+        if referenced_states - state_ids:
+            raise ValueError(f"steps reference unknown visual states: {sorted(referenced_states - state_ids)}")
+        if state_ids and any(not step.state_id for step in self.steps):
+            raise ValueError("dynamic visual requires every teaching step to declare state_id")
+        if not state_ids and referenced_states:
+            raise ValueError("static visual cannot declare state_id")
         return self
 
 
 class TeachingLesson(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    title: str = Field(
-        min_length=1,
-        max_length=80,
-    )
-
-    course: str = Field(
-        default="计算机科学",
-        min_length=1,
-        max_length=40,
-    )
-
-    scenes: list[TeachingScene] = Field(
-        min_length=2,
-        max_length=8,
-    )
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=72)
+    course: str = Field(default="计算机科学", min_length=1, max_length=40)
+    scenes: list[TeachingScene] = Field(min_length=4, max_length=6)
 
     @model_validator(mode="after")
-    def validate_lesson(
-        self,
-    ) -> "TeachingLesson":
-        ids = [
-            scene.id
+    def validate_lesson(self) -> "TeachingLesson":
+        if len({scene.id for scene in self.scenes}) != len(self.scenes):
+            raise ValueError("lesson contains duplicate scene ids")
+        if len({scene.layout for scene in self.scenes}) < 4:
+            raise ValueError("lesson needs at least four layouts")
+        animated_models = [
+            scene
             for scene in self.scenes
+            if scene.visual.kind in _CONNECTED_VISUAL_KINDS and scene.visual.states
         ]
-
-        if len(ids) != len(set(ids)):
-            raise ValueError(
-                "lesson contains duplicate scene ids"
-            )
-
-        if not any(
-            action.kind in _DYNAMIC_ACTIONS
-            for scene in self.scenes
-            for step in scene.steps
-            for action in step.actions
-        ):
-            raise ValueError(
-                "lesson does not contain "
-                "any dynamic teaching process"
-            )
-
+        if len(animated_models) < 2:
+            raise ValueError("lesson needs at least two animated knowledge-model scenes")
         return self
 
 
-def scene_motion_problems(
-    scene: TeachingScene,
-) -> list[str]:
-    """Return mechanism-level motion problems without changing the scene."""
-
-    required = _MECHANISM_ACTIONS.get(
-        scene.mechanism
-    )
-
-    if not required:
-        return []
-
-    kinds = {
-        action.kind
-        for step in scene.steps
-        for action in step.actions
-    }
-
-    if kinds & required:
-        return []
-
-    expected = "/".join(
-        sorted(required)
-    )
-
-    return [
-        f"scene {scene.id} mechanism "
-        f"{scene.mechanism} requires one of: "
-        f"{expected}"
-    ]
-
-
-def collect_lesson_motion_problems(
-    lesson: TeachingLesson,
-) -> list[str]:
-    return [
-        problem
-        for scene in lesson.scenes
-        for problem in scene_motion_problems(
-            scene
-        )
-    ]
-
-
-def replay_scene(
-    scene: TeachingScene,
-) -> VisualModel:
-    """Replay actions and patches in timeline order and return the final state."""
-
-    state = scene.visual_model.model_copy(
-        deep=True
-    )
-
-    nodes = {
-        node.id: node
-        for node in state.nodes
-    }
-
-    edges = {
-        _edge_key(edge): edge
-        for edge in state.edges
-    }
-
-    def require_node(
-        node_id: str,
-    ) -> None:
-        if node_id not in nodes:
-            raise ValueError(
-                f"scene {scene.id} references "
-                f"unknown node {node_id}"
-            )
-
-    def apply_patch(
-        patch: StatePatch,
-    ) -> None:
-        if patch.op == "add_node":
-            assert patch.node is not None
-
-            if patch.node.id in nodes:
-                raise ValueError(
-                    f"scene {scene.id} adds "
-                    f"duplicate node {patch.node.id}"
-                )
-
-            if patch.node.parent_id:
-                require_node(
-                    patch.node.parent_id
-                )
-
-            nodes[patch.node.id] = (
-                patch.node.model_copy(
-                    deep=True
-                )
-            )
-            return
-
-        if patch.op == "remove_node":
-            assert patch.target_id is not None
-
-            require_node(
-                patch.target_id
-            )
-
-            nodes.pop(
-                patch.target_id
-            )
-
-            for key, edge in list(
-                edges.items()
-            ):
-                if (
-                    edge.source_id
-                    == patch.target_id
-                    or edge.target_id
-                    == patch.target_id
-                ):
-                    edges.pop(key)
-
-            return
-
-        if patch.op in {
-            "set_label",
-            "set_state",
-            "set_value",
-        }:
-            assert patch.target_id is not None
-
-            require_node(
-                patch.target_id
-            )
-
-            node = nodes[
-                patch.target_id
-            ]
-
-            if patch.op == "set_label":
-                node.label = str(
-                    patch.value
-                )
-
-            elif patch.op == "set_state":
-                node.state = str(
-                    patch.value
-                )
-
-            else:
-                node.value = patch.value
-
-            return
-
-        assert patch.edge is not None
-
-        require_node(
-            patch.edge.source_id
-        )
-        require_node(
-            patch.edge.target_id
-        )
-
-        key = _edge_key(
-            patch.edge
-        )
-
-        if patch.op == "add_edge":
-            if key in edges:
-                raise ValueError(
-                    f"scene {scene.id} adds "
-                    "duplicate edge "
-                    f"{patch.edge.source_id}->"
-                    f"{patch.edge.target_id}"
-                )
-
-            edges[key] = (
-                patch.edge.model_copy(
-                    deep=True
-                )
-            )
-
-        else:
-            if key not in edges:
-                raise ValueError(
-                    f"scene {scene.id} removes "
-                    "unknown edge "
-                    f"{patch.edge.source_id}->"
-                    f"{patch.edge.target_id}"
-                )
-
-            edges.pop(key)
-
-    for step in scene.steps:
-        for focus_id in step.focus_ids:
-            require_node(
-                focus_id
-            )
-
-        patches_by_action: dict[
-            int,
-            list[StatePatch],
-        ] = {}
-
-        for patch in step.patches:
-            patches_by_action.setdefault(
-                patch.after_action_index,
-                [],
-            ).append(patch)
-
-        for (
-            action_index,
-            action,
-        ) in enumerate(
-            step.actions
-        ):
-            pending_nodes = {
-                patch.node.id
-                for patch in patches_by_action.get(
-                    action_index,
-                    [],
-                )
-                if (
-                    patch.op == "add_node"
-                    and patch.node is not None
-                )
-            }
-
-            action_ids = [
-                *action.target_ids
-            ]
-
-            if action.source_id:
-                action_ids.append(
-                    action.source_id
-                )
-
-            if action.destination_id:
-                action_ids.append(
-                    action.destination_id
-                )
-
-            for node_id in action_ids:
-                if node_id not in pending_nodes:
-                    require_node(
-                        node_id
-                    )
-
-            related_patches = (
-                patches_by_action.get(
-                    action_index,
-                    [],
-                )
-            )
-
-            if action.kind == "mutate":
-                changed = {
-                    patch.target_id
-                    for patch in related_patches
-                    if patch.op
-                    in {
-                        "set_label",
-                        "set_state",
-                        "set_value",
-                    }
-                }
-
-                if not changed.intersection(
-                    action.target_ids
-                ):
-                    raise ValueError(
-                        f"scene {scene.id} "
-                        f"step {step.id} "
-                        "mutate action requires "
-                        "a matching state patch"
-                    )
-
-            elif action.kind == "remove":
-                removed = {
-                    patch.target_id
-                    for patch in related_patches
-                    if patch.op
-                    == "remove_node"
-                }
-
-                if not removed.intersection(
-                    action.target_ids
-                ):
-                    raise ValueError(
-                        f"scene {scene.id} "
-                        f"step {step.id} "
-                        "remove action requires "
-                        "a matching remove_node patch"
-                    )
-
-            elif action.kind == "insert":
-                inserted = {
-                    patch.node.id
-                    for patch in related_patches
-                    if (
-                        patch.op == "add_node"
-                        and patch.node is not None
-                    )
-                }
-
-                hidden_existing = {
-                    node_id
-                    for node_id
-                    in action.target_ids
-                    if (
-                        node_id in nodes
-                        and not nodes[
-                            node_id
-                        ].initially_visible
-                    )
-                }
-
-                if (
-                    not inserted.intersection(
-                        action.target_ids
-                    )
-                    and not hidden_existing
-                ):
-                    raise ValueError(
-                        f"scene {scene.id} "
-                        f"step {step.id} "
-                        "insert action must add "
-                        "or reveal a target node"
-                    )
-
-            elif action.kind == "connect":
-                assert (
-                    action.source_id
-                    is not None
-                    and action.destination_id
-                    is not None
-                )
-
-                staged_edges = [
-                    *edges.values(),
-                    *(
-                        patch.edge
-                        for patch
-                        in related_patches
-                        if (
-                            patch.op == "add_edge"
-                            and patch.edge
-                            is not None
-                        )
-                    ),
-                ]
-
-                if not any(
-                    {
-                        edge.source_id,
-                        edge.target_id,
-                    }
-                    == {
-                        action.source_id,
-                        action.destination_id,
-                    }
-                    for edge in staged_edges
-                ):
-                    raise ValueError(
-                        f"scene {scene.id} "
-                        f"step {step.id} "
-                        "connect action has no "
-                        "matching visual edge"
-                    )
-
-            for patch in related_patches:
-                apply_patch(
-                    patch
-                )
-
-    return VisualModel(
-        kind=state.kind,
-        label=state.label,
-        nodes=list(
-            nodes.values()
-        ),
-        edges=list(
-            edges.values()
-        ),
-    )
-
-
-def stage_visual_model(
-    scene: TeachingScene,
-) -> VisualModel:
-    """Return every node and edge that can appear at any point in the scene."""
-
-    nodes = {
-        node.id: node.model_copy(
-            deep=True
-        )
-        for node in scene.visual_model.nodes
-    }
-
-    edges = {
-        _edge_key(edge): edge.model_copy(
-            deep=True
-        )
-        for edge in scene.visual_model.edges
-    }
-
-    for step in scene.steps:
-        for patch in step.patches:
-            if (
-                patch.op == "add_node"
-                and patch.node is not None
-            ):
-                if patch.node.id in nodes:
-                    raise ValueError(
-                        f"scene {scene.id} "
-                        "stages duplicate node "
-                        f"{patch.node.id}"
-                    )
-
-                nodes[patch.node.id] = (
-                    patch.node.model_copy(
-                        deep=True
-                    )
-                )
-
-            if patch.edge is not None:
-                edges.setdefault(
-                    _edge_key(
-                        patch.edge
-                    ),
-                    patch.edge.model_copy(
-                        deep=True
-                    ),
-                )
-
-    return VisualModel(
-        kind=scene.visual_model.kind,
-        label=scene.visual_model.label,
-        nodes=list(
-            nodes.values()
-        ),
-        edges=list(
-            edges.values()
-        ),
-    )
-
-
 class AudioSynthesis(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-    )
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     path: Path
-
-    duration_ms: int = Field(
-        gt=0,
-    )
-
-    text: str = Field(
-        min_length=1,
-    )
-
-    provider: str = Field(
-        min_length=1,
-    )
-
-    voice: str = Field(
-        min_length=1,
-    )
+    duration_ms: int = Field(gt=0)
+    text: str = Field(min_length=1)
+    provider: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
 
 
-class TimedAction(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    action_index: int = Field(
-        ge=0,
-    )
-
-    action: TeachingAction
-
-    start_ms: int = Field(
-        ge=0,
-    )
-
-    duration_ms: int = Field(
-        gt=0,
-    )
-
-    synthetic: bool = False
-
-
-class TimedPatch(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    patch_index: int = Field(
-        ge=0,
-    )
-
-    patch: StatePatch
-
-    start_ms: int = Field(
-        ge=0,
-    )
+class TimedMotion(BaseModel):
+    motion: MotionBeat
+    start_ms: int = Field(ge=0)
+    duration_ms: int = Field(gt=0)
 
 
 class TimedStep(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
     scene_id: str
-
     step: TeachingStep
-
-    start_ms: int = Field(
-        ge=0,
-    )
-
-    duration_ms: int = Field(
-        gt=0,
-    )
-
-    audio_src: str = Field(
-        min_length=1,
-    )
-
-    audio_duration_ms: int = Field(
-        gt=0,
-    )
-
-    actions: list[TimedAction] = Field(
-        min_length=1,
-    )
-
-    patches: list[TimedPatch] = Field(
-        default_factory=list,
-    )
+    start_ms: int = Field(ge=0)
+    duration_ms: int = Field(gt=0)
+    audio_src: str
+    audio_duration_ms: int = Field(gt=0)
+    motions: list[TimedMotion]
 
 
 class TimedScene(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    index: int = Field(
-        ge=0,
-    )
-
+    index: int = Field(ge=0)
     scene: TeachingScene
-
-    start_ms: int = Field(
-        ge=0,
-    )
-
-    duration_ms: int = Field(
-        gt=0,
-    )
-
-    steps: list[TimedStep] = Field(
-        min_length=1,
-    )
+    start_ms: int = Field(ge=0)
+    duration_ms: int = Field(gt=0)
+    steps: list[TimedStep] = Field(min_length=1)
 
 
 class CompositionPlan(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-
-    total_duration_ms: int = Field(
-        gt=0,
-    )
-
-    scenes: list[TimedScene] = Field(
-        min_length=1,
-    )
+    total_duration_ms: int = Field(gt=0)
+    scenes: list[TimedScene] = Field(min_length=4)
