@@ -100,7 +100,7 @@ class ResourcePPT(PPTModel):
 
 
 class PathPPT(PPTModel):
-    """路径规划 PPT 请求 — 字段对齐 NodeInput。"""
+    """路径规划 PPT 请求。"""
 
     username: str = ""
     profile: dict[str, Any] | str = Field(default_factory=dict)

@@ -12,25 +12,15 @@ import json
 import re
 from typing import TYPE_CHECKING, Callable
 
-from app.infra.logging import get_logger
 from app.resource.schemas.quiz import (
     QuizPayload,
     build_quiz_blueprint,
     validate_quiz_payload,
 )
-from app.resource.service import (
-    BASE_RESOURCE_AGENT_IDS,
-)
+from app.resource.catalog import BASE_RESOURCE_AGENT_IDS
 
 if TYPE_CHECKING:
     from app.resource.schemas import AgentResult, ResourceInput
-
-logger = get_logger(__name__)
-
-
-# 内容相似度阈值：超过则判定与其他 Agent 内容重复
-CONTENT_SIMILARITY_THRESHOLD = 0.7
-
 
 class ValidationError(ValueError):
     """验证失败异常。"""
@@ -232,9 +222,8 @@ def validate_agent_result(
     agent_id: str,
     result: "AgentResult",
     input_data: "ResourceInput",
-    existing_results: dict[str, "AgentResult"] | None = None,
-) -> list[str]:
-    """执行通用校验和特定校验，返回内容重复警告列表。"""
+) -> None:
+    """执行通用校验和类型契约校验。"""
     # 先执行通用校验
     validate_common_result(agent_id, result, input_data)
 
@@ -243,108 +232,9 @@ def validate_agent_result(
     if validator:
         validator(result, input_data)
 
-    # 内容去重检查（仅当存在已有结果时）
-    overlap_warnings = []
-    if existing_results:
-        overlap_warnings = check_content_overlap(
-            agent_id, result, existing_results
-        )
-
-    return overlap_warnings
-
-
-def check_content_overlap(
-    agent_id: str,
-    result: "AgentResult",
-    existing_results: dict[str, "AgentResult"],
-) -> list[str]:
-    """检查内容是否与其他 Agent 重复。
-
-    使用简单关键词重叠率作为相似度指标。
-
-    Args:
-        agent_id: 当前 Agent ID
-        result: 当前 Agent 结果
-        existing_results: 已完成的其他 Agent 结果
-
-    Returns:
-        重复警告列表
-    """
-    warnings = []
-
-    overlap_targets = [aid for aid in existing_results if aid != agent_id]
-    if not overlap_targets:
-        return warnings
-
-    current_keywords = extract_keywords(result.content)
-
-    # 与每个其它 agent 计算关键词重叠率
-    for other_agent_id in overlap_targets:
-        other_content = existing_results[other_agent_id].content
-        other_keywords = extract_keywords(other_content)
-
-        similarity = compute_keyword_overlap(current_keywords, other_keywords)
-
-        # 超过阈值则发出重复警告
-        if similarity > CONTENT_SIMILARITY_THRESHOLD:
-            warning = (
-                f"内容与 {other_agent_id} 相似度 {similarity:.1%} 超过阈值 "
-                f"{CONTENT_SIMILARITY_THRESHOLD:.1%}，可能存在重复"
-            )
-            warnings.append(warning)
-            logger.warning(
-                "Agent %s 内容重复检测: overlap_with=%s similarity=%.2f",
-                agent_id, other_agent_id, similarity
-            )
-
-    return warnings
-
-
-def extract_keywords(content: str, max_keywords: int = 50) -> set[str]:
-    """从内容中提取关键词（简单实现：提取非停用词）。"""
-    stop_words = {
-        "的", "是", "在", "有", "和", "与", "或", "但", "如果", "因为",
-        "所以", "那么", "这", "那", "它", "他", "她", "我", "你", "我们",
-        "可以", "需要", "应该", "必须", "能够", "可能", "已经", "将", "要",
-        "一个", "一些", "所有", "每个", "任何", "这种", "那种", "这样",
-        "通过", "使用", "进行", "实现", "完成", "开始", "结束", "继续",
-    }
-
-    words = set()
-
-    chinese_pattern = re.findall(r"[a-zA-Z0-9一-鿿]{2,10}", content)
-    for w in chinese_pattern:
-        w_lower = w.lower()
-        if w_lower not in stop_words and len(w_lower) >= 2:
-            words.add(w_lower)
-
-    english_words = re.findall(r"[a-zA-Z]{3,}", content)
-    for w in english_words:
-        w_lower = w.lower()
-        if w_lower not in stop_words:
-            words.add(w_lower)
-
-    return set(list(words)[:max_keywords])
-
-
-def compute_keyword_overlap(set1: set[str], set2: set[str]) -> float:
-    """计算两个关键词集合的重叠率（Jaccard 相似度）。"""
-    # 任一集合为空则无重叠
-    if not set1 or not set2:
-        return 0.0
-
-    intersection = len(set1 & set2)
-    union = len(set1 | set2)
-
-    # Jaccard 系数：交集 / 并集
-    return intersection / union if union > 0 else 0.0
-
-
 __all__ = [
     "ValidationError",
     "validate_common_result",
     "validate_agent_result",
-    "check_content_overlap",
     "AGENT_VALIDATORS",
-    "CONTENT_SIMILARITY_THRESHOLD",
 ]

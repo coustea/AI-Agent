@@ -36,5 +36,5 @@ export interface ResourceEvent {
   message: string // 事件描述消息
   progress: number | null // 整体进度百分比，无进度信息时为 null
   data: Record<string, unknown> // 事件负载数据（状态、阶段、指标等）
-  timestamp: number // 事件时间戳（毫秒）
+  timestamp: number // Unix 时间戳（毫秒）
 }

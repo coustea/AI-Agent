@@ -33,17 +33,16 @@ async def run_multi_agent_generation(
     success = False
 
     try:
-        # 通知前端资源生成已开始
+        # 全局状态与事件在同一事务写入；前端刷新后从该事实恢复。
         await events.send("global", "running", "资源生成已开始")
         logger.info(
             "启动 LangGraph 全局编排图资源生成: user_id=%s, resource_id=%s",
             user_id, resource_id,
         )
 
-        # 将资源状态置为 generating
+        # 读取创建时冻结的请求快照。
         async with session_scope() as session:
             service = ResourceService(session)
-            await service.update_resource_status(resource_id, "generating")
             resource = await service.get_resource(user_id, resource_id)
             if resource is None:
                 raise ValueError(f"资源不存在或无权限: {resource_id}")
@@ -70,25 +69,31 @@ async def run_multi_agent_generation(
         # 读取工作流终态是否成功
         success = bool(final_state.get("success", False))
 
-        # 未成功：若仍停留在 generating 则兜底标记为 failed
+        final_status = "completed"
         if not success:
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             logger.warning(
                 "LangGraph 未产生成功终态: resource_id=%s elapsed_ms=%d",
                 resource_id, elapsed_ms,
             )
+            final_status = "failed"
+        else:
             async with session_scope() as session:
                 service = ResourceService(session)
                 resource = await service.get_resource(user_id, resource_id)
-                if resource is not None and resource.status == "generating":
-                    await service.update_resource_status(
-                        resource_id,
-                        "failed",
-                    )
+                if resource is not None:
+                    final_status = resource.status
 
         # 根据成败发送全局终态事件
         if success:
-            await events.send("global", "completed", "资源生成完成")
+            async with session_scope() as session:
+                service = ResourceService(session)
+                completed_event = await service.publish_generation_status(
+                    resource_id=resource_id,
+                    status=final_status,
+                    message="资源生成完成",
+                )
+            await events.publish_committed(completed_event)
         else:
             await events.send("global", "failed", "资源生成未产生可用结果")
         total_elapsed = int((time.perf_counter() - start_time) * 1000)
@@ -103,11 +108,4 @@ async def run_multi_agent_generation(
             "资源生成异常: resource_id=%s error=%s elapsed_ms=%d",
             resource_id, exc, total_elapsed, exc_info=True,
         )
-        async with session_scope() as session:
-            service = ResourceService(session)
-            await service.update_resource_status(
-                resource_id,
-                "failed",
-            )
         await events.send("global", "failed", "资源生成过程中发生异常")
-

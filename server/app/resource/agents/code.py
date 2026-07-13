@@ -8,13 +8,9 @@ from typing import TYPE_CHECKING
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import (
-    build_node_context,
-    build_resource_context,
-    build_path_context,
-)
+from app.resource.agents.common import build_path_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.resource.schemas import AgentResult, ResourceInput
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
@@ -39,23 +35,6 @@ class CodeAgent(BaseResourceAgent):
             title_prefix=input_data.learning_need[:32],
             config=input_data.agent_config,
         )
-
-    async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        # 路径节点：将难度映射为代码输出风格
-        node_difficulty = input_data.difficulty or "beginner"
-        output_style_map = {"beginner": "tutorial", "intermediate": "reference", "advanced": "challenge"}
-        config = {
-            "output_style": output_style_map.get(node_difficulty, "tutorial"),
-            **input_data.agent_config,
-        }
-        result = await self._generate_code(
-            input_text="\n\n".join(build_node_context(input_data)),
-            title_prefix=input_data.node_title,
-            config=config,
-        )
-        result.metadata["path_id"] = input_data.path_id
-        result.metadata["node_id"] = input_data.node_id
-        return result
 
     async def generate_for_path(self, request: "PathResourceRequest") -> AgentResult:
         """路径规划统一接口 — 接收 PathResourceRequest，返回 AgentResult。"""
@@ -107,20 +86,6 @@ class CodeAgent(BaseResourceAgent):
 
         if include_tests:
             input_text += "\n请在代码末尾附带测试用例（使用 assert 或单元测试框架）。"
-
-        # 执行搜索以获取该知识点的最佳实践或真实代码示例
-        await self.emitter.send(self.agent_id, "running", "正在搜索相关代码最佳实践...", 30)
-        search_query = f"{language} {title_prefix} 示例代码 best practice"
-        search_report = await self.search(search_query)
-        search_text = self.format_search_result(search_report)
-        search_elapsed = int((time.perf_counter() - started) * 1000)
-        logger.info(
-            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
-            self.agent_id, search_query, len(search_report.sources), search_elapsed,
-        )
-        # 将搜索参考前置拼入提示词
-        if search_text:
-            input_text = f"## 搜索到的参考代码示例背景\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建代码示例提示词...", 45)
         prompt = prompts.get("resource").get("code")

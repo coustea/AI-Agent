@@ -44,13 +44,12 @@ class ResourceBundle(BaseModel):
     title: str = "个性化学习资源包"
     learning_need: str
     selected_agents: list[str] = Field(default_factory=list)
-    plan_content: str | None = None
+    plan: dict[str, Any] | None = None
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
     status: str = "completed"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: dict[str, Any] = Field(default_factory=dict)
-
 
 
 

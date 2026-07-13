@@ -15,11 +15,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.resource.schemas.meta import (
-    AGENT_DEFAULT_ENABLED,
-    AGENT_DEFAULT_ORDER,
-    MIN_SELECTED_AGENTS,
-)
+from app.resource.catalog import AGENT_DEFAULT_ENABLED, AGENT_DEFAULT_ORDER
+
+MIN_SELECTED_AGENTS = 3
 from app.shared.ppt import PPTPreferences
 
 

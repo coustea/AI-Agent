@@ -244,6 +244,12 @@ export function useGeneration() {
     return undefined
   }
 
+  function normalizeEventTimestamp(timestamp?: number | null) {
+    if (!timestamp || !Number.isFinite(timestamp)) return Date.now()
+    // 兼容历史任务曾以秒为单位保存的事件；当前后端统一返回毫秒。
+    return timestamp < 10_000_000_000 ? timestamp * 1000 : timestamp
+  }
+
   // 将一条资源事件追加到节点的日志列表，相同消息做合并更新
   function appendResourceEventLog(node: DagNodeState, event: ResourceEvent) {
     const message = event.message.trim()
@@ -267,7 +273,7 @@ export function useGeneration() {
           status: eventStatus || last.status,
           progress: event.progress ?? last.progress,
           elapsedMs: eventElapsedMs ?? last.elapsedMs,
-          timestamp: Date.now(),
+          timestamp: normalizeEventTimestamp(event.timestamp),
         },
       ]
       return
@@ -284,7 +290,7 @@ export function useGeneration() {
         status: eventStatus || node.status,
         progress: event.progress ?? undefined,
         elapsedMs: eventElapsedMs,
-        timestamp: Date.now(),
+        timestamp: normalizeEventTimestamp(event.timestamp),
       },
     ]
   }
@@ -350,9 +356,17 @@ export function useGeneration() {
     // 合并指标数据
     const metrics = event.data.metrics as Record<string, unknown> | undefined
     if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) node.metrics = { ...(node.metrics || {}), ...metrics }
+    const eventMetrics = Object.fromEntries(
+      Object.entries(event.data).filter(([key, value]) => (
+        !['status', 'phase', 'artifact_id', 'elapsed_ms', 'heartbeat', 'metrics'].includes(key)
+        && value !== null
+        && value !== undefined
+      )),
+    )
+    if (Object.keys(eventMetrics).length) node.metrics = { ...(node.metrics || {}), ...eventMetrics }
     const artifactId = event.data.artifact_id as string | undefined
     if (typeof artifactId === 'string') node.artifactId = artifactId
-    node.lastUpdatedAt = Date.now()
+    node.lastUpdatedAt = normalizeEventTimestamp(event.timestamp)
     // 更新当前消息并追加到步骤历史（保留最近 8 条）
     const message = event.message
     if (message) {
@@ -398,9 +412,8 @@ export function useGeneration() {
       Object.values(taskStatus.agent_snapshots).forEach((snapshot) => {
         if (snapshot.agent_id) {
           let dataStatus = 'running'
-          if (snapshot.status === 'finished' || snapshot.status === 'completed') dataStatus = 'completed'
+          if (snapshot.status === 'completed') dataStatus = 'completed'
           else if (snapshot.status === 'failed' || snapshot.status === 'interrupted') dataStatus = 'failed'
-          else if (snapshot.status === 'skipped') dataStatus = 'completed'
           else if (snapshot.status === 'pending') dataStatus = 'pending'
 
           applyResourceEvent({
@@ -417,7 +430,7 @@ export function useGeneration() {
               artifact_id: snapshot.artifact_id,
               elapsed_ms: snapshot.elapsed_ms,
             },
-            timestamp: snapshot.timestamp || Date.now() / 1000,
+            timestamp: snapshot.timestamp || Date.now(),
           })
         }
       })
