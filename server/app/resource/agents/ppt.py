@@ -166,7 +166,7 @@ class PPTAgent(BaseResourceAgent):
                 metadata={"agent_id": self.agent_id},
             )
 
-        title = artifact.plan.title
+        title = artifact.title
         path = artifact.path
         logger.info(
             "Agent[%s] 生成完成: slides=%d style=%s size_bytes=%d",
@@ -187,7 +187,6 @@ class PPTAgent(BaseResourceAgent):
                 "slide_count": artifact.slide_count,
                 "style_name": artifact.template_name,
                 "template_id": artifact.template_id,
-                "density": artifact.plan.density,
                 "file_size": path.stat().st_size,
             },
         )

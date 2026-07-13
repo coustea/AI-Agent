@@ -24,7 +24,6 @@ from app.shared.cartoon.renderer import (
 from app.shared.cartoon.schemas import (
     AudioSynthesis,
     CartoonBrief,
-    CompositionPlan,
     TeachingLesson,
     collect_lesson_motion_problems,
 )
@@ -67,12 +66,8 @@ class CartoonGenerationResult:
     scene_count: int
     has_audio: bool
     output_dir: Path
-    lesson_path: Path
-    composition_path: Path
     html_path: Path
     video_path: Path
-    manifest_path: Path
-    audit_path: Path
 
 
 class CartoonVideoAgent:
@@ -84,11 +79,11 @@ class CartoonVideoAgent:
         compiler: CartoonCompiler | None = None,
         renderer: CartoonVideoRenderer | None = None,
         gsap_source: Path | None = None,
-        max_parallel_scenes: int = 3,
+        max_parallel_speech: int = 4,
     ) -> None:
         parallelism = max(
             1,
-            max_parallel_scenes,
+            max_parallel_speech,
         )
 
         self.planner = (
@@ -282,15 +277,6 @@ class CartoonVideoAgent:
                 "compile"
             )
 
-            (
-                lesson_path,
-                composition_path,
-            ) = self._write_semantics(
-                lesson,
-                plan,
-                output_dir,
-            )
-
             self._copy_gsap(
                 output_dir
             )
@@ -362,19 +348,14 @@ class CartoonVideoAgent:
                 "media"
             )
 
-            if not await self.renderer.has_audio_stream(
-                render.video_path
-            ):
+            if not render.has_audio:
                 raise CartoonGenerationError(
                     "渲染完成但 MP4 "
                     "没有音频轨",
                     stage="media",
                 )
 
-            self._validate_duration_contract(
-                render.duration_seconds,
-                brief.configuration.target_duration_seconds,
-            )
+            self._validate_duration_contract(render.duration_seconds)
 
             audit["stages"][
                 "render"
@@ -392,73 +373,6 @@ class CartoonVideoAgent:
                 "has_audio": True,
             }
 
-            current_stage = (
-                "manifest"
-            )
-
-            manifest_path = (
-                output_dir
-                / "manifest.json"
-            )
-
-            self._write_json(
-                manifest_path,
-                {
-                    "schema_version": (
-                        "cartoon/artifact-v4"
-                    ),
-                    "title": lesson.title,
-                    "composition_id": (
-                        COMPOSITION_ID
-                    ),
-                    "template": {
-                        "id": template.id,
-                        "version": (
-                            template.version
-                        ),
-                    },
-                    "duration_ms": (
-                        plan.total_duration_ms
-                    ),
-                    "scene_count": len(
-                        plan.scenes
-                    ),
-                    "has_audio": True,
-                    "files": {
-                        "lesson": (
-                            lesson_path.name
-                        ),
-                        "composition": (
-                            composition_path.name
-                        ),
-                        "html": (
-                            html_path.name
-                        ),
-                        "video": (
-                            render.video_path.name
-                        ),
-                        "audit": (
-                            audit_path.name
-                        ),
-                    },
-                    "render": {
-                        "duration_seconds": (
-                            render.duration_seconds
-                        ),
-                        "width": (
-                            render.width
-                        ),
-                        "height": (
-                            render.height
-                        ),
-                        "fps": render.fps,
-                        "size_bytes": (
-                            render.size_bytes
-                        ),
-                    },
-                },
-            )
-
             audit["passed"] = True
 
             self._write_json(
@@ -471,26 +385,16 @@ class CartoonVideoAgent:
                     "cartoon/artifact-v4"
                 ),
                 title=lesson.title,
-                duration_ms=(
-                    plan.total_duration_ms
-                ),
+                duration_ms=round(render.duration_seconds * 1000),
                 scene_count=len(
                     plan.scenes
                 ),
                 has_audio=True,
                 output_dir=output_dir,
-                lesson_path=lesson_path,
-                composition_path=(
-                    composition_path
-                ),
                 html_path=html_path,
                 video_path=(
                     render.video_path
                 ),
-                manifest_path=(
-                    manifest_path
-                ),
-                audit_path=audit_path,
             )
 
         except CartoonGenerationError as exc:
@@ -579,7 +483,6 @@ class CartoonVideoAgent:
     @staticmethod
     def _validate_duration_contract(
         actual_seconds: float,
-        target_seconds: int,
     ) -> None:
         """Reject videos that are too short for meaningful lesson content."""
         if actual_seconds < 90:
@@ -588,6 +491,15 @@ class CartoonVideoAgent:
                 stage="media",
                 problems=[
                     f"actual={actual_seconds:.2f}s; minimum=90s",
+                ],
+            )
+
+        if actual_seconds > 600:
+            raise CartoonGenerationError(
+                "成片时长超过动画讲解视频上限",
+                stage="media",
+                problems=[
+                    f"actual={actual_seconds:.2f}s; maximum=600s",
                 ],
             )
 
@@ -786,44 +698,6 @@ class CartoonVideoAgent:
             )
 
         return result
-
-    @staticmethod
-    def _write_semantics(
-        lesson: TeachingLesson,
-        plan: CompositionPlan,
-        output_dir: Path,
-    ) -> tuple[
-        Path,
-        Path,
-    ]:
-        lesson_path = (
-            output_dir
-            / "lesson.json"
-        )
-
-        composition_path = (
-            output_dir
-            / "composition.json"
-        )
-
-        lesson_path.write_text(
-            lesson.model_dump_json(
-                indent=2
-            ),
-            encoding="utf-8",
-        )
-
-        composition_path.write_text(
-            plan.model_dump_json(
-                indent=2
-            ),
-            encoding="utf-8",
-        )
-
-        return (
-            lesson_path,
-            composition_path,
-        )
 
     def _copy_gsap(
         self,

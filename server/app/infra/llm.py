@@ -4,12 +4,14 @@
 - 普通文本生成（ainvoke / astream）
 - 自研工具调用执行器创建
 - 结构化 JSON 输出（ainvoke_json）
+- 图片理解（vision）
 
 关键设计：
 - ainvoke_json 不再默认依赖 LangChain with_structured_output(function_calling)。
-- 结构化输出统一走“纯文本 JSON → 本地提取 → Pydantic 校验 → 一次修复”。
+- 结构化输出统一走”纯文本 JSON → 本地提取 → Pydantic 校验 → 一次修复”。
 - 这样可以兼容不稳定的 OpenAI-compatible 服务，避免模型把 JSON 放入 tool_calls 后
   LangChain 解析成 None，导致业务侧无原文可修复。
+- 固定加载两个模型：main（主模型）和 vision（图片理解），不再支持 profile 参数。
 """
 
 # 本模块是 OpenAI 兼容的 LLM 网关：提供文本生成、流式输出、工具调用与结构化 JSON 输出
@@ -20,7 +22,6 @@ import json
 import re
 import time
 import uuid
-from functools import lru_cache
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -45,7 +46,7 @@ logger = get_logger(__name__)
 
 # LLM 模型配置项（base_url / api_key / 温度 / 超时等）
 class ChatModelConfig(BaseModel):
-    """LLM 模型配置项。"""
+    """LLM 模型配置项."""""
 
     base_url: str
     api_key: str
@@ -93,7 +94,7 @@ class ChatModel(ChatOpenAI):
 
 # 将 tool_call 对象统一转为 dict，兼容 OpenAI SDK 对象
 def _to_dict(tc: Any) -> dict[str, Any]:
-    """将 tool_call 对象转为 dict，兼容 OpenAI SDK 对象格式。"""
+    """将 tool_call 对象转为 dict，兼容 OpenAI SDK 对象格式."""""
     if isinstance(tc, dict):
         return tc
 
@@ -117,7 +118,7 @@ def _to_dict(tc: Any) -> dict[str, Any]:
 
 # 清洗工具名称，使其符合 OpenAI 兼容接口命名约束
 def _safe_tool_name(name: Any) -> str:
-    """保证 tool/function name 符合 OpenAI 兼容接口常见约束。"""
+    """保证 tool/function name 符合 OpenAI 兼容接口常见约束."""""
     candidate = str(name or "tool_call").strip()
     candidate = re.sub(r"[^a-zA-Z0-9_-]", "_", candidate)
     candidate = candidate.strip("_") or "tool_call"
@@ -126,7 +127,7 @@ def _safe_tool_name(name: Any) -> str:
 
 # 修复单个 tool_call：补齐 id/type 并序列化 arguments
 def _fix_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
-    """修复单个 tool_call 的格式：补 id、补 type、序列化 arguments。"""
+    """修复单个 tool_call 的格式：补 id、补 type、序列化 arguments."""""
     fixed = dict(tc)
 
     if not fixed.get("id"):
@@ -154,7 +155,7 @@ def _fix_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
 
 # 规范化 base_url：去除尾部斜杠与 /chat/completions 后缀
 def _normalize_base_url(base_url: str) -> str:
-    """规范化 base_url：去除尾部斜杠和 /chat/completions 后缀。"""
+    """规范化 base_url：去除尾部斜杠和 /chat/completions 后缀."""""
     url = (base_url or "").strip().rstrip("/")
     if url.endswith("/chat/completions"):
         url = url[: -len("/chat/completions")]
@@ -163,7 +164,7 @@ def _normalize_base_url(base_url: str) -> str:
 
 # 从 config.yaml 加载并校验指定路径的模型配置
 def _load_config(path: str) -> ChatModelConfig | None:
-    """从配置文件加载模型配置，返回 ChatModelConfig 或 None。"""
+    """从配置文件加载模型配置，返回 ChatModelConfig 或 None."""""
     raw = get(path, {}) or {}
     if not isinstance(raw, dict) or not raw.get("model_name"):
         return None
@@ -176,7 +177,7 @@ def _load_config(path: str) -> ChatModelConfig | None:
         base_url=_normalize_base_url(str(data["base_url"])),
         api_key=str(data["api_key"]),
         model_name=str(data["model_name"]),
-        temperature=float(data.get("temperature", DEFAULT_TEMPERATURE)),
+        temperature=DEFAULT_TEMPERATURE,  # 使用全局常量，而非从配置字典提取（字典格式）
         max_tokens=data.get("max_tokens"),
         timeout=float(data.get("timeout", 300)),
         max_retries=int(data.get("max_retries", 2)),
@@ -188,7 +189,7 @@ def _load_config(path: str) -> ChatModelConfig | None:
 
 # 根据配置构造 ChatModel 实例（支持流式开关）
 def _create_model(cfg: ChatModelConfig, *, streaming: bool = False) -> ChatModel:
-    """根据配置创建 ChatModel 实例。"""
+    """根据配置创建 ChatModel 实例."""""
     kwargs: dict[str, Any] = {
         "model": cfg.model_name,
         "api_key": cfg.api_key,
@@ -217,7 +218,7 @@ def _bind(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> Any:
-    """为模型绑定运行时参数。"""
+    """为模型绑定运行时参数."""""
     kwargs: dict[str, Any] = {}
     if temperature is not None:
         kwargs["temperature"] = temperature
@@ -258,7 +259,7 @@ def _parse_json(
 
 # 将 Pydantic schema 转为 prompt 可读的精简字段描述
 def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
-    """构建用于 prompt 的精简 schema 描述，包含枚举值和嵌套字段提示。"""
+    """构建用于 prompt 的精简 schema 描述，包含枚举值和嵌套字段提示."""""
     full_schema = schema.model_json_schema()
     defs = full_schema.get("$defs", {})
     required = set(full_schema.get("required") or [])
@@ -283,7 +284,7 @@ def _describe_property(
     defs: dict[str, Any],
     depth: int = 0,
 ) -> str:
-    """以人类可读形式描述 JSON schema 属性，包含关键约束。"""
+    """以人类可读形式描述 JSON schema 属性，包含关键约束."""""
     if depth > 4:
         return "..."
 
@@ -373,7 +374,7 @@ def _describe_property(
 
 # 将字符串 / 单条消息 / 消息列表统一为 LangChain messages
 def _normalize_messages(input_data: Any) -> list[BaseMessage]:
-    """将字符串、BaseMessage 或消息列表统一为 LangChain messages。"""
+    """将字符串、BaseMessage 或消息列表统一为 LangChain messages."""""
     if isinstance(input_data, str):
         return [HumanMessage(content=input_data)]
 
@@ -413,7 +414,7 @@ def _build_json_generation_messages(
                 "你是严格 JSON 生成器。\n"
                 "必须只输出一个完整 JSON 对象，不要 Markdown，不要代码围栏，不要解释。\n"
                 "不要调用工具，不要输出 tool_calls，不要输出 function_call。\n"
-                "输出必须能被 Python json.loads 直接解析，并且必须符合给定 Pydantic schema。"
+                "输出必须能被 Python json.loads 直接解析，并且必须符合给定 Pydantic schema."""
             )
         ),
         *messages,
@@ -421,7 +422,7 @@ def _build_json_generation_messages(
             content=(
                 "请根据以上任务输出 JSON。\n\n"
                 f"目标 schema:\n{schema_desc}\n\n"
-                "再次强调：只输出 JSON object 本体，不要任何额外文本。"
+                "再次强调：只输出 JSON object 本体，不要任何额外文本."""
             )
         ),
     ]
@@ -433,7 +434,7 @@ def _build_repair_prompt(
     raw_output: str,
     error_msg: str,
 ) -> list[BaseMessage]:
-    """构造 self-repair 修正 prompt。"""
+    """构造 self-repair 修正 prompt."""""
     schema_desc = _simplify_schema_for_prompt(schema)
     return [
         SystemMessage(
@@ -451,7 +452,7 @@ def _build_repair_prompt(
             content=(
                 f"上一次输出：\n```\n{raw_output}\n```\n\n"
                 f"错误信息：\n{error_msg}\n\n"
-                "请输出修正后的完整 JSON。"
+                "请输出修正后的完整 JSON."""
             )
         ),
     ]
@@ -468,7 +469,7 @@ _LLM_INFRA_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 
 # 延迟注册 openai / httpx 等基础设施异常类型到判断集合
 def _register_infra_exceptions() -> None:
-    """延迟注册基础设施异常类型。"""
+    """延迟注册基础设施异常类型."""""
     global _INFRA_EXCEPTIONS
 
     types: list[type[Exception]] = []
@@ -515,7 +516,7 @@ _register_infra_exceptions()
 
 # 判断异常是否属基础设施故障（可重试），依据类型与错误信息关键字
 def _is_infra_error(exc: Exception) -> bool:
-    """判断异常是否为基础设施问题。"""
+    """判断异常是否为基础设施问题."""""
     if isinstance(exc, _INFRA_EXCEPTIONS):
         return True
 
@@ -543,7 +544,7 @@ def _is_infra_error(exc: Exception) -> bool:
 
 
 def _is_permanent_infra_error(exc: Exception) -> bool:
-    """判断基础设施异常是否为不可通过重试恢复的配置/权限问题。"""
+    """判断基础设施异常是否为不可通过重试恢复的配置/权限问题."""""
     text = f"{type(exc).__name__}: {exc}".lower()
     permanent_markers = (
         "authentication",
@@ -559,7 +560,7 @@ def _is_permanent_infra_error(exc: Exception) -> bool:
 
 
 def _is_retryable_infra_error(exc: Exception) -> bool:
-    """判断 LLM 调用是否值得在网关层重试。"""
+    """判断 LLM 调用是否值得在网关层重试."""""
     return _is_infra_error(exc) and not _is_permanent_infra_error(exc)
 
 
@@ -604,7 +605,7 @@ async def _ainvoke_with_infra_retries(
 
 # 从多样的 LLM 响应结构中尽力提取纯文本或 tool/function arguments
 def _extract_text_from_response(value: Any) -> str:
-    """从常见 LLM 响应结构中提取文本或 tool/function arguments。"""
+    """从常见 LLM 响应结构中提取文本或 tool/function arguments."""""
     if value is None:
         return ""
 
@@ -770,7 +771,7 @@ def _extract_tool_call_arguments(tool_calls: Any) -> str:
 
 # 从异常对象中尝试提取模型原始输出文本，用于修复阶段
 def _extract_raw_from_exception(exc: Exception) -> str:
-    """从异常中尝试提取模型原始输出文本。"""
+    """从异常中尝试提取模型原始输出文本."""""
     for attr in ("output", "tool_output", "text", "message"):
         value = getattr(exc, attr, None)
         if isinstance(value, str) and value.strip():
@@ -799,44 +800,50 @@ def _safe_log_text(text: str | None, limit: int = 2000) -> str:
     return compact[:limit]
 
 
-# 统一异步 LLM 网关：文本 / 流式 / 工具执行 / 结构化 JSON 输出
+# 统一异步 LLM 网关：文本 / 流式 / 工具执行 / 结构化 JSON 输出 / 图片理解
 class Llm:
     """统一异步 LLM 网关。
 
+    固定加载两个模型：
+    - main：主模型，用于文本生成、工具调用、结构化输出
+    - vision：图片理解模型
+
     普通文本：ainvoke / astream
     结构化 JSON：ainvoke_json
-
-    ainvoke_json 的策略是 prompt JSON，而不是 function_calling。
-    这样更适合多家 OpenAI-compatible 服务，尤其是工具调用不完全兼容的网关。
+    图片理解：vision
     """
 
-    # 构造网关：加载文本与视觉模型配置并创建模型实例
-    def __init__(self, profile: str = "default") -> None:
-        self.profile = profile
-        self.text_config = _load_config(f"models.{profile}")
-        self.vision_config = _load_config(f"models.{profile}.vision")
-        self._text_model = _create_model(self.text_config) if self.text_config else None
-        self._vision_model = _create_model(self.vision_config) if self.vision_config else None
+    # 构造网关：加载 main 和 vision 模型配置并创建实例
+    def __init__(self) -> None:
+        """加载 main 和 vision 模型配置并创建实例."""""
+        self._main_config = _load_config("models.main")
+        self._vision_config = _load_config("models.vision")
 
-    # 返回文本模型实例，未配置则抛 ServiceError
+        if self._main_config is None:
+            raise ServiceError("models.main 配置缺失")
+        if self._vision_config is None:
+            raise ServiceError("models.vision 配置缺失")
+
+        self._main_model = _create_model(self._main_config)
+        self._vision_model = _create_model(self._vision_config)
+
+    # 返回主模型实例
     @property
-    def model(self) -> Any:
-        if self._text_model is None:
-            raise ServiceError("文本模型配置缺失")
-        return self._text_model
+    def model(self) -> ChatModel:
+        """返回主模型实例."""""
+        return self._main_model
 
     # 普通文本生成：绑定温度后调用模型 ainvoke
     async def ainvoke(
         self,
         input_data: Any,
         *,
-        model: Any | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> Any:
         temp = temperature if temperature is not None else DEFAULT_TEMPERATURE
         bound_model = _bind(
-            model or self.model,
+            self._main_model,
             temperature=temp,
             max_tokens=max_tokens,
         )
@@ -851,13 +858,12 @@ class Llm:
         self,
         input_data: Any,
         *,
-        model: Any | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[Any]:
         temp = temperature if temperature is not None else STREAM_TEMPERATURE
         async for chunk in _bind(
-            model or self.model,
+            self._main_model,
             temperature=temp,
             max_tokens=max_tokens,
         ).astream(input_data):
@@ -1000,7 +1006,7 @@ class Llm:
             return None, ""
         return result, result.model_dump_json()
 
-    # 视觉（图片理解）模型调用
+    # 图片理解：调用 vision 模型
     async def vision(
         self,
         input_data: Any,
@@ -1008,9 +1014,16 @@ class Llm:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> Any:
-        if self._vision_model is None:
-            raise ServiceError("图片理解模型配置缺失")
+        """调用图片理解模型。
 
+        Args:
+            input_data: 输入数据，支持多模态内容块
+            temperature: 生成温度（可选）
+            max_tokens: 最大输出 token 数（可选）
+
+        Returns:
+            模型响应结果
+        """
         temp = temperature if temperature is not None else VISION_TEMPERATURE
         return await _bind(
             self._vision_model,
@@ -1019,7 +1032,13 @@ class Llm:
         ).ainvoke(input_data)
 
 
-# 全局单例获取 LLM 网关（按 profile 进程内缓存）
-@lru_cache(maxsize=8)
-def get_llm(profile: str = "default") -> Llm:
-    return Llm(profile)
+# 全局单例获取 LLM 网关（进程内缓存）
+_LLM_INSTANCE: Llm | None = None
+
+
+def get_llm() -> Llm:
+    """获取全局 LLM 单例."""""
+    global _LLM_INSTANCE
+    if _LLM_INSTANCE is None:
+        _LLM_INSTANCE = Llm()
+    return _LLM_INSTANCE

@@ -119,13 +119,6 @@ class PPTTemplateCatalog:
             dict[str, PPTTemplate] | None
         ) = None
 
-    def all(
-        self,
-    ) -> tuple[PPTTemplate, ...]:
-        return tuple(
-            self._loaded().values()
-        )
-
     def get(
         self,
         template_id: str,
@@ -167,19 +160,9 @@ class PPTTemplateCatalog:
                 slide.type
             ]
 
-            normalized_slide = (
-                slide.model_copy(
-                    update={
-                        "animation": (
-                            layout.animation
-                        )
-                    }
-                )
-            )
-
             resolved_slides.append(
                 ResolvedPPTSlide(
-                    spec=normalized_slide,
+                    spec=slide,
                     layout=layout,
                 )
             )
@@ -409,8 +392,3 @@ class PPTTemplateCatalog:
                 )
             ),
         )
-
-
-def get_ppt_template_catalog(
-) -> PPTTemplateCatalog:
-    return PPTTemplateCatalog()

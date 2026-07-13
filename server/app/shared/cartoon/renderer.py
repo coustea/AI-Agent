@@ -32,6 +32,7 @@ class CartoonVideoRenderResult:
     height: int
     fps: int
     size_bytes: int
+    has_audio: bool
 
 
 class CartoonVideoRenderer:
@@ -476,26 +477,10 @@ class CartoonVideoRenderer:
             height=height,
             fps=fps,
             size_bytes=size_bytes,
-        )
-
-    async def has_audio_stream(
-        self,
-        video_path: Path,
-    ) -> bool:
-        media = await self._probe_media(
-            video_path
-        )
-
-        return any(
-            stream.get(
-                "codec_type"
-            )
-            == "audio"
-            for stream
-            in media.get(
-                "streams",
-                [],
-            )
+            has_audio=any(
+                stream.get("codec_type") == "audio"
+                for stream in streams
+            ),
         )
 
     def _render_command(

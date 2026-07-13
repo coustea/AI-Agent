@@ -7,8 +7,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-DensityMode = Literal["speaker_led", "reading_first"]
-
 SlideType = Literal[
     "cover",
     "agenda",
@@ -198,8 +196,6 @@ class PPTSlide(PPTModel):
     speaker_notes: str = Field(default="", max_length=700)
     cover: CoverContent = Field(default_factory=CoverContent)
 
-    animation: AnimationKind = "reveal"
-
     @model_validator(mode="after")
     def validate_required_content(self) -> "PPTSlide":
         has_table = bool(self.table.headers and self.table.rows)
@@ -260,12 +256,6 @@ class PPTSlide(PPTModel):
 
 class PPTPlan(PPTModel):
     title: str = Field(min_length=1, max_length=72)
-    subtitle: str = Field(default="", max_length=120)
-    purpose: str = Field(min_length=1, max_length=220)
-    audience: str = Field(min_length=1, max_length=140)
-    narrative: str = Field(min_length=1, max_length=600)
-
-    density: DensityMode = "reading_first"
     language: str = "zh-CN"
     template_preference: PPTTemplatePreference = Field(default_factory=PPTTemplatePreference)
 
@@ -328,9 +318,8 @@ class PPTPlan(PPTModel):
 
 
 class PPTArtifact(PPTModel):
+    title: str = Field(min_length=1)
     path: Path
-    plan: PPTPlan
-    plan_json: str = ""
     generated_at: datetime
     template_id: str
     template_name: str

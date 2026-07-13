@@ -158,7 +158,7 @@ class PPTService:
 
         return AgentResult(
             success=True,
-            title=f"{artifact.plan.title} - 教学课件",
+            title=f"{artifact.title} - 教学课件",
             file_type="html",
             content="",
             summary=f"生成 {artifact.slide_count} 页 HTML 教学课件",

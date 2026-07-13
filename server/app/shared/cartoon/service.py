@@ -3,6 +3,7 @@
 Public surface:
 - generate_resource(ResourceInput) -> AgentResult
 - generate_for_path(PathResourceRequest) -> AgentResult
+- generate_for_chat(...) -> ChatCartoonArtifact
 
 The service only adapts business requests, owns isolated workspaces and atomic
 publication, and converts the generated artifact into a small resource card.
@@ -15,6 +16,7 @@ import asyncio
 import json
 import shutil
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 from uuid import uuid4
@@ -26,6 +28,7 @@ from pydantic import (
 
 from app.config import (
     static_url,
+    user_chat_video_dir,
     user_path_node_cartoon_dir,
     user_resource_cartoon_dir,
 )
@@ -52,8 +55,19 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class ChatCartoonArtifact:
+    """Small, frontend-safe result for an explicitly requested chat video."""
+
+    title: str
+    video_url: str
+    preview_url: str
+    duration_seconds: float
+    scene_count: int
+
+
 class CartoonService:
-    """Expose exactly two business entry points for cartoon generation."""
+    """Expose business-specific entry points for cartoon generation."""
 
     def __init__(
         self,
@@ -241,6 +255,43 @@ class CartoonService:
                 started,
             )
 
+    async def generate_for_chat(
+        self,
+        *,
+        topic: str,
+        username: str,
+        session_id: str,
+        message_id: int,
+    ) -> ChatCartoonArtifact:
+        """Generate a video requested directly by a chat user, never by the LLM."""
+        normalized_topic = self._bounded_text(topic, 500)
+        if not normalized_topic:
+            raise ValueError("视频主题不能为空")
+
+        artifact = await self._generate_and_publish(
+            CartoonBrief(
+                learning_need=normalized_topic,
+                teaching_plan=(
+                    "# 聊天视频讲解任务\n\n"
+                    f"请围绕“{normalized_topic}”制作一段完整的教学动画。"
+                ),
+                tutorial_markdown=(
+                    f"# {normalized_topic}\n\n"
+                    "请从概念、机制、示例与总结四个层次组织讲解，"
+                    "使用动态可视化呈现关键过程。"
+                ),
+                configuration=CartoonGenerationConfig(),
+            ),
+            user_chat_video_dir(username, session_id, message_id),
+        )
+        return ChatCartoonArtifact(
+            title=artifact.title,
+            video_url=static_url(artifact.video_path),
+            preview_url=static_url(artifact.html_path),
+            duration_seconds=round(artifact.duration_ms / 1000, 2),
+            scene_count=artifact.scene_count,
+        )
+
     def _build_resource_brief(
         self,
         input_data: "ResourceInput",
@@ -281,12 +332,6 @@ class CartoonService:
                 tutorial_markdown,
                 30000,
             ),
-            prerequisites=self._string_list(
-                raw_config.get(
-                    "prerequisites"
-                ),
-                20,
-            ),
             knowledge_points=self._string_list(
                 raw_config.get(
                     "knowledge_points"
@@ -299,10 +344,6 @@ class CartoonService:
                 ),
                 20,
             ),
-            learner_profile=self._normalize_profile(
-                input_data.profile
-            ),
-            upstream_handoffs=handoffs,
             configuration=configuration,
         )
 
@@ -412,15 +453,6 @@ class CartoonService:
             or []
         )
 
-        prerequisites = list(
-            getattr(
-                request,
-                "prerequisites",
-                [],
-            )
-            or []
-        )
-
         return CartoonBrief(
             learning_need=self._bounded_text(
                 request.node_title,
@@ -431,10 +463,6 @@ class CartoonService:
                 12000,
             ),
             tutorial_markdown=tutorial_markdown,
-            prerequisites=self._string_list(
-                prerequisites,
-                20,
-            ),
             knowledge_points=self._string_list(
                 knowledge_points,
                 30,
@@ -443,12 +471,6 @@ class CartoonService:
                 weak_points,
                 20,
             ),
-            learner_profile=self._normalize_profile(
-                request.profile
-            ),
-            upstream_handoffs={
-                "path_context": path_context,
-            },
             configuration=self._build_generation_config(
                 raw_config
             ),
@@ -616,12 +638,8 @@ class CartoonService:
         workspace: Path,
     ) -> dict[str, Path]:
         fields = (
-            "lesson_path",
-            "composition_path",
             "html_path",
             "video_path",
-            "manifest_path",
-            "audit_path",
         )
 
         return {
@@ -651,14 +669,6 @@ class CartoonService:
             scene_count=artifact.scene_count,
             has_audio=artifact.has_audio,
             output_dir=output_dir,
-            lesson_path=(
-                output_dir
-                / relative_paths["lesson_path"]
-            ),
-            composition_path=(
-                output_dir
-                / relative_paths["composition_path"]
-            ),
             html_path=(
                 output_dir
                 / relative_paths["html_path"]
@@ -666,14 +676,6 @@ class CartoonService:
             video_path=(
                 output_dir
                 / relative_paths["video_path"]
-            ),
-            manifest_path=(
-                output_dir
-                / relative_paths["manifest_path"]
-            ),
-            audit_path=(
-                output_dir
-                / relative_paths["audit_path"]
             ),
         )
 
@@ -709,15 +711,6 @@ class CartoonService:
             )
 
         payload: dict[str, Any] = {}
-
-        if raw_config.get("depth") in {
-            "overview",
-            "standard",
-            "deep",
-        }:
-            payload["depth"] = (
-                raw_config["depth"]
-            )
 
         pace = pace_aliases.get(
             str(
@@ -773,51 +766,6 @@ class CartoonService:
             CartoonGenerationConfig
             .model_validate(payload)
         )
-
-    @staticmethod
-    def _normalize_profile(
-        value: Any,
-    ) -> dict[str, Any]:
-        if value is None:
-            return {}
-
-        if isinstance(
-            value,
-            BaseModel,
-        ):
-            return value.model_dump(
-                mode="json",
-                exclude_none=True,
-            )
-
-        if isinstance(
-            value,
-            dict,
-        ):
-            return {
-                str(key): CartoonService._json_value(
-                    item
-                )
-                for key, item in value.items()
-            }
-
-        if isinstance(
-            value,
-            str,
-        ):
-            text = value.strip()
-
-            return (
-                {
-                    "profile_markdown": text,
-                }
-                if text
-                else {}
-            )
-
-        return {
-            "profile": str(value),
-        }
 
     @staticmethod
     def _normalize_mapping(

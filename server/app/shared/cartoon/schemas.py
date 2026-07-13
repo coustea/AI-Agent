@@ -239,12 +239,6 @@ class CartoonGenerationConfig(BaseModel):
         extra="forbid",
     )
 
-    depth: Literal[
-        "overview",
-        "standard",
-        "deep",
-    ] = "standard"
-
     pace: Literal[
         "calm",
         "balanced",
@@ -260,6 +254,7 @@ class CartoonGenerationConfig(BaseModel):
     target_duration_seconds: int = Field(
         default=90,
         ge=90,
+        le=600,
     )
 
     voice: Literal[
@@ -301,11 +296,6 @@ class CartoonBrief(BaseModel):
         max_length=30000,
     )
 
-    prerequisites: list[str] = Field(
-        default_factory=list,
-        max_length=20,
-    )
-
     knowledge_points: list[str] = Field(
         default_factory=list,
         max_length=30,
@@ -314,14 +304,6 @@ class CartoonBrief(BaseModel):
     weak_knowledge_points: list[str] = Field(
         default_factory=list,
         max_length=20,
-    )
-
-    learner_profile: dict[str, Any] = Field(
-        default_factory=dict,
-    )
-
-    upstream_handoffs: dict[str, Any] = Field(
-        default_factory=dict,
     )
 
     configuration: CartoonGenerationConfig = Field(
@@ -373,12 +355,6 @@ class SceneOutline(BaseModel):
         max_length=180,
     )
 
-    estimated_seconds: int = Field(
-        default=30,
-        ge=12,
-        le=240,
-    )
-
     @field_validator("id")
     @classmethod
     def normalize_id(
@@ -407,16 +383,6 @@ class LessonOutline(BaseModel):
         default="计算机科学",
         min_length=1,
         max_length=40,
-    )
-
-    topic: str = Field(
-        min_length=1,
-        max_length=60,
-    )
-
-    terminology: dict[str, str] = Field(
-        default_factory=dict,
-        max_length=24,
     )
 
     scenes: list[SceneOutline] = Field(
@@ -1036,11 +1002,6 @@ class TeachingLesson(BaseModel):
         default="计算机科学",
         min_length=1,
         max_length=40,
-    )
-
-    topic: str = Field(
-        min_length=1,
-        max_length=60,
     )
 
     scenes: list[TeachingScene] = Field(

@@ -1,4 +1,4 @@
-import type { StructuredTeachingDiagram, TeachingDiagram } from '@/features/chat/types/chat'
+import type { ChatVideoArtifact, StructuredTeachingDiagram, TeachingDiagram } from '@/features/chat/types/chat'
 
 export interface PendingFile {
   file?: File
@@ -61,6 +61,7 @@ export interface ChatMsg {
   attachments?: Attachment[] | null
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
+  video?: ChatVideoArtifact | null
   agentActivities?: AgentActivity[]
   sources?: KnowledgeSource[]  // 知识库来源
 }

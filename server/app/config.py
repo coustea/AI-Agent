@@ -137,6 +137,11 @@ def user_chat_uploads_dir(username: str, session_id: str) -> Path:
     return user_chat_dir(username, session_id) / "uploads"
 
 
+def user_chat_video_dir(username: str, session_id: str, message_id: int) -> Path:
+    """获取一条聊天视频任务的独立发布目录。"""
+    return user_chat_dir(username, session_id) / "videos" / str(message_id)
+
+
 # 获取用户资源目录
 def user_resources_dir(username: str) -> Path:
     """获取用户资源目录：static/{username}/resources/"""
@@ -339,21 +344,13 @@ UPDATE_MIN_TOKENS = get("memory.update_min_tokens", 6000)
 LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
 
 # ============ 模型推理参数 ============
-# 默认模型的全局温度只服务未指定 profile 的业务调用。
-JSON_TEMPERATURE = get("models.default.json_temp")
-assert JSON_TEMPERATURE is not None, "config.yaml 缺少 models.default.json_temp 配置"
-STREAM_TEMPERATURE = get("models.default.stream_temp")
-assert STREAM_TEMPERATURE is not None, "config.yaml 缺少 models.default.stream_temp 配置"
-DEFAULT_TEMPERATURE = get("models.default.default_temp")
-assert DEFAULT_TEMPERATURE is not None, "config.yaml 缺少 models.default.default_temp 配置"
-# 结构化输出策略：function_calling_first / json_mode_first / prompt_first
-# function_calling_first — 优先 function_calling，失败后降级 json_mode → prompt
-# json_mode_first — 跳过 function_calling，直接 json_mode，失败后降级 prompt
-# prompt_first — 仅 prompt 注入 + 手动解析
-STRUCTURED_OUTPUT_STRATEGY = get("models.default.structured_output_strategy", "function_calling_first")
-# 视觉模型温度参数（必须在 config.yaml 中配置 models.vision.temperature）
-VISION_TEMPERATURE = get("models.default.vision.temperature")
-assert VISION_TEMPERATURE is not None, "config.yaml 缺少 models.default.vision.temperature 配置"
+# 从 models.main.temperature 读取温度参数
+temp_config = get("models.main.temperature", {})
+JSON_TEMPERATURE = temp_config.get("json", 0.1)
+STREAM_TEMPERATURE = temp_config.get("stream", 1.0)
+DEFAULT_TEMPERATURE = temp_config.get("default", 0.7)
+# 视觉模型温度参数
+VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
 
 # ============ Chat 扩展配置 ============
 # 支持的图片扩展名集合

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 import hashlib
 import json
@@ -10,20 +9,15 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.infra.llm import _is_infra_error, get_llm
-from app.infra.logging import get_logger
+from app.infra.llm import get_llm
 from app.infra.prompts import prompts
 from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer, PPTPublication
 from app.shared.ppt.models import PPTArtifact, PPTPlan, PPTPreferences, PathPPT, ResourcePPT
-from app.shared.ppt.templates import PPTTemplateCatalog, get_ppt_template_catalog
+from app.shared.ppt.templates import PPTTemplateCatalog
 
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
-logger = get_logger(__name__)
-
-_PLAN_ATTEMPTS = 3
 _PLAN_MAX_TOKENS = 4_200
-_PLAN_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 _PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
@@ -43,8 +37,8 @@ class PPTGenerator:
         templates: PPTTemplateCatalog | None = None,
         renderer: PPTHTMLRenderer | None = None,
     ) -> None:
-        self._llm = llm or get_llm("ppt")
-        self._templates = templates or get_ppt_template_catalog()
+        self._llm = llm or get_llm()
+        self._templates = templates or PPTTemplateCatalog()
         self._renderer = renderer or PPTHTMLRenderer()
 
     async def generate(
@@ -58,7 +52,7 @@ class PPTGenerator:
 
         try:
             await self._progress(progress, "正在规划教学叙事与页面结构…", 20)
-            plan, plan_json = await self._generate_plan(request)
+            plan = await self._generate_plan(request)
 
             stage = "template"
             await self._progress(progress, "正在匹配课件模板…", 58)
@@ -74,7 +68,7 @@ class PPTGenerator:
             stage = "publish"
             await self._progress(progress, "正在发布课件…", 96)
             path = PPTHTMLPublisher(output_dir).publish(
-                self._safe_file_id(plan.title, plan_json),
+                self._safe_file_id(plan.title, document),
                 document,
             )
 
@@ -88,9 +82,8 @@ class PPTGenerator:
             raise PPTGenerationError(stage, str(exc)) from exc
 
         return PPTArtifact(
+            title=plan.title,
             path=path,
-            plan=plan,
-            plan_json=plan_json,
             generated_at=publication.generated_at,
             template_id=resolved.template.manifest.id,
             template_name=resolved.template.manifest.name,
@@ -100,7 +93,7 @@ class PPTGenerator:
     async def _generate_plan(
         self,
         request: ResourcePPT | PathPPT,
-    ) -> tuple[PPTPlan, str]:
+    ) -> PPTPlan:
         prompt = prompts.get("ppt").render(
             "slide_plan",
             request=json.dumps(
@@ -110,31 +103,12 @@ class PPTGenerator:
             ),
             ppt_preferences=self._render_preferences(request.preferences),
         )
-        for attempt in range(1, _PLAN_ATTEMPTS + 1):
-            try:
-                plan = await self._llm.ainvoke_json(
-                    PPTPlan,
-                    prompt,
-                    temperature=0.15,
-                    max_tokens=_PLAN_MAX_TOKENS,
-                )
-                return plan, plan.model_dump_json(indent=2)
-            except Exception as exc:
-                if _is_infra_error(exc):
-                    raise
-
-                if attempt >= _PLAN_ATTEMPTS:
-                    raise
-                logger.warning(
-                    "PPT plan attempt failed; retrying dedicated generation channel: "
-                    "attempt=%d/%d error=%s",
-                    attempt,
-                    _PLAN_ATTEMPTS,
-                    exc,
-                )
-                await asyncio.sleep(_PLAN_RETRY_DELAYS_SECONDS[attempt - 1])
-
-        raise RuntimeError("PPT plan generation exhausted without a result")
+        return await self._llm.ainvoke_json(
+            PPTPlan,
+            prompt,
+            temperature=0.15,
+            max_tokens=_PLAN_MAX_TOKENS,
+        )
 
     @staticmethod
     def _prompt_payload(request: ResourcePPT | PathPPT) -> dict[str, Any]:
@@ -234,9 +208,9 @@ class PPTGenerator:
             await callback(message, percent)
 
     @staticmethod
-    def _safe_file_id(title: str, plan_json: str) -> str:
+    def _safe_file_id(title: str, document: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-        digest = hashlib.sha1(f"{title}\n{plan_json}".encode("utf-8")).hexdigest()[:10]
+        digest = hashlib.sha1(document.encode("utf-8")).hexdigest()[:10]
 
         if slug:
             return f"{slug[:42].strip('-')}-{digest}"

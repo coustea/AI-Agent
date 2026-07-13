@@ -1306,7 +1306,7 @@ class PPTHTMLRenderer:
   data-type="{slide.type}"
   data-layout="{_escape(layout.id)}"
   data-skeleton="{_escape(layout.skeleton)}"
-  data-animation="{slide.animation}"
+  data-animation="{layout.animation}"
   data-content-density="{_content_density(slide)}"
   data-layout-profile="{_layout_profile(slide)}"
   data-teaching-items="{_teaching_item_count(slide)}"

@@ -254,8 +254,21 @@ export interface ChatMessageItem {
     detail?: Record<string, unknown>
   }>
   usage_metadata?: Record<string, unknown> | null
+  video?: ChatVideoArtifact | null
   diagram?: TeachingDiagram | null
   created_at: string | null
+}
+
+export interface ChatVideoArtifact {
+  task_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  topic: string
+  title?: string
+  video_url?: string
+  preview_url?: string
+  duration_seconds?: number
+  scene_count?: number
+  error?: string
 }
 
 export interface ChatSession {

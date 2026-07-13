@@ -67,7 +67,7 @@ class SceneCompiler:
         visual_kind = cls._VISUAL_KINDS.get(outline.mechanism, "flow")
         beats = [cls._text(beat, "过程变化", 72) for beat in outline.process_beats]
         node_ids = ["anchor", *[f"beat-{index + 1:02d}" for index in range(len(beats))], "outcome"]
-        narration_budget = max(36, min(120, round(outline.estimated_seconds * 4.2 / (len(beats) + 2))))
+        narration_budget = max(48, min(120, 48 + len(beats) * 12))
         nodes = [
             {
                 "id": "anchor",
@@ -193,9 +193,8 @@ class CartoonLessonPlanner:
     async def plan(self, brief: CartoonBrief) -> TeachingLesson:
         try:
             outline = await self._invoke_outline(brief)
-            outline = self._allocate_duration(outline, brief.configuration.target_duration_seconds)
             scenes = [SceneCompiler.compile(scene) for scene in outline.scenes]
-            return TeachingLesson.model_validate({"title": outline.title, "course": outline.course, "topic": outline.topic, "scenes": [scene.model_dump(mode="json") for scene in scenes]})
+            return TeachingLesson.model_validate({"title": outline.title, "course": outline.course, "scenes": [scene.model_dump(mode="json") for scene in scenes]})
         except Exception as exc:
             raise CartoonPlanningError(f"无法生成可回放的教学动画: {exc}") from exc
 
@@ -211,30 +210,13 @@ class CartoonLessonPlanner:
                 "你是高校计算机课程教学动画的总导演。只输出 LessonOutline JSON。\n"
                 "你负责教学结构：每个 process_beats 都必须是可被单独演示的连续因果步骤，不能写泛泛总结。\n"
                 f"mechanism 只能取：{'、'.join(MECHANISM_KINDS)}。场景数量为 2-6 个，至少一个必须展示真实过程。"
-                "每场景给出 entry_state、2-6 个连续 process_beats、exit_state 和 estimated_seconds。"
+                "每场景给出 entry_state、2-6 个连续 process_beats 和 exit_state。"
             )),
             HumanMessage(content=(
                 f"学习需求：{brief.learning_need}\n目标时长：{config.target_duration_seconds} 秒（最少 90 秒）。\n"
                 f"知识点：{'、'.join(brief.knowledge_points)}\n薄弱知识点：{'、'.join(brief.weak_knowledge_points)}\教学材料：\n{source}"
             )),
         ]
-
-    @staticmethod
-    def _allocate_duration(outline: LessonOutline, target_seconds: int) -> LessonOutline:
-        weights = [max(1, len(scene.process_beats) + 1) for scene in outline.scenes]
-        total_weight = sum(weights)
-        remaining = target_seconds
-        allocated: list[int] = []
-        for index, weight in enumerate(weights):
-            if index == len(weights) - 1:
-                seconds = remaining
-            else:
-                seconds = round(target_seconds * weight / total_weight)
-                seconds = max(12, seconds)
-                remaining -= seconds
-            allocated.append(seconds)
-        scenes = [scene.model_copy(update={"estimated_seconds": seconds}) for scene, seconds in zip(outline.scenes, allocated, strict=True)]
-        return outline.model_copy(update={"scenes": scenes})
 
     @staticmethod
     def _source(brief: CartoonBrief, limit: int) -> str:

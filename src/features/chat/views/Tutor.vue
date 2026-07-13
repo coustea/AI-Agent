@@ -219,6 +219,7 @@
                   || msg.agentActivities?.length
                   || msg.teachingDiagramGenerating
                   || msg.teachingDiagram
+                  || msg.video
                 "
                 :class="['message-row', msg.role]"
               >
@@ -348,6 +349,8 @@
                       @retry="retryTeachingDiagramImage(msg)"
                     />
                   </div>
+
+                  <ChatVideoArtifact v-if="msg.video" :video="msg.video" />
                 </div>
               </div>
             </template>
@@ -454,6 +457,21 @@
                   >
                     <DataLine class="btn-icon" aria-hidden="true" />
                     <span>图解</span>
+                  </button>
+
+                  <button
+                    v-if="chatMode === 'standard'"
+                    type="button"
+                    class="input-tool-btn"
+                    :disabled="!canGenerateVideo"
+                    :title="canGenerateVideo ? '根据当前输入生成动画讲解视频' : '请输入视频主题，视频不支持附件'"
+                    @click="startVideoGeneration"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
+                      <rect x="3" y="6" width="12" height="12" rx="2"></rect>
+                      <path d="m15 10 5-3v10l-5-3z"></path>
+                    </svg>
+                    <span>视频</span>
                   </button>
                 </div>
 
@@ -677,9 +695,11 @@ import TutorMessageContent from '@/features/chat/components/TutorMessageContent.
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import TeachingDiagramImage from '@/features/chat/components/TeachingDiagramImage.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
+import ChatVideoArtifact from '@/features/chat/components/ChatVideoArtifact.vue'
 
 import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
 import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
+import { useChatVideoTasks } from '@/features/chat/composables/useChatVideoTasks'
 import {
   uploadFile,
   getSessions,
@@ -688,9 +708,11 @@ import {
   updateSessionTitle,
   getChatHistory,
   retryDiagramImage,
+  createChatVideo,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
+  ChatVideoArtifact as ChatVideoArtifactData,
   TeachingDiagram,
 } from '@/features/chat/types/chat'
 import type { ChatEvent } from '@/features/chat/types/chatEvent'
@@ -987,8 +1009,18 @@ const canSendMessage = computed(() => (
   && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
 ))
 
+// Video creation is a separate, user-triggered workflow and must not inherit
+// the text-agent's long-running "responding" lock.
+const canGenerateVideo = computed(() => (
+  chatMode.value === 'standard'
+  && !uploadingFile.value
+  && pendingFiles.value.length === 0
+  && Boolean(userInput.value.trim())
+))
+
 // 流式消息管理器（全局单例）
 const streamManager = useChatStreamManager()
+const videoTasks = useChatVideoTasks()
 // 数字人思考超时定时器
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAsrProcessing = ref(false)
@@ -1915,6 +1947,10 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         msg.diagram as TeachingDiagram | null | undefined
           ?? msg.usage_metadata?.diagram as TeachingDiagram | null | undefined,
       )
+      const rawVideo = msg.video ?? msg.usage_metadata?.video
+      const video = rawVideo && typeof rawVideo === 'object'
+        ? rawVideo as ChatVideoArtifactData
+        : null
 
       return {
         id: msg.id || Date.now() + i,
@@ -1925,6 +1961,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         attachments,
         agentActivities: (msg.activities || []) as AgentActivity[],
         teachingDiagram: diagram,
+        video,
       }
     })
     // 防止刷新后历史中相邻重复消息导致双排显示
@@ -1940,6 +1977,11 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         && previousAttachmentKey === currentAttachmentKey
       )
     })
+    for (const message of messages.value) {
+      if (message.video?.status === 'queued' || message.video?.status === 'running') {
+        watchChatVideo(sessionId, message.id)
+      }
+    }
   } catch (err) {
     toast.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
   }
@@ -1947,6 +1989,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
 
 // 切换会话：加载历史 → 恢复流状态 → 绑定回调
 const switchSession = async (sessionId: string) => {
+  videoTasks.dispose()
   currentSessionId.value = sessionId
   messages.value = []
 
@@ -2234,6 +2277,59 @@ const handleAvatarReconnect = async () => {
 
 const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
+}
+
+const watchChatVideo = (sessionId: string, userMessageId: number) => {
+  videoTasks.watch(sessionId, userMessageId, (video) => {
+    const message = messages.value.find(item => item.id === userMessageId)
+    if (message) message.video = video
+    if (video.status === 'completed') scrollToBottom()
+  })
+}
+
+const startVideoGeneration = async () => {
+  const topic = userInput.value.trim()
+  if (!canGenerateVideo.value || !topic) return
+  if (!await ensureCurrentSession('standard')) return
+  const sessionId = currentSessionId.value
+  if (!sessionId) return
+
+  const localMessageId = Date.now()
+  const localVideo: ChatVideoArtifactData = {
+    task_id: `pending-${localMessageId}`,
+    status: 'queued',
+    topic,
+  }
+  messages.value.push({
+    id: localMessageId,
+    role: 'user',
+    content: topic,
+    time: now(),
+    video: localVideo,
+  })
+  userInput.value = ''
+  isExpandedInput.value = false
+  if (textareaRef.value) textareaRef.value.style.height = '24px'
+  scrollToBottom()
+
+  try {
+    const response = await createChatVideo(topic, sessionId)
+    const task = response.data.data
+    const message = messages.value.find(item => item.id === localMessageId)
+    if (!message) return
+    message.id = task.user_message_id
+    message.video = task.video
+    watchChatVideo(task.session_id, task.user_message_id)
+  } catch (error) {
+    const message = messages.value.find(item => item.id === localMessageId)
+    if (message?.video) {
+      message.video = {
+        ...message.video,
+        status: 'failed',
+        error: getErrorMessage(error, '视频任务创建失败，请重新发起请求。'),
+      }
+    }
+  }
 }
 
 // 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流 / 数字人消息
@@ -2547,6 +2643,7 @@ onBeforeUnmount(() => {
   }
   isStreamDone = false
   streamingMsgRef.value = null
+  videoTasks.dispose()
   clearPendingFiles()
   if (dimTimer) clearTimeout(dimTimer)
   document.removeEventListener('mousedown', handleGlobalClick)
