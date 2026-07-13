@@ -65,7 +65,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { PhUser as Avatar } from '@phosphor-icons/vue'
-import { applyGreenScreenAlpha } from '../model/chromaKey'
+import { applyGreenScreenAlpha, computeChromaRenderSize } from '../model/chromaKey'
 import type { DigitalHumanStateType } from '../model/digital-human'
 
 const props = defineProps<{
@@ -92,6 +92,11 @@ let chromaFrameId: number | null = null
 let sourceVideo: HTMLVideoElement | null = null
 let workCanvas: HTMLCanvasElement | null = null
 let workContext: CanvasRenderingContext2D | null = null
+let outputContext: CanvasRenderingContext2D | null = null
+let lastChromaRenderAt = 0
+
+const CHROMA_SPEAKING_FPS = 24
+const CHROMA_IDLE_FPS = 12
 
 // 确保绿幕抠像用的离屏 Canvas 已创建
 const ensureWorkCanvas = () => {
@@ -110,24 +115,34 @@ const resizeCanvas = (canvas: HTMLCanvasElement, width: number, height: number) 
 }
 
 // 逐帧渲染绿幕抠像：读取视频帧 → 去绿 → 绘制到输出 Canvas
-const renderChromaFrame = () => {
+const renderChromaFrame = (timestamp: number) => {
+  chromaFrameId = window.requestAnimationFrame(renderChromaFrame)
+  if (document.hidden) return
+
+  const targetFps = props.state === 'speaking' ? CHROMA_SPEAKING_FPS : CHROMA_IDLE_FPS
+  if (timestamp - lastChromaRenderAt < 1000 / targetFps) return
+  lastChromaRenderAt = timestamp
+
   const video = sourceVideo
   const canvas = chromaCanvas.value
-  const context = canvas?.getContext('2d')
+  if (canvas && !outputContext) {
+    outputContext = canvas.getContext('2d', { alpha: true, desynchronized: true })
+  }
+  const context = outputContext
   const work = ensureWorkCanvas()
 
   if (video && canvas && context && work && video.readyState >= 2) {
-    const width = video.videoWidth || 720
-    const height = video.videoHeight || 1280
+    const { width, height } = computeChromaRenderSize(
+      video.videoWidth || 720,
+      video.videoHeight || 1280,
+    )
     resizeCanvas(canvas, width, height)
 
     try {
       work.drawImage(video, 0, 0, width, height)
       const frame = work.getImageData(0, 0, width, height)
       applyGreenScreenAlpha(frame.data)
-      work.putImageData(frame, 0, 0)
-      context.clearRect(0, 0, width, height)
-      context.drawImage(work.canvas, 0, 0)
+      context.putImageData(frame, 0, 0)
       chromaReady.value = true
     } catch (error) {
       chromaReady.value = false
@@ -135,7 +150,6 @@ const renderChromaFrame = () => {
     }
   }
 
-  chromaFrameId = window.requestAnimationFrame(renderChromaFrame)
 }
 
 // 查找 video 元素并启动绿幕渲染循环
@@ -176,6 +190,9 @@ onBeforeUnmount(() => {
   chromaObserver?.disconnect()
   chromaObserver = null
   sourceVideo = null
+  outputContext = null
+  workContext = null
+  workCanvas = null
   if (videoContainer.value) {
     while (videoContainer.value.firstChild) {
       videoContainer.value.removeChild(videoContainer.value.firstChild)

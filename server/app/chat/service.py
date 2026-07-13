@@ -438,6 +438,7 @@ class ChatUseCases:
         self,
         *,
         user_id: int,
+        username: str,
         session_id: str,
         text: str,
         attachments: list[dict[str, Any]],
@@ -445,7 +446,7 @@ class ChatUseCases:
         """把文字和原始附件快照直接写入 UserMessage。"""
         # 校验并归一化每个附件（URL 前缀 + 去重）
         normalized_attachments: list[dict[str, Any]] = []
-        prefix = f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/"
+        prefix = f"/static/{username}/chat/{session_id}/uploads/"
         seen_urls: set[str] = set()
         for attachment in attachments:
             url = str(attachment.get("url") or "").strip()
@@ -453,8 +454,8 @@ class ChatUseCases:
                 raise ValueError("附件地址无效或不属于当前会话")
             filename = url.removeprefix(prefix)
             path = self.file_store.resolve_user_file(
-                current_user_id=user_id,
-                owner_id=user_id,
+                current_username=username,
+                owner_username=username,
                 session_id=session_id,
                 filename=filename,
             )

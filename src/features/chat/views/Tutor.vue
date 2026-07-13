@@ -75,8 +75,13 @@
             </PopoverPortal>
           </PopoverRoot>
 
-          <PopoverRoot>
-            <PopoverTrigger v-if="sessionSidebarCollapsed" class="nav-item history-collapsed-btn" title="历史记录" style="background: none; border: none; text-align: left; padding: 0; outline: none; width: 100%;">
+          <PopoverRoot v-model:open="historyPopoverVisible">
+            <PopoverTrigger
+              v-if="sessionSidebarCollapsed"
+              class="nav-item history-collapsed-btn"
+              title="历史记录"
+              aria-label="历史记录"
+            >
               <Timer class="nav-icon" />
             </PopoverTrigger>
 
@@ -87,20 +92,38 @@
                 align="start"
                 :side-offset="8"
               >
+                <div class="history-popover-header">
+                  <div class="history-popover-heading">
+                    <Timer class="history-popover-icon" aria-hidden="true" />
+                    <div>
+                      <div class="popover-title">历史记录</div>
+                      <div class="history-popover-count">{{ sessions.length }} 个对话</div>
+                    </div>
+                  </div>
+                </div>
                 <div class="popover-session-scroll">
-                  <div class="popover-title">历史记录</div>
                   <div
                       v-for="s in visibleSessions"
                       :key="s.id"
                       :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
-                      @click="switchSession(s.id)"
+                      :title="s.title || '新建对话'"
+                      :aria-current="s.id === currentSessionId ? 'true' : undefined"
+                      @click="switchSession(s.id); historyPopoverVisible = false"
                   >
                     <ChatLineSquare class="session-icon" />
                     <div class="session-info nav-text">
-                      <span class="session-title">{{ s.title || '新建对话' }}</span>
+                      <span class="session-title-line">
+                        <span class="session-title">{{ s.title || '新建对话' }}</span>
+                        <span v-if="s.id === currentSessionId" class="current-session-indicator">当前</span>
+                      </span>
                       <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
                     </div>
-                    <button class="btn-link del-btn nav-text" @click.stop="archiveSession(s.id)" title="删除对话">
+                    <button
+                      class="btn-link del-btn nav-text"
+                      aria-label="删除对话"
+                      title="删除对话"
+                      @click.stop="historyPopoverVisible = false; archiveSession(s.id)"
+                    >
                       <Delete class="del-icon" />
                     </button>
                   </div>
@@ -929,7 +952,14 @@ const {
   onSpeechDetectedChange: (detected) => {
     hasSpeechDetected.value = detected
   },
-  onError: (msg) => {
+  onError: (msg, context) => {
+    if (context?.source === 'player') {
+      // Player readiness belongs to the video transport, not the active LLM
+      // turn. Keep the current thinking/message state until the turn itself
+      // completes or fails.
+      toast.error({ message: msg, plain: true })
+      return
+    }
     digitalHumanBackendStatus.value = ''
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
@@ -983,6 +1013,7 @@ const currentSessionId = ref<string | undefined>(undefined)
 const digitalHumanSessionId = ref<string | undefined>(undefined)
 const sessionSidebarCollapsed = ref(false)
 const searchPopoverVisible = ref(false)
+const historyPopoverVisible = ref(false)
 const searchKeyword = ref('')
 const historyExpanded = ref(false)
 const HISTORY_COLLAPSED_COUNT = 5
@@ -1023,6 +1054,7 @@ const streamManager = useChatStreamManager()
 const videoTasks = useChatVideoTasks()
 // 数字人思考超时定时器
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
+const isAvatarThinkingSlow = ref(false)
 const isAsrProcessing = ref(false)
 let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1193,6 +1225,7 @@ const clearAvatarThinkingTimeout = () => {
     clearTimeout(avatarThinkingTimeout)
     avatarThinkingTimeout = null
   }
+  isAvatarThinkingSlow.value = false
 }
 
 const detachCurrentStreamCallbacks = () => {
@@ -1246,10 +1279,11 @@ const startAvatarThinkingTimeout = () => {
   avatarThinkingTimeout = setTimeout(() => {
     if (chatMode.value !== 'digital_human') return
     if (!isAIThinking.value) return
-    isAIThinking.value = false
-    stopTeachingDiagramGeneratingForCurrentAi()
-    streamingMsgId.value = null
-    toast.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
+    // Long tool/RAG turns can legitimately exceed 30 seconds. This watchdog
+    // must never end the turn or expose the microphone preparation state while
+    // the backend is still producing the current answer.
+    isAvatarThinkingSlow.value = true
+    avatarThinkingTimeout = null
   }, 30000)
 }
 
@@ -1355,7 +1389,9 @@ const voiceAsrStage = computed<VoiceAsrStage>(() => {
 })
 
 const digitalHumanStatusText = computed(() => {
+  if (!isAvatarConnected.value) return '数字人未连接'
   if (isAvatarSpeaking.value) return '正在播报中...'
+  if (isAIThinking.value && isAvatarThinkingSlow.value) return '正在深入思考，请稍候...'
   if (isAIThinking.value) return '正在思考中...'
   if (voiceAsrStage.value === 'no_voice') return '倾听就绪'
   if (voiceAsrStage.value === 'heard_voice') return '已检测到语音'
@@ -2783,10 +2819,20 @@ onBeforeUnmount(() => {
 
 .nav-item.history-collapsed-btn {
   color: var(--color-text-secondary);
+  width: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  outline: none;
+  text-align: left;
 }
 .nav-item.history-collapsed-btn:hover {
   background: var(--color-border);
   color: var(--color-text);
+}
+.nav-item.history-collapsed-btn[data-state='open'] {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
 }
 
 .history-section-header {
@@ -2812,6 +2858,162 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+:global(.history-popover-content) {
+  width: min(320px, calc(100vw - 88px));
+  max-height: min(520px, calc(100vh - 32px));
+  padding: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: var(--color-surface, #fff);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(17, 46, 52, 0.18), 0 4px 12px rgba(17, 46, 52, 0.08);
+  outline: none;
+  z-index: 1200;
+}
+
+:global([data-radix-popper-content-wrapper]:has(.history-popover-content)) {
+  z-index: 1200 !important;
+}
+
+.history-popover-header {
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+  padding: 2px 4px 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.history-popover-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.history-popover-icon {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  color: var(--color-primary);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+:global(.history-popover-content .popover-title) {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: var(--weight-bold);
+}
+
+.history-popover-count {
+  margin-top: 2px;
+  color: var(--color-text-faint);
+  font-size: 0.72rem;
+}
+
+:global(.history-popover-content .popover-session-scroll) {
+  max-height: min(400px, calc(100vh - 150px));
+  padding-right: 2px;
+  gap: 4px;
+}
+
+:global(.history-popover-content .session-item) {
+  width: 100%;
+  min-height: 58px;
+  margin: 0;
+  padding: 9px 10px;
+  box-sizing: border-box;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+:global(.history-popover-content .session-item:hover) {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:global(.history-popover-content .session-item.active) {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+:global(.history-popover-content .session-icon) {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.session-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-title-line .session-title {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  font-size: 0.88rem;
+  font-weight: var(--weight-semibold);
+}
+
+.current-session-indicator {
+  flex-shrink: 0;
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: var(--weight-semibold);
+}
+
+:global(.history-popover-content .session-time) {
+  margin-top: 3px;
+  font-size: 0.72rem;
+}
+
+:global(.history-popover-content .del-btn) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  opacity: 0.35;
+}
+
+:global(.history-popover-content .session-item:hover .del-btn),
+:global(.history-popover-content .del-btn:focus-visible) {
+  opacity: 1;
+  background: var(--color-danger-soft, #fff1f1);
+}
+
+:global(.history-popover-content .session-empty) {
+  margin: 24px 0;
+  color: var(--color-text-faint);
+}
+
+:global(.history-popover-content .session-expand-btn) {
+  margin-top: 6px;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--color-border);
 }
 
 .search-results-scroll {

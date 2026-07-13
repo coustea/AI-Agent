@@ -71,7 +71,7 @@
               @click="$emit('submit-daily', question)"
             >
               <span v-if="reviewing[question.id]" class="reviewing-spinner"></span>
-              {{ reviewing[question.id] ? 'AI 评阅中' : '提交答案' }}
+              {{ reviewing[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
             </button>
             <button
               v-if="submitted[question.id]"
@@ -86,7 +86,7 @@
 
         <div v-if="reviewing[question.id]" class="reviewing-banner">
           <span class="reviewing-spinner-lg"></span>
-          <span class="reviewing-text">AI 正在评阅你的答案，请稍候...</span>
+          <span class="reviewing-text">{{ pendingAnswerMessage(question.type) }}</span>
         </div>
 
         <div v-if="submitted[question.id] && openedAnalysis.has(question.id)" class="analysis-box">
@@ -117,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
 
 // 每日练习题目类型
 interface DailyQuestion {

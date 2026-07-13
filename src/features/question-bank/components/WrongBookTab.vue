@@ -57,14 +57,14 @@
             @click="$emit('submit-drill')"
           >
             <span v-if="drillReviewing" class="reviewing-spinner"></span>
-            {{ drillReviewing ? 'AI 评阅中' : '提交答案' }}
+            {{ drillReviewing ? pendingAnswerLabel(drillQuestion.type) : '提交答案' }}
           </button>
           <button v-else class="secondary-btn" type="button" @click="$emit('pick-drill')">再练一题</button>
         </div>
 
         <div v-if="drillReviewing" class="reviewing-banner">
           <span class="reviewing-spinner-lg"></span>
-          <span class="reviewing-text">AI 正在评阅你的答案，请稍候...</span>
+          <span class="reviewing-text">{{ pendingAnswerMessage(drillQuestion.type) }}</span>
         </div>
 
         <div v-if="drillSubmitted" class="drill-result">
@@ -162,6 +162,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
+import { summarizeQuestionText } from '@/features/question-bank/model/questionText'
 
 // 组件属性：错题列表、再练题状态、筛选过滤
 const props = defineProps<{
@@ -276,11 +278,7 @@ function formatUserAnswer(question: any) {
 }
 
 function summarizeText(text: string) {
-  const plain = String(text || '')
-    .replace(/\s+/g, ' ')
-    .replace(/[#*_`>-]/g, '')
-    .trim()
-  return plain.length > 120 ? `${plain.slice(0, 120)}...` : plain
+  return summarizeQuestionText(text, 120)
 }
 
 function renderInline(text: string) {

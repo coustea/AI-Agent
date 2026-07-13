@@ -93,7 +93,7 @@ export async function fetchQuizBankQuestions(params?: {
   }
 }
 
-// 提交分析题给 AI 评阅
+// 提交填空题或分析题给 AI 评阅
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
   const response = await http.post('/ai/quiz/review', request, { timeout: 60000 })
   return response.data as QuizReviewResult
@@ -103,6 +103,7 @@ export interface ObjectiveQuestionResult {
   question_id: string
   user_answer: string
   is_correct: boolean
+  score?: number
   subject?: string
   question_type?: string
   content?: string
@@ -131,6 +132,7 @@ export interface QuizAnswerHistoryItem {
   question_id: string
   subject: string | null
   question_type: string | null
+  score: number | null
   is_correct: boolean
   attempts: number
   last_answer: string | null
