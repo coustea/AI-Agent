@@ -18,30 +18,28 @@ jwt:
   expire_days: 7
 
 # ============ 模型配置 ============
-# 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-  default: &default_model
+  # 主模型：系统默认调用
+  main:
     base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
     api_key: "3842c168016ff65462f3f01133b14259:ODZkZjE4ZjIzNTNjNmI3YzNiNmYwNWUz"
     model_name: "astron-code-latest"
     max_tokens: 8192
-    structured_output_strategy: "function_calling_first"
     timeout: 300
     max_retries: 2
-    json_temp: 0.1
-    stream_temp: 1.0
-    default_temp: 0.7
-    vision:
-      base_url: "https://open.bigmodel.cn/api/paas/v4/"
-      api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
-      model_name: "glm-4.6v-flash"
-      temperature: 0.7
-      timeout: 300
-      max_retries: 2
-  ppt:
-    <<: *default_model
-    timeout: 120
-    max_retries: 0
+    temperature:
+      default: 0.7
+      json: 0.1
+      stream: 1.0
+
+  # 视觉模型：图片理解
+  vision:
+    base_url: "https://open.bigmodel.cn/api/paas/v4/"
+    api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
+    model_name: "glm-4.6v-flash"
+    temperature: 0.7
+    timeout: 300
+    max_retries: 2
 
 # 星火 WebSocket API（Vision 用，TTS 也回退到此配置）
 spark:
