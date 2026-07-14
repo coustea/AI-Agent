@@ -69,7 +69,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'exam_map', max_depth: 3, leaf_detail: 'annotated', show_relations: true },
     code: { programming_language: 'python', output_style: 'challenge', focus: 'application', include_tests: true },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'exam_review', narrative_style: 'review', density: 'detailed', emphasis: ['core_concepts', 'pitfalls'] },
+    ppt: { narrative_style: 'review', density: 'detailed', emphasis: ['core_concepts', 'pitfalls'] },
     cartoon: { depth: 'deep', pace: 'normal' },
   },
   // 日常学习场景：循序渐进、偏基础与巩固
@@ -79,7 +79,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'teaching', narrative_style: 'review', density: 'concise', emphasis: ['core_concepts', 'pitfalls'] },
+    ppt: { narrative_style: 'review', density: 'concise', emphasis: ['core_concepts', 'pitfalls'] },
     cartoon: { depth: 'overview', pace: 'fast' },
   },
   // 项目实践场景：案例驱动、偏工程化与应用
@@ -89,7 +89,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
     code: { programming_language: 'python', output_style: 'reference', focus: 'application', include_tests: true },
     reading: { coverage: 'broad', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
-    ppt: { template: 'technical', narrative_style: 'case_driven', density: 'detailed', emphasis: ['core_concepts', 'cases', 'derivation'] },
+    ppt: { narrative_style: 'case_driven', density: 'detailed', emphasis: ['core_concepts', 'cases', 'derivation'] },
     cartoon: { depth: 'deep', pace: 'slow' },
   },
   // 预习自学场景：系统化、偏概念与基础架构
@@ -99,7 +99,7 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { template: 'teaching', narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts', 'pitfalls'] },
+    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts', 'pitfalls'] },
     cartoon: { depth: 'standard', pace: 'normal' },
   },
 }

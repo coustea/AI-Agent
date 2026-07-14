@@ -50,8 +50,8 @@ class User(SQLModel, table=True):
     email: str | None = Field(default=None, max_length=100)
     # 头像 URL
     avatar: str | None = Field(default=None, max_length=500)
-    # onboarding 是否已完成，True=已完成，False=未完成（需弹窗）
-    is_first_login: bool = Field(default=False)
+    # onboarding 是否已完成（True=已完成，False=未完成需弹窗）
+    onboarding_completed: bool = Field(default=False)
 
     # ── 基础信息（原 profile_json.base_info，由 onboarding 填写）──
     school: str | None = Field(default=None, max_length=200)

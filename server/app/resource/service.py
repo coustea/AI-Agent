@@ -36,6 +36,7 @@ from app.resource.schemas import (
     ResourceGenerationRequest,
     ResourceStatusSnapshot,
 )
+from app.resource.status import ResourceLifecycleStatus
 
 logger = get_module_logger("resource", sub="service")
 
@@ -140,7 +141,7 @@ class ResourceService:
             user_id=user_id,
             learning_need=request.learning_need,
             request_snapshot_json=request_snapshot,
-            status="pending",
+            status=ResourceLifecycleStatus.PENDING.value,
         )
         self.session.add(resource)
         await self.session.flush()
@@ -158,7 +159,7 @@ class ResourceService:
             )
         # 落库并返回新任务 ID
         await self._commit(resource)
-        return {"resource_id": resource_id, "status": "pending"}
+        return {"resource_id": resource_id, "status": ResourceLifecycleStatus.PENDING.value}
 
     async def publish_agent_status(
         self,
@@ -225,7 +226,7 @@ class ResourceService:
         self,
         *,
         resource_id: int,
-        status: str,
+        status: ResourceLifecycleStatus,
         message: str,
         data: dict[str, Any] | None = None,
     ) -> GeneratedResourceRunEvent:
@@ -234,18 +235,18 @@ class ResourceService:
         if resource is None:
             raise ValueError(f"资源不存在: {resource_id}")
         now = datetime.now(timezone.utc)
-        resource.status = status
+        resource.status = status.value
         resource.updated_at = now
         event_name = {
-            "generating": "generation.started",
-            "completed": "generation.completed",
-            "partial_completed": "generation.completed",
-            "failed": "generation.failed",
+            ResourceLifecycleStatus.GENERATING: "generation.started",
+            ResourceLifecycleStatus.COMPLETED: "generation.completed",
+            ResourceLifecycleStatus.PARTIAL: "generation.completed",
+            ResourceLifecycleStatus.FAILED: "generation.failed",
         }.get(status, "generation.started")
         event = GeneratedResourceRunEvent(
             resource_id=resource_id,
             event=event_name,
-            status=status,
+            status=status.value,
             phase="generation",
             message=message,
             data_json=data or {},
@@ -413,7 +414,7 @@ class ResourceService:
         user_id: int,
         resource_id: int,
         expected_agent_ids: set[str],
-    ) -> str:
+    ) -> ResourceLifecycleStatus:
         """从数据库计算终态。
 
         不接收调用者声称的成功集合，不再次保存资源项。
@@ -451,15 +452,15 @@ class ResourceService:
                     "unexpected": sorted(unexpected),
                 },
             )
-            status = "failed"
+            status = ResourceLifecycleStatus.FAILED
         elif successful == expected_agent_ids:
-            status = "completed"
+            status = ResourceLifecycleStatus.COMPLETED
         elif successful:
-            status = "partial_completed"
+            status = ResourceLifecycleStatus.PARTIAL
         else:
-            status = "failed"
+            status = ResourceLifecycleStatus.FAILED
 
-        resource.status = status
+        resource.status = status.value
         await self._commit(resource)
         # 记录资源生成事件供学习评估聚合（失败不影响主流程）
         try:
@@ -467,7 +468,7 @@ class ResourceService:
                 db=self.session,
                 user_id=user_id,
                 resource_id=resource_id,
-                status=status,
+                status=status.value,
                 topic=resource.learning_need,
                 agent_types=list(successful),
             )

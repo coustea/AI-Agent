@@ -2,26 +2,29 @@
 
 目标：设计 4 到 6 个连续场景，让学习者看见概念如何变化，而不是把讲义逐句念出来。
 
-输出契约：顶层只能有 `title`、`course`、`scenes`。每个 scenes 元素只能有 `id`、`title`、`objective`、`layout`、`visual_kind`。禁止输出 `density`、`teaching_focus`、说明文字或任何未列出的字段。
+输出契约：顶层只能有 `title`、`course`、`scenes`。每个 scenes 元素只能有 `id`、`title`、`objective`、`teaching_function`、`layout`、`visual_kind`。禁止输出 `density`、`teaching_focus`、说明文字或任何未列出的字段。
 
 ## 字段约束 (FIELD CONSTRAINTS)
 - `title`: 1～72 字符
 - `course`: 1～40 字符
-- `scenes`: 4～6 个场景
+- `scenes`: 5～6 个场景
 - `scenes[].id`: 1～48 字符
 - `scenes[].title`: 1～54 字符
 - `scenes[].objective`: 1～110 字符
+- `scenes[].teaching_function`: 严格使用下方教学功能之一
 
 可用 layout（必须严格使用以下值之一）：{{layouts}}
 可用 visual_kind（必须严格使用以下值之一）：{{visual_kinds}}
 画面密度：{{density}}
 
 硬性规则：
-- 第一幕 layout 必须为 `hero`，最后一幕必须为 `recap`；全片至少使用四种构图。
+- 第一幕必须是 `hero` + `orient`，最后一幕必须是 `recap` + `consolidate`；全片至少使用四种构图。
+- 全片必须各有一幕 `model`、`trace`、`compare`：先建立心智模型，再逐步运行模型，最后通过边界或易混点做判断。不要让任何一幕只是重复前一幕的文字。
+- teaching_function 只能是 `orient`（问题和学习坐标）、`model`（对象与关系）、`trace`（逐步执行或状态变化）、`compare`（边界、反例或方案比较）、`consolidate`（迁移总结）。
 - 每幕只负责一个可观察的教学目标，标题短、目标具体。
 - layout 和 visual_kind 必须严格使用上述枚举值，不要创造新的值（如 full, closeup, realistic, cartoon, abstract 等都是非法的）。
 - 场景应覆盖：建立问题、核心机制、一次可视化推演、边界/对比、总结。可以按主题调整，但不可重复同一画面。
-- 至少安排两幕“机制演示”场景：它们必须选择 {{connected_visual_kinds}} 之一，并在后续场景 JSON 中输出连续 states。开场和总结可以简洁，但整片不能主要由静态卡片构成。
+- 至少安排三幕“机制演示”场景：它们必须选择 {{connected_visual_kinds}} 之一，并在后续场景 JSON 中输出连续 states。三个状态分别表示初始条件、机制正在发生、机制完成后的结果。开场和总结可以简洁，但整片不能主要由静态卡片构成。
 - 当知识本体是层级结构、搜索树、决策树、语法树或树形递归时，选择 `tree`，后续场景必须用真实父子边和节点状态讲解；不要把树伪装成并排卡片。
 - 当知识点需要一个非树形的可运行心智模型时，选择 `model`：模型要由课程本身决定对象、关系、状态和变化。例如操作系统可呈现进程/队列/资源，网络可呈现端点/报文/链路，数据库可呈现实体/字段/关系，数学可呈现变量/项/变换。不要因为没有专属类型就退化成文字卡片。
 - 当讲解包含插入、删除、旋转、状态迁移或数据流动时，优先安排可视化推演场景，让后续分镜输出连续状态，而不是只展示最终结论。

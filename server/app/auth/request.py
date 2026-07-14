@@ -42,8 +42,8 @@ class UserUpdate(BaseModel):
     email: str | None = None
     # 头像 URL（可选）
     avatar: str | None = None
-    # 是否首次登录标记（可选，用于控制 onboarding 弹窗）
-    is_first_login: bool | None = None
+    # onboarding 是否已完成（可选，用于标记 onboarding 完成状态）
+    onboarding_completed: bool | None = None
 
     # ── 基础信息（原 profile base_info，onboarding 填写）──
     school: str | None = None

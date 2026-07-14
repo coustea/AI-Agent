@@ -5,7 +5,7 @@
   >
     <header class="editor-header">
       <div class="editor-left">
-        <span class="editor-tab">代码</span>
+        <span class="editor-tab">{{ title ?? '代码' }}</span>
 
         <Select
           v-model="editorLanguageModel"
@@ -108,6 +108,8 @@ const props = defineProps<{
   language: CodeLanguage
   languages: LanguageInfo[]
   disabled?: boolean
+  readonly?: boolean
+  title?: string
   activeLine?: number
   currentStepMessage?: string
   currentStepIndex?: number
@@ -217,7 +219,7 @@ watch(
 watch(
   () => props.disabled,
   (loading) => {
-    editor?.updateOptions({ readOnly: Boolean(loading) })
+    editor?.updateOptions({ readOnly: Boolean(loading) || Boolean(props.readonly) })
   },
 )
 
@@ -248,7 +250,7 @@ function createEditor() {
     value: props.modelValue,
     language: mapCodeLanguage(props.language),
     theme: monacoThemeName.value,
-    readOnly: Boolean(props.disabled),
+    readOnly: Boolean(props.disabled) || Boolean(props.readonly),
     automaticLayout: true,
 
     fontSize: 14,

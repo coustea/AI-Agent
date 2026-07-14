@@ -20,7 +20,7 @@ export interface LoginData { // 登录响应数据
     email: string | null // 邮箱
     avatar: string | null // 头像 URL
     created_at: string // 创建时间
-    is_first_login?: boolean // 是否首次登录
+    onboarding_completed?: boolean // onboarding 是否已完成（false=未完成需弹窗，true=已完成）
     // 基础信息（原 profile base_info，onboarding 填写）
     school?: string | null
     school_level?: string | null
@@ -41,7 +41,7 @@ export interface UserData { // 注册响应数据
     email: string | null // 邮箱
     avatar: string | null // 头像 URL
     created_at: string // 创建时间
-    is_first_login?: boolean // 是否首次登录
+    onboarding_completed?: boolean // onboarding 是否已完成（false=未完成需弹窗，true=已完成）
     school?: string | null
     school_level?: string | null
     major?: string | null
@@ -58,7 +58,7 @@ export interface UserUpdateParams { // 用户信息更新参数
   username?: string // 用户名
   email?: string // 邮箱
   avatar?: string // 头像 URL
-  is_first_login?: boolean // 首次登录标记
+  onboarding_completed?: boolean // onboarding 是否已完成（false=未完成需弹窗，true=已完成）
   school?: string | null
   school_level?: string | null
   major?: string | null

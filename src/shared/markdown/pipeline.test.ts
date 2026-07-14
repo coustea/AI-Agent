@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import tutorFreezeRegression from './fixtures/tutor-freeze-regression.md?raw'
-import { renderMarkdownToHtml } from './pipeline'
+import { renderMarkdownToHtml } from './markdown'
 
 describe('renderMarkdownToHtml', () => {
   it('renders GFM, math, and highlighted teaching code', async () => {
@@ -26,6 +26,9 @@ describe('renderMarkdownToHtml', () => {
     expect(html).toContain('class="katex"')
     expect(html).toContain('data-language="python"')
     expect(html).toContain('code-block-copy')
+    expect(html).toContain('data-code-action="copy"')
+    expect(html).toContain('data-code-action="wrap"')
+    expect(html).toContain('2 行')
     expect(html).toContain('class="line code-line"')
     expect(html).toContain('$5')
   })

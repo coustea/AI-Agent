@@ -58,6 +58,26 @@ export interface TemplateData {
   requiredEvents: string[]
   supportedLanguages: CodeLanguage[]
   defaultInput: Record<string, unknown>
+  inputSchema: InputSchema
+}
+
+export interface InputSchema {
+  type?: 'object' | 'array' | 'string' | 'boolean' | 'integer' | 'number' | 'null'
+  required?: string[]
+  properties?: Record<string, InputSchema>
+  items?: InputSchema
+}
+
+export interface CustomFunctionInfo {
+  name: string
+  parameters: string[]
+}
+
+export interface CustomCodeContract {
+  entryFunction: string
+  functions: CustomFunctionInfo[]
+  inputSchema: InputSchema
+  defaultInput: Record<string, unknown>
 }
 
 // 运行结果 (来自 POST /run 成功)
@@ -66,6 +86,7 @@ export interface RunResult {
   algorithm: string
   visualizerType: VisualizerType
   language: CodeLanguage
+  executionMode: 'official' | 'custom'
   events: TraceEvent[]
   result: unknown
   summary: string
@@ -90,7 +111,12 @@ export interface RunError {
     | 'TRACE_VISUALIZER_TYPE_INVALID'
     | 'TRACER_SDK_MISSING'
     | 'INSTRUMENTATION_FAILED'
+    | 'CUSTOM_VISUALIZATION_ERROR'
+    | 'CODE_TOO_LARGE'
+    | 'MISSING_VISUALIZER_TYPE'
     | 'VISUALIZER_RUN_ERROR'
+    | 'INPUT_INVALID'
+    | 'CUSTOM_CONTRACT_INVALID'
   message: string
   details?: string
 }

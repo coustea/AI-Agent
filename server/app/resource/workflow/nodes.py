@@ -23,6 +23,7 @@ from app.infra.logging import get_logger
 from app.resource.agents import AGENT_REGISTRY
 from app.resource.catalog import AGGREGATION_AGENT_IDS, BASE_RESOURCE_AGENT_IDS
 from app.resource.service import ResourceService
+from app.resource.status import SUCCESSFUL_RESOURCE_STATUSES
 from app.resource.workflow.execution import execute_resource_agent
 from app.resource.schemas import (
     DownstreamContext,
@@ -411,7 +412,7 @@ async def save_node(state: ParentState) -> dict[str, Any]:
                 resource_id=resource_id,
                 expected_agent_ids=selected_agent_ids,
             )
-            success = status in ("completed", "partial_completed")
+            success = status in SUCCESSFUL_RESOURCE_STATUSES
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
                 "保存节点完成: resource_id=%s status=%s elapsed_ms=%d",

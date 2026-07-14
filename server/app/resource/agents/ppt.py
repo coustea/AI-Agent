@@ -106,13 +106,23 @@ class PPTAgent(BaseResourceAgent):
         # 1. 数据转换：upstream_handoffs → artifacts
         artifacts = _source_artifacts(input_data.upstream_handoffs)
 
-        # 2. 构建 ResourcePPT 请求
+        # 2. 计划以 JSON-safe 快照跨越资源域与共享 PPT 引擎边界。禁止把
+        # Pydantic 模型或拼接后的旧文本计划隐式传入另一个领域。
+        if input_data.teaching_plan is None:
+            return AgentResult(
+                success=False,
+                title="PPT 生成失败",
+                file_type="html",
+                error="PPT 聚合生成缺少结构化教学计划",
+                metadata={"agent_id": self.agent_id, "generation_stage": "assembling_context"},
+            )
+
         request = ResourcePPT(
             username=username,
             learning_need=input_data.learning_need,
             learning_scenario=input_data.learning_scenario,
             profile=input_data.profile or {},
-            teaching_plan=input_data.teaching_plan,
+            resource_plan=input_data.teaching_plan.model_dump(mode="json"),
             artifacts=artifacts,
             preferences=_parse_preferences(input_data.agent_config),
         )
@@ -128,8 +138,8 @@ class PPTAgent(BaseResourceAgent):
             artifact = await self.run_with_heartbeat(
                 self._ppt_service.generate(request, output_dir, progress=progress),
                 messages=[
-                    "正在规划课件大纲与版式...",
-                    "正在生成教学课件页面...",
+                    "教学总监正在设计整套课件叙事...",
+                    "三个视觉编排智能体正在并行完成页面...",
                     "正在渲染 HTML 课件，请稍候...",
                 ],
                 interval_seconds=15.0,
@@ -187,5 +197,15 @@ class PPTAgent(BaseResourceAgent):
                 "style_name": artifact.template_name,
                 "template_id": artifact.template_id,
                 "file_size": path.stat().st_size,
+                "ppt_pipeline": {
+                    "version": "storyboard-parallel-svg-v1",
+                    "stages": [
+                        "assembling_context",
+                        "designing_story",
+                        "composing_sections",
+                        "rendering_html",
+                    ],
+                    "composition_workers": 3,
+                },
             },
         )

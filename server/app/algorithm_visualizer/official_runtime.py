@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import copy
+import io
 import importlib.util
 import inspect
 import json
 import sys
+from contextlib import redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType, ModuleType
@@ -95,7 +97,8 @@ def run_registered_template(
     previous_trace = sys.gettrace()
     try:
         sys.settrace(observe)
-        result = entry(*args, **kwargs)
+        with redirect_stdout(io.StringIO()):
+            result = entry(*args, **kwargs)
     finally:
         sys.settrace(previous_trace)
 

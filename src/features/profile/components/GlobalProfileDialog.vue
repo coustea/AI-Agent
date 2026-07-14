@@ -50,6 +50,10 @@
                         'is-highlighted': hoveredNodeKey === node.key
                       }
                     ]"
+                    :style="{
+                      '--node-hue': node.hue,
+                      '--node-chroma': node.chromaScale
+                    }"
                   />
                 </svg>
 
@@ -90,7 +94,9 @@
                   :style="{
                     '--x': `${node.x}%`,
                     '--y': `${node.y}%`,
-                    '--delay': `${node.delay}s`
+                    '--delay': `${node.delay}s`,
+                    '--node-hue': node.hue,
+                    '--node-chroma': node.chromaScale
                   }"
                   @mouseenter="hoveredNodeKey = node.key"
                   @mouseleave="hoveredNodeKey = null"
@@ -203,48 +209,64 @@ const DIM_CONFIG: Array<{
   label: string
   tip: string
   icon: string
+  hue: number
+  chromaScale: number
 }> = [
   {
     key: 'knowledge_level',
     label: '知识基础',
     tip: '已有知识储备与课程基础水平',
-    icon: '基'
+    icon: '基',
+    hue: 250,
+    chromaScale: 1
   },
   {
     key: 'cognitive_style',
     label: '认知风格',
     tip: '更适合的理解方式与讲解方式',
-    icon: '认'
+    icon: '认',
+    hue: 300,
+    chromaScale: 1
   },
   {
     key: 'weak_knowledge_points',
     label: '易错偏好',
     tip: '高频错误、薄弱概念与失分类型',
-    icon: '错'
+    icon: '错',
+    hue: 45,
+    chromaScale: 1
   },
   {
     key: 'knowledge_gap_pattern',
     label: '缺口模式',
     tip: '知识结构中的断点与前置缺失',
-    icon: '缺'
+    icon: '缺',
+    hue: 15,
+    chromaScale: 1
   },
   {
     key: 'learning_goal_type',
     label: '目标导向',
     tip: '应试、实践、项目或系统掌握倾向',
-    icon: '目'
+    icon: '目',
+    hue: 160,
+    chromaScale: 1
   },
   {
     key: 'difficulty_tolerance',
     label: '难度耐受',
     tip: '可承受的学习坡度与题目难度',
-    icon: '难'
+    icon: '难',
+    hue: 240,
+    chromaScale: 0.6
   },
   {
     key: 'self_correction_ability',
     label: '自纠能力',
     tip: '发现问题、复盘问题和修正问题的能力',
-    icon: '纠'
+    icon: '纠',
+    hue: 135,
+    chromaScale: 1
   }
 ]
 
@@ -265,6 +287,8 @@ const dimensionCards = computed(() => {
       label: config.label,
       tip: config.tip,
       icon: config.icon,
+      hue: config.hue,
+      chromaScale: config.chromaScale,
       value: dimensionValue.value || '',
       evidence: dimensionValue.evidence || []
     }
@@ -425,7 +449,6 @@ watch(profileRefreshTrigger, () => {
   overflow: hidden;
 
   background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
 }
@@ -472,9 +495,8 @@ watch(profileRefreshTrigger, () => {
   overflow: hidden;
 
   background: rgba(255, 255, 255, 0.84);
-  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
 }
 
 .floating-close-btn {
@@ -497,23 +519,20 @@ watch(profileRefreshTrigger, () => {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
 
-  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
 
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
 
   transition:
     color var(--transition-fast),
     background var(--transition-fast),
-    border-color var(--transition-fast),
     box-shadow var(--transition-fast);
 }
 
 .floating-close-btn:hover {
   color: var(--color-text-strong);
   background: var(--color-surface);
-  border-color: var(--color-border-hover);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .floating-close-btn:focus-visible {
@@ -615,12 +634,12 @@ watch(profileRefreshTrigger, () => {
 }
 
 .connection-line.is-active {
-  stroke: var(--color-primary);
+  stroke: oklch(62% calc(0.16 * var(--node-chroma, 1)) var(--node-hue));
   opacity: 0.85;
 }
 
 .connection-line.is-growing {
-  stroke: var(--color-primary);
+  stroke: oklch(62% calc(0.16 * var(--node-chroma, 1)) var(--node-hue));
   opacity: 0.48;
 }
 
@@ -636,7 +655,7 @@ watch(profileRefreshTrigger, () => {
   left: 50%;
   z-index: 1;
 
-  border: 1px solid var(--color-border-light);
+  border: 1px solid rgba(32, 95, 103, 0.04);
   border-radius: 50%;
 
   transform: translate(-50%, -50%);
@@ -696,7 +715,6 @@ watch(profileRefreshTrigger, () => {
       transparent 72%
     );
 
-  border: 1px solid var(--color-primary-border);
   border-radius: 50%;
 
   animation: auraPulse 3.8s ease-in-out infinite;
@@ -731,8 +749,8 @@ watch(profileRefreshTrigger, () => {
       var(--color-primary-soft)
     );
 
-  border: 1px solid var(--color-primary-border);
   border-radius: 24px 24px 28px 28px;
+  box-shadow: 0 4px 12px rgba(32, 95, 103, 0.08);
 }
 
 .avatar-neck {
@@ -742,9 +760,6 @@ watch(profileRefreshTrigger, () => {
   margin-top: -2px;
 
   background: var(--color-surface);
-
-  border-right: 1px solid var(--color-primary-border);
-  border-left: 1px solid var(--color-primary-border);
 }
 
 .avatar-body {
@@ -768,8 +783,8 @@ watch(profileRefreshTrigger, () => {
       var(--color-bg)
     );
 
-  border: 1px solid var(--color-border-light);
   border-radius: 34px 34px 24px 24px;
+  box-shadow: 0 -4px 16px rgba(32, 95, 103, 0.05);
 }
 
 .avatar-body span {
@@ -812,10 +827,9 @@ watch(profileRefreshTrigger, () => {
 
   background: rgba(255, 255, 255, 0.88);
 
-  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-pill);
 
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
 
   transform: translateX(-50%);
 }
@@ -842,6 +856,12 @@ watch(profileRefreshTrigger, () => {
 }
 
 .dimension-node {
+  /* Define local dimension colors based on dynamic hue */
+  --n-primary: oklch(62% calc(0.16 * var(--node-chroma, 1)) var(--node-hue));
+  --n-soft: oklch(96% calc(0.04 * var(--node-chroma, 1)) var(--node-hue));
+  --n-border: oklch(88% calc(0.08 * var(--node-chroma, 1)) var(--node-hue));
+  --n-text: oklch(45% calc(0.12 * var(--node-chroma, 1)) var(--node-hue));
+
   position: absolute;
 
   top: var(--y);
@@ -875,7 +895,6 @@ watch(profileRefreshTrigger, () => {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
 
-  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
 
   box-shadow:
@@ -884,13 +903,11 @@ watch(profileRefreshTrigger, () => {
 
   transition:
     transform var(--transition-fast),
-    border-color var(--transition-fast),
     box-shadow var(--transition-fast);
 }
 
 .dimension-node:hover .node-card {
-  border-color: var(--color-primary-border);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 14px 32px oklch(45% calc(0.1 * var(--node-chroma, 1)) var(--node-hue) / 16%);
 
   transform: translateY(-3px);
 }
@@ -909,20 +926,21 @@ watch(profileRefreshTrigger, () => {
 
   background: var(--color-bg);
 
-  border: 1px solid var(--color-border-light);
   border-radius: 16px;
+
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .is-active .node-icon {
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary-border);
+  color: var(--n-text);
+  background: var(--n-soft);
 }
 
 .is-growing .node-icon {
-  color: var(--color-primary-text);
+  color: var(--n-text);
   background: rgba(255, 255, 255, 0.9);
-  border-color: var(--color-primary-border);
 }
 
 .node-info {
@@ -979,13 +997,14 @@ watch(profileRefreshTrigger, () => {
 }
 
 .is-active .node-status {
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
+  color: var(--n-text);
+  background: var(--n-soft);
 }
 
 .is-growing .node-status {
-  color: var(--color-primary-text);
-  background: rgba(70, 184, 180, 0.12);
+  color: var(--n-text);
+  background: var(--n-soft);
+  opacity: 0.85;
 }
 
 .node-popup {
@@ -1000,12 +1019,11 @@ watch(profileRefreshTrigger, () => {
 
   background: var(--color-surface);
 
-  border: 1px solid var(--color-primary-border);
   border-radius: var(--radius-lg);
 
   box-shadow:
     0 18px 48px
-    rgba(32, 95, 103, 0.16);
+    oklch(45% calc(0.1 * var(--node-chroma, 1)) var(--node-hue) / 16%);
 }
 
 /* 连接节点和详情框之间的透明悬浮区域，避免鼠标移动时弹层消失 */
@@ -1085,8 +1103,6 @@ watch(profileRefreshTrigger, () => {
   gap: 18px;
 
   padding-bottom: 14px;
-
-  border-bottom: 1px solid var(--color-border-light);
 }
 
 .popup-title strong {

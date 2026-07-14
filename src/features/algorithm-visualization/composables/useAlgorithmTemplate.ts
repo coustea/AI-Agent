@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { fetchAlgorithms, fetchLanguages, fetchTemplate } from '@/features/algorithm-visualization/api/algorithmVisualizer'
 import type {
@@ -17,6 +17,7 @@ export function useAlgorithmTemplate() {
   const code = ref('')
   const templateData = ref<TemplateData | null>(null)
   const loading = ref(false)
+  const templateVersion = ref(0)
 
   // 语言列表、算法列表、元数据加载状态、当前算法对象（根据 algorithm key 计算）
   const languages = ref<LanguageInfo[]>([])
@@ -75,6 +76,7 @@ export function useAlgorithmTemplate() {
       if (mySeq !== _loadSeq) return
       templateData.value = resp.data.data
       code.value = templateData.value?.templateCode ?? ''
+      templateVersion.value += 1
     } catch {
       if (mySeq !== _loadSeq) return
       toast.error('加载模板失败')
@@ -85,28 +87,32 @@ export function useAlgorithmTemplate() {
     }
   }
 
-  // 算法或语言切换时，自动规范化选择并重新加载模板
-  watch([algorithm, language], () => {
-    if (!algorithms.value.length) return
-    if (normalizeSelection()) return
-    loadTemplate()
-  })
-
-  // 设置当前算法，同时确保语言与算法兼容
-  function setAlgorithm(nextAlgorithm: string) {
+  // 设置当前算法并加载模板。选择和源码同步必须处于同一显式流程，
+  // 不能依赖 watch 的异步调度，否则编辑器可能显示上一次模板的源码。
+  async function setAlgorithm(nextAlgorithm: string) {
     const selected = algorithms.value.find((item) => item.key === nextAlgorithm)
-    if (!selected) return
+    if (!selected) return false
 
     algorithm.value = selected.key
 
     if (selected.supportedLanguages.length && !selected.supportedLanguages.includes(language.value)) {
       language.value = selected.supportedLanguages[0]!
     }
+
+    await loadTemplate()
+    return true
+  }
+
+  // 语言切换也必须同步刷新当前模板源码。
+  async function setLanguage(nextLanguage: CodeLanguage) {
+    if (language.value === nextLanguage) return
+    language.value = nextLanguage
+    await loadTemplate()
   }
 
   // 重置模板为当前算法+语言的初始代码
   function resetTemplate() {
-    loadTemplate()
+    return loadTemplate()
   }
 
   // 获取当前算法信息
@@ -124,6 +130,7 @@ export function useAlgorithmTemplate() {
     algorithm,
     code,
     templateData,
+    templateVersion,
     loading,
     languages,
     algorithms,
@@ -133,6 +140,7 @@ export function useAlgorithmTemplate() {
     loadTemplate,
     resetTemplate,
     setAlgorithm,
+    setLanguage,
     normalizeSelection,
     getCurrentAlgorithmInfo,
     getCurrentVisualizerType,

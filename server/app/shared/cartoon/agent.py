@@ -17,6 +17,7 @@ from app.shared.cartoon.compiler import (
 )
 from app.shared.cartoon.planner import (
     CartoonLessonPlanner,
+    build_composition_plan,
 )
 from app.shared.cartoon.renderer import (
     CartoonVideoRenderer,
@@ -25,10 +26,6 @@ from app.shared.cartoon.schemas import (
     AudioSynthesis,
     CartoonBrief,
     TeachingLesson,
-    collect_lesson_motion_problems,
-)
-from app.shared.cartoon.timeline import (
-    build_composition_plan,
 )
 from app.shared.cartoon.tts import (
     CartoonTtsService,
@@ -138,7 +135,7 @@ class CartoonVideoAgent:
 
         audit: dict[str, Any] = {
             "schema_version": (
-                "cartoon/audit-v4"
+                "cartoon/audit-v6"
             ),
             "passed": False,
             "composition_id": (
@@ -151,22 +148,6 @@ class CartoonVideoAgent:
             lesson = await self._plan(
                 brief
             )
-
-            motion_problems = (
-                collect_lesson_motion_problems(
-                    lesson
-                )
-            )
-
-            if motion_problems:
-                raise CartoonGenerationError(
-                    "教学动画规划未通过"
-                    "语义动作校验",
-                    stage="planning",
-                    problems=(
-                        motion_problems
-                    ),
-                )
 
             audit["stages"][
                 "planning"
@@ -182,9 +163,9 @@ class CartoonVideoAgent:
                     for scene
                     in lesson.scenes
                 ),
-                "semantic_action_count": sum(
+                "semantic_motion_count": sum(
                     len(
-                        step.actions
+                        step.motions
                     )
                     for scene
                     in lesson.scenes
@@ -205,6 +186,18 @@ class CartoonVideoAgent:
                 )
             )
 
+            providers = {
+                item.provider
+                for item in audio.values()
+            }
+
+            if len(providers) != 1:
+                raise CartoonGenerationError(
+                    "同一教学视频必须使用统一的旁白提供方",
+                    stage="speech",
+                    problems=sorted(providers),
+                )
+
             audit["stages"][
                 "speech"
             ] = {
@@ -212,13 +205,8 @@ class CartoonVideoAgent:
                 "step_count": len(
                     audio
                 ),
-                "provider_count": len(
-                    {
-                        item.provider
-                        for item
-                        in audio.values()
-                    }
-                ),
+                "provider": next(iter(providers)),
+                "target_lufs": -16,
             }
 
             current_stage = (
@@ -235,10 +223,6 @@ class CartoonVideoAgent:
                     pace=(
                         brief.configuration.pace
                     ),
-                    visual_density=(
-                        brief.configuration
-                        .visual_density
-                    ),
                     target_duration_seconds=(
                         brief.configuration
                         .target_duration_seconds
@@ -253,18 +237,9 @@ class CartoonVideoAgent:
                 "duration_ms": (
                     plan.total_duration_ms
                 ),
-                "timed_action_count": sum(
+                "timed_motion_count": sum(
                     len(
-                        step.actions
-                    )
-                    for scene
-                    in plan.scenes
-                    for step
-                    in scene.steps
-                ),
-                "timed_patch_count": sum(
-                    len(
-                        step.patches
+                        step.motions
                     )
                     for scene
                     in plan.scenes
@@ -281,29 +256,17 @@ class CartoonVideoAgent:
                 output_dir
             )
 
-            (
-                html_path,
-                template,
-            ) = self.compiler.write(
+            html_path = self.compiler.write(
                 lesson,
                 plan,
                 output_dir,
-                (
-                    brief.configuration
-                    .template_id
-                ),
             )
 
             audit["stages"][
                 "compile"
             ] = {
                 "passed": True,
-                "template": {
-                    "id": template.id,
-                    "version": (
-                        template.version
-                    ),
-                },
+                "engine": "hyperframes-html-v6",
             }
 
             current_stage = (

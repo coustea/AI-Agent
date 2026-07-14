@@ -171,6 +171,7 @@
                 :key="action.label"
                 type="button"
                 class="quick-entry-item"
+                :style="getQuickActionStyle(action.icon)"
                 @click="goTo(action.path)"
             >
               <span
@@ -238,7 +239,7 @@
                   <div
                       v-for="resource in paginatedResources"
                       :key="resource.id"
-                      class="history-item flex items-center justify-between py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200 cursor-pointer"
+                      class="history-item flex items-center justify-between py-3.5 hover:bg-slate-50 px-3 rounded-lg transition-all duration-200 cursor-pointer"
                       @click="goTo(resource.path)"
                   >
                     <div
@@ -365,7 +366,7 @@
                   <div
                       v-for="path in paginatedPaths"
                       :key="path.id"
-                      class="history-item flex flex-col py-3 hover:bg-slate-55/65 px-2 rounded-xl transition-all duration-200"
+                      class="history-item flex flex-col py-3.5 hover:bg-slate-50 px-3 rounded-lg transition-all duration-200"
                   >
                     <div class="flex items-start justify-between gap-4">
                       <div class="space-y-1.5 text-left min-w-0 flex-1">
@@ -386,8 +387,9 @@
                       </div>
 
                       <Button
+                          variant="outline"
                           size="sm"
-                          class="text-[10px] h-7 px-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl border-none cursor-pointer"
+                          class="text-[10px] h-6 px-2.5 bg-white text-slate-600 hover:text-teal-700 hover:bg-teal-50 border-slate-200 hover:border-teal-200 rounded-md shadow-sm transition-colors cursor-pointer"
                           @click="goTo(path.path)"
                       >
                         继续学习
@@ -403,7 +405,7 @@
                       </div>
 
                       <div
-                          class="w-full h-1 bg-slate-200/70 rounded-full overflow-hidden"
+                          class="w-full h-[2px] bg-slate-200/70 rounded-full overflow-hidden"
                       >
                         <div
                             class="h-full bg-teal-500 rounded-full transition-all duration-500"
@@ -647,6 +649,20 @@ const getIconComponent = (iconName: string) => {
     default:
       return DocumentCopy
   }
+}
+
+const getQuickActionStyle = (iconName: string) => {
+  const styles: Record<string, any> = {
+    chat: { '--qe-color': '#2563EB', '--qe-bg': '#EFF6FF', '--qe-border': '#BFDBFE', '--qe-hover': '#1D4ED8' },
+    resource: { '--qe-color': '#4F46E5', '--qe-bg': '#EEF2FF', '--qe-border': '#C7D2FE', '--qe-hover': '#4338CA' },
+    path: { '--qe-color': '#059669', '--qe-bg': '#ECFDF5', '--qe-border': '#A7F3D0', '--qe-hover': '#047857' },
+    practice: { '--qe-color': '#D97706', '--qe-bg': '#FFFBEB', '--qe-border': '#FDE68A', '--qe-hover': '#B45309' },
+    monitor: { '--qe-color': '#E11D48', '--qe-bg': '#FFF1F2', '--qe-border': '#FECDD3', '--qe-hover': '#BE123C' },
+    assessment: { '--qe-color': '#9333EA', '--qe-bg': '#FAF5FF', '--qe-border': '#E9D5FF', '--qe-hover': '#7E22CE' },
+    reading: { '--qe-color': '#0284C7', '--qe-bg': '#F0F9FF', '--qe-border': '#BAE6FD', '--qe-hover': '#0369A1' },
+    default: { '--qe-color': '#0D9488', '--qe-bg': '#F0FDFA', '--qe-border': '#99F6E4', '--qe-hover': '#0F766E' }
+  }
+  return styles[iconName] || styles.default
 }
 
 const clampPercent = (
@@ -1227,11 +1243,8 @@ onUnmounted(() => {
 
 .quick-entry-item:hover,
 .quick-entry-item:focus-visible {
-  background:
-      rgba(240, 253, 250, 0.72);
-  box-shadow:
-      inset 0 -2px 0
-      rgba(13, 148, 136, 0.78);
+  background: var(--qe-bg);
+  box-shadow: inset 0 -2px 0 var(--qe-hover);
   outline: none;
 }
 
@@ -1241,24 +1254,17 @@ onUnmounted(() => {
   height: 38px;
   align-items: center;
   justify-content: center;
-  border: 1px solid
-  rgba(153, 246, 228, 0.72);
+  border: 1px solid var(--qe-border);
   border-radius: 9px;
-  background:
-      rgba(240, 253, 250, 0.88);
-  color: #0f766e;
-  transition:
-      border-color 180ms ease,
-      background-color 180ms ease,
-      color 180ms ease;
+  background: var(--qe-bg);
+  color: var(--qe-color);
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease;
 }
 
-.quick-entry-item:hover
-.quick-entry-icon,
-.quick-entry-item:focus-visible
-.quick-entry-icon {
-  border-color: #0d9488;
-  background: #0d9488;
+.quick-entry-item:hover .quick-entry-icon,
+.quick-entry-item:focus-visible .quick-entry-icon {
+  border-color: var(--qe-hover);
+  background: var(--qe-hover);
   color: #ffffff;
 }
 
@@ -1295,16 +1301,12 @@ onUnmounted(() => {
   width: 15px;
   height: 15px;
   color: #cbd5e1;
-  transition:
-      color 180ms ease,
-      transform 180ms ease;
+  transition: color 180ms ease, transform 180ms ease;
 }
 
-.quick-entry-item:hover
-.quick-entry-arrow,
-.quick-entry-item:focus-visible
-.quick-entry-arrow {
-  color: #0d9488;
+.quick-entry-item:hover .quick-entry-arrow,
+.quick-entry-item:focus-visible .quick-entry-arrow {
+  color: var(--qe-hover);
   transform: translateX(2px);
 }
 

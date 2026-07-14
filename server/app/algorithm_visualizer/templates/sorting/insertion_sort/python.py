@@ -1,39 +1,11 @@
-def binary_insertion_sort(arr):
-    n = len(arr)
-    for i in range(1, n):
-        key = arr[i]
-        lo, hi = 0, i
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if arr[mid] <= key:
-                lo = mid + 1
-            else:
-                hi = mid
-        for j in range(i, lo, -1):
-            arr[j] = arr[j - 1]
-        arr[lo] = key
-    return arr
-
-# 定义 insertion_sort 函数
 def insertion_sort(arr):
-    n = len(arr)
-    for i in range(1, n):
-        key = arr[i]
-        j = i - 1
-        while j >= 0 and key < arr[j]:
-            arr[j + 1] = arr[j]
-            j -= 1
-        arr[j + 1] = key
-    return arr
-
-# 定义 shell_insertion 函数
-def shell_insertion(arr, gap):
-    n = len(arr)
-    for i in range(gap, n):
-        key = arr[i]
-        j = i
-        while j >= gap and arr[j - gap] > key:
-            arr[j] = arr[j - gap]
-            j -= gap
-        arr[j] = key
-    return arr
+    """插入排序：将当前元素插入左侧有序区间。"""
+    nums = list(arr)
+    for index in range(1, len(nums)):
+        value = nums[index]
+        position = index - 1
+        while position >= 0 and nums[position] > value:
+            nums[position + 1] = nums[position]
+            position -= 1
+        nums[position + 1] = value
+    return nums

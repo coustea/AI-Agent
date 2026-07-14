@@ -2,9 +2,9 @@
   <Dialog v-model:open="openModel">
     <DialogContent class="run-error-dialog">
       <DialogHeader>
-        <DialogTitle>运行失败</DialogTitle>
+        <DialogTitle>{{ dialogTitle }}</DialogTitle>
         <DialogDescription>
-          代码没有生成可视化轨迹，请检查错误信息后再运行。
+          {{ dialogDescription }}
         </DialogDescription>
       </DialogHeader>
 
@@ -13,10 +13,13 @@
         class="error-body"
       >
         <div class="error-message">{{ error.message }}</div>
-        <pre
+        <details
           v-if="error.details"
           class="error-details"
-        >{{ error.details }}</pre>
+        >
+          <summary>查看技术详情</summary>
+          <pre>{{ error.details }}</pre>
+        </details>
       </div>
 
       <DialogFooter>
@@ -53,6 +56,16 @@ const openModel = computed({
   get: () => props.open,
   set: (value: boolean) => emit('update:open', value),
 })
+
+const dialogTitle = computed(() => {
+  return props.error?.errorType === 'INPUT_INVALID' ? '请检查运行数据' : '暂时无法运行可视化'
+})
+
+const dialogDescription = computed(() => {
+  return props.error?.errorType === 'INPUT_INVALID'
+    ? '修正输入内容后，再点击“运行可视化”。'
+    : '请根据提示调整后重试；技术详情仅在需要排查时查看。'
+})
 </script>
 
 <style scoped>
@@ -79,9 +92,22 @@ const openModel = computed({
 }
 
 .error-details {
-  max-height: 260px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.error-details summary {
+  cursor: pointer;
+  color: var(--color-primary-text);
+  font-weight: 800;
+}
+
+.error-details pre {
+  max-height: 220px;
   margin: 0;
   overflow: auto;
+  margin-top: 8px;
   padding: 12px;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);

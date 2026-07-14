@@ -14,6 +14,7 @@ from app.infra.database import session_scope
 from app.infra.logging import get_module_logger
 from app.resource.event import ResourceEvents
 from app.resource.service import ResourceService
+from app.resource.status import ResourceLifecycleStatus
 from app.resource.workflow import build_parent_graph
 from app.resource.workflow.state import ParentState
 
@@ -69,20 +70,20 @@ async def run_multi_agent_generation(
         # 读取工作流终态是否成功
         success = bool(final_state.get("success", False))
 
-        final_status = "completed"
+        final_status = ResourceLifecycleStatus.COMPLETED
         if not success:
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             logger.warning(
                 "LangGraph 未产生成功终态: resource_id=%s elapsed_ms=%d",
                 resource_id, elapsed_ms,
             )
-            final_status = "failed"
+            final_status = ResourceLifecycleStatus.FAILED
         else:
             async with session_scope() as session:
                 service = ResourceService(session)
                 resource = await service.get_resource(user_id, resource_id)
                 if resource is not None:
-                    final_status = resource.status
+                    final_status = ResourceLifecycleStatus(resource.status)
 
         # 根据成败发送全局终态事件
         if success:

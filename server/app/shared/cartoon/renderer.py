@@ -246,7 +246,19 @@ class CartoonVideoRenderer:
             )
         )
 
+        normalized_path = (
+            output_dir
+            / (
+                f".{video_path.stem}"
+                ".normalized.mp4"
+            )
+        )
+
         temporary_path.unlink(
+            missing_ok=True
+        )
+
+        normalized_path.unlink(
             missing_ok=True
         )
 
@@ -342,9 +354,16 @@ class CartoonVideoRenderer:
                 "MP4 文件异常为空"
             )
 
-        temporary_path.replace(
-            video_path
+        await self._normalize_audio(
+            temporary_path,
+            normalized_path,
         )
+
+        temporary_path.unlink(
+            missing_ok=True
+        )
+
+        normalized_path.replace(video_path)
 
         media = await self._probe_media(
             video_path
@@ -482,6 +501,58 @@ class CartoonVideoRenderer:
                 for stream in streams
             ),
         )
+
+    async def _normalize_audio(
+        self,
+        source_path: Path,
+        output_path: Path,
+    ) -> None:
+        """Apply one loudness target to the finished mix without re-encoding video."""
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise RuntimeError("ffmpeg 未安装，无法规范动画讲解音频响度")
+
+        process = await asyncio.create_subprocess_exec(
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source_path),
+            "-map",
+            "0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=7",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            _, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=self.probe_timeout_seconds + 120,
+            )
+        except TimeoutError as exc:
+            process.kill()
+            await process.communicate()
+            raise RuntimeError("动画讲解音频响度规范超时") from exc
+
+        if process.returncode != 0 or not output_path.is_file() or output_path.stat().st_size <= 1024:
+            output_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                "动画讲解音频响度规范失败: "
+                f"{stderr.decode(errors='replace')[:500]}"
+            )
 
     def _render_command(
         self,

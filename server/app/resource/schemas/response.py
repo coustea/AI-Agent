@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.resource.schemas.request import ResourceAgentId
+from app.resource.status import ResourceLifecycleStatus
 
 
 class GeneratedResourceItem(BaseModel):
@@ -29,7 +30,7 @@ class ResourceStatusSnapshot(BaseModel):
     """SSE/轮询状态接口返回的轻量任务快照。"""
     resource_id: int
     learning_need: str = ""
-    status: str
+    status: ResourceLifecycleStatus
     selected_agents: list[str] = Field(default_factory=list)
     agent_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
     current_message: str = ""
@@ -45,8 +46,7 @@ class ResourceBundle(BaseModel):
     selected_agents: list[str] = Field(default_factory=list)
     plan: dict[str, Any] | None = None
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    status: str = "completed"
+    status: ResourceLifecycleStatus = ResourceLifecycleStatus.COMPLETED
     created_at: str  # 总是由 service 显式设置，无默认值
     updated_at: str  # 总是由 service 显式设置，无默认值
     metadata: dict[str, Any] = Field(default_factory=dict)
-

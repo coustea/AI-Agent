@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -23,6 +23,16 @@ class SceneLayout(StrEnum):
     CODE_STUDIO = "code_studio"
     FORMULA_LAB = "formula_lab"
     RECAP = "recap"
+
+
+class TeachingFunction(StrEnum):
+    """The teaching job of a scene in a computer-science explainer."""
+
+    ORIENT = "orient"
+    MODEL = "model"
+    TRACE = "trace"
+    COMPARE = "compare"
+    CONSOLIDATE = "consolidate"
 
 
 class VisualKind(StrEnum):
@@ -140,8 +150,8 @@ class CartoonGenerationConfig(BaseModel):
 class CartoonBrief(BaseModel):
     model_config = ConfigDict(extra="forbid")
     learning_need: str = Field(min_length=1, max_length=500)
-    teaching_plan: str = Field(default="", max_length=12000)
-    tutorial_markdown: str = Field(default="", max_length=30000)
+    instruction_context: dict[str, Any] = Field(default_factory=dict)
+    source_materials: list[str] = Field(default_factory=list, max_length=12)
     knowledge_points: list[str] = Field(default_factory=list, max_length=30)
     weak_knowledge_points: list[str] = Field(default_factory=list, max_length=20)
     configuration: CartoonGenerationConfig = Field(default_factory=CartoonGenerationConfig)
@@ -152,6 +162,7 @@ class StoryboardScene(BaseModel):
     id: str = Field(min_length=1, max_length=48)
     title: str = Field(min_length=1, max_length=54)
     objective: str = Field(min_length=1, max_length=110)
+    teaching_function: TeachingFunction
     layout: SceneLayout
     visual_kind: VisualKind
 
@@ -171,7 +182,7 @@ class CartoonStoryboard(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=72)
     course: str = Field(default="计算机科学", min_length=1, max_length=40)
-    scenes: list[StoryboardScene] = Field(min_length=4, max_length=6)
+    scenes: list[StoryboardScene] = Field(min_length=5, max_length=6)
 
     @model_validator(mode="after")
     def unique_scenes(self) -> "CartoonStoryboard":
@@ -179,6 +190,14 @@ class CartoonStoryboard(BaseModel):
             raise ValueError("storyboard contains duplicate scene ids")
         if self.scenes[0].layout != SceneLayout.HERO or self.scenes[-1].layout != SceneLayout.RECAP:
             raise ValueError("storyboard must begin with hero and end with recap")
+        if self.scenes[0].teaching_function != TeachingFunction.ORIENT:
+            raise ValueError("storyboard must begin with an orient scene")
+        if self.scenes[-1].teaching_function != TeachingFunction.CONSOLIDATE:
+            raise ValueError("storyboard must end with a consolidate scene")
+        required = {TeachingFunction.MODEL, TeachingFunction.TRACE, TeachingFunction.COMPARE}
+        actual = {scene.teaching_function for scene in self.scenes}
+        if not required <= actual:
+            raise ValueError("storyboard must include model, trace, and compare scenes")
         return self
 
 
@@ -246,8 +265,10 @@ class VisualState(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=48)
+    annotation: str = Field(min_length=1, max_length=72)
     items: list[VisualStateItem] = Field(min_length=1, max_length=MAX_SCENE_VISUAL_ITEMS)
     edges: list[VisualEdge] = Field(default_factory=list, max_length=MAX_SCENE_VISUAL_ITEMS * 2)
+    focus_item_ids: list[str] = Field(min_length=1, max_length=MAX_SCENE_VISUAL_ITEMS)
 
     @field_validator("id")
     @classmethod
@@ -258,6 +279,9 @@ class VisualState(BaseModel):
     def unique_items(self) -> "VisualState":
         if len({item.id for item in self.items}) != len(self.items):
             raise ValueError("visual state contains duplicate item ids")
+        item_ids = {item.id for item in self.items}
+        if not set(self.focus_item_ids) <= item_ids:
+            raise ValueError("visual state focus references an invisible item")
         return self
 
 
@@ -291,23 +315,40 @@ class SceneVisual(BaseModel):
         if self.states and self.edges:
             raise ValueError("dynamic visual must define edges only inside states")
         if self.states:
+            if self.kind in _CONNECTED_VISUAL_KINDS and len(self.states) < 3:
+                raise ValueError(f"dynamic {self.kind.value} visual requires initial, mechanism, and result states")
             for state in self.states:
                 state_item_ids = {item.id for item in state.items}
                 if not state_item_ids <= item_ids:
                     raise ValueError(f"visual state {state.id} references unknown items")
-                self._validate_edges(state_item_ids, state.edges)
+                # A snapshot can legitimately be an unconnected initial or
+                # transitional state. Relationship integrity belongs to the
+                # dynamic sequence as a whole, not every individual frame.
+                self._validate_edges(state_item_ids, state.edges, require_relationship=False)
+            if (
+                self.kind in _CONNECTED_VISUAL_KINDS
+                and len(item_ids) > 1
+                and not any(state.edges for state in self.states)
+            ):
+                raise ValueError(f"dynamic {self.kind.value} visual requires relationships across its states")
         else:
-            self._validate_edges(item_ids, self.edges)
+            self._validate_edges(item_ids, self.edges, require_relationship=True)
         return self
 
-    def _validate_edges(self, item_ids: set[str], edges: list[VisualEdge]) -> None:
+    def _validate_edges(
+        self,
+        item_ids: set[str],
+        edges: list[VisualEdge],
+        *,
+        require_relationship: bool,
+    ) -> None:
         pairs = {(edge.source_id, edge.target_id) for edge in edges}
         if len(pairs) != len(edges):
             raise ValueError("visual contains duplicate edge endpoints")
         invalid_edges = [edge.id for edge in edges if edge.source_id not in item_ids or edge.target_id not in item_ids or edge.source_id == edge.target_id]
         if invalid_edges:
             raise ValueError(f"visual contains invalid edges: {sorted(invalid_edges)}")
-        if self.kind in {VisualKind.MODEL, VisualKind.TREE, VisualKind.FLOW, VisualKind.STATE, VisualKind.NETWORK} and len(item_ids) > 1 and not edges:
+        if require_relationship and self.kind in _CONNECTED_VISUAL_KINDS and len(item_ids) > 1 and not edges:
             raise ValueError(f"{self.kind.value} visual requires edges")
         if self.kind == VisualKind.TREE:
             self._validate_tree(item_ids, edges)
@@ -343,6 +384,7 @@ class MotionBeat(BaseModel):
     # A motion can address the whole visual. This must stay aligned with
     # SceneVisual.items because the compiler accepts every referenced target.
     target_ids: list[str] = Field(min_length=1, max_length=MAX_SCENE_VISUAL_ITEMS)
+    path_ids: list[str] = Field(default_factory=list, max_length=MAX_SCENE_VISUAL_ITEMS)
     duration_ms: int = Field(default=700, ge=240, le=2200)
 
     @field_validator("target_ids")
@@ -352,6 +394,20 @@ class MotionBeat(BaseModel):
         if len(normalized) != len(set(normalized)):
             raise ValueError("motion beat contains duplicate targets")
         return normalized
+
+    @field_validator("path_ids")
+    @classmethod
+    def normalize_path(cls, values: list[str]) -> list[str]:
+        return [_id(value, "item") for value in values]
+
+    @model_validator(mode="after")
+    def validate_path(self) -> "MotionBeat":
+        if self.kind in {MotionKind.TRANSFER, MotionKind.TRAVERSE}:
+            if len(self.path_ids) < 2:
+                raise ValueError(f"{self.kind.value} motion requires a path with at least two objects")
+        elif self.path_ids:
+            raise ValueError("only transfer and traverse motions may declare path_ids")
+        return self
 
 
 class TeachingStep(BaseModel):
@@ -378,6 +434,7 @@ class TeachingScene(BaseModel):
     id: str = Field(min_length=1, max_length=48)
     title: str = Field(min_length=1, max_length=54)
     objective: str = Field(min_length=1, max_length=110)
+    teaching_function: TeachingFunction
     layout: SceneLayout
     visual: SceneVisual
     steps: list[TeachingStep] = Field(min_length=2, max_length=4)
@@ -396,6 +453,15 @@ class TeachingScene(BaseModel):
         unknown = {target for step in self.steps for motion in step.motions for target in motion.target_ids if target not in known}
         if unknown:
             raise ValueError(f"motion references unknown items: {sorted(unknown)}")
+        unknown_paths = {
+            target
+            for step in self.steps
+            for motion in step.motions
+            for target in motion.path_ids
+            if target not in known
+        }
+        if unknown_paths:
+            raise ValueError(f"motion path references unknown items: {sorted(unknown_paths)}")
         state_ids = {state.id for state in self.visual.states}
         referenced_states = {step.state_id for step in self.steps if step.state_id}
         if referenced_states - state_ids:
@@ -404,6 +470,8 @@ class TeachingScene(BaseModel):
             raise ValueError("dynamic visual requires every teaching step to declare state_id")
         if not state_ids and referenced_states:
             raise ValueError("static visual cannot declare state_id")
+        if state_ids and len(self.steps) < 3:
+            raise ValueError("dynamic visual requires at least three teaching steps")
         return self
 
 
@@ -411,7 +479,7 @@ class TeachingLesson(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=72)
     course: str = Field(default="计算机科学", min_length=1, max_length=40)
-    scenes: list[TeachingScene] = Field(min_length=4, max_length=6)
+    scenes: list[TeachingScene] = Field(min_length=5, max_length=6)
 
     @model_validator(mode="after")
     def validate_lesson(self) -> "TeachingLesson":
@@ -424,8 +492,12 @@ class TeachingLesson(BaseModel):
             for scene in self.scenes
             if scene.visual.kind in _CONNECTED_VISUAL_KINDS and scene.visual.states
         ]
-        if len(animated_models) < 2:
-            raise ValueError("lesson needs at least two animated knowledge-model scenes")
+        if len(animated_models) < 3:
+            raise ValueError("lesson needs at least three animated knowledge-model scenes")
+        functions = {scene.teaching_function for scene in self.scenes}
+        required = {TeachingFunction.ORIENT, TeachingFunction.MODEL, TeachingFunction.TRACE, TeachingFunction.COMPARE, TeachingFunction.CONSOLIDATE}
+        if not required <= functions:
+            raise ValueError("lesson must cover orient, model, trace, compare, and consolidate teaching functions")
         return self
 
 

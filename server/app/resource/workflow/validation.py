@@ -187,8 +187,8 @@ def validate_cartoon(result: "AgentResult", input_data: "ResourceInput") -> None
         raise ValidationError(f"Cartoon JSON parse error: {exc}") from exc
 
     # 逐项校验动画产物契约
-    if not isinstance(data, dict) or data.get("schema_version") != "cartoon/v1":
-        raise ValidationError("Cartoon must use the cartoon/v1 schema")
+    if not isinstance(data, dict) or data.get("schema_version") != "cartoon/v6":
+        raise ValidationError("Cartoon must use the cartoon/v6 schema")
     if not str(data.get("video_url", "")).endswith(".mp4"):
         raise ValidationError("Cartoon must expose an MP4 video_url")
     if float(data.get("duration_seconds", 0)) <= 0:

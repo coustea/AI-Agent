@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -107,7 +108,10 @@ class CartoonLessonPlanner:
             scenes = [task.result() for task in scene_tasks]
             return TeachingLesson(title=storyboard.title, course=storyboard.course, scenes=scenes)
         except Exception as exc:
-            raise CartoonPlanningError(f"无法生成可渲染的动画教学分镜: {exc}") from exc
+            details = self._exception_details(exc)
+            raise CartoonPlanningError(
+                "无法生成可渲染的动画教学分镜: " + " | ".join(details)
+            ) from exc
 
     async def _create_storyboard(self, brief: CartoonBrief) -> CartoonStoryboard:
         prompt = self._prompts["storyboard.md"].render({
@@ -118,7 +122,13 @@ class CartoonLessonPlanner:
             "connected_visual_kinds": connected_visual_kind_values(),
             "source": self._source(brief, 12000),
         })
-        response = await get_llm().ainvoke_json(CartoonStoryboard, [SystemMessage(content=prompt), HumanMessage(content="根据素材生成整套动画分镜。")], temperature=0.22, max_tokens=2200)
+        response = await self._invoke_json(
+            CartoonStoryboard,
+            [SystemMessage(content=prompt), HumanMessage(content="根据素材生成整套动画分镜。")],
+            temperature=0.22,
+            max_tokens=2200,
+            operation="storyboard",
+        )
         return response if isinstance(response, CartoonStoryboard) else CartoonStoryboard.model_validate(response)
 
     async def _compose_scene(self, brief: CartoonBrief, storyboard: CartoonStoryboard, scene: StoryboardScene, semaphore: asyncio.Semaphore) -> TeachingScene:
@@ -135,9 +145,20 @@ class CartoonLessonPlanner:
                     "density": brief.configuration.visual_density,
                     "source": self._source(brief, 9000),
                 })
-                response = await get_llm().ainvoke_json(TeachingScene, [SystemMessage(content=prompt), HumanMessage(content="只生成这个场景的 JSON。")], temperature=0.28, max_tokens=2400)
+                response = await self._invoke_json(
+                    TeachingScene,
+                    [SystemMessage(content=prompt), HumanMessage(content="只生成这个场景的 JSON。")],
+                    temperature=0.28,
+                    max_tokens=2400,
+                    operation=f"scene:{scene.id}",
+                )
                 result = response if isinstance(response, TeachingScene) else TeachingScene.model_validate(response)
-                if result.id != scene.id or result.layout != scene.layout or result.visual.kind != scene.visual_kind:
+                if (
+                    result.id != scene.id
+                    or result.layout != scene.layout
+                    or result.visual.kind != scene.visual_kind
+                    or result.teaching_function != scene.teaching_function
+                ):
                     raise CartoonPlanningError(f"场景 {scene.id} 未遵守全局分镜契约")
                 completed = True
                 return result
@@ -151,8 +172,69 @@ class CartoonLessonPlanner:
 
     @staticmethod
     def _source(brief: CartoonBrief, limit: int) -> str:
-        sections = [brief.learning_need, brief.teaching_plan, brief.tutorial_markdown, "\n".join(brief.knowledge_points), "\n".join(brief.weak_knowledge_points)]
-        return "\n\n".join(part.strip() for part in sections if part.strip())[:limit]
+        sections = [
+            f"学习主题：{brief.learning_need}",
+            "教学上下文：" + json.dumps(brief.instruction_context, ensure_ascii=False, separators=(",", ":")),
+            "知识点：" + "、".join(brief.knowledge_points),
+            "薄弱点：" + "、".join(brief.weak_knowledge_points),
+            *brief.source_materials,
+        ]
+        result: list[str] = []
+        used = 0
+        for section in sections:
+            text = section.strip()
+            if not text or used >= limit:
+                continue
+            available = limit - used
+            result.append(text[:available])
+            used += len(result[-1]) + 2
+        return "\n\n".join(result)
+
+    @staticmethod
+    def _is_transient_error(exc: Exception) -> bool:
+        if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+            return True
+        message = str(exc).lower()
+        return any(marker in message for marker in ("timeout", "timed out", "connection", "temporarily unavailable", "rate limit", "429", "502", "503", "504"))
+
+    async def _invoke_json(
+        self,
+        schema: type[Any],
+        messages: list[SystemMessage | HumanMessage],
+        *,
+        temperature: float,
+        max_tokens: int,
+        operation: str,
+    ) -> Any:
+        for attempt in range(1, 3):
+            try:
+                return await get_llm().ainvoke_json(
+                    schema,
+                    messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except Exception as exc:
+                if not self._is_transient_error(exc) or attempt == 2:
+                    raise
+                delay_seconds = 0.6 * attempt
+                logger.warning(
+                    "[CartoonPlanner] transient LLM failure: operation=%s attempt=%d/2 retry_in=%.1fs error=%s",
+                    operation,
+                    attempt,
+                    delay_seconds,
+                    exc,
+                )
+                await asyncio.sleep(delay_seconds)
+        raise RuntimeError("unreachable")
+
+    @staticmethod
+    def _exception_details(exc: BaseException) -> list[str]:
+        if isinstance(exc, BaseExceptionGroup):
+            details = [detail for nested in exc.exceptions for detail in CartoonLessonPlanner._exception_details(nested)]
+            return details[:6] or [type(exc).__name__]
+        message = str(exc).strip() or type(exc).__name__
+        return [f"{type(exc).__name__}: {message}"]
 
 
 _PACE = {

@@ -629,41 +629,10 @@
                   </header>
 
                   <div class="viewer-body">
-                    <MindMap
-                        v-if="
-                        viewerResource.resource_type ===
-                        'mindmap'
-                      "
-                        :result-data="viewerContent"
-                    />
-
-                    <Markdown
-                        v-else-if="
-                        viewerResource.resource_type ===
-                        'code'
-                      "
-                        :result-data="viewerContent"
-                    />
-
-                    <Slides
-                        v-else-if="
-                        viewerResource.resource_type ===
-                        'ppt'
-                      "
+                    <ArtifactRenderer
+                        :type="viewerResource.resource_type"
+                        :content="viewerContent"
                         :resource="viewerResource"
-                    />
-
-                    <Reading
-                        v-else-if="
-                        viewerResource.resource_type ===
-                        'reading'
-                      "
-                        :result-data="viewerContent"
-                    />
-
-                    <Markdown
-                        v-else
-                        :result-data="viewerContent"
                     />
                   </div>
                 </article>
@@ -925,9 +894,7 @@ import {
 import { toast } from 'vue-sonner'
 
 import Markdown from '@/shared/content/renderers/Markdown.vue'
-import MindMap from '@/shared/content/renderers/MindMap.vue'
-import Reading from '@/shared/content/renderers/Reading.vue'
-import Slides from '@/shared/content/renderers/Slides.vue'
+import ArtifactRenderer from '@/shared/content/ArtifactRenderer.vue'
 
 import {
   generateNodeResource,
@@ -2431,7 +2398,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 7px;
   padding: 0 13px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 6px;
   background:
@@ -2511,7 +2478,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 7px;
   padding: 0 10px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent-border);
   border-radius: 6px;
   background:
@@ -2704,7 +2671,7 @@ onBeforeUnmount(() => {
 .tutorial-main {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 8px;
   background:
@@ -2762,7 +2729,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   padding: 0 10px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 6px;
   background: #ffffff;
@@ -2858,7 +2825,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin: 0 0 24px;
   padding: 15px 17px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border-light);
   border-left: 3px solid
   var(--study-accent-border);
@@ -2893,7 +2860,7 @@ onBeforeUnmount(() => {
   min-height: 23px;
   align-items: center;
   padding: 0 8px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent-border);
   border-radius: 5px;
   background:
@@ -2964,7 +2931,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 18px;
   padding: 14px 15px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border-light);
   border-radius: 7px;
   background: #fafcfc;
@@ -2990,7 +2957,7 @@ onBeforeUnmount(() => {
   min-height: 25px;
   align-items: center;
   padding: 0 8px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 5px;
   background: #ffffff;
@@ -3011,7 +2978,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 7px;
   padding: 0 15px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent);
   border-radius: 6px;
   background:
@@ -3087,7 +3054,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border-light);
   border-radius: 6px;
   background:
@@ -3195,7 +3162,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 0 8px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent-border);
   border-radius: 5px;
   background: #ffffff;
@@ -3236,7 +3203,7 @@ onBeforeUnmount(() => {
   gap: 11px;
   margin: 110px auto 0;
   padding: 30px 25px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 9px;
   background:
@@ -3290,7 +3257,7 @@ onBeforeUnmount(() => {
 }
 
 .state-icon-error {
-  border: 1px solid #edc6c6;
+  border: 0px solid #edc6c6;
   background: #fbeeee;
   color: #bd5d5d;
 }
@@ -3305,7 +3272,7 @@ onBeforeUnmount(() => {
 .generate-panel {
   width: min(600px, 100%);
   padding: 32px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent-border);
   border-radius: 12px;
   background: #ffffff;
@@ -3367,7 +3334,7 @@ onBeforeUnmount(() => {
 .generate-stage-panel {
   margin-top: 24px;
   padding: 13px 14px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border-light);
   border-radius: 7px;
   background: #f9fbfb;
@@ -3467,7 +3434,7 @@ onBeforeUnmount(() => {
   height: 20px;
   flex-shrink: 0;
   place-items: center;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 50%;
   background: #ffffff;
@@ -3526,9 +3493,7 @@ onBeforeUnmount(() => {
   max-height:
       calc(100vh - 44px);
   overflow: hidden;
-  border: 1px solid
-  var(--study-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
   box-shadow:
       0 24px 70px
@@ -3543,8 +3508,6 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 9px 16px;
-  border-bottom: 1px solid
-  var(--study-border-light);
   background: #fafcfc;
 }
 
@@ -3554,7 +3517,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 5px;
   background: #ffffff;
@@ -3612,7 +3575,7 @@ onBeforeUnmount(() => {
   height: 30px;
   place-items: center;
   padding: 0;
-  border: 1px solid
+  border: 0px solid
   var(--study-border);
   border-radius: 5px;
   background: #ffffff;
@@ -3669,8 +3632,6 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 24px;
   padding: 26px 30px 21px;
-  border-bottom: 1px solid
-  var(--study-border-light);
 }
 
 .viewer-title {
@@ -3705,7 +3666,7 @@ onBeforeUnmount(() => {
   min-height: 24px;
   align-items: center;
   padding: 0 7px;
-  border: 1px solid
+  border: 0px solid
   var(--study-border-light);
   border-radius: 5px;
   background: #f7f9f9;
@@ -3728,9 +3689,7 @@ onBeforeUnmount(() => {
   max-height:
       calc(100vh - 44px);
   overflow: hidden;
-  border: 1px solid
-  var(--study-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
   box-shadow:
       0 24px 70px
@@ -3778,13 +3737,12 @@ onBeforeUnmount(() => {
 .quiz-question-list {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 36px;
 }
 
 .quiz-question-node {
-  padding-bottom: 22px;
-  border-bottom: 1px solid
-  var(--study-border-light);
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .quiz-question-node:last-child {
@@ -3795,85 +3753,65 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  margin: 0 0 13px;
+  margin: 0 0 16px;
   color:
       var(--study-text-strong);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.6;
 }
 
 .quiz-question-number {
-  display: grid;
-  width: 23px;
-  height: 23px;
+  display: inline-block;
   flex-shrink: 0;
-  place-items: center;
-  margin-top: 1px;
-  border: 1px solid
-  var(--study-accent-border);
-  border-radius: 5px;
-  background:
-      var(--study-accent-soft);
+  margin-top: 2px;
   color:
       var(--study-accent-text);
   font-family:
       var(--font-mono, monospace);
-  font-size: 10px;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .quiz-choices-stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-left: 32px;
+  gap: 10px;
+  padding-left: 26px;
 }
 
 .quiz-choice-row {
   display: flex;
-  min-height: 42px;
+  min-height: 48px;
   align-items: center;
-  gap: 10px;
-  padding: 8px 11px;
-  border: 1px solid
-  var(--study-border-light);
-  border-radius: 6px;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
   background: #ffffff;
   cursor: pointer;
-  transition:
-      border-color 160ms ease,
-      background-color 160ms ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .quiz-choice-row:hover {
-  border-color:
-      var(--study-accent-border);
   background:
       var(--study-accent-softer);
 }
 
+.quiz-choice-row:active {
+  transform: scale(0.99);
+}
+
 .quiz-choice-row.selected {
-  border-color:
-      var(--study-accent);
   background:
       var(--study-accent-soft);
-  box-shadow:
-      inset 0 0 0 1px
-      var(--study-accent-border);
 }
 
 .quiz-choice-row.correct {
-  border-color: #5cb897;
   background: #e0f5ec;
-  box-shadow:
-      inset 0 0 0 1px #8fd8c1;
 }
 
 .quiz-choice-row.incorrect {
-  border-color: #d88888;
   background: #fef2f2;
-  box-shadow:
-      inset 0 0 0 1px #f0b0b0;
 }
 
 .quiz-choice-row input {
@@ -3884,33 +3822,20 @@ onBeforeUnmount(() => {
 }
 
 .quiz-choice-box {
-  display: grid;
-  width: 23px;
-  height: 23px;
+  display: inline-block;
   flex-shrink: 0;
-  place-items: center;
-  border: 1px solid
-  var(--study-border);
-  border-radius: 5px;
-  background: #f8fafa;
   color:
-      var(--study-text-secondary);
+      var(--study-text-muted);
   font-family:
       var(--font-mono, monospace);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .quiz-choice-row.selected
 .quiz-choice-box {
-  border-color:
-      var(--study-accent-border);
-  background:
-      var(--study-accent);
-  color: #ffffff;
-  box-shadow:
-      0 2px 6px
-      rgba(21, 154, 148, 0.25);
+  color:
+      var(--study-accent-text);
 }
 
 .quiz-choice-row.selected
@@ -3922,12 +3847,7 @@ onBeforeUnmount(() => {
 
 .quiz-choice-row.correct
 .quiz-choice-box {
-  border-color: #4a9f7d;
-  background: #4a9f7d;
-  color: #ffffff;
-  box-shadow:
-      0 2px 6px
-      rgba(74, 159, 125, 0.25);
+  color: #2d7a5c;
 }
 
 .quiz-choice-row.correct
@@ -3938,12 +3858,7 @@ onBeforeUnmount(() => {
 
 .quiz-choice-row.incorrect
 .quiz-choice-box {
-  border-color: #c45c5c;
-  background: #c45c5c;
-  color: #ffffff;
-  box-shadow:
-      0 2px 6px
-      rgba(196, 92, 92, 0.25);
+  color: #a04040;
 }
 
 .quiz-choice-row.incorrect
@@ -3959,10 +3874,10 @@ onBeforeUnmount(() => {
 }
 
 .quiz-analysis-box {
-  margin: 13px 0 0 32px;
-  padding: 11px 13px;
-  border-left: 3px solid #5aa98f;
-  background: #f7faf9;
+  margin: 16px 0 0 26px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: #f4f8f7;
 }
 
 .quiz-analysis-meta {
@@ -4009,7 +3924,7 @@ onBeforeUnmount(() => {
   gap: 15px;
   margin-top: 22px;
   padding: 18px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent-border);
   border-radius: 7px;
   background:
@@ -4082,7 +3997,7 @@ onBeforeUnmount(() => {
   min-height: 25px;
   align-items: center;
   padding: 0 8px;
-  border: 1px solid #e4baba;
+  border: 0px solid #e4baba;
   border-radius: 5px;
   background: #fceeee;
   color: #a65353;
@@ -4097,7 +4012,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid
+  border: 0px solid
   var(--study-accent-border);
   border-radius: 6px;
   background: #ffffff;

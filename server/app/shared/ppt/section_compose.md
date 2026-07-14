@@ -71,11 +71,14 @@
 - `visual.code`: 0～1600 字符
 - `visual.formula`: 0～300 字符
 - `visual.formula_steps`: 最多 5 步（字符串数组）
-- `visual.model_code`: 0～4000 字符，必须是合法的 Mermaid 代码（纯文本，不要带有 Markdown 代码块 ```mermaid 前后缀）
+- `visual.model`: 仅当 `visual.kind` 为 `model` 时必填；包含 `layout`、`nodes`、`edges`
+  - `layout`: `hierarchy`、`flow`、`network` 或 `comparison`
+  - `nodes`: 2～8 个节点，每项只含 `id`（`n1`～`n99`）、`label`、可选 `detail`、可选 `tone`
+  - `edges`: 最多 12 条边，每项只含 `source_id`、`target_id`、可选 `label`；引用的节点必须存在，禁止自环
 
 # FORBIDDEN
 
-- 不输出 CSS、HTML、Markdown、坐标、颜色名称、图片链接
+- 不输出 CSS、HTML、Markdown、Mermaid 代码、坐标、颜色名称、图片链接
 - 不输出"建议插图"等占位内容
 - 不把二叉树或任何单一主题当作固定结构
 - 不修改已分配的 kind、visual_kind、layout
