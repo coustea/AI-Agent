@@ -143,7 +143,7 @@ class CartoonGenerationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pace: Literal["calm", "balanced", "fast"] = "balanced"
     visual_density: Literal["moderate", "rich", "intensive"] = "rich"
-    target_duration_seconds: int = Field(default=90, ge=90, le=600)
+    target_duration_seconds: int = Field(default=180, ge=90, le=600)
     voice: Literal["teacher", "coach"] = "teacher"
 
 

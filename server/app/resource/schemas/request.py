@@ -96,12 +96,13 @@ class ReadingConfig(BaseModel):
 
 
 class CartoonConfig(BaseModel):
-    """动画讲解 Agent 配置 — 仅保留影响脚本 LLM 输出的参数。"""
+    """动画讲解 Agent 配置 — 直接对应共享 Cartoon 生成契约。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    depth: Literal["overview", "standard", "deep"] = "standard"
-    pace: Literal["fast", "normal", "slow"] = "normal"
+    visual_density: Literal["moderate", "rich", "intensive"] = "rich"
+    pace: Literal["calm", "balanced", "fast"] = "balanced"
+    target_duration_seconds: int = Field(default=180, ge=90, le=600)
 
 
 class AgentConfigs(BaseModel):

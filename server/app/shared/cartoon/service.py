@@ -693,104 +693,12 @@ class CartoonService:
     def _build_generation_config(
         raw_config: dict[str, Any],
     ) -> CartoonGenerationConfig:
-        pace_aliases = {
-            "slow": "calm",
-            "normal": "balanced",
-            "medium": "balanced",
-            "calm": "calm",
-            "balanced": "balanced",
-            "fast": "fast",
-        }
-
-        density_aliases = {
-            "simple": "moderate",
-            "moderate": "moderate",
-            "standard": "rich",
-            "rich": "rich",
-            "dense": "intensive",
-            "intensive": "intensive",
-        }
-
-        duration = raw_config.get(
-            "target_duration_seconds"
-        )
-
-        if duration is None:
-            duration = raw_config.get(
-                "duration"
-            )
-
-        payload: dict[str, Any] = {}
-
-        pace = pace_aliases.get(
-            str(
-                raw_config.get(
-                    "pace",
-                    "",
-                )
-            ).lower()
-        )
-
-        if pace:
-            payload["pace"] = pace
-
-        density = density_aliases.get(
-            str(
-                raw_config.get(
-                    "visual_density",
-                    raw_config.get(
-                        "density",
-                        "",
-                    ),
-                )
-            ).lower()
-        )
-
-        if density:
-            payload["visual_density"] = (
-                density
-            )
-
-        if duration not in (
-            None,
-            "",
-        ):
-            payload[
-                "target_duration_seconds"
-            ] = int(duration)
-
-        if raw_config.get("voice") in {
-            "teacher",
-            "coach",
-        }:
-            payload["voice"] = (
-                raw_config["voice"]
-            )
-
-        depth_profiles = {
-            "overview": {
-                "visual_density": "moderate",
-                "target_duration_seconds": 90,
-            },
-            "standard": {
-                "visual_density": "rich",
-                "target_duration_seconds": 90,
-            },
-            "deep": {
-                "visual_density": "intensive",
-                "target_duration_seconds": 150,
-            },
-        }
-
-        depth = depth_profiles.get(
-            str(raw_config.get("depth", "")).lower()
-        )
-        if depth:
-            payload = {**depth, **payload}
-
-        return (
-            CartoonGenerationConfig
-            .model_validate(payload)
+        return CartoonGenerationConfig.model_validate(
+            {
+                key: value
+                for key, value in raw_config.items()
+                if key != "agent_id"
+            }
         )
 
     @staticmethod
