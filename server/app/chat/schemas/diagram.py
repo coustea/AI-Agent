@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -514,7 +515,7 @@ def validate_visual(graph_type: str, visual_content: dict[str, Any]) -> tuple[di
 
 # TeachingDiagram：一次答疑对应的一张结构化教学图解（顶层聚合模型）
 class TeachingDiagram(BaseModel):
-    """一次答疑对应的一张结构化教学图解。"""
+    """一次答疑对应的一张 Mermaid 教学图解。"""
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     graph_type: TeachingDiagramType
@@ -523,21 +524,48 @@ class TeachingDiagram(BaseModel):
     teaching_goal: str = Field(default="", description="教学目标")
     course: Optional[str] = Field(default=None, description="课程名称")
     difficulty: Literal["beginner", "intermediate", "advanced"] = Field(default="intermediate", description="难度等级")
-    visual_content: Union[
+    mermaid_source: Optional[str] = Field(default=None, description="可直接渲染的 Mermaid 源码")
+    visual_content: Optional[Union[
         ComparisonPayload, FlowchartPayload, SequencePayload,
         FrameworkPayload, SummaryPayload, HierarchyPayload,
         TreePayload, GridPayload, ProtocolPayload, TimelinePayload,
-    ]
+    ]] = None
     teaching_content: TeachingContent
 
     # 校验器：确保 graph_type 与 visual_content 的实际类型匹配
     @model_validator(mode="after")
     def validate_payload_type(self) -> "TeachingDiagram":
         """确保 graph_type 与 visual_content 的实际类型匹配。"""
+        if self.mermaid_source:
+            return self
         expected_type = PAYLOAD_TYPE_MAP[self.graph_type]
         if not isinstance(self.visual_content, expected_type):
             raise ValueError("visual_content must match graph_type")
         return self
+
+
+_MERMAID_START_RE = re.compile(
+    r"^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|"
+    r"journey|gantt|pie|mindmap|timeline|quadrantChart|xychart-beta|block-beta)\b"
+)
+
+
+def validate_mermaid_source(value: Any) -> tuple[str, str]:
+    """Perform cheap deterministic checks before handing source to Mermaid."""
+    if not isinstance(value, str):
+        return "", "mermaid_source 不是字符串"
+    source = value.strip()
+    if source.startswith("```"):
+        source = re.sub(r"^```(?:mermaid)?\s*", "", source, flags=re.IGNORECASE)
+        source = re.sub(r"\s*```$", "", source).strip()
+    if not source:
+        return "", "mermaid_source 不能为空"
+    if len(source) > 30_000:
+        return "", "mermaid_source 超过 30000 字符限制"
+    first_line = next((line.strip() for line in source.splitlines() if line.strip()), "")
+    if not _MERMAID_START_RE.match(first_line):
+        return "", "mermaid_source 缺少受支持的 Mermaid 图类型声明"
+    return source, ""
 
 
 # 校验从 <answer> 的 <diagram> 标签提取的 JSON，返回 (校验后 dict, 错误)
@@ -570,19 +598,25 @@ def validate_diagram_json(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, s
     if not raw.get("teaching_goal"):
         return None, "缺少必填字段 teaching_goal"
 
-    # 校验 visual_content 与 teaching_content 均为对象
+    # 新格式由模型直接输出 Mermaid 源码。visual_content 仅用于兼容旧消息。
+    mermaid_source = raw.get("mermaid_source")
     visual_content = raw.get("visual_content")
-    if not isinstance(visual_content, dict):
-        return None, "visual_content 不是有效的对象"
+    validated_mermaid = ""
+    validated_visual: dict[str, Any] | None = None
+    if mermaid_source is not None:
+        validated_mermaid, mermaid_error = validate_mermaid_source(mermaid_source)
+        if mermaid_error:
+            return None, mermaid_error
+    else:
+        if not isinstance(visual_content, dict):
+            return None, "缺少必填字段 mermaid_source"
+        validated_visual, visual_error = validate_visual(graph_type, visual_content)
+        if visual_error:
+            return None, visual_error
 
     teaching_content = raw.get("teaching_content")
     if not isinstance(teaching_content, dict):
         return None, "teaching_content 不是有效的对象"
-
-    # 校验 visual_content（含自动修复）
-    validated_visual, visual_error = validate_visual(graph_type, visual_content)
-    if visual_error:
-        return None, visual_error
 
     # 校验 teaching_content
     validated_tc: dict[str, Any] | None = None
@@ -602,6 +636,7 @@ def validate_diagram_json(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, s
         "teaching_goal": raw["teaching_goal"],
         "course": raw.get("course"),
         "difficulty": raw.get("difficulty", "intermediate"),
+        "mermaid_source": validated_mermaid or None,
         "visual_content": validated_visual,
         "teaching_content": validated_tc,
     }

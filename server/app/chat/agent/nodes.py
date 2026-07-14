@@ -101,6 +101,11 @@ def split_reasoning_and_answer(text: str) -> tuple[str, str]:
 # 根据图解 JSON 校验错误，生成针对性的修复建议，帮助 LLM 理解出错原因
 def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> str:
     """根据校验错误生成具体的修复建议，帮助 LLM 理解哪里出错。"""
+    if "mermaid_source" in error_msg:
+        return (
+            "请输出非空 mermaid_source，并确保第一行是合法 Mermaid 图类型声明；"
+            "源码必须放在 JSON 字符串中，换行和双引号需要正确转义。"
+        )
     graph_type = raw_diagram.get("graph_type", "")
     visual_content = raw_diagram.get("visual_content", {})
     hints: list[str] = []
@@ -151,7 +156,7 @@ def _build_diagram_repair_hint(raw_diagram: dict[str, Any], error_msg: str) -> s
 
     # 没有更具体的提示时，给出通用校验建议
     if not hints:
-        hints.append("请仔细检查 visual_content 结构是否与 graph_type 对应的 schema 完全匹配。")
+        hints.append("请检查 mermaid_source 是否为可直接渲染的 Mermaid 源码。")
 
     # 将修复提示拼接为单行中文说明
     return "；".join(hints)
@@ -711,7 +716,7 @@ async def react_node(
                         "上一次图解 JSON 格式不合法，无法解析。\n"
                         "请严格输出合法 JSON，确保所有字符串使用双引号、属性间用逗号分隔、无尾逗号。\n"
                         "请修复并重新输出完整的 <answer>，包含修复后的 <diagram>...</diagram>。"
-                        "确保 graph_type 是合法类型，visual_content 结构与 graph_type 严格匹配。"
+                        "确保 graph_type 合法，mermaid_source 是正确转义的 Mermaid 源码。"
                     )))
                     continue
                 elif diagram_parse_status == "json_error":
@@ -741,7 +746,7 @@ async def react_node(
                             f"已生成内容：{json.dumps(raw_diagram, ensure_ascii=False)[:2000]}\n"
                             f"修复建议：{repair_hint}\n"
                             "请修复并重新输出完整的 <answer>，包含修复后的 <diagram>...</diagram>。"
-                            "确保 graph_type 是合法类型，visual_content 结构与 graph_type 严格匹配。"
+                            "确保 graph_type 合法，mermaid_source 是可直接渲染的 Mermaid 源码。"
                         )))
                         continue
                     else:

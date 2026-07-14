@@ -15,6 +15,7 @@ import math
 import time
 from collections.abc import Sequence
 
+import httpx
 from langchain_openai import OpenAIEmbeddings
 
 from app.config import KB_EMBED_API_KEY, KB_EMBED_BASE_URL, KB_EMBED_MODEL
@@ -26,6 +27,14 @@ _PROBE_TEXT = "RAG embedding service health check."
 
 # 嵌入请求超时秒数（批量嵌入 32 条长文本时需较长等待）
 _REQUEST_TIMEOUT = 30
+
+# Windows 系统代理（如 Clash）会拦截 localhost 请求返回 502，
+# 显式创建不走代理的 httpx client 避免此问题。
+_no_proxy_transport = httpx.HTTPTransport(proxy=None)
+_no_proxy_http_client = httpx.Client(
+    transport=_no_proxy_transport,
+    timeout=_REQUEST_TIMEOUT,
+)
 
 # 熔断器：连续失败后暂时停止请求
 _BREAKER_COOLDOWN_SECONDS = 300.0
@@ -80,6 +89,7 @@ def _get_embeddings_client() -> OpenAIEmbeddings:
         base_url=KB_EMBED_BASE_URL,
         check_embedding_ctx_length=False,
         request_timeout=_REQUEST_TIMEOUT,
+        http_client=_no_proxy_http_client,
     )
 
 

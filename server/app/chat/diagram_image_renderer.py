@@ -8,6 +8,7 @@ small image payload for SSE/history metadata.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from html import escape
@@ -23,6 +24,7 @@ logger = get_logger(__name__)
 
 DEFAULT_WIDTH = 1400
 DEFAULT_HEIGHT = 900
+PNG_DEVICE_SCALE_FACTOR = 2
 Screenshotter = Callable[[str, int, int], Awaitable[bytes]]
 ImageUrlBuilder = Callable[[str], str]
 DiagramRenderer = Callable[..., Awaitable[dict[str, Any]]]
@@ -391,7 +393,192 @@ def build_diagram_image_document(
     width: int = DEFAULT_WIDTH,
     height: int = DEFAULT_HEIGHT,
 ) -> str:
-    return build_teaching_diagram_html(diagram, width=width, height=height)
+    source = build_mermaid_source(diagram)
+    title = _localize_title(_text(diagram.get("title")) or "教学图解")
+    subtitle = _text(diagram.get("subtitle"))
+    graph_type = _text(diagram.get("graph_type")) or "diagram"
+    teaching = diagram.get("teaching_content") if isinstance(diagram.get("teaching_content"), dict) else {}
+    summary = _text(teaching.get("summary"))
+    source_literal = json.dumps(source, ensure_ascii=False).replace("<", "\\u003c")
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; width: {width}px; min-height: {height}px; background: #f5f9ff; color: #092f5e; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }}
+    #diagram-canvas {{ width: {width}px; min-height: {height}px; padding: 36px 40px 30px; border: 2px solid #4b83e8; border-radius: 26px; background: linear-gradient(180deg, #f8fbff 0%, #f2f8ff 100%); }}
+    header {{ margin-bottom: 22px; text-align: center; }}
+    h1 {{ margin: 0; color: #073b7a; font-size: 40px; line-height: 1.2; letter-spacing: 0; font-weight: 800; }}
+    .subtitle {{ margin: 12px 0 0; color: #58779c; font-size: 19px; }}
+    #mermaid-output {{ display: flex; align-items: center; justify-content: center; width: 100%; min-height: 610px; padding: 28px 34px; border: 1px solid #d8e6f8; border-radius: 18px; background: rgba(255, 255, 255, .78); box-shadow: 0 12px 34px rgba(37, 83, 145, .08); }}
+    #mermaid-output svg {{ display: block; width: 100%; height: auto; max-height: 650px; overflow: visible; }}
+    #mermaid-output .node rect,
+    #mermaid-output .node polygon,
+    #mermaid-output .node path {{ stroke-width: 2px !important; filter: drop-shadow(0 6px 8px rgba(31, 76, 135, .12)); }}
+    #mermaid-output .nodes > .node:nth-child(3n+1) rect,
+    #mermaid-output .nodes > .node:nth-child(3n+1) polygon {{ fill: #eaf3ff !important; stroke: #4f87e8 !important; }}
+    #mermaid-output .nodes > .node:nth-child(3n+2) rect,
+    #mermaid-output .nodes > .node:nth-child(3n+2) polygon {{ fill: #e8f8f5 !important; stroke: #2b9a8e !important; }}
+    #mermaid-output .nodes > .node:nth-child(3n) rect,
+    #mermaid-output .nodes > .node:nth-child(3n) polygon {{ fill: #f1f6ff !important; stroke: #6a8fcf !important; }}
+    #mermaid-output .nodeLabel,
+    #mermaid-output .edgeLabel {{ color: #0a315f !important; font-weight: 650 !important; line-height: 1.45 !important; }}
+    #mermaid-output .edgePath .path,
+    #mermaid-output .flowchart-link {{ stroke: #3975d2 !important; stroke-width: 2.5px !important; }}
+    #mermaid-output marker path {{ fill: #3975d2 !important; stroke: #3975d2 !important; }}
+    #mermaid-output .cluster rect {{ fill: #f8fbff !important; stroke: #a8c4ee !important; stroke-width: 1.5px !important; rx: 14px; ry: 14px; }}
+    #mermaid-output .actor {{ fill: #eaf3ff !important; stroke: #4f87e8 !important; stroke-width: 2px !important; }}
+    #mermaid-output .messageLine0,
+    #mermaid-output .messageLine1 {{ stroke: #3975d2 !important; stroke-width: 2.2px !important; }}
+    #render-error {{ display: none; padding: 24px; color: #a42323; white-space: pre-wrap; }}
+    .conclusion {{ margin-top: 20px; padding: 18px 22px; border-left: 7px solid #3779e8; border-radius: 0 10px 10px 0; background: #e8f1ff; font-size: 19px; line-height: 1.45; }}
+  </style>
+</head>
+<body>
+  <main id="diagram-canvas" data-renderer="mermaid" data-graph-type="{escape(graph_type)}">
+    <header><h1>{escape(title)}</h1>{f'<p class="subtitle">{escape(subtitle)}</p>' if subtitle else ''}</header>
+    <section id="mermaid-output" aria-label="{escape(title)}"></section>
+    <pre id="render-error"></pre>
+    {f'<footer class="conclusion"><strong>核心结论：</strong>{escape(summary)}</footer>' if summary else ''}
+  </main>
+  <script>
+    const source = {source_literal};
+    window.renderTeachingMermaid = async () => {{
+      try {{
+        mermaid.initialize({{
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "base",
+          flowchart: {{ htmlLabels: true, curve: "basis", useMaxWidth: true, nodeSpacing: 58, rankSpacing: 72, padding: 24 }},
+          sequence: {{ useMaxWidth: true, wrap: true, actorMargin: 80, messageMargin: 38, diagramMarginX: 40, diagramMarginY: 24 }},
+          themeVariables: {{
+            fontFamily: "Microsoft YaHei, PingFang SC, sans-serif",
+            fontSize: "19px",
+            primaryColor: "#eef6ff",
+            primaryTextColor: "#092f5e",
+            primaryBorderColor: "#5c91ed",
+            lineColor: "#3779e8",
+            secondaryColor: "#e7f8f6",
+            tertiaryColor: "#ffffff",
+            clusterBkg: "#ffffff",
+            clusterBorder: "#78a9ff"
+          }}
+        }});
+        await mermaid.parse(source);
+        const result = await mermaid.render("teaching-mermaid", source);
+        const output = document.getElementById("mermaid-output");
+        output.innerHTML = result.svg;
+        result.bindFunctions?.(output);
+        output.querySelectorAll(".node rect").forEach((rect) => {{
+          rect.setAttribute("rx", "12");
+          rect.setAttribute("ry", "12");
+        }});
+        document.documentElement.dataset.mermaidReady = "true";
+      }} catch (error) {{
+        document.getElementById("render-error").textContent = String(error);
+        document.documentElement.dataset.mermaidError = String(error);
+      }}
+    }};
+  </script>
+</body>
+</html>"""
+
+
+def _mermaid_runtime_path() -> Path:
+    runtime_path = Path(__file__).resolve().parents[3] / "node_modules" / "mermaid" / "dist" / "mermaid.min.js"
+    if not runtime_path.is_file():
+        raise RuntimeError("Mermaid runtime is missing; run npm install")
+    return runtime_path
+
+
+def build_mermaid_source(diagram: dict[str, Any]) -> str:
+    """Return model-authored Mermaid, or convert legacy structured diagrams."""
+    source = _text_block(diagram.get("mermaid_source"))
+    if source:
+        return source
+    return _legacy_diagram_to_mermaid(diagram)
+
+
+def _legacy_diagram_to_mermaid(diagram: dict[str, Any]) -> str:
+    graph_type = _text(diagram.get("graph_type")) or "summary"
+    visual = diagram.get("visual_content") if isinstance(diagram.get("visual_content"), dict) else {}
+
+    if graph_type == "sequence":
+        actors = _string_list(visual.get("actors"))
+        lines = ["sequenceDiagram"]
+        aliases = {actor: f"A{index}" for index, actor in enumerate(actors, start=1)}
+        for actor, alias in aliases.items():
+            lines.append(f"    participant {alias} as {_mermaid_text(actor)}")
+        for message in _dict_list(visual.get("messages")):
+            sender = _text(message.get("from"))
+            receiver = _text(message.get("to"))
+            if sender not in aliases:
+                aliases[sender] = f"A{len(aliases) + 1}"
+                lines.append(f"    participant {aliases[sender]} as {_mermaid_text(sender)}")
+            if receiver not in aliases:
+                aliases[receiver] = f"A{len(aliases) + 1}"
+                lines.append(f"    participant {aliases[receiver]} as {_mermaid_text(receiver)}")
+            label = _text(message.get("label")) or _text(message.get("detail")) or "消息"
+            lines.append(f"    {aliases[sender]}->>{aliases[receiver]}: {_mermaid_text(label)}")
+        return "\n".join(lines)
+
+    direction = "LR" if _text(visual.get("direction")) == "horizontal" else "TB"
+    lines = [f"flowchart {direction}"]
+    if graph_type == "flowchart":
+        nodes = _dict_list(visual.get("nodes"))
+        id_map: dict[str, str] = {}
+        for index, node in enumerate(nodes, start=1):
+            raw_id = _text(node.get("id")) or str(index)
+            node_id = f"N{index}"
+            id_map[raw_id] = node_id
+            label = _first_text(node, ("title", "label", "name", "text", "content", "id")) or raw_id
+            details = _items_from(
+                node,
+                (
+                    "short_desc", "description", "definition", "details", "detail",
+                    "explanation", "note", "items", "points", "children",
+                ),
+                exclude={label},
+            )
+            lines.append(f'    {node_id}["{_mermaid_text(label, *details)}"]')
+        for edge in _dict_list(visual.get("edges")):
+            left = id_map.get(_text(edge.get("from")))
+            right = id_map.get(_text(edge.get("to")))
+            if left and right:
+                label = _text(edge.get("label"))
+                lines.append(f"    {left} -->|{_mermaid_text(label)}| {right}" if label else f"    {left} --> {right}")
+        return "\n".join(lines)
+
+    center, sections = _extract_visual_model(graph_type, visual, diagram.get("teaching_content") or {})
+    center = _localize_title(center)
+    if graph_type == "comparison":
+        sections = _comparison_sections(visual)
+    if not any(_section_has_teaching_content(section) for section in sections):
+        teaching = diagram.get("teaching_content") if isinstance(diagram.get("teaching_content"), dict) else {}
+        sections = _teaching_overview_sections(teaching) or _fallback_sections(visual)
+    if center:
+        lines.append(f'    ROOT["{_mermaid_text(center)}"]')
+    for index, section in enumerate(sections, start=1):
+        title = _text(section.get("title")) or f"知识点 {index}"
+        items = _string_list(section.get("items"))
+        lines.append(f'    S{index}["{_mermaid_text(title, *items)}"]')
+        if center:
+            lines.append(f"    ROOT --> S{index}")
+    if not center and len(sections) > 1:
+        for index in range(1, len(sections)):
+            lines.append(f"    S{index} ~~~ S{index + 1}")
+    return "\n".join(lines)
+
+
+def _mermaid_text(*parts: str) -> str:
+    text = "<br/>".join(part for part in parts if part)
+    return text.replace("\\", "\\\\").replace('"', "&quot;").replace("\n", " ")
+
+
+def _text_block(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _comparison_sections(visual: dict[str, Any]) -> list[dict[str, Any]]:
@@ -510,11 +697,13 @@ async def render_teaching_diagram_png(
     width: int = DEFAULT_WIDTH,
     height: int = DEFAULT_HEIGHT,
 ) -> dict[str, Any]:
+    mermaid_source = build_mermaid_source(diagram)
     html = build_diagram_image_document(diagram, width=width, height=height)
     screenshot = screenshotter or _screenshot_html_to_png
     png_bytes = await screenshot(html, width, height)
     if not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("diagram renderer did not return PNG bytes")
+    pixel_width, pixel_height = _png_dimensions(png_bytes, fallback=(width, height))
 
     root_dir = uploads_dir or user_chat_uploads_dir(username, session_id)
     diagrams_dir = root_dir / "diagrams"
@@ -531,11 +720,15 @@ async def render_teaching_diagram_png(
         "title": _text(diagram.get("title")) or "教学图解",
         "subtitle": _text(diagram.get("subtitle")) or None,
         "graph_type": _text(diagram.get("graph_type")) or "diagram",
+        "mermaid_source": mermaid_source,
         "image_url": url_builder(filename),
         "filename": filename,
         "mime_type": "image/png",
-        "width": width,
-        "height": height,
+        "width": pixel_width,
+        "height": pixel_height,
+        "logical_width": width,
+        "logical_height": height,
+        "pixel_ratio": round(pixel_width / width, 2) if width else 1,
     }
 
 
@@ -576,9 +769,21 @@ async def _screenshot_html_to_png(html: str, width: int, height: int) -> bytes:
         try:
             page = await browser.new_page(
                 viewport={"width": width, "height": height},
-                device_scale_factor=1,
+                device_scale_factor=PNG_DEVICE_SCALE_FACTOR,
             )
             await page.set_content(html, wait_until="networkidle")
+            await page.add_script_tag(path=str(_mermaid_runtime_path()))
+            await page.evaluate("window.renderTeachingMermaid()")
+            await page.wait_for_function(
+                "document.documentElement.dataset.mermaidReady === 'true' || "
+                "Boolean(document.documentElement.dataset.mermaidError)",
+                timeout=15_000,
+            )
+            render_error = await page.evaluate(
+                "document.documentElement.dataset.mermaidError || ''"
+            )
+            if render_error:
+                raise ValueError(f"Mermaid render failed: {render_error}")
             canvas = page.locator("#diagram-canvas")
             rendered_height = await canvas.evaluate(
                 """element => Math.ceil(element.getBoundingClientRect().height)"""
@@ -588,6 +793,16 @@ async def _screenshot_html_to_png(html: str, width: int, height: int) -> bytes:
             return await canvas.screenshot(type="png")
         finally:
             await browser.close()
+
+
+def _png_dimensions(data: bytes, *, fallback: tuple[int, int]) -> tuple[int, int]:
+    """Read the IHDR dimensions without adding another image dependency."""
+    if len(data) >= 24 and data[12:16] == b"IHDR":
+        return (
+            int.from_bytes(data[16:20], "big"),
+            int.from_bytes(data[20:24], "big"),
+        )
+    return fallback
 
 
 def _extract_visual_model(

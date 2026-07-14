@@ -122,5 +122,7 @@ paths_config:
 
 # ASR 语音识别配置
 asr:
+  # 当前网络使用 fake-IP DNS；域名鉴权和 TLS SNI 仍保持不变。
+  direct_ip: "124.172.152.234"
   # VAD 结束静默时长（毫秒）— 越小响应越快，但可能截断短停顿
   vad_eos: 1200

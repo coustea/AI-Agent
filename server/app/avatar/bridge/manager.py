@@ -24,6 +24,7 @@ from starlette.websockets import WebSocketState
 
 from app.avatar.bridge.state import MessageType
 from app.avatar.services import AvatarController
+from app.avatar.services.audio_ingress import AudioIngress
 from app.avatar.services.streaming_asr import AdaptiveVADController, StreamingASRSession
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import chat, get_chat_usecases
@@ -173,7 +174,10 @@ class RealtimeBridge:
         self.is_listening = False
         # 音频输入队列（VAD 模式下持续接收 PCM 音频块）
         self.current_audio_queue: Optional[asyncio.Queue] = None
-        self._audio_frame_buffer = bytearray()
+        self._audio_ingress = AudioIngress(
+            frame_bytes=ASR_AUDIO_FRAME_BYTES,
+            queue_size=AUDIO_QUEUE_MAX_CHUNKS,
+        )
 
         # 数字人控制器实例
         self._avatar_controller = None
@@ -194,8 +198,6 @@ class RealtimeBridge:
         self._vad_controller = AdaptiveVADController(base_vad_eos=ASR_VAD_EOS)
 
         # Audio chunk tracking
-        self._audio_chunk_counter = 0   # 音频块计数器
-        self._audio_dropped_chunks = 0  # 队列拥塞时丢弃的旧音频块
         self._last_asr_text: str = ""   # 上一次 ASR 识别结果（用于去重）
         self._last_asr_at: float = 0.0  # 上一次 ASR 结果的时间戳
         self._asr_connection_retry_count = 0
@@ -213,6 +215,22 @@ class RealtimeBridge:
         self._reconnecting: bool = False
         # 重连锁 — 防止多个 connection_lost 回调同时触发多个重连流程
         self._reconnect_lock = asyncio.Lock()
+
+    @property
+    def _audio_frame_buffer(self) -> bytearray:
+        return self._audio_ingress.remainder
+
+    @property
+    def _audio_chunk_counter(self) -> int:
+        return self._audio_ingress.callbacks
+
+    @property
+    def _audio_dropped_chunks(self) -> int:
+        return self._audio_ingress.dropped
+
+    def _bind_audio_ingress_queue(self) -> None:
+        if self._audio_ingress.queue is not self.current_audio_queue:
+            self._audio_ingress.queue = self.current_audio_queue
 
     # 修复文本乱码：当 UTF-8 文本被误编码为 GBK 时尝试恢复
     @staticmethod
@@ -738,99 +756,46 @@ class RealtimeBridge:
         if len(pcm_bytes) > AUDIO_MESSAGE_MAX_BYTES:
             logger.warning("[Bridge] ignored oversized audio chunk bytes=%s", len(pcm_bytes))
             return
-        self._audio_chunk_counter += 1
-        if self._audio_chunk_counter == 1 or self._audio_chunk_counter % 25 == 0:
+        self._bind_audio_ingress_queue()
+        stats = self._audio_ingress.accept(pcm_bytes)
+        if stats.callbacks == 1 or stats.callbacks % 25 == 0:
             logger.info(
-                "[Bridge] audio_chunk recv count=%s bytes=%s queue_size=%s",
-                self._audio_chunk_counter,
+                "[Bridge] audio frame recv callbacks=%s bytes=%s frames=%s queued=%s",
+                stats.callbacks,
                 len(pcm_bytes),
-                self.current_audio_queue.qsize(),
+                stats.frames,
+                stats.queued,
             )
-        # 4096-byte browser callbacks do not align to 1280-byte ASR frames.
-        # Preserve the remainder across callbacks instead of emitting 256-byte bursts.
-        self._audio_frame_buffer.extend(pcm_bytes)
-        while len(self._audio_frame_buffer) >= ASR_AUDIO_FRAME_BYTES:
-            chunk = bytes(self._audio_frame_buffer[:ASR_AUDIO_FRAME_BYTES])
-            del self._audio_frame_buffer[:ASR_AUDIO_FRAME_BYTES]
-            self._put_audio_chunk((time.monotonic(), chunk))
 
     def _put_audio_chunk(self, item: tuple[float, bytes]) -> None:
-        """入队最新音频；拥塞时丢弃最旧帧，避免延迟无限增长。"""
-        queue = self.current_audio_queue
-        if queue is None:
-            return
-        if queue.full():
-            try:
-                queue.get_nowait()
-                self._audio_dropped_chunks += 1
-                if self._audio_dropped_chunks == 1 or self._audio_dropped_chunks % 25 == 0:
-                    logger.warning(
-                        "[Bridge] audio backpressure dropped=%s queue_size=%s",
-                        self._audio_dropped_chunks,
-                        queue.qsize(),
-                    )
-            except asyncio.QueueEmpty:
-                pass
-        try:
-            queue.put_nowait(item)
-        except asyncio.QueueFull:
-            self._audio_dropped_chunks += 1
+        self._bind_audio_ingress_queue()
+        self._audio_ingress.offer_item(item)
 
     def _restore_asr_audio(self, items: list[tuple[float, bytes] | None]) -> None:
         """Put frames consumed by a failed ASR connection before newer audio."""
-        queue = self.current_audio_queue
-        if queue is None or not items:
-            return
-
-        pending: list[tuple[float, bytes] | None] = []
-        while True:
-            try:
-                pending.append(queue.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-
-        combined: list[tuple[float, bytes] | None] = [*items, *pending]
-        if queue.maxsize > 0 and len(combined) > queue.maxsize:
-            has_end_marker = combined[-1] is None
-            truncated = len(combined) - queue.maxsize
-            combined = combined[:queue.maxsize]
-            if has_end_marker:
-                combined[-1] = None
-            logger.warning(
-                "[Bridge] ASR replay truncated frames=%s maxsize=%s",
-                truncated,
-                queue.maxsize,
-            )
-
-        for item in combined:
-            queue.put_nowait(item)
-        logger.info("[Bridge] restored ASR audio frames=%s pending=%s", len(items), len(pending))
+        self._bind_audio_ingress_queue()
+        restored = self._audio_ingress.restore(items)
+        if restored:
+            logger.info("[Bridge] restored ASR audio items=%s", restored)
 
     # 处理音频输入结束信号：向队列发送 None 终止符
     async def _handle_audio_end(self):
         if self.current_audio_queue:
-            has_audio = self._audio_chunk_counter > 0 or bool(self._audio_frame_buffer)
-            if self._audio_frame_buffer:
-                self._put_audio_chunk(
-                    (time.monotonic(), bytes(self._audio_frame_buffer))
+            self._bind_audio_ingress_queue()
+            stats = self._audio_ingress.finish()
+            if stats.callbacks:
+                logger.info(
+                    "[Bridge] audio end callbacks=%s frames=%s queued=%s dropped=%s",
+                    stats.callbacks,
+                    stats.frames,
+                    stats.queued,
+                    stats.dropped,
                 )
-                self._audio_frame_buffer.clear()
-            self._put_audio_end(self.current_audio_queue)
-            if has_audio:
                 await self._send_digital_human_state("recognizing", "Processing speech")
 
     @staticmethod
     def _put_audio_end(queue: asyncio.Queue) -> None:
-        """确保结束标记可以进入有界队列。"""
-        while queue.full():
-            try:
-                queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-        try:
-            queue.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
+        AudioIngress.end_queue(queue)
 
     # 处理文本输入：提取文本、附件、语速等参数，分派到辅导管线
     async def _handle_text_input(self, data: dict):
@@ -911,10 +876,7 @@ class RealtimeBridge:
             await asyncio.gather(previous_task, return_exceptions=True)
 
         self.is_listening = True
-        self.current_audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_MAX_CHUNKS)
-        self._audio_frame_buffer.clear()
-        self._audio_chunk_counter = 0
-        self._audio_dropped_chunks = 0
+        self.current_audio_queue = self._audio_ingress.start()
         self._asr_connection_retry_count = 0
         asr_ready_event = asyncio.Event()
         asr_task = asyncio.create_task(
@@ -1040,9 +1002,9 @@ class RealtimeBridge:
         await self._cancel_asr_ready_ack()
         audio_queue = self.current_audio_queue
         self.current_audio_queue = None
-        self._audio_frame_buffer.clear()
         if audio_queue:
             self._put_audio_end(audio_queue)
+        self._audio_ingress.close()
         if self._asr_loop_task and not self._asr_loop_task.done():
             current_task = asyncio.current_task()
             if self._asr_loop_task is not current_task:
@@ -1555,7 +1517,7 @@ class RealtimeBridge:
         self._vad_generation += 1
         self._vad_ack_generation = None
         self._active_vad_session_id = None
-        self._audio_frame_buffer.clear()
+        self._audio_ingress.close()
         await self._cancel_asr_ready_ack()
         if self._asr_loop_task and not self._asr_loop_task.done():
             self._asr_loop_task.cancel()
