@@ -33,7 +33,7 @@ async def record_resource_generated_event(
         db: 异步数据库会话。
         user_id: 用户 ID。
         resource_id: 资源 ID。
-        status: 生成状态（completed / partial_completed / failed）。
+    status: 生成状态（completed / partial / failed）。
         course: 可选的学习课程/科目。
         topic: 可选的学习主题。
         agent_types: 成功生成的智能体类型列表。

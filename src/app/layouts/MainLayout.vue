@@ -71,12 +71,11 @@
     </header>
 
     <main class="page-content">
-      <router-view v-slot="{ Component }">
-        <transition name="fade-slide" mode="out-in">
-          <keep-alive include="ResourceGenerator,Tutor,PathPlanOverview,Home">
-            <component :is="Component" :key="route.path" />
-          </keep-alive>
-        </transition>
+      <router-view v-slot="{ Component, route: matchedRoute }">
+        <component
+          :is="Component"
+          :key="matchedRoute.fullPath"
+        />
       </router-view>
     </main>
 
@@ -288,7 +287,8 @@ const handleLogout = () => {
   justify-content: space-between;
   padding: 0 clamp(16px, 2.8vw, 44px);
   flex-shrink: 0;
-  z-index: 20;
+  /* 全局导航必须高于任意功能页的 fixed 遮罩、编辑器和画布。 */
+  z-index: 100;
   box-shadow: 0 8px 24px rgba(32, 95, 103, 0.05);
 }
 
@@ -488,26 +488,16 @@ const handleLogout = () => {
 /* ================== 页面内容区 ================== */
 .page-content {
   flex: 1;
+  min-height: 0;
   background: var(--color-page-bg);
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
+  /* 将功能页弹层约束在内容层，不能吞掉系统导航的点击。 */
+  z-index: 0;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-}
-
-.fade-slide-enter-active, .fade-slide-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.fade-slide-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 
 /* ================== 响应式媒体查询 ================== */

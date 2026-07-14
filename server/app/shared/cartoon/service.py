@@ -294,15 +294,11 @@ class CartoonService:
         artifact = await self._generate_and_publish(
             CartoonBrief(
                 learning_need=normalized_topic,
-                teaching_plan=(
-                    "# 聊天视频讲解任务\n\n"
-                    f"请围绕“{normalized_topic}”制作一段完整的教学动画。"
-                ),
-                tutorial_markdown=(
-                    f"# {normalized_topic}\n\n"
-                    "请从概念、机制、示例与总结四个层次组织讲解，"
-                    "使用动态可视化呈现关键过程。"
-                ),
+                instruction_context={
+                    "entry": "chat",
+                    "teaching_goal": "从概念、机制、示例与总结四个层次组织讲解，并用动态模型呈现关键过程。",
+                },
+                source_materials=[normalized_topic],
                 configuration=CartoonGenerationConfig(),
             ),
             user_chat_video_dir(username, session_id, message_id),
@@ -330,31 +326,28 @@ class CartoonService:
             )
         )
 
-        handoffs = self._normalize_mapping(
-            input_data.upstream_handoffs
-            or {}
-        )
+        if input_data.teaching_plan is None:
+            raise ValueError("资源动画生成缺少结构化教学计划")
 
-        tutorial_markdown = (
-            self._handoffs_as_markdown(
-                handoffs
-            )
-        )
+        plan = input_data.teaching_plan
+        task = plan.task_for("cartoon")
+        handoffs = self._normalize_mapping(input_data.upstream_handoffs or {})
 
         return CartoonBrief(
             learning_need=self._bounded_text(
                 input_data.learning_need,
                 500,
             ),
-            teaching_plan=self._bounded_text(
-                input_data.teaching_plan
-                or "",
-                12000,
-            ),
-            tutorial_markdown=self._bounded_text(
-                tutorial_markdown,
-                30000,
-            ),
+            instruction_context={
+                "entry": "resource",
+                "course_title": plan.title,
+                "learner_goal": plan.learner_goal,
+                "scope": plan.scope,
+                "learning_thread": plan.learning_thread,
+                "consistency_rules": plan.consistency_rules,
+                "task": task.model_dump(mode="json"),
+            },
+            source_materials=self._source_materials(handoffs),
             knowledge_points=self._string_list(
                 raw_config.get(
                     "knowledge_points"
@@ -433,12 +426,6 @@ class CartoonService:
             ),
         }
 
-        teaching_plan = (
-            self._path_context_as_markdown(
-                path_context
-            )
-        )
-
         raw_config = dict(
             getattr(
                 request,
@@ -481,11 +468,11 @@ class CartoonService:
                 request.node_title,
                 500,
             ),
-            teaching_plan=self._bounded_text(
-                teaching_plan,
-                12000,
-            ),
-            tutorial_markdown=tutorial_markdown,
+            instruction_context={
+                "entry": "path",
+                **path_context,
+            },
+            source_materials=[tutorial_markdown],
             knowledge_points=self._string_list(
                 knowledge_points,
                 30,
@@ -706,88 +693,12 @@ class CartoonService:
     def _build_generation_config(
         raw_config: dict[str, Any],
     ) -> CartoonGenerationConfig:
-        pace_aliases = {
-            "slow": "calm",
-            "normal": "balanced",
-            "medium": "balanced",
-            "calm": "calm",
-            "balanced": "balanced",
-            "fast": "fast",
-        }
-
-        density_aliases = {
-            "simple": "moderate",
-            "moderate": "moderate",
-            "standard": "rich",
-            "rich": "rich",
-            "dense": "intensive",
-            "intensive": "intensive",
-        }
-
-        duration = raw_config.get(
-            "target_duration_seconds"
-        )
-
-        if duration is None:
-            duration = raw_config.get(
-                "duration"
-            )
-
-        payload: dict[str, Any] = {}
-
-        pace = pace_aliases.get(
-            str(
-                raw_config.get(
-                    "pace",
-                    "",
-                )
-            ).lower()
-        )
-
-        if pace:
-            payload["pace"] = pace
-
-        density = density_aliases.get(
-            str(
-                raw_config.get(
-                    "visual_density",
-                    raw_config.get(
-                        "density",
-                        "",
-                    ),
-                )
-            ).lower()
-        )
-
-        if density:
-            payload["visual_density"] = (
-                density
-            )
-
-        if duration not in (
-            None,
-            "",
-        ):
-            payload[
-                "target_duration_seconds"
-            ] = int(duration)
-
-        if raw_config.get("voice") in {
-            "teacher",
-            "coach",
-        }:
-            payload["voice"] = (
-                raw_config["voice"]
-            )
-
-        if raw_config.get("template_id"):
-            payload["template_id"] = str(
-                raw_config["template_id"]
-            )
-
-        return (
-            CartoonGenerationConfig
-            .model_validate(payload)
+        return CartoonGenerationConfig.model_validate(
+            {
+                key: value
+                for key, value in raw_config.items()
+                if key != "agent_id"
+            }
         )
 
     @staticmethod
@@ -877,9 +788,9 @@ class CartoonService:
         return str(value)
 
     @staticmethod
-    def _handoffs_as_markdown(
+    def _source_materials(
         handoffs: dict[str, Any],
-    ) -> str:
+    ) -> list[str]:
         sections: list[str] = []
 
         for source, payload in handoffs.items():
@@ -887,9 +798,7 @@ class CartoonService:
                 payload,
                 dict,
             ):
-                sections.append(
-                    f"## {source}\n\n{payload}"
-                )
+                sections.append(f"{source}\n{payload}")
                 continue
 
             title = str(
@@ -910,9 +819,7 @@ class CartoonService:
                 or []
             )
 
-            lines = [
-                f"## {title}",
-            ]
+            lines = [title]
 
             if summary:
                 lines.extend(
@@ -939,57 +846,7 @@ class CartoonService:
                 "\n".join(lines)
             )
 
-        return "\n\n".join(
-            sections
-        )
-
-    @staticmethod
-    def _path_context_as_markdown(
-        context: dict[str, Any],
-    ) -> str:
-        labels = {
-            "path_title": "学习路径",
-            "path_goal": "路径目标",
-            "node_title": "当前节点",
-            "difficulty": "难度",
-            "mastery_target": "掌握目标",
-            "generation_focus": "生成重点",
-            "tutorial_title": "教程标题",
-            "tutorial_summary": "教程摘要",
-        }
-
-        lines = [
-            "# 路径节点教学上下文",
-        ]
-
-        for key, label in labels.items():
-            value = context.get(key)
-
-            if value in (
-                None,
-                "",
-                [],
-            ):
-                continue
-
-            if isinstance(
-                value,
-                list,
-            ):
-                rendered = "、".join(
-                    str(item)
-                    for item in value
-                )
-            else:
-                rendered = str(value)
-
-            lines.append(
-                f"- {label}：{rendered}"
-            )
-
-        return "\n".join(
-            lines
-        )
+        return [section[:4_000] for section in sections if section.strip()][:12]
 
     @staticmethod
     def _string_list(
@@ -1096,7 +953,7 @@ class CartoonService:
         )
 
         card = {
-            "schema_version": "cartoon/v1",
+            "schema_version": "cartoon/v6",
             "resource_type": "cartoon",
             "title": artifact.title,
             "file_type": "mp4",
@@ -1139,7 +996,7 @@ class CartoonService:
             },
             metadata={
                 "agent_id": "cartoon",
-                "schema_version": "cartoon/v1",
+                "schema_version": "cartoon/v6",
                 "engine": "hyperframes",
                 "has_audio": artifact.has_audio,
                 "video_file_path": str(artifact.video_path),

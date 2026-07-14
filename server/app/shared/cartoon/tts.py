@@ -102,33 +102,11 @@ class CartoonTtsService:
         )
 
         if self.provider == "edge":
-            try:
-                return await self._synthesize_edge(
-                    narration,
-                    output_path,
-                    voice,
-                )
-
-            except Exception as exc:
-                logger.warning(
-                    "edge-tts failed, "
-                    "trying local fallback: %s",
-                    exc,
-                )
-
-                if (
-                    shutil.which("say")
-                    and shutil.which(
-                        "ffmpeg"
-                    )
-                ):
-                    return await self._synthesize_say(
-                        narration,
-                        output_path,
-                        voice,
-                    )
-
-                raise
+            return await self._synthesize_edge(
+                narration,
+                output_path,
+                voice,
+            )
 
         return await self._synthesize_say(
             narration,

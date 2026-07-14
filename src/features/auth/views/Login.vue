@@ -150,8 +150,11 @@ const handleLogin = async () => {
       // 保存 JWT Token 并更新全局用户状态
       setAuthToken(data.token)
       setCurrentUser(data.user ?? null)
-      // 首次登录跳转 onboarding 引导页，非首次直接进 dashboard
-      if (!data.user?.is_first_login) {
+
+      // onboarding_completed: false=未完成需弹窗, true=已完成
+      const needsOnboarding = data.user?.onboarding_completed === false
+
+      if (needsOnboarding) {
         router.push('/dashboard?onboarding=true&loginSuccess=true')
       } else {
         router.push('/dashboard?loginSuccess=true')

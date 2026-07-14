@@ -65,9 +65,8 @@ export interface ResourceGenerationRequest {
       max_items: number
       focus: 'textbook' | 'engineering' | 'research'
     }
-    // 演示幻灯智能体的配置：四项参数只影响 PPT 大纲 LLM 内容输出
+    // 演示幻灯智能体的配置：影响共享教学叙事与视觉编排智能体
     ppt: {
-      template: 'auto' | 'teaching' | 'technical' | 'case_study' | 'exam_review'
       narrative_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
       density: 'concise' | 'standard' | 'detailed'
       emphasis: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
@@ -85,7 +84,7 @@ export interface ResourceGenerationRequest {
 export interface ResourceTaskStatus {
   resource_id: number // 资源生成任务主键
   learning_need?: string // 用户输入的学习需求
-  status?: string // 任务生命周期状态：pending / planning / generating / completed / partial_completed / failed
+  status?: string // 任务生命周期状态：pending / planning / generating / completed / partial / failed
   selected_agents?: string[] // 参与生成的智能体 id 列表
   agent_snapshots?: Record<string, ResourceAgentSnapshot> // 各智能体实时快照，键为 agent_id
   current_message?: string // 当前阶段的汇总消息

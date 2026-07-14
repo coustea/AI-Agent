@@ -808,37 +808,9 @@ const agentSettingSchemas: Record<
 
   ppt: [
     {
-      key: 'template',
-      title: '内容取向',
-      description: '控制课件内容组织，不改变视觉模板',
-      type: 'select',
-      options: [
-        {
-          label: '自动取向',
-          value: 'auto',
-        },
-        {
-          label: '课堂讲授',
-          value: 'teaching',
-        },
-        {
-          label: '技术解析',
-          value: 'technical',
-        },
-        {
-          label: '案例拆解',
-          value: 'case_study',
-        },
-        {
-          label: '复习巩固',
-          value: 'exam_review',
-        },
-      ],
-    },
-    {
       key: 'narrative_style',
       title: '叙事方式',
-      description: '决定 PPT 大纲从概念、案例或问题切入',
+      description: '决定教学总监如何组织整套叙事与页面视觉重点',
       type: 'choice',
       options: [
         {
@@ -1313,13 +1285,7 @@ function agentThemeStyle(
     clamp(18px, 3vw, 42px)
     30px;
   box-sizing: border-box;
-  background:
-    linear-gradient(
-      180deg,
-      #f8fbff 0%,
-      #f5f8fc 48%,
-      #f7f9fc 100%
-    );
+  background: #fafafa;
   color: var(
     --color-text,
     #334155
@@ -1599,10 +1565,8 @@ function agentThemeStyle(
       minmax(142px, 1fr)
     );
   overflow-x: auto;
-  border-top: 1px solid #dfe7f0;
-  border-bottom: 1px solid #dfe7f0;
-  background:
-    rgba(255, 255, 255, 0.58);
+  border: none;
+  background: transparent;
   scrollbar-width: thin;
 }
 
@@ -1618,7 +1582,6 @@ function agentThemeStyle(
   align-items: center;
   gap: 9px;
   border: 0;
-  border-right: 1px solid #e7edf4;
   padding: 11px 10px;
   background: transparent;
   text-align: left;
@@ -1745,12 +1708,10 @@ function agentThemeStyle(
   position: relative;
   margin-top: 14px;
   overflow: hidden;
-  border: 1px solid #dce5ef;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow:
-    0 10px 28px
-    rgba(31, 55, 82, 0.06);
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .disabled-banner {
@@ -1798,7 +1759,8 @@ function agentThemeStyle(
   display: grid;
   grid-template-columns:
     repeat(2, minmax(0, 1fr));
-  padding-top: 3px;
+  gap: 32px 48px;
+  padding: 12px 4px;
   transition:
     opacity 0.18s ease,
     filter 0.18s ease;
@@ -1817,16 +1779,15 @@ function agentThemeStyle(
   justify-content: space-between;
   gap: 22px;
   padding: 23px;
-  border-right: 1px solid #e6edf4;
-  border-bottom: 1px solid #e6edf4;
+  border: none;
 }
 
 .setting-item:nth-child(2n) {
-  border-right: 0;
+  border: none;
 }
 
 .setting-item:nth-last-child(-n + 2) {
-  border-bottom: 0;
+  border: none;
 }
 
 .setting-copy {
@@ -1903,11 +1864,11 @@ function agentThemeStyle(
 
 .option-button {
   min-height: 40px;
-  border: 1px solid #dce5ef;
-  border-radius: 9px;
+  border: none;
+  border-radius: 8px;
   padding: 8px 10px;
-  background: #ffffff;
-  color: #526174;
+  background: #f1f5f9;
+  color: #64748b;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -1919,46 +1880,25 @@ function agentThemeStyle(
 }
 
 .option-button:hover {
-  border-color:
-    color-mix(
-      in srgb,
-      var(--agent-accent) 42%,
-      #dce5ef
-    );
-  color: var(--agent-text);
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .option-button.active {
-  border-color:
-    color-mix(
-      in srgb,
-      var(--agent-accent) 64%,
-      #ffffff
-    );
-  background:
-    color-mix(
-      in srgb,
-      var(--agent-soft) 70%,
-      #ffffff
-    );
+  background: var(--agent-soft);
   color: var(--agent-text);
-  box-shadow:
-    inset 0 0 0 1px
-    color-mix(
-      in srgb,
-      var(--agent-accent) 14%,
-      transparent
-    );
+  font-weight: 800;
+  box-shadow: none;
 }
 
 .segmented-control {
   display: grid;
   grid-template-columns:
     repeat(3, minmax(0, 1fr));
-  padding: 3px;
-  border: 1px solid #dce5ef;
+  padding: 4px;
+  border: none;
   border-radius: 10px;
-  background: #f8fafc;
+  background: #f1f5f9;
 }
 
 .segmented-control button {
@@ -1984,9 +1924,8 @@ function agentThemeStyle(
 .segmented-control button.active {
   background: #ffffff;
   color: var(--agent-text);
-  box-shadow:
-    0 2px 7px
-    rgba(30, 52, 76, 0.09);
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .clean-select {
@@ -1996,11 +1935,11 @@ function agentThemeStyle(
   -webkit-appearance: none;
   color-scheme: light;
   forced-color-adjust: none;
-  border: 1px solid #dce5ef;
-  border-radius: 9px;
+  border: none;
+  border-radius: 8px;
   padding: 0 42px 0 13px;
 
-  background-color: #ffffff !important;
+  background-color: #f1f5f9 !important;
   background-image:
     linear-gradient(
       45deg,
@@ -2031,33 +1970,15 @@ function agentThemeStyle(
 }
 
 .clean-select:hover {
-  border-color:
-    color-mix(
-      in srgb,
-      var(--agent-accent) 48%,
-      #dce5ef
-    );
-  background-color: #ffffff !important;
+  background-color: #e2e8f0 !important;
   color: #334155 !important;
 }
 
 .clean-select:focus,
 .clean-select:focus-visible {
-  border-color:
-    color-mix(
-      in srgb,
-      var(--agent-accent) 56%,
-      #dce5ef
-    );
   background-color: #ffffff !important;
   color: #334155 !important;
-  box-shadow:
-    0 0 0 3px
-    color-mix(
-      in srgb,
-      var(--agent-soft) 72%,
-      transparent
-    );
+  box-shadow: 0 0 0 2px var(--agent-accent);
 }
 
 .clean-select:disabled {

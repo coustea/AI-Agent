@@ -79,7 +79,11 @@
         </div>
 
         <!-- 智能体流程画布：包含计划核心、连接线 SVG、基础资源工位行、聚合工位行、整合卡片 -->
-        <div ref="flowCanvasRef" class="agent-flow-canvas agent-flow-canvas-v4">
+        <div
+          ref="flowCanvasRef"
+          class="agent-flow-canvas agent-flow-canvas-v4"
+          :class="{ 'has-measured-links': agentLinkPaths.length > 0 }"
+        >
           <!-- 装饰性背景：网格与三条轨道光晕 -->
           <div class="flow-grid-bg"></div>
           <div class="flow-orbit orbit-one"></div>
@@ -106,7 +110,7 @@
                 <em>{{ getNodeStatusLabel(getStageNode('planning')) }}</em>
               </div>
               <!-- 静态当前消息：planning 节点 -->
-              <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]">
+              <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]" aria-live="polite">
                 <div class="live-message-row">
                   <span class="station-live-dot" :class="getStageNode('planning').status"></span>
                   <p class="live-message-only">{{ getNodeMessage(getStageNode('planning')) }}</p>
@@ -177,7 +181,7 @@
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
               <!-- 静态当前消息：并行工位节点 -->
-              <div class="station-live-log" :class="[`is-${node.status}`]">
+              <div class="station-live-log" :class="[`is-${node.status}`]" aria-live="polite">
                 <div class="live-message-row">
                   <span class="station-live-dot" :class="node.status"></span>
                   <p class="live-message-only">{{ getNodeMessage(node) }}</p>
@@ -218,7 +222,7 @@
                 <em>{{ getNodeStatusLabel(node) }}</em>
               </div>
               <!-- 静态当前消息：聚合工位节点 -->
-              <div class="station-live-log" :class="[`is-${node.status}`]">
+              <div class="station-live-log" :class="[`is-${node.status}`]" aria-live="polite">
                 <div class="live-message-row">
                   <span class="station-live-dot" :class="node.status"></span>
                   <p class="live-message-only">{{ getNodeMessage(node) }}</p>
@@ -3648,235 +3652,6 @@ function formatEventTime(timestamp: number) {
   outline-offset: 2px;
 }
 
-/* Custom Styles for Simplified Cards & Neon Breathing Glow */
-.msg-queue-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow: hidden;
-}
-
-.message-queue-item {
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  min-height: 0 !important;
-  grid-template-columns: none !important;
-}
-
-.message-queue-item.is-head {
-  opacity: 0.5;
-}
-
-.message-queue-item.is-head .live-message-only {
-  font-size: 0.7rem !important;
-  font-weight: var(--weight-bold) !important;
-  -webkit-line-clamp: 1 !important;
-}
-
-/* Broadcast queue animation:
-   - New message (tail): slides up from below + fades in
-   - Old head leaving: slides up + fades out
-   - Tail becoming head: smoothly transitions opacity/size via is-head class */
-.msg-queue-enter-active {
-  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.msg-queue-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.4, 0, 1, 1);
-  position: absolute;
-  width: 100%;
-}
-
-.msg-queue-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-.msg-queue-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
-}
-
-.msg-queue-move {
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.message-only-layout {
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  height: 100% !important;
-  grid-template-columns: none !important;
-}
-
-.live-message-only {
-  margin: 0 !important;
-  color: var(--color-text);
-  font-size: 0.74rem !important;
-  font-weight: var(--weight-bold) !important;
-  line-height: 1.4 !important;
-  display: -webkit-box;
-  -webkit-line-clamp: 2 !important;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-family: var(--agent-body-font);
-}
-
-/* Pulsing Neon border glow animation for running cards */
-@keyframes card-neon-glow {
-  0% {
-    border-color: rgba(59, 130, 246, 0.45);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2), 0 10px 25px rgba(59, 130, 246, 0.1);
-  }
-  50% {
-    border-color: rgba(59, 130, 246, 0.95);
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.55), 0 10px 40px rgba(59, 130, 246, 0.25);
-  }
-  100% {
-    border-color: rgba(59, 130, 246, 0.45);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2), 0 10px 25px rgba(59, 130, 246, 0.1);
-  }
-}
-
-.agent-station-card.status-running {
-  animation: card-neon-glow 2s infinite ease-in-out !important;
-  border-color: rgba(59, 130, 246, 0.8) !important;
-}
-
-/* Beautiful custom status-aligned dots */
-.station-live-dot.waiting,
-.station-live-dot.skipped {
-  background: #94A3B8 !important;
-  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.2) !important;
-}
-
-.station-live-dot.running {
-  background: #3B82F6 !important;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25) !important;
-  animation: dot-pulse-glow 1.5s infinite ease-in-out !important;
-}
-
-.station-live-dot.success {
-  background: #10B981 !important;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25) !important;
-}
-
-.station-live-dot.failed {
-  background: #EF4444 !important;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25) !important;
-}
-
-@keyframes dot-pulse-glow {
-  0% {
-    transform: scale(0.9);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), 0 0 0 5px rgba(59, 130, 246, 0.3) !important;
-  }
-  100% {
-    transform: scale(0.9);
-    opacity: 0.8;
-  }
-}
-
-/* 微调多智能体动画页面样式 - 保持原有布局，仅增强高级感 */
-.agent-flow-canvas {
-  background: 
-    radial-gradient(circle at 50% 25%, rgba(99, 102, 241, 0.08), transparent 45%),
-    radial-gradient(circle at 20% 75%, rgba(14, 165, 233, 0.05), transparent 35%),
-    radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.05), transparent 35%),
-    #fafbfd !important;
-  border-color: rgba(15, 23, 42, 0.05) !important;
-}
-
-.agent-station-card-v4 {
-  background: rgba(255, 255, 255, 0.85) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(15, 23, 42, 0.06) !important;
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.02) !important;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-.agent-station-card-v4:hover,
-.agent-station-card-v4.is-selected {
-  transform: translateY(-4px) !important;
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.08) !important;
-}
-
-/* 运行中的呼吸光晕 */
-.agent-station-card.status-running {
-  border-color: var(--color-primary) !important;
-  animation: card-premium-glow 2.5s infinite ease-in-out !important;
-}
-
-@keyframes card-premium-glow {
-  0%, 100% {
-    box-shadow: 0 4px 18px rgba(99, 102, 241, 0.03), 0 0 0 1px rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.3) !important;
-  }
-  50% {
-    box-shadow: 0 12px 30px rgba(99, 102, 241, 0.08), 0 0 0 2px rgba(99, 102, 241, 0.2);
-    border-color: rgba(99, 102, 241, 0.7) !important;
-  }
-}
-
-/* 成功状态 */
-.agent-station-card.status-success,
-.agent-station-card.has-artifact {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(16, 185, 129, 0.24) !important;
-  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.02) !important;
-}
-
-/* 基础与聚合 Agent 使用同一工位尺寸；聚合行不再因卡片数量少而拉伸。 */
-.agent-station-row-v4.base-agent-row,
-.agent-station-row-v4.aggregation-agent-row {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
-  max-width: 1420px;
-  justify-content: center;
-}
-
-.aggregation-agent-row .agent-station-card-v4:only-child {
-  grid-column: auto;
-  width: auto;
-  justify-self: stretch;
-}
-
-.agent-station-card-v4 {
-  height: 116px;
-  min-height: 116px;
-}
-
-@media (max-width: 640px) {
-  .agent-station-row-v4.base-agent-row,
-  .agent-station-row-v4.aggregation-agent-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* 连接线微妙光晕 */
-.agent-link-path {
-  stroke-width: 2;
-  transition: all 0.3s ease;
-}
-
-.agent-link-path.status-running {
-  stroke-width: 2.5;
-  stroke: var(--color-primary);
-  opacity: 0.8;
-}
-
-.agent-link-path.status-success {
-  stroke: #10B981 !important;
-  opacity: 0.6;
-}
-
 /* ==================== 内联 Outputs 样式 ==================== */
 .output-dock-section {
   padding: 18px 24px 24px;
@@ -4203,4 +3978,259 @@ function formatEventTime(timestamp: number) {
     transform: none;
   }
 }
+
+/* Adaptive workflow graph: the DOM is the source of truth for card and link geometry. */
+.agent-flow-canvas-v4 {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+  padding: clamp(22px, 2.4vw, 38px);
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.1), transparent 34%),
+    radial-gradient(circle at 12% 86%, rgba(16, 185, 129, 0.08), transparent 28%),
+    linear-gradient(180deg, #fbfdff, #f7faff);
+  border: 1px solid rgba(191, 219, 254, 0.58);
+  border-radius: 22px;
+}
+
+.agent-flow-canvas-v4::before {
+  top: 104px;
+  height: min(34vw, 320px);
+}
+
+.flow-grid-bg {
+  opacity: 0.52;
+}
+
+.flow-orbit {
+  opacity: 0.62;
+}
+
+.flow-core-stack-v4 {
+  z-index: 4;
+  margin-top: 2px;
+}
+
+.planning-core {
+  width: min(370px, 100%) !important;
+  min-height: 144px !important;
+}
+
+.agent-link-svg {
+  display: block !important;
+  z-index: 2;
+}
+
+.agent-link-path {
+  stroke-width: 2;
+  opacity: 0.6;
+}
+
+.agent-link-path.status-running {
+  stroke-width: 2.5;
+  opacity: 0.96;
+}
+
+.agent-station-row-v4,
+.agent-station-row-v4.base-agent-row,
+.agent-station-row-v4.aggregation-agent-row {
+  z-index: 4;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 232px), 1fr));
+  width: min(100%, 1420px);
+  max-width: 1420px;
+  margin: clamp(52px, 7vw, 92px) auto 0;
+  gap: clamp(12px, 1.4vw, 20px);
+  align-items: stretch;
+}
+
+.agent-station-row-v4.base-agent-row {
+  position: relative;
+  margin-top: 42px;
+  padding-top: 32px;
+}
+
+/* The structural rail is visible before measured SVG paths exist. */
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row::before,
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row::after,
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row > .agent-station-card::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+  background: linear-gradient(90deg, #60a5fa, #34d399, #60a5fa);
+  background-size: 180% 100%;
+  animation: workflow-rail-flow 2.8s linear infinite;
+}
+
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row::before {
+  top: -42px;
+  left: 50%;
+  width: 2px;
+  height: 42px;
+  transform: translateX(-50%);
+}
+
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row::after {
+  top: 0;
+  right: min(12%, 116px);
+  left: min(12%, 116px);
+  height: 2px;
+}
+
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row > .agent-station-card {
+  position: relative;
+  z-index: 1;
+}
+
+.agent-flow-canvas-v4:not(.has-measured-links) .base-agent-row > .agent-station-card::before {
+  top: -32px;
+  left: 50%;
+  width: 2px;
+  height: 32px;
+  transform: translateX(-50%);
+}
+
+.agent-flow-canvas-v4.has-measured-links .base-agent-row::before,
+.agent-flow-canvas-v4.has-measured-links .base-agent-row::after,
+.agent-flow-canvas-v4.has-measured-links .base-agent-row > .agent-station-card::before {
+  content: none;
+}
+
+.agent-station-row-v4.aggregation-agent-row {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  width: min(100%, 760px);
+  margin-top: 0;
+}
+
+.agent-station-card,
+.agent-station-card-v4 {
+  min-height: 144px;
+  height: auto;
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.agent-station-card:hover,
+.agent-station-card.is-selected {
+  transform: translateY(-3px);
+  border-color: rgba(59, 130, 246, 0.62);
+  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.13);
+}
+
+.agent-station-card.status-running {
+  border-color: rgba(59, 130, 246, 0.66);
+  background: linear-gradient(135deg, #ffffff, #f3f8ff);
+  animation: station-running-halo 2.4s ease-in-out infinite;
+}
+
+.agent-station-card.status-success,
+.agent-station-card.has-artifact {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: linear-gradient(135deg, #ffffff, #f2fdf8);
+}
+
+.station-live-log {
+  min-height: 40px;
+  margin: 9px 0;
+  padding: 8px 9px;
+}
+
+.live-message-only {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: #52627a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.station-footer {
+  margin-top: auto;
+}
+
+.station-progress-track {
+  min-width: 72px;
+  flex: 1;
+}
+
+.station-live-dot.waiting,
+.station-live-dot.skipped {
+  background: #94a3b8;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.18);
+}
+
+.station-live-dot.running {
+  background: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+}
+
+.station-live-dot.success {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
+}
+
+.station-live-dot.failed {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18);
+}
+
+.agent-station-card.status-running .station-progress-track i {
+  background-size: 180% 100%;
+  animation: station-progress-flow 1.8s linear infinite;
+}
+
+.agent-station-card.status-running .station-live-dot {
+  animation: station-live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes station-running-halo {
+  0%, 100% { box-shadow: 0 8px 24px rgba(37, 99, 235, 0.08); }
+  50% { box-shadow: 0 14px 34px rgba(37, 99, 235, 0.2), 0 0 0 3px rgba(59, 130, 246, 0.08); }
+}
+
+@keyframes station-progress-flow {
+  to { background-position: -180% 0; }
+}
+
+@keyframes station-live-pulse {
+  50% { transform: scale(1.22); }
+}
+
+@keyframes workflow-rail-flow {
+  to { background-position: -180% 0; }
+}
+
+@media (max-width: 760px) {
+  .agent-flow-canvas-v4 {
+    padding: 18px;
+  }
+
+  .agent-link-svg,
+  .flow-orbit {
+    display: none !important;
+  }
+
+  .agent-station-row-v4,
+  .agent-station-row-v4.base-agent-row,
+  .agent-station-row-v4.aggregation-agent-row {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 0;
+  }
+
+  .dual-flow-connector {
+    margin: 0 auto;
+  }
+}
+
 </style>

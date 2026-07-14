@@ -12,6 +12,7 @@ from app.infra.database import session_scope
 from app.infra.models import GeneratedResourceRunEvent
 from app.infra.logging import get_logger
 from app.resource.service import ResourceService
+from app.resource.status import ResourceLifecycleStatus
 
 logger = get_logger(__name__)
 
@@ -114,10 +115,10 @@ class ResourceEvents:
             service = ResourceService(session)
             if agent_id == "global":
                 resource_status = {
-                    "running": "generating",
-                    "completed": "completed",
-                    "failed": "failed",
-                }.get(status, "generating")
+                    "running": ResourceLifecycleStatus.GENERATING,
+                    "completed": ResourceLifecycleStatus.COMPLETED,
+                    "failed": ResourceLifecycleStatus.FAILED,
+                }.get(status, ResourceLifecycleStatus.GENERATING)
                 row = await service.publish_generation_status(
                     resource_id=self._resource_id,
                     status=resource_status,

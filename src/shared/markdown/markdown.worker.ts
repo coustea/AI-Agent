@@ -1,10 +1,10 @@
 /// <reference lib="webworker" />
 
-import { renderMarkdownToHtml } from './pipeline'
+import { renderMarkdownToHtml } from './markdown'
 import type {
   MarkdownRenderRequest,
   MarkdownRenderResponse,
-} from './types'
+} from './markdown'
 
 const workerScope: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope
 

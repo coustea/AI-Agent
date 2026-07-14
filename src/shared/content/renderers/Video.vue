@@ -70,7 +70,15 @@ function parseArtifact(value: unknown): VideoArtifactView | null {
   const record = asRecord(candidate)
   if (!record) return null
   const nested = asRecord(record.metadata)
-  const source = nested?.public_url || nested?.video_url ? nested : record
+  const content = asRecord(record.content)
+  const contentMetadata = asRecord(content?.metadata)
+  const source = nested?.public_url || nested?.video_url
+    ? nested
+    : contentMetadata?.public_url || contentMetadata?.video_url
+      ? contentMetadata
+      : content?.public_url || content?.video_url
+        ? content
+        : record
   const publicUrl = source.public_url ?? source.video_url
   if (typeof publicUrl !== 'string' || !publicUrl.endsWith('.mp4')) return null
 

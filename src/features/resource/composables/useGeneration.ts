@@ -52,7 +52,7 @@ export function useGeneration() {
     quiz: { question_count: 5, difficulty_mode: 'adaptive', emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
-    ppt: { template: 'auto', narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
+    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
     cartoon: { depth: 'standard', pace: 'normal' },
   })
 
@@ -507,7 +507,7 @@ export function useGeneration() {
       finalBundle.value = bundle
       generatedResources.value = bundle.resources
       // 根据任务状态设置相应的警告提示文案
-      resultWarning.value = taskStatus.status === 'partial_completed'
+      resultWarning.value = taskStatus.status === 'partial'
         ? '部分资源生成失败，以下已完成内容仍可查看。'
         : taskStatus.status === 'failed'
           ? '资源生成未完全成功，以下已完成内容仍可查看。'
@@ -529,7 +529,7 @@ export function useGeneration() {
     applyTaskStatus(taskStatus)
     // 终态状态触发完成收尾
     const status = taskStatus.status || ''
-    if (['completed', 'partial_completed', 'failed'].includes(status)) {
+    if (['completed', 'partial', 'failed'].includes(status)) {
       await completeGeneration(resourceId, taskStatus)
     }
   }
@@ -682,7 +682,7 @@ export function useGeneration() {
       applyTaskStatus(taskStatus)
       // 若任务已结束则直接完成收尾
       const status = taskStatus.status || ''
-      if (['completed', 'partial_completed', 'failed'].includes(status)) {
+      if (['completed', 'partial', 'failed'].includes(status)) {
         await completeGeneration(resourceId, taskStatus)
         return
       }

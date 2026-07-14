@@ -12,16 +12,9 @@ export const DOMAIN_LABELS: Record<string, string> = {
   sorting: '排序算法',
   searching: '搜索算法',
   base_data_structure: '基础数据结构',
-  linear_structure: '线性结构',
   tree_structure: '树结构',
   graph_structure: '图结构',
-  string_structure: '字符串',
-  recursion_backtrack: '递归与回溯',
   dynamic_programming: '动态规划',
-  greedy: '贪心算法',
-  divide_conquer: '分治算法',
-  bit_manipulation: '位运算',
-  math: '数学算法',
 }
 
 // 可视化器类型的中文标签

@@ -359,7 +359,7 @@ class ProfileService:
             user.courses = payload["courses"]
 
         # 标记 onboarding 已完成并更新时间戳
-        user.is_first_login = True
+        user.onboarding_completed = True
         user.updated_at = datetime.now(timezone.utc)
 
         db.add(user)
@@ -369,10 +369,10 @@ class ProfileService:
 
         logger.info(
             "[ProfileService] onboarding 基础信息已提交: user_id=%s school=%s major=%s grade=%s "
-            "daily_study_time=%s goal=%s courses_count=%s languages_count=%s is_first_login=%s",
+            "daily_study_time=%s goal=%s courses_count=%s languages_count=%s onboarding_completed=%s",
             user.id, user.school, user.major, user.grade,
             user.daily_study_time, user.global_learning_goal,
-            len(user.courses or []), len(user.programming_languages or []), user.is_first_login,
+            len(user.courses or []), len(user.programming_languages or []), user.onboarding_completed,
         )
 
         # 提交后回读校验，确认真正落库（便于排查“没存进数据库”的问题）
@@ -382,9 +382,9 @@ class ProfileService:
         else:
             logger.info(
                 "[ProfileService] onboarding 落库校验通过: user_id=%s school=%s major=%s grade=%s "
-                "courses=%s programming_languages=%s is_first_login=%s",
+                "courses=%s programming_languages=%s onboarding_completed=%s",
                 user_id, reloaded.school, reloaded.major, reloaded.grade,
-                reloaded.courses, reloaded.programming_languages, reloaded.is_first_login,
+                reloaded.courses, reloaded.programming_languages, reloaded.onboarding_completed,
             )
 
         # 确保对应画像记录存在

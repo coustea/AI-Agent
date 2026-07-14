@@ -1,18 +1,10 @@
-"""算法可视化模块 Pydantic 请求/响应模型。
-
-当前设计：
-1. 前端必须选择语言 language。
-2. 前端必须选择算法模板 algorithm。
-3. 后端根据 algorithm + language 返回干净模板代码（无 tracer）。
-4. 用户基于模板修改代码和数据。
-5. 运行时后端自动插装 tracer 调用，编译运行，读取 trace.json，校验事件流。
-"""
+"""算法可视化模块的双执行链路请求/响应契约。"""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # 支持的语言信息响应模型
@@ -49,21 +41,55 @@ class TemplateResponse(BaseModel):
     requiredEvents: List[str] = Field(default_factory=list, alias="required_events")
     supportedLanguages: List[str] = Field(default_factory=list, alias="supported_languages")
     defaultInput: Dict[str, Any] = Field(default_factory=dict, alias="default_data")
+    inputSchema: Dict[str, Any] = Field(default_factory=dict, alias="input_schema")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class RunRequest(BaseModel):
-    """Run visualization with code and input data."""
+    """Run either an official template or LLM-instrumented custom Python code."""
 
-    algorithm: str
+    mode: Literal["official", "custom"] = "official"
+    algorithm: str | None = None
     language: str
-    code: str
-    domain: str
-    visualizerType: str = Field(..., alias="visualizer_type")
     inputData: Dict[str, Any] = Field(default_factory=dict, alias="input_data")
+    code: str | None = None
+    visualizerType: Optional[Literal["array", "stack-queue", "linked-list", "tree", "graph", "dp-table"]] = None
+    entryFunction: str | None = None
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_mode_payload(self) -> "RunRequest":
+        if self.mode == "official":
+            if not self.algorithm:
+                raise ValueError("官方模板模式必须指定 algorithm")
+            if self.code is not None or self.visualizerType is not None or self.entryFunction is not None:
+                raise ValueError("官方模板模式不接受 code、visualizerType 或 entryFunction")
+        elif not self.code or not self.visualizerType:
+            raise ValueError("自定义代码模式必须提供 code 和 visualizerType")
+        return self
+
+
+class CustomContractRequest(BaseModel):
+    """Request a deterministic, form-friendly input contract for custom code."""
+
+    code: str
+    entryFunction: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CustomFunctionResponse(BaseModel):
+    name: str
+    parameters: List[str]
+
+
+class CustomContractResponse(BaseModel):
+    entryFunction: str
+    functions: List[CustomFunctionResponse]
+    inputSchema: Dict[str, Any]
+    defaultInput: Dict[str, Any]
 
 
 class TraceEventResponse(BaseModel):
@@ -88,7 +114,7 @@ class RunSuccessResponse(BaseModel):
     algorithm: str
     visualizerType: str
     language: str
-    executionMode: str
+    executionMode: Literal["official", "custom"]
     events: List[TraceEventResponse]
     result: Any
     summary: str

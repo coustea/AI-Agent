@@ -2,7 +2,6 @@
   <section class="visualizer-left">
     <header class="visualizer-header">
       <div class="visualizer-title">
-        <span class="visualizer-kicker">算法展示</span>
         <h2>{{ selectedAlgorithm?.name || '算法可视化' }}</h2>
         <p>{{ selectedAlgorithmDescription }}</p>
       </div>
@@ -28,6 +27,7 @@
         :current-event="currentEvent"
         :current-step-index="currentStepIndex"
         :events="events"
+        :key="`${visualizerType}-${runVersion}`"
       />
 
       <div
@@ -52,16 +52,9 @@
         </div>
 
         <div class="empty-copy">
-          <span class="empty-kicker">可视化画布</span>
-          <h2>选择算法模板，编辑代码后运行</h2>
-          <p>根据后端返回的可视化轨迹渲染数组、链表、树、图和 DP 表。</p>
+          <h2>准备好后，开始运行可视化</h2>
+          <p>选择模板或编写代码，运行后会在这里逐步展示执行过程。</p>
         </div>
-
-        <ul class="empty-tips">
-          <li>选择模板</li>
-          <li>确认语言</li>
-          <li>运行生成展示</li>
-        </ul>
       </div>
     </section>
 
@@ -69,23 +62,14 @@
       <div class="control-actions">
         <button
           class="control-btn primary"
-          :disabled="!hasEvents"
+          :disabled="generating || (!hasEvents && runDisabled)"
           @click="$emit('primary')"
         >
           <component
             :is="primaryIcon"
-            class="btn-icon"
+            :class="['btn-icon', { spin: generating }]"
           />
           <span>{{ primaryLabel }}</span>
-        </button>
-
-        <button
-          class="control-btn"
-          :disabled="!hasEvents"
-          @click="$emit('reset')"
-        >
-          <RotateCcw class="btn-icon" />
-          <span>重置展示</span>
         </button>
       </div>
 
@@ -107,7 +91,7 @@
 
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
-import { Pause, Play, RotateCcw } from 'lucide-vue-next'
+import { Loader2, Pause, Play } from 'lucide-vue-next'
 import type {
   AlgorithmInfo,
   TraceEvent,
@@ -131,13 +115,14 @@ const props = defineProps<{
   currentEvent: TraceEvent | null
   currentStepIndex: number
   generating: boolean
+  runVersion: number
   playing: boolean
   finished: boolean
+  runDisabled?: boolean
 }>()
 
 defineEmits<{
   primary: []
-  reset: []
 }>()
 
 // 可视化器组件映射表（按可视化器类型选择对应组件）
@@ -191,13 +176,18 @@ const progressPercent = computed(() => {
 
 // 主操作按钮的文字标签
 const primaryLabel = computed(() => {
+  if (props.generating) return '正在生成可视化'
+  if (!hasEvents.value) return '运行可视化'
   if (props.playing) return '暂停展示'
   if (props.finished) return '重新展示'
   return '开始展示'
 })
 
 // 主操作按钮的图标
-const primaryIcon = computed(() => (props.playing ? Pause : Play))
+const primaryIcon = computed(() => {
+  if (props.generating) return Loader2
+  return props.playing ? Pause : Play
+})
 </script>
 
 <style scoped>
@@ -225,14 +215,6 @@ const primaryIcon = computed(() => (props.playing ? Pause : Play))
 
 .visualizer-title {
   min-width: 0;
-}
-
-.visualizer-kicker {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 900;
 }
 
 .visualizer-title h2 {
@@ -374,21 +356,8 @@ const primaryIcon = computed(() => (props.playing ? Pause : Play))
   max-width: 520px;
 }
 
-.empty-kicker {
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  font-size: 11px;
-  font-weight: 900;
-}
-
 .empty-copy h2 {
-  margin: 12px 0 6px;
+  margin: 0 0 6px;
   color: var(--color-text-strong);
   font-size: 18px;
   line-height: 1.3;
@@ -400,26 +369,6 @@ const primaryIcon = computed(() => (props.playing ? Pause : Play))
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.7;
-}
-
-.empty-tips {
-  width: min(600px, 100%);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.empty-tips li {
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: 800;
 }
 
 .visualizer-control-bar {
@@ -484,6 +433,10 @@ const primaryIcon = computed(() => (props.playing ? Pause : Play))
   height: 14px;
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 .timeline-meter {
   min-width: 0;
   flex: 1;
@@ -522,6 +475,18 @@ const primaryIcon = computed(() => (props.playing ? Pause : Play))
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner,
+  .spin {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+
+  .progress-fill {
+    transition: none;
+  }
+}
+
 @media (max-width: 960px) {
   .visualizer-left {
     min-height: 560px;
@@ -549,10 +514,6 @@ const primaryIcon = computed(() => (props.playing ? Pause : Play))
 
   .progress-track {
     width: 100%;
-  }
-
-  .empty-tips {
-    grid-template-columns: 1fr;
   }
 
   .empty-copy h2 {

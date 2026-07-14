@@ -6,7 +6,6 @@ generate_for_path: 接收 PathResourceRequest，返回 AgentResult（路径规�
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 from pathlib import Path
 
@@ -20,44 +19,6 @@ if TYPE_CHECKING:
     from app.resource.schemas import AgentResult
 
 logger = get_logger(__name__)
-
-
-def _extract_core_content(markdown: str) -> str:
-    """从教程 markdown 中提取核心知识点讲解部分。
-
-    教程结构：
-    - 元数据标题块（标题、摘要、知识点、类型）
-    - 1. 概述 / 学习目标
-    - 2. 前置知识（可选）
-    - 3. 核心知识点讲解  ← 提取这部分
-    - 4. 实战示例（可选）
-    - 5. 总结回顾
-
-    Returns:
-        核心知识点讲解部分的 markdown 内容
-    """
-    lines = markdown.split("\n")
-    core_start = -1
-    core_end = len(lines)
-
-    # 查找"核心知识点讲解"或"## 3."开头的部分
-    for i, line in enumerate(lines):
-        if re.match(r"^##\s*(?:3\.|核心知识点)", line):
-            core_start = i
-            break
-
-    if core_start == -1:
-        # 没找到，返回空
-        return ""
-
-    # 查找下一节（4. 实战示例 或 5. 总结回顾）
-    for i in range(core_start + 1, len(lines)):
-        if re.match(r"^##\s*(?:4\.|5\.|实战示例|总结回顾)", lines[i]):
-            core_end = i
-            break
-
-    return "\n".join(lines[core_start:core_end]).strip()
-
 
 class PPTService:
     """PPT 生成服务。
@@ -126,7 +87,18 @@ class PPTService:
                 error="缺少教程内容",
             )
 
-        # 构建 PathPPT 请求
+        tutorial_content = tutorial.content_markdown.strip()
+        if not tutorial_content:
+            logger.error("[PPTService] 教程正文为空: node_id=%s", request.node_id)
+            return AgentResult(
+                success=False,
+                title="PPT 生成失败",
+                file_type="html",
+                error="教程正文为空，无法生成 PPT",
+            )
+
+        # Path 的教程正文是独立领域的源材料，不依赖某个 Markdown 章节号。
+        # 共享引擎会统一压缩其提示词预算。
         logger.info(
             "[PPTService] 构建 PPT 请求: tutorial_title=%s knowledge_points=%s",
             tutorial.title, list(tutorial.knowledge_points or []),
@@ -145,7 +117,7 @@ class PPTService:
             tutorial_title=tutorial.title,
             tutorial_summary=tutorial.summary or "",
             tutorial_knowledge_points=list(tutorial.knowledge_points or []),
-            tutorial_core_content=_extract_core_content(tutorial.content_markdown),
+            tutorial_core_content=tutorial_content,
         )
 
         # 计算输出路径
@@ -191,5 +163,15 @@ class PPTService:
                 "style_name": artifact.template_name,
                 "template_id": artifact.template_id,
                 "file_size": artifact.path.stat().st_size,
+                "ppt_pipeline": {
+                    "version": "storyboard-parallel-svg-v1",
+                    "stages": [
+                        "assembling_context",
+                        "designing_story",
+                        "composing_sections",
+                        "rendering_html",
+                    ],
+                    "composition_workers": 3,
+                },
             },
         )

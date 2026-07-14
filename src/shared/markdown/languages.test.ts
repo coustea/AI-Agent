@@ -6,7 +6,7 @@ import {
   languageLoaders,
   normalizeLanguage,
   shouldHighlight,
-} from './languages'
+} from './markdown'
 
 describe('normalizeLanguage', () => {
   it.each([

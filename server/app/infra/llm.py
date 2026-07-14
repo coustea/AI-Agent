@@ -431,10 +431,11 @@ def _build_json_generation_messages(
 # 构造 JSON 自修复的修正 prompt，带回填原文与错误信息
 def _build_repair_prompt(
     schema: type[BaseModel],
+    original_messages: list[BaseMessage],
     raw_output: str,
     error_msg: str,
 ) -> list[BaseMessage]:
-    """构造 self-repair 修正 prompt."""""
+    """Build a repair request without discarding the original generation task."""
     schema_desc = _simplify_schema_for_prompt(schema)
     return [
         SystemMessage(
@@ -445,14 +446,25 @@ def _build_repair_prompt(
                 "- 不要 Markdown 代码围栏\n"
                 "- 不要解释文字\n"
                 "- 不要调用工具或 function_call\n"
+                "- **必须严格遵守 schema 中的所有约束**，包括：\n"
+                "  - 字段长度限制（如 min_length, max_length）\n"
+                "  - 数值范围限制（如 minimum, maximum）\n"
+                "  - 枚举值限制（只能从指定的枚举值中选择）\n"
+                "  - 数组长度限制（如 min_items, max_items）\n"
+                "  - 自定义验证规则（如首尾约束、唯一性约束）\n"
+                "- 保留未报错字段及数组中有效元素的相对顺序。\n"
+                "- 当数组长度违反 min_items 或 max_items 时，允许删除多余元素或补充最少必要元素以满足 schema；不要因为这条规则保留非法长度。\n"
+                "- 如果缺少必填顶层字段，必须依据原始任务重新补全完整对象，不能只输出出错片段。\n"
+                "- 保持教学语义与原始任务一致；在满足 schema 的前提下仅做必要改动。\n"
                 f"- 必须符合以下 schema:\n{schema_desc}"
             )
         ),
+        *original_messages,
         HumanMessage(
             content=(
                 f"上一次输出：\n```\n{raw_output}\n```\n\n"
                 f"错误信息：\n{error_msg}\n\n"
-                "请输出修正后的完整 JSON."""
+                "请仔细检查并修正所有不符合约束的字段，输出修正后的完整 JSON。"
             )
         ),
     ]
@@ -959,6 +971,7 @@ class Llm:
         try:
             repair_messages = _build_repair_prompt(
                 schema,
+                messages,
                 raw_output or "<empty response>",
                 error_msg,
             )

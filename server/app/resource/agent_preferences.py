@@ -33,8 +33,8 @@ _VALUES: dict[str, dict[str, dict[Any, str]]] = {
         "focus": {"textbook": "偏向教材与系统课程", "engineering": "偏向工程实践资料", "research": "偏向研究论文与综述"},
     },
     "cartoon": {
-        "depth": {"overview": "采用概览讲解", "standard": "采用标准讲解深度", "deep": "进行深入讲解"},
-        "pace": {"fast": "使用紧凑讲解节奏", "normal": "使用正常讲解节奏", "slow": "放慢讲解节奏并留出理解停顿"},
+        "visual_density": {"moderate": "每幕保持适中的模型对象数量", "rich": "每幕使用丰富但清晰的对象、关系与状态", "intensive": "在不牺牲可读性的前提下使用高密度概念模型"},
+        "pace": {"fast": "使用紧凑的讲解和路径动画节奏", "balanced": "使用均衡的讲解、停顿与状态变化节奏", "calm": "为模型推演和理解停顿留出充足时间"},
     },
 }
 
@@ -56,4 +56,6 @@ def build_agent_preference_instruction(agent_id: str, config: dict[str, Any] | N
             requirements.append(f"- 题型仅可使用：{'、'.join(config['question_types'])}。")
     if agent_id == "reading" and "max_items" in config:
         requirements.append(f"- 最多推荐 {config['max_items']} 项。")
+    if agent_id == "cartoon" and "target_duration_seconds" in config:
+        requirements.append(f"- 目标成片时长为 {config['target_duration_seconds']} 秒，必须保证机制推演完整。")
     return "## 本次生成偏好（必须落实到输出）\n" + "\n".join(requirements) if requirements else ""

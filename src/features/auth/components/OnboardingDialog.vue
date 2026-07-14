@@ -1139,7 +1139,7 @@ const submitForm = async () => {
     })
 
     // 标记首次登录完成（非关键，失败不影响流程）
-    updateMe({ is_first_login: true }).catch(() => {})
+    updateMe({ onboarding_completed: true }).catch(() => {})
 
     clearDraft()
 
@@ -1162,7 +1162,7 @@ const submitForm = async () => {
 // “稍后完善”：保留 onboarding 待完成状态并保存草稿，然后关闭弹窗
 const handleCompleteLater = async () => {
   try {
-    await updateMe({ is_first_login: false }).catch(() => {})
+    await updateMe({ onboarding_completed: false }).catch(() => {})
   } catch (error) {
     console.error('Failed to keep onboarding pending', error)
   }

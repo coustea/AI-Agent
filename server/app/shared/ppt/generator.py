@@ -1,24 +1,44 @@
 from __future__ import annotations
 
-from datetime import datetime
-import hashlib
+import asyncio
 import json
-import re
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.infra.llm import get_llm
 from app.infra.prompts import prompts
+from app.shared.ppt.contract import (
+    layout_guidance,
+    layout_kind_values,
+    slide_kind_values,
+    visual_component_guidance,
+    visual_kind_values,
+)
 from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer, PPTPublication
-from app.shared.ppt.models import PPTArtifact, PPTPlan, PPTPreferences, PathPPT, ResourcePPT
-from app.shared.ppt.templates import PPTTemplateCatalog
+from app.shared.ppt.models import (
+    PPTArtifact,
+    PPTDeck,
+    PPTGenerationContext,
+    PPTPreferences,
+    PPTSection,
+    PPTStoryboard,
+    PathPPT,
+    ResourcePPT,
+    SlideBrief,
+)
 
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
-_PLAN_MAX_TOKENS = 4_200
+_STORYBOARD_MAX_TOKENS = 2_800
+_SECTION_MAX_TOKENS = 3_800
 _PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_SECTION_COUNT = 3
+_MAX_SOURCE_MATERIALS = 10
+_MAX_SOURCE_MATERIAL_CHARS = 2_400
+_MAX_SOURCE_CONTEXT_CHARS = 12_000
 
 
 class PPTGenerationError(RuntimeError):
@@ -27,18 +47,93 @@ class PPTGenerationError(RuntimeError):
         super().__init__(f"{stage}: {message}")
 
 
-class PPTGenerator:
-    """HTML 教学 PPT 生成器。"""
+class PPTContextAdapter:
+    """让 resource/path 维持各自参数，仅共享内部生成语义。"""
 
-    def __init__(
-        self,
-        *,
-        llm: Any | None = None,
-        templates: PPTTemplateCatalog | None = None,
-        renderer: PPTHTMLRenderer | None = None,
-    ) -> None:
+    @classmethod
+    def from_request(cls, request: ResourcePPT | PathPPT) -> PPTGenerationContext:
+        if isinstance(request, ResourcePPT):
+            materials = [
+                json.dumps(
+                    request.resource_plan,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            ]
+            materials.extend(
+                f"{source.title}: {source.summary}\n" + "\n".join(source.materials[:4])
+                for source in request.artifacts[:6]
+            )
+            return PPTGenerationContext(
+                source="resource",
+                topic=cls._clip(request.learning_need, 160),
+                learner_profile=cls._profile_text(request.profile),
+                learning_goal=cls._clip(request.learning_need, 1_200),
+                prerequisites=[],
+                source_materials=cls._clean_materials(materials),
+                constraints=[f"学习场景：{cls._clip(request.learning_scenario, 80)}"],
+                preferences=request.preferences,
+            )
+
+        materials = [request.tutorial_summary, request.tutorial_core_content]
+        materials.extend(request.tutorial_knowledge_points[:12])
+        return PPTGenerationContext(
+            source="path",
+            topic=cls._clip(request.node_title, 160),
+            learner_profile=cls._profile_text(request.profile),
+            learning_goal=cls._clip(request.path_goal, 1_200),
+            prerequisites=[cls._clip(item, 100) for item in request.knowledge_points[:12]],
+            source_materials=cls._clean_materials(materials),
+            constraints=[
+                f"路径：{cls._clip(request.path_title, 120)}",
+                f"难度：{cls._clip(request.difficulty, 40)}",
+                "薄弱点：" + "、".join(cls._clip(item, 60) for item in request.weak_knowledge_points[:8]),
+            ],
+            preferences=request.preferences,
+        )
+
+    @staticmethod
+    def _profile_text(profile: dict[str, Any] | str) -> str:
+        value = profile if isinstance(profile, str) else json.dumps(profile, ensure_ascii=False)
+        return PPTContextAdapter._clip(value, 1_600)
+
+    @staticmethod
+    def _clean_materials(values: list[str]) -> list[str]:
+        """Build one bounded source packet reused by every planning call.
+
+        The storyboard and all section composers receive the same context.  A
+        per-item limit alone lets a resource request multiply into a very large
+        prompt four times, which is both slow and prone to provider timeouts.
+        Keep complete, ordered source units until the shared packet budget is
+        exhausted instead of silently building a different context per worker.
+        """
+        materials: list[str] = []
+        used = 0
+        for value in values:
+            text = " ".join(value.split())
+            if not text or len(materials) >= _MAX_SOURCE_MATERIALS:
+                continue
+            remaining = _MAX_SOURCE_CONTEXT_CHARS - used
+            if remaining <= 0:
+                break
+            clipped = text[: min(_MAX_SOURCE_MATERIAL_CHARS, remaining)]
+            if not clipped:
+                break
+            materials.append(clipped)
+            used += len(clipped)
+        return materials or ["请基于课程主题组织完整、准确的教学讲解。"]
+
+    @staticmethod
+    def _clip(value: str, limit: int) -> str:
+        return " ".join(value.split())[:limit]
+
+
+class PPTGenerator:
+    """一次故事板设计 + 三段并行视觉编排 + 确定性 HTML/SVG 渲染。"""
+
+    def __init__(self, *, llm: Any | None = None, renderer: PPTHTMLRenderer | None = None) -> None:
         self._llm = llm or get_llm()
-        self._templates = templates or PPTTemplateCatalog()
         self._renderer = renderer or PPTHTMLRenderer()
 
     async def generate(
@@ -48,171 +143,120 @@ class PPTGenerator:
         output_dir: Path,
         progress: ProgressCallback | None = None,
     ) -> PPTArtifact:
-        stage = "generation"
-
+        stage = "assembling_context"
         try:
-            await self._progress(progress, "正在规划教学叙事与页面结构…", 20)
-            plan = await self._generate_plan(request)
+            context = PPTContextAdapter.from_request(request)
+            await self._progress(progress, "正在整理课程材料…", 8)
 
-            stage = "template"
-            await self._progress(progress, "正在匹配课件模板…", 58)
-            resolved = self._templates.resolve(plan)
+            stage = "designing_story"
+            await self._progress(progress, "教学总监正在设计整套叙事与视觉方向…", 24)
+            storyboard = await self._generate_storyboard(context)
 
-            stage = "render"
-            await self._progress(progress, "正在渲染 HTML 教学课件…", 82)
-            publication = PPTPublication(
-                generated_at=datetime.now(_PRESENTATION_TIMEZONE)
-            )
-            document = self._renderer.render(resolved, publication)
+            stage = "composing_sections"
+            await self._progress(progress, "三个视觉编排智能体正在并行完成页面…", 46)
+            deck = await self._compose_deck(context, storyboard, progress)
 
-            stage = "publish"
-            await self._progress(progress, "正在发布课件…", 96)
-            path = PPTHTMLPublisher(output_dir).publish(
-                self._safe_file_id(plan.title, document),
-                document,
-            )
+            stage = "rendering_html"
+            await self._progress(progress, "正在将语义版式渲染为 HTML/SVG 课件…", 88)
+            publication = PPTPublication(generated_at=datetime.now(_PRESENTATION_TIMEZONE))
+            document = self._renderer.render(deck, publication)
 
+            stage = "publishing"
+            path = PPTHTMLPublisher(output_dir).publish("slides", document)
             await self._progress(progress, "课件生成完成", 100)
-
         except PPTGenerationError:
             raise
-        except KeyError as exc:
-            raise PPTGenerationError("template", str(exc)) from exc
         except Exception as exc:
             raise PPTGenerationError(stage, str(exc)) from exc
 
         return PPTArtifact(
-            title=plan.title,
+            title=deck.title,
             path=path,
             generated_at=publication.generated_at,
-            template_id=resolved.template.manifest.id,
-            template_name=resolved.template.manifest.name,
-            slide_count=len(resolved.slides),
+            slide_count=len(deck.slides),
         )
 
-    async def _generate_plan(
-        self,
-        request: ResourcePPT | PathPPT,
-    ) -> PPTPlan:
+    async def _generate_storyboard(self, context: PPTGenerationContext) -> PPTStoryboard:
         prompt = prompts.get("ppt").render(
-            "slide_plan",
-            request=json.dumps(
-                self._prompt_payload(request),
-                ensure_ascii=False,
-                indent=2,
-            ),
-            ppt_preferences=self._render_preferences(request.preferences),
+            "storyboard",
+            context=json.dumps(context.model_dump(mode="json"), ensure_ascii=False, indent=2),
+            preferences=self._render_preferences(context.preferences),
+            slide_kinds=slide_kind_values(),
+            visual_kinds=visual_kind_values(),
+            layouts=layout_kind_values(),
+            layout_guidance=layout_guidance(),
+            visual_component_guidance=visual_component_guidance(),
         )
         return await self._llm.ainvoke_json(
-            PPTPlan,
-            prompt,
-            temperature=0.15,
-            max_tokens=_PLAN_MAX_TOKENS,
+            PPTStoryboard, prompt, temperature=0.18, max_tokens=_STORYBOARD_MAX_TOKENS
+        )
+
+    async def _compose_deck(
+        self,
+        context: PPTGenerationContext,
+        storyboard: PPTStoryboard,
+        progress: ProgressCallback | None,
+    ) -> PPTDeck:
+        chunks = self._split_briefs(storyboard.slides)
+
+        async def compose(index: int, briefs: list[SlideBrief]) -> PPTSection:
+            await self._progress(progress, f"第 {index + 1}/{len(chunks)} 组页面正在视觉编排…", 52 + index * 8)
+            prompt = prompts.get("ppt").render(
+                "section_compose",
+                context=json.dumps(context.model_dump(mode="json"), ensure_ascii=False, indent=2),
+                visual_direction=storyboard.visual_direction,
+                section=json.dumps([brief.model_dump(mode="json") for brief in briefs], ensure_ascii=False, indent=2),
+                preferences=self._render_preferences(context.preferences),
+                layout_guidance=layout_guidance(),
+                visual_component_guidance=visual_component_guidance(),
+            )
+            return await self._llm.ainvoke_json(
+                PPTSection, prompt, temperature=0.22, max_tokens=_SECTION_MAX_TOKENS
+            )
+
+        sections = await asyncio.gather(*(compose(index, chunk) for index, chunk in enumerate(chunks)))
+        expected_ids = [brief.id for brief in storyboard.slides]
+        actual_ids = [slide.id for section in sections for slide in section.slides]
+        duplicate_ids = sorted({slide_id for slide_id in actual_ids if actual_ids.count(slide_id) > 1})
+        missing_ids = sorted(set(expected_ids) - set(actual_ids))
+        unexpected_ids = sorted(set(actual_ids) - set(expected_ids))
+        if duplicate_ids or missing_ids or unexpected_ids:
+            raise PPTGenerationError(
+                "composing_sections",
+                "分段编排结果与故事板不一致: "
+                f"missing={missing_ids} unexpected={unexpected_ids} duplicate={duplicate_ids}",
+            )
+        slides_by_id = {slide.id: slide for section in sections for slide in section.slides}
+        ordered_slides = [slides_by_id[brief_id] for brief_id in expected_ids]
+        return PPTDeck(
+            title=storyboard.title,
+            language=storyboard.language,
+            visual_direction=storyboard.visual_direction,
+            slides=ordered_slides,
         )
 
     @staticmethod
-    def _prompt_payload(request: ResourcePPT | PathPPT) -> dict[str, Any]:
-        """Create the small, content-only input accepted by the outline model."""
-        if isinstance(request, ResourcePPT):
-            return {
-                "learning_need": PPTGenerator._clip(request.learning_need, 800),
-                "learning_scenario": PPTGenerator._clip(request.learning_scenario, 80),
-                "profile": PPTGenerator._profile_text(request.profile),
-                "teaching_plan": PPTGenerator._clip(request.teaching_plan or "", 6_000),
-                "artifacts": [
-                    {
-                        "agent_id": PPTGenerator._clip(source.agent_id, 32),
-                        "title": PPTGenerator._clip(source.title, 120),
-                        "summary": PPTGenerator._clip(source.summary, 320),
-                        "materials": [
-                            PPTGenerator._clip(material, 360)
-                            for material in source.materials[:4]
-                        ],
-                    }
-                    for source in request.artifacts[:6]
-                ],
-            }
-
-        return {
-            "path_title": PPTGenerator._clip(request.path_title, 120),
-            "path_goal": PPTGenerator._clip(request.path_goal, 600),
-            "node_title": PPTGenerator._clip(request.node_title, 120),
-            "difficulty": PPTGenerator._clip(request.difficulty, 40),
-            "profile": PPTGenerator._profile_text(request.profile),
-            "knowledge_points": [PPTGenerator._clip(item, 100) for item in request.knowledge_points[:12]],
-            "weak_knowledge_points": [PPTGenerator._clip(item, 100) for item in request.weak_knowledge_points[:8]],
-            "tutorial_title": PPTGenerator._clip(request.tutorial_title, 120),
-            "tutorial_summary": PPTGenerator._clip(request.tutorial_summary, 800),
-            "tutorial_knowledge_points": [
-                PPTGenerator._clip(item, 100) for item in request.tutorial_knowledge_points[:12]
-            ],
-            "tutorial_core_content": PPTGenerator._clip(request.tutorial_core_content, 7_000),
-        }
-
-    @staticmethod
-    def _profile_text(profile: dict[str, Any] | str) -> str:
-        text = profile if isinstance(profile, str) else json.dumps(profile, ensure_ascii=False)
-        return PPTGenerator._clip(text, 1_600)
-
-    @staticmethod
-    def _clip(value: str, limit: int) -> str:
-        return " ".join(value.split())[:limit]
+    def _split_briefs(briefs: list[SlideBrief]) -> list[list[SlideBrief]]:
+        size = max(1, -(-len(briefs) // _SECTION_COUNT))
+        return [briefs[start : start + size] for start in range(0, len(briefs), size)]
 
     @staticmethod
     def _render_preferences(preferences: PPTPreferences) -> str:
-        template_map = {
-            "auto": "根据学习需求自行选择内容组织取向，不输出任何视觉模板名称。",
-            "teaching": "内容取向偏课堂讲授，强化概念递进、定义边界和教师口头讲解。",
-            "technical": "内容取向偏技术解析，强化机制、数据流、约束条件和系统关系。",
-            "case_study": "内容取向偏案例拆解，围绕真实情境说明问题、条件、过程和取舍。",
-            "exam_review": "内容取向偏复习巩固，突出考点辨析、易错点和可复述的知识结构。",
-        }
-        narrative_map = {
-            "concept": "从概念建立开始，先定义对象和边界，再解释机制与应用。",
-            "case_driven": "从具体案例或工程场景切入，再抽象出概念、机制和判断方法。",
-            "problem_led": "从一个核心问题或认知冲突出发，逐步推导出所需知识结构。",
-            "review": "以复习巩固为主线，先唤起已有知识，再补齐薄弱点和误区。",
-        }
-        density_map = {
-            "concise": "页面正文保持精炼，每页优先 3～4 个要点，把补充解释放入讲稿。",
-            "standard": "页面正文保持标准教学密度，每页 4～5 个要点，讲稿补充关键承接。",
-            "detailed": "页面正文覆盖更多条件、限制和推理细节，每页可使用 5～6 个要点，但不得堆砌。",
-        }
-        emphasis_map = {
-            "core_concepts": "核心概念：优先讲清定义、对象、成立条件、体系位置。",
-            "cases": "案例应用：优先补充真实场景、输入条件、判断过程和适用边界。",
-            "pitfalls": "易错误区：优先指出常见误解、错误原因和正确判断方法。",
-            "derivation": "推导过程：优先展示因果链、状态变化、机制步骤和结论来源。",
-        }
-        emphasis_text = "\n".join(
-            f"- {emphasis_map[value]}" for value in preferences.emphasis
-        )
-
-        return "\n".join(
-            [
-                f"- 内容取向 template={preferences.template}: {template_map[preferences.template]}",
-                f"- 叙事方式 narrative_style={preferences.narrative_style}: {narrative_map[preferences.narrative_style]}",
-                f"- 内容密度 density={preferences.density}: {density_map[preferences.density]}",
-                "- 教学重点 emphasis:",
-                emphasis_text,
-            ]
-        )
+        narrative = {
+            "concept": "从概念、边界到机制与应用递进。",
+            "case_driven": "从场景或案例切入，抽象出概念与判断方法。",
+            "problem_led": "从核心问题出发，逐步建立解决问题的知识结构。",
+            "review": "围绕复习、薄弱点和易错判断组织讲解。",
+        }[preferences.narrative_style]
+        density = {
+            "concise": "每页 2～3 个信息单元，留出视觉呼吸。",
+            "standard": "每页 3～4 个信息单元，内容与图解均衡。",
+            "detailed": "每页最多 5 个信息单元，不能缩小字号或堆砌。",
+        }[preferences.density]
+        emphasis = "、".join(preferences.emphasis)
+        return f"叙事：{narrative}\n密度：{density}\n强调：{emphasis}"
 
     @staticmethod
-    async def _progress(
-        callback: ProgressCallback | None,
-        message: str,
-        percent: int,
-    ) -> None:
+    async def _progress(callback: ProgressCallback | None, message: str, percent: int) -> None:
         if callback is not None:
             await callback(message, percent)
-
-    @staticmethod
-    def _safe_file_id(title: str, document: str) -> str:
-        slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-        digest = hashlib.sha1(document.encode("utf-8")).hexdigest()[:10]
-
-        if slug:
-            return f"{slug[:42].strip('-')}-{digest}"
-
-        return f"teaching-slides-{digest}"

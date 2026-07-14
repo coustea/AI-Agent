@@ -8,47 +8,37 @@
       </div>
       
       <div class="reading-list">
-        <article v-for="(resource, index) in visibleResources" :key="resource.id || index" class="reading-item" :class="resource.type">
-          <div class="reading-header">
-            <span class="reading-type">{{ getResourceTypeText(resource.type) }}</span>
-            <span class="reading-title">{{ resource.title || '推荐资源' }}</span>
-          </div>
-          <div class="reading-meta" v-if="!compact">
-            <span v-if="resource.authors && resource.authors.length">
-              <User class='w-4 h-4 inline-block align-middle' /> {{ resource.authors.join(', ') }}
-            </span>
-            <span v-if="resource.source">
-              来源 {{ resource.source }}
-            </span>
-            <span v-if="resource.difficulty" class="difficulty-tag" :class="resource.difficulty">
-              {{ getDifficultyText(resource.difficulty) }}
-            </span>
-          </div>
-          <div class="reading-reason" v-if="getRecommendReason(resource) && !compact">
-            <div class="reason-label">推荐理由</div>
-            {{ getRecommendReason(resource) }}
-          </div>
-          <div class="reading-desc" v-if="getDescription(resource) && !compact">
-            {{ getDescription(resource) }}
+        <article v-for="(resource, index) in visibleResources" :key="resource.id || index" class="reading-item">
+          <div class="reading-main">
+            <div class="reading-header">
+              <span class="reading-title">{{ resource.title || '推荐资源' }}</span>
+            </div>
+            
+            <div class="reading-meta" v-if="!compact">
+              <span>
+                {{ getResourceTypeText(resource.type) }}
+                <template v-if="resource.difficulty"> · {{ getDifficultyText(resource.difficulty) }}</template>
+                <template v-if="resource.source"> · 来自 {{ resource.source }}</template>
+                <template v-if="resource.authors && resource.authors.length"> · {{ resource.authors.join(', ') }}</template>
+              </span>
+            </div>
+            
+            <div class="reading-reason" v-if="getRecommendReason(resource) && !compact">
+              {{ getRecommendReason(resource) }}
+            </div>
+            
+            <div class="reading-url" v-if="resource.url && !compact">
+              <LinkIcon class="w-3.5 h-3.5 inline-block mr-1 opacity-50" />
+              <span class="url-text" :title="resource.url">{{ resource.url }}</span>
+            </div>
           </div>
           
-          <!-- Explicitly styled URL tag link -->
-          <div v-if="resource.url" class="reading-url-wrap">
-            <LinkIcon class="w-3.5 h-3.5 text-slate-400 inline-block align-middle mr-1.5" />
-            <a :href="resource.url" target="_blank" rel="noopener noreferrer" class="reading-url-link">
-              {{ getDisplayDomain(resource.url) }} ↗
+          <div class="reading-action" v-if="resource.url">
+            <a :href="resource.url" target="_blank" rel="noopener noreferrer" class="visit-btn" title="前往阅读">
+              <span>前往阅读</span>
+              <ArrowRightIcon class="w-4 h-4" />
             </a>
           </div>
-
-          <a
-            v-if="resource.url"
-            class="reading-action-btn"
-            :href="resource.url"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            打开资源
-          </a>
         </article>
       </div>
 
@@ -73,7 +63,6 @@
 
 import { computed } from 'vue'
 import {
-  PhUser as User,
   PhArrowRight as ArrowRightIcon,
   PhBookOpen as Reading,
   PhLink as LinkIcon
@@ -101,21 +90,6 @@ const visibleResources = computed(() => {
 
 const getRecommendReason = (resource: Record<string, any>) => {
   return resource.recommend_reason || resource.reason || resource.relevance || ''
-}
-
-const getDescription = (resource: Record<string, any>) => {
-  return resource.description || resource.content || resource.abstract || resource.summary || ''
-}
-
-// 从 URL 中提取域名作为显示文本
-const getDisplayDomain = (urlStr?: string) => {
-  if (!urlStr) return ''
-  try {
-    const url = new URL(urlStr)
-    return url.hostname
-  } catch (e) {
-    return urlStr
-  }
 }
 
 // 资源类型的中文映射
@@ -180,65 +154,47 @@ const getDifficultyText = (difficulty?: string) => {
 }
 
 .reading-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .reading-item {
   padding: 24px;
   border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  background: #ffffff;
-  transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
   box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
 }
 
 .reading-item:hover {
-  background: #ffffff;
-  border-color: var(--color-primary-border);
+  border-color: #bbd2fb;
   box-shadow: var(--shadow-md);
-  transform: translateY(-1.5px);
+  transform: translateY(-2px);
 }
 
-.reading-item.book {
-  border-left-color: var(--cat-path, #F59E0B);
-}
-.reading-item.paper {
-  border-left-color: var(--color-primary);
-}
-.reading-item.article {
-  border-left-color: var(--cat-tutor, #1E40AF);
-}
-.reading-item.documentation {
-  border-left-color: var(--cat-rose, #F43F5E);
+.reading-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .reading-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.reading-type {
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-weight: 700;
+  margin-bottom: 2px;
 }
 
 .reading-title {
   font-family: var(--font-sans);
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--color-text-strong);
   line-height: 1.4;
@@ -247,106 +203,60 @@ const getDifficultyText = (difficulty?: string) => {
 .reading-meta {
   display: flex;
   align-items: center;
-  gap: 20px;
   font-family: var(--font-sans);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .reading-meta span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: inline-block;
 }
-
-.difficulty-tag {
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  font-weight: 600;
-}
-
-.difficulty-tag.basic { color: var(--color-primary-text); background: var(--color-primary-soft); }
-.difficulty-tag.medium { color: var(--color-warning-text, #D97706); border-color: var(--color-warning-border); background: var(--color-warning-soft); }
-.difficulty-tag.advanced { color: var(--color-danger); border-color: var(--color-danger-border); background: var(--color-danger-soft); }
 
 .reading-reason {
   font-family: var(--font-sans);
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
-  background: var(--color-primary-soft);
-  padding: 16px;
-  border-left: 3px solid var(--color-primary);
-  border-radius: var(--radius-sm);
-  line-height: 1.6;
-}
-
-.reason-label {
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-primary-text);
-  margin-bottom: 6px;
-  text-transform: uppercase;
-}
-
-.reading-desc {
-  font-family: var(--font-sans);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
-.reading-url-wrap {
-  display: flex;
-  align-items: center;
-  margin-top: 4px;
-}
-
-.reading-url-link {
+.reading-url {
   font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: var(--color-primary-text);
-  text-decoration: none;
-  font-weight: 500;
+  color: var(--color-text-faint);
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  overflow: hidden;
 }
 
-.reading-url-link:hover {
-  text-decoration: underline;
+.url-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.reading-action-btn {
+.reading-action {
+  flex-shrink: 0;
+}
+
+.visit-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: fit-content;
-  margin-top: var(--space-2);
-  height: 36px;
-  padding: 0 var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-primary-text);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
+  gap: 6px;
+  padding: 8px 16px;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
   font-weight: 600;
   text-decoration: none;
-  transition: var(--btn-transition);
+  transition: all 0.2s ease;
 }
 
-.reading-action-btn:hover {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #ffffff;
-  transform: translateY(-0.5px);
-  box-shadow: var(--shadow-sm);
-}
-
-.reading-action-btn:active {
-  transform: translateY(0.5px);
+.visit-btn:hover {
+  background: #2563eb;
+  color: white;
 }
 
 .reading-more {
@@ -396,7 +306,8 @@ const getDifficultyText = (difficulty?: string) => {
   box-shadow: none;
 }
 .compact .reading-list { gap: 12px; }
-.compact .reading-item { padding: 12px; }
+.compact .reading-item { padding: 16px; gap: 16px; }
 .compact .reading-header { margin-bottom: 0; }
-.compact .reading-title { font-size: 0.9rem; }
+.compact .reading-title { font-size: 0.95rem; }
+.compact .visit-btn { padding: 6px 12px; font-size: 0.85rem; }
 </style>

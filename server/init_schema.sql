@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     password        VARCHAR(255)    NOT NULL,
     email           VARCHAR(100),
     avatar          VARCHAR(500),
-    is_first_login  BOOLEAN         DEFAULT FALSE,
+    onboarding_completed BOOLEAN         DEFAULT FALSE,
     school          VARCHAR(200),
     school_level    VARCHAR(50),
     major           VARCHAR(200),
@@ -41,7 +41,7 @@ COMMENT ON COLUMN users.username IS '用户名，唯一';
 COMMENT ON COLUMN users.password IS '密码哈希值';
 COMMENT ON COLUMN users.email IS '邮箱';
 COMMENT ON COLUMN users.avatar IS '头像URL';
-COMMENT ON COLUMN users.is_first_login IS '是否首次登录';
+COMMENT ON COLUMN users.onboarding_completed IS 'onboarding 是否已完成（FALSE=未完成需弹窗，TRUE=已完成）';
 COMMENT ON COLUMN users.school IS '就读学校';
 COMMENT ON COLUMN users.school_level IS '学校层次';
 COMMENT ON COLUMN users.major IS '专业';

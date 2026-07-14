@@ -2,9 +2,9 @@
   <div class="array-bars-visualizer">
     <div class="chart-shell">
       <div class="legend">
-        <span class="legend-item"><i class="legend-dot compare"></i>比较</span>
-        <span class="legend-item"><i class="legend-dot swap"></i>交换</span>
-        <span class="legend-item"><i class="legend-dot sorted"></i>已归位</span>
+        <span class="legend-item"><i class="legend-dot focus"></i>当前关注</span>
+        <span class="legend-item"><i class="legend-dot changed"></i>数据变化</span>
+        <span class="legend-item"><i class="legend-dot complete"></i>执行完成</span>
       </div>
 
       <svg ref="svgRef" class="chart-svg" viewBox="0 0 860 420" preserveAspectRatio="xMidYMid meet" />
@@ -31,6 +31,14 @@ interface BarDatum {
   tone: string
 }
 
+interface BarTransition {
+  element: SVGRectElement
+  fromY: number
+  fromHeight: number
+  toY: number
+  toHeight: number
+}
+
 const props = defineProps<Props>()
 
 // SVG 容器引用、当前步骤的数组数据（降级到初始事件）
@@ -48,6 +56,13 @@ const activeArray = computed(() => {
   return []
 })
 
+const previousArray = computed(() => {
+  if (props.currentStepIndex <= 0) return []
+  const arr = props.events[props.currentStepIndex - 1]?.state?.structure?.array
+  if (!Array.isArray(arr)) return []
+  return arr.map(Number).filter((item: number) => Number.isFinite(item))
+})
+
 // 从事件 targets 中提取索引数组
 function getIndices(event: TraceEvent | null): number[] {
   const raw = event?.targets
@@ -55,23 +70,25 @@ function getIndices(event: TraceEvent | null): number[] {
   return raw.map(Number).filter((item: number) => Number.isInteger(item))
 }
 
-// 从 mark_sorted 事件中提取已排序索引
-function getSortedIndex(event: TraceEvent | null): number | null {
-  if (event?.type === 'mark_sorted') {
-    const raw = event.targets
-    if (Array.isArray(raw) && raw.length > 0) return Number(raw[0])
-  }
-  return null
+function getChangedIndices(): number[] {
+  if (previousArray.value.length !== activeArray.value.length) return []
+  return activeArray.value.reduce<number[]>((changed, value, index) => {
+    if (value !== previousArray.value[index]) changed.push(index)
+    return changed
+  }, [])
 }
 
-// 根据事件类型确定柱状图的颜色主题
+function getFocusedIndices(): number[] {
+  const targets = getIndices(props.currentEvent)
+  const validTargets = targets.filter(index => index >= 0 && index < activeArray.value.length)
+  return validTargets.length > 0 ? validTargets : getChangedIndices()
+}
+
+// 状态帧是后端追踪协议的核心：用帧差分和 targets 表达关注位置与数据变化。
 function getTone(index: number): string {
-  const event = props.currentEvent
-  const indices = getIndices(event)
-  const sortedIndex = getSortedIndex(event)
-  if (sortedIndex === index) return 'sorted'
-  if (event?.type === 'swap' && indices.includes(index)) return 'swap'
-  if (indices.includes(index)) return 'compare'
+  if (props.currentEvent?.type === 'finish') return 'complete'
+  if (getChangedIndices().includes(index)) return 'changed'
+  if (getFocusedIndices().includes(index)) return 'focus'
   return 'default'
 }
 
@@ -82,9 +99,9 @@ function buildData(): BarDatum[] {
   }))
 }
 
-// 用 D3 渲染柱状图（创建/更新 bar-group）
-function renderChart() {
-  if (!svgRef.value) return
+// 用 D3 渲染柱状图，并保留变更前的几何信息以实现状态帧间的连续过渡。
+function renderChart(): BarTransition[] {
+  if (!svgRef.value) return []
   const svg = d3.select(svgRef.value)
   const width = 860; const height = 420
   const margin = { top: 28, right: 32, bottom: 56, left: 32 }
@@ -92,6 +109,17 @@ function renderChart() {
   const innerHeight = height - margin.top - margin.bottom
   const maxValue = Math.max(...activeArray.value, 1)
   const data = buildData()
+  const previousGeometry = new Map<string, { y: number; height: number }>()
+  svgRef.value.querySelectorAll<SVGGElement>('g.bar-group').forEach((group) => {
+    const id = group.getAttribute('data-bar-id')
+    const rect = group.querySelector<SVGRectElement>('rect.bar-rect')
+    if (!id || !rect) return
+    previousGeometry.set(id, {
+      y: Number(rect.getAttribute('y')),
+      height: Number(rect.getAttribute('height')),
+    })
+  })
+  const transitions: BarTransition[] = []
 
   const root = svg.selectAll('g.chart-root').data([null]).join('g')
     .attr('class', 'chart-root').attr('transform', `translate(${margin.left},${margin.top})`)
@@ -118,45 +146,79 @@ function renderChart() {
     const x = xScale(d.index) ?? 0; const y = yScale(d.value)
     const bw = xScale.bandwidth(); const bh = innerHeight - y
     g.attr('transform', `translate(${x}, 0)`)
-    g.select('rect.bar-rect').attr('x', 0).attr('y', y).attr('rx', 3).attr('ry', 3).attr('width', bw).attr('height', Math.max(bh, 20))
+    const rect = this.querySelector<SVGRectElement>('rect.bar-rect')
+    if (!rect) return
+    const nextHeight = Math.max(bh, 20)
+    const previous = previousGeometry.get(d.id)
+    rect.setAttribute('x', '0')
+    rect.setAttribute('y', String(y))
+    rect.setAttribute('rx', '3')
+    rect.setAttribute('ry', '3')
+    rect.setAttribute('width', String(bw))
+    rect.setAttribute('height', String(nextHeight))
+    if (previous && (previous.y !== y || previous.height !== nextHeight)) {
+      rect.setAttribute('y', String(previous.y))
+      rect.setAttribute('height', String(previous.height))
+      transitions.push({
+        element: rect,
+        fromY: previous.y,
+        fromHeight: previous.height,
+        toY: y,
+        toHeight: nextHeight,
+      })
+    }
     g.select('text.bar-value').attr('x', bw / 2).attr('y', Math.max(y - 8, 12)).attr('text-anchor', 'middle').text(d.value)
     g.select('text.bar-index').attr('x', bw / 2).attr('y', innerHeight + 20).attr('text-anchor', 'middle').text(d.index)
   })
+
+  return transitions
 }
 
-// 根据事件类型执行 GSAP 动画（比较/交换/归位/初始化）
-function animateStep() {
+// 所有状态帧都会触发动画：变化的柱子过渡，targets 或变化位置脉冲提示。
+function animateStep(transitions: BarTransition[]) {
   if (!svgRef.value || !props.currentEvent) return
   const svg = svgRef.value
   const rects = Array.from(svg.querySelectorAll<SVGRectElement>('rect.bar-rect'))
-  const targets = getIndices(props.currentEvent)
+  const targets = getFocusedIndices()
     .map((i: number) => svg.querySelector<SVGRectElement>(`g[data-bar-id="bar-${i}"] rect.bar-rect`))
     .filter((e: SVGRectElement | null): e is SVGRectElement => Boolean(e))
-  const sortedIdx = getSortedIndex(props.currentEvent)
-  const sortedTarget = sortedIdx !== null ? svg.querySelector<SVGRectElement>(`g[data-bar-id="bar-${sortedIdx}"] rect.bar-rect`) : null
 
-  gsap.killTweensOf(rects); gsap.set(rects, { clearProps: 'all' })
+  gsap.killTweensOf(rects)
+  gsap.set(rects, { clearProps: 'transform' })
 
-  if (props.currentEvent.type === 'init_array') {
-    gsap.fromTo(rects, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', stagger: 0.04 }); return
+  transitions.forEach(({ element, fromY, fromHeight, toY, toHeight }) => {
+    gsap.fromTo(
+      element,
+      { attr: { y: fromY, height: fromHeight } },
+      { attr: { y: toY, height: toHeight }, duration: 0.42, ease: 'power2.inOut' },
+    )
+  })
+
+  if (props.currentStepIndex === 0) {
+    gsap.fromTo(rects, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', stagger: 0.04 })
+    return
   }
-  if (props.currentEvent.type === 'compare' && targets.length) {
-    gsap.fromTo(targets, { y: 0, scaleY: 1 }, { y: -8, scaleY: 1.02, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' }); return
-  }
-  if (props.currentEvent.type === 'swap' && targets.length) {
-    const [first, second] = targets
-    if (first) gsap.fromTo(first, { x: 0, y: 0 }, { x: -6, y: -10, duration: 0.18, yoyo: true, repeat: 1 })
-    if (second) gsap.fromTo(second, { x: 0, y: 0 }, { x: 6, y: -10, duration: 0.18, yoyo: true, repeat: 1 }); return
-  }
-  if (props.currentEvent.type === 'mark_sorted' && sortedTarget) {
-    gsap.fromTo(sortedTarget, { scale: 1 }, { scale: 1.04, duration: 0.22, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' })
+
+  if (targets.length > 0) {
+    gsap.fromTo(
+      targets,
+      { y: 0, scaleY: 1 },
+      { y: -7, scaleY: 1.025, duration: 0.2, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' },
+    )
   }
 }
 
-// 步骤索引或数组变化时重新渲染并运行动画
-watch(() => [props.currentStepIndex, activeArray.value.join(',')], async () => { await nextTick(); renderChart(); animateStep() }, { immediate: true })
-// 初始渲染
-onMounted(() => { renderChart(); animateStep() })
+async function renderAndAnimate() {
+  await nextTick()
+  animateStep(renderChart())
+}
+
+// 步骤索引变化时重新渲染并运行动画，即使数组值不变也会展示当前关注位置。
+watch(
+  [() => props.currentStepIndex, () => props.currentEvent],
+  renderAndAnimate,
+)
+onMounted(renderAndAnimate)
 // 销毁前清理 GSAP 动画
 onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySelectorAll<SVGGElement>('g.bar-group')) })
 </script>
@@ -198,15 +260,15 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
   border-radius: 50%;
 }
 
-.legend-dot.compare {
+.legend-dot.focus {
   background: var(--color-primary);
 }
 
-.legend-dot.swap {
+.legend-dot.changed {
   background: var(--color-warning);
 }
 
-.legend-dot.sorted {
+.legend-dot.complete {
   background: var(--color-success);
 }
 
@@ -246,15 +308,15 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
   font-weight: 500;
 }
 
-:deep(.bar-group[data-tone='compare'] .bar-rect) {
+:deep(.bar-group[data-tone='focus'] .bar-rect) {
   fill: var(--color-primary);
 }
 
-:deep(.bar-group[data-tone='swap'] .bar-rect) {
+:deep(.bar-group[data-tone='changed'] .bar-rect) {
   fill: var(--color-warning);
 }
 
-:deep(.bar-group[data-tone='sorted'] .bar-rect) {
+:deep(.bar-group[data-tone='complete'] .bar-rect) {
   fill: var(--color-success);
 }
 </style>

@@ -136,9 +136,9 @@
             tabindex="0"
             role="button"
             :aria-label="`查看${card.title}`"
-            @click="openPreview(card)"
-            @keydown.enter.prevent="openPreview(card)"
-            @keydown.space.prevent="openPreview(card)"
+            @click="openDetail(card)"
+            @keydown.enter.prevent="openDetail(card)"
+            @keydown.space.prevent="openDetail(card)"
           >
             <header class="card-header">
               <div class="card-meta-row">
@@ -325,7 +325,7 @@
 
             <footer class="card-action">
               <span>
-                {{ getActionText(card.type) }}
+                {{ getResourceActionText(card.type) }}
               </span>
 
               <PhArrowRight />
@@ -351,11 +351,6 @@
         </section>
       </main>
 
-      <PreviewDialog
-        v-model:activeAgent="activePreviewAgent"
-        :data="previewData"
-        :resource="previewResource"
-      />
     </template>
   </div>
 </template>
@@ -364,7 +359,6 @@
 import {
   computed,
   onMounted,
-  ref,
   shallowRef,
 } from 'vue'
 
@@ -384,8 +378,6 @@ import {
   PhWarningCircle,
 } from '@phosphor-icons/vue'
 
-import PreviewDialog from '@/shared/content/PreviewDialog.vue'
-
 import {
   getGeneratedResourceDetail,
   type GeneratedResourceBundle,
@@ -395,51 +387,26 @@ import {
   getArtifactLabel,
 } from '@/shared/content/kind'
 import { recordLearningEvent } from '@/features/evaluation/api/evaluation'
-
-type ResourceCard = {
-  id: string
-  type: string
-  title: string
-  summary: string
-  format: string
-  content: unknown
-  resource: Record<string, any>
-}
+import {
+  formatResourceTime,
+  getResourceActionText,
+  getResourceBundleSubtitle,
+  getResourceCards,
+  type ResourceCard,
+} from '../model/resourceDisplay'
 
 const route = useRoute()
 const router = useRouter()
 
-const loading = ref(true)
-const error = ref(false)
+const loading = shallowRef(true)
+const error = shallowRef(false)
 
 const bundle =
   shallowRef<GeneratedResourceBundle | null>(
     null,
   )
 
-const activePreviewAgent =
-  ref<string | null>(null)
-
-const previewData = ref<unknown>(null)
-
-const previewResource =
-  ref<Record<string, any> | null>(null)
-
 const reportedViewedResources = new Set<number>()
-
-const RESOURCE_ORDER = [
-  'content',
-  'mindmap',
-  'quiz',
-  'code',
-  'reading',
-  'ppt',
-  'cartoon',
-] as const
-
-const RESOURCE_TYPES = new Set<string>(
-  RESOURCE_ORDER,
-)
 
 const resourceId = computed(() => {
   const id = Number(route.params.id)
@@ -452,78 +419,18 @@ const resourceId = computed(() => {
 const isPartial = computed(
   () =>
     bundle.value?.status ===
-    'partial_completed',
+    'partial',
 )
 
 const createdAt = computed(() =>
-  formatTime(
+  formatResourceTime(
     bundle.value?.created_at || null,
   ),
 )
 
-const bundleSubtitle = computed(() => {
-  const title = String(
-    bundle.value?.title || '',
-  ).trim()
+const bundleSubtitle = computed(() => getResourceBundleSubtitle(bundle.value))
 
-  if (
-    title &&
-    title !== '个性化学习资源包'
-  ) {
-    return title
-  }
-
-  return '本次生成的课程讲解、练习与拓展内容已整理完成'
-})
-
-const rawResources = computed<
-  Record<string, any>[]
->(() => {
-  const resources =
-    bundle.value?.resources ??
-    (bundle.value as any)?.items
-
-  return Array.isArray(resources)
-    ? resources
-    : []
-})
-
-const resourceCards = computed<
-  ResourceCard[]
->(() =>
-  rawResources.value
-    .map(normalizeCard)
-    .filter(
-      (
-        card,
-      ): card is ResourceCard =>
-        card !== null,
-    )
-    .sort((first, second) => {
-      const firstIndex =
-        RESOURCE_ORDER.indexOf(
-          first.type as (
-            typeof RESOURCE_ORDER
-          )[number],
-        )
-
-      const secondIndex =
-        RESOURCE_ORDER.indexOf(
-          second.type as (
-            typeof RESOURCE_ORDER
-          )[number],
-        )
-
-      return (
-        (firstIndex === -1
-          ? 99
-          : firstIndex) -
-        (secondIndex === -1
-          ? 99
-          : secondIndex)
-      )
-    }),
-)
+const resourceCards = computed<ResourceCard[]>(() => getResourceCards(bundle.value))
 
 onMounted(loadResource)
 
@@ -582,260 +489,14 @@ function recordResourceViewed(id: number) {
   }).catch(() => {})
 }
 
-function normalizeCard(
-  resource: Record<string, any>,
-): ResourceCard | null {
-  const type = String(
-    resource.type ||
-      resource.agent_type ||
-      resource.agentId ||
-      '',
-  )
-    .trim()
-    .toLowerCase()
-
-  const status = String(
-    resource.status || 'completed',
-  )
-    .trim()
-    .toLowerCase()
-
-  if (!RESOURCE_TYPES.has(type)) {
-    return null
-  }
-
-  if (
-    ![
-      'finished',
-      'completed',
-      'success',
-    ].includes(status)
-  ) {
-    return null
-  }
-
-  if (
-    !hasContent(
-      resource.content,
-      type,
-    )
-  ) {
-    return null
-  }
-
-  return {
-    id: String(resource.id ?? type),
-    type,
-    title: getTitle(resource, type),
-    summary: getSummary(
-      resource,
-      type,
-    ),
-    format: getFormat(
-      resource,
-      type,
-    ),
-    content: resource.content,
-    resource,
-  }
-}
-
-function getTitle(
-  resource: Record<string, any>,
-  type: string,
-) {
-  const resourceTitle =
-    typeof resource.title === 'string'
-      ? resource.title.trim()
-      : ''
-
-  if (resourceTitle) {
-    return resourceTitle
-  }
-
-  return `${getArtifactLabel(type)} · ${
-    bundleSubtitle.value
-  }`
-}
-
-function getSummary(
-  resource: Record<string, any>,
-  type: string,
-) {
-  const candidates = [
-    resource.summary,
-    resource.description,
-    resource.metadata?.summary,
-    resource.metadata_json?.summary,
-  ]
-
-  const summary = candidates.find(
-    value =>
-      typeof value === 'string' &&
-      value.trim(),
-  )
-
-  return typeof summary === 'string'
-    ? summary.trim()
-    : getDefaultSummary(type)
-}
-
-function getDefaultSummary(
-  type: string,
-) {
-  const summaries: Record<
-    string,
-    string
-  > = {
-    content:
-      '围绕学习目标组织系统讲解，帮助建立完整、清晰的知识框架。',
-    mindmap:
-      '梳理核心概念、层级关系和知识依赖，形成直观的知识结构。',
-    quiz:
-      '通过不同题型检测理解程度，用于学习后的即时练习与巩固。',
-    code:
-      '提供可阅读、可运行的代码案例，帮助将理论知识转化为实践能力。',
-    reading:
-      '补充相关课程资料与拓展阅读，便于继续深入学习。',
-    ppt:
-      '整合重点内容形成结构化课件，适合课堂展示与快速复习。',
-    cartoon:
-      '通过动画呈现概念变化、执行过程与知识之间的关系。',
-  }
-
-  return (
-    summaries[type] ||
-    '根据本次学习需求生成的个性化学习资源。'
-  )
-}
-
-function getFormat(
-  resource: Record<string, any>,
-  type: string,
-) {
-  const rawFormat =
-    resource.format ||
-    resource.file_type ||
-    resource.fileType
-
-  if (
-    typeof rawFormat === 'string' &&
-    rawFormat.trim()
-  ) {
-    return normalizeFormat(rawFormat)
-  }
-
-  const formats: Record<
-    string,
-    string
-  > = {
-    content: 'Markdown',
-    mindmap: 'Markmap',
-    quiz: 'JSON',
-    code: 'Code',
-    reading: 'Links',
-    ppt: 'Slides',
-    cartoon: 'Video',
-  }
-
-  return formats[type] || 'Resource'
-}
-
-function normalizeFormat(
-  rawFormat: string,
-) {
-  const value = rawFormat
-    .trim()
-    .toLowerCase()
-
-  const formatMap: Record<
-    string,
-    string
-  > = {
-    markdown: 'Markdown',
-    md: 'Markdown',
-    markmap: 'Markmap',
-    json: 'JSON',
-    code: 'Code',
-    links: 'Links',
-    pdf: 'PDF',
-    ppt: 'Slides',
-    pptx: 'Slides',
-    slides: 'Slides',
-    mp4: 'Video',
-    video: 'Video',
-  }
-
-  return (
-    formatMap[value] ||
-    rawFormat.trim()
-  )
-}
-
-function hasContent(
-  value: unknown,
-  type?: string,
-) {
-  if (
-    type === 'ppt' ||
-    type === 'cartoon'
-  ) {
-    return true
-  }
-
-  if (typeof value === 'string') {
-    return value.trim().length > 0
-  }
-
-  if (Array.isArray(value)) {
-    return value.length > 0
-  }
-
-  return (
-    isPlainObject(value) &&
-    Object.keys(value).length > 0
-  )
-}
-
-function isPlainObject(
-  value: unknown,
-): value is Record<string, any> {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    !Array.isArray(value)
-  )
-}
-
-function getActionText(
-  type: string,
-) {
-  const actionMap: Record<
-    string,
-    string
-  > = {
-    content: '查看课程讲解',
-    mindmap: '打开思维导图',
-    quiz: '查看练习题',
-    code: '查看代码实操',
-    reading: '查看拓展阅读',
-    ppt: '查看教学课件',
-    cartoon: '查看动画讲解',
-  }
-
-  return (
-    actionMap[type] ||
-    '查看资源内容'
-  )
-}
-
-function openPreview(
-  card: ResourceCard,
-) {
-  activePreviewAgent.value = card.type
-  previewData.value = card.content
-  previewResource.value =
-    card.resource
+function openDetail(card: ResourceCard) {
+  void router.push({
+    name: 'ResourceItemDetail',
+    params: {
+      id: resourceId.value,
+      type: card.type,
+    },
+  })
 }
 
 function showPartialInfo() {
@@ -848,32 +509,6 @@ function goBack() {
   router.back()
 }
 
-function formatTime(
-  time: string | null,
-) {
-  if (!time) {
-    return ''
-  }
-
-  const date = new Date(time)
-
-  if (
-    Number.isNaN(date.getTime())
-  ) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat(
-    'zh-CN',
-    {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    },
-  ).format(date)
-}
 </script>
 
 <style scoped>
