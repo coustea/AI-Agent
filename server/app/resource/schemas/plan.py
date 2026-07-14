@@ -16,7 +16,6 @@ class ResourcePlanTask(BaseModel):
     focus: list[str] = Field(min_length=1, max_length=8)
     required_elements: list[str] = Field(min_length=1, max_length=10)
     avoid: list[str] = Field(default_factory=list, max_length=8)
-    configuration_notes: list[str] = Field(default_factory=list, max_length=8)
 
 
 class ResourcePlan(BaseModel):
@@ -24,15 +23,11 @@ class ResourcePlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1] = 1
-    title: str = Field(min_length=1, max_length=200)
     learner_goal: str = Field(min_length=8, max_length=600)
     scope: list[str] = Field(min_length=1, max_length=10)
-    learning_thread: list[str] = Field(min_length=2, max_length=10)
-    coordination_rules: list[str] = Field(min_length=1, max_length=12)
-    consistency_rules: list[str] = Field(min_length=1, max_length=10)
     tasks: list[ResourcePlanTask] = Field(min_length=1, max_length=7)
 
-    @field_validator("scope", "learning_thread", "coordination_rules", "consistency_rules")
+    @field_validator("scope")
     @classmethod
     def reject_empty_strings(cls, values: list[str]) -> list[str]:
         cleaned = [value.strip() for value in values if value and value.strip()]

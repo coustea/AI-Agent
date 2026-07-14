@@ -31,11 +31,29 @@ from app.shared.cartoon.schemas import (
     layout_kind_values,
     motion_values,
     role_values,
+    scene_motion_guidance,
+    scene_relationship_guidance,
+    scene_visual_guidance,
+    static_only_visual_kind_values,
+    teaching_scene_contract,
+    teaching_scene_example,
+    visual_kind_guidance,
     visual_kind_values,
 )
 
 
 logger = get_logger(__name__)
+
+
+_STORYBOARD_MAX_TOKENS = 4096
+_SCENE_MAX_TOKENS = 6144
+
+
+_VISUAL_ITEM_LIMITS = {
+    "moderate": 4,
+    "rich": 6,
+    "intensive": 8,
+}
 
 
 _PROMPT_VARIABLE = re.compile(r"\{\{(?P<name>[a-z_][a-z0-9_]*)\}\}")
@@ -119,14 +137,16 @@ class CartoonLessonPlanner:
             "layout_guidance": layout_guidance(),
             "layouts": layout_kind_values(),
             "visual_kinds": visual_kind_values(),
+            "visual_guidance": visual_kind_guidance(),
             "connected_visual_kinds": connected_visual_kind_values(),
+            "static_only_visual_kinds": static_only_visual_kind_values(),
             "source": self._source(brief, 12000),
         })
         response = await self._invoke_json(
             CartoonStoryboard,
             [SystemMessage(content=prompt), HumanMessage(content="根据素材生成整套动画分镜。")],
             temperature=0.22,
-            max_tokens=2200,
+            max_tokens=_STORYBOARD_MAX_TOKENS,
             operation="storyboard",
         )
         return response if isinstance(response, CartoonStoryboard) else CartoonStoryboard.model_validate(response)
@@ -136,30 +156,41 @@ class CartoonLessonPlanner:
         completed = False
         try:
             async with semaphore:
+                item_limit = _VISUAL_ITEM_LIMITS[brief.configuration.visual_density]
                 prompt = self._prompts["scene_compose.md"].render({
                     "scene": scene.model_dump_json(),
+                    "animation_mode": scene.animation_mode.value,
                     "course": storyboard.course,
-                    "motions": motion_values(),
+                    "motions": motion_values(scene.visual_kind),
+                    "motion_guidance": scene_motion_guidance(scene.visual_kind),
+                    "relationship_guidance": scene_relationship_guidance(
+                        scene.visual_kind,
+                        scene.animation_mode,
+                    ),
                     "roles": role_values(),
+                    "visual_guidance": scene_visual_guidance(scene.visual_kind),
                     "connected_visual_kinds": connected_visual_kind_values(),
                     "density": brief.configuration.visual_density,
+                    "item_limit": item_limit,
+                    "example": json.dumps(
+                        teaching_scene_example(scene),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "source": self._source(brief, 9000),
                 })
+                scene_schema = teaching_scene_contract(
+                    scene,
+                    max_visual_items=item_limit,
+                )
                 response = await self._invoke_json(
-                    TeachingScene,
+                    scene_schema,
                     [SystemMessage(content=prompt), HumanMessage(content="只生成这个场景的 JSON。")],
                     temperature=0.28,
-                    max_tokens=2400,
+                    max_tokens=_SCENE_MAX_TOKENS,
                     operation=f"scene:{scene.id}",
                 )
-                result = response if isinstance(response, TeachingScene) else TeachingScene.model_validate(response)
-                if (
-                    result.id != scene.id
-                    or result.layout != scene.layout
-                    or result.visual.kind != scene.visual_kind
-                    or result.teaching_function != scene.teaching_function
-                ):
-                    raise CartoonPlanningError(f"场景 {scene.id} 未遵守全局分镜契约")
+                result = response if isinstance(response, TeachingScene) else scene_schema.model_validate(response)
                 completed = True
                 return result
         finally:

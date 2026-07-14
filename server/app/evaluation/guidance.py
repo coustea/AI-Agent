@@ -5,11 +5,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.models import UserProfile
 
 DEFAULT_GUIDANCE_STRATEGY = {
+    "version": 1,
+    "conclusion": "暂无学习数据，开始学习后将生成个性化评估。",
     "weekly_goal": "积极学习并参与练习测验，积累首期诊断所需的学习事实。",
     "tutoring_style": "以精细解构、步步启发为主的讲授与练习辅导风格",
     "recommended_session_minutes": 30,
     "focus_topics": [],
     "preferred_resource_types": ["content", "quiz"],
+    "action_plan": [],
     "reason": "新用户尚未生成诊断报告，使用缺省初始自适应辅导策略"
 }
 

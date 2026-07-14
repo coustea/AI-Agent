@@ -1,161 +1,281 @@
 <template>
-  <main class="profile-page min-h-screen font-sans antialiased text-left">
+  <main class="profile-page">
     <div class="profile-shell">
-      <div class="profile-title-row profile-motion-item">
-        <div class="title-mark">
-          <UserRound class="h-7 w-7" />
+      <!-- 页面标题 -->
+      <header class="profile-page-header profile-motion-item">
+        <div class="page-heading">
+          <div class="title-mark">
+            <UserRound class="h-5 w-5" />
+          </div>
+
+          <div>
+            <h1>个人中心</h1>
+            <p>查看学习数据，维护用于个性化推荐的学业资料。</p>
+          </div>
         </div>
-        <h1>个人中心</h1>
-      </div>
+
+        <div class="header-profile-progress">
+          <div class="header-progress-copy">
+            <span>资料完整度</span>
+            <strong>{{ profileCompletionPercent }}%</strong>
+          </div>
+
+          <div class="header-progress-track">
+            <i
+                :style="{
+                transform: `scaleX(${profileCompletionPercent / 100})`,
+              }"
+            ></i>
+          </div>
+
+          <span class="header-progress-hint">
+            {{
+              profileCompletionPercent >= 80
+                  ? "资料较完整，推荐结果将更加精准"
+                  : `还有 ${missingProfileItems.length} 项资料待完善`
+            }}
+          </span>
+        </div>
+      </header>
 
       <div class="profile-layout-grid">
-        <!-- Left Sidebar (Academic Profile Card) -->
+        <!-- 左侧个人资料 -->
         <aside class="academic-profile-sidebar profile-motion-item">
-          <!-- Profile Card Header -->
-          <div class="sidebar-user-info">
+          <section class="identity-section">
             <Button
-              variant="ghost"
-              class="avatar-button"
-              :disabled="avatarUploading"
-              aria-label="更换头像"
-              @click="triggerAvatarUpload"
+                variant="ghost"
+                class="avatar-button"
+                :disabled="avatarUploading"
+                aria-label="更换头像"
+                @click="triggerAvatarUpload"
             >
               <input
-                ref="avatarInput"
-                type="file"
-                class="hidden"
-                accept="image/*"
-                @change="onAvatarFileChange"
+                  ref="avatarInput"
+                  type="file"
+                  class="avatar-file-input"
+                  accept="image/*"
+                  @change="onAvatarFileChange"
               />
+
               <Avatar class="profile-avatar">
                 <AvatarImage
-                  v-if="userAvatar"
-                  :src="userAvatar"
-                  alt="用户头像"
+                    v-if="userAvatar"
+                    :src="userAvatar"
+                    alt="用户头像"
                 />
-                <AvatarFallback>{{
-                  userName?.slice(0, 1) || "U"
-                }}</AvatarFallback>
+                <AvatarFallback>
+                  {{ userName?.slice(0, 1) || "U" }}
+                </AvatarFallback>
               </Avatar>
+
               <span class="avatar-edit-mask">
                 <Edit class="h-4 w-4" />
+                <em>{{ avatarUploading ? "上传中" : "更换头像" }}</em>
               </span>
             </Button>
 
-            <h2 class="user-name">{{ userName }}</h2>
-            <span class="academic-role-badge">智能系统学习者</span>
-            <p class="user-email">{{ userEmail || "邮箱待同步" }}</p>
-            <p class="user-headline">{{ profileHeadline || "暂无个性签名" }}</p>
-          </div>
+            <div class="identity-copy">
+              <h2>{{ userName }}</h2>
 
-          <!-- Academic Info Grid -->
-          <div class="sidebar-details-section">
-            <div class="detail-group">
-              <span class="detail-label">就读学校</span>
-              <strong class="detail-value">{{
-                studentProfile.school || "点击下方编辑资料完善学校"
-              }}</strong>
+              <span class="academic-role-badge">
+                <Sparkles class="h-3 w-3" />
+                智能系统学习者
+              </span>
+
+              <p class="user-headline">
+                {{ profileHeadline || "学习资料待完善" }}
+              </p>
             </div>
 
-            <div class="detail-group">
-              <span class="detail-label">专业领域</span>
-              <strong class="detail-value">{{
-                studentProfile.major || "未填写"
-              }}</strong>
+            <div class="identity-email">
+              <Mail class="h-4 w-4" />
+              <span>{{ userEmail || "邮箱待同步" }}</span>
+            </div>
+          </section>
+
+          <section class="profile-completion-card">
+            <div class="completion-heading">
+              <div>
+                <span>个性化资料状态</span>
+                <strong>{{ profileCompletionPercent }}%</strong>
+              </div>
+
+              <BadgeCheck
+                  class="h-5 w-5"
+                  :class="{
+                  completed: profileCompletionPercent >= 80,
+                }"
+              />
             </div>
 
-            <div class="detail-group">
-              <span class="detail-label">年级阶段</span>
-              <strong class="detail-value">{{
-                studentProfile.grade || "未填写"
-              }}</strong>
+            <div class="completion-track">
+              <i
+                  :style="{
+                  transform: `scaleX(${profileCompletionPercent / 100})`,
+                }"
+              ></i>
             </div>
 
-            <div class="detail-group">
-              <span class="detail-label">当前学习目标</span>
-              <strong class="detail-value">{{
-                profileMeta.globalLearningGoal ||
-                studentProfile.learning_goal ||
-                "未设置"
-              }}</strong>
+            <p v-if="missingProfileItems.length">
+              待补充：{{ missingProfileItems.slice(0, 3).join("、") }}
+            </p>
+
+            <p v-else>当前资料已能够支持完整的个性化推荐。</p>
+          </section>
+
+          <section class="profile-facts">
+            <div class="profile-fact">
+              <span class="fact-icon fact-school">
+                <SchoolIcon class="h-4 w-4" />
+              </span>
+
+              <div>
+                <small>就读学校</small>
+                <strong>
+                  {{ studentProfile.school || "尚未填写" }}
+                </strong>
+              </div>
             </div>
 
-            <div class="detail-group">
-              <span class="detail-label">每日计划学习时间</span>
-              <strong class="detail-value">{{
-                profileMeta.dailyStudyTime || "未设置"
-              }}</strong>
+            <div class="profile-fact">
+              <span class="fact-icon fact-major">
+                <GraduationCap class="h-4 w-4" />
+              </span>
+
+              <div>
+                <small>专业与年级</small>
+                <strong>
+                  {{
+                    [studentProfile.major, studentProfile.grade]
+                        .filter(Boolean)
+                        .join(" · ") || "尚未填写"
+                  }}
+                </strong>
+              </div>
             </div>
 
-            <div class="detail-group">
-              <span class="detail-label">正在学习课程</span>
-              <div class="detail-badges vertical-badges">
-                <span
+            <div class="profile-fact">
+              <span class="fact-icon fact-target">
+                <Target class="h-4 w-4" />
+              </span>
+
+              <div>
+                <small>当前学习目标</small>
+                <strong>
+                  {{
+                    profileMeta.globalLearningGoal ||
+                    studentProfile.learning_goal ||
+                    "尚未设置"
+                  }}
+                </strong>
+              </div>
+            </div>
+
+            <div class="profile-fact">
+              <span class="fact-icon fact-time">
+                <Timer class="h-4 w-4" />
+              </span>
+
+              <div>
+                <small>每日计划时长</small>
+                <strong>
+                  {{ profileMeta.dailyStudyTime || "尚未设置" }}
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="profile-chip-section">
+            <header>
+              <BookMarked class="h-4 w-4" />
+              <span>正在学习</span>
+            </header>
+
+            <div class="profile-chip-list">
+              <span
                   v-for="course in displayCourses"
                   :key="course"
-                  class="detail-badge-pill"
-                  >{{ course }}</span
-                >
-                <span v-if="!displayCourses.length" class="empty-badge-pill"
-                  >未选课</span
-                >
-              </div>
-            </div>
+                  class="profile-chip course-chip"
+              >
+                {{ course }}
+              </span>
 
-            <div class="detail-group">
-              <span class="detail-label">常用编程语言</span>
-              <div class="detail-badges vertical-badges">
-                <span
-                  v-for="lang in displayLanguages"
-                  :key="lang"
-                  class="detail-badge-pill lang-pill"
-                  >{{ lang }}</span
-                >
-                <span v-if="!displayLanguages.length" class="empty-badge-pill"
-                  >未设置</span
-                >
-              </div>
+              <span
+                  v-if="!displayCourses.length"
+                  class="profile-chip empty-profile-chip"
+              >
+                暂无课程
+              </span>
             </div>
-          </div>
+          </section>
 
-          <!-- Actions at bottom -->
-          <div class="sidebar-actions">
-            <Button
+          <section class="profile-chip-section">
+            <header>
+              <Code2 class="h-4 w-4" />
+              <span>常用语言</span>
+            </header>
+
+            <div class="profile-chip-list">
+              <span
+                  v-for="language in displayLanguages"
+                  :key="language"
+                  class="profile-chip language-chip"
+              >
+                {{ language }}
+              </span>
+
+              <span
+                  v-if="!displayLanguages.length"
+                  class="profile-chip empty-profile-chip"
+              >
+                暂无语言偏好
+              </span>
+            </div>
+          </section>
+
+          <Button
               variant="outline"
-              class="edit-profile-button w-full"
+              class="edit-profile-button"
               @click="openProfileEditor"
-            >
-              <Edit class="h-4 w-4" />
-              编辑学业资料
-            </Button>
-          </div>
+          >
+            <Edit class="h-4 w-4" />
+            更新学业资料
+          </Button>
         </aside>
 
-        <!-- Right Main Panel (Learning Dashboard) -->
+        <!-- 右侧学习数据 -->
         <section class="analytics-dashboard-main profile-motion-item">
-          <!-- Controls & Header -->
           <div class="dashboard-header">
             <div class="panel-heading">
-              <ChartColumn class="h-5 w-5 text-indigo-500" />
-              <h3>学业数据看板</h3>
+              <span class="panel-heading-icon">
+                <ChartColumn class="h-5 w-5" />
+              </span>
+
+              <div>
+                <h3>学业数据看板</h3>
+                <p>根据学习行为、资源使用和测验结果汇总。</p>
+              </div>
             </div>
+
             <div class="dashboard-controls">
               <Select
-                v-if="
-                  studentProfile.courses && studentProfile.courses.length > 1
+                  v-if="
+                  studentProfile.courses &&
+                  studentProfile.courses.length > 1
                 "
-                v-model="selectedTrendCourse"
+                  v-model="selectedTrendCourse"
               >
                 <SelectTrigger class="course-trigger">
                   <SelectValue placeholder="切换课程" />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem
-                      v-for="course in studentProfile.courses"
-                      :key="course"
-                      :value="course"
-                      class="text-xs cursor-pointer"
+                        v-for="course in studentProfile.courses"
+                        :key="course"
+                        :value="course"
+                        class="cursor-pointer text-xs"
                     >
                       {{ course }}
                     </SelectItem>
@@ -164,77 +284,97 @@
               </Select>
 
               <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                class="range-toggle"
-                :model-value="timeRange"
-                @update:model-value="setTimeRange"
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  class="range-toggle"
+                  :model-value="timeRange"
+                  @update:model-value="setTimeRange"
               >
-                <ToggleGroupItem value="7">7天</ToggleGroupItem>
-                <ToggleGroupItem value="30">30天</ToggleGroupItem>
+                <ToggleGroupItem value="7">近 7 天</ToggleGroupItem>
+                <ToggleGroupItem value="30">近 30 天</ToggleGroupItem>
               </ToggleGroup>
             </div>
           </div>
 
-          <!-- Summary Metric Cards -->
+          <!-- 数据摘要 -->
           <div class="summary-card-grid">
-            <div
-              v-for="card in learningSummaryCards"
-              :key="card.label"
-              :class="['summary-card', card.themeClass]"
+            <article
+                v-for="card in learningSummaryCards"
+                :key="card.label"
+                :class="['summary-card', card.themeClass]"
             >
               <div class="summary-icon">
-                <component :is="card.icon" class="h-7 w-7" />
+                <component :is="card.icon" class="h-6 w-6" />
               </div>
-              <div>
+
+              <div class="summary-card-copy">
                 <span>{{ card.label }}</span>
                 <strong>{{ card.value }}</strong>
                 <small>{{ card.hint }}</small>
               </div>
-            </div>
+            </article>
           </div>
 
-          <!-- Dashboard Charts & Insights Bento Grid -->
           <div class="dashboard-grid">
-            <!-- Left Column (Visualizations) -->
             <div class="visual-column">
-              <div class="chart-panel focus-chart-panel">
-                <div class="chart-heading">
-                  <h4>学习专注走势</h4>
-                  <span>(h)</span>
-                </div>
+              <!-- 专注走势 -->
+              <section class="dashboard-panel focus-chart-panel">
+                <header class="panel-header">
+                  <div>
+                    <span>LEARNING TREND</span>
+                    <h4>学习专注走势</h4>
+                  </div>
+
+                  <em>单位：小时</em>
+                </header>
+
                 <div class="chart-box">
-                  <v-chart class="chart" :option="lineOption" autoresize />
+                  <v-chart
+                      class="chart"
+                      :option="lineOption"
+                      autoresize
+                  />
+
                   <div v-if="!hasLineChartData" class="chart-empty">
-                    暂无学习时长数据
+                    <Clock3 class="h-5 w-5" />
+                    <span>暂无学习时长数据</span>
                   </div>
                 </div>
-              </div>
+              </section>
 
               <div class="visual-sub-grid">
-                <div class="insight-panel resource-panel">
-                  <div class="chart-heading">
-                    <h4>学习产出分布</h4>
-                    <span>{{
-                      resourceHistoryLoading
-                        ? "同步中"
-                        : `${resourceHistory.length}份`
-                    }}</span>
-                  </div>
+                <!-- 资源分布 -->
+                <section class="dashboard-panel resource-panel">
+                  <header class="panel-header compact-panel-header">
+                    <div>
+                      <span>RESOURCE OUTPUT</span>
+                      <h4>学习产出分布</h4>
+                    </div>
+
+                    <em>
+                      {{
+                        resourceHistoryLoading
+                            ? "同步中"
+                            : `${resourceHistory.length} 份`
+                      }}
+                    </em>
+                  </header>
+
                   <div class="resource-mix-list">
                     <div
-                      v-for="item in resourceMixRows"
-                      :key="item.label"
-                      class="resource-mix-row"
+                        v-for="item in resourceMixRows"
+                        :key="item.label"
+                        class="resource-mix-row"
                     >
-                      <div>
+                      <div class="resource-mix-copy">
                         <span>{{ item.label }}</span>
-                        <strong>{{ item.count }}份</strong>
+                        <strong>{{ item.count }} 份</strong>
                       </div>
+
                       <div class="mix-track">
                         <i
-                          :style="{
+                            :style="{
                             width: `${item.percent}%`,
                             background: item.gradient,
                           }"
@@ -242,425 +382,729 @@
                       </div>
                     </div>
                   </div>
-                </div>
+                </section>
 
-                <div class="chart-panel scenario-chart-panel">
-                  <div class="chart-heading">
-                    <h4>功能使用占比</h4>
-                  </div>
+                <!-- 使用占比 -->
+                <section class="dashboard-panel scenario-chart-panel">
+                  <header class="panel-header compact-panel-header">
+                    <div>
+                      <span>FEATURE USAGE</span>
+                      <h4>功能使用占比</h4>
+                    </div>
+                  </header>
+
                   <div class="scenario-body">
                     <div class="donut-box">
-                      <v-chart class="chart" :option="pieOption" autoresize />
+                      <v-chart
+                          class="chart"
+                          :option="pieOption"
+                          autoresize
+                      />
+
                       <div v-if="!hasScenarioData" class="chart-empty">
-                        暂无场景数据
+                        <Gauge class="h-5 w-5" />
+                        <span>暂无使用数据</span>
                       </div>
                     </div>
+
                     <div class="scenario-list">
                       <div
-                        v-for="item in scenarioBreakdown"
-                        :key="item.name"
-                        class="scenario-row"
+                          v-for="item in scenarioBreakdown"
+                          :key="item.name"
+                          class="scenario-row"
                       >
                         <span class="scenario-name">
-                          <i :style="{ backgroundColor: item.color }"></i>
+                          <i
+                              :style="{
+                              backgroundColor: item.color,
+                            }"
+                          ></i>
                           {{ item.name }}
                         </span>
+
                         <strong>{{ item.percent }}%</strong>
                       </div>
                     </div>
                   </div>
-                </div>
+                </section>
               </div>
             </div>
 
-            <!-- Right Column (Insights & Status) -->
             <div class="insights-column">
-              <div class="insight-panel advice-panel">
-                <div class="chart-heading">
-                  <h4>薄弱点与建议</h4>
-                </div>
-                <div class="tag-cloud">
-                  <span
-                    v-for="topic in displayedWeakTopics"
-                    :key="topic"
-                    class="weak-tag"
-                    >{{ topic }}</span
-                  >
-                  <span
-                    v-if="displayedWeakTopics.length === 0"
-                    class="empty-chip"
-                    >暂无薄弱点</span
-                  >
-                </div>
-                <div class="tag-cloud preference-cloud">
-                  <span
-                    v-for="resource in displayedPreferredResources"
-                    :key="resource"
-                    class="data-chip"
-                    >{{ resource }}</span
-                  >
-                  <span
-                    v-if="displayedPreferredResources.length === 0"
-                    class="empty-chip"
-                    >继续积累反馈</span
-                  >
-                </div>
-                <div class="next-action-box">
-                  <span>下一步建议</span>
-                  <p>{{ primaryLearningAdvice }}</p>
-                </div>
-              </div>
+              <!-- 学习建议 -->
+              <section class="dashboard-panel advice-panel">
+                <header class="panel-header compact-panel-header">
+                  <div>
+                    <span>LEARNING INSIGHT</span>
+                    <h4>薄弱点与学习建议</h4>
+                  </div>
+                </header>
 
-              <div class="insight-panel status-panel">
-                <div class="chart-heading">
-                  <h4>学习状态速览</h4>
-                </div>
-                <div class="status-grid">
-                  <div
-                    v-for="item in learningStatusCards"
-                    :key="item.label"
-                    :class="['status-card', item.themeClass]"
-                  >
-                    <div class="status-card-head">
-                      <component :is="item.icon" class="h-4 w-4 status-icon" />
-                      <span>{{ item.label }}</span>
-                    </div>
-                    <strong>{{ item.value }}</strong>
-                    <div class="status-progress-bar">
-                      <div
-                        class="status-progress-fill"
-                        :style="{ width: `${item.percent}%` }"
-                      ></div>
-                    </div>
-                    <small>{{ item.hint }}</small>
+                <div class="insight-block">
+                  <span class="insight-label">需要巩固</span>
+
+                  <div class="tag-cloud">
+                    <span
+                        v-for="topic in displayedWeakTopics"
+                        :key="topic"
+                        class="weak-tag"
+                    >
+                      {{ topic }}
+                    </span>
+
+                    <span
+                        v-if="displayedWeakTopics.length === 0"
+                        class="empty-chip"
+                    >
+                      暂无明显薄弱点
+                    </span>
                   </div>
                 </div>
-              </div>
+
+                <div class="insight-block">
+                  <span class="insight-label">重点主题</span>
+
+                  <div class="tag-cloud">
+                    <span
+                        v-for="topic in displayedFocusTopics"
+                        :key="topic"
+                        class="preference-chip"
+                    >
+                      {{ topic }}
+                    </span>
+
+                    <span
+                        v-if="displayedFocusTopics.length === 0"
+                        class="empty-chip"
+                    >
+                      继续积累学习反馈
+                    </span>
+                  </div>
+                </div>
+
+                <div class="next-action-box">
+                  <div class="next-action-icon">
+                    <Sparkles class="h-4 w-4" />
+                  </div>
+
+                  <div>
+                    <span>下一步建议</span>
+                    <p>{{ primaryLearningAdvice }}</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 学习状态 -->
+              <section class="dashboard-panel status-panel">
+                <header class="panel-header compact-panel-header">
+                  <div>
+                    <span>LEARNING STATUS</span>
+                    <h4>学习状态速览</h4>
+                  </div>
+                </header>
+
+                <div class="status-grid">
+                  <article
+                      v-for="item in learningStatusCards"
+                      :key="item.label"
+                      :class="['status-card', item.themeClass]"
+                  >
+                    <div class="status-card-head">
+                      <component
+                          :is="item.icon"
+                          class="h-4 w-4 status-icon"
+                      />
+                      <span>{{ item.label }}</span>
+                    </div>
+
+                    <strong>{{ item.value }}</strong>
+
+                    <div class="status-progress-bar">
+                      <div
+                          class="status-progress-fill"
+                          :style="{
+                          transform: `scaleX(${item.percent / 100})`,
+                        }"
+                      ></div>
+                    </div>
+
+                    <small>{{ item.hint }}</small>
+                  </article>
+                </div>
+              </section>
             </div>
           </div>
         </section>
       </div>
     </div>
 
-    <!-- Modals -->
-    <!-- Profile Editor Dialog -->
-    <!-- Profile Editor Dialog -->
+    <!-- 编辑学业资料 -->
     <Dialog v-model:open="profileEditorVisible">
-      <DialogContent
-        class="profile-editor-dialog sm:max-w-[620px] w-full gap-0 overflow-hidden rounded-xl border border-slate-100 bg-white p-0 shadow-[0_28px_80px_rgba(15,118,110,0.16)]"
-      >
+      <DialogContent class="profile-editor-dialog">
         <DialogHeader class="sr-only">
-          <DialogTitle>编辑学业资料</DialogTitle>
+          <DialogTitle>更新学业资料</DialogTitle>
           <DialogDescription>
-            完善就读学校、专业和课程信息，系统将据此为您智能推荐学习内容。
+            完善学校、专业、课程与学习偏好，用于生成个性化学习路径和资源。
           </DialogDescription>
         </DialogHeader>
 
-        <!-- Custom Gorgeous Header Banner -->
-        <div class="dialog-header-banner">
-          <div class="header-banner-content">
-            <span class="header-badge">
-              <Sparkles class="h-3 w-3 mr-1" /> MAS 画像同步
-            </span>
-            <h3>编辑个人学业画像</h3>
-            <p>完善您的就读学校、当前年级与正在学习的课程信息，AI 将为您定制专属学习路径。</p>
-          </div>
-        </div>
-
-        <!-- Form Scroll Area -->
-        <div class="dialog-scroll-container">
-          <form @submit.prevent class="dialog-form-layout">
-            
-            <!-- Section 1: 基础就读信息 -->
-            <div class="form-section">
-              <div class="section-title-wrapper">
-                <span class="section-num">01</span>
-                <span class="section-title">基础就读信息</span>
+        <div class="profile-editor-shell">
+          <!-- 左侧资料概览 -->
+          <aside class="profile-editor-sidebar">
+            <header class="editor-brand-header">
+              <div class="editor-brand-mark">
+                <Sparkles class="h-5 w-5" />
               </div>
-              
-              <!-- School -->
-              <div class="form-field-group">
-                <label class="form-field-label">
-                  就读学校 <span class="text-rose-500">*</span>
-                </label>
-                <div class="relative">
-                  <Input
-                    v-model="profileForm.school"
-                    type="text"
-                    placeholder="请输入学校名称"
-                    class="editor-input"
-                    @focus="schoolFocus = true"
-                    @blur="schoolFocus = false"
+
+              <div>
+                <span>PROFILE SETTINGS</span>
+                <h3>更新学业资料</h3>
+              </div>
+            </header>
+
+            <div class="editor-user-preview">
+              <Avatar class="editor-preview-avatar">
+                <AvatarImage
+                    v-if="userAvatar"
+                    :src="userAvatar"
+                    alt="用户头像"
+                />
+                <AvatarFallback>
+                  {{ userName?.slice(0, 1) || "U" }}
+                </AvatarFallback>
+              </Avatar>
+
+              <div>
+                <strong>{{ userName }}</strong>
+                <p>{{ editorPreviewHeadline }}</p>
+              </div>
+            </div>
+
+            <section class="editor-completion-panel">
+              <div class="editor-completion-heading">
+                <span>本次资料完整度</span>
+                <strong>{{ editorCompletionPercent }}%</strong>
+              </div>
+
+              <div class="editor-completion-track">
+                <i
+                    :style="{
+                    transform: `scaleX(${editorCompletionPercent / 100})`,
+                  }"
+                ></i>
+              </div>
+
+              <p>
+                这些信息将用于路径规划、资源推荐和学习效果评估。
+              </p>
+            </section>
+
+            <nav class="editor-section-nav">
+              <div
+                  v-for="section in editorSections"
+                  :key="section.index"
+                  :class="[
+                  'editor-section-nav-item',
+                  {
+                    completed: section.completed,
+                  },
+                ]"
+              >
+                <span class="editor-nav-index">
+                  <Check
+                      v-if="section.completed"
+                      class="h-4 w-4"
                   />
-                  <div
-                    v-if="profileErrors.school"
-                    class="editor-error text-rose-500 text-[11px] mt-0.5"
-                  >
-                    {{ profileErrors.school }}
-                  </div>
+                  <template v-else>
+                    {{ section.index }}
+                  </template>
+                </span>
 
-                  <ul
-                    v-if="schoolFocus && schoolSuggestions.length > 0"
-                    class="editor-suggestion-list"
-                  >
-                    <li
-                      v-for="item in schoolSuggestions"
-                      :key="item.value"
-                      @mousedown="selectSchool(item.value)"
-                    >
-                      <span class="font-bold text-slate-700">{{
-                        item.value
-                      }}</span>
-                      <small
-                        v-if="item.level"
-                        class="text-slate-400 text-[10px] ml-2"
-                        >{{ item.level }}</small
-                      >
-                    </li>
-                  </ul>
+                <div>
+                  <strong>{{ section.title }}</strong>
+                  <small>{{ section.description }}</small>
                 </div>
               </div>
+            </nav>
 
-              <!-- Grade & Major (Grid) -->
-              <div class="grid grid-cols-2 gap-4 mt-4">
-                <!-- Grade -->
-                <div class="form-field-group">
-                  <label class="form-field-label">
-                    年级阶段 <span class="text-rose-500">*</span>
-                  </label>
-                  <Select v-model="profileForm.grade">
-                    <SelectTrigger class="editor-select-trigger">
-                      <SelectValue placeholder="选择年级" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem
-                          v-for="grade in PRESET_GRADES"
-                          :key="grade"
-                          :value="grade"
-                          class="text-xs cursor-pointer"
-                        >
-                          {{ grade }}
-                        </SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <div
-                    v-if="profileErrors.grade"
-                    class="editor-error text-rose-500 text-[11px] mt-0.5"
-                  >
-                    {{ profileErrors.grade }}
-                  </div>
+            <div class="editor-preview-summary">
+              <span>当前选择</span>
+
+              <dl>
+                <div>
+                  <dt>课程</dt>
+                  <dd>{{ profileForm.courses.length }} 门</dd>
                 </div>
 
-                <!-- Major -->
-                <div class="form-field-group">
-                  <label class="form-field-label">
-                    专业 <span class="text-rose-500">*</span>
-                  </label>
-                  <div class="relative">
-                    <Input
-                      v-model="profileForm.major"
-                      type="text"
-                      placeholder="输入或选择专业"
-                      class="editor-input"
-                      @focus="majorFocus = true"
-                      @blur="majorFocus = false"
-                    />
-                    <div
-                      v-if="profileErrors.major"
-                      class="editor-error text-rose-500 text-[11px] mt-0.5"
-                    >
-                      {{ profileErrors.major }}
+                <div>
+                  <dt>语言</dt>
+                  <dd>
+                    {{ profileForm.programming_languages.length }} 项
+                  </dd>
+                </div>
+
+                <div>
+                  <dt>学习时长</dt>
+                  <dd>
+                    {{ profileForm.daily_study_time || "未设置" }}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="editor-security-note">
+              <Info class="h-4 w-4" />
+
+              <p>
+                学业资料仅用于系统内部个性化学习分析，不会作为公开资料展示。
+              </p>
+            </div>
+          </aside>
+
+          <!-- 右侧表单 -->
+          <section class="profile-editor-main">
+            <header class="profile-editor-main-header">
+              <div>
+                <span>ACADEMIC PROFILE</span>
+                <h3>完善你的学习背景</h3>
+                <p>
+                  请填写当前真实学习状态。资料越完整，生成内容越贴合你的基础和目标。
+                </p>
+              </div>
+
+              <div class="editor-header-stats">
+                <span>
+                  <strong>{{ profileForm.courses.length }}</strong>
+                  门课程
+                </span>
+
+                <span>
+                  <strong>
+                    {{ profileForm.programming_languages.length }}
+                  </strong>
+                  种语言
+                </span>
+              </div>
+            </header>
+
+            <form
+                class="profile-editor-form"
+                @submit.prevent="submitProfile"
+            >
+              <!-- 学业身份 -->
+              <section class="editor-form-section">
+                <header class="editor-form-section-header">
+                  <span class="editor-section-number">01</span>
+
+                  <div>
+                    <h4>学业身份</h4>
+                    <p>用于判断当前学习阶段和课程难度范围。</p>
+                  </div>
+                </header>
+
+                <div class="editor-field-grid">
+                  <div class="editor-field editor-field-wide">
+                    <label for="profile-school">
+                      就读学校
+                      <span>*</span>
+                    </label>
+
+                    <div class="editor-field-control">
+                      <SchoolIcon class="editor-input-icon h-4 w-4" />
+
+                      <Input
+                          id="profile-school"
+                          v-model="profileForm.school"
+                          type="text"
+                          placeholder="搜索或输入学校名称"
+                          class="editor-input has-icon"
+                          autocomplete="off"
+                          @focus="schoolFocus = true"
+                          @blur="handleSchoolBlur"
+                      />
+
+                      <ul
+                          v-if="
+                          schoolFocus &&
+                          schoolSuggestions.length > 0
+                        "
+                          class="editor-suggestion-list"
+                      >
+                        <li
+                            v-for="item in schoolSuggestions"
+                            :key="item.value"
+                            @mousedown.prevent="selectSchool(item.value)"
+                        >
+                          <div>
+                            <strong>{{ item.value }}</strong>
+                            <small v-if="item.level">
+                              {{ item.level }}
+                            </small>
+                          </div>
+
+                          <Check class="h-4 w-4" />
+                        </li>
+                      </ul>
                     </div>
 
-                    <ul
-                      v-if="majorFocus && majorSuggestions.length > 0"
-                      class="editor-suggestion-list"
+                    <p
+                        v-if="profileErrors.school"
+                        class="editor-error"
                     >
-                      <li
-                        v-for="item in majorSuggestions"
-                        :key="item.value"
-                        @mousedown="selectMajor(item.value)"
+                      {{ profileErrors.school }}
+                    </p>
+                  </div>
+
+                  <div class="editor-field">
+                    <label>
+                      年级阶段
+                      <span>*</span>
+                    </label>
+
+                    <Select v-model="profileForm.grade">
+                      <SelectTrigger class="editor-select-trigger">
+                        <SelectValue placeholder="选择当前年级" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem
+                              v-for="grade in PRESET_GRADES"
+                              :key="grade"
+                              :value="grade"
+                              class="cursor-pointer text-xs"
+                          >
+                            {{ grade }}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+
+                    <p
+                        v-if="profileErrors.grade"
+                        class="editor-error"
+                    >
+                      {{ profileErrors.grade }}
+                    </p>
+                  </div>
+
+                  <div class="editor-field">
+                    <label for="profile-major">
+                      所学专业
+                      <span>*</span>
+                    </label>
+
+                    <div class="editor-field-control">
+                      <GraduationCap
+                          class="editor-input-icon h-4 w-4"
+                      />
+
+                      <Input
+                          id="profile-major"
+                          v-model="profileForm.major"
+                          type="text"
+                          placeholder="输入或选择专业"
+                          class="editor-input has-icon"
+                          autocomplete="off"
+                          @focus="majorFocus = true"
+                          @blur="handleMajorBlur"
+                      />
+
+                      <ul
+                          v-if="
+                          majorFocus &&
+                          majorSuggestions.length > 0
+                        "
+                          class="editor-suggestion-list"
                       >
-                        {{ item.value }}
-                      </li>
-                    </ul>
+                        <li
+                            v-for="item in majorSuggestions"
+                            :key="item.value"
+                            @mousedown.prevent="selectMajor(item.value)"
+                        >
+                          <strong>{{ item.value }}</strong>
+                          <Check class="h-4 w-4" />
+                        </li>
+                      </ul>
+                    </div>
+
+                    <p
+                        v-if="profileErrors.major"
+                        class="editor-error"
+                    >
+                      {{ profileErrors.major }}
+                    </p>
                   </div>
                 </div>
-              </div>
-            </div>
+              </section>
 
-            <!-- Section 2: 学习目标与时长 -->
-            <div class="form-section mt-6">
-              <div class="section-title-wrapper">
-                <span class="section-num">02</span>
-                <span class="section-title">学习目标与时长</span>
-              </div>
-              
-              <div class="grid grid-cols-2 gap-4">
-                <!-- Goal -->
-                <div class="form-field-group">
-                  <label class="form-field-label">
-                    当前学习目标 <span class="text-rose-500">*</span>
+              <!-- 学习目标 -->
+              <section class="editor-form-section">
+                <header class="editor-form-section-header">
+                  <span class="editor-section-number">02</span>
+
+                  <div>
+                    <h4>学习目标与节奏</h4>
+                    <p>系统将据此调整讲解深度、路径速度和练习强度。</p>
+                  </div>
+                </header>
+
+                <div class="editor-field-grid">
+                  <div class="editor-field">
+                    <label>
+                      当前学习目标
+                      <span>*</span>
+                    </label>
+
+                    <Select
+                        v-model="profileForm.global_learning_goal"
+                    >
+                      <SelectTrigger class="editor-select-trigger">
+                        <SelectValue placeholder="选择当前目标" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem
+                              v-for="goal in PRESET_GOALS"
+                              :key="goal"
+                              :value="goal"
+                              class="cursor-pointer text-xs"
+                          >
+                            {{ goal }}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+
+                    <p
+                        v-if="
+                        profileErrors.global_learning_goal
+                      "
+                        class="editor-error"
+                    >
+                      {{ profileErrors.global_learning_goal }}
+                    </p>
+                  </div>
+
+                  <div class="editor-field">
+                    <label>每日计划学习时间</label>
+
+                    <Select
+                        v-model="profileForm.daily_study_time"
+                    >
+                      <SelectTrigger class="editor-select-trigger">
+                        <SelectValue placeholder="选择每日时长" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem
+                              v-for="time in PRESET_DAILY_STUDY_TIME"
+                              :key="time"
+                              :value="time"
+                              class="cursor-pointer text-xs"
+                          >
+                            {{ time }}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+
+                    <small class="editor-field-hint">
+                      建议根据日常可持续投入时间选择。
+                    </small>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 学习课程 -->
+              <section class="editor-form-section">
+                <header class="editor-form-section-header">
+                  <span class="editor-section-number">03</span>
+
+                  <div>
+                    <h4>正在学习的课程</h4>
+                    <p>用于构建课程画像和生成针对性的学习资源。</p>
+                  </div>
+
+                  <em>{{ profileForm.courses.length }} 门</em>
+                </header>
+
+                <div class="editor-field">
+                  <label>
+                    课程列表
+                    <span>*</span>
                   </label>
-                  <Select v-model="profileForm.global_learning_goal">
-                    <SelectTrigger class="editor-select-trigger">
-                      <SelectValue placeholder="选择当前目标" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem
-                          v-for="goal in PRESET_GOALS"
-                          :key="goal"
-                          :value="goal"
-                          class="text-xs cursor-pointer"
-                        >
-                          {{ goal }}
-                        </SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+
                   <div
-                    v-if="profileErrors.global_learning_goal"
-                    class="editor-error text-rose-500 text-[11px] mt-0.5"
+                      class="editor-chip-input"
+                      :class="{
+                      'has-error': profileErrors.courses,
+                    }"
                   >
-                    {{ profileErrors.global_learning_goal }}
-                  </div>
-                </div>
-
-                <!-- Daily study time -->
-                <div class="form-field-group">
-                  <label class="form-field-label">每日计划学习时间</label>
-                  <Select v-model="profileForm.daily_study_time">
-                    <SelectTrigger class="editor-select-trigger">
-                      <SelectValue placeholder="请选择计划时间" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem
-                          v-for="time in PRESET_DAILY_STUDY_TIME"
-                          :key="time"
-                          :value="time"
-                          class="text-xs cursor-pointer"
-                        >
-                          {{ time }}
-                        </SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <!-- Section 3: 学习路径配置 -->
-            <div class="form-section mt-6">
-              <div class="section-title-wrapper">
-                <span class="section-num">03</span>
-                <span class="section-title">学习路径与偏好</span>
-              </div>
-              
-              <!-- Courses -->
-              <div class="form-field-group">
-                <label class="form-field-label">
-                  正在学习的课程 <span class="text-rose-500">*</span>
-                </label>
-                <div class="editor-chip-input-container">
-                  <div class="editor-chip-input">
                     <span
-                      v-for="(course, index) in profileForm.courses"
-                      :key="course"
-                      class="editor-course-chip"
+                        v-for="(course, index) in profileForm.courses"
+                        :key="`${course}-${index}`"
+                        class="editor-course-chip"
                     >
                       {{ course }}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        class="editor-chip-remove"
-                        aria-label="移除课程"
-                        @click="removeCourse(index)"
+
+                      <button
+                          type="button"
+                          aria-label="移除课程"
+                          @click="removeCourse(index)"
                       >
                         <Close class="h-3 w-3" />
-                      </Button>
+                      </button>
                     </span>
+
                     <input
-                      v-model="newCourseInput"
-                      type="text"
-                      placeholder="按回车添加课程"
-                      @keydown.enter.prevent="addCourse"
+                        v-model="newCourseInput"
+                        type="text"
+                        placeholder="输入课程名称，按回车添加"
+                        @keydown.enter.prevent="addCourse"
                     />
                   </div>
-                  <div
-                    v-if="profileErrors.courses"
-                    class="editor-error text-rose-500 text-[11px] mt-0.5"
+
+                  <p
+                      v-if="profileErrors.courses"
+                      class="editor-error"
                   >
                     {{ profileErrors.courses }}
-                  </div>
+                  </p>
                 </div>
 
-                <div class="editor-preset-block mt-2.5">
-                  <span class="preset-label">快捷推荐课程：</span>
+                <div class="editor-preset-block">
+                  <div class="preset-heading">
+                    <span>推荐课程</span>
+                    <small>点击即可加入课程列表</small>
+                  </div>
+
                   <div class="editor-preset-list">
-                    <Button
-                      v-for="course in PRESET_COURSES.slice(0, 8)"
-                      :key="course"
-                      type="button"
-                      variant="outline"
-                      class="editor-preset-button text-xs"
-                      @click="
-                        () => {
-                          if (!profileForm.courses.includes(course))
-                            profileForm.courses.push(course);
-                        }
+                    <button
+                        v-for="course in PRESET_COURSES"
+                        :key="course"
+                        type="button"
+                        class="editor-preset-button"
+                        :class="{
+                        selected:
+                          profileForm.courses.includes(course),
+                      }"
+                        :disabled="
+                        profileForm.courses.includes(course)
                       "
+                        @click="addPresetCourse(course)"
                     >
-                      + {{ course }}
-                    </Button>
+                      <Check
+                          v-if="
+                          profileForm.courses.includes(course)
+                        "
+                          class="h-3 w-3"
+                      />
+
+                      <span v-else>+</span>
+                      {{ course }}
+                    </button>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <!-- Programming Languages -->
-              <div class="form-field-group mt-4">
-                <label class="form-field-label">常用编程语言偏好（多选）</label>
+              <!-- 编程语言 -->
+              <section class="editor-form-section">
+                <header class="editor-form-section-header">
+                  <span class="editor-section-number">04</span>
+
+                  <div>
+                    <h4>编程语言偏好</h4>
+                    <p>影响代码案例、实践任务和解释语言的选择。</p>
+                  </div>
+
+                  <em>
+                    {{ profileForm.programming_languages.length }} 项
+                  </em>
+                </header>
+
                 <div class="language-chips-grid">
                   <button
-                    v-for="language in PRESET_LANGUAGES"
-                    :key="language"
-                    type="button"
-                    :class="['lang-chip', { active: profileForm.programming_languages.includes(language) }]"
-                    @click="toggleLanguage(language)"
+                      v-for="language in PRESET_LANGUAGES"
+                      :key="language"
+                      type="button"
+                      :class="[
+                      'language-option',
+                      {
+                        active:
+                          profileForm.programming_languages.includes(
+                            language,
+                          ),
+                      },
+                    ]"
+                      @click="toggleLanguage(language)"
                   >
-                    <Check v-if="profileForm.programming_languages.includes(language)" class="h-3 w-3 mr-1 flex-shrink-0" />
-                    <span class="truncate">{{ language }}</span>
+                    <span class="language-check">
+                      <Check
+                          v-if="
+                          profileForm.programming_languages.includes(
+                            language,
+                          )
+                        "
+                          class="h-3 w-3"
+                      />
+                    </span>
+
+                    <strong>{{ language }}</strong>
                   </button>
                 </div>
-              </div>
-            </div>
+              </section>
+            </form>
 
-            <!-- Footer Actions -->
-            <div class="flex justify-end gap-3 pt-5 mt-6 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                class="px-4 py-2 border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold rounded-lg h-9"
-                @click="profileEditorVisible = false"
-              >
-                取消
-              </Button>
-              <Button
-                type="submit"
-                class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-sm h-9"
-                :disabled="profileSubmitting"
-                @click="submitProfile"
-              >
-                <span v-if="profileSubmitting">正在保存...</span>
-                <span v-else class="flex items-center gap-1.5"
-                  >保存修改 <Check class="h-4 w-4"
-                /></span>
-              </Button>
-            </div>
-          </form>
+            <footer class="profile-editor-footer">
+              <div class="editor-footer-note">
+                <Info class="h-4 w-4" />
+                <span>保存后将同步更新个性化学习画像。</span>
+              </div>
+
+              <div class="editor-footer-actions">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    class="editor-reset-button"
+                    :disabled="profileSubmitting"
+                    @click="resetEditorForm"
+                >
+                  <RotateCcw class="h-4 w-4" />
+                  恢复原资料
+                </Button>
+
+                <Button
+                    type="button"
+                    variant="outline"
+                    class="editor-cancel-button"
+                    :disabled="profileSubmitting"
+                    @click="closeProfileEditor"
+                >
+                  取消
+                </Button>
+
+                <Button
+                    type="button"
+                    class="editor-save-button"
+                    :disabled="profileSubmitting"
+                    @click="submitProfile"
+                >
+                  <template v-if="profileSubmitting">
+                    <span class="editor-saving-dot"></span>
+                    正在保存
+                  </template>
+
+                  <template v-else>
+                    <Save class="h-4 w-4" />
+                    保存修改
+                  </template>
+                </Button>
+              </div>
+            </footer>
+          </section>
         </div>
       </DialogContent>
     </Dialog>
@@ -669,11 +1113,11 @@
 
 <script setup lang="ts">
 import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
   reactive,
   ref,
-  computed,
-  onMounted,
-  onBeforeUnmount,
   watch,
 } from "vue";
 import { useRoute } from "vue-router";
@@ -684,11 +1128,16 @@ import { CanvasRenderer } from "echarts/renderers";
 import { LineChart, PieChart } from "echarts/charts";
 import {
   GridComponent,
-  TooltipComponent,
   LegendComponent,
+  TooltipComponent,
 } from "echarts/components";
 import { gsap } from "gsap";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -706,22 +1155,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group";
+
 import {
   BadgeCheckIcon as BadgeCheck,
+  BookMarkedIcon as BookMarked,
   BookOpenCheckIcon as BookOpenCheck,
   CalendarDaysIcon as CalendarDays,
-  CheckIcon as Check,
   ChartColumnIcon as ChartColumn,
+  CheckIcon as Check,
   Clock3Icon as Clock3,
+  Code2Icon as Code2,
   FileCheckIcon as FileCheck,
   GaugeIcon as Gauge,
+  GraduationCapIcon as GraduationCap,
+  InfoIcon as Info,
   LayersIcon as Layers,
+  MailIcon as Mail,
   PencilIcon as Edit,
+  RotateCcwIcon as RotateCcw,
+  SaveIcon as Save,
+  SchoolIcon as SchoolIcon,
   SparklesIcon as Sparkles,
+  TargetIcon as Target,
+  TimerIcon as Timer,
   UserRoundIcon as UserRound,
   XIcon as Close,
 } from "@lucide/vue";
+
 import { uploadAvatar } from "@/features/auth/api/auth";
 import {
   ensureCurrentUser,
@@ -740,8 +1204,8 @@ import type {
   RecentResourceItem,
   StudyStatsData,
 } from "@/features/dashboard/api/home";
-import { getGeneratedResources } from "@/features/resource/api/history";
-import type { GeneratedResourceItem } from "@/features/resource/api/history";
+import { getGeneratedResources } from "@/features/resource/api/resource";
+import type { GeneratedResourceHistoryItem } from "@/features/resource/model/resource";
 import {
   getEvaluationSummary,
   getLearningTimeStats,
@@ -758,7 +1222,6 @@ import type {
   StudentProfileData,
 } from "@/features/profile/api/profile";
 
-// 注册 ECharts 渲染器与图表组件
 use([
   CanvasRenderer,
   LineChart,
@@ -767,47 +1230,6 @@ use([
   TooltipComponent,
   LegendComponent,
 ]);
-
-const route = useRoute();
-const { currentUser, userName } = useCurrentUser();
-
-// 时间范围（7天/30天）
-const timeRange = ref("7");
-const userEmail = ref<string | null>(null);
-const userAvatar = ref<string | null>(null);
-const avatarUploading = ref(false);
-// 编辑弹窗显隐
-const profileEditorVisible = ref(false);
-const profileSubmitting = ref(false);
-const learningStats = ref<LearningTimeStats | null>(null);
-const evaluationSummary = ref<EvaluationSummary | null>(null);
-const studyStats = ref<StudyStatsData | null>(null);
-const selectedTrendCourse = ref<string>("");
-const resourceHistoryLoading = ref(false);
-const dashboardStatsLoading = ref(false);
-const evaluationLoading = ref(false);
-const wrongLoading = ref(false);
-const wrongTotal = ref(0);
-
-const studentProfile = ref<
-  StudentProfileData & { learning_duration_total?: number }
->({
-  school: null,
-  school_level: null,
-  grade: null,
-  major: null,
-  courses: [],
-  learning_goal: null,
-  preferred_language: null,
-  learning_duration_total: 0,
-});
-
-// 画像元数据（学习时间/目标/编程语言），从 base_info 提取
-const profileMeta = reactive({
-  dailyStudyTime: "",
-  globalLearningGoal: "",
-  programmingLanguages: [] as string[],
-});
 
 interface ProfileFormData {
   grade: string;
@@ -819,7 +1241,47 @@ interface ProfileFormData {
   programming_languages: string[];
 }
 
-// 编辑表单绑定的响应式数据
+const route = useRoute();
+const { currentUser, userName } = useCurrentUser();
+
+const timeRange = ref("7");
+const userEmail = ref<string | null>(null);
+const userAvatar = ref<string | null>(null);
+const avatarUploading = ref(false);
+const profileEditorVisible = ref(false);
+const profileSubmitting = ref(false);
+
+const learningStats = ref<LearningTimeStats | null>(null);
+const evaluationSummary = ref<EvaluationSummary | null>(null);
+const studyStats = ref<StudyStatsData | null>(null);
+const selectedTrendCourse = ref("");
+const resourceHistoryLoading = ref(false);
+const dashboardStatsLoading = ref(false);
+const evaluationLoading = ref(false);
+const wrongLoading = ref(false);
+const wrongTotal = ref(0);
+
+const studentProfile = ref<
+    StudentProfileData & {
+  learning_duration_total?: number;
+}
+>({
+  school: null,
+  school_level: null,
+  grade: null,
+  major: null,
+  courses: [],
+  learning_goal: null,
+  preferred_language: null,
+  learning_duration_total: 0,
+});
+
+const profileMeta = reactive({
+  dailyStudyTime: "",
+  globalLearningGoal: "",
+  programmingLanguages: [] as string[],
+});
+
 const profileForm = reactive<ProfileFormData>({
   grade: "",
   major: "",
@@ -830,8 +1292,27 @@ const profileForm = reactive<ProfileFormData>({
   programming_languages: [],
 });
 
-const resourceHistory = ref<GeneratedResourceItem[]>([]);
+const profileErrors = reactive({
+  major: "",
+  courses: "",
+  global_learning_goal: "",
+  school: "",
+  grade: "",
+});
+
+const resourceHistory = ref<GeneratedResourceHistoryItem[]>([]);
 const recentDashboardResources = ref<RecentResourceItem[]>([]);
+const fullProfileData = ref<any>(null);
+
+const newCourseInput = ref("");
+const majorFocus = ref(false);
+const schoolFocus = ref(false);
+const schoolSuggestions = ref<
+    {
+      value: string;
+      level?: string | null;
+    }[]
+>([]);
 
 const PRESET_MAJORS = [
   "计算机科学与技术",
@@ -845,6 +1326,7 @@ const PRESET_MAJORS = [
   "电子信息工程",
   "数字媒体技术",
 ];
+
 const PRESET_COURSES = [
   "数据结构",
   "算法分析",
@@ -867,6 +1349,7 @@ const PRESET_COURSES = [
   "嵌入式开发",
   "移动端开发",
 ];
+
 const PRESET_GOALS = [
   "期末考试冲刺",
   "完成课程设计项目",
@@ -879,6 +1362,7 @@ const PRESET_GOALS = [
   "个人兴趣拓展",
   "行业证书考取",
 ];
+
 const PRESET_DAILY_STUDY_TIME = [
   "30min 以下",
   "30-60min",
@@ -886,6 +1370,7 @@ const PRESET_DAILY_STUDY_TIME = [
   "2-3h",
   "3h 以上",
 ];
+
 const PRESET_GRADES = [
   "大一",
   "大二",
@@ -901,6 +1386,7 @@ const PRESET_GRADES = [
   "高职二年级",
   "高职三年级",
 ];
+
 const PRESET_LANGUAGES = [
   "Python",
   "Java",
@@ -917,121 +1403,256 @@ const PRESET_LANGUAGES = [
   "HTML/CSS",
 ];
 
-// 组合专业/年级/目标生成个性签名
 const profileHeadline = computed(() => {
   const parts = [
     studentProfile.value.major,
     studentProfile.value.grade,
     studentProfile.value.learning_goal,
   ].filter((item): item is string => Boolean(item));
+
   return parts.length ? parts.join(" · ") : "学习资料待完善";
 });
 
-// 优先取 profileMeta 中的语言列表，fallback 到 studentProfile.preferred_language
+const editorPreviewHeadline = computed(() => {
+  return (
+      [
+        profileForm.major,
+        profileForm.grade,
+        profileForm.global_learning_goal,
+      ]
+          .filter(Boolean)
+          .join(" · ") || "正在完善学业资料"
+  );
+});
+
 const preferredLanguages = computed(() => {
   if (profileMeta.programmingLanguages.length > 0) {
     return profileMeta.programmingLanguages.filter(Boolean);
   }
+
   return (studentProfile.value.preferred_language || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
 });
 
-// 将秒数格式化为可读时长（如 "2h" / "45m"）
-const formatStudyDuration = (seconds?: number | null) => {
-  if (!seconds || seconds <= 0) return "0m";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  const hours = seconds / 3600;
-  return `${Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}h`;
+const displayLanguages = computed(() => {
+  return preferredLanguages.value.slice(0, 6);
+});
+
+const displayCourses = computed(() => {
+  return (studentProfile.value.courses || [])
+      .filter(Boolean)
+      .slice(0, 6);
+});
+
+const boundedPercent = (value: number) => {
+  return Math.min(100, Math.max(0, Math.round(value)));
 };
 
-// 展示用（最多取前 5 项）
-const displayLanguages = computed(() => preferredLanguages.value.slice(0, 5));
-const displayCourses = computed(() =>
-  (studentProfile.value.courses || []).filter(Boolean).slice(0, 5),
-);
-
-// 将数值限定在 0-100 之间
-const boundedPercent = (value: number) =>
-  Math.min(100, Math.max(0, Math.round(value)));
-
-// 根据各字段填写情况计算资料完整度百分比
 const profileCompletionPercent = computed(() => {
   const checks = [
     studentProfile.value.school,
     studentProfile.value.major,
     studentProfile.value.grade,
-    studentProfile.value.learning_goal || profileMeta.globalLearningGoal,
+    studentProfile.value.learning_goal ||
+    profileMeta.globalLearningGoal,
     (studentProfile.value.courses || []).length > 0,
     preferredLanguages.value.length > 0,
     profileMeta.dailyStudyTime,
   ];
+
   const completed = checks.filter(Boolean).length;
+
   return boundedPercent((completed / checks.length) * 100);
 });
 
-// 收集所有已生成资源的类型集合
+const missingProfileItems = computed(() => {
+  const items: string[] = [];
+
+  if (!studentProfile.value.school) {
+    items.push("学校");
+  }
+
+  if (!studentProfile.value.major) {
+    items.push("专业");
+  }
+
+  if (!studentProfile.value.grade) {
+    items.push("年级");
+  }
+
+  if (
+      !studentProfile.value.learning_goal &&
+      !profileMeta.globalLearningGoal
+  ) {
+    items.push("学习目标");
+  }
+
+  if (!(studentProfile.value.courses || []).length) {
+    items.push("学习课程");
+  }
+
+  if (!preferredLanguages.value.length) {
+    items.push("编程语言");
+  }
+
+  if (!profileMeta.dailyStudyTime) {
+    items.push("每日学习时长");
+  }
+
+  return items;
+});
+
+const editorCompletionPercent = computed(() => {
+  const checks = [
+    profileForm.school.trim(),
+    profileForm.major.trim(),
+    profileForm.grade,
+    profileForm.global_learning_goal,
+    profileForm.daily_study_time,
+    profileForm.courses.length > 0,
+    profileForm.programming_languages.length > 0,
+  ];
+
+  const completed = checks.filter(Boolean).length;
+
+  return boundedPercent((completed / checks.length) * 100);
+});
+
+const editorSections = computed(() => [
+  {
+    index: "01",
+    title: "学业身份",
+    description: "学校、专业与年级",
+    completed: Boolean(
+        profileForm.school.trim() &&
+        profileForm.major.trim() &&
+        profileForm.grade,
+    ),
+  },
+  {
+    index: "02",
+    title: "学习目标",
+    description: "目标与每日节奏",
+    completed: Boolean(
+        profileForm.global_learning_goal &&
+        profileForm.daily_study_time,
+    ),
+  },
+  {
+    index: "03",
+    title: "学习课程",
+    description: "当前课程范围",
+    completed: profileForm.courses.length > 0,
+  },
+  {
+    index: "04",
+    title: "语言偏好",
+    description: "代码与实践语言",
+    completed:
+        profileForm.programming_languages.length > 0,
+  },
+]);
+
+const formatStudyDuration = (
+    seconds?: number | null,
+) => {
+  if (!seconds || seconds <= 0) {
+    return "0m";
+  }
+
+  if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)}m`;
+  }
+
+  const hours = seconds / 3600;
+
+  return `${Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}h`;
+};
+
 const resourceTypeSet = computed(() => {
   const types = new Set<string>();
+
   resourceHistory.value.forEach((item) => {
     (item.resource_types || []).forEach((type) => {
-      if (type) types.add(type);
+      if (type) {
+        types.add(type);
+      }
     });
   });
+
   return types;
 });
 
-// 已覆盖的资源类型数量和已完成资源数
-const resourceTypeCoverage = computed(() => resourceTypeSet.value.size);
-const completedResourceCount = computed(
-  () =>
-    evaluationSummary.value?.completed_resources ||
-    resourceHistory.value.length ||
-    0,
-);
+const resourceTypeCoverage = computed(() => {
+  return resourceTypeSet.value.size;
+});
 
-// 统计指定场景的模块事件次数
+const completedResourceCount = computed(() => {
+  return (
+      evaluationSummary.value?.completed_resources ||
+      resourceHistory.value.length ||
+      0
+  );
+});
+
 const eventCountForContexts = (...keys: string[]) => {
-  const context = learningStats.value?.context_breakdown || {};
-  return keys.reduce((sum, key) => sum + (context[key] || 0), 0);
+  const context =
+      learningStats.value?.context_breakdown || {};
+
+  return keys.reduce(
+      (sum, key) => sum + (context[key] || 0),
+      0,
+  );
 };
 
-// 各场景事件次数（题库/AI 辅导/路径规划/智能推荐）
-const questionBankEvents = computed(() =>
-  eventCountForContexts("QuestionBank", "question-bank"),
-);
-const tutorEvents = computed(() => eventCountForContexts("Tutor", "tutor"));
-const pathPlanningEvents = computed(() =>
-  eventCountForContexts(
-    "PathPlanCreate",
-    "PathPlanOverview",
-    "PathPlanHistory",
-    "PathNodeStudy",
-    "path-planner",
-    "path-planner-overview",
-    "path-planner-history",
-    "path-planner-node",
-  ),
-);
-const recommendationEvents = computed(() =>
-  eventCountForContexts(
-    "ResourceGenerator",
-    "ResourceGenerator",
-    "ResourceResult",
-    "ResourceHistory",
-    "resource-generator",
-    "resource-detail",
-    "ai/resources/history",
-  ),
-);
+const questionBankEvents = computed(() => {
+  return eventCountForContexts(
+      "QuestionBank",
+      "question-bank",
+  );
+});
 
-// 顶部学习概览卡片数据（活跃/产出/时间/错题）
+const tutorEvents = computed(() => {
+  return eventCountForContexts("Tutor", "tutor");
+});
+
+const pathPlanningEvents = computed(() => {
+  return eventCountForContexts(
+      "PathPlanCreate",
+      "PathPlanOverview",
+      "PathPlanHistory",
+      "PathNodeStudy",
+      "path-planner",
+      "path-planner-overview",
+      "path-planner-history",
+      "path-planner-node",
+  );
+});
+
+const recommendationEvents = computed(() => {
+  return eventCountForContexts(
+      "ResourceGenerator",
+      "ResourceResult",
+      "ResourceHistory",
+      "resource-generator",
+      "resource-detail",
+      "ai/resources/history",
+  );
+});
+
 const learningSummaryCards = computed(() => [
   {
     label: "本周活跃",
-    value: `${studyStats.value?.weekly_days ?? learningStats.value?.streak_days ?? 0}天`,
-    hint: `今日 ${formatStudyDuration(learningStats.value?.today_seconds || 0)}`,
+    value: `${
+        studyStats.value?.weekly_days ??
+        learningStats.value?.streak_days ??
+        0
+    }天`,
+    hint: `今日 ${formatStudyDuration(
+        learningStats.value?.today_seconds || 0,
+    )}`,
     icon: CalendarDays,
     themeClass: "card-active",
   },
@@ -1039,33 +1660,42 @@ const learningSummaryCards = computed(() => [
     label: "学习产出",
     value: `${completedResourceCount.value}`,
     hint: evaluationSummary.value?.viewed_resources
-      ? `已浏览 ${evaluationSummary.value.viewed_resources} 份`
-      : `${resourceHistory.value.length}份生成记录`,
+        ? `已浏览 ${evaluationSummary.value.viewed_resources} 份`
+        : `${resourceHistory.value.length} 份生成记录`,
     icon: FileCheck,
     themeClass: "card-output",
   },
   {
     label: "学习时间",
-    value: formatStudyDuration(learningStats.value?.total_seconds || 0),
-    hint: `今日已学 ${formatStudyDuration(learningStats.value?.today_seconds || 0)}`,
+    value: formatStudyDuration(
+        learningStats.value?.total_seconds || 0,
+    ),
+    hint: `今日已学 ${formatStudyDuration(
+        learningStats.value?.today_seconds || 0,
+    )}`,
     icon: Clock3,
     themeClass: "card-score",
   },
   {
     label: "待巩固错题",
     value: `${wrongTotal.value}题`,
-    hint: wrongTotal.value > 0 ? "建议优先复盘" : "暂无积压",
+    hint:
+        wrongTotal.value > 0
+            ? "建议优先复盘"
+            : "当前暂无积压",
     icon: BookOpenCheck,
     themeClass: "card-wrong",
   },
 ]);
 
-// 学习状态速览卡片（完整度/覆盖/样本/连续）
 const learningStatusCards = computed(() => [
   {
     label: "资料完整度",
     value: `${profileCompletionPercent.value}%`,
-    hint: profileCompletionPercent.value >= 80 ? "推荐更精准" : "继续完善资料",
+    hint:
+        profileCompletionPercent.value >= 80
+            ? "推荐结果更精准"
+            : "建议继续完善资料",
     percent: profileCompletionPercent.value,
     icon: BadgeCheck,
     themeClass: "theme-teal",
@@ -1073,44 +1703,64 @@ const learningStatusCards = computed(() => [
   {
     label: "资源类型覆盖",
     value: `${Math.min(resourceTypeCoverage.value, 5)}/5`,
-    hint: resourceHistoryLoading.value ? "同步中" : "文档/题库/案例等",
-    percent: boundedPercent((resourceTypeCoverage.value / 5) * 100),
+    hint: resourceHistoryLoading.value
+        ? "数据同步中"
+        : "文档、题库与案例",
+    percent: boundedPercent(
+        (resourceTypeCoverage.value / 5) * 100,
+    ),
     icon: Layers,
     themeClass: "theme-purple",
   },
   {
     label: "评估样本",
-    value: `${evaluationSummary.value?.event_count || 0}条`,
-    hint: evaluationLoading.value ? "同步中" : "行为与测验信号",
+    value: `${
+        evaluationSummary.value?.event_count || 0
+    }条`,
+    hint: evaluationLoading.value
+        ? "数据同步中"
+        : "行为与测验信号",
     percent: boundedPercent(
-      ((evaluationSummary.value?.event_count || 0) / 12) * 100,
+        ((evaluationSummary.value?.event_count || 0) /
+            12) *
+        100,
     ),
     icon: ChartColumn,
     themeClass: "theme-indigo",
   },
   {
     label: "连续学习",
-    value: `${learningStats.value?.streak_days || 0}天`,
-    hint: dashboardStatsLoading.value ? "同步中" : `${timeRange.value}天窗口`,
+    value: `${
+        learningStats.value?.streak_days || 0
+    }天`,
+    hint: dashboardStatsLoading.value
+        ? "数据同步中"
+        : `${timeRange.value} 天统计窗口`,
     percent: boundedPercent(
-      ((learningStats.value?.streak_days || 0) / 7) * 100,
+        ((learningStats.value?.streak_days || 0) / 7) *
+        100,
     ),
     icon: Gauge,
     themeClass: "theme-amber",
   },
 ]);
 
-// 薄弱点（最多 4 个），偏好资源类型（最多 4 个），首要学习建议
-const displayedWeakTopics = computed(() =>
-  (evaluationSummary.value?.weak_topics || []).slice(0, 4),
-);
-const displayedPreferredResources = computed(() =>
-  (evaluationSummary.value?.preferred_resources || []).slice(0, 4),
-);
+const displayedWeakTopics = computed(() => {
+  return (
+      evaluationSummary.value?.weak_topics || []
+  ).slice(0, 4);
+});
+
+const displayedFocusTopics = computed(() => {
+  return (
+      evaluationSummary.value?.focus_topics || []
+  ).slice(0, 4);
+});
+
 const primaryLearningAdvice = computed(() => {
   return (
-    evaluationSummary.value?.recommendations?.[0] ||
-    "继续完成资源学习与阶段测验，系统会逐步积累学习效果信号。"
+      evaluationSummary.value?.recommendations?.[0] ||
+      "继续完成资源学习与阶段测验，系统会逐步积累学习效果信号。"
   );
 });
 
@@ -1125,123 +1775,195 @@ const resourceTypeLabels: Record<string, string> = {
 };
 
 const resourceGradients: Record<string, string> = {
-  content: "linear-gradient(90deg, #0D9488, #2DD4BF)",
-  mindmap: "linear-gradient(90deg, #EA580C, #FBBF24)",
-  quiz: "linear-gradient(90deg, #6D28D9, #A78BFA)",
-  code: "linear-gradient(90deg, #BE123C, #F43F5E)",
-  reading: "linear-gradient(90deg, #047857, #34D399)",
-  ppt: "linear-gradient(90deg, #0369A1, #38BDF8)",
-  video: "linear-gradient(90deg, #DB2777, #F472B6)",
+  content: "linear-gradient(90deg, #0d9488, #2dd4bf)",
+  mindmap: "linear-gradient(90deg, #ea580c, #fbbf24)",
+  quiz: "linear-gradient(90deg, #6d28d9, #a78bfa)",
+  code: "linear-gradient(90deg, #be123c, #f43f5e)",
+  reading: "linear-gradient(90deg, #047857, #34d399)",
+  ppt: "linear-gradient(90deg, #0369a1, #38bdf8)",
+  video: "linear-gradient(90deg, #db2777, #f472b6)",
 };
 
-// 统计各资源类型的产出数量及占比，取前 5
 const resourceMixRows = computed(() => {
   const counts = new Map<string, number>();
+
   resourceHistory.value.forEach((item) => {
     const types = item.resource_types?.length
-      ? item.resource_types
-      : ["content"];
-    types.forEach((type) => counts.set(type, (counts.get(type) || 0) + 1));
-  });
-  const rows = [...counts.entries()]
-    .map(([type, count]) => ({
-      label: resourceTypeLabels[type] || type,
-      count,
-      type,
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-  const max = Math.max(...rows.map((item) => item.count), 1);
-  return rows.length
-    ? rows.map((item) => ({
-        ...item,
-        percent: boundedPercent((item.count / max) * 100),
-        gradient:
-          resourceGradients[item.type] ||
-          "linear-gradient(90deg, #079894, #62c9c5)",
-      }))
-    : [
-        {
-          label: "知识文档",
-          count: 0,
-          percent: 0,
-          gradient: "linear-gradient(90deg, #0D9488, #2DD4BF)",
-        },
-        {
-          label: "题库练习",
-          count: 0,
-          percent: 0,
-          gradient: "linear-gradient(90deg, #6D28D9, #A78BFA)",
-        },
-        {
-          label: "思维导图",
-          count: 0,
-          percent: 0,
-          gradient: "linear-gradient(90deg, #EA580C, #FBBF24)",
-        },
-      ];
-});
+        ? item.resource_types
+        : ["content"];
 
-// 计算各学习场景的事件占比
-const scenarioBreakdown = computed(() => {
-  const items = [
-    { name: "题库练习", count: questionBankEvents.value, color: "#818CF8" },
-    { name: "AI辅导", count: tutorEvents.value, color: "#2DD4BF" },
-    { name: "路径规划", count: pathPlanningEvents.value, color: "#FBBF24" },
-    {
-      name: "智能推荐",
-      count: recommendationEvents.value,
-      color: "#34D399",
-    },
-  ];
-  const total = items.reduce((sum, item) => sum + item.count, 0);
-  return items.map((item) => ({
+    types.forEach((type) => {
+      counts.set(type, (counts.get(type) || 0) + 1);
+    });
+  });
+
+  const rows = [...counts.entries()]
+      .map(([type, count]) => ({
+        label: resourceTypeLabels[type] || type,
+        count,
+        type,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+  const max = Math.max(
+      ...rows.map((item) => item.count),
+      1,
+  );
+
+  if (!rows.length) {
+    return [
+      {
+        label: "知识文档",
+        count: 0,
+        percent: 0,
+        gradient:
+            "linear-gradient(90deg, #0d9488, #2dd4bf)",
+      },
+      {
+        label: "题库练习",
+        count: 0,
+        percent: 0,
+        gradient:
+            "linear-gradient(90deg, #6d28d9, #a78bfa)",
+      },
+      {
+        label: "思维导图",
+        count: 0,
+        percent: 0,
+        gradient:
+            "linear-gradient(90deg, #ea580c, #fbbf24)",
+      },
+    ];
+  }
+
+  return rows.map((item) => ({
     ...item,
-    percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    percent: boundedPercent(
+        (item.count / max) * 100,
+    ),
+    gradient:
+        resourceGradients[item.type] ||
+        "linear-gradient(90deg, #079894, #62c9c5)",
   }));
 });
 
-// 判断图表是否有数据可展示
-const hasLineChartData = computed(() =>
-  (learningStats.value?.daily_breakdown || []).some((item) => item.seconds > 0),
-);
-const hasScenarioData = computed(() =>
-  scenarioBreakdown.value.some((item) => item.count > 0),
-);
+const scenarioBreakdown = computed(() => {
+  const items = [
+    {
+      name: "题库练习",
+      count: questionBankEvents.value,
+      color: "#818cf8",
+    },
+    {
+      name: "AI 辅导",
+      count: tutorEvents.value,
+      color: "#2dd4bf",
+    },
+    {
+      name: "路径规划",
+      count: pathPlanningEvents.value,
+      color: "#fbbf24",
+    },
+    {
+      name: "智能推荐",
+      count: recommendationEvents.value,
+      color: "#34d399",
+    },
+  ];
 
-// 学习专注走势折线图 ECharts 配置
-const lineOption = computed(() => {
-  const dailyBreakdown = learningStats.value?.daily_breakdown || [];
-  const dates = dailyBreakdown.map((item) => {
-    const date = new Date(item.date);
-    if (Number.isNaN(date.getTime())) return item.date;
-    return `${date.getMonth() + 1}-${date.getDate()}`;
-  });
-  const values = dailyBreakdown.map((item) =>
-    Number((item.seconds / 3600).toFixed(1)),
+  const total = items.reduce(
+      (sum, item) => sum + item.count,
+      0,
   );
 
+  return items.map((item) => ({
+    ...item,
+    percent:
+        total > 0
+            ? Math.round((item.count / total) * 100)
+            : 0,
+  }));
+});
+
+const hasLineChartData = computed(() => {
+  return (
+      learningStats.value?.daily_breakdown || []
+  ).some((item) => item.seconds > 0);
+});
+
+const hasScenarioData = computed(() => {
+  return scenarioBreakdown.value.some(
+      (item) => item.count > 0,
+  );
+});
+
+const lineOption = computed(() => {
+  const dailyBreakdown =
+      learningStats.value?.daily_breakdown || [];
+
+  const dates = dailyBreakdown.map((item) => {
+    const date = new Date(item.date);
+
+    if (Number.isNaN(date.getTime())) {
+      return item.date;
+    }
+
+    return `${date.getMonth() + 1}-${date.getDate()}`;
+  });
+
+  const values = dailyBreakdown.map((item) => {
+    return Number((item.seconds / 3600).toFixed(1));
+  });
+
   return {
-    grid: { top: 24, right: 12, bottom: 28, left: 36 },
+    grid: {
+      top: 24,
+      right: 15,
+      bottom: 28,
+      left: 38,
+    },
     tooltip: {
       trigger: "axis",
-      backgroundColor: "#FCFFFF",
-      borderColor: "#C8E4E3",
+      backgroundColor: "#ffffff",
+      borderColor: "#d7e2ef",
       borderWidth: 1,
-      textStyle: { color: "#173B42", fontSize: 11 },
-      formatter: `{b}<br/>课程：${selectedTrendCourse.value || "全部课程"}<br/>专注时长：{c}h`,
+      textStyle: {
+        color: "#334155",
+        fontSize: 11,
+      },
+      formatter: `{b}<br/>课程：${
+          selectedTrendCourse.value || "全部课程"
+      }<br/>专注时长：{c}h`,
     },
     xAxis: {
       type: "category",
       data: dates,
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: "#DDEDEC" } },
-      axisLabel: { color: "#6B858A", fontSize: 10 },
+      axisTick: {
+        show: false,
+      },
+      axisLine: {
+        lineStyle: {
+          color: "#dce5ef",
+        },
+      },
+      axisLabel: {
+        color: "#718096",
+        fontSize: 10,
+      },
     },
     yAxis: {
       type: "value",
-      splitLine: { lineStyle: { color: "#DDEDEC", type: "dashed" } },
-      axisLabel: { color: "#6B858A", fontSize: 10 },
+      splitLine: {
+        lineStyle: {
+          color: "#e5eaf1",
+          type: "dashed",
+        },
+      },
+      axisLabel: {
+        color: "#718096",
+        fontSize: 10,
+      },
     },
     series: [
       {
@@ -1251,8 +1973,15 @@ const lineOption = computed(() => {
         smooth: true,
         showSymbol: true,
         symbolSize: 6,
-        lineStyle: { color: "#6366F1", width: 3 },
-        itemStyle: { color: "#FCFFFF", borderColor: "#6366F1", borderWidth: 2 },
+        lineStyle: {
+          color: "#6366f1",
+          width: 3,
+        },
+        itemStyle: {
+          color: "#ffffff",
+          borderColor: "#6366f1",
+          borderWidth: 2,
+        },
         areaStyle: {
           color: {
             type: "linear",
@@ -1261,8 +1990,14 @@ const lineOption = computed(() => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: "rgba(99, 102, 241, 0.22)" },
-              { offset: 1, color: "rgba(99, 102, 241, 0)" },
+              {
+                offset: 0,
+                color: "rgba(99, 102, 241, 0.2)",
+              },
+              {
+                offset: 1,
+                color: "rgba(99, 102, 241, 0)",
+              },
             ],
           },
         },
@@ -1271,16 +2006,18 @@ const lineOption = computed(() => {
   };
 });
 
-// 功能使用占比环形图 ECharts 配置
 const pieOption = computed(() => {
   return {
     tooltip: {
       trigger: "item",
       formatter: "{b}: {d}%",
-      backgroundColor: "#FCFFFF",
-      borderColor: "#C8E4E3",
+      backgroundColor: "#ffffff",
+      borderColor: "#d7e2ef",
       borderWidth: 1,
-      textStyle: { color: "#173B42", fontSize: 11 },
+      textStyle: {
+        color: "#334155",
+        fontSize: 11,
+      },
     },
     series: [
       {
@@ -1290,83 +2027,141 @@ const pieOption = computed(() => {
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 8,
-          borderColor: "#FCFFFF",
-          borderWidth: 2,
+          borderColor: "#ffffff",
+          borderWidth: 3,
         },
-        label: { show: false },
-        labelLine: { show: false },
+        label: {
+          show: false,
+        },
+        labelLine: {
+          show: false,
+        },
         data: hasScenarioData.value
-          ? scenarioBreakdown.value.map((item) => ({
+            ? scenarioBreakdown.value.map((item) => ({
               value: item.count,
               name: item.name,
-              itemStyle: { color: item.color },
+              itemStyle: {
+                color: item.color,
+              },
             }))
-          : [{ value: 1, name: "暂无数据", itemStyle: { color: "#DDEDEC" } }],
+            : [
+              {
+                value: 1,
+                name: "暂无数据",
+                itemStyle: {
+                  color: "#e2e8f0",
+                },
+              },
+            ],
       },
     ],
   };
 });
 
-// 课程列表变化时自动选择第一个作为趋势筛选课程
 watch(
-  () => studentProfile.value.courses,
-  (newCourses) => {
-    if (newCourses && newCourses.length > 0) {
-      if (!newCourses.includes(selectedTrendCourse.value)) {
-        selectedTrendCourse.value = newCourses[0] || "";
+    () => studentProfile.value.courses,
+    (courses) => {
+      if (courses?.length) {
+        if (!courses.includes(selectedTrendCourse.value)) {
+          selectedTrendCourse.value = courses[0] || "";
+        }
+      } else {
+        selectedTrendCourse.value = "";
       }
-    } else {
-      selectedTrendCourse.value = "";
-    }
-  },
-  { immediate: true },
+    },
+    {
+      immediate: true,
+    },
 );
 
-// URL 参数携带 ?action=edit-profile 时打开编辑弹窗
 watch(
-  () => route.query.action,
-  () => {
-    openProfileEditorFromRoute();
-  },
+    () => route.query.action,
+    () => {
+      openProfileEditorFromRoute();
+    },
 );
 
-// 时间范围切换时重新加载学习时长数据
 watch(timeRange, () => {
   loadLearningStats();
 });
 
-// 进入 /profile 页面时并行加载所有数据
 watch(
-  () => route.path,
-  (newPath) => {
-    if (newPath === "/profile") {
-      Promise.all([
-        loadProfileInfo(),
-        loadResourceHistory(),
-        loadDashboardStats(),
-        loadLearningStats(),
-        loadEvaluationSummary(),
-        loadWrongOverview(),
-      ]).catch(console.error);
-    }
-  },
+    () => route.path,
+    (newPath) => {
+      if (newPath === "/profile") {
+        loadAllProfileData();
+      }
+    },
 );
 
-let profileMotionContext: ReturnType<typeof gsap.context> | null = null;
-// 页面挂载时加载数据，执行入场动画
+watch(
+    () => profileForm.school,
+    (value) => {
+      if (value.trim()) {
+        profileErrors.school = "";
+      }
+
+      scheduleSchoolSearch(value);
+    },
+);
+
+watch(
+    () => profileForm.major,
+    (value) => {
+      if (value.trim()) {
+        profileErrors.major = "";
+      }
+    },
+);
+
+watch(
+    () => profileForm.grade,
+    (value) => {
+      if (value) {
+        profileErrors.grade = "";
+      }
+    },
+);
+
+watch(
+    () => profileForm.global_learning_goal,
+    (value) => {
+      if (value) {
+        profileErrors.global_learning_goal = "";
+      }
+    },
+);
+
+watch(
+    () => profileForm.courses.length,
+    (length) => {
+      if (length > 0) {
+        profileErrors.courses = "";
+      }
+    },
+);
+
+let profileMotionContext:
+    | ReturnType<typeof gsap.context>
+    | null = null;
+
+let schoolSearchTimer:
+    | ReturnType<typeof setTimeout>
+    | null = null;
+
 onMounted(async () => {
-  await Promise.all([
-    loadProfileInfo(),
-    loadResourceHistory(),
-    loadDashboardStats(),
-    loadLearningStats(),
-    loadEvaluationSummary(),
-    loadWrongOverview(),
-  ]).catch(console.error);
+  await loadAllProfileData();
   openProfileEditorFromRoute();
 
   requestAnimationFrame(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (
+        window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+        ).matches
+    ) {
+      return;
+    }
+
     profileMotionContext = gsap.context(() => {
       gsap.from(".profile-motion-item", {
         opacity: 0,
@@ -1379,47 +2174,69 @@ onMounted(async () => {
   });
 });
 
-// 组件销毁时还原 GSAP 动画上下文
 onBeforeUnmount(() => {
   profileMotionContext?.revert();
+
+  if (schoolSearchTimer) {
+    clearTimeout(schoolSearchTimer);
+  }
 });
 
 const avatarInput = ref<HTMLInputElement>();
-// 模拟点击隐藏的文件输入以触发选择头像
+
 const triggerAvatarUpload = () => {
   avatarInput.value?.click();
 };
 
-// 头像文件选择后校验格式/大小并上传
-const onAvatarFileChange = async (e: Event) => {
-  const target = e.target as HTMLInputElement;
+const onAvatarFileChange = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
-  if (!file) return;
 
-  const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-  if (!allowedTypes.includes(file.type)) {
-    toast.error("仅支持 JPG、PNG、GIF、WebP 格式图片");
+  if (!file) {
     return;
   }
+
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
+
+  if (!allowedTypes.includes(file.type)) {
+    toast.error(
+        "仅支持 JPG、PNG、GIF、WebP 格式图片",
+    );
+    target.value = "";
+    return;
+  }
+
   const maxSize = 2 * 1024 * 1024;
+
   if (file.size > maxSize) {
     toast.error("图片大小不能超过 2MB");
+    target.value = "";
     return;
   }
 
   avatarUploading.value = true;
+
   try {
-    const res = await uploadAvatar(file);
-    userAvatar.value = res.data.data.avatar;
+    const response = await uploadAvatar(file);
+    const avatar = response.data.data.avatar;
+
+    userAvatar.value = avatar;
+
     if (currentUser.value) {
       setCurrentUser({
         ...currentUser.value,
-        avatar: res.data.data.avatar,
+        avatar,
       });
     }
+
     toast.success("头像更新成功");
-  } catch (err) {
-    console.error("Failed to upload avatar", err);
+  } catch (error) {
+    console.error("Failed to upload avatar", error);
     toast.error("头像更新失败，请重试");
   } finally {
     avatarUploading.value = false;
@@ -1427,235 +2244,324 @@ const onAvatarFileChange = async (e: Event) => {
   }
 };
 
-const newCourseInput = ref("");
-// 添加课程（去重）
 const addCourse = () => {
   const course = newCourseInput.value.trim();
-  if (course && !profileForm.courses.includes(course)) {
+
+  if (
+      course &&
+      !profileForm.courses.includes(course)
+  ) {
     profileForm.courses.push(course);
   }
+
   newCourseInput.value = "";
 };
+
+const addPresetCourse = (course: string) => {
+  if (!profileForm.courses.includes(course)) {
+    profileForm.courses.push(course);
+  }
+};
+
 const removeCourse = (index: number) => {
   profileForm.courses.splice(index, 1);
 };
 
-// 切换编程语言选中状态
-const toggleLanguage = (lang: string) => {
-  const index = profileForm.programming_languages.indexOf(lang);
-  if (index > -1) {
+const toggleLanguage = (language: string) => {
+  const index =
+      profileForm.programming_languages.indexOf(language);
+
+  if (index >= 0) {
     profileForm.programming_languages.splice(index, 1);
-  } else {
-    profileForm.programming_languages.push(lang);
+    return;
   }
+
+  profileForm.programming_languages.push(language);
 };
 
-const majorFocus = ref(false);
-const schoolFocus = ref(false);
-
-// 根据输入过滤预设专业列表
 const majorSuggestions = computed(() => {
-  const query = profileForm.major.trim().toLowerCase();
-  if (!query) return PRESET_MAJORS.map((m) => ({ value: m }));
-  return PRESET_MAJORS.filter((m) => m.toLowerCase().includes(query)).map(
-    (m) => ({ value: m }),
-  );
+  const query = profileForm.major
+      .trim()
+      .toLowerCase();
+
+  if (!query) {
+    return PRESET_MAJORS.map((major) => ({
+      value: major,
+    }));
+  }
+
+  return PRESET_MAJORS.filter((major) => {
+    return major.toLowerCase().includes(query);
+  }).map((major) => ({
+    value: major,
+  }));
 });
 
-const schoolSuggestions = ref<{ value: string; level?: string | null }[]>([]);
-// 根据输入关键词异步搜索学校
 const querySearchSchool = async (query: string) => {
   if (!query.trim()) {
     schoolSuggestions.value = [];
     return;
   }
+
   try {
-    const res = await searchSchools(query, 20);
-    schoolSuggestions.value = (res.data.data || []).map(
-      (school: SchoolItem) => ({
-        value: school.name,
-        level: school.level,
-      }),
-    );
-  } catch (e) {
+    const response = await searchSchools(query, 20);
+
+    schoolSuggestions.value = (
+        response.data.data || []
+    ).map((school: SchoolItem) => ({
+      value: school.name,
+      level: school.level,
+    }));
+  } catch {
     schoolSuggestions.value = [];
   }
 };
 
-// 学校输入变化时自动搜索建议
-watch(
-  () => profileForm.school,
-  (newVal) => {
-    querySearchSchool(newVal);
-  },
-);
+const scheduleSchoolSearch = (query: string) => {
+  if (schoolSearchTimer) {
+    clearTimeout(schoolSearchTimer);
+  }
 
-const selectMajor = (val: string) => {
-  profileForm.major = val;
+  if (!schoolFocus.value || !query.trim()) {
+    schoolSuggestions.value = [];
+    return;
+  }
+
+  schoolSearchTimer = setTimeout(() => {
+    querySearchSchool(query);
+  }, 260);
+};
+
+const selectMajor = (value: string) => {
+  profileForm.major = value;
   majorFocus.value = false;
 };
 
-const selectSchool = (val: string) => {
-  profileForm.school = val;
+const selectSchool = (value: string) => {
+  profileForm.school = value;
   schoolFocus.value = false;
+  schoolSuggestions.value = [];
 };
 
-const profileErrors = reactive({
-  major: "",
-  courses: "",
-  global_learning_goal: "",
-  school: "",
-  grade: "",
-});
+const handleSchoolBlur = () => {
+  window.setTimeout(() => {
+    schoolFocus.value = false;
+  }, 120);
+};
 
-// 表单校验：学校/年级/专业/目标/课程至少一项
-const validateProfile = () => {
-  let valid = true;
+const handleMajorBlur = () => {
+  window.setTimeout(() => {
+    majorFocus.value = false;
+  }, 120);
+};
+
+const clearProfileErrors = () => {
   profileErrors.major = "";
   profileErrors.courses = "";
   profileErrors.global_learning_goal = "";
   profileErrors.school = "";
   profileErrors.grade = "";
+};
+
+const validateProfile = () => {
+  clearProfileErrors();
+
+  let valid = true;
 
   if (!profileForm.school.trim()) {
-    profileErrors.school = "请输入或搜索你的就读学校";
+    profileErrors.school =
+        "请输入或搜索你的就读学校";
     valid = false;
   }
+
   if (!profileForm.grade) {
-    profileErrors.grade = "请选择你当前的年级阶段";
+    profileErrors.grade =
+        "请选择你当前的年级阶段";
     valid = false;
   }
+
   if (!profileForm.major.trim()) {
-    profileErrors.major = "请选择或输入你的专业";
+    profileErrors.major =
+        "请选择或输入你的专业";
     valid = false;
   }
+
   if (!profileForm.global_learning_goal) {
-    profileErrors.global_learning_goal = "请选择你当前的学习目标";
+    profileErrors.global_learning_goal =
+        "请选择你当前的学习目标";
     valid = false;
   }
+
   if (profileForm.courses.length === 0) {
-    profileErrors.courses = "请至少添加一门课程";
+    profileErrors.courses =
+        "请至少添加一门正在学习的课程";
     valid = false;
   }
+
   return valid;
 };
 
-// 将服务端数据回填到编辑表单
-const fillProfileForm = (payload: StudentProfileData) => {
+const fillProfileForm = (
+    payload: StudentProfileData,
+) => {
   profileForm.grade = payload.grade || "";
   profileForm.major = payload.major || "";
   profileForm.courses = Array.isArray(payload.courses)
-    ? [...payload.courses]
-    : [];
+      ? [...payload.courses]
+      : [];
   profileForm.global_learning_goal =
-    profileMeta.globalLearningGoal || payload.learning_goal || "";
+      profileMeta.globalLearningGoal ||
+      payload.learning_goal ||
+      "";
   profileForm.school = payload.school || "";
-  profileForm.daily_study_time = profileMeta.dailyStudyTime;
+  profileForm.daily_study_time =
+      profileMeta.dailyStudyTime;
   profileForm.programming_languages =
-    profileMeta.programmingLanguages.length > 0
-      ? [...profileMeta.programmingLanguages]
-      : payload.preferred_language
-        ? payload.preferred_language
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [];
+      profileMeta.programmingLanguages.length > 0
+          ? [...profileMeta.programmingLanguages]
+          : payload.preferred_language
+              ? payload.preferred_language
+                  .split(",")
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+              : [];
+
+  newCourseInput.value = "";
 };
 
-const fullProfileData = ref<any>(null);
-
-// 加载用户信息 + 画像数据，填充 studentProfile 和 profileMeta
 const loadProfileInfo = async () => {
   try {
-    const [userRes, profileRes] = await Promise.allSettled([
-      ensureCurrentUser(true),
-      getProfile(),
-    ]);
+    const [userResult, profileResult] =
+        await Promise.allSettled([
+          ensureCurrentUser(true),
+          getProfile(),
+        ]);
 
-    if (userRes.status === "fulfilled" && userRes.value) {
-      setCurrentUser(userRes.value);
-      userAvatar.value = userRes.value.avatar;
-      userEmail.value = userRes.value.email;
+    if (
+        userResult.status === "fulfilled" &&
+        userResult.value
+    ) {
+      setCurrentUser(userResult.value);
+      userAvatar.value = userResult.value.avatar;
+      userEmail.value = userResult.value.email;
     } else if (currentUser.value) {
       userAvatar.value = currentUser.value.avatar;
       userEmail.value = currentUser.value.email;
     }
 
-    if (profileRes.status === "fulfilled") {
-      const profileData = profileRes.value.data?.data;
+    if (profileResult.status === "fulfilled") {
+      const profileData =
+          profileResult.value.data?.data;
+
       fullProfileData.value = profileData;
+
       const baseInfo = profileData?.base_info;
-      // 统一从 base_info 中获取所有基本信息，确保数据正确展示
+
       if (baseInfo) {
         studentProfile.value = {
           school: baseInfo.school || null,
-          school_level: baseInfo.school_level || null,
+          school_level:
+              baseInfo.school_level || null,
           major: baseInfo.major || null,
           grade: baseInfo.grade || null,
           courses: baseInfo.courses || [],
-          learning_goal: baseInfo.global_learning_goal || null,
-          preferred_language: (baseInfo.programming_languages || []).join(", "),
+          learning_goal:
+              baseInfo.global_learning_goal || null,
+          preferred_language: (
+              baseInfo.programming_languages || []
+          ).join(", "),
         };
-        profileMeta.dailyStudyTime = baseInfo.daily_study_time || "";
-        profileMeta.globalLearningGoal = baseInfo.global_learning_goal || "";
-        profileMeta.programmingLanguages = Array.isArray(
-          baseInfo.programming_languages,
-        )
-          ? [...baseInfo.programming_languages]
-          : [];
+
+        profileMeta.dailyStudyTime =
+            baseInfo.daily_study_time || "";
+
+        profileMeta.globalLearningGoal =
+            baseInfo.global_learning_goal || "";
+
+        profileMeta.programmingLanguages =
+            Array.isArray(
+                baseInfo.programming_languages,
+            )
+                ? [...baseInfo.programming_languages]
+                : [];
       }
     }
-  } catch (e) {
-    console.warn("加载个人中心数据失败", e);
+  } catch (error) {
+    console.warn(
+        "加载个人中心数据失败",
+        error,
+    );
   } finally {
     fillProfileForm(studentProfile.value);
   }
 };
 
-// 加载学习时长统计数据
 const loadLearningStats = async () => {
   try {
-    const days = parseInt(timeRange.value) || 7;
-    const res = await getLearningTimeStats(days);
-    learningStats.value = res.data.data;
-    studentProfile.value.learning_duration_total = res.data.data.total_seconds;
-  } catch (e) {
-    console.warn("加载学习时长统计失败", e);
+    const days = Number.parseInt(timeRange.value) || 7;
+    const response =
+        await getLearningTimeStats(days);
+
+    learningStats.value = response.data.data;
+    studentProfile.value.learning_duration_total =
+        response.data.data.total_seconds;
+  } catch (error) {
+    console.warn(
+        "加载学习时长统计失败",
+        error,
+    );
+
     learningStats.value = null;
     studentProfile.value.learning_duration_total = 0;
   }
 };
 
-// 加载资源生成历史
 const loadResourceHistory = async () => {
   resourceHistoryLoading.value = true;
+
   try {
-    const res = await getGeneratedResources(1, 40);
-    resourceHistory.value = res.data.data?.items || [];
-  } catch (e) {
-    console.warn("加载资源生成历史失败", e);
+    const response =
+        await getGeneratedResources(1, 40);
+
+    resourceHistory.value =
+        response.data.data?.items || [];
+  } catch (error) {
+    console.warn(
+        "加载资源生成历史失败",
+        error,
+    );
+
     resourceHistory.value = [];
   } finally {
     resourceHistoryLoading.value = false;
   }
 };
 
-// 加载学习概览和最近资源数据
 const loadDashboardStats = async () => {
   dashboardStatsLoading.value = true;
+
   try {
-    const [statsRes, resourcesRes] = await Promise.allSettled([
-      getStudyStats(),
-      getRecentResources(),
-    ]);
+    const [statsResult, resourcesResult] =
+        await Promise.allSettled([
+          getStudyStats(),
+          getRecentResources(),
+        ]);
+
     studyStats.value =
-      statsRes.status === "fulfilled" ? statsRes.value.data.data : null;
+        statsResult.status === "fulfilled"
+            ? statsResult.value.data.data
+            : null;
+
     recentDashboardResources.value =
-      resourcesRes.status === "fulfilled"
-        ? resourcesRes.value.data.data || []
-        : [];
-  } catch (e) {
-    console.warn("加载学习数据概览失败", e);
+        resourcesResult.status === "fulfilled"
+            ? resourcesResult.value.data.data || []
+            : [];
+  } catch (error) {
+    console.warn(
+        "加载学习数据概览失败",
+        error,
+    );
+
     studyStats.value = null;
     recentDashboardResources.value = [];
   } finally {
@@ -1663,62 +2569,90 @@ const loadDashboardStats = async () => {
   }
 };
 
-// 加载学习评估摘要（薄弱点/偏好/建议等）
 const loadEvaluationSummary = async () => {
   evaluationLoading.value = true;
+
   try {
-    const res = await getEvaluationSummary(100);
-    evaluationSummary.value = res.data.data;
-  } catch (e) {
-    console.warn("加载学习评估摘要失败", e);
+    const response =
+        await getEvaluationSummary(100);
+
+    evaluationSummary.value =
+        response.data.data;
+  } catch (error) {
+    console.warn(
+        "加载学习评估摘要失败",
+        error,
+    );
+
     evaluationSummary.value = null;
   } finally {
     evaluationLoading.value = false;
   }
 };
 
-// 加载错题概览（仅统计总数）
 const loadWrongOverview = async () => {
   wrongLoading.value = true;
+
   try {
-    const res = await fetchWrongQuestions({
+    const response = await fetchWrongQuestions({
       is_archived: false,
       page: 1,
       page_size: 1,
     });
-    wrongTotal.value = res.total || 0;
-  } catch (e) {
-    console.warn("加载错题概览失败", e);
+
+    wrongTotal.value = response.total || 0;
+  } catch (error) {
+    console.warn(
+        "加载错题概览失败",
+        error,
+    );
+
     wrongTotal.value = 0;
   } finally {
     wrongLoading.value = false;
   }
 };
 
-// 打开编辑弹窗，填充表单并清空错误
+const loadAllProfileData = async () => {
+  await Promise.all([
+    loadProfileInfo(),
+    loadResourceHistory(),
+    loadDashboardStats(),
+    loadLearningStats(),
+    loadEvaluationSummary(),
+    loadWrongOverview(),
+  ]).catch(console.error);
+};
+
 const openProfileEditor = () => {
   fillProfileForm(studentProfile.value);
-  profileErrors.major = "";
-  profileErrors.courses = "";
-  profileErrors.global_learning_goal = "";
-  profileErrors.school = "";
-  profileErrors.grade = "";
+  clearProfileErrors();
   profileEditorVisible.value = true;
 };
 
-// 检测路由参数 ?action=edit-profile 触发弹窗
+const closeProfileEditor = () => {
+  fillProfileForm(studentProfile.value);
+  clearProfileErrors();
+  profileEditorVisible.value = false;
+};
+
+const resetEditorForm = () => {
+  fillProfileForm(studentProfile.value);
+  clearProfileErrors();
+};
+
 const openProfileEditorFromRoute = () => {
   if (route.query.action === "edit-profile") {
     openProfileEditor();
   }
 };
 
-// 设置时间范围（7天/30天）
-const setTimeRange = (val: any) => {
-  if (typeof val === "string" && val) timeRange.value = val;
+const setTimeRange = (value: unknown) => {
+  if (typeof value === "string" && value) {
+    timeRange.value = value;
+  }
 };
 
-// 提交编辑表单，更新 onboarding 数据并刷新展示
 const submitProfile = async () => {
   if (!validateProfile()) {
     toast.warning("请先完善所有必填项");
@@ -1726,35 +2660,67 @@ const submitProfile = async () => {
   }
 
   profileSubmitting.value = true;
+
   try {
     const payload: ProfileOnboardingUpdate = {
-      school: profileForm.school,
-      major: profileForm.major,
+      school: profileForm.school.trim(),
+      major: profileForm.major.trim(),
       grade: profileForm.grade,
-      global_learning_goal: profileForm.global_learning_goal,
-      daily_study_time: profileForm.daily_study_time,
-      courses: profileForm.courses.filter(Boolean).map((c) => c.trim()),
-      programming_languages: profileForm.programming_languages,
+      global_learning_goal:
+      profileForm.global_learning_goal,
+      daily_study_time:
+      profileForm.daily_study_time,
+      courses: profileForm.courses
+          .map((course) => course.trim())
+          .filter(Boolean),
+      programming_languages: [
+        ...profileForm.programming_languages,
+      ],
+      foundational_level: "",
+      learning_style: "",
+      content_depth: "",
+      weak_points: [],
     };
+
     await updateProfileOnboarding(payload);
+
     studentProfile.value = {
       ...studentProfile.value,
       school: payload.school,
       major: payload.major,
       grade: payload.grade,
       courses: payload.courses,
-      learning_goal: payload.global_learning_goal,
-      preferred_language: payload.programming_languages.join(", "),
+      learning_goal:
+      payload.global_learning_goal,
+      preferred_language:
+          payload.programming_languages.join(", "),
     };
-    profileMeta.dailyStudyTime = payload.daily_study_time;
-    profileMeta.globalLearningGoal = payload.global_learning_goal;
-    profileMeta.programmingLanguages = [...payload.programming_languages];
+
+    profileMeta.dailyStudyTime =
+        payload.daily_study_time;
+
+    profileMeta.globalLearningGoal =
+        payload.global_learning_goal;
+
+    profileMeta.programmingLanguages = [
+      ...payload.programming_languages,
+    ];
+
     profileEditorVisible.value = false;
-    toast.success("学习资料更新成功");
+
+    toast.success("学业资料更新成功");
+
     await loadProfileInfo();
-  } catch (e: any) {
-    console.error("Failed to update profile onboarding", e);
-    toast.error(e.response?.data?.message || "保存失败，请稍后重试");
+  } catch (error: any) {
+    console.error(
+        "Failed to update profile onboarding",
+        error,
+    );
+
+    toast.error(
+        error.response?.data?.message ||
+        "保存失败，请稍后重试",
+    );
   } finally {
     profileSubmitting.value = false;
   }
@@ -1762,245 +2728,486 @@ const submitProfile = async () => {
 </script>
 
 <style scoped>
-.profile-page {
-  min-height: 100%;
-  background: #ffffff;
-  color: var(--color-text);
+.profile-page,
+.profile-page * {
+  box-sizing: border-box;
 }
 
-.profile-page :is(h1, h2, h3, h4, p, span, strong, small, button) {
+.profile-page {
+  min-height: 100%;
+  color: #172033;
+  background:
+      linear-gradient(
+          180deg,
+          #fbfcfe 0,
+          #ffffff 240px
+      );
+}
+
+.profile-page :is(
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  span,
+  strong,
+  small,
+  button
+) {
   letter-spacing: 0;
 }
 
 .profile-shell {
   width: min(100%, 1680px);
   margin: 0 auto;
-  padding: 26px 28px 32px;
+  padding: 28px 30px 40px;
 }
 
-.profile-title-row {
+.profile-page-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  color: var(--color-primary-text);
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e4e9f0;
 }
 
-.profile-title-row h1 {
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--color-primary-text);
+.page-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
 }
 
 .title-mark {
   display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  color: #079894;
+  border: 1px solid #cde5e2;
+  border-radius: 11px;
+  color: #0b918d;
+  background: #f0fbfa;
 }
 
-/* Layout Grid */
+.page-heading h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 25px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.page-heading p {
+  margin: 5px 0 0;
+  color: #758196;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.header-profile-progress {
+  width: min(360px, 38vw);
+}
+
+.header-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-progress-copy span {
+  color: #67758a;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.header-progress-copy strong {
+  color: #0d8f89;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.header-progress-track,
+.completion-track,
+.editor-completion-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e7ecf2;
+}
+
+.header-progress-track {
+  margin-top: 7px;
+}
+
+.header-progress-track i,
+.completion-track i,
+.editor-completion-track i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  border-radius: inherit;
+  background: linear-gradient(
+      90deg,
+      #0d9488,
+      #5b7cfa
+  );
+  transition: transform 320ms ease;
+}
+
+.header-progress-hint {
+  display: block;
+  margin-top: 6px;
+  color: #8a95a5;
+  font-size: 10px;
+  font-weight: 650;
+  text-align: right;
+}
+
 .profile-layout-grid {
   display: grid;
-  grid-template-columns: 350px minmax(0, 1fr);
+  grid-template-columns: 330px minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
 
-/* Left Sidebar Styles */
 .academic-profile-sidebar {
+  position: sticky;
+  top: 20px;
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 24px;
-  padding: 24px;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  gap: 19px;
+  padding: 22px;
+  border: 1px solid #e1e7ef;
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.02);
-  text-align: left;
+  background: #ffffff;
+  box-shadow: 0 10px 32px rgba(23, 35, 55, 0.045);
 }
 
-.sidebar-user-info {
+.identity-section {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-bottom: 19px;
+  border-bottom: 1px solid #e8edf3;
   text-align: center;
-  padding-bottom: 20px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .avatar-button {
   position: relative;
-  width: 90px;
-  height: 90px;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 14px;
   padding: 0;
-  border-radius: 999px;
+  overflow: hidden;
+  border-radius: 50%;
   background: transparent;
-  margin-bottom: 16px;
 }
 
 .avatar-button:hover {
   background: transparent;
 }
 
+.avatar-file-input {
+  display: none;
+}
+
 .profile-avatar {
-  width: 90px;
-  height: 90px;
-  border: 2px solid rgba(157, 210, 208, 0.7);
+  width: 88px;
+  height: 88px;
+  border: 2px solid #d3e8e6;
   box-shadow:
-    inset 0 0 0 4px #fff,
-    0 8px 20px rgba(15, 23, 42, 0.05);
+      inset 0 0 0 4px #ffffff,
+      0 8px 24px rgba(25, 50, 69, 0.09);
 }
 
 .profile-avatar :deep(span) {
-  font-size: 32px;
-  font-weight: 800;
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
+  color: #176b68;
+  background: #e9f8f6;
+  font-size: 30px;
+  font-weight: 850;
 }
 
 .avatar-edit-mask {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.68);
   opacity: 0;
-  transition: opacity var(--transition-fast);
+  transition: opacity 180ms ease;
+}
+
+.avatar-edit-mask em {
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .avatar-button:hover .avatar-edit-mask {
   opacity: 1;
 }
 
-.user-name {
-  color: #0f172a;
-  font-size: 22px;
-  font-weight: 800;
-  margin-bottom: 6px;
+.identity-copy h2 {
+  margin: 0;
+  color: #182235;
+  font-size: 21px;
+  font-weight: 850;
 }
 
 .academic-role-badge {
   display: inline-flex;
+  height: 25px;
   align-items: center;
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(99, 102, 241, 0.1);
-  color: #4f46e5;
-  font-size: 11px;
-  font-weight: 700;
-  margin-bottom: 12px;
-}
-
-.user-email {
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 4px;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 0 9px;
+  border: 1px solid #d8ddfb;
+  border-radius: 7px;
+  color: #5454be;
+  background: #f4f4ff;
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .user-headline {
-  color: #475569;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.5;
-  max-width: 280px;
-}
-
-.sidebar-details-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.detail-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.detail-label {
-  color: #64748b;
+  max-width: 270px;
+  margin: 10px auto 0;
+  color: #627086;
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  line-height: 1.55;
 }
 
-.detail-value {
-  color: #1e293b;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.detail-badges {
+.identity-email {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.detail-badge-pill {
-  display: inline-flex;
+  max-width: 100%;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid rgba(99, 102, 241, 0.15);
-  border-radius: 6px;
-  background: rgba(245, 243, 255, 0.8);
-  color: #4f46e5;
-  font-size: 11px;
-  font-weight: 700;
+  gap: 7px;
+  margin-top: 12px;
+  color: #7c899b;
 }
 
-.detail-badge-pill.lang-pill {
-  border-color: rgba(13, 148, 136, 0.15);
-  background: rgba(240, 253, 250, 0.8);
+.identity-email span {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-completion-card {
+  padding: 13px;
+  border: 1px solid #dce8e7;
+  border-radius: 11px;
+  background: #f7fbfb;
+}
+
+.completion-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.completion-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.completion-heading span {
+  color: #607186;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.completion-heading strong {
+  color: #0b8c86;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.completion-heading svg {
+  color: #a6b1be;
+}
+
+.completion-heading svg.completed {
   color: #0d9488;
 }
 
-.empty-badge-pill {
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 600;
+.completion-track {
+  margin-top: 9px;
 }
 
-.sidebar-actions {
-  margin-top: 8px;
+.profile-completion-card p {
+  margin: 8px 0 0;
+  color: #7a8798;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.profile-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.profile-fact {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 9px;
+  border-radius: 9px;
+  transition:
+      background-color 180ms ease,
+      transform 180ms ease;
+}
+
+.profile-fact:hover {
+  background: #f8fafc;
+  transform: translateX(2px);
+}
+
+.fact-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+}
+
+.fact-school {
+  color: #0d9488;
+  background: #ecf9f7;
+}
+
+.fact-major {
+  color: #5b61c9;
+  background: #f1f1ff;
+}
+
+.fact-target {
+  color: #c36b24;
+  background: #fff6e9;
+}
+
+.fact-time {
+  color: #3674c8;
+  background: #edf5ff;
+}
+
+.profile-fact small,
+.profile-fact strong {
+  display: block;
+}
+
+.profile-fact small {
+  color: #8793a3;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.profile-fact strong {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-chip-section {
+  padding-top: 2px;
+}
+
+.profile-chip-section header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #58677d;
+}
+
+.profile-chip-section header span {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.profile-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.profile-chip {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.course-chip {
+  border: 1px solid #dcdffc;
+  color: #5454bd;
+  background: #f6f5ff;
+}
+
+.language-chip {
+  border: 1px solid #cce7e3;
+  color: #087f79;
+  background: #effaf8;
+}
+
+.empty-profile-chip {
+  border: 1px dashed #dbe2ea;
+  color: #95a0ae;
+  background: #fafbfc;
 }
 
 .edit-profile-button {
+  width: 100%;
   height: 40px;
   gap: 8px;
-  border-color: rgba(203, 213, 225, 0.8);
-  border-radius: 8px;
+  margin-top: 2px;
+  border-color: #cad6e3;
+  border-radius: 9px;
+  color: #315d68;
   background: #ffffff;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .edit-profile-button:hover {
-  background: #f8fafc;
-  color: #0f172a;
-  border-color: rgba(148, 163, 184, 0.8);
+  border-color: #7abbb5;
+  color: #087d77;
+  background: #f2faf9;
 }
 
-/* Right Main Dashboard Panel */
 .analytics-dashboard-main {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
   min-width: 0;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .dashboard-header {
   display: flex;
+  min-height: 42px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -2009,235 +3216,266 @@ const submitProfile = async () => {
 .panel-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #4f46e5;
+  gap: 11px;
+}
+
+.panel-heading-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #d9ddfb;
+  border-radius: 10px;
+  color: #585fc9;
+  background: #f4f4ff;
 }
 
 .panel-heading h3 {
-  color: #0f172a;
-  font-size: 20px;
-  font-weight: 800;
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.panel-heading p {
+  margin: 4px 0 0;
+  color: #7c899a;
+  font-size: 10px;
 }
 
 .dashboard-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
 }
 
 .course-trigger {
-  width: 140px;
-  height: 32px;
-  border-color: rgba(226, 232, 240, 0.8);
+  width: 150px;
+  height: 34px;
+  border-color: #dde4ec;
   border-radius: 8px;
   background: #ffffff;
   color: #334155;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .range-toggle {
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  border: 1px solid #dde4ec;
   border-radius: 8px;
   background: #ffffff;
 }
 
 .range-toggle :deep(button) {
-  height: 30px;
-  min-width: 48px;
+  height: 32px;
+  min-width: 58px;
   border: 0;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
+  color: #657287;
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .range-toggle :deep(button[data-state="on"]) {
-  background: rgba(99, 102, 241, 0.1);
-  color: #4f46e5;
+  color: #4f55bc;
+  background: #f1f1ff;
 }
 
-/* Core Summary Grid */
 .summary-card-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 13px;
 }
 
 .summary-card {
   display: flex;
+  min-width: 0;
+  min-height: 92px;
   align-items: center;
-  gap: 16px;
-  min-height: 84px;
-  padding: 16px 20px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid #e0e7ef;
   border-radius: 12px;
   background: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.01);
+  box-shadow: 0 5px 18px rgba(22, 34, 54, 0.035);
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
-  text-align: left;
+      transform 180ms ease,
+      box-shadow 180ms ease;
 }
 
 .summary-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.03);
-}
-
-.summary-card.card-active {
-  border-color: rgba(217, 119, 6, 0.2);
-  background: rgba(255, 251, 235, 0.45);
-}
-.summary-card.card-active .summary-icon {
-  color: #d97706;
-}
-.summary-card.card-active span {
-  color: #b45309;
-}
-.summary-card.card-active strong {
-  color: #78350f;
-}
-
-.summary-card.card-output {
-  border-color: rgba(16, 185, 129, 0.2);
-  background: rgba(240, 253, 250, 0.45);
-}
-.summary-card.card-output .summary-icon {
-  color: #10b981;
-}
-.summary-card.card-output span {
-  color: #047857;
-}
-.summary-card.card-output strong {
-  color: #064e3b;
-}
-
-.summary-card.card-score {
-  border-color: rgba(99, 102, 241, 0.2);
-  background: rgba(245, 243, 255, 0.45);
-}
-.summary-card.card-score .summary-icon {
-  color: #6366f1;
-}
-.summary-card.card-score span {
-  color: #4338ca;
-}
-.summary-card.card-score strong {
-  color: #312e81;
-}
-
-.summary-card.card-wrong {
-  border-color: rgba(244, 63, 94, 0.2);
-  background: rgba(255, 241, 242, 0.45);
-}
-.summary-card.card-wrong .summary-icon {
-  color: #f43f5e;
-}
-.summary-card.card-wrong span {
-  color: #b91c1c;
-}
-.summary-card.card-wrong strong {
-  color: #7f1d1d;
+  box-shadow: 0 10px 25px rgba(22, 34, 54, 0.065);
 }
 
 .summary-icon {
   display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  border-radius: 11px;
 }
 
-.summary-card span,
-.summary-card small {
+.summary-card-copy {
+  min-width: 0;
+}
+
+.summary-card-copy span,
+.summary-card-copy small {
   display: block;
-  font-size: 13px;
-  font-weight: 700;
 }
 
-.summary-card strong {
+.summary-card-copy span {
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.summary-card-copy strong {
   display: block;
-  margin-top: 1px;
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.summary-card small {
   margin-top: 3px;
-  color: #64748b;
-  font-size: 11px;
+  font-size: 23px;
+  font-weight: 850;
+  line-height: 1;
 }
 
-/* Double Column Grid Layout */
+.summary-card-copy small {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #7c899a;
+  font-size: 9px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-active {
+  border-color: #f0dec0;
+  background: linear-gradient(145deg, #ffffff, #fffaf1);
+}
+
+.card-active .summary-icon {
+  color: #bd7427;
+  background: #fff1dc;
+}
+
+.card-active span,
+.card-active strong {
+  color: #9b5d1c;
+}
+
+.card-output {
+  border-color: #cde7df;
+  background: linear-gradient(145deg, #ffffff, #f3fbf8);
+}
+
+.card-output .summary-icon {
+  color: #16866d;
+  background: #e7f8f2;
+}
+
+.card-output span,
+.card-output strong {
+  color: #146b58;
+}
+
+.card-score {
+  border-color: #d9dcfa;
+  background: linear-gradient(145deg, #ffffff, #f5f5ff);
+}
+
+.card-score .summary-icon {
+  color: #5b61c9;
+  background: #ebecff;
+}
+
+.card-score span,
+.card-score strong {
+  color: #4c50a9;
+}
+
+.card-wrong {
+  border-color: #f1d3d8;
+  background: linear-gradient(145deg, #ffffff, #fff6f7);
+}
+
+.card-wrong .summary-icon {
+  color: #cc536a;
+  background: #ffecef;
+}
+
+.card-wrong span,
+.card-wrong strong {
+  color: #aa4256;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 20px;
+  gap: 17px;
 }
 
 .visual-column {
   grid-column: span 7;
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 20px;
+  gap: 17px;
 }
 
 .insights-column {
   grid-column: span 5;
   display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.chart-panel,
-.insight-panel {
   min-width: 0;
-  padding: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.01);
-  text-align: left;
-  display: flex;
   flex-direction: column;
+  gap: 17px;
 }
 
-.visual-sub-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  flex: 1;
+.dashboard-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e0e7ef;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(22, 34, 54, 0.03);
 }
 
-.status-panel {
-  flex: 1;
-}
-
-.chart-heading {
+.panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 13px;
 }
 
-.chart-heading h4 {
-  color: #0f172a;
-  font-size: 16px;
-  font-weight: 800;
+.panel-header > div > span {
+  display: block;
+  color: #8995a5;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.09em;
 }
 
-.chart-heading span {
-  color: #64748b;
-  font-size: 12px;
+.panel-header h4 {
+  margin: 4px 0 0;
+  color: #202b3d;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.panel-header > em {
+  color: #7b8798;
+  font-size: 9px;
+  font-style: normal;
   font-weight: 700;
+}
+
+.compact-panel-header {
+  margin-bottom: 15px;
 }
 
 .chart-box {
   position: relative;
-  height: 220px;
+  height: 230px;
 }
 
 .chart {
@@ -2248,68 +3486,27 @@ const submitProfile = async () => {
 .chart-empty {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  color: #94a3b8;
-  font-size: 13px;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #9aa5b3;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  font-weight: 700;
   pointer-events: none;
 }
 
-/* Scenario breakdown & Resource Progress */
-.scenario-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex: 1;
-  justify-content: space-between;
-}
-
-.donut-box {
-  position: relative;
-  min-height: 110px;
-  flex: 1;
-}
-
-.scenario-list {
+.visual-sub-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 6px;
-}
-
-.scenario-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  font-weight: 700;
-  color: #334155;
-}
-
-.scenario-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.scenario-name i {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
-  border-radius: 2px;
-}
-
-.scenario-row strong {
-  color: #0f172a;
-  font-family: monospace;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
 }
 
 .resource-mix-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  justify-content: space-between;
+  gap: 13px;
 }
 
 .resource-mix-row {
@@ -2318,147 +3515,197 @@ const submitProfile = async () => {
   gap: 6px;
 }
 
-.resource-mix-row > div:first-child {
+.resource-mix-copy {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #475569;
-  font-size: 12px;
+}
+
+.resource-mix-copy span {
+  color: #59687d;
+  font-size: 10px;
   font-weight: 700;
 }
 
-.resource-mix-row strong {
-  color: #0f172a;
+.resource-mix-copy strong {
+  color: #29384d;
+  font-size: 10px;
   font-weight: 800;
 }
 
 .mix-track {
   height: 6px;
-  border-radius: 999px;
-  background: #f1f5f9;
   overflow: hidden;
+  border-radius: 99px;
+  background: #edf1f5;
 }
 
 .mix-track i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #159f9b, #62c9c5);
+  transition: width 350ms ease;
 }
 
-/* Advice Panel & Next Action */
+.scenario-body {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.donut-box {
+  position: relative;
+  height: 126px;
+}
+
+.scenario-list {
+  display: grid;
+  gap: 7px;
+}
+
+.scenario-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scenario-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #59687d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.scenario-name i {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.scenario-row strong {
+  color: #2f3d51;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.insight-block + .insight-block {
+  margin-top: 15px;
+}
+
+.insight-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #7b8798;
+  font-size: 9px;
+  font-weight: 800;
+}
+
 .tag-cloud {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px;
 }
 
-.preference-cloud {
-  margin-top: 10px;
+.weak-tag,
+.preference-chip,
+.empty-chip {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 750;
 }
 
 .weak-tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 2px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid rgba(99, 102, 241, 0.15);
-  background: rgba(245, 243, 255, 0.7);
-  color: #4f46e5;
-  transition: transform 0.2s ease;
-}
-
-.weak-tag:hover {
-  transform: scale(1.03);
+  border: 1px solid #dfdcfa;
+  color: #5954b8;
+  background: #f7f5ff;
 }
 
 .weak-tag:nth-child(2n) {
-  border-color: rgba(13, 148, 136, 0.15);
-  background: rgba(240, 253, 250, 0.7);
-  color: #0d9488;
+  border-color: #cde6e2;
+  color: #0d847c;
+  background: #f1faf8;
 }
 
 .weak-tag:nth-child(3n) {
-  border-color: rgba(217, 119, 6, 0.15);
-  background: rgba(255, 251, 235, 0.7);
-  color: #d97706;
+  border-color: #eedec4;
+  color: #b56b20;
+  background: #fff9ee;
 }
 
-.weak-tag:nth-child(4n) {
-  border-color: rgba(244, 63, 94, 0.15);
-  background: rgba(255, 241, 242, 0.7);
-  color: #f43f5e;
-}
-
-.data-chip,
-.empty-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid rgba(13, 148, 136, 0.15);
-  border-radius: 6px;
-  background: rgba(240, 253, 250, 0.5);
-  color: #0d9488;
-  font-size: 11px;
-  font-weight: 700;
+.preference-chip {
+  border: 1px solid #cde6e2;
+  color: #0d847c;
+  background: #f1faf8;
 }
 
 .empty-chip {
-  color: #94a3b8;
-  border-color: rgba(226, 232, 240, 0.8);
-  background: #f8fafc;
+  border: 1px dashed #dce3eb;
+  color: #929dac;
+  background: #fafbfc;
 }
 
 .next-action-box {
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: linear-gradient(
-    135deg,
-    rgba(245, 243, 255, 0.5),
-    rgba(240, 253, 250, 0.5)
-  );
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px solid #dde1f7;
+  border-radius: 10px;
+  background:
+      linear-gradient(
+          135deg,
+          #f7f6ff,
+          #f2fbf9
+      );
+}
+
+.next-action-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: #5e5ac3;
+  background: #eaeaff;
 }
 
 .next-action-box span {
-  display: block;
-  color: #4f46e5;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
+  color: #5956b8;
+  font-size: 9px;
+  font-weight: 850;
 }
 
 .next-action-box p {
-  margin: 4px 0 0;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.6;
+  margin: 5px 0 0;
+  color: #4c5b71;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.55;
 }
 
-/* Status Cards & Progress */
+.status-panel {
+  flex: 1;
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  flex: 1;
+  gap: 10px;
 }
 
 .status-card {
   min-width: 0;
   padding: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 8px;
+  border: 1px solid #e1e7ef;
+  border-radius: 9px;
   background: #ffffff;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
 }
 
 .status-card-head {
@@ -2468,279 +3715,387 @@ const submitProfile = async () => {
 }
 
 .status-card-head span {
-  color: #475569;
-  font-size: 11px;
-  font-weight: 800;
   overflow: hidden;
+  color: #59687d;
+  font-size: 9px;
+  font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.status-card strong {
+.status-card > strong {
   display: block;
-  margin-top: 6px;
-  color: #0f172a;
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1;
+  margin-top: 8px;
+  color: #253449;
+  font-size: 19px;
+  font-weight: 850;
 }
 
 .status-progress-bar {
   height: 4px;
-  background: #f1f5f9;
-  border-radius: 999px;
+  margin-top: 9px;
   overflow: hidden;
-  margin: 8px 0 4px;
+  border-radius: 99px;
+  background: rgba(148, 163, 184, 0.2);
 }
 
 .status-progress-fill {
+  width: 100%;
   height: 100%;
+  transform-origin: left;
   border-radius: inherit;
-  transition: width 0.4s ease;
-}
-
-.status-card.theme-teal {
-  border-color: rgba(13, 148, 136, 0.15);
-  background: rgba(240, 253, 250, 0.45);
-}
-.status-card.theme-teal .status-icon {
-  color: #0d9488;
-}
-.status-card.theme-teal .status-progress-fill {
-  background: #0d9488;
-}
-
-.status-card.theme-purple {
-  border-color: rgba(139, 92, 246, 0.15);
-  background: rgba(245, 243, 255, 0.45);
-}
-.status-card.theme-purple .status-icon {
-  color: #8b5cf6;
-}
-.status-card.theme-purple .status-progress-fill {
-  background: #8b5cf6;
-}
-
-.status-card.theme-indigo {
-  border-color: rgba(79, 70, 229, 0.15);
-  background: rgba(238, 242, 255, 0.45);
-}
-.status-card.theme-indigo .status-icon {
-  color: #4f46e5;
-}
-.status-card.theme-indigo .status-progress-fill {
-  background: #4f46e5;
-}
-
-.status-card.theme-amber {
-  border-color: rgba(217, 119, 6, 0.15);
-  background: rgba(255, 251, 235, 0.45);
-}
-.status-card.theme-amber .status-icon {
-  color: #d97706;
-}
-.status-card.theme-amber .status-progress-fill {
-  background: #d97706;
+  transition: transform 350ms ease;
 }
 
 .status-card small {
   display: block;
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 600;
+  margin-top: 6px;
+  color: #7c899a;
+  font-size: 8px;
+  font-weight: 650;
 }
 
-/* Responsive Overrides */
-@media (max-width: 1024px) {
-  .profile-layout-grid {
-    grid-template-columns: 1fr;
-  }
-  .visual-column,
-  .insights-column {
-    grid-column: span 12;
-  }
+.theme-teal {
+  border-color: #cfe6e2;
+  background: #f5fbfa;
 }
 
+.theme-teal .status-icon {
+  color: #0d9488;
+}
+
+.theme-teal .status-progress-fill {
+  background: #0d9488;
+}
+
+.theme-purple {
+  border-color: #ded9fa;
+  background: #f8f6ff;
+}
+
+.theme-purple .status-icon {
+  color: #765dc9;
+}
+
+.theme-purple .status-progress-fill {
+  background: #765dc9;
+}
+
+.theme-indigo {
+  border-color: #d9ddfb;
+  background: #f6f7ff;
+}
+
+.theme-indigo .status-icon {
+  color: #5962c9;
+}
+
+.theme-indigo .status-progress-fill {
+  background: #5962c9;
+}
+
+.theme-amber {
+  border-color: #eee0c8;
+  background: #fffaf1;
+}
+
+.theme-amber .status-icon {
+  color: #bc7629;
+}
+
+.theme-amber .status-progress-fill {
+  background: #bc7629;
+}
+
+/* 编辑资料弹窗 */
 :global(.profile-editor-dialog) {
-  width: min(580px, calc(100vw - 48px)) !important;
-  max-width: min(580px, calc(100vw - 48px)) !important;
-  max-height: min(720px, calc(100dvh - 48px));
-  color: var(--color-primary-text);
-}
-
-.profile-editor-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 24px 68px 22px 28px;
-  border-bottom: 1px solid rgba(200, 228, 227, 0.82);
-  background:
-    radial-gradient(
-      circle at 92% 0%,
-      rgba(70, 184, 180, 0.16),
-      transparent 30%
-    ),
-    linear-gradient(
-      135deg,
-      rgba(252, 255, 255, 0.98),
-      rgba(239, 250, 250, 0.74)
-    );
-}
-
-.profile-editor-title {
-  color: var(--color-primary-text);
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.profile-editor-desc {
-  margin-top: 7px;
-  max-width: 520px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.6;
-}
-
-.profile-editor-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.profile-editor-meta span {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  border: 1px solid rgba(70, 184, 180, 0.42);
-  border-radius: 999px;
-  background: rgba(216, 241, 240, 0.62);
-  color: #079894;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.profile-editor-layout {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  min-height: 520px;
-  max-height: calc(100dvh - 146px);
+  width: min(1040px, calc(100vw - 42px)) !important;
+  max-width: min(1040px, calc(100vw - 42px)) !important;
+  max-height: min(860px, calc(100dvh - 42px));
+  gap: 0 !important;
   overflow: hidden;
+  border: 1px solid #dce4ed !important;
+  border-radius: 17px !important;
+  background: #ffffff !important;
+  padding: 0 !important;
+  box-shadow: 0 32px 90px rgba(15, 28, 48, 0.22) !important;
 }
 
-.profile-editor-aside {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  padding: 22px 18px;
-  border-right: 1px solid rgba(200, 228, 227, 0.82);
-  background: linear-gradient(
-    180deg,
-    rgba(247, 253, 253, 0.95),
-    rgba(255, 255, 255, 0.92)
-  );
-}
-
-.editor-step-card {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid rgba(200, 228, 227, 0.76);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-primary-text);
-  text-align: left;
-  transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.editor-step-card:hover {
-  border-color: rgba(70, 184, 180, 0.62);
-  background: #fff;
-}
-
-.editor-step-card:active {
-  transform: translateY(1px);
-}
-
-.editor-step-card.active,
-.editor-step-card.done {
-  border-color: rgba(21, 159, 155, 0.55);
-  background: linear-gradient(
-    135deg,
-    rgba(216, 241, 240, 0.76),
-    rgba(255, 255, 255, 0.92)
-  );
-}
-
-.editor-step-index {
-  display: grid;
+:global(.profile-editor-dialog > button.absolute) {
+  top: 17px !important;
+  right: 17px !important;
+  z-index: 20;
+  display: grid !important;
+  width: 31px !important;
+  height: 31px !important;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  border: 1px solid #dce4ed;
+  border-radius: 8px;
+  color: #718096 !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  opacity: 1 !important;
+}
+
+:global(.profile-editor-dialog > button.absolute:hover) {
+  color: #253449 !important;
+  background: #f5f7fa !important;
+}
+
+.profile-editor-shell {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  min-height: 670px;
+  max-height: min(860px, calc(100dvh - 42px));
+}
+
+.profile-editor-sidebar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 17px;
+  padding: 22px 19px;
+  overflow-y: auto;
+  border-right: 1px solid #dde5ed;
+  background:
+      radial-gradient(
+          circle at 0 0,
+          rgba(13, 148, 136, 0.09),
+          transparent 34%
+      ),
+      linear-gradient(
+          180deg,
+          #f8fbfb,
+          #f5f7fb
+      );
+}
+
+.editor-brand-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 30px;
+}
+
+.editor-brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid #bfe1dd;
   border-radius: 10px;
-  background: rgba(234, 245, 244, 0.92);
-  color: #079894;
-  font-size: 13px;
-  font-weight: 800;
+  color: #0c918b;
+  background: #eaf8f6;
 }
 
-.editor-step-card.active .editor-step-index,
-.editor-step-card.done .editor-step-index {
-  background: #079894;
-  color: #fff;
+.editor-brand-header span {
+  display: block;
+  color: #7b899a;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
 }
 
-.editor-step-card strong,
-.editor-step-card small {
+.editor-brand-header h3 {
+  margin: 3px 0 0;
+  color: #1c293b;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.editor-user-preview {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid #dbe5e6;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.editor-preview-avatar {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #cfe4e2;
+}
+
+.editor-preview-avatar :deep(span) {
+  color: #147b76;
+  background: #eaf8f6;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.editor-user-preview strong {
   display: block;
   overflow: hidden;
+  color: #28364a;
+  font-size: 12px;
+  font-weight: 850;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.editor-step-card strong {
-  color: var(--color-primary-text);
-  font-size: 13px;
+.editor-user-preview p {
+  display: -webkit-box;
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: #718096;
+  font-size: 9px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.editor-completion-panel {
+  padding: 12px;
+  border: 1px solid #d6e3ea;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.editor-completion-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-completion-heading span {
+  color: #617086;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.editor-completion-heading strong {
+  color: #0b8d87;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.editor-completion-track {
+  margin-top: 8px;
+}
+
+.editor-completion-panel p {
+  margin: 8px 0 0;
+  color: #7a8798;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.editor-section-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.editor-section-nav-item {
+  display: grid;
+  grid-template-columns: 31px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.editor-section-nav-item.completed {
+  border-color: #d5e8e3;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.editor-nav-index {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 9px;
+  color: #758297;
+  background: #e8edf3;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.editor-section-nav-item.completed .editor-nav-index {
+  color: #ffffff;
+  background: #15978f;
+}
+
+.editor-section-nav-item strong,
+.editor-section-nav-item small {
+  display: block;
+}
+
+.editor-section-nav-item strong {
+  color: #3c4b61;
+  font-size: 10px;
   font-weight: 800;
 }
 
-.editor-step-card small {
-  margin-top: 4px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 700;
+.editor-section-nav-item small {
+  margin-top: 3px;
+  color: #8490a1;
+  font-size: 8px;
+  font-weight: 650;
 }
 
-.editor-aside-note {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 9px;
-  margin-top: auto;
-  padding: 13px 12px;
-  border: 1px solid rgba(200, 228, 227, 0.82);
+.editor-preview-summary {
+  padding: 12px;
+  border: 1px solid #dce4ec;
   border-radius: 10px;
-  background: rgba(252, 255, 255, 0.8);
-  color: #079894;
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.editor-aside-note p {
+.editor-preview-summary > span {
+  display: block;
+  color: #68768a;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.editor-preview-summary dl {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.editor-preview-summary dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-preview-summary dt {
+  color: #8490a1;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.editor-preview-summary dd {
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.6;
+  color: #37475d;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.editor-security-note {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: auto;
+  padding: 10px;
+  border: 1px solid #dae5ec;
+  border-radius: 9px;
+  color: #668094;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.editor-security-note p {
+  margin: 0;
+  color: #718096;
+  font-size: 8px;
+  line-height: 1.55;
 }
 
 .profile-editor-main {
@@ -2749,73 +4104,143 @@ const submitProfile = async () => {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+  background: #ffffff;
+}
+
+.profile-editor-main-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 21px 55px 18px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.profile-editor-main-header > div:first-child > span {
+  display: block;
+  color: #0d918a;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.profile-editor-main-header h3 {
+  margin: 4px 0 0;
+  color: #192638;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.profile-editor-main-header p {
+  max-width: 500px;
+  margin: 6px 0 0;
+  color: #718096;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.editor-header-stats {
+  display: flex;
+  gap: 7px;
+  padding-top: 4px;
+}
+
+.editor-header-stats > span {
+  display: inline-flex;
+  height: 29px;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid #dce4ec;
+  border-radius: 7px;
+  color: #758196;
+  background: #f8fafc;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.editor-header-stats strong {
+  color: #34445b;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .profile-editor-form {
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
+  gap: 14px;
   overflow-y: auto;
-  padding: 24px 26px;
-}
-
-.editor-step-pane {
-  display: grid;
-  gap: 16px;
+  padding: 18px 24px 24px;
+  background: #fbfcfe;
 }
 
 .editor-form-section {
-  min-width: 0;
-  padding: 18px;
-  border: 1px solid rgba(200, 228, 227, 0.82);
-  border-radius: 10px;
-  background: rgba(252, 255, 255, 0.82);
+  padding: 16px;
+  border: 1px solid #e0e7ef;
+  border-radius: 11px;
+  background: #ffffff;
 }
 
-.compact-section {
-  max-width: 520px;
-}
-
-.editor-section-heading {
-  display: flex;
+.editor-form-section-header {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 15px;
 }
 
-.editor-section-heading h5 {
-  color: var(--color-primary-text);
-  font-size: 14px;
-  font-weight: 800;
+.editor-section-number {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #cce5e1;
+  border-radius: 9px;
+  color: #0b8e88;
+  background: #eef9f7;
+  font-size: 10px;
+  font-weight: 850;
 }
 
-.editor-badge {
-  height: 22px;
-  border-radius: 7px;
-  background: var(--color-primary-soft);
-  color: #079894;
-  font-size: 11px;
-  font-weight: 800;
+.editor-form-section-header h4 {
+  margin: 0;
+  color: #2b394d;
+  font-size: 13px;
+  font-weight: 850;
 }
 
-.editor-badge.outline {
-  border-color: rgba(70, 184, 180, 0.42);
-  color: #079894;
+.editor-form-section-header p {
+  margin: 3px 0 0;
+  color: #8490a1;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.editor-form-section-header > em {
+  padding: 4px 7px;
+  border: 1px solid #dce4ec;
+  border-radius: 6px;
+  color: #6c7a8f;
+  background: #f8fafc;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 750;
 }
 
 .editor-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.editor-field,
-.editor-field label {
-  min-width: 0;
+  gap: 13px;
 }
 
 .editor-field {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .editor-field-wide {
@@ -2823,578 +4248,541 @@ const submitProfile = async () => {
 }
 
 .editor-field > label {
-  display: block;
-  color: var(--color-primary-text);
-  font-size: 12px;
+  color: #4d5d73;
+  font-size: 10px;
   font-weight: 800;
 }
 
-.editor-field > label span {
-  margin-right: 3px;
-  color: #e05268;
+.editor-field > label > span {
+  margin-left: 2px;
+  color: #df566b;
+}
+
+.editor-field-control {
+  position: relative;
+}
+
+.editor-input-icon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  z-index: 2;
+  color: #8995a5;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .editor-input,
 .editor-select-trigger {
-  height: 42px;
-  border: 1px solid rgba(200, 228, 227, 0.96) !important;
-  border-radius: 8px;
-  background: #fff !important;
-  color: var(--color-primary-text);
-  font-size: 13px;
+  width: 100% !important;
+  height: 39px !important;
+  border: 1px solid #d7e0e9 !important;
+  border-radius: 8px !important;
+  color: #334155 !important;
+  background: #ffffff !important;
+  font-size: 11px !important;
+  box-shadow: none !important;
 }
 
-.editor-select-trigger {
-  width: 100% !important;
-  padding: 0 14px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
+.editor-input.has-icon {
+  padding-left: 37px !important;
+}
+
+.editor-input:focus,
+.editor-select-trigger:focus {
+  border-color: #59aaa4 !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.09) !important;
+}
+
+.editor-field-hint {
+  color: #8995a5;
+  font-size: 8px;
+  line-height: 1.4;
 }
 
 .editor-error {
-  margin-top: 2px;
-  color: #e05268;
-  font-size: 11px;
+  margin: 0;
+  color: #cf4e63;
+  font-size: 9px;
   font-weight: 700;
 }
 
 .editor-suggestion-list {
   position: absolute;
+  top: calc(100% + 5px);
   right: 0;
   left: 0;
-  z-index: 2100;
-  max-height: 180px;
-  margin-top: 6px;
+  z-index: 2200;
+  max-height: 190px;
+  margin: 0;
   overflow-y: auto;
-  border: 1px solid rgba(200, 228, 227, 0.9);
+  border: 1px solid #d4dfe9;
   border-radius: 9px;
-  background: #fff;
-  box-shadow: 0 18px 40px rgba(32, 95, 103, 0.14);
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(24, 48, 74, 0.14);
+  list-style: none;
 }
 
 .editor-suggestion-list li {
   display: flex;
+  min-height: 39px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  color: var(--color-primary-text);
-  font-size: 12px;
-  font-weight: 700;
+  padding: 8px 11px;
+  color: #334155;
   cursor: pointer;
 }
 
 .editor-suggestion-list li:hover {
-  background: rgba(216, 241, 240, 0.48);
+  color: #0b7f79;
+  background: #f0f9f7;
+}
+
+.editor-suggestion-list li > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-suggestion-list strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-suggestion-list small {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(234, 245, 244, 0.82);
-  color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: #7a8798;
+  background: #f0f3f6;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .editor-chip-input {
   display: flex;
+  min-height: 50px;
   flex-wrap: wrap;
-  gap: 8px;
-  min-height: 48px;
+  gap: 7px;
+  align-items: center;
   padding: 8px;
-  border: 1px solid rgba(200, 228, 227, 0.96);
+  border: 1px solid #d7e0e9;
   border-radius: 9px;
-  background: #fff;
+  background: #ffffff;
   transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
+      border-color 180ms ease,
+      box-shadow 180ms ease;
 }
 
 .editor-chip-input:focus-within {
-  border-color: rgba(21, 159, 155, 0.72);
-  box-shadow: 0 0 0 3px rgba(21, 159, 155, 0.1);
+  border-color: #59aaa4;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.09);
+}
+
+.editor-chip-input.has-error {
+  border-color: #e2a2ad;
 }
 
 .editor-chip-input input {
-  min-width: 180px;
+  min-width: 170px;
+  min-height: 30px;
   flex: 1;
   border: 0;
   outline: 0;
+  color: #334155;
   background: transparent;
-  color: var(--color-primary-text);
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 600;
+}
+
+.editor-chip-input input::placeholder {
+  color: #9aa5b3;
 }
 
 .editor-course-chip {
   display: inline-flex;
+  min-height: 29px;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
-  padding: 3px 6px 3px 11px;
-  border: 1px solid rgba(70, 184, 180, 0.38);
-  border-radius: 8px;
-  background: rgba(216, 241, 240, 0.5);
-  color: #0b7774;
-  font-size: 12px;
-  font-weight: 800;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid #c9e5e1;
+  border-radius: 7px;
+  color: #0b7d77;
+  background: #eff9f7;
+  font-size: 9px;
+  font-weight: 750;
 }
 
-.editor-chip-remove {
+.editor-course-chip button {
+  display: grid;
   width: 20px;
   height: 20px;
-  padding: 0;
-  border-radius: 999px;
-  color: var(--color-text-muted);
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #5d948f;
+  background: transparent;
+  cursor: pointer;
 }
 
-.editor-chip-remove:hover {
-  background: rgba(21, 159, 155, 0.12);
-  color: #079894;
+.editor-course-chip button:hover {
+  color: #b54859;
+  background: #ffffff;
 }
 
 .editor-preset-block {
-  margin-top: 12px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid #edf1f5;
 }
 
-.editor-preset-block > span {
-  color: var(--color-text-muted);
-  font-size: 11px;
+.preset-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preset-heading span {
+  color: #58687e;
+  font-size: 10px;
   font-weight: 800;
+}
+
+.preset-heading small {
+  color: #929dac;
+  font-size: 8px;
 }
 
 .editor-preset-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 7px;
+  margin-top: 9px;
 }
 
 .editor-preset-button {
-  height: 30px;
-  border-color: rgba(200, 228, 227, 0.96);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--color-primary-text);
-  font-size: 12px;
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid #dbe3ec;
+  border-radius: 7px;
+  color: #59687d;
+  background: #ffffff;
+  font: inherit;
+  font-size: 9px;
   font-weight: 700;
+  cursor: pointer;
+  transition:
+      border-color 160ms ease,
+      color 160ms ease,
+      background-color 160ms ease;
+}
+
+.editor-preset-button:hover:not(:disabled) {
+  border-color: #79bbb5;
+  color: #0b817b;
+  background: #f1faf8;
+}
+
+.editor-preset-button.selected {
+  border-color: #c9e5e1;
+  color: #0b817b;
+  background: #eff9f7;
+  cursor: default;
 }
 
 .language-chips-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  padding: 10px;
-  border: 1px solid rgba(200, 228, 227, 0.8);
-  border-radius: 9px;
+}
+
+.language-option {
+  display: flex;
+  min-width: 0;
+  height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid #dce4ec;
+  border-radius: 8px;
+  color: #5b697d;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+  transition:
+      border-color 170ms ease,
+      color 170ms ease,
+      background-color 170ms ease,
+      transform 170ms ease;
+}
+
+.language-option:hover {
+  border-color: #84bbb7;
+  color: #0b817b;
+  background: #f4fbfa;
+  transform: translateY(-1px);
+}
+
+.language-option.active {
+  border-color: #15978f;
+  color: #ffffff;
+  background: #15978f;
+  box-shadow: 0 5px 14px rgba(21, 151, 143, 0.15);
+}
+
+.language-check {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  place-items: center;
+  border: 1px solid #d6dfe8;
+  border-radius: 5px;
   background: #f8fafc;
 }
 
-.lang-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+.language-option.active .language-check {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #15978f;
   background: #ffffff;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 32px;
-  user-select: none;
 }
 
-.lang-chip:hover {
-  border-color: #0d9488;
-  color: #0d9488;
-  background: rgba(13, 148, 136, 0.02);
-}
-
-.lang-chip.active {
-  border-color: #0d9488;
-  background: #0f766e;
-  color: #ffffff;
-  font-weight: 700;
-  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.15);
-}
-
-.dialog-header-banner {
-  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
-  padding: 24px 28px;
-  text-align: left;
-  position: relative;
-}
-
-.header-banner-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.header-badge {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-}
-
-.dialog-header-banner h3 {
-  margin: 6px 0 2px;
-  font-size: 18px;
-  font-weight: 800;
-  color: #ffffff;
-  line-height: 1.2;
-}
-
-.dialog-header-banner p {
-  margin: 0;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
-  line-height: 1.4;
-}
-
-.dialog-scroll-container {
-  max-height: calc(85vh - 120px);
-  overflow-y: auto;
-  padding: 24px 28px;
-}
-
-.dialog-form-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.form-section {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-}
-
-.section-title-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 6px;
-}
-
-.section-num {
-  font-size: 11px;
-  font-weight: 800;
-  color: #0d9488;
-  background: rgba(13, 148, 136, 0.08);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: 0.05em;
-}
-
-.form-field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  text-align: left;
-}
-
-.form-field-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: #475569;
-  margin-bottom: 2px;
-}
-
-.editor-chip-input-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.preset-label {
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-}
-
-.profile-editor-dialog button.absolute {
-  color: rgba(255, 255, 255, 0.8) !important;
-  transition: all 0.2s ease;
-  top: 20px !important;
-  right: 20px !important;
-}
-
-.profile-editor-dialog button.absolute:hover {
-  color: #ffffff !important;
-  background: rgba(255, 255, 255, 0.15) !important;
+.language-option strong {
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-editor-footer {
   display: flex;
+  min-height: 66px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 26px;
-  border-top: 1px solid rgba(200, 228, 227, 0.72);
-  background: rgba(252, 255, 255, 0.92);
-}
-
-.editor-footer-note,
-.editor-footer-actions,
-.editor-primary-button,
-.editor-secondary-button {
-  display: flex;
-  align-items: center;
+  gap: 14px;
+  padding: 13px 24px;
+  border-top: 1px solid #e1e7ef;
+  background: #ffffff;
 }
 
 .editor-footer-note {
-  gap: 6px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #7b8798;
+  font-size: 9px;
+  font-weight: 650;
 }
 
 .editor-footer-actions {
-  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.editor-primary-button,
-.editor-secondary-button {
-  height: 38px;
+.editor-reset-button,
+.editor-cancel-button,
+.editor-save-button {
+  height: 36px;
   gap: 7px;
-  border-radius: 9px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 10px;
   font-weight: 800;
 }
 
-.editor-primary-button {
+.editor-reset-button {
+  color: #718096;
+}
+
+.editor-reset-button:hover {
+  color: #34445b;
+  background: #f3f5f8;
+}
+
+.editor-cancel-button {
+  border-color: #d5dee8;
+  color: #59687d;
+  background: #ffffff;
+}
+
+.editor-save-button {
+  min-width: 104px;
   border: 0;
-  background: #079894;
-  color: #fff;
+  color: #ffffff;
+  background: #0d918a;
+  box-shadow: 0 5px 14px rgba(13, 145, 138, 0.17);
 }
 
-.editor-primary-button:hover {
-  background: #0aa7a3;
+.editor-save-button:hover {
+  background: #0a837d;
 }
 
-.editor-secondary-button {
-  border-color: rgba(200, 228, 227, 0.96);
-  color: var(--color-primary-text);
+.editor-save-button:disabled {
+  opacity: 0.65;
+}
+
+.editor-saving-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: saving-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes saving-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
 }
 
 @media (max-width: 1280px) {
-  .profile-identity-strip {
-    grid-template-columns: 1fr;
-  }
-
-  :global(.profile-editor-dialog) {
-    width: min(580px, calc(100vw - 40px)) !important;
-    max-width: min(580px, calc(100vw - 40px)) !important;
-  }
-
-  .profile-editor-layout {
-    grid-template-columns: 232px minmax(0, 1fr);
-  }
-
-  .language-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .identity-panel {
-    padding-right: 0;
-    padding-bottom: 14px;
-    border-right: 0;
-    border-bottom: 1px solid rgba(200, 228, 227, 0.72);
-  }
-
   .summary-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .dashboard-mosaic {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .visual-column,
+  .insights-column {
+    grid-column: span 12;
   }
 
-  .focus-chart-panel,
-  .scenario-chart-panel {
-    grid-column: 1 / -1;
+  .profile-editor-shell {
+    grid-template-columns: 245px minmax(0, 1fr);
   }
 
-  .signal-panel,
-  .status-panel,
-  .resource-panel,
-  .activity-panel {
-    grid-column: auto;
-  }
-
-  .advice-panel {
-    grid-column: 1 / -1;
+  .language-chips-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 768px) {
-  .profile-shell {
-    padding: 20px 16px 28px;
+@media (max-width: 1024px) {
+  .profile-layout-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
+  .academic-profile-sidebar {
+    position: static;
+  }
+
+  .identity-section {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 17px;
+    align-items: center;
+    text-align: left;
+  }
+
+  .avatar-button {
+    grid-row: 1 / 3;
+    margin: 0;
+  }
+
+  .identity-copy {
+    align-self: end;
+  }
+
+  .identity-copy h2,
+  .user-headline {
+    text-align: left;
+  }
+
+  .user-headline {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .identity-email {
+    grid-column: 2;
+    margin-top: 0;
+  }
+
+  .profile-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
   :global(.profile-editor-dialog) {
     width: calc(100vw - 24px) !important;
     max-width: calc(100vw - 24px) !important;
     max-height: calc(100dvh - 24px);
   }
 
-  .profile-editor-header {
-    flex-direction: column;
-    gap: 12px;
-    padding: 20px 52px 18px 18px;
+  .profile-editor-shell {
+    display: block;
+    min-height: 0;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
   }
 
-  .profile-editor-meta {
-    justify-content: flex-start;
-  }
-
-  .profile-editor-layout {
-    grid-template-columns: 1fr;
-    min-height: auto;
-    max-height: calc(100dvh - 126px);
-  }
-
-  .profile-editor-aside {
+  .profile-editor-sidebar {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    padding: 14px;
+    max-height: none;
+    overflow: visible;
     border-right: 0;
-    border-bottom: 1px solid rgba(200, 228, 227, 0.82);
+    border-bottom: 1px solid #dde5ed;
   }
 
-  .editor-step-card {
-    grid-template-columns: 30px minmax(0, 1fr);
-    padding: 10px;
+  .editor-brand-header {
+    grid-column: 1 / -1;
   }
 
-  .editor-step-index {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
+  .editor-section-nav {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .editor-aside-note {
+  .editor-section-nav-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+    padding: 8px;
+  }
+
+  .editor-nav-index {
+    width: 28px;
+    height: 28px;
+  }
+
+  .editor-security-note {
     display: none;
   }
 
+  .profile-editor-main {
+    overflow: visible;
+  }
+
   .profile-editor-form {
-    padding: 16px;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 768px) {
+  .profile-shell {
+    padding: 20px 15px 30px;
   }
 
-  .editor-form-section {
-    padding: 14px;
-  }
-
-  .compact-section {
-    max-width: none;
-  }
-
-  .editor-field-grid,
-  .language-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .editor-field-wide {
-    grid-column: auto;
-  }
-
-  .profile-editor-footer {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 14px 16px;
-  }
-
-  .editor-footer-actions {
-    justify-content: flex-end;
-  }
-
-  .profile-title-row h1 {
-    font-size: 24px;
-  }
-
-  .profile-identity-strip {
-    padding: 14px;
-  }
-
-  .identity-panel {
+  .profile-page-header {
     align-items: flex-start;
     flex-direction: column;
-    padding-bottom: 14px;
   }
 
-  .identity-inner {
-    width: 100%;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .avatar-button {
-    width: 70px;
-    height: 70px;
-    flex-basis: 70px;
-  }
-
-  .profile-avatar {
-    width: 64px;
-    height: 64px;
-  }
-
-  .name-line h2 {
-    max-width: min(58vw, 320px);
-    font-size: 22px;
-  }
-
-  .edit-profile-button {
+  .header-profile-progress {
     width: 100%;
   }
 
-  .identity-facts {
-    grid-template-columns: 1fr;
-  }
-
-  .profile-panel {
-    padding: 20px;
-  }
-
-  .summary-card-grid,
-  .scenario-body,
-  .signal-list,
-  .status-grid,
-  .scenario-list,
-  .dashboard-mosaic {
-    grid-template-columns: 1fr;
-  }
-
-  .focus-chart-panel,
-  .scenario-chart-panel,
-  .signal-panel,
-  .status-panel,
-  .resource-panel,
-  .activity-panel,
-  .advice-panel {
-    grid-column: 1 / -1;
+  .header-progress-hint {
+    text-align: left;
   }
 
   .dashboard-header {
@@ -3404,56 +4792,145 @@ const submitProfile = async () => {
 
   .dashboard-controls {
     width: 100%;
-    flex-wrap: wrap;
   }
 
-  .course-trigger {
-    width: 100%;
+  .course-trigger,
+  .range-toggle {
+    flex: 1;
   }
 
+  .summary-card-grid,
+  .visual-sub-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-facts,
+  .status-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-editor-sidebar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 15px;
+  }
+
+  .editor-user-preview,
+  .editor-completion-panel,
+  .editor-preview-summary {
+    grid-column: auto;
+  }
+
+  .editor-section-nav {
+    grid-column: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-editor-main-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px 48px 15px 16px;
+  }
+
+  .editor-header-stats {
+    padding: 0;
+  }
+
+  .profile-editor-form {
+    padding: 14px;
+  }
+
+  .editor-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-field-wide {
+    grid-column: auto;
+  }
+
+  .language-chips-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-editor-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px 14px;
+  }
+
+  .editor-footer-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 520px) {
+  .page-heading h1 {
+    font-size: 22px;
+  }
+
+  .identity-section {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .identity-copy h2,
+  .user-headline {
+    text-align: center;
+  }
+
+  .user-headline {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .identity-email {
+    margin-top: 10px;
+  }
+
+  .dashboard-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .course-trigger,
   .range-toggle {
     width: 100%;
   }
 
-  .range-toggle :deep(button) {
-    flex: 1;
+  .editor-section-nav {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .profile-info-row,
-  .chip-section {
-    grid-template-columns: 82px minmax(0, 1fr);
+  .language-chips-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .compact-row-list .profile-info-row {
-    grid-template-columns: 1fr;
+  .editor-footer-note {
+    align-items: flex-start;
   }
 
-  .chart-box,
-  .donut-box {
-    height: 220px;
+  .editor-footer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .editor-reset-button {
+    grid-column: 1 / -1;
+  }
+
+  .editor-cancel-button,
+  .editor-save-button {
+    width: 100%;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .avatar-edit-mask,
-  .ring-value {
-    transition: none;
+  .profile-page *,
+  .profile-page *::before,
+  .profile-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
-}
-
-/* Micro-interaction transition for companion card */
-.fade-enter-active,
-.fade-leave-active {
-  transition:
-    opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.fade-enter-from {
-  opacity: 0;
-  transform: translateY(4px);
-}
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
 }
 </style>

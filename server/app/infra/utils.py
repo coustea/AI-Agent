@@ -83,76 +83,25 @@ def strip_markdown_code_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-# 从文本中解析首个 JSON 值（dict/list/标量），扫描 { 与 [ 起点
-def parse_first_json_value(text: str) -> Any:
-    """从文本中解析出第一个 JSON 值（dict/list/str/number/bool/null）。
+def parse_first_json_object(text: str) -> dict[str, Any]:
+    """Parse one outer JSON object without salvaging nested fragments.
 
-    解析策略（不使用正则）：
-    1. 去除 Markdown 代码围栏
-    2. 尝试 json.loads 整体解析
-    3. 使用 JSONDecoder.raw_decode 扫描 '{' / '[' 起点并解析
-
-    Args:
-        text: 可能包含 JSON 的文本
-
-    Returns:
-        解析出的 JSON 值
-
-    Raises:
-        json.JSONDecodeError: 无法找到有效 JSON 时抛出
+    A prose prefix and a Markdown fence are tolerated. If the outer object is
+    malformed, the error is preserved instead of returning a valid list or
+    object nested inside the broken response.
     """
-    # 清理 Markdown 代码围栏
     cleaned = strip_markdown_code_fences(text)
     if not cleaned:
         raise json.JSONDecodeError("empty input", "", 0)
 
-    # 尝试整体解析
     try:
-        return json.loads(cleaned)
+        value = json.loads(cleaned)
     except json.JSONDecodeError:
-        pass
+        start = cleaned.find("{")
+        if start < 0:
+            raise
+        value, _end = json.JSONDecoder().raw_decode(cleaned[start:])
 
-    # 使用 JSONDecoder 扫描所有可能的 JSON 起始位置
-    decoder = json.JSONDecoder()
-    s = cleaned.strip()
-    candidates: list[int] = []
-    # 查找所有 '{' 位置
-    idx = s.find("{")
-    while idx != -1:
-        candidates.append(idx)
-        idx = s.find("{", idx + 1)
-    # 查找所有 '[' 位置
-    idx = s.find("[")
-    while idx != -1:
-        candidates.append(idx)
-        idx = s.find("[", idx + 1)
-
-    # 按位置排序，逐个尝试解析
-    for start in sorted(set(candidates)):
-        try:
-            value, _end = decoder.raw_decode(s[start:])
-            return value
-        except json.JSONDecodeError:
-            continue
-
-    raise json.JSONDecodeError("no JSON value found", s, 0)
-
-
-# 解析文本并保证返回 dict 类型的 JSON 对象，否则抛 TypeError
-def parse_first_json_object(text: str) -> dict[str, Any]:
-    """解析文本并保证返回 dict 类型的 JSON 对象。
-
-    Args:
-        text: 可能包含 JSON 对象的文本
-
-    Returns:
-        解析出的 dict
-
-    Raises:
-        TypeError: 解析结果不是 dict 时抛出
-        json.JSONDecodeError: 找不到 JSON 时抛出
-    """
-    value = parse_first_json_value(text)
     if not isinstance(value, dict):
         raise TypeError(f"expected JSON object(dict), got {type(value).__name__}")
     return value

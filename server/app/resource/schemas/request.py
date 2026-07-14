@@ -16,6 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.resource.catalog import AGENT_DEFAULT_ENABLED, AGENT_DEFAULT_ORDER
+from app.shared.cartoon import CartoonGenerationConfig
 
 MIN_SELECTED_AGENTS = 3
 from app.shared.ppt import PPTPreferences
@@ -95,16 +96,6 @@ class ReadingConfig(BaseModel):
     focus: Literal["textbook", "engineering", "research"] = "textbook"
 
 
-class CartoonConfig(BaseModel):
-    """动画讲解 Agent 配置 — 直接对应共享 Cartoon 生成契约。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    visual_density: Literal["moderate", "rich", "intensive"] = "rich"
-    pace: Literal["calm", "balanced", "fast"] = "balanced"
-    target_duration_seconds: int = Field(default=180, ge=90, le=600)
-
-
 class AgentConfigs(BaseModel):
     """Agent 配置集合。"""
     model_config = ConfigDict(extra="forbid")
@@ -115,7 +106,7 @@ class AgentConfigs(BaseModel):
     code: CodeConfig = Field(default_factory=CodeConfig)
     reading: ReadingConfig = Field(default_factory=ReadingConfig)
     ppt: PPTPreferences = Field(default_factory=PPTPreferences)
-    cartoon: CartoonConfig = Field(default_factory=CartoonConfig)
+    cartoon: CartoonGenerationConfig = Field(default_factory=CartoonGenerationConfig)
 
     def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
         value = getattr(self, agent_id, None)

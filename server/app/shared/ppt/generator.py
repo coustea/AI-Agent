@@ -13,12 +13,16 @@ from app.infra.prompts import prompts
 from app.shared.ppt.contract import (
     layout_guidance,
     layout_kind_values,
+    logic_layout_guidance,
+    logic_node_role_values,
+    logic_relation_values,
     slide_kind_values,
     visual_component_guidance,
     visual_kind_values,
 )
 from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer, PPTPublication
 from app.shared.ppt.models import (
+    DeckLogicModel,
     PPTArtifact,
     PPTDeck,
     PPTGenerationContext,
@@ -32,7 +36,8 @@ from app.shared.ppt.models import (
 
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
-_STORYBOARD_MAX_TOKENS = 2_800
+_LOGIC_MODEL_MAX_TOKENS = 3_400
+_STORYBOARD_MAX_TOKENS = 3_800
 _SECTION_MAX_TOKENS = 3_800
 _PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _SECTION_COUNT = 3
@@ -130,7 +135,7 @@ class PPTContextAdapter:
 
 
 class PPTGenerator:
-    """一次故事板设计 + 三段并行视觉编排 + 确定性 HTML/SVG 渲染。"""
+    """逻辑建模 + 故事板映射 + 分段视觉编排 + 确定性渲染。"""
 
     def __init__(self, *, llm: Any | None = None, renderer: PPTHTMLRenderer | None = None) -> None:
         self._llm = llm or get_llm()
@@ -148,13 +153,18 @@ class PPTGenerator:
             context = PPTContextAdapter.from_request(request)
             await self._progress(progress, "正在整理课程材料…", 8)
 
+            stage = "designing_logic"
+            await self._progress(progress, "教学逻辑架构师正在建立知识依赖模型…", 20)
+            logic_model = await self._generate_logic_model(context)
+
             stage = "designing_story"
-            await self._progress(progress, "教学总监正在设计整套叙事与视觉方向…", 24)
-            storyboard = await self._generate_storyboard(context)
+            await self._progress(progress, "教学总监正在将逻辑模型映射为故事板…", 34)
+            storyboard = await self._generate_storyboard(context, logic_model)
+            self._validate_storyboard_logic(storyboard, logic_model)
 
             stage = "composing_sections"
-            await self._progress(progress, "三个视觉编排智能体正在并行完成页面…", 46)
-            deck = await self._compose_deck(context, storyboard, progress)
+            await self._progress(progress, "三个视觉编排智能体正在按全局逻辑完成页面…", 48)
+            deck = await self._compose_deck(context, logic_model, storyboard, progress)
 
             stage = "rendering_html"
             await self._progress(progress, "正在将语义版式渲染为 HTML/SVG 课件…", 88)
@@ -176,15 +186,33 @@ class PPTGenerator:
             slide_count=len(deck.slides),
         )
 
-    async def _generate_storyboard(self, context: PPTGenerationContext) -> PPTStoryboard:
+    async def _generate_logic_model(self, context: PPTGenerationContext) -> DeckLogicModel:
+        prompt = prompts.get("ppt").render(
+            "logic_model",
+            context=json.dumps(context.model_dump(mode="json"), ensure_ascii=False, indent=2),
+            preferences=self._render_preferences(context.preferences),
+            logic_node_roles=logic_node_role_values(),
+            logic_relations=logic_relation_values(),
+        )
+        return await self._llm.ainvoke_json(
+            DeckLogicModel, prompt, temperature=0.12, max_tokens=_LOGIC_MODEL_MAX_TOKENS
+        )
+
+    async def _generate_storyboard(
+        self,
+        context: PPTGenerationContext,
+        logic_model: DeckLogicModel,
+    ) -> PPTStoryboard:
         prompt = prompts.get("ppt").render(
             "storyboard",
             context=json.dumps(context.model_dump(mode="json"), ensure_ascii=False, indent=2),
             preferences=self._render_preferences(context.preferences),
+            logic_model=json.dumps(logic_model.model_dump(mode="json"), ensure_ascii=False, indent=2),
             slide_kinds=slide_kind_values(),
             visual_kinds=visual_kind_values(),
             layouts=layout_kind_values(),
             layout_guidance=layout_guidance(),
+            logic_layout_guidance=logic_layout_guidance(),
             visual_component_guidance=visual_component_guidance(),
         )
         return await self._llm.ainvoke_json(
@@ -194,17 +222,42 @@ class PPTGenerator:
     async def _compose_deck(
         self,
         context: PPTGenerationContext,
+        logic_model: DeckLogicModel,
         storyboard: PPTStoryboard,
         progress: ProgressCallback | None,
     ) -> PPTDeck:
         chunks = self._split_briefs(storyboard.slides)
 
+        outline = [
+            {
+                "id": brief.id,
+                "chapter_id": brief.chapter_id,
+                "logic_node_ids": brief.logic_node_ids,
+                "question": brief.question,
+                "claim": brief.claim,
+                "bridge": brief.bridge,
+            }
+            for brief in storyboard.slides
+        ]
+        index_by_id = {brief.id: index for index, brief in enumerate(storyboard.slides)}
+
         async def compose(index: int, briefs: list[SlideBrief]) -> PPTSection:
             await self._progress(progress, f"第 {index + 1}/{len(chunks)} 组页面正在视觉编排…", 52 + index * 8)
+            first_index = index_by_id[briefs[0].id]
+            last_index = index_by_id[briefs[-1].id]
+            neighbors = {
+                "previous": storyboard.slides[first_index - 1].model_dump(mode="json") if first_index else None,
+                "next": storyboard.slides[last_index + 1].model_dump(mode="json")
+                if last_index + 1 < len(storyboard.slides)
+                else None,
+            }
             prompt = prompts.get("ppt").render(
                 "section_compose",
                 context=json.dumps(context.model_dump(mode="json"), ensure_ascii=False, indent=2),
                 visual_direction=storyboard.visual_direction,
+                logic_model=json.dumps(logic_model.model_dump(mode="json"), ensure_ascii=False, indent=2),
+                storyboard_outline=json.dumps(outline, ensure_ascii=False, indent=2),
+                neighbor_context=json.dumps(neighbors, ensure_ascii=False, indent=2),
                 section=json.dumps([brief.model_dump(mode="json") for brief in briefs], ensure_ascii=False, indent=2),
                 preferences=self._render_preferences(context.preferences),
                 layout_guidance=layout_guidance(),
@@ -228,12 +281,86 @@ class PPTGenerator:
             )
         slides_by_id = {slide.id: slide for section in sections for slide in section.slides}
         ordered_slides = [slides_by_id[brief_id] for brief_id in expected_ids]
+        for brief, slide in zip(storyboard.slides, ordered_slides, strict=True):
+            self._validate_composed_slide(brief, slide)
         return PPTDeck(
             title=storyboard.title,
             language=storyboard.language,
             visual_direction=storyboard.visual_direction,
+            logic_model=logic_model,
             slides=ordered_slides,
         )
+
+    @staticmethod
+    def _validate_storyboard_logic(
+        storyboard: PPTStoryboard,
+        logic_model: DeckLogicModel,
+    ) -> None:
+        if len(storyboard.slides) < 2 or storyboard.slides[1].kind.value != "roadmap":
+            raise PPTGenerationError("designing_story", "第 2 页必须是全局逻辑路线页")
+
+        known_chapters = {chapter.id for chapter in logic_model.chapters}
+        known_nodes = {node.id for node in logic_model.nodes}
+        covered_nodes: set[str] = set()
+        completed_chapters: set[str] = set()
+        active_chapter: str | None = None
+        for brief in storyboard.slides:
+            if brief.chapter_id is not None:
+                if brief.chapter_id not in known_chapters:
+                    raise PPTGenerationError(
+                        "designing_story", f"页面 {brief.id} 引用了未知章节 {brief.chapter_id}"
+                    )
+                if brief.chapter_id != active_chapter:
+                    if brief.chapter_id in completed_chapters:
+                        raise PPTGenerationError("designing_story", "同一章节的页面必须连续")
+                    if active_chapter is not None:
+                        completed_chapters.add(active_chapter)
+                    active_chapter = brief.chapter_id
+            unknown_nodes = set(brief.logic_node_ids) - known_nodes
+            if unknown_nodes:
+                raise PPTGenerationError(
+                    "designing_story", f"页面 {brief.id} 引用了未知逻辑节点 {sorted(unknown_nodes)}"
+                )
+            if brief.kind.value not in {"cover", "roadmap", "summary"}:
+                covered_nodes.update(brief.logic_node_ids)
+        missing_nodes = known_nodes - covered_nodes
+        if missing_nodes:
+            raise PPTGenerationError(
+                "designing_story", f"故事板未覆盖逻辑节点 {sorted(missing_nodes)}"
+            )
+
+    @staticmethod
+    def _validate_composed_slide(brief: SlideBrief, slide: Any) -> None:
+        expected = {
+            "kind": brief.kind,
+            "title": brief.title,
+            "chapter_id": brief.chapter_id,
+            "logic_node_ids": brief.logic_node_ids,
+            "question": brief.question,
+            "claim": brief.claim,
+            "bridge": brief.bridge,
+            "logic_relation": brief.logic_relation,
+            "layout": brief.layout,
+            "visual_kind": brief.visual_kind,
+        }
+        actual = {
+            "kind": slide.kind,
+            "title": slide.title,
+            "chapter_id": slide.chapter_id,
+            "logic_node_ids": slide.logic_node_ids,
+            "question": slide.question,
+            "claim": slide.claim,
+            "bridge": slide.bridge,
+            "logic_relation": slide.logic_relation,
+            "layout": slide.layout,
+            "visual_kind": slide.visual.kind,
+        }
+        changed = [name for name, value in expected.items() if actual[name] != value]
+        if changed:
+            raise PPTGenerationError(
+                "composing_sections",
+                f"页面 {brief.id} 修改了受保护字段: {changed}",
+            )
 
     @staticmethod
     def _split_briefs(briefs: list[SlideBrief]) -> list[list[SlideBrief]]:

@@ -4,21 +4,72 @@
 // 可选智能体的标识联合类型
 export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon'
 
+export type ResourceLifecycleStatus = 'pending' | 'generating' | 'completed' | 'partial' | 'failed'
+
+export type ResourceAgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'interrupted'
+
+export type ResourceContentFormat = 'markdown' | 'json' | 'html' | 'mp4'
+
+export type ResourceContent = Record<string, unknown> | unknown[] | string | null
+
+export interface CartoonResourceMetadata extends Record<string, unknown> {
+  agent_id: 'cartoon'
+  schema_version: 'cartoon/v7'
+  engine: 'hyperframes'
+  has_audio: true
+  video_url: string
+  preview_url: string
+  duration_seconds: number
+  scene_count: number
+}
+
 // 学习场景的标识联合类型
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 
 // 单个智能体的运行时快照结构
 export type ResourceAgentSnapshot = {
   agent_id: string // 智能体标识（content / mindmap / quiz …）
-  event_type?: string // 最近一次事件类型
-  status?: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted' | null
-  message?: string | null // 智能体最新进度消息
-  progress?: number // 进度百分比 0–100
-  phase?: string | null // 当前执行阶段（如 planning / generating / reviewing）
-  elapsed_ms?: number | null // 已耗时（毫秒）
-  metrics?: Record<string, any> // 运行指标（token 数、生成条数等）
-  artifact_id?: string | null // 产物 ID，生成完成后有值
-  timestamp?: number // Unix 时间戳（毫秒）
+  status: ResourceAgentRunStatus
+  message: string // 智能体最新进度消息
+  progress: number // 进度百分比 0–100
+  phase: string // 当前执行阶段（如 planning / generating / reviewing）
+  elapsed_ms: number | null // 已耗时（毫秒）
+  artifact_id: string | null // 产物 ID，生成完成后有值
+  timestamp: number | null // Unix 时间戳（毫秒）
+}
+
+export interface GeneratedResourceItem {
+  id: string
+  type: ResourceAgentId
+  title: string
+  format: ResourceContentFormat
+  content: ResourceContent
+  metadata: Record<string, unknown>
+  created_at: string | null
+}
+
+export interface GeneratedResourceBundle {
+  id: string
+  title: string
+  learning_need: string
+  selected_agents: ResourceAgentId[]
+  plan: Record<string, unknown> | null
+  resources: GeneratedResourceItem[]
+  status: ResourceLifecycleStatus
+  created_at: string
+  updated_at: string
+  metadata: {
+    failed_agents: ResourceAgentId[]
+  }
+}
+
+export interface GeneratedResourceHistoryItem {
+  id: number
+  learning_need: string
+  status: ResourceLifecycleStatus
+  resource_types: ResourceAgentId[]
+  created_at: string | null
+  updated_at: string | null
 }
 
 // 发起资源生成任务的请求体：包含学习需求、场景、所选智能体及其详细配置
@@ -70,11 +121,14 @@ export interface ResourceGenerationRequest {
       narrative_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
       density: 'concise' | 'standard' | 'detailed'
       emphasis: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
+      include_speaker_notes: boolean
     }
     // 动画讲解智能体的配置
     cartoon: {
-      depth: 'overview' | 'standard' | 'deep'
-      pace: 'fast' | 'normal' | 'slow'
+      visual_density: 'moderate' | 'rich' | 'intensive'
+      pace: 'calm' | 'balanced' | 'fast'
+      target_duration_seconds: number
+      voice: 'teacher' | 'coach'
     }
   }
 }
@@ -83,11 +137,11 @@ export interface ResourceGenerationRequest {
 // 与后端 ResourceStatusSnapshot 完全对齐
 export interface ResourceTaskStatus {
   resource_id: number // 资源生成任务主键
-  learning_need?: string // 用户输入的学习需求
-  status?: string // 任务生命周期状态：pending / planning / generating / completed / partial / failed
-  selected_agents?: string[] // 参与生成的智能体 id 列表
-  agent_snapshots?: Record<string, ResourceAgentSnapshot> // 各智能体实时快照，键为 agent_id
-  current_message?: string // 当前阶段的汇总消息
-  resources?: any[] // 已完成产物列表
-  updated_at?: string | null // 任务最近更新时间
+  learning_need: string // 用户输入的学习需求
+  status: ResourceLifecycleStatus
+  selected_agents: ResourceAgentId[] // 参与生成的智能体 id 列表
+  agent_snapshots: Record<string, ResourceAgentSnapshot> // 各智能体实时快照，键为 agent_id
+  current_message: string // 当前阶段的汇总消息
+  resources: GeneratedResourceItem[] // 已完成产物列表
+  updated_at: string | null // 任务最近更新时间
 }

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from app.resource.schemas.request import ResourceAgentId
 from app.resource.status import ResourceLifecycleStatus
@@ -20,10 +19,23 @@ class GeneratedResourceItem(BaseModel):
     id: str  # 总是由 _item_to_dto 显式设置，无默认值
     type: ResourceAgentId
     title: str
-    format: str
+    format: Literal["markdown", "json", "html", "mp4"]
     content: Any = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str | None = None
+
+
+class ResourceAgentSnapshot(BaseModel):
+    """One persisted Agent state used to restore the running page."""
+
+    agent_id: str
+    status: Literal["pending", "running", "completed", "failed", "interrupted"]
+    message: str
+    progress: int = Field(ge=0, le=100)
+    phase: str
+    elapsed_ms: int | None = None
+    artifact_id: str | None = None
+    timestamp: int | None = None
 
 
 class ResourceStatusSnapshot(BaseModel):
@@ -31,11 +43,17 @@ class ResourceStatusSnapshot(BaseModel):
     resource_id: int
     learning_need: str = ""
     status: ResourceLifecycleStatus
-    selected_agents: list[str] = Field(default_factory=list)
-    agent_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    selected_agents: list[ResourceAgentId] = Field(default_factory=list)
+    agent_snapshots: dict[str, ResourceAgentSnapshot] = Field(default_factory=dict)
     current_message: str = ""
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
     updated_at: str | None = None
+
+
+class ResourceBundleMetadata(BaseModel):
+    """Task-level facts needed by the standalone result page."""
+
+    failed_agents: list[str] = Field(default_factory=list)
 
 
 class ResourceBundle(BaseModel):
@@ -43,10 +61,10 @@ class ResourceBundle(BaseModel):
     id: str
     title: str = "个性化学习资源包"
     learning_need: str
-    selected_agents: list[str] = Field(default_factory=list)
+    selected_agents: list[ResourceAgentId] = Field(default_factory=list)
     plan: dict[str, Any] | None = None
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
     status: ResourceLifecycleStatus = ResourceLifecycleStatus.COMPLETED
     created_at: str  # 总是由 service 显式设置，无默认值
     updated_at: str  # 总是由 service 显式设置，无默认值
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: ResourceBundleMetadata = Field(default_factory=ResourceBundleMetadata)

@@ -379,9 +379,9 @@ import {
 } from '@phosphor-icons/vue'
 
 import {
-  getGeneratedResourceDetail,
-  type GeneratedResourceBundle,
-} from '@/features/resource/api/history'
+  getResourceBundle,
+} from '@/features/resource/api/resource'
+import type { GeneratedResourceBundle } from '@/features/resource/model/resource'
 
 import {
   getArtifactLabel,
@@ -446,7 +446,7 @@ async function loadResource() {
 
   try {
     const response =
-      await getGeneratedResourceDetail(
+      await getResourceBundle(
         resourceId.value,
       )
 

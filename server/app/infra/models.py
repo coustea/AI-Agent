@@ -63,6 +63,16 @@ class User(SQLModel, table=True):
     programming_languages: list[str] | None = Field(default=None, sa_column=Column(JSONB))
     courses: list[str] | None = Field(default=None, sa_column=Column(JSONB))
 
+    # ── 学习画像字段（阶段二采集）──
+    # 基础水平：beginner/entry/proficient/master
+    foundational_level: str | None = Field(default=None, max_length=20)
+    # 学习风格：theory_first/practice_first/case_driven
+    learning_style: str | None = Field(default=None, max_length=20)
+    # 内容深度：quick_overview/systematic_deep
+    content_depth: str | None = Field(default=None, max_length=20)
+    # 薄弱知识点列表
+    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -429,7 +439,7 @@ class LearningAssessmentReport(SQLModel, table=True):
             postgresql_where=text("status = 'generating'"),
             unique=True,
         ),
-        CheckConstraint("range_days IN (7, 14, 30)", name="chk_reports_range_days"),
+        CheckConstraint("range_days IN (3, 7, 14)", name="chk_reports_range_days"),
         CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_reports_status"),
         CheckConstraint("window_end > window_start", name="chk_reports_window_order"),
         CheckConstraint(
@@ -473,7 +483,7 @@ class GeneratedResource(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    learning_need: str | None = Field(default=None, sa_column=Column(Text))
+    learning_need: str = Field(sa_column=Column(Text, nullable=False))
     # 请求在入队前冻结；后台工作流不得依赖 HTTP 进程内参数。
     request_snapshot_json: dict[str, Any] = Field(
         default_factory=dict,
@@ -513,12 +523,15 @@ class GeneratedResourceItem(SQLModel, table=True):
     agent_type: str = Field(max_length=50, index=True)
 
     # 展示信息
-    title: str | None = Field(default=None, max_length=200)
+    title: str = Field(max_length=200)
 
     # 内容主体（根据 agent_type 选择存储位置）
     content_json: dict[str, Any] | list[Any] | None = Field(default=None, sa_column=Column(JSONB))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
-    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    metadata_json: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSONB, nullable=False),
+    )
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -547,11 +560,8 @@ class GeneratedResourceAgentRun(SQLModel, table=True):
     phase: str = Field(default="queued", max_length=64)
     message: str = Field(default="等待调度", sa_column=Column(Text, nullable=False))
     progress: int = Field(default=0)
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
     elapsed_ms: int | None = Field(default=None)
     started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
-    heartbeat_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now()),

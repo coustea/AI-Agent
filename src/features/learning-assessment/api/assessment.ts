@@ -12,7 +12,7 @@ export type {
   GuidanceStrategyResponse,
 }
 
-export function generateAssessmentReport(rangeDays: 7 | 14 | 30) {
+export function generateAssessmentReport(rangeDays: 3 | 7 | 14) {
   return http.post<ApiResponse<LearningAssessmentReport>>('/ai/evaluation/reports', { range_days: rangeDays })
 }
 

@@ -48,6 +48,29 @@ class LayoutKind(StrEnum):
     RECAP = "recap"
 
 
+class LogicNodeRole(StrEnum):
+    QUESTION = "question"
+    PREMISE = "premise"
+    CONCEPT = "concept"
+    MECHANISM = "mechanism"
+    METHOD = "method"
+    EVIDENCE = "evidence"
+    CASE = "case"
+    CONCLUSION = "conclusion"
+
+
+class LogicRelation(StrEnum):
+    PREREQUISITE = "prerequisite"
+    DECOMPOSES = "decomposes"
+    SUPPORTS = "supports"
+    DERIVES = "derives"
+    CAUSES = "causes"
+    CONTRASTS = "contrasts"
+    APPLIES = "applies"
+    VERIFIES = "verifies"
+    SUMMARIZES = "summarizes"
+
+
 @dataclass(frozen=True)
 class VisualComponent:
     kind: VisualKind
@@ -82,6 +105,19 @@ LAYOUTS: dict[LayoutKind, LayoutSpec] = {
 }
 
 
+LOGIC_RELATION_LAYOUTS: dict[LogicRelation, frozenset[LayoutKind]] = {
+    LogicRelation.PREREQUISITE: frozenset({LayoutKind.ROUTE, LayoutKind.DIAGRAM, LayoutKind.SEQUENCE}),
+    LogicRelation.DECOMPOSES: frozenset({LayoutKind.ROUTE, LayoutKind.DIAGRAM, LayoutKind.RECAP}),
+    LogicRelation.SUPPORTS: frozenset({LayoutKind.STATEMENT, LayoutKind.DIAGRAM, LayoutKind.MOSAIC}),
+    LogicRelation.DERIVES: frozenset({LayoutKind.SEQUENCE, LayoutKind.STUDIO}),
+    LogicRelation.CAUSES: frozenset({LayoutKind.SEQUENCE, LayoutKind.DIAGRAM}),
+    LogicRelation.CONTRASTS: frozenset({LayoutKind.COMPARISON}),
+    LogicRelation.APPLIES: frozenset({LayoutKind.STUDIO, LayoutKind.DIAGRAM, LayoutKind.MOSAIC}),
+    LogicRelation.VERIFIES: frozenset({LayoutKind.STUDIO, LayoutKind.STATEMENT, LayoutKind.MOSAIC}),
+    LogicRelation.SUMMARIZES: frozenset({LayoutKind.RECAP, LayoutKind.ROUTE}),
+}
+
+
 def _validate_contract() -> None:
     declared = set(VisualKind)
     registered = set(VISUAL_COMPONENTS)
@@ -93,6 +129,8 @@ def _validate_contract() -> None:
         raise RuntimeError("PPT visual contract contains a mismatched component key")
     if set(LayoutKind) != set(LAYOUTS):
         raise RuntimeError("PPT layout contract is incomplete")
+    if set(LogicRelation) != set(LOGIC_RELATION_LAYOUTS):
+        raise RuntimeError("PPT logic relation layout contract is incomplete")
 
 
 _validate_contract()
@@ -110,6 +148,14 @@ def layout_kind_values() -> str:
     return "、".join(f"`{kind.value}`" for kind in LayoutKind)
 
 
+def logic_node_role_values() -> str:
+    return "、".join(f"`{role.value}`" for role in LogicNodeRole)
+
+
+def logic_relation_values() -> str:
+    return "、".join(f"`{relation.value}`" for relation in LogicRelation)
+
+
 def visual_component_guidance() -> str:
     return "\n".join(
         f"- `{component.kind.value}`：{component.prompt_instruction}"
@@ -122,6 +168,18 @@ def layout_guidance() -> str:
         f"- `{layout.kind.value}`：{layout.prompt_instruction}"
         for layout in LAYOUTS.values()
     )
+
+
+def logic_layout_guidance() -> str:
+    return "\n".join(
+        f"- `{relation.value}` -> "
+        + "、".join(f"`{layout.value}`" for layout in sorted(layouts, key=lambda item: item.value))
+        for relation, layouts in LOGIC_RELATION_LAYOUTS.items()
+    )
+
+
+def layout_supports_relation(layout: LayoutKind, relation: LogicRelation) -> bool:
+    return layout in LOGIC_RELATION_LAYOUTS[relation]
 
 
 def visual_component(kind: VisualKind) -> VisualComponent:

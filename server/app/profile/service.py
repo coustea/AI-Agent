@@ -4,8 +4,6 @@
 画像维度（7 维度）存储在 UserProfileDimension 表，由 LLM 推理；
 评分汇总存储在 UserProfile 表。
 """
-
-# 画像服务：基础信息/维度/评分的持久化与 LLM 推理
 from __future__ import annotations
 
 import json
@@ -41,11 +39,8 @@ from app.infra.prompts import prompts
 logger = get_logger(__name__)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
-
-# 从 User ORM 提取基础信息字典，供 prompt 与响应使用
 def _user_base_info_dict(user: User) -> dict[str, Any]:
-    """从 User ORM 对象提取基础信息字典，供 LLM prompt 和 API 响应使用。"""
+    """从 User ORM 对象提取基础信息字典。"""
     return {
         "school": user.school or "",
         "school_level": user.school_level or "",
@@ -55,12 +50,15 @@ def _user_base_info_dict(user: User) -> dict[str, Any]:
         "global_learning_goal": user.global_learning_goal or "",
         "programming_languages": user.programming_languages or [],
         "courses": user.courses or [],
+        "foundational_level": user.foundational_level or "",
+        "learning_style": user.learning_style or "",
+        "content_depth": user.content_depth or "",
+        "weak_points": user.weak_points or [],
     }
 
 
-# 对 LLM 评分输出做清洗：截断到 0~100 并取均值计算总分
 def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
-    """对打分输出进行后置验证与清洗 — 仅处理 7 维度分数，overall_score 取均值。"""
+    """对打分输出进行后置验证与清洗。"""
     scores = {}
     for key in ALL_DIMENSIONS:
         raw_score = raw.dimension_scores.get(key, 0)
@@ -81,28 +79,20 @@ def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
 
 
 def get_effective_guidance_strategy(profile: UserProfile | None) -> dict[str, Any]:
-    """获取用户有效的自适应辅导策略，若没有或为空则返回初始缺省默认值。"""
+    """获取用户有效的自适应辅导策略，若没有则返回默认值。"""
     if not profile or not profile.guidance_strategy:
         from app.evaluation.guidance import DEFAULT_GUIDANCE_STRATEGY
         return DEFAULT_GUIDANCE_STRATEGY
     return profile.guidance_strategy
 
 
-# ── ProfileService ────────────────────────────────────────────────────
-
-# 学习者画像服务：CRUD 与 LLM 推理评分
 class ProfileService:
-    """学习者画像服务 — CRUD、LLM 推理与评分。
-
-    基础信息存储在 User 表，画像维度存储在 UserProfileDimension 表，
-    评分汇总存储在 UserProfile 表。
-    """
+    """学习者画像服务 — CRUD、LLM 推理与评分。"""
 
     def __init__(self, *, module: str = "mentor") -> None:
         self.module = module
         self.llm = get_llm()
 
-    # 获取用户画像记录，不存在则创建
     async def get_profile(
         self,
         *,
@@ -111,7 +101,7 @@ class ProfileService:
     ) -> UserProfile:
         """获取用户画像记录，不存在则创建。"""
         logger.info("[ProfileService] get_profile — user=%d", user_id)
-        # 内层 upsert：无记录时插入默认画像，否则读取现有记录
+
         async def _upsert(db: AsyncSession) -> UserProfile:
             now = datetime.now(timezone.utc)
             stmt = pg_insert(UserProfile).values(
@@ -145,22 +135,20 @@ class ProfileService:
             await db.commit()
             return profile
 
-        # 未传入会话则使用独立事务上下文
         if db is None:
             async with session_scope() as db:
                 return await _upsert(db)
         return await _upsert(db)
 
-    # 获取用户画像维度明细（key → {value, evidence, score}）
     async def get_dimensions(
         self,
         *,
         user_id: int,
         db: AsyncSession | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """获取用户画像维度明细，返回 {dimension_key: {value, evidence}} 字典。"""
+        """获取用户画像维度明细。"""
         logger.info("[ProfileService] get_dimensions — user=%d", user_id)
-        # 内层查询：读取全部维度行并组装为字典
+
         async def _query(db: AsyncSession) -> dict[str, dict[str, Any]]:
             rows = (
                 await db.exec(
@@ -183,7 +171,6 @@ class ProfileService:
                 return await _query(db)
         return await _query(db)
 
-    # 保存画像维度增量更新（已存在则更新，否则插入）
     async def save_dimensions(
         self,
         *,
@@ -194,7 +181,6 @@ class ProfileService:
         """保存画像维度增量更新到 UserProfileDimension 表。"""
         now = datetime.now(timezone.utc)
         for dim_key, dim_value in dimensions_patch.items():
-            # 仅处理合法的 7 维度键
             if dim_key not in ALL_DIMENSIONS:
                 continue
 
@@ -207,7 +193,6 @@ class ProfileService:
                 )
             ).first()
 
-            # 已存在则就地更新，否则新建维度行
             if existing:
                 existing.value = dim_value.value.strip()
                 existing.evidence = [item.strip() for item in dim_value.evidence if item.strip()]
@@ -224,7 +209,6 @@ class ProfileService:
                 )
                 db.add(new_dim)
 
-        # 批量刷新并提交维度变更
         await db.flush()
         await db.commit()
         logger.info(
@@ -232,9 +216,6 @@ class ProfileService:
             user_id, len(dimensions_patch), list(dimensions_patch.keys()),
         )
 
-
-
-    # 将画像维度 + 基础信息转为结构化 Markdown 文本
     async def build_profile_markdown(self, *, user_id: int) -> str:
         """将画像维度 + User 基础信息转为结构化 Markdown。"""
         logger.info("[ProfileService] build_profile_markdown — user=%d", user_id)
@@ -246,7 +227,6 @@ class ProfileService:
         base_info = _user_base_info_dict(user) if user else {}
         lines: list[str] = ["# 学习者画像"]
 
-        # 1. 基础信息段落
         if base_info:
             lines.append("\n## 基础信息")
             info_items: list[str] = []
@@ -273,7 +253,6 @@ class ProfileService:
             else:
                 lines.append("- 暂无基础信息")
 
-        # 2. 知识层维度段落
         lines.append("\n## 知识层维度")
         for dim_key in KNOWLEDGE_DIMENSIONS:
             dim_data = dimensions.get(dim_key, {})
@@ -282,7 +261,6 @@ class ProfileService:
             lines.append(f"\n### {dim_name}")
             lines.append(value if value else "暂无明确画像")
 
-        # 3. 认知层维度段落
         lines.append("\n## 认知层维度")
         for dim_key in COGNITIVE_DIMENSIONS:
             dim_data = dimensions.get(dim_key, {})
@@ -291,17 +269,16 @@ class ProfileService:
             lines.append(f"\n### {dim_name}")
             lines.append(value if value else "暂无明确画像")
 
-        # 4. 当前自适应辅导策略段落
         strategy = get_effective_guidance_strategy(profile)
         lines.append("\n## 当前自适应辅导策略")
         lines.append(f"- 阶段关注目标：{strategy.get('weekly_goal')}")
         lines.append(f"- 建议单次学习时长：{strategy.get('recommended_session_minutes')} 分钟")
         lines.append(f"- 推荐辅导风格：{strategy.get('tutoring_style')}")
-        
+
         focus_topics = strategy.get("focus_topics", [])
         topics_str = "、".join(focus_topics) if focus_topics else "暂无"
         lines.append(f"- 重点学习主题：{topics_str}")
-        
+
         pref_types = strategy.get("preferred_resource_types", [])
         types_str = "、".join(pref_types) if pref_types else "暂无"
         lines.append(f"- 偏好学习资源类型：{types_str}")
@@ -309,7 +286,6 @@ class ProfileService:
 
         return "\n".join(lines)
 
-    # 保存 onboarding 基本信息到 User 表（同步提交并回读校验）
     async def save_onboarding_info(
         self,
         *,
@@ -317,13 +293,14 @@ class ProfileService:
         payload: dict[str, Any],
         db: AsyncSession,
     ) -> dict[str, Any]:
-        """保存 onboarding 基本信息 — 直接写入 User 表（同步提交）。"""
+        """保存 onboarding 基本信息 — 直接写入 User 表。"""
         logger.info(
             "[ProfileService] onboarding 写入开始: user_id=%s payload=%s",
             user_id,
             {k: payload.get(k) for k in (
                 "school", "major", "grade", "daily_study_time",
                 "global_learning_goal", "programming_languages", "courses",
+                "foundational_level", "learning_style", "content_depth", "weak_points",
             )},
         )
 
@@ -332,7 +309,6 @@ class ProfileService:
             logger.error("[ProfileService] onboarding 写入失败，用户不存在: user_id=%s", user_id)
             raise ValueError(f"User {user_id} not found")
 
-        # 根据学校名反查院校层次（school_level）
         school_name = payload.get("school")
         if school_name:
             school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
@@ -342,7 +318,6 @@ class ProfileService:
                 user_id, school_name, user.school_level,
             )
 
-        # 将 base_info 各字段写入 User 表
         if payload.get("school") is not None:
             user.school = payload["school"]
         if payload.get("major") is not None:
@@ -357,8 +332,15 @@ class ProfileService:
             user.programming_languages = payload["programming_languages"]
         if payload.get("courses") is not None:
             user.courses = payload["courses"]
+        if payload.get("foundational_level") is not None:
+            user.foundational_level = payload["foundational_level"] or None
+        if payload.get("learning_style") is not None:
+            user.learning_style = payload["learning_style"] or None
+        if payload.get("content_depth") is not None:
+            user.content_depth = payload["content_depth"] or None
+        if payload.get("weak_points") is not None:
+            user.weak_points = payload["weak_points"]
 
-        # 标记 onboarding 已完成并更新时间戳
         user.onboarding_completed = True
         user.updated_at = datetime.now(timezone.utc)
 
@@ -375,7 +357,6 @@ class ProfileService:
             len(user.courses or []), len(user.programming_languages or []), user.onboarding_completed,
         )
 
-        # 提交后回读校验，确认真正落库（便于排查“没存进数据库”的问题）
         reloaded = (await db.exec(select(User).where(User.id == user_id))).first()
         if reloaded is None:
             logger.error("[ProfileService] onboarding 落库校验失败，回读为空: user_id=%s", user_id)
@@ -387,7 +368,6 @@ class ProfileService:
                 reloaded.courses, reloaded.programming_languages, reloaded.onboarding_completed,
             )
 
-        # 确保对应画像记录存在
         await self.get_profile(user_id=user_id, db=db)
 
         result = {
@@ -402,9 +382,8 @@ class ProfileService:
         )
         return result
 
-    # 从 onboarding 信息推理 7 维度画像并评分（后台异步任务）
     async def infer_profile_from_onboarding(self, *, user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
-        """从 onboarding 信息推理 7 维度画像并评分（后台异步任务）。"""
+        """从 onboarding 信息推理 7 维度画像并评分。"""
         try:
             logger.info("[ProfileService] onboarding LLM推理开始: user_id=%s", user_id)
 
@@ -418,7 +397,6 @@ class ProfileService:
                     len(base_info.get("courses", [])), len(base_info.get("programming_languages", [])),
                 )
 
-                # 调用 LLM 根据 onboarding 信息推理画像维度补丁
                 logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
                 prompt = prompts.get("profile").render(
                     "onboarding",
@@ -429,13 +407,11 @@ class ProfileService:
                     [HumanMessage(content=prompt)],
                 )
 
-                # 仅取前 50 字符用于日志摘要，避免过长
                 dims_summary = {k: v.value[:50] if isinstance(v, DimensionValue) else str(v)[:50]
                                 for k, v in resp.dimensions_patch.items()}
                 logger.info("[ProfileService] onboarding LLM推理结果: user_id=%s dimensions_patch=%s",
                             user_id, dims_summary)
 
-                # 保存推理出的维度补丁
                 await self.save_dimensions(
                     user_id=user_id,
                     dimensions_patch=resp.dimensions_patch,
@@ -446,7 +422,6 @@ class ProfileService:
                     user_id, len(resp.dimensions_patch), list(resp.dimensions_patch.keys()),
                 )
 
-            # 维度落库后触发评分
             score_result = await self.score_profile(user_id=user_id)
             logger.info("[ProfileService] onboarding 推理+评分完成: user_id=%s dimensions_updated=%s overall_score=%s",
                          user_id, list(dims_summary.keys()), score_result.get("overall_score"))
@@ -456,11 +431,8 @@ class ProfileService:
             logger.exception("[ProfileService] onboarding 推理+评分失败: user_id=%s", user_id)
             return {"inference_ok": False, "reason": "llm_error"}
 
-
-
-    # 仅依据文字画像（base_info + dimensions）对 7 维度重新评分
     async def score_profile(self, *, user_id: int) -> dict[str, Any]:
-        """仅依据文字画像（base_info + dimensions）对 7 维度重新评分。"""
+        """依据文字画像对 7 维度重新评分。"""
         logger.info("[ProfileService] 全局评分刷新开始: user_id=%s", user_id)
         async with session_scope() as db:
             profile = await self.get_profile(user_id=user_id, db=db)
@@ -473,7 +445,6 @@ class ProfileService:
                 len(dimensions),
             )
 
-            # 将文字画像拼接为 prompt，调用 LLM 打分
             profile_text = json.dumps(
                 {"base_info": base_info, "dimensions": dimensions},
                 ensure_ascii=False,
@@ -493,13 +464,11 @@ class ProfileService:
                 resp.dimension_scores,
             )
 
-            # 清洗 LLM 结果并写回总体分与评分时间
             scores = sanitize_score_output(resp)
             profile.overall_score = scores["overall_score"]
             profile.scored_at = datetime.now(timezone.utc)
             profile.updated_at = datetime.now(timezone.utc)
 
-            # 同步各维度得分到维度表
             for dim_key, dim_score in scores.get("dimension_scores", {}).items():
                 dim_row = (
                     await db.exec(
@@ -525,11 +494,9 @@ class ProfileService:
             return scores
 
 
-# 模块级画像服务单例缓存
 _profile_service_cache: dict[str, ProfileService] = {}
 
 
-# 获取指定模块的画像服务单例（带缓存，避免重复构建 LLM 客户端）
 def get_profile_service(*, module: str = "mentor") -> ProfileService:
     """获取指定模块的画像服务单例（带缓存）。"""
     if module not in _profile_service_cache:

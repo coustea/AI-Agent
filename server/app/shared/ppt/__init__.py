@@ -1,5 +1,9 @@
 from app.shared.ppt.generator import PPTGenerationError, PPTGenerator
 from app.shared.ppt.models import (
+    DeckLogicModel,
+    LogicChapter,
+    LogicEdge,
+    LogicNode,
     PathPPT,
     PPTArtifact,
     PPTDeck,
@@ -18,6 +22,10 @@ from app.shared.ppt.models import (
 from app.shared.ppt.service import PPTService
 
 __all__ = [
+    "DeckLogicModel",
+    "LogicChapter",
+    "LogicEdge",
+    "LogicNode",
     "PPTArtifact",
     "PPTDeck",
     "PPTGenerationError",

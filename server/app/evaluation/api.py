@@ -71,7 +71,7 @@ async def record_learning_session(
 
 
 class ReportGenerateRequest(BaseModel):
-    range_days: Literal[7, 14, 30] = Field(..., description="评估天数，必须为 7、14 或 30")
+    range_days: Literal[3, 7, 14] = Field(..., description="评估天数，必须为 3、7 或 14")
 
 
 # 1. POST /api/v1/ai/evaluation/reports -> 建立并同步生成报告

@@ -279,7 +279,7 @@ class LearningPathResourceDTO(BaseModel):
     content_text: str | None = None
     content_json: dict[str, Any] | None = None
     summary: str | None = None
-    status: str = "completed"
+    status: Literal["generating", "completed", "failed"] = "completed"
     error_message: str | None = None
     input_data: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

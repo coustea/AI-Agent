@@ -19,20 +19,12 @@ export function useTracePlayer(eventsRef: () => TraceEvent[]) {
     return events.length > 0 && currentStepIndex.value >= events.length - 1
   })
 
-  // 事件列表变化时，重置索引和播放状态
+  // 新运行会替换整个事件数组；即使步数相同，也必须回到首帧。
   watch(
-    () => eventsRef().length,
-    (length) => {
-      if (length <= 0) {
-        currentStepIndex.value = 0
-        playing.value = false
-        return
-      }
-
-      if (currentStepIndex.value > length - 1) {
-        currentStepIndex.value = Math.max(0, length - 1)
-        playing.value = false
-      }
+    eventsRef,
+    () => {
+      currentStepIndex.value = 0
+      playing.value = false
     },
     { flush: 'sync' },
   )

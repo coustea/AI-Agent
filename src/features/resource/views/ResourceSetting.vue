@@ -879,22 +879,22 @@ const agentSettingSchemas: Record<
 
   cartoon: [
     {
-      key: 'depth',
-      title: '讲解深度',
-      description: '控制动画脚本的解释层级与推导程度',
+      key: 'visual_density',
+      title: '画面信息密度',
+      description: '控制每幕知识模型、关系和状态变化的丰富程度',
       type: 'segment',
       options: [
         {
-          label: '概览',
-          value: 'overview',
+          label: '适中',
+          value: 'moderate',
         },
         {
-          label: '标准',
-          value: 'standard',
+          label: '丰富',
+          value: 'rich',
         },
         {
-          label: '深入',
-          value: 'deep',
+          label: '高密度',
+          value: 'intensive',
         },
       ],
     },
@@ -905,16 +905,43 @@ const agentSettingSchemas: Record<
       type: 'segment',
       options: [
         {
+          label: '舒缓',
+          value: 'calm',
+        },
+        {
+          label: '均衡',
+          value: 'balanced',
+        },
+        {
           label: '快速',
           value: 'fast',
         },
+      ],
+    },
+    {
+      key: 'target_duration_seconds',
+      title: '目标成片时长',
+      description: '控制动画讲解的目标总时长',
+      type: 'range',
+      min: 90,
+      max: 600,
+      step: 30,
+      scales: [90, 180, 300, 450, 600],
+      unit: ' 秒',
+    },
+    {
+      key: 'voice',
+      title: '配音角色',
+      description: '选择动画讲解使用的表达方式',
+      type: 'segment',
+      options: [
         {
-          label: '正常',
-          value: 'normal',
+          label: '教师讲解',
+          value: 'teacher',
         },
         {
-          label: '慢速',
-          value: 'slow',
+          label: '教练引导',
+          value: 'coach',
         },
       ],
     },

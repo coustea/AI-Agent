@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 class ResearchDecision(BaseModel):
     """规划前的临时研究判断，不进入工作流状态或持久化结果。"""
 
-    needs_research: bool = Field(description="是否需要外部事实核验")
+    needs_research: bool = Field(default=False, description="是否需要外部事实核验，默认 false")
     query: str = Field(default="", description="需要核验时使用的简短网页查询")
 
 
@@ -73,15 +73,14 @@ class PlanningAgent(BaseResourceAgent):
         agent_ids = plan.agent_ids
         total_elapsed = int((time.perf_counter() - started) * 1000)
         logger.info(
-            "Agent[%s] 生成完成: agent_count=%d plan_len=%d elapsed_ms=%d → %s",
+            "Agent[%s] 生成完成: agent_count=%d plan_len=%d elapsed_ms=%d",
             self.agent_id, len(agent_ids), len(plan.model_dump_json()), total_elapsed,
-            plan.title,
         )
         result = AgentResult(
             success=True,
             content=plan.model_dump_json(),
             file_type="json",
-            title=plan.title,
+            title=input_data.learning_need[:64],
             summary=f"生成了包含 {len(agent_ids)} 个 Agent 任务的协同计划",
             metrics={
                 "agent_count": len(agent_ids),

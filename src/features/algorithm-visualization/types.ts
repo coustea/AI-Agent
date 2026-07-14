@@ -31,6 +31,39 @@ export interface TraceEventState {
   auxiliary?: Record<string, unknown>
 }
 
+export interface VisualEdge {
+  to: string
+  weight?: string | number
+}
+
+export interface VisualNode {
+  id: string
+  label: string
+  tone?: string
+  next?: string | null
+  left?: string
+  right?: string
+  children?: string[]
+  distance?: string | number
+  edges?: VisualEdge[]
+  x?: number
+  y?: number
+}
+
+export interface VisualPointer {
+  label: string
+  nodeId?: string
+  nodeIndex?: number
+  itemIndex?: number
+  tone?: string
+}
+
+export interface HighlightedCell {
+  row: number
+  col: number
+  tone: 'active' | 'dependency' | 'success'
+}
+
 // 算法信息 (来自 GET /algorithms)
 export interface AlgorithmInfo {
   key: string
