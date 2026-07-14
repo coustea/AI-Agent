@@ -30,7 +30,7 @@ export interface EvaluationSummary {
   viewed_resources: number
   event_count: number
   weak_topics: string[]
-  preferred_resources: string[]
+  focus_topics: string[]
   recommendations: string[]
 }
 
@@ -141,9 +141,9 @@ export async function getEvaluationSummary(_limit = 100) {
         viewed_resources: facts?.resource_usage.viewed ?? 0,
         event_count: moduleCount,
         weak_topics: facts?.data_quality.insufficient_topics ?? [],
-        preferred_resources: strategy?.preferred_resource_types ?? [],
+        focus_topics: strategy?.focus_topics ?? [],
         recommendations: [
-          strategy?.weekly_goal,
+          strategy?.conclusion,
           strategy?.reason,
         ].filter((item): item is string => Boolean(item)),
       },

@@ -41,6 +41,7 @@ from app.shared.cartoon.agent import (
 from app.shared.cartoon.schemas import (
     CartoonBrief,
     CartoonGenerationConfig,
+    CartoonResourceMetadata,
 )
 
 if TYPE_CHECKING:
@@ -231,8 +232,14 @@ class CartoonService:
 
         except CartoonGenerationError as exc:
             logger.error(
-                "[CartoonService] 动画视频生成失败: stage=%s error=%s",
-                exc.stage, exc, exc_info=True,
+                (
+                    "[CartoonService] 动画视频生成失败: "
+                    "stage=%s error=%s problems=%s"
+                ),
+                exc.stage,
+                exc,
+                exc.problems,
+                exc_info=True,
             )
             return self._build_error_result(
                 node_title,
@@ -952,22 +959,13 @@ class CartoonService:
             2,
         )
 
-        card = {
-            "schema_version": "cartoon/v6",
-            "resource_type": "cartoon",
-            "title": artifact.title,
-            "file_type": "mp4",
-            "video_url": static_url(
-                artifact.video_path
-            ),
-            "preview_url": static_url(
-                artifact.html_path
-            ),
-            "duration_seconds": duration_seconds,
-            "scene_count": artifact.scene_count,
-            "has_audio": artifact.has_audio,
-            "engine": "hyperframes",
-        }
+        metadata = CartoonResourceMetadata(
+            video_url=static_url(artifact.video_path),
+            preview_url=static_url(artifact.html_path),
+            duration_seconds=duration_seconds,
+            scene_count=artifact.scene_count,
+            has_audio=artifact.has_audio,
+        )
 
         elapsed_ms = int(
             (
@@ -981,10 +979,7 @@ class CartoonService:
             success=True,
             title=artifact.title,
             file_type="mp4",
-            content=json.dumps(
-                card,
-                ensure_ascii=False,
-            ),
+            content="",
             summary=(
                 f"{artifact.scene_count} 个场景，"
                 f"时长 {duration_seconds:.1f} 秒"
@@ -994,20 +989,7 @@ class CartoonService:
                 "duration_seconds": duration_seconds,
                 "elapsed_ms": elapsed_ms,
             },
-            metadata={
-                "agent_id": "cartoon",
-                "schema_version": "cartoon/v6",
-                "engine": "hyperframes",
-                "has_audio": artifact.has_audio,
-                "video_file_path": str(artifact.video_path),
-                "html_file_path": str(artifact.html_path),
-                "video_url": static_url(
-                    artifact.video_path
-                ),
-                "html_url": static_url(
-                    artifact.html_path
-                ),
-            },
+            metadata=metadata.model_dump(mode="json"),
         )
 
     @staticmethod
@@ -1031,10 +1013,12 @@ class CartoonService:
         logger.error(
             (
                 "Cartoon generation failed: "
-                "stage=%s error=%s elapsed_ms=%d"
+                "stage=%s error=%s problems=%s "
+                "elapsed_ms=%d"
             ),
             exc.stage,
             exc,
+            exc.problems,
             elapsed_ms,
         )
 

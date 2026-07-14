@@ -7,9 +7,17 @@
       </div>
 
       <div v-if="nodes.length" class="linear-strip">
-        <div v-for="(node, index) in nodes" :key="node.id" :class="['linear-node', node.tone || 'default']">
+        <div
+          v-for="(node, index) in nodes"
+          :key="node.id"
+          :data-node-id="node.id"
+          :class="['linear-node', node.tone || 'default']"
+        >
           <span class="node-value">{{ node.label }}</span>
-          <span v-if="index < nodes.length - 1" class="node-arrow">→</span>
+          <span class="node-next">
+            <span class="node-arrow">→</span>
+            {{ getNextLabel(node.next) }}
+          </span>
           <div class="pointer-stack">
             <span v-for="pointer in getPointers(index)" :key="pointer.label" :class="['pointer-pill', pointer.tone || 'accent']">{{ pointer.label }}</span>
           </div>
@@ -22,15 +30,25 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEvent } from '@/features/algorithm-visualization/types'
+import type { TraceEvent, VisualNode, VisualPointer } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
 
 // 当前步骤的链表节点和指针数据
-const nodes = computed(() => { const raw = props.currentEvent?.state?.structure?.nodes; return Array.isArray(raw) ? raw : [] })
-const pointers = computed(() => { const raw = props.currentEvent?.state?.structure?.pointers; return Array.isArray(raw) ? raw : [] })
+const nodes = computed<VisualNode[]>(() => { const raw = props.currentEvent?.state?.structure?.nodes; return Array.isArray(raw) ? raw as VisualNode[] : [] })
+const pointers = computed<VisualPointer[]>(() => { const raw = props.currentEvent?.state?.structure?.pointers; return Array.isArray(raw) ? raw as VisualPointer[] : [] })
 // 获取特定索引节点上的指针标签
-function getPointers(index: number) { return pointers.value.filter((p: any) => p.nodeIndex === index || p.itemIndex === index) }
+function getPointers(index: number) {
+  const nodeId = nodes.value[index]?.id
+  return pointers.value.filter(pointer => (
+    pointer.nodeId === nodeId || pointer.nodeIndex === index || pointer.itemIndex === index
+  ))
+}
+
+function getNextLabel(nextId: string | null | undefined) {
+  if (!nextId) return '∅'
+  return nodes.value.find(node => node.id === nextId)?.label ?? nextId
+}
 </script>
 
 <style scoped>
@@ -125,8 +143,16 @@ function getPointers(index: number) { return pointers.value.filter((p: any) => p
 .node-arrow {
   font-size: 14px;
   color: var(--color-text-faint);
-  align-self: center;
-  margin: 0 4px;
+  margin-right: 3px;
+}
+
+.node-next {
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 .pointer-stack {

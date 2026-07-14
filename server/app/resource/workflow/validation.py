@@ -18,6 +18,7 @@ from app.resource.schemas.quiz import (
     validate_quiz_payload,
 )
 from app.resource.catalog import BASE_RESOURCE_AGENT_IDS
+from app.shared.cartoon.schemas import CartoonResourceMetadata
 
 if TYPE_CHECKING:
     from app.resource.schemas import AgentResult, ResourceInput
@@ -40,8 +41,10 @@ def validate_common_result(
     if result.success is not True:
         raise ValidationError(result.error or "Agent returned success=False")
 
-    # HTML 文件型不要求内联正文，其余类型内容必须非空
-    if result.file_type != "html" and (not isinstance(result.content, str) or not result.content.strip()):
+    # 文件型资源只使用 metadata 发布引用，不保存重复的内联正文。
+    if result.file_type not in {"html", "mp4"} and (
+        not isinstance(result.content, str) or not result.content.strip()
+    ):
         raise ValidationError("Agent returned empty content")
 
     # 标题与文件类型缺失则不合格
@@ -180,25 +183,10 @@ def validate_cartoon(result: "AgentResult", input_data: "ResourceInput") -> None
     if result.file_type != "mp4":
         raise ValidationError("Cartoon must be MP4")
 
-    # 解析产物元数据 JSON
     try:
-        data = json.loads(result.content) if isinstance(result.content, str) else result.content
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"Cartoon JSON parse error: {exc}") from exc
-
-    # 逐项校验动画产物契约
-    if not isinstance(data, dict) or data.get("schema_version") != "cartoon/v6":
-        raise ValidationError("Cartoon must use the cartoon/v6 schema")
-    if not str(data.get("video_url", "")).endswith(".mp4"):
-        raise ValidationError("Cartoon must expose an MP4 video_url")
-    if float(data.get("duration_seconds", 0)) <= 0:
-        raise ValidationError("Cartoon duration must be positive")
-    if int(data.get("scene_count", 0)) < 3:
-        raise ValidationError("Cartoon must contain at least three scenes")
-    if result.metadata.get("engine") != "hyperframes":
-        raise ValidationError("Cartoon must be rendered by HyperFrames")
-    if result.metadata.get("has_audio") is not True:
-        raise ValidationError("Cartoon must contain an audio stream")
+        CartoonResourceMetadata.model_validate(result.metadata)
+    except ValueError as exc:
+        raise ValidationError(f"Cartoon metadata contract failed: {exc}") from exc
 
 
 # =============================================================================

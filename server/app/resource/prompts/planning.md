@@ -9,9 +9,8 @@
 计划必须：
 
 - 只为运行时指定的 Agent 分配任务；每个指定 Agent 恰好一个 task。
-- 将学习目标、范围、学习主线、协作去重规则和术语/难度一致性规则写为具体可执行语句。
-- 每个 task 必须给出 objective、focus、required_elements、avoid、configuration_notes。
-- configuration_notes 必须解释本次用户配置如何影响任务，不得照抄空泛原则。
+- 将学习目标、范围写为具体可执行语句。
+- 每个 task 必须给出 objective、focus、required_elements、avoid。
 - 所有任务应围绕同一学习主线分工，避免多个资源重复讲同一段内容。
 
 # AGENT RESPONSIBILITIES

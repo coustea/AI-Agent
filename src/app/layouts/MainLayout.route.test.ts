@@ -2,6 +2,7 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import MainLayout from './MainLayout.vue'
+import AlgorithmVisualization from '@/features/algorithm-visualization/views/AlgorithmVisualization.vue'
 
 vi.mock('primevue/useconfirm', () => ({
   useConfirm: () => ({ require: vi.fn() }),
@@ -13,6 +14,35 @@ vi.mock('primevue/usetoast', () => ({
 
 vi.mock('@/features/auth/model/useAuthPolling', () => ({
   useAuthPolling: vi.fn(),
+}))
+
+vi.mock('@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmCodeEditorPanel.vue', () => ({
+  default: defineComponent({
+    name: 'AlgorithmCodeEditorPanelStub',
+    setup: () => () => h('div', { 'data-testid': 'algorithm-code-editor' }),
+  }),
+}))
+
+vi.mock('@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmInputDataPanel.vue', () => ({
+  default: defineComponent({
+    name: 'AlgorithmInputDataPanelStub',
+    setup: () => () => h('div', { 'data-testid': 'algorithm-input-data' }),
+  }),
+}))
+
+vi.mock('@/features/algorithm-visualization/api/algorithmVisualizer', () => ({
+  fetchLanguages: vi.fn(async () => ({ data: { data: [] } })),
+  fetchAlgorithms: vi.fn(async () => ({ data: { data: [] } })),
+  fetchTemplate: vi.fn(async () => ({
+    data: {
+      data: {
+        templateCode: 'def demo():\n  pass',
+        defaultInput: {},
+      },
+    },
+  })),
+  fetchCustomCodeContract: vi.fn(),
+  runVisualization: vi.fn(),
 }))
 
 const mountedApps: Array<{ unmount: () => void }> = []
@@ -37,7 +67,7 @@ describe('MainLayout route outlet', () => {
           path: '/',
           component: MainLayout,
           children: [
-            { path: 'algorithm-visualizer', component: createRoutePage('algorithm', '算法可视化') },
+            { path: 'algorithm-visualizer', component: AlgorithmVisualization },
             { path: 'path-planner', component: createRoutePage('path-planner', '路径规划') },
           ],
         },
@@ -53,12 +83,19 @@ describe('MainLayout route outlet', () => {
     await router.isReady()
     app.mount(target)
     await nextTick()
-    expect(target.querySelector('[data-route-page="algorithm"]')).not.toBeNull()
+    await vi.waitFor(() => {
+      expect(target.querySelector('.algorithm-visualizer-page')).not.toBeNull()
+    })
 
-    await router.push('/path-planner')
+    const pathPlannerNav = target.querySelector<HTMLElement>('.nav-item[title="路径规划"]')
+    expect(pathPlannerNav).not.toBeNull()
+    pathPlannerNav!.click()
     await nextTick()
 
-    expect(target.querySelector('[data-route-page="algorithm"]')).toBeNull()
-    expect(target.querySelector('[data-route-page="path-planner"]')).not.toBeNull()
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.path).toBe('/path-planner')
+      expect(target.querySelector('.algorithm-visualizer-page')).toBeNull()
+      expect(target.querySelector('[data-route-page="path-planner"]')).not.toBeNull()
+    })
   })
 })

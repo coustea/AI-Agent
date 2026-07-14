@@ -7,6 +7,7 @@ import io
 import importlib.util
 import inspect
 import json
+import math
 import sys
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -80,10 +81,11 @@ def run_registered_template(
         if frame.f_code.co_filename != source_path or event not in {"line", "return"}:
             return observe
         snapshot = adapter.capture(frame.f_locals, arg if event == "return" else None)
+        event_type, snapshot = _describe_step(spec, last_snapshot, snapshot)
         fingerprint = _snapshot_fingerprint(snapshot)
         if fingerprint != last_fingerprint and snapshot_count < 600:
             tracer.snapshot(
-                "snapshot",
+                event_type,
                 snapshot.structure,
                 targets=snapshot.targets,
                 message=snapshot.message,
@@ -265,6 +267,13 @@ class _StateAdapter:
         self.input_data = copy.deepcopy(input_data)
         self.bound_values = [*args, *kwargs.values()]
         self._object_ids: dict[int, str] = {}
+        linked_head = next(
+            (value for value in self.bound_values if hasattr(value, "next")),
+            None,
+        )
+        self._linked_node_objects, self._linked_object_ids = _collect_linked_nodes(
+            linked_head
+        )
         self._last_structure = self._initial_structure()
 
     def initial(self) -> _Snapshot:
@@ -290,10 +299,19 @@ class _StateAdapter:
             return {"array": _initial_array(self.input_data)}
         if visualizer_type == "stack-queue":
             mode = "queue" if "queue" in self.spec.key else "stack"
-            return {"mode": mode, "items": [], "pointers": []}
+            return {
+                "mode": mode,
+                "items": [],
+                "pointers": [],
+                "currentValue": "",
+            }
         if visualizer_type == "linked-list":
             return {
-                "nodes": _nodes_from_values(self.input_data.get("arr", [])),
+                "nodes": _linked_nodes(
+                    self._linked_node_objects,
+                    self._linked_object_ids,
+                    set(),
+                ),
                 "pointers": [],
             }
         if visualizer_type == "tree":
@@ -314,7 +332,11 @@ class _StateAdapter:
         if values is None and isinstance(result, (list, tuple)):
             values = list(result)
         array = _numeric_array(values) if values is not None else self._last_structure["array"]
-        return {"array": array}, _integer_targets(local_values, len(array))
+        return {"array": array}, _array_targets(
+            self.spec.key,
+            local_values,
+            len(array),
+        )
 
     def _capture_stack_queue(self, local_values: dict[str, Any], result: Any):
         mode = self._last_structure["mode"]
@@ -325,22 +347,55 @@ class _StateAdapter:
             {"id": f"item-{index}", "label": str(value), "tone": "default"}
             for index, value in enumerate(values)
         ]
-        return {"mode": mode, "items": items, "pointers": []}, []
+        pointers = []
+        if items:
+            pointers.append(
+                {
+                    "label": "top" if mode == "stack" else "front",
+                    "itemIndex": len(items) - 1 if mode == "stack" else 0,
+                    "tone": "accent",
+                }
+            )
+        return {
+            "mode": mode,
+            "items": items,
+            "pointers": pointers,
+            "currentValue": str(local_values.get("char", "")),
+        }, []
 
     def _capture_linked_list(self, local_values: dict[str, Any], result: Any):
-        candidates = [result, local_values.get("prev"), local_values.get("head")]
-        root = next((item for item in candidates if hasattr(item, "next")), None)
-        values, object_indexes = _linked_values(root)
-        if not values:
-            values = [node["label"] for node in self._last_structure["nodes"]]
-        pointers = []
+        pointers: list[dict[str, Any]] = []
+        active_ids: set[str] = set()
         for label in ("prev", "current", "curr", "head", "next_node"):
             node = local_values.get(label)
-            if id(node) in object_indexes:
-                pointers.append(
-                    {"label": label, "nodeIndex": object_indexes[id(node)], "tone": "accent"}
+            node_id = self._linked_object_ids.get(id(node))
+            if node_id is not None:
+                node_index = next(
+                    index
+                    for index, item in enumerate(self._linked_node_objects)
+                    if item is node
                 )
-        return {"nodes": _nodes_from_values(values), "pointers": pointers}, list(object_indexes.values())[:1]
+                pointers.append(
+                    {
+                        "label": label,
+                        "nodeId": node_id,
+                        "nodeIndex": node_index,
+                        "tone": "accent",
+                    }
+                )
+                active_ids.add(node_id)
+        if not pointers and result is not None:
+            node_id = self._linked_object_ids.get(id(result))
+            if node_id is not None:
+                active_ids.add(node_id)
+        return {
+            "nodes": _linked_nodes(
+                self._linked_node_objects,
+                self._linked_object_ids,
+                active_ids,
+            ),
+            "pointers": pointers,
+        }, list(active_ids)
 
     def _capture_tree(self, local_values: dict[str, Any], result: Any):
         nodes = copy.deepcopy(self._last_structure["nodes"])
@@ -358,6 +413,7 @@ class _StateAdapter:
     def _capture_graph(self, local_values: dict[str, Any], result: Any):
         nodes = copy.deepcopy(self._last_structure["nodes"])
         visited = local_values.get("visited")
+        distance = local_values.get("distance")
         visited_values = set()
         if isinstance(visited, set):
             visited_values = visited
@@ -365,8 +421,12 @@ class _StateAdapter:
             visited_values = {index for index, value in enumerate(visited) if value}
         targets = _integer_targets(local_values, len(nodes))
         for node in nodes:
-            if int(node["id"]) in visited_values or int(node["id"]) in targets:
+            node_index = int(node["id"])
+            if node_index in visited_values or node_index in targets:
                 node["tone"] = "visited"
+            if isinstance(distance, list) and node_index < len(distance):
+                value = distance[node_index]
+                node["distance"] = "∞" if isinstance(value, float) and math.isinf(value) else value
         return {"nodes": nodes}, [str(target) for target in targets]
 
     def _capture_dp_table(self, local_values: dict[str, Any], result: Any):
@@ -377,10 +437,11 @@ class _StateAdapter:
             return copy.deepcopy(self._last_structure), []
         values = table if table and isinstance(table[0], list) else [table]
         width = max((len(row) for row in values), default=1)
+        highlighted = _table_highlights(local_values, values)
         return {
             "headers": [str(index) for index in range(width)],
             "values": _to_jsonable(values),
-            "highlighted": [],
+            "highlighted": highlighted,
         }, _table_targets(local_values, values)
 
 
@@ -423,7 +484,7 @@ def _numeric_array(values: list[Any]) -> list[Any]:
 
 
 def _find_scalar_list(local_values: dict[str, Any]) -> list[Any] | None:
-    for key in ("arr", "nums", "prices", "result", "output", "dp"):
+    for key in ("nums", "arr", "prices", "result", "output", "dp"):
         value = local_values.get(key)
         if isinstance(value, list) and (not value or not isinstance(value[0], list)):
             return list(value)
@@ -440,9 +501,63 @@ def _find_sequence(local_values: dict[str, Any], names: tuple[str, ...]) -> list
     return None
 
 
+def _array_targets(
+    algorithm_key: str,
+    local_values: dict[str, Any],
+    length: int,
+) -> list[int]:
+    def valid_index(value: Any) -> bool:
+        return (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and 0 <= value < length
+        )
+
+    if algorithm_key == "bubble_sort":
+        index = local_values.get("index")
+        if valid_index(index) and valid_index(index + 1):
+            return [index, index + 1]
+
+    if algorithm_key == "selection_sort":
+        minimum = local_values.get("minimum")
+        index = local_values.get("index")
+        if valid_index(minimum) and valid_index(index):
+            return [minimum, index] if minimum != index else [minimum]
+        if valid_index(minimum):
+            return [minimum]
+        return []
+
+    if algorithm_key == "insertion_sort":
+        position = local_values.get("position")
+        if valid_index(position) and valid_index(position + 1):
+            return [position, position + 1]
+
+    if algorithm_key == "quick_sort":
+        left_cursor = local_values.get("i")
+        right_cursor = local_values.get("j")
+        if valid_index(left_cursor) and valid_index(right_cursor):
+            return [left_cursor, right_cursor]
+
+    return _integer_targets(local_values, length)
+
+
 def _integer_targets(local_values: dict[str, Any], length: int) -> list[int]:
     targets = []
-    for name in ("i", "j", "left", "right", "lo", "hi", "mid", "index", "start", "end"):
+    for name in (
+        "i",
+        "j",
+        "left",
+        "right",
+        "lo",
+        "hi",
+        "mid",
+        "middle",
+        "index",
+        "position",
+        "minimum",
+        "start",
+        "end",
+    ):
         value = local_values.get(name)
         if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < length:
             if value not in targets:
@@ -468,6 +583,38 @@ def _linked_values(root: Any) -> tuple[list[Any], dict[int, int]]:
         values.append(getattr(current, "val", getattr(current, "value", "?")))
         current = current.next
     return values, indexes
+
+
+def _collect_linked_nodes(root: Any) -> tuple[list[Any], dict[int, str]]:
+    nodes: list[Any] = []
+    object_ids: dict[int, str] = {}
+    current = root
+    while (
+        current is not None
+        and hasattr(current, "next")
+        and id(current) not in object_ids
+        and len(nodes) < 100
+    ):
+        object_ids[id(current)] = f"node-{len(nodes)}"
+        nodes.append(current)
+        current = current.next
+    return nodes, object_ids
+
+
+def _linked_nodes(
+    node_objects: list[Any],
+    object_ids: dict[int, str],
+    active_ids: set[str],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": object_ids[id(node)],
+            "label": str(getattr(node, "val", getattr(node, "value", "?"))),
+            "next": object_ids.get(id(getattr(node, "next", None))),
+            "tone": "visited" if object_ids[id(node)] in active_ids else "default",
+        }
+        for node in node_objects
+    ]
 
 
 def _tree_nodes(root: Any) -> tuple[list[dict[str, Any]], dict[int, str]]:
@@ -618,16 +765,116 @@ def _find_table(local_values: dict[str, Any]) -> list[Any] | None:
 def _table_targets(local_values: dict[str, Any], values: list[list[Any]]) -> list[Any]:
     if not values:
         return []
-    row = next((local_values.get(name) for name in ("i", "r", "row") if isinstance(local_values.get(name), int)), None)
-    col = next((local_values.get(name) for name in ("j", "c", "col") if isinstance(local_values.get(name), int)), None)
+    row = next(
+        (
+            local_values.get(name)
+            for name in ("i", "r", "row", "index")
+            if isinstance(local_values.get(name), int)
+        ),
+        None,
+    )
+    col = next(
+        (
+            local_values.get(name)
+            for name in ("j", "c", "col", "current_capacity")
+            if isinstance(local_values.get(name), int)
+        ),
+        None,
+    )
     if row is None or col is None:
         return []
     return [{"row": row, "col": col}]
 
 
+def _table_highlights(
+    local_values: dict[str, Any],
+    values: list[list[Any]],
+) -> list[dict[str, Any]]:
+    targets = _table_targets(local_values, values)
+    if not targets:
+        return []
+    row = targets[0]["row"]
+    col = targets[0]["col"]
+    highlighted = [{"row": row, "col": col, "tone": "active"}]
+    if row <= 0:
+        return highlighted
+    highlighted.append({"row": row - 1, "col": col, "tone": "dependency"})
+    weight = local_values.get("weight")
+    if isinstance(weight, int) and col >= weight:
+        highlighted.append(
+            {"row": row - 1, "col": col - weight, "tone": "dependency"}
+        )
+    return highlighted
+
+
 def _line_message(local_values: dict[str, Any]) -> str:
-    names = [name for name in ("i", "j", "left", "right", "node", "current") if name in local_values]
+    names = [
+        name
+        for name in (
+            "i",
+            "j",
+            "left",
+            "right",
+            "middle",
+            "position",
+            "minimum",
+            "char",
+            "node",
+            "current",
+            "current_capacity",
+        )
+        if name in local_values
+    ]
     return "执行算法步骤" if not names else f"更新状态：{', '.join(names)}"
+
+
+def _describe_step(
+    spec: TemplateSpec,
+    previous: _Snapshot,
+    current: _Snapshot,
+) -> tuple[str, _Snapshot]:
+    if spec.visualizer_type != "array":
+        return "snapshot", current
+
+    previous_array = previous.structure.get("array")
+    current_array = current.structure.get("array")
+    if not isinstance(previous_array, list) or not isinstance(current_array, list):
+        return "snapshot", current
+    if len(previous_array) != len(current_array):
+        return "write", current
+
+    changed = [
+        index
+        for index, (before, after) in enumerate(zip(previous_array, current_array))
+        if before != after
+    ]
+    if changed:
+        is_swap = (
+            len(changed) == 2
+            and previous_array[changed[0]] == current_array[changed[1]]
+            and previous_array[changed[1]] == current_array[changed[0]]
+        )
+        if is_swap:
+            left, right = changed
+            return "swap", _Snapshot(
+                structure=current.structure,
+                targets=changed,
+                message=f"交换位置 {left} 与 {right}",
+            )
+        return "write", _Snapshot(
+            structure=current.structure,
+            targets=changed,
+            message="写入新的数组状态",
+        )
+
+    if len(current.targets) == 2 and current.targets[0] != current.targets[1]:
+        left, right = current.targets
+        return "compare", _Snapshot(
+            structure=current.structure,
+            targets=current.targets,
+            message=f"比较位置 {left} 与 {right}",
+        )
+    return "snapshot", current
 
 
 def _snapshot_fingerprint(snapshot: _Snapshot) -> str:

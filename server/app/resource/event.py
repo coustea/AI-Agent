@@ -110,7 +110,14 @@ class ResourceEvents:
         *,
         data: dict[str, Any] | None = None,
     ) -> ResourceEvent:
-        phase = str((data or {}).get("phase") or "working")
+        payload = data or {}
+        phase = str(payload.get("phase") or "working")
+        raw_elapsed_ms = payload.get("elapsed_ms")
+        elapsed_ms = (
+            int(raw_elapsed_ms)
+            if isinstance(raw_elapsed_ms, (int, float)) and raw_elapsed_ms >= 0
+            else None
+        )
         async with session_scope() as session:
             service = ResourceService(session)
             if agent_id == "global":
@@ -134,6 +141,7 @@ class ResourceEvents:
                     phase=phase,
                     progress=progress,
                     data=data,
+                    elapsed_ms=elapsed_ms,
                 )
         event = _to_event(row)
         await _subscribers.publish(event)

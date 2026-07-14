@@ -1,6 +1,7 @@
 import { ref, shallowRef, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
+import { getErrorMessage } from '@/shared/api/http'
 // 资源生成相关 API：启动生成、轮询状态、获取最终资源包
 import {
   startResourceGeneration,
@@ -12,6 +13,8 @@ import type {
   ResourceAgentId,
   ResourceTaskStatus,
   ResourceGenerationRequest,
+  GeneratedResourceBundle,
+  GeneratedResourceItem,
 } from '@/features/resource/model/resource'
 import type { ResourceEvent } from '@/features/resource/model/resourceEvent'
 import { useResourceEvents } from './useResourceEvents'
@@ -52,8 +55,8 @@ export function useGeneration() {
     quiz: { question_count: 5, difficulty_mode: 'adaptive', emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
-    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
-    cartoon: { depth: 'standard', pace: 'normal' },
+    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'], include_speaker_notes: true },
+    cartoon: { visual_density: 'rich', pace: 'balanced', target_duration_seconds: 180, voice: 'teacher' },
   })
 
   // DAG 选中的智能体 id 列表（直接使用 enabledAgentIds）
@@ -73,9 +76,9 @@ export function useGeneration() {
   // 最新一条工作流消息，显示在顶部状态栏
   const latestWorkflowMessage = ref('')
   // 已生成的资源摘要列表（shallowRef 避免深度监听大对象）
-  const generatedResources = shallowRef<Array<Record<string, any>>>([])
+  const generatedResources = shallowRef<GeneratedResourceItem[]>([])
   // 最终资源包数据
-  const finalBundle = shallowRef<any | null>(null)
+  const finalBundle = shallowRef<GeneratedResourceBundle | null>(null)
   // 生成错误信息
   const generationError = ref<string | null>(null)
   // 结果页面的警告提示（部分失败时展示）
@@ -440,12 +443,12 @@ export function useGeneration() {
     }
     // 合并资源摘要，保留已有的详细 content 避免覆盖
     if (Array.isArray(taskStatus.resources)) {
-      const existingMap = new Map(
-        generatedResources.value.map(r => [r.type, r] as [string, any])
+      const existingMap = new Map<ResourceAgentId, GeneratedResourceItem>(
+        generatedResources.value.map(resource => [resource.type, resource])
       )
-      generatedResources.value = taskStatus.resources.map((summary: any) => {
+      generatedResources.value = taskStatus.resources.map((summary) => {
         const existing = existingMap.get(summary.type)
-        if (existing && existing.content) {
+        if (existing && existing.content !== null) {
           return { ...existing, ...summary, content: existing.content }
         }
         return summary
@@ -471,7 +474,6 @@ export function useGeneration() {
             data: {
               status: dataStatus,
               phase: snapshot.phase,
-              metrics: snapshot.metrics || {},
               artifact_id: snapshot.artifact_id,
               elapsed_ms: snapshot.elapsed_ms,
             },
@@ -485,7 +487,10 @@ export function useGeneration() {
   }
 
   // 生成完成后的收尾：拉取资源包、更新结果状态、清理连接
-  async function completeGeneration(resourceId: number, taskStatus: ResourceTaskStatus) {
+  async function completeGeneration(
+    resourceId: number,
+    taskStatus: Pick<ResourceTaskStatus, 'status'>,
+  ) {
     // 防止重复收尾
     if (generationFinalized.value) return
     generationFinalized.value = true
@@ -493,17 +498,16 @@ export function useGeneration() {
     stopResourceStream()
 
     // 拉取最终资源包，失败不阻断流程
-    let bundle: any = null
+    let bundle: GeneratedResourceBundle | null = null
+    let bundleError: string | null = null
     try {
       bundle = (await getResourceBundle(resourceId)).data?.data
-    } catch {
-      // bundle 获取失败不影响后续流程
+    } catch (error: unknown) {
+      bundleError = getErrorMessage(error, '无法获取生成结果')
     }
 
-    const hasResources = Array.isArray(bundle?.resources) && bundle.resources.length > 0
-
     // 有可用资源则进入结果展示阶段
-    if (hasResources) {
+    if (bundle && bundle.resources.length > 0) {
       finalBundle.value = bundle
       generatedResources.value = bundle.resources
       // 根据任务状态设置相应的警告提示文案
@@ -518,7 +522,7 @@ export function useGeneration() {
     }
 
     // 无任何资源可展示则报错
-    generationError.value = '资源生成失败，暂无可展示内容'
+    generationError.value = bundleError || '资源生成失败，暂无可展示内容'
     isGenerating.value = false
     toast.error(generationError.value || '资源生成失败，暂无可展示内容')
   }
@@ -539,9 +543,9 @@ export function useGeneration() {
     if (pollingInterval.value) return
     void checkStatusOnce(resourceId)
     pollingInterval.value = setInterval(() => {
-      void checkStatusOnce(resourceId).catch((err: any) => {
+      void checkStatusOnce(resourceId).catch((error: unknown) => {
         stopPolling()
-        generationError.value = err.message || '生成中断，请稍后重试'
+        generationError.value = getErrorMessage(error, '生成中断，请稍后重试')
         isGenerating.value = false
         toast.error(generationError.value || '生成中断，请稍后重试')
       })
@@ -550,7 +554,9 @@ export function useGeneration() {
 
   // 生成完成后尽快同步一次完整状态（确保资源列表与后端一致）
   function syncStatusSoon(resourceId: number) {
-    void checkStatusOnce(resourceId).catch((err: any) => { console.warn('[ResourceGenerator] 状态同步失败:', err) })
+    void checkStatusOnce(resourceId).catch((error: unknown) => {
+      console.warn('[ResourceGenerator] 状态同步失败:', error)
+    })
   }
 
   // 启动资源事件流：同时建立 SSE 连接和轮询兜底，监听生成进度
@@ -568,13 +574,13 @@ export function useGeneration() {
       // SSE 连接完成回调：拉取最终状态
       onCompleted: () => {
         void checkStatusOnce(resourceId).catch(() => {
-          void completeGeneration(resourceId, { resource_id: resourceId, status: 'completed' })
+          void completeGeneration(resourceId, { status: 'completed' })
         })
       },
       // SSE 连接失败回调：尝试拉取状态，失败则按失败处理
       onFailed: () => {
         void checkStatusOnce(resourceId).catch(() => {
-          void completeGeneration(resourceId, { resource_id: resourceId, status: 'failed' })
+          void completeGeneration(resourceId, { status: 'failed' })
         })
       },
     })
@@ -592,7 +598,7 @@ export function useGeneration() {
       const requestParams: ResourceGenerationRequest = {
         learning_need: naturalInput.value,
         learning_scenario: learningScenario.value,
-        selected_agents: enabledAgentIds.value.map((id) => ({ agent_id: id, enabled: true })).filter(a => a.enabled),
+        selected_agents: enabledAgentIds.value.map((id) => ({ agent_id: id, enabled: true })),
         agent_configs: agentConfigs.value,
       }
       // 发起生成请求并获取资源 id
@@ -610,8 +616,8 @@ export function useGeneration() {
         },
       })
       startResourceStream(resource_id)
-    } catch (err: any) {
-      generationError.value = err.message || '生成请求失败'
+    } catch (error: unknown) {
+      generationError.value = getErrorMessage(error, '生成请求失败')
       isGenerating.value = false
       toast.error(generationError.value || '生成请求失败')
     }
@@ -688,8 +694,8 @@ export function useGeneration() {
       }
       // 任务仍在进行则恢复事件流监听
       startResourceStream(resourceId)
-    } catch (err: any) {
-      generationError.value = err.message || '无法恢复资源生成任务'
+    } catch (error: unknown) {
+      generationError.value = getErrorMessage(error, '无法恢复资源生成任务')
       isGenerating.value = false
       currentPhase.value = 'input'
       // 恢复失败则清除 URL 中的 resourceId 参数和缓存

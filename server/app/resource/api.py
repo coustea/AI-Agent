@@ -188,7 +188,7 @@ async def list_resources(
         items.append(
             {
                 "id": value.id,
-                "learning_need": value.learning_need or "",
+                "learning_need": value.learning_need,
                 "status": value.status,
                 "resource_types": type_summary.get(value.id or 0, []),
                 "created_at": value.created_at,

@@ -47,6 +47,14 @@ def validate_trace_events(
             raise TraceValidationError(f"事件 id 重复: {event_id}")
         seen_ids.add(event_id)
 
+    if not any(
+        _has_renderable_content(event["state"]["structure"], visualizer_type)
+        for event in events
+    ):
+        raise TraceValidationError(
+            f"{visualizer_type} 事件流没有可渲染内容"
+        )
+
 
 def _validate_event(
     event: dict[str, Any],
@@ -135,3 +143,19 @@ def _require_optional_list(
 ) -> None:
     if key in structure:
         _require_list(structure, key, visualizer_type)
+
+
+def _has_renderable_content(
+    structure: dict[str, Any],
+    visualizer_type: str,
+) -> bool:
+    if visualizer_type == "array":
+        return bool(structure.get("array"))
+    if visualizer_type == "stack-queue":
+        return bool(structure.get("items")) or bool(structure.get("currentValue"))
+    if visualizer_type in {"linked-list", "tree", "graph"}:
+        return bool(structure.get("nodes"))
+    if visualizer_type == "dp-table":
+        values = structure.get("values")
+        return bool(values) and any(bool(row) for row in values)
+    return False

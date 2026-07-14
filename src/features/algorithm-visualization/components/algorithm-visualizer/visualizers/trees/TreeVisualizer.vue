@@ -1,13 +1,27 @@
 <template>
   <div class="tree-visualizer">
     <div class="chart-shell">
+      <div
+        v-if="activeNode"
+        class="current-status"
+      >
+        <span class="status-marker"></span>
+        当前节点 {{ activeNode.label }}
+      </div>
+
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>默认</span>
         <span class="legend-item"><i class="legend-dot visited"></i>已访问</span>
+        <span class="legend-item"><i class="legend-dot active"></i>当前</span>
       </div>
 
       <div v-if="layoutNodes.length" class="tree-container">
-        <svg class="tree-links-svg">
+        <svg
+          class="tree-links-svg"
+          viewBox="0 0 1000 600"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
           <line
             v-for="(link, idx) in treeLinks"
             :key="idx"
@@ -22,8 +36,9 @@
         <div
           v-for="node in layoutNodes"
           :key="node.id"
-          :class="['tree-node', node.tone || 'default']"
-          :style="{ left: `${node.px}px`, top: `${node.py}px` }"
+          :class="['tree-node', node.tone || 'default', { active: node.isActive }]"
+          :data-node-id="node.id"
+          :style="{ left: `${node.leftPercent}%`, top: `${node.topPercent}%` }"
         >
           <span class="node-label">{{ node.label }}</span>
         </div>
@@ -35,7 +50,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEvent } from '@/features/algorithm-visualization/types'
+import type { TraceEvent, VisualNode } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
   currentEvent: TraceEvent | null
@@ -46,13 +61,19 @@ const props = defineProps<{
 // 从 trace state 解析原始树节点
 const rawNodes = computed(() => {
   const raw = props.currentEvent?.state?.structure?.nodes
-  return Array.isArray(raw) ? raw : []
+  return Array.isArray(raw) ? raw as VisualNode[] : []
 })
+
+const activeNodeIds = computed(() => new Set(
+  (props.currentEvent?.targets ?? []).map(target => String(target)),
+))
+
+const activeNode = computed(() => rawNodes.value.find(node => activeNodeIds.value.has(String(node.id))) ?? null)
 
 // 构建树节点映射和父子连接关系
 const treeData = computed(() => {
   const nodes = rawNodes.value
-  const nodeMap = new Map<string, any>()
+  const nodeMap = new Map<string, VisualNode>()
   nodes.forEach(n => nodeMap.set(String(n.id), { ...n }))
 
   const links: Array<{ from: string; to: string; tone?: string }> = []
@@ -72,7 +93,7 @@ const treeData = computed(() => {
       hasParent.add(rightId)
     }
     if (Array.isArray(n.children)) {
-      n.children.forEach((childId: any) => {
+      n.children.forEach((childId) => {
         const cId = String(childId)
         links.push({ from: idStr, to: cId, tone: n.tone === 'visited' && nodeMap.get(cId)?.tone === 'visited' ? 'visited' : 'default' })
         hasParent.add(cId)
@@ -88,13 +109,15 @@ const treeData = computed(() => {
       const rightIdx = 2 * idx + 2
 
       if (leftIdx < nodes.length) {
-        const leftId = String(nodes[leftIdx].id)
-        links.push({ from: idStr, to: leftId, tone: n.tone === 'visited' && nodes[leftIdx].tone === 'visited' ? 'visited' : 'default' })
+        const leftNode = nodes[leftIdx]!
+        const leftId = String(leftNode.id)
+        links.push({ from: idStr, to: leftId, tone: n.tone === 'visited' && leftNode.tone === 'visited' ? 'visited' : 'default' })
         hasParent.add(leftId)
       }
       if (rightIdx < nodes.length) {
-        const rightId = String(nodes[rightIdx].id)
-        links.push({ from: idStr, to: rightId, tone: n.tone === 'visited' && nodes[rightIdx].tone === 'visited' ? 'visited' : 'default' })
+        const rightNode = nodes[rightIdx]!
+        const rightId = String(rightNode.id)
+        links.push({ from: idStr, to: rightId, tone: n.tone === 'visited' && rightNode.tone === 'visited' ? 'visited' : 'default' })
         hasParent.add(rightId)
       }
     })
@@ -105,7 +128,7 @@ const treeData = computed(() => {
   return { nodeMap, links, roots }
 })
 
-// 用中序 DFS 计算节点坐标，防止重叠并保持居中
+// 叶节点先均匀分布，父节点取子节点的水平中心，保持层级稳定且避免重叠。
 const layoutNodes = computed(() => {
   const { nodeMap, links, roots } = treeData.value
   if (nodeMap.size === 0) return []
@@ -119,37 +142,46 @@ const layoutNodes = computed(() => {
     adj.set(l.from, list)
   })
 
-  const coords = new Map<string, { x: number; y: number }>()
-  let currentX = 0
+  const coords = new Map<string, { leaf: number; depth: number }>()
+  const traversed = new Set<string>()
+  let leafIndex = 0
 
-  function traverse(nodeId: string, depth: number) {
-    const children = adj.get(nodeId) || []
-    if (children[0]) traverse(children[0], depth + 1)
-    coords.set(nodeId, { x: currentX++, y: depth })
-    if (children[1]) traverse(children[1], depth + 1)
+  function traverse(nodeId: string, depth: number): number {
+    if (traversed.has(nodeId)) return coords.get(nodeId)?.leaf ?? leafIndex
+    traversed.add(nodeId)
+    const children = (adj.get(nodeId) || []).filter(childId => nodeMap.has(childId))
+    const childPositions = children.map(childId => traverse(childId, depth + 1))
+    const leaf = childPositions.length > 0
+      ? childPositions.reduce((sum, value) => sum + value, 0) / childPositions.length
+      : leafIndex++
+    coords.set(nodeId, { leaf, depth })
+    return leaf
   }
 
-  // 从每个根节点开始遍历布局
   roots.forEach(r => traverse(r, 0))
+  nodeMap.forEach((_, id) => {
+    if (!traversed.has(id)) traverse(id, 0)
+  })
 
-  // 将 DFS 坐标转换为实际画布像素坐标
-  const canvasWidth = 800
-  const nodeCount = nodeMap.size
-  const colWidth = nodeCount > 1 ? (canvasWidth - 80) / (nodeCount - 1) : 0
-  const rowHeight = 52
+  const maxDepth = Math.max(...Array.from(coords.values()).map(coord => coord.depth), 0)
+  const leafCount = Math.max(leafIndex, 1)
+  const verticalSpan = maxDepth === 0 ? 0 : Math.min(420, maxDepth * 142)
+  const rowHeight = maxDepth === 0 ? 0 : verticalSpan / maxDepth
+  const startY = (600 - verticalSpan) / 2
 
   return Array.from(nodeMap.values()).map(n => {
     const idStr = String(n.id)
-    const c = coords.get(idStr) || { x: 0, y: 0 }
-    
-    // 水平缩放并居中
-    const px = nodeCount > 1 ? 40 + c.x * colWidth : canvasWidth / 2
-    const py = 30 + c.y * rowHeight
+    const coord = coords.get(idStr) || { leaf: 0, depth: 0 }
+    const x = leafCount > 1 ? 80 + (coord.leaf / (leafCount - 1)) * 840 : 500
+    const y = startY + coord.depth * rowHeight
 
     return {
       ...n,
-      px,
-      py,
+      x,
+      y,
+      leftPercent: x / 10,
+      topPercent: y / 6,
+      isActive: activeNodeIds.value.has(idStr),
     }
   })
 })
@@ -158,18 +190,18 @@ const layoutNodes = computed(() => {
 const treeLinks = computed(() => {
   const { links } = treeData.value
   const nodes = layoutNodes.value
-  const posMap = new Map<string, { px: number; py: number }>()
-  nodes.forEach(n => posMap.set(String(n.id), { px: n.px, py: n.py }))
+  const posMap = new Map<string, { x: number; y: number; isActive: boolean }>()
+  nodes.forEach(n => posMap.set(String(n.id), { x: n.x, y: n.y, isActive: n.isActive }))
 
   return links.map(l => {
-    const fromPos = posMap.get(l.from) || { px: 0, py: 0 }
-    const toPos = posMap.get(l.to) || { px: 0, py: 0 }
+    const fromPos = posMap.get(l.from) || { x: 0, y: 0, isActive: false }
+    const toPos = posMap.get(l.to) || { x: 0, y: 0, isActive: false }
     return {
-      x1: fromPos.px,
-      y1: fromPos.py,
-      x2: toPos.px,
-      y2: toPos.py,
-      tone: l.tone,
+      x1: fromPos.x,
+      y1: fromPos.y,
+      x2: toPos.x,
+      y2: toPos.y,
+      tone: l.tone === 'visited' && (fromPos.isActive || toPos.isActive) ? 'active' : l.tone,
     }
   })
 })
@@ -194,8 +226,7 @@ const treeLinks = computed(() => {
   padding: 6px 8px;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
-  backdrop-filter: blur(6px);
+  background: var(--color-surface);
 }
 
 .legend-item {
@@ -203,7 +234,7 @@ const treeLinks = computed(() => {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .legend-dot {
@@ -213,13 +244,43 @@ const treeLinks = computed(() => {
 }
 
 .legend-dot.default {
-  background: #cbd5e1;
-  border: 1px solid #94a3b8;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-hover);
 }
 
 .legend-dot.visited {
-  background: #ecfdf5;
-  border: 1px solid #10b981;
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+}
+
+.legend-dot.active {
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+.current-status {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 2;
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-marker {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
 }
 
 .chart-shell {
@@ -252,48 +313,61 @@ const treeLinks = computed(() => {
 }
 
 .tree-link {
-  stroke: #cbd5e1;
-  stroke-width: 1.5;
-  transition: stroke 0.25s ease, stroke-width 0.25s ease;
+  stroke: var(--color-border-hover);
+  stroke-width: 1.75;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 0.25s ease;
 }
 
 .tree-link.visited {
-  stroke: #10b981;
+  stroke: var(--color-success);
   stroke-width: 2.5;
+}
+
+.tree-link.active {
+  stroke: var(--color-primary);
+  stroke-width: 3;
 }
 
 .tree-node {
   position: absolute;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #ffffff;
-  border: 1.5px solid #cbd5e1;
-  font-weight: 600;
-  font-size: 11px;
-  color: #334155;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border-hover);
+  font-weight: 750;
+  font-size: 13px;
+  color: var(--color-text-strong);
   transform: translate(-50%, -50%);
-  transition: border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease;
-  z-index: 10;
-}
-
-@keyframes node-pulse {
-  0% { transform: translate(-50%, -50%) scale(1); }
-  50% { transform: translate(-50%, -50%) scale(1.25); }
-  100% { transform: translate(-50%, -50%) scale(1); }
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+  z-index: 1;
 }
 
 .tree-node.visited {
-  border-color: #10b981;
-  background: #ecfdf5;
-  color: #047857;
-  animation: node-pulse 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.tree-node.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-surface);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 .node-label {
-  font-size: 11px;
+  max-width: 34px;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-state {
@@ -303,6 +377,13 @@ const treeLinks = computed(() => {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-link,
+  .tree-node {
+    transition: none;
+  }
 }
 </style>

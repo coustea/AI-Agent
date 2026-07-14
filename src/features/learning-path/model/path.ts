@@ -1,5 +1,6 @@
 // 路径节点内可生成的辅助资源类型
 export type PathResourceType = 'mindmap' | 'code' | 'reading' | 'ppt' | 'cartoon'
+export type PathResourceStatus = 'generating' | 'completed' | 'failed'
 
 // ======================================================================
 // 路径偏好参数（前后端对齐）
@@ -101,7 +102,7 @@ export interface LearningPathResource {
   content_text: string | null
   content_json: Record<string, unknown> | null
   summary: string | null
-  status: string
+  status: PathResourceStatus
   error_message: string | null
   input_data: Record<string, unknown> | null
   metadata: Record<string, unknown>
@@ -222,19 +223,5 @@ export interface PathLearningEvaluationResponse {
   optimization_tips: string[]
 }
 
-// 辅助资源详情（用于路径资源详情页）
-export interface PathResourceDetail {
-  id: number
-  resource_type: PathResourceType | string
-  version_no: number
-  title: string
-  content_format: string
-  content_text: string | null
-  content_json: Record<string, unknown> | null
-  summary: string | null
-  status: string
-  error_message: string | null
-  input_data: Record<string, unknown> | null
-  metadata: Record<string, unknown>
-  created_at: string
-}
+// 资源任务和工作区返回同一份辅助资源结构。
+export type PathResourceDetail = LearningPathResource

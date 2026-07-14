@@ -79,9 +79,9 @@ import {
 } from '@phosphor-icons/vue'
 
 import {
-  getGeneratedResourceDetail,
-  type GeneratedResourceBundle,
-} from '@/features/resource/api/history'
+  getResourceBundle,
+} from '@/features/resource/api/resource'
+import type { GeneratedResourceBundle } from '@/features/resource/model/resource'
 import {
   getResourceBundleSubtitle,
   getResourceCards,
@@ -120,7 +120,7 @@ async function loadResource() {
   error.value = false
 
   try {
-    const response = await getGeneratedResourceDetail(resourceId.value)
+    const response = await getResourceBundle(resourceId.value)
     bundle.value = response.data?.data || null
     error.value = !bundle.value
   } catch (exception) {

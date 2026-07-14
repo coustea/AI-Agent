@@ -6,7 +6,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.shared.ppt.contract import LayoutKind, SlideKind, VisualKind
+from app.shared.ppt.contract import (
+    LayoutKind,
+    LogicNodeRole,
+    LogicRelation,
+    SlideKind,
+    VisualKind,
+    layout_supports_relation,
+)
 
 
 class PPTModel(BaseModel):
@@ -28,6 +35,7 @@ class PPTPreferences(PPTModel):
     emphasis: list[Literal["core_concepts", "cases", "pitfalls", "derivation"]] = Field(
         default_factory=lambda: ["core_concepts"], min_length=1, max_length=4
     )
+    include_speaker_notes: bool = True
 
 
 class ResourcePPT(PPTModel):
@@ -77,14 +85,145 @@ class PPTGenerationContext(PPTModel):
     preferences: PPTPreferences = Field(default_factory=PPTPreferences)
 
 
+class LogicChapter(PPTModel):
+    id: str = Field(pattern=r"^c[0-9]{2}$")
+    title: str = Field(min_length=2, max_length=32)
+    question: str = Field(min_length=8, max_length=96)
+    outcome: str = Field(min_length=8, max_length=120)
+    node_ids: list[str] = Field(min_length=1, max_length=8)
+
+
+class LogicNode(PPTModel):
+    id: str = Field(pattern=r"^l[0-9]{2}$")
+    chapter_id: str = Field(pattern=r"^c[0-9]{2}$")
+    role: LogicNodeRole
+    question: str = Field(min_length=8, max_length=96)
+    claim: str = Field(min_length=8, max_length=120)
+    evidence: list[str] = Field(default_factory=list, max_length=4)
+    output: str = Field(min_length=8, max_length=120)
+    importance: Literal["core", "supporting", "example"] = "core"
+
+
+class LogicEdge(PPTModel):
+    source_id: str = Field(pattern=r"^l[0-9]{2}$")
+    target_id: str = Field(pattern=r"^l[0-9]{2}$")
+    relation: LogicRelation
+    bridge: str = Field(min_length=4, max_length=96)
+
+
+class DeckLogicModel(PPTModel):
+    central_question: str = Field(min_length=8, max_length=120)
+    thesis: str = Field(min_length=8, max_length=160)
+    learner_before: list[str] = Field(default_factory=list, max_length=6)
+    learner_after: list[str] = Field(min_length=1, max_length=6)
+    chapters: list[LogicChapter] = Field(min_length=2, max_length=5)
+    nodes: list[LogicNode] = Field(min_length=5, max_length=16)
+    edges: list[LogicEdge] = Field(min_length=4, max_length=24)
+
+    @model_validator(mode="after")
+    def validate_logic_graph(self) -> "DeckLogicModel":
+        chapter_ids = [chapter.id for chapter in self.chapters]
+        node_ids = [node.id for node in self.nodes]
+        if len(set(chapter_ids)) != len(chapter_ids):
+            raise ValueError("logic chapter ids must be unique")
+        if len(set(node_ids)) != len(node_ids):
+            raise ValueError("logic node ids must be unique")
+
+        known_chapters = set(chapter_ids)
+        known_nodes = set(node_ids)
+        declared_nodes: list[str] = []
+        for chapter in self.chapters:
+            if len(set(chapter.node_ids)) != len(chapter.node_ids):
+                raise ValueError(f"logic chapter {chapter.id} contains duplicate node ids")
+            declared_nodes.extend(chapter.node_ids)
+        if set(declared_nodes) != known_nodes or len(declared_nodes) != len(known_nodes):
+            raise ValueError("logic chapters must contain every node exactly once")
+
+        chapter_by_node = {node_id: chapter.id for chapter in self.chapters for node_id in chapter.node_ids}
+        for node in self.nodes:
+            if node.chapter_id not in known_chapters:
+                raise ValueError(f"logic node {node.id} references an unknown chapter")
+            if chapter_by_node[node.id] != node.chapter_id:
+                raise ValueError(f"logic node {node.id} is assigned to the wrong chapter")
+            if node.importance == "core" and not node.evidence and node.role not in {
+                LogicNodeRole.QUESTION,
+                LogicNodeRole.CONCLUSION,
+            }:
+                raise ValueError(f"core logic node {node.id} needs evidence")
+
+        adjacency: dict[str, list[str]] = {node_id: [] for node_id in node_ids}
+        undirected: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
+        connected: set[str] = set()
+        for edge in self.edges:
+            if edge.source_id not in known_nodes or edge.target_id not in known_nodes:
+                raise ValueError("logic edge references an unknown node")
+            if edge.source_id == edge.target_id:
+                raise ValueError("logic edges cannot loop to the same node")
+            adjacency[edge.source_id].append(edge.target_id)
+            undirected[edge.source_id].add(edge.target_id)
+            undirected[edge.target_id].add(edge.source_id)
+            connected.update((edge.source_id, edge.target_id))
+        isolated = known_nodes - connected
+        if isolated:
+            raise ValueError(f"logic graph contains isolated nodes: {sorted(isolated)}")
+
+        reachable: set[str] = set()
+        pending = [node_ids[0]]
+        while pending:
+            node_id = pending.pop()
+            if node_id in reachable:
+                continue
+            reachable.add(node_id)
+            pending.extend(undirected[node_id] - reachable)
+        if reachable != known_nodes:
+            raise ValueError("logic graph must form one connected component")
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(node_id: str) -> None:
+            if node_id in visiting:
+                raise ValueError("logic graph must be acyclic")
+            if node_id in visited:
+                return
+            visiting.add(node_id)
+            for target_id in adjacency[node_id]:
+                visit(target_id)
+            visiting.remove(node_id)
+            visited.add(node_id)
+
+        for node_id in node_ids:
+            visit(node_id)
+        return self
+
+
 class SlideBrief(PPTModel):
     id: str = Field(pattern=r"^s[0-9]{2}$")
     kind: SlideKind
     title: str = Field(min_length=1, max_length=54)
     teaching_goal: str = Field(min_length=12, max_length=150)
     content_focus: str = Field(min_length=12, max_length=180)
+    chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
+    logic_node_ids: list[str] = Field(default_factory=list, max_length=3)
+    question: str = Field(default="", max_length=96)
+    claim: str = Field(default="", max_length=120)
+    bridge: str = Field(default="", max_length=96)
+    logic_relation: LogicRelation | None = None
     visual_kind: VisualKind
     layout: LayoutKind
+
+    @model_validator(mode="after")
+    def validate_logic_mapping(self) -> "SlideBrief":
+        if self.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+            if not self.chapter_id or not self.logic_node_ids or not self.question or not self.claim:
+                raise ValueError("content slide needs chapter, logic nodes, question, and claim")
+            if self.logic_relation is None:
+                raise ValueError("content slide needs a primary logic relation")
+        if self.logic_relation is not None and not layout_supports_relation(self.layout, self.logic_relation):
+            raise ValueError(
+                f"layout {self.layout.value} does not support relation {self.logic_relation.value}"
+            )
+        return self
 
 
 class PPTStoryboard(PPTModel):
@@ -171,6 +310,12 @@ class PPTSlide(PPTModel):
     eyebrow: str = Field(default="", max_length=28)
     subtitle: str = Field(default="", max_length=84)
     lead: str = Field(default="", max_length=96)
+    chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
+    logic_node_ids: list[str] = Field(default_factory=list, max_length=3)
+    question: str = Field(default="", max_length=96)
+    claim: str = Field(default="", max_length=120)
+    bridge: str = Field(default="", max_length=96)
+    logic_relation: LogicRelation | None = None
     points: list[SlidePoint] = Field(default_factory=list, max_length=4)
     visual: VisualSpec
     layout: LayoutKind
@@ -181,6 +326,15 @@ class PPTSlide(PPTModel):
     def validate_teaching_payload(self) -> "PPTSlide":
         if not self.lead and not self.points and not self.visual.code and not self.visual.formula and self.visual.model is None:
             raise ValueError("slide needs a teaching statement, points, code, formula, or diagram model")
+        if self.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+            if not self.chapter_id or not self.logic_node_ids or not self.question or not self.claim:
+                raise ValueError("content slide needs its assigned logic mapping")
+            if self.logic_relation is None:
+                raise ValueError("content slide needs a primary logic relation")
+        if self.logic_relation is not None and not layout_supports_relation(self.layout, self.logic_relation):
+            raise ValueError(
+                f"layout {self.layout.value} does not support relation {self.logic_relation.value}"
+            )
         return self
 
 
@@ -192,6 +346,7 @@ class PPTDeck(PPTModel):
     title: str = Field(min_length=1, max_length=72)
     language: str = "zh-CN"
     visual_direction: str = Field(min_length=24, max_length=300)
+    logic_model: DeckLogicModel
     slides: list[PPTSlide] = Field(min_length=10, max_length=18)
 
     @model_validator(mode="after")
@@ -200,6 +355,28 @@ class PPTDeck(PPTModel):
             raise ValueError("deck must start with cover and end with summary")
         if len({slide.id for slide in self.slides}) != len(self.slides):
             raise ValueError("deck slide ids must be unique")
+        known_chapters = {chapter.id for chapter in self.logic_model.chapters}
+        known_nodes = {node.id for node in self.logic_model.nodes}
+        covered_nodes: set[str] = set()
+        completed_chapters: set[str] = set()
+        active_chapter: str | None = None
+        for slide in self.slides:
+            if slide.chapter_id is not None:
+                if slide.chapter_id not in known_chapters:
+                    raise ValueError(f"slide {slide.id} references an unknown chapter")
+                if slide.chapter_id != active_chapter:
+                    if slide.chapter_id in completed_chapters:
+                        raise ValueError("slides for each logic chapter must be contiguous")
+                    if active_chapter is not None:
+                        completed_chapters.add(active_chapter)
+                    active_chapter = slide.chapter_id
+            unknown_nodes = set(slide.logic_node_ids) - known_nodes
+            if unknown_nodes:
+                raise ValueError(f"slide {slide.id} references unknown logic nodes")
+            if slide.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+                covered_nodes.update(slide.logic_node_ids)
+        if covered_nodes != known_nodes:
+            raise ValueError("content slides must cover every logic node")
         return self
 
 

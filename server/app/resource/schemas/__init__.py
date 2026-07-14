@@ -24,7 +24,9 @@ from app.resource.schemas.result import (
 # ── Response ──────────────────────────────────────────────────────────────
 from app.resource.schemas.response import (
     GeneratedResourceItem,
+    ResourceAgentSnapshot,
     ResourceBundle,
+    ResourceBundleMetadata,
     ResourceStatusSnapshot,
 )
 
@@ -42,6 +44,8 @@ __all__ = [
     "AgentResult",
     "ResourceInput",
     "GeneratedResourceItem",
+    "ResourceAgentSnapshot",
     "ResourceBundle",
+    "ResourceBundleMetadata",
     "ResourceStatusSnapshot",
 ]

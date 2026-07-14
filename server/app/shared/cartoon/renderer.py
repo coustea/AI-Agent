@@ -131,6 +131,34 @@ class CartoonVideoRenderer:
         self,
         output_dir: Path,
     ) -> RenderAudit:
+        return await self._run_hyperframes_check(
+            output_dir,
+            command_name="lint",
+            timeout_seconds=(
+                self.lint_timeout_seconds
+            ),
+        )
+
+    async def validate(
+        self,
+        output_dir: Path,
+    ) -> RenderAudit:
+        return await self._run_hyperframes_check(
+            output_dir,
+            command_name="validate",
+            timeout_seconds=max(
+                self.lint_timeout_seconds,
+                180,
+            ),
+        )
+
+    async def _run_hyperframes_check(
+        self,
+        output_dir: Path,
+        *,
+        command_name: str,
+        timeout_seconds: int,
+    ) -> RenderAudit:
         html_path = (
             output_dir
             / "index.html"
@@ -149,7 +177,7 @@ class CartoonVideoRenderer:
             command = [
                 self._npx_path(),
                 "hyperframes",
-                "lint",
+                command_name,
                 ".",
                 "--json",
             ]
@@ -174,11 +202,10 @@ class CartoonVideoRenderer:
             ) = await run_process_with_logging(
                 command,
                 cwd=output_dir,
-                timeout_seconds=(
-                    self.lint_timeout_seconds
-                ),
+                timeout_seconds=timeout_seconds,
                 logger_name=(
-                    "app.shared.cartoon.lint"
+                    "app.shared.cartoon."
+                    f"{command_name}"
                 ),
             )
 
@@ -186,24 +213,45 @@ class CartoonVideoRenderer:
             return RenderAudit(
                 False,
                 (
-                    "HyperFrames lint "
+                    f"HyperFrames {command_name} "
                     f"执行失败: {exc}",
                 ),
             )
 
-        if return_code == 0:
+        check_ok = self._parse_lint_ok(
+            stdout_str
+        )
+
+        if (
+            return_code == 0
+            and check_ok is not False
+        ):
             return RenderAudit(
                 True
             )
 
+        problems = tuple(
+            self._parse_lint_problems(
+                stdout_str,
+                stderr_str,
+            )[:12]
+        )
+
+        logger.error(
+            (
+                "HyperFrames %s failed: "
+                "cwd=%s exit_code=%d "
+                "problems=%s"
+            ),
+            command_name,
+            output_dir,
+            return_code,
+            list(problems),
+        )
+
         return RenderAudit(
             False,
-            tuple(
-                self._parse_lint_problems(
-                    stdout_str,
-                    stderr_str,
-                )[:12]
-            ),
+            problems,
         )
 
     async def render(
@@ -722,6 +770,46 @@ class CartoonVideoRenderer:
         stdout_str: str,
         stderr_str: str,
     ) -> list[str]:
+        def finding_message(
+            item: dict,
+        ) -> str:
+            message = str(
+                item.get("message")
+                or item
+            )
+
+            code = str(
+                item.get("code")
+                or ""
+            ).strip()
+
+            if code:
+                message = (
+                    f"[{code}] {message}"
+                )
+
+            file_name = str(
+                item.get("file")
+                or ""
+            ).strip()
+
+            if file_name:
+                message += (
+                    f" (file={file_name})"
+                )
+
+            fix_hint = str(
+                item.get("fixHint")
+                or ""
+            ).strip()
+
+            if fix_hint:
+                message += (
+                    f"; fix={fix_hint}"
+                )
+
+            return message
+
         def extract(
             payload: object,
         ) -> list[str]:
@@ -770,11 +858,8 @@ class CartoonVideoRenderer:
                         continue
 
                     messages.append(
-                        str(
-                            item.get(
-                                "message"
-                            )
-                            or item
+                        finding_message(
+                            item
                         )
                     )
 
@@ -835,6 +920,39 @@ class CartoonVideoRenderer:
             )
 
         return problems
+
+    @staticmethod
+    def _parse_lint_ok(
+        stdout_str: str,
+    ) -> bool | None:
+        candidates = [
+            stdout_str.strip(),
+            *(
+                line.strip()
+                for line in stdout_str.splitlines()
+                if line.strip()
+            ),
+        ]
+
+        for candidate in candidates:
+            try:
+                payload = json.loads(
+                    candidate
+                )
+
+            except json.JSONDecodeError:
+                continue
+
+            if (
+                isinstance(payload, dict)
+                and isinstance(
+                    payload.get("ok"),
+                    bool,
+                )
+            ):
+                return payload["ok"]
+
+        return None
 
     @staticmethod
     def _read_duration(

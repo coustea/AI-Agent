@@ -1,6 +1,4 @@
-"""画像 API 响应模型 — 入门信息、全局画像及评分响应。"""
-
-# 定义基础信息、学生画像摘要、入门响应与全局画像的响应模型
+"""画像 API 响应模型。"""
 from __future__ import annotations
 
 from typing import Any
@@ -10,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class BaseInfoData(BaseModel):
-    """用户基础信息响应数据 — 学校、专业、年级等。"""
+    """用户基础信息响应数据。"""
 
     school: str | None = None
     school_level: str | None = None
@@ -20,10 +18,14 @@ class BaseInfoData(BaseModel):
     global_learning_goal: str | None = None
     programming_languages: list[str] = Field(default_factory=list)
     courses: list[str] = Field(default_factory=list)
+    foundational_level: str | None = None
+    learning_style: str | None = None
+    content_depth: str | None = None
+    weak_points: list[str] = Field(default_factory=list)
 
 
 class StudentProfileData(BaseModel):
-    """学生画像摘要响应数据 — 精简版画像用于前端展示。"""
+    """学生画像摘要响应数据。"""
 
     school: str | None = None
     school_level: str | None = None
@@ -34,7 +36,6 @@ class StudentProfileData(BaseModel):
     preferred_language: str | None = None
 
     @classmethod
-    # 从 base_info 字典构造精简版学生画像
     def from_base_info(cls, base_info: dict[str, Any]) -> "StudentProfileData":
         """从 base_info 字典构造 StudentProfileData。"""
         return cls(
@@ -49,7 +50,7 @@ class StudentProfileData(BaseModel):
 
 
 class OnboardingResponse(BaseModel):
-    """入门信息查询响应 — 包含基础信息和学生画像摘要。"""
+    """入门信息查询响应。"""
 
     base_info: BaseInfoData = Field(default_factory=BaseInfoData)
     student_profile: StudentProfileData = Field(default_factory=StudentProfileData)
@@ -57,7 +58,7 @@ class OnboardingResponse(BaseModel):
 
 
 class GlobalProfileResponse(BaseModel):
-    """全局画像详情响应（GET /profile）。"""
+    """全局画像详情响应。"""
 
     user_id: int
     module: str

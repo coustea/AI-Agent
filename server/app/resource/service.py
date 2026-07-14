@@ -45,7 +45,7 @@ def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | No
     """将 AgentResult 内容拆分为 JSON 和纯文本存储字段。
 
     严格分流：不创建 envelope 包装，不降级非法 JSON。
-    HTML/MP4 文件型资源仅在 metadata_json 中保存发布引用。
+    HTML/MP4 文件型资源仅在 metadata_json 中保存发布契约。
     """
     # JSON 类型：解析后存入 content_json
     if result.file_type == "json":
@@ -79,7 +79,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
         elif content_format in {"markdown", "mermaid", "text", "code"}:
             content = item.content_text
         elif content_format in {"html", "mp4"}:
-            content = item.metadata_json or {}
+            content = None
         else:
             content = None
     else:
@@ -87,7 +87,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
 
     return GeneratedResourceItem(
         id=str(item.id), type=item.agent_type,
-        title=item.title or "",
+        title=item.title,
         format=content_format, content=content,
         metadata=item.metadata_json or {},
         created_at=item.created_at.isoformat() if item.created_at else None,
@@ -171,7 +171,6 @@ class ResourceService:
         phase: str | None = None,
         progress: int | None = None,
         data: dict[str, Any] | None = None,
-        error_message: str | None = None,
         elapsed_ms: int | None = None,
     ) -> GeneratedResourceRunEvent:
         """原子写入 Agent 当前状态和对应事件。"""
@@ -191,17 +190,10 @@ class ResourceService:
         run.message = message
         if progress is not None:
             run.progress = progress
-        if error_message is not None:
-            run.error_message = error_message
-        elif status in {"failed", "interrupted"}:
-            run.error_message = message
         if elapsed_ms is not None:
             run.elapsed_ms = elapsed_ms
         if status == "running" and run.started_at is None:
             run.started_at = now
-        if status in {"completed", "failed", "interrupted"}:
-            run.completed_at = now
-        run.heartbeat_at = now
         run.updated_at = now
 
         resource = await self.session.get(GeneratedResource, resource_id)
@@ -283,8 +275,6 @@ class ResourceService:
         run.message = "教学大纲已生成"
         run.progress = 100
         run.elapsed_ms = elapsed_ms
-        run.completed_at = now
-        run.heartbeat_at = now
         run.updated_at = now
         event = GeneratedResourceRunEvent(
             resource_id=resource_id,
@@ -345,8 +335,6 @@ class ResourceService:
         run.message = f"{result.title} 已保存"
         run.progress = 100
         run.elapsed_ms = elapsed_ms
-        run.completed_at = now
-        run.heartbeat_at = now
         run.updated_at = now
         resource.updated_at = now
         event = GeneratedResourceRunEvent(
@@ -533,7 +521,6 @@ class ResourceService:
             if agent_id in items_by_agent:
                 item = items_by_agent[agent_id]
                 merged[agent_id] = {
-                    "event_type": "agent.status",
                     "agent_id": agent_id,
                     "status": "completed",
                     "message": f"{agent_id} 资源已保存",
@@ -544,12 +531,11 @@ class ResourceService:
                     "timestamp": int(run.updated_at.timestamp() * 1000) if run.updated_at else None,
                 }
             else:
-                message = run.message or run.error_message or f"{agent_id} {run.status}"
+                message = run.message or f"{agent_id} {run.status}"
                 elapsed_ms = run.elapsed_ms
                 if elapsed_ms is None and run.status == "running" and run.started_at is not None:
                     elapsed_ms = max(0, int((now - run.started_at).total_seconds() * 1000))
                 merged[agent_id] = {
-                    "event_type": f"agent.{run.status}",
                     "agent_id": agent_id,
                     "status": run.status,
                     "message": message,
@@ -566,17 +552,19 @@ class ResourceService:
             if agent_id in merged:
                 continue
             merged[agent_id] = {
-                "event_type": "agent.status",
                 "agent_id": agent_id,
                 "status": "completed",
                 "message": f"{agent_id} 资源已保存",
                 "progress": 100,
+                "phase": "completed",
+                "elapsed_ms": None,
                 "artifact_id": str(item.id),
+                "timestamp": int(item.created_at.timestamp() * 1000) if item.created_at else None,
             }
 
         return ResourceStatusSnapshot(
             resource_id=resource_id,
-            learning_need=resource.learning_need or "",
+            learning_need=resource.learning_need,
             status=resource.status,
             selected_agents=selected_agents,
             agent_snapshots=merged,
@@ -606,12 +594,12 @@ class ResourceService:
 
         return ResourceBundle(
             id=str(resource.id), title="个性化学习资源包",
-            learning_need=resource.learning_need or "", selected_agents=selected_agents,
+            learning_need=resource.learning_need, selected_agents=selected_agents,
             plan=resource.plan_json,
             resources=[_item_to_dto(item) for item in db_items], status=resource.status,
             created_at=resource.created_at.isoformat() if resource.created_at else "",
             updated_at=resource.updated_at.isoformat() if resource.updated_at else "",
-            metadata={"source": "database", "failed_agents": failed_agents},
+            metadata={"failed_agents": failed_agents},
         )
 
 

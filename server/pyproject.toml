@@ -58,5 +58,6 @@ dev = [
     "aiosqlite>=0.22.1",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "python-jose>=3.5.0",
     "vulture>=2.16",
 ]

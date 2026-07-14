@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 import type { InputSchema } from '@/features/algorithm-visualization/types'
 
 const props = withDefaults(defineProps<{
@@ -94,7 +94,7 @@ watch(
   () => props.defaultData,
   (data) => {
     fieldErrors.value = {}
-    emit('update:modelValue', structuredClone(data ?? {}))
+    emit('update:modelValue', cloneInputData(data))
     emit('validity-change', true)
   },
   { immediate: true },
@@ -116,8 +116,12 @@ function updateField(key: string, schema: InputSchema, raw: string) {
 
 function restoreDefaults() {
   fieldErrors.value = {}
-  emit('update:modelValue', structuredClone(props.defaultData ?? {}))
+  emit('update:modelValue', cloneInputData(props.defaultData))
   emit('validity-change', true)
+}
+
+function cloneInputData(data?: Record<string, unknown>) {
+  return structuredClone(toRaw(data ?? {}))
 }
 
 function parseValue(raw: string, schema: InputSchema): unknown {

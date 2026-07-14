@@ -22,7 +22,7 @@ models:
   # 主模型：系统默认调用
   main:
     base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-    api_key: "3842c168016ff65462f3f01133b14259:ODZkZjE4ZjIzNTNjNmI3YzNiNmYwNWUz"
+    api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
     model_name: "astron-code-latest"
     max_tokens: 8192
     timeout: 300

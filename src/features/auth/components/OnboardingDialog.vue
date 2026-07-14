@@ -129,10 +129,10 @@
           </div>
 
           <div class="input-dock">
-            <div v-if="currentStep <= 7" class="composer-wrapper">
+            <div v-if="currentStep <= 10" class="composer-wrapper">
               <transition name="fade-up">
                 <div
-                  v-if="currentStep === 4 && schoolSuggestions.length > 0"
+                  v-if="currentStep === 3 && schoolSuggestions.length > 0"
                   class="school-autocomplete-popover"
                 >
                   <button
@@ -352,6 +352,11 @@ const form = reactive<ProfileOnboardingUpdate>({
   global_learning_goal: '',
   programming_languages: [],
   courses: [],
+  // 学习画像字段
+  foundational_level: '',
+  learning_style: '',
+  content_depth: '',
+  weak_points: [],
 })
 
 const PRESET_MAJORS = [
@@ -387,8 +392,11 @@ const PRESET_GOALS = ['期末复习', '考研学习', '进阶学习', '补基础
 const PRESET_GRADES = ['大一', '大二', '大三', '大四', '研一', '研二', '研三']
 const PRESET_DAILY_STUDY_TIME = ['30min以下', '30-60min', '1-2h', '2-3h', '3h以上']
 const PRESET_PROGRAMMING_LANGUAGES = ['Python', 'Java', 'C++', 'JavaScript', 'Go', 'Rust']
+const PRESET_FOUNDATIONAL_LEVELS = ['初学', '入门', '熟练', '精通']
+const PRESET_LEARNING_STYLES = ['理论优先', '实践优先', '案例驱动']
+const PRESET_CONTENT_DEPTHS = ['快速了解', '系统深入']
 
-// 7 步引导的元数据定义（专业→年级→目标→学校→时间→语言→课程）
+// 10 步引导的元数据定义（阶段一：基础信息 → 阶段二：学习画像）
 const ONBOARDING_STEPS: StepMeta[] = [
   {
     key: 1,
@@ -406,38 +414,59 @@ const ONBOARDING_STEPS: StepMeta[] = [
   },
   {
     key: 3,
-    short: '目标',
-    title: '明确你的学习目标',
-    description: '目标会决定系统更偏向复习、补基础、进阶还是项目实践。',
-    quickTitle: '学习目标',
-  },
-  {
-    key: 4,
     short: '学校',
     title: '填写学校名称',
     description: '输入学校名称后会出现搜索结果，可以直接选择。',
     quickTitle: '学校名称',
   },
   {
-    key: 5,
-    short: '时间',
-    title: '设置每天学习时长',
-    description: '学习时长会影响节奏安排、任务强度和复习频率。',
-    quickTitle: '每日时长',
+    key: 4,
+    short: '课程',
+    title: '选择本学期核心课程',
+    description: '课程会直接影响学习路径、题库练习和资源生成范围。',
+    quickTitle: '核心课程',
   },
   {
-    key: 6,
+    key: 5,
     short: '语言',
     title: '选择常用编程语言',
     description: '编程语言会影响代码示例、实践任务和项目练习。',
     quickTitle: '技术栈',
   },
   {
+    key: 6,
+    short: '目标',
+    title: '明确你的学习目标',
+    description: '目标会决定系统更偏向复习、补基础、进阶还是项目实践。',
+    quickTitle: '学习目标',
+  },
+  {
     key: 7,
-    short: '课程',
-    title: '选择本学期核心课程',
-    description: '课程会直接影响学习路径、题库练习和资源生成范围。',
-    quickTitle: '核心课程',
+    short: '时间',
+    title: '设置每天学习时长',
+    description: '学习时长会影响节奏安排、任务强度和复习频率。',
+    quickTitle: '每日时长',
+  },
+  {
+    key: 8,
+    short: '水平',
+    title: '评估你的基础水平',
+    description: '基础水平会影响内容深度、讲解速度和练习难度。',
+    quickTitle: '基础水平',
+  },
+  {
+    key: 9,
+    short: '偏好',
+    title: '选择学习偏好',
+    description: '学习偏好会影响内容风格、案例选择和呈现方式。',
+    quickTitle: '学习偏好',
+  },
+  {
+    key: 10,
+    short: '薄弱点',
+    title: '选择薄弱知识点',
+    description: '薄弱点会优先安排针对性学习和练习。',
+    quickTitle: '薄弱知识点',
   },
 ]
 
@@ -451,15 +480,18 @@ const coursesValue = computed<string[]>(() => {
   return Array.isArray(form.courses) ? (form.courses as string[]).map(String) : []
 })
 
-// 是否已收集完所有必填项（或步骤超过 7）
+// 是否已收集完所有必填项（或步骤超过 10）
 const isComplete = computed(() => {
-  return currentStep.value > 7 || Boolean(
+  return currentStep.value > 10 || Boolean(
     form.school &&
     form.major &&
     form.grade &&
     form.daily_study_time &&
     form.global_learning_goal &&
-    coursesValue.value.length > 0,
+    coursesValue.value.length > 0 &&
+    form.foundational_level &&
+    form.learning_style &&
+    form.content_depth,
   )
 })
 
@@ -467,26 +499,29 @@ const completedRequiredCount = computed(() => {
   return [
     Boolean(form.major),
     Boolean(form.grade),
-    Boolean(form.global_learning_goal),
     Boolean(form.school),
-    Boolean(form.daily_study_time),
     coursesValue.value.length > 0,
+    Boolean(form.global_learning_goal),
+    Boolean(form.daily_study_time),
+    Boolean(form.foundational_level),
+    Boolean(form.learning_style),
+    Boolean(form.content_depth),
   ].filter(Boolean).length
 })
 
 const profileProgress = computed(() => {
-  if (currentStep.value > 7 || isComplete.value) return 100
-  return Math.round((completedRequiredCount.value / 6) * 100)
+  if (currentStep.value > 10 || isComplete.value) return 100
+  return Math.round((completedRequiredCount.value / 9) * 100)
 })
 
 const canSend = computed(() => {
   return userInput.value.trim().length > 0 && !isAssistantStreaming.value && !submitting.value
 })
 
-const isMultiSelectStep = computed(() => [6, 7].includes(currentStep.value))
+const isMultiSelectStep = computed(() => [4, 5, 10].includes(currentStep.value))
 
 const currentStepMeta = computed<StepMeta>(() => {
-  return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 7)) ?? ONBOARDING_STEPS[0]!
+  return ONBOARDING_STEPS.find(step => step.key === Math.min(currentStep.value, 10)) ?? ONBOARDING_STEPS[0]!
 })
 
 const currentQuestionTitle = computed(() => {
@@ -496,15 +531,21 @@ const currentQuestionTitle = computed(() => {
     case 2:
       return '你目前处于哪个年级？'
     case 3:
-      return '你的主要学习目标是什么？'
-    case 4:
       return '你的学校是哪一所？'
-    case 5:
-      return '每天大约能学习多久？'
-    case 6:
-      return '常用哪些编程语言？'
-    case 7:
+    case 4:
       return '本学期重点课程有哪些？'
+    case 5:
+      return '常用哪些编程语言？'
+    case 6:
+      return '你的主要学习目标是什么？'
+    case 7:
+      return '每天大约能学习多久？'
+    case 8:
+      return '你的基础水平如何？'
+    case 9:
+      return '你偏好怎样的学习方式？'
+    case 10:
+      return '哪些知识点比较薄弱？'
     default:
       return '基础资料已确认'
   }
@@ -515,7 +556,7 @@ const stepTimeline = computed<StepTimelineItem[]>(() => {
     let state: StepTimelineItem['state'] = 'pending'
 
     if (step.key < currentStep.value) state = 'done'
-    if (step.key === Math.min(currentStep.value, 7)) state = 'active'
+    if (step.key === Math.min(currentStep.value, 10)) state = 'active'
 
     return {
       ...step,
@@ -528,8 +569,10 @@ const composerPlaceholder = computed(() => {
   if (isAssistantStreaming.value) return 'Mentorly 正在输入...'
   if (currentStep.value === 1) return '输入专业名称，或点击推荐标签...'
   if (currentStep.value === 2) return '输入年级，或点击推荐标签...'
-  if (currentStep.value === 4) return '输入学校名称，支持搜索选择...'
-  if (currentStep.value === 7) return '输入多门课程，用逗号、空格或顿号分隔...'
+  if (currentStep.value === 3) return '输入学校名称，支持搜索选择...'
+  if (currentStep.value === 4) return '输入多门课程，用逗号、空格或顿号分隔...'
+  if (currentStep.value === 5) return '选择编程语言，可多选...'
+  if (currentStep.value === 10) return '选择薄弱知识点，可多选...'
   if (isMultiSelectStep.value) return '输入多个内容，用逗号、空格或顿号分隔...'
   return '输入回复，Enter 发送，Shift + Enter 换行...'
 })
@@ -549,15 +592,22 @@ const currentQuickReplies = computed(() => {
     case 2:
       return PRESET_GRADES
     case 3:
-      return PRESET_GOALS
-    case 4:
       return PRESET_SCHOOLS
-    case 5:
-      return PRESET_DAILY_STUDY_TIME
-    case 6:
-      return ['暂不选择', ...PRESET_PROGRAMMING_LANGUAGES]
-    case 7:
+    case 4:
       return PRESET_COURSES
+    case 5:
+      return ['暂不选择', ...PRESET_PROGRAMMING_LANGUAGES]
+    case 6:
+      return PRESET_GOALS
+    case 7:
+      return PRESET_DAILY_STUDY_TIME
+    case 8:
+      return PRESET_FOUNDATIONAL_LEVELS
+    case 9:
+      return [...PRESET_LEARNING_STYLES, ...PRESET_CONTENT_DEPTHS]
+    case 10:
+      // 薄弱点从已选课程动态生成
+      return coursesValue.value.length > 0 ? coursesValue.value : ['暂无课程，可跳过']
     default:
       return []
   }
@@ -567,18 +617,21 @@ const confirmedFields = computed<InfoField[]>(() => {
   const fields: InfoField[] = [
     { key: 'major', label: '专业', value: form.major || '' },
     { key: 'grade', label: '年级', value: form.grade || '' },
-    { key: 'goal', label: '学习目标', value: form.global_learning_goal || '' },
     { key: 'school', label: '学校', value: form.school || '' },
-    { key: 'time', label: '每日时长', value: form.daily_study_time || '' },
+    { key: 'courses', label: '核心课程', value: coursesValue.value.join('，') },
     {
       key: 'languages',
       label: '常用语言',
       value: Array.isArray(form.programming_languages) ? form.programming_languages.join('，') : '',
     },
+    { key: 'goal', label: '学习目标', value: form.global_learning_goal || '' },
+    { key: 'time', label: '每日时长', value: form.daily_study_time || '' },
+    { key: 'level', label: '基础水平', value: form.foundational_level || '' },
+    { key: 'style', label: '学习偏好', value: `${form.learning_style || ''} / ${form.content_depth || ''}` },
     {
-      key: 'courses',
-      label: '核心课程',
-      value: coursesValue.value.join('，'),
+      key: 'weak_points',
+      label: '薄弱点',
+      value: Array.isArray(form.weak_points) ? form.weak_points.join('，') : '',
     },
   ]
 
@@ -589,11 +642,14 @@ const pendingFields = computed<InfoField[]>(() => {
   const fields: InfoField[] = [
     { key: 'major', label: '专业', value: '待填写' },
     { key: 'grade', label: '年级', value: '待填写' },
-    { key: 'goal', label: '学习目标', value: '待填写' },
     { key: 'school', label: '学校', value: '待填写' },
-    { key: 'time', label: '每日时长', value: '待填写' },
-    { key: 'languages', label: '常用语言', value: '可选' },
     { key: 'courses', label: '核心课程', value: '待填写' },
+    { key: 'languages', label: '常用语言', value: '可选' },
+    { key: 'goal', label: '学习目标', value: '待填写' },
+    { key: 'time', label: '每日时长', value: '待填写' },
+    { key: 'level', label: '基础水平', value: '待填写' },
+    { key: 'style', label: '学习偏好', value: '待填写' },
+    { key: 'weak_points', label: '薄弱点', value: '可选' },
   ]
 
   const confirmedKeys = new Set(confirmedFields.value.map(item => item.key))
@@ -601,10 +657,10 @@ const pendingFields = computed<InfoField[]>(() => {
 })
 
 const showAssistantActions = computed(() => {
-  if (currentStep.value > 7 || isAssistantStreaming.value || isThinking.value) return false
+  if (currentStep.value > 10 || isAssistantStreaming.value || isThinking.value) return false
 
   if (currentQuickReplies.value.length > 0) return true
-  return currentStep.value === 4 && schoolSuggestions.value.length > 0
+  return currentStep.value === 3 && schoolSuggestions.value.length > 0
 })
 
 // 页面滚动锁定：打开时禁掉 body/html 滚动
@@ -628,6 +684,10 @@ const cloneFormState = (): ProfileOnboardingUpdate => ({
   global_learning_goal: form.global_learning_goal || '',
   programming_languages: Array.isArray(form.programming_languages) ? [...form.programming_languages] : [],
   courses: Array.isArray(form.courses) ? [...form.courses] : [],
+  foundational_level: form.foundational_level || '',
+  learning_style: form.learning_style || '',
+  content_depth: form.content_depth || '',
+  weak_points: Array.isArray(form.weak_points) ? [...form.weak_points] : [],
 })
 
 // 将当前进度持久化到 localStorage（水合中或 key 缺失时跳过）
@@ -674,6 +734,10 @@ const loadDraft = () => {
     form.global_learning_goal = typeof state.form?.global_learning_goal === 'string' ? state.form.global_learning_goal : ''
     form.programming_languages = Array.isArray(state.form?.programming_languages) ? [...state.form.programming_languages] : []
     form.courses = Array.isArray(state.form?.courses) ? [...state.form.courses] : []
+    form.foundational_level = typeof state.form?.foundational_level === 'string' ? state.form.foundational_level : ''
+    form.learning_style = typeof state.form?.learning_style === 'string' ? state.form.learning_style : ''
+    form.content_depth = typeof state.form?.content_depth === 'string' ? state.form.content_depth : ''
+    form.weak_points = Array.isArray(state.form?.weak_points) ? [...state.form.weak_points] : []
 
     isDraftHydrating = false
 
@@ -751,6 +815,10 @@ const resetState = () => {
   form.global_learning_goal = ''
   form.programming_languages = []
   form.courses = []
+  form.foundational_level = ''
+  form.learning_style = ''
+  form.content_depth = ''
+  form.weak_points = []
   messages.value = []
   submitting.value = false
   isDraftHydrating = false
@@ -932,7 +1000,7 @@ const handleComposerKeydown = (event: KeyboardEvent) => {
 const handleInputChange = () => {
   autoResizeComposer()
 
-  if (currentStep.value !== 4) return
+  if (currentStep.value !== 3) return
 
   if (schoolSearchTimer) clearTimeout(schoolSearchTimer)
 
@@ -1023,7 +1091,7 @@ const extractMultiple = (text: string, presets: string[]) => {
   return result
 }
 
-// 发送消息：按当前步骤（1-7）解析用户输入写入表单并推进到下一步
+// 发送消息：按当前步骤（1-10）解析用户输入写入表单并推进到下一步
 const handleSend = async () => {
   if (!canSend.value) return
 
@@ -1039,11 +1107,12 @@ const handleSend = async () => {
   await nextTick(autoResizeComposer)
   await scrollToBottom({ force: true })
 
+  // 阶段一：基础信息（步骤 1-5）
   if (currentStep.value === 1) {
     const foundMajor = PRESET_MAJORS.find(major => text.includes(major))
     form.major = foundMajor || text
     currentStep.value = 2
-    await streamAssistantMessage(`已记录专业：${form.major}。接下来只确认年级，我会据此调整讲解深度。`)
+    await streamAssistantMessage(`已记录专业：${form.major}。接下来确认年级。`)
     return
   }
 
@@ -1051,50 +1120,84 @@ const handleSend = async () => {
     const foundGrade = PRESET_GRADES.find(grade => text.includes(grade))
     form.grade = foundGrade || text
     currentStep.value = 3
-    await streamAssistantMessage(`已记录年级：${form.grade}。现在只聊学习目标。`)
+    await streamAssistantMessage(`已记录年级：${form.grade}。接下来填写学校名称。`)
     return
   }
 
   if (currentStep.value === 3) {
-    const foundGoal = PRESET_GOALS.find(goal => text.includes(goal))
-    form.global_learning_goal = foundGoal || text
+    form.school = text
     currentStep.value = 4
-    await streamAssistantMessage(`目标已记录：${form.global_learning_goal}。接下来确认学校，输入学校名称后我会给出搜索建议。`)
+    await streamAssistantMessage(`学校已记录：${form.school}。接下来选择本学期核心课程。`)
     return
   }
 
   if (currentStep.value === 4) {
-    form.school = text
+    const courses = extractMultiple(text, PRESET_COURSES)
+    form.courses = courses.length > 0 ? courses : [text]
     currentStep.value = 5
-    await streamAssistantMessage(`学校已记录：${form.school}。现在只确认每天大约能学习多久。`)
+    await streamAssistantMessage(`课程已记录。接下来选择常用编程语言，也可暂不选择。`)
     return
   }
 
   if (currentStep.value === 5) {
-    const foundStudyTime = PRESET_DAILY_STUDY_TIME.find(time => text.includes(time))
-    form.daily_study_time = foundStudyTime || text
-    currentStep.value = 6
-    await streamAssistantMessage(`学习时间已记录：${form.daily_study_time}。现在选择常用编程语言，也可以暂不选择。`)
-    return
-  }
-
-  if (currentStep.value === 6) {
     if (text !== '暂不选择') {
       const languages = extractMultiple(text, PRESET_PROGRAMMING_LANGUAGES)
       form.programming_languages = languages.length > 0 ? languages : [text]
     }
+    currentStep.value = 6
+    await streamAssistantMessage('基础信息已确认。接下来进入学习画像阶段，先确认学习目标。')
+    return
+  }
 
+  // 阶段二：学习画像（步骤 6-10）
+  if (currentStep.value === 6) {
+    const foundGoal = PRESET_GOALS.find(goal => text.includes(goal))
+    form.global_learning_goal = foundGoal || text
     currentStep.value = 7
-    await streamAssistantMessage('技术栈信息已记录。最后只确认本学期核心课程，可以多选。')
+    await streamAssistantMessage(`学习目标已记录：${form.global_learning_goal}。接下来确认每天学习时长。`)
     return
   }
 
   if (currentStep.value === 7) {
-    const courses = extractMultiple(text, PRESET_COURSES)
-    form.courses = courses.length > 0 ? courses : [text]
+    const foundStudyTime = PRESET_DAILY_STUDY_TIME.find(time => text.includes(time))
+    form.daily_study_time = foundStudyTime || text
     currentStep.value = 8
+    await streamAssistantMessage(`学习时长已记录：${form.daily_study_time}。接下来评估基础水平。`)
+    return
+  }
+
+  if (currentStep.value === 8) {
+    const levelMap: Record<string, string> = { '初学': 'beginner', '入门': 'entry', '熟练': 'proficient', '精通': 'master' }
+    const foundLevel = Object.entries(levelMap).find(([label]) => text.includes(label))
+    form.foundational_level = (foundLevel ? foundLevel[1] : 'entry') as typeof form.foundational_level
+    currentStep.value = 9
+    await streamAssistantMessage(`基础水平已记录。接下来选择学习偏好（学习风格和内容深度）。`)
+    return
+  }
+
+  if (currentStep.value === 9) {
+    // 解析学习偏好：学习风格 + 内容深度
+    const styleMap: Record<string, string> = { '理论优先': 'theory_first', '实践优先': 'practice_first', '案例驱动': 'case_driven' }
+    const depthMap: Record<string, string> = { '快速了解': 'quick_overview', '系统深入': 'systematic_deep' }
+
+    const foundStyle = Object.entries(styleMap).find(([label]) => text.includes(label))
+    const foundDepth = Object.entries(depthMap).find(([label]) => text.includes(label))
+
+    form.learning_style = (foundStyle ? foundStyle[1] : 'theory_first') as typeof form.learning_style
+    form.content_depth = (foundDepth ? foundDepth[1] : 'systematic_deep') as typeof form.content_depth
+    currentStep.value = 10
+    await streamAssistantMessage(`学习偏好已记录。最后选择薄弱知识点，系统会优先安排针对性学习。`)
+    return
+  }
+
+  if (currentStep.value === 10) {
+    if (text !== '暂无课程，可跳过') {
+      const weakPoints = text.split(/[,，、\s]+/).filter(Boolean)
+      form.weak_points = weakPoints.length > 0 ? weakPoints : []
+    }
+    currentStep.value = 11
     persistDraft()
-    await streamAssistantMessage('基础资料已经完成。这些信息会展示到个人中心，也会用于初始化学习路径、资源推荐和题库偏好。')
+    await streamAssistantMessage('学习画像已完成。所有信息会用于个性化推荐和资源生成。')
   }
 }
 
@@ -1116,6 +1219,10 @@ const loadStatus = async () => {
     form.global_learning_goal = user.global_learning_goal || ''
     form.programming_languages = Array.isArray(user.programming_languages) ? user.programming_languages : []
     form.courses = Array.isArray(user.courses) ? user.courses : []
+    form.foundational_level = (user.foundational_level || '') as typeof form.foundational_level
+    form.learning_style = (user.learning_style || '') as typeof form.learning_style
+    form.content_depth = (user.content_depth || '') as typeof form.content_depth
+    form.weak_points = Array.isArray(user.weak_points) ? user.weak_points : []
   } catch (error) {
     console.error('Failed to load onboarding data', error)
   }
@@ -1136,6 +1243,10 @@ const submitForm = async () => {
       global_learning_goal: form.global_learning_goal || '',
       programming_languages: form.programming_languages,
       courses: form.courses as any,
+      foundational_level: form.foundational_level || '',
+      learning_style: form.learning_style || '',
+      content_depth: form.content_depth || '',
+      weak_points: form.weak_points,
     })
 
     // 标记首次登录完成（非关键，失败不影响流程）

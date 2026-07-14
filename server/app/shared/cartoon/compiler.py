@@ -12,6 +12,9 @@ from app.shared.cartoon.schemas import CompositionPlan, TeachingLesson, VisualKi
 
 
 COMPOSITION_ID = "cartoon-learning-studio"
+SCENE_TRACK_INDEX = 0
+AUDIO_TRACK_INDEX = 10
+CAPTION_TRACK_INDEX = 20
 _CONNECTED_KINDS = {VisualKind.MODEL, VisualKind.TREE, VisualKind.FLOW, VisualKind.STATE, VisualKind.MEMORY, VisualKind.NETWORK}
 
 
@@ -31,16 +34,29 @@ def _item_html(item, *, diagram: bool = False, position: tuple[float, float] | N
 
 
 def _tree_positions(items, edges) -> dict[str, tuple[float, float]]:
+    item_ids = [item.id for item in items]
     children: dict[str, list[str]] = defaultdict(list)
     for edge in edges:
         children[edge.source_id].append(edge.target_id)
     child_ids = {edge.target_id for edge in edges}
-    root = next(item.id for item in items if item.id not in child_ids)
+    roots = [item_id for item_id in item_ids if item_id not in child_ids]
+    pending = [(root, 0) for root in roots]
+    seen: set[str] = set()
     levels: list[list[str]] = []
-    pending = [root]
     while pending:
-        levels.append(pending)
-        pending = [child for node in pending for child in children[node]]
+        node, depth = pending.pop(0)
+        if node in seen:
+            continue
+        seen.add(node)
+        while len(levels) <= depth:
+            levels.append([])
+        levels[depth].append(node)
+        pending.extend((child, depth + 1) for child in children[node])
+    for item_id in item_ids:
+        if item_id not in seen:
+            if not levels:
+                levels.append([])
+            levels[0].append(item_id)
     positions: dict[str, tuple[float, float]] = {}
     level_count = max(1, len(levels))
     for level_index, nodes in enumerate(levels):
@@ -75,9 +91,8 @@ def _diagram_positions(kind: VisualKind, items, edges) -> dict[str, tuple[float,
 def _model_positions(items, edges) -> dict[str, tuple[float, float]]:
     """Lay out an arbitrary course model from its declared relationships.
 
-    This is deliberately topology-driven.  It never examines labels such as
-    "tree", "packet" or "process", which keeps the renderer reusable across
-    disciplines while still making the generated model readable.
+    This is deliberately topology-driven. It never branches on course terms,
+    which keeps the renderer reusable while preserving the declared model.
     """
 
     item_ids = [item.id for item in items]
@@ -192,9 +207,9 @@ def _stage_html(scene) -> str:
 def _scene_html(timed_scene, total: int, course: str) -> str:
     scene = timed_scene.scene
     step_chips = "".join(f'<span data-step-chip="{html.escape(step.step.id, quote=True)}">{html.escape(step.step.focus)}</span>' for step in timed_scene.steps)
-    return f'''<section id="scene-{html.escape(scene.id, quote=True)}" class="scene clip layout-{scene.layout.value}" data-scene-id="{html.escape(scene.id, quote=True)}" data-start="{_seconds(timed_scene.start_ms)}" data-duration="{_seconds(timed_scene.duration_ms)}" data-track-index="{timed_scene.index}">
+    return f'''<section id="scene-{html.escape(scene.id, quote=True)}" class="scene clip layout-{scene.layout.value}" data-scene-id="{html.escape(scene.id, quote=True)}" data-start="{_seconds(timed_scene.start_ms)}" data-duration="{_seconds(timed_scene.duration_ms)}" data-track-index="{SCENE_TRACK_INDEX}">
       <header class="scene-header"><div><p>{html.escape(course)}</p><span class="scene-function">{html.escape(scene.teaching_function.value)}</span><h1>{html.escape(scene.title)}</h1><strong>{html.escape(scene.objective)}</strong></div><span>{timed_scene.index + 1:02d} / {total:02d}</span></header>
-      <main class="scene-body">{_stage_html(scene)}<div class="scene-principle"><span>本幕结论</span><strong>{html.escape(scene.takeaway)}</strong><div class="step-rail">{step_chips}</div></div></main>
+      <div class="scene-body">{_stage_html(scene)}<div class="scene-principle"><span>本幕结论</span><strong>{html.escape(scene.takeaway)}</strong><div class="step-rail">{step_chips}</div></div></div>
     </section>'''
 
 
@@ -205,8 +220,8 @@ def _audio_html(plan: CompositionPlan) -> str:
         for step in scene.steps
     ]
     return "".join(
-        f'<audio id="audio-{html.escape(step.scene_id, quote=True)}-{html.escape(step.step.id, quote=True)}" data-start="{_seconds(step.start_ms)}" data-duration="{_seconds(step.audio_duration_ms)}" data-track-index="{10 + index}" src="{html.escape(step.audio_src, quote=True)}"></audio>'
-        for index, step in enumerate(clips)
+        f'<audio id="audio-{html.escape(step.scene_id, quote=True)}-{html.escape(step.step.id, quote=True)}" data-start="{_seconds(step.start_ms)}" data-duration="{_seconds(step.audio_duration_ms)}" data-track-index="{AUDIO_TRACK_INDEX}" data-volume="1" src="{html.escape(step.audio_src, quote=True)}"></audio>'
+        for step in clips
     )
 
 
@@ -217,8 +232,8 @@ def _captions_html(plan: CompositionPlan) -> str:
         for step in scene.steps
     ]
     return "".join(
-        f'<div id="caption-{html.escape(step.scene_id, quote=True)}-{html.escape(step.step.id, quote=True)}" class="caption clip" data-start="{_seconds(step.start_ms)}" data-duration="{_seconds(max(120, step.duration_ms - 80))}" data-track-index="{20 + index}"><span>{html.escape(step.step.narration)}</span></div>'
-        for index, step in enumerate(captions)
+        f'<div id="caption-{html.escape(step.scene_id, quote=True)}-{html.escape(step.step.id, quote=True)}" class="caption clip" data-slot="caption" data-start="{_seconds(step.start_ms)}" data-duration="{_seconds(max(120, step.duration_ms - 80))}" data-track-index="{CAPTION_TRACK_INDEX}"><span>{html.escape(step.step.narration)}</span></div>'
+        for step in captions
     )
 
 
@@ -239,8 +254,8 @@ def _diagram_runtime(lesson: TeachingLesson) -> str:
 
     The payload carries only lesson data.  The JavaScript understands stable
     objects, relationships and snapshots; it has no subject, algorithm or
-    course-name branches.  This makes one renderer sufficient for a tree
-    rotation, a cache update, a packet journey or a formula substitution.
+    course-name branches. This keeps one renderer usable across courses,
+    visual grammars and teaching mechanisms.
     """
 
     payload: dict[str, dict[str, dict[str, object]]] = {}
@@ -341,7 +356,15 @@ def _motion_runtime() -> str:
 
 
 def _timeline(plan: CompositionPlan) -> str:
-    lines = ["const sceneEls = document.querySelectorAll('.scene');", "gsap.set(sceneEls, { autoAlpha: 0 });"]
+    lines = [
+        "const sceneEls = document.querySelectorAll('.scene');",
+        "gsap.set(sceneEls, { autoAlpha: 0 });",
+        (
+            "tl.fromTo('[data-progress-fill]', { scaleX: 0 }, "
+            f"{{ scaleX: 1, duration: {_seconds(plan.total_duration_ms)}, "
+            "ease: 'none', transformOrigin: 'left center' }, 0);"
+        ),
+    ]
     for timed_scene in plan.scenes:
         scene_id = timed_scene.scene.id
         start = _seconds(timed_scene.start_ms)
@@ -382,11 +405,11 @@ def _timeline(plan: CompositionPlan) -> str:
 
 
 _CSS = r'''
-@font-face{font-family:"PingFang SC";src:local("PingFang SC")}@font-face{font-family:"Microsoft YaHei";src:local("Microsoft YaHei")}:root{--ink:#101828;--slate:#46556d;--line:#dbe4ee;--paper:#f7f9fc;--blue:#2563eb;--mint:#0f9f8d;--amber:#e78b19;--violet:#7557d9;--coral:#df4f5f}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--paper);color:var(--ink);font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif}main[data-composition-id]{position:relative;width:1920px;height:1080px;overflow:hidden;background:linear-gradient(132deg,#f9fbff 0%,#eef4ff 50%,#f7fcfb 100%)}main[data-composition-id]:before{content:"";position:absolute;width:980px;height:980px;right:-420px;top:-440px;border:1px solid #c7dcff;border-radius:50%;box-shadow:0 0 0 90px rgba(210,228,255,.2),0 0 0 210px rgba(223,238,255,.16)}.scene{position:absolute;inset:0;padding:66px 92px 48px}.scene-header{position:relative;z-index:2;display:grid;grid-template-columns:1fr auto;column-gap:32px;align-items:end}.scene-header p{grid-column:1;margin:0 0 12px;color:var(--blue);font-size:17px;font-weight:800;letter-spacing:.12em}.scene-header h1{grid-column:1;margin:0;max-width:1260px;font-size:56px;line-height:1.05;letter-spacing:-.045em}.scene-header span{grid-column:2;grid-row:1/3;align-self:start;padding:10px 0 10px 24px;border-left:1px solid #b9c7dd;color:#61718a;font-size:18px;font-weight:800;letter-spacing:.15em}.scene-body{position:relative;height:814px}.scene-stage{position:absolute;inset:74px 0 68px;border:1px solid rgba(193,207,227,.9);border-radius:36px;background:rgba(255,255,255,.74);box-shadow:0 22px 70px rgba(41,77,128,.09);overflow:hidden}.scene-stage:before{content:"";position:absolute;inset:0;background:linear-gradient(125deg,transparent 46%,rgba(219,235,255,.32));pointer-events:none}.scene-note{position:absolute;z-index:3;left:38px;bottom:0;width:475px;padding:24px 28px;border:1px solid #d6e2f1;border-radius:22px;background:rgba(255,255,255,.92);box-shadow:0 16px 38px rgba(41,77,128,.1)}.scene-note>p{margin:0 0 10px;color:var(--blue);font-size:14px;font-weight:900;letter-spacing:.12em}.scene-note h2{margin:0;font-size:27px;line-height:1.3;letter-spacing:-.025em}.step-rail{display:flex;flex-wrap:wrap;gap:8px;margin-top:17px}.step-rail span{padding:7px 10px;border-radius:999px;background:#edf4ff;color:#50627e;font-size:13px;line-height:1.2}.scene-footer{position:absolute;right:92px;bottom:28px;max-width:760px;color:#697a93;font-size:16px;text-align:right}.scene-footer span{padding-bottom:8px;border-bottom:1px solid #c9d5e5}.diagram-shell{position:relative;width:100%;height:100%;min-height:550px}.diagram-links{position:absolute;inset:7% 6%;width:88%;height:86%;overflow:visible}.diagram-edge line{stroke:currentColor;stroke-width:.38;stroke-linecap:round;opacity:.72}.diagram-edge path{fill:currentColor}.diagram-edge text{fill:currentColor;font-size:2.25px;font-weight:700;text-anchor:middle}.diagram-node{position:absolute;left:var(--x);top:var(--y);width:166px;min-height:110px;padding:15px 16px;transform:translate(-50%,-50%);border:2px solid currentColor;border-radius:18px;background:rgba(255,255,255,.97);box-shadow:0 13px 28px rgba(23,47,88,.12);text-align:center}.visual-tree .diagram-node{width:122px;min-height:122px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13px}.visual-tree .diagram-node b{font-size:22px}.visual-flow .diagram-node{border-radius:999px;min-height:86px}.visual-memory .diagram-node{width:250px;border-radius:13px;text-align:left}.visual-network .diagram-node:first-of-type{width:180px;min-height:180px;border-radius:50%;display:flex;flex-direction:column;justify-content:center}.visual-item b{display:block;font-size:18px;line-height:1.22}.visual-item span{display:block;margin-top:7px;color:var(--slate);font-size:13px;line-height:1.35}.visual-item em{display:block;margin-top:8px;font-size:18px;font-style:normal;font-weight:900}.tone-ink{color:#172238}.tone-blue{color:var(--blue)}.tone-mint{color:var(--mint)}.tone-amber{color:var(--amber)}.tone-violet{color:var(--violet)}.tone-coral{color:var(--coral)}.visual-caption{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);margin:0;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.82);color:#667892;font-size:14px;white-space:nowrap}.grid-shell{position:relative;display:flex;flex-direction:column;justify-content:center;width:100%;height:100%;padding:56px 66px}.visual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:18px}.grid-shell .visual-item{min-height:132px;padding:20px;border:1px solid currentColor;border-radius:20px;background:#fff;box-shadow:0 10px 24px rgba(26,55,99,.08)}.visual-metrics .visual-item{min-height:150px;border-top-width:6px}.visual-comparison .visual-grid{grid-template-columns:1fr 56px 1fr;align-items:center}.visual-comparison .visual-item{min-height:105px}.comparison-divider{color:var(--coral);font-size:17px;font-weight:900;text-align:center;letter-spacing:.08em}.code-panel,.formula-panel{margin:0 0 22px;padding:24px 28px;border-radius:22px;background:#10223c;color:#e0edff;font-family:Menlo,Monaco,monospace;font-size:18px;line-height:1.6;white-space:pre-wrap}.formula-panel{background:linear-gradient(135deg,#f1edff,#fbfaff);color:#5c41ba;font-family:Arial,"PingFang SC",sans-serif;font-size:38px;font-weight:900;text-align:center}.layout-hero .scene-stage{inset:68px 190px 110px}.layout-hero .scene-note{left:calc(50% - 330px);width:660px;bottom:12px;text-align:center}.layout-hero .step-rail{justify-content:center}.layout-hero .diagram-shell{min-height:410px}.layout-concept_map .scene-note,.layout-system_map .scene-note{left:auto;right:32px;bottom:34px}.layout-process_lane .scene-stage{inset:92px 0 104px}.layout-process_lane .scene-note{left:calc(50% - 430px);width:860px;bottom:10px}.layout-state_lab .scene-note{bottom:28px}.layout-comparison_board .scene-stage,.layout-formula_lab .scene-stage{inset:90px 74px 96px}.layout-comparison_board .scene-note,.layout-formula_lab .scene-note{left:calc(50% - 360px);width:720px;bottom:8px;text-align:center}.layout-comparison_board .step-rail,.layout-formula_lab .step-rail{justify-content:center}.layout-recap .scene-stage{inset:96px 340px 120px}.layout-recap .scene-note{width:370px;left:auto;right:64px;bottom:92px}[data-slot="captions"]{position:absolute;z-index:10;bottom:34px;left:430px;right:430px;text-align:center}.caption{position:absolute;left:0;right:0}.caption span{display:inline-block;max-width:1060px;padding:14px 24px;border-radius:14px;background:rgba(11,27,54,.9);color:white;font-size:22px;line-height:1.42;box-shadow:0 12px 28px rgba(0,0,0,.18)}[data-slot="progress"]{position:absolute;z-index:12;bottom:0;left:0;width:100%;height:7px;background:#dfe8f6}[data-progress-fill]{display:block;width:100%;height:100%;background:linear-gradient(90deg,var(--mint),var(--blue))}.audio-track{display:none}
+@font-face{font-family:"PingFang SC";src:local("PingFang SC")}@font-face{font-family:"Microsoft YaHei";src:local("Microsoft YaHei")}:root{--ink:#101828;--slate:#46556d;--line:#dbe4ee;--paper:#f7f9fc;--blue:#2563eb;--mint:#0f9f8d;--amber:#e78b19;--violet:#7557d9;--coral:#df4f5f}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--paper);color:var(--ink);font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif}main[data-composition-id]{position:relative;width:1920px;height:1080px;overflow:hidden}.composition-background{position:absolute;inset:0;background:linear-gradient(132deg,#f9fbff 0%,#eef4ff 50%,#f7fcfb 100%)}.composition-background:before{content:"";position:absolute;width:980px;height:980px;right:-420px;top:-440px;border:1px solid #c7dcff;border-radius:50%;box-shadow:0 0 0 90px rgba(210,228,255,.2),0 0 0 210px rgba(223,238,255,.16)}.scene{position:absolute;inset:0;padding:66px 92px 48px}.scene-header{position:relative;z-index:2;display:grid;grid-template-columns:1fr auto;column-gap:32px;align-items:end}.scene-header p{grid-column:1;margin:0 0 12px;color:var(--blue);font-size:17px;font-weight:800;letter-spacing:.12em}.scene-header h1{grid-column:1;margin:0;max-width:1260px;font-size:56px;line-height:1.05;letter-spacing:-.045em}.scene-header span{grid-column:2;grid-row:1/3;align-self:start;padding:10px 0 10px 24px;border-left:1px solid #b9c7dd;color:#61718a;font-size:18px;font-weight:800;letter-spacing:.15em}.scene-body{position:relative;height:814px}.scene-stage{position:absolute;inset:74px 0 68px;border:1px solid rgba(193,207,227,.9);border-radius:36px;background:rgba(255,255,255,.74);box-shadow:0 22px 70px rgba(41,77,128,.09);overflow:hidden}.scene-stage:before{content:"";position:absolute;inset:0;background:linear-gradient(125deg,transparent 46%,rgba(219,235,255,.32));pointer-events:none}.scene-note{position:absolute;z-index:3;left:38px;bottom:0;width:475px;padding:24px 28px;border:1px solid #d6e2f1;border-radius:22px;background:rgba(255,255,255,.92);box-shadow:0 16px 38px rgba(41,77,128,.1)}.scene-note>p{margin:0 0 10px;color:var(--blue);font-size:14px;font-weight:900;letter-spacing:.12em}.scene-note h2{margin:0;font-size:27px;line-height:1.3;letter-spacing:-.025em}.step-rail{display:flex;flex-wrap:wrap;gap:8px;margin-top:17px}.step-rail span{padding:7px 10px;border-radius:999px;background:#edf4ff;color:#50627e;font-size:13px;line-height:1.2}.scene-footer{position:absolute;right:92px;bottom:28px;max-width:760px;color:#697a93;font-size:16px;text-align:right}.scene-footer span{padding-bottom:8px;border-bottom:1px solid #c9d5e5}.diagram-shell{position:relative;width:100%;height:100%;min-height:550px}.diagram-links{position:absolute;inset:7% 6%;width:88%;height:86%;overflow:visible}.diagram-edge line{stroke:currentColor;stroke-width:.38;stroke-linecap:round;opacity:.72}.diagram-edge path{fill:currentColor}.diagram-edge text{fill:currentColor;font-size:2.25px;font-weight:700;text-anchor:middle}.diagram-node{position:absolute;left:var(--x);top:var(--y);width:166px;min-height:110px;padding:15px 16px;transform:translate(-50%,-50%);border:2px solid currentColor;border-radius:18px;background:rgba(255,255,255,.97);box-shadow:0 13px 28px rgba(23,47,88,.12);text-align:center}.visual-tree .diagram-node{width:122px;min-height:122px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13px}.visual-tree .diagram-node b{font-size:22px}.visual-flow .diagram-node{border-radius:999px;min-height:86px}.visual-memory .diagram-node{width:250px;border-radius:13px;text-align:left}.visual-network .diagram-node:first-of-type{width:180px;min-height:180px;border-radius:50%;display:flex;flex-direction:column;justify-content:center}.visual-item b{display:block;font-size:18px;line-height:1.22}.visual-item span{display:block;margin-top:7px;color:var(--slate);font-size:13px;line-height:1.35}.visual-item em{display:block;margin-top:8px;font-size:18px;font-style:normal;font-weight:900}.tone-ink{color:#172238}.tone-blue{color:var(--blue)}.tone-mint{color:var(--mint)}.tone-amber{color:var(--amber)}.tone-violet{color:var(--violet)}.tone-coral{color:var(--coral)}.visual-caption{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);margin:0;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.82);color:#667892;font-size:14px;white-space:nowrap}.grid-shell{position:relative;display:flex;flex-direction:column;justify-content:center;width:100%;height:100%;padding:56px 66px}.visual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:18px}.grid-shell .visual-item{min-height:132px;padding:20px;border:1px solid currentColor;border-radius:20px;background:#fff;box-shadow:0 10px 24px rgba(26,55,99,.08)}.visual-metrics .visual-item{min-height:150px;border-top-width:6px}.visual-comparison .visual-grid{grid-template-columns:1fr 56px 1fr;align-items:center}.visual-comparison .visual-item{min-height:105px}.comparison-divider{color:var(--coral);font-size:17px;font-weight:900;text-align:center;letter-spacing:.08em}.code-panel,.formula-panel{margin:0 0 22px;padding:24px 28px;border-radius:22px;background:#10223c;color:#e0edff;font-family:Menlo,Monaco,monospace;font-size:18px;line-height:1.6;white-space:pre-wrap}.formula-panel{background:linear-gradient(135deg,#f1edff,#fbfaff);color:#5c41ba;font-family:Arial,"PingFang SC",sans-serif;font-size:38px;font-weight:900;text-align:center}.layout-hero .scene-stage{inset:68px 190px 110px}.layout-hero .scene-note{left:calc(50% - 330px);width:660px;bottom:12px;text-align:center}.layout-hero .step-rail{justify-content:center}.layout-hero .diagram-shell{min-height:410px}.layout-concept_map .scene-note,.layout-system_map .scene-note{left:auto;right:32px;bottom:34px}.layout-process_lane .scene-stage{inset:92px 0 104px}.layout-process_lane .scene-note{left:calc(50% - 430px);width:860px;bottom:10px}.layout-state_lab .scene-note{bottom:28px}.layout-comparison_board .scene-stage,.layout-formula_lab .scene-stage{inset:90px 74px 96px}.layout-comparison_board .scene-note,.layout-formula_lab .scene-note{left:calc(50% - 360px);width:720px;bottom:8px;text-align:center}.layout-comparison_board .step-rail,.layout-formula_lab .step-rail{justify-content:center}.layout-recap .scene-stage{inset:96px 340px 120px}.layout-recap .scene-note{width:370px;left:auto;right:64px;bottom:92px}.caption{position:absolute;z-index:10;bottom:34px;left:430px;right:430px;text-align:center;pointer-events:none}.caption span{display:inline-block;max-width:1060px;padding:14px 24px;border-radius:14px;background:#081830;color:white;font-size:22px;line-height:1.42;box-shadow:0 12px 28px rgba(0,0,0,.18)}[data-slot="progress"]{position:absolute;z-index:12;bottom:0;left:0;width:100%;height:7px;background:#dfe8f6}[data-progress-fill]{display:block;width:100%;height:100%;background:linear-gradient(90deg,var(--mint),var(--blue))}
 '''
 
 _CSS += r'''
-.scene{padding:54px 86px 42px}.scene-header{min-height:144px;align-items:start}.scene-header>div{position:relative;padding-left:26px;border-left:4px solid var(--blue)}.scene-header p{display:inline-block;margin:0 14px 14px 0;font-size:15px;letter-spacing:.1em}.scene-header .scene-function{display:inline-block;position:static;padding:6px 10px;border:0;border-radius:999px;background:#e8f0ff;color:#2459d9;font-size:13px;letter-spacing:.08em;text-transform:uppercase}.scene-header h1{max-width:1340px;font-size:52px;line-height:1.08}.scene-header strong{display:block;max-width:1080px;margin-top:12px;color:#53647c;font-size:19px;font-weight:600;line-height:1.4}.scene-header>span{padding-top:12px;font-size:17px}.scene-body{height:840px}.scene-stage{inset:26px 0 142px;border-radius:30px;background:rgba(255,255,255,.82);box-shadow:0 18px 46px rgba(41,77,128,.1)}.scene-stage:before{background:linear-gradient(135deg,rgba(238,247,255,.68),transparent 42%,rgba(230,250,244,.42))}.scene-principle{position:absolute;left:0;right:0;bottom:56px;display:grid;grid-template-columns:118px minmax(0,1fr) auto;gap:18px;align-items:center;min-height:58px;padding:12px 20px;border-top:1px solid #d9e5f1;border-bottom:1px solid #d9e5f1;background:rgba(250,253,255,.85)}.scene-principle>span{color:var(--blue);font-size:13px;font-weight:900;letter-spacing:.1em}.scene-principle>strong{font-size:18px;line-height:1.35}.step-rail{justify-content:flex-end;gap:6px;margin:0}.step-rail span{padding:6px 9px;background:#eaf3ff;color:#486582;font-size:12px}.diagram-shell{min-height:0;padding:76px 28px 28px}.diagram-links{inset:13% 7% 10%;width:86%;height:77%}.diagram-node{width:188px;min-height:116px;padding:16px 18px;border-width:2px;border-radius:20px;box-shadow:0 16px 30px rgba(23,47,88,.14)}.diagram-node[data-focused="true"]{box-shadow:0 18px 42px rgba(37,99,235,.28)}.visual-tree .diagram-node{width:132px;min-height:132px}.visual-flow .diagram-node{width:184px;min-height:92px}.visual-memory .diagram-node{width:280px}.visual-network .diagram-node:first-of-type{width:196px;min-height:196px}.visual-item b{font-size:19px}.visual-item span{font-size:14px}.diagram-edge line{stroke-width:.5;opacity:.86}.diagram-edge text{font-size:2.5px}.diagram-edge-state{pointer-events:none}.diagram-edge-state[data-active="true"] .diagram-edge line{stroke-width:.7;opacity:1}.model-state-annotation{position:absolute;z-index:4;top:22px;left:28px;right:28px;max-width:830px;padding:10px 14px;border-left:4px solid var(--mint);border-radius:0 12px 12px 0;background:rgba(239,252,248,.92);color:#147867;font-size:17px;font-weight:800;line-height:1.35}.motion-signal{position:absolute;z-index:8;width:22px;height:22px;margin:-11px;border:4px solid #fff;border-radius:50%;background:var(--amber);box-shadow:0 0 0 8px rgba(231,139,25,.18),0 6px 16px rgba(126,72,10,.34);opacity:0}.visual-caption{bottom:18px;z-index:5}.grid-shell{padding:78px 66px 52px}.visual-grid{gap:24px}.grid-shell .visual-item{min-height:154px;padding:24px;border-radius:22px}.visual-comparison .visual-grid{grid-template-columns:1fr 68px 1fr}.code-panel,.formula-panel{margin-bottom:24px;padding:30px 34px}.formula-panel{font-size:42px}.layout-hero .scene-stage{inset:34px 130px 150px}.layout-hero .diagram-shell{padding-top:64px}.layout-hero .scene-principle{left:130px;right:130px}.layout-process_lane .scene-stage{inset:36px 0 146px}.layout-process_lane .visual-flow .diagram-node{width:205px}.layout-state_lab .scene-stage{inset:20px 64px 132px;border-color:#b8d5f4;background:linear-gradient(130deg,#fafdff,#f3f8ff)}.layout-state_lab .model-state-annotation{background:#e6f4ff;border-left-color:var(--blue)}.layout-system_map .scene-stage{inset:24px 36px 138px}.layout-comparison_board .scene-stage,.layout-formula_lab .scene-stage{inset:34px 74px 148px}.layout-recap .scene-stage{inset:32px 210px 156px}.layout-recap .grid-shell{padding:78px 70px 48px}.layout-recap .scene-principle{left:210px;right:210px}[data-slot="captions"]{bottom:32px;left:300px;right:300px;min-height:72px;display:flex;align-items:flex-end;justify-content:center;pointer-events:none}.caption{position:absolute;left:0;right:0;bottom:0}.caption span{max-width:1240px;padding:13px 24px;border-radius:13px;background:rgba(8,24,48,.94);font-size:21px;line-height:1.38}[data-slot="progress"]{height:6px}.audio-track{display:none}
+.scene{padding:54px 86px 42px}.scene-header{min-height:144px;align-items:start}.scene-header>div{position:relative;padding-left:26px;border-left:4px solid var(--blue)}.scene-header p{display:inline-block;margin:0 14px 14px 0;font-size:15px;letter-spacing:.1em}.scene-header .scene-function{display:inline-block;position:static;padding:6px 10px;border:0;border-radius:999px;background:#e8f0ff;color:#2459d9;font-size:13px;letter-spacing:.08em;text-transform:uppercase}.scene-header h1{max-width:1340px;font-size:52px;line-height:1.08}.scene-header strong{display:block;max-width:1080px;margin-top:12px;color:#53647c;font-size:19px;font-weight:600;line-height:1.4}.scene-header>span{padding-top:12px;font-size:17px}.scene-body{height:840px}.scene-stage{inset:26px 0 142px;border-radius:30px;background:rgba(255,255,255,.82);box-shadow:0 18px 46px rgba(41,77,128,.1)}.scene-stage:before{background:linear-gradient(135deg,rgba(238,247,255,.68),transparent 42%,rgba(230,250,244,.42))}.scene-principle{position:absolute;left:0;right:0;bottom:56px;display:grid;grid-template-columns:118px minmax(0,1fr) auto;gap:18px;align-items:center;min-height:58px;padding:12px 20px;border-top:1px solid #d9e5f1;border-bottom:1px solid #d9e5f1;background:rgba(250,253,255,.85)}.scene-principle>span{color:var(--blue);font-size:13px;font-weight:900;letter-spacing:.1em}.scene-principle>strong{font-size:18px;line-height:1.35}.step-rail{justify-content:flex-end;gap:6px;margin:0}.step-rail span{padding:6px 9px;background:#eaf3ff;color:#486582;font-size:12px}.diagram-shell{min-height:0;padding:76px 28px 28px}.diagram-links{inset:13% 7% 10%;width:86%;height:77%}.diagram-node{width:188px;min-height:116px;padding:16px 18px;border-width:2px;border-radius:20px;box-shadow:0 16px 30px rgba(23,47,88,.14)}.diagram-node[data-focused="true"]{box-shadow:0 18px 42px rgba(37,99,235,.28)}.visual-tree .diagram-node{width:132px;min-height:132px}.visual-flow .diagram-node{width:184px;min-height:92px}.visual-memory .diagram-node{width:280px}.visual-network .diagram-node:first-of-type{width:196px;min-height:196px}.visual-item b{font-size:19px}.visual-item span{font-size:14px}.diagram-edge line{stroke-width:.5;opacity:.86}.diagram-edge text{font-size:2.5px}.diagram-edge-state{pointer-events:none}.diagram-edge-state[data-active="true"] .diagram-edge line{stroke-width:.7;opacity:1}.model-state-annotation{position:absolute;z-index:4;top:22px;left:28px;right:28px;max-width:830px;padding:10px 14px;border-left:4px solid var(--mint);border-radius:0 12px 12px 0;background:rgba(239,252,248,.92);color:#147867;font-size:17px;font-weight:800;line-height:1.35}.motion-signal{position:absolute;z-index:8;width:22px;height:22px;margin:-11px;border:4px solid #fff;border-radius:50%;background:var(--amber);box-shadow:0 0 0 8px rgba(231,139,25,.18),0 6px 16px rgba(126,72,10,.34);opacity:0}.visual-caption{bottom:18px;z-index:5}.grid-shell{padding:78px 66px 52px}.visual-grid{gap:24px}.grid-shell .visual-item{min-height:154px;padding:24px;border-radius:22px}.visual-comparison .visual-grid{grid-template-columns:1fr 68px 1fr}.code-panel,.formula-panel{margin-bottom:24px;padding:30px 34px}.formula-panel{font-size:42px}.layout-hero .scene-stage{inset:34px 130px 150px}.layout-hero .diagram-shell{padding-top:64px}.layout-hero .scene-principle{left:130px;right:130px}.layout-process_lane .scene-stage{inset:36px 0 146px}.layout-process_lane .visual-flow .diagram-node{width:205px}.layout-state_lab .scene-stage{inset:20px 64px 132px;border-color:#b8d5f4;background:linear-gradient(130deg,#fafdff,#f3f8ff)}.layout-state_lab .model-state-annotation{background:#e6f4ff;border-left-color:var(--blue)}.layout-system_map .scene-stage{inset:24px 36px 138px}.layout-comparison_board .scene-stage,.layout-formula_lab .scene-stage{inset:34px 74px 148px}.layout-recap .scene-stage{inset:32px 210px 156px}.layout-recap .grid-shell{padding:78px 70px 48px}.layout-recap .scene-principle{left:210px;right:210px}.caption{bottom:32px;left:300px;right:300px;min-height:72px;display:flex;align-items:flex-end;justify-content:center}.caption span{max-width:1240px;padding:13px 24px;border-radius:13px;background:#081830;font-size:21px;line-height:1.38}[data-slot="progress"]{height:6px}
 '''
 
 
@@ -394,9 +417,72 @@ class CartoonCompiler:
     def compile(self, lesson: TeachingLesson, plan: CompositionPlan) -> str:
         if len(lesson.scenes) != len(plan.scenes):
             raise ValueError("lesson and composition scene counts differ")
-        return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>{html.escape(lesson.title, quote=True)}</title><style>{_CSS}</style></head><body><main data-composition-id="{COMPOSITION_ID}" data-start="0" data-duration="{_seconds(plan.total_duration_ms)}" data-width="1920" data-height="1080">{"".join(_scene_html(scene, len(plan.scenes), lesson.course) for scene in plan.scenes)}<section data-slot="captions">{_captions_html(plan)}</section><footer data-slot="progress"><span></span></footer><div class="audio-track">{_audio_html(plan)}</div></main><script src="assets/vendor/gsap.min.js"></script><script>{_diagram_runtime(lesson)}{_motion_runtime()}const tl=gsap.timeline({{paused:true}});window.__timelines=window.__timelines||{{}};window.__timelines['{COMPOSITION_ID}']=tl;{_timeline(plan)}</script></body></html>'''
+        self._validate_plan(plan)
+        return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=1920, height=1080"><title>{html.escape(lesson.title, quote=True)}</title><style>{_CSS}</style></head><body><main id="root" data-composition-id="{COMPOSITION_ID}" data-start="0" data-duration="{_seconds(plan.total_duration_ms)}" data-width="1920" data-height="1080"><div class="composition-background" aria-hidden="true"></div>{"".join(_scene_html(scene, len(plan.scenes), lesson.course) for scene in plan.scenes)}{_captions_html(plan)}{_audio_html(plan)}<footer data-slot="progress"><span data-progress-fill></span></footer></main><script src="assets/vendor/gsap.min.js"></script><script>{_diagram_runtime(lesson)}{_motion_runtime()}window.__timelines=window.__timelines||{{}};const tl=gsap.timeline({{paused:true}});{_timeline(plan)}window.__timelines['{COMPOSITION_ID}']=tl;</script></body></html>'''
 
     def write(self, lesson: TeachingLesson, plan: CompositionPlan, output_dir: Path) -> Path:
+        self._validate_audio_assets(
+            plan,
+            output_dir,
+        )
         path = output_dir / "index.html"
         path.write_text(self.compile(lesson, plan), encoding="utf-8")
         return path
+
+    @staticmethod
+    def _validate_plan(plan: CompositionPlan) -> None:
+        previous_scene_end = 0
+
+        for expected_index, scene in enumerate(plan.scenes):
+            if scene.index != expected_index:
+                raise ValueError("composition scene indexes must be contiguous")
+
+            if scene.start_ms < previous_scene_end:
+                raise ValueError("composition scenes overlap")
+
+            scene_end = scene.start_ms + scene.duration_ms
+            previous_step_end = scene.start_ms
+
+            for step in scene.steps:
+                if step.scene_id != scene.scene.id:
+                    raise ValueError("timed step belongs to a different scene")
+
+                if step.start_ms < previous_step_end:
+                    raise ValueError("composition steps overlap")
+
+                step_end = step.start_ms + step.duration_ms
+                if step.start_ms < scene.start_ms or step_end > scene_end:
+                    raise ValueError("timed step escapes its scene")
+
+                for motion in step.motions:
+                    motion_end = motion.start_ms + motion.duration_ms
+                    if motion.start_ms < step.start_ms or motion_end > step_end:
+                        raise ValueError("timed motion escapes its teaching step")
+
+                previous_step_end = step_end
+
+            previous_scene_end = scene_end
+
+        if previous_scene_end != plan.total_duration_ms:
+            raise ValueError("composition duration does not match its final scene")
+
+    @staticmethod
+    def _validate_audio_assets(plan: CompositionPlan, output_dir: Path) -> None:
+        root = output_dir.resolve()
+
+        for scene in plan.scenes:
+            for step in scene.steps:
+                source = Path(step.audio_src)
+
+                if source.is_absolute():
+                    raise ValueError("audio source must be relative to the composition")
+
+                resolved = (root / source).resolve()
+
+                try:
+                    resolved.relative_to(root)
+                except ValueError as exc:
+                    raise ValueError("audio source escapes the composition") from exc
+
+                if not resolved.is_file() or resolved.stat().st_size <= 0:
+                    raise ValueError(f"audio source is missing or empty: {source.as_posix()}")

@@ -1,6 +1,4 @@
-"""画像 API 请求模型 — 入门信息更新、全局辅导更新。"""
-
-# 定义入门信息更新与全局辅导增量更新的请求模型
+"""画像 API 请求模型。"""
 from __future__ import annotations
 
 from typing import Any
@@ -9,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class OnboardingUpdate(BaseModel):
-    """入门信息更新请求 — 用户首次填写的基本信息。"""
+    """入门信息更新请求。"""
 
     school: str
     major: str
@@ -18,6 +16,10 @@ class OnboardingUpdate(BaseModel):
     global_learning_goal: str
     programming_languages: list[str] = Field(default_factory=list)
     courses: list[str] = Field(default_factory=list)
+    foundational_level: str = ""  # beginner/entry/proficient/master
+    learning_style: str = ""  # theory_first/practice_first/case_driven
+    content_depth: str = ""  # quick_overview/systematic_deep
+    weak_points: list[str] = Field(default_factory=list)
 
 
 class GlobalTutoringProfileUpdate(BaseModel):

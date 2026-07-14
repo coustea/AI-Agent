@@ -98,7 +98,7 @@
             <div
                 class="generate-progress-fill"
                 :style="{
-                width: `${generationProgress}%`,
+                transform: `scaleX(${generationProgress / 100})`,
               }"
             ></div>
           </div>
@@ -405,9 +405,8 @@
                 :class="[
                 item.type,
                 {
-                  generated: Boolean(item.resource),
-                  active:
-                    resourceLoading.has(item.type),
+                  generated: isResourceReady(item.resource),
+                  active: isResourceGenerating(item),
                 },
               ]"
             >
@@ -426,50 +425,24 @@
                 <span>{{ item.desc }}</span>
 
                 <em
-                    v-if="item.resource"
                     class="status-label"
                     :class="{
-                    fail:
-                      item.resource.status ===
-                      'failed',
+                    fail: isResourceFailed(item.resource),
+                    wait: !item.resource && !isResourceGenerating(item),
+                    running: isResourceGenerating(item),
                   }"
                 >
-                  {{
-                    item.resource.status === 'failed'
-                        ? '生成失败'
-                        : '已生成'
-                  }}
-                </em>
-
-                <em
-                    v-else
-                    class="status-label wait"
-                >
-                  尚未生成
+                  {{ resourceStatusText(item) }}
                 </em>
               </div>
 
               <button
                   type="button"
                   class="resource-action-button"
-                  :disabled="
-                  !item.resource && resourceLoading.has(item.type)
-                "
-                  @click="
-                  item.resource
-                    ? openResourceDetail(
-                        item.resource.id,
-                      )
-                    : createResource(item.type)
-                "
+                  :disabled="isResourceGenerating(item)"
+                  @click="handleResourceAction(item)"
               >
-                {{
-                  resourceLoading.has(item.type)
-                      ? '生成中'
-                      : item.resource
-                          ? '查看'
-                          : '生成'
-                }}
+                {{ resourceActionText(item) }}
               </button>
             </article>
           </div>
@@ -916,7 +889,6 @@ import type {
   LearningPathWorkspace,
   PathQuizRound,
   PathQuizSubmitResponse,
-  PathResourceEvent,
 } from '@/features/learning-path/model/path'
 
 import {
@@ -958,11 +930,8 @@ const loading = ref(false)
 const quizLoading = ref(false)
 const submitLoading = ref(false)
 
-const resourceLoading =
+const resourceStarting =
     ref<Set<ResourceKind>>(new Set())
-
-const resourceEventSource =
-    ref<EventSource | null>(null)
 
 const workspace =
     ref<LearningPathWorkspace | null>(null)
@@ -1006,6 +975,23 @@ let headingObserver:
 let generationTimer:
     | number
     | null = null
+
+let resourcePollTimer:
+    | number
+    | null = null
+
+let resourcePollInFlight = false
+let isPageActive = false
+
+const RESOURCE_POLL_INTERVAL_MS = 2500
+
+const resourceKinds: ResourceKind[] = [
+  'mindmap',
+  'code',
+  'ppt',
+  'reading',
+  'cartoon',
+]
 
 const tutorialGenerationSteps = [
   '读取学习目标与当前基础',
@@ -1212,7 +1198,7 @@ function preprocessTutorialMarkdown(
     return ''
   }
 
-  let text = raw.trim()
+  let text = normalizeTutorialMarkdown(raw)
 
   if (text.startsWith('---')) {
     const endMatch =
@@ -1318,15 +1304,59 @@ function preprocessTutorialMarkdown(
   return text.trim()
 }
 
+function normalizeTutorialMarkdown(
+    raw: string,
+): string {
+  const text = raw
+      .trim()
+      .replace(/^\uFEFF/, '')
+
+  const opening = text.match(
+      /^(`{3,}|~{3,})(?:markdown|md|text)?[ \t]*\r?\n/i,
+  )
+
+  if (!opening?.[1]) {
+    return text
+  }
+
+  const fence = opening[1]
+  const escapedFence = fence.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&',
+  )
+  const closing = new RegExp(
+      `\\r?\\n${escapedFence}[ \\t]*$`,
+  )
+  const closingMatch = closing.exec(text)
+
+  const document = text
+      .slice(
+          opening[0].length,
+          closingMatch?.index ?? text.length,
+      )
+      .trim()
+
+  if (
+    /^#\s+\S/.test(document) &&
+    /^##\s+\S/m.test(document)
+  ) {
+    return document
+  }
+
+  return text
+}
+
 function latestResourceByType(
-    type: string,
-) {
-  if (!workspace.value) {
+    type: ResourceKind,
+    currentWorkspace:
+        LearningPathWorkspace | null = workspace.value,
+): LearningPathResource | null {
+  if (!currentWorkspace) {
     return null
   }
 
   const matched =
-      workspace.value.resources
+      currentWorkspace.resources
           .filter(
               item =>
                   item.resource_type === type,
@@ -1338,6 +1368,91 @@ function latestResourceByType(
           )
 
   return matched[0] || null
+}
+
+function normalizedResourceStatus(
+    resource: LearningPathResource | null,
+) {
+  return String(
+      resource?.status || '',
+  ).toLowerCase()
+}
+
+function isResourceReady(
+    resource: LearningPathResource | null,
+) {
+  return (
+    normalizedResourceStatus(resource) ===
+    'completed'
+  )
+}
+
+function isResourceFailed(
+    resource: LearningPathResource | null,
+) {
+  return (
+    normalizedResourceStatus(resource) ===
+    'failed'
+  )
+}
+
+function isPersistedResourceGenerating(
+    resource: LearningPathResource | null,
+) {
+  return [
+    'pending',
+    'generating',
+    'processing',
+  ].includes(
+      normalizedResourceStatus(resource),
+  )
+}
+
+function isResourceGenerating(
+    item: ResourcePushItem,
+) {
+  return (
+    resourceStarting.value.has(item.type) ||
+    isPersistedResourceGenerating(
+        item.resource,
+    )
+  )
+}
+
+function resourceStatusText(
+    item: ResourcePushItem,
+) {
+  if (isResourceGenerating(item)) {
+    return '生成中'
+  }
+
+  if (isResourceFailed(item.resource)) {
+    return '生成失败'
+  }
+
+  if (isResourceReady(item.resource)) {
+    return '已生成'
+  }
+
+  return '尚未生成'
+}
+
+function resourceActionText(
+    item: ResourcePushItem,
+) {
+  if (isResourceGenerating(item)) {
+    return '生成中'
+  }
+
+  if (isResourceFailed(item.resource)) {
+    return '重试'
+  }
+
+  if (isResourceReady(item.resource)) {
+    return '查看'
+  }
+
+  return '生成'
 }
 
 function slugify(value: string) {
@@ -1530,6 +1645,8 @@ async function loadWorkspace() {
 
     workspace.value =
         response.data.data
+
+    resumeResourcePolling()
 
     if (
         workspace.value &&
@@ -1889,146 +2006,124 @@ async function submitQuiz() {
   }
 }
 
-const resourceApiMap:
-    Record<
-        ResourceKind,
-        (
-            nodeId: number,
-        ) => Promise<any>
-    > = {
-  mindmap: id =>
-      generateNodeResource(
-          id,
-          'mindmap',
-      ),
-  code: id =>
-      generateNodeResource(
-          id,
-          'code',
-      ),
-  ppt: id =>
-      generateNodeResource(
-          id,
-          'ppt',
-      ),
-  reading: id =>
-      generateNodeResource(
-          id,
-          'reading',
-      ),
-  cartoon: id =>
-      generateNodeResource(
-          id,
-          'cartoon',
-      ),
-}
-
-function closeResourceEvents() {
-  resourceEventSource.value?.close()
-  resourceEventSource.value = null
-}
-
-function parseResourceEvent(
-    raw: MessageEvent,
-): PathResourceEvent | null {
-  try {
-    return JSON.parse(
-        raw.data,
-    ) as PathResourceEvent
-  } catch {
-    return null
+function stopResourcePolling() {
+  if (resourcePollTimer !== null) {
+    window.clearTimeout(
+        resourcePollTimer,
+    )
+    resourcePollTimer = null
   }
 }
 
-function connectResourceEvents(
-    resourceId: number,
-    runId: string,
-    type: ResourceKind,
+function hasGeneratingResources(
+    currentWorkspace:
+        LearningPathWorkspace | null = workspace.value,
 ) {
-  closeResourceEvents()
-
-  const source = new EventSource(
-      `/api/v1/ai/path-plan/resources/${resourceId}/runs/${runId}/events`,
+  return resourceKinds.some(type =>
+    isPersistedResourceGenerating(
+        latestResourceByType(
+            type,
+            currentWorkspace,
+        ),
+    ),
   )
+}
 
-  source.addEventListener(
-      'path.event',
-      async (
-          raw: MessageEvent,
-      ) => {
-        const event =
-            parseResourceEvent(raw)
+function scheduleResourcePolling(
+    delay = RESOURCE_POLL_INTERVAL_MS,
+) {
+  stopResourcePolling()
 
-        if (!event) {
-          return
-        }
-
-        if (
-            event.event ===
-            'resource.completed'
-        ) {
-          closeResourceEvents()
-
-          const response =
-              await getLearningNodeWorkspace(
-                  nodeId.value,
-              )
-
-          workspace.value =
-              response.data.data
-
-          const generated =
-              workspace.value?.resources.find(
-                  item =>
-                      item.id === resourceId,
-              )
-
-          if (generated) {
-            openViewer(generated)
-          }
-
-          resourceLoading.value.delete(type)
-
-          toast.success(
-              '辅助资源生成完成',
-          )
-        }
-
-        if (
-            event.event ===
-            'resource.failed'
-        ) {
-          closeResourceEvents()
-
-          const response =
-              await getLearningNodeWorkspace(
-                  nodeId.value,
-              )
-
-          workspace.value =
-              response.data.data
-
-          resourceLoading.value.delete(type)
-
-          toast.error(
-              event.message ||
-              '生成辅助资源失败',
-          )
-        }
-      },
-  )
-
-  source.onerror = () => {
-    if (
-        source.readyState ===
-        EventSource.CLOSED
-    ) {
-      resourceLoading.value.delete(type)
-    }
+  if (
+      !isPageActive ||
+      !hasGeneratingResources()
+  ) {
+    return
   }
 
-  resourceEventSource.value =
-      source
+  resourcePollTimer =
+      window.setTimeout(() => {
+        void pollResourceStatuses()
+      }, delay)
+}
+
+function resumeResourcePolling() {
+  if (hasGeneratingResources()) {
+    scheduleResourcePolling()
+  } else {
+    stopResourcePolling()
+  }
+}
+
+async function pollResourceStatuses() {
+  resourcePollTimer = null
+
+  if (
+      resourcePollInFlight ||
+      !isPageActive ||
+      !nodeId.value ||
+      !hasGeneratingResources()
+  ) {
+    return
+  }
+
+  resourcePollInFlight = true
+  const polledNodeId = nodeId.value
+  const previousWorkspace = workspace.value
+
+  try {
+    const response =
+        await getLearningNodeWorkspace(
+            nodeId.value,
+        )
+
+    const nextWorkspace =
+        response.data.data
+
+    if (
+        !isPageActive ||
+        nodeId.value !== polledNodeId
+    ) {
+      return
+    }
+
+    workspace.value = nextWorkspace
+
+    for (const type of resourceKinds) {
+      const previous = latestResourceByType(
+          type,
+          previousWorkspace,
+      )
+      const current = latestResourceByType(
+          type,
+          nextWorkspace,
+      )
+
+      if (
+          isPersistedResourceGenerating(previous) &&
+          isResourceReady(current)
+      ) {
+        toast.success(
+            `${resourceTypeLabel(type)}生成完成`,
+        )
+      }
+
+      if (
+          isPersistedResourceGenerating(previous) &&
+          isResourceFailed(current)
+      ) {
+        toast.error(
+            current?.error_message ||
+            `${resourceTypeLabel(type)}生成失败`,
+        )
+      }
+    }
+  } catch {
+    // 保留数据库中的 generating 状态，下一轮继续确认。
+  } finally {
+    resourcePollInFlight = false
+    resumeResourcePolling()
+  }
 }
 
 async function createResource(
@@ -2039,47 +2134,80 @@ async function createResource(
   }
 
   // 如果该资源类型已经在生成中，不允许重复点击
-  if (resourceLoading.value.has(type)) {
+  const current = latestResourceByType(type)
+  if (
+      resourceStarting.value.has(type) ||
+      isPersistedResourceGenerating(current)
+  ) {
     return
   }
 
-  resourceLoading.value.add(type)
+  resourceStarting.value.add(type)
+  const requestedNodeId =
+      workspace.value.node.id
 
   try {
-    const apiFunction =
-        resourceApiMap[type]
-
     const response =
-        await apiFunction(
-            workspace.value.node.id,
+        await generateNodeResource(
+            requestedNodeId,
+            type,
         )
 
     const task =
         response.data.data
 
-    const workspaceResponse =
-        await getLearningNodeWorkspace(
-            nodeId.value,
-        )
+    if (
+        !isPageActive ||
+        workspace.value?.node.id !==
+        requestedNodeId
+    ) {
+      return
+    }
 
-    workspace.value =
-        workspaceResponse.data.data
-
-    connectResourceEvents(
-        task.resource.id,
-        task.run_id,
-        type,
-    )
-  } catch (error) {
-    resourceLoading.value.delete(type)
-
-    toast.error(
-        getErrorMessage(
-            error,
-            '生成辅助资源失败',
+    workspace.value = {
+      ...workspace.value,
+      resources: [
+        ...workspace.value.resources.filter(
+            item =>
+                item.id !== task.resource.id,
         ),
-    )
+        task.resource,
+      ],
+    }
+
+    scheduleResourcePolling(800)
+  } catch (error) {
+    if (isPageActive) {
+      toast.error(
+          getErrorMessage(
+              error,
+              '生成辅助资源失败',
+          ),
+      )
+    }
+  } finally {
+    resourceStarting.value.delete(type)
   }
+}
+
+function handleResourceAction(
+    item: ResourcePushItem,
+) {
+  if (isResourceGenerating(item)) {
+    return
+  }
+
+  if (
+      item.resource &&
+      isResourceReady(item.resource)
+  ) {
+    openResourceDetail(
+        item.resource.id,
+    )
+    return
+  }
+
+  void createResource(item.type)
 }
 
 function openViewer(
@@ -2258,7 +2386,8 @@ watch(
       }
 
       disconnectHeadingObserver()
-      closeResourceEvents()
+      stopResourcePolling()
+      resourceStarting.value.clear()
 
       workspace.value = null
       quizRound.value = null
@@ -2299,6 +2428,8 @@ watch(
 )
 
 onMounted(() => {
+  isPageActive = true
+
   window.addEventListener(
       'keydown',
       handleEscape,
@@ -2308,6 +2439,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  isPageActive = false
+
   window.removeEventListener(
       'keydown',
       handleEscape,
@@ -2317,7 +2450,8 @@ onBeforeUnmount(() => {
 
   stopGenerationAnimation()
   disconnectHeadingObserver()
-  closeResourceEvents()
+  stopResourcePolling()
+  resourceStarting.value.clear()
   stopTracking()
 })
 </script>
@@ -2785,10 +2919,15 @@ onBeforeUnmount(() => {
   min-height: 500px;
 }
 
+.markdown-shell :deep(.model-content) {
+  width: min(100%, 76ch);
+  margin-inline: auto;
+}
+
 .markdown-shell :deep(.markdown-body) {
   color: var(--study-text);
   font-size: 15px;
-  line-height: 1.82;
+  line-height: 1.78;
 }
 
 .markdown-shell :deep(h1) {
@@ -2796,27 +2935,142 @@ onBeforeUnmount(() => {
 }
 
 .markdown-shell :deep(h2) {
-  margin-top: 2.2em;
+  margin: 2.35em 0 0.9em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid
+  var(--study-border-light);
   color:
       var(--study-text-strong);
   font-size: 20px;
+  font-weight: 750;
   line-height: 1.45;
   scroll-margin-top: 88px;
+  text-wrap: balance;
 }
 
 .markdown-shell :deep(h3) {
-  margin-top: 1.9em;
+  margin: 1.9em 0 0.75em;
   color:
       var(--study-text-strong);
   font-size: 17px;
+  font-weight: 720;
   line-height: 1.5;
   scroll-margin-top: 88px;
+  text-wrap: balance;
+}
+
+.markdown-shell :deep(h4) {
+  margin: 1.55em 0 0.65em;
+  color:
+      var(--study-text-strong);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .markdown-shell :deep(p),
 .markdown-shell :deep(li) {
   font-size: 15px;
-  line-height: 1.82;
+  line-height: 1.78;
+}
+
+.markdown-shell :deep(p) {
+  margin-bottom: 1em;
+  text-wrap: pretty;
+}
+
+.markdown-shell :deep(ul),
+.markdown-shell :deep(ol) {
+  margin-bottom: 1.15em;
+  padding-left: 1.55em;
+}
+
+.markdown-shell :deep(li + li) {
+  margin-top: 0.38em;
+}
+
+.markdown-shell :deep(li::marker) {
+  color: var(--study-accent-text);
+  font-weight: 700;
+}
+
+.markdown-shell :deep(strong) {
+  color:
+      var(--study-text-strong);
+  font-weight: 700;
+}
+
+.markdown-shell :deep(blockquote) {
+  margin: 1.25em 0;
+  padding: 13px 15px;
+  border: 1px solid
+  var(--study-accent-border);
+  border-radius: 6px;
+  background:
+      var(--study-accent-softer);
+  color:
+      var(--study-text-secondary);
+}
+
+.markdown-shell :deep(table) {
+  width: 100%;
+  margin: 1.35em 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid
+  var(--study-border);
+  border-radius: 6px;
+}
+
+.markdown-shell :deep(th),
+.markdown-shell :deep(td) {
+  padding: 9px 11px;
+  border-width: 0 1px 1px 0;
+  border-color:
+      var(--study-border-light);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.markdown-shell :deep(th) {
+  background: #f4f8f7;
+  color:
+      var(--study-text-strong);
+}
+
+.markdown-shell :deep(tr > :last-child) {
+  border-right: 0;
+}
+
+.markdown-shell :deep(tr:last-child > td) {
+  border-bottom: 0;
+}
+
+.markdown-shell :deep(:not(pre) > code) {
+  border-color:
+      var(--study-border);
+  border-radius: 4px;
+  background: #f2f6f5;
+  color: #145f5d;
+}
+
+.markdown-shell :deep(.code-block-wrapper) {
+  margin: 1.35em 0;
+  border-color:
+      var(--study-border);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.markdown-shell :deep(.code-block-header) {
+  background: #f4f8f7;
+}
+
+.markdown-shell :deep(a) {
+  color:
+      var(--study-accent-text);
+  text-underline-offset: 3px;
 }
 
 .markdown-shell :deep(.tutorial-meta-banner) {
@@ -2825,12 +3079,14 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin: 0 0 24px;
   padding: 15px 17px;
-  border: 0px solid
-  var(--study-border-light);
-  border-left: 3px solid
+  border: 1px solid
   var(--study-accent-border);
   border-radius: 6px;
   background: #f9fbfb;
+}
+
+.markdown-shell :deep(.tutorial-meta-banner + h2) {
+  margin-top: 0;
 }
 
 .markdown-shell :deep(.meta-summary) {
@@ -3389,7 +3645,9 @@ onBeforeUnmount(() => {
 }
 
 .generate-progress-fill {
+  width: 100%;
   height: 100%;
+  transform-origin: left center;
   border-radius: inherit;
   background:
       linear-gradient(
@@ -3397,7 +3655,7 @@ onBeforeUnmount(() => {
           #159a94,
           #5dbdb8
       );
-  transition: width 350ms ease;
+  transition: transform 350ms ease;
 }
 
 .generate-step-list {

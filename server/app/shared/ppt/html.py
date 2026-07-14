@@ -8,8 +8,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from app.shared.ppt.contract import VisualRenderMode, visual_component
-from app.shared.ppt.models import DiagramModel, PPTDeck, PPTSlide, VisualSpec
+from app.shared.ppt.contract import SlideKind, VisualRenderMode, visual_component
+from app.shared.ppt.models import DeckLogicModel, DiagramModel, PPTDeck, PPTSlide, VisualSpec
 
 
 @dataclass(frozen=True)
@@ -34,8 +34,13 @@ def _render_points(slide: PPTSlide) -> str:
 def _diagram_positions(model: DiagramModel) -> dict[str, tuple[float, float]]:
     nodes = model.nodes
     if model.layout == "flow":
+        columns = min(4, len(nodes))
+        rows = math.ceil(len(nodes) / columns)
         return {
-            node.id: (100 + index * 800 / max(1, len(nodes) - 1), 280)
+            node.id: (
+                120 + (index % columns) * 760 / max(1, columns - 1),
+                280 if rows == 1 else 170 + (index // columns) * 220,
+            )
             for index, node in enumerate(nodes)
         }
     if model.layout == "comparison":
@@ -74,26 +79,113 @@ def _diagram_positions(model: DiagramModel) -> dict[str, tuple[float, float]]:
     }
 
 
-def _render_model(model: DiagramModel) -> str:
+def _edge_endpoints(
+    source: tuple[float, float],
+    target: tuple[float, float],
+) -> tuple[float, float, float, float]:
+    source_x, source_y = source
+    target_x, target_y = target
+    delta_x = target_x - source_x
+    delta_y = target_y - source_y
+    if not delta_x and not delta_y:
+        return source_x, source_y, target_x, target_y
+    scale = 1 / max(abs(delta_x) / 92, abs(delta_y) / 46)
+    offset_x = delta_x * scale
+    offset_y = delta_y * scale
+    return source_x + offset_x, source_y + offset_y, target_x - offset_x, target_y - offset_y
+
+
+def _render_model(model: DiagramModel, *, marker_id: str, label: str) -> str:
     positions = _diagram_positions(model)
-    edges = "".join(
-        f'<g class="diagram-edge"><line x1="{positions[edge.source_id][0]:.1f}" y1="{positions[edge.source_id][1]:.1f}" x2="{positions[edge.target_id][0]:.1f}" y2="{positions[edge.target_id][1]:.1f}" marker-end="url(#diagram-arrow)"/>'
-        + (f'<text x="{(positions[edge.source_id][0] + positions[edge.target_id][0]) / 2:.1f}" y="{(positions[edge.source_id][1] + positions[edge.target_id][1]) / 2 - 14:.1f}">{_escape(edge.label)}</text>' if edge.label else "")
-        + "</g>"
-        for edge in model.edges
-    )
+    rendered_edges: list[str] = []
+    for edge in model.edges:
+        x1, y1, x2, y2 = _edge_endpoints(positions[edge.source_id], positions[edge.target_id])
+        edge_label = ""
+        if edge.label:
+            edge_label = (
+                f'<text x="{(x1 + x2) / 2:.1f}" y="{(y1 + y2) / 2 - 14:.1f}">'
+                f'{_escape(edge.label)}</text>'
+            )
+        rendered_edges.append(
+            f'<g class="diagram-edge"><line x1="{x1:.1f}" y1="{y1:.1f}" '
+            f'x2="{x2:.1f}" y2="{y2:.1f}" marker-end="url(#{marker_id})"/>{edge_label}</g>'
+        )
+    edges = "".join(rendered_edges)
     nodes = "".join(
         f'<g class="diagram-node tone-{node.tone}" transform="translate({positions[node.id][0]:.1f} {positions[node.id][1]:.1f})"><rect x="-92" y="-46" width="184" height="92" rx="18"/>'
-        f'<text class="diagram-label" y="-5">{_escape(node.label)}</text>'
-        + (f'<text class="diagram-detail" y="22">{_escape(node.detail)}</text>' if node.detail else "")
+        '<foreignObject x="-82" y="-38" width="164" height="76">'
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-node-copy">'
+        f'<strong>{_escape(node.label)}</strong>'
+        + (f'<span>{_escape(node.detail)}</span>' if node.detail else "")
+        + "</div></foreignObject>"
         + "</g>"
         for node in model.nodes
     )
-    return f'<svg class="diagram" viewBox="0 0 1000 560" role="img" aria-label="课程关系图"><defs><marker id="diagram-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z"/></marker></defs>{edges}{nodes}</svg>'
+    return (
+        f'<svg class="diagram" viewBox="0 0 1000 560" role="img" aria-label="{_escape(label)}">'
+        f'<defs><marker id="{marker_id}" markerWidth="9" markerHeight="9" refX="7" '
+        'refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z"/></marker></defs>'
+        f'{nodes}{edges}</svg>'
+    )
 
 
 
-def _render_visual(visual: VisualSpec) -> str:
+def _render_logic_overview(logic_model: DeckLogicModel, *, summary: bool) -> str:
+    relation_labels = {
+        "prerequisite": "前置",
+        "decomposes": "拆解",
+        "supports": "支撑",
+        "derives": "推导",
+        "causes": "因果",
+        "contrasts": "对比",
+        "applies": "应用",
+        "verifies": "验证",
+        "summarizes": "收束",
+    }
+    chapter_by_node = {
+        node_id: chapter.id for chapter in logic_model.chapters for node_id in chapter.node_ids
+    }
+    links: dict[tuple[str, str], str] = {}
+    for edge in logic_model.edges:
+        source_chapter = chapter_by_node[edge.source_id]
+        target_chapter = chapter_by_node[edge.target_id]
+        if source_chapter != target_chapter:
+            links.setdefault((source_chapter, target_chapter), relation_labels[edge.relation.value])
+
+    rendered_chapters: list[str] = []
+    for index, chapter in enumerate(logic_model.chapters):
+        relation_attribute = ""
+        if index < len(logic_model.chapters) - 1:
+            target_chapter = logic_model.chapters[index + 1]
+            relation = links.get((chapter.id, target_chapter.id), "推进")
+            relation_attribute = f' data-relation="{_escape(relation)}"'
+        rendered_chapters.append(
+            f'<article class="logic-stage"{relation_attribute}>'
+            f'<span>{index + 1:02d}</span><h3>{_escape(chapter.title)}</h3>'
+            f'<p>{_escape(chapter.outcome if summary else chapter.question)}</p>'
+            '</article>'
+        )
+    chapters = "".join(rendered_chapters)
+    mode = "已建立的答案" if summary else "需要解决的问题"
+    return (
+        f'<section class="logic-overview {"is-summary" if summary else ""}">'
+        f'<div class="logic-origin"><span>核心问题</span><strong>{_escape(logic_model.central_question)}</strong></div>'
+        f'<div class="logic-stages" aria-label="{mode}">{chapters}</div>'
+        f'<div class="logic-outcome"><span>{"最终结论" if summary else "学习目标"}</span>'
+        f'<strong>{_escape(logic_model.thesis)}</strong></div></section>'
+    )
+
+
+def _render_chapter_rail(logic_model: DeckLogicModel, active_chapter: str | None) -> str:
+    items = "".join(
+        f'<span class="{"active" if chapter.id == active_chapter else ""}">'
+        f'<i>{index + 1:02d}</i>{_escape(chapter.title)}</span>'
+        for index, chapter in enumerate(logic_model.chapters)
+    )
+    return f'<nav class="chapter-rail" aria-label="课程章节进度">{items}</nav>'
+
+
+def _render_visual(visual: VisualSpec, *, slide_id: str) -> str:
     mode = visual_component(visual.kind).render_mode
     if mode is VisualRenderMode.CODE:
         return (
@@ -112,114 +204,135 @@ def _render_visual(visual: VisualSpec) -> str:
     if mode is VisualRenderMode.MODEL:
         if visual.model is None:
             raise ValueError("model visual is missing its structured diagram")
-        return f'<div class="diagram-wrap">{_render_model(visual.model)}<p class="visual-caption">{_escape(visual.caption)}</p></div>'
+        label = visual.title or visual.caption or "逻辑关系图"
+        return (
+            f'<div class="diagram-wrap">{_render_model(visual.model, marker_id=f"arrow-{slide_id}", label=label)}'
+            f'<p class="visual-caption">{_escape(visual.caption)}</p></div>'
+        )
     raise RuntimeError(f"Unsupported visual render mode: {mode}")
 
 
-def _render_slide(slide: PPTSlide, index: int, total: int) -> str:
+def _render_slide(
+    slide: PPTSlide,
+    index: int,
+    total: int,
+    logic_model: DeckLogicModel,
+) -> str:
     eyebrow_html = f'<div class="eyebrow">{_escape(slide.eyebrow or slide.kind.value)}</div>'
     if slide.kind == "cover" or slide.kind.value == "cover":
         eyebrow_html = f'<div class="author-badge">Presented by Mentorly</div>{eyebrow_html}'
 
     subtitle = f'<p class="subtitle">{_escape(slide.subtitle)}</p>' if slide.subtitle else ""
+    question = f'<p class="logic-question">{_escape(slide.question)}</p>' if slide.question else ""
     lead = f'<p class="lead">{_escape(slide.lead)}</p>' if slide.lead else ""
-    takeaway = f'<footer><span>TAKEAWAY</span>{_escape(slide.takeaway)}</footer>' if slide.takeaway else ""
+    conclusion = slide.takeaway or slide.claim
+    takeaway = (
+        f'<footer><span>本页结论</span><strong>{_escape(conclusion)}</strong></footer>'
+        if conclusion
+        else '<footer class="empty-footer"></footer>'
+    )
+    if slide.kind is SlideKind.ROADMAP:
+        visual = _render_logic_overview(logic_model, summary=False)
+        meta_class = " has-meta-visual"
+    elif slide.kind is SlideKind.SUMMARY:
+        visual = _render_logic_overview(logic_model, summary=True)
+        meta_class = " has-meta-visual"
+    else:
+        visual = _render_visual(slide.visual, slide_id=slide.id)
+        meta_class = ""
     active = " active" if index == 0 else ""
-    return f'''<section class="slide layout-{slide.layout.value} kind-{slide.kind.value}{active}" data-notes="{_escape(slide.speaker_notes)}">
-  <div class="orb orb-one"></div><div class="orb orb-two"></div>
+    chapter_rail = (
+        ""
+        if slide.kind in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}
+        else _render_chapter_rail(logic_model, slide.chapter_id)
+    )
+    notes = "\n\n".join(
+        part for part in (f"承接：{slide.bridge}" if slide.bridge else "", slide.speaker_notes) if part
+    )
+    return f'''<section class="slide layout-{slide.layout.value} kind-{slide.kind.value}{meta_class}{active}" data-notes="{_escape(notes)}" data-chapter="{_escape(slide.chapter_id or "")}">
   <div class="shell">
     <header>{eyebrow_html}<div class="page">{index + 1:02d}<i></i>{total:02d}</div><h1>{_escape(slide.title)}</h1>{subtitle}</header>
-    <div class="slide-main"><section class="copy">{lead}{_render_points(slide)}</section><section class="visual visual-{slide.visual.kind.value}">{_render_visual(slide.visual)}</section></div>
+    {chapter_rail}
+    <div class="slide-main"><section class="copy">{question}{lead}{_render_points(slide)}</section><section class="visual visual-{slide.visual.kind.value}">{visual}</section></div>
     {takeaway}
   </div>
 </section>'''
 
 
 BASE_CSS = r'''
-*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#f8fbff}
-body{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:#173b42}
-code,.cs-term{font-family:Menlo,Monaco,Consolas,monospace;background:rgba(70,184,180,0.1);color:#005552;padding:2px 8px;border-radius:6px;font-size:.9em;letter-spacing:-.02em}
+:root{--paper:#f7f8fa;--surface:#fff;--ink:#142326;--muted:#52666b;--quiet:#77898d;--line:#d7e0e2;--accent:#158f8b;--accent-soft:#e8f5f4;--warm:#c77a16;--warning:#b84d43;--code-bg:#102c31;--code-head:#0a2024;--code-text:#f5fbfb;--radius:8px}
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--paper)}
+body{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink)}
+code,.cs-term{font-family:Menlo,Monaco,Consolas,monospace;color:var(--ink)}
 .viewport{position:fixed;inset:0;overflow:hidden}.stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px}
-.slide{position:absolute;inset:0;width:1920px;height:1080px;visibility:hidden;opacity:0;overflow:hidden;background:linear-gradient(135deg,#ffffff 0%,#f0f5fa 100%);transition:opacity .28s ease}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;visibility:hidden;opacity:0;overflow:hidden;background:var(--paper);transition:opacity .22s ease}
 .slide.active{visibility:visible;opacity:1}
-.shell{position:relative;height:100%;padding:68px 102px 82px}
-.orb{position:absolute;border:1px solid #46B8B4;border-radius:50%;opacity:.15}
-.orb-one{right:-130px;top:-168px;width:540px;height:540px}
-.orb-two{left:-188px;bottom:-246px;width:500px;height:500px;border-color:#173B42}
-header{position:relative;z-index:1;padding-left:24px;border-left:4px solid #46B8B4}
-.author-badge{color:#46B8B4;font-size:18px;font-weight:800;letter-spacing:.15em;margin-bottom:12px;text-transform:uppercase}
-.eyebrow{color:#46B8B4;font-size:16px;font-weight:800;letter-spacing:.12em}
-.page{position:absolute;right:18px;top:3px;color:#8293ad;font:800 16px/1 Menlo,Monaco,Consolas,monospace;letter-spacing:.12em}
-.page i{display:inline-block;width:48px;height:1px;margin:0 12px 5px;background:#b9cbe7}
-h1{max-width:1260px;margin:16px 0 0;font-size:54px;line-height:1.12;letter-spacing:-.045em;color:#0b1d21}
-.subtitle{max-width:860px;margin:14px 0 0;color:#526970;font-size:22px;line-height:1.45}
-.slide-main{position:relative;z-index:1;height:685px;padding:34px 22px 58px;display:flex;gap:46px;align-items:center}
-.copy{flex:1;min-width:0}.visual{flex:1;min-width:0;height:100%;padding:0}
-.lead{max-width:720px;margin:0 0 24px;font-size:29px;line-height:1.36;font-weight:750;letter-spacing:-.025em}
-.points{display:grid;gap:20px}
+.shell{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;height:100%;padding:54px 104px 34px 88px}
+.kind-cover .shell,.kind-roadmap .shell,.kind-summary .shell{grid-template-rows:auto minmax(0,1fr) auto}
+header{position:relative;padding-left:22px;border-left:4px solid var(--accent)}
+.author-badge{margin-bottom:10px;color:var(--accent);font-size:17px;font-weight:800;text-transform:uppercase}
+.eyebrow{color:var(--accent);font-size:16px;font-weight:800}
+.page{position:absolute;right:0;top:2px;color:var(--quiet);font:700 16px/1 Menlo,Monaco,Consolas,monospace}
+.page i{display:inline-block;width:42px;height:1px;margin:0 12px 5px;background:var(--line)}
+h1{max-width:1380px;margin:12px 0 0;font-size:52px;line-height:1.12;letter-spacing:0;color:var(--ink)}
+.subtitle{max-width:1040px;margin:10px 0 0;color:var(--muted);font-size:21px;line-height:1.4}
+.chapter-rail{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:24px;margin-top:22px;border-bottom:1px solid var(--line)}
+.chapter-rail span{position:relative;padding:0 0 12px;color:var(--quiet);font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chapter-rail span:after{content:"";position:absolute;right:0;bottom:-1px;left:0;height:3px;background:transparent}
+.chapter-rail span.active{color:var(--ink)}.chapter-rail span.active:after{background:var(--accent)}
+.chapter-rail i{margin-right:8px;color:var(--accent);font:700 13px Menlo,Monaco,Consolas,monospace;font-style:normal}
+.slide-main{display:grid;grid-template-columns:minmax(0,42fr) minmax(0,58fr);gap:54px;min-height:0;padding:28px 0 22px;align-items:stretch}
+.copy,.visual{min-width:0;min-height:0}.copy{align-self:center}.visual{height:100%}
+.logic-question{margin:0 0 16px;padding-left:14px;border-left:3px solid var(--warm);color:#7b4a0f;font-size:18px;font-weight:800;line-height:1.4}
+.lead{max-width:780px;margin:0 0 24px;font-size:29px;line-height:1.38;font-weight:750}
+.points{display:grid;grid-template-columns:1fr;gap:14px}
 .points-3,.points-4{grid-template-columns:repeat(2,minmax(0,1fr))}
-.point{min-width:0;min-height:96px;padding:24px;border-radius:18px;background:#fff;box-shadow:0 8px 30px rgba(23,59,66,.05);border:1px solid #e1e9eb}
-.point h3{margin:0 0 10px;color:#173B42;font-size:20px;font-weight:800}
-.point p{margin:0;color:#526970;font-size:16px;line-height:1.5}
-.diagram-wrap{height:100%;display:flex;flex-direction:column;justify-content:center}
-.diagram{display:block;width:100%;height:100%;overflow:visible;min-height:450px}
-.diagram-edge{fill:none;stroke:#46B8B4;stroke-width:3}
-marker path{fill:#46B8B4}
-.diagram-node rect{fill:#fff;stroke:#46B8B4;stroke-width:2}
-.diagram-node.tone-secondary rect{fill:#f3fbfa;stroke:#46B8B4}
-.diagram-node.tone-accent rect{fill:#fff8ec;stroke:#eeaa42}
-.diagram-node.tone-muted rect{fill:#f6f7fa;stroke:#a1aab9}
-.diagram-node.tone-warning rect{fill:#fff1f0;stroke:#e78278}
-.diagram-node text{fill:#173b42;text-anchor:middle;font-size:25px;font-weight:760}
-.diagram-node .diagram-detail{fill:#526970;font-size:15px;font-weight:500}
-.visual-caption{margin:16px 0 0;padding:0 18px;color:#71809a;font-size:16px;line-height:1.4;text-align:center;font-style:italic}
-.empty-visual{display:grid;place-content:center;height:100%;border:2px dashed #c8d9ef;border-radius:18px;color:#8291a7;text-align:center}
-.code-panel{height:100%;overflow:hidden;border-radius:16px;background:#173b42;box-shadow:0 16px 40px rgba(23,59,66,.2)}
-.code-head{display:flex;align-items:center;gap:8px;height:46px;padding:0 17px;background:#0b1d21}
-.code-head i{width:10px;height:10px;border-radius:50%;background:#ff7e71}
-.code-head i:nth-child(2){background:#ffc762}
-.code-head i:nth-child(3){background:#65d5a7}
-.code-head b{margin-left:auto;color:#46b8b4;font:600 14px Menlo,Monaco,Consolas,monospace;text-transform:uppercase}
-.code-panel pre{height:calc(100% - 46px);margin:0;padding:27px;color:#f0f5fa;font:18px/1.6 Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;overflow:auto}
-.formula-panel{height:100%;padding:40px;background:#fff;border-radius:24px;border:1px solid #e1e9eb;box-shadow:0 8px 30px rgba(23,59,66,.05)}
-.formula{padding:30px;border-radius:17px;background:#f3fbfa;color:#173B42;font:700 36px/1.35 Menlo,Monaco,Consolas,monospace;text-align:center}
-.formula-panel ol{margin:30px 0 0;padding-left:27px;color:#526970;font-size:20px;line-height:1.8}
-.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;height:100%}
-.metrics article{display:flex;flex-direction:column;justify-content:center;min-height:145px;padding:24px;border:1px solid #e1e9eb;border-radius:20px;background:#fff}
-.metrics strong{color:#46B8B4;font-size:48px;letter-spacing:-.05em;font-family:'JetBrains Mono',monospace}
-.metrics b{margin-top:12px;font-size:20px;color:#173b42}
-.metrics p{margin:8px 0 0;color:#526970;font-size:15px;line-height:1.4}
-footer{position:absolute;z-index:1;right:102px;bottom:58px;left:102px;padding:20px 0;border-top:2px solid rgba(70,184,180,0.2);color:#526970;font-size:18px;font-weight:600}
-footer span{margin-right:16px;color:#46B8B4;font:800 14px Menlo,Monaco,Consolas,monospace;letter-spacing:.15em;text-transform:uppercase}
-.layout-hero .slide-main{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;padding:0;height:654px}
-.layout-hero .copy{flex:none;width:100%;max-width:1000px}
-.layout-hero .lead{font-size:38px;line-height:1.4}
-.layout-hero h1{font-size:80px;margin-bottom:24px}
-.layout-hero .visual{display:none}
-.layout-route .slide-main,.layout-statement .slide-main,.layout-studio .slide-main{display:grid;grid-template-columns:1fr 1fr;gap:60px}
-.layout-route .visual,.layout-statement .visual,.layout-studio .visual{height:100%}
-.layout-studio .slide-main{grid-template-columns:1.2fr 0.8fr}
-.layout-diagram .slide-main,.layout-sequence .slide-main{display:flex;flex-direction:column;align-items:center;text-align:center}
-.layout-diagram .copy,.layout-sequence .copy{flex:none}
-.layout-diagram header,.layout-sequence header{border:none;padding-left:0;text-align:center}
-.layout-diagram header h1,.layout-sequence header h1{margin-left:auto;margin-right:auto}
-.layout-diagram .visual,.layout-sequence .visual{width:100%;height:500px;flex:1}
-.layout-diagram .points,.layout-sequence .points{display:none}
-.layout-comparison .slide-main,.layout-mosaic .slide-main,.layout-recap .slide-main{display:grid;grid-template-columns:1fr 1fr;gap:40px}
-.layout-mosaic .points{grid-template-columns:1fr 1fr;grid-column:span 2}
-.layout-mosaic .visual{display:none}
-.layout-recap .slide-main{grid-template-columns:0.8fr 1.2fr}
-.layout-recap .point{background:#173b42;color:#fff}
-.layout-recap .point h3{color:#46B8B4}
-.layout-recap .point p{color:#a8bee0}
-.kind-question h1{font-size:60px}
-.deck-controls{position:fixed;z-index:5;right:24px;bottom:22px;display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.6);box-shadow:0 4px 15px rgba(0,0,0,.05);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.4)}
-.deck-controls button{width:36px;height:32px;border:0;border-radius:8px;background:transparent;color:#526970;font-size:18px;cursor:pointer;transition:all .2s}
-.deck-controls button:hover{background:#46b8b4;color:#fff}
-.deck-controls button:focus-visible{outline:2px solid #46b8b4;outline-offset:2px}
-.deck-counter{min-width:60px;color:#526970;font:600 14px Menlo,Monaco,Consolas,monospace;text-align:center}
-.speaker-notes{position:fixed;z-index:4;right:24px;bottom:84px;width:360px;max-height:250px;padding:16px 18px;border:1px solid #d2ddec;border-radius:14px;background:#fff;color:#526079;font-size:14px;line-height:1.6;box-shadow:0 12px 30px #1d457d22;display:none}
-.speaker-notes.open{display:block}
+.point{min-width:0;min-height:108px;padding:20px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.point h3{margin:0 0 8px;color:var(--ink);font-size:21px;font-weight:800}
+.point p{margin:0;color:var(--muted);font-size:19px;line-height:1.45}
+.diagram-wrap{display:flex;flex-direction:column;justify-content:center;height:100%;min-height:0}
+.diagram{display:block;width:100%;height:100%;min-height:390px;overflow:visible}
+.diagram-edge{fill:none;stroke:var(--accent);stroke-width:3}.diagram-edge text{fill:#316d6a;font-size:16px;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--paper);stroke-width:6px}
+marker path{fill:var(--accent)}
+.diagram-node rect{fill:var(--surface);stroke:var(--accent);stroke-width:2;rx:8}
+.diagram-node.tone-secondary rect{fill:var(--accent-soft)}.diagram-node.tone-accent rect{fill:#fff8ea;stroke:var(--warm)}
+.diagram-node.tone-muted rect{fill:#eef1f2;stroke:#8b999d}.diagram-node.tone-warning rect{fill:#fff0ee;stroke:var(--warning)}
+.diagram-node-copy{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;color:var(--ink);text-align:center;line-height:1.2}
+.diagram-node-copy strong{font-size:18px}.diagram-node-copy span{margin-top:5px;color:var(--muted);font-size:14px}
+.visual-caption{margin:8px 0 0;color:var(--quiet);font-size:17px;line-height:1.4;text-align:center}
+.code-panel{height:100%;overflow:hidden;border-radius:var(--radius);background:var(--code-bg);box-shadow:0 12px 28px rgba(16,44,49,.16)}
+.code-head{display:flex;align-items:center;gap:8px;height:46px;padding:0 18px;background:var(--code-head)}
+.code-head i{width:10px;height:10px;border-radius:50%;background:#e56d62}.code-head i:nth-child(2){background:#e5b853}.code-head i:nth-child(3){background:#55bd91}
+.code-head b{margin-left:auto;color:#8bd4d0;font:700 14px Menlo,Monaco,Consolas,monospace;text-transform:uppercase}
+.code-panel pre{height:calc(100% - 46px);margin:0;padding:26px 30px;color:var(--code-text);font:21px/1.45 Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;overflow:hidden}
+.code-panel pre code{padding:0;border:0;border-radius:0;background:transparent;color:var(--code-text);font:inherit;letter-spacing:0}
+.formula-panel{height:100%;padding:34px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.formula{padding:26px;border-left:5px solid var(--accent);background:var(--accent-soft);color:var(--ink);font:700 38px/1.35 Menlo,Monaco,Consolas,monospace;text-align:center}
+.formula-panel ol{margin:24px 0 0;padding-left:27px;color:var(--muted);font-size:20px;line-height:1.65}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;height:100%}
+.metrics article{display:flex;flex-direction:column;justify-content:center;min-height:145px;padding:22px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.metrics strong{color:var(--accent);font:700 46px/1 Menlo,Monaco,Consolas,monospace}.metrics b{margin-top:12px;font-size:21px}.metrics p{margin:8px 0 0;color:var(--muted);font-size:18px;line-height:1.4}
+footer{display:grid;grid-template-columns:118px minmax(0,1fr);gap:16px;align-items:start;min-height:62px;padding:16px 320px 0 0;border-top:1px solid var(--line)}
+footer span{color:var(--accent);font:800 14px Menlo,Monaco,Consolas,monospace}footer strong{color:var(--muted);font-size:18px;line-height:1.4}.empty-footer{visibility:hidden}
+.logic-overview{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,3fr) minmax(240px,1fr);gap:26px;align-items:stretch;height:100%}
+.logic-origin,.logic-outcome{display:flex;flex-direction:column;justify-content:center;padding:26px;border-left:5px solid var(--accent);background:var(--surface)}
+.logic-origin span,.logic-outcome span{margin-bottom:12px;color:var(--accent);font-size:15px;font-weight:800}.logic-origin strong,.logic-outcome strong{font-size:24px;line-height:1.35}
+.logic-stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:42px;align-items:center;position:relative}
+.logic-stage{position:relative;min-height:190px;padding:22px 18px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.logic-stage:not(:last-child):after{content:attr(data-relation) " \2192";position:absolute;z-index:2;right:-48px;top:50%;width:54px;color:var(--accent);font-size:13px;font-weight:800;text-align:center;transform:translateY(-50%)}
+.logic-stage span{color:var(--accent);font:800 14px Menlo,Monaco,Consolas,monospace}.logic-stage h3{margin:18px 0 10px;font-size:22px}.logic-stage p{margin:0;color:var(--muted);font-size:17px;line-height:1.45}
+.logic-overview.is-summary .logic-stage{border-top:4px solid var(--accent)}
+.has-meta-visual .slide-main{grid-template-columns:1fr}.has-meta-visual .copy{display:none}.has-meta-visual .visual{grid-column:1/-1}
+.layout-hero .slide-main{grid-template-columns:minmax(0,48fr) minmax(0,52fr);padding-top:38px}.layout-hero h1{max-width:1180px;font-size:76px}.layout-hero .lead{font-size:36px}
+.layout-route .slide-main,.layout-recap .slide-main{grid-template-columns:1fr}
+.layout-statement .slide-main{grid-template-columns:minmax(0,46fr) minmax(0,54fr)}
+.layout-diagram .slide-main{grid-template-columns:minmax(0,36fr) minmax(0,64fr)}
+.layout-sequence .slide-main{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:18px}.layout-sequence .copy{display:grid;grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr);gap:28px;align-items:start}.layout-sequence .copy .points{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.layout-sequence .logic-question,.layout-sequence .lead{grid-column:1}.layout-sequence .points{grid-column:2;grid-row:1/3}
+.layout-comparison .slide-main{grid-template-columns:1fr 1fr}.layout-studio .slide-main{grid-template-columns:minmax(0,34fr) minmax(0,66fr)}.layout-mosaic .slide-main{grid-template-columns:minmax(0,56fr) minmax(0,44fr)}
+.deck-controls{position:fixed;z-index:5;right:10px;top:50%;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border:1px solid rgba(20,35,38,.12);border-radius:var(--radius);background:rgba(255,255,255,.9);box-shadow:0 6px 20px rgba(20,35,38,.1);backdrop-filter:blur(8px);transform:translateY(-50%)}
+.deck-controls button{width:36px;height:32px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:18px;cursor:pointer}.deck-controls button:hover{background:var(--accent-soft);color:var(--ink)}.deck-controls button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.deck-counter{min-width:42px;padding:7px 0;color:var(--muted);font:700 13px Menlo,Monaco,Consolas,monospace;text-align:center;writing-mode:vertical-rl}
+.speaker-notes{position:fixed;z-index:4;right:76px;top:50%;width:380px;max-height:320px;padding:18px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:15px;line-height:1.6;box-shadow:0 12px 30px rgba(20,35,38,.14);display:none;transform:translateY(-50%)}.speaker-notes.open{display:block}
 body.embedded .deck-controls,body.embedded .speaker-notes{display:none}
 '''
 
@@ -238,7 +351,10 @@ new DeckController();
 
 class PPTHTMLRenderer:
     def render(self, deck: PPTDeck, publication: PPTPublication) -> str:
-        slides = "".join(_render_slide(slide, index, len(deck.slides)) for index, slide in enumerate(deck.slides))
+        slides = "".join(
+            _render_slide(slide, index, len(deck.slides), deck.logic_model)
+            for index, slide in enumerate(deck.slides)
+        )
         return f'''<!doctype html><html lang="{_escape(deck.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{_escape(deck.title)}</title><style>{BASE_CSS}</style></head><body><div class="viewport"><div class="stage" id="deckStage">{slides}</div></div><nav class="deck-controls"><button id="prevSlide" aria-label="上一页">←</button><span class="deck-counter" id="deckCounter"></span><button id="nextSlide" aria-label="下一页">→</button><button id="notesToggle" aria-label="讲稿">N</button></nav><aside class="speaker-notes" id="speakerNotes"></aside><script>{CONTROLLER_JS}</script></body></html>'''
 
 

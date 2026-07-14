@@ -115,13 +115,12 @@
 
         <div class="editor-content">
           <AlgorithmCodeEditorPanel
-            :key="editorSessionKey"
             v-show="activeEditorTab === 'code'"
             :model-value="editorCode"
             :title="executionMode === 'official' ? '官方模板代码' : '自定义 Python 代码'"
             :readonly="executionMode === 'official'"
             @update:model-value="updateEditorCode"
-            v-model:language="editorLanguageModel"
+            :language="language"
             :languages="supportedEditorLanguages"
             :disabled="generating || loading"
             :active-line="currentEvent?.line"
@@ -144,6 +143,7 @@
     </section>
 
     <AlgorithmRunErrorDialog
+      v-if="errorDialogOpen && runError"
       v-model:open="errorDialogOpen"
       :error="runError"
     />
@@ -155,7 +155,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Code2, RotateCcw, Settings } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { getErrorMessage } from '@/shared/api/http'
-import type { CodeLanguage, CustomCodeContract, RunError, VisualizerType } from '@/features/algorithm-visualization/types'
+import type { CustomCodeContract, RunError, VisualizerType } from '@/features/algorithm-visualization/types'
 import AlgorithmTemplatePicker from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmTemplatePicker.vue'
 import AlgorithmVisualizerStage from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmVisualizerStage.vue'
 import AlgorithmCodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmCodeEditorPanel.vue'
@@ -188,12 +188,10 @@ const {
   metaLoading,
   currentAlgorithm,
   templateData,
-  templateVersion,
   loadMeta,
   loadTemplate,
   resetTemplate,
   setAlgorithm,
-  setLanguage,
   getCurrentVisualizerType,
 } = useAlgorithmTemplate()
 
@@ -242,11 +240,6 @@ useVisualizerTimeline({
 const currentEvent = computed(() => playback.currentEvent.value)
 const currentStepIndex = computed(() => playback.currentStepIndex.value)
 const editorCode = computed(() => executionMode.value === 'official' ? code.value : customCode.value)
-const editorSessionKey = computed(() => {
-  return executionMode.value === 'official'
-    ? `official-${templateVersion.value}`
-    : 'custom'
-})
 
 // 按领域分组的算法分类
 const algorithmCategoryGroups = computed(() => groupAlgorithmsByDomain(algorithms.value))
@@ -267,15 +260,6 @@ const supportedEditorLanguages = computed(() => {
   }
   const filtered = languages.value.filter((item) => selected.supportedLanguages.includes(item.key))
   return filtered.length > 0 ? filtered : languages.value
-})
-
-// 编辑器语言双向绑定（运行中禁止切换）
-const editorLanguageModel = computed({
-  get: () => language.value,
-  set: (value: CodeLanguage) => {
-    if (generating.value) return
-    void setLanguage(value)
-  },
 })
 
 // 当前可视化器类型（优先取事件中指定，其次算法默认）
@@ -589,9 +573,8 @@ watch(customVisualizerType, () => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
-  gap: 1px;
-  background: var(--color-border);
+  grid-template-columns: minmax(0, 56fr) minmax(440px, 44fr);
+  background: var(--color-surface);
 }
 
 .visualizer-right {
@@ -601,10 +584,11 @@ watch(customVisualizerType, () => {
   background: var(--color-surface);
   display: flex;
   flex-direction: column;
+  border-left: 1px solid var(--color-border);
 }
 
 .editor-tabs {
-  height: 42px;
+  height: 44px;
   flex: 0 0 auto;
   display: flex;
   align-items: stretch;
@@ -614,7 +598,7 @@ watch(customVisualizerType, () => {
 }
 
 .editor-tab-btn {
-  height: 42px;
+  height: 44px;
   flex: 1;
   display: inline-flex;
   align-items: center;
@@ -628,7 +612,7 @@ watch(customVisualizerType, () => {
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .editor-tab-btn:hover {
@@ -651,6 +635,7 @@ watch(customVisualizerType, () => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--color-surface);
 }
 
 @keyframes spin {
@@ -691,6 +676,8 @@ watch(customVisualizerType, () => {
 
   .visualizer-right {
     min-height: 520px;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
   }
 }
 

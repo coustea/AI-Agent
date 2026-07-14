@@ -257,119 +257,52 @@ def _parse_json(
     return payload
 
 
-# 将 Pydantic schema 转为 prompt 可读的精简字段描述
-def _simplify_schema_for_prompt(schema: type[BaseModel]) -> str:
-    """构建用于 prompt 的精简 schema 描述，包含枚举值和嵌套字段提示."""""
-    full_schema = schema.model_json_schema()
-    defs = full_schema.get("$defs", {})
-    required = set(full_schema.get("required") or [])
-    props = full_schema.get("properties", {})
+# 从 Pydantic schema 生成实例模板，而非 schema 定义
+# 避免模型输出 schema 本身而非 JSON 实例
+def _schema_instance_template(schema: type[BaseModel]) -> str:
+    """生成 JSON 实例模板，包含字段描述注释，而非 JSON Schema 定义。
 
-    lines: list[str] = []
-    for name, prop in props.items():
-        marker = " (required)" if name in required else ""
-        desc = prop.get("description", "")
-        type_hint = _describe_property(prop, defs)
-        line = f"  {name}: {type_hint}{marker}"
-        if desc:
-            line += f" — {desc}"
-        lines.append(line)
+    解决问题：某些模型看到 JSON Schema 定义时会输出 schema 本身，而非符合 schema 的实例。
+    """
+    json_schema = schema.model_json_schema()
+    props = json_schema.get("properties", {})
 
-    return schema.__name__ + " {\n" + "\n".join(lines) + "\n}"
+    def get_example_value(prop_info: dict[str, Any]) -> str:
+        type_str = prop_info.get("type", "string")
+        default = prop_info.get("default")
+        if default is not None:
+            return json.dumps(default)
+        # Include enum values if available - helps repair mechanism
+        enum_values = prop_info.get("enum")
+        if enum_values:
+            # Return first enum value as example
+            return json.dumps(enum_values[0])
+        if type_str == "boolean":
+            return "false"
+        elif type_str == "integer":
+            return "0"
+        elif type_str == "number":
+            return "0.0"
+        elif type_str == "array":
+            return "[]"
+        elif type_str == "object":
+            return "{}"
+        else:
+            return '""'
 
-
-# 递归以人类可读形式描述 JSON schema 属性及约束
-def _describe_property(
-    prop: dict[str, Any],
-    defs: dict[str, Any],
-    depth: int = 0,
-) -> str:
-    """以人类可读形式描述 JSON schema 属性，包含关键约束."""""
-    if depth > 4:
-        return "..."
-
-    if "enum" in prop:
-        return "enum(" + ", ".join(str(value) for value in prop["enum"]) + ")"
-    if "const" in prop:
-        return f"const({prop['const']})"
-
-    prop_type = prop.get("type", "")
-
-    if prop_type == "string":
-        parts: list[str] = ["str"]
-        if "pattern" in prop:
-            parts.append(f"pattern={prop['pattern']}")
-        if "minLength" in prop or "maxLength" in prop:
-            min_len = prop.get("minLength", "")
-            max_len = prop.get("maxLength", "")
-            if min_len and max_len:
-                parts.append(f"len={min_len}-{max_len}")
-            elif max_len:
-                parts.append(f"max {max_len} chars")
-            elif min_len:
-                parts.append(f"min {min_len} chars")
-        return " (".join(parts) + ")" if len(parts) > 1 else "str"
-
-    if prop_type == "integer":
-        parts = ["int"]
-        if "minimum" in prop:
-            parts.append(f"min={prop['minimum']}")
-        if "maximum" in prop:
-            parts.append(f"max={prop['maximum']}")
-        return " (".join(parts) + ")" if len(parts) > 1 else "int"
-
-    if prop_type == "number":
-        return "float"
-    if prop_type == "boolean":
-        return "bool"
-
-    if prop_type == "array":
-        items = prop.get("items", {})
-        item_desc = _describe_property(items, defs, depth + 1)
-        parts = [f"list[{item_desc}]"]
-        if "minItems" in prop:
-            parts.append(f"min={prop['minItems']}")
-        if "maxItems" in prop:
-            parts.append(f"max={prop['maxItems']}")
-        return " (".join(parts) + ")" if len(parts) > 1 else f"list[{item_desc}]"
-
-    if prop_type == "object" and "properties" in prop:
-        fields = ", ".join(prop["properties"].keys())
-        return f"object({fields})"
-
-    if "$ref" in prop:
-        ref_name = prop["$ref"].split("/")[-1]
-        ref_def = defs.get(ref_name, {})
-        ref_props = ref_def.get("properties", {})
-        ref_required = set(ref_def.get("required", []))
-
-        if ref_props:
-            field_descs: list[str] = []
-            for field_name, field_prop in ref_props.items():
-                field_type = _describe_property(field_prop, defs, depth + 1)
-                marker = "*" if field_name in ref_required else ""
-                field_descs.append(f"{field_name}{marker}: {field_type}")
-            return f"{ref_name}({'; '.join(field_descs)})"
-
-        return ref_name
-
-    if "anyOf" in prop:
-        parts = [
-            _describe_property(item, defs, depth + 1)
-            for item in prop["anyOf"]
-            if isinstance(item, dict)
-        ]
-        return " | ".join(parts) if parts else "Any"
-
-    if "allOf" in prop:
-        parts = [
-            _describe_property(item, defs, depth + 1)
-            for item in prop["allOf"]
-            if isinstance(item, dict)
-        ]
-        return " & ".join(parts) if parts else "Any"
-
-    return prop_type or "Any"
+    lines = ["{"]
+    for prop_name, prop_info in props.items():
+        desc = prop_info.get("description", "")
+        example = get_example_value(prop_info)
+        # Include enum constraint in comment if available
+        enum_values = prop_info.get("enum")
+        if enum_values:
+            enum_comment = f" [可选值: {', '.join(str(v) for v in enum_values)}]"
+            lines.append(f'  "{prop_name}": {example},  // {desc}{enum_comment}')
+        else:
+            lines.append(f'  "{prop_name}": {example},  // {desc}')
+    lines.append("}")
+    return "\n".join(lines)
 
 
 # 将字符串 / 单条消息 / 消息列表统一为 LangChain messages
@@ -407,22 +340,23 @@ def _build_json_generation_messages(
     schema: type[BaseModel],
     messages: list[BaseMessage],
 ) -> list[BaseMessage]:
-    schema_desc = _simplify_schema_for_prompt(schema)
+    """构造结构化 JSON 生成的消息，使用实例模板而非 schema 定义。"""
+    instance_template = _schema_instance_template(schema)
     return [
         SystemMessage(
             content=(
                 "你是严格 JSON 生成器。\n"
                 "必须只输出一个完整 JSON 对象，不要 Markdown，不要代码围栏，不要解释。\n"
                 "不要调用工具，不要输出 tool_calls，不要输出 function_call。\n"
-                "输出必须能被 Python json.loads 直接解析，并且必须符合给定 Pydantic schema."""
+                "输出必须能被 Python json.loads 直接解析，必须符合给定格式。"
             )
         ),
         *messages,
         HumanMessage(
             content=(
                 "请根据以上任务输出 JSON。\n\n"
-                f"目标 schema:\n{schema_desc}\n\n"
-                "再次强调：只输出 JSON object 本体，不要任何额外文本."""
+                f"输出格式示例（按此结构输出，字段值根据任务调整）：\n{instance_template}\n\n"
+                "再次强调：只输出 JSON object 本体，不要任何额外文本。"
             )
         ),
     ]
@@ -436,35 +370,28 @@ def _build_repair_prompt(
     error_msg: str,
 ) -> list[BaseMessage]:
     """Build a repair request without discarding the original generation task."""
-    schema_desc = _simplify_schema_for_prompt(schema)
+    instance_template = _schema_instance_template(schema)
     return [
         SystemMessage(
             content=(
-                "你是 JSON 修正助手。上一次输出无法被后端解析或无法通过 Pydantic 校验。\n"
+                "你是 JSON 修正助手。上一次输出无法被后端解析或无法通过校验。\n"
                 "规则：\n"
                 "- 只输出修正后的完整 JSON 对象\n"
                 "- 不要 Markdown 代码围栏\n"
                 "- 不要解释文字\n"
                 "- 不要调用工具或 function_call\n"
-                "- **必须严格遵守 schema 中的所有约束**，包括：\n"
-                "  - 字段长度限制（如 min_length, max_length）\n"
-                "  - 数值范围限制（如 minimum, maximum）\n"
-                "  - 枚举值限制（只能从指定的枚举值中选择）\n"
-                "  - 数组长度限制（如 min_items, max_items）\n"
-                "  - 自定义验证规则（如首尾约束、唯一性约束）\n"
-                "- 保留未报错字段及数组中有效元素的相对顺序。\n"
-                "- 当数组长度违反 min_items 或 max_items 时，允许删除多余元素或补充最少必要元素以满足 schema；不要因为这条规则保留非法长度。\n"
-                "- 如果缺少必填顶层字段，必须依据原始任务重新补全完整对象，不能只输出出错片段。\n"
-                "- 保持教学语义与原始任务一致；在满足 schema 的前提下仅做必要改动。\n"
-                f"- 必须符合以下 schema:\n{schema_desc}"
+                "- 必须严格遵守字段约束\n"
+                "- 保留未报错字段及数组中有效元素的相对顺序\n"
+                "- 如果缺少必填字段，必须依据原始任务重新补全完整对象"
             )
         ),
         *original_messages,
         HumanMessage(
             content=(
                 f"上一次输出：\n```\n{raw_output}\n```\n\n"
-                f"错误信息：\n{error_msg}\n\n"
-                "请仔细检查并修正所有不符合约束的字段，输出修正后的完整 JSON。"
+                f"错误信息：{error_msg}\n\n"
+                f"正确格式示例：\n{instance_template}\n\n"
+                "请修正后输出完整 JSON。"
             )
         ),
     ]
@@ -477,6 +404,7 @@ def _build_repair_prompt(
 # 基础设施异常类型元组（延迟填充），用于区分可重试的底层故障
 _INFRA_EXCEPTIONS: tuple[type[Exception], ...] = ()
 _LLM_INFRA_RETRY_DELAYS_SECONDS = (1.0, 3.0)
+_LLM_EMPTY_RESPONSE_RETRY_DELAYS_SECONDS = (0.5,)
 
 
 # 延迟注册 openai / httpx 等基础设施异常类型到判断集合
@@ -781,6 +709,35 @@ def _extract_tool_call_arguments(tool_calls: Any) -> str:
     return ""
 
 
+async def _ainvoke_text_with_retries(
+    model: Any,
+    input_data: Any,
+    *,
+    operation: str,
+) -> str:
+    """Invoke a model and retry an empty response in the same operation."""
+
+    attempts = len(_LLM_EMPTY_RESPONSE_RETRY_DELAYS_SECONDS) + 1
+    for attempt in range(1, attempts + 1):
+        response = await _ainvoke_with_infra_retries(model, input_data, operation=operation)
+        content = _extract_text_from_response(response)
+        if content:
+            return content
+        if attempt >= attempts:
+            raise ValueError(f"{operation}: empty response after {attempts} attempts")
+        delay = _LLM_EMPTY_RESPONSE_RETRY_DELAYS_SECONDS[attempt - 1]
+        logger.warning(
+            "[LLM] %s empty response; retrying attempt %d/%d after %.1fs",
+            operation,
+            attempt + 1,
+            attempts,
+            delay,
+        )
+        await asyncio.sleep(delay)
+
+    raise RuntimeError(f"{operation} exhausted without text")
+
+
 # 从异常对象中尝试提取模型原始输出文本，用于修复阶段
 def _extract_raw_from_exception(exc: Exception) -> str:
     """从异常中尝试提取模型原始输出文本."""""
@@ -931,15 +888,11 @@ class Llm:
 
         try:
             generation_messages = _build_json_generation_messages(schema, messages)
-            response = await _ainvoke_with_infra_retries(
+            raw_output = await _ainvoke_text_with_retries(
                 model,
                 generation_messages,
                 operation=f"ainvoke_json.generate.{schema.__name__}",
             )
-            raw_output = _extract_text_from_response(response)
-
-            if not raw_output:
-                raise ValueError("empty response")
 
             parsed = _parse_json(raw_output, schema, validator)
             logger.info(
@@ -975,15 +928,11 @@ class Llm:
                 raw_output or "<empty response>",
                 error_msg,
             )
-            response = await _ainvoke_with_infra_retries(
+            repair_content = await _ainvoke_text_with_retries(
                 model,
                 repair_messages,
                 operation=f"ainvoke_json.repair.{schema.__name__}",
             )
-            repair_content = _extract_text_from_response(response)
-
-            if not repair_content:
-                raise ValueError("repair: empty response")
 
             parsed = _parse_json(repair_content, schema, validator)
             logger.info(

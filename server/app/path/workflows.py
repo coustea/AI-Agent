@@ -235,7 +235,7 @@ def _parse_markdown_metadata(text: str) -> tuple[dict, str]:
     Returns:
         (metadata_dict, body_text) — 无法解析时返回 ({}, text)。
     """
-    stripped = text.lstrip()
+    stripped = _normalize_tutorial_markdown(text)
     meta: dict = {}
 
     # 1. 提取一级标题作为 title
@@ -285,6 +285,29 @@ def _parse_markdown_metadata(text: str) -> tuple[dict, str]:
         body = rest
 
     return meta, body
+
+
+def _normalize_tutorial_markdown(text: str) -> str:
+    """Return the canonical Markdown document produced by the tutorial agent."""
+    stripped = text.strip().lstrip("\ufeff")
+    if not stripped:
+        return ""
+
+    opening = re.match(
+        r"^(?P<fence>`{3,}|~{3,})(?P<language>markdown|md|text)?[ \t]*\r?\n",
+        stripped,
+        flags=re.IGNORECASE,
+    )
+    if opening is None:
+        return stripped
+
+    fence = re.escape(opening.group("fence"))
+    closing = re.search(rf"\r?\n{fence}[ \t]*$", stripped)
+    document_end = closing.start() if closing is not None else len(stripped)
+    document = stripped[opening.end():document_end].strip()
+    if re.match(r"^#\s+\S", document) and re.search(r"^##\s+\S", document, re.MULTILINE):
+        return document
+    return stripped
 
 
 # ======================================================================

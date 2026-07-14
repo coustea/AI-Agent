@@ -1,11 +1,19 @@
-// 辅导策略结构
+// 行动计划项
+export interface ActionPlanItem {
+  topic: string
+  action_type: 'review' | 'practice' | 'quiz'
+  description: string
+  link: string
+}
+
+// 辅导策略结构 — 与后端 service.py 返回值对齐
 export interface GuidanceStrategy {
   version: number
+  conclusion: string // 本期结论文案（LLM 生成）
   focus_topics: string[]
-  preferred_resource_types: string[]
   recommended_session_minutes: number
-  weekly_goal: string
   tutoring_style: string
+  action_plan: ActionPlanItem[]
   reason: string
 }
 
@@ -88,10 +96,11 @@ export interface AssessmentFacts {
   data_quality: FactsDataQuality
 }
 
+// 学习评估报告 — 与后端 models.py LearningAssessmentReport 对齐
 export interface LearningAssessmentReport {
   id: number
   user_id: number
-  range_days: 7 | 14 | 30
+  range_days: 3 | 7 | 14
   window_start: string
   window_end: string
   status: 'generating' | 'ready' | 'failed'
@@ -103,6 +112,7 @@ export interface LearningAssessmentReport {
   updated_at: string
 }
 
+// 历史报告列表响应
 export interface ReportsHistoryResponse {
   items: Omit<LearningAssessmentReport, 'facts_snapshot' | 'report_markdown'>[]
   total: number
@@ -110,31 +120,35 @@ export interface ReportsHistoryResponse {
   page_size: number
 }
 
+// 辅导策略 API 响应
 export interface GuidanceStrategyResponse {
   guidance_strategy: Partial<GuidanceStrategy> | null
   guidance_updated_at: string | null
   last_assessment_report_id: number | null
 }
 
+/**
+ * 规范化辅导策略对象，处理可能缺失的字段
+ */
 export function normalizeGuidanceStrategy(strategy: Partial<GuidanceStrategy> | null | undefined): GuidanceStrategy | null {
   if (!strategy || Object.keys(strategy).length === 0) return null
 
   const normalized: GuidanceStrategy = {
     version: strategy.version ?? 1,
+    conclusion: strategy.conclusion ?? '',
     focus_topics: Array.isArray(strategy.focus_topics) ? strategy.focus_topics : [],
-    preferred_resource_types: Array.isArray(strategy.preferred_resource_types) ? strategy.preferred_resource_types : [],
     recommended_session_minutes: strategy.recommended_session_minutes ?? 25,
-    weekly_goal: strategy.weekly_goal ?? '',
     tutoring_style: strategy.tutoring_style ?? '',
+    action_plan: Array.isArray(strategy.action_plan) ? strategy.action_plan : [],
     reason: strategy.reason ?? '',
   }
 
+  // 判断是否有有效内容
   const hasContent = Boolean(
+    normalized.conclusion ||
     normalized.focus_topics.length ||
-    normalized.preferred_resource_types.length ||
-    normalized.weekly_goal ||
-    normalized.tutoring_style ||
-    normalized.reason,
+    normalized.action_plan.length ||
+    normalized.tutoring_style,
   )
 
   return hasContent ? normalized : null

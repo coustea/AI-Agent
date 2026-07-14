@@ -3,10 +3,10 @@
     <header class="page-header">
       <div class="header-left">
         <h1>学习评估</h1>
-        <p class="header-subtitle">学习记录如何改变当前辅导策略</p>
+        <p class="header-subtitle">基于学习记录的自适应辅导策略调整</p>
       </div>
       <div class="header-actions">
-        <div class="range-tabs">
+        <div class="range-tabs" role="group" aria-label="评估时间范围">
           <button
             v-for="days in rangeOptions"
             :key="days"
@@ -19,13 +19,13 @@
         </div>
         <Button class="generate-btn" :disabled="generating" @click="triggerReportGeneration">
           <Sparkles :size="16" />
-          {{ generating ? '生成中' : '生成报告' }}
+          {{ generating ? '生成中' : '重新评估' }}
         </Button>
       </div>
     </header>
 
-    <!-- 生成进度条 -->
-    <section v-if="generating" class="generation-progress">
+    <!-- 生成进度 -->
+    <section v-if="generating" class="generation-progress" aria-label="生成进度">
       <span
         v-for="(step, index) in generationSteps"
         :key="step"
@@ -36,248 +36,368 @@
     </section>
 
     <!-- 加载状态 -->
-    <section v-if="initialLoading" class="empty-state">
-      <Clock3 :size="28" />
-      <h2>正在加载学习评估</h2>
-      <p>正在读取报告、历史记录和当前辅导策略。</p>
+    <section v-if="initialLoading" class="loading-state">
+      <div class="loading-spinner" />
+      <p>正在加载学习评估数据...</p>
     </section>
 
     <!-- 无报告状态 -->
     <section v-else-if="!activeReport" class="empty-state">
-      <FileCheck :size="28" />
+      <FileCheck :size="32" class="empty-icon" />
       <h2>暂无评估报告</h2>
-      <p>点击「生成报告」创建第一份学习效果评估。</p>
+      <p>点击「重新评估」开始生成第一份学习效果评估报告</p>
     </section>
 
     <!-- 失败状态 -->
-    <section v-else-if="activeReport.status === 'failed'" class="empty-state failed">
+    <section v-else-if="activeReport.status === 'failed'" class="error-state">
       <AlertCircle :size="24" />
       <h2>报告生成失败</h2>
       <p>{{ activeReport.failure_code || '未知内部错误' }}</p>
-      <Button variant="outline" @click="triggerReportGeneration">重新生成</Button>
+      <Button variant="outline" @click="triggerReportGeneration">重试</Button>
     </section>
 
     <!-- 生成中状态 -->
-    <section v-else-if="activeReport.status !== 'ready'" class="empty-state">
-      <Route :size="28" />
-      <h2>报告正在生成</h2>
-      <p>{{ formatDateRange(activeReport.window_start, activeReport.window_end) }}</p>
+    <section v-else-if="activeReport.status !== 'ready'" class="loading-state">
+      <div class="loading-spinner" />
+      <p>报告正在生成中...</p>
     </section>
 
-    <!-- 正常内容 -->
+    <!-- 主内容 -->
     <template v-else-if="facts">
-      <!-- 横向指标行 -->
-      <section class="metrics-row">
-        <div class="metric-item">
-          <Clock3 :size="16" class="metric-icon" />
-          <div class="metric-content">
+      <!-- 本期结论与策略 -->
+      <section class="conclusion-section">
+        <div class="conclusion-card">
+          <div class="conclusion-header">
+            <ShieldCheck :size="18" />
+            <h2>本期结论与策略调整</h2>
+            <span class="window-badge">
+              <Calendar :size="14" />
+              {{ activeReport.range_days }} 天
+              {{ formatDateRange(activeReport.window_start, activeReport.window_end) }}
+            </span>
+          </div>
+          <p class="conclusion-text">{{ guidanceStrategy?.conclusion || defaultConclusion }}</p>
+          <div v-if="guidanceStrategy" class="strategy-highlights">
+            <div class="highlight-item">
+              <span class="highlight-label">重点主题</span>
+              <strong class="highlight-value">
+                {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
+              </strong>
+            </div>
+            <div class="highlight-item">
+              <span class="highlight-label">建议时长</span>
+              <strong class="highlight-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟/次</strong>
+            </div>
+            <div class="highlight-item">
+              <span class="highlight-label">辅导方式</span>
+              <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 核心指标 -->
+      <section class="metrics-section" aria-label="核心学习指标">
+        <div class="metric-card">
+          <Clock :size="18" class="metric-icon" />
+          <div class="metric-body">
             <span class="metric-label">学习时长</span>
-            <strong class="metric-value">{{ facts.activity.total_minutes }} 分钟</strong>
-            <span class="metric-detail">活跃 {{ facts.activity.active_days }} 天</span>
+            <strong class="metric-value">{{ facts.activity.total_minutes }}</strong>
+            <span class="metric-unit">分钟</span>
           </div>
+          <span class="metric-sub">活跃 {{ facts.activity.active_days }} 天</span>
         </div>
-        <div class="metric-item">
-          <Activity :size="16" class="metric-icon" />
-          <div class="metric-content">
-            <span class="metric-label">系统事件</span>
-            <strong class="metric-value">{{ totalEvents }} 次</strong>
-            <span class="metric-detail">{{ moduleSummary }}</span>
+        <div class="metric-card">
+          <ListChecks :size="18" class="metric-icon" />
+          <div class="metric-body">
+            <span class="metric-label">练习正确率</span>
+            <strong class="metric-value">{{ percentLabel(facts.practice.accuracy) }}</strong>
           </div>
+          <span class="metric-sub">完成 {{ facts.practice.correct }}/{{ facts.practice.submitted }} 题</span>
         </div>
-        <div class="metric-item">
-          <ListChecks :size="16" class="metric-icon" />
-          <div class="metric-content">
-            <span class="metric-label">练习表现</span>
-            <strong class="metric-value">{{ practiceAccuracyLabel }}</strong>
-            <span class="metric-detail">{{ facts.practice.correct }} / {{ facts.practice.submitted }} 题</span>
-          </div>
-        </div>
-        <div class="metric-item">
-          <Layers :size="16" class="metric-icon" />
-          <div class="metric-content">
-            <span class="metric-label">资源统计</span>
-            <strong class="metric-value">生成 {{ facts.resource_usage.generated }}</strong>
-            <span class="metric-detail">浏览 {{ facts.resource_usage.viewed }} / 完成 {{ facts.resource_usage.completed }}</span>
-          </div>
-        </div>
-        <div class="metric-item">
-          <Route :size="16" class="metric-icon" />
-          <div class="metric-content">
-            <span class="metric-label">路径推进</span>
+        <div class="metric-card">
+          <Route :size="18" class="metric-icon" />
+          <div class="metric-body">
+            <span class="metric-label">路径完成率</span>
             <strong class="metric-value">{{ percentLabel(facts.learning_path.completion_rate) }}</strong>
-            <span class="metric-detail">完成 {{ facts.learning_path.nodes_completed }} 节点</span>
           </div>
+          <span class="metric-sub">完成 {{ facts.learning_path.nodes_completed }} 节点</span>
+        </div>
+        <div class="metric-card">
+          <Target :size="18" class="metric-icon" />
+          <div class="metric-body">
+            <span class="metric-label">涉及主题</span>
+            <strong class="metric-value">{{ facts.topics.encountered.length }}</strong>
+            <span class="metric-unit">个</span>
+          </div>
+          <span class="metric-sub">{{ topicsSummary }}</span>
         </div>
       </section>
 
-      <!-- 图表区域 -->
-      <section class="charts-section">
-        <article class="chart-block">
-          <div class="block-header">
-            <Clock3 :size="16" />
-            <h3>每日学习时长趋势</h3>
+      <!-- 学习趋势 + 主题掌握 -->
+      <section class="analysis-section">
+        <article class="chart-panel">
+          <div class="panel-header">
+            <Clock :size="16" />
+            <h3>每日学习趋势</h3>
           </div>
-          <v-chart v-if="hasDailyData" class="chart chart-line" :option="lineOption" autoresize />
-          <div v-else class="empty-chart">本窗口暂无学习会话时长记录</div>
+          <v-chart v-if="hasDailyData" class="chart" :option="lineOption" autoresize />
+          <div v-else class="chart-empty">本窗口暂无学习时长记录</div>
         </article>
-
-        <article class="chart-block">
-          <div class="block-header">
-            <ChartColumn :size="16" />
-            <h3>功能使用占比</h3>
+        <article class="topics-panel">
+          <div class="panel-header">
+            <Target :size="16" />
+            <h3>主题掌握情况</h3>
           </div>
-          <v-chart v-if="hasModuleData" class="chart chart-pie" :option="pieOption" autoresize />
-          <div v-else class="empty-chart">本窗口暂无学习事件记录</div>
+          <div v-if="topicRows.length" class="topic-bars">
+            <div
+              v-for="topic in topicRows.slice(0, 5)"
+              :key="topic.topic"
+              class="topic-bar"
+            >
+              <div class="topic-info">
+                <span class="topic-name">{{ topic.topic }}</span>
+                <span class="topic-stats">{{ topic.correct }}/{{ topic.submitted }} 题</span>
+              </div>
+              <div class="bar-track">
+                <div
+                  class="bar-fill"
+                  :style="{ width: `${topic.accuracy * 100}%` }"
+                  :class="{ weak: topic.accuracy < 0.6, moderate: topic.accuracy >= 0.6 && topic.accuracy < 0.8 }"
+                />
+              </div>
+              <strong class="topic-accuracy" :class="{ weak: topic.accuracy < 0.6 }">
+                {{ topic.enough_evidence ? percentLabel(topic.accuracy) : '数据不足' }}
+              </strong>
+            </div>
+          </div>
+          <div v-else class="chart-empty">本窗口暂无练习记录</div>
         </article>
       </section>
 
-      <!-- 主题掌握证据 -->
-      <section class="topics-section">
-        <div class="section-header">
-          <Target :size="16" />
-          <h3>主题掌握证据</h3>
-        </div>
-        <div v-if="topicRows.length" class="topics-grid">
-          <button
-            v-for="topic in topicRows"
-            :key="topic.topic"
-            type="button"
-            class="topic-cell"
-          >
-            <span class="topic-name">{{ topic.topic }}</span>
-            <strong class="topic-accuracy">
-              {{ topic.enough_evidence ? percentLabel(topic.accuracy) : '数据不足' }}
-            </strong>
-            <span class="topic-detail">{{ topic.correct }} / {{ topic.submitted }} 题</span>
-          </button>
-        </div>
-        <div v-else class="empty-chart">本窗口暂无可评估的答题事实</div>
-      </section>
-
-      <!-- 当前辅导策略 -->
-      <section class="strategy-section">
+      <!-- 行动计划 -->
+      <section v-if="actionPlan.length" class="action-section">
         <div class="section-header">
           <Compass :size="16" />
-          <h3>当前辅导策略</h3>
+          <h3>下一阶段学习计划</h3>
         </div>
-        <div v-if="guidanceStrategy" class="strategy-grid">
-          <div class="strategy-item">
-            <span class="strategy-label">重点主题</span>
-            <strong class="strategy-value">
-              {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
-            </strong>
-          </div>
-          <div class="strategy-item">
-            <span class="strategy-label">建议时长</span>
-            <strong class="strategy-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟</strong>
-          </div>
-          <div class="strategy-item">
-            <span class="strategy-label">近期目标</span>
-            <strong class="strategy-value">{{ guidanceStrategy.weekly_goal || '暂无' }}</strong>
-          </div>
-          <div class="strategy-item">
-            <span class="strategy-label">辅导风格</span>
-            <strong class="strategy-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
+        <div class="action-list">
+          <div
+            v-for="(action, index) in actionPlan"
+            :key="index"
+            class="action-item"
+          >
+            <span class="action-index">{{ index + 1 }}</span>
+            <div class="action-content">
+              <p class="action-description">{{ action.description }}</p>
+              <span class="action-topic">{{ action.topic }}</span>
+            </div>
+            <RouterLink :to="action.link" class="action-link">
+              <span>{{ actionTypeLabel(action.action_type) }}</span>
+              <ArrowRight :size="14" />
+            </RouterLink>
           </div>
         </div>
-        <p v-else class="strategy-empty">生成第一份学习评估后将提供建议。</p>
       </section>
 
-      <!-- 证据质量 -->
-      <section class="quality-section">
-        <div class="section-header">
-          <ShieldCheck :size="16" />
-          <h3>证据质量</h3>
-        </div>
-        <div class="quality-metrics">
-          <div class="quality-item">
-            <span class="quality-label">学习活动</span>
-            <strong class="quality-value">{{ facts.data_quality.has_activity ? '已有记录' : '暂无记录' }}</strong>
-          </div>
-          <div class="quality-item">
-            <span class="quality-label">涉及主题</span>
-            <strong class="quality-value">{{ facts.topics.encountered.length }} 个</strong>
-          </div>
-          <div class="quality-item">
-            <span class="quality-label">样本不足</span>
-            <strong class="quality-value">{{ facts.data_quality.insufficient_topics.length }} 个</strong>
-          </div>
-          <div class="quality-item">
-            <span class="quality-label">资源反馈</span>
-            <strong class="quality-value">{{ facts.resource_usage.feedback.helpful + facts.resource_usage.feedback.not_helpful }} 条</strong>
-          </div>
-        </div>
-        <div v-if="facts.topics.encountered.length" class="topic-tags">
-          <span v-for="topic in facts.topics.encountered.slice(0, 12)" :key="topic">
-            {{ topic }}
-          </span>
-        </div>
-        <p class="quality-note">{{ evidenceNote }}</p>
+      <!-- 详细数据入口 -->
+      <section class="detail-entry">
+        <Button variant="outline" @click="showDetailDrawer = true">
+          <Layers :size="16" />
+          查看完整评估数据
+        </Button>
       </section>
 
       <!-- 历史报告 -->
       <section class="history-section">
         <div class="section-header">
-          <Layers :size="16" />
+          <History :size="16" />
           <h3>历史报告</h3>
           <span class="history-count">{{ totalReports }} 份</span>
         </div>
-        <div v-if="historyLoading" class="empty-chart">正在加载历史报告...</div>
-        <div v-else-if="reportsHistory.length === 0" class="empty-chart">暂无历史报告</div>
-        <div v-else class="history-list">
+        <div v-if="historyLoading" class="history-loading">加载中...</div>
+        <div v-else-if="reportsHistory.length === 0" class="history-empty">暂无历史报告</div>
+        <div v-else class="history-grid">
           <button
-            v-for="report in reportsHistory"
+            v-for="report in reportsHistory.slice(0, 4)"
             :key="report.id"
             type="button"
             :class="{ active: activeReport?.id === report.id }"
+            class="history-item"
             @click="selectReport(report.id)"
           >
             <strong>{{ report.range_days }} 天评估</strong>
             <span>{{ formatDateRange(report.window_start, report.window_end) }}</span>
-            <em>{{ statusLabel(report.status) }}</em>
           </button>
         </div>
-        <div v-if="totalPages > 1" class="pagination">
-          <Button variant="ghost" size="sm" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">
-            <ChevronLeft :size="14" />
-            上一页
-          </Button>
-          <span>{{ currentPage }} / {{ totalPages }}</span>
-          <Button variant="ghost" size="sm" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">
-            下一页
+        <div v-if="totalReports > 4" class="history-more">
+          <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
+            查看全部 {{ totalReports }} 份报告
             <ChevronRight :size="14" />
           </Button>
         </div>
       </section>
     </template>
+
+    <!-- 详细数据抽屉 -->
+    <Teleport to="body">
+      <div v-if="showDetailDrawer" class="drawer-overlay" @click.self="showDetailDrawer = false">
+        <div class="drawer-panel">
+          <header class="drawer-header">
+            <h2>完整评估数据</h2>
+            <button type="button" class="drawer-close" @click="showDetailDrawer = false">
+              <X :size="20" />
+            </button>
+          </header>
+          <div class="drawer-body">
+            <template v-if="facts">
+              <!-- 资源与路径详情 -->
+              <article class="detail-block">
+                <h4>资源使用统计</h4>
+                <div class="detail-grid">
+                  <div class="detail-item">
+                    <span>生成资源</span>
+                    <strong>{{ facts.resource_usage.generated }}</strong>
+                  </div>
+                  <div class="detail-item">
+                    <span>浏览资源</span>
+                    <strong>{{ facts.resource_usage.viewed }}</strong>
+                  </div>
+                  <div class="detail-item">
+                    <span>完成资源</span>
+                    <strong>{{ facts.resource_usage.completed }}</strong>
+                  </div>
+                  <div class="detail-item">
+                    <span>有帮助反馈</span>
+                    <strong>{{ facts.resource_usage.feedback.helpful }}</strong>
+                  </div>
+                </div>
+              </article>
+
+              <!-- 学习路径详情 -->
+              <article class="detail-block">
+                <h4>学习路径进度</h4>
+                <div class="detail-grid">
+                  <div class="detail-item">
+                    <span>开始节点</span>
+                    <strong>{{ facts.learning_path.nodes_started }}</strong>
+                  </div>
+                  <div class="detail-item">
+                    <span>完成节点</span>
+                    <strong>{{ facts.learning_path.nodes_completed }}</strong>
+                  </div>
+                  <div class="detail-item">
+                    <span>完成率</span>
+                    <strong>{{ percentLabel(facts.learning_path.completion_rate) }}</strong>
+                  </div>
+                </div>
+              </article>
+
+              <!-- 证据质量 -->
+              <article class="detail-block">
+                <h4>证据质量</h4>
+                <div class="detail-grid">
+                  <div class="detail-item">
+                    <span>学习活动</span>
+                    <strong>{{ facts.data_quality.has_activity ? '已有记录' : '暂无记录' }}</strong>
+                  </div>
+                  <div class="detail-item">
+                    <span>样本不足主题</span>
+                    <strong>{{ facts.data_quality.insufficient_topics.length }} 个</strong>
+                  </div>
+                </div>
+                <p v-if="facts.data_quality.insufficient_topics.length" class="detail-note">
+                  数据不足：{{ facts.data_quality.insufficient_topics.join('、') }}
+                </p>
+              </article>
+
+              <!-- 涉及主题标签 -->
+              <article v-if="facts.topics.encountered.length" class="detail-block">
+                <h4>涉及主题</h4>
+                <div class="topic-tags">
+                  <span v-for="topic in facts.topics.encountered" :key="topic" class="topic-tag">
+                    {{ topic }}
+                  </span>
+                </div>
+              </article>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 历史报告抽屉 -->
+    <Teleport to="body">
+      <div v-if="showHistoryDrawer" class="drawer-overlay" @click.self="showHistoryDrawer = false">
+        <div class="drawer-panel">
+          <header class="drawer-header">
+            <h2>历史报告</h2>
+            <button type="button" class="drawer-close" @click="showHistoryDrawer = false">
+              <X :size="20" />
+            </button>
+          </header>
+          <div class="drawer-body">
+            <div v-if="historyLoading" class="history-loading">加载中...</div>
+            <div v-else class="history-full-list">
+              <button
+                v-for="report in reportsHistory"
+                :key="report.id"
+                type="button"
+                :class="{ active: activeReport?.id === report.id }"
+                class="history-full-item"
+                @click="selectReport(report.id); showHistoryDrawer = false"
+              >
+                <strong>{{ report.range_days }} 天评估</strong>
+                <span>{{ formatDateRange(report.window_start, report.window_end) }}</span>
+                <em>{{ statusLabel(report.status) }}</em>
+              </button>
+            </div>
+            <div v-if="totalPages > 1" class="pagination">
+              <Button variant="ghost" size="sm" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">
+                <ChevronLeft :size="14" />
+                上一页
+              </Button>
+              <span>{{ currentPage }} / {{ totalPages }}</span>
+              <Button variant="ghost" size="sm" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">
+                下一页
+                <ChevronRight :size="14" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
+import { RouterLink } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import {
-  Activity,
   AlertCircle,
-  ChartColumn,
+  ArrowRight,
+  Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock3,
+  Clock,
   Compass,
   FileCheck,
+  History,
   Layers,
   ListChecks,
   Route,
   ShieldCheck,
   Sparkles,
   Target,
+  X,
 } from 'lucide-vue-next'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart, PieChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
   generateAssessmentReport,
   getGuidanceStrategy,
@@ -286,6 +406,7 @@ import {
   getReportsHistory,
 } from '@/features/learning-assessment/api/assessment'
 import type {
+  ActionPlanItem,
   AssessmentFacts,
   FactsTopicPractice,
   GuidanceStrategy,
@@ -293,17 +414,10 @@ import type {
 } from '@/features/learning-assessment/model/assessment'
 import { normalizeGuidanceStrategy } from '@/features/learning-assessment/model/assessment'
 
-use([
-  CanvasRenderer,
-  LineChart,
-  PieChart,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-])
+use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
-const rangeOptions = [7, 14, 30] as const
-const selectedRange = ref<7 | 14 | 30>(7)
+const rangeOptions = [3, 7, 14] as const
+const selectedRange = ref<3 | 7 | 14>(7)
 const reportsHistory = ref<Omit<LearningAssessmentReport, 'facts_snapshot' | 'report_markdown'>[]>([])
 const activeReport = ref<LearningAssessmentReport | null>(null)
 const guidanceStrategy = ref<GuidanceStrategy | null>(null)
@@ -315,120 +429,70 @@ const totalReports = ref(0)
 const totalPages = ref(1)
 const currentStepIdx = ref(0)
 const pageSize = 10
+const showDetailDrawer = ref(false)
+const showHistoryDrawer = ref(false)
 const generationSteps = ['聚合学习事实', '校验证据质量', '生成评估报告', '更新辅导策略']
-
-const MODULE_LABELS: Record<string, string> = {
-  chat: 'AI 辅导',
-  quiz: '题库练习',
-  path: '学习路径',
-  resource: '学习资源',
-  visualizer: '算法可视化',
-}
 
 const facts = computed<AssessmentFacts | null>(() => activeReport.value?.facts_snapshot ?? null)
 
-const totalEvents = computed(() => (
-  facts.value?.activity.module_distribution.reduce((sum, item) => sum + item.count, 0) ?? 0
-))
+const actionPlan = computed<ActionPlanItem[]>(() => guidanceStrategy.value?.action_plan ?? [])
+
+const defaultConclusion = computed(() => {
+  if (!facts.value) return '暂无学习数据，开始学习后将生成个性化评估。'
+  if (!facts.value.data_quality.has_activity) {
+    return '当前窗口暂无学习活动记录，建议先完成一次资源学习或练习。'
+  }
+  return '学习证据已形成，系统已记录到学习时长、模块使用和练习表现。'
+})
 
 const hasDailyData = computed(() => (
   (facts.value?.activity.daily_minutes ?? []).some(item => item.minutes > 0)
 ))
 
-const hasModuleData = computed(() => (
-  (facts.value?.activity.module_distribution ?? []).some(item => item.count > 0)
-))
-
 const topicRows = computed<FactsTopicPractice[]>(() => (
   [...(facts.value?.practice.by_topic ?? [])]
     .sort((a, b) => b.submitted - a.submitted)
-    .slice(0, 8)
 ))
 
-const moduleSummary = computed(() => {
-  const modules = facts.value?.activity.module_distribution ?? []
-  const top = [...modules].sort((a, b) => b.count - a.count)[0]
-  if (!top) return '暂无事件'
-  return `${MODULE_LABELS[top.module] || top.module}最多`
-})
-
-const practiceAccuracyLabel = computed(() => {
-  const current = facts.value
-  if (!current || current.practice.submitted === 0) return '无数据'
-  return percentLabel(current.practice.accuracy)
-})
-
-const evidenceNote = computed(() => {
-  const insufficient = facts.value?.data_quality.insufficient_topics ?? []
-  if (insufficient.length) return `数据不足：${insufficient.join('、')}`
-  if (!facts.value?.data_quality.has_activity) return '当前窗口暂无活动记录。'
-  return '当前窗口没有被标记为样本不足的主题。'
+const topicsSummary = computed(() => {
+  const topics = facts.value?.topics.encountered ?? []
+  if (topics.length === 0) return '暂无主题'
+  if (topics.length <= 3) return topics.join('、')
+  return `${topics.slice(0, 3).join('、')} 等`
 })
 
 const lineOption = computed(() => {
   const daily = facts.value?.activity.daily_minutes ?? []
   return {
-    grid: { top: 20, right: 16, bottom: 28, left: 40 },
+    grid: { top: 24, right: 20, bottom: 32, left: 44 },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: '#ffffff',
-      borderColor: '#e2e8f0',
-      textStyle: { color: '#1e293b', fontSize: 12 },
+      backgroundColor: 'rgba(255, 255, 255, 0.96)',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      textStyle: { color: '#1f2937', fontSize: 13 },
       formatter: '{b}<br/>学习时长: {c} 分钟',
     },
     xAxis: {
       type: 'category',
       data: daily.map(item => formatShortDate(item.date)),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#cbd5e1' } },
-      axisLabel: { color: '#64748b', fontSize: 11 },
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      axisLabel: { color: '#6b7280', fontSize: 12 },
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e2e8f0', type: 'dashed' } },
-      axisLabel: { color: '#64748b', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
+      axisLabel: { color: '#6b7280', fontSize: 12 },
     },
     series: [{
       data: daily.map(item => item.minutes),
       type: 'line',
       smooth: true,
-      symbolSize: 5,
-      lineStyle: { color: '#0d9488', width: 2 },
+      symbolSize: 6,
+      lineStyle: { color: '#0d9488', width: 2.5 },
       itemStyle: { color: '#0d9488' },
       areaStyle: { color: 'rgba(13, 148, 136, 0.1)' },
-    }],
-  }
-})
-
-const pieOption = computed(() => {
-  const modules = facts.value?.activity.module_distribution ?? []
-  return {
-    color: ['#0d9488', '#2563eb', '#f59e0b', '#10b981', '#64748b'],
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} 次 ({d}%)',
-      backgroundColor: '#ffffff',
-      borderColor: '#e2e8f0',
-      textStyle: { color: '#1e293b', fontSize: 12 },
-    },
-    legend: {
-      bottom: 0,
-      icon: 'circle',
-      textStyle: { color: '#475569', fontSize: 11 },
-    },
-    series: [{
-      type: 'pie',
-      radius: ['45%', '70%'],
-      center: ['50%', '42%'],
-      itemStyle: {
-        borderRadius: 4,
-        borderColor: '#ffffff',
-        borderWidth: 2,
-      },
-      label: { show: false },
-      data: modules
-        .filter(item => item.count > 0)
-        .map(item => ({ value: item.count, name: MODULE_LABELS[item.module] || item.module })),
     }],
   }
 })
@@ -511,6 +575,15 @@ function percentLabel(value: number): string {
   return `${Math.round(value * 100)}%`
 }
 
+function actionTypeLabel(type: ActionPlanItem['action_type']): string {
+  const labels: Record<string, string> = {
+    review: '开始复习',
+    practice: '进入练习',
+    quiz: '开始测验',
+  }
+  return labels[type] || '开始学习'
+}
+
 function formatShortDate(value: string): string {
   const parts = value.split('-')
   return parts.length === 3 ? `${parts[1]}-${parts[2]}` : value
@@ -547,7 +620,7 @@ onMounted(async () => {
 
 <style scoped>
 .assessment-page {
-  max-width: 1200px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: var(--space-6);
   display: flex;
@@ -555,7 +628,7 @@ onMounted(async () => {
   gap: var(--space-5);
 }
 
-h1, h2, h3, p {
+h1, h2, h3, h4, p {
   margin: 0;
 }
 
@@ -573,7 +646,6 @@ h1, h2, h3, p {
   font-size: 1.5rem;
   font-weight: var(--weight-extrabold);
   color: var(--color-text-strong);
-  letter-spacing: 0;
 }
 
 .header-subtitle {
@@ -590,15 +662,15 @@ h1, h2, h3, p {
 
 .range-tabs {
   display: inline-flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
 
 .range-tabs button {
-  min-width: 4rem;
+  min-width: 3.5rem;
   min-height: 2rem;
   border: 0;
   border-radius: var(--radius-sm);
@@ -607,7 +679,7 @@ h1, h2, h3, p {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.15s ease;
 }
 
 .range-tabs button:hover {
@@ -618,7 +690,6 @@ h1, h2, h3, p {
 .range-tabs button.active {
   color: var(--color-primary-text);
   background: var(--color-primary-soft);
-  box-shadow: inset 0 0 0 1px var(--color-primary-border);
 }
 
 .generate-btn {
@@ -634,7 +705,7 @@ h1, h2, h3, p {
 }
 
 .generation-progress span {
-  min-height: 2rem;
+  min-height: 2.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -649,62 +720,169 @@ h1, h2, h3, p {
 .generation-progress span.done {
   background: var(--color-success-soft);
   color: var(--color-success);
+  border-color: transparent;
 }
 
 .generation-progress span.current {
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
+  border-color: transparent;
 }
 
-/* Empty State */
-.empty-state {
-  min-height: 12rem;
+/* Loading & Empty States */
+.loading-state,
+.empty-state,
+.error-state {
+  min-height: 14rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
   text-align: center;
-  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-.empty-state h2 {
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state .empty-icon {
+  color: var(--color-text-muted);
+}
+
+.empty-state h2,
+.error-state h2 {
   font-size: var(--text-lg);
   color: var(--color-text-strong);
 }
 
-.empty-state.failed {
+.empty-state p,
+.loading-state p {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.error-state {
   color: var(--color-danger);
 }
 
-/* Metrics Row */
-.metrics-row {
+.error-state h2 {
+  color: var(--color-danger);
+}
+
+/* Conclusion Section */
+.conclusion-section {
+  margin-top: var(--space-1);
+}
+
+.conclusion-card {
+  padding: var(--space-5);
+  background: linear-gradient(135deg, var(--color-primary-soft) 0%, var(--color-surface) 40%);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-lg);
+}
+
+.conclusion-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  color: var(--color-primary-text);
+}
+
+.conclusion-header h2 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-extrabold);
+  color: var(--color-text-strong);
+}
+
+.window-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-bold);
+}
+
+.conclusion-text {
+  font-size: var(--text-base);
+  color: var(--color-text-strong);
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-4);
+}
+
+.strategy-highlights {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-3);
 }
 
-.metric-item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
+.highlight-item {
   padding: var(--space-3);
+  background: var(--color-surface);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.highlight-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--weight-bold);
+}
+
+.highlight-value {
+  font-size: var(--text-sm);
+  color: var(--color-text-strong);
+  line-height: 1.3;
+}
+
+/* Metrics Section */
+.metrics-section {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+
+.metric-card {
+  padding: var(--space-4);
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .metric-icon {
-  flex-shrink: 0;
   color: var(--color-primary-text);
-  margin-top: 2px;
 }
 
-.metric-content {
-  min-width: 0;
+.metric-body {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-wrap: wrap;
 }
 
 .metric-label {
@@ -714,31 +892,38 @@ h1, h2, h3, p {
 }
 
 .metric-value {
-  font-size: var(--text-md);
+  font-size: 1.5rem;
+  font-weight: var(--weight-extrabold);
   color: var(--color-text-strong);
-  line-height: 1.2;
+  line-height: 1;
 }
 
-.metric-detail {
+.metric-unit {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.metric-sub {
   font-size: var(--text-xs);
   color: var(--color-text-faint);
 }
 
-/* Charts Section */
-.charts-section {
+/* Analysis Section */
+.analysis-section {
   display: grid;
-  grid-template-columns: 1.4fr 0.6fr;
+  grid-template-columns: 1.4fr 1fr;
   gap: var(--space-4);
 }
 
-.chart-block {
+.chart-panel,
+.topics-panel {
+  padding: var(--space-4);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  padding: var(--space-4);
 }
 
-.block-header {
+.panel-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -746,7 +931,7 @@ h1, h2, h3, p {
   color: var(--color-primary-text);
 }
 
-.block-header h3 {
+.panel-header h3 {
   font-size: var(--text-base);
   font-weight: var(--weight-extrabold);
   color: var(--color-text-strong);
@@ -754,15 +939,11 @@ h1, h2, h3, p {
 
 .chart {
   width: 100%;
+  height: 12rem;
 }
 
-.chart-line,
-.chart-pie {
-  height: 14rem;
-}
-
-.empty-chart {
-  min-height: 6rem;
+.chart-empty {
+  min-height: 10rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -770,12 +951,89 @@ h1, h2, h3, p {
   font-size: var(--text-sm);
 }
 
-/* Section Header */
+/* Topic Bars */
+.topic-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.topic-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  grid-template-rows: auto auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+}
+
+.topic-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.topic-name {
+  font-size: var(--text-sm);
+  color: var(--color-text-strong);
+  font-weight: var(--weight-bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topic-stats {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.bar-track {
+  height: 6px;
+  background: var(--color-border-light);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.bar-fill.weak {
+  background: var(--color-danger);
+}
+
+.bar-fill.moderate {
+  background: var(--color-warning);
+}
+
+.topic-accuracy {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  font-size: var(--text-base);
+  color: var(--color-primary-text);
+  text-align: right;
+}
+
+.topic-accuracy.weak {
+  color: var(--color-danger);
+}
+
+/* Action Section */
+.action-section {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
 .section-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
   color: var(--color-primary-text);
 }
 
@@ -792,239 +1050,331 @@ h1, h2, h3, p {
   font-weight: var(--weight-bold);
 }
 
-/* Topics Section */
-.topics-section {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  padding: var(--space-4);
-}
-
-.topics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+.action-list {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
 }
 
-.topic-cell {
-  min-height: 5.5rem;
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.action-index {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
+  flex-shrink: 0;
+}
+
+.action-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.action-description {
+  font-size: var(--text-sm);
+  color: var(--color-text-strong);
+  line-height: 1.4;
+}
+
+.action-topic {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: white;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.action-link:hover {
+  background: var(--color-primary-hover);
+}
+
+/* Detail Entry */
+.detail-entry {
+  display: flex;
+  justify-content: center;
+}
+
+/* History Section */
+.history-section {
+  padding: var(--space-4);
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.history-loading,
+.history-empty {
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-faint);
+  font-size: var(--text-sm);
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+
+.history-item {
+  min-height: 4.5rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
   text-align: left;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  transition: all var(--transition-fast);
+  transition: all 0.15s ease;
 }
 
-.topic-cell:hover {
-  border-color: var(--color-primary-border);
+.history-item:hover,
+.history-item.active {
+  border-color: var(--color-primary);
   background: var(--color-primary-soft);
 }
 
-.topic-name {
+.history-item strong {
   font-size: var(--text-sm);
-  font-weight: var(--weight-extrabold);
   color: var(--color-text-strong);
-  overflow-wrap: anywhere;
 }
 
-.topic-accuracy {
-  font-size: var(--text-lg);
-  color: var(--color-primary-text);
-}
-
-.topic-detail {
-  font-size: var(--text-xs);
-  color: var(--color-text-faint);
-}
-
-/* Strategy Section */
-.strategy-section {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  padding: var(--space-4);
-}
-
-.strategy-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-}
-
-.strategy-item {
-  min-height: 5rem;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-primary-soft));
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-1);
-}
-
-.strategy-label {
+.history-item span {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
 }
 
-.strategy-value {
-  font-size: var(--text-md);
+.history-more {
+  margin-top: var(--space-3);
+  display: flex;
+  justify-content: center;
+}
+
+/* Drawers */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer-panel {
+  width: min(420px, 100%);
+  background: var(--color-surface);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: slideIn 0.25s ease;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawer-header h2 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
   color: var(--color-text-strong);
-  line-height: 1.3;
 }
 
-.strategy-empty {
-  min-height: 6rem;
+.drawer-close {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-faint);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-/* Quality Section */
-.quality-section {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+.drawer-close:hover {
+  background: var(--color-bg);
+  color: var(--color-text-strong);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow: auto;
   padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
 }
 
-.quality-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
+.detail-block h4 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-extrabold);
+  color: var(--color-text-strong);
   margin-bottom: var(--space-3);
 }
 
-.quality-item {
-  min-height: 4.5rem;
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.detail-item {
   padding: var(--space-3);
+  background: var(--color-bg);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-primary-soft));
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: var(--space-1);
 }
 
-.quality-label {
+.detail-item span {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
 }
 
-.quality-value {
-  font-size: var(--text-md);
+.detail-item strong {
+  font-size: var(--text-base);
   color: var(--color-text-strong);
+}
+
+.detail-note {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
 }
 
 .topic-tags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
 }
 
-.topic-tags span {
+.topic-tag {
   padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
+  border-radius: var(--radius-pill);
 }
 
-.quality-note {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--leading-relaxed);
-}
-
-/* History Section */
-.history-section {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  padding: var(--space-4);
-}
-
-.history-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.history-full-list {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
-.history-list button {
+.history-full-item {
   min-height: 4rem;
   padding: var(--space-3);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--color-bg);
   text-align: left;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: all var(--transition-fast);
+  transition: all 0.15s ease;
 }
 
-.history-list button:hover,
-.history-list button.active {
+.history-full-item:hover,
+.history-full-item.active {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
 }
 
-.history-list strong {
+.history-full-item strong {
   font-size: var(--text-sm);
   color: var(--color-text-strong);
 }
 
-.history-list span {
+.history-full-item span {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
-.history-list em {
+.history-full-item em {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   font-style: normal;
 }
 
-/* Pagination */
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
   gap: var(--space-3);
   margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
 /* Responsive */
-@media (max-width: 1024px) {
-  .charts-section {
+@media (max-width: 900px) {
+  .analysis-section {
     grid-template-columns: 1fr;
   }
 
-  .metrics-row {
-    grid-template-columns: repeat(3, 1fr);
+  .metrics-section {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  .strategy-grid,
-  .quality-metrics {
+  .strategy-highlights {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .history-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .assessment-page {
     padding: var(--space-4);
   }
@@ -1038,32 +1388,44 @@ h1, h2, h3, p {
     flex-wrap: wrap;
   }
 
-  .metrics-row {
-    grid-template-columns: repeat(2, 1fr);
+  .range-tabs {
+    width: 100%;
+    justify-content: stretch;
   }
 
-  .topics-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .range-tabs button {
+    flex: 1;
   }
 
-  .history-list {
-    grid-template-columns: 1fr;
+  .generate-btn {
+    flex: 1;
+    justify-content: center;
   }
 
   .generation-progress {
     grid-template-columns: repeat(2, 1fr);
   }
-}
 
-@media (max-width: 480px) {
-  .metrics-row {
+  .metrics-section {
     grid-template-columns: 1fr;
   }
 
-  .strategy-grid,
-  .quality-metrics,
-  .topics-grid {
+  .strategy-highlights {
     grid-template-columns: 1fr;
+  }
+
+  .history-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topic-bar {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .topic-accuracy {
+    grid-column: 1;
+    text-align: left;
   }
 }
 </style>

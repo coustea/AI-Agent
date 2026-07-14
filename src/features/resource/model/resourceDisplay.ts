@@ -1,4 +1,7 @@
-import type { GeneratedResourceBundle } from '@/features/resource/api/history'
+import type {
+  GeneratedResourceBundle,
+  GeneratedResourceItem,
+} from '@/features/resource/model/resource'
 import { getArtifactLabel } from '@/shared/content/kind'
 import type { ResourceArtifactLike } from '@/shared/content/artifact'
 
@@ -9,7 +12,7 @@ export type ResourceCard = {
   summary: string
   format: string
   content: ResourceArtifactLike
-  resource: Record<string, any>
+  resource: GeneratedResourceItem
 }
 
 export const RESOURCE_ORDER = [
@@ -35,7 +38,7 @@ export function getResourceBundleSubtitle(bundle: GeneratedResourceBundle | null
 }
 
 export function getResourceCards(bundle: GeneratedResourceBundle | null): ResourceCard[] {
-  const resources = bundle?.resources ?? (bundle as any)?.items
+  const resources = bundle?.resources
   const subtitle = getResourceBundleSubtitle(bundle)
 
   if (!Array.isArray(resources)) return []
@@ -75,13 +78,10 @@ export function formatResourceTime(time: string | null) {
   }).format(date)
 }
 
-function normalizeCard(resource: Record<string, any>, bundleSubtitle: string): ResourceCard | null {
-  const type = String(resource.type || resource.agent_type || resource.agentId || '')
-    .trim()
-    .toLowerCase()
-  const status = String(resource.status || 'completed').trim().toLowerCase()
+function normalizeCard(resource: GeneratedResourceItem, bundleSubtitle: string): ResourceCard | null {
+  const type = resource.type
 
-  if (!RESOURCE_TYPES.has(type) || !['finished', 'completed', 'success'].includes(status)) {
+  if (!RESOURCE_TYPES.has(type)) {
     return null
   }
 
@@ -103,17 +103,14 @@ function getResourceOrder(type: string) {
   return index === -1 ? 99 : index
 }
 
-function getTitle(resource: Record<string, any>, type: string, bundleSubtitle: string) {
+function getTitle(resource: GeneratedResourceItem, type: string, bundleSubtitle: string) {
   const title = typeof resource.title === 'string' ? resource.title.trim() : ''
   return title || `${getArtifactLabel(type)} · ${bundleSubtitle}`
 }
 
-function getSummary(resource: Record<string, any>, type: string) {
+function getSummary(resource: GeneratedResourceItem, type: string) {
   const summary = [
-    resource.summary,
-    resource.description,
     resource.metadata?.summary,
-    resource.metadata_json?.summary,
   ].find(value => typeof value === 'string' && value.trim())
 
   if (typeof summary === 'string') return summary.trim()
@@ -131,8 +128,8 @@ function getSummary(resource: Record<string, any>, type: string) {
   return defaults[type] || '根据本次学习需求生成的个性化学习资源。'
 }
 
-function getFormat(resource: Record<string, any>, type: string) {
-  const raw = resource.format || resource.file_type || resource.fileType
+function getFormat(resource: GeneratedResourceItem, type: string) {
+  const raw = resource.format
 
   if (typeof raw === 'string' && raw.trim()) {
     const formatMap: Record<string, string> = {

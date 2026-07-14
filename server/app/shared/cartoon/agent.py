@@ -289,11 +289,57 @@ class CartoonVideoAgent:
             }
 
             if not lint.passed:
+                detail = (
+                    lint.problems[0]
+                    if lint.problems
+                    else "未返回具体 finding"
+                )
+
                 raise CartoonGenerationError(
-                    "HyperFrames lint 失败",
+                    (
+                        "HyperFrames lint 失败: "
+                        f"{detail}"
+                    ),
                     stage="lint",
                     problems=list(
                         lint.problems
+                    ),
+                )
+
+            current_stage = (
+                "validate"
+            )
+
+            validation = (
+                await self.renderer.validate(
+                    output_dir
+                )
+            )
+
+            audit["stages"][
+                "validate"
+            ] = {
+                "passed": validation.passed,
+                "problems": list(
+                    validation.problems
+                ),
+            }
+
+            if not validation.passed:
+                detail = (
+                    validation.problems[0]
+                    if validation.problems
+                    else "未返回具体 finding"
+                )
+
+                raise CartoonGenerationError(
+                    (
+                        "HyperFrames validate 失败: "
+                        f"{detail}"
+                    ),
+                    stage="validate",
+                    problems=list(
+                        validation.problems
                     ),
                 )
 

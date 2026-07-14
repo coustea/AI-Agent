@@ -1,6 +1,14 @@
 <template>
   <div class="array-bars-visualizer">
     <div class="chart-shell">
+      <div
+        class="operation-indicator"
+        :data-operation="currentOperation"
+      >
+        <i class="operation-dot"></i>
+        <span>{{ operationText }}</span>
+      </div>
+
       <div class="legend">
         <span class="legend-item"><i class="legend-dot focus"></i>当前关注</span>
         <span class="legend-item"><i class="legend-dot changed"></i>数据变化</span>
@@ -39,10 +47,42 @@ interface BarTransition {
   toHeight: number
 }
 
+interface GroupTransition {
+  element: SVGGElement
+  fromX: number
+  toX: number
+}
+
+interface ChartTransitions {
+  bars: BarTransition[]
+  groups: GroupTransition[]
+}
+
 const props = defineProps<Props>()
 
 // SVG 容器引用、当前步骤的数组数据（降级到初始事件）
 const svgRef = ref<SVGSVGElement | null>(null)
+
+const currentOperation = computed(() => {
+  if (props.currentEvent?.type === 'compare') return 'compare'
+  if (props.currentEvent?.type === 'swap') return 'swap'
+  if (props.currentEvent?.type === 'write') return 'write'
+  if (props.currentEvent?.type === 'finish') return 'finish'
+  return 'observe'
+})
+
+const operationText = computed(() => {
+  const targets = getIndices(props.currentEvent)
+  if (currentOperation.value === 'compare' && targets.length >= 2) {
+    return `比较位置 ${targets[0]} 与 ${targets[1]}`
+  }
+  if (currentOperation.value === 'swap' && targets.length >= 2) {
+    return `交换位置 ${targets[0]} 与 ${targets[1]}`
+  }
+  if (currentOperation.value === 'write') return '移动并写入元素'
+  if (currentOperation.value === 'finish') return '排序完成'
+  return '观察数组状态'
+})
 
 const activeArray = computed(() => {
   const arr = props.currentEvent?.state?.structure?.array
@@ -84,6 +124,20 @@ function getFocusedIndices(): number[] {
   return validTargets.length > 0 ? validTargets : getChangedIndices()
 }
 
+function getSwapPair(): [number, number] | null {
+  if (props.currentEvent?.type !== 'swap') return null
+  const targets = getIndices(props.currentEvent)
+    .filter(index => index >= 0 && index < activeArray.value.length)
+  if (targets.length !== 2 || previousArray.value.length !== activeArray.value.length) return null
+  const left = targets[0]!
+  const right = targets[1]!
+  if (
+    previousArray.value[left] !== activeArray.value[right]
+    || previousArray.value[right] !== activeArray.value[left]
+  ) return null
+  return [left, right]
+}
+
 // 状态帧是后端追踪协议的核心：用帧差分和 targets 表达关注位置与数据变化。
 function getTone(index: number): string {
   if (props.currentEvent?.type === 'finish') return 'complete'
@@ -100,8 +154,8 @@ function buildData(): BarDatum[] {
 }
 
 // 用 D3 渲染柱状图，并保留变更前的几何信息以实现状态帧间的连续过渡。
-function renderChart(): BarTransition[] {
-  if (!svgRef.value) return []
+function renderChart(): ChartTransitions {
+  if (!svgRef.value) return { bars: [], groups: [] }
   const svg = d3.select(svgRef.value)
   const width = 860; const height = 420
   const margin = { top: 28, right: 32, bottom: 56, left: 32 }
@@ -119,7 +173,8 @@ function renderChart(): BarTransition[] {
       height: Number(rect.getAttribute('height')),
     })
   })
-  const transitions: BarTransition[] = []
+  const transitions: ChartTransitions = { bars: [], groups: [] }
+  const swapPair = getSwapPair()
 
   const root = svg.selectAll('g.chart-root').data([null]).join('g')
     .attr('class', 'chart-root').attr('transform', `translate(${margin.left},${margin.top})`)
@@ -136,20 +191,43 @@ function renderChart(): BarTransition[] {
       const g = enter.append('g').attr('class', 'bar-group')
       g.append('rect').attr('class', 'bar-rect')
       g.append('text').attr('class', 'bar-value')
-      g.append('text').attr('class', 'bar-index')
       return g
     })
     .attr('data-bar-id', (d: BarDatum) => d.id).attr('data-tone', (d: BarDatum) => d.tone)
+
+  const indexLayer = root.selectAll('g.index-layer').data([null]).join('g').attr('class', 'index-layer')
+  indexLayer.selectAll('text.bar-index').data(data, (d: BarDatum) => d.id).join('text')
+    .attr('class', 'bar-index')
+    .attr('x', (d: BarDatum) => (xScale(d.index) ?? 0) + xScale.bandwidth() / 2)
+    .attr('y', innerHeight + 20)
+    .attr('text-anchor', 'middle')
+    .text((d: BarDatum) => d.index)
 
   groups.each(function (this: SVGGElement, d: BarDatum) {
     const g = d3.select(this)
     const x = xScale(d.index) ?? 0; const y = yScale(d.value)
     const bw = xScale.bandwidth(); const bh = innerHeight - y
-    g.attr('transform', `translate(${x}, 0)`)
+    const sourceIndex = swapPair?.[0] === d.index
+      ? swapPair[1]
+      : swapPair?.[1] === d.index
+        ? swapPair[0]
+        : null
+    const sourceX = sourceIndex === null ? x : (xScale(sourceIndex) ?? x)
+    const swapDirection = sourceIndex === null
+      ? null
+      : sourceIndex < d.index
+        ? 'right'
+        : 'left'
+    g.attr('transform', `translate(${sourceX}, 0)`)
+      .attr('data-swap-from', sourceIndex === null ? null : sourceIndex)
+      .attr('data-swap-direction', swapDirection)
+    if (sourceIndex !== null) {
+      transitions.groups.push({ element: this, fromX: sourceX, toX: x })
+    }
     const rect = this.querySelector<SVGRectElement>('rect.bar-rect')
     if (!rect) return
     const nextHeight = Math.max(bh, 20)
-    const previous = previousGeometry.get(d.id)
+    const previous = previousGeometry.get(sourceIndex === null ? d.id : `bar-${sourceIndex}`)
     rect.setAttribute('x', '0')
     rect.setAttribute('y', String(y))
     rect.setAttribute('rx', '3')
@@ -159,7 +237,7 @@ function renderChart(): BarTransition[] {
     if (previous && (previous.y !== y || previous.height !== nextHeight)) {
       rect.setAttribute('y', String(previous.y))
       rect.setAttribute('height', String(previous.height))
-      transitions.push({
+      transitions.bars.push({
         element: rect,
         fromY: previous.y,
         fromHeight: previous.height,
@@ -168,29 +246,53 @@ function renderChart(): BarTransition[] {
       })
     }
     g.select('text.bar-value').attr('x', bw / 2).attr('y', Math.max(y - 8, 12)).attr('text-anchor', 'middle').text(d.value)
-    g.select('text.bar-index').attr('x', bw / 2).attr('y', innerHeight + 20).attr('text-anchor', 'middle').text(d.index)
   })
 
   return transitions
 }
 
 // 所有状态帧都会触发动画：变化的柱子过渡，targets 或变化位置脉冲提示。
-function animateStep(transitions: BarTransition[]) {
+function animateStep(transitions: ChartTransitions) {
   if (!svgRef.value || !props.currentEvent) return
   const svg = svgRef.value
   const rects = Array.from(svg.querySelectorAll<SVGRectElement>('rect.bar-rect'))
+  const groups = Array.from(svg.querySelectorAll<SVGGElement>('g.bar-group'))
   const targets = getFocusedIndices()
     .map((i: number) => svg.querySelector<SVGRectElement>(`g[data-bar-id="bar-${i}"] rect.bar-rect`))
     .filter((e: SVGRectElement | null): e is SVGRectElement => Boolean(e))
 
   gsap.killTweensOf(rects)
+  gsap.killTweensOf(groups)
   gsap.set(rects, { clearProps: 'transform' })
 
-  transitions.forEach(({ element, fromY, fromHeight, toY, toHeight }) => {
+  if (transitions.groups.length > 0) {
+    const root = svg.querySelector<SVGGElement>('g.chart-root')
+    transitions.groups
+      .slice()
+      .sort((left, right) => {
+        const leftHeight = Number(left.element.querySelector('rect')?.getAttribute('height') ?? 0)
+        const rightHeight = Number(right.element.querySelector('rect')?.getAttribute('height') ?? 0)
+        return rightHeight - leftHeight
+      })
+      .forEach(({ element }) => root?.append(element))
+    const indexLayer = root?.querySelector<SVGGElement>('g.index-layer')
+    if (root && indexLayer) root.append(indexLayer)
+  }
+
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  transitions.bars.forEach(({ element, fromY, fromHeight, toY, toHeight }) => {
     gsap.fromTo(
       element,
       { attr: { y: fromY, height: fromHeight } },
-      { attr: { y: toY, height: toHeight }, duration: 0.42, ease: 'power2.inOut' },
+      { attr: { y: toY, height: toHeight }, duration: reducedMotion ? 0 : 0.42, ease: 'power2.inOut' },
+    )
+  })
+
+  transitions.groups.forEach(({ element, fromX, toX }) => {
+    gsap.fromTo(
+      element,
+      { attr: { transform: `translate(${fromX}, 0)` } },
+      { attr: { transform: `translate(${toX}, 0)` }, duration: reducedMotion ? 0 : 0.58, ease: 'power3.inOut' },
     )
   })
 
@@ -203,7 +305,7 @@ function animateStep(transitions: BarTransition[]) {
     gsap.fromTo(
       targets,
       { y: 0, scaleY: 1 },
-      { y: -7, scaleY: 1.025, duration: 0.2, yoyo: true, repeat: 1, ease: 'power2.out', transformOrigin: 'center bottom' },
+      { y: -7, scaleY: 1.025, duration: reducedMotion ? 0 : 0.2, yoyo: !reducedMotion, repeat: reducedMotion ? 0 : 1, ease: 'power2.out', transformOrigin: 'center bottom' },
     )
   }
 }
@@ -244,6 +346,44 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-surface) 82%, transparent);
   backdrop-filter: blur(6px);
+}
+
+.operation-indicator {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 1;
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.operation-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+}
+
+.operation-indicator[data-operation='compare'] .operation-dot {
+  background: var(--color-primary);
+}
+
+.operation-indicator[data-operation='swap'] .operation-dot,
+.operation-indicator[data-operation='write'] .operation-dot {
+  background: var(--color-warning);
+}
+
+.operation-indicator[data-operation='finish'] .operation-dot {
+  background: var(--color-success);
 }
 
 .legend-item {
@@ -314,6 +454,10 @@ onBeforeUnmount(() => { if (svgRef.value) gsap.killTweensOf(svgRef.value.querySe
 
 :deep(.bar-group[data-tone='changed'] .bar-rect) {
   fill: var(--color-warning);
+}
+
+:deep(.bar-group[data-tone='changed'][data-swap-direction='right'] .bar-rect) {
+  fill: var(--color-primary);
 }
 
 :deep(.bar-group[data-tone='complete'] .bar-rect) {
