@@ -4,6 +4,14 @@
 
 输出契约：顶层只能有 `title`、`course`、`scenes`。每个 scenes 元素只能有 `id`、`title`、`objective`、`layout`、`visual_kind`。禁止输出 `density`、`teaching_focus`、说明文字或任何未列出的字段。
 
+## 字段约束 (FIELD CONSTRAINTS)
+- `title`: 1～72 字符
+- `course`: 1～40 字符
+- `scenes`: 4～6 个场景
+- `scenes[].id`: 1～48 字符
+- `scenes[].title`: 1～54 字符
+- `scenes[].objective`: 1～110 字符
+
 可用 layout（必须严格使用以下值之一）：{{layouts}}
 可用 visual_kind（必须严格使用以下值之一）：{{visual_kinds}}
 画面密度：{{density}}

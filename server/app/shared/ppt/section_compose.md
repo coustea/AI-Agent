@@ -43,8 +43,8 @@
 
 ## 每页必填内容
 
-- `lead`: 一句不超过 96 字符的结论或问题
-- `points`: 2～4 个短信息单元（每单元：label 不超过 24 字、detail 不超过 72 字）
+- `lead`: 一句核心结论或问题（0～96 字符）
+- `points`: 2～4 个短信息单元（每单元：`label` 1～24 字符，`detail` 8～72 字符）
 - `visual`: 根据分配的 `visual_kind` 填写对应内容
 
 ## visual 字段填写规则
@@ -57,10 +57,21 @@
 
 # FIELD CONSTRAINTS
 
-- `points`: 每页最多 4 个信息单元
-- `visual.model_code`: 必须是合法的 Mermaid 语法代码（纯文本，不要带有 Markdown 代码块 ```mermaid 前后缀）
-- `visual.metrics[].label`: 1～24 字符
-- `visual.metrics[].value`: 1～32 字符
+- `title`: 1～54 字符
+- `eyebrow`: 0～28 字符（可选）
+- `subtitle`: 0～84 字符（可选）
+- `takeaway`: 0～96 字符（可选）
+- `speaker_notes`: 0～600 字符（可选）
+- `points`: 最多 4 个单元（`label` 1～24 字符，`detail` 8～72 字符）
+- `visual.metrics`: 最多 5 个指标
+  - `visual.metrics[].label`: 1～24 字符
+  - `visual.metrics[].value`: 1～32 字符
+  - `visual.metrics[].detail`: 0～56 字符（可选）
+- `visual.code_language`: 0～20 字符
+- `visual.code`: 0～1600 字符
+- `visual.formula`: 0～300 字符
+- `visual.formula_steps`: 最多 5 步（字符串数组）
+- `visual.model_code`: 0～4000 字符，必须是合法的 Mermaid 代码（纯文本，不要带有 Markdown 代码块 ```mermaid 前后缀）
 
 # FORBIDDEN
 

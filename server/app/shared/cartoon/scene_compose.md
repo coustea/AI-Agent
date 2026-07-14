@@ -21,6 +21,20 @@
 - 让动作表达机制：数据移动用 transfer/traverse，状态变化用 transform，比较用 compare，而不是所有动作都 reveal。
 - takeaway 用一句可迁移的结论收束。
 
+## 字段约束 (FIELD CONSTRAINTS)
+- `title`: 1～54 字符
+- `objective`: 1～110 字符
+- `takeaway`: 1～96 字符
+- `visual.items[].label`: 1～30 字符
+- `visual.items[].detail`: 0～64 字符（可选）
+- `visual.items[].value`: 0～36 字符（可选）
+- `visual.edges[].label`: 0～30 字符（可选）
+- `visual.code`: 0～540 字符
+- `visual.formula`: 0～160 字符
+- `visual.caption`: 0～90 字符
+- `steps[].narration`: 8～150 字符，不要过短或过长
+- `steps[].focus`: 1～64 字符
+
 输出格式示例（必须包含 id, title, objective, layout, visual, steps, takeaway 这些顶层字段）：
 
 {
