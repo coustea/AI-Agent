@@ -5,7 +5,6 @@ API 端点：
 - POST /resources - 创建后台资源生成任务
 - GET /resources/{id}/status - 查询任务执行状态
 - GET /resources/{id}/events - SSE 推送任务事件
-- GET /resources/agents - 查询可用 Agent 列表
 - GET /resources - 查询资源列表
 - GET /resources/{id} - 查询资源详情
 """
@@ -13,11 +12,10 @@ API 端点：
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -26,7 +24,7 @@ from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.profile.service import ProfileService
-from app.resource.schemas import AGENT_META, AGENT_DEFAULT_ORDER, ResourceGenerationRequest, AgentConfigs
+from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
 from app.infra.response import HttpResponse
@@ -34,18 +32,12 @@ from app.resource.event import (
     RESOURCE_TERMINAL_EVENTS,
     ResourceEvents,
     encode_resource_sse,
-    get_resource_channel,
+    _to_event,
 )
 
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-# 当前多智能体资源生成页面开放全部资源 Agent。
-FRONTEND_RESOURCE_AGENT_IDS = frozenset(
-    {"content", "mindmap", "quiz", "code", "reading", "ppt", "cartoon"}
-)
-
 
 @router.post("/resources")
 async def create_resource_task(
@@ -61,24 +53,14 @@ async def create_resource_task(
     )
     profile_service = ProfileService()
     profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
-    from app.evaluation.guidance import get_effective_guidance_strategy
-    guidance_strategy = await get_effective_guidance_strategy(session, current_user.id)
     service = ResourceService(session)
     result = await service.create_task(
         user_id=current_user.id,
         request=req,
         profile_markdown=profile_markdown,
         username=current_user.username,
-        guidance_strategy=guidance_strategy,
     )
     resource_id = result["resource_id"]
-
-    # 创建事件频道，供前端 SSE 订阅本次任务
-    events = ResourceEvents(
-        user_id=current_user.id,
-        resource_id=resource_id,
-    )
-    await events.open()
 
     # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
     asyncio.create_task(
@@ -129,33 +111,35 @@ async def get_resource_events(
     if resource is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
 
-    # 获取已存在的频道
-    events = await get_resource_channel(current_user.id, resource_id)
-    # 频道不存在（可能已过期）返回 410
-    if events is None:
-        return HttpResponse.error(code=410, message="事件流已过期或不存在")
-
     resume_sequence = after_sequence
     # 若客户端携带 Last-Event-ID，则从该序号之后续传
     if last_event_id and last_event_id.isdigit():
         resume_sequence = max(resume_sequence, int(last_event_id))
 
     async def event_generator():
+        events = ResourceEvents(user_id=current_user.id, resource_id=resource_id)
         queue: asyncio.Queue | None = None
+        delivered_sequence = resume_sequence
         try:
-            queue, replay = await events.subscribe(after_sequence=resume_sequence)
-            # 先发送回放事件（断线重连场景）
-            for event in replay:
+            # 先订阅再读取数据库，避免历史读取与实时订阅之间遗漏事件。
+            queue = await events.subscribe()
+            replay = await service.list_run_events(
+                resource_id=resource_id,
+                after_sequence=resume_sequence,
+            )
+            for row in replay:
+                event = _to_event(row)
+                delivered_sequence = event.sequence
                 yield encode_resource_sse(event)
-                # 回放到终态事件则直接结束
                 if event.event in RESOURCE_TERMINAL_EVENTS:
                     return
-            # 然后监听新事件
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    if event.sequence <= delivered_sequence:
+                        continue
+                    delivered_sequence = event.sequence
                     yield encode_resource_sse(event)
-                    # 收到终态事件则结束推送
                     if event.event in RESOURCE_TERMINAL_EVENTS:
                         break
                 except asyncio.TimeoutError:
@@ -176,26 +160,6 @@ async def get_resource_events(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-@router.get("/resources/agents")
-async def list_agents():
-    """查询当前资源生成前端可选择的 Agent 列表。"""
-    agents: list[dict[str, Any]] = []
-    # 按默认顺序返回前端可选 Agent，过滤掉未开放项
-    for agent_id in AGENT_DEFAULT_ORDER:
-        if agent_id not in FRONTEND_RESOURCE_AGENT_IDS:
-            continue
-        meta = AGENT_META.get(agent_id, {})
-        agents.append({
-            "id": agent_id,
-            "name": meta.get("name", agent_id),
-            "icon": meta.get("icon", ""),
-            "description": meta.get("description", ""),
-            "configurable": True,
-        })
-
-    return HttpResponse.success(data=agents)
 
 
 @router.get("/resources")
@@ -251,90 +215,8 @@ async def get_resource(
     return HttpResponse.success(data=bundle.model_dump(mode="json"))
 
 
-@router.get("/resources/public/{item_id}/html")
-async def get_public_item_html(
-    item_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    """公开获取 PPT/Cartoon 的 HTML 内容，支持 iframe 直接加载。"""
-    from app.infra.models import GeneratedResourceItem as ItemModel
-
-    item = await session.get(ItemModel, item_id)
-    # 仅 PPT/Cartoon 产出 HTML，其他类型拒绝访问
-    if not item or item.agent_type not in ("ppt", "cartoon"):
-        return HttpResponse.error(code=404, message="HTML 资源不存在")
-
-    html_path = None
-    # 从元数据读取 HTML 文件落盘路径
-    if item.metadata_json:
-        html_path = item.metadata_json.get("html_file_path")
-
-    if not html_path or not os.path.exists(html_path):
-        return HttpResponse.error(code=404, message="HTML 文件未找到")
-
-    return FileResponse(path=html_path, media_type="text/html")
-
-
-@router.get("/resources/public/{item_id}/video")
-async def get_public_item_video(
-    item_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    """公开获取 Cartoon 的 MP4 视频文件。"""
-    from app.infra.models import GeneratedResourceItem as ItemModel
-
-    item = await session.get(ItemModel, item_id)
-    if not item or item.agent_type != "cartoon":
-        return HttpResponse.error(code=404, message="视频资源不存在")
-
-    video_path = None
-    if item.metadata_json:
-        video_path = item.metadata_json.get("video_file_path")
-
-    if not video_path or not os.path.exists(video_path):
-        return HttpResponse.error(code=404, message="视频文件未找到")
-
-    return FileResponse(path=video_path, media_type="video/mp4")
-
-
-@router.get("/resources/{resource_id}/html")
-async def download_html(
-    resource_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """下载 HTML 幻灯片文件。"""
-    service = ResourceService(session)
-
-    # 获取资源项
-    items = await service.list_resource_items(current_user.id, resource_id)
-    ppt_item = None
-    # 找到第一个 PPT 类型条目
-    for item in items:
-        if item.agent_type == "ppt":
-            ppt_item = item
-            break
-
-    if not ppt_item:
-        return HttpResponse.error(code=404, message="PPT 资源不存在")
-
-    # 从 metadata 获取 HTML 文件路径
-    html_path = None
-    if ppt_item.metadata_json:
-        html_path = ppt_item.metadata_json.get("html_file_path")
-
-    if not html_path or not os.path.exists(html_path):
-        return HttpResponse.error(code=404, message="HTML 文件未找到")
-
-    return FileResponse(
-        path=html_path,
-        filename=f"{ppt_item.title}.html",
-        media_type="text/html",
-    )
-
-
 # ---------------------------------------------------------------------------
-# 仪表盘端点（从 dashboard 模块迁移）
+# 仪表盘端点
 # ---------------------------------------------------------------------------
 
 

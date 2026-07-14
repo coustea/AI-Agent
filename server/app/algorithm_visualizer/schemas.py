@@ -46,26 +46,24 @@ class TemplateResponse(BaseModel):
     visualizerType: str = Field(..., alias="visualizer_type")
     language: str
     templateCode: str = Field(..., alias="template_code")
-    defaultData: Dict[str, Any] = Field(..., alias="default_data")
-    requiredEvents: List[str] = Field(..., alias="required_events")
-    supportedLanguages: List[str] = Field(..., alias="supported_languages")
+    requiredEvents: List[str] = Field(default_factory=list, alias="required_events")
+    supportedLanguages: List[str] = Field(default_factory=list, alias="supported_languages")
+    defaultInput: Dict[str, Any] = Field(default_factory=dict, alias="default_data")
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class RunRequest(BaseModel):
-    """运行可视化请求。
+    """Run visualization with code and input data."""
 
-    code 可以是干净算法代码（无 tracer），后端会自动插装。
-    也可以是已包含 tracer 调用的代码，后端直接执行。
-    """
-
-    domain: str = "all"
     algorithm: str
-    visualizerType: Optional[str] = None
     language: str
     code: str
-    inputData: Optional[str] = None
+    domain: str
+    visualizerType: str = Field(..., alias="visualizer_type")
+    inputData: Dict[str, Any] = Field(default_factory=dict, alias="input_data")
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class TraceEventResponse(BaseModel):
@@ -88,15 +86,15 @@ class RunSuccessResponse(BaseModel):
 
     domain: str
     algorithm: str
-    visualizerType: str = Field(..., alias="visualizer_type")
+    visualizerType: str
     language: str
+    executionMode: str
     events: List[TraceEventResponse]
     result: Any
     summary: str
     stdout: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(extra="forbid")
 
 
 class RunErrorResponse(BaseModel):

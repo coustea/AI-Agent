@@ -50,8 +50,8 @@ class FenwickTree:
         return self.range_sum(idx, idx)
 
 # 定义 fenwick_tree_operations 函数
-def fenwick_tree_operations():
-    data = [2, 5, 1, 4, 8, 3, 7, 6]
-    ft = FenwickTree(len(data))
-    for i, val in enumerate(data, 1):
+def fenwick_tree_operations(arr):
+    ft = FenwickTree(len(arr))
+    for i, val in enumerate(arr, 1):
         ft.update(i, val)
+    return {"tree": ft.tree, "prefix_sum": ft.prefix_sum(len(arr))}

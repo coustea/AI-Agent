@@ -64,17 +64,48 @@
       />
 
       <aside class="visualizer-right">
-        <AlgorithmCodeEditorPanel
-          v-model="code"
-          v-model:language="editorLanguageModel"
-          :languages="supportedEditorLanguages"
-          :disabled="generating || loading"
-          :active-line="currentEvent?.line"
-          :current-step-message="currentEvent?.message"
-          :current-step-index="currentStepIndex"
-          :event-count="events.length"
-          :generating="generating"
-        />
+        <div class="editor-tabs">
+          <button
+            type="button"
+            class="editor-tab-btn"
+            :class="{ active: activeEditorTab === 'code' }"
+            @click="activeEditorTab = 'code'"
+          >
+            <Code2 class="tab-icon" />
+            代码
+          </button>
+          <button
+            type="button"
+            class="editor-tab-btn"
+            :class="{ active: activeEditorTab === 'input' }"
+            @click="activeEditorTab = 'input'"
+          >
+            <Settings class="tab-icon" />
+            输入数据
+          </button>
+        </div>
+
+        <div class="editor-content">
+          <AlgorithmCodeEditorPanel
+            v-show="activeEditorTab === 'code'"
+            v-model="code"
+            v-model:language="editorLanguageModel"
+            :languages="supportedEditorLanguages"
+            :disabled="generating || loading"
+            :active-line="currentEvent?.line"
+            :current-step-message="currentEvent?.message"
+            :current-step-index="currentStepIndex"
+            :event-count="events.length"
+            :generating="generating"
+          />
+
+          <AlgorithmInputDataPanel
+            v-show="activeEditorTab === 'input'"
+            v-model="inputDataJson"
+            :disabled="generating || loading"
+            :default-data="currentAlgorithmDefaultData"
+          />
+        </div>
       </aside>
     </section>
 
@@ -87,12 +118,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Loader2, Play, RotateCcw } from 'lucide-vue-next'
+import { Code2, Loader2, Play, RotateCcw, Settings } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import type { CodeLanguage } from '@/features/algorithm-visualization/types'
 import AlgorithmTemplatePicker from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmTemplatePicker.vue'
 import AlgorithmVisualizerStage from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmVisualizerStage.vue'
 import AlgorithmCodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmCodeEditorPanel.vue'
+import AlgorithmInputDataPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmInputDataPanel.vue'
 import AlgorithmRunErrorDialog from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmRunErrorDialog.vue'
 import { useTracePlayer } from '@/features/algorithm-visualization/composables/useTracePlayer'
 import { useAlgorithmTemplate } from '@/features/algorithm-visualization/composables/useAlgorithmTemplate'
@@ -118,6 +150,7 @@ const {
   algorithms,
   metaLoading,
   currentAlgorithm,
+  templateData,
   loadMeta,
   loadTemplate,
   resetTemplate,
@@ -136,6 +169,8 @@ const {
 // 步骤播放器
 const playback = useTracePlayer(() => events.value)
 const errorDialogOpen = ref(false)
+const activeEditorTab = ref<'code' | 'input'>('code')
+const inputDataJson = ref<Record<string, unknown>>({})
 
 // 自动播放时间线调度
 useVisualizerTimeline({
@@ -183,6 +218,22 @@ const editorLanguageModel = computed({
 const resolvedVisualizerType = computed(() => {
   return currentEvent.value?.visualizerType ?? currentAlgorithm.value?.visualizerType ?? getCurrentVisualizerType()
 })
+
+// 当前算法的默认输入数据
+const currentAlgorithmDefaultData = computed(() => {
+  return templateData.value?.defaultInput ?? {}
+})
+
+// 模板数据变化时，更新输入数据
+watch(
+  () => templateData.value?.defaultInput,
+  (newData) => {
+    if (newData) {
+      inputDataJson.value = newData
+    }
+  },
+  { immediate: true },
+)
 
 // 运行出错时自动打开错误弹窗
 watch(
@@ -232,6 +283,7 @@ async function handleRun() {
     visualizerType: selected?.visualizerType ?? getCurrentVisualizerType(),
     language: language.value,
     code: code.value,
+    inputData: inputDataJson.value,
   })
   // 运行完成后重置播放器并自动播放
   playback.reset()
@@ -360,6 +412,58 @@ async function handleRun() {
   min-height: 0;
   overflow: hidden;
   background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-tabs {
+  height: 42px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.editor-tab-btn {
+  height: 42px;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editor-tab-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.editor-tab-btn.active {
+  border-bottom-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
+
+.tab-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.editor-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @keyframes spin {

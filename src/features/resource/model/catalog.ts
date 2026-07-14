@@ -23,9 +23,6 @@ export const COORDINATOR_AGENT_ID = 'coordinator'
 export const BUNDLE_AGENT_ID = 'bundle'
 // 系统级智能体列表（规划、协同中枢、汇编），用于区分用户可选与系统内部节点
 export const SYSTEM_AGENT_IDS = ['planning', COORDINATOR_AGENT_ID, BUNDLE_AGENT_ID]
-// 一次生成任务至少需要的智能体数量下限
-export const MIN_AGENTS = 3
-
 // 各智能体在界面上的展示信息映射：标签名称与 emoji 图标
 export const AGENT_DISPLAY: Record<string, { label: string; icon: string }> = {
   planning: { label: '认知架构', icon: '🎯' },
@@ -135,20 +132,6 @@ export const getResourceTypeLabel = (type: string) => {
   return label === type ? getAgentMeta(type).name || type : label
 }
 
-// 将英文难度档位映射为中文标签，未匹配时回退为原值或“自适应”
-export const getDifficultyLabel = (difficulty?: string) => {
-  // 难度档位到中文文案的映射表
-  const difficultyMap: Record<string, string> = {
-    basic: '基础',
-    beginner: '入门',
-    intermediate: '进阶',
-    advanced: '提高',
-    hard: '挑战',
-    exam: '考试强化',
-  }
-  return difficultyMap[String(difficulty || '').toLowerCase()] || difficulty || '自适应'
-}
-
 // 根据产物类型返回对应的主题色类名，用于卡片着色
 export const getResourceToneClass = (type: string) => {
   // 产物类型到主题色类的映射表
@@ -164,20 +147,6 @@ export const getResourceToneClass = (type: string) => {
   return toneMap[type] || 'tone-blue'
 }
 
-// 根据智能体 id 返回其产出的资源格式中文描述
-export const getAgentOutputFormat = (agentId: string) => {
-  // 智能体到产出格式描述的映射表
-  const formatMap: Record<string, string> = {
-    content: '课程讲解文档',
-    mindmap: '思维导图图片',
-    code: '代码实操案例',
-    quiz: '随堂练习题库',
-    reading: '拓展阅读文献',
-    ppt: '演示幻灯课件',
-    cartoon: '动画讲解视频',
-  }
-  return formatMap[agentId] || '学习资源'
-}
 
 // 单个智能体事件日志的结构定义
 export type AgentEventLog = {

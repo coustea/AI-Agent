@@ -114,6 +114,10 @@
               </div>
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(getStageNode('planning')) }}</span>
+                <span class="station-progress-track" aria-label="教学计划进度">
+                  <i :style="{ width: `${getNodeProgress(getStageNode('planning'))}%` }"></i>
+                </span>
+                <b>{{ getNodeProgress(getStageNode('planning')) }}%</b>
               </div>
             </article>
           </div>
@@ -181,6 +185,10 @@
               </div>
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
+                <span class="station-progress-track" :aria-label="`${getWorkflowTitle(node.id)}进度`">
+                  <i :style="{ width: `${getNodeProgress(node)}%` }"></i>
+                </span>
+                <b>{{ getNodeProgress(node) }}%</b>
               </div>
             </article>
           </transition-group>
@@ -218,6 +226,10 @@
               </div>
               <div class="station-footer">
                 <span>{{ getNodeStageLabel(node) }}</span>
+                <span class="station-progress-track" :aria-label="`${getWorkflowTitle(node.id)}进度`">
+                  <i :style="{ width: `${getNodeProgress(node)}%` }"></i>
+                </span>
+                <b>{{ getNodeProgress(node) }}%</b>
               </div>
             </article>
 
@@ -240,7 +252,7 @@
               </div>
               <div>
                 <strong>资源整合</strong>
-                <span>{{ getNodeStageLabel(bundleNode) }}</span>
+                <span>{{ getNodeStageLabel(bundleNode) }} · {{ getNodeProgress(bundleNode) }}%</span>
               </div>
               <em>{{ getNodeStatusLabel(bundleNode) }}</em>
             </article>
@@ -283,8 +295,12 @@
               <div class="selected-agent-detail-card">
                 <!-- 当前任务区：任务描述 -->
                 <div class="detail-current-task">
-                  <span>当前任务</span>
+                  <span>真实运行状态 · {{ getNodeStatusLabel(selectedDagNode) }}</span>
                   <strong>{{ getNodeDisplayMessage(selectedDagNode) }}</strong>
+                  <div class="detail-progress-line" :aria-label="`${getWorkflowTitle(selectedDagNode.id)}进度`">
+                    <i :style="{ width: `${getNodeProgress(selectedDagNode)}%` }"></i>
+                  </div>
+                  <em>{{ getNodeProgress(selectedDagNode) }}%</em>
                 </div>
 
                 <!-- 关键指标网格：阶段、耗时、更新时间、成果状态 -->
@@ -295,7 +311,7 @@
                   </div>
                   <div>
                     <dt>运行耗时</dt>
-                    <dd>{{ formatElapsed(selectedDagNode.elapsedMs) }}</dd>
+                    <dd>{{ getNodeElapsedLabel(selectedDagNode) }}</dd>
                   </div>
                   <div>
                     <dt>最近更新</dt>
@@ -311,7 +327,7 @@
                 <div class="detail-io-grid">
                   <div>
                     <span>输入</span>
-                    <p>{{ getNodeInputSummary(selectedDagNode) }}</p>
+                    <p>{{ getNodeExecutionInputSummary(selectedDagNode) }}</p>
                   </div>
                   <div>
                     <span>输出</span>
@@ -323,6 +339,28 @@
                 <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
                   <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
                 </div>
+
+                <section class="detail-history-v3" aria-label="Agent 运行事件">
+                  <span class="detail-section-label">运行事件</span>
+                  <div v-if="getNodeEventLogs(selectedDagNode).length" class="timeline-stream-wrapper">
+                    <article
+                      v-for="log in getNodeEventLogs(selectedDagNode)"
+                      :key="log.id"
+                      class="detail-live-log-item"
+                      :class="`is-${log.status || selectedDagNode.status}`"
+                    >
+                      <i class="timeline-dot"></i>
+                      <div class="timeline-content">
+                        <div class="timeline-header">
+                          <span>{{ getLogPhaseLabel(log.phase) }} · {{ getLogStatusLabel(log.status) }}</span>
+                          <em>{{ formatEventTime(log.timestamp) }}</em>
+                        </div>
+                        <p>{{ log.message }}</p>
+                      </div>
+                    </article>
+                  </div>
+                  <p v-else class="timeline-empty-msg">尚未收到该 Agent 的运行事件</p>
+                </section>
               </div>
             </aside>
           </div>
@@ -624,16 +662,22 @@ const workflowLogItems = computed(() => {
 // 将事件阶段英文名翻译为简短中文标签
 function getLogPhaseLabel(phase?: string) {
   const phaseMap: Record<string, string> = {
-    planning_blueprint: '规划',
-    llm_generating: '生成',
-    validating: '校验',
-    ppt_generating: 'PPT',
-    ppt_waiting_sources: '等待',
+    queued: '等待',
+    planning: '规划',
+    planning_research: '资料核验',
+    plan_ready: '计划就绪',
+    generation_started: '开始生成',
+    working: '内容生成',
+    heartbeat: '生成中',
+    reading_research: '资料检索',
+    validation: '校验',
+    persistence: '保存',
     artifact_saved: '保存',
-    research: '资料研究',
-    research_delegate: '研究委托',
-    bundling: '打包',
-    finished: '完成',
+    coordination: '汇总',
+    aggregation_ready: '汇总完成',
+    aggregation: '打包',
+    generation: '任务完成',
+    timeout: '超时',
     failed: '失败',
   }
 
@@ -666,9 +710,15 @@ function hasGeneratedResource(type: string) {
 function getNodeStatusLabel(node: DagNodeState) {
   if (node.status === 'failed') return '受阻'
   if (node.status === 'skipped') return '已跳过'
-  if (node.status === 'success') return '就绪'
+  if (node.status === 'success') return '已完成'
   if (node.status === 'running') return '执行中'
-  return '就绪待命'
+  return '等待调度'
+}
+
+function getNodeProgress(node: DagNodeState) {
+  if (node.status === 'success') return 100
+  if (node.status === 'waiting' || node.status === 'skipped') return 0
+  return Math.max(0, Math.min(100, Math.round(node.progress || 0)))
 }
 
 // 卡片正文静态消息：只展示当前进度文案，不轮播、不显示冗长的完成文案
@@ -697,11 +747,13 @@ function getNodeStageLabel(node: DagNodeState) {
     if (node.id === 'planning') return '计划生成中'
     if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
     if ([PPT_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
-    if (node.phase === 'llm_generating') return '核心推演中'
-    if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
-    if (node.phase === 'validating') return '一致性校验中'
-    if (node.phase === 'artifact_saved') return '资源已保存'
-    if (node.phase === 'bundling') return '资源整合中'
+    if (node.phase === 'generation_started' || node.phase === 'working' || node.phase === 'heartbeat') return '生成处理中'
+    if (node.phase === 'planning' || node.phase === 'planning_research') return '计划构建中'
+    if (node.phase === 'reading_research') return '资料检索中'
+    if (node.phase === 'validation') return '结构校验中'
+    if (node.phase === 'persistence') return '成果保存中'
+    if (node.phase === 'coordination') return '并行结果汇总中'
+    if (node.phase === 'aggregation_ready' || node.phase === 'aggregation') return '资源整合中'
     return '工位执行中'
   }
   if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与课件'
@@ -712,20 +764,23 @@ function getNodeStageLabel(node: DagNodeState) {
 // 节点阶段名称（详情面板用）：阶段英文 key 映射为中文短标签
 function getNodePhaseLabel(node: DagNodeState) {
   const phaseMap: Record<string, string> = {
-    planning_blueprint: '蓝图构建',
-    coverage_gap_warning: '覆盖校验',
-    llm_generating: '深度推演',
-    validating: '一致性校验',
-    ppt_generating: 'PPT 聚合',
-    ppt_waiting_sources: '等待讲义要义',
-    cartoon_planning: '动画分镜',
-    artifact_saved: '成果移交',
-    research: '资料研究',
-    research_delegate: '研究委托',
-    aggregation_done: '聚合完成',
-    bundling: '资源打包',
-    finished: '已完成',
-    failed: '受阻',
+    queued: '等待调度',
+    planning: '任务规划',
+    planning_research: '规划资料核验',
+    plan_ready: '计划已就绪',
+    generation_started: '开始生成',
+    working: '内容生成',
+    heartbeat: '生成处理中',
+    reading_research: '阅读资料检索',
+    validation: '结果校验',
+    persistence: '成果保存',
+    artifact_saved: '成果已交付',
+    coordination: '并行结果汇总',
+    aggregation_ready: '聚合结果就绪',
+    aggregation: '资源包组装',
+    generation: '任务完成',
+    timeout: '执行超时',
+    failed: '执行失败',
   }
   if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
   if (node.id === 'planning' && node.status === 'running') return '计划生成'
@@ -747,6 +802,8 @@ function getNodeDisplayMessage(node: DagNodeState) {
 
 // 节点成果状态描述：按智能体类型返回产物就绪/生成中/等待状态文案
 function getNodeArtifactStatus(node: DagNodeState) {
+  if (node.status === 'failed') return '该 Agent 未交付成果'
+  if (node.status === 'skipped') return '该 Agent 已跳过'
   if (node.id === 'planning') {
     return node.status === 'success' ? '教学计划已生成' : '正在生成教学计划'
   }
@@ -759,16 +816,16 @@ function getNodeArtifactStatus(node: DagNodeState) {
     return '等待上游资源就绪'
   }
   if (node.id === PPT_AGENT_ID) {
-    return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
+    return hasGeneratedResource(node.id) ? '聚合资源已交付' : '正在依据教学计划生成'
   }
   if (node.id === CARTOON_AGENT_ID) {
-    return hasGeneratedResource(node.id) ? '动画视频已交付' : '等待基础资源后生成'
+    return hasGeneratedResource(node.id) ? '动画视频已交付' : '正在依据教学计划生成'
   }
   return hasGeneratedResource(node.id) ? '基础资源已交付' : '工位响应中'
 }
 
 // 节点输入摘要：按智能体类型描述上游输入要素
-function getNodeInputSummary(node: DagNodeState) {
+function getNodeExecutionInputSummary(node: DagNodeState) {
   if (node.id === 'planning') return '学习需求 / 学习场景 / 用户画像 / 已选 Agent'
   if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
   if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
@@ -790,12 +847,17 @@ function getNodeOutputSummary(node: DagNodeState) {
 
 // 将毫秒耗时格式化为人类可读的 "Xs" / "Xm Ys" 文本
 function formatElapsed(ms?: number | null) {
-  if (!ms || ms < 0) return '未开始'
+  if (ms == null || ms < 0) return '未开始'
   const seconds = Math.floor(ms / 1000)
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   return `${minutes}m ${rest}s`
+}
+
+function getNodeElapsedLabel(node: DagNodeState) {
+  if (node.elapsedMs != null) return formatElapsed(node.elapsedMs)
+  return node.status === 'running' ? '进行中' : '未开始'
 }
 
 // 节点更新时间标签：刚刚/X秒前/X分钟前
@@ -815,6 +877,24 @@ function getMetricChips(node: DagNodeState) {
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .slice(0, 4)
     .map(([key, value]) => `${key}: ${String(value)}`)
+}
+
+function getNodeEventLogs(node: DagNodeState) {
+  return node.eventLogs || []
+}
+
+function getLogStatusLabel(status?: DagNodeState['status']) {
+  if (status === 'success') return '已完成'
+  if (status === 'failed') return '失败'
+  if (status === 'skipped') return '已跳过'
+  if (status === 'running') return '进行中'
+  return '等待中'
+}
+
+function formatEventTime(timestamp: number) {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '--:--:--'
+  return date.toLocaleTimeString('zh-CN', { hour12: false })
 }
 
 </script>
@@ -1599,6 +1679,14 @@ function getMetricChips(node: DagNodeState) {
   color: var(--color-success);
   font-size: 0.68rem;
   font-weight: var(--weight-extrabold);
+}
+
+.station-footer b {
+  min-width: 30px;
+  color: var(--workflow-muted);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .station-progress-track {
@@ -3384,6 +3472,14 @@ function getMetricChips(node: DagNodeState) {
   max-height: none;
   padding: 12px 4px 4px;
   margin-top: 4px;
+}
+
+.detail-section-label {
+  display: block;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .timeline-stream-wrapper {

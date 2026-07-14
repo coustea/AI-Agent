@@ -479,7 +479,7 @@ class GeneratedResource(SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False),
     )
-    plan_content: str | None = Field(default=None, sa_column=Column(Text))
+    plan_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     status: str = Field(default="pending", max_length=50)
 
     created_at: datetime = Field(
@@ -544,8 +544,46 @@ class GeneratedResourceAgentRun(SQLModel, table=True):
     resource_id: int = Field(sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True))
     agent_id: str = Field(max_length=32)
     status: str = Field(default="pending", max_length=16)
+    phase: str = Field(default="queued", max_length=64)
+    message: str = Field(default="等待调度", sa_column=Column(Text, nullable=False))
+    progress: int = Field(default=0)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
     elapsed_ms: int | None = Field(default=None)
+    started_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    completed_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    heartbeat_at: datetime | None = Field(default=None, sa_column=Column(TIMESTAMP(timezone=True)))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now()),
+    )
+
+
+class GeneratedResourceRunEvent(SQLModel, table=True):
+    """资源任务事件历史。
+
+    事件 ID 是该资源 SSE 的断点序号；数据库是刷新/切页后的唯一事实源，
+    进程内订阅仅用于把已提交事件立即推送给当前页面。
+    """
+    __tablename__ = "generated_resource_run_events"
+    __table_args__ = (
+        Index("ix_generated_resource_run_events_resource_id_id", "resource_id", "id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    resource_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("generated_resources.id", ondelete="CASCADE"), index=True)
+    )
+    agent_id: str | None = Field(default=None, max_length=32)
+    event: str = Field(max_length=48)
+    status: str | None = Field(default=None, max_length=16)
+    phase: str | None = Field(default=None, max_length=64)
+    message: str = Field(sa_column=Column(Text, nullable=False))
+    progress: int | None = Field(default=None)
+    data_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -683,6 +721,8 @@ class LearningPath(SQLModel, table=True):
     title: str = Field(max_length=200)
     goal: str = Field(sa_column=Column(Text))
     topic: str | None = Field(default=None, sa_column=Column(Text))
+    current_knowledge: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
+    preferences: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
 
     overall_progress: int = Field(default=0, ge=0, le=100)
     current_node_key: str | None = Field(default=None, max_length=80, index=True)
@@ -934,6 +974,7 @@ REGISTERED_MODELS = (
     GeneratedResource,
     GeneratedResourceItem,
     GeneratedResourceAgentRun,
+    GeneratedResourceRunEvent,
     QuizQuestion,
     QuizAnswerHistory,
     LearningEvent,

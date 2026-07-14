@@ -13,33 +13,172 @@
       </button>
     </section>
 
-    <section v-else-if="isGenerating" class="generating-view">
-      <div class="generate-copy">
-        <span>AI PATH PLANNING</span>
-        <h1>正在生成学习路径</h1>
-        <p>后端正在拆解阶段、节点顺序和前置依赖。</p>
-      </div>
+    <section
+        v-else-if="isGenerating"
+        class="persistent-generation-stage"
+    >
+      <section
+          class="generation-waiting-card"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+      >
+        <template v-if="pathGenerationError">
+          <div class="generation-result-state generation-error-state">
+            <div
+                class="generation-result-icon generation-error-icon"
+                aria-hidden="true"
+            >
+              !
+            </div>
 
-      <div class="generate-progress">
-        <div class="generate-progress-head">
-          <span>生成进度</span>
-          <strong>{{ generatingProgress }}%</strong>
-        </div>
-        <div class="generate-track">
-          <i :style="{ width: `${generatingProgress}%` }"></i>
-        </div>
-      </div>
+            <div class="generation-result-copy">
+              <h2>学习路径生成失败</h2>
+              <p>
+                路径任务信息已经保留，可以重新连接后台任务或返回创建页面。
+              </p>
+            </div>
 
-      <transition-group name="log" tag="div" class="generate-log">
-        <div
-            v-for="(message, index) in generatingMessages"
-            :key="`${message}-${index}`"
-            class="log-item"
-        >
-          <i></i>
-          <span>{{ message }}</span>
-        </div>
-      </transition-group>
+            <div class="generation-error-detail">
+              {{ pathGenerationError }}
+            </div>
+
+            <div class="generation-result-actions">
+              <button
+                  class="generation-secondary-action"
+                  type="button"
+                  @click="router.push('/path-planner')"
+              >
+                返回创建页面
+              </button>
+
+              <button
+                  class="generation-primary-action"
+                  type="button"
+                  @click="retryPathStatus"
+              >
+                重新连接任务
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <template v-else-if="generatingProgressRounded >= 100">
+          <div class="generation-result-state generation-success-state">
+            <div
+                class="generation-result-icon generation-success-icon"
+                aria-hidden="true"
+            >
+              ✓
+            </div>
+
+            <div class="generation-result-copy">
+              <h2>学习路径已生成</h2>
+              <p>
+                路径阶段、知识节点与前置依赖已经编排完成。
+              </p>
+            </div>
+
+            <div class="generation-success-summary">
+              <span></span>
+              正在打开学习路径总览
+            </div>
+
+            <div class="generation-success-track">
+              <i></i>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <header class="generation-loading-header">
+            <div
+                class="generation-loader"
+                aria-hidden="true"
+            >
+              <div class="generation-loader-ring"></div>
+              <span>✦</span>
+            </div>
+
+            <h2>AI 正在构建您的学习路径</h2>
+            <p>
+              正在结合学习目标、当前基础和学习偏好编排知识节点。
+            </p>
+          </header>
+
+          <div class="generation-timeline">
+            <div
+                v-for="(step, index) in pathPlanningSteps"
+                :key="step.key"
+                class="generation-timeline-node"
+                :class="{
+                  'is-active': pathPlanningStepIndex === index,
+                  'is-done': pathPlanningStepIndex > index,
+                }"
+                :style="generationStepStyle(step, index, pathPlanningSteps)"
+            >
+              <div class="generation-node-circle">
+                <span v-if="pathPlanningStepIndex > index">✓</span>
+                <span v-else>{{ index + 1 }}</span>
+              </div>
+
+              <span class="generation-node-label">
+                {{ step.title }}
+              </span>
+
+              <div
+                  v-if="index < pathPlanningSteps.length - 1"
+                  class="generation-node-line"
+              ></div>
+            </div>
+          </div>
+
+          <div class="generation-progress-panel">
+            <div class="generation-progress-head">
+              <div>
+                <span>当前阶段</span>
+                <strong>{{ currentPathPlanningStep }}</strong>
+              </div>
+
+              <em>
+                第 {{ currentPathPlanningStepNumber }}
+                / {{ pathPlanningSteps.length }} 步
+              </em>
+            </div>
+
+            <div
+                class="generation-progress-track"
+                role="progressbar"
+                :aria-valuenow="generatingProgressRounded"
+                aria-valuemin="0"
+                aria-valuemax="100"
+            >
+              <i
+                  :style="{
+                    width: `${generatingProgressRounded}%`,
+                  }"
+              ></i>
+            </div>
+          </div>
+
+          <div class="generation-log-box">
+            <transition-group name="log">
+              <div
+                  v-for="(message, index) in visibleGeneratingMessages"
+                  :key="`${message}-${index}`"
+                  class="generation-log-row"
+              >
+                <span></span>
+                <p>{{ message }}</p>
+              </div>
+            </transition-group>
+          </div>
+
+          <p class="generation-persistence-note">
+            后台任务不会因切换页面或刷新而停止；再次进入本路径时会自动恢复进度并确认生成结果。
+          </p>
+        </template>
+      </section>
     </section>
 
     <section v-else-if="path" class="overview-shell">
@@ -333,26 +472,172 @@
 
     <Teleport to="body">
       <transition name="tutorial-overlay">
-        <div v-if="isGeneratingTutorial" class="tutorial-generating-overlay">
-          <section class="tutorial-generating-modal">
-            <div class="generate-copy">
-              <span>NODE TUTORIAL</span>
-              <h1>正在准备节点教程</h1>
-              <p>
-                如果该节点已有教程，系统会直接进入学习页；如果没有教程，系统会在当前页面生成完成后再进入。
-              </p>
-            </div>
+        <div
+            v-if="isGeneratingTutorial"
+            class="tutorial-generating-overlay"
+        >
+          <section
+              class="generation-waiting-card tutorial-waiting-card"
+              role="dialog"
+              aria-modal="true"
+              aria-live="polite"
+              aria-atomic="true"
+          >
+            <template v-if="tutorialGenerationError">
+              <div class="generation-result-state generation-error-state">
+                <div
+                    class="generation-result-icon generation-error-icon"
+                    aria-hidden="true"
+                >
+                  !
+                </div>
 
-            <transition-group name="log" tag="div" class="generate-log">
-              <div
-                  v-for="(msg, index) in tutorialMessages"
-                  :key="`${msg}-${index}`"
-                  class="log-item"
-              >
-                <i></i>
-                <span>{{ msg }}</span>
+                <div class="generation-result-copy">
+                  <h2>节点教程生成失败</h2>
+                  <p>
+                    教程任务状态已经保留，可以重新生成或关闭等待页面。
+                  </p>
+                </div>
+
+                <div class="generation-error-detail">
+                  {{ tutorialGenerationError }}
+                </div>
+
+                <div class="generation-result-actions">
+                  <button
+                      class="generation-secondary-action"
+                      type="button"
+                      @click="closeTutorialFailure"
+                  >
+                    关闭等待
+                  </button>
+
+                  <button
+                      class="generation-primary-action"
+                      type="button"
+                      @click="retryTutorialGeneration"
+                  >
+                    重新生成教程
+                  </button>
+                </div>
               </div>
-            </transition-group>
+            </template>
+
+            <template v-else-if="tutorialProgressRounded >= 100">
+              <div class="generation-result-state generation-success-state">
+                <div
+                    class="generation-result-icon generation-success-icon"
+                    aria-hidden="true"
+                >
+                  ✓
+                </div>
+
+                <div class="generation-result-copy">
+                  <h2>节点教程已生成</h2>
+                  <p>
+                    教程正文、示例和易错点已经完成保存。
+                  </p>
+                </div>
+
+                <div class="generation-success-summary">
+                  <span></span>
+                  正在进入节点学习页面
+                </div>
+
+                <div class="generation-success-track">
+                  <i></i>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
+              <header class="generation-loading-header">
+                <div
+                    class="generation-loader"
+                    aria-hidden="true"
+                >
+                  <div class="generation-loader-ring"></div>
+                  <span>✦</span>
+                </div>
+
+                <h2>AI 正在准备节点教程</h2>
+                <p>
+                  正在结合路径目标、节点知识与学习画像组织个性化教程。
+                </p>
+              </header>
+
+              <div class="generation-timeline">
+                <div
+                    v-for="(step, index) in tutorialGenerationSteps"
+                    :key="step.key"
+                    class="generation-timeline-node"
+                    :class="{
+                      'is-active': tutorialStepIndex === index,
+                      'is-done': tutorialStepIndex > index,
+                    }"
+                    :style="generationStepStyle(step, index, tutorialGenerationSteps)"
+                >
+                  <div class="generation-node-circle">
+                    <span v-if="tutorialStepIndex > index">✓</span>
+                    <span v-else>{{ index + 1 }}</span>
+                  </div>
+
+                  <span class="generation-node-label">
+                    {{ step.title }}
+                  </span>
+
+                  <div
+                      v-if="index < tutorialGenerationSteps.length - 1"
+                      class="generation-node-line"
+                  ></div>
+                </div>
+              </div>
+
+              <div class="generation-progress-panel">
+                <div class="generation-progress-head">
+                  <div>
+                    <span>当前阶段</span>
+                    <strong>{{ currentTutorialStep }}</strong>
+                  </div>
+
+                  <em>
+                    第 {{ currentTutorialStepNumber }}
+                    / {{ tutorialGenerationSteps.length }} 步
+                  </em>
+                </div>
+
+                <div
+                    class="generation-progress-track"
+                    role="progressbar"
+                    :aria-valuenow="tutorialProgressRounded"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                >
+                  <i
+                      :style="{
+                        width: `${tutorialProgressRounded}%`,
+                      }"
+                  ></i>
+                </div>
+              </div>
+
+              <div class="generation-log-box">
+                <transition-group name="log">
+                  <div
+                      v-for="(message, index) in visibleTutorialMessages"
+                      :key="`${message}-${index}`"
+                      class="generation-log-row"
+                  >
+                    <span></span>
+                    <p>{{ message }}</p>
+                  </div>
+                </transition-group>
+              </div>
+
+              <p class="generation-persistence-note">
+                教程任务由后端持续执行。切换页面或刷新后，再次进入该节点会自动恢复等待状态。
+              </p>
+            </template>
           </section>
         </div>
       </transition>
@@ -361,7 +646,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  onActivated,
+  onBeforeUnmount,
+  onDeactivated,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
+import type { CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
@@ -395,83 +689,422 @@ type NodeWorkspaceLike = {
   current_tutorial?: unknown | null
 }
 
+type GenerationStatus =
+    | 'running'
+    | 'failed'
+    | 'completed'
+
+type GenerationStep = {
+  key: string
+  title: string
+  threshold: number
+  start: string
+  end: string
+  soft: string
+  text: string
+  glow: string
+}
+
+type CachedPlanningTask = {
+  version: 3
+  status: GenerationStatus
+  pathId: number
+  runId: string
+  progress: number
+  logs: string[]
+  error: string
+  startedAt: number
+  updatedAt: number
+  payload?: unknown
+}
+
+type CachedTutorialGeneration = {
+  version: 3
+  status: GenerationStatus
+  nodeId: number
+  pathId: number | null
+  title: string
+  progress: number
+  logs: string[]
+  error: string
+  startedAt: number
+  updatedAt: number
+}
+
+const PLANNING_CACHE_KEY =
+    'mentorly:path-planning-task:v3'
+const PLANNING_CACHE_TTL =
+    60 * 60 * 1000
+const PLANNING_CONFIRM_TIMEOUT =
+    10 * 60 * 1000
+
+const TUTORIAL_CACHE_PREFIX =
+    'mentorly:tutorial-generation:v3:'
+const TUTORIAL_CACHE_TTL =
+    60 * 60 * 1000
+const TUTORIAL_CONFIRM_TIMEOUT =
+    10 * 60 * 1000
+
 const router = useRouter()
 const route = useRoute()
+const pathEvents = usePathEvents()
 
 const loading = ref(false)
 const path = ref<PathOverview | null>(null)
-const evaluation = ref<PathLearningEvaluationResponse | null>(null)
-const activeDetailNode = ref<LearningPathNode | null>(null)
+const evaluation =
+    ref<PathLearningEvaluationResponse | null>(null)
+const activeDetailNode =
+    ref<LearningPathNode | null>(null)
 
 const isGenerating = ref(false)
 const generatingProgress = ref(12)
 const generatingMessages = ref<string[]>([])
-const pathEvents = usePathEvents()
+const pathGenerationError = ref('')
 const activeRunId = ref<string | null>(null)
 
 const isGeneratingTutorial = ref(false)
 const openingNodeId = ref<number | null>(null)
 const tutorialNodeId = ref<number | null>(null)
+const tutorialProgress = ref(0)
 const tutorialMessages = ref<string[]>([])
+const tutorialGenerationError = ref('')
 
-const learningStatuses = new Set(['in_progress'])
-const completedStatuses = new Set(['completed', 'completed_with_gaps'])
+let pageActive = true
+let activationCount = 0
+let pathMonitorToken = 0
+let tutorialMonitorToken = 0
+let pathFinishing = false
+let tutorialFinishing = false
+
+let pathProgressTimer: number | null = null
+let tutorialProgressTimer: number | null = null
+
+const sharedStepTones = [
+  {
+    start: '#4f8cf7',
+    end: '#73a7ff',
+    soft: '#eef5ff',
+    text: '#3268bd',
+    glow: 'rgba(79, 140, 247, 0.18)',
+  },
+  {
+    start: '#8d78f2',
+    end: '#aa96ff',
+    soft: '#f4f1ff',
+    text: '#6651c1',
+    glow: 'rgba(141, 120, 242, 0.18)',
+  },
+  {
+    start: '#ef9a58',
+    end: '#f6b072',
+    soft: '#fff5ed',
+    text: '#bd6c2f',
+    glow: 'rgba(239, 154, 88, 0.18)',
+  },
+  {
+    start: '#df7fac',
+    end: '#ed9bc2',
+    soft: '#fff0f7',
+    text: '#b25582',
+    glow: 'rgba(223, 127, 172, 0.18)',
+  },
+  {
+    start: '#28ad9e',
+    end: '#58c7bb',
+    soft: '#ebfaf8',
+    text: '#197b72',
+    glow: 'rgba(40, 173, 158, 0.18)',
+  },
+] as const
+
+const pathPlanningSteps: GenerationStep[] = [
+  {
+    key: 'profile',
+    title: '结合学习画像',
+    threshold: 10,
+    ...sharedStepTones[0],
+  },
+  {
+    key: 'stage',
+    title: '拆解学习阶段',
+    threshold: 30,
+    ...sharedStepTones[1],
+  },
+  {
+    key: 'node',
+    title: '编排知识节点',
+    threshold: 52,
+    ...sharedStepTones[2],
+  },
+  {
+    key: 'validate',
+    title: '校验路径依赖',
+    threshold: 74,
+    ...sharedStepTones[3],
+  },
+  {
+    key: 'save',
+    title: '保存路径结构',
+    threshold: 90,
+    ...sharedStepTones[4],
+  },
+]
+
+const tutorialGenerationSteps: GenerationStep[] = [
+  {
+    key: 'context',
+    title: '读取节点上下文',
+    threshold: 8,
+    ...sharedStepTones[0],
+  },
+  {
+    key: 'scope',
+    title: '提取核心知识',
+    threshold: 27,
+    ...sharedStepTones[1],
+  },
+  {
+    key: 'outline',
+    title: '搭建教程结构',
+    threshold: 48,
+    ...sharedStepTones[2],
+  },
+  {
+    key: 'content',
+    title: '补充示例与易错点',
+    threshold: 70,
+    ...sharedStepTones[3],
+  },
+  {
+    key: 'save',
+    title: '保存并校验教程',
+    threshold: 90,
+    ...sharedStepTones[4],
+  },
+]
+
+const learningStatuses = new Set([
+  'in_progress',
+  'remediation',
+  'reinforced',
+])
+const completedStatuses = new Set([
+  'completed',
+  'completed_with_gaps',
+])
 const enterableStatuses = new Set([
   'available',
   'in_progress',
+  'remediation',
+  'reinforced',
   'completed',
   'completed_with_gaps',
 ])
 
+const generatingProgressRounded = computed(() => {
+  return clampProgress(generatingProgress.value)
+})
+
+const tutorialProgressRounded = computed(() => {
+  return clampProgress(tutorialProgress.value)
+})
+
+const pathPlanningStepIndex = computed(() => {
+  return stepIndexForProgress(
+      generatingProgressRounded.value,
+      pathPlanningSteps,
+  )
+})
+
+const tutorialStepIndex = computed(() => {
+  return stepIndexForProgress(
+      tutorialProgressRounded.value,
+      tutorialGenerationSteps,
+  )
+})
+
+const currentPathPlanningStep = computed(() => {
+  if (generatingProgressRounded.value >= 100) {
+    return '路径结构已生成'
+  }
+
+  return (
+      pathPlanningSteps[
+          pathPlanningStepIndex.value
+          ]?.title ||
+      '准备规划任务'
+  )
+})
+
+const currentTutorialStep = computed(() => {
+  if (tutorialProgressRounded.value >= 100) {
+    return '节点教程已生成'
+  }
+
+  return (
+      tutorialGenerationSteps[
+          tutorialStepIndex.value
+          ]?.title ||
+      '准备教程任务'
+  )
+})
+
+const currentPathPlanningStepNumber = computed(() => {
+  if (generatingProgressRounded.value >= 100) {
+    return pathPlanningSteps.length
+  }
+
+  return Math.min(
+      pathPlanningStepIndex.value + 1,
+      pathPlanningSteps.length,
+  )
+})
+
+const currentTutorialStepNumber = computed(() => {
+  if (tutorialProgressRounded.value >= 100) {
+    return tutorialGenerationSteps.length
+  }
+
+  return Math.min(
+      tutorialStepIndex.value + 1,
+      tutorialGenerationSteps.length,
+  )
+})
+
+const visibleGeneratingMessages = computed(() => {
+  if (generatingProgressRounded.value >= 100) {
+    return [
+      '路径阶段、知识节点和前置依赖已保存，正在打开学习路径总览。',
+    ]
+  }
+
+  return generatingMessages.value.slice(-3)
+})
+
+const visibleTutorialMessages = computed(() => {
+  if (tutorialProgressRounded.value >= 100) {
+    return [
+      '节点教程已保存，正在进入学习页面。',
+    ]
+  }
+
+  return tutorialMessages.value.slice(-3)
+})
+
 const averageScore = computed(() => {
-  const score = evaluation.value?.signal_snapshot?.average_score
-  if (score === null || score === undefined) return 0
+  const score =
+      evaluation.value?.signal_snapshot?.average_score
+
+  if (
+      score === null ||
+      score === undefined
+  ) {
+    return 0
+  }
+
   return Math.round(score)
 })
 
 const activeMinutes = computed(() => {
-  return evaluation.value?.signal_snapshot?.active_minutes ?? 0
+  return (
+      evaluation.value
+          ?.signal_snapshot
+          ?.active_minutes ??
+      0
+  )
 })
 
 const weakTopics = computed(() => {
-  return evaluation.value?.signal_snapshot?.weak_topics ?? []
+  return (
+      evaluation.value
+          ?.signal_snapshot
+          ?.weak_topics ??
+      []
+  )
 })
 
 const optimizationTips = computed(() => {
-  return evaluation.value?.optimization_tips ?? []
+  return (
+      evaluation.value
+          ?.optimization_tips ??
+      []
+  )
 })
 
 const currentNode = computed(() => {
   if (!path.value) return null
 
   return (
-      path.value.nodes.find((node) => node.node_id === path.value?.current_node_key)
-      ?? path.value.nodes.find((node) => ['available', 'in_progress'].includes(node.status))
-      ?? null
+      path.value.nodes.find(
+          node =>
+              node.node_id ===
+              path.value?.current_node_key,
+      ) ??
+      path.value.nodes.find(
+          node =>
+              [
+                'available',
+                'in_progress',
+                'remediation',
+                'reinforced',
+              ].includes(node.status),
+      ) ??
+      null
   )
 })
 
-const displayedNode = computed(() => activeDetailNode.value || currentNode.value)
+const displayedNode = computed(() => {
+  return (
+      activeDetailNode.value ||
+      currentNode.value
+  )
+})
 
-const selectedNodeId = computed(() => displayedNode.value?.id ?? null)
+const selectedNodeId = computed(() => {
+  return displayedNode.value?.id ?? null
+})
 
 const displayedStageTitle = computed(() => {
   if (!displayedNode.value) return ''
-  return stageTitleById(displayedNode.value.stage_id)
+
+  return stageTitleById(
+      displayedNode.value.stage_id,
+  )
 })
 
 const displayedPrerequisites = computed(() => {
-  return displayedNode.value?.prerequisites?.map(prerequisiteLabel) ?? []
+  return (
+      displayedNode.value
+          ?.prerequisites
+          ?.map(prerequisiteLabel) ??
+      []
+  )
 })
 
 const summary = computed(() => {
   const nodes = path.value?.nodes ?? []
 
   return {
-    available: nodes.filter((node) => node.status === 'available').length,
-    learning: nodes.filter((node) => learningStatuses.has(node.status)).length,
-    completed: nodes.filter((node) => completedStatuses.has(node.status)).length,
-    locked: nodes.filter((node) => node.status === 'locked').length,
+    available:
+        nodes.filter(
+            node =>
+                node.status === 'available',
+        ).length,
+    learning:
+        nodes.filter(
+            node =>
+                learningStatuses.has(node.status),
+        ).length,
+    completed:
+        nodes.filter(
+            node =>
+                completedStatuses.has(node.status),
+        ).length,
+    locked:
+        nodes.filter(
+            node =>
+                node.status === 'locked',
+        ).length,
   }
 })
 
@@ -491,71 +1124,195 @@ const stageSections = computed<StageSection[]>(() => {
   const stages = path.value.stages ?? []
   const nodes = path.value.nodes ?? []
 
-  const sections: StageSection[] = stages.map((stage) => {
-    const stageId = getStageId(stage)
+  const sections: StageSection[] =
+      stages.map(stage => {
+        const stageId = getStageId(stage)
 
-    return {
-      stageId,
-      title: getStageTitle(stage),
-      nodes: nodes
-          .filter((node) => node.stage_id === stageId)
-          .sort((a, b) => (a.priority || 0) - (b.priority || 0)),
-    }
-  })
+        return {
+          stageId,
+          title: getStageTitle(stage),
+          nodes:
+              nodes
+                  .filter(
+                      node =>
+                          node.stage_id === stageId,
+                  )
+                  .sort(
+                      (first, second) =>
+                          (first.priority || 0) -
+                          (second.priority || 0),
+                  ),
+        }
+      })
 
-  const knownStageIds = new Set(sections.map((section) => section.stageId))
-  const orphanNodes = nodes.filter((node) => !knownStageIds.has(node.stage_id))
+  const knownStageIds =
+      new Set(
+          sections.map(
+              section => section.stageId,
+          ),
+      )
+
+  const orphanNodes =
+      nodes.filter(
+          node =>
+              !knownStageIds.has(node.stage_id),
+      )
 
   if (orphanNodes.length) {
     sections.push({
       stageId: 'unknown-stage',
       title: '未归类节点',
-      nodes: orphanNodes.sort((a, b) => (a.priority || 0) - (b.priority || 0)),
+      nodes:
+          orphanNodes.sort(
+              (first, second) =>
+                  (first.priority || 0) -
+                  (second.priority || 0),
+          ),
     })
   }
 
-  return sections.filter((section) => section.nodes.length > 0)
+  return sections.filter(
+      section => section.nodes.length > 0,
+  )
 })
 
-const getStageId = (stage: LearningPathStage) => {
+function clampProgress(value: number) {
+  return Math.max(
+      0,
+      Math.min(
+          100,
+          Math.round(value),
+      ),
+  )
+}
+
+function stepIndexForProgress(
+    progress: number,
+    steps: GenerationStep[],
+) {
+  for (
+      let index = steps.length - 1;
+      index >= 0;
+      index -= 1
+  ) {
+    const step = steps[index]
+
+    if (
+        step &&
+        progress >= step.threshold
+    ) {
+      return index
+    }
+  }
+
+  return 0
+}
+
+function generationStepStyle(
+    step: GenerationStep,
+    index: number,
+    steps: GenerationStep[],
+): CSSProperties {
+  const next =
+      steps[index + 1] ?? step
+
+  return {
+    '--generation-node-start': step.start,
+    '--generation-node-end': step.end,
+    '--generation-node-soft': step.soft,
+    '--generation-node-text': step.text,
+    '--generation-node-glow': step.glow,
+    '--generation-next-start': next.start,
+  } as CSSProperties
+}
+
+function getStageId(
+    stage: LearningPathStage,
+) {
   return stage.stage_id
 }
 
-const getStageTitle = (stage: LearningPathStage) => {
+function getStageTitle(
+    stage: LearningPathStage,
+) {
   return stage.title
 }
 
-const stageTitleById = (stageId: string) => {
-  const stage = stageSections.value.find((item) => item.stageId === stageId)
+function stageTitleById(
+    stageId: string,
+) {
+  const stage =
+      stageSections.value.find(
+          item =>
+              item.stageId === stageId,
+      )
+
   return stage?.title || stageId
 }
 
-const stageCompletedCount = (stage: StageSection) => {
-  return stage.nodes.filter((node) => completedStatuses.has(node.status)).length
+function stageCompletedCount(
+    stage: StageSection,
+) {
+  return (
+      stage.nodes.filter(
+          node =>
+              completedStatuses.has(node.status),
+      ).length
+  )
 }
 
-const stageAvailableCount = (stage: StageSection) => {
-  return stage.nodes.filter((node) => node.status === 'available').length
+function stageAvailableCount(
+    stage: StageSection,
+) {
+  return (
+      stage.nodes.filter(
+          node =>
+              node.status === 'available',
+      ).length
+  )
 }
 
-const stageProgress = (stage: StageSection) => {
+function stageProgress(
+    stage: StageSection,
+) {
   if (!stage.nodes.length) return 0
-  return Math.round((stageCompletedCount(stage) / stage.nodes.length) * 100)
+
+  return Math.round(
+      (
+          stageCompletedCount(stage) /
+          stage.nodes.length
+      ) * 100,
+  )
 }
 
-const difficultyText = (diff?: string | null) => {
-  if (diff === 'beginner') return '入门'
-  if (diff === 'intermediate') return '进阶'
-  if (diff === 'advanced') return '挑战'
-  return diff || '常规'
+function difficultyText(
+    difficulty?: string | null,
+) {
+  if (difficulty === 'beginner') {
+    return '入门'
+  }
+
+  if (difficulty === 'intermediate') {
+    return '进阶'
+  }
+
+  if (difficulty === 'advanced') {
+    return '挑战'
+  }
+
+  return difficulty || '常规'
 }
 
-const statusText = (status: string) => {
+function statusText(status: string) {
   switch (status) {
     case 'available':
       return '可开始'
     case 'in_progress':
       return '学习中'
+    case 'remediation':
+      return '补弱中'
+    case 'reinforced':
+      return '强化中'
     case 'locked':
       return '未解锁'
     case 'completed':
@@ -567,7 +1324,9 @@ const statusText = (status: string) => {
   }
 }
 
-const nodeLearningHint = (node: LearningPathNode) => {
+function nodeLearningHint(
+    node: LearningPathNode,
+) {
   if (node.status === 'locked') {
     return '该节点暂未解锁。完成前置节点后，系统会自动开放学习入口。'
   }
@@ -576,22 +1335,34 @@ const nodeLearningHint = (node: LearningPathNode) => {
     return '该节点已经完成。点击左侧节点可以直接进入学习页回顾教程、题目和辅助资源。'
   }
 
-  if (node.status === 'completed_with_gaps') {
+  if (
+      node.status ===
+      'completed_with_gaps'
+  ) {
     return '该节点已完成但仍存在薄弱点。点击左侧节点可以进入学习页查看强化内容并复习错题。'
   }
 
   return '该节点可以开始学习。点击左侧节点后，若已有教程会直接进入学习页；若没有教程，会在当前页面生成完成后进入。'
 }
 
-const prerequisiteLabel = (nodeKey: string) => {
-  return nodeTitleMap.value.get(nodeKey) || nodeKey
+function prerequisiteLabel(
+    nodeKey: string,
+) {
+  return (
+      nodeTitleMap.value.get(nodeKey) ||
+      nodeKey
+  )
 }
 
-const canEnterNode = (node: LearningPathNode) => {
+function canEnterNode(
+    node: LearningPathNode,
+) {
   return enterableStatuses.has(node.status)
 }
 
-function unwrapResponseData<T>(response: unknown): T {
+function unwrapResponseData<T>(
+    response: unknown,
+): T {
   const maybeResponse = response as {
     data?: {
       data?: T
@@ -599,320 +1370,2009 @@ function unwrapResponseData<T>(response: unknown): T {
   }
 
   if (
-      maybeResponse
-      && typeof maybeResponse === 'object'
-      && maybeResponse.data
-      && typeof maybeResponse.data === 'object'
-      && 'data' in maybeResponse.data
+      maybeResponse &&
+      typeof maybeResponse === 'object' &&
+      maybeResponse.data &&
+      typeof maybeResponse.data === 'object' &&
+      'data' in maybeResponse.data
   ) {
     return maybeResponse.data.data as T
   }
 
-  if (maybeResponse && 'data' in maybeResponse) {
+  if (
+      maybeResponse &&
+      'data' in maybeResponse
+  ) {
     return maybeResponse.data as T
   }
 
   return response as T
 }
 
-const previewNode = (node: LearningPathNode) => {
+function delay(ms: number) {
+  return new Promise<void>(resolve => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+async function animateProgressTo(
+    target: {
+      value: number
+    },
+    finalValue: number,
+    duration = 720,
+) {
+  const from = target.value
+  const startedAt = performance.now()
+
+  await new Promise<void>(resolve => {
+    const tick = (now: number) => {
+      const ratio = Math.min(
+          1,
+          (now - startedAt) / duration,
+      )
+
+      const eased =
+          1 - Math.pow(1 - ratio, 3)
+
+      target.value =
+          from +
+          (finalValue - from) * eased
+
+      if (ratio >= 1) {
+        target.value = finalValue
+        resolve()
+        return
+      }
+
+      window.requestAnimationFrame(tick)
+    }
+
+    window.requestAnimationFrame(tick)
+  })
+}
+
+function canUseStorage() {
+  return (
+      typeof window !== 'undefined' &&
+      Boolean(window.localStorage)
+  )
+}
+
+function readPlanningCache():
+    CachedPlanningTask | null {
+  if (!canUseStorage()) return null
+
+  try {
+    const raw =
+        window.localStorage.getItem(
+            PLANNING_CACHE_KEY,
+        )
+
+    if (!raw) return null
+
+    const task =
+        JSON.parse(raw) as CachedPlanningTask
+
+    const invalid =
+        task.version !== 3 ||
+        !task.pathId ||
+        Date.now() - task.updatedAt >
+        PLANNING_CACHE_TTL
+
+    if (invalid) {
+      window.localStorage.removeItem(
+          PLANNING_CACHE_KEY,
+      )
+      return null
+    }
+
+    return task
+  } catch {
+    return null
+  }
+}
+
+function writePlanningCache(
+    task: CachedPlanningTask,
+) {
+  if (!canUseStorage()) return
+
+  try {
+    const raw =
+        window.localStorage.getItem(
+            PLANNING_CACHE_KEY,
+        )
+
+    const previous =
+        raw
+            ? JSON.parse(raw)
+            : {}
+
+    window.localStorage.setItem(
+        PLANNING_CACHE_KEY,
+        JSON.stringify({
+          ...previous,
+          ...task,
+        }),
+    )
+  } catch {
+    // 缓存失败不影响后端任务。
+  }
+}
+
+function clearPlanningCache(
+    targetPathId?: number,
+) {
+  if (!canUseStorage()) return
+
+  if (targetPathId) {
+    const current = readPlanningCache()
+
+    if (
+        current &&
+        current.pathId !== targetPathId
+    ) {
+      return
+    }
+  }
+
+  window.localStorage.removeItem(
+      PLANNING_CACHE_KEY,
+  )
+}
+
+function persistPlanningTask(
+    patch: Partial<CachedPlanningTask> = {},
+) {
+  const previous = readPlanningCache()
+  const routePathId =
+      Number(route.params.id || 0)
+
+  const resolvedPathId =
+      patch.pathId ??
+      previous?.pathId ??
+      path.value?.id ??
+      (
+          Number.isFinite(routePathId)
+              ? routePathId
+              : 0
+      )
+
+  if (!resolvedPathId) return null
+
+  const task: CachedPlanningTask = {
+    version: 3,
+    status:
+        patch.status ??
+        previous?.status ??
+        'running',
+    pathId: resolvedPathId,
+    runId:
+        patch.runId ??
+        previous?.runId ??
+        activeRunId.value ??
+        '',
+    progress:
+        patch.progress ??
+        generatingProgress.value,
+    logs:
+        patch.logs ??
+        [...generatingMessages.value],
+    error:
+        patch.error ??
+        pathGenerationError.value,
+    startedAt:
+        patch.startedAt ??
+        previous?.startedAt ??
+        Date.now(),
+    updatedAt: Date.now(),
+    payload:
+        patch.payload ??
+        previous?.payload,
+  }
+
+  writePlanningCache(task)
+  return task
+}
+
+function tutorialCacheKey(
+    targetNodeId: number,
+) {
+  return (
+      `${TUTORIAL_CACHE_PREFIX}` +
+      `${targetNodeId}`
+  )
+}
+
+function readTutorialCache(
+    targetNodeId: number,
+): CachedTutorialGeneration | null {
+  if (
+      !canUseStorage() ||
+      !targetNodeId
+  ) {
+    return null
+  }
+
+  try {
+    const key =
+        tutorialCacheKey(targetNodeId)
+
+    const raw =
+        window.localStorage.getItem(key)
+
+    if (!raw) return null
+
+    const task =
+        JSON.parse(raw) as
+            CachedTutorialGeneration
+
+    const invalid =
+        task.version !== 3 ||
+        task.nodeId !== targetNodeId ||
+        Date.now() - task.updatedAt >
+        TUTORIAL_CACHE_TTL
+
+    if (invalid) {
+      window.localStorage.removeItem(key)
+      return null
+    }
+
+    return task
+  } catch {
+    return null
+  }
+}
+
+function writeTutorialCache(
+    task: CachedTutorialGeneration,
+) {
+  if (!canUseStorage()) return
+
+  try {
+    window.localStorage.setItem(
+        tutorialCacheKey(task.nodeId),
+        JSON.stringify(task),
+    )
+  } catch {
+    // 缓存失败不影响后端任务。
+  }
+}
+
+function clearTutorialCache(
+    targetNodeId: number,
+) {
+  if (
+      !canUseStorage() ||
+      !targetNodeId
+  ) {
+    return
+  }
+
+  window.localStorage.removeItem(
+      tutorialCacheKey(targetNodeId),
+  )
+}
+
+function persistTutorialTask(
+    targetNodeId: number,
+    patch:
+        Partial<CachedTutorialGeneration> = {},
+) {
+  if (!targetNodeId) return null
+
+  const previous =
+      readTutorialCache(targetNodeId)
+
+  const targetNode =
+      path.value?.nodes.find(
+          node =>
+              node.id === targetNodeId,
+      )
+
+  const task: CachedTutorialGeneration = {
+    version: 3,
+    status:
+        patch.status ??
+        previous?.status ??
+        'running',
+    nodeId: targetNodeId,
+    pathId:
+        patch.pathId ??
+        previous?.pathId ??
+        path.value?.id ??
+        null,
+    title:
+        patch.title ??
+        previous?.title ??
+        targetNode?.title ??
+        '',
+    progress:
+        patch.progress ??
+        tutorialProgress.value,
+    logs:
+        patch.logs ??
+        [...tutorialMessages.value],
+    error:
+        patch.error ??
+        tutorialGenerationError.value,
+    startedAt:
+        patch.startedAt ??
+        previous?.startedAt ??
+        Date.now(),
+    updatedAt: Date.now(),
+  }
+
+  writeTutorialCache(task)
+  return task
+}
+
+function findPendingTutorialForPath(
+    pathId: number,
+): CachedTutorialGeneration | null {
+  if (
+      !canUseStorage() ||
+      !pathId
+  ) {
+    return null
+  }
+
+  let latest:
+      CachedTutorialGeneration | null =
+      null
+
+  for (
+      let index = 0;
+      index < window.localStorage.length;
+      index += 1
+  ) {
+    const key =
+        window.localStorage.key(index)
+
+    if (
+        !key ||
+        !key.startsWith(
+            TUTORIAL_CACHE_PREFIX,
+        )
+    ) {
+      continue
+    }
+
+    const nodeId =
+        Number(
+            key.slice(
+                TUTORIAL_CACHE_PREFIX.length,
+            ),
+        )
+
+    const task =
+        readTutorialCache(nodeId)
+
+    if (
+        !task ||
+        task.pathId !== pathId
+    ) {
+      continue
+    }
+
+    if (
+        !latest ||
+        task.updatedAt > latest.updatedAt
+    ) {
+      latest = task
+    }
+  }
+
+  return latest
+}
+
+function estimatePlanningProgress(
+    task: CachedPlanningTask,
+) {
+  const elapsedSeconds =
+      Math.max(
+          0,
+          (
+              Date.now() -
+              task.startedAt
+          ) / 1000,
+      )
+
+  if (elapsedSeconds < 10) {
+    return Math.min(
+        30,
+        10 + elapsedSeconds * 2,
+    )
+  }
+
+  if (elapsedSeconds < 35) {
+    return Math.min(
+        64,
+        30 +
+        (elapsedSeconds - 10) * 1.36,
+    )
+  }
+
+  if (elapsedSeconds < 70) {
+    return Math.min(
+        86,
+        64 +
+        (elapsedSeconds - 35) * 0.63,
+    )
+  }
+
+  return Math.min(
+      94,
+      86 +
+      (elapsedSeconds - 70) * 0.12,
+  )
+}
+
+function estimateTutorialProgress(
+    task: CachedTutorialGeneration,
+) {
+  const elapsedSeconds =
+      Math.max(
+          0,
+          (
+              Date.now() -
+              task.startedAt
+          ) / 1000,
+      )
+
+  if (elapsedSeconds < 10) {
+    return Math.min(
+        28,
+        7 + elapsedSeconds * 2.1,
+    )
+  }
+
+  if (elapsedSeconds < 32) {
+    return Math.min(
+        61,
+        28 +
+        (elapsedSeconds - 10) * 1.5,
+    )
+  }
+
+  if (elapsedSeconds < 65) {
+    return Math.min(
+        84,
+        61 +
+        (elapsedSeconds - 32) * 0.7,
+    )
+  }
+
+  return Math.min(
+      94,
+      84 +
+      (elapsedSeconds - 65) * 0.13,
+  )
+}
+
+function addPlanningMessage(
+    message: string,
+) {
+  if (
+      !message ||
+      generatingMessages.value.includes(
+          message,
+      )
+  ) {
+    return
+  }
+
+  generatingMessages.value = [
+    ...generatingMessages.value,
+    message,
+  ].slice(-5)
+
+  if (isGenerating.value) {
+    persistPlanningTask({
+      logs: [
+        ...generatingMessages.value,
+      ],
+    })
+  }
+}
+
+function addTutorialMessage(
+    message: string,
+) {
+  if (
+      !message ||
+      tutorialMessages.value.includes(
+          message,
+      )
+  ) {
+    return
+  }
+
+  tutorialMessages.value = [
+    ...tutorialMessages.value,
+    message,
+  ].slice(-5)
+
+  if (
+      isGeneratingTutorial.value &&
+      tutorialNodeId.value
+  ) {
+    persistTutorialTask(
+        tutorialNodeId.value,
+        {
+          logs: [
+            ...tutorialMessages.value,
+          ],
+        },
+    )
+  }
+}
+
+function syncPlanningMessagesByProgress() {
+  if (generatingProgress.value >= 10) {
+    addPlanningMessage(
+        '已读取学习目标、当前基础和学习偏好。',
+    )
+  }
+
+  if (generatingProgress.value >= 30) {
+    addPlanningMessage(
+        '正在拆解学习阶段并确定阶段目标。',
+    )
+  }
+
+  if (generatingProgress.value >= 52) {
+    addPlanningMessage(
+        '正在编排核心知识节点和学习顺序。',
+    )
+  }
+
+  if (generatingProgress.value >= 74) {
+    addPlanningMessage(
+        '正在检查节点覆盖度和前置依赖。',
+    )
+  }
+
+  if (generatingProgress.value >= 90) {
+    addPlanningMessage(
+        '路径结构已基本完成，正在保存结果。',
+    )
+  }
+}
+
+function syncTutorialMessagesByProgress() {
+  if (tutorialProgress.value >= 8) {
+    addTutorialMessage(
+        '已读取学习目标、节点信息和当前学习基础。',
+    )
+  }
+
+  if (tutorialProgress.value >= 27) {
+    addTutorialMessage(
+        '正在提取本节点需要讲清的核心知识与边界。',
+    )
+  }
+
+  if (tutorialProgress.value >= 48) {
+    addTutorialMessage(
+        '正在组织章节顺序、概念关系和讲解层次。',
+    )
+  }
+
+  if (tutorialProgress.value >= 70) {
+    addTutorialMessage(
+        '正在补充示例、易错点和学习提示。',
+    )
+  }
+
+  if (tutorialProgress.value >= 90) {
+    addTutorialMessage(
+        '教程内容已基本完成，正在保存并校验。',
+    )
+  }
+}
+
+function stopPathProgressAnimation() {
+  if (pathProgressTimer === null) {
+    return
+  }
+
+  window.clearInterval(pathProgressTimer)
+  pathProgressTimer = null
+}
+
+function startPathProgressAnimation(
+    initialProgress =
+        generatingProgress.value,
+) {
+  stopPathProgressAnimation()
+
+  generatingProgress.value =
+      Math.max(
+          generatingProgress.value,
+          initialProgress,
+      )
+
+  pathProgressTimer =
+      window.setInterval(() => {
+        if (
+            !pageActive ||
+            !isGenerating.value ||
+            pathFinishing
+        ) {
+          return
+        }
+
+        if (generatingProgress.value < 28) {
+          generatingProgress.value += 2.6
+        } else if (
+            generatingProgress.value < 56
+        ) {
+          generatingProgress.value += 1.7
+        } else if (
+            generatingProgress.value < 78
+        ) {
+          generatingProgress.value += 0.95
+        } else if (
+            generatingProgress.value < 94
+        ) {
+          generatingProgress.value += 0.32
+        }
+
+        generatingProgress.value =
+            Math.min(
+                generatingProgress.value,
+                94,
+            )
+
+        syncPlanningMessagesByProgress()
+
+        persistPlanningTask({
+          status: 'running',
+          progress:
+              generatingProgress.value,
+          logs: [
+            ...generatingMessages.value,
+          ],
+        })
+      }, 700)
+}
+
+function stopTutorialProgressAnimation() {
+  if (
+      tutorialProgressTimer === null
+  ) {
+    return
+  }
+
+  window.clearInterval(
+      tutorialProgressTimer,
+  )
+  tutorialProgressTimer = null
+}
+
+function startTutorialProgressAnimation(
+    initialProgress =
+        tutorialProgress.value,
+) {
+  stopTutorialProgressAnimation()
+
+  tutorialProgress.value =
+      Math.max(
+          tutorialProgress.value,
+          initialProgress,
+      )
+
+  tutorialProgressTimer =
+      window.setInterval(() => {
+        if (
+            !pageActive ||
+            !isGeneratingTutorial.value ||
+            tutorialFinishing
+        ) {
+          return
+        }
+
+        if (tutorialProgress.value < 27) {
+          tutorialProgress.value += 2.3
+        } else if (
+            tutorialProgress.value < 53
+        ) {
+          tutorialProgress.value += 1.55
+        } else if (
+            tutorialProgress.value < 76
+        ) {
+          tutorialProgress.value += 0.9
+        } else if (
+            tutorialProgress.value < 94
+        ) {
+          tutorialProgress.value += 0.3
+        }
+
+        tutorialProgress.value =
+            Math.min(
+                tutorialProgress.value,
+                94,
+            )
+
+        syncTutorialMessagesByProgress()
+
+        if (tutorialNodeId.value) {
+          persistTutorialTask(
+              tutorialNodeId.value,
+              {
+                status: 'running',
+                progress:
+                    tutorialProgress.value,
+                logs: [
+                  ...tutorialMessages.value,
+                ],
+              },
+          )
+        }
+      }, 700)
+}
+
+function previewNode(
+    node: LearningPathNode,
+) {
   activeDetailNode.value = node
 }
 
-const handleNodeClick = async (node: LearningPathNode) => {
+async function handleNodeClick(
+    node: LearningPathNode,
+) {
   activeDetailNode.value = node
 
   if (!canEnterNode(node)) {
-    toast.warning('该节点尚未解锁，请先完成前置节点')
+    toast.warning(
+        '该节点尚未解锁，请先完成前置节点',
+    )
     return
   }
 
   await openNodeLearning(node)
 }
 
-const openNodeLearning = async (node: LearningPathNode) => {
-  if (openingNodeId.value || isGeneratingTutorial.value) return
+async function openNodeLearning(
+    node: LearningPathNode,
+) {
+  if (
+      openingNodeId.value ||
+      isGeneratingTutorial.value
+  ) {
+    return
+  }
 
   openingNodeId.value = node.id
   tutorialNodeId.value = node.id
-  tutorialMessages.value = ['正在检查该节点是否已有教程...']
+  tutorialMessages.value = [
+    '正在检查该节点是否已有教程。',
+  ]
 
   try {
-    const workspaceResponse = await getLearningNodeWorkspace(node.id)
-    const workspace = unwrapResponseData<NodeWorkspaceLike>(workspaceResponse)
+    const workspaceResponse =
+        await getLearningNodeWorkspace(
+            node.id,
+        )
+
+    const workspace =
+        unwrapResponseData<NodeWorkspaceLike>(
+            workspaceResponse,
+        )
 
     if (workspace.current_tutorial) {
       await startLearning(node.id)
-      router.push(`/path-planner/node/${node.id}`)
+
+      await router.push(
+          `/path-planner/node/${node.id}`,
+      )
       return
     }
 
-    await generateNodeTutorialAndEnter(node)
+    await beginTutorialGeneration(node)
   } catch (error) {
-    toast.error(getErrorMessage(error, '打开节点学习页失败'))
-  } finally {
-    if (!isGeneratingTutorial.value) {
-      openingNodeId.value = null
-      tutorialNodeId.value = null
-      tutorialMessages.value = []
-    }
-  }
-}
+    toast.error(
+        getErrorMessage(
+            error,
+            '打开节点学习页失败',
+        ),
+    )
 
-const generateNodeTutorialAndEnter = async (node: LearningPathNode) => {
-  isGeneratingTutorial.value = true
-  tutorialNodeId.value = node.id
-  tutorialMessages.value = [
-    '当前节点还没有教程，正在启动教程生成流程...',
-    '正在读取路径目标、节点信息和学习画像...',
-  ]
-
-  const logs = [
-    '正在生成节点主教程结构...',
-    '正在补充核心概念、例子和易错点...',
-    '正在整理教程正文与知识点...',
-    '正在保存教程并准备进入学习页...',
-  ]
-
-  let logIndex = 0
-  const interval = window.setInterval(() => {
-    if (logIndex < logs.length) {
-      tutorialMessages.value.push(logs[logIndex]!)
-
-      if (tutorialMessages.value.length > 5) {
-        tutorialMessages.value.shift()
-      }
-
-      logIndex += 1
-    }
-  }, 1800)
-
-  try {
-    await startLearning(node.id)
-    await generateTutorial(node.id)
-    router.push(`/path-planner/node/${node.id}`)
-  } catch (error) {
-    toast.error(getErrorMessage(error, '教程生成失败'))
-  } finally {
-    window.clearInterval(interval)
-    isGeneratingTutorial.value = false
     openingNodeId.value = null
     tutorialNodeId.value = null
     tutorialMessages.value = []
   }
 }
 
-const stopSSE = () => {
-  pathEvents.close()
-}
-
-const handlePathEvent = (event: PathEvent) => {
-  if (typeof event.progress === 'number') {
-    generatingProgress.value = Math.max(generatingProgress.value, Math.min(event.progress, 100))
-  }
-
-  const message = event.message
-  if (message && !generatingMessages.value.includes(message)) {
-    generatingMessages.value.push(message)
-
-    if (generatingMessages.value.length > 6) {
-      generatingMessages.value.shift()
-    }
-  }
-}
-
-const startSSE = (pathId: number, runId: string) => {
-  stopSSE()
-  pathEvents.connect(pathId, runId, {
-    onEvent: handlePathEvent,
-    onCompleted: () => {
-      generatingProgress.value = 100
-      // 立即加载路径数据，无需额外延迟
-      loadPath()
-    },
-    onFailed: (error) => {
-      toast.error(error.message || '路径规划失败')
-      isGenerating.value = false
-      loadPath()
-    },
-  })
-}
-
-const loadEvaluation = async (pathId: number) => {
+async function invokeTutorialGeneration(
+    targetNodeId: number,
+    token: number,
+) {
   try {
-    const response = await getLearningEvaluation(pathId)
-    evaluation.value = unwrapResponseData<PathLearningEvaluationResponse>(response)
+    await startLearning(targetNodeId)
+
+    const response =
+        await generateTutorial(
+            targetNodeId,
+        )
+
+    if (
+        token !== tutorialMonitorToken ||
+        !pageActive
+    ) {
+      return ''
+    }
+
+    const workspace =
+        unwrapResponseData<NodeWorkspaceLike>(
+            response,
+        )
+
+    if (workspace.current_tutorial) {
+      await finishTutorialGeneration(
+          targetNodeId,
+          workspace,
+      )
+    }
+
+    return ''
   } catch (error) {
-    console.error('Failed to load evaluation', error)
-    evaluation.value = null
+    return getErrorMessage(
+        error,
+        '教程生成请求失败',
+    )
   }
 }
 
-const loadPath = async () => {
-  const rawId = String(route.params.id || '')
+async function checkTutorialReady(
+    targetNodeId: number,
+) {
+  const response =
+      await getLearningNodeWorkspace(
+          targetNodeId,
+      )
 
-  if (rawId === 'new') {
-    isGenerating.value = true
-    loading.value = false
-    path.value = null
-    evaluation.value = null
-    activeDetailNode.value = null
-    generatingProgress.value = 12
+  const workspace =
+      unwrapResponseData<NodeWorkspaceLike>(
+          response,
+      )
 
-    const newGoal = route.query.goal as string
-    const newTopic = (route.query.topic as string) || newGoal
+  if (workspace.current_tutorial) {
+    await finishTutorialGeneration(
+        targetNodeId,
+        workspace,
+    )
+    return true
+  }
 
-    if (!newGoal) {
-      router.replace('/path-planner')
+  return false
+}
+
+async function finishTutorialGeneration(
+    targetNodeId: number,
+    readyWorkspace?: NodeWorkspaceLike,
+) {
+  if (
+      tutorialFinishing ||
+      !pageActive
+  ) {
+    return
+  }
+
+  let workspace = readyWorkspace
+
+  if (!workspace?.current_tutorial) {
+    const response =
+        await getLearningNodeWorkspace(
+            targetNodeId,
+        )
+
+    workspace =
+        unwrapResponseData<NodeWorkspaceLike>(
+            response,
+        )
+  }
+
+  if (!workspace.current_tutorial) {
+    return
+  }
+
+  tutorialFinishing = true
+  tutorialMonitorToken += 1
+  stopTutorialProgressAnimation()
+
+  addTutorialMessage(
+      '教程内容已生成，正在准备进入学习页面。',
+  )
+
+  await animateProgressTo(
+      tutorialProgress,
+      100,
+      760,
+  )
+
+  persistTutorialTask(
+      targetNodeId,
+      {
+        status: 'completed',
+        progress: 100,
+        error: '',
+        logs: [
+          ...tutorialMessages.value,
+        ],
+      },
+  )
+
+  await delay(850)
+
+  if (!pageActive) {
+    tutorialFinishing = false
+    return
+  }
+
+  clearTutorialCache(targetNodeId)
+
+  isGeneratingTutorial.value = false
+  openingNodeId.value = null
+  tutorialNodeId.value = null
+  tutorialGenerationError.value = ''
+  tutorialFinishing = false
+
+  await router.push(
+      `/path-planner/node/${targetNodeId}`,
+  )
+}
+
+function failTutorialGeneration(
+    message: string,
+) {
+  stopTutorialProgressAnimation()
+
+  tutorialGenerationError.value =
+      message
+
+  if (tutorialNodeId.value) {
+    persistTutorialTask(
+        tutorialNodeId.value,
+        {
+          status: 'failed',
+          progress:
+              tutorialProgress.value,
+          error: message,
+          logs: [
+            ...tutorialMessages.value,
+          ],
+        },
+    )
+  }
+
+  toast.error(message)
+}
+
+async function monitorTutorialGeneration(
+    targetNodeId: number,
+    invokeImmediately: boolean,
+) {
+  const token = ++tutorialMonitorToken
+  const startedAt = Date.now()
+
+  let generatorInvoked = false
+  let generatorError = ''
+  let checksAfterGeneratorError = 0
+
+  const invoke = async () => {
+    if (
+        generatorInvoked ||
+        token !== tutorialMonitorToken ||
+        !pageActive
+    ) {
       return
     }
 
-    if (generatingMessages.value.length === 0) {
-      generatingMessages.value = [
-        '正在创建路径任务...',
-        '正在读取学习目标与用户画像...',
-      ]
+    generatorInvoked = true
+
+    generatorError =
+        await invokeTutorialGeneration(
+            targetNodeId,
+            token,
+        )
+
+    if (generatorError) {
+      addTutorialMessage(
+          '生成连接暂时中断，正在继续确认后台结果。',
+      )
     }
+  }
 
+  if (invokeImmediately) {
+    void invoke()
+  }
+
+  while (
+      token === tutorialMonitorToken &&
+      pageActive &&
+      isGeneratingTutorial.value &&
+      !tutorialGenerationError.value &&
+      !tutorialFinishing &&
+      Date.now() - startedAt <
+      TUTORIAL_CONFIRM_TIMEOUT
+  ) {
     try {
-      let parsedKnowledge: string[] = []
+      if (
+          await checkTutorialReady(
+              targetNodeId,
+          )
+      ) {
+        return
+      }
 
-      if (route.query.current_knowledge) {
-        try {
-          parsedKnowledge = JSON.parse(route.query.current_knowledge as string)
-        } catch (error) {
-          console.warn('解析已掌握知识点失败:', error)
+      if (
+          !invokeImmediately &&
+          !generatorInvoked &&
+          Date.now() - startedAt >= 5000
+      ) {
+        void invoke()
+      }
+
+      if (
+          generatorInvoked &&
+          generatorError
+      ) {
+        checksAfterGeneratorError += 1
+
+        if (
+            checksAfterGeneratorError >= 8
+        ) {
+          failTutorialGeneration(
+              generatorError,
+          )
+          return
         }
       }
-
-      const preferences: PathPreferences = {
-        use_profile: route.query.use_profile !== 'false',
-        scene: 'general',
-        pace: 'normal',
-        granularity: 'standard',
-        focus: ['key_points'],
-      }
-
-      const response = await createLearningPath({
-        goal: newGoal,
-        topic: newTopic,
-        current_knowledge: parsedKnowledge,
-        preferences,
-      })
-
-      const newPath = unwrapResponseData<PathOverview & { run_id?: string }>(response)
-      activeRunId.value = newPath.run_id || null
-
-      router.replace({
-        path: `/path-planner/overview/${newPath.id}`,
-        query: newPath.run_id ? { run_id: newPath.run_id } : {},
-      })
-    } catch (error) {
-      toast.error(getErrorMessage(error, '路径规划任务创建失败'))
-      isGenerating.value = false
-      router.replace('/path-planner')
+    } catch {
+      addTutorialMessage(
+          '暂时无法读取教程状态，正在继续重试。',
+      )
     }
 
+    await delay(1500)
+  }
+
+  if (
+      token === tutorialMonitorToken &&
+      pageActive &&
+      isGeneratingTutorial.value &&
+      !tutorialGenerationError.value &&
+      !tutorialFinishing
+  ) {
+    failTutorialGeneration(
+        '教程生成确认超时，后台任务可能仍在继续。刷新页面后会继续确认生成结果。',
+    )
+  }
+}
+
+async function beginTutorialGeneration(
+    node: LearningPathNode,
+) {
+  tutorialMonitorToken += 1
+  tutorialFinishing = false
+
+  isGeneratingTutorial.value = true
+  openingNodeId.value = node.id
+  tutorialNodeId.value = node.id
+  tutorialGenerationError.value = ''
+  tutorialProgress.value = 7
+  tutorialMessages.value = [
+    '教程任务已提交，正在准备节点上下文。',
+  ]
+
+  clearTutorialCache(node.id)
+
+  persistTutorialTask(
+      node.id,
+      {
+        status: 'running',
+        pathId: path.value?.id ?? null,
+        title: node.title,
+        progress: 7,
+        logs: [
+          ...tutorialMessages.value,
+        ],
+        error: '',
+        startedAt: Date.now(),
+      },
+  )
+
+  startTutorialProgressAnimation(7)
+
+  await monitorTutorialGeneration(
+      node.id,
+      true,
+  )
+}
+
+async function resumeTutorialGeneration(
+    cached: CachedTutorialGeneration,
+) {
+  const node =
+      path.value?.nodes.find(
+          item =>
+              item.id === cached.nodeId,
+      )
+
+  if (!node) {
+    clearTutorialCache(cached.nodeId)
+    return
+  }
+
+  openingNodeId.value = cached.nodeId
+  tutorialNodeId.value = cached.nodeId
+  isGeneratingTutorial.value = true
+  tutorialGenerationError.value =
+      cached.error || ''
+  tutorialProgress.value =
+      Math.max(
+          cached.progress,
+          estimateTutorialProgress(cached),
+      )
+  tutorialMessages.value =
+      cached.logs.length
+          ? [...cached.logs]
+          : [
+            '已恢复教程生成任务，正在确认后台结果。',
+          ]
+
+  if (cached.status === 'failed') {
+    stopTutorialProgressAnimation()
+    return
+  }
+
+  try {
+    if (
+        await checkTutorialReady(
+            cached.nodeId,
+        )
+    ) {
+      return
+    }
+  } catch {
+    addTutorialMessage(
+        '正在重新连接后台教程任务。',
+    )
+  }
+
+  startTutorialProgressAnimation(
+      tutorialProgress.value,
+  )
+
+  await monitorTutorialGeneration(
+      cached.nodeId,
+      false,
+  )
+}
+
+async function resumePendingTutorialForPath(
+    pathId: number,
+) {
+  if (
+      !pageActive ||
+      isGeneratingTutorial.value
+  ) {
+    return
+  }
+
+  const cached =
+      findPendingTutorialForPath(pathId)
+
+  if (!cached) return
+
+  await resumeTutorialGeneration(cached)
+}
+
+function closeTutorialFailure() {
+  tutorialMonitorToken += 1
+  stopTutorialProgressAnimation()
+
+  if (tutorialNodeId.value) {
+    clearTutorialCache(
+        tutorialNodeId.value,
+    )
+  }
+
+  isGeneratingTutorial.value = false
+  openingNodeId.value = null
+  tutorialNodeId.value = null
+  tutorialProgress.value = 0
+  tutorialMessages.value = []
+  tutorialGenerationError.value = ''
+}
+
+async function retryTutorialGeneration() {
+  const targetNodeId =
+      tutorialNodeId.value
+
+  if (!targetNodeId) {
+    closeTutorialFailure()
+    return
+  }
+
+  const node =
+      path.value?.nodes.find(
+          item =>
+              item.id === targetNodeId,
+      )
+
+  if (!node) {
+    closeTutorialFailure()
+    toast.error(
+        '未找到需要重新生成的学习节点',
+    )
+    return
+  }
+
+  tutorialMonitorToken += 1
+  stopTutorialProgressAnimation()
+  clearTutorialCache(targetNodeId)
+
+  tutorialGenerationError.value = ''
+  tutorialProgress.value = 0
+  tutorialMessages.value = []
+
+  await beginTutorialGeneration(node)
+}
+
+function stopSSE() {
+  pathEvents.close()
+}
+
+function handlePathEvent(
+    event: PathEvent,
+) {
+  if (
+      typeof event.progress === 'number'
+  ) {
+    generatingProgress.value =
+        Math.max(
+            generatingProgress.value,
+            Math.min(
+                event.progress,
+                96,
+            ),
+        )
+  }
+
+  if (event.message) {
+    addPlanningMessage(event.message)
+  }
+
+  persistPlanningTask({
+    status: 'running',
+    progress:
+        generatingProgress.value,
+    logs: [
+      ...generatingMessages.value,
+    ],
+  })
+}
+
+function startSSE(
+    pathId: number,
+    runId: string,
+) {
+  stopSSE()
+
+  pathEvents.connect(
+      pathId,
+      runId,
+      {
+        onEvent: handlePathEvent,
+        onCompleted: () => {
+          generatingProgress.value =
+              Math.max(
+                  generatingProgress.value,
+                  96,
+              )
+
+          addPlanningMessage(
+              '后端规划已完成，正在确认路径结构写入。',
+          )
+
+          void confirmPathCompletion(
+              pathId,
+          )
+        },
+        onFailed: error => {
+          addPlanningMessage(
+              '实时进度连接暂时中断，正在通过路径状态继续确认。',
+          )
+
+          persistPlanningTask({
+            status: 'running',
+            error:
+                error.message || '',
+          })
+        },
+      },
+  )
+}
+
+async function confirmPathCompletion(
+    pathId: number,
+) {
+  for (
+      let index = 0;
+      index < 12;
+      index += 1
+  ) {
+    if (!pageActive) return
+
+    try {
+      const response =
+          await getLearningPathById(
+              pathId,
+          )
+
+      const readyPath =
+          unwrapResponseData<PathOverview>(
+              response,
+          )
+
+      if (
+          readyPath.status !==
+          'generating'
+      ) {
+        await finishPathGeneration(
+            readyPath,
+        )
+        return
+      }
+    } catch {
+      // 交由轮询继续确认。
+    }
+
+    await delay(800)
+  }
+}
+
+async function monitorPathGeneration(
+    pathId: number,
+) {
+  const token = ++pathMonitorToken
+  const startedAt = Date.now()
+
+  while (
+      token === pathMonitorToken &&
+      pageActive &&
+      isGenerating.value &&
+      !pathFinishing &&
+      !pathGenerationError.value &&
+      Date.now() - startedAt <
+      PLANNING_CONFIRM_TIMEOUT
+  ) {
+    try {
+      const response =
+          await getLearningPathById(
+              pathId,
+          )
+
+      const current =
+          unwrapResponseData<PathOverview>(
+              response,
+          )
+
+      if (
+          current.status !== 'generating'
+      ) {
+        if (
+            current.status === 'failed'
+        ) {
+          failPathGeneration(
+              '学习路径生成失败，请返回创建页面重新规划。',
+          )
+          return
+        }
+
+        await finishPathGeneration(
+            current,
+        )
+        return
+      }
+    } catch {
+      addPlanningMessage(
+          '暂时无法读取路径状态，正在继续重试。',
+      )
+    }
+
+    await delay(1800)
+  }
+
+  if (
+      token === pathMonitorToken &&
+      pageActive &&
+      isGenerating.value &&
+      !pathFinishing &&
+      !pathGenerationError.value
+  ) {
+    failPathGeneration(
+        '路径生成确认超时，后台任务可能仍在继续。刷新页面后会继续确认生成结果。',
+    )
+  }
+}
+
+async function finishPathGeneration(
+    readyPath?: PathOverview,
+) {
+  if (
+      pathFinishing ||
+      !pageActive
+  ) {
+    return
+  }
+
+  pathFinishing = true
+  pathMonitorToken += 1
+  stopSSE()
+  stopPathProgressAnimation()
+
+  addPlanningMessage(
+      '路径结构生成完成，正在打开学习路径总览。',
+  )
+
+  await animateProgressTo(
+      generatingProgress,
+      100,
+      760,
+  )
+
+  persistPlanningTask({
+    status: 'completed',
+    progress: 100,
+    error: '',
+    logs: [
+      ...generatingMessages.value,
+    ],
+  })
+
+  await delay(850)
+
+  if (!pageActive) {
+    pathFinishing = false
+    return
+  }
+
+  let latest = readyPath
+
+  if (!latest) {
+    const pathId =
+        path.value?.id ??
+        Number(route.params.id || 0)
+
+    if (pathId) {
+      const response =
+          await getLearningPathById(
+              pathId,
+          )
+
+      latest =
+          unwrapResponseData<PathOverview>(
+              response,
+          )
+    }
+  }
+
+  if (
+      !latest ||
+      latest.status === 'generating'
+  ) {
+    pathFinishing = false
+    generatingProgress.value = 94
+    startPathProgressAnimation(94)
+
+    const pathId =
+        path.value?.id ??
+        Number(route.params.id || 0)
+
+    if (pathId) {
+      void monitorPathGeneration(pathId)
+    }
+
+    return
+  }
+
+  path.value = latest
+  activeDetailNode.value = null
+  isGenerating.value = false
+  pathGenerationError.value = ''
+  pathFinishing = false
+
+  clearPlanningCache(latest.id)
+
+  await loadEvaluation(latest.id)
+  await resumePendingTutorialForPath(
+      latest.id,
+  )
+}
+
+function failPathGeneration(
+    message: string,
+) {
+  stopSSE()
+  stopPathProgressAnimation()
+
+  pathGenerationError.value = message
+
+  persistPlanningTask({
+    status: 'failed',
+    progress:
+        generatingProgress.value,
+    error: message,
+    logs: [
+      ...generatingMessages.value,
+    ],
+  })
+
+  toast.error(message)
+}
+
+async function retryPathStatus() {
+  const pathId =
+      path.value?.id ??
+      Number(route.params.id || 0)
+
+  if (!pathId) {
+    await router.push('/path-planner')
+    return
+  }
+
+  pathGenerationError.value = ''
+  isGenerating.value = true
+
+  addPlanningMessage(
+      '正在重新连接路径规划任务。',
+  )
+
+  startPathProgressAnimation(
+      generatingProgress.value,
+  )
+
+  if (activeRunId.value) {
+    startSSE(
+        pathId,
+        activeRunId.value,
+    )
+  }
+
+  void monitorPathGeneration(pathId)
+}
+
+async function loadEvaluation(
+    pathId: number,
+) {
+  try {
+    const response =
+        await getLearningEvaluation(
+            pathId,
+        )
+
+    evaluation.value =
+        unwrapResponseData<
+            PathLearningEvaluationResponse
+        >(response)
+  } catch (error) {
+    console.error(
+        'Failed to load evaluation',
+        error,
+    )
+
+    evaluation.value = null
+  }
+}
+
+async function loadNewPathRequest() {
+  isGenerating.value = true
+  loading.value = false
+  path.value = null
+  evaluation.value = null
+  activeDetailNode.value = null
+  pathGenerationError.value = ''
+  generatingProgress.value = 8
+  generatingMessages.value = [
+    '正在创建路径任务。',
+    '正在读取学习目标与用户画像。',
+  ]
+
+  const newGoal =
+      String(route.query.goal || '')
+
+  const newTopic =
+      String(
+          route.query.topic ||
+          newGoal,
+      )
+
+  if (!newGoal) {
+    await router.replace(
+        '/path-planner',
+    )
+    return
+  }
+
+  try {
+    let parsedKnowledge: string[] = []
+
+    if (route.query.current_knowledge) {
+      try {
+        parsedKnowledge =
+            JSON.parse(
+                String(
+                    route.query
+                        .current_knowledge,
+                ),
+            )
+      } catch (error) {
+        console.warn(
+            '解析已掌握知识点失败:',
+            error,
+        )
+      }
+    }
+
+    const preferences:
+        PathPreferences = {
+          use_profile:
+              route.query.use_profile !==
+              'false',
+          scene: 'general',
+          pace: 'normal',
+          granularity: 'standard',
+          focus: ['key_points'],
+        }
+
+    const response =
+        await createLearningPath({
+          goal: newGoal,
+          topic: newTopic,
+          current_knowledge:
+              parsedKnowledge,
+          preferences,
+        })
+
+    const newPath =
+        unwrapResponseData<
+            PathOverview & {
+              run_id?: string
+            }
+        >(response)
+
+    activeRunId.value =
+        newPath.run_id || null
+
+    persistPlanningTask({
+      status: 'running',
+      pathId: newPath.id,
+      runId: newPath.run_id || '',
+      progress:
+          generatingProgress.value,
+      logs: [
+        ...generatingMessages.value,
+      ],
+      error: '',
+      startedAt: Date.now(),
+    })
+
+    await router.replace({
+      path:
+          `/path-planner/overview/` +
+          `${newPath.id}`,
+      query:
+          newPath.run_id
+              ? {
+                run_id:
+                    newPath.run_id,
+              }
+              : {},
+    })
+  } catch (error) {
+    const message =
+        getErrorMessage(
+            error,
+            '路径规划任务创建失败',
+        )
+
+    failPathGeneration(message)
+  }
+}
+
+async function loadPath() {
+  pageActive = true
+
+  const rawId =
+      String(route.params.id || '')
+
+  if (rawId === 'new') {
+    await loadNewPathRequest()
     return
   }
 
   loading.value = true
 
   try {
-    const paramId = Number(rawId || 0)
-    const shouldLoadSpecificPath = Boolean(rawId && rawId !== 'latest' && Number.isFinite(paramId) && paramId > 0)
+    const paramId =
+        Number(rawId || 0)
+
+    const shouldLoadSpecificPath =
+        Boolean(
+            rawId &&
+            rawId !== 'latest' &&
+            Number.isFinite(paramId) &&
+            paramId > 0,
+        )
 
     let currentPathId = 0
+    let loadedPath:
+        PathOverview | null = null
 
     if (shouldLoadSpecificPath) {
-      const response = await getLearningPathById(paramId)
-      const loadedPath = unwrapResponseData<PathOverview>(response)
-      path.value = loadedPath
+      const response =
+          await getLearningPathById(
+              paramId,
+          )
+
+      loadedPath =
+          unwrapResponseData<PathOverview>(
+              response,
+          )
+
       currentPathId = loadedPath.id
     } else {
-      const response = await getCurrentLearningPath()
-      const current = unwrapResponseData<PathOverview | null>(response)
+      const response =
+          await getCurrentLearningPath()
 
-      if (!current) {
+      loadedPath =
+          unwrapResponseData<
+              PathOverview | null
+          >(response)
+
+      if (!loadedPath) {
         path.value = null
         evaluation.value = null
         return
       }
 
-      path.value = current
-      currentPathId = current.id
+      currentPathId = loadedPath.id
 
       if (rawId === 'latest') {
-        router.replace(`/path-planner/overview/${current.id}`)
+        await router.replace(
+            `/path-planner/overview/` +
+            `${loadedPath.id}`,
+        )
       }
     }
 
+    path.value = loadedPath
     activeDetailNode.value = null
 
-    const loaded = path.value
-    if (!loaded) return
-
-    if (loaded.status === 'generating') {
+    if (
+        loadedPath.status ===
+        'generating'
+    ) {
       isGenerating.value = true
-      generatingProgress.value = Math.max(generatingProgress.value, 18)
+      pathGenerationError.value = ''
 
-      if (generatingMessages.value.length === 0) {
-        generatingMessages.value = [
-          '已找到正在生成的路径任务...',
-          '正在连接后端 SSE 进度流...',
-        ]
+      const cached =
+          readPlanningCache()
+
+      if (
+          cached &&
+          cached.pathId === currentPathId
+      ) {
+        activeRunId.value =
+            String(
+                route.query.run_id ||
+                cached.runId ||
+                '',
+            ) || null
+
+        generatingProgress.value =
+            Math.max(
+                12,
+                cached.progress,
+                estimatePlanningProgress(
+                    cached,
+                ),
+            )
+
+        generatingMessages.value =
+            cached.logs.length
+                ? [...cached.logs]
+                : [
+                  '已恢复正在生成的路径任务。',
+                ]
+
+        if (
+            cached.status === 'failed'
+        ) {
+          pathGenerationError.value =
+              cached.error ||
+              '路径生成失败'
+          stopPathProgressAnimation()
+          return
+        }
+      } else {
+        activeRunId.value =
+            String(
+                route.query.run_id ||
+                activeRunId.value ||
+                '',
+            ) || null
+
+        generatingProgress.value =
+            Math.max(
+                generatingProgress.value,
+                18,
+            )
+
+        if (
+            generatingMessages.value
+                .length === 0
+        ) {
+          generatingMessages.value = [
+            '已找到正在生成的路径任务。',
+            '正在恢复后端进度连接。',
+          ]
+        }
+
+        persistPlanningTask({
+          status: 'running',
+          pathId: currentPathId,
+          runId:
+              activeRunId.value || '',
+          progress:
+              generatingProgress.value,
+          logs: [
+            ...generatingMessages.value,
+          ],
+          error: '',
+          startedAt: Date.now(),
+        })
       }
 
-      activeRunId.value = String(route.query.run_id || activeRunId.value || '') || null
+      startPathProgressAnimation(
+          generatingProgress.value,
+      )
 
-      if (activeRunId.value && currentPathId) {
-        startSSE(currentPathId, activeRunId.value)
+      if (activeRunId.value) {
+        startSSE(
+            currentPathId,
+            activeRunId.value,
+        )
       }
-    } else {
-      isGenerating.value = false
-      generatingProgress.value = 100
-      stopSSE()
 
-      if (currentPathId > 0) {
-        await loadEvaluation(currentPathId)
-      }
+      void monitorPathGeneration(
+          currentPathId,
+      )
+      return
     }
+
+    const cached =
+        readPlanningCache()
+
+    if (
+        cached &&
+        cached.pathId === currentPathId &&
+        cached.status !== 'failed'
+    ) {
+      isGenerating.value = true
+      generatingProgress.value =
+          Math.max(
+              cached.progress,
+              94,
+          )
+      generatingMessages.value =
+          cached.logs.length
+              ? [...cached.logs]
+              : [
+                '路径结构已生成，正在打开学习路径总览。',
+              ]
+
+      await finishPathGeneration(
+          loadedPath,
+      )
+      return
+    }
+
+    isGenerating.value = false
+    generatingProgress.value = 100
+    pathGenerationError.value = ''
+    stopSSE()
+    stopPathProgressAnimation()
+    clearPlanningCache(
+        currentPathId,
+    )
+
+    await loadEvaluation(
+        currentPathId,
+    )
+
+    await resumePendingTutorialForPath(
+        currentPathId,
+    )
   } catch (error) {
-    toast.error(getErrorMessage(error, '加载学习路径失败'))
+    toast.error(
+        getErrorMessage(
+            error,
+            '加载学习路径失败',
+        ),
+    )
   } finally {
     loading.value = false
   }
 }
 
+function deactivatePage() {
+  pageActive = false
+  pathMonitorToken += 1
+  tutorialMonitorToken += 1
+
+  stopSSE()
+  stopPathProgressAnimation()
+  stopTutorialProgressAnimation()
+}
+
 watch(
     () => route.params.id,
     (newId, oldId) => {
-      stopSSE()
+      if (newId === oldId) return
 
-      if (oldId === 'new' && newId && newId !== 'new') {
-        isGenerating.value = true
-      } else {
+      deactivatePage()
+      pageActive = true
+
+      activeDetailNode.value = null
+      pathGenerationError.value = ''
+      pathFinishing = false
+      tutorialFinishing = false
+
+      if (
+          oldId !== 'new'
+      ) {
         generatingMessages.value = []
         generatingProgress.value = 12
         isGenerating.value = false
       }
 
-      activeDetailNode.value = null
-      loadPath()
+      void loadPath()
     },
 )
 
+onMounted(() => {
+  pageActive = true
+  void loadPath()
+})
+
 onActivated(() => {
-  if (isGenerating.value && activeRunId.value && path.value?.id) {
-    startSSE(path.value.id, activeRunId.value)
+  activationCount += 1
+
+  if (activationCount <= 1) {
+    return
   }
+
+  pageActive = true
+  pathFinishing = false
+  tutorialFinishing = false
+
+  void loadPath()
+})
+
+onDeactivated(() => {
+  deactivatePage()
 })
 
 onBeforeUnmount(() => {
-  stopSSE()
+  deactivatePage()
 })
 
-onMounted(loadPath)
 </script>
 
 <style scoped>
@@ -2089,4 +4549,704 @@ onMounted(loadPath)
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   持久化生成等待界面
+   与路径创建页保持一致：多色阶段节点，青绿色固定进度条
+   ========================================================= */
+
+.persistent-generation-stage {
+  min-height: calc(100vh - var(--navbar-height, 72px));
+  display: grid;
+  place-items: center;
+  padding: 28px 20px;
+  background:
+      radial-gradient(
+          circle at 50% 35%,
+          rgba(21, 154, 148, 0.055),
+          transparent 30rem
+      ),
+      #fafcfc;
+}
+
+.generation-waiting-card {
+  width: min(680px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 31px 32px;
+  border: 1px solid #cfe4e2;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow:
+      0 20px 55px rgba(31, 76, 80, 0.1),
+      0 3px 10px rgba(31, 76, 80, 0.035);
+  color: #26383c;
+}
+
+.generation-loading-header {
+  text-align: center;
+}
+
+.generation-loader {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+}
+
+.generation-loader-ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(21, 154, 148, 0.11);
+  border-top-color: #159a94;
+  border-right-color: #6bc3be;
+  border-radius: 50%;
+  animation: generationSpin 1.15s linear infinite;
+}
+
+.generation-loader > span {
+  position: relative;
+  z-index: 1;
+  color: #159a94;
+  font-size: 19px;
+  line-height: 1;
+  animation: generationBreathe 1.6s ease-in-out infinite;
+}
+
+.generation-loading-header h2,
+.generation-result-copy h2 {
+  margin: 0;
+  color: #172d31;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+}
+
+.generation-loading-header p,
+.generation-result-copy p {
+  margin: 7px 0 0;
+  color: #607277;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.generation-timeline {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 28px;
+  padding: 0 7px;
+}
+
+.generation-timeline-node {
+  --generation-node-start: #7f9b98;
+  --generation-node-end: #a7bfbc;
+  --generation-node-soft: #f2f7f6;
+  --generation-node-text: #58726f;
+  --generation-node-glow: rgba(73, 111, 107, 0.14);
+  --generation-next-start: #a7bfbc;
+
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.generation-node-circle {
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background:
+      linear-gradient(#ffffff, #ffffff) padding-box,
+      linear-gradient(
+          135deg,
+          var(--generation-node-start),
+          var(--generation-node-end)
+      ) border-box;
+  color: var(--generation-node-text);
+  box-shadow: 0 2px 8px rgba(39, 72, 75, 0.055);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  transition:
+      color 260ms ease,
+      box-shadow 260ms ease,
+      transform 260ms ease,
+      filter 260ms ease;
+}
+
+.generation-node-circle::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -6px;
+  border-radius: inherit;
+  background:
+      radial-gradient(
+          circle,
+          var(--generation-node-glow) 0%,
+          transparent 70%
+      );
+  opacity: 0;
+  transform: scale(0.76);
+  transition:
+      opacity 260ms ease,
+      transform 260ms ease;
+}
+
+.generation-node-label {
+  max-width: 98px;
+  color: #9ca9ac;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.45;
+  text-align: center;
+  transition:
+      color 240ms ease,
+      font-weight 240ms ease,
+      transform 240ms ease;
+}
+
+.generation-node-line {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  background: #e9efee;
+  transition:
+      background 320ms ease,
+      box-shadow 320ms ease;
+}
+
+.generation-timeline-node.is-active .generation-node-circle {
+  background:
+      linear-gradient(
+          135deg,
+          var(--generation-node-soft),
+          #ffffff
+      ) padding-box,
+      linear-gradient(
+          135deg,
+          var(--generation-node-start),
+          var(--generation-node-end)
+      ) border-box;
+  color: var(--generation-node-text);
+  box-shadow:
+      0 0 0 5px var(--generation-node-glow),
+      0 8px 18px var(--generation-node-glow);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.generation-timeline-node.is-active .generation-node-circle::after {
+  opacity: 1;
+  transform: scale(1);
+  animation: generationNodeBreathe 1.9s ease-in-out infinite;
+}
+
+.generation-timeline-node.is-active .generation-node-label {
+  color: var(--generation-node-text);
+  font-weight: 750;
+  transform: translateY(1px);
+}
+
+.generation-timeline-node.is-done .generation-node-circle {
+  border-color: transparent;
+  background:
+      linear-gradient(
+          135deg,
+          var(--generation-node-start),
+          var(--generation-node-end)
+      ) padding-box;
+  color: #ffffff;
+  box-shadow:
+      0 5px 13px var(--generation-node-glow);
+}
+
+.generation-timeline-node.is-done .generation-node-label {
+  color: #607277;
+  font-weight: 650;
+}
+
+.generation-timeline-node.is-done .generation-node-line {
+  background:
+      linear-gradient(
+          90deg,
+          var(--generation-node-start),
+          var(--generation-node-end) 54%,
+          var(--generation-next-start)
+      );
+  box-shadow: 0 0 7px var(--generation-node-glow);
+}
+
+.generation-progress-panel {
+  margin-top: 25px;
+  padding: 13px 15px;
+  border: 1px solid #dfecea;
+  border-radius: 8px;
+  background: #f8fbfb;
+}
+
+.generation-progress-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.generation-progress-head > div {
+  min-width: 0;
+}
+
+.generation-progress-head span {
+  display: block;
+  margin-bottom: 2px;
+  color: #9ca9ac;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.generation-progress-head strong {
+  display: block;
+  overflow: hidden;
+  color: #176b67;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generation-progress-head em {
+  flex-shrink: 0;
+  color: #839397;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.generation-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4eeed;
+}
+
+.generation-progress-track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background:
+      linear-gradient(
+          90deg,
+          #159a94,
+          #5abdb8
+      );
+  transition: width 320ms ease;
+}
+
+.generation-log-box {
+  min-height: 82px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 17px;
+  padding: 12px 15px;
+  border-left: 2px solid #82cbc7;
+  background: #fbfdfd;
+}
+
+.generation-log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.generation-log-row > span {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: #159a94;
+}
+
+.generation-log-row p {
+  margin: 0;
+  color: #607277;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.generation-persistence-note {
+  margin: 12px 0 0;
+  color: #8a9a9e;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.generation-result-state {
+  min-height: 310px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.generation-result-icon {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 19px;
+  border-radius: 50%;
+  font-size: 29px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.generation-success-icon {
+  border: 1px solid #82cbc7;
+  background: #eaf7f6;
+  color: #159a94;
+  animation:
+      generationSuccessEnter 420ms
+      cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.generation-error-icon {
+  border: 1px solid rgba(211, 94, 94, 0.22);
+  background: rgba(211, 94, 94, 0.07);
+  color: #cc5b5b;
+}
+
+.generation-result-copy {
+  max-width: 470px;
+}
+
+.generation-error-detail {
+  width: 100%;
+  margin-top: 24px;
+  padding: 13px 15px;
+  border: 1px solid rgba(211, 94, 94, 0.2);
+  border-radius: 8px;
+  background: rgba(211, 94, 94, 0.045);
+  color: #775d5d;
+  font-size: 12px;
+  line-height: 1.65;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.generation-result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 23px;
+}
+
+.generation-secondary-action,
+.generation-primary-action {
+  min-width: 116px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  cursor: pointer;
+  transition:
+      border-color 180ms ease,
+      background-color 180ms ease,
+      color 180ms ease,
+      transform 180ms ease;
+}
+
+.generation-secondary-action {
+  border: 1px solid #dce7e6;
+  background: #ffffff;
+  color: #607277;
+}
+
+.generation-secondary-action:hover {
+  border-color: #bccdca;
+  background: #f7fafa;
+  color: #172d31;
+}
+
+.generation-primary-action {
+  border: 1px solid #159a94;
+  background: #159a94;
+  color: #ffffff;
+}
+
+.generation-primary-action:hover {
+  border-color: #10847f;
+  background: #10847f;
+  transform: translateY(-1px);
+}
+
+.generation-success-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  color: #176b67;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.generation-success-summary > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #159a94;
+  animation: generationSuccessDot 1.1s ease-in-out infinite;
+}
+
+.generation-success-track {
+  width: min(330px, 100%);
+  height: 5px;
+  overflow: hidden;
+  margin-top: 16px;
+  border-radius: 999px;
+  background: #e3efee;
+}
+
+.generation-success-track > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background:
+      linear-gradient(
+          90deg,
+          #159a94,
+          #65c4bf
+      );
+  transform-origin: left center;
+  animation: generationSuccessProgress 800ms ease-out;
+}
+
+.tutorial-generating-overlay {
+  position: fixed;
+  z-index: 9000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(247, 250, 250, 0.84);
+  backdrop-filter: blur(5px);
+}
+
+.tutorial-waiting-card {
+  max-height: calc(100vh - 40px);
+}
+
+.tutorial-overlay-enter-active,
+.tutorial-overlay-leave-active {
+  transition: opacity 220ms ease;
+}
+
+.tutorial-overlay-enter-active .tutorial-waiting-card,
+.tutorial-overlay-leave-active .tutorial-waiting-card {
+  transition:
+      opacity 220ms ease,
+      transform 220ms ease;
+}
+
+.tutorial-overlay-enter-from,
+.tutorial-overlay-leave-to {
+  opacity: 0;
+}
+
+.tutorial-overlay-enter-from .tutorial-waiting-card,
+.tutorial-overlay-leave-to .tutorial-waiting-card {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+}
+
+.overview-shell {
+  animation:
+      overviewReveal 320ms
+      cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes generationSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes generationBreathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes generationNodeBreathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.86);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes generationSuccessEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes generationSuccessDot {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes generationSuccessProgress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes overviewReveal {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .persistent-generation-stage {
+    padding: 14px 12px;
+  }
+
+  .generation-waiting-card {
+    max-height: calc(100vh - 24px);
+    padding: 26px 18px;
+  }
+
+  .generation-timeline {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 25px;
+    padding: 0;
+  }
+
+  .generation-timeline-node {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: 10px;
+  }
+
+  .generation-node-circle {
+    grid-column: 1;
+  }
+
+  .generation-node-label {
+    grid-column: 2;
+    max-width: none;
+    text-align: left;
+  }
+
+  .generation-node-line {
+    top: 29px;
+    left: 14px;
+    width: 2px;
+    height: 22px;
+  }
+
+  .generation-progress-head {
+    align-items: flex-start;
+  }
+
+  .generation-result-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .generation-secondary-action,
+  .generation-primary-action {
+    width: 100%;
+  }
+
+  .tutorial-generating-overlay {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .generation-loader-ring,
+  .generation-loader > span,
+  .generation-timeline-node.is-active .generation-node-circle::after,
+  .generation-success-icon,
+  .generation-success-summary > span,
+  .generation-success-track > i,
+  .overview-shell {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 </style>

@@ -100,11 +100,11 @@ class Trie:
         return result
 
 # 定义 trie_operations 函数
-def trie_operations():
+def trie_operations(words, queries=()):
     trie = Trie()
-    words = ["cat", "car", "card", "care", "dog", "deer", "deep", "do"]
     for w in words:
         trie.insert(w)
-    trie.search("cat")
-    trie.search("cab")
-    trie.delete("car")
+    return {
+        "words": trie.list_words(),
+        "queries": {query: trie.search(query) for query in queries},
+    }

@@ -8,7 +8,10 @@ from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user
+from app.auth.security import (
+    get_current_user,
+    get_current_user_flexible,
+)
 from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
 from app.infra.models import LearningEvent, LearningPath, PathNode, PathNodeResource, User
@@ -79,7 +82,7 @@ async def stream_path_plan_events(
     path_id: int,
     run_id: str,
     after_sequence: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     """订阅路径规划实时事件流 — 前端 usePathEvents 通过此端点接收生成进度。"""
     events = await get_path_channel(current_user.id, path_id, run_id)
@@ -587,5 +590,4 @@ async def get_continue_learning(
         })
 
     return HttpResponse.success(data={"active_paths": result})
-
 

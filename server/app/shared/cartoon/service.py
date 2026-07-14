@@ -178,6 +178,10 @@ class CartoonService:
         request: "PathResourceRequest",
     ) -> "AgentResult":
         """Generate a video for one learning-path node."""
+        logger.info(
+            "[CartoonService] 开始动画视频生成: node_id=%s node_title=%s",
+            request.node_id, request.node_title,
+        )
         started = time.perf_counter()
 
         node_title = self._bounded_text(
@@ -199,15 +203,25 @@ class CartoonService:
             str(request.path_id),
             str(request.node_id),
         )
+        logger.info("[CartoonService] 输出目录: %s", output_dir)
 
         try:
+            logger.info("[CartoonService] 构建视频简报")
             brief = self._build_path_brief(
                 request
+            )
+            logger.info(
+                "[CartoonService] 调用 _generate_and_publish 开始生成",
             )
 
             artifact = await self._generate_and_publish(
                 brief,
                 output_dir,
+            )
+
+            logger.info(
+                "[CartoonService] 动画视频生成成功: video_path=%s duration=%.2fs",
+                artifact.video_path, time.perf_counter() - started,
             )
 
             return self._build_card_result(
@@ -216,6 +230,10 @@ class CartoonService:
             )
 
         except CartoonGenerationError as exc:
+            logger.error(
+                "[CartoonService] 动画视频生成失败: stage=%s error=%s",
+                exc.stage, exc, exc_info=True,
+            )
             return self._build_error_result(
                 node_title,
                 exc,
@@ -226,6 +244,10 @@ class CartoonService:
             ValidationError,
             ValueError,
         ) as exc:
+            logger.error(
+                "[CartoonService] 动画视频请求参数无效: %s",
+                exc, exc_info=True,
+            )
             wrapped = CartoonGenerationError(
                 f"动画视频请求参数无效: {exc}",
                 stage="request",
@@ -240,7 +262,8 @@ class CartoonService:
 
         except Exception as exc:
             logger.exception(
-                "Cartoon path generation failed"
+                "[CartoonService] Cartoon path generation failed: node_id=%s error=%s",
+                request.node_id, exc,
             )
 
             wrapped = CartoonGenerationError(

@@ -33,7 +33,7 @@ export interface GeneratedResourceBundle {
   title: string // 任务标题
   learning_need: string // 用户输入的学习需求
   selected_agents: string[] // 参与生成的智能体 id 列表
-  plan_content: string | null // 教学计划 Markdown 内容
+  plan: Record<string, unknown> | null // 版本化结构化教学计划
   resources: ResourceItemDetail[] // 全部产物明细列表
   status: string // 任务整体状态
   created_at: string | null // 任务创建时间

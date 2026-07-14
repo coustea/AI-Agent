@@ -55,9 +55,9 @@ export interface TemplateData {
   visualizerType: VisualizerType
   language: CodeLanguage
   templateCode: string
-  defaultData: Record<string, unknown>
   requiredEvents: string[]
   supportedLanguages: CodeLanguage[]
+  defaultInput: Record<string, unknown>
 }
 
 // 运行结果 (来自 POST /run 成功)

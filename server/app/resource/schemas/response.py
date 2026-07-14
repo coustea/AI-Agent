@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from uuid import uuid4
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.resource.schemas.request import ResourceAgentId
 
@@ -17,7 +16,7 @@ class GeneratedResourceItem(BaseModel):
     content 为 None 时表示轻量摘要（不含正文），用于状态轮询等轻量场景。
     format 由 agent_type 推导，不再从数据库存储字段读取。
     """
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str  # 总是由 _item_to_dto 显式设置，无默认值
     type: ResourceAgentId
     title: str
     format: str
@@ -44,14 +43,10 @@ class ResourceBundle(BaseModel):
     title: str = "个性化学习资源包"
     learning_need: str
     selected_agents: list[str] = Field(default_factory=list)
-    plan_content: str | None = None
+    plan: dict[str, Any] | None = None
     resources: list[GeneratedResourceItem] = Field(default_factory=list)
     status: str = "completed"
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str  # 总是由 service 显式设置，无默认值
+    updated_at: str  # 总是由 service 显式设置，无默认值
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-
-
 

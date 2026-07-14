@@ -25,7 +25,7 @@ export function useAlgorithmRun() {
     visualizerType: VisualizerType
     language: CodeLanguage
     code: string
-    inputData?: string
+    inputData?: Record<string, unknown>
   }) {
     generating.value = true
     runError.value = null

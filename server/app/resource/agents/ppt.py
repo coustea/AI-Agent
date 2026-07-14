@@ -81,7 +81,6 @@ class PPTAgent(BaseResourceAgent):
 
     agent_id = "ppt"
     agent_name = "演示幻灯"
-    research_enabled = False
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)

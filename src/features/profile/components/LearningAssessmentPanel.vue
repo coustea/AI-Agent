@@ -264,7 +264,6 @@ import { Button } from '@/components/ui/button'
 import {
   Activity,
   AlertCircle,
-  BookOpenCheck,
   CalendarDays,
   ChartColumn,
   ChevronLeft,

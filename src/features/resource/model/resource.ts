@@ -11,14 +11,14 @@ export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice'
 export type ResourceAgentSnapshot = {
   agent_id: string // 智能体标识（content / mindmap / quiz …）
   event_type?: string // 最近一次事件类型
-  status?: string | null // 智能体当前状态：pending / running / completed / failed
+  status?: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted' | null
   message?: string | null // 智能体最新进度消息
   progress?: number // 进度百分比 0–100
   phase?: string | null // 当前执行阶段（如 planning / generating / reviewing）
   elapsed_ms?: number | null // 已耗时（毫秒）
   metrics?: Record<string, any> // 运行指标（token 数、生成条数等）
   artifact_id?: string | null // 产物 ID，生成完成后有值
-  timestamp?: number // 快照时间戳（毫秒）
+  timestamp?: number // Unix 时间戳（毫秒）
 }
 
 // 发起资源生成任务的请求体：包含学习需求、场景、所选智能体及其详细配置

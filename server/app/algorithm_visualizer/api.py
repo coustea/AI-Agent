@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -147,6 +149,9 @@ async def run_visualization(
 
     vis_type = request_data.visualizerType or ""
 
+    # 将 inputData dict 转换为 JSON 字符串传递给沙箱
+    input_data_str = json.dumps(request_data.inputData) if request_data.inputData else None
+
     # 在沙箱中运行用户代码（缺失 tracer 时自动插装）
     try:
         result = await run_visualization_in_sandbox(
@@ -155,7 +160,7 @@ async def run_visualization(
             algorithm=algorithm,
             visualizer_type=vis_type,
             domain=request_data.domain,
-            input_data=request_data.inputData,
+            input_data=input_data_str,
         )
 
     # 插装或执行失败，记录失败事件并返回错误
