@@ -93,6 +93,7 @@ export interface DigitalHumanCallbacks {
   onStatus?: (status: { stage?: string; message?: string }) => void
   onDiagram?: (diagram: unknown, turn_id?: string) => void
   onAsrResult?: (text: string) => void
+  onAsrPartial?: (text: string) => void
   onError?: (msg: string, context?: DigitalHumanErrorContext) => void
   onConnectionChange?: (connected: boolean) => void
   onAvatarReady?: (ready: boolean) => void

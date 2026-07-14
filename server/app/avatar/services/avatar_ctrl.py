@@ -47,7 +47,7 @@ def estimate_speech_duration(text: str, speech_rate: float = 1.0) -> float:
 
     spoken_seconds = cjk_count / 4.8 + latin_words / 2.7
     pause_seconds = sentence_pauses * 0.32 + clause_pauses * 0.14
-    return max(1.8, min(58.0, 1.0 + (spoken_seconds + pause_seconds) / rate))
+    return max(1.8, min(180.0, 1.0 + (spoken_seconds + pause_seconds) / rate))
 
 
 # 标准化背景图编码格式：移除点号前缀，jpeg 统一为 jpg
@@ -243,6 +243,7 @@ class AvatarController:
         self._event_callback = None
         # 当前播报的 turn_id — 用于回调时绑定正确的 turn
         self._current_speak_turn_id: Optional[str] = None
+        self._current_estimated_duration: float | None = None
 
     # 检查 WebSocket 是否已关闭（兼容不同 websockets 版本）
     @property
@@ -359,7 +360,10 @@ class AvatarController:
                     turn_id = self._current_speak_turn_id
                     if not self.is_speaking:
                         self.is_speaking = True
-                        await callback("tts_start", avatar_data, turn_id)
+                        event_data = dict(avatar_data)
+                        if self._current_estimated_duration is not None:
+                            event_data["estimated_duration"] = self._current_estimated_duration
+                        await callback("tts_start", event_data, turn_id)
                     logger.debug(f"Avatar started speaking (turn_id: {turn_id})")
 
                 elif event_type == "tts_end":
@@ -396,6 +400,7 @@ class AvatarController:
         self.is_ready = False
         self.is_speaking = False
         self.ws = None
+        self._current_estimated_duration = None
 
         if was_ready:
             logger.warning("[AvatarCtrl] Connection lost while was ready — notifying bridge for reconnect")
@@ -464,6 +469,8 @@ class AvatarController:
             sentence, speech_rate, turn_id = await self.sentence_queue.get()
             # 设置当前播报的 turn_id
             self._current_speak_turn_id = turn_id
+            estimated_duration = estimate_speech_duration(sentence, speech_rate)
+            self._current_estimated_duration = estimated_duration
 
             # 安全检查：如果还在播报中，先等待结束（最多 5 秒）
             # 防止两个 TTS 重叠导致"两个声音"
@@ -491,8 +498,9 @@ class AvatarController:
                             "reason": "dispatch_failed",
                         },
                         turn_id,
-                    )
+                )
                 self._current_speak_turn_id = None
+                self._current_estimated_duration = None
                 continue
 
             logger.debug(f"Avatar speech dispatched: {sentence[:30]}... (turn_id: {turn_id})")
@@ -504,11 +512,14 @@ class AvatarController:
                 if self._event_callback:
                     await self._event_callback(
                         "tts_start",
-                        {"event_type": "tts_start", "fallback": True},
+                        {
+                            "event_type": "tts_start",
+                            "fallback": True,
+                            "estimated_duration": estimated_duration,
+                        },
                         turn_id,
                     )
 
-            estimated_duration = estimate_speech_duration(sentence, speech_rate)
             loop = asyncio.get_running_loop()
             deadline = loop.time() + estimated_duration
             while self.is_speaking and loop.time() < deadline:
@@ -535,6 +546,7 @@ class AvatarController:
             logger.debug(f"Sentence completed: {sentence[:30]}... (turn_id: {turn_id})")
             # 清除当前播报的 turn_id
             self._current_speak_turn_id = None
+            self._current_estimated_duration = None
 
         logger.info("Sentence queue processing completed")
 
@@ -623,6 +635,8 @@ class AvatarController:
         # 取消正在执行的播放任务
         if self._playback_task and not self._playback_task.done():
             self._playback_task.cancel()
+        self._current_speak_turn_id = None
+        self._current_estimated_duration = None
 
         if not self.ws or self._ws_closed:
             return

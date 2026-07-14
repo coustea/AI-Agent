@@ -801,7 +801,32 @@ const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
 const hasSpeechDetected = ref(false)
 const lastAsrCommittedText = ref('')
+const asrPreviewMessageId = ref<number | null>(null)
 let lastAsrCommitAt = 0
+
+const clearAsrPreview = () => {
+  if (asrPreviewMessageId.value === null) return
+  const index = messages.value.findIndex(message => message.id === asrPreviewMessageId.value)
+  if (index >= 0) messages.value.splice(index, 1)
+  asrPreviewMessageId.value = null
+}
+
+const updateAsrPreview = (text: string) => {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) return
+  lastAsrText.value = normalized
+  const existing = asrPreviewMessageId.value === null
+    ? null
+    : messages.value.find(message => message.id === asrPreviewMessageId.value && message.role === 'user')
+  if (existing) {
+    existing.content = normalized
+  } else {
+    const messageId = Date.now()
+    messages.value.push({ id: messageId, role: 'user', content: normalized, time: now() })
+    asrPreviewMessageId.value = messageId
+  }
+  scrollToBottom()
+}
 
 
 const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
@@ -828,6 +853,7 @@ const {
 } = useDigitalHuman({
   onStatus: (status: any) => {
     digitalHumanBackendStatus.value = status.message || ''
+    if (status.stage === 'asr_empty') clearAsrPreview()
     // 数字人模式下不显示 agent activity 卡片
     // 数字人有语音播报，用户通过听就能知道进度，不需要文本模式的复杂步骤卡片
     // 这些卡片反而会和语音播报不同步，造成视觉干扰
@@ -899,27 +925,45 @@ const {
     // 因为此时数字人可能还在说话（TTS 播报中），麦克风会拾取到回声
     // 连续语音的 VAD 重启由 useDigitalHuman 在 avatar_stopped 后统一调度。
   },
+  onAsrPartial: (text) => {
+    updateAsrPreview(text)
+  },
   onAsrResult: (text) => {
     if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
       setAvatarNeedDiagram(needTeachingDiagram.value)
     }
     const normalized = text.replace(/\s+/g, ' ').trim()
     lastAsrText.value = normalized
+    if (!normalized) {
+      clearAsrPreview()
+      return
+    }
     if (normalized) {
       startAsrProcessing(6000)
       const nowTs = Date.now()
       const isDup = normalized === lastAsrCommittedText.value
       const isNearDup = normalized.includes(lastAsrCommittedText.value) || lastAsrCommittedText.value.includes(normalized)
       const committedRecently = nowTs - lastAsrCommitAt < 1400
-      if (isDup || (isNearDup && committedRecently)) return
+      if (isDup || (isNearDup && committedRecently)) {
+        clearAsrPreview()
+        return
+      }
       lastAsrCommittedText.value = normalized
       lastAsrCommitAt = nowTs
-      messages.value.push({
-        id: Date.now(),
-        role: 'user',
-        content: normalized,
-        time: now(),
-      })
+      const preview = asrPreviewMessageId.value === null
+        ? null
+        : messages.value.find(message => message.id === asrPreviewMessageId.value && message.role === 'user')
+      if (preview) {
+        preview.content = normalized
+        asrPreviewMessageId.value = null
+      } else {
+        messages.value.push({
+          id: Date.now(),
+          role: 'user',
+          content: normalized,
+          time: now(),
+        })
+      }
       if (streamingMsgId.value === null) {
         const aiMsgId = Date.now() + 1
         messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
@@ -1657,13 +1701,12 @@ const enqueueStreamChunk = (messageId: number, chunk: string) => {
   if (streamingMsgRef.value?.id !== messageId) return
   lastChunkArrivedAt = Date.now()
 
-  // 数字人模式下：useDigitalHuman 的 reveal 系统已经按 TTS 语速节流了
-  // 这里直接渲染，不再做二次节流，避免字幕延迟
+  // 数字人字幕只由 useDigitalHuman 的 TTS 时钟驱动。这里作为纯渲染
+  // 终点直接写入消息，不能再进入文本聊天的第二套流式缓冲。
   if (isDigitalHumanPacedStream()) {
     const aiMsg = streamingMsgRef.value
     if (aiMsg) {
-      streamRenderedChunks.push(chunk)
-      streamDisplayText.value += chunk
+      aiMsg.content += chunk
       scrollToBottomThrottled(true)
     }
     return
@@ -2300,6 +2343,7 @@ const handleVoiceToggle = async () => {
 
 // 重新连接数字人（断开后重建 WebSocket）
 const handleAvatarReconnect = async () => {
+  const shouldResumeVoice = isVoiceChatting.value
   disconnectAvatar()
   await connectAvatar()
   setAvatarSpeechRate(avatarSpeechRate.value)
@@ -2309,6 +2353,11 @@ const handleAvatarReconnect = async () => {
       setPlayerContainer(container)
     }
   })
+  if (shouldResumeVoice) {
+    configureContinuousVoice(true)
+    await startVad(needTeachingDiagram.value, getAvatarCapabilities())
+    isRecording.value = isVadListening.value
+  }
 }
 
 const handleAvatarSpeechRateChange = (val: number) => {

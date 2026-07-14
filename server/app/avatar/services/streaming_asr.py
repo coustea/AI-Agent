@@ -10,6 +10,7 @@ AdaptiveVADController: 自适应 VAD 参数控制器
 import asyncio
 import base64
 import json
+from collections.abc import Awaitable, Callable
 
 import websockets
 
@@ -40,10 +41,12 @@ class StreamingASRSession:
         audio_queue: asyncio.Queue,
         vad_eos: int = ASR_VAD_EOS,
         ready_event: asyncio.Event | None = None,
+        partial_callback: Callable[[str], Awaitable[None]] | None = None,
     ):
         self.audio_queue = audio_queue
         self.vad_eos = vad_eos
         self.ready_event = ready_event
+        self.partial_callback = partial_callback
         self.chunk_count = 0
         self.timeout_hit = False
         self._consumed_items: list[tuple[float, bytes] | None] = []
@@ -231,6 +234,8 @@ class StreamingASRSession:
             str: Recognized text (stripped)
         """
         result_text = ""
+        best_partial_text = ""
+        published_partial_text = ""
         segments: dict[int, str] = {}
         async for message in ws:
             data = json.loads(message)
@@ -279,12 +284,23 @@ class StreamingASRSession:
                     # 兼容不携带 sn/pgs 的整句快照响应。
                     result_text = current_text
 
+            candidate_text = result_text.strip()
+            if candidate_text:
+                best_partial_text = candidate_text
+                if self.partial_callback is not None and candidate_text != published_partial_text:
+                    await self.partial_callback(candidate_text)
+                    published_partial_text = candidate_text
+
             # status=2 表示最终结果，结束接收
             if status == 2:
                 break
 
         # 返回去除首尾空白的识别文本
-        return result_text.strip()
+        final_text = result_text.strip()
+        if not final_text and best_partial_text:
+            logger.warning("[ASR] Final frame cleared a non-empty partial result; using partial")
+            return best_partial_text
+        return final_text
 
 
 # 自适应 VAD 控制器：根据历史识别表现动态调整静默结束阈值
@@ -303,12 +319,12 @@ class AdaptiveVADController:
         self.empty_rate = 0.0
         self.round_metrics: list[dict] = []
 
-    # 根据历史指标计算自适应 VAD 静默阈值（800~1800 毫秒）
+    # 根据历史指标计算自适应 VAD 静默阈值（1000~1800 毫秒）
     def compute_vad_eos(self) -> int:
         """Compute adaptive VAD timeout based on metrics.
 
         Returns:
-            int: Computed VAD EOS value in milliseconds (clamped to 800-1800)
+            int: Computed VAD EOS value in milliseconds (clamped to 1000-1800)
         """
         # 以基准值为起点计算本次 VAD 静默阈值
         vad = self.base_vad_eos
@@ -330,8 +346,9 @@ class AdaptiveVADController:
             elif avg_chunks >= 18 and self.empty_rate <= 0.45:
                 vad -= 60
 
-        # 阈值限制在 800~1800 毫秒之间
-        return max(800, min(1800, vad))
+        # 浏览器会通过 status=2 主动结束识别。上游 VAD 只作为兜底，必须
+        # 长于本地停句窗口，避免用户句中停顿时提前结束并丢弃后续音频。
+        return max(1000, min(1800, vad))
 
     # 记录一轮 ASR 识别指标，更新空识别率和连续空识别计数
     def record_round(self, chunk_count: int, timeout_hit: bool, has_result: bool):

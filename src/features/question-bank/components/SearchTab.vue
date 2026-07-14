@@ -174,15 +174,33 @@
 
     <div v-if="total > 0 && !loading" class="pagination-row">
       <button class="page-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">上一页</button>
-      <span class="page-info">第 {{ currentPage }} 页 / 共 {{ Math.ceil(total / pageSize) }} 页</span>
-      <button class="page-btn" :disabled="currentPage >= Math.ceil(total / pageSize)" @click="changePage(currentPage + 1)">下一页</button>
+      <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
+      <button class="page-btn" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">下一页</button>
+      <div class="pagination-jump">
+        <label for="question-page-input">前往</label>
+        <input
+          id="question-page-input"
+          v-model="pageInput"
+          class="page-input"
+          type="number"
+          inputmode="numeric"
+          min="1"
+          :max="totalPages"
+          step="1"
+          :aria-label="`输入页码，范围 1 到 ${totalPages}`"
+          @keyup.enter="jumpToPage"
+        />
+        <span>页</span>
+        <button class="page-btn jump-btn" type="button" @click="jumpToPage">跳转</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
+import { normalizePageNumber } from '@/features/question-bank/model/pagination'
 import { summarizeQuestionText } from '@/features/question-bank/model/questionText'
 
 // 组件属性：题库列表、筛选、答题状态
@@ -218,6 +236,15 @@ const emit = defineEmits<{
 
 // 当前展开作答的题目 ID
 const activeQuestionId = ref<string | null>(null)
+const pageInput = ref(String(props.currentPage))
+const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
+
+watch(
+  () => props.currentPage,
+  (page) => {
+    pageInput.value = String(page)
+  },
+)
 
 // 监听高亮题目 ID，自动展开并滚动到目标位置
 watch(
@@ -257,6 +284,17 @@ function handleSearch() {
 function changePage(page: number) {
   activeQuestionId.value = null
   emit('page-change', page)
+}
+
+function jumpToPage() {
+  const targetPage = normalizePageNumber(pageInput.value, totalPages.value)
+  if (targetPage == null) {
+    pageInput.value = String(props.currentPage)
+    return
+  }
+
+  pageInput.value = String(targetPage)
+  if (targetPage !== props.currentPage) changePage(targetPage)
 }
 
 // 展开/收起题目作答面板
@@ -891,6 +929,37 @@ function renderInline(text: string) {
   padding-top: 6px;
 }
 
+.pagination-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.page-input {
+  width: 64px;
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid rgba(203, 213, 225, 0.96);
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  text-align: center;
+}
+
+.page-input:focus {
+  outline: 2px solid rgba(15, 23, 42, 0.14);
+  outline-offset: 1px;
+  border-color: #94a3b8;
+}
+
+.jump-btn {
+  min-height: 42px;
+}
+
 .page-btn {
   padding: 0 14px;
   border: 1px solid rgba(203, 213, 225, 0.96);
@@ -930,10 +999,13 @@ function renderInline(text: string) {
 
   .head-line,
   .question-foot,
-  .pagination-row,
   .expanded-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .pagination-row {
+    flex-wrap: wrap;
   }
 
   .foot-actions,

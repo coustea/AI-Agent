@@ -604,7 +604,7 @@ async def react_node(
 
             async for chunk in llm.astream(
                 messages,
-                model=tool_model,
+                runnable=tool_model,
             ):
                 # 累积完整响应（流式结束后用于提取 tool_calls）
                 accumulated_response = chunk if accumulated_response is None else accumulated_response + chunk

@@ -858,12 +858,13 @@ class Llm:
         self,
         input_data: Any,
         *,
+        runnable: Any | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[Any]:
         temp = temperature if temperature is not None else STREAM_TEMPERATURE
         async for chunk in _bind(
-            self._main_model,
+            runnable or self._main_model,
             temperature=temp,
             max_tokens=max_tokens,
         ).astream(input_data):
