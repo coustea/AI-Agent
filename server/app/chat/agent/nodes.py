@@ -23,10 +23,10 @@ from app.chat.emitter import (
     build_workflow_activity_payload,
 )
 from app.chat.agent.tool_runner import ToolExecutionContext, TutorToolRunner
-from app.chat.schemas import TutorRequestContext, TutorRuntimeEvent
+from app.chat.schemas import DiagramMode, TutorRequestContext, TutorRuntimeEvent
 from app.chat.schemas.diagram import validate_diagram_json
 from app.chat.streaming import ResponseStreamer
-from app.chat.agent.tools import build_tutor_tools
+from app.chat.agent.tools import GENERATE_TEACHING_DIAGRAM_TOOL_NAME, build_tutor_tools
 from app.chat.utils import normalize_message_content
 from app.chat.utils.files import analyze_documents
 from app.chat.utils.vision import VisionService
@@ -64,7 +64,7 @@ _VOICE_HARD_TECHNICAL_REQUEST_RE = re.compile(
 )
 
 
-# 返回当前日期字符串，用于注入 system prompt 的“今日日期”上下文
+# 返回当前日期字符串，用于注入 system prompt 的"今日日期"上下文
 def _current_date_text() -> str:
     return datetime.now().date().isoformat()
 
@@ -145,7 +145,7 @@ def _should_use_fast_voice_response(
     voice_mode: bool,
     attachments: list[str],
     enable_web_search: bool,
-    need_teaching_diagram: bool,
+    diagram_mode: DiagramMode,
 ) -> bool:
     """Use one direct model round for ordinary spoken conversation.
 
@@ -155,7 +155,7 @@ def _should_use_fast_voice_response(
     using it for formulas and multi-part knowledge questions can trade away
     factual precision for brevity.
     """
-    if not voice_mode or attachments or enable_web_search or need_teaching_diagram:
+    if not voice_mode or attachments or enable_web_search or diagram_mode == "required":
         return False
     text = question or ""
     if (
@@ -194,7 +194,7 @@ def _build_detailed_voice_accuracy_guard(question: str) -> str:
 
 ## 红黑树事实边界
 - 经典 CLRS 插入修复最多执行 2 次旋转；删除修复最多执行 3 次旋转。
-- 重新着色可能沿祖先方向传播到根，不能写成“修正只涉及常数层”。
+- 重新着色可能沿祖先方向传播到根，不能写成"修正只涉及常数层"。
 - 查找、插入、删除的最坏时间复杂度都是 O(log n)，但旋转次数与重新着色传播范围必须分别表述。
 - 与 AVL 树比较时，只能说红黑树通常旋转次数较少，不能无条件断言插入删除的均摊代价一定更低。
 """
@@ -635,14 +635,15 @@ async def react_node(
     session_id = state.get("session_id", "")
     user_message_id = state.get("user_message_id", 0)
     enable_web_search = state.get("enable_web_search", False)
-    need_teaching_diagram = state.get("need_teaching_diagram", False)
+    diagram_mode = state.get("diagram_mode", "auto")
+    diagram_required = diagram_mode == "required"
     voice_mode = state.get("voice_mode", False)
     fast_voice_response = _should_use_fast_voice_response(
         question=question,
         voice_mode=voice_mode,
         attachments=attachments,
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        diagram_mode=diagram_mode,
     )
 
     node_events: list[TutorRuntimeEvent] = []
@@ -651,6 +652,7 @@ async def react_node(
     node_errors: list[str] = []
     node_diagram_result: dict[str, Any] | None = None
     full_answer = ""
+    messages: list[AnyMessage] = []
     base_seq = len(state.get("stream_events", [])) + 1
 
     # 联网搜索状态事件发射器：转发研究状态为 agent_status 事件
@@ -677,11 +679,12 @@ async def react_node(
         user_input=question,
         attachments=attachments,
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        diagram_mode=diagram_mode,
     )
     tools = build_tutor_tools(
         request_context,
         research_event_handler=emit_research_status,
+        diagram_context=attachment_context,
     )
 
     # 工具调用状态事件发射器：转发工具运行时事件为 agent_status 事件
@@ -744,6 +747,39 @@ async def react_node(
         if search_text:
             forced_context_blocks.append(f"[联网搜索结果]\n{search_text}")
 
+    # ── 1b. diagram_mode="required": skip LLM, directly call diagram tool ──
+    if diagram_required:
+        diagram_result = await execute_tutor_tool(
+            tool_name=GENERATE_TEACHING_DIAGRAM_TOOL_NAME,
+            arguments={"focus": question},
+            tool_call_id="direct-diagram",
+        )
+        raw_payload = diagram_result.result_payload
+        if raw_payload is not None:
+            validated, diagram_error = validate_diagram_json(raw_payload)
+            if validated is not None:
+                node_diagram_result = validated
+            else:
+                raise RuntimeError(
+                    f"diagram generation failed validation: {diagram_error}"
+                )
+        else:
+            raise RuntimeError("diagram generation returned no payload")
+
+        if voice_mode:
+            condensed = condense_voice_diagram_answer(question)
+            full_answer = condensed
+        # Return immediately with diagram only — no answer_token events.
+        return {
+            "final_answer": full_answer,
+            "diagram_result": node_diagram_result,
+            "messages": messages,
+            "stream_events": node_events,
+            "tool_invocations": node_tool_invocations,
+            "sources": node_sources,
+            "errors": node_errors,
+        }
+
     # ── 2. 构建 system prompt ──
     if fast_voice_response:
         system_prompt = _build_fast_voice_system_prompt(session_summary)
@@ -772,8 +808,8 @@ async def react_node(
             attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
             current_date=_current_date_text(),
             diagram_mode=(
-                "开启（学生已在前端勾选“图解”开关，你必须在 <answer> 中包含 <diagram> 标签输出图解 JSON）"
-                if need_teaching_diagram
+                "开启（学生已在前端勾选'图解'开关，系统会自动调用 generate_teaching_diagram 工具生成图解）"
+                if diagram_required
                 else "关闭"
             ),
             guidance_strategy_context=strategy_str,
@@ -803,7 +839,7 @@ async def react_node(
         human_content = f"{human_content}\n\n" + "\n\n".join(forced_context_blocks)
 
     # 构建完整消息列表：system + 历史 + 本轮 human
-    messages: list[AnyMessage] = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
+    messages = [SystemMessage(content=system_prompt), *history, HumanMessage(content=human_content)]
 
     # ── 4. ReAct 循环（最多 8 轮：LLM → 工具 / 回答）──
     max_iterations = 8
@@ -994,7 +1030,7 @@ async def react_node(
                         logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解: %s", diagram_error)
                         answer_body = cleaned_answer
 
-                if voice_mode and need_teaching_diagram:
+                if voice_mode and diagram_required:
                     condensed_answer = condense_voice_diagram_answer(answer_body)
                     if condensed_answer != answer_body:
                         logger.info(
@@ -1059,6 +1095,22 @@ async def react_node(
                     tool_call_id=tool_call_id,
                 )
 
+                # generate_teaching_diagram is terminal: validate and break
+                if tool_name == GENERATE_TEACHING_DIAGRAM_TOOL_NAME:
+                    raw_payload = result.result_payload
+                    if raw_payload is not None:
+                        validated, diagram_error = validate_diagram_json(raw_payload)
+                        if validated is not None:
+                            node_diagram_result = validated
+                            # Break outer ReAct loop — no further LLM rounds.
+                            break
+                        else:
+                            raise RuntimeError(
+                                f"diagram generation failed validation: {diagram_error}"
+                            )
+                    else:
+                        raise RuntimeError("diagram generation returned no payload")
+
                 # 将工具返回文本封装为 ToolMessage 加入上下文
                 tool_result_text = str((result.invocation or {}).get("result_text", "") or "")
                 messages.append(ToolMessage(content=tool_result_text, tool_call_id=tool_call_id))
@@ -1069,7 +1121,14 @@ async def react_node(
                 node_errors.append(f"{tool_name}: {exc}")
                 messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
 
-    if need_teaching_diagram and node_diagram_result is None and full_answer.strip():
+        # If diagram tool was called and validated, break the outer ReAct loop.
+        if node_diagram_result is not None:
+            if voice_mode and diagram_required:
+                condensed_answer = condense_voice_diagram_answer(full_answer or question)
+                full_answer = condensed_answer
+            break
+
+    if diagram_required and node_diagram_result is None and full_answer.strip():
         node_diagram_result = build_deterministic_fallback_diagram(question, full_answer)
         if node_diagram_result is not None:
             logger.warning(
